@@ -177,21 +177,14 @@ def _ready_session_runtime(
 ) -> Sandbox:
     """The sandbox this turn runs in, with the session's workspace present.
 
-    Ensuring the sandbox is not enough: a session whose workspace was reclaimed
-    needs it rebuilt, and rebuilding it concurrently with the prompt is what
-    leaves opencode pinned to a config that did not exist yet. So on anything
-    but the settled case we take the lock the restore endpoint holds and go
-    through the same path — blocking, because the turn has nothing to do until
-    the workspace is there.
-
-    The settled case is decided from the database alone. It is the common one,
-    and confirming a workspace costs an exec into the pod, so a turn on a live
-    session pays two reads and no lock.
+    A settled session returns straight away; anything else — a sandbox the
+    reaper took, a session never restored — is rebuilt through the same path and
+    the same lock the restore endpoint uses, blocking, because the turn has
+    nothing to do until the workspace is there.
     """
     session = get_build_session(session_id, user_id, db_session)
     sandbox = get_sandbox_by_user_id(db_session, user_id)
-    if session_runtime_intact(session, sandbox):
-        assert sandbox is not None
+    if sandbox is not None and session_runtime_intact(session, sandbox):
         return sandbox
 
     if session is None:

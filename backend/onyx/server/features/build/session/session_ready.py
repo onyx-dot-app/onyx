@@ -1,25 +1,18 @@
 """Bringing a session's runtime up, for whoever needs it.
 
-Provisioning the sandbox and rebuilding the session workspace are one
-operation, not two. An opencode instance caches the config of the directory it
-is created for, so a turn that touches a session while its workspace is still
-being written pins the config that existed at that moment — for the life of the
-pod. Splitting the two let a turn provision the sandbox (``ensure_sandbox_running``)
-while the restore endpoint was still writing the workspace, which is how a
-session ends up answering "model not found" with a perfectly correct
-``opencode.json`` on disk.
-
-So the whole thing lives here, behind the user's session-creation lock, and both
-the restore endpoint and the interactive-turn runner go through it. That also
-retires an unwritten precondition of every turn: that the client called
-``/restore`` first and that it finished.
+Provisioning the sandbox and rebuilding the session workspace are one operation:
+an opencode instance caches the config of the directory it is created for, so a
+turn that touches a session while its workspace is still being written stays
+pinned to a config that did not exist yet, for the life of the pod. Both the
+restore endpoint and the interactive-turn runner come through here, under the
+user's session-creation lock, so the two cannot interleave.
 """
 
 from uuid import UUID
 
 from sqlalchemy.orm import Session as DBSession
 
-from onyx.db.enums import BuildSessionStatus, SandboxStatus
+from onyx.db.enums import BuildSessionStatus
 from onyx.db.external_app import get_connectable_apps_for_user
 from onyx.db.models import BuildSession, Sandbox, User
 from onyx.server.features.build.db.build_session import (
@@ -58,15 +51,14 @@ def session_runtime_intact(
 ) -> bool:
     """Whether the recorded state says this session can be prompted right now.
 
-    Database-only on purpose: this is the per-turn fast path, and confirming a
-    workspace costs an exec into the pod. A session the reaper has put to sleep
-    fails it, which is the case that has to reach ``ensure_session_ready``.
+    Database-only: this is the per-turn fast path, and confirming a workspace
+    costs an exec into the pod.
     """
     return (
         session is not None
         and sandbox is not None
         and session.status == BuildSessionStatus.ACTIVE
-        and sandbox.status == SandboxStatus.RUNNING
+        and sandbox.status.is_active()
     )
 
 
@@ -80,21 +72,19 @@ def ensure_session_ready(
 
     Provisions or wakes the sandbox, rebuilds the workspace from its latest
     snapshot (or a fresh template) when the pod does not have it, and leaves the
-    session ACTIVE.
+    session ACTIVE. A failed rebuild discards the partial workspace so a later
+    attempt does not mistake it for a restored one.
 
-    The caller must already hold the user's session-creation lock — this both
+    The caller must already hold the user's session-creation lock: this
     provisions and writes into the sandbox, so it must not interleave with a
     reap, a second restore, or another turn doing the same thing.
-
-    Raises whatever provisioning raises; on a failed workspace rebuild the
-    partial workspace is removed so a later attempt does not mistake it for a
-    restored one.
     """
     session_id = session.id
+    session_manager = SessionManager(db_session)
 
     # Validate the model configuration before any external work; the commit
     # closes the read transaction without expiring loaded instances.
-    llm_config = SessionManager(db_session).build_llm_configs(user)
+    llm_config = session_manager.build_llm_configs(user)
     db_session.commit()
 
     sandbox, outcome = ensure_sandbox_ready(
@@ -107,13 +97,12 @@ def ensure_session_ready(
     if sandbox_manager.session_workspace_exists(sandbox.id, session_id):
         session.status = BuildSessionStatus.ACTIVE
         if session_runtime_stale(session, sandbox):
-            SessionManager(db_session).reload_session_skills(session_id, user)
+            session_manager.reload_session_skills(session_id, user)
         else:
             update_sandbox_heartbeat(db_session, sandbox.id)
             db_session.commit()
         return sandbox
 
-    # Workspace missing: rebuild it (snapshot restore or fresh template).
     if not session.nextjs_port:
         reserve_nextjs_port__no_commit(db_session, session)
         db_session.commit()
@@ -133,29 +122,21 @@ def ensure_session_ready(
     sandbox_mcp_config_hash = sandbox.mcp_config_hash
     db_session.commit()
 
-    # Rebuilding the workspace rewrites opencode.json, but a running opencode
-    # instance for this session — one the restored history can bring back —
-    # keeps serving the config it started with. Claim the dispose before the
-    # write so the next turn's reconcile performs it.
+    # The rebuild rewrites opencode.json; claim the dispose before the write so
+    # the next turn's reconcile hands the running instance the new config.
     mark_opencode_dispose_pending(session_id)
 
     try:
         if snapshot:
-            try:
-                sandbox_manager.restore_snapshot(
-                    sandbox_id=sandbox.id,
-                    session_id=session_id,
-                    snapshot_storage_path=snapshot.storage_path,
-                    nextjs_port=nextjs_port,
-                    llm_config=llm_config,
-                    connectable_apps_section=connectable_apps_section,
-                    mcp_servers=mcp_servers,
-                )
-            except Exception:
-                db_session.rollback()
-                session.nextjs_port = None
-                db_session.commit()
-                raise
+            sandbox_manager.restore_snapshot(
+                sandbox_id=sandbox.id,
+                session_id=session_id,
+                snapshot_storage_path=snapshot.storage_path,
+                nextjs_port=nextjs_port,
+                llm_config=llm_config,
+                connectable_apps_section=connectable_apps_section,
+                mcp_servers=mcp_servers,
+            )
         else:
             sandbox_manager.setup_session_workspace(
                 sandbox_id=sandbox.id,
@@ -166,6 +147,11 @@ def ensure_session_ready(
                 mcp_servers=mcp_servers,
             )
     except Exception:
+        if snapshot:
+            # Release the port the restore reserved but never bound.
+            db_session.rollback()
+            session.nextjs_port = None
+            db_session.commit()
         _discard_partial_workspace(db_session, sandbox_manager, user.id, session_id)
         raise
 
@@ -182,17 +168,14 @@ def _discard_partial_workspace(
     user_id: UUID,
     session_id: UUID,
 ) -> None:
-    """Best-effort cleanup after a failed rebuild.
-
-    Sandbox-level failures are already recorded durably by the state machine;
-    only a half-written workspace needs compensating, so ``session_workspace_exists``
-    doesn't later report it as restored.
-    """
+    """Best-effort: drop a half-written workspace so ``session_workspace_exists``
+    doesn't later report it as restored. Sandbox-level failures are already
+    recorded durably by the state machine."""
     try:
         db_session.rollback()
         current = get_sandbox_by_user_id(db_session, user_id)
         db_session.rollback()
-        if current is not None and current.status == SandboxStatus.RUNNING:
+        if current is not None and current.status.is_active():
             sandbox_manager.cleanup_session_workspace(current.id, session_id)
             logger.info(
                 "Cleaned up partial workspace for session %s after failed restore",
