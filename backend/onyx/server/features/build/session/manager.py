@@ -114,15 +114,11 @@ def _dispose_pending_key(session_id: UUID) -> str:
 
 
 def mark_opencode_dispose_pending(session_id: UUID) -> None:
-    """Record that a session's ``opencode.json`` was rewritten while a running
-    opencode instance may still be holding the old one.
+    """Claim the dispose owed to a running instance after rewriting its config.
 
-    Anyone who writes that file owes the running instance a dispose, or it
-    serves the stale config until the pod dies. ``reconcile_session_llm_config``
-    performs the dispose on the next turn, but it short-circuits when the file
-    already matches what it would write — which it does after a workspace
-    rebuild — so this marker is the only thing that tells it the instance is
-    behind the file.
+    ``reconcile_session_llm_config`` performs it on the next turn, and needs the
+    marker because it short-circuits when the file already matches what it would
+    write — which it does after a workspace rebuild.
     """
     get_cache_backend().set(
         _dispose_pending_key(session_id), "1", ex=_DISPOSE_PENDING_TTL_SECONDS

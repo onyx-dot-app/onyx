@@ -17,7 +17,7 @@ from onyx.cache.factory import get_cache_backend
 from onyx.cache.interface import CacheBackend
 from onyx.configs.constants import PUBLIC_API_TAGS
 from onyx.db.engine.sql_engine import get_session, get_session_with_current_tenant
-from onyx.db.enums import Permission, SandboxStatus
+from onyx.db.enums import Permission
 from onyx.db.models import User
 from onyx.error_handling.error_codes import OnyxErrorCode
 from onyx.error_handling.exceptions import OnyxError
@@ -193,18 +193,15 @@ def get_interactive_turn_events(
                 if session is None:
                     yield _format_stream_error("Session not found")
                     return
-                # Both conditions, because neither implies the other. The
-                # opencode session id outlives the pod that minted it, so after
-                # the sandbox has been reclaimed it is set from the previous
-                # incarnation while nothing is listening yet — and the runner
-                # is concurrently waking the sandbox, so the right answer is to
-                # keep the stream open and wait rather than fail the turn the
-                # user just sent.
+                # The opencode session id outlives the pod that minted it, so
+                # after a reap it is set while nothing is listening — and the
+                # runner is concurrently waking the sandbox. Wait for both.
                 sandbox = get_sandbox_by_user_id(stream_db_session, user_id)
-                runtime_ready = (
-                    sandbox is not None and sandbox.status == SandboxStatus.RUNNING
-                )
-                if session.opencode_session_id and runtime_ready:
+                if (
+                    session.opencode_session_id
+                    and sandbox is not None
+                    and sandbox.status.is_active()
+                ):
                     break
 
             yield SSE_KEEPALIVE
