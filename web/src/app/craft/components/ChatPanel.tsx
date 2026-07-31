@@ -686,6 +686,7 @@ export default function BuildChatPanel({
                 {isMobile && leftSidebarFolded && (
                   <OpalButton
                     icon={SvgSidebar}
+                    aria-label="Open Sidebar"
                     onClick={() => setLeftSidebarFolded(false)}
                     prominence="tertiary"
                     size="sm"
