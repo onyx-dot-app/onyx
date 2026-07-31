@@ -46,6 +46,9 @@ type Manifest struct {
 	CLIVersion    string `json:"cli_version"`
 	Mode          Mode   `json:"mode"`
 	IncludeCraft  bool   `json:"include_craft"`
+	// Dev records the dev overlay (published service ports). Not a Mode: it
+	// stacks on standard and lite alike.
+	Dev bool `json:"dev,omitempty"`
 	// Project is the docker compose project name, when it differs from the
 	// default pinned in docker-compose.yml (adopted deployments created under
 	// another name keep it — renaming would strand their volumes).

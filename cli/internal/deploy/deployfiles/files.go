@@ -56,6 +56,16 @@ var (
 		DestRel:   "deployment/docker-compose.craft.yml",
 		Mode:      0644,
 	}
+	// DevOverlay publishes the service ports (API, Postgres, Redis,
+	// OpenSearch, model server, MinIO, code interpreter) on the host. Stacked
+	// on Compose like LiteOverlay, but flag-only (--dev): it takes the
+	// deployment's internals out from behind nginx.
+	DevOverlay = File{
+		EmbedPath: "embedded/docker_compose/docker-compose.dev.yml",
+		RepoPath:  "deployment/docker_compose/docker-compose.dev.yml",
+		DestRel:   "deployment/docker-compose.dev.yml",
+		Mode:      0644,
+	}
 	// ProdCompose is the standalone production compose file: run on its own
 	// (not stacked on Compose), it is the complete prod stack with TLS.
 	ProdCompose = File{
@@ -113,6 +123,7 @@ var All = []File{
 	Compose,
 	LiteOverlay,
 	CraftOverlay,
+	DevOverlay,
 	ProdCompose,
 	EnvTemplate,
 	EnvProdTemplate,

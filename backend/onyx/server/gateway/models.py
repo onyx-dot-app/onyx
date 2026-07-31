@@ -1,3 +1,4 @@
+from collections.abc import Sequence
 from typing import Any, Literal, TypeAlias
 
 from pydantic import BaseModel, ConfigDict, Field
@@ -200,4 +201,28 @@ class ChatCompletionChunk(_WireModel):
                 )
             ],
             **chunk_kwargs,
+        )
+
+
+class ModelListEntry(_WireModel):
+    id: str
+    object: Literal["model"] = "model"
+    owned_by: str
+
+    @classmethod
+    def from_descriptor(cls, descriptor: GatewayModelDescriptor) -> "ModelListEntry":
+        return cls(id=descriptor.id, object="model", owned_by=descriptor.provider)
+
+
+class ModelListResponse(_WireModel):
+    object: Literal["list"] = "list"
+    data: list[ModelListEntry]
+
+    @classmethod
+    def from_catalog(
+        cls, catalog: Sequence[GatewayModelDescriptor]
+    ) -> "ModelListResponse":
+        return cls(
+            object="list",
+            data=[ModelListEntry.from_descriptor(d) for d in catalog],
         )

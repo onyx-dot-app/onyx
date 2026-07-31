@@ -53,5 +53,5 @@ jobs:
       - run: git diff --exit-code go.mod go.sum
         working-directory: ${{ matrix.modules }}
 
-      - run: go test ./...
+      - run: go test -race ./...
         working-directory: ${{ matrix.modules }}

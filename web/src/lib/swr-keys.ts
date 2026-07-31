@@ -42,6 +42,10 @@ export const SWR_KEYS = {
   wellKnownLlmProvider: (providerEndpoint: string) =>
     `/api/admin/llm/built-in/options/${providerEndpoint}`,
   llmContextualCost: "/api/admin/llm/provider-contextual-cost",
+  userUsage: (days: number) => `/api/user/usage?days=${days}`,
+  costOverrides: "/api/admin/cost-overrides",
+  adminUsageExport: "/api/admin/usage/export",
+  adminUsageReset: "/api/admin/usage/reset",
 
   // ── Image Generation ──────────────────────────────────────────────────────
   imageGenConfig: "/api/admin/image-generation/config",

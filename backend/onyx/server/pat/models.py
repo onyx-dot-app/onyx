@@ -45,6 +45,12 @@ _ASSIGNABLE_SCOPES: list[PatScopeOption] = [
         label="Write",
         description="Create sessions and send messages.",
     ),
+    PatScopeOption(
+        scope=Permission.USE_LLM_GATEWAY,
+        group_label="LLM Gateway",
+        label="Use",
+        description="Call the LLM gateway from external tools.",
+    ),
 ]
 
 SELECTABLE_PAT_SCOPES: dict[Permission, PatScopeOption] = {

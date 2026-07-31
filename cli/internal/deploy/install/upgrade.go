@@ -106,6 +106,8 @@ func (in *installer) runUpgrade(ctx context.Context) error {
 		in.overlayOnDisk(filepath.Base(deployfiles.LiteOverlay.DestRel)))
 	in.craft = in.opts.IncludeCraft || manifest.IncludeCraft ||
 		in.overlayOnDisk(filepath.Base(deployfiles.CraftOverlay.DestRel))
+	in.dev = !in.prod && (in.opts.Dev || manifest.Dev ||
+		in.overlayOnDisk(filepath.Base(deployfiles.DevOverlay.DestRel)))
 	in.resolveProject(manifest)
 	if in.wiz != nil {
 		mode := "Standard"
@@ -118,6 +120,9 @@ func (in *installer) runUpgrade(ctx context.Context) error {
 			mode = "Prod"
 		case in.craft:
 			mode = "Std+Craft"
+		}
+		if in.dev {
+			mode += "+Dev"
 		}
 		in.wiz.Answer("Mode", mode)
 		in.wiz.Answer("From", installedTag)
@@ -150,6 +155,9 @@ func (in *installer) runUpgrade(ctx context.Context) error {
 		craftNote := ""
 		if in.craft {
 			craftNote = ", Craft: true"
+		}
+		if in.dev {
+			craftNote += ", Dev overlay: true"
 		}
 		in.plainf("  • Mode: %s%s", in.modeName(), craftNote)
 		if in.project != dockercmd.DefaultProjectName {
@@ -187,7 +195,7 @@ func (in *installer) runUpgrade(ctx context.Context) error {
 		in.infof("Refreshing config files to match %s...", configRef)
 	}
 	fetcher := &fileFetcher{in: in}
-	if err := in.materializeFiles(ctx, configRef, managedFiles(in.prod, in.lite, in.craft), manifest, fetcher); err != nil {
+	if err := in.materializeFiles(ctx, configRef, managedFiles(in.prod, in.lite, in.craft, in.dev), manifest, fetcher); err != nil {
 		return err
 	}
 
@@ -255,6 +263,7 @@ func (in *installer) runUpgrade(ctx context.Context) error {
 	}
 	in.recordProject(manifest)
 	manifest.IncludeCraft = in.craft
+	manifest.Dev = in.dev
 	if !hadManifest || manifest.InstalledAt.IsZero() {
 		manifest.InstalledAt = now
 	}

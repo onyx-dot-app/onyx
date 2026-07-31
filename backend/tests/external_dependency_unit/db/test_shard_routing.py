@@ -9,11 +9,12 @@ routes per-DSN, not per-host, so a second database is a faithful stand-in for a
 second instance and keeps the tests self-contained.
 """
 
-from collections.abc import Generator
+from collections.abc import AsyncGenerator, Generator
 from typing import Any
 from uuid import uuid4
 
 import pytest
+import pytest_asyncio
 from sqlalchemy import Column, Integer, MetaData, String, Table, select, text
 from sqlalchemy.engine import Engine
 from sqlalchemy.exc import OperationalError, ProgrammingError
@@ -754,9 +755,31 @@ def test_sqlalchemy_url_option_is_still_ignored_by_env_py(
     )
 
 
+@pytest_asyncio.fixture
+async def isolated_async_engines() -> AsyncGenerator[None, None]:
+    """Async engines belonging to *this* test's event loop.
+
+    asyncpg binds a pool to the loop that created it, and pytest-asyncio gives every
+    test a fresh loop. An engine cached by an earlier test therefore belongs to a
+    closed loop: using it raises "attached to a different loop", and disposing it
+    raises "Event loop is closed" because asyncpg schedules the close there. So drop
+    whatever is cached on the way in without touching it, and dispose properly on the
+    way out, when the engines do belong to this loop.
+    """
+    from onyx.db.engine.async_sql_engine import (
+        abandon_async_engines,
+        reset_sqlalchemy_async_engine,
+    )
+
+    abandon_async_engines()
+    yield
+    await reset_sqlalchemy_async_engine()
+
+
 @pytest.mark.asyncio
 async def test_async_sessions_reach_different_physical_databases(
     two_shards: dict[str, Any],
+    isolated_async_engines: None,  # noqa: ARG001
 ) -> None:
     """Async sessions must route by shard, not just by schema.
 
@@ -764,42 +787,27 @@ async def test_async_sessions_reach_different_physical_databases(
     PAT, SAML, and token-refresh work for a migrated tenant would read a stale
     schema on the old database and write to an abandoned copy.
     """
-    from onyx.db.engine.async_sql_engine import (
-        get_async_session_context_manager,
-        reset_sqlalchemy_async_engine,
-    )
+    from onyx.db.engine.async_sql_engine import get_async_session_context_manager
 
-    try:
-        async with get_async_session_context_manager(two_shards["tenant_a"]) as session:
-            db_a = str(
-                (await session.execute(text("SELECT current_database()"))).scalar()
-            )
-        async with get_async_session_context_manager(two_shards["tenant_b"]) as session:
-            db_b = str(
-                (await session.execute(text("SELECT current_database()"))).scalar()
-            )
+    async with get_async_session_context_manager(two_shards["tenant_a"]) as session:
+        db_a = str((await session.execute(text("SELECT current_database()"))).scalar())
+    async with get_async_session_context_manager(two_shards["tenant_b"]) as session:
+        db_b = str((await session.execute(text("SELECT current_database()"))).scalar())
 
-        assert db_a == POSTGRES_DB
-        assert db_b == two_shards["second_db"]
-        assert db_a != db_b
-    finally:
-        # Async pools are bound to this test's event loop; leaving them open leaks
-        # connections and makes a later test fail depending on selection order.
-        await reset_sqlalchemy_async_engine()
+    assert db_a == POSTGRES_DB
+    assert db_b == two_shards["second_db"]
+    assert db_a != db_b
 
 
 @pytest.mark.asyncio
-async def test_async_engine_is_reused_per_shard(two_shards: dict[str, Any]) -> None:
+async def test_async_engine_is_reused_per_shard(
+    two_shards: dict[str, Any],
+    isolated_async_engines: None,  # noqa: ARG001
+) -> None:
     """One engine per shard, not one per call — pools must not multiply."""
-    from onyx.db.engine.async_sql_engine import (
-        get_async_engine_for_tenant,
-        reset_sqlalchemy_async_engine,
-    )
+    from onyx.db.engine.async_sql_engine import get_async_engine_for_tenant
 
-    try:
-        first = await get_async_engine_for_tenant(two_shards["tenant_b"])
-        second = await get_async_engine_for_tenant(two_shards["tenant_b"])
-        assert first is second
-        assert first is not await get_async_engine_for_tenant(two_shards["tenant_a"])
-    finally:
-        await reset_sqlalchemy_async_engine()
+    first = await get_async_engine_for_tenant(two_shards["tenant_b"])
+    second = await get_async_engine_for_tenant(two_shards["tenant_b"])
+    assert first is second
+    assert first is not await get_async_engine_for_tenant(two_shards["tenant_a"])

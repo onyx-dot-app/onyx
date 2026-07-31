@@ -2,14 +2,14 @@
 
 These tests exercise the pure logic added by the
 docker-sandbox-serve port — no Docker engine required. We use
-``object.__new__(DockerSandboxManager)`` to bypass ``_initialize``
+``object.__new__(DockerSandboxManager)`` to bypass ``__init__``
 (which would try to open the Docker socket) and verify:
 
 - ``_load_serve_connection_info`` produces the expected container-name
   fallback URL or localhost-published URL + cleartext password from a mocked
   container's ``inspect`` data, yields a ``None`` password for legacy
   containers, and returns ``None`` when the container is gone.
-- ``_render_agents_md`` produces shell-escaped AGENTS.md content.
+- ``_build_agents_md`` renders AGENTS.md content.
 """
 
 from __future__ import annotations
@@ -48,10 +48,9 @@ def _skip_api_url_probe(monkeypatch: pytest.MonkeyPatch) -> None:
 def _bare_manager() -> DockerSandboxManager:
     """
     DockerSandboxManager without touching the Docker socket: skips
-    ``_initialize`` so contributors without docker running can still run
+    ``__init__`` so contributors without docker running can still run
     these tests.
     """
-    DockerSandboxManager._instance = None
     mgr: DockerSandboxManager = object.__new__(DockerSandboxManager)
     mgr._agent_instructions_template_path = (  # type: ignore[attr-defined]
         dsm.Path(dsm.__file__).parent.parent.parent / "AGENTS.template.md"
@@ -240,11 +239,11 @@ def llm_config() -> CraftLLMProviderConfig:
     )
 
 
-def test_render_agents_md_returns_escaped_string(
+def test_build_agents_md_renders_instructions(
     llm_config: CraftLLMProviderConfig,
 ) -> None:
     mgr = _bare_manager()
-    agents_md = mgr._render_agents_md(
+    agents_md = mgr._build_agents_md(
         agent_provider=llm_config.provider,
         agent_model=llm_config.model_name,
         nextjs_port=None,
@@ -252,7 +251,6 @@ def test_render_agents_md_returns_escaped_string(
     )
     assert isinstance(agents_md, str)
     assert agents_md
-    assert "'" not in agents_md or "'\\''" in agents_md
     assert "## Skills" not in agents_md
     assert "{{AVAILABLE_SKILLS_SECTION}}" not in agents_md
 
@@ -273,7 +271,7 @@ def test_setup_writes_fresh_gateway_catalog_before_instance_start(
         manager, "_require_container", MagicMock(return_value=MagicMock())
     )
     monkeypatch.setattr(
-        manager, "_render_agents_md", MagicMock(return_value="instructions")
+        manager, "_build_agents_md", MagicMock(return_value="instructions")
     )
     gateway = CraftLLMProviderConfig(
         provider="onyx",
@@ -333,7 +331,7 @@ def test_attachments_section_is_inserted_before_connectable_apps(
 
 def test_init_serve_state_is_idempotent() -> None:
     """
-    ``_init_serve_state`` is called from ``_initialize``; provision paths must
+    ``_init_serve_state`` is called from ``__init__``; provision paths must
     not blow up if called twice.
     """
     mgr = _bare_manager()
@@ -377,7 +375,7 @@ def test_provision_generates_fresh_password_and_injects_into_container_env(
     monkeypatch.setattr(
         DockerSandboxManager,
         "_wait_for_opencode_serve_ready",
-        lambda self, sandbox_id: True,  # noqa: ARG005 — patched callable
+        lambda self, sandbox_id, timeout: True,  # noqa: ARG005 — patched callable
     )
 
     mgr = _bare_manager()
@@ -417,6 +415,7 @@ def test_provision_generates_fresh_password_and_injects_into_container_env(
         user_id=UUID("aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa"),
         tenant_id="tenant-abc",
         onyx_pat="pat-redacted",
+        provisioning_attempt_number=1,
     )
 
     assert info.status.value == "running"
@@ -560,6 +559,7 @@ def test_provision_removes_container_when_history_restore_fails(
             user_id=UUID("aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa"),
             tenant_id="tenant-abc",
             onyx_pat="pat-redacted",
+            provisioning_attempt_number=1,
         )
 
     # Half-provisioned container is force-removed; opencode never started.

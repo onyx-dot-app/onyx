@@ -233,6 +233,7 @@ def kwargs() -> ContainerCreateKwargs:
         volume_name="onyx-craft-sandbox-12345678",
         memory_limit="2g",
         cpu_limit=1.0,
+        provisioning_attempt_number=1,
         opencode_password=_OPENCODE_PASSWORD,
         opencode_config_json=_OPENCODE_CONFIG_JSON,
     )
@@ -260,6 +261,7 @@ def proxy_kwargs() -> ContainerCreateKwargs:
         volume_name="onyx-craft-sandbox-12345678",
         memory_limit="2g",
         cpu_limit=1.0,
+        provisioning_attempt_number=1,
         opencode_password=_OPENCODE_PASSWORD,
         opencode_config_json=_OPENCODE_CONFIG_JSON,
         sandbox_proxy_host="sandbox-proxy",
@@ -425,6 +427,7 @@ def test_container_kwargs_publishes_serve_on_localhost_in_dev(
         volume_name="onyx-craft-sandbox-12345678",
         memory_limit="2g",
         cpu_limit=1.0,
+        provisioning_attempt_number=1,
         opencode_password=_OPENCODE_PASSWORD,
         opencode_config_json=_OPENCODE_CONFIG_JSON,
     )
@@ -548,6 +551,7 @@ def test_container_kwargs_warns_on_internal_compose_host(
             volume_name="vol",
             memory_limit="2g",
             cpu_limit=1.0,
+            provisioning_attempt_number=1,
             opencode_password=_OPENCODE_PASSWORD,
             opencode_config_json=_OPENCODE_CONFIG_JSON,
         )
@@ -575,6 +579,7 @@ def test_container_kwargs_no_warning_for_public_url(
             volume_name="vol",
             memory_limit="2g",
             cpu_limit=1.0,
+            provisioning_attempt_number=1,
             opencode_password=_OPENCODE_PASSWORD,
             opencode_config_json=_OPENCODE_CONFIG_JSON,
         )
@@ -601,6 +606,7 @@ def test_container_kwargs_no_warning_for_craft_api_alias(
             volume_name="vol",
             memory_limit="2g",
             cpu_limit=1.0,
+            provisioning_attempt_number=1,
             opencode_password=_OPENCODE_PASSWORD,
             opencode_config_json=_OPENCODE_CONFIG_JSON,
         )
@@ -839,8 +845,69 @@ def test_proxy_kwargs_requires_ca_volume() -> None:
             volume_name="vol",
             memory_limit="2g",
             cpu_limit=1.0,
+            provisioning_attempt_number=1,
             opencode_password=_OPENCODE_PASSWORD,
             opencode_config_json=_OPENCODE_CONFIG_JSON,
             sandbox_proxy_host="sandbox-proxy",
             proxy_ca_volume_name=None,
         )
+
+
+def _craft_compose_services() -> dict:
+    compose_path = REPO_ROOT / "deployment/docker_compose/docker-compose.craft.yml"
+    return yaml.safe_load(compose_path.read_text())["services"]
+
+
+def test_compose_prepulls_the_image_the_sandboxes_run() -> None:
+    """The prepull entry exists so `docker compose pull` fetches the sandbox
+    image, and must name the *same* ref the sandbox containers get. A drifted
+    ref warms an image nobody runs while every sandbox still cold-pulls, and
+    nothing looks wrong — the only symptom is the slow provision it exists to
+    remove.
+    """
+    services = _craft_compose_services()
+    prepull_image = services["sandbox-image-prepull"]["image"]
+
+    for service_name in ("api_server", "background"):
+        assert (
+            f"SANDBOX_CONTAINER_IMAGE={prepull_image}"
+            in services[service_name]["environment"]
+        )
+
+
+def test_compose_prepull_never_starts_a_container() -> None:
+    """It is an image reference, not a workload. `replicas: 0` keeps `up` from
+    creating anything, so nothing idles doing nothing and `up --wait` — which
+    install.sh passes by default — stays green. A one-shot that exited would
+    fail that wait; a long-lived idler would leave a pointless container.
+    """
+    prepull = _craft_compose_services()["sandbox-image-prepull"]
+
+    assert prepull["deploy"]["replicas"] == 0
+    # No socket, no volumes, no sandbox bridge: nothing is supposed to run.
+    for key in ("volumes", "networks", "restart"):
+        assert key not in prepull
+
+
+def test_compose_prepull_is_inert_even_if_it_does_start() -> None:
+    """`deploy` is ignored by the legacy standalone docker-compose, which
+    install.sh accepts with no minimum version. If `replicas: 0` is dropped, a
+    container *is* created — and this image's own ENTRYPOINT starts
+    `opencode serve` on 0.0.0.0:4096 with no password, staying up so nothing
+    looks broken. The override is the only thing standing between a dropped
+    `deploy` key and an unauthenticated agent server on the compose network.
+    """
+    prepull = _craft_compose_services()["sandbox-image-prepull"]
+
+    assert prepull["entrypoint"] == ["/bin/true"]
+
+
+def test_embedded_craft_compose_copy_is_in_sync() -> None:
+    """onyx-cli go:embeds a byte-identical copy (go:embed can't reach outside
+    the cli module). See tools/ods/internal/deployfilessync."""
+    source = REPO_ROOT / "deployment/docker_compose/docker-compose.craft.yml"
+    embedded = (
+        REPO_ROOT
+        / "cli/internal/deploy/deployfiles/embedded/docker_compose/docker-compose.craft.yml"
+    )
+    assert embedded.read_text() == source.read_text()

@@ -9,14 +9,13 @@ from sqlalchemy import event, pool
 from sqlalchemy.ext.asyncio import AsyncEngine, AsyncSession, create_async_engine
 
 from onyx.configs.app_configs import (
-    AWS_REGION_NAME,
     POSTGRES_API_SERVER_POOL_OVERFLOW,
     POSTGRES_API_SERVER_POOL_SIZE,
     POSTGRES_POOL_PRE_PING,
     POSTGRES_POOL_RECYCLE,
     POSTGRES_USE_NULL_POOL,
 )
-from onyx.db.engine.iam_auth import get_iam_auth_token
+from onyx.db.engine.iam_auth import make_provide_iam_token_async
 from onyx.db.engine.pg_ssl import create_pg_ssl_context
 from onyx.db.engine.shard_registry import (
     ShardSpec,
@@ -87,21 +86,11 @@ def _build_async_engine(spec: ShardSpec) -> AsyncEngine:
         # Bound to this shard's coordinates: an RDS IAM token is only valid for the
         # host/port/user it was minted for, so the global POSTGRES_* values would be
         # rejected for a shard on a different instance.
-        iam_host = spec.host
-        iam_port = spec.port
-        iam_user = spec.user
-
-        @event.listens_for(engine.sync_engine, "do_connect")
-        def provide_iam_token_async(
-            dialect: Any,  # noqa: ARG001
-            conn_rec: Any,  # noqa: ARG001
-            cargs: Any,  # noqa: ARG001
-            cparams: Any,
-        ) -> None:
-            # For async engine using asyncpg, we still need to set the IAM token here.
-            token = get_iam_auth_token(iam_host, iam_port, iam_user, AWS_REGION_NAME)
-            cparams["password"] = token
-            cparams["ssl"] = create_pg_ssl_context()
+        event.listen(
+            engine.sync_engine,
+            "do_connect",
+            make_provide_iam_token_async(spec.host, spec.port, spec.user),
+        )
 
     return engine
 
@@ -145,6 +134,19 @@ def get_sqlalchemy_async_engine() -> AsyncEngine:
     the default database regardless of where the tenant actually lives.
     """
     return get_async_engine_for_shard(get_default_shard_name())
+
+
+def abandon_async_engines() -> None:
+    """Drop the cached async engines without closing their connections.
+
+    For when the loop that owns them is gone — a forked child, or a test whose event
+    loop has been closed. Awaiting `dispose()` there fails, because asyncpg schedules
+    the close on the originating loop. Prefer `reset_sqlalchemy_async_engine` whenever
+    that loop is still running.
+    """
+    global _ASYNC_ENGINES
+    with _ASYNC_ENGINES_LOCK:
+        _ASYNC_ENGINES = {}
 
 
 async def reset_sqlalchemy_async_engine() -> None:

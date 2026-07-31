@@ -45,6 +45,7 @@ def mock_async_session() -> MagicMock:
     session.scalar = AsyncMock()
     session.commit = AsyncMock()
     session.rollback = AsyncMock()
+    session.run_sync = AsyncMock(return_value=None)
     return session
 
 
@@ -584,7 +585,10 @@ class TestOAuthDottedGmail:
         mock_session_manager.return_value = _AsyncSessionContextManager(
             mock_async_session
         )
-        mock_fetch_ee.return_value = AsyncMock(return_value="test_tenant")
+        provision_tenant = AsyncMock(return_value="test_tenant")
+        mock_fetch_ee.side_effect = lambda _module, attribute, _default: (
+            provision_tenant if attribute == "get_or_provision_tenant" else MagicMock()
+        )
         mock_verify_domain.return_value = None
 
         user_manager = UserManager(MagicMock())
@@ -671,7 +675,10 @@ class TestOAuthPlaceholderPromotion:
         mock_session_manager.return_value = _AsyncSessionContextManager(
             mock_async_session
         )
-        mock_fetch_ee.return_value = AsyncMock(return_value="test_tenant")
+        provision_tenant = AsyncMock(return_value="test_tenant")
+        mock_fetch_ee.side_effect = lambda _module, attribute, _default: (
+            provision_tenant if attribute == "get_or_provision_tenant" else MagicMock()
+        )
 
         placeholder = MagicMock(id="placeholder-id", email="synced@corp.com")
         placeholder.account_type = AccountType.EXT_PERM_USER
@@ -915,3 +922,7 @@ class TestPasswordAuthKillSwitch:
             pass
 
         mock_fetch_ee.assert_called()
+        assert mock_fetch_ee.call_args_list[0].args[:2] == (
+            "onyx.db.user_tenant_mapping",
+            "get_tenant_id_for_email",
+        )

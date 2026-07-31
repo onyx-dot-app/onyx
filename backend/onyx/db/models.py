@@ -30,12 +30,15 @@ from sqlalchemy import (
     desc,
     event,
     func,
+    inspect,
     text,
     true,
+    update,
 )
 from sqlalchemy.dialects import postgresql
 from sqlalchemy.dialects.postgresql import JSONB as PGJSONB
 from sqlalchemy.dialects.postgresql import UUID as PGUUID
+from sqlalchemy.engine import Connection
 from sqlalchemy.engine.interfaces import Dialect
 from sqlalchemy.orm import (
     DeclarativeBase,
@@ -337,6 +340,13 @@ class User(SQLAlchemyBaseUserTableUUID, Base):
     # Craft gate (PostHog flag / ENABLE_CRAFT).
     craft_enabled: Mapped[bool | None] = mapped_column(
         Boolean, nullable=True, default=None
+    )
+
+    # Addresses this user was renamed away from. They still match indexed ACLs
+    # that name them, so each one grants access until another identity claims
+    # the address.
+    prior_emails: Mapped[list[str]] = mapped_column(
+        postgresql.ARRAY(String), nullable=False, default=list, server_default="{}"
     )
 
     """
@@ -4514,6 +4524,46 @@ class KVStore(Base):
     )
 
 
+def _release_prior_email_claim(
+    email: str, connection: Connection, *, user_id: UUID | None = None
+) -> None:
+    """Revoke the alias grant when a different identity takes the address.
+
+    A prior address keeps granting its former holder access, so it has to stop
+    the moment it legitimately belongs to someone else.
+    """
+    normalized_email = email.lower()
+    release = (
+        update(User)
+        .where(User.prior_emails.contains([normalized_email]))
+        .values(prior_emails=func.array_remove(User.prior_emails, normalized_email))
+    )
+    if user_id is not None:
+        release = release.where(User.id != user_id)  # ty: ignore[invalid-argument-type]
+
+    connection.execute(release)
+
+
+# Claiming an address anywhere revokes it as anyone else's alias.
+@event.listens_for(User, "before_insert")
+def _release_inserted_user_email(
+    mapper: Mapper,  # noqa: ARG001
+    connection: Connection,
+    target: User,
+) -> None:
+    _release_prior_email_claim(target.email, connection)
+
+
+@event.listens_for(User, "before_update")
+def _release_updated_user_email(
+    mapper: Mapper,  # noqa: ARG001
+    connection: Connection,
+    target: User,
+) -> None:
+    if inspect(target).attrs.email.history.has_changes():
+        _release_prior_email_claim(target.email, connection, user_id=target.id)
+
+
 class EncryptedKeyValueStore(Base):
     """Encrypted-at-rest key/value storage for instance-level secrets. Postgres
     only, never cached, so secrets stay out of Redis."""
@@ -5406,6 +5456,39 @@ class UserTenantMapping(PublicBase):
         return value.lower() if value else value
 
 
+class UserTenantMappingOAuthAccount(PublicBase):
+    """Copy of an `OAuthAccount` subject, which survives an email change at the
+    provider, keyed to the mapping row it authenticates. The primary key holds
+    one mapping per subject. ON UPDATE CASCADE follows an email rekey, and ON
+    DELETE CASCADE drops the link with its membership. Widths mirror the source
+    columns."""
+
+    __tablename__ = "user_tenant_mapping_oauth_account"
+
+    oauth_name: Mapped[str] = mapped_column(
+        String(length=100), nullable=False, primary_key=True
+    )
+    account_id: Mapped[str] = mapped_column(
+        String(length=320), nullable=False, primary_key=True
+    )
+    email: Mapped[str] = mapped_column(String, nullable=False)
+    tenant_id: Mapped[str] = mapped_column(String, nullable=False)
+
+    __table_args__ = (
+        ForeignKeyConstraint(
+            ["email", "tenant_id"],
+            [
+                "public.user_tenant_mapping.email",
+                "public.user_tenant_mapping.tenant_id",
+            ],
+            ondelete="CASCADE",
+            onupdate="CASCADE",
+        ),
+        Index("ix_user_tenant_mapping_oauth_account_mapping", "email", "tenant_id"),
+        {"schema": "public"},
+    )
+
+
 class AvailableTenant(PublicBase):
     __tablename__ = "available_tenant"
     __table_args__ = ({"schema": "public"},)
@@ -6034,6 +6117,16 @@ class BuildSession(Base):
             desc("created_at"),
         ),
         Index("ix_build_session_status", "status"),
+        # Durable port reservation: allocation retries on collision instead of
+        # trusting the application-level scan. Scoped per user — ports only
+        # collide within one user's sandbox.
+        Index(
+            "uq_build_session_nextjs_port",
+            "user_id",
+            "nextjs_port",
+            unique=True,
+            postgresql_where=text("nextjs_port IS NOT NULL"),
+        ),
     )
 
 
@@ -6068,6 +6161,24 @@ class Sandbox(Base):
 
     encrypted_pat: Mapped[SensitiveValue[str] | None] = mapped_column(
         EncryptedString(), nullable=True
+    )
+
+    # Attempt number: incremented (under the per-user reservation lock) each
+    # time a new provisioning attempt is authorized. Every status write names
+    # the attempt it belongs to and only applies while the row still holds
+    # that number, so an old attempt can never overwrite a newer attempt's
+    # outcome. Backend runtime deletes are name-keyed and best-effort
+    # serialized by the provisioning lock; a wrongly deleted pod self-heals
+    # through unhealthy-RUNNING recovery.
+    provisioning_attempt_number: Mapped[int] = mapped_column(
+        Integer, nullable=False, default=0, server_default="0"
+    )
+    # When the current attempt was authorized; a committed PROVISIONING row
+    # whose attempt is older than the managers' bounded waits is dead and may
+    # be taken over. Failure diagnostics live in logs (keyed by sandbox ID +
+    # attempt number), not here.
+    provisioning_started_at: Mapped[datetime.datetime | None] = mapped_column(
+        DateTime(timezone=True), nullable=True
     )
 
     # Relationships

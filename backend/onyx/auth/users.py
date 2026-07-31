@@ -6,6 +6,7 @@ import secrets
 import string
 import uuid
 from collections.abc import AsyncGenerator, Sequence
+from contextlib import asynccontextmanager
 from datetime import datetime, timedelta, timezone
 from functools import partial
 from typing import Any, Dict, List, Literal, Optional, Protocol, Tuple, TypeVar, cast
@@ -116,7 +117,7 @@ from onyx.configs.constants import (
     MilestoneRecordType,
     OnyxRedisLocks,
 )
-from onyx.db.api_key import fetch_user_for_api_key
+from onyx.db.api_key import fetch_api_key_auth_result
 from onyx.db.auth import (
     SQLAlchemyUserAdminDB,
     get_access_token_db,
@@ -132,13 +133,15 @@ from onyx.db.engine.sql_engine import (
     get_session_with_current_tenant,
     get_session_with_tenant,
 )
-from onyx.db.enums import AccountType, Permission
+from onyx.db.enums import AccountType, PatType, Permission
 from onyx.db.models import AccessToken, OAuthAccount, Persona, User
 from onyx.db.pat import resolve_pat
 from onyx.db.users import (
     assign_user_to_default_groups__no_commit,
     get_user_by_email,
+    get_user_by_oauth_account,
     is_limited_user,
+    reconcile_user_email__no_commit,
 )
 from onyx.error_handling.error_codes import OnyxErrorCode
 from onyx.error_handling.exceptions import (
@@ -168,9 +171,12 @@ from shared_configs.configs import (
 )
 from shared_configs.contextvars import (
     CURRENT_TENANT_ID_CONTEXTVAR,
+    CURRENT_USAGE_CREDENTIAL_CONTEXTVAR,
     CURRENT_USER_ID_CONTEXTVAR,
+    UsageCredentialIdentity,
     get_current_tenant_id,
 )
+from shared_configs.enums import UsageCredentialType
 
 logger = setup_logger()
 
@@ -333,9 +339,57 @@ def verify_email_is_invited(email: str) -> None:
     )
 
 
-def verify_email_in_whitelist(email: str, tenant_id: str) -> None:
+def remove_user_from_invited_users_after_login(
+    email: str, user_id: uuid.UUID, tenant_id: str
+) -> None:
+    """Best-effort invite cleanup. A leftover entry is inert once the user is a
+    member, so a failure must not fail the login."""
+    try:
+        remove_user_from_invited_users(email)
+    except Exception:
+        logger.warning(
+            "Invite cleanup failed after login: user_id=%s tenant=%s",
+            user_id,
+            tenant_id,
+            exc_info=True,
+        )
+
+
+def rekey_tenant_mapping_after_login(
+    email: str,
+    tenant_id: str,
+    oauth_identities: list[tuple[str, str]],
+    previous_email: str | None = None,
+) -> None:
+    """Best-effort catalog rekey for a login that has already succeeded.
+
+    Tenant resolution routes by linked subject, so a membership row left under
+    the old address still reaches the right workspace and the next login retries.
+    """
+    try:
+        fetch_ee_implementation_or_noop(
+            "onyx.db.user_tenant_mapping", "rekey_user_mapping_email", None
+        )(email, tenant_id, oauth_identities, previous_email)
+    except Exception:
+        logger.warning(
+            "Tenant mapping rekey failed after login: tenant=%s",
+            tenant_id,
+            exc_info=True,
+        )
+
+
+def verify_email_in_whitelist(
+    email: str,
+    tenant_id: str,
+    oauth_name: str | None = None,
+    account_id: str | None = None,
+) -> None:
     with get_session_with_tenant(tenant_id=tenant_id) as db_session:
         user = get_user_by_email(email, db_session)
+        if user is None and oauth_name and account_id:
+            # A linked subject proves this is an existing member even when the
+            # provider has renamed their address since the previous login.
+            user = get_user_by_oauth_account(oauth_name, account_id, db_session)
         # A permission-sync placeholder is not a member: appearing in a
         # connector's ACLs must not satisfy invite-only, so the invite check
         # applies until the person actually joins.
@@ -470,6 +524,18 @@ def _invalidate_license_cache_after_seat_change() -> None:
     )()
 
 
+@asynccontextmanager
+async def _tenant_session_with_context(
+    tenant_id: str,
+) -> AsyncGenerator[AsyncSession, None]:
+    token = CURRENT_TENANT_ID_CONTEXTVAR.set(tenant_id)
+    try:
+        async with get_async_session_context_manager(tenant_id) as db_session:
+            yield db_session
+    finally:
+        CURRENT_TENANT_ID_CONTEXTVAR.reset(token)
+
+
 class UserManager(UUIDIDMixin, BaseUserManager[User, uuid.UUID]):
     reset_password_token_secret = USER_AUTH_SECRET
     verification_token_secret = USER_AUTH_SECRET
@@ -478,7 +544,7 @@ class UserManager(UUIDIDMixin, BaseUserManager[User, uuid.UUID]):
 
     async def get_by_email(self, user_email: str) -> User:
         tenant_id = fetch_ee_implementation_or_noop(
-            "onyx.server.tenants.user_mapping", "get_tenant_id_for_email", None
+            "onyx.db.user_tenant_mapping", "get_tenant_id_for_email", None
         )(user_email)
         async with get_async_session_context_manager(tenant_id) as db_session:
             if MULTI_TENANT:
@@ -521,7 +587,7 @@ class UserManager(UUIDIDMixin, BaseUserManager[User, uuid.UUID]):
 
         try:
             tenant_id = fetch_ee_implementation_or_noop(
-                "onyx.server.tenants.user_mapping",
+                "onyx.db.user_tenant_mapping",
                 "get_tenant_id_for_email",
                 None,
             )(email)
@@ -901,17 +967,16 @@ class UserManager(UUIDIDMixin, BaseUserManager[User, uuid.UUID]):
             email=account_email,
             referral_source=referral_source,
             request=request,
+            oauth_name=oauth_name,
+            account_id=account_id,
         )
 
         if not tenant_id:
             raise HTTPException(status_code=401, detail="User not found")
 
         # Proceed with the tenant context
-        token = None
-        async with get_async_session_context_manager(tenant_id) as db_session:
-            token = CURRENT_TENANT_ID_CONTEXTVAR.set(tenant_id)
-
-            verify_email_in_whitelist(account_email, tenant_id)
+        async with _tenant_session_with_context(tenant_id) as db_session:
+            verify_email_in_whitelist(account_email, tenant_id, oauth_name, account_id)
             oauth_security_settings = get_security_settings()
             effective_valid_email_domains = (
                 allowed_email_domains_override
@@ -1009,6 +1074,40 @@ class UserManager(UUIDIDMixin, BaseUserManager[User, uuid.UUID]):
                                 oauth_account_dict,
                             )
 
+            assert user is not None
+
+            # Keyed on the stored email rather than the one the IdP just sent.
+            # The membership row moves onto the new address at the rekey below.
+            fetch_ee_implementation_or_noop(
+                "onyx.db.user_tenant_mapping", "record_oauth_identity", None
+            )(user.email, tenant_id, oauth_name, account_id)
+
+            # The provider is authoritative for the address, so adopt it when it
+            # moves. Not gated on multi-tenant: single-tenant reaches the same
+            # user by subject and so arrives here with a stale email too.
+            email_reconcile_result = await db_session.run_sync(
+                partial(reconcile_user_email__no_commit, user.id, account_email)
+            )
+            replaced_email: str | None = None
+            if email_reconcile_result is not None:
+                replaced_email, reconciled_prior_emails = email_reconcile_result
+                # Retire the consumed invite before the rename commits. A failure
+                # afterwards leaves it able to authorize the address's next holder,
+                # and no later login reports that address again.
+                remove_user_from_invited_users(replaced_email)
+                await db_session.commit()
+                user.email = account_email.lower()
+                user.prior_emails = reconciled_prior_emails
+
+            oauth_identities = [
+                (oauth_account.oauth_name, oauth_account.account_id)
+                for oauth_account in user.oauth_accounts
+            ]
+
+            rekey_tenant_mapping_after_login(
+                user.email, tenant_id, oauth_identities, replaced_email
+            )
+
             # NOTE: Most IdPs have very short expiry times, and we don't want to force the user to
             # re-authenticate that frequently, so by default this is disabled
             track_external_idp_expiry = (
@@ -1075,9 +1174,7 @@ class UserManager(UUIDIDMixin, BaseUserManager[User, uuid.UUID]):
             if user.oidc_expiry is not None and not track_external_idp_expiry:
                 await self.user_db.update(user, {"oidc_expiry": None})
                 user.oidc_expiry = None  # ty: ignore[invalid-assignment]
-            remove_user_from_invited_users(user.email)
-            if token:
-                CURRENT_TENANT_ID_CONTEXTVAR.reset(token)
+            remove_user_from_invited_users_after_login(user.email, user.id, tenant_id)
 
             return user
 
@@ -1342,12 +1439,16 @@ class UserManager(UUIDIDMixin, BaseUserManager[User, uuid.UUID]):
         tenant_id: str | None = None
         try:
             tenant_id = fetch_ee_implementation_or_noop(
-                "onyx.server.tenants.provisioning",
+                "onyx.db.user_tenant_mapping",
                 "get_tenant_id_for_email",
                 POSTGRES_DEFAULT_SCHEMA,
             )(
                 email=email,
             )
+        except OnyxError:
+            # Ambiguous membership is actionable, so it has to reach the caller
+            # rather than be flattened into a generic credential failure.
+            raise
         except Exception as e:
             logger.warning(
                 "User attempted to login with invalid credentials: %s", str(e)
@@ -1943,6 +2044,10 @@ async def _check_for_saml_and_jwt(
                 user = await _get_or_create_user_from_jwt(
                     payload, request, async_db_session
                 )
+                if user is not None:
+                    request.state.usage_credential = UsageCredentialIdentity(
+                        UsageCredentialType.JWT
+                    )
 
     return user
 
@@ -2012,6 +2117,11 @@ async def _resolve_optional_user(
     user: User | None,
     user_manager: BaseUserManager[User, uuid.UUID],
 ) -> User | None:
+    if user is not None:
+        request.state.usage_credential = UsageCredentialIdentity(
+            UsageCredentialType.SESSION
+        )
+
     if user := await _check_for_saml_and_jwt(request, user, async_db_session):
         # If user is already set, _check_for_saml_and_jwt returns the same user object
         await _maybe_refresh_oauth_tokens(user, async_db_session, user_manager)
@@ -2025,8 +2135,26 @@ async def _resolve_optional_user(
                 # Expose the token's scopes so require_permission can cap the
                 # request to them.
                 request.state.token_scopes = pat.scopes
+                request.state.usage_credential = UsageCredentialIdentity(
+                    (
+                        UsageCredentialType.CRAFT_PAT
+                        if pat.pat_type == PatType.CRAFT
+                        else UsageCredentialType.PAT
+                    ),
+                    str(pat.pat_id),
+                    pat.pat_name,
+                    pat.pat_display,
+                )
         elif hashed_api_key := get_hashed_api_key_from_request(request):
-            user = await fetch_user_for_api_key(hashed_api_key, async_db_session)
+            api_key = await fetch_api_key_auth_result(hashed_api_key, async_db_session)
+            if api_key is not None:
+                user = api_key.user
+                request.state.usage_credential = UsageCredentialIdentity(
+                    UsageCredentialType.API_KEY,
+                    str(api_key.api_key_id),
+                    api_key.api_key_name,
+                    api_key.api_key_display,
+                )
     except ValueError:
         logger.warning("Issue with validating authentication token")
         return None
@@ -2060,9 +2188,13 @@ async def optional_user(
         user_manager,
     )
     token = CURRENT_USER_ID_CONTEXTVAR.set(str(user.id) if user is not None else None)
+    credential_token = CURRENT_USAGE_CREDENTIAL_CONTEXTVAR.set(
+        getattr(request.state, "usage_credential", None)
+    )
     try:
         yield user
     finally:
+        CURRENT_USAGE_CREDENTIAL_CONTEXTVAR.reset(credential_token)
         CURRENT_USER_ID_CONTEXTVAR.reset(token)
 
 
@@ -2425,19 +2557,20 @@ async def complete_login_flow(
             ErrorCode.OAUTH_NOT_AVAILABLE_EMAIL,
         )
 
-    # Snapshot the raw IdP claims for directory-profile enrichment and the
-    # admin "OAuth Test" page. Best-effort — never raises, no-op unless
-    # IDP_PROFILE_ENRICHMENT_ENABLED.
-    await capture_oauth_login_claims(oauth_client, account_email, token)
-
     next_url = sanitize_next_url(state_data.get("next_url"))
     referral_source = state_data.get("referral_source", None)
-    try:
-        tenant_id = fetch_ee_implementation_or_noop(
-            "onyx.server.tenants.user_mapping", "get_tenant_id_for_email", None
-        )(account_email)
-    except exceptions.UserNotExists:
-        tenant_id = None
+    # Drives the new_team redirect below. Resolving differently from the login
+    # itself would greet a returning user as a brand new signup.
+    tenant_id = fetch_ee_implementation_or_noop(
+        "onyx.db.user_tenant_mapping", "resolve_tenant_id", None
+    )(account_email, oauth_client.name, account_id)
+
+    # Snapshot the raw IdP claims for directory-profile enrichment and the admin
+    # "OAuth Test" page. The subject-resolved tenant keeps capture working after
+    # an IdP rename. Never raises, no-op unless IDP_PROFILE_ENRICHMENT_ENABLED.
+    await capture_oauth_login_claims(
+        oauth_client, account_email, token, tenant_id=tenant_id
+    )
 
     request.state.referral_source = referral_source
 

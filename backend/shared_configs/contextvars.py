@@ -1,6 +1,8 @@
 import contextvars
+from typing import NamedTuple
 
 from shared_configs.configs import MULTI_TENANT, POSTGRES_DEFAULT_SCHEMA
+from shared_configs.enums import UsageCredentialType
 
 # Context variable for the current tenant id
 CURRENT_TENANT_ID_CONTEXTVAR: contextvars.ContextVar[str | None] = (
@@ -35,6 +37,18 @@ CURRENT_USER_ID_CONTEXTVAR: contextvars.ContextVar[str | None] = contextvars.Con
 )
 
 
+class UsageCredentialIdentity(NamedTuple):
+    credential_type: UsageCredentialType
+    credential_id: str | None = None
+    credential_name: str | None = None
+    credential_display: str | None = None
+
+
+CURRENT_USAGE_CREDENTIAL_CONTEXTVAR: contextvars.ContextVar[
+    UsageCredentialIdentity | None
+] = contextvars.ContextVar("current_usage_credential", default=None)
+
+
 def get_current_tenant_id() -> str:
     tenant_id = CURRENT_TENANT_ID_CONTEXTVAR.get()
     if tenant_id is None:
@@ -55,3 +69,7 @@ def get_current_tenant_id() -> str:
 def get_current_user_id() -> str | None:
     """Requesting user's id, or None outside a per-request context."""
     return CURRENT_USER_ID_CONTEXTVAR.get()
+
+
+def get_current_usage_credential() -> UsageCredentialIdentity | None:
+    return CURRENT_USAGE_CREDENTIAL_CONTEXTVAR.get()

@@ -36,6 +36,10 @@ const (
 	minComposeVersion  = "2.24.0"
 	failureLogTail     = 30
 
+	// dockerDesktopWait bounds the wait for the macOS daemon to answer, and so
+	// also bounds how long its spinner can turn with nothing else on screen.
+	dockerDesktopWait = 120 * time.Second
+
 	// s3FilestoreProfile is the COMPOSE_PROFILES entry that runs MinIO: on in
 	// standard mode, off in lite. It is the only entry the CLI owns.
 	s3FilestoreProfile = "s3-filestore"
@@ -71,6 +75,7 @@ func RunInstall(ctx context.Context, deps Deps, opts Options) error {
 	in.lite = opts.Lite
 	in.craft = opts.IncludeCraft
 	in.prod = opts.Prod
+	in.dev = opts.Dev
 	err := in.runInstall(ctx)
 	if errors.Is(err, ui.ErrAborted) || (err != nil && ctx.Err() != nil) {
 		return exitcodes.New(exitcodes.General, "installation cancelled")
@@ -86,6 +91,10 @@ func (in *installer) runInstall(ctx context.Context) error {
 	if in.opts.Prod && in.opts.Lite {
 		return exitcodes.New(exitcodes.BadRequest,
 			"--prod and --lite cannot be used together: they select conflicting compose files")
+	}
+	if in.opts.Prod && in.opts.Dev {
+		return exitcodes.New(exitcodes.BadRequest,
+			"--prod and --dev cannot be used together: the dev overlay publishes Postgres, Redis, OpenSearch and the API on the host, which a production deployment keeps behind nginx")
 	}
 
 	in.root = paths.Resolve(in.opts.Dir)
@@ -205,11 +214,17 @@ func (in *installer) runInstall(ctx context.Context) error {
 			return exitcodes.New(exitcodes.BadRequest,
 				"this is a prod deployment — --lite cannot be applied to it")
 		}
+		if in.prod && in.opts.Dev {
+			return exitcodes.New(exitcodes.BadRequest,
+				"this is a prod deployment — --dev cannot be applied to it")
+		}
 		in.wasLite = manifest.Mode == state.ModeLite ||
 			in.overlayOnDisk(filepath.Base(deployfiles.LiteOverlay.DestRel))
 		in.lite = !in.prod && (in.opts.Lite || (!in.opts.IncludeCraft && in.wasLite))
 		in.craft = in.opts.IncludeCraft || manifest.IncludeCraft ||
 			in.overlayOnDisk(filepath.Base(deployfiles.CraftOverlay.DestRel))
+		in.dev = !in.prod && (in.opts.Dev || manifest.Dev ||
+			in.overlayOnDisk(filepath.Base(deployfiles.DevOverlay.DestRel)))
 
 		if pinnedTag != "" {
 			// --tag already answers the question below.
@@ -330,7 +345,7 @@ func (in *installer) runInstall(ctx context.Context) error {
 		initialRef = release.ConfigRef(initialTag)
 	}
 	fetcher := &fileFetcher{in: in}
-	if err := in.materializeFiles(ctx, initialRef, managedFiles(in.prod, in.lite, in.craft), manifest, fetcher); err != nil {
+	if err := in.materializeFiles(ctx, initialRef, managedFiles(in.prod, in.lite, in.craft, in.dev), manifest, fetcher); err != nil {
 		return err
 	}
 	if !in.lite {
@@ -342,6 +357,14 @@ func (in *installer) runInstall(ctx context.Context) error {
 		if err := in.removeOverlayIfPresent(deployfiles.CraftOverlay, manifest, "Craft disabled this run"); err != nil {
 			return err
 		}
+	}
+	if !in.dev {
+		if err := in.removeOverlayIfPresent(deployfiles.DevOverlay, manifest, "dev ports not requested this run"); err != nil {
+			return err
+		}
+	}
+	if in.dev {
+		in.warnf("Dev overlay: Postgres, Redis, OpenSearch, MinIO, the model server and the API are published on this host, not just nginx. Only run it on a machine you trust the network of.")
 	}
 
 	// Captured for rollback: a failed pull must not leave .env pointing at a
@@ -367,7 +390,7 @@ func (in *installer) runInstall(ctx context.Context) error {
 	configRef := release.ConfigRef(effectiveTag)
 	if !in.localFiles() && configRef != initialRef {
 		in.infof("Fetching config files matching %s...", configRef)
-		if err := in.materializeFiles(ctx, configRef, managedFiles(in.prod, in.lite, in.craft), manifest, fetcher); err != nil {
+		if err := in.materializeFiles(ctx, configRef, managedFiles(in.prod, in.lite, in.craft, in.dev), manifest, fetcher); err != nil {
 			// .env already names this version and nothing has been deployed
 			// yet, so it is put back for the same reason a failed pull does:
 			// a version that never ran must not be left recorded as the
@@ -412,6 +435,7 @@ func (in *installer) runInstall(ctx context.Context) error {
 	}
 	in.recordProject(manifest)
 	manifest.IncludeCraft = in.craft
+	manifest.Dev = in.dev
 	if !hadManifest || manifest.InstalledAt.IsZero() {
 		manifest.InstalledAt = now
 	}
@@ -685,9 +709,9 @@ func (in *installer) resolveDockerProblems(ctx context.Context, pre preflight) e
 
 	if !in.docker.DaemonRunning(ctx) {
 		if runtime.GOOS == "darwin" {
-			in.infof("Docker daemon is not running. Starting Docker Desktop...")
-			if err := in.suspend(func() error {
-				return dockercmd.StartDockerDesktopDarwin(ctx, in.docker, in.deps.IOS.Out, 120*time.Second)
+			in.infof("Docker daemon is not running.")
+			if err := in.runTask("Starting Docker Desktop", func(progress io.Writer) error {
+				return dockercmd.StartDockerDesktopDarwin(ctx, in.docker, progress, dockerDesktopWait)
 			}); err != nil {
 				return exitcodes.Newf(exitcodes.General, "%v", err)
 			}
@@ -1381,6 +1405,11 @@ func (in *installer) printSuccess(ctx context.Context, hostPort int) {
 			"Lite mode: no OpenSearch/Redis/model servers or background workers.",
 			"Connectors and RAG search are off; chat, tools, uploads, projects work.")
 	}
+	if in.dev {
+		lines = append(lines, "",
+			"Dev overlay: the API (8080) and the data services (Postgres, Redis,",
+			"OpenSearch, MinIO, model server) are published on this host.")
+	}
 	lines = append(lines, "")
 	lines = append(lines, manageLines()...)
 
@@ -1491,7 +1520,7 @@ func (in *installer) starRepo(ctx context.Context) {
 // docker-compose.prod.yml on its own; every other mode stacks overlays on
 // docker-compose.yml. With autoDetect, previously downloaded files are
 // picked up from disk so users don't have to repeat
-// --lite/--prod/--include-craft for lifecycle commands (install.sh's
+// --lite/--prod/--include-craft/--dev for lifecycle commands (install.sh's
 // build_compose_file_args true).
 func (in *installer) composeFileNames(autoDetect bool) []string {
 	prodName := filepath.Base(deployfiles.ProdCompose.DestRel)
@@ -1510,6 +1539,12 @@ func (in *installer) composeFileNames(autoDetect bool) []string {
 	}
 	if in.craft || (autoDetect && in.overlayOnDisk(craftName)) {
 		files = append(files, craftName)
+	}
+	// Last, so the ports and build targets it publishes are the ones that
+	// survive the merge — that is the whole point of the overlay.
+	devName := filepath.Base(deployfiles.DevOverlay.DestRel)
+	if in.dev || (autoDetect && in.overlayOnDisk(devName)) {
+		files = append(files, devName)
 	}
 	return files
 }

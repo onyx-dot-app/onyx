@@ -9,6 +9,7 @@ import (
 	"os"
 	"path/filepath"
 	"strings"
+	"sync"
 	"testing"
 	"time"
 
@@ -18,13 +19,19 @@ import (
 	"github.com/onyx-dot-app/onyx/cli/internal/iostreams"
 )
 
-// fakeRunner scripts every external command RunInstall issues.
+// fakeRunner scripts every external command RunInstall issues. The installer
+// runs commands from concurrent goroutines (preflight, tag fallback), so Run
+// serializes itself — including the handler, which tests write as closures
+// over unsynchronized locals.
 type fakeRunner struct {
+	mu      sync.Mutex
 	calls   []dockercmd.Command
 	handler func(c dockercmd.Command) (dockercmd.Result, error)
 }
 
 func (f *fakeRunner) Run(_ context.Context, c dockercmd.Command) (dockercmd.Result, error) {
+	f.mu.Lock()
+	defer f.mu.Unlock()
 	f.calls = append(f.calls, c)
 	if f.handler != nil {
 		return f.handler(c)

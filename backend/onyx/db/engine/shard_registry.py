@@ -348,6 +348,15 @@ def get_shard_spec(shard_name: str) -> ShardSpec:
     return spec
 
 
+def validate_shard_name(shard_name: str) -> None:
+    """Raise unless this names a configured shard.
+
+    For callers that want the check without the spec, so a bad `-x shard=` fails at
+    argument-parsing time rather than after connecting somewhere unintended.
+    """
+    get_shard_spec(shard_name)
+
+
 def get_engine_for_shard(shard_name: str) -> Engine:
     return ShardRegistry.get_engine(shard_name)
 

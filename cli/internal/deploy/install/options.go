@@ -5,6 +5,7 @@ package install
 
 import (
 	"fmt"
+	"io"
 
 	"github.com/onyx-dot-app/onyx/cli/internal/deploy/dockercmd"
 	"github.com/onyx-dot-app/onyx/cli/internal/deploy/paths"
@@ -21,6 +22,7 @@ type Options struct {
 	Lite         bool
 	IncludeCraft bool
 	Prod         bool
+	Dev          bool
 	Tag          string
 	Local        bool
 	Offline      bool
@@ -52,6 +54,9 @@ type Deps struct {
 
 // NewDeps wires production dependencies.
 func NewDeps(ios *iostreams.IOStreams, cliVersion string) Deps {
+	// Before anything is styled or the wizard takes the terminal over: the
+	// accent color is picked by asking the terminal for its background.
+	ui.DetectBackground(ios)
 	return Deps{
 		IOS:        ios,
 		Runner:     dockercmd.ExecRunner{},
@@ -75,6 +80,7 @@ type installer struct {
 	lite     bool
 	craft    bool
 	prod     bool
+	dev      bool
 	project  string     // compose project name every docker/compose call uses
 	wiz      *ui.Wizard // live wizard when the fancy renderer drives the run
 	cancel   func()     // cancels in-flight work when the wizard is quit
@@ -315,4 +321,21 @@ func (in *installer) suspend(fn func() error) error {
 		return in.wiz.Suspend(fn)
 	}
 	return fn()
+}
+
+// runTask shows fn as a spinner phase rather than releasing the screen for it,
+// for steps that neither prompt nor report progress worth reading — the only
+// two things suspend() buys. Their narration ("Waiting for X to start...",
+// once every couple of seconds) is what the spinner and its elapsed counter
+// say instead, so under the wizard it is dropped rather than written to a
+// screen the wizard has taken over.
+func (in *installer) runTask(label string, fn func(progress io.Writer) error) error {
+	if in.wiz == nil || in.opts.Verbose {
+		in.infof("%s...", label)
+		return fn(in.deps.IOS.Out)
+	}
+	in.wiz.TaskStart(label)
+	err := fn(io.Discard)
+	in.wiz.TaskDone(err == nil)
+	return err
 }
