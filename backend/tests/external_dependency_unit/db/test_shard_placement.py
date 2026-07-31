@@ -253,6 +253,33 @@ def test_cleanup_drops_the_schema_from_the_tenants_own_shard(
     assert _mapped_shard(tenant_id) is None
 
 
+def test_cleanup_sweeps_every_shard_not_just_the_mapped_one(
+    placement_on_second_shard: dict[str, Any],
+) -> None:
+    """Cleanup deletes the mapping, so trusting it would strand a copy on the shard the
+    mapping did not name — and a tenant mid-migration exists on two shards at once."""
+    from scripts.tenant_cleanup.on_pod_scripts.cleanup_tenant_schema import (
+        drop_data_plane_schema,
+    )
+
+    tenant_id = f"tenant_{uuid4()}"
+    placement_on_second_shard["created"].append(tenant_id)
+
+    # Schema on both shards, with the mapping naming only one of them.
+    for shard in (DEFAULT_SHARD, SECOND_SHARD):
+        with get_engine_for_shard(shard).connect() as conn:
+            conn.execute(text(f'CREATE SCHEMA IF NOT EXISTS "{tenant_id}"'))
+            conn.commit()
+    record_tenant_placement(tenant_id, SECOND_SHARD)
+
+    result = drop_data_plane_schema(tenant_id)
+
+    assert result["status"] == "success"
+    assert not _schema_exists(get_engine_for_shard(SECOND_SHARD), tenant_id)
+    assert not _schema_exists(get_engine_for_shard(DEFAULT_SHARD), tenant_id)
+    assert _mapped_shard(tenant_id) is None
+
+
 def test_cleanup_clears_catalog_rows_when_the_schema_is_already_gone(
     placement_on_second_shard: dict[str, Any],
 ) -> None:
