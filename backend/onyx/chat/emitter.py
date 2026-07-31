@@ -49,7 +49,7 @@ class NullEmitter(Emitter):
 
     def __init__(self) -> None:
         self._model_idx = 0
-        self._merged_queue = None  # type: ignore[assignment]
+        self._merged_queue = None
         self._drain_done = None
 
     def emit(self, packet: Packet) -> None:

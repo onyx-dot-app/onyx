@@ -19,8 +19,8 @@ def test_kubernetes_workspace_cleanup_failure_propagates(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     manager = object.__new__(KubernetesSandboxManager)
-    manager._stream_core_api = MagicMock()  # type: ignore[attr-defined]
-    manager._namespace = "sandbox-test"  # type: ignore[attr-defined]
+    manager._stream_core_api = MagicMock()
+    manager._namespace = "sandbox-test"
     monkeypatch.setattr(manager, "_close_session_buses", MagicMock())
     monkeypatch.setattr(
         kubernetes_module,

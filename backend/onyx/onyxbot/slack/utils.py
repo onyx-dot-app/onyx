@@ -638,7 +638,8 @@ def slack_usage_report(action: str, sender_id: str | None, client: WebClient) ->
     sender_email = None
     try:
         resp = client.users_info(user=sender_id)  # ty: ignore[invalid-argument-type]
-        sender_email = resp.data["user"]["profile"]["email"]  # type: ignore
+        data = cast(dict[str, Any], resp.data)
+        sender_email = data["user"]["profile"]["email"]
     except Exception:
         logger.warning("Unable to find sender email")
 

@@ -73,8 +73,8 @@ def test_ensure_opencode_session_uses_unary_client_without_event_bus(
     def fail_if_bus_created(_: UUID, __: str) -> object:
         raise AssertionError("ensure_opencode_session should not create an event bus")
 
-    manager._load_serve_connection_info = load_connection_info  # type: ignore[method-assign]  # ty: ignore[invalid-assignment]
-    manager._get_or_create_event_bus = fail_if_bus_created  # type: ignore[method-assign]  # ty: ignore[invalid-assignment]
+    manager._load_serve_connection_info = load_connection_info  # ty: ignore[invalid-assignment]
+    manager._get_or_create_event_bus = fail_if_bus_created  # ty: ignore[invalid-assignment]
     monkeypatch.setattr(
         serve_transport,
         "OpencodeServeClient",
@@ -101,8 +101,8 @@ def test_delete_opencode_session_uses_unary_client_without_event_bus(
     def fail_if_bus_created(_: UUID, __: str) -> object:
         raise AssertionError("delete_opencode_session should not create an event bus")
 
-    manager._load_serve_connection_info = load_connection_info  # type: ignore[method-assign]  # ty: ignore[invalid-assignment]
-    manager._get_or_create_event_bus = fail_if_bus_created  # type: ignore[method-assign]  # ty: ignore[invalid-assignment]
+    manager._load_serve_connection_info = load_connection_info  # ty: ignore[invalid-assignment]
+    manager._get_or_create_event_bus = fail_if_bus_created  # ty: ignore[invalid-assignment]
     monkeypatch.setattr(
         serve_transport,
         "OpencodeServeClient",

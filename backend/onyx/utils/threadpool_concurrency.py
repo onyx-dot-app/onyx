@@ -587,7 +587,7 @@ def parallel_yield(gens: list[Iterator[R]], max_workers: int = 10) -> Iterator[R
     for some extra generator code to run and not have the result(s) yielded.
     """
     with ThreadPoolExecutor(max_workers=max_workers) as executor:
-        future_to_index: dict[Future[tuple[int, R | None]], int] = (  # type: ignore
+        future_to_index: dict[Future[tuple[int, R | None]], int] = (  # ty: ignore[invalid-assignment]
             {
                 executor.submit(_next_or_none, ind, gen): ind
                 for ind, gen in enumerate(gens)

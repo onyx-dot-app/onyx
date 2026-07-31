@@ -309,9 +309,9 @@ def test_craft_helm_rejects_docker_sandbox_backend_override() -> None:
 def _build_pod() -> client.V1Pod:
     pod_template = _render_pod_template()
     mgr: KubernetesSandboxManager = object.__new__(KubernetesSandboxManager)
-    mgr._namespace = "onyx-sandboxes"  # type: ignore[attr-defined]
-    mgr._core_api = _FakeCoreApi(pod_template)  # type: ignore[attr-defined]  # ty: ignore[invalid-assignment]
-    return mgr._create_sandbox_pod(  # type: ignore[attr-defined]
+    mgr._namespace = "onyx-sandboxes"
+    mgr._core_api = _FakeCoreApi(pod_template)  # ty: ignore[invalid-assignment]
+    return mgr._create_sandbox_pod(
         sandbox_id="abc12345-abcd-abcd-abcd-abcdef123456",
         tenant_id="t-1",
         provisioning_attempt_number=1,
@@ -650,8 +650,8 @@ def test_service_exposes_push_daemon_port() -> None:
     """push/snapshot/health reach the pod via the Service FQDN, so the
     push-daemon port must be exposed on the Service, not just the pod."""
     mgr: KubernetesSandboxManager = object.__new__(KubernetesSandboxManager)
-    mgr._namespace = "onyx-sandboxes"  # type: ignore[attr-defined]
-    svc = mgr._create_sandbox_service(  # type: ignore[attr-defined]
+    mgr._namespace = "onyx-sandboxes"
+    svc = mgr._create_sandbox_service(
         sandbox_id=UUID("abc12345-abcd-abcd-abcd-abcdef123456"),
         tenant_id="t-1",
     )
