@@ -1,8 +1,9 @@
 from datetime import datetime
-from typing import Any
+from typing import Any, cast
 
 from litellm.completion_extras.litellm_responses_transformation.transformation import (
     LiteLLMResponsesTransformationHandler,
+    OpenAiResponsesToChatCompletionStreamIterator,
 )
 from litellm.litellm_core_utils.litellm_logging import Logging
 from litellm.llms.ollama.chat.transformation import OllamaChatCompletionResponseIterator
@@ -189,3 +190,112 @@ def test_responses_transform_response_preserves_reasoning_summary_sections() -> 
     assert (
         result.choices[0].message.reasoning_content == "first section\n\nsecond section"
     )
+
+
+def _minimal_completed_response_dict() -> dict[str, Any]:
+    return {
+        "id": "resp_dict_1",
+        "object": "response",
+        "created_at": 0,
+        "status": "completed",
+        "model": "m",
+        "output": None,
+        "usage": {"input_tokens": 5, "output_tokens": 3, "total_tokens": 8},
+    }
+
+
+def test_responses_chunk_parser_normalizes_null_output_on_completed() -> None:
+    apply_monkey_patches()
+    iterator = OpenAiResponsesToChatCompletionStreamIterator(
+        streaming_response=iter(()),
+        sync_stream=True,
+    )
+    parsed = iterator.chunk_parser(
+        {
+            "type": "response.completed",
+            "sequence_number": 9,
+            "response": _minimal_completed_response_dict(),
+        }
+    )
+    assert parsed.choices[0].finish_reason == "stop"
+
+
+def test_responses_chunk_parser_ignores_empty_tool_argument_delta() -> None:
+    apply_monkey_patches()
+    iterator = OpenAiResponsesToChatCompletionStreamIterator(
+        streaming_response=iter(()),
+        sync_stream=True,
+    )
+    empty = iterator.chunk_parser(
+        {
+            "type": "response.function_call_arguments.delta",
+            "item_id": "toolu_1",
+            "output_index": 0,
+            "delta": "",
+            "sequence_number": 4,
+        }
+    )
+    assert empty.choices[0].delta.tool_calls is None
+
+    real = iterator.chunk_parser(
+        {
+            "type": "response.function_call_arguments.delta",
+            "item_id": "toolu_1",
+            "output_index": 0,
+            "delta": '{"query": "onboarding"}',
+            "sequence_number": 5,
+        }
+    )
+    tool_calls = real.choices[0].delta.tool_calls
+    assert tool_calls is not None
+    assert tool_calls[0].function.arguments == '{"query": "onboarding"}'
+
+
+def test_assembled_streaming_response_handles_dict_response() -> None:
+    from types import SimpleNamespace
+
+    from litellm.types.llms.openai import ResponseCompletedEvent
+
+    apply_monkey_patches()
+    event = ResponseCompletedEvent.model_construct(
+        type="response.completed",
+        response=_minimal_completed_response_dict(),
+    )
+    get_assembled = cast(Any, Logging._get_assembled_streaming_response)
+    assembled = get_assembled(
+        SimpleNamespace(stream=True),
+        event,
+        None,
+        None,
+        False,
+        [],
+    )
+    assert isinstance(assembled, ResponsesAPIResponse)
+    assert assembled.usage is not None
+    assert assembled.usage.input_tokens == 5
+    assert assembled.usage.output_tokens == 3
+
+
+def test_bridge_check_honors_prefix_for_registry_known_models() -> None:
+    # Registry-known compound ids must still bridge when the prefix is explicit.
+    import litellm.main as litellm_main
+
+    apply_monkey_patches()
+    model_info, model = litellm_main.responses_api_bridge_check(
+        model="responses/anthropic/claude-haiku-4-5",
+        custom_llm_provider="openai",
+    )
+    assert model_info["mode"] == "responses"
+    assert model == "anthropic/claude-haiku-4-5"
+
+
+def test_bridge_check_delegates_without_prefix() -> None:
+    import litellm.main as litellm_main
+
+    apply_monkey_patches()
+    model_info, model = litellm_main.responses_api_bridge_check(
+        model="gpt-4o",
+        custom_llm_provider="openai",
+    )
+    assert model_info.get("mode") != "responses"
+    assert model == "gpt-4o"
