@@ -1,4 +1,6 @@
 from collections.abc import Callable
+from concurrent.futures import ThreadPoolExecutor
+from concurrent.futures import TimeoutError as FutureTimeoutError
 from datetime import datetime, timedelta, timezone
 
 import pytest
@@ -160,6 +162,60 @@ def test_create_notification_can_preserve_existing_last_shown(
 
     assert existing_notification.id == notification.id
     assert existing_notification.last_shown == original_last_shown
+
+
+def test_create_notification_handles_concurrent_insert(
+    db_session: Session,
+    tenant_context: None,  # noqa: ARG001
+) -> None:
+    user = create_test_user(db_session, "notification_concurrent_insert")
+    additional_data = {"test": "concurrent_insert"}
+
+    def create_competing_notification() -> int:
+        with Session(bind=db_session.get_bind()) as competing_session:
+            notification = create_notification(
+                user_id=user.id,
+                notif_type=NotificationType.FEATURE_ANNOUNCEMENT,
+                db_session=competing_session,
+                title="Competing notification",
+                additional_data=additional_data,
+            )
+            return notification.id
+
+    with Session(bind=db_session.get_bind()) as winning_session:
+        winning_notification = Notification(
+            user_id=user.id,
+            notif_type=NotificationType.FEATURE_ANNOUNCEMENT,
+            dismissed=False,
+            last_shown=datetime.now(timezone.utc),
+            first_shown=datetime.now(timezone.utc),
+            title="Winning notification",
+            additional_data=additional_data,
+        )
+        winning_session.add(winning_notification)
+        winning_session.flush()
+
+        with ThreadPoolExecutor(max_workers=1) as executor:
+            competing_result = executor.submit(create_competing_notification)
+            with pytest.raises(FutureTimeoutError):
+                competing_result.result(timeout=0.2)
+
+            winning_session.commit()
+            competing_notification_id = competing_result.result(timeout=5)
+
+    assert competing_notification_id == winning_notification.id
+    matching_notifications = list(
+        db_session.scalars(
+            select(Notification).where(
+                Notification.user_id == user.id,
+                Notification.notif_type == NotificationType.FEATURE_ANNOUNCEMENT,
+                Notification.additional_data == additional_data,
+            )
+        ).all()
+    )
+    assert [notification.id for notification in matching_notifications] == [
+        winning_notification.id
+    ]
 
 
 def test_get_notifications_api_returns_paginated_response(
