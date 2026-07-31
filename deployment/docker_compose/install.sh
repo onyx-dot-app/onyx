@@ -284,6 +284,18 @@ print_success "onyx-cli installed to ${BIN_PATH}"
 # may not have until this script created it moments ago.
 PATH_MARKER="# Added by the Onyx installer"
 
+# The startup files get the unexpanded $HOME so they stay portable.
+# shellcheck disable=SC2016
+POSIX_PATH_LINE='export PATH="$HOME/.local/bin:$PATH"'
+
+# fish_add_path only landed in fish 3.2; distros still shipping 3.0/3.1 would
+# hit "Unknown command" on every shell start. contains/set works on every
+# version and prepends the same way.
+# shellcheck disable=SC2016
+FISH_PATH_LINE='if not contains "$HOME/.local/bin" $PATH
+    set -gx PATH "$HOME/.local/bin" $PATH
+end'
+
 # Appends `line` to `profile` under PATH_MARKER unless the marker is already
 # there. Returns non-zero when the file cannot be written so the caller can
 # fall back to printing manual instructions.
@@ -300,6 +312,43 @@ append_line_to_profile() {
     printf '\n%s\n%s\n' "$PATH_MARKER" "$line" 2>/dev/null >> "$profile"
 }
 
+# Fills PROFILE_FILES with every startup file the login shell needs patched.
+# bash usually needs two: ~/.bashrc covers interactive non-login shells, but a
+# login shell (ssh, macOS Terminal) reads only the first of ~/.bash_profile,
+# ~/.bash_login and ~/.profile, and skips ~/.bashrc unless that file sources
+# it. Patching just one of the two leaves half the sessions without the entry.
+resolve_profile_files() {
+    local rc
+    PROFILE_FILES=()
+    case "${SHELL##*/}" in
+        zsh)
+            # zsh reads .zshrc for login and non-login interactive shells both.
+            PROFILE_FILES=("${ZDOTDIR:-$HOME}/.zshrc")
+            ;;
+        bash)
+            if [[ -f "${HOME}/.bashrc" ]]; then
+                PROFILE_FILES=("${HOME}/.bashrc")
+            fi
+            for rc in "${HOME}/.bash_profile" "${HOME}/.bash_login" "${HOME}/.profile"; do
+                [[ -f "$rc" ]] || continue
+                # A login profile that sources ~/.bashrc is already covered.
+                if ! grep -qE '(^|[[:space:]])(\.|source)[[:space:]]+[^#]*\.bashrc' "$rc" 2>/dev/null; then
+                    PROFILE_FILES+=("$rc")
+                fi
+                return 0
+            done
+            # No login profile yet: bash falls back to ~/.profile, so create
+            # that one. Creating ~/.bash_profile instead would stop bash from
+            # reading ~/.profile at all.
+            PROFILE_FILES+=("${HOME}/.profile")
+            ;;
+        fish)
+            PROFILE_FILES=("${HOME}/.config/fish/config.fish")
+            ;;
+    esac
+    return 0
+}
+
 case ":${PATH}:" in
     *":${BIN_DIR}:"*)
         # An onyx-cli earlier in PATH (e.g. a pip install) would shadow the one
@@ -311,46 +360,38 @@ case ":${PATH}:" in
         fi
         ;;
     *)
-        # Persist BIN_DIR into the login shell's profile so onyx-cli still
+        # Persist BIN_DIR into the login shell's profiles so onyx-cli still
         # resolves in new shells once this installer hands over to the CLI.
         # The script itself runs under bash even when the user's shell is zsh
         # or fish, hence the $SHELL sniffing. Only the default user-local
         # location is patched in: an explicit ONYX_CLI_BIN_DIR means the
         # caller manages their own PATH, and ONYX_CLI_NO_MODIFY_PATH opts out.
-        PROFILE_FILE=""
-        PATH_LINE=""
+        PROFILE_FILES=()
+        PATH_LINE="$POSIX_PATH_LINE"
+        # What the user can paste into the shell they are in right now.
+        HINT_LINE="export PATH=\"${BIN_DIR}:\$PATH\""
+        if [[ "${SHELL##*/}" == "fish" ]]; then
+            PATH_LINE="$FISH_PATH_LINE"
+            HINT_LINE="set -gx PATH \"${BIN_DIR}\" \$PATH"
+        fi
         if [[ -n "$DEFAULT_USER_BIN_DIR" ]] && [[ -z "$ONYX_CLI_NO_MODIFY_PATH" ]]; then
-            # The startup files get the unexpanded $HOME so they stay portable.
-            # shellcheck disable=SC2016
-            PATH_LINE='export PATH="$HOME/.local/bin:$PATH"'
-            case "${SHELL##*/}" in
-                zsh)
-                    PROFILE_FILE="${ZDOTDIR:-$HOME}/.zshrc"
-                    ;;
-                bash)
-                    # macOS terminals start login shells, which skip ~/.bashrc.
-                    if [[ "$OS" == "darwin" ]]; then
-                        PROFILE_FILE="${HOME}/.bash_profile"
-                    else
-                        PROFILE_FILE="${HOME}/.bashrc"
-                    fi
-                    ;;
-                fish)
-                    PROFILE_FILE="${HOME}/.config/fish/config.fish"
-                    # shellcheck disable=SC2016
-                    PATH_LINE='fish_add_path "$HOME/.local/bin"'
-                    ;;
-            esac
+            resolve_profile_files
         fi
 
-        if [[ -n "$PROFILE_FILE" ]] && append_line_to_profile "$PROFILE_FILE" "$PATH_LINE"; then
-            print_success "Added ${BIN_DIR} to PATH in ${PROFILE_FILE}"
+        UPDATED=""
+        for PROFILE_FILE in "${PROFILE_FILES[@]}"; do
+            if append_line_to_profile "$PROFILE_FILE" "$PATH_LINE"; then
+                UPDATED="${UPDATED}${UPDATED:+, }${PROFILE_FILE}"
+            fi
+        done
+
+        if [[ -n "$UPDATED" ]]; then
+            print_success "Added ${BIN_DIR} to PATH in ${UPDATED}"
             print_info "Restart your shell (or run the line below) to pick it up:"
-            echo -e "   ${BOLD}${PATH_LINE}${NC}"
         else
             print_warning "${BIN_DIR} is not in your PATH — add it to run onyx-cli directly:"
-            echo -e "   ${BOLD}export PATH=\"${BIN_DIR}:\$PATH\"${NC}"
         fi
+        echo -e "   ${BOLD}${HINT_LINE}${NC}"
         # Fix up this process too so anything the CLI spawns can find it.
         export PATH="${BIN_DIR}:${PATH}"
         ;;
