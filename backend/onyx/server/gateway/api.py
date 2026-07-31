@@ -2,7 +2,6 @@ import json
 import queue
 import threading
 from collections.abc import Callable, Iterator
-from contextlib import contextmanager
 from typing import Any
 
 from fastapi import APIRouter, Depends, Request, Response
@@ -51,6 +50,7 @@ from onyx.server.manage.llm.models import LLMProviderView, ModelConfigurationVie
 from onyx.server.query_and_chat.token_limit import check_token_rate_limits
 from onyx.tracing.flows import LLMFlow
 from onyx.tracing.framework.create import trace
+from onyx.tracing.framework.traces import Trace
 from onyx.tracing.llm_utils import (
     llm_generation_span,
     record_llm_response,
@@ -75,10 +75,11 @@ _MESSAGES_ADAPTER: TypeAdapter[list[ChatCompletionMessage]] = TypeAdapter(
 )
 
 
-@contextmanager
-def _gateway_trace(flow: LLMFlow, model: str) -> Iterator[None]:
-    with trace("llm_gateway", metadata={"flow": flow.value, "model": model}):
-        yield
+def _gateway_trace(flow: LLMFlow, llm: LLM) -> Trace:
+    return trace(
+        "llm_gateway",
+        metadata={"flow": flow.value, "model": llm.config.model_name},
+    )
 
 
 def resolve_gateway_model(
@@ -244,7 +245,7 @@ def _stream_worker(
     # StreamingResponse, so the trace must be opened here rather than in the
     # endpoint for the generation span to see an active trace.
     with (
-        _gateway_trace(flow, model),
+        _gateway_trace(flow, llm),
         llm_generation_span(
             llm, flow=flow, input_messages=messages, tools=tools
         ) as span,
@@ -434,7 +435,7 @@ def handle_chat_completion(
         )
 
     with (
-        _gateway_trace(flow, request.model),
+        _gateway_trace(flow, llm),
         llm_generation_span(
             llm,
             flow=flow,
