@@ -4,7 +4,8 @@ from uuid import UUID
 
 from fastapi import HTTPException
 from fastapi_users.password import PasswordHelper
-from sqlalchemy import Select, case, func, select
+from sqlalchemy import Select, case, delete, func, literal, select, update
+from sqlalchemy.dialects.postgresql import insert as pg_insert
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session, lazyload, selectinload
 from sqlalchemy.sql import expression
@@ -23,11 +24,14 @@ from onyx.db.enums import AccountType
 from onyx.db.models import (
     DocumentSet,
     DocumentSet__User,
+    MCPConnectionConfig,
+    MCPServer,
     OAuthAccount,
     Persona,
     Persona__User,
     SamlAccount,
     User,
+    User__ExternalUserGroupId,
     User__UserGroup,
     UserGroup,
 )
@@ -356,6 +360,123 @@ def get_user_by_oauth_account(
         )
         .first()
     )
+
+
+def build_email_reconcile_update(user: User, new_email: str) -> dict[str, Any] | None:
+    """Fields that move `user` onto `new_email`, or None when they already match
+    case-insensitively.
+
+    The replaced address is kept in `prior_emails`, which keeps matching the
+    documents whose indexed ACLs still name it.
+    """
+    current_email = user.email.lower()
+    new_email = new_email.lower()
+    if current_email == new_email:
+        return None
+
+    # Re-adopting an old address makes it current, so it stops being an alias.
+    kept = [
+        email.lower()
+        for email in user.prior_emails
+        if email.lower() not in (new_email, current_email)
+    ]
+    return {"email": new_email, "prior_emails": [*kept, current_email]}
+
+
+def reconcile_user_email__no_commit(
+    user_id: UUID, new_email: str, db_session: Session
+) -> tuple[str, list[str]] | None:
+    """Move a user and their email-keyed rows in one transaction.
+
+    Rows are locked so a concurrent login builds `prior_emails` from the latest
+    address. Returns None when the address was already current, which does not
+    mean nothing changed: a shadow user may still have been merged in.
+    """
+    normalized_new_email = new_email.lower()
+    users = (
+        db_session.query(User)
+        .filter(
+            or_(
+                User.id == user_id,  # ty: ignore[invalid-argument-type]
+                func.lower(User.email) == normalized_new_email,
+            )
+        )
+        .order_by(User.id)  # ty: ignore[invalid-argument-type]
+        .populate_existing()
+        .with_for_update(of=User)
+        .all()
+    )
+    user = next((candidate for candidate in users if candidate.id == user_id), None)
+    if user is None:
+        raise ValueError(f"User {user_id} disappeared during email reconciliation")
+
+    shadow_user = next(
+        (
+            candidate
+            for candidate in users
+            if candidate.id != user_id
+            and candidate.account_type == AccountType.EXT_PERM_USER
+            and candidate.role == UserRole.EXT_PERM_USER
+            and not candidate.oauth_accounts
+        ),
+        None,
+    )
+    if shadow_user is not None:
+        membership_insert = pg_insert(User__ExternalUserGroupId).from_select(
+            ["user_id", "external_user_group_id", "cc_pair_id", "stale"],
+            select(
+                literal(user_id),
+                User__ExternalUserGroupId.external_user_group_id,
+                User__ExternalUserGroupId.cc_pair_id,
+                User__ExternalUserGroupId.stale,
+            ).where(User__ExternalUserGroupId.user_id == shadow_user.id),
+        )
+        db_session.execute(
+            membership_insert.on_conflict_do_update(
+                index_elements=[
+                    User__ExternalUserGroupId.user_id,
+                    User__ExternalUserGroupId.external_user_group_id,
+                    User__ExternalUserGroupId.cc_pair_id,
+                ],
+                set_={
+                    "stale": User__ExternalUserGroupId.stale
+                    & membership_insert.excluded.stale
+                },
+            )
+        )
+        db_session.execute(
+            delete(User__ExternalUserGroupId).where(
+                User__ExternalUserGroupId.user_id == shadow_user.id
+            )
+        )
+        db_session.delete(shadow_user)
+        db_session.flush()
+        logger.info(
+            "Merged external-permission shadow user %s into user %s",
+            shadow_user.id,
+            user_id,
+        )
+
+    email_update = build_email_reconcile_update(user, normalized_new_email)
+    if email_update is None:
+        return None
+
+    old_email = user.email
+    prior_emails = list(email_update["prior_emails"])
+
+    user.email = normalized_new_email
+    user.prior_emails = prior_emails
+    db_session.execute(
+        update(MCPServer)
+        .where(MCPServer.owner == old_email)
+        .values(owner=normalized_new_email)
+    )
+    db_session.execute(
+        update(MCPConnectionConfig)
+        .where(MCPConnectionConfig.user_email == old_email)
+        .values(user_email=normalized_new_email)
+    )
+    return old_email, prior_emails
 
 
 def fetch_user_by_id(

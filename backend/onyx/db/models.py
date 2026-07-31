@@ -30,12 +30,15 @@ from sqlalchemy import (
     desc,
     event,
     func,
+    inspect,
     text,
     true,
+    update,
 )
 from sqlalchemy.dialects import postgresql
 from sqlalchemy.dialects.postgresql import JSONB as PGJSONB
 from sqlalchemy.dialects.postgresql import UUID as PGUUID
+from sqlalchemy.engine import Connection
 from sqlalchemy.engine.interfaces import Dialect
 from sqlalchemy.orm import (
     DeclarativeBase,
@@ -339,10 +342,9 @@ class User(SQLAlchemyBaseUserTableUUID, Base):
         Boolean, nullable=True, default=None
     )
 
-    # Addresses this user was renamed away from, until each one's ACL repair
-    # completes. Never grants access. An entry lets a later login re-submit a
-    # lost repair and reserves the address against another user claiming it
-    # mid-repair. `expire_prior_emails` closes entries out.
+    # Addresses this user was renamed away from. They still match indexed ACLs
+    # that name them, so each one grants access until another identity claims
+    # the address.
     prior_emails: Mapped[list[str]] = mapped_column(
         postgresql.ARRAY(String), nullable=False, default=list, server_default="{}"
     )
@@ -4520,6 +4522,46 @@ class KVStore(Base):
     encrypted_value: Mapped[SensitiveValue[dict[str, Any]] | None] = mapped_column(
         EncryptedJson(), nullable=True, deferred=True
     )
+
+
+def _release_prior_email_claim(
+    email: str, connection: Connection, *, user_id: UUID | None = None
+) -> None:
+    """Revoke the alias grant when a different identity takes the address.
+
+    A prior address keeps granting its former holder access, so it has to stop
+    the moment it legitimately belongs to someone else.
+    """
+    normalized_email = email.lower()
+    release = (
+        update(User)
+        .where(User.prior_emails.contains([normalized_email]))
+        .values(prior_emails=func.array_remove(User.prior_emails, normalized_email))
+    )
+    if user_id is not None:
+        release = release.where(User.id != user_id)  # ty: ignore[invalid-argument-type]
+
+    connection.execute(release)
+
+
+# Claiming an address anywhere revokes it as anyone else's alias.
+@event.listens_for(User, "before_insert")
+def _release_inserted_user_email(
+    mapper: Mapper,  # noqa: ARG001
+    connection: Connection,
+    target: User,
+) -> None:
+    _release_prior_email_claim(target.email, connection)
+
+
+@event.listens_for(User, "before_update")
+def _release_updated_user_email(
+    mapper: Mapper,  # noqa: ARG001
+    connection: Connection,
+    target: User,
+) -> None:
+    if inspect(target).attrs.email.history.has_changes():
+        _release_prior_email_claim(target.email, connection, user_id=target.id)
 
 
 class EncryptedKeyValueStore(Base):
