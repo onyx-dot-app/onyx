@@ -161,6 +161,11 @@ def box_api_status_code(error: BoxAPIError) -> int | None:
     return error.response_info.status_code
 
 
+# Box token-endpoint OAuth error codes that mean the app credentials themselves
+# are wrong, rather than a transient/unexpected failure.
+_BOX_CREDENTIAL_OAUTH_ERRORS = frozenset({"invalid_client", "unauthorized_client"})
+
+
 def box_oauth_error(error: BoxAPIError) -> tuple[str | None, str | None]:
     """Extract the OAuth ``error`` / ``error_description`` from a Box token
     failure. Box returns these in the response body on HTTP 400 (e.g.
@@ -862,7 +867,7 @@ class BoxConnector(
                 ) from e
             if status == 400:
                 code, description = box_oauth_error(e)
-                if code in ("invalid_client", "unauthorized_client"):
+                if code in _BOX_CREDENTIAL_OAUTH_ERRORS:
                     raise CredentialInvalidError(
                         f"Box rejected the app credentials ({code}): "
                         f"{description or e.message}. Verify the Client ID and "
