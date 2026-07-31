@@ -16,6 +16,13 @@ from onyx.connectors.capability_checks.registry import (
 from onyx.connectors.interfaces import BaseConnector
 
 
+class _NamedCheck(CapabilityCheck):
+    """Minimal concrete named check; ``run`` never executes in these tests."""
+
+    def run(self, context: CapabilityCheckContext) -> None:
+        raise NotImplementedError
+
+
 def test_unregistered_source_gets_connector_settings_fallback() -> None:
     """
     Verifies fallback synthesis for a source with no named INDEXING checks.
@@ -41,11 +48,10 @@ def test_registered_source_gets_no_fallback(monkeypatch: pytest.MonkeyPatch) -> 
     # Precondition.
     # Nothing is registered at framework stage, so register a named check the
     # way a per-connector session would.
-    named_check = CapabilityCheck(
+    named_check = _NamedCheck(
         capability=CredentialCapability.INDEXING,
         check_id="github_named_check",
         display_name="Named check",
-        run=MagicMock(),
     )
     monkeypatch.setitem(
         registry._INDEXING_CHECKS_BY_SOURCE, DocumentSource.GITHUB, [named_check]

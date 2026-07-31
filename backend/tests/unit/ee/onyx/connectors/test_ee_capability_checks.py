@@ -16,6 +16,13 @@ from onyx.connectors.capability_checks.models import (
 from onyx.connectors.interfaces import BaseConnector
 
 
+class _NamedCheck(CapabilityCheck):
+    """Minimal concrete named check; ``run`` never executes in these tests."""
+
+    def run(self, context: CapabilityCheckContext) -> None:
+        raise NotImplementedError
+
+
 def test_slack_perm_sync_capabilities_exclude_group_sync() -> None:
     """Verifies Slack applicability: doc sync yes, group sync no (by design)."""
     # Under test and postcondition.
@@ -65,14 +72,14 @@ def test_unregistered_sync_source_gets_shared_fallback_checks() -> None:
     checks = get_perm_sync_capability_checks(DocumentSource.GOOGLE_DRIVE)
 
     # Postcondition.
-    # One fallback per applicable capability, sharing a single run callable (and
-    # check_id) so the runner executes it once and mirrors.
+    # One fallback per applicable capability, sharing a single check_id (and
+    # class) so the runner executes it once and mirrors.
     assert {check.capability for check in checks} == {
         CredentialCapability.DOC_PERMISSION_SYNC,
         CredentialCapability.EXTERNAL_GROUP_SYNC,
     }
     assert all(check.is_fallback for check in checks)
-    assert len({id(check.run) for check in checks}) == 1
+    assert len({type(check) for check in checks}) == 1
     assert {check.check_id for check in checks} == {"google_drive_perm_sync"}
 
 
@@ -85,11 +92,10 @@ def test_registered_checks_clobber_only_their_capability(
     # Precondition.
     # Nothing is registered at framework stage, so register a named doc-sync
     # check the way a per-connector session would.
-    named_check = CapabilityCheck(
+    named_check = _NamedCheck(
         capability=CredentialCapability.DOC_PERMISSION_SYNC,
         check_id="google_drive_named_check",
         display_name="Named check",
-        run=MagicMock(),
     )
     monkeypatch.setitem(
         ee_capability_checks._DOC_PERMISSION_SYNC_CHECKS_BY_SOURCE,

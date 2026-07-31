@@ -1,4 +1,5 @@
-from collections.abc import Callable, Sequence
+from abc import ABC, abstractmethod
+from collections.abc import Sequence
 from enum import Enum
 from typing import Any
 
@@ -59,35 +60,51 @@ class CapabilityCheckContext(BaseModel):
     connector_specific_config: dict[str, Any] | None = None
 
 
-class CapabilityCheck(BaseModel):
+class CapabilityCheck(ABC):
     """
-    A named, declarative probe of one permission assumption a connector makes.
+    A named probe of one permission assumption a connector makes.
 
-    ``run`` raises a ``ValidationError``-family exception on failure and returns
+    Concrete checks pass their metadata to ``__init__`` and implement ``run``,
+    which raises a ``ValidationError``-family exception on failure and returns
     nothing on success; the runner maps exceptions to statuses.
     """
 
-    model_config = ConfigDict(frozen=True)
+    def __init__(
+        self,
+        *,
+        capability: CredentialCapability,
+        check_id: str,
+        display_name: str,
+        required: bool = True,
+        requires_connector_instance: bool = True,
+        requires_connector_config: bool = False,
+        timeout_seconds: float | None = None,
+        is_fallback: bool = False,
+        remediation: str | None = None,
+        docs_link: str | None = None,
+    ) -> None:
+        self.capability = capability
+        self.check_id = check_id
+        self.display_name = display_name
+        # Required checks gate the capability verdict; non-required checks
+        # only downgrade PASSED to PASSED_WITH_WARNINGS (partial capability).
+        self.required = required
+        self.requires_connector_instance = requires_connector_instance
+        self.requires_connector_config = requires_connector_config
+        # Per-check hang guard in seconds; None falls back to the
+        # ``CAPABILITY_CHECK_TIMEOUT_SECONDS`` default. Timing out maps to
+        # INDETERMINATE, never FAILED.
+        self.timeout_seconds = timeout_seconds
+        # True for synthesized wrappers around the legacy validation blobs
+        # (``validate_connector_settings`` / ``validate_perm_sync``) rather
+        # than named per-permission probes; the FE labels these "basic check".
+        self.is_fallback = is_fallback
+        self.remediation = remediation
+        self.docs_link = docs_link
 
-    capability: CredentialCapability
-    check_id: str
-    display_name: str
-    run: Callable[["CapabilityCheckContext"], None]
-    # Required checks gate the capability verdict; non-required checks only
-    # downgrade PASSED to PASSED_WITH_WARNINGS (partial capability).
-    required: bool = True
-    requires_connector_instance: bool = True
-    requires_connector_config: bool = False
-    # Per-check hang guard in seconds; None falls back to the
-    # ``CAPABILITY_CHECK_TIMEOUT_SECONDS`` default. Timing out maps to
-    # INDETERMINATE, never FAILED.
-    timeout_seconds: float | None = None
-    # True for synthesized wrappers around the legacy validation blobs
-    # (``validate_connector_settings`` / ``validate_perm_sync``) rather than
-    # named per-permission probes; the FE labels these "basic check".
-    is_fallback: bool = False
-    remediation: str | None = None
-    docs_link: str | None = None
+    @abstractmethod
+    def run(self, context: CapabilityCheckContext) -> None:
+        """Probes the permission; raises on failure, returns on success."""
 
 
 class CapabilityCheckResult(BaseModel):

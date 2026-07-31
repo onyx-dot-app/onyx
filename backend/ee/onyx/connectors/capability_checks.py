@@ -1,4 +1,4 @@
-"""EE hook for perm-sync capability checks.
+"""EE implementation of perm-sync capability checks.
 
 Fetched by ``onyx.connectors.capability_checks.registry`` via
 ``fetch_ee_implementation_or_noop``. Only the dispatch lives here; the check
@@ -24,29 +24,28 @@ _DOC_PERMISSION_SYNC_CHECKS_BY_SOURCE: dict[DocumentSource, list[CapabilityCheck
 _EXTERNAL_GROUP_SYNC_CHECKS_BY_SOURCE: dict[DocumentSource, list[CapabilityCheck]] = {}
 
 
-def _run_perm_sync_fallback(context: CapabilityCheckContext) -> None:
-    assert context.connector is not None, "The runner guarantees an instance."
-    context.connector.validate_perm_sync()
-
-
-def _build_perm_sync_fallback_check(
-    source: DocumentSource, capability: CredentialCapability
-) -> CapabilityCheck:
-    """
-    Builds the baseline check for a perm-sync capability with no named checks.
+class _PermSyncFallbackCheck(CapabilityCheck):
+    """Baseline check for a perm-sync capability with no named checks.
 
     Wraps the legacy ``validate_perm_sync`` blob, which covers doc sync and
-    group sync together; the checks for both capabilities therefore share one
-    run callable (and one check_id), and the runner executes it once per run and
-    mirrors the outcome onto each.
+    group sync together; the checks for both capabilities are therefore two
+    instances of this class sharing one check_id, and the runner executes the
+    probe once per run and mirrors the outcome onto each.
     """
-    return CapabilityCheck(
-        capability=capability,
-        check_id=f"{source.value}_perm_sync",
-        display_name="Permission sync validation",
-        run=_run_perm_sync_fallback,
-        is_fallback=True,
-    )
+
+    def __init__(
+        self, source: DocumentSource, capability: CredentialCapability
+    ) -> None:
+        super().__init__(
+            capability=capability,
+            check_id=f"{source.value}_perm_sync",
+            display_name="Permission sync validation",
+            is_fallback=True,
+        )
+
+    def run(self, context: CapabilityCheckContext) -> None:
+        assert context.connector is not None, "The runner guarantees an instance."
+        context.connector.validate_perm_sync()
 
 
 def get_applicable_perm_sync_capabilities(
@@ -82,5 +81,5 @@ def get_perm_sync_capability_checks(source: DocumentSource) -> list[CapabilityCh
         if registered:
             checks.extend(registered)
         elif capability in applicable:
-            checks.append(_build_perm_sync_fallback_check(source, capability))
+            checks.append(_PermSyncFallbackCheck(source, capability))
     return checks

@@ -3,6 +3,8 @@ from collections.abc import Callable
 from typing import cast
 from unittest.mock import MagicMock
 
+import pytest
+
 from onyx.configs.constants import DocumentSource
 from onyx.connectors.capability_checks.models import (
     CapabilityCheck,
@@ -18,27 +20,38 @@ from onyx.connectors.exceptions import (
 from onyx.connectors.interfaces import BaseConnector
 
 
-def _make_check(
-    run: Callable[[CapabilityCheckContext], None],
-    check_id: str = "dummy_check",
-    required: bool = True,
-    requires_connector_instance: bool = False,
-    requires_connector_config: bool = False,
-    capability: CredentialCapability = CredentialCapability.INDEXING,
-    timeout_seconds: float | None = None,
-    is_fallback: bool = False,
-) -> CapabilityCheck:
-    return CapabilityCheck(
-        capability=capability,
-        check_id=check_id,
-        display_name="Dummy check",
-        run=run,
-        required=required,
-        requires_connector_instance=requires_connector_instance,
-        requires_connector_config=requires_connector_config,
-        timeout_seconds=timeout_seconds,
-        is_fallback=is_fallback,
-    )
+class _CallableCheck(CapabilityCheck):
+    """Concrete check that delegates ``run`` to an injected callable."""
+
+    def __init__(
+        self,
+        run: Callable[[CapabilityCheckContext], None],
+        check_id: str = "dummy_check",
+        required: bool = True,
+        requires_connector_instance: bool = False,
+        requires_connector_config: bool = False,
+        capability: CredentialCapability = CredentialCapability.INDEXING,
+        timeout_seconds: float | None = None,
+        is_fallback: bool = False,
+    ) -> None:
+        super().__init__(
+            capability=capability,
+            check_id=check_id,
+            display_name="Dummy check",
+            required=required,
+            requires_connector_instance=requires_connector_instance,
+            requires_connector_config=requires_connector_config,
+            timeout_seconds=timeout_seconds,
+            is_fallback=is_fallback,
+        )
+        self._run = run
+
+    def run(self, context: CapabilityCheckContext) -> None:
+        self._run(context)
+
+
+class _OtherCallableCheck(_CallableCheck):
+    """Second concrete class, for the mirrored-check class-identity guard."""
 
 
 def _context(
@@ -56,7 +69,7 @@ def _context(
 def test_passing_check_maps_to_passed() -> None:
     """Verifies that a check returning without raising is PASSED."""
     # Precondition.
-    check = _make_check(lambda _context: None)
+    check = _CallableCheck(lambda _context: None)
 
     # Under test.
     results = run_capability_checks([check], _context())
@@ -76,7 +89,7 @@ def test_connector_validation_error_maps_to_failed() -> None:
     def run(_context: CapabilityCheckContext) -> None:
         raise InsufficientPermissionsError("Missing `channels:read`.")
 
-    check = _make_check(run)
+    check = _CallableCheck(run)
 
     # Under test.
     results = run_capability_checks([check], _context())
@@ -94,7 +107,7 @@ def test_unexpected_validation_error_maps_to_indeterminate() -> None:
     def run(_context: CapabilityCheckContext) -> None:
         raise UnexpectedValidationError("Slack rate limited the check.")
 
-    check = _make_check(run)
+    check = _CallableCheck(run)
 
     # Under test.
     results = run_capability_checks([check], _context())
@@ -111,7 +124,7 @@ def test_unknown_exception_maps_to_indeterminate() -> None:
     def run(_context: CapabilityCheckContext) -> None:
         raise RuntimeError("Boom.")
 
-    check = _make_check(run)
+    check = _CallableCheck(run)
 
     # Under test.
     results = run_capability_checks([check], _context())
@@ -125,7 +138,7 @@ def test_skips_instance_requiring_check_without_connector() -> None:
     """Verifies the skip path for checks that need a connector instance."""
     # Precondition.
     run = MagicMock()
-    check = _make_check(run, requires_connector_instance=True)
+    check = _CallableCheck(run, requires_connector_instance=True)
 
     # Under test.
     results = run_capability_checks([check], _context(connector=None))
@@ -141,7 +154,7 @@ def test_skips_config_requiring_check_even_with_connector() -> None:
     """
     # Precondition.
     run = MagicMock()
-    check = _make_check(run, requires_connector_config=True)
+    check = _CallableCheck(run, requires_connector_config=True)
     connector = cast(BaseConnector, MagicMock(spec=BaseConnector))
 
     # Under test.
@@ -158,7 +171,7 @@ def test_config_requiring_check_runs_with_config() -> None:
     """Verifies that a supplied config unlocks config-requiring checks."""
     # Precondition.
     run = MagicMock(return_value=None)
-    check = _make_check(run, requires_connector_config=True)
+    check = _CallableCheck(run, requires_connector_config=True)
 
     # Under test.
     results = run_capability_checks(
@@ -178,8 +191,8 @@ def test_failure_does_not_stop_subsequent_checks() -> None:
         raise InsufficientPermissionsError("Missing scope.")
 
     checks = [
-        _make_check(failing_run, check_id="failing_check"),
-        _make_check(lambda _context: None, check_id="passing_check"),
+        _CallableCheck(failing_run, check_id="failing_check"),
+        _CallableCheck(lambda _context: None, check_id="passing_check"),
     ]
 
     # Under test.
@@ -209,7 +222,7 @@ def test_timeout_maps_to_indeterminate() -> None:
     def slow_run(_context: CapabilityCheckContext) -> None:
         time.sleep(slow_run_duration_seconds)
 
-    check = _make_check(slow_run, timeout_seconds=timeout_seconds)
+    check = _CallableCheck(slow_run, timeout_seconds=timeout_seconds)
 
     # Under test.
     results = run_capability_checks([check], _context())
@@ -220,12 +233,12 @@ def test_timeout_maps_to_indeterminate() -> None:
     assert "timed out" in results[0].message
 
 
-def test_shared_run_callable_executes_once_and_mirrors() -> None:
+def test_shared_check_id_executes_once_and_mirrors() -> None:
     """
     Verifies the shared perm-sync fallback contract: one execution, two results.
     """
     # Precondition.
-    # One callable registered under both sync capabilities.
+    # One check_id registered under both sync capabilities.
     call_count = 0
 
     def shared_run(_context: CapabilityCheckContext) -> None:
@@ -234,12 +247,12 @@ def test_shared_run_callable_executes_once_and_mirrors() -> None:
         raise InsufficientPermissionsError("Missing directory scope.")
 
     checks = [
-        _make_check(
+        _CallableCheck(
             shared_run,
             check_id="perm_sync",
             capability=CredentialCapability.DOC_PERMISSION_SYNC,
         ),
-        _make_check(
+        _CallableCheck(
             shared_run,
             check_id="perm_sync",
             capability=CredentialCapability.EXTERNAL_GROUP_SYNC,
@@ -263,28 +276,62 @@ def test_shared_run_callable_executes_once_and_mirrors() -> None:
     assert all("directory scope" in result.message for result in results)
 
 
-def test_distinct_callables_are_not_memoized_together() -> None:
-    """Verifies memoization keys on callable identity, not check metadata."""
+def test_shared_callable_with_distinct_check_ids_runs_independently() -> None:
+    """
+    Verifies distinct checks are never collapsed by a shared implementation.
+    """
     # Precondition.
-    first_run = MagicMock(return_value=None)
-    second_run = MagicMock(return_value=None)
+    shared_run = MagicMock(return_value=None)
     checks = [
-        _make_check(first_run, check_id="same_id"),
-        _make_check(second_run, check_id="same_id"),
+        _CallableCheck(shared_run, check_id="first_check"),
+        _CallableCheck(shared_run, check_id="second_check"),
     ]
 
     # Under test.
     run_capability_checks(checks, _context())
 
     # Postcondition.
-    first_run.assert_called_once()
-    second_run.assert_called_once()
+    assert shared_run.call_count == 2
+
+
+def test_duplicate_check_id_within_a_capability_is_rejected() -> None:
+    """Verifies a reused check_id inside one capability is a hard error."""
+    # Precondition.
+    checks = [
+        _CallableCheck(MagicMock(return_value=None), check_id="same_id"),
+        _CallableCheck(MagicMock(return_value=None), check_id="same_id"),
+    ]
+
+    # Under test and postcondition.
+    with pytest.raises(AssertionError, match="Duplicate check_id"):
+        run_capability_checks(checks, _context())
+
+
+def test_mirrored_check_id_across_classes_is_rejected() -> None:
+    """Verifies cross-capability check_id reuse requires a single class."""
+    # Precondition.
+    checks = [
+        _CallableCheck(
+            MagicMock(return_value=None),
+            check_id="perm_sync",
+            capability=CredentialCapability.DOC_PERMISSION_SYNC,
+        ),
+        _OtherCallableCheck(
+            MagicMock(return_value=None),
+            check_id="perm_sync",
+            capability=CredentialCapability.EXTERNAL_GROUP_SYNC,
+        ),
+    ]
+
+    # Under test and postcondition.
+    with pytest.raises(AssertionError, match="must be one class"):
+        run_capability_checks(checks, _context())
 
 
 def test_is_fallback_propagates_to_result() -> None:
     """Verifies that result rows carry the fallback marker for FE labeling."""
     # Precondition.
-    check = _make_check(lambda _context: None, is_fallback=True)
+    check = _CallableCheck(lambda _context: None, is_fallback=True)
 
     # Under test.
     results = run_capability_checks([check], _context())

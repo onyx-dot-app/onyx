@@ -1,5 +1,5 @@
 import time
-from collections.abc import Callable, Sequence
+from collections.abc import Sequence
 
 from pydantic import BaseModel
 
@@ -8,6 +8,7 @@ from onyx.connectors.capability_checks.models import (
     CapabilityCheckContext,
     CapabilityCheckResult,
     CapabilityCheckStatus,
+    CredentialCapability,
 )
 from onyx.connectors.exceptions import (
     ConnectorValidationError,
@@ -23,7 +24,7 @@ logger = setup_logger()
 # Its sole purpose is to stop a stuck probe from blocking a worker thread
 # forever. Known-slow probes override it via
 # ``CapabilityCheck.timeout_seconds``.
-CAPABILITY_CHECK_TIMEOUT_SECONDS = 60
+CAPABILITY_CHECK_TIMEOUT_SECONDS = 600
 
 _SKIP_NEEDS_INSTANCE_MESSAGE = (
     "Requires a connector instance -- will re-run automatically when the "
@@ -41,7 +42,7 @@ _TIMEOUT_MESSAGE = (
 class _CheckOutcome(BaseModel):
     """
     Outcome of one check execution, before it is joined with the check's
-    metadata into a result row. Shared across checks with one run callable.
+    metadata into a result row. Shared across checks with one check_id.
     """
 
     status: CapabilityCheckStatus
@@ -93,6 +94,17 @@ def _execute_check(
             duration_ms=elapsed_ms(),
         )
     except TimeoutError as e:
+        # ``run_with_timeout`` abandons the probe thread on timeout -- Python
+        # has no safe thread cancellation -- so the probe may still have a
+        # request in flight. Check bodies must keep per-request timeouts below
+        # ``timeout_seconds`` so an abandoned probe dies with its current
+        # request instead of running on.
+        logger.warning(
+            "Capability check %s timed out after %.0fs; its probe thread is "
+            "abandoned and may still have a request in flight.",
+            check.check_id,
+            timeout_seconds,
+        )
         return _CheckOutcome(
             status=CapabilityCheckStatus.INDETERMINATE,
             message=_TIMEOUT_MESSAGE,
@@ -131,41 +143,53 @@ def run_capability_checks(
     concurrent probes against the same credential are counterproductive. Check
     failures become result rows; this function never raises for them.
 
-    Checks sharing one run callable (the perm-sync fallback registered under
-    both sync capabilities) execute once; the outcome mirrors onto each result.
+    Checks sharing one check_id (the perm-sync fallback registered under both
+    sync capabilities) are one check surfaced per capability: they execute once
+    and the outcome mirrors onto each result. Distinct check_ids always execute
+    independently, even when they share an implementation.
     """
-    results: list[CapabilityCheckResult] = []
-    outcome_by_run_callable: dict[
-        Callable[[CapabilityCheckContext], None], _CheckOutcome
-    ] = {}
+    # A check_id may repeat only as one check mirrored across capabilities;
+    # anything else is a registration bug, caught before it silently collapses
+    # distinct checks into one execution.
+    check_class_by_id: dict[str, type[CapabilityCheck]] = {}
+    seen_capability_ids: set[tuple[str, CredentialCapability]] = set()
     for check in checks:
+        capability_id = (check.check_id, check.capability)
+        assert capability_id not in seen_capability_ids, (
+            f"Duplicate check_id {check.check_id!r} within capability "
+            f"{check.capability.value}."
+        )
+        seen_capability_ids.add(capability_id)
+        check_class = check_class_by_id.setdefault(check.check_id, type(check))
+        assert check_class is type(check), (
+            f"check_id {check.check_id!r} is shared by {check_class.__name__} "
+            f"and {type(check).__name__}; mirrored checks must be one class."
+        )
+
+    results: list[CapabilityCheckResult] = []
+    outcome_by_check_id: dict[str, _CheckOutcome] = {}
+    for check in checks:
+        skip_message: str | None = None
         if (
             check.requires_connector_config
             and context.connector_specific_config is None
         ):
+            skip_message = _SKIP_NEEDS_CONFIG_MESSAGE
+        elif check.requires_connector_instance and context.connector is None:
+            skip_message = _SKIP_NEEDS_INSTANCE_MESSAGE
+        if skip_message is not None:
             results.append(
                 _build_result(
                     check,
                     _CheckOutcome(
                         status=CapabilityCheckStatus.SKIPPED,
-                        message=_SKIP_NEEDS_CONFIG_MESSAGE,
-                    ),
-                )
-            )
-            continue
-        if check.requires_connector_instance and context.connector is None:
-            results.append(
-                _build_result(
-                    check,
-                    _CheckOutcome(
-                        status=CapabilityCheckStatus.SKIPPED,
-                        message=_SKIP_NEEDS_INSTANCE_MESSAGE,
+                        message=skip_message,
                     ),
                 )
             )
             continue
 
-        if check.run not in outcome_by_run_callable:
-            outcome_by_run_callable[check.run] = _execute_check(check, context)
-        results.append(_build_result(check, outcome_by_run_callable[check.run]))
+        if check.check_id not in outcome_by_check_id:
+            outcome_by_check_id[check.check_id] = _execute_check(check, context)
+        results.append(_build_result(check, outcome_by_check_id[check.check_id]))
     return results
