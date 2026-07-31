@@ -20,7 +20,11 @@ Status checked against LiteLLM v1.93.0 (2026-07-20):
    - LiteLLM passes through reasoning_summary_text.delta content as-is without
      separating different summary_index sections
    - Our patch inserts "\\n\\n" when the summary_index changes
-   STATUS: STILL NEEDED - Upstream does not insert separators between summary sections.
+   - Also normalizes terminal events (response.completed/incomplete/failed)
+     whose response carries "output": null (newer Bifrost gateways, e.g.
+     fronting Bedrock) — upstream iterates output and raises TypeError
+   STATUS: STILL NEEDED - Upstream does not insert separators between summary sections
+           and does not guard against null output in terminal events.
 
 3. OpenAI Responses API Non-Streaming (_patch_openai_responses_transform_response):
    - LiteLLM's transform_response joins multiple reasoning summary parts with spaces
@@ -56,7 +60,9 @@ Status checked against LiteLLM v1.93.0 (2026-07-20):
    STATUS: STILL NEEDED - Upstream still mutates result.response.usage in place via
          setattr in v1.93.0. Our patch rebuilds the response via model_construct so the
          original ResponseAPIUsage object is preserved. Handles ResponseCompletedEvent,
-         ResponseIncompleteEvent, and ResponseFailedEvent (matching upstream).
+         ResponseIncompleteEvent, and ResponseFailedEvent (matching upstream), and
+         tolerates result.response being a plain dict (validation-fallback payloads
+         from gateways whose responses litellm cannot strictly parse).
 
 7. Explicit responses/ Prefix Ignored (_patch_responses_api_bridge_check):
    - responses_api_bridge_check only engages the completions->responses bridge when
@@ -303,6 +309,23 @@ def _patch_responses_reasoning_summary_newlines() -> None:
                         )
                     ]
                 )
+
+        # Some gateways (e.g. newer Bifrost with Bedrock) emit terminal events
+        # whose response carries "output": null; upstream iterates it and
+        # raises. Normalize to an empty list before delegating.
+        if (
+            event_type
+            in (
+                "response.completed",
+                "response.incomplete",
+                "response.failed",
+            )
+            and isinstance(parsed_chunk, dict)
+            and isinstance(parsed_chunk.get("response"), dict)
+            and parsed_chunk["response"].get("output") is None
+        ):
+            parsed_chunk["response"]["output"] = []
+            chunk = parsed_chunk
 
         # For all other event types, use the original upstream chunk_parser
         return _original_responses_chunk_parser(self, chunk)
@@ -557,15 +580,32 @@ def _patch_logging_assembled_streaming_response() -> None:
             result,
             (ResponseCompletedEvent, ResponseIncompleteEvent, ResponseFailedEvent),
         ):
-            # Get the original response data
+            # Get the original response data. Gateways whose completed-event
+            # payload fails litellm's strict validation leave result.response
+            # as a plain dict (upstream falls back to model_construct/dict in
+            # several places), so handle both shapes.
             original_response = result.response
-            response_data = original_response.model_dump()
+            if isinstance(original_response, dict):
+                response_data = dict(original_response)
+                raw_usage = original_response.get("usage")
+                usage: ResponseAPIUsage | None = (
+                    ResponseAPIUsage.model_construct(**raw_usage)
+                    if isinstance(raw_usage, dict) and "input_tokens" in raw_usage
+                    else None
+                )
+            else:
+                response_data = original_response.model_dump()
+                usage = (
+                    original_response.usage
+                    if isinstance(original_response.usage, ResponseAPIUsage)
+                    else None
+                )
 
             # Transform usage if present
-            if isinstance(original_response.usage, ResponseAPIUsage):
+            if usage is not None:
                 transformed_usage = (
                     ResponseAPILoggingUtils._transform_response_api_usage_to_chat_usage(
-                        original_response.usage
+                        usage
                     )
                 )
                 # Put the transformed usage (in chat completion format) into response_data

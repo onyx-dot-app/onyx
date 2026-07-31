@@ -1,8 +1,9 @@
 from datetime import datetime
-from typing import Any
+from typing import Any, cast
 
 from litellm.completion_extras.litellm_responses_transformation.transformation import (
     LiteLLMResponsesTransformationHandler,
+    OpenAiResponsesToChatCompletionStreamIterator,
 )
 from litellm.litellm_core_utils.litellm_logging import Logging
 from litellm.llms.ollama.chat.transformation import OllamaChatCompletionResponseIterator
@@ -189,3 +190,60 @@ def test_responses_transform_response_preserves_reasoning_summary_sections() -> 
     assert (
         result.choices[0].message.reasoning_content == "first section\n\nsecond section"
     )
+
+
+def _minimal_completed_response_dict() -> dict[str, Any]:
+    return {
+        "id": "resp_dict_1",
+        "object": "response",
+        "created_at": 0,
+        "status": "completed",
+        "model": "m",
+        "output": None,
+        "usage": {"input_tokens": 5, "output_tokens": 3, "total_tokens": 8},
+    }
+
+
+def test_responses_chunk_parser_normalizes_null_output_on_completed() -> None:
+    # Newer Bifrost gateways (e.g. fronting Bedrock) emit terminal events with
+    # "output": null; upstream iterates output and raises TypeError.
+    apply_monkey_patches()
+    iterator = OpenAiResponsesToChatCompletionStreamIterator(
+        streaming_response=iter(()),
+        sync_stream=True,
+    )
+    parsed = iterator.chunk_parser(
+        {
+            "type": "response.completed",
+            "sequence_number": 9,
+            "response": _minimal_completed_response_dict(),
+        }
+    )
+    assert parsed.choices[0].finish_reason == "stop"
+
+
+def test_assembled_streaming_response_handles_dict_response() -> None:
+    # When the terminal event's response fails litellm's validation it stays a
+    # plain dict; the assembled-response patch must not assume a pydantic model.
+    from types import SimpleNamespace
+
+    from litellm.types.llms.openai import ResponseCompletedEvent
+
+    apply_monkey_patches()
+    event = ResponseCompletedEvent.model_construct(
+        type="response.completed",
+        response=_minimal_completed_response_dict(),
+    )
+    get_assembled = cast(Any, Logging._get_assembled_streaming_response)
+    assembled = get_assembled(
+        SimpleNamespace(stream=True),
+        event,
+        None,
+        None,
+        False,
+        [],
+    )
+    assert isinstance(assembled, ResponsesAPIResponse)
+    assert assembled.usage is not None
+    assert assembled.usage.input_tokens == 5
+    assert assembled.usage.output_tokens == 3
