@@ -64,7 +64,7 @@ interface SandboxStatusIndicatorProps {}
  *
  * Priority:
  * 1. Actual sandbox status from backend (if session has sandbox info)
- * 2. Session exists but no sandbox info → "running" (optimistic for consumed pre-provisioned sessions)
+ * 2. Session exists but no sandbox info → "loading" (we do not know yet)
  * 3. Pre-provisioning failed → "failed"
  * 4. Pre-provisioning in progress → "provisioning" (only when no session - welcome page)
  * 5. Pre-provisioning ready (not yet consumed) → "ready"
@@ -73,6 +73,12 @@ interface SandboxStatusIndicatorProps {}
  * IMPORTANT: Pre-provisioning state is checked AFTER session existence because
  * pre-provisioning is for NEW sessions. When viewing an existing session, we
  * should show that session's status, not the background pre-provisioning state.
+ *
+ * Case 2 must never claim "running". A sandbox can be reclaimed while its
+ * session is still open — the idle sweep sleeps sandboxes, and sooner for one
+ * left on a superseded image — so "we have a session" says nothing about
+ * whether a runtime exists. Asserting "Sandbox running" there puts the
+ * indicator in direct contradiction with a backend that is still provisioning.
  */
 function deriveSandboxStatus(
   session: ReturnType<typeof useSession>,
@@ -84,10 +90,9 @@ function deriveSandboxStatus(
   if (session?.sandbox) {
     return session.sandbox.status as Status;
   }
-  // 2. Session exists but no sandbox info - assume running
-  // (This handles consumed pre-provisioned sessions before sandbox loads)
+  // 2. Session exists but no sandbox info yet — say so rather than guess
   if (session) {
-    return "running";
+    return "loading";
   }
   // 3. Pre-provisioning failed
   if (isFailed) {

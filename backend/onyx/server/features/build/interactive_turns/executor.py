@@ -8,13 +8,18 @@ from dataclasses import dataclass
 from enum import Enum, auto
 from uuid import UUID
 
+from sqlalchemy.orm import Session
+
 from onyx.cache.factory import get_cache_backend
 from onyx.cache.interface import CACHE_TRANSIENT_ERRORS, CacheBackend
 from onyx.db.engine.sql_engine import get_session_with_current_tenant
+from onyx.db.models import Sandbox
 from onyx.db.users import fetch_user_by_id
 from onyx.server.features.build.configs import (
     OPENCODE_PROMPT_INACTIVITY_TIMEOUT_SECONDS,
 )
+from onyx.server.features.build.db.build_session import get_build_session
+from onyx.server.features.build.db.sandbox import get_sandbox_by_user_id
 from onyx.server.features.build.interactive_turns.state import (
     TURN_STATUS_CANCELLED,
     TURN_STATUS_FAILED,
@@ -30,13 +35,19 @@ from onyx.server.features.build.sandbox.event_schema import (
     PromptResponse,
 )
 from onyx.server.features.build.sandbox.event_schema import Error as SandboxError
+from onyx.server.features.build.sandbox.factory import get_sandbox_manager
 from onyx.server.features.build.sandbox.models import PromptAttachment
 from onyx.server.features.build.sandbox.sse import SSEKeepalive
 from onyx.server.features.build.session.interrupt_signal import (
     clear_interrupt,
     is_interrupt_requested,
 )
+from onyx.server.features.build.session.locks import session_creation_lock
 from onyx.server.features.build.session.manager import SessionManager
+from onyx.server.features.build.session.session_ready import (
+    ensure_session_ready,
+    session_runtime_intact,
+)
 from onyx.server.features.build.session.streaming import BuildStreamingState
 from onyx.server.features.build.timeouts import (
     PROMPT_SLOT_FAST_FAIL_ACQUIRE_SECONDS,
@@ -161,6 +172,44 @@ def run_claimed_interactive_build_turn(
         )
 
 
+def _ready_session_runtime(
+    db_session: Session, session_id: UUID, user_id: UUID
+) -> Sandbox:
+    """The sandbox this turn runs in, with the session's workspace present.
+
+    Ensuring the sandbox is not enough: a session whose workspace was reclaimed
+    needs it rebuilt, and rebuilding it concurrently with the prompt is what
+    leaves opencode pinned to a config that did not exist yet. So on anything
+    but the settled case we take the lock the restore endpoint holds and go
+    through the same path — blocking, because the turn has nothing to do until
+    the workspace is there.
+
+    The settled case is decided from the database alone. It is the common one,
+    and confirming a workspace costs an exec into the pod, so a turn on a live
+    session pays two reads and no lock.
+    """
+    session = get_build_session(session_id, user_id, db_session)
+    sandbox = get_sandbox_by_user_id(db_session, user_id)
+    if session_runtime_intact(session, sandbox):
+        assert sandbox is not None
+        return sandbox
+
+    if session is None:
+        raise RuntimeError(f"Build session {session_id} not found")
+    user = fetch_user_by_id(db_session, user_id)
+    if user is None:
+        raise RuntimeError(f"User {user_id} not found")
+
+    logger.info(
+        "Interactive turn is waking session %s (session=%s sandbox=%s)",
+        session_id,
+        session.status.value,
+        sandbox.status.value if sandbox else "missing",
+    )
+    with session_creation_lock(user_id):
+        return ensure_session_ready(db_session, get_sandbox_manager(), session, user)
+
+
 def _drive_interactive_turn(
     *,
     turn_id: UUID,
@@ -176,7 +225,7 @@ def _drive_interactive_turn(
     cache = get_cache_backend()
     with get_session_with_current_tenant() as db_session:
         session_manager = SessionManager(db_session)
-        sandbox = session_manager.ensure_sandbox_running(user_id)
+        sandbox = _ready_session_runtime(db_session, session_id, user_id)
         db_session.commit()
 
         if not touch_turn(cache=cache, turn_id=turn_id, runner_id=runner_id):
