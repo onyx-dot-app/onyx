@@ -691,7 +691,6 @@ def _handle_completion_call(request: ChatCompletionRequest) -> Any:
     provider = _provider(1, "openai", [_model("test")])
     return gateway_api.handle_chat_completion(
         request=request,
-        db_session=cast(Session, MagicMock(spec=Session)),
         provider=provider,
         model_config=provider.model_configurations[0],
         flow=LLMFlow.CRAFT_LLM_GENERATION,
@@ -888,7 +887,6 @@ def test_endpoint_applies_craft_policy() -> None:
     resolve_model.assert_called_once_with(db_session, user, "1/test")
     handle.assert_called_once_with(
         request=request,
-        db_session=db_session,
         provider=provider,
         model_config=model_config,
         flow=LLMFlow.CRAFT_LLM_GENERATION,
@@ -1218,7 +1216,6 @@ def _handle_responses_call(request: ResponsesRequest) -> Any:
     provider = _provider(1, "openai", [_model("test")])
     return gateway_api.handle_responses_request(
         request=request,
-        db_session=cast(Session, MagicMock(spec=Session)),
         provider=provider,
         model_config=provider.model_configurations[0],
         flow=LLMFlow.CRAFT_LLM_GENERATION,
@@ -1379,7 +1376,6 @@ def test_responses_endpoint_resolves_model_same_way_as_chat_route() -> None:
     resolve_model.assert_called_once_with(db_session, user, "1/test")
     handle.assert_called_once_with(
         request=request,
-        db_session=db_session,
         provider=provider,
         model_config=model_config,
         flow=LLMFlow.CRAFT_LLM_GENERATION,

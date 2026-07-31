@@ -4,6 +4,7 @@ import threading
 import time
 import uuid
 from collections.abc import Callable, Iterator
+from contextlib import closing
 from typing import Any, cast
 
 from fastapi import APIRouter, Depends, Request, Response
@@ -418,7 +419,6 @@ def _stream_sse(
 
 def handle_chat_completion(
     request: ChatCompletionRequest,
-    db_session: Session,
     provider: LLMProviderView,
     model_config: ModelConfigurationView,
     flow: LLMFlow,
@@ -432,7 +432,6 @@ def handle_chat_completion(
     tool_choice = _parse_tool_choice(request.tool_choice)
     reasoning_effort = _parse_reasoning_effort(request.reasoning_effort)
     max_tokens = request.max_completion_tokens or request.max_tokens
-    db_session.close()
 
     if request.stream:
         return StreamingResponse(
@@ -599,7 +598,6 @@ def _build_responses_output_items(
 
 def handle_responses_request(
     request: ResponsesRequest,
-    db_session: Session,
     provider: LLMProviderView,
     model_config: ModelConfigurationView,
     flow: LLMFlow,
@@ -624,7 +622,6 @@ def handle_responses_request(
     max_tokens = request.max_output_tokens
     response_id = _new_id("resp")
     created_at = int(time.time())
-    db_session.close()
 
     with (
         _gateway_trace(flow, llm.config.model_name),
@@ -701,10 +698,10 @@ def gateway_chat_completions(
 ) -> Response:
     flow = _authorize_gateway_request(http_request, user)
     check_token_rate_limits(user)
-    provider, model_config = resolve_gateway_model(db_session, user, request.model)
+    with closing(db_session):
+        provider, model_config = resolve_gateway_model(db_session, user, request.model)
     result = handle_chat_completion(
         request=request,
-        db_session=db_session,
         provider=provider,
         model_config=model_config,
         flow=flow,
@@ -725,10 +722,10 @@ def gateway_responses(
 ) -> Response:
     flow = _authorize_gateway_request(http_request, user)
     check_token_rate_limits(user)
-    provider, model_config = resolve_gateway_model(db_session, user, request.model)
+    with closing(db_session):
+        provider, model_config = resolve_gateway_model(db_session, user, request.model)
     result = handle_responses_request(
         request=request,
-        db_session=db_session,
         provider=provider,
         model_config=model_config,
         flow=flow,
