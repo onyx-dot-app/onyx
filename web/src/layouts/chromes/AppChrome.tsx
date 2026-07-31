@@ -468,14 +468,18 @@ function Header() {
                     >
                       Share
                     </Button>
-                    <Button
-                      icon={fullWidthChat ? SvgFitWidth : SvgFullWidth}
-                      prominence="tertiary"
-                      onClick={toggleFullWidthChat}
-                      tooltip={fullWidthChat ? "Fit width" : "Full width"}
-                      aria-label="Toggle full width chat"
-                      aria-pressed={fullWidthChat}
-                    />
+                    {/* Below md the reading-width cap never applies (chat is
+                        always full width), so the toggle has nothing to do. */}
+                    <span className="hidden md:flex">
+                      <Button
+                        icon={fullWidthChat ? SvgFitWidth : SvgFullWidth}
+                        prominence="tertiary"
+                        onClick={toggleFullWidthChat}
+                        tooltip={fullWidthChat ? "Fit width" : "Full width"}
+                        aria-label="Toggle full width chat"
+                        aria-pressed={fullWidthChat}
+                      />
+                    </span>
                     <SimplePopover
                       trigger={
                         <Button
