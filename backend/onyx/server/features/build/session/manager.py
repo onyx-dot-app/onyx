@@ -24,7 +24,7 @@ from sqlalchemy.orm import Session as DBSession
 
 from onyx.cache.factory import get_cache_backend
 from onyx.configs.app_configs import WEB_DOMAIN
-from onyx.db.enums import SandboxStatus, SessionOrigin
+from onyx.db.enums import BuildSessionStatus, SandboxStatus, SessionOrigin
 from onyx.db.external_app import get_connectable_apps_for_user
 from onyx.db.llm import fetch_all_accessible_llm_providers
 from onyx.db.models import BuildMessage, BuildSession, Sandbox, User
@@ -38,13 +38,15 @@ from onyx.server.features.build.configs import (
     OPENCODE_DISABLED_TOOLS,
 )
 from onyx.server.features.build.db.build_session import (
-    allocate_nextjs_port,
     create_build_session__no_commit,
     delete_build_session__no_commit,
+    finalize_session_initialization__no_commit,
     get_build_session,
     get_empty_session_for_user,
     get_session_messages,
     get_user_build_sessions,
+    mark_session_initializing__no_commit,
+    reserve_nextjs_port__no_commit,
     session_runtime_stale,
     update_session_activity,
 )
@@ -75,6 +77,7 @@ from onyx.server.features.build.sandbox.util.opencode_config import (
 from onyx.server.features.build.session import streaming as _streaming
 from onyx.server.features.build.session.errors import (
     RateLimitError,
+    StaleProvisioningAttemptError,
     UploadLimitExceededError,
 )
 from onyx.server.features.build.session.interrupt_signal import request_interrupt
@@ -88,14 +91,15 @@ from onyx.server.features.build.session.naming import generate_session_name
 from onyx.server.features.build.session.sandbox_lifecycle import (
     ProvisioningPolicy,
     ensure_sandbox_ready,
-    hydrate_managed_content,
+    sync_managed_content,
 )
 from onyx.server.features.build.session.streaming import BuildStreamingState
 from onyx.server.features.build.timeouts import (
     PROMPT_SLOT_FAST_FAIL_ACQUIRE_SECONDS,
     PROMPT_SLOT_KEEP_ALIVE_MAX_SECONDS,
+    PROVISION_WAIT_SECONDS,
 )
-from onyx.skills.push import build_user_skills_payload
+from onyx.server.metrics.craft_sandbox import SandboxReadyOutcome
 from onyx.utils.logger import setup_logger
 from onyx.utils.threadpool_concurrency import start_thread_with_context
 from shared_configs.configs import MULTI_TENANT
@@ -103,10 +107,10 @@ from shared_configs.contextvars import get_current_tenant_id
 
 logger = setup_logger()
 
+_DISPOSE_PENDING_TTL_SECONDS = 24 * 3600
+
 # Webapp-ready probe on the UI-poll hot path; any response (even 404) counts.
 _WEBAPP_PROBE_TIMEOUT_SECONDS = 2.0
-
-_DISPOSE_PENDING_TTL_SECONDS = 24 * 3600
 
 
 # Hidden directories/files to filter from listings
@@ -430,65 +434,72 @@ class SessionManager:
         self,
         user_id: UUID,
         *,
-        provisioning_wait_seconds: float = 30.0,
+        provisioning_wait_seconds: float = PROVISION_WAIT_SECONDS,
     ) -> Sandbox:
         """Ensure the user has a RUNNING sandbox, creating/waking as needed.
 
         Headless entry point for flows (e.g. scheduled tasks) that need the
-        sandbox up but aren't going through ``create_session__no_commit``.
-        Mirrors the sandbox-handling section of ``create_session__no_commit``
-        but without creating a session record. Falls back to the system
-        default LLM config since there is no user cookie context.
+        sandbox up but aren't going through ``create_session``.
 
         Behavior by current sandbox status:
         - No sandbox row: creates one and provisions it.
         - ``RUNNING`` + pod healthy: returns as-is.
-        - ``RUNNING`` + pod missing/unhealthy: terminates and re-provisions.
+        - ``RUNNING`` + pod missing/unhealthy: terminates and re-provisions
+          under a new attempt number.
         - ``SLEEPING`` / ``TERMINATED`` / ``FAILED``: re-provisions in place.
-        - ``PROVISIONING``: polls up to ``provisioning_wait_seconds`` (default
-          30s) for the concurrent provisioner to finish, then continues
-          based on the resulting status. Raises
+        - ``PROVISIONING``: a dead attempt is taken over; a live one is
+          polled up to ``provisioning_wait_seconds``. Raises
           ``SandboxProvisioningError`` only if the timeout elapses without
           a transition.
 
-        Honors ``SANDBOX_MAX_CONCURRENT_PER_ORG`` when ``MULTI_TENANT`` for
-        any path that newly counts toward the running limit (creating a new
-        sandbox or waking a SLEEPING / TERMINATED / FAILED one).
-
-        Caller is responsible for committing.
+        Commits its own short transactions; the database session must be at a
+        clean transaction boundary.
 
         Raises:
-            SandboxProvisioningError: Sandbox was still PROVISIONING after
-                the wait timeout elapsed.
-            ValueError: Max concurrent sandboxes reached, or user missing.
-            RuntimeError: Sandbox manager failed to provision the pod.
+            SandboxProvisioningError: Provisioning failed, or the sandbox was
+                still PROVISIONING after the wait timeout elapsed.
+            ValueError: user missing.
         """
-        user = fetch_user_by_id(self._db_session, user_id)
-        if user is None:
-            raise ValueError(f"User {user_id} not found")
-        sandbox = ensure_sandbox_ready(
+        sandbox, _outcome = ensure_sandbox_ready(
             self._db_session,
             self._sandbox_manager,
             user_id,
             policy=ProvisioningPolicy.POLL,
             provisioning_wait_seconds=provisioning_wait_seconds,
-            user=user,
         )
         return sandbox
 
-    def create_session__no_commit(
+    def _ready_sandbox(self, user: User) -> tuple[Sandbox, SandboxReadyOutcome]:
+        """Ensure the user's sandbox is RUNNING with current managed content.
+
+        Fresh provisioning pushes managed content itself; a reused pod may be
+        missing content pushed since it last synced.
+        """
+        sandbox, outcome = ensure_sandbox_ready(
+            self._db_session,
+            self._sandbox_manager,
+            user.id,
+            policy=ProvisioningPolicy.FAIL,
+        )
+        if outcome == SandboxReadyOutcome.ALREADY_RUNNING:
+            sync_managed_content(
+                self._db_session, self._sandbox_manager, sandbox.id, user
+            )
+        return sandbox, outcome
+
+    def create_session(
         self,
         user_id: UUID,
         name: str | None = None,
         origin: SessionOrigin = SessionOrigin.INTERACTIVE,
-        headless: bool = False,
     ) -> BuildSession:
-        """
-        Create a new build session with a sandbox.
+        """Create a new build session with a ready sandbox.
 
-        NOTE: This method does NOT commit the transaction. The caller is
-        responsible for committing after this method returns successfully.
-        This allows the entire operation to be atomic at the endpoint level.
+        Reserve → reconcile → finalize: the session identity is committed as
+        ``INITIALIZING`` (with its port reservation) before any workspace
+        work, then flipped to ``ACTIVE`` only once the workspace and OpenCode
+        session are usable. Failed initialization leaves a durable ``FAILED``
+        row that a retry repairs under the same session ID.
 
         Args:
             user_id: The user ID
@@ -497,32 +508,25 @@ class SessionManager:
                 appear in the Craft sidebar; SCHEDULED (scheduled-tasks
                 executor) and SLACK (Slack bot) sessions are excluded.
 
-        Returns:
-            The created BuildSession model
-
         Raises:
-            ValueError: If max concurrent sandboxes reached or no LLM provider
-            RuntimeError: If sandbox provisioning fails
+            ValueError: If the user is missing
+            OnyxError: If no LLM provider is accessible
+            SandboxProvisioningError: If sandbox provisioning fails
+            RuntimeError: If session initialization fails
         """
-        # Fetch user early — needed for provider access checks, PAT, AGENTS.md.
         user = fetch_user_by_id(self._db_session, user_id)
         if not user:
             raise ValueError(f"User {user_id} not found")
 
+        # Validate the model config before any reservation or external work;
+        # the commit leaves the clean boundary ensure_sandbox_ready requires.
         llm_config = self.build_llm_configs(user)
+        self._db_session.commit()
 
-        # Allocate port for this session (per-session port allocation).
-        # Both LOCAL and KUBERNETES backends use the same port allocation
-        # strategy. Skipped for non-interactive origins (SCHEDULED, SLACK):
-        # those sessions are headless, never attach a preview, and pile up
-        # fast enough to exhaust the [3010, 3100) range on a busy tenant.
-        nextjs_port: int | None
-        if origin != SessionOrigin.INTERACTIVE or headless:
-            nextjs_port = None
-        else:
-            nextjs_port = allocate_nextjs_port(self._db_session)
+        sandbox, _outcome = self._ready_sandbox(user)
 
-        # Create BuildSession record with allocated port (uses flush, caller commits)
+        # Reservation: commit the INITIALIZING identity and port before the
+        # workspace exists.
         build_session = create_build_session__no_commit(
             user_id,
             self._db_session,
@@ -531,62 +535,21 @@ class SessionManager:
             agent_provider=llm_config.provider,
             agent_model=llm_config.model_name,
         )
-        build_session.nextjs_port = nextjs_port
-        self._db_session.flush()
-        session_id = str(build_session.id)
+        # Port allocation is skipped for non-interactive origins (SCHEDULED,
+        # SLACK): those sessions are headless, never attach a preview, and
+        # pile up fast enough to exhaust the [3010, 3100) range on a busy
+        # tenant.
+        if origin == SessionOrigin.INTERACTIVE:
+            reserve_nextjs_port__no_commit(self._db_session, build_session)
+        self._db_session.commit()
         logger.info(
-            "Created build session %s for user %s (port: %s)",
-            session_id,
+            "Reserved build session %s for user %s (port: %s)",
+            build_session.id,
             user_id,
-            nextjs_port,
+            build_session.nextjs_port,
         )
 
-        # Ensure the user's sandbox is RUNNING. Interactive callers can't
-        # afford to wait through a concurrent provisioner, so we use the
-        # FAIL policy (raise RuntimeError if another request is mid-
-        # provision).
-        sandbox = ensure_sandbox_ready(
-            self._db_session,
-            self._sandbox_manager,
-            user_id,
-            policy=ProvisioningPolicy.FAIL,
-            user=user,
-        )
-
-        # Set up session workspace within the sandbox
-        logger.info(
-            "Setting up session workspace %s in sandbox %s", session_id, sandbox.id
-        )
-        user_name = user.personal_name
-
-        connectable_apps_section, skills_files = build_user_skills_payload(
-            user, self._db_session
-        )
-        hydrate_managed_content(
-            self._sandbox_manager,
-            sandbox.id,
-            user,
-            self._db_session,
-            connectable_apps_section=connectable_apps_section,
-            skills_files=skills_files,
-        )
-        self._sandbox_manager.setup_session_workspace(
-            sandbox_id=sandbox.id,
-            session_id=build_session.id,
-            llm_config=llm_config,
-            nextjs_port=nextjs_port,
-            connectable_apps_section=connectable_apps_section,
-            user_name=user_name,
-            mcp_servers=resolve_craft_mcp_servers(self._db_session, user),
-        )
-        self._prewarm_opencode_session(sandbox, build_session)
-
-        logger.info(
-            "Successfully created session %s with workspace in sandbox %s",
-            session_id,
-            sandbox.id,
-        )
-
+        self._reconcile_session(sandbox, build_session, user, llm_config)
         return build_session
 
     def get_or_create_empty_session(
@@ -594,86 +557,196 @@ class SessionManager:
         user_id: UUID,
         headless: bool = False,
     ) -> BuildSession:
-        """Get existing empty session or create a new one with provisioned sandbox.
+        """Get or create the user's empty (pre-provisioned) session.
 
-        Used for pre-provisioning sandboxes when user lands on /build/v1.
-        Returns existing recent empty session if one exists and has a healthy sandbox.
-        If an empty session exists but its sandbox is unhealthy/terminated/missing,
-        the stale session is deleted and a fresh one is created (which will handle
-        sandbox recovery/re-provisioning).
-
-        Args:
-            user_id: The user ID
-        Returns:
-            BuildSession (existing empty or newly created)
+        Used for pre-provisioning sandboxes when the user lands on /build/v1.
+        The empty-session identity is reserved (or reused) under the per-user
+        row lock, so concurrent pre-provisioners converge on one committed
+        session. An existing session with an intact workspace is reused;
+        otherwise it is repaired in place — returned to ``INITIALIZING`` and
+        its workspace rebuilt under the same committed session ID (never
+        deleted and replaced).
 
         Raises:
-            ValueError: If max concurrent sandboxes reached
-            RuntimeError: If sandbox provisioning fails
+            ValueError: If the user is missing
+            OnyxError: If no LLM provider is accessible
+            SandboxProvisioningError: If sandbox provisioning fails
+            RuntimeError: If session initialization fails
         """
-        existing = get_empty_session_for_user(user_id, self._db_session)
-        if existing:
-            logger.info(
-                "Existing empty session %s found for user %s", existing.id, user_id
-            )
-            # Verify sandbox is healthy before returning existing session
-            sandbox = get_sandbox_by_user_id(self._db_session, user_id)
+        user = fetch_user_by_id(self._db_session, user_id)
+        if not user:
+            raise ValueError(f"User {user_id} not found")
 
-            if sandbox and sandbox.status.is_active():
-                # Quick health check to verify sandbox is actually responsive
-                # AND verify the session workspace still exists on disk
-                # (it may have been wiped if the sandbox was re-provisioned)
-                is_healthy = self._sandbox_manager.health_check(sandbox.id, timeout=5.0)
-                workspace_exists = (
-                    is_healthy
-                    and self._sandbox_manager.session_workspace_exists(
-                        sandbox.id, existing.id
-                    )
+        # Reservation: the user-row lock serializes concurrent
+        # pre-provisioners so exactly one empty-session identity exists.
+        locked_user = fetch_user_by_id(self._db_session, user_id, for_update=True)
+        if locked_user is None:
+            raise ValueError(f"User {user_id} not found")
+        existing = get_empty_session_for_user(user_id, self._db_session)
+
+        if existing is None:
+            # Validates the model configuration before any external work.
+            llm_config = self.build_llm_configs(user)
+            session = create_build_session__no_commit(
+                user_id,
+                self._db_session,
+                agent_provider=llm_config.provider,
+                agent_model=llm_config.model_name,
+            )
+            if not headless:
+                reserve_nextjs_port__no_commit(self._db_session, session)
+            self._db_session.commit()
+            logger.info("Reserved empty session %s for user %s", session.id, user_id)
+            sandbox, _outcome = self._ready_sandbox(user)
+            self._reconcile_session(sandbox, session, user, llm_config)
+            return session
+
+        session = existing
+        self._db_session.commit()
+        logger.info(
+            "Found existing empty session %s (status=%s) for user %s",
+            session.id,
+            session.status.value,
+            user_id,
+        )
+
+        sandbox, outcome = self._ready_sandbox(user)
+        workspace_intact = self._sandbox_manager.session_workspace_exists(
+            sandbox.id, session.id
+        )
+        if (
+            session.status == BuildSessionStatus.ACTIVE
+            and outcome == SandboxReadyOutcome.ALREADY_RUNNING
+            and workspace_intact
+        ):
+            # Light path: everything is already in place; refresh the
+            # session runtime and hand the session back.
+            self.reconcile_session_llm_config(sandbox, session, user)
+            self._prewarm_opencode_session(sandbox, session)
+            self._db_session.commit()
+            logger.info(
+                "Returning existing empty session %s for user %s",
+                session.id,
+                user_id,
+            )
+            return session
+
+        # Repair: return the committed session ID to INITIALIZING and
+        # rebuild its workspace, honoring its persisted model selection.
+        logger.info(
+            "Repairing empty session %s for user %s (status=%s, workspace %s)",
+            session.id,
+            user_id,
+            session.status.value,
+            "intact" if workspace_intact else "missing",
+        )
+        llm_config = self.session_llm_config(session, user)
+        mark_session_initializing__no_commit(self._db_session, session)
+        if session.nextjs_port is None and not headless:
+            reserve_nextjs_port__no_commit(self._db_session, session)
+        self._db_session.commit()
+
+        self._reconcile_session(sandbox, session, user, llm_config)
+        return session
+
+    def _reconcile_session(
+        self,
+        sandbox: Sandbox,
+        session: BuildSession,
+        user: User,
+        llm_config: CraftLLMProviderConfig,
+    ) -> None:
+        """Build the workspace and OpenCode session for a committed
+        ``INITIALIZING`` session, then mark it ``ACTIVE`` (a no-op if the
+        session already moved on).
+
+        All database reads happen up front; the workspace setup and OpenCode
+        prewarm run with no open transaction. On failure the session is
+        durably marked ``FAILED`` (the sandbox stays ``RUNNING``) and the
+        error is re-raised; a later request repairs the same session ID.
+        """
+        session_id = session.id
+        try:
+            connectable_apps_section = build_connectable_apps_list(
+                get_connectable_apps_for_user(self._db_session, user)
+            )
+            mcp_servers = resolve_craft_mcp_servers(self._db_session, user)
+            nextjs_port = session.nextjs_port
+            opencode_session_id = session.opencode_session_id
+            user_name = user.personal_name
+            sandbox_skills_hash = sandbox.skills_hash
+            sandbox_mcp_config_hash = sandbox.mcp_config_hash
+            self._db_session.commit()
+
+            logger.info(
+                "Setting up session workspace %s in sandbox %s",
+                session_id,
+                sandbox.id,
+            )
+            self._sandbox_manager.setup_session_workspace(
+                sandbox_id=sandbox.id,
+                session_id=session_id,
+                llm_config=llm_config,
+                nextjs_port=nextjs_port,
+                connectable_apps_section=connectable_apps_section,
+                user_name=user_name,
+                mcp_servers=mcp_servers,
+            )
+            minted_opencode_session_id = self._sandbox_manager.ensure_opencode_session(
+                sandbox_id=sandbox.id,
+                session_id=session_id,
+                opencode_session_id=opencode_session_id,
+            )
+            if minted_opencode_session_id is None:
+                raise RuntimeError(
+                    f"Failed to prewarm opencode session for build session {session_id}"
                 )
-                if is_healthy and workspace_exists:
-                    user = fetch_user_by_id(self._db_session, user_id)
-                    if user is None:
-                        logger.warning("Cannot push skills: user %s not found", user_id)
-                    else:
-                        hydrate_managed_content(
-                            self._sandbox_manager, sandbox.id, user, self._db_session
-                        )
-                        self.reconcile_session_llm_config(sandbox, existing, user)
-                    self._prewarm_opencode_session(sandbox, existing)
-                    logger.info(
-                        "Returning existing empty session %s for user %s",
-                        existing.id,
-                        user_id,
-                    )
-                    return existing
-                elif not is_healthy:
-                    logger.warning(
-                        "Empty session %s has unhealthy sandbox %s. Deleting and creating fresh session.",
-                        existing.id,
-                        sandbox.id,
+
+            finalized = finalize_session_initialization__no_commit(
+                self._db_session,
+                session_id,
+                BuildSessionStatus.ACTIVE,
+                opencode_session_id=minted_opencode_session_id,
+                skills_hash=sandbox_skills_hash,
+                mcp_config_hash=sandbox_mcp_config_hash,
+            )
+            if not finalized:
+                self._db_session.rollback()
+                raise StaleProvisioningAttemptError(
+                    f"Session {session_id} left INITIALIZING before this "
+                    f"attempt finalized"
+                )
+            self._db_session.commit()
+            self._db_session.refresh(session)
+            logger.info(
+                "Successfully created session %s with workspace in sandbox %s",
+                session_id,
+                sandbox.id,
+            )
+        except StaleProvisioningAttemptError:
+            raise
+        except Exception as e:
+            self._db_session.rollback()
+            try:
+                if finalize_session_initialization__no_commit(
+                    self._db_session, session_id, BuildSessionStatus.FAILED
+                ):
+                    self._db_session.commit()
+                    logger.error(
+                        "Session %s initialization failed; marked FAILED "
+                        "for repair on retry: %s",
+                        session_id,
+                        e,
                     )
                 else:
-                    logger.warning(
-                        "Empty session %s workspace missing in sandbox %s. Deleting and creating fresh session.",
-                        existing.id,
-                        sandbox.id,
-                    )
-            else:
-                logger.warning(
-                    "Empty session %s has no active sandbox (sandbox=%s). Deleting and creating fresh session.",
-                    existing.id,
-                    "missing" if not sandbox else sandbox.status,
+                    self._db_session.rollback()
+            except Exception:
+                self._db_session.rollback()
+                logger.exception(
+                    "Failed to record initialization failure for session %s",
+                    session_id,
                 )
-
-            # Delete through the normal session path. Opencode history is
-            # sandbox-global implementation data, so this removes the Onyx
-            # session row without trying to prune opencode's internal store.
-            self.delete_session(existing.id, user_id)
-
-        return self.create_session__no_commit(
-            user_id=user_id,
-            headless=headless,
-        )
+            raise
 
     def get_session(
         self,

@@ -4,9 +4,10 @@ from __future__ import annotations
 
 from uuid import UUID, uuid4
 
+from onyx.configs.constants import OnyxRedisLocks
 from onyx.db.enums import SharingScope
 from onyx.redis.redis_pool import get_redis_client
-from onyx.server.features.build.session.api import RESTORE_LOCK_TIMEOUT_SECONDS
+from onyx.server.features.build.timeouts import SESSION_FLOW_LOCK_LEASE_SECONDS
 from shared_configs.configs import POSTGRES_DEFAULT_SCHEMA_STANDARD_VALUE
 from tests.integration.common_utils.constants import API_SERVER_URL
 from tests.integration.common_utils.http_client import client
@@ -75,11 +76,13 @@ def test_restore_session_returns_409_when_lock_held(
     body = BuildSessionManager.create(admin_user)
     session_id = body.id
     assert body.sandbox is not None
-    sandbox_id = body.sandbox.id
+    assert body.user_id is not None
 
     redis_client = get_redis_client(tenant_id=POSTGRES_DEFAULT_SCHEMA_STANDARD_VALUE)
+    # Restore shares the per-user session-flow lock with create and the reaper.
     lock = redis_client.lock(
-        f"sandbox_restore:{sandbox_id}", timeout=RESTORE_LOCK_TIMEOUT_SECONDS
+        f"{OnyxRedisLocks.SESSION_CREATE_LOCK_PREFIX}:{body.user_id}",
+        timeout=SESSION_FLOW_LOCK_LEASE_SECONDS,
     )
     assert lock.acquire(blocking=False)
     try:

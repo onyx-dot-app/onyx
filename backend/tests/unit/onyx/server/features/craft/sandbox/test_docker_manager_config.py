@@ -233,6 +233,7 @@ def kwargs() -> ContainerCreateKwargs:
         volume_name="onyx-craft-sandbox-12345678",
         memory_limit="2g",
         cpu_limit=1.0,
+        provisioning_attempt_number=1,
         opencode_password=_OPENCODE_PASSWORD,
         opencode_config_json=_OPENCODE_CONFIG_JSON,
     )
@@ -260,6 +261,7 @@ def proxy_kwargs() -> ContainerCreateKwargs:
         volume_name="onyx-craft-sandbox-12345678",
         memory_limit="2g",
         cpu_limit=1.0,
+        provisioning_attempt_number=1,
         opencode_password=_OPENCODE_PASSWORD,
         opencode_config_json=_OPENCODE_CONFIG_JSON,
         sandbox_proxy_host="sandbox-proxy",
@@ -425,6 +427,7 @@ def test_container_kwargs_publishes_serve_on_localhost_in_dev(
         volume_name="onyx-craft-sandbox-12345678",
         memory_limit="2g",
         cpu_limit=1.0,
+        provisioning_attempt_number=1,
         opencode_password=_OPENCODE_PASSWORD,
         opencode_config_json=_OPENCODE_CONFIG_JSON,
     )
@@ -548,6 +551,7 @@ def test_container_kwargs_warns_on_internal_compose_host(
             volume_name="vol",
             memory_limit="2g",
             cpu_limit=1.0,
+            provisioning_attempt_number=1,
             opencode_password=_OPENCODE_PASSWORD,
             opencode_config_json=_OPENCODE_CONFIG_JSON,
         )
@@ -575,6 +579,7 @@ def test_container_kwargs_no_warning_for_public_url(
             volume_name="vol",
             memory_limit="2g",
             cpu_limit=1.0,
+            provisioning_attempt_number=1,
             opencode_password=_OPENCODE_PASSWORD,
             opencode_config_json=_OPENCODE_CONFIG_JSON,
         )
@@ -601,6 +606,7 @@ def test_container_kwargs_no_warning_for_craft_api_alias(
             volume_name="vol",
             memory_limit="2g",
             cpu_limit=1.0,
+            provisioning_attempt_number=1,
             opencode_password=_OPENCODE_PASSWORD,
             opencode_config_json=_OPENCODE_CONFIG_JSON,
         )
@@ -839,6 +845,7 @@ def test_proxy_kwargs_requires_ca_volume() -> None:
             volume_name="vol",
             memory_limit="2g",
             cpu_limit=1.0,
+            provisioning_attempt_number=1,
             opencode_password=_OPENCODE_PASSWORD,
             opencode_config_json=_OPENCODE_CONFIG_JSON,
             sandbox_proxy_host="sandbox-proxy",

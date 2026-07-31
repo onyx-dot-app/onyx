@@ -100,6 +100,7 @@ from onyx.server.features.build.sandbox.labels import (
     LABEL_K8S_COMPONENT_SANDBOX,
     LABEL_K8S_MANAGED_BY,
     LABEL_K8S_MANAGED_BY_ONYX,
+    LABEL_PROVISIONING_ATTEMPT,
     LABEL_SANDBOX_ID,
     LABEL_TENANT_ID,
 )
@@ -111,13 +112,11 @@ from onyx.server.features.build.sandbox.models import (
     FilesystemEntry,
     RetriableWriteError,
     SandboxInfo,
+    SandboxProvisionContentionError,
     SnapshotResult,
 )
 from onyx.server.features.build.sandbox.nextjs_dev import build_nextjs_start_script
-from onyx.server.features.build.sandbox.serve_transport import (
-    OPENCODE_SERVE_READY_TIMEOUT_SECONDS,
-    ServeConnectionInfo,
-)
+from onyx.server.features.build.sandbox.serve_transport import ServeConnectionInfo
 from onyx.server.features.build.sandbox.session_workspace import (
     SESSIONS_ROOT,
     WORKSPACE_SETUP_COMPLETE_SENTINEL,
@@ -136,6 +135,14 @@ from onyx.server.features.build.sandbox.util.opencode_config import (
     build_opencode_base_config,
     build_provider_opencode_config,
 )
+from onyx.server.features.build.timeouts import (
+    BULK_TRANSFER_TIMEOUT_SECONDS,
+    POLL_INTERVAL_SECONDS,
+    PROVISION_DEADLINE_SECONDS,
+    RPC_TIMEOUT_SECONDS,
+    RUNTIME_TEARDOWN_SECONDS,
+    WORKSPACE_SETUP_DEADLINE_SECONDS,
+)
 from onyx.server.metrics.craft_sandbox import (
     SandboxProvisionPhase,
     time_provision_phase,
@@ -148,36 +155,6 @@ logger = setup_logger()
 # API server pod hostname — used to identify which replica is handling a
 # request. In K8s, HOSTNAME is set to the pod name (e.g., "api-server-dpgg7").
 _API_SERVER_HOSTNAME = os.environ.get("HOSTNAME", "unknown")
-
-POD_READY_TIMEOUT_SECONDS = 30
-
-# Session-workspace materialization (template copy + bun install). Enforced as
-# an explicit exec deadline paired with a completion sentinel — the Kubernetes
-# exec client returns truncated output without raising when its window lapses,
-# so the sentinel is what distinguishes success from truncation.
-WORKSPACE_SETUP_DEADLINE_SECONDS = 180.0
-
-# Shared deadline for IP assignment (scheduling + image pull) and the restore.
-OPENCODE_HISTORY_RESTORE_TIMEOUT_SECONDS = 90.0
-POD_IP_POLL_INTERVAL_SECONDS = 0.5
-
-# Resource deletion timeout and polling interval
-# Kubernetes deletes are async - we need to wait for resources to actually be
-# gone.
-RESOURCE_DELETION_TIMEOUT_SECONDS = 30
-RESOURCE_DELETION_POLL_INTERVAL_SECONDS = 0.5
-
-# Lock TTL and waiter blocking timeout; the sum of every bounded wait a holder
-# can spend inside the lock (incl. a terminating-Service deletion wait in
-# _ensure_service_exists). Expiry falls open to provision()'s 409/pod-exists
-# fallbacks.
-PROVISION_LOCK_TIMEOUT_SECONDS = (
-    OPENCODE_HISTORY_RESTORE_TIMEOUT_SECONDS
-    + POD_READY_TIMEOUT_SECONDS
-    + OPENCODE_SERVE_READY_TIMEOUT_SECONDS
-    + RESOURCE_DELETION_TIMEOUT_SECONDS
-)
-
 
 # Pinned to the proxy IP via pod hostAliases — the iptables lockdown blocks DNS,
 # so the sandbox can't resolve it on its own.
@@ -207,17 +184,19 @@ def _provisioning_lock_key(sandbox_id: UUID) -> str:
 @contextmanager
 def _provisioning_lock(sandbox_id: UUID, tenant_id: str) -> Iterator[None]:
     """Serialize pod creation + startup restore for one sandbox across
-    api-server replicas; losers block, then reuse the ready pod via the
-    pod-exists check in provision(). Fails open on cache outages."""
+    api-server replicas. Acquisition is non-blocking: the numbered-attempt
+    reservation already guarantees at most one live attempt per sandbox, so a
+    held lock means a superseded attempt's tail — the caller retries rather
+    than waiting it out.
+    TTL equals the provision deadline (the lock never outlives the work it
+    guards); expiry falls open to provision()'s 409/pod-exists fallbacks.
+    Fails open on cache outages."""
     try:
         lock = get_cache_backend(tenant_id=tenant_id).lock(
             _provisioning_lock_key(sandbox_id),
-            timeout=PROVISION_LOCK_TIMEOUT_SECONDS,
+            timeout=PROVISION_DEADLINE_SECONDS,
         )
-        acquired = lock.acquire(
-            blocking=True,
-            blocking_timeout=PROVISION_LOCK_TIMEOUT_SECONDS,
-        )
+        acquired = lock.acquire(blocking=False)
     except CACHE_TRANSIENT_ERRORS as e:
         logger.warning(
             "Provisioning lock unavailable for sandbox %s (%s); "
@@ -229,8 +208,8 @@ def _provisioning_lock(sandbox_id: UUID, tenant_id: str) -> Iterator[None]:
         return
 
     if not acquired:
-        raise RuntimeError(
-            f"Timed out waiting for a concurrent provisioner of sandbox {sandbox_id}"
+        raise SandboxProvisionContentionError(
+            f"A concurrent provisioner holds the lock for sandbox {sandbox_id}"
         )
     try:
         yield
@@ -475,6 +454,7 @@ class KubernetesSandboxManager(SandboxManager):
         self,
         sandbox_id: str,
         tenant_id: str,
+        provisioning_attempt_number: int,
     ) -> client.V1Pod:
         """Build the sandbox Pod from the Helm PodTemplate, overlaying the
         dynamic fields the template can't carry."""
@@ -509,6 +489,7 @@ class KubernetesSandboxManager(SandboxManager):
                     LABEL_K8S_MANAGED_BY: LABEL_K8S_MANAGED_BY_ONYX,
                     LABEL_SANDBOX_ID: sandbox_id,
                     LABEL_TENANT_ID: tenant_id,
+                    LABEL_PROVISIONING_ATTEMPT: str(provisioning_attempt_number),
                 },
             ),
             spec=spec,
@@ -642,13 +623,15 @@ class KubernetesSandboxManager(SandboxManager):
         self,
         sandbox_id: UUID,
         tenant_id: str,
+        deadline: float,
     ) -> None:
         """Ensure a ClusterIP service exists for the sandbox pod.
 
         Handles the case where a service is in Terminating state (has a
-        deletion_timestamp) by waiting for deletion and recreating it.
-        This prevents a race condition where provision reuses an existing pod
-        but the old service is still being deleted.
+        deletion_timestamp) by waiting (up to the provision deadline) for
+        deletion and recreating it. This prevents a race condition where
+        provision reuses an existing pod but the old service is still being
+        deleted.
         """
         service_name = self._get_pod_name(str(sandbox_id))
 
@@ -662,7 +645,9 @@ class KubernetesSandboxManager(SandboxManager):
                 logger.info(
                     "Service %s is terminating, waiting for deletion", service_name
                 )
-                self._wait_for_resource_deletion("service", service_name)
+                self._wait_for_resource_deletion(
+                    "service", service_name, deadline - time.monotonic()
+                )
                 # Now create a fresh service
                 service = self._create_sandbox_service(sandbox_id, tenant_id)
                 self._core_api.create_namespaced_service(
@@ -853,16 +838,15 @@ class KubernetesSandboxManager(SandboxManager):
     def _wait_for_pod_ready(
         self,
         pod_name: str,
-        timeout: float = POD_READY_TIMEOUT_SECONDS,
+        deadline: float,
     ) -> bool:
-        """Block on a single-pod watch until Ready or timeout.
+        """Block on a single-pod watch until Ready or the monotonic deadline.
 
         Watching beats polling: the apiserver pushes status transitions as
         they happen, so we catch ``Ready`` within ~100ms instead of waiting
         for the next poll tick. A bounded retry loop covers ``410 Gone``
         (resource version aged out under us) by re-listing and resuming.
         """
-        start_time = time.time()
         field_selector = f"metadata.name={pod_name}"
 
         try:
@@ -879,7 +863,7 @@ class KubernetesSandboxManager(SandboxManager):
             raise
 
         while True:
-            remaining = timeout - (time.time() - start_time)
+            remaining = deadline - time.monotonic()
             if remaining <= 0:
                 break
 
@@ -890,7 +874,7 @@ class KubernetesSandboxManager(SandboxManager):
                     namespace=self._namespace,
                     field_selector=field_selector,
                     resource_version=resource_version,
-                    timeout_seconds=int(remaining),
+                    timeout_seconds=max(1, int(remaining)),
                 )
                 for event in stream:
                     event_type = event.get("type")
@@ -955,7 +939,7 @@ class KubernetesSandboxManager(SandboxManager):
             if pod.status.pod_ip:
                 logger.info("Pod %s assigned IP %s", pod_name, pod.status.pod_ip)
                 return True
-            time.sleep(POD_IP_POLL_INTERVAL_SECONDS)
+            time.sleep(POLL_INTERVAL_SECONDS)
 
         logger.warning("Timeout waiting for pod %s to be assigned an IP", pod_name)
         return False
@@ -998,13 +982,15 @@ class KubernetesSandboxManager(SandboxManager):
         sandbox_id: UUID,
         user_id: UUID,
         tenant_id: str,
-        onyx_pat: str | None = None,
+        onyx_pat: str | None,
+        provisioning_attempt_number: int,
     ) -> SandboxInfo:
         """Provision a new sandbox as a Kubernetes pod (user-level).
 
         This method is idempotent - if a pod already exists and is healthy,
-        it will be reused. Concurrent provisioners are serialized by a
-        per-sandbox lock; losers reuse the pod the winner created.
+        it will be reused. A concurrent provisioner holding the per-sandbox
+        lock raises ``SandboxProvisionContentionError`` (fail-fast; the
+        lifecycle layer retries).
 
         Creates pod with:
         1. Sessions/ directory for per-session workspaces
@@ -1047,21 +1033,26 @@ class KubernetesSandboxManager(SandboxManager):
             )
 
         with _provisioning_lock(sandbox_id, tenant_id):
+            # Every phase below (service churn, scheduling + image pull,
+            # history restore, readiness, opencode-serve bind) draws from this
+            # one deadline: slow phases leave less budget for later ones
+            # instead of stacking per-phase timeouts.
+            deadline = time.monotonic() + PROVISION_DEADLINE_SECONDS
             pod_name = self._get_pod_name(str(sandbox_id))
 
-            # Idempotency check; also the lock-loser path (the pod the winner
-            # just provisioned is found here and reused).
+            # Idempotency check; also the pod-exists path a lock-expiry racer
+            # lands on.
             if self._pod_exists_and_healthy(pod_name):
                 logger.info(
                     "Pod %s already exists and is healthy, reusing existing pod",
                     pod_name,
                 )
                 # Ensure service exists and is not terminating
-                self._ensure_service_exists(sandbox_id, tenant_id)
+                self._ensure_service_exists(sandbox_id, tenant_id, deadline)
 
                 # Wait for pod to be ready if it's still pending
                 logger.info("Waiting for existing pod %s to become ready...", pod_name)
-                if not self._wait_for_pod_ready(pod_name):
+                if not self._wait_for_pod_ready(pod_name, deadline):
                     raise RuntimeError(
                         f"Timeout waiting for existing sandbox pod {pod_name} to become ready"
                     )
@@ -1072,7 +1063,9 @@ class KubernetesSandboxManager(SandboxManager):
                 with self._event_buses_lock:
                     self._terminated_sandboxes.discard(sandbox_id)
 
-                if not self._wait_for_opencode_serve_ready(sandbox_id):
+                if not self._wait_for_opencode_serve_ready(
+                    sandbox_id, timeout=deadline - time.monotonic()
+                ):
                     raise RuntimeError(
                         f"opencode-serve never became ready in existing sandbox pod {pod_name}"
                     )
@@ -1115,6 +1108,7 @@ class KubernetesSandboxManager(SandboxManager):
                 pod = self._create_sandbox_pod(
                     sandbox_id=str(sandbox_id),
                     tenant_id=tenant_id,
+                    provisioning_attempt_number=provisioning_attempt_number,
                 )
                 try:
                     with time_provision_phase(SandboxProvisionPhase.POD_CREATE):
@@ -1149,36 +1143,33 @@ class KubernetesSandboxManager(SandboxManager):
                         raise
 
                 # 2. Create Service (handles terminating services)
-                self._ensure_service_exists(sandbox_id, tenant_id)
+                self._ensure_service_exists(sandbox_id, tenant_id, deadline)
 
                 # 3. Restore opencode history before the sandbox app container starts;
                 # the init sidecar serves the restore endpoint while its startup probe
-                # stays blocked, so opencode-serve can't open an empty DB first. The IP
-                # wait and the restore draw from one deadline so slow scheduling leaves
-                # less budget for the restore rather than stacking two full timeouts.
+                # stays blocked, so opencode-serve can't open an empty DB first.
                 if startup_restore_required:
-                    restore_deadline = (
-                        time.monotonic() + OPENCODE_HISTORY_RESTORE_TIMEOUT_SECONDS
-                    )
-                    if not self._wait_for_pod_ip(pod_name, restore_deadline):
+                    if not self._wait_for_pod_ip(pod_name, deadline):
                         raise RuntimeError(
                             f"Timeout waiting for sandbox pod {pod_name} to be assigned an IP"
                         )
                     self.restore_opencode_history_snapshot(
                         sandbox_id,
                         tenant_id,
-                        timeout_seconds=restore_deadline - time.monotonic(),
+                        timeout_seconds=deadline - time.monotonic(),
                     )
 
                 # 4. Wait for pod to be ready
                 logger.info("Waiting for pod %s to become ready...", pod_name)
-                if not self._wait_for_pod_ready(pod_name):
+                if not self._wait_for_pod_ready(pod_name, deadline):
                     raise RuntimeError(
                         f"Timeout waiting for sandbox pod {pod_name} to become ready"
                     )
 
                 # 5. Wait for opencode-serve to bind :4096 .
-                if not self._wait_for_opencode_serve_ready(sandbox_id):
+                if not self._wait_for_opencode_serve_ready(
+                    sandbox_id, timeout=deadline - time.monotonic()
+                ):
                     raise RuntimeError(
                         f"opencode-serve never became ready in sandbox pod {pod_name}"
                     )
@@ -1226,7 +1217,7 @@ class KubernetesSandboxManager(SandboxManager):
         self,
         resource_type: str,
         name: str,
-        timeout: float = RESOURCE_DELETION_TIMEOUT_SECONDS,
+        timeout: float,
     ) -> bool:
         """Wait for a Kubernetes resource to be fully deleted.
 
@@ -1261,7 +1252,7 @@ class KubernetesSandboxManager(SandboxManager):
 
                 # Resource still exists, wait and retry
                 logger.debug("Waiting for %s %s to be deleted...", resource_type, name)
-                time.sleep(RESOURCE_DELETION_POLL_INTERVAL_SECONDS)
+                time.sleep(POLL_INTERVAL_SECONDS)
 
             except ApiException as e:
                 if e.status == 404:
@@ -1274,7 +1265,7 @@ class KubernetesSandboxManager(SandboxManager):
                 logger.warning(
                     "Error checking %s %s status: %s", resource_type, name, e
                 )
-                time.sleep(RESOURCE_DELETION_POLL_INTERVAL_SECONDS)
+                time.sleep(POLL_INTERVAL_SECONDS)
 
         logger.warning(
             "Timeout waiting for %s %s to be deleted after %ss",
@@ -1345,9 +1336,13 @@ class KubernetesSandboxManager(SandboxManager):
         # on immediate re-provisioning
         if wait_for_deletion:
             if service_deleted:
-                self._wait_for_resource_deletion("service", service_name)
+                self._wait_for_resource_deletion(
+                    "service", service_name, RUNTIME_TEARDOWN_SECONDS
+                )
             if pod_deleted:
-                self._wait_for_resource_deletion("pod", pod_name)
+                self._wait_for_resource_deletion(
+                    "pod", pod_name, RUNTIME_TEARDOWN_SECONDS
+                )
 
     def terminate(self, sandbox_id: UUID) -> None:
         """Tear down event buses, then delete Service + Pod."""
@@ -1548,7 +1543,7 @@ echo "Session cleanup complete"
             body=body,
             content_type="application/json",
             operation_label="Snapshot create",
-            timeout_seconds=300.0,
+            timeout_seconds=BULK_TRANSFER_TIMEOUT_SECONDS,
         ) as snapshot_stream:
             if snapshot_stream is None:
                 logger.info("No outputs to snapshot for session %s", session_id)
@@ -1577,7 +1572,7 @@ echo "Session cleanup complete"
         self,
         sandbox_id: UUID,
         tenant_id: str,
-        timeout_seconds: float = 300.0,
+        timeout_seconds: float = BULK_TRANSFER_TIMEOUT_SECONDS,
     ) -> bool:
         with self._sidecar_client.request_and_stream_new_snapshot(
             sandbox_id=sandbox_id,
@@ -1614,7 +1609,7 @@ echo "Session cleanup complete"
         self,
         sandbox_id: UUID,
         tenant_id: str,
-        timeout_seconds: float = OPENCODE_HISTORY_RESTORE_TIMEOUT_SECONDS,
+        timeout_seconds: float,
     ) -> bool:
         if not self._snapshot_manager.has_opencode_history_snapshot(
             tenant_id, str(sandbox_id)
@@ -1660,7 +1655,7 @@ echo "Session cleanup complete"
         self,
         *,
         sandbox_id: UUID,
-        timeout_seconds: float = OPENCODE_HISTORY_RESTORE_TIMEOUT_SECONDS,
+        timeout_seconds: float,
     ) -> None:
         self._sidecar_client.post_empty(
             sandbox_id=sandbox_id,
@@ -1847,8 +1842,8 @@ echo "Session cleanup complete"
                     stderr=True,
                     stdin=False,
                     stdout=True,
-                    _request_timeout=WORKSPACE_SETUP_DEADLINE_SECONDS,
                     tty=False,
+                    _request_timeout=WORKSPACE_SETUP_DEADLINE_SECONDS,
                 )
         except ApiException as e:
             raise RuntimeError(f"Failed to restore snapshot: {e}") from e
@@ -1927,7 +1922,7 @@ fi
         )
         logger.info("Session configuration files regenerated")
 
-    def health_check(self, sandbox_id: UUID, timeout: float = 60.0) -> bool:
+    def health_check(self, sandbox_id: UUID, timeout: float) -> bool:
         """Check whether the agent container and sidecar are both healthy."""
         pod_name = self._get_pod_name(str(sandbox_id))
         try:
@@ -2585,7 +2580,7 @@ fi
                 archive=tar_bytes,
                 sha256_hex=sha256_hex,
                 operation_label=pod_name,
-                timeout_seconds=30.0,
+                timeout_seconds=RPC_TIMEOUT_SECONDS,
             )
         except SidecarRequestError as e:
             raise RetriableWriteError(f"Push to {pod_name} failed: {e}") from e

@@ -6075,6 +6075,16 @@ class BuildSession(Base):
             desc("created_at"),
         ),
         Index("ix_build_session_status", "status"),
+        # Durable port reservation: allocation retries on collision instead of
+        # trusting the application-level scan. Scoped per user — ports only
+        # collide within one user's sandbox.
+        Index(
+            "uq_build_session_nextjs_port",
+            "user_id",
+            "nextjs_port",
+            unique=True,
+            postgresql_where=text("nextjs_port IS NOT NULL"),
+        ),
     )
 
 
@@ -6109,6 +6119,24 @@ class Sandbox(Base):
 
     encrypted_pat: Mapped[SensitiveValue[str] | None] = mapped_column(
         EncryptedString(), nullable=True
+    )
+
+    # Attempt number: incremented (under the per-user reservation lock) each
+    # time a new provisioning attempt is authorized. Every status write names
+    # the attempt it belongs to and only applies while the row still holds
+    # that number, so an old attempt can never overwrite a newer attempt's
+    # outcome. Backend runtime deletes are name-keyed and best-effort
+    # serialized by the provisioning lock; a wrongly deleted pod self-heals
+    # through unhealthy-RUNNING recovery.
+    provisioning_attempt_number: Mapped[int] = mapped_column(
+        Integer, nullable=False, default=0, server_default="0"
+    )
+    # When the current attempt was authorized; a committed PROVISIONING row
+    # whose attempt is older than the managers' bounded waits is dead and may
+    # be taken over. Failure diagnostics live in logs (keyed by sandbox ID +
+    # attempt number), not here.
+    provisioning_started_at: Mapped[datetime.datetime | None] = mapped_column(
+        DateTime(timezone=True), nullable=True
     )
 
     # Relationships

@@ -9,6 +9,12 @@ Every Craft time constant is one of four things:
    taxonomy (connect / RPC / bulk transfer / mutex lease), or
 4. a **cadence** — poll and retry intervals.
 
+Correctness never depends on any of these: a sandbox status write only
+applies while the row still holds the writer's attempt number
+(``provisioning_attempt_number``), and a turn write only applies for the owning
+``runner_id``. Timeouts here only detect failure, bound budgets, or pace
+polling.
+
 Residence rule: a constant lives here only if it is used by multiple files,
 is a derivation (or feeds one), or belongs to the shared client-I/O taxonomy.
 A single-file, free-standing constant is defined at its point of use.
@@ -20,20 +26,64 @@ over those roots live here (e.g. ``RUNNER_STALE_AFTER_SECONDS``).
 Ordering invariants (asserted by
 ``tests/unit/onyx/server/features/craft/test_timeout_registry.py``):
 
-    cadences < probes/connect < mutex leases
+    cadences < probes/connect < mutex leases < PROVISION_DEADLINE
+      < ATTEMPT_DEADLINE (== observer staleness threshold)
       < QUEUE_RESIDENCY < TURN_BUDGET < ACTIVE_TURN_TTL < REQUEST_ID_TTL
     RUNNER_STALE_AFTER == 6 x SSE_KEEPALIVE_INTERVAL
     OPENCODE_PROMPT_INACTIVITY > SANDBOX_APPROVAL_WAIT (configs.py)
     SANDBOX_HEARTBEAT_REFRESH << SANDBOX_IDLE_TIMEOUT (configs.py)
 
 The client-I/O taxonomy (connect / RPC / bulk) is orthogonal to the ordering
-chain — a bulk transfer legitimately outlasts most other bounds.
+chain — a bulk transfer legitimately outlasts a provision deadline.
 """
 
 from onyx.server.features.build.configs import (
     PROMPT_SLOT_LEASE_SECONDS,
     SSE_KEEPALIVE_INTERVAL,
 )
+
+# =============================================================================
+# Provisioning family (root: PROVISION_DEADLINE_SECONDS)
+# =============================================================================
+
+# Max wall clock for one provision() call to converge a runtime. All internal
+# phases (pod/container scheduling, history restore, readiness, opencode-serve
+# bind, terminating-resource waits) draw from this one deadline. Also the
+# provisioning lock's TTL: the lock never outlives the work it guards.
+PROVISION_DEADLINE_SECONDS = 180.0
+
+# Session-workspace materialization (template copy + bun install) inside an
+# already-RUNNING sandbox. Enforced as an explicit exec deadline paired with a
+# completion sentinel — the Kubernetes exec client returns truncated output
+# without raising when its window lapses, so the sentinel is what
+# distinguishes success from truncation.
+WORKSPACE_SETUP_DEADLINE_SECONDS = PROVISION_DEADLINE_SECONDS
+
+# Best-effort opencode-history capture before terminating an unhealthy
+# sandbox. Small: recovery latency is user-facing and the history snapshot is
+# a nice-to-have, not a gate.
+RECOVERY_HISTORY_SNAPSHOT_SECONDS = 30.0
+
+# Teardown of a dead runtime (Kubernetes deletes are async; this bounds the
+# wait for resources to actually disappear).
+RUNTIME_TEARDOWN_SECONDS = 30.0
+
+# Everything a provisioning attempt spends outside provision() itself.
+ATTEMPT_OVERHEAD_SECONDS = RECOVERY_HISTORY_SNAPSHOT_SECONDS + RUNTIME_TEARDOWN_SECONDS
+
+# Self-enforced deadline of one provisioning attempt AND the observer-side
+# staleness threshold: reconcile aborts (finalizing FAILED) at the same age at
+# which reserve_sandbox declares a committed PROVISIONING row dead and takes
+# it over, so a crashed attempt blocks its sandbox for at most this long. The
+# check runs between external phases, so an in-flight phase can overrun it —
+# takeover safety comes from the provisioning lock and the attempt-number
+# condition on status writes, never from this number.
+ATTEMPT_DEADLINE_SECONDS = PROVISION_DEADLINE_SECONDS + ATTEMPT_OVERHEAD_SECONDS
+
+# How long POLL-policy callers wait out a concurrent live attempt before
+# giving up. Sized to cover a typical full provision: failing earlier just
+# fails a turn the concurrent attempt was about to satisfy.
+PROVISION_WAIT_SECONDS = 120.0
 
 # =============================================================================
 # Turn family (root: TURN_BUDGET_SECONDS)
@@ -106,6 +156,17 @@ BULK_TRANSFER_TIMEOUT_SECONDS = 300.0
 # Fixed kit — mutexes (critical-section leases, never budget-derived)
 # =============================================================================
 
+# Session create/restore flow lock (one per-user lock shared by create,
+# restore, and the reaper): held across one full session-flow operation —
+# sandbox attempt + snapshot restore + workspace materialization — so the
+# lease is the sum of those bounds. Deletable once the flows are crash-safe
+# end-to-end without it.
+SESSION_FLOW_LOCK_LEASE_SECONDS = (
+    ATTEMPT_DEADLINE_SECONDS
+    + BULK_TRANSFER_TIMEOUT_SECONDS
+    + WORKSPACE_SETUP_DEADLINE_SECONDS
+)
+
 # Prompt-slot acquire policy: a second turn racing a live one bounces fast
 # ("concurrent turn in flight") instead of queueing; a reclaimed turn must
 # instead wait out a dead holder's full lease before taking the slot.
@@ -116,6 +177,7 @@ PROMPT_SLOT_WAIT_OUT_ORPHAN_SECONDS = PROMPT_SLOT_LEASE_SECONDS + 10.0
 # Cadences
 # =============================================================================
 
-# Shared interval for poll-a-fast-local-resource loops (live-stream readiness;
-# provisioning wait loops adopt it as they move onto the registry).
+# Shared interval for every poll-a-fast-local-resource loop (pod IP, container
+# running, opencode-serve bind, resource deletion, PROVISIONING status,
+# live-stream readiness).
 POLL_INTERVAL_SECONDS = 0.5

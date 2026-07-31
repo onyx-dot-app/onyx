@@ -313,6 +313,7 @@ def _build_pod() -> client.V1Pod:
     return mgr._create_sandbox_pod(  # type: ignore[attr-defined]
         sandbox_id="abc12345-abcd-abcd-abcd-abcdef123456",
         tenant_id="t-1",
+        provisioning_attempt_number=1,
     )
 
 

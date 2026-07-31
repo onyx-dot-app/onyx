@@ -19,8 +19,11 @@ from onyx.server.features.build.db.user_library import (
 from onyx.server.features.build.sandbox.user_library import (
     USER_LIBRARY_MOUNT_PATH,
     build_user_library_fileset,
-    hydrate_user_library,
     sync_user_library_to_active_sandboxes,
+)
+from onyx.server.features.build.session.sandbox_lifecycle import (
+    build_managed_content_payload,
+    push_managed_content,
 )
 from tests.common.craft.stubs import StubSandboxManager
 
@@ -94,28 +97,23 @@ class TestUserLibraryFileset:
 
         assert fileset == {"real_file.csv": b"data"}
 
-    def test_hydrate_user_library_pushes_current_fileset_to_one_sandbox(
+    def test_managed_content_push_delivers_current_library_fileset(
         self,
         db_session: Session,
         test_user: User,
         sandbox: Callable[..., Sandbox],
         stub_sandbox_manager: StubSandboxManager,
-        monkeypatch: pytest.MonkeyPatch,
     ) -> None:
+        # Cold-start hydration path: the reconcile payload carries the user's
+        # current library fileset and pushes it to the sandbox's mount.
         sandbox_row = sandbox(user=test_user, status=SandboxStatus.RUNNING)
         _seed_file(db_session, test_user, "docs/readme.md", b"hello")
         stub_sandbox_manager.write_files_to_sandbox_silent = True
-        _patch_user_library_manager(monkeypatch, stub_sandbox_manager)
 
-        result = hydrate_user_library(
-            sandbox_row.id,
-            test_user.id,
-            db_session,
-            sandbox_manager=stub_sandbox_manager,
-        )
+        payload = build_managed_content_payload(test_user, db_session)
+        push_managed_content(stub_sandbox_manager, sandbox_row.id, payload)
 
-        assert result.succeeded == 1
-        assert stub_sandbox_manager.write_files_to_sandbox_count == 1
+        assert payload.library_files == {"docs/readme.md": b"hello"}
         assert stub_sandbox_manager.last_write_files_to_sandbox_payload == {
             "sandbox_id": sandbox_row.id,
             "mount_path": USER_LIBRARY_MOUNT_PATH,
