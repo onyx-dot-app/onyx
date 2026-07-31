@@ -75,7 +75,7 @@ def _execute_check(
     """
     Executes one check under its hang guard and maps the outcome to a status.
 
-    A timeout maps to INDETERMINATE, never FAILED: a slow source is not proof of
+    A timeout maps to INDETERMINATE, never FAILED; a slow source is not proof of
     a broken credential.
     """
     timeout_seconds = check.timeout_seconds or CAPABILITY_CHECK_TIMEOUT_SECONDS
@@ -101,7 +101,7 @@ def _execute_check(
         # request instead of running on.
         logger.warning(
             "Capability check %s timed out after %.0fs; its probe thread is "
-            "abandoned and may still have a request in flight.",
+            "abandoned and may still have a request in-flight.",
             check.check_id,
             timeout_seconds,
         )

@@ -25,7 +25,9 @@ _EXTERNAL_GROUP_SYNC_CHECKS_BY_SOURCE: dict[DocumentSource, list[CapabilityCheck
 
 
 class _PermSyncFallbackCheck(CapabilityCheck):
-    """Baseline check for a perm-sync capability with no named checks.
+    """
+    Baseline check for a perm-sync capability where the source registers no
+    named checks.
 
     Wraps the legacy ``validate_perm_sync`` blob, which covers doc sync and
     group sync together; the checks for both capabilities are therefore two
@@ -44,7 +46,9 @@ class _PermSyncFallbackCheck(CapabilityCheck):
         )
 
     def run(self, context: CapabilityCheckContext) -> None:
-        assert context.connector is not None, "The runner guarantees an instance."
+        assert context.connector is not None, (
+            "The runner guarantees an instance of a connector."
+        )
         context.connector.validate_perm_sync()
 
 

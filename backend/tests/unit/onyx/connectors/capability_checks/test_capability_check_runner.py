@@ -295,7 +295,7 @@ def test_shared_callable_with_distinct_check_ids_runs_independently() -> None:
 
 
 def test_duplicate_check_id_within_a_capability_is_rejected() -> None:
-    """Verifies a reused check_id inside one capability is a hard error."""
+    """Verifies a reused check_id within one capability is a hard error."""
     # Precondition.
     checks = [
         _CallableCheck(MagicMock(return_value=None), check_id="same_id"),

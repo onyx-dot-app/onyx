@@ -62,7 +62,7 @@ class CapabilityCheckContext(BaseModel):
 
 class CapabilityCheck(ABC):
     """
-    A named probe of one permission assumption a connector makes.
+    A named probe of one permission/capability assumption a connector makes.
 
     Concrete checks pass their metadata to ``__init__`` and implement ``run``,
     which raises a ``ValidationError``-family exception on failure and returns
@@ -86,8 +86,8 @@ class CapabilityCheck(ABC):
         self.capability = capability
         self.check_id = check_id
         self.display_name = display_name
-        # Required checks gate the capability verdict; non-required checks
-        # only downgrade PASSED to PASSED_WITH_WARNINGS (partial capability).
+        # Required checks gate the capability verdict; non-required checks only
+        # downgrade PASSED to PASSED_WITH_WARNINGS (partial capability).
         self.required = required
         self.requires_connector_instance = requires_connector_instance
         self.requires_connector_config = requires_connector_config
@@ -96,15 +96,15 @@ class CapabilityCheck(ABC):
         # INDETERMINATE, never FAILED.
         self.timeout_seconds = timeout_seconds
         # True for synthesized wrappers around the legacy validation blobs
-        # (``validate_connector_settings`` / ``validate_perm_sync``) rather
-        # than named per-permission probes; the FE labels these "basic check".
+        # (``validate_connector_settings`` / ``validate_perm_sync``) rather than
+        # named per-permission probes.
         self.is_fallback = is_fallback
         self.remediation = remediation
         self.docs_link = docs_link
 
     @abstractmethod
     def run(self, context: CapabilityCheckContext) -> None:
-        """Probes the permission; raises on failure, returns on success."""
+        """Probes the capability; raises on failure, returns on success."""
 
 
 class CapabilityCheckResult(BaseModel):
@@ -135,7 +135,7 @@ def aggregate_capability_verdict(
     Non-required outcomes only downgrade: failures to PASSED_WITH_WARNINGS
     (definite, stable, actionable), indeterminates to INDETERMINATE when no
     warning outranks them (transient, self-resolves on re-run). An empty result
-    list aggregates to SKIPPED (vacuously, "all checks were skipped").
+    list aggregates to SKIPPED.
     """
     if not applicable:
         return CapabilityVerdict.NOT_APPLICABLE

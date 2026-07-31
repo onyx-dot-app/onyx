@@ -13,10 +13,10 @@ _INDEXING_CHECKS_BY_SOURCE: dict[DocumentSource, list[CapabilityCheck]] = {}
 
 
 class _ConnectorSettingsFallbackCheck(CapabilityCheck):
-    """Baseline INDEXING check for a source with no named checks.
+    """Baseline INDEXING check where the source registers no named checks.
 
-    Wraps the legacy ``validate_connector_settings`` blob so every connector
-    has day-one coverage until a per-connector session registers named,
+    Wraps the legacy ``validate_connector_settings`` blob so every connector has
+    day-one coverage until a per-connector session registers named,
     per-permission checks that shadow this.
     """
 
@@ -29,16 +29,20 @@ class _ConnectorSettingsFallbackCheck(CapabilityCheck):
         )
 
     def run(self, context: CapabilityCheckContext) -> None:
-        assert context.connector is not None, "The runner guarantees an instance."
+        assert context.connector is not None, (
+            "The runner guarantees an instance of a connector."
+        )
         context.connector.validate_connector_settings()
 
 
 def get_capability_checks(source: DocumentSource) -> list[CapabilityCheck]:
-    """Returns all capability checks for a source, synthesizing fallbacks.
+    """
+    Returns all capability checks for a source, synthesizing fallbacks where
+    there are no named checks.
 
     INDEXING checks are registered here; perm-sync checks come from the EE
-    implementation and are empty on OSS builds, where the perm-sync feature
-    does not exist.
+    implementation and are empty on OSS builds, where the perm-sync feature does
+    not exist.
     """
     checks = list(_INDEXING_CHECKS_BY_SOURCE.get(source, []))
     if not checks:
