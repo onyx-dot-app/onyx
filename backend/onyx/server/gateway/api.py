@@ -49,6 +49,8 @@ from onyx.server.gateway.models import (
 from onyx.server.manage.llm.models import LLMProviderView, ModelConfigurationView
 from onyx.server.query_and_chat.token_limit import check_token_rate_limits
 from onyx.tracing.flows import LLMFlow
+from onyx.tracing.framework.create import trace
+from onyx.tracing.framework.traces import Trace
 from onyx.tracing.llm_utils import (
     llm_generation_span,
     record_llm_response,
@@ -67,9 +69,14 @@ _FLOW_ACCESS_CHECKS: dict[LLMFlow, Callable[[Request, User], bool]] = {
     LLMFlow.CRAFT_LLM_GENERATION: is_gateway_request,
 }
 
+
 _MESSAGES_ADAPTER: TypeAdapter[list[ChatCompletionMessage]] = TypeAdapter(
     list[ChatCompletionMessage]
 )
+
+
+def _gateway_trace(flow: LLMFlow, model: str) -> Trace:
+    return trace("llm_gateway", metadata={"flow": flow.value, "model": model})
 
 
 def resolve_gateway_model(
@@ -231,9 +238,15 @@ def _stream_worker(
     out: "queue.Queue[Any]",
     cancelled: threading.Event,
 ) -> None:
-    with llm_generation_span(
-        llm, flow=flow, input_messages=messages, tools=tools
-    ) as span:
+    # Runs on its own thread after the endpoint has returned the
+    # StreamingResponse, so the trace must be opened here rather than in the
+    # endpoint for the generation span to see an active trace.
+    with (
+        _gateway_trace(flow, llm.config.model_name),
+        llm_generation_span(
+            llm, flow=flow, input_messages=messages, tools=tools
+        ) as span,
+    ):
         accumulated_content: list[str] = []
         accumulated_reasoning: list[str] = []
         final_usage: Usage | None = None
@@ -418,12 +431,15 @@ def handle_chat_completion(
             headers={"Cache-Control": "no-cache", "X-Accel-Buffering": "no"},
         )
 
-    with llm_generation_span(
-        llm,
-        flow=flow,
-        input_messages=messages,
-        tools=request.tools,
-    ) as span:
+    with (
+        _gateway_trace(flow, llm.config.model_name),
+        llm_generation_span(
+            llm,
+            flow=flow,
+            input_messages=messages,
+            tools=request.tools,
+        ) as span,
+    ):
         try:
             response = llm.invoke(
                 prompt=messages,
