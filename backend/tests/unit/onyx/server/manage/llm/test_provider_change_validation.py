@@ -44,11 +44,30 @@ def test_surface_mode_only_change_is_allowed() -> None:
 
 
 @patch("onyx.server.manage.llm.api.MULTI_TENANT", True)
+def test_mode_change_alongside_unchanged_entries_is_allowed() -> None:
+    _validate(
+        {BIFROST_API_MODE_CONFIG_KEY: "chat_completions", "extra": "kept"},
+        {BIFROST_API_MODE_CONFIG_KEY: "responses", "extra": "kept"},
+    )
+
+
+@patch("onyx.server.manage.llm.api.MULTI_TENANT", True)
 def test_other_custom_config_change_still_rejected() -> None:
     with pytest.raises(OnyxError):
         _validate(
             {BIFROST_API_MODE_CONFIG_KEY: "responses"},
             {BIFROST_API_MODE_CONFIG_KEY: "responses", "some_credential": "x"},
+        )
+
+
+@patch("onyx.server.manage.llm.api.MULTI_TENANT", True)
+def test_mode_only_submission_dropping_stored_entries_is_rejected() -> None:
+    # A submission containing only the mode key must not silently delete
+    # stored non-surface entries when persisted wholesale.
+    with pytest.raises(OnyxError):
+        _validate(
+            {BIFROST_API_MODE_CONFIG_KEY: "chat_completions", "extra": "stored"},
+            {BIFROST_API_MODE_CONFIG_KEY: "responses"},
         )
 
 

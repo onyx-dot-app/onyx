@@ -332,10 +332,12 @@ def _validate_llm_provider_change(
         }
 
     api_base_changed = normalized_new_api_base != normalized_existing_api_base
-    new_comparable_config = _without_surface_keys(new_custom_config)
-    custom_config_changed = bool(
-        new_comparable_config
-    ) and new_comparable_config != _without_surface_keys(existing_custom_config)
+    # Gate on the raw submitted config (empty submissions are restored from the
+    # stored config later, never persisted), but compare stripped dicts so a
+    # submission that would drop stored non-surface entries is still rejected.
+    custom_config_changed = bool(new_custom_config) and _without_surface_keys(
+        new_custom_config
+    ) != _without_surface_keys(existing_custom_config)
 
     if api_base_changed or custom_config_changed:
         raise OnyxError(
