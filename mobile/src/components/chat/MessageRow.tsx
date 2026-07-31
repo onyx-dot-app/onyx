@@ -1,5 +1,5 @@
 // Memoized on packet count, not array identity: a row re-renders only when its own packets grow.
-import { memo, useMemo, useState } from "react";
+import { Fragment, memo, useMemo, useState } from "react";
 import { View } from "react-native";
 
 import { selectSources } from "@/chat/citations";
@@ -7,16 +7,22 @@ import { Message } from "@/chat/interfaces";
 import { MinimalAgent } from "@/chat/agents";
 import { getErrorTitle } from "@/chat/errorHelpers";
 import { fileDescriptorToDisplayFile } from "@/chat/fileDescriptors";
+import { openSource } from "@/chat/openSource";
 import { AgentTimeline } from "@/components/chat/AgentTimeline";
 import {
   CitedSourcesBar,
   CitedSourcesSheet,
 } from "@/components/chat/CitedSources";
 import { FileCard } from "@/components/chat/FileCard";
+import { RendererComponent } from "@/components/chat/renderers/RendererComponent";
+import type { FullChatState } from "@/components/chat/renderers/registry";
 import { Icon } from "@/components/ui/icon";
 import { Text } from "@/components/ui/text";
 import SvgAlertCircle from "@/icons/alert-circle";
 import { usePacketDisplay } from "@/hooks/usePacketDisplay";
+
+// The renderer's onComplete drives the timeline pacing gate (9b.7); nothing consumes it in PR4.
+const NOOP = (): void => {};
 
 function UserMessage({ node }: { node: Message }) {
   const files = node.files.map(fileDescriptorToDisplayFile);
@@ -30,7 +36,7 @@ function UserMessage({ node }: { node: Message }) {
         </View>
       ) : null}
       {node.message.length > 0 ? (
-        // Web parity: HumanMessage bubble with asymmetric corners (square bottom-right).
+        // Web HumanMessage bubble: squared bottom-right corner.
         <View className="max-w-[85%] rounded-t-16 rounded-bl-16 bg-background-tint-02 px-12 py-8">
           {/* 14px body: deliberate reduction from web's 16px, which reads oversized on a phone. */}
           <Text font="main-ui-body" color="text-05">
@@ -42,7 +48,7 @@ function UserMessage({ node }: { node: Message }) {
   );
 }
 
-// Web parity: ErrorBanner — code-derived title + raw error. Single alert icon; no regenerate yet.
+// Web ErrorBanner. No regenerate action yet.
 function ErrorMessage({ node }: { node: Message }) {
   return (
     <View className="py-6">
@@ -72,19 +78,29 @@ function AssistantMessage({
   node: Message;
   agent: MinimalAgent | null;
 }) {
-  const { renderer, packets, processed } = usePacketDisplay(node);
+  const { packets, processed, hasRenderer } = usePacketDisplay(node);
   const [sourcesOpen, setSourcesOpen] = useState(false);
-  const Renderer = renderer?.Component;
-  const hasContent = Renderer != null && packets.length > 0;
+  const hasContent = hasRenderer && packets.length > 0;
 
-  // Sources appear only once the answer completes (web parity; avoids mid-stream layout shift).
-  // Memoized on `processed` so toggling the sheet open/closed doesn't re-run the selector.
+  // Only after the answer completes, to avoid mid-stream layout shift.
   const sources = useMemo(
     () => (processed.isComplete ? selectSources(processed) : null),
     [processed],
   );
 
-  // Web AgentMessage: timeline (avatar + status) above the answer; the timeline owns the loader.
+  // Context a renderer may read. This identity churns each flush, but RendererComponent's memo keys on
+  // agent.id, not this object, so that's harmless.
+  const chatState = useMemo<FullChatState>(
+    () => ({
+      agent,
+      citations: processed.citationMap,
+      documentMap: processed.documentMap,
+      openSource,
+    }),
+    [agent, processed.citationMap, processed.documentMap],
+  );
+
+  // Web AgentMessage: the timeline (above) owns the loader; answer and sources sit below.
   return (
     <View className="gap-12 py-6">
       <AgentTimeline
@@ -92,9 +108,25 @@ function AssistantMessage({
         isLoading={!hasContent && !processed.isComplete}
       />
       {hasContent ? (
-        // Inset (px-12) aligns the answer under the avatar rail, matching web's px-3.
+        // px-12 aligns the answer under the avatar rail (web's px-3).
         <View className="px-12">
-          <Renderer packets={packets} processed={processed} />
+          <RendererComponent
+            packets={packets}
+            chatState={chatState}
+            messageNodeId={node.nodeId}
+            onComplete={NOOP}
+            animate={!processed.isComplete}
+            stopPacketSeen={processed.stopPacketSeen}
+            stopReason={processed.stopReason}
+          >
+            {(results) => (
+              <>
+                {results.map((result, index) => (
+                  <Fragment key={index}>{result.content}</Fragment>
+                ))}
+              </>
+            )}
+          </RendererComponent>
         </View>
       ) : null}
       {sources && sources.hasSources ? (
@@ -136,8 +168,6 @@ export const MessageRow = memo(
     prev.node.messageId === next.node.messageId &&
     prev.node.errorCode === next.node.errorCode &&
     prev.node.packets.length === next.node.packets.length &&
-    // user attachment chips: re-render if the files array is replaced
     prev.node.files === next.node.files &&
-    // assistant avatar: re-render if the session's agent changes
     prev.agent === next.agent,
 );
