@@ -49,11 +49,12 @@ def test_only_a_settled_session_skips_the_ensure(
     assert session_runtime_intact(session, sandbox) is intact
 
 
-def test_settled_turn_takes_no_lock_and_does_not_touch_the_pod(
+def test_settled_turn_records_activity_and_does_not_exec(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
-    """The common case is every turn on a live session: two reads, no lock, and
-    no exec into the sandbox to confirm a workspace we already believe in."""
+    """Every turn on a live session: no lock, no exec to confirm a workspace we
+    already believe in — but it records the activity, or the next sweep reaps a
+    session in use."""
     session_id, user_id = uuid4(), uuid4()
     sandbox = _sandbox()
 
@@ -65,13 +66,60 @@ def test_settled_turn_takes_no_lock_and_does_not_touch_the_pod(
     ensure = MagicMock()
     monkeypatch.setattr(executor, "ensure_session_ready", ensure)
     manager = MagicMock()
+    manager.health_check.return_value = True
     monkeypatch.setattr(executor, "get_sandbox_manager", lambda: manager)
+    heartbeat = MagicMock()
+    monkeypatch.setattr(executor, "update_sandbox_heartbeat", heartbeat)
 
     assert executor._ready_session_runtime(MagicMock(), session_id, user_id) is sandbox
 
     lock_taken.assert_not_called()
     ensure.assert_not_called()
     manager.session_workspace_exists.assert_not_called()
+    assert heartbeat.call_args.args[1] == sandbox.id
+
+
+def test_turn_wakes_the_session_when_the_pod_is_gone(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """A record saying RUNNING must be verified before a prompt is posted into
+    it — the reaper terminates the pod before it writes SLEEPING. A failed
+    check wakes the session instead of using the dead pod."""
+    session_id, user_id = uuid4(), uuid4()
+    rebuilt = _sandbox()
+    order: list[str] = []
+
+    monkeypatch.setattr(executor, "get_build_session", lambda *_a: _session())
+    monkeypatch.setattr(executor, "get_sandbox_by_user_id", lambda *_a: _sandbox())
+    monkeypatch.setattr(executor, "fetch_user_by_id", lambda *_a: MagicMock())
+    monkeypatch.setattr(executor, "update_sandbox_heartbeat", MagicMock())
+
+    manager = MagicMock()
+    # What a terminated pod looks like from here.
+    manager.health_check.return_value = False
+    monkeypatch.setattr(executor, "get_sandbox_manager", lambda: manager)
+
+    class FakeLock:
+        def __init__(self, uid: object) -> None:
+            assert uid == user_id
+
+        def __enter__(self) -> None:
+            order.append("lock")
+
+        def __exit__(self, *_a: object) -> None:
+            order.append("unlock")
+
+    def fake_ensure(*_args: Any, **_kwargs: Any) -> Any:
+        order.append("ensure")
+        return rebuilt
+
+    monkeypatch.setattr(executor, "session_creation_lock", FakeLock)
+    monkeypatch.setattr(executor, "ensure_session_ready", fake_ensure)
+
+    assert executor._ready_session_runtime(MagicMock(), session_id, user_id) is rebuilt
+
+    # Rebuilt through the restore path rather than handed the doomed pod.
+    assert order == ["lock", "ensure", "unlock"]
 
 
 def test_reaped_session_is_rebuilt_under_the_restore_lock(

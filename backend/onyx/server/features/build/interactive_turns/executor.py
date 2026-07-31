@@ -19,7 +19,10 @@ from onyx.server.features.build.configs import (
     OPENCODE_PROMPT_INACTIVITY_TIMEOUT_SECONDS,
 )
 from onyx.server.features.build.db.build_session import get_build_session
-from onyx.server.features.build.db.sandbox import get_sandbox_by_user_id
+from onyx.server.features.build.db.sandbox import (
+    get_sandbox_by_user_id,
+    update_sandbox_heartbeat,
+)
 from onyx.server.features.build.interactive_turns.state import (
     TURN_STATUS_CANCELLED,
     TURN_STATUS_FAILED,
@@ -44,6 +47,9 @@ from onyx.server.features.build.session.interrupt_signal import (
 )
 from onyx.server.features.build.session.locks import session_creation_lock
 from onyx.server.features.build.session.manager import SessionManager
+from onyx.server.features.build.session.sandbox_lifecycle import (
+    HEALTH_PROBE_TIMEOUT_SECONDS,
+)
 from onyx.server.features.build.session.session_ready import (
     ensure_session_ready,
     session_runtime_intact,
@@ -188,14 +194,28 @@ def _ready_session_runtime(
     """The sandbox this turn runs in, with the session's workspace present.
 
     A settled session returns straight away; anything else — a sandbox the
-    reaper took, a session never restored — is rebuilt through the same path and
-    the same lock the restore endpoint uses, blocking, because the turn has
-    nothing to do until the workspace is there.
+    reaper took, a session never restored, a pod that died under a live record —
+    is rebuilt through the same path and the same lock the restore endpoint
+    uses, blocking, because the turn has nothing to do until the workspace is
+    there.
     """
     session = get_build_session(session_id, user_id, db_session)
     sandbox = get_sandbox_by_user_id(db_session, user_id)
     if sandbox is not None and session_runtime_intact(session, sandbox):
-        return sandbox
+        # The reaper decides from this timestamp, and the stream only starts
+        # refreshing it after the prompt slot and the send.
+        update_sandbox_heartbeat(db_session, sandbox.id)
+        db_session.commit()
+        # RUNNING is a claim, not a fact: the reaper terminates the pod before
+        # it writes SLEEPING, and an evicted pod is never written down at all.
+        if get_sandbox_manager().health_check(
+            sandbox.id, timeout=HEALTH_PROBE_TIMEOUT_SECONDS
+        ):
+            return sandbox
+        logger.warning(
+            "Session %s claims a RUNNING sandbox with no live pod; waking it",
+            session_id,
+        )
 
     if session is None:
         raise RuntimeError(f"Build session {session_id} not found")
