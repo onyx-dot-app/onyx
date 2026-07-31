@@ -662,9 +662,31 @@ def _responses_stream_worker(
         )
     )
     message_item_id = _new_id("msg")
+    state = _StreamAccumulator()
+    text_item_open = False
+
+    def close_text_item(status: str) -> ResponsesMessageItem:
+        part = ResponsesOutputTextPart.create(text=state.text)
+        item = ResponsesMessageItem.create(
+            id=message_item_id, status=status, content=[part]
+        )
+        emit(
+            ResponsesOutputTextDoneEvent.create(
+                item_id=message_item_id, output_index=0, text=state.text
+            )
+        )
+        emit(
+            ResponsesContentPartDoneEvent.create(
+                item_id=message_item_id, output_index=0, part=part
+            )
+        )
+        emit(ResponsesOutputItemDoneEvent.create(output_index=0, item=item))
+        return item
 
     def emit_error(*, message: str, error_type: str) -> None:
         del error_type  # the Responses protocol carries only the message
+        if text_item_open:
+            close_text_item("incomplete")
         emit(
             ResponsesFailedEvent.create(
                 ResponsesObjectPayload.failed(
@@ -685,8 +707,6 @@ def _responses_stream_worker(
             llm, flow=flow, input_messages=messages, tools=tools
         ) as span,
     ):
-        state = _StreamAccumulator()
-        text_item_open = False
         with _stream_worker_guard(
             span,
             model,
@@ -707,65 +727,42 @@ def _responses_stream_worker(
                 if cancelled.is_set():
                     break
                 state.observe(chunk)
-                if chunk.choice.delta.content:
-                    if not text_item_open:
-                        # Open the item before the first delta; Codex drops
-                        # deltas for items it has not seen added.
-                        if not emit(
-                            ResponsesOutputItemAddedEvent.create(
-                                output_index=0,
-                                item=ResponsesMessageItem.create(
-                                    id=message_item_id, status="in_progress", content=[]
-                                ),
-                            )
-                        ):
-                            break
-                        if not emit(
-                            ResponsesContentPartAddedEvent.create(
-                                item_id=message_item_id,
-                                output_index=0,
-                                part=ResponsesOutputTextPart.create(text=""),
-                            )
-                        ):
-                            break
-                        text_item_open = True
+                if not chunk.choice.delta.content:
+                    continue
+                if not text_item_open:
+                    # Open the item before the first delta; Codex drops
+                    # deltas for items it has not seen added.
                     if not emit(
-                        ResponsesOutputTextDeltaEvent.create(
-                            item_id=message_item_id,
-                            delta=chunk.choice.delta.content,
+                        ResponsesOutputItemAddedEvent.create(
+                            output_index=0,
+                            item=ResponsesMessageItem.create(
+                                id=message_item_id, status="in_progress", content=[]
+                            ),
                         )
                     ):
                         break
+                    if not emit(
+                        ResponsesContentPartAddedEvent.create(
+                            item_id=message_item_id,
+                            output_index=0,
+                            part=ResponsesOutputTextPart.create(text=""),
+                        )
+                    ):
+                        break
+                    text_item_open = True
+                if not emit(
+                    ResponsesOutputTextDeltaEvent.create(
+                        item_id=message_item_id,
+                        delta=chunk.choice.delta.content,
+                    )
+                ):
+                    break
             else:
                 # Build each item once and reuse it below: re-deriving items
                 # for the terminal payload remints ids the client never saw.
                 completed_items: list[ResponsesOutputItem] = []
                 if text_item_open:
-                    full_text = state.text
-                    completed_part = ResponsesOutputTextPart.create(text=full_text)
-                    message_item = ResponsesMessageItem.create(
-                        id=message_item_id,
-                        status="completed",
-                        content=[completed_part],
-                    )
-                    completed_items.append(message_item)
-                    emit(
-                        ResponsesOutputTextDoneEvent.create(
-                            item_id=message_item_id, output_index=0, text=full_text
-                        )
-                    )
-                    emit(
-                        ResponsesContentPartDoneEvent.create(
-                            item_id=message_item_id,
-                            output_index=0,
-                            part=completed_part,
-                        )
-                    )
-                    emit(
-                        ResponsesOutputItemDoneEvent.create(
-                            output_index=0, item=message_item
-                        )
-                    )
+                    completed_items.append(close_text_item("completed"))
                 # Filter before enumerating, or a dropped nameless call leaves
                 # a hole in the output_index sequence.
                 call_items = [

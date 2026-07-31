@@ -1483,6 +1483,51 @@ def test_responses_stream_upstream_failure_emits_response_failed(
     assert not any(e["type"] == "response.completed" for e in events)
 
 
+class _FailAfterTextLLM(_ConfigOnlyLLM):
+    def __init__(self, exc: Exception) -> None:
+        super().__init__(
+            LLMConfig(
+                model_provider="openai",
+                model_name="test",
+                temperature=0,
+                max_input_tokens=1_000,
+            )
+        )
+        self._exc = exc
+
+    def stream(self, *args: object, **kwargs: object):  # type: ignore[no-untyped-def,override]
+        del args, kwargs
+        yield ModelResponseStream(
+            id="p1", created="0", choice=StreamingChoice(delta=Delta(content="partial"))
+        )
+        raise self._exc
+
+
+def test_responses_stream_failure_closes_the_open_text_item() -> None:
+    events = _responses_stream_events(
+        _FailAfterTextLLM(RuntimeError("boom")), response_id="resp_partial"
+    )
+    event_types = [e["type"] for e in events]
+
+    assert event_types == [
+        "response.created",
+        "response.output_item.added",
+        "response.content_part.added",
+        "response.output_text.delta",
+        "response.output_text.done",
+        "response.content_part.done",
+        "response.output_item.done",
+        "response.failed",
+    ]
+    item_id = events[1]["item"]["id"]
+    assert events[1]["item"]["status"] == "in_progress"
+    done_item = events[6]["item"]
+    assert done_item["id"] == item_id
+    assert done_item["status"] == "incomplete"
+    assert done_item["content"][0]["text"] == "partial"
+    assert events[-1]["response"]["status"] == "failed"
+
+
 def test_responses_stream_disconnect_closes_upstream_and_omits_completed() -> None:
     closed = threading.Event()
     with patch.object(gateway_api, "llm_generation_span", return_value=nullcontext()):
