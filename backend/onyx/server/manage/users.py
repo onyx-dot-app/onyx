@@ -588,7 +588,7 @@ def bulk_invite_users(
     if MULTI_TENANT:
         try:
             fetch_ee_implementation_or_noop(
-                "onyx.server.tenants.provisioning", "add_users_to_tenant", None
+                "onyx.db.user_tenant_mapping", "add_users_to_tenant", None
             )(new_invited_emails, tenant_id)
         except OnyxError:
             # Seat-limit / billing declines from the cloud check must reach

@@ -103,20 +103,29 @@ def resolve_tenant_id(
     """Tenant this login belongs to, or None when it maps nowhere.
 
     An active subject membership wins because only the subject survives an
-    address change. A superseded one is the last resort, since an active email
-    membership names a workspace the user was deliberately moved into.
+    address change. A superseded one ranks behind an active email membership,
+    which is where an admin-initiated workspace move lands, and ahead of an
+    address that maps nowhere or to several pending invitations.
     """
+    superseded_tenant_id: str | None = None
     if oauth_name and account_id:
         tenant_id = get_tenant_id_for_oauth_account(oauth_name, account_id)
         if tenant_id:
             return tenant_id
+        superseded_tenant_id = get_superseded_tenant_id_for_oauth_account(
+            oauth_name, account_id
+        )
 
     try:
         return get_tenant_id_for_email(email)
     except exceptions.UserNotExists:
-        if not (oauth_name and account_id):
-            return None
-        return get_superseded_tenant_id_for_oauth_account(oauth_name, account_id)
+        return superseded_tenant_id
+    except OnyxError:
+        # A linked subject names exactly one workspace, so it settles an address
+        # the caller would otherwise have to disambiguate.
+        if superseded_tenant_id is None:
+            raise
+        return superseded_tenant_id
 
 
 def _oauth_account_tenant_id(
@@ -244,6 +253,159 @@ def _association_ownership_filter(
     )
 
 
+def rekey_user_mapping_email(
+    new_email: str,
+    tenant_id: str,
+    oauth_identities: Sequence[tuple[str, str]],
+    previous_email: str | None = None,
+) -> None:
+    """Collapse this tenant's membership rows for the user's linked subjects
+    onto their new address, keeping one row and deleting the rest.
+
+    An unmapped new address links no further subjects and resolves nowhere for
+    a login that presents none, which is what provisions a second tenant.
+    Ownership is matched by any linked subject, since the provider used for this
+    login may not be the one that linked the row. ``previous_email`` names the
+    row the caller is moving, since a tenant can hold several of this user's.
+
+    No-op outside multi-tenant, where the mapping tables are not provisioned.
+    """
+    if not MULTI_TENANT:
+        return
+
+    identities = list(dict.fromkeys(oauth_identities))
+    if not identities:
+        logger.warning("No linked OAuth identity to rekey in tenant %s", tenant_id)
+        return
+
+    normalized_new_email = new_email.lower()
+    with get_catalog_session() as db_session:
+        # uq_user_active_email_idx spans tenants, so the address may already be
+        # held. Moving the row onto it anyway would make the other tenant's row
+        # answer this user's next login, and the subject link still resolves it.
+        held_elsewhere = db_session.scalar(
+            select(UserTenantMapping.tenant_id).where(
+                UserTenantMapping.email == normalized_new_email,
+                UserTenantMapping.tenant_id != tenant_id,
+                UserTenantMapping.active == True,  # noqa: E712
+            )
+        )
+        if held_elsewhere is not None:
+            logger.warning(
+                "Renamed address is active in another workspace, leaving the "
+                "tenant %s mapping under its current address",
+                tenant_id,
+            )
+            return
+
+        matched_mappings = (
+            db_session.query(UserTenantMapping)
+            .filter(
+                UserTenantMapping.tenant_id == tenant_id,
+                _association_ownership_filter(identities),
+            )
+            .with_for_update()
+            .all()
+        )
+        if not matched_mappings:
+            logger.warning("No mapping row to rekey in tenant %s", tenant_id)
+            return
+
+        destination = (
+            db_session.query(UserTenantMapping)
+            .filter(
+                UserTenantMapping.tenant_id == tenant_id,
+                UserTenantMapping.email == normalized_new_email,
+            )
+            .with_for_update()
+            .one_or_none()
+        )
+        # A row carries someone else's subject once a declined rekey parks it
+        # and an invite hands the address on. Renaming one promotes them into a
+        # workspace, and deleting one cascades their membership away.
+        candidate_keys = {(row.email, row.tenant_id) for row in matched_mappings}
+        if destination is not None:
+            candidate_keys.add((destination.email, destination.tenant_id))
+        if db_session.scalar(
+            select(UserTenantMappingOAuthAccount.account_id).where(
+                tuple_(
+                    UserTenantMappingOAuthAccount.email,
+                    UserTenantMappingOAuthAccount.tenant_id,
+                ).in_(list(candidate_keys)),
+                ~tuple_(
+                    UserTenantMappingOAuthAccount.oauth_name,
+                    UserTenantMappingOAuthAccount.account_id,
+                ).in_(identities),
+            )
+        ):
+            logger.warning(
+                "Mapping rows in tenant %s carry another identity's subject, "
+                "leaving them as they are",
+                tenant_id,
+            )
+            return
+
+        if destination is None:
+            normalized_previous = previous_email.lower() if previous_email else None
+            destination = next(
+                (
+                    mapping
+                    for mapping in matched_mappings
+                    if mapping.email == normalized_previous
+                ),
+                None,
+            ) or next(
+                # No caller-named row, so fall back to keeping an active
+                # membership active rather than reviving a retired one.
+                (mapping for mapping in matched_mappings if mapping.active),
+                matched_mappings[0],
+            )
+            destination.email = normalized_new_email
+
+        source_mappings = [
+            mapping for mapping in matched_mappings if mapping is not destination
+        ]
+        if source_mappings:
+            association_accounts = (
+                db_session.query(UserTenantMappingOAuthAccount)
+                .filter(
+                    tuple_(
+                        UserTenantMappingOAuthAccount.email,
+                        UserTenantMappingOAuthAccount.tenant_id,
+                    ).in_(
+                        [
+                            (mapping.email, mapping.tenant_id)
+                            for mapping in source_mappings
+                        ]
+                    ),
+                    # A row can carry a stranger's subject, so scope the move to
+                    # this user's. `identities` is every provider they have
+                    # linked, not just the one used today, so none is stranded.
+                    tuple_(
+                        UserTenantMappingOAuthAccount.oauth_name,
+                        UserTenantMappingOAuthAccount.account_id,
+                    ).in_(identities),
+                )
+                .with_for_update()
+                .all()
+            )
+            for account in association_accounts:
+                account.email = destination.email
+                account.tenant_id = destination.tenant_id
+
+            # Land the FK moves before the source mappings are deleted, or
+            # ON DELETE CASCADE takes the links with them.
+            db_session.flush()
+
+        destination.active = destination.active or any(
+            mapping.active for mapping in source_mappings
+        )
+        for mapping in source_mappings:
+            db_session.delete(mapping)
+
+        db_session.commit()
+
+
 def add_users_to_tenant(emails: list[str], tenant_id: str) -> None:
     """
     Add users to a tenant. If a user has an active mapping elsewhere,
@@ -252,7 +414,7 @@ def add_users_to_tenant(emails: list[str], tenant_id: str) -> None:
     Calls ``enforce_cloud_seat_limit`` before inserting any new active
     mapping so Stripe auto-billing fails the request closed on decline.
     """
-    unique_emails = set(emails)
+    unique_emails = {email.lower() for email in emails}
     if not unique_emails:
         return
 
@@ -331,12 +493,13 @@ def add_users_to_tenant(emails: list[str], tenant_id: str) -> None:
 
 
 def remove_users_from_tenant(emails: list[str], tenant_id: str) -> None:
+    normalized_emails = [email.lower() for email in emails]
     with get_catalog_session() as db_session:
         try:
             mappings_to_delete = (
                 db_session.query(UserTenantMapping)
                 .filter(
-                    UserTenantMapping.email.in_(emails),
+                    UserTenantMapping.email.in_(normalized_emails),
                     UserTenantMapping.tenant_id == tenant_id,
                 )
                 .all()
@@ -572,6 +735,7 @@ def deny_user_invite(email: str, tenant_id: str) -> None:
     Deny an invitation to join a tenant.
     This removes the user's mapping to the tenant.
     """
+    email = email.lower()
     with get_catalog_session() as db_session:
         # Delete the mapping for this user and tenant
         result = (
@@ -652,6 +816,7 @@ def get_tenant_invitation(email: str) -> TenantSnapshot | None:
     """
     Get the first tenant invitation for this user
     """
+    email = email.lower()
     with get_catalog_session() as db_session:
         # Get the first tenant invitation for this user
         invitation = (

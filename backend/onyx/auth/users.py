@@ -6,6 +6,7 @@ import secrets
 import string
 import uuid
 from collections.abc import AsyncGenerator, Sequence
+from contextlib import asynccontextmanager
 from datetime import datetime, timedelta, timezone
 from functools import partial
 from typing import Any, Dict, List, Literal, Optional, Protocol, Tuple, TypeVar, cast
@@ -140,6 +141,7 @@ from onyx.db.users import (
     get_user_by_email,
     get_user_by_oauth_account,
     is_limited_user,
+    reconcile_user_email__no_commit,
 )
 from onyx.error_handling.error_codes import OnyxErrorCode
 from onyx.error_handling.exceptions import (
@@ -337,6 +339,45 @@ def verify_email_is_invited(email: str) -> None:
     )
 
 
+def remove_user_from_invited_users_after_login(
+    email: str, user_id: uuid.UUID, tenant_id: str
+) -> None:
+    """Best-effort invite cleanup. A leftover entry is inert once the user is a
+    member, so a failure must not fail the login."""
+    try:
+        remove_user_from_invited_users(email)
+    except Exception:
+        logger.warning(
+            "Invite cleanup failed after login: user_id=%s tenant=%s",
+            user_id,
+            tenant_id,
+            exc_info=True,
+        )
+
+
+def rekey_tenant_mapping_after_login(
+    email: str,
+    tenant_id: str,
+    oauth_identities: list[tuple[str, str]],
+    previous_email: str | None = None,
+) -> None:
+    """Best-effort catalog rekey for a login that has already succeeded.
+
+    Tenant resolution routes by linked subject, so a membership row left under
+    the old address still reaches the right workspace and the next login retries.
+    """
+    try:
+        fetch_ee_implementation_or_noop(
+            "onyx.db.user_tenant_mapping", "rekey_user_mapping_email", None
+        )(email, tenant_id, oauth_identities, previous_email)
+    except Exception:
+        logger.warning(
+            "Tenant mapping rekey failed after login: tenant=%s",
+            tenant_id,
+            exc_info=True,
+        )
+
+
 def verify_email_in_whitelist(
     email: str,
     tenant_id: str,
@@ -481,6 +522,18 @@ def _invalidate_license_cache_after_seat_change() -> None:
     fetch_ee_implementation_or_noop(
         "onyx.db.license", "invalidate_license_cache", None
     )()
+
+
+@asynccontextmanager
+async def _tenant_session_with_context(
+    tenant_id: str,
+) -> AsyncGenerator[AsyncSession, None]:
+    token = CURRENT_TENANT_ID_CONTEXTVAR.set(tenant_id)
+    try:
+        async with get_async_session_context_manager(tenant_id) as db_session:
+            yield db_session
+    finally:
+        CURRENT_TENANT_ID_CONTEXTVAR.reset(token)
 
 
 class UserManager(UUIDIDMixin, BaseUserManager[User, uuid.UUID]):
@@ -922,10 +975,7 @@ class UserManager(UUIDIDMixin, BaseUserManager[User, uuid.UUID]):
             raise HTTPException(status_code=401, detail="User not found")
 
         # Proceed with the tenant context
-        token = None
-        async with get_async_session_context_manager(tenant_id) as db_session:
-            token = CURRENT_TENANT_ID_CONTEXTVAR.set(tenant_id)
-
+        async with _tenant_session_with_context(tenant_id) as db_session:
             verify_email_in_whitelist(account_email, tenant_id, oauth_name, account_id)
             oauth_security_settings = get_security_settings()
             effective_valid_email_domains = (
@@ -1024,11 +1074,39 @@ class UserManager(UUIDIDMixin, BaseUserManager[User, uuid.UUID]):
                                 oauth_account_dict,
                             )
 
-            # Keyed on the stored email rather than the one the IdP just sent:
-            # that is the address this user's membership row is filed under.
+            assert user is not None
+
+            # Keyed on the stored email rather than the one the IdP just sent.
+            # The membership row moves onto the new address at the rekey below.
             fetch_ee_implementation_or_noop(
                 "onyx.db.user_tenant_mapping", "record_oauth_identity", None
             )(user.email, tenant_id, oauth_name, account_id)
+
+            # The provider is authoritative for the address, so adopt it when it
+            # moves. Not gated on multi-tenant: single-tenant reaches the same
+            # user by subject and so arrives here with a stale email too.
+            email_reconcile_result = await db_session.run_sync(
+                partial(reconcile_user_email__no_commit, user.id, account_email)
+            )
+            replaced_email: str | None = None
+            if email_reconcile_result is not None:
+                replaced_email, reconciled_prior_emails = email_reconcile_result
+                # Retire the consumed invite before the rename commits. A failure
+                # afterwards leaves it able to authorize the address's next holder,
+                # and no later login reports that address again.
+                remove_user_from_invited_users(replaced_email)
+                await db_session.commit()
+                user.email = account_email.lower()
+                user.prior_emails = reconciled_prior_emails
+
+            oauth_identities = [
+                (oauth_account.oauth_name, oauth_account.account_id)
+                for oauth_account in user.oauth_accounts
+            ]
+
+            rekey_tenant_mapping_after_login(
+                user.email, tenant_id, oauth_identities, replaced_email
+            )
 
             # NOTE: Most IdPs have very short expiry times, and we don't want to force the user to
             # re-authenticate that frequently, so by default this is disabled
@@ -1096,9 +1174,7 @@ class UserManager(UUIDIDMixin, BaseUserManager[User, uuid.UUID]):
             if user.oidc_expiry is not None and not track_external_idp_expiry:
                 await self.user_db.update(user, {"oidc_expiry": None})
                 user.oidc_expiry = None  # ty: ignore[invalid-assignment]
-            remove_user_from_invited_users(user.email)
-            if token:
-                CURRENT_TENANT_ID_CONTEXTVAR.reset(token)
+            remove_user_from_invited_users_after_login(user.email, user.id, tenant_id)
 
             return user
 
