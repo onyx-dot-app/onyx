@@ -23,8 +23,12 @@ Status checked against LiteLLM v1.93.0 (2026-07-20):
    - Also normalizes terminal events (response.completed/incomplete/failed)
      whose response carries "output": null (newer Bifrost gateways, e.g.
      fronting Bedrock) — upstream iterates output and raises TypeError
-   STATUS: STILL NEEDED - Upstream does not insert separators between summary sections
-           and does not guard against null output in terminal events.
+   - Also turns empty function_call_arguments.delta events into no-op chunks;
+     Anthropic-backed gateways open tool-call streams with an empty delta and
+     upstream raises ValueError on falsy deltas
+   STATUS: STILL NEEDED - Upstream does not insert separators between summary sections,
+           does not guard against null output in terminal events, and rejects empty
+           tool-argument deltas.
 
 3. OpenAI Responses API Non-Streaming (_patch_openai_responses_transform_response):
    - LiteLLM's transform_response joins multiple reasoning summary parts with spaces
@@ -309,6 +313,17 @@ def _patch_responses_reasoning_summary_newlines() -> None:
                         )
                     ]
                 )
+
+        # Anthropic-backed gateways (e.g. Bifrost) open tool-call streams with
+        # an empty arguments delta; upstream raises ValueError on falsy deltas.
+        # Emit a no-op chunk instead — the real arguments follow in later
+        # deltas.
+        if event_type == "response.function_call_arguments.delta" and not (
+            isinstance(parsed_chunk, dict) and parsed_chunk.get("delta")
+        ):
+            return ModelResponseStream(
+                choices=[StreamingChoices(index=0, delta=Delta(), finish_reason=None)]
+            )
 
         # Some gateways (e.g. newer Bifrost with Bedrock) emit terminal events
         # whose response carries "output": null; upstream iterates it and

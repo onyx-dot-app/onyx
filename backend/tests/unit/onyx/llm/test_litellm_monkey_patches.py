@@ -222,6 +222,40 @@ def test_responses_chunk_parser_normalizes_null_output_on_completed() -> None:
     assert parsed.choices[0].finish_reason == "stop"
 
 
+def test_responses_chunk_parser_ignores_empty_tool_argument_delta() -> None:
+    # Anthropic-backed gateways open tool-call streams with an empty arguments
+    # delta; upstream raises ValueError on falsy deltas. The patch must turn
+    # these into no-op chunks and keep real deltas working.
+    apply_monkey_patches()
+    iterator = OpenAiResponsesToChatCompletionStreamIterator(
+        streaming_response=iter(()),
+        sync_stream=True,
+    )
+    empty = iterator.chunk_parser(
+        {
+            "type": "response.function_call_arguments.delta",
+            "item_id": "toolu_1",
+            "output_index": 0,
+            "delta": "",
+            "sequence_number": 4,
+        }
+    )
+    assert empty.choices[0].delta.tool_calls is None
+
+    real = iterator.chunk_parser(
+        {
+            "type": "response.function_call_arguments.delta",
+            "item_id": "toolu_1",
+            "output_index": 0,
+            "delta": '{"query": "onboarding"}',
+            "sequence_number": 5,
+        }
+    )
+    tool_calls = real.choices[0].delta.tool_calls
+    assert tool_calls is not None
+    assert tool_calls[0].function.arguments == '{"query": "onboarding"}'
+
+
 def test_assembled_streaming_response_handles_dict_response() -> None:
     # When the terminal event's response fails litellm's validation it stays a
     # plain dict; the assembled-response patch must not assume a pydantic model.
