@@ -34,15 +34,14 @@ handler at `web/src/app/api/[...path]/route.ts`), so **`localhost:3000` serves b
 `/api`** — no reverse proxy needed. You can also hit the backend directly at `localhost:8080` (note:
 **no** `/api` prefix there — e.g. `/health`, `/auth/type`).
 
-`ods web dev` runs `bun install --frozen-lockfile` first, but only when `web/node_modules` is
-missing or empty. Two gaps to know about:
-
-- A **stale** install (lockfile drifted since node_modules was populated) is not detected — if the
-  dev server fails on missing packages, run `cd web && bun install` yourself.
-- The workspace packages `@onyx-ai/shared` and `@onyx-ai/opal` are symlinks into `web/lib/*` whose
-  exports point at `dist/`, and `bun install` does not build them. If the dev server dies with an
-  export error like `Package path ./root.css is not exported`, build them (in this order):
-  `cd web/lib/shared && bun run build && cd ../opal && bun run build`.
+`ods web <script>` self-heals its prerequisites before running: it runs
+`bun install --frozen-lockfile` when `web/node_modules` is missing, empty, or was installed from a
+different `bun.lock` (tracked via a hash stamp inside node_modules), and rebuilds the workspace
+packages `web/lib/shared` / `web/lib/opal` when their `dist/` is missing or older than their
+sources. If an older `ods` build (it's compiled into `.venv/bin` — refresh with `uv sync`) hits
+these anyway, the symptoms and fixes: missing packages → `cd web && bun install`; export errors
+like `Package path ./root.css is not exported` →
+`cd web/lib/shared && bun run build && cd ../opal && bun run build`.
 
 **Stop the dev servers when you're finished with them** (backgrounded processes outlive your
 task otherwise):
@@ -52,14 +51,18 @@ task otherwise):
 
 ## Playwright / browser access
 
-- **Playwright MCP browser tools** (`browser_navigate` etc.) drive the `chrome` channel — Google
-  Chrome is baked into the image at `/opt/google/chrome/chrome`. If it's missing (container built
-  from an older image), install it once: `cd web && npx playwright install chrome`.
-- **Repo-pinned Playwright chromium** (the e2e runner in `web/tests/e2e`) is *not* baked — only its
-  system libraries are — so the binary can track the lockfile. If a run reports the browser
-  missing, install it with the Ubuntu 26.04 platform spoof (Playwright ships no 26.04 builds):
-  `PLAYWRIGHT_HOST_PLATFORM_OVERRIDE=ubuntu24.04-$(dpkg --print-architecture | sed s/amd64/x64/) npx playwright install chromium`
-  (run from `web/`). The backend integration conftest already does this itself for
-  playwright-python.
+Browsers live in the shared cache at `/opt/ms-playwright` (`PLAYWRIGHT_BROWSERS_PATH`). Playwright
+browser builds are revision-coupled to the playwright version that installs them, so "a" chromium
+being present doesn't mean *your* playwright can see it — always install with the version that
+will drive it:
+
+- **Playwright MCP browser tools** (`browser_navigate` etc.) run playwright chromium, baked into
+  the image for the `@playwright/mcp` version pinned in `.mcp.json`. If the tools report a missing
+  browser (container from an older image), install the matching revision once:
+  `npx -y playwright@"$(npm view @playwright/mcp@<pin from .mcp.json> dependencies.playwright)" install chromium`.
+- **The e2e runner** (`web/tests/e2e`) tracks `web/package.json`'s playwright, so its chromium is
+  installed at test time, not baked. If a run reports the browser missing:
+  `cd web && npx playwright install chromium`. The backend integration conftest handles its own
+  playwright-python install.
 
 Login credentials for driving the UI are in the root guide's KEY NOTES.
