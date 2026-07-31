@@ -14,6 +14,10 @@
 #   ONYX_CLI_BIN_DIR  where the binary is installed. Defaults to
 #                     /usr/local/bin when running as root, else ~/.local/bin.
 #
+# When the install directory isn't already on PATH, the script persists it via
+# the user's shell profile (~/.bashrc, ~/.zshrc, or fish's config.fish) so the
+# follow-up `onyx-cli deploy ...` commands work in new shells.
+#
 # This script must remain compatible with bash 3.2 — macOS still ships
 # 3.2.57 by default and the curl-pipe installer is invoked with /bin/bash.
 # Avoid bash 4+ features (associative arrays, ${var,,}, etc.).
@@ -267,6 +271,92 @@ chmod +x "${TMP_DIR}/onyx-cli"
 mv -f "${TMP_DIR}/onyx-cli" "$BIN_PATH"
 print_success "onyx-cli installed to ${BIN_PATH}"
 
+# --- Make sure follow-up `onyx-cli` commands resolve ---
+# The rc file PATH entries should be added to for the user's shell; empty when
+# the shell isn't one this script knows how to configure.
+shell_profile() {
+    local p
+    case "${SHELL##*/}" in
+        zsh)
+            echo "${ZDOTDIR:-$HOME}/.zshrc"
+            ;;
+        bash)
+            # macOS terminals open login shells, which skip .bashrc and read
+            # only the FIRST of these files that exists — append to that one.
+            # Creating .bash_profile above an existing .profile would shadow
+            # it and silently drop the user's setup.
+            if [[ "$OS" == "darwin" ]]; then
+                for p in "${HOME}/.bash_profile" "${HOME}/.bash_login" "${HOME}/.profile"; do
+                    if [[ -f "$p" ]]; then
+                        echo "$p"
+                        return 0
+                    fi
+                done
+                echo "${HOME}/.bash_profile"
+            else
+                echo "${HOME}/.bashrc"
+            fi
+            ;;
+        fish)
+            echo "${XDG_CONFIG_HOME:-$HOME/.config}/fish/config.fish"
+            ;;
+    esac
+}
+
+# Persist BIN_DIR on PATH via the user's shell profile so the follow-up
+# commands this script and the CLI advertise (onyx-cli deploy status, logs,
+# upgrade, ...) don't die with "command not found" in new shells. Returns 1
+# when the shell is unrecognized or the profile can't be written; the caller
+# then falls back to printing manual instructions.
+persist_path() {
+    local profile line bin_dir_ref unsafe
+    profile="$(shell_profile)"
+    if [[ -z "$profile" ]]; then
+        return 1
+    fi
+
+    # The directory is embedded in profile syntax, where quotes, dollars,
+    # backticks, backslashes, and newlines are shell-active rather than inert
+    # data. A path carrying any of those goes through the manual instructions
+    # instead of being written out as code.
+    unsafe="\"'\\\`\$"
+    if [[ "$BIN_DIR" == *["$unsafe"]* ]] || [[ "$BIN_DIR" == *$'\n'* ]]; then
+        return 1
+    fi
+
+    # Reference $HOME symbolically so the entry reads the way users write it
+    # by hand and survives a renamed home directory.
+    bin_dir_ref="$BIN_DIR"
+    case "$BIN_DIR" in
+        "$HOME"/*)
+            bin_dir_ref="\$HOME${BIN_DIR#"$HOME"}"
+            ;;
+    esac
+
+    if [[ "$profile" == */fish/* ]]; then
+        line="fish_add_path -g \"${bin_dir_ref}\""
+    else
+        line="export PATH=\"${bin_dir_ref}:\$PATH\""
+    fi
+
+    if [[ -f "$profile" ]] && grep -qF "$line" "$profile"; then
+        # A previous install already added the entry; this shell just predates
+        # it.
+        print_info "PATH entry for ${BIN_DIR} already in ${profile} — open a new shell to pick it up."
+        return 0
+    fi
+
+    if ! mkdir -p "$(dirname "$profile")" 2>/dev/null; then
+        return 1
+    fi
+    if ! printf '\n# Added by the Onyx installer\n%s\n' "$line" >> "$profile" 2>/dev/null; then
+        return 1
+    fi
+    print_success "Added ${BIN_DIR} to PATH in ${profile}"
+    print_info "Open a new shell (or run 'source ${profile}') before using onyx-cli directly."
+    return 0
+}
+
 case ":${PATH}:" in
     *":${BIN_DIR}:"*)
         # An onyx-cli earlier in PATH (e.g. a pip install) would shadow the one
@@ -278,8 +368,13 @@ case ":${PATH}:" in
         fi
         ;;
     *)
-        print_warning "${BIN_DIR} is not in your PATH — add it to run onyx-cli directly:"
-        echo -e "   ${BOLD}export PATH=\"${BIN_DIR}:\$PATH\"${NC}"
+        if ! persist_path; then
+            print_warning "${BIN_DIR} is not in your PATH — add it to run onyx-cli directly:"
+            echo -e "   ${BOLD}export PATH=\"${BIN_DIR}:\$PATH\"${NC}"
+        fi
+        # Either way, the CLI this script execs into (and anything it spawns)
+        # should resolve onyx-cli by name during this run.
+        export PATH="${BIN_DIR}:${PATH}"
         ;;
 esac
 
