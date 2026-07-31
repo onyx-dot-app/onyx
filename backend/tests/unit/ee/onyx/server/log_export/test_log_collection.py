@@ -101,6 +101,45 @@ def test_symlink_within_log_directory_is_included(tmp_path: Path) -> None:
             assert zip_file.read(entry) == b"aliased content\n"
 
 
+def test_known_system_logs_are_excluded(tmp_path: Path) -> None:
+    # Precondition.
+    (tmp_path / "dpkg.log").write_text("package line\n")
+    (tmp_path / "alternatives.log").write_text("alternatives line\n")
+    (tmp_path / "onyx_debug.log").write_text("debug line\n")
+
+    # Under test.
+    with build_log_zip([tmp_path], SCOPE_NOTE) as zip_buffer:
+        # Postcondition.
+        with zipfile.ZipFile(zip_buffer) as zip_file:
+            names = _zip_names(zip_file)
+            # README plus ``onyx_debug.log``; the system logs are dropped.
+            assert len(names) == 2
+            _entry_ending_with(zip_file, "onyx_debug.log")
+            assert not any(
+                name.endswith(("dpkg.log", "alternatives.log")) for name in names
+            )
+
+
+def test_shallow_directory_is_not_recursed(tmp_path: Path) -> None:
+    # Precondition.
+    (tmp_path / "top.log").write_text("top line\n")
+    nested = tmp_path / "nested"
+    nested.mkdir()
+    (nested / "deep.log").write_text("deep line\n")
+
+    # Under test.
+    with build_log_zip(
+        [], SCOPE_NOTE, shallow_log_directories=[tmp_path]
+    ) as zip_buffer:
+        # Postcondition.
+        with zipfile.ZipFile(zip_buffer) as zip_file:
+            names = _zip_names(zip_file)
+            # README plus ``top.log``; ``nested/deep.log`` is not searched.
+            assert len(names) == 2
+            _entry_ending_with(zip_file, "top.log")
+            assert not any(name.endswith("deep.log") for name in names)
+
+
 @pytest.mark.skipif(os.geteuid() == 0, reason="Root can read mode-000 files")
 def test_unreadable_file_is_skipped_and_noted(tmp_path: Path) -> None:
     readable = tmp_path / "readable.log"
