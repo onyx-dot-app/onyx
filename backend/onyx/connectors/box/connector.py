@@ -161,16 +161,12 @@ def box_api_status_code(error: BoxAPIError) -> int | None:
     return error.response_info.status_code
 
 
-# Box token-endpoint OAuth error codes that mean the app credentials themselves
-# are wrong, rather than a transient/unexpected failure.
+# Box returns these in an HTTP 400 body when the app credentials are wrong.
 _BOX_CREDENTIAL_OAUTH_ERRORS = frozenset({"invalid_client", "unauthorized_client"})
 
 
 def box_oauth_error(error: BoxAPIError) -> tuple[str | None, str | None]:
-    """Extract the OAuth ``error`` / ``error_description`` from a Box token
-    failure. Box returns these in the response body on HTTP 400 (e.g.
-    ``invalid_client`` for a bad secret, ``unauthorized_client`` when the app
-    is not enterprise-authorized), which is where the actionable detail lives."""
+    """Return the OAuth ``(error, error_description)`` from a Box failure body."""
     body = error.response_info.body if error.response_info else None
     if not isinstance(body, dict):
         return None, None
