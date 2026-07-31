@@ -89,9 +89,9 @@ def _missing_instance_outcome(instantiation_error: Exception | None) -> _CheckOu
     check.
 
     A config-less run skips: most connectors cannot be constructed without
-    configuration, and that is not a credential problem. A construction
-    failure with a supplied config is real signal and follows the check
-    exception contract (``ConnectorValidationError`` is FAILED, anything else
+    configuration, and that is not a credential problem. A construction failure
+    with a supplied config is real signal and follows the check exception
+    contract (``ConnectorValidationError`` is FAILED, anything else
     INDETERMINATE).
     """
     if instantiation_error is None:
@@ -259,9 +259,9 @@ def generate_capability_report(
     identify_connector_class(source, input_type)
 
     # Config-less runs attempt instantiation with an empty config: some
-    # connectors happen to construct with one, giving unmigrated sources a
-    # basic credential-time probe. There is deliberately no per-connector
-    # extension point for this.
+    # connectors happen to construct with one, giving unmigrated sources a basic
+    # credential-time probe. There is deliberately no per-connector extension
+    # point for this.
     instantiation_config = (
         connector_specific_config if connector_specific_config is not None else {}
     )
@@ -276,8 +276,8 @@ def generate_capability_report(
             credential=credential,
         )
     except Exception as e:
-        # A config-less probe construction fails routinely and stays a skip;
-        # a failure with the real config is actionable and is surfaced on
+        # A config-less probe construction fails routinely and stays a skip; a
+        # failure with the real config is actionable and is surfaced on
         # instance-requiring checks.
         if connector_specific_config is not None:
             instantiation_error = e
@@ -296,8 +296,9 @@ def generate_capability_report(
         source=source,
         credential_json=credential_json,
         connector=connector,
-        # The real config only, never the probe config: checks marked
-        # requires_connector_config must skip on config-less runs.
+        # The supplied config only, never the empty instantiation config: checks
+        # marked requires_connector_config must skip on config-less runs rather
+        # than probe an empty dict.
         connector_specific_config=connector_specific_config,
         instantiation_error=instantiation_error,
     )

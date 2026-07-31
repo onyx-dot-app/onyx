@@ -60,8 +60,8 @@ class CapabilityCheckContext(BaseModel):
 
     ``connector`` and ``connector_specific_config`` are None for config-less
     credential-time runs; the runner skips checks that declare a requirement on
-    them. ``instantiation_error`` is set when connector construction failed
-    for a supplied config; the runner surfaces it on instance-requiring checks
+    them. ``instantiation_error`` is set when connector construction failed for
+    a supplied config; the runner surfaces it on instance-requiring checks
     instead of skipping them.
     """
 
