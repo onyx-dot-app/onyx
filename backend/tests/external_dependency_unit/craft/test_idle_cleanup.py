@@ -65,8 +65,8 @@ def short_idle_threshold(monkeypatch: pytest.MonkeyPatch) -> int:
     """Lower the idle threshold so tests can backdate a heartbeat cheaply.
 
     Patched in both consuming modules: the task reads it for the background
-    snapshot cutoff; ``is_sandbox_idle`` (sandbox lifecycle) reads it for the
-    idle partition and the pre-kill re-check.
+    snapshot cutoff; sandbox lifecycle reads it for the reap decision and the
+    pre-kill re-check.
 
     Returns the threshold (seconds) so tests can reason about boundary
     conditions without hard-coding magic numbers.
@@ -860,3 +860,155 @@ def test_task_holds_redis_lock_for_duration(
             external_lock.release()
     finally:
         CURRENT_TENANT_ID_CONTEXTVAR.reset(token)
+
+
+# ---------------------------------------------------------------------------
+# Image recycling: a superseded image is a shorter idle timeout
+# ---------------------------------------------------------------------------
+
+
+@pytest.fixture
+def short_stale_image_threshold(monkeypatch: pytest.MonkeyPatch) -> int:
+    """Well under ``short_idle_threshold``, so a sandbox can be quiet long
+    enough to be reclaimed for its image but not long enough to be reclaimed
+    for being unused. That gap is the whole feature."""
+    threshold = 10
+    monkeypatch.setattr(
+        sandbox_lifecycle_module, "SANDBOX_STALE_IMAGE_IDLE_TIMEOUT_SECONDS", threshold
+    )
+    return threshold
+
+
+_RUNNING_RELEASE = "2.0.0"
+_EARLIER_RELEASE = "1.0.0"
+
+
+def _release(
+    stub: StubSandboxManager,
+    monkeypatch: pytest.MonkeyPatch,
+    *,
+    provisioned: str | None,
+) -> None:
+    """Run as ``_RUNNING_RELEASE``, with the sandbox stamped ``provisioned``."""
+    monkeypatch.setattr(tasks_module, "current_release_label", lambda: _RUNNING_RELEASE)
+    monkeypatch.setattr(stub, "provisioned_release", lambda _sandbox_id: provisioned)
+
+
+def test_sandbox_on_a_stale_image_is_reaped_on_the_shorter_timeout(
+    db_session: Session,
+    test_user: User,  # noqa: ARG001
+    stubbed_cleanup: StubSandboxManager,
+    short_idle_threshold: int,  # noqa: ARG001  (the long timeout it must beat)
+    short_stale_image_threshold: int,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """Sleeping is how a sandbox moves onto the current image: the next request
+    provisions a fresh one. The session is marked IDLE and its port released, so
+    the restore flow rebuilds the workspace and restarts its dev server."""
+    user = make_user(db_session)
+    sandbox = make_sandbox(db_session, user)
+    session_row = BuildSession(
+        id=uuid4(),
+        user_id=user.id,
+        name="live session",
+        status=BuildSessionStatus.ACTIVE,
+        nextjs_port=3123,
+    )
+    db_session.add(session_row)
+    db_session.commit()
+
+    _backdate_heartbeat(
+        db_session, sandbox, seconds_ago=short_stale_image_threshold * 2
+    )
+    _release(stubbed_cleanup, monkeypatch, provisioned=_EARLIER_RELEASE)
+    stubbed_cleanup.list_session_workspaces_returns = [session_row.id]
+    stubbed_cleanup.create_snapshot_returns = SnapshotResult(
+        storage_path=f"snapshots/{session_row.id}.tar.gz", size_bytes=1
+    )
+    stubbed_cleanup.terminate_silent = True
+
+    cleanup_idle_sandboxes_task.run(tenant_id=POSTGRES_DEFAULT_SCHEMA_STANDARD_VALUE)
+
+    db_session.expire_all()
+    refreshed = db_session.get(Sandbox, sandbox.id)
+    refreshed_session = db_session.get(BuildSession, session_row.id)
+    assert refreshed is not None and refreshed.status == SandboxStatus.SLEEPING
+    assert refreshed_session is not None
+    assert refreshed_session.status == BuildSessionStatus.IDLE
+    assert refreshed_session.nextjs_port is None
+
+
+def test_sandbox_on_a_stale_image_still_in_use_is_left_alone(
+    db_session: Session,
+    test_user: User,  # noqa: ARG001
+    stubbed_cleanup: StubSandboxManager,
+    short_idle_threshold: int,  # noqa: ARG001
+    short_stale_image_threshold: int,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """The heartbeat is refreshed while a turn streams, so "quiet for N" is the
+    same "nobody is using this" the reaper already trusts — no second gate."""
+    user = make_user(db_session)
+    sandbox = make_sandbox(db_session, user)
+    _backdate_heartbeat(
+        db_session, sandbox, seconds_ago=short_stale_image_threshold // 2
+    )
+    _release(stubbed_cleanup, monkeypatch, provisioned=_EARLIER_RELEASE)
+    stubbed_cleanup.list_session_workspaces_returns = []
+
+    cleanup_idle_sandboxes_task.run(tenant_id=POSTGRES_DEFAULT_SCHEMA_STANDARD_VALUE)
+
+    db_session.expire_all()
+    refreshed = db_session.get(Sandbox, sandbox.id)
+    assert refreshed is not None and refreshed.status == SandboxStatus.RUNNING
+
+
+def test_sandbox_with_no_release_label_keeps_the_normal_timeout(
+    db_session: Session,
+    test_user: User,  # noqa: ARG001
+    stubbed_cleanup: StubSandboxManager,
+    short_idle_threshold: int,  # noqa: ARG001
+    short_stale_image_threshold: int,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """A pod provisioned before this shipped carries no release label, and one
+    the API cannot be read for reports none either. Both must count as current,
+    or the first sweep after deploy reaps the whole fleet."""
+    user = make_user(db_session)
+    sandbox = make_sandbox(db_session, user)
+    _backdate_heartbeat(
+        db_session, sandbox, seconds_ago=short_stale_image_threshold * 2
+    )
+    _release(stubbed_cleanup, monkeypatch, provisioned=None)
+    stubbed_cleanup.list_session_workspaces_returns = []
+
+    cleanup_idle_sandboxes_task.run(tenant_id=POSTGRES_DEFAULT_SCHEMA_STANDARD_VALUE)
+
+    db_session.expire_all()
+    refreshed = db_session.get(Sandbox, sandbox.id)
+    assert refreshed is not None and refreshed.status == SandboxStatus.RUNNING
+
+
+def test_sandbox_on_the_current_image_keeps_the_normal_timeout(
+    db_session: Session,
+    test_user: User,  # noqa: ARG001
+    stubbed_cleanup: StubSandboxManager,
+    short_idle_threshold: int,  # noqa: ARG001
+    short_stale_image_threshold: int,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """Same quiet period, current image: the shorter timeout applies to being
+    behind, not to being quiet."""
+    user = make_user(db_session)
+    sandbox = make_sandbox(db_session, user)
+    _backdate_heartbeat(
+        db_session, sandbox, seconds_ago=short_stale_image_threshold * 2
+    )
+    _release(stubbed_cleanup, monkeypatch, provisioned=_RUNNING_RELEASE)
+    stubbed_cleanup.list_session_workspaces_returns = []
+
+    cleanup_idle_sandboxes_task.run(tenant_id=POSTGRES_DEFAULT_SCHEMA_STANDARD_VALUE)
+
+    db_session.expire_all()
+    refreshed = db_session.get(Sandbox, sandbox.id)
+    assert refreshed is not None and refreshed.status == SandboxStatus.RUNNING

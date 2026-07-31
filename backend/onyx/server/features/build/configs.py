@@ -29,6 +29,17 @@ OPENCODE_DISABLED_TOOLS: list[str] = [
 SANDBOX_IDLE_TIMEOUT_SECONDS = int(
     os.environ.get("SANDBOX_IDLE_TIMEOUT_SECONDS", "3600")
 )
+# How long a sandbox left on a superseded image may sit unused before it is
+# reclaimed. Shorter than the normal timeout because the sooner it sleeps, the
+# sooner its user's next request provisions on the current image — and the cost
+# of being wrong is only the restore they would have paid at the normal timeout
+# anyway. Not zero: the heartbeat is what tells us nobody is using it, and it is
+# refreshed by work (a streaming turn, a scheduled run, a restore) and by
+# nothing else — so this window will sometimes reclaim a sandbox whose user is
+# reading or clicking around the preview. Raise it if that lands too often.
+SANDBOX_STALE_IMAGE_IDLE_TIMEOUT_SECONDS = int(
+    os.environ.get("SANDBOX_STALE_IMAGE_IDLE_TIMEOUT_SECONDS", "300")
+)
 SANDBOX_APPROVAL_WAIT_TIMEOUT_SECONDS = int(
     os.environ.get("SANDBOX_APPROVAL_WAIT_TIMEOUT_SECONDS", "180")
 )
