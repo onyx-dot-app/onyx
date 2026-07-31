@@ -555,6 +555,7 @@ class SessionManager:
     def get_or_create_empty_session(
         self,
         user_id: UUID,
+        name: str | None = None,
         headless: bool = False,
     ) -> BuildSession:
         """Get or create the user's empty (pre-provisioned) session.
@@ -566,6 +567,11 @@ class SessionManager:
         otherwise it is repaired in place — returned to ``INITIALIZING`` and
         its workspace rebuilt under the same committed session ID (never
         deleted and replaced).
+
+        Args:
+            user_id: The user whose empty session should be reserved.
+            name: Optional name to apply to a new or reused empty session.
+            headless: Skip reserving a Next.js preview port when true.
 
         Raises:
             ValueError: If the user is missing
@@ -590,6 +596,7 @@ class SessionManager:
             session = create_build_session__no_commit(
                 user_id,
                 self._db_session,
+                name=name,
                 agent_provider=llm_config.provider,
                 agent_model=llm_config.model_name,
             )
@@ -602,6 +609,8 @@ class SessionManager:
             return session
 
         session = existing
+        if name is not None:
+            session.name = name
         self._db_session.commit()
         logger.info(
             "Found existing empty session %s (status=%s) for user %s",
