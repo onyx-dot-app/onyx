@@ -632,6 +632,12 @@ ONYX_DB_DEFAULT_SHARD = os.environ.get("ONYX_DB_DEFAULT_SHARD") or "default"
 # Shard that holds the shared `public` catalog tables (user_tenant_mapping etc.)
 # and the tenant -> shard map itself. Must be resolvable without a lookup.
 ONYX_DB_CATALOG_SHARD = os.environ.get("ONYX_DB_CATALOG_SHARD") or ONYX_DB_DEFAULT_SHARD
+# Shard that newly created tenants are placed on. Existing tenants are unaffected;
+# flipping this changes where the *next* tenant's schema is built. The pre-provisioned
+# pool drains oldest-first, so a flip ramps in gradually rather than all at once.
+ONYX_DB_NEW_TENANT_SHARD = (
+    os.environ.get("ONYX_DB_NEW_TENANT_SHARD") or ONYX_DB_DEFAULT_SHARD
+)
 # Operator escape hatch: JSON object of tenant_id -> shard name, consulted
 # before the catalog table. Intended for incident response, not routine use.
 ONYX_DB_SHARD_OVERRIDES_JSON = os.environ.get("ONYX_DB_SHARD_OVERRIDES", "").strip()

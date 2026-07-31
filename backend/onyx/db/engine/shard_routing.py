@@ -37,6 +37,7 @@ from onyx.db.engine.shard_registry import (
     get_catalog_engine,
     get_default_shard_name,
     get_engine_for_shard,
+    get_new_tenant_shard_name,
     get_shard_specs,
     is_sharded,
 )
@@ -233,6 +234,27 @@ def get_shard_for_tenant(tenant_id: str) -> str:
         )
 
     _ShardCache.put(tenant_id, shard_name, generation)
+    return shard_name
+
+
+def get_shard_for_new_tenant() -> str:
+    """Shard a tenant being created right now should be placed on.
+
+    Distinct from `get_shard_for_tenant`, which answers where an *existing* tenant
+    already lives. A tenant that has no schema yet cannot be resolved through a catalog
+    describing only tenants that do, so placement is a configuration decision rather
+    than a lookup.
+
+    Raises if the configured shard is unknown. Placing a tenant on the default shard
+    because the intended one could not be resolved is exactly the silent misplacement
+    this is meant to prevent.
+    """
+    shard_name = get_new_tenant_shard_name()
+    if shard_name not in get_shard_specs():
+        raise ShardConfigurationError(
+            f"ONYX_DB_NEW_TENANT_SHARD='{shard_name}' is not a configured shard "
+            f"(known: {sorted(get_shard_specs())})"
+        )
     return shard_name
 
 

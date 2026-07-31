@@ -23,8 +23,10 @@ from onyx.configs.constants import (
     OnyxCeleryTask,
     OnyxRedisLocks,
 )
+from onyx.db.engine.shard_routing import get_shard_for_new_tenant
 from onyx.db.engine.sql_engine import get_session_with_shared_schema
 from onyx.db.models import AvailableTenant
+from onyx.db.tenant_shard import record_tenant_placement
 from onyx.redis.redis_pool import get_redis_client
 from shared_configs.configs import MULTI_TENANT, TENANT_ID_PREFIX
 
@@ -194,7 +196,12 @@ def pre_provision_tenant() -> bool:
     try:
         # Generate a new tenant ID
         tenant_id = TENANT_ID_PREFIX + str(uuid.uuid4())
-        task_logger.info(f"Pre-provisioning tenant: {tenant_id}")
+        shard_name = get_shard_for_new_tenant()
+        task_logger.info(f"Pre-provisioning tenant {tenant_id} on shard {shard_name}")
+
+        # Recorded before the schema exists: every step below resolves the tenant's
+        # physical database through the catalog, so the mapping has to be there first.
+        record_tenant_placement(tenant_id, shard_name)
 
         # Create the schema for the new tenant
         schema_created = create_schema_if_not_exists(tenant_id)
@@ -224,6 +231,7 @@ def pre_provision_tenant() -> bool:
                     tenant_id=tenant_id,
                     alembic_version=alembic_version,
                     date_created=datetime.datetime.now(),
+                    shard_name=shard_name,
                 )
                 db_session.add(new_tenant)
                 db_session.commit()
