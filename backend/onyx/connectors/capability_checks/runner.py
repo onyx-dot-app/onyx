@@ -1,19 +1,33 @@
 import time
 from collections.abc import Sequence
+from datetime import datetime, timezone
+from typing import Any
 
 from pydantic import BaseModel
+from sqlalchemy.orm import Session
 
 from onyx.connectors.capability_checks.models import (
     CapabilityCheck,
     CapabilityCheckContext,
     CapabilityCheckResult,
     CapabilityCheckStatus,
+    CapabilityCheckTrigger,
     CredentialCapability,
+    CredentialCapabilityReport,
+    compute_capability_verdicts,
+)
+from onyx.connectors.capability_checks.registry import (
+    get_applicable_capabilities,
+    get_capability_checks,
 )
 from onyx.connectors.exceptions import (
     ConnectorValidationError,
     UnexpectedValidationError,
 )
+from onyx.connectors.factory import identify_connector_class, instantiate_connector
+from onyx.connectors.interfaces import BaseConnector
+from onyx.connectors.models import InputType
+from onyx.db.models import Credential
 from onyx.utils.logger import setup_logger
 from onyx.utils.threadpool_concurrency import run_with_timeout
 
@@ -66,6 +80,35 @@ def _build_result(
         remediation=check.remediation,
         docs_link=check.docs_link,
         duration_ms=outcome.duration_ms,
+    )
+
+
+def _missing_instance_outcome(instantiation_error: Exception | None) -> _CheckOutcome:
+    """
+    Maps a missing connector instance to an outcome for an instance-requiring
+    check.
+
+    A config-less run skips: most connectors cannot be constructed without
+    configuration, and that is not a credential problem. A construction failure
+    with a supplied config is real signal and follows the check exception
+    contract (``ConnectorValidationError`` is FAILED, anything else
+    INDETERMINATE).
+    """
+    if instantiation_error is None:
+        return _CheckOutcome(
+            status=CapabilityCheckStatus.SKIPPED,
+            message=_SKIP_NEEDS_INSTANCE_MESSAGE,
+        )
+    if isinstance(instantiation_error, ConnectorValidationError):
+        return _CheckOutcome(
+            status=CapabilityCheckStatus.FAILED,
+            message=str(instantiation_error),
+            error_type=type(instantiation_error).__name__,
+        )
+    return _CheckOutcome(
+        status=CapabilityCheckStatus.INDETERMINATE,
+        message=str(instantiation_error),
+        error_type=type(instantiation_error).__name__,
     )
 
 
@@ -169,27 +212,105 @@ def run_capability_checks(
     results: list[CapabilityCheckResult] = []
     outcome_by_check_id: dict[str, _CheckOutcome] = {}
     for check in checks:
-        skip_message: str | None = None
+        unrunnable_outcome: _CheckOutcome | None = None
         if (
             check.requires_connector_config
             and context.connector_specific_config is None
         ):
-            skip_message = _SKIP_NEEDS_CONFIG_MESSAGE
-        elif check.requires_connector_instance and context.connector is None:
-            skip_message = _SKIP_NEEDS_INSTANCE_MESSAGE
-        if skip_message is not None:
-            results.append(
-                _build_result(
-                    check,
-                    _CheckOutcome(
-                        status=CapabilityCheckStatus.SKIPPED,
-                        message=skip_message,
-                    ),
-                )
+            unrunnable_outcome = _CheckOutcome(
+                status=CapabilityCheckStatus.SKIPPED,
+                message=_SKIP_NEEDS_CONFIG_MESSAGE,
             )
+        elif check.requires_connector_instance and context.connector is None:
+            unrunnable_outcome = _missing_instance_outcome(context.instantiation_error)
+        if unrunnable_outcome is not None:
+            results.append(_build_result(check, unrunnable_outcome))
             continue
 
         if check.check_id not in outcome_by_check_id:
             outcome_by_check_id[check.check_id] = _execute_check(check, context)
         results.append(_build_result(check, outcome_by_check_id[check.check_id]))
     return results
+
+
+def generate_capability_report(
+    db_session: Session,
+    credential: Credential,
+    connector_specific_config: dict[str, Any] | None = None,
+    connector_id: int | None = None,
+    input_type: InputType | None = None,
+    trigger: CapabilityCheckTrigger = CapabilityCheckTrigger.MANUAL,
+) -> CredentialCapabilityReport:
+    """Runs every capability check for a credential and packages a report.
+
+    Check failures are report content; this raises only for programmer errors
+    (e.g. a source with no connector class). Without a
+    ``connector_specific_config``, instantiation is attempted with an empty
+    config; when construction raises, instance-requiring checks are SKIPPED.
+    When a supplied config fails to instantiate, the failure is surfaced on
+    instance-requiring checks instead (see ``_missing_instance_outcome``).
+    Unlike ``validate_ccpair_for_user``, no source is exempted: MOCK_CONNECTOR
+    must run so integration tests can exercise the full pipeline.
+    """
+    source = credential.source
+    checks = get_capability_checks(source)
+    # Fail loudly for programmer errors (a source with no connector class)
+    # rather than degrading them to skips in the guarded instantiation below.
+    identify_connector_class(source, input_type)
+
+    # Config-less runs attempt instantiation with an empty config: some
+    # connectors happen to construct with one, giving unmigrated sources a basic
+    # credential-time probe. There is deliberately no per-connector extension
+    # point for this.
+    instantiation_config = (
+        connector_specific_config if connector_specific_config is not None else {}
+    )
+    connector: BaseConnector | None = None
+    instantiation_error: Exception | None = None
+    try:
+        connector = instantiate_connector(
+            db_session=db_session,
+            source=source,
+            input_type=input_type,
+            connector_specific_config=instantiation_config,
+            credential=credential,
+        )
+    except Exception as e:
+        # A config-less probe construction fails routinely and stays a skip; a
+        # failure with the real config is actionable and is surfaced on
+        # instance-requiring checks.
+        if connector_specific_config is not None:
+            instantiation_error = e
+        logger.warning(
+            "Could not instantiate %s connector for capability checks: %s",
+            source,
+            e,
+        )
+
+    credential_json = (
+        credential.credential_json.get_value(apply_mask=False)
+        if credential.credential_json
+        else {}
+    )
+    context = CapabilityCheckContext(
+        source=source,
+        credential_json=credential_json,
+        connector=connector,
+        # The supplied config only, never the empty instantiation config: checks
+        # marked requires_connector_config must skip on config-less runs rather
+        # than probe an empty dict.
+        connector_specific_config=connector_specific_config,
+        instantiation_error=instantiation_error,
+    )
+    results = run_capability_checks(checks, context)
+    return CredentialCapabilityReport(
+        credential_id=credential.id,
+        source=source,
+        connector_id=connector_id,
+        checked_at=datetime.now(timezone.utc),
+        trigger=trigger,
+        verdicts=compute_capability_verdicts(
+            get_applicable_capabilities(source), results
+        ),
+        check_results=results,
+    )

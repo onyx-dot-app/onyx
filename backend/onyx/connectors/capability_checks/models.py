@@ -1,5 +1,6 @@
 from abc import ABC, abstractmethod
 from collections.abc import Sequence
+from datetime import datetime
 from enum import Enum
 from typing import Any
 
@@ -43,12 +44,25 @@ class CapabilityVerdict(str, Enum):
     NOT_APPLICABLE = "not_applicable"
 
 
+class CapabilityCheckTrigger(str, Enum):
+    """What initiated a capability-check run."""
+
+    MANUAL = "manual"
+    CREDENTIAL_CREATED = "credential_created"
+    # Recorded from the blocking validation at cc-pair creation/swap time.
+    CC_PAIR_VALIDATION = "cc_pair_validation"
+    # Recorded from the blocking validation at indexing-run start.
+    INDEXING_ATTEMPT = "indexing_attempt"
+
+
 class CapabilityCheckContext(BaseModel):
     """Inputs available to a capability check at run time.
 
     ``connector`` and ``connector_specific_config`` are None for config-less
     credential-time runs; the runner skips checks that declare a requirement on
-    them.
+    them. ``instantiation_error`` is set when connector construction failed for
+    a supplied config; the runner surfaces it on instance-requiring checks
+    instead of skipping them.
     """
 
     # ``BaseConnector`` is not a pydantic type; validate by isinstance.
@@ -58,6 +72,7 @@ class CapabilityCheckContext(BaseModel):
     credential_json: dict[str, Any]
     connector: BaseConnector | None = None
     connector_specific_config: dict[str, Any] | None = None
+    instantiation_error: Exception | None = None
 
 
 class CapabilityCheck(ABC):
@@ -121,6 +136,19 @@ class CapabilityCheckResult(BaseModel):
     remediation: str | None = None
     docs_link: str | None = None
     duration_ms: int | None = None
+
+
+class CredentialCapabilityReport(BaseModel):
+    """The full outcome of one capability-check run for a credential."""
+
+    credential_id: int
+    source: DocumentSource
+    # None means a config-less credential-time run.
+    connector_id: int | None = None
+    checked_at: datetime
+    trigger: CapabilityCheckTrigger
+    verdicts: dict[CredentialCapability, CapabilityVerdict]
+    check_results: list[CapabilityCheckResult]
 
 
 def aggregate_capability_verdict(
