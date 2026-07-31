@@ -4,6 +4,7 @@ import json
 import threading
 from collections.abc import Awaitable, Callable, Iterator
 from contextlib import contextmanager, nullcontext
+from pathlib import Path
 from typing import Any, cast
 from unittest.mock import MagicMock, patch
 
@@ -47,10 +48,12 @@ from onyx.server.auth_check import check_router_auth
 from onyx.server.features.build import craft_gateway
 from onyx.server.features.build.craft_gateway import is_gateway_request
 from onyx.server.gateway import api as gateway_api
+from onyx.server.gateway.api import _MESSAGES_ADAPTER
 from onyx.server.gateway.configs import GATEWAY_PATH_PREFIX
 from onyx.server.gateway.models import (
     ChatCompletionRequest,
     ChatCompletionResponse,
+    ResponsesRequest,
 )
 from onyx.server.manage.llm.models import LLMProviderView, ModelConfigurationView
 from onyx.tracing.flows import LLMFlow
@@ -688,7 +691,6 @@ def _handle_completion_call(request: ChatCompletionRequest) -> Any:
     provider = _provider(1, "openai", [_model("test")])
     return gateway_api.handle_chat_completion(
         request=request,
-        db_session=cast(Session, MagicMock(spec=Session)),
         provider=provider,
         model_config=provider.model_configurations[0],
         flow=LLMFlow.CRAFT_LLM_GENERATION,
@@ -885,7 +887,6 @@ def test_endpoint_applies_craft_policy() -> None:
     resolve_model.assert_called_once_with(db_session, user, "1/test")
     handle.assert_called_once_with(
         request=request,
-        db_session=db_session,
         provider=provider,
         model_config=model_config,
         flow=LLMFlow.CRAFT_LLM_GENERATION,
@@ -1119,6 +1120,284 @@ def test_list_models_rejects_non_gateway_credentials() -> None:
     assert exc_info.value.error_code == OnyxErrorCode.INSUFFICIENT_PERMISSIONS
 
 
+def test_responses_input_instructions_become_system_message() -> None:
+    request = ResponsesRequest(
+        model="1/test",
+        instructions="You are a coding agent.",
+        input=[{"type": "message", "role": "user", "content": "say hi"}],
+    )
+
+    raw = gateway_api._responses_input_to_raw_messages(request)
+
+    assert raw[0] == {"role": "system", "content": "You are a coding agent."}
+    assert raw[-1]["role"] == "user"
+
+
+def test_responses_developer_role_collapses_into_system_message() -> None:
+    """Our ChatCompletionMessage union has no 'developer' role and
+    SystemMessage.content is str-only, so both must collapse to 'system'."""
+    request = ResponsesRequest(
+        model="1/test",
+        input=[
+            {
+                "type": "message",
+                "role": "developer",
+                "content": [{"type": "text", "text": "be terse"}],
+            },
+            {"type": "message", "role": "user", "content": "say hi"},
+        ],
+    )
+
+    raw = gateway_api._responses_input_to_raw_messages(request)
+
+    assert raw[0] == {"role": "system", "content": "be terse"}
+
+
+def test_responses_input_items_become_messages() -> None:
+    request = ResponsesRequest(
+        model="1/test",
+        input=[
+            {"type": "message", "role": "user", "content": "hello there"},
+        ],
+    )
+
+    raw = gateway_api._responses_input_to_raw_messages(request)
+    llm = _ConfigOnlyLLM(
+        LLMConfig(
+            model_provider="openai",
+            model_name="test",
+            temperature=0,
+            max_input_tokens=1_000,
+        )
+    )
+    messages = gateway_api._prepare_messages(llm, raw)
+
+    assert messages == [UserMessage(content="hello there")]
+
+
+def test_responses_request_tolerates_unknown_top_level_fields() -> None:
+    """Codex sends fields like prompt_cache_key/client_metadata/include that
+    the gateway doesn't act on; these must be accepted, not rejected."""
+    request = ResponsesRequest.model_validate(
+        {
+            "model": "1/test",
+            "input": [{"type": "message", "role": "user", "content": "hi"}],
+            "store": False,
+            "prompt_cache_key": "019fb050-bf28-7812-8a84-5331b2ed60b0",
+            "client_metadata": {"turn_id": "abc"},
+            "include": ["reasoning.encrypted_content"],
+            "parallel_tool_calls": False,
+        }
+    )
+
+    assert request.model == "1/test"
+
+
+def test_responses_tools_drop_namespace_entries() -> None:
+    """Codex's multi-agent 'namespace' tool has no Chat Completions
+    equivalent; it must be silently dropped rather than erroring."""
+    request = ResponsesRequest(
+        model="1/test",
+        input="hi",
+        tools=[
+            {"type": "function", "name": "exec_command", "parameters": {}},
+            {"type": "namespace", "name": "multi_agent_v1", "tools": []},
+        ],
+    )
+
+    tools = gateway_api._responses_tools(request)
+
+    assert tools is not None
+    assert len(tools) == 1
+    assert tools[0]["function"]["name"] == "exec_command"
+
+
+def _handle_responses_call(request: ResponsesRequest) -> Any:
+    provider = _provider(1, "openai", [_model("test")])
+    return gateway_api.handle_responses_request(
+        request=request,
+        provider=provider,
+        model_config=provider.model_configurations[0],
+        flow=LLMFlow.CRAFT_LLM_GENERATION,
+    )
+
+
+def test_handle_responses_request_non_streaming_returns_completed_response() -> None:
+    request = ResponsesRequest(model="1/test", input="say hi")
+    response = ModelResponse(
+        id="chatcmpl-1",
+        created="1784577999",
+        choice=Choice(finish_reason="stop", message=Message(content="hello there")),
+        usage=_wire_usage(),
+    )
+
+    with patch.object(
+        gateway_api, "llm_from_provider", return_value=_InvokeLLM(response)
+    ):
+        result = _handle_responses_call(request)
+
+    assert isinstance(result, gateway_api.ResponsesObjectPayload)
+    payload = result.to_wire()
+    assert payload["object"] == "response"
+    assert payload["status"] == "completed"
+    assert payload["output"][0]["type"] == "message"
+    assert payload["output"][0]["content"][0]["text"] == "hello there"
+    assert payload["usage"]["input_tokens"] == 120
+
+
+def test_handle_responses_request_rejects_streaming() -> None:
+    request = ResponsesRequest(model="1/test", input="say hi", stream=True)
+
+    with pytest.raises(OnyxError) as exc_info:
+        _handle_responses_call(request)
+
+    assert exc_info.value.error_code is OnyxErrorCode.NOT_IMPLEMENTED
+
+
+def test_responses_gateway_route_carries_same_permission_dependency() -> None:
+    application = FastAPI(openapi_url=None, docs_url=None, redoc_url=None)
+    application.include_router(gateway_api.router)
+    responses_route = cast(
+        APIRoute,
+        next(
+            route
+            for route in application.routes
+            if getattr(route, "path", None) == f"{GATEWAY_PATH_PREFIX}/v1/responses"
+        ),
+    )
+    auth_dependencies = [
+        dependency.call
+        for dependency in responses_route.dependant.dependencies
+        if getattr(dependency.call, "_is_require_permission", False)
+    ]
+    assert len(auth_dependencies) == 1
+
+
+def test_responses_endpoint_rejects_non_gateway_credentials() -> None:
+    request = ResponsesRequest(model="1/test", input="hi")
+    with (
+        patch.dict(
+            gateway_api._FLOW_ACCESS_CHECKS,
+            {LLMFlow.CRAFT_LLM_GENERATION: MagicMock(return_value=False)},
+        ),
+        pytest.raises(OnyxError) as exc_info,
+    ):
+        gateway_api.gateway_responses(
+            request=request,
+            http_request=cast(Request, MagicMock(spec=Request)),
+            user=cast(User, MagicMock(spec=User)),
+            db_session=cast(Session, MagicMock(spec=Session)),
+        )
+    assert exc_info.value.error_code == OnyxErrorCode.INSUFFICIENT_PERMISSIONS
+
+
+def test_responses_endpoint_rejects_unrestricted_pat() -> None:
+    """An unrestricted PAT (scopes=None) must never be treated as
+    gateway-capable, mirroring the chat completions route."""
+    user = MagicMock()
+    user.effective_permissions = ["basic"]
+    request = ResponsesRequest(model="1/test", input="hi")
+
+    with pytest.raises(OnyxError) as exc_info:
+        gateway_api.gateway_responses(
+            request=request,
+            http_request=_pat_request(None),
+            user=cast(User, user),
+            db_session=cast(Session, MagicMock(spec=Session)),
+        )
+    assert exc_info.value.error_code == OnyxErrorCode.INSUFFICIENT_PERMISSIONS
+
+
+def test_responses_endpoint_enforces_token_rate_limits_before_calling_provider() -> (
+    None
+):
+    """Same token/cost budget enforcement as the chat route: an over-budget
+    caller must never reach model resolution or the provider."""
+    request = ResponsesRequest(model="1/test", input="hi")
+    db_session = cast(Session, MagicMock(spec=Session))
+    user = cast(User, MagicMock(spec=User))
+    http_request = cast(Request, MagicMock(spec=Request))
+
+    rate_limited = OnyxError(OnyxErrorCode.RATE_LIMITED, "over budget")
+    with (
+        patch.dict(
+            gateway_api._FLOW_ACCESS_CHECKS,
+            {LLMFlow.CRAFT_LLM_GENERATION: MagicMock(return_value=True)},
+        ),
+        patch.object(
+            gateway_api, "check_token_rate_limits", side_effect=rate_limited
+        ) as rate_check,
+        patch.object(gateway_api, "resolve_gateway_model") as resolve_model,
+        patch.object(gateway_api, "handle_responses_request") as handle,
+        pytest.raises(OnyxError) as exc_info,
+    ):
+        gateway_api.gateway_responses(
+            request=request,
+            http_request=http_request,
+            user=user,
+            db_session=db_session,
+        )
+
+    assert exc_info.value.error_code == OnyxErrorCode.RATE_LIMITED
+    rate_check.assert_called_once_with(user)
+    resolve_model.assert_not_called()
+    handle.assert_not_called()
+
+
+def test_responses_endpoint_resolves_model_same_way_as_chat_route() -> None:
+    request = ResponsesRequest(model="1/test", input="hi")
+    provider = _provider(1, "openai", [_model("test")])
+    model_config = provider.model_configurations[0]
+    db_session = cast(Session, MagicMock(spec=Session))
+    user = cast(User, MagicMock(spec=User))
+    http_request = cast(Request, MagicMock(spec=Request))
+
+    with (
+        patch.dict(
+            gateway_api._FLOW_ACCESS_CHECKS,
+            {LLMFlow.CRAFT_LLM_GENERATION: MagicMock(return_value=True)},
+        ),
+        patch.object(
+            gateway_api,
+            "resolve_gateway_model",
+            return_value=(provider, model_config),
+        ) as resolve_model,
+        patch.object(gateway_api, "handle_responses_request") as handle,
+        patch.object(gateway_api, "check_token_rate_limits"),
+    ):
+        handle.return_value.to_wire.return_value = {}
+        gateway_api.gateway_responses(
+            request=request,
+            http_request=http_request,
+            user=user,
+            db_session=db_session,
+        )
+
+    resolve_model.assert_called_once_with(db_session, user, "1/test")
+    handle.assert_called_once_with(
+        request=request,
+        provider=provider,
+        model_config=model_config,
+        flow=LLMFlow.CRAFT_LLM_GENERATION,
+    )
+
+
+def test_responses_model_not_found_matches_chat_route_behavior() -> None:
+    provider = _provider(1, "anthropic", [_model("visible-model")])
+    with (
+        patch.object(
+            gateway_api, "fetch_accessible_llm_provider_by_id", return_value=provider
+        ),
+        pytest.raises(OnyxError) as exc_info,
+    ):
+        gateway_api.resolve_gateway_model(
+            cast(Session, MagicMock(spec=Session)),
+            cast(User, MagicMock(spec=User)),
+            "1/does-not-exist",
+        )
+    assert exc_info.value.status_code == 404
+
+
 def test_models_route_has_single_permission_dependency() -> None:
     application = FastAPI(openapi_url=None, docs_url=None, redoc_url=None)
     application.include_router(gateway_api.router)
@@ -1136,3 +1415,67 @@ def test_models_route_has_single_permission_dependency() -> None:
         if getattr(dependency.call, "_is_require_permission", False)
     ]
     assert len(auth_dependencies) == 1
+
+
+def _codex_fixture() -> dict[str, Any]:
+    path = Path(__file__).parent / "fixtures" / "codex_responses_request.json"
+    return cast(dict[str, Any], json.loads(path.read_text()))
+
+
+def test_codex_capture_converts_without_rejecting_input() -> None:
+    """Replay of a real Codex CLI request. Our own synthetic payloads all
+    passed while Codex was failing, so the shapes it actually sends
+    (top-level instructions, function_call/reasoning items, namespace and
+    web_search tools) are pinned here rather than invented."""
+    request = ResponsesRequest.model_validate(_codex_fixture())
+
+    raw_messages = gateway_api._responses_input_to_raw_messages(request)
+    _MESSAGES_ADAPTER.validate_python(raw_messages)
+
+    assert raw_messages[0]["role"] == "system"
+    assert {m["role"] for m in raw_messages} <= {"system", "user", "assistant", "tool"}
+
+    tools = gateway_api._responses_tools(request)
+    assert tools is not None
+    assert {t["type"] for t in tools} == {"function"}
+    assert len(tools) < len(request.tools or [])
+
+
+def test_responses_tool_round_trip_assistant_content_is_flattened() -> None:
+    """Regression: on a tool round-trip the prior assistant turn comes back
+    with list-of-parts content, but AssistantMessage.content is str-only, so
+    the whole turn 400'd with "Invalid messages". Only reachable on the second
+    turn, which is why first-turn tests missed it."""
+    request = ResponsesRequest.model_validate(
+        {
+            "model": "1/test",
+            "input": [
+                {
+                    "type": "message",
+                    "role": "user",
+                    "content": [{"type": "input_text", "text": "run it"}],
+                },
+                {
+                    "type": "function_call",
+                    "id": "fc_1",
+                    "call_id": "call_1",
+                    "name": "exec_command",
+                    "arguments": '{"cmd":"cat probe.txt"}',
+                    "status": "completed",
+                },
+                {
+                    "type": "function_call_output",
+                    "call_id": "call_1",
+                    "output": "hello",
+                },
+            ],
+        }
+    )
+
+    raw = gateway_api._responses_input_to_raw_messages(request)
+    _MESSAGES_ADAPTER.validate_python(raw)
+
+    assistant = [m for m in raw if m.get("role") == "assistant"]
+    assert assistant, raw
+    for message in assistant:
+        assert not isinstance(message["content"], list)

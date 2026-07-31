@@ -1,8 +1,11 @@
 import json
 import queue
 import threading
+import time
+import uuid
 from collections.abc import Callable, Iterator
-from typing import Any
+from contextlib import closing
+from typing import Any, cast
 
 from fastapi import APIRouter, Depends, Request, Response
 from fastapi.responses import JSONResponse, StreamingResponse
@@ -23,6 +26,7 @@ from onyx.llm.factory import llm_from_provider
 from onyx.llm.interfaces import LLM
 from onyx.llm.model_response import (
     ChatCompletionDeltaToolCall,
+    ChatCompletionMessageToolCall,
     ModelResponseStream,
     Usage,
 )
@@ -31,6 +35,7 @@ from onyx.llm.models import (
     ChatCompletionMessage,
     ReasoningEffort,
     TextContentPart,
+    ToolCall,
     ToolChoiceOptions,
     UserMessage,
 )
@@ -45,6 +50,12 @@ from onyx.server.gateway.models import (
     ChatCompletionRequest,
     ChatCompletionResponse,
     ModelListResponse,
+    ResponsesFunctionCallItem,
+    ResponsesMessageItem,
+    ResponsesObjectPayload,
+    ResponsesOutputItem,
+    ResponsesOutputTextPart,
+    ResponsesRequest,
 )
 from onyx.server.manage.llm.models import LLMProviderView, ModelConfigurationView
 from onyx.server.query_and_chat.token_limit import check_token_rate_limits
@@ -77,6 +88,16 @@ _MESSAGES_ADAPTER: TypeAdapter[list[ChatCompletionMessage]] = TypeAdapter(
 
 def _gateway_trace(flow: LLMFlow, model: str) -> Trace:
     return trace("llm_gateway", metadata={"flow": flow.value, "model": model})
+
+
+def _authorize_gateway_request(http_request: Request, user: User) -> LLMFlow:
+    flow = LLMFlow.CRAFT_LLM_GENERATION
+    if not _FLOW_ACCESS_CHECKS[flow](http_request, user):
+        raise OnyxError(
+            OnyxErrorCode.INSUFFICIENT_PERMISSIONS,
+            "This credential is not authorized to use the Onyx LLM gateway.",
+        )
+    return flow
 
 
 def resolve_gateway_model(
@@ -356,7 +377,7 @@ def _stream_sse(
     reasoning_effort: ReasoningEffort,
     model: str,
 ) -> Iterator[str]:
-    """Bridge the LLM stream through a queue so the whole consumption —
+    """Bridge the worker through a queue so the whole stream consumption —
     including the generation span's ContextVar enter/exit — happens on ONE
     thread. Yielding directly from a sync generator breaks under Starlette,
     which resumes the generator on varying threadpool threads (ContextVar
@@ -398,7 +419,6 @@ def _stream_sse(
 
 def handle_chat_completion(
     request: ChatCompletionRequest,
-    db_session: Session,
     provider: LLMProviderView,
     model_config: ModelConfigurationView,
     flow: LLMFlow,
@@ -412,7 +432,6 @@ def handle_chat_completion(
     tool_choice = _parse_tool_choice(request.tool_choice)
     reasoning_effort = _parse_reasoning_effort(request.reasoning_effort)
     max_tokens = request.max_completion_tokens or request.max_tokens
-    db_session.close()
 
     if request.stream:
         return StreamingResponse(
@@ -473,18 +492,198 @@ def handle_chat_completion(
     return ChatCompletionResponse.from_model_response(response, request.model)
 
 
+def _new_id(prefix: str) -> str:
+    return f"{prefix}_{uuid.uuid4().hex}"
+
+
+def _flatten_text_content(content: Any) -> str:
+    if isinstance(content, str):
+        return content
+    if isinstance(content, list):
+        return "\n\n".join(
+            part.get("text", "")
+            for part in content
+            if isinstance(part, dict) and part.get("type") == "text"
+        )
+    return ""
+
+
+def _responses_input_to_raw_messages(request: ResponsesRequest) -> list[dict[str, Any]]:
+    """LiteLLM's Responses->Chat bridge emits an OpenAI 'developer' role and
+    list-of-parts system/developer content; our ChatCompletionMessage union has
+    no developer role and SystemMessage.content is str-only, so collapse both."""
+    from litellm.responses.litellm_completion_transformation.transformation import (
+        LiteLLMCompletionResponsesConfig,
+    )
+
+    litellm_messages = (
+        LiteLLMCompletionResponsesConfig.transform_responses_api_input_to_messages(
+            input=cast(Any, request.input),
+            responses_api_request=cast(Any, {"instructions": request.instructions}),
+        )
+    )
+    raw: list[dict[str, Any]] = []
+    for message in litellm_messages:
+        message_dict: dict[str, Any] = dict(message)
+        role = message_dict.get("role")
+        if role in ("system", "developer"):
+            raw.append(
+                {
+                    "role": "system",
+                    "content": _flatten_text_content(message_dict.get("content")),
+                }
+            )
+        elif role == "assistant" and isinstance(message_dict.get("content"), list):
+            # AssistantMessage.content is str, but LiteLLM emits parts here.
+            raw.append(
+                {
+                    **message_dict,
+                    "content": _flatten_text_content(message_dict["content"]) or None,
+                }
+            )
+        else:
+            raw.append(message_dict)
+    return raw
+
+
+def _responses_tools(request: ResponsesRequest) -> list[dict[str, Any]] | None:
+    from litellm.responses.litellm_completion_transformation.transformation import (
+        LiteLLMCompletionResponsesConfig,
+    )
+
+    tools, _ = (
+        LiteLLMCompletionResponsesConfig.transform_responses_api_tools_to_chat_completion_tools(
+            cast(Any, request.tools)
+        )
+    )
+    return cast(list[dict[str, Any]], tools) or None
+
+
+def _function_call_item(
+    tool_call: ToolCall | ChatCompletionMessageToolCall,
+) -> ResponsesFunctionCallItem | None:
+    # A nameless tool call has no valid function_call representation.
+    name = tool_call.function.name
+    if not name:
+        return None
+    return ResponsesFunctionCallItem.create(
+        id=_new_id("fc"),
+        call_id=tool_call.id,
+        name=name,
+        arguments=tool_call.function.arguments or "",
+    )
+
+
+def _build_responses_output_items(
+    content: str | None,
+    tool_calls: list[ToolCall] | list[ChatCompletionMessageToolCall] | None,
+    message_item_id: str,
+) -> list[ResponsesOutputItem]:
+    items: list[ResponsesOutputItem] = []
+    if content:
+        items.append(
+            ResponsesMessageItem.create(
+                id=message_item_id,
+                status="completed",
+                content=[ResponsesOutputTextPart.create(content)],
+            )
+        )
+    items.extend(
+        item
+        for item in (_function_call_item(tc) for tc in tool_calls or [])
+        if item is not None
+    )
+    return items
+
+
+def handle_responses_request(
+    request: ResponsesRequest,
+    provider: LLMProviderView,
+    model_config: ModelConfigurationView,
+    flow: LLMFlow,
+) -> ResponsesObjectPayload:
+    if request.stream:
+        raise OnyxError(
+            OnyxErrorCode.NOT_IMPLEMENTED,
+            "Streaming is not yet supported on the Responses API.",
+        )
+    llm = llm_from_provider(
+        model_name=model_config.name,
+        llm_provider=provider,
+        temperature=request.temperature,
+    )
+    raw_messages = _responses_input_to_raw_messages(request)
+    messages = _prepare_messages(llm, raw_messages)
+    tools = _responses_tools(request)
+    tool_choice = _parse_tool_choice(request.tool_choice)
+    reasoning_effort = _parse_reasoning_effort(
+        request.reasoning.get("effort") if request.reasoning else None
+    )
+    max_tokens = request.max_output_tokens
+    response_id = _new_id("resp")
+    created_at = int(time.time())
+
+    with (
+        _gateway_trace(flow, llm.config.model_name),
+        llm_generation_span(
+            llm,
+            flow=flow,
+            input_messages=messages,
+            tools=tools,
+        ) as span,
+    ):
+        try:
+            response = llm.invoke(
+                prompt=messages,
+                tools=tools,
+                tool_choice=tool_choice,
+                max_tokens=max_tokens,
+                reasoning_effort=reasoning_effort,
+            )
+        except LLMRateLimitError as e:
+            raise OnyxError(
+                OnyxErrorCode.RATE_LIMITED,
+                "The selected model is temporarily rate limited.",
+            ) from e
+        except LLMTimeoutError as e:
+            raise OnyxError(
+                OnyxErrorCode.BAD_GATEWAY,
+                "The selected model did not respond in time.",
+            ) from e
+        except Exception as e:
+            if span is not None:
+                span.set_error({"message": f"{type(e).__name__}: {e}", "data": None})
+            logger.exception(
+                "LLM gateway responses invoke failed for model %s", request.model
+            )
+            raise OnyxError(
+                OnyxErrorCode.BAD_GATEWAY,
+                "The upstream LLM request failed.",
+            ) from e
+        if span is not None:
+            record_llm_response(span, response)
+
+    return ResponsesObjectPayload.from_parts(
+        response_id=response_id,
+        created_at=created_at,
+        model=request.model,
+        status="completed",
+        output=_build_responses_output_items(
+            response.choice.message.content,
+            response.choice.message.tool_calls,
+            _new_id("msg"),
+        ),
+        usage=response.usage,
+    )
+
+
 @router.get("/v1/models")
 def gateway_list_models(
     http_request: Request,
     user: User = Depends(require_permission(Permission.USE_LLM_GATEWAY)),
     db_session: Session = Depends(get_session),
 ) -> Response:
-    flow = LLMFlow.CRAFT_LLM_GENERATION
-    if not _FLOW_ACCESS_CHECKS[flow](http_request, user):
-        raise OnyxError(
-            OnyxErrorCode.INSUFFICIENT_PERMISSIONS,
-            "This credential is not authorized to use the Onyx LLM gateway.",
-        )
+    _authorize_gateway_request(http_request, user)
     providers = fetch_all_accessible_llm_providers(db_session, user)
     catalog = build_gateway_model_catalog(providers)
     return JSONResponse(content=ModelListResponse.from_catalog(catalog).to_wire())
@@ -497,17 +696,12 @@ def gateway_chat_completions(
     user: User = Depends(require_permission(Permission.USE_LLM_GATEWAY)),
     db_session: Session = Depends(get_session),
 ) -> Response:
-    flow = LLMFlow.CRAFT_LLM_GENERATION
-    if not _FLOW_ACCESS_CHECKS[flow](http_request, user):
-        raise OnyxError(
-            OnyxErrorCode.INSUFFICIENT_PERMISSIONS,
-            "This credential is not authorized to use the Onyx LLM gateway.",
-        )
+    flow = _authorize_gateway_request(http_request, user)
     check_token_rate_limits(user)
-    provider, model_config = resolve_gateway_model(db_session, user, request.model)
+    with closing(db_session):
+        provider, model_config = resolve_gateway_model(db_session, user, request.model)
     result = handle_chat_completion(
         request=request,
-        db_session=db_session,
         provider=provider,
         model_config=model_config,
         flow=flow,
@@ -516,4 +710,24 @@ def gateway_chat_completions(
         return result
     # Serialize explicitly: FastAPI's default model serialization would emit
     # unset fields as nulls, violating the wire contract's presence semantics.
+    return JSONResponse(content=result.to_wire())
+
+
+@router.post("/v1/responses")
+def gateway_responses(
+    request: ResponsesRequest,
+    http_request: Request,
+    user: User = Depends(require_permission(Permission.USE_LLM_GATEWAY)),
+    db_session: Session = Depends(get_session),
+) -> Response:
+    flow = _authorize_gateway_request(http_request, user)
+    check_token_rate_limits(user)
+    with closing(db_session):
+        provider, model_config = resolve_gateway_model(db_session, user, request.model)
+    result = handle_responses_request(
+        request=request,
+        provider=provider,
+        model_config=model_config,
+        flow=flow,
+    )
     return JSONResponse(content=result.to_wire())
