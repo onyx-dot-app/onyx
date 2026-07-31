@@ -1,10 +1,12 @@
 from datetime import datetime
 from enum import Enum
 from typing import TypeVarTuple
+from uuid import UUID
 
 from fastapi import HTTPException
-from sqlalchemy import Select, delete, desc, exists, select, update
+from sqlalchemy import Select, and_, delete, desc, exists, or_, select, update
 from sqlalchemy.orm import Session, aliased, joinedload, selectinload
+from sqlalchemy.sql.elements import ColumnElement
 
 from onyx.configs.constants import DocumentSource
 from onyx.db.connector import fetch_connector_by_id
@@ -30,6 +32,44 @@ from onyx.utils.variable_functionality import fetch_ee_implementation_or_noop
 logger = setup_logger()
 
 R = TypeVarTuple("R")
+
+
+def build_user_cc_pair_access_filter(user_id: UUID) -> ColumnElement[bool]:
+    """Grant public, credential-owner, or current user-group connector access."""
+    credential_owner = (
+        select(1)
+        .select_from(Credential)
+        .where(
+            Credential.id == ConnectorCredentialPair.credential_id,
+            Credential.user_id == user_id,
+        )
+        .correlate(ConnectorCredentialPair)
+        .exists()
+    )
+    current_group_member = (
+        select(1)
+        .select_from(User__UserGroup)
+        .join(
+            UserGroup__ConnectorCredentialPair,
+            and_(
+                UserGroup__ConnectorCredentialPair.user_group_id
+                == User__UserGroup.user_group_id,
+                UserGroup__ConnectorCredentialPair.cc_pair_id
+                == ConnectorCredentialPair.id,
+                UserGroup__ConnectorCredentialPair.is_current.is_(True),
+            ),
+        )
+        .where(User__UserGroup.user_id == user_id)
+        .correlate(ConnectorCredentialPair)
+        .exists()
+    )
+    return or_(
+        ConnectorCredentialPair.access_type == AccessType.PUBLIC,
+        and_(
+            ConnectorCredentialPair.access_type != AccessType.SYNC,
+            or_(credential_owner, current_group_member),
+        ),
+    )
 
 
 class ConnectorType(str, Enum):
