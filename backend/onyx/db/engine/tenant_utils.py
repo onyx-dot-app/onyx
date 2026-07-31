@@ -1,8 +1,14 @@
 import re
+from itertools import chain
 
 from sqlalchemy import text
+from sqlalchemy.engine import Engine
 
-from onyx.db.engine.sql_engine import SqlEngine, get_session_with_shared_schema
+from onyx.db.engine.shard_registry import (
+    get_default_shard_name,
+    get_engine_for_shard,
+    get_shard_specs,
+)
 from shared_configs.configs import (
     MULTI_TENANT,
     POSTGRES_DEFAULT_SCHEMA,
@@ -33,7 +39,7 @@ def validate_tenant_id(tenant_id: str) -> bool:
 
 
 def get_schemas_needing_migration(
-    tenant_schemas: list[str], head_rev: str
+    tenant_schemas: list[str], head_rev: str, shard_name: str
 ) -> list[str]:
     """Return only schemas whose current alembic version is not at head.
 
@@ -45,7 +51,9 @@ def get_schemas_needing_migration(
     if not tenant_schemas:
         return []
 
-    engine = SqlEngine.get_engine()
+    # Named rather than defaulted: alembic_version lives in the schema, so this has to
+    # read the database that actually holds these schemas.
+    engine = get_engine_for_shard(shard_name)
 
     with engine.connect() as conn:
         # Populate a temp input table with exactly the schemas we care about.
@@ -118,16 +126,10 @@ def get_schemas_needing_migration(
     return [s for s in tenant_schemas if version_by_schema.get(s) != head_rev]
 
 
-def get_all_tenant_ids() -> list[str]:
-    """Returning [None] means the only tenant is the 'public' or self hosted tenant."""
-
-    tenant_ids: list[str]
-
-    if not MULTI_TENANT:
-        return [POSTGRES_DEFAULT_SCHEMA]
-
-    with get_session_with_shared_schema() as session:
-        result = session.execute(
+def _tenant_schemas_on(engine: Engine) -> list[str]:
+    """Tenant schemas physically present in one database."""
+    with engine.connect() as connection:
+        result = connection.execute(
             text(
                 """
                 SELECT schema_name
@@ -136,9 +138,35 @@ def get_all_tenant_ids() -> list[str]:
             ),
             {"default_schema": POSTGRES_DEFAULT_SCHEMA},
         )
-        tenant_ids = [row[0] for row in result]
+        return [row[0] for row in result if validate_tenant_id(row[0])]
 
-    valid_tenants = [
-        tenant for tenant in tenant_ids if tenant is None or validate_tenant_id(tenant)
-    ]
-    return valid_tenants
+
+def get_tenant_ids_by_shard() -> dict[str, list[str]]:
+    """Tenant schemas on each configured shard, keyed by shard name.
+
+    Grouped by where a schema physically lives rather than by what `tenant_shard` says,
+    because the callers that need the grouping — migrations — must reach the database
+    actually holding the schema. A tenant mid-copy appears under both its old and its
+    new shard, which is the safe way round: it gets migrated in both places.
+    """
+    if not MULTI_TENANT:
+        return {get_default_shard_name(): [POSTGRES_DEFAULT_SCHEMA]}
+
+    return {
+        shard_name: _tenant_schemas_on(get_engine_for_shard(shard_name))
+        for shard_name in sorted(get_shard_specs())
+    }
+
+
+def get_all_tenant_ids() -> list[str]:
+    """Every tenant, across every shard.
+
+    Returning [POSTGRES_DEFAULT_SCHEMA] means the only tenant is the 'public' or self
+    hosted tenant. Enumerating a single shard would silently drop every tenant that has
+    been moved off it — they would keep working, but stop being scheduled any work.
+    """
+    if not MULTI_TENANT:
+        return [POSTGRES_DEFAULT_SCHEMA]
+
+    # Deduped: a tenant mid-copy exists on two shards but is still one tenant.
+    return sorted(set(chain.from_iterable(get_tenant_ids_by_shard().values())))

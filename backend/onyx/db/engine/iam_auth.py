@@ -62,6 +62,29 @@ def make_provide_iam_token(host: str, port: str, user: str) -> Any:
     return _provide
 
 
+def make_provide_iam_token_async(host: str, port: str, user: str) -> Any:
+    """`do_connect` handler for an asyncpg engine, bound to these coordinates.
+
+    Same scoping rule as `make_provide_iam_token`; separate because asyncpg takes an
+    `ssl` context where psycopg2 takes `sslmode`/`sslrootcert`.
+    """
+    from onyx.db.engine.pg_ssl import create_pg_ssl_context
+
+    def _provide(
+        dialect: Any,  # noqa: ARG001
+        conn_rec: Any,  # noqa: ARG001
+        cargs: Any,  # noqa: ARG001
+        cparams: Any,
+    ) -> None:
+        if not USE_IAM_AUTH:
+            return
+        region = os.getenv("AWS_REGION_NAME", "us-east-2")
+        cparams["password"] = get_iam_auth_token(host, port, user, region)
+        cparams["ssl"] = create_pg_ssl_context()
+
+    return _provide
+
+
 # The default engine's handler: the general one bound to the global coordinates.
 provide_iam_token = make_provide_iam_token(POSTGRES_HOST, POSTGRES_PORT, POSTGRES_USER)
 
