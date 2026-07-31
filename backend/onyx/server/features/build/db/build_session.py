@@ -247,6 +247,33 @@ def finalize_session_initialization__no_commit(
     return result.rowcount == 1  # ty: ignore[unresolved-attribute]
 
 
+def get_live_session_ids_for_user(
+    user_id: UUID,
+    db_session: Session,
+) -> list[UUID]:
+    """IDs of the user's sessions that are using the sandbox, whatever their
+    origin.
+
+    ACTIVE is the obvious one; INITIALIZING counts too, because its workspace
+    setup execs into the sandbox and would fail if the sandbox were disturbed
+    under it. Bounds the set of sessions worth asking the turn cache about, and
+    the set whose prompt slots have to be held before touching the sandbox.
+    """
+    return list(
+        db_session.scalars(
+            select(BuildSession.id).where(
+                BuildSession.user_id == user_id,
+                BuildSession.status.in_(
+                    (
+                        BuildSessionStatus.INITIALIZING,
+                        BuildSessionStatus.ACTIVE,
+                    )
+                ),
+            )
+        )
+    )
+
+
 def update_session_activity(
     session_id: UUID,
     db_session: Session,

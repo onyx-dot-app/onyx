@@ -26,6 +26,9 @@ from onyx.server.features.build.session.sandbox_lifecycle import (
     list_snapshotable_session_workspaces,
     sleep_sandbox,
 )
+from onyx.server.features.build.session.sandbox_recycle import (
+    recycle_sandboxes_on_stale_images,
+)
 
 # 100 minutes - snapshotting can take time
 TIMEOUT_SECONDS = 6000
@@ -43,7 +46,8 @@ SNAPSHOT_INTERVAL_DIVISOR = 4
     ignore_result=True,
 )
 def cleanup_idle_sandboxes_task(self: Task, *, tenant_id: str) -> None:  # noqa: ARG001
-    """Sweep RUNNING sandboxes: background-snapshot sessions, sleep idle ones.
+    """Sweep RUNNING sandboxes: background-snapshot sessions, sleep idle ones,
+    move ones left behind onto the current sandbox image.
 
     Background snapshots bound data loss from ungraceful pod death (kubelet
     eviction, node loss, spot reclaim) to ~idle_timeout/SNAPSHOT_INTERVAL_DIVISOR:
@@ -53,6 +57,9 @@ def cleanup_idle_sandboxes_task(self: Task, *, tenant_id: str) -> None:  # noqa:
     The reap itself is ``sleep_sandbox`` (sandbox lifecycle), which stays
     fail-closed: snapshot failure on a reachable pod keeps the sandbox
     RUNNING for retry next sweep.
+
+    Image recycling rides the same tick: same rows, same "is anyone using this?"
+    question, and one lock keeps a reap and a recycle off the same pod.
     """
     task_logger.info(f"cleanup_idle_sandboxes_task starting for tenant {tenant_id}")
 
@@ -114,6 +121,16 @@ def cleanup_idle_sandboxes_task(self: Task, *, tenant_id: str) -> None:  # noqa:
                         exc_info=True,
                     )
                     db_session.rollback()
+
+            # After the idle reaps: no point restarting a sandbox about to be
+            # reclaimed, and reclaiming pods is the time-sensitive half.
+            try:
+                recycle_sandboxes_on_stale_images(
+                    db_session, sandbox_manager, redis_client, tenant_id
+                )
+            except Exception:
+                task_logger.exception("Sandbox image recycling failed")
+                db_session.rollback()
 
             for sandbox in non_idle_sandboxes:
                 sandbox_id = sandbox.id
