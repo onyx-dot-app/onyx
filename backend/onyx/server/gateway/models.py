@@ -251,7 +251,7 @@ class ResponsesOutputTextPart(_WireModel):
     annotations: list[Any] = Field(default_factory=list)
 
     @classmethod
-    def create(cls, text: str) -> "ResponsesOutputTextPart":
+    def create(cls, *, text: str) -> "ResponsesOutputTextPart":
         return cls(type="output_text", text=text, annotations=[])
 
 
