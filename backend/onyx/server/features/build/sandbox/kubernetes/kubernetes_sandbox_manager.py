@@ -113,6 +113,7 @@ from onyx.server.features.build.sandbox.models import (
     FatalWriteError,
     FileSet,
     FilesystemEntry,
+    ImageMoveOutcome,
     RetriableWriteError,
     SandboxImageState,
     SandboxImageTarget,
@@ -191,6 +192,10 @@ _PREPULLER_CONTAINER_NAME = "prepuller"
 # Short-lived: the point is to notice a new image, but it is read every pass.
 _IMAGE_TARGET_TTL_SECONDS = 60.0
 
+# Covers a container restart plus opencode-serve and the sidecar coming back
+# against an image the node already holds — not a download.
+_IMAGE_SWAP_TIMEOUT_SECONDS = 60.0
+_IMAGE_SWAP_POLL_SECONDS = 2.0
 
 # Per-session egress tagging plugin, baked into the sandbox image (see
 # docker/Dockerfile). Path must match the COPY destination there.
@@ -686,6 +691,106 @@ class KubernetesSandboxManager(SandboxManager):
         ref = next(iter(refs))
         digest = next(iter(digests))
         return SandboxImageTarget(ref=_pinned_ref(ref, digest), digest=digest)
+
+    def move_to_image(
+        self, sandbox_id: UUID, target: SandboxImageTarget
+    ) -> ImageMoveOutcome:
+        """Patch the image and let the kubelet restart just that container.
+
+        The pod survives, so the ``workspace`` and ``opencode-data`` emptyDirs do
+        too: no snapshot, no restore, no re-provision, and the sandbox never
+        leaves RUNNING. Verified on a real cluster, since the pod is
+        ``restartPolicy: Never`` and a replacement container was not a given.
+
+        Agent and sidecar go in one patch — a half-swapped pod would pair a new
+        agent with an old daemon. Never ``NEEDS_PROVISION``: the workspaces are
+        emptyDirs that die with the pod, so they cannot outlive it.
+        """
+        pod_name = self._get_pod_name(str(sandbox_id))
+        try:
+            pod = self._core_api.read_namespaced_pod(
+                name=pod_name, namespace=self._namespace
+            )
+        except ApiException as e:
+            logger.info("Cannot swap sandbox %s: %s", sandbox_id, e)
+            return ImageMoveOutcome.UNSUPPORTED
+
+        # The reported image, not the spec: the patch updates the spec at once,
+        # so a spec check would pass while the old process is still serving.
+        status = _container_status(pod, _SANDBOX_CONTAINER_NAME)
+        before_digest = sandbox_image_digest(status.image_id if status else None)
+
+        try:
+            self._core_api.patch_namespaced_pod(
+                name=pod_name,
+                namespace=self._namespace,
+                body={
+                    "spec": {
+                        "containers": [
+                            {"name": _SANDBOX_CONTAINER_NAME, "image": target.ref}
+                        ],
+                        # sandbox-init keeps its ref; it has already run.
+                        "initContainers": [
+                            {"name": _SIDECAR_CONTAINER_NAME, "image": target.ref}
+                        ],
+                    }
+                },
+            )
+        except ApiException as e:
+            logger.warning(
+                "Sandbox %s image swap to %s was refused: %s",
+                sandbox_id,
+                target.ref,
+                e,
+            )
+            return ImageMoveOutcome.UNSUPPORTED
+
+        logger.info("Swapping sandbox %s onto %s", sandbox_id, target.ref)
+        if self._wait_for_swapped_container(
+            sandbox_id, pod_name, before_digest=before_digest
+        ):
+            return ImageMoveOutcome.MOVED
+        return ImageMoveOutcome.UNSUPPORTED
+
+    def _wait_for_swapped_container(
+        self,
+        sandbox_id: UUID,
+        pod_name: str,
+        *,
+        before_digest: str | None,
+    ) -> bool:
+        """Wait until the container reports the new digest *and* is serving:
+        without readiness the caller gets a sandbox that cannot take a turn."""
+        deadline = time.monotonic() + _IMAGE_SWAP_TIMEOUT_SECONDS
+        while time.monotonic() < deadline:
+            time.sleep(_IMAGE_SWAP_POLL_SECONDS)
+            try:
+                pod = self._core_api.read_namespaced_pod(
+                    name=pod_name, namespace=self._namespace
+                )
+            except ApiException as e:
+                logger.warning("Lost sight of sandbox %s mid-swap: %s", sandbox_id, e)
+                return False
+
+            status = _container_status(pod, _SANDBOX_CONTAINER_NAME)
+            digest = sandbox_image_digest(status.image_id if status else None)
+            if digest is None or digest == before_digest:
+                continue
+            if not self._sandbox_container_is_ready(pod):
+                continue
+            if not self._sidecar_client.is_healthy(
+                sandbox_id=sandbox_id, timeout_seconds=_IMAGE_SWAP_POLL_SECONDS
+            ):
+                continue
+            logger.info("Sandbox %s is serving %s", sandbox_id, digest)
+            return True
+
+        logger.warning(
+            "Sandbox %s did not come back on the new image within %.0fs",
+            sandbox_id,
+            _IMAGE_SWAP_TIMEOUT_SECONDS,
+        )
+        return False
 
     def _live_sandbox_digests(self) -> dict[UUID, str]:
         """One list call for the whole fleet, keyed by the sandbox-id label."""
