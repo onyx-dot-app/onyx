@@ -24,8 +24,7 @@ def drop_data_plane_schema(tenant_id: str) -> dict[str, str]:
     SqlEngine.init_engine(pool_size=5, max_overflow=2)
 
     try:
-        # The schema lives on the tenant's shard, which is not necessarily the database
-        # holding the catalog tables cleaned up below.
+        # The schema lives on the tenant's shard, not necessarily the catalog database.
         with get_engine_for_tenant(tenant_id).connect() as connection:
             with connection.begin():
                 check_schema_query = text("""
@@ -34,23 +33,24 @@ def drop_data_plane_schema(tenant_id: str) -> dict[str, str]:
                     WHERE nspname = :schema_name
                 """)
 
-                result = connection.execute(
-                    check_schema_query, {"schema_name": tenant_id}
-                ).fetchone()
+                schema_exists = (
+                    connection.execute(
+                        check_schema_query, {"schema_name": tenant_id}
+                    ).fetchone()
+                    is not None
+                )
 
-                if not result:
+                if schema_exists:
+                    # CASCADE to remove all objects within it
+                    connection.execute(
+                        text(f'DROP SCHEMA IF EXISTS "{tenant_id}" CASCADE')
+                    )
+                    print(f"Successfully dropped schema: {tenant_id}", file=sys.stderr)
+                else:
                     print(f"Schema {tenant_id} does not exist", file=sys.stderr)
-                    return {
-                        "status": "not_found",
-                        "message": f"Schema {tenant_id} does not exist",
-                    }
 
-                # Drop the schema with CASCADE to remove all objects within it
-                drop_schema_query = text(f'DROP SCHEMA IF EXISTS "{tenant_id}" CASCADE')
-                connection.execute(drop_schema_query)
-
-        print(f"Successfully dropped schema: {tenant_id}", file=sys.stderr)
-
+        # Runs even when the schema was already gone, so a retry after a partially
+        # completed cleanup converges instead of repeating `not_found` forever.
         with get_session_with_shared_schema() as session:
             # Schema-qualified on purpose: schema_translate_map only rewrites SQLAlchemy
             # Table constructs, not raw text(), so an unqualified name resolves against
@@ -62,11 +62,15 @@ def drop_data_plane_schema(tenant_id: str) -> dict[str, str]:
             session.execute(delete_mapping_query, {"tenant_id": tenant_id})
             session.commit()
 
-        print(f"Successfully deleted tenant mapping for: {tenant_id}", file=sys.stderr)
-
         # Last: the shard lookup above depends on this row.
         clear_tenant_placement(tenant_id)
+        print(f"Successfully deleted tenant mapping for: {tenant_id}", file=sys.stderr)
 
+        if not schema_exists:
+            return {
+                "status": "not_found",
+                "message": f"Schema {tenant_id} does not exist; cleared catalog rows",
+            }
         return {
             "status": "success",
             "message": f"Successfully dropped schema: {tenant_id}",

@@ -79,9 +79,9 @@ class ShardSpec:
 def _validate_named_shards(specs: dict[str, ShardSpec]) -> None:
     """Fail at startup if a settings-named shard does not exist.
 
-    Checked on the unconfigured path too: pointing one of these at a name without also
-    defining ONYX_DB_SHARDS otherwise starts cleanly and then breaks at request time —
-    every catalog session for the former, every signup for the latter.
+    Checked on the unconfigured path too: naming one of these without also defining
+    ONYX_DB_SHARDS otherwise starts cleanly and then breaks at request time — every
+    catalog session for the former, every signup for the latter.
     """
     for setting, name in (
         ("ONYX_DB_CATALOG_SHARD", ONYX_DB_CATALOG_SHARD),

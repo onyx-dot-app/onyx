@@ -199,8 +199,7 @@ def pre_provision_tenant() -> bool:
         shard_name = get_shard_for_new_tenant()
         task_logger.info(f"Pre-provisioning tenant {tenant_id} on shard {shard_name}")
 
-        # Recorded before the schema exists: every step below resolves the tenant's
-        # physical database through the catalog, so the mapping has to be there first.
+        # Before schema creation: every step below routes via the catalog.
         record_tenant_placement(tenant_id, shard_name)
 
         # Create the schema for the new tenant

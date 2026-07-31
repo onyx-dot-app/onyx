@@ -240,14 +240,9 @@ def get_shard_for_tenant(tenant_id: str) -> str:
 def get_shard_for_new_tenant() -> str:
     """Shard a tenant being created right now should be placed on.
 
-    Distinct from `get_shard_for_tenant`, which answers where an *existing* tenant
-    already lives. A tenant that has no schema yet cannot be resolved through a catalog
-    describing only tenants that do, so placement is a configuration decision rather
-    than a lookup.
-
-    Raises if the configured shard is unknown. Placing a tenant on the default shard
-    because the intended one could not be resolved is exactly the silent misplacement
-    this is meant to prevent.
+    A configuration decision, not a lookup: unlike `get_shard_for_tenant`, there is no
+    catalog row to consult yet. Raises rather than defaulting on an unknown shard —
+    silently placing a tenant elsewhere is what this is meant to prevent.
     """
     shard_name = get_new_tenant_shard_name()
     if shard_name not in get_shard_specs():

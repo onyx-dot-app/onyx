@@ -209,8 +209,7 @@ async def provision_tenant(tenant_id: str, email: str) -> None:
     )
 
     try:
-        # Recorded before the schema exists: every step below resolves the tenant's
-        # physical database through the catalog, so the mapping has to be there first.
+        # Before schema creation: every step below routes via the catalog.
         record_tenant_placement(tenant_id, shard_name)
 
         # Create the schema for the tenant
@@ -323,8 +322,7 @@ async def rollback_tenant_provisioning(tenant_id: str) -> None:
         logger.error(error_msg)
         rollback_errors.append(error_msg)
 
-    # 4. Drop the shard mapping. Last, so the steps above still route to the right
-    # database while they run.
+    # 4. Drop the shard mapping. Last, so the steps above still route correctly.
     try:
         clear_tenant_placement(tenant_id)
         logger.info("Successfully cleared shard mapping for tenant %s", tenant_id)

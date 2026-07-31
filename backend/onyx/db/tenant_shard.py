@@ -1,13 +1,8 @@
-"""Writes to the `public.tenant_shard` catalog table.
+"""Writes to the `public.tenant_shard` catalog table. Reads live in `shard_routing`.
 
-Reads live in `onyx.db.engine.shard_routing`, which is on the request hot path and
-caches aggressively. Writes happen at provisioning and teardown time only, so they go
-straight to the catalog database with no caching.
-
-Raw SQL against an explicitly schema-qualified name, matching the read side:
-`schema_translate_map` only rewrites SQLAlchemy `Table` constructs, so an unqualified
-name in `text()` would resolve against whatever `search_path` the pooled connection
-happens to carry.
+Schema-qualified raw SQL, matching the read side: `schema_translate_map` only rewrites
+SQLAlchemy `Table` constructs, so an unqualified name in `text()` would resolve against
+whatever `search_path` the pooled connection happens to carry.
 """
 
 from sqlalchemy import text
@@ -20,15 +15,11 @@ logger = setup_logger()
 
 
 def record_tenant_placement(tenant_id: str, shard_name: str) -> None:
-    """Record which physical database a tenant's schema is being created on.
+    """Record where a tenant's schema is about to be created.
 
-    Must be called *before* the schema is created. Every provisioning step after that
-    resolves the tenant's database through the catalog, so the mapping has to be there
-    for them to reach the right one.
-
-    Writes nothing for the default shard. An absent row already means "default", and
-    keeping it that way leaves existing tenants and new ones described by one rule
-    rather than splitting the fleet into mapped and unmapped halves.
+    Must run *before* schema creation: every step after it resolves the tenant's
+    database through the catalog. Writes nothing for the default shard, since an
+    absent row already means "default".
     """
     if is_default_shard(shard_name):
         return
@@ -47,19 +38,15 @@ def record_tenant_placement(tenant_id: str, shard_name: str) -> None:
                 {"tenant_id": tenant_id, "shard_name": shard_name},
             )
 
-    # A resolution attempted before this write would have cached "default" for a full
-    # TTL, sending the schema to the wrong database. Local invalidation is enough: a
-    # tenant this new cannot have been resolved anywhere else.
+    # A lookup before this write caches "default" for a full TTL, which would send the
+    # schema to the wrong database. Local-only: nothing else has seen this tenant.
     invalidate_shard_cache(tenant_id)
     logger.info("Placed tenant %s on shard %s", tenant_id, shard_name)
 
 
 def clear_tenant_placement(tenant_id: str) -> None:
-    """Drop a tenant's shard mapping, for teardown paths.
-
-    Leaving the row behind is inert — tenant IDs are UUIDs and are never reused — but
-    it would misreport which shard is holding capacity.
-    """
+    """Drop a tenant's shard mapping. Inert if left behind, since tenant ids are never
+    reused, but it would misreport which shard is holding capacity."""
     with get_catalog_engine().connect() as connection:
         with connection.begin():
             connection.execute(

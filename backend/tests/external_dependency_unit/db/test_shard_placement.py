@@ -1,13 +1,8 @@
 """Placement of *new* tenants onto a configured shard, against two real databases.
 
-Routing (`test_shard_routing.py`) answers where an existing tenant lives. This suite
-covers the step before that: deciding where a tenant that has no schema yet should be
-created, and proving the schema physically lands there.
-
-The invariant under test is an ordering one — the shard mapping has to be written
-before the schema is created, because every subsequent provisioning step resolves the
-tenant's database through the catalog. So the tests assert on which database the schema
-actually appears in, not on what a helper returned.
+The invariant is an ordering one — the mapping must be written before the schema is
+created — so these assert on which database the schema physically lands in, not on
+what a helper returned.
 """
 
 from collections.abc import Generator
@@ -158,14 +153,9 @@ def test_unknown_target_shard_raises_at_placement_rather_than_using_default(
     placement_on_second_shard: dict[str, Any],  # noqa: ARG001
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
-    """Second line of defence, behind the parse-time check above.
-
-    The shard table is read here *before* the name is changed, so the configuration is
-    already cached and valid — which is what forces the check inside
-    `get_shard_for_new_tenant` to be the thing that catches this, rather than
-    revalidation. Falling back to the default shard is the silent misplacement that
-    placement exists to prevent.
-    """
+    """Second line of defence. The shard table is read before the name is changed, so
+    the config is already cached — forcing the check inside `get_shard_for_new_tenant`
+    to be what catches this rather than revalidation."""
     assert get_shard_for_new_tenant() == SECOND_SHARD
 
     monkeypatch.setattr(shard_registry, "ONYX_DB_NEW_TENANT_SHARD", "no-such-shard")
@@ -177,11 +167,8 @@ def test_unknown_target_shard_raises_at_placement_rather_than_using_default(
 def test_recorded_placement_puts_the_schema_on_the_target_shard(
     placement_on_second_shard: dict[str, Any],
 ) -> None:
-    """The whole point: recording placement first makes schema creation follow.
-
-    The unplaced tenant in the same test is the control — it proves the assertion
-    discriminates, rather than the second shard simply receiving everything.
-    """
+    """The unplaced tenant is the control: it proves the assertion discriminates,
+    rather than the second shard simply receiving everything."""
     placed = f"tenant_{uuid4()}"
     unplaced = f"tenant_{uuid4()}"
     placement_on_second_shard["created"].extend([placed, unplaced])
@@ -225,11 +212,8 @@ def test_placement_is_recorded_and_cleared(
 def test_placement_overrides_a_stale_cached_resolution(
     placement_on_second_shard: dict[str, Any],
 ) -> None:
-    """Resolving before placement must not pin the tenant to the default shard.
-
-    `get_shard_for_tenant` caches the "no row, so default" answer for a full TTL, which
-    would send the schema to the wrong database.
-    """
+    """`get_shard_for_tenant` caches the "no row, so default" answer for a full TTL,
+    which would otherwise send the schema to the wrong database."""
     tenant_id = f"tenant_{uuid4()}"
     placement_on_second_shard["created"].append(tenant_id)
 
@@ -245,12 +229,8 @@ def test_placement_overrides_a_stale_cached_resolution(
 def test_cleanup_drops_the_schema_from_the_tenants_own_shard(
     placement_on_second_shard: dict[str, Any],
 ) -> None:
-    """The on-pod cleanup script previously dropped against the catalog database.
-
-    For a tenant on another shard that reports `not_found` and silently leaves the
-    schema in place, which matters because tenant cleanup is how database-1 is meant
-    to shrink.
-    """
+    """The script previously dropped against the catalog database, which for a sharded
+    tenant reports `not_found` and silently leaves the schema in place."""
     from scripts.tenant_cleanup.on_pod_scripts.cleanup_tenant_schema import (
         drop_data_plane_schema,
     )
@@ -266,4 +246,27 @@ def test_cleanup_drops_the_schema_from_the_tenants_own_shard(
 
     assert result["status"] == "success"
     assert not _schema_exists(get_engine_for_shard(SECOND_SHARD), tenant_id)
+    assert _mapped_shard(tenant_id) is None
+
+
+def test_cleanup_clears_catalog_rows_when_the_schema_is_already_gone(
+    placement_on_second_shard: dict[str, Any],
+) -> None:
+    """Otherwise a retry after a partial run repeats `not_found` forever and the tenant
+    stays in shared catalog state indefinitely."""
+    from scripts.tenant_cleanup.on_pod_scripts.cleanup_tenant_schema import (
+        drop_data_plane_schema,
+    )
+
+    tenant_id = f"tenant_{uuid4()}"
+    placement_on_second_shard["created"].append(tenant_id)
+
+    # Mapped, but the schema was never created — the state a half-finished cleanup or
+    # a failed provision leaves behind.
+    record_tenant_placement(tenant_id, SECOND_SHARD)
+    assert _mapped_shard(tenant_id) == SECOND_SHARD
+
+    result = drop_data_plane_schema(tenant_id)
+
+    assert result["status"] == "not_found"
     assert _mapped_shard(tenant_id) is None
