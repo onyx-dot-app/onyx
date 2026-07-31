@@ -290,11 +290,14 @@ append_line_to_profile() {
     if [[ -f "$profile" ]] && grep -Fq "$PATH_MARKER" "$profile" 2>/dev/null; then
         return 0
     fi
-    # 2>/dev/null must precede >>: redirections apply left to right, and a
-    # failing append would otherwise print the shell's error before stderr is
-    # silenced. The line keeps $HOME unexpanded so the profile stays portable.
+    # The line keeps $HOME unexpanded so the profile stays portable, and
+    # no-ops when the entry is already on PATH — profiles that chain into each
+    # other would otherwise stack up duplicates. 2>/dev/null must precede >>:
+    # redirections apply left to right, so a failing append would otherwise
+    # print the shell's error before stderr is silenced.
     # shellcheck disable=SC2016
-    printf '\n%s\n%s\n' "$PATH_MARKER" 'export PATH="$HOME/.local/bin:$PATH"' \
+    printf '\n%s\n%s\n' "$PATH_MARKER" \
+        'case ":$PATH:" in *":$HOME/.local/bin:"*) ;; *) export PATH="$HOME/.local/bin:$PATH" ;; esac' \
         2>/dev/null >> "$profile"
 }
 
@@ -322,15 +325,14 @@ case ":${PATH}:" in
                     ;;
                 bash)
                     # A bash login shell (ssh, macOS Terminal) reads only the
-                    # first profile that exists and skips ~/.bashrc entirely
-                    # unless that profile sources it, so both are needed.
+                    # first profile that exists and never ~/.bashrc, so both
+                    # get the line. Whether the profile already chains into
+                    # ~/.bashrc doesn't matter: the line is self-skipping.
                     PROFILE_FILES=("${HOME}/.bashrc")
                     for RC in "${HOME}/.bash_profile" "${HOME}/.bash_login" "${HOME}/.profile"; do
                         if [[ -f "$RC" ]]; then break; fi
                     done
-                    if ! grep -qE '(\.|source)[[:space:]].*\.bashrc' "$RC" 2>/dev/null; then
-                        PROFILE_FILES+=("$RC")
-                    fi
+                    PROFILE_FILES+=("$RC")
                     ;;
             esac
         fi
@@ -348,7 +350,12 @@ case ":${PATH}:" in
         else
             print_warning "${BIN_DIR} is not in your PATH — add it to run onyx-cli directly:"
         fi
-        echo -e "   ${BOLD}export PATH=\"${BIN_DIR}:\$PATH\"${NC}"
+        # fish has no `export`, so the hint has to match the shell it lands in.
+        HINT_LINE="export PATH=\"${BIN_DIR}:\$PATH\""
+        if [[ "${SHELL##*/}" == "fish" ]]; then
+            HINT_LINE="set -gx PATH \"${BIN_DIR}\" \$PATH"
+        fi
+        echo -e "   ${BOLD}${HINT_LINE}${NC}"
         # Fix up this process too so anything the CLI spawns can find it.
         export PATH="${BIN_DIR}:${PATH}"
         ;;
