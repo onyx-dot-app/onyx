@@ -347,7 +347,7 @@ class SessionManager:
         # the next reconcile, so the marker is the only thing that tells it to
         # retry the missed dispose. Setting it after the write leaves that exact
         # window uncovered.
-        cache.set(dispose_pending_key, "1", ex=_DISPOSE_PENDING_TTL_SECONDS)
+        mark_opencode_dispose_pending(session.id)
         self._sandbox_manager.regenerate_session_config(
             sandbox_id=sandbox.id,
             session_id=session.id,
