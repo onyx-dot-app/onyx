@@ -1,7 +1,7 @@
 from datetime import datetime, timezone
 from uuid import UUID
 
-from sqlalchemy import cast, select, update
+from sqlalchemy import JSON, cast, select, update
 from sqlalchemy.dialects import postgresql
 from sqlalchemy.dialects.postgresql import insert
 from sqlalchemy.orm import Session
@@ -11,6 +11,17 @@ from sqlalchemy.sql.elements import ColumnElement
 from onyx.auth.schemas import UserRole
 from onyx.configs.constants import NotificationType
 from onyx.db.models import Notification, User
+
+
+def _notification_additional_data_key() -> ColumnElement[dict]:
+    """Normalize legacy JSON null and SQL NULL values to the empty-object key."""
+    return func.coalesce(
+        func.nullif(
+            Notification.additional_data,
+            cast(JSON.NULL, postgresql.JSONB),
+        ),
+        cast({}, postgresql.JSONB),
+    )
 
 
 def _notification_filters(
@@ -40,23 +51,17 @@ def create_notification(
 ) -> Notification:
     """Create or return a notification without racing concurrent user inserts."""
 
-    # Normalize additional_data to match the unique index behavior
-    # The index uses COALESCE(additional_data, '{}'::jsonb)
-    # We need to match this logic in our query
     additional_data_normalized = additional_data if additional_data is not None else {}
 
     existing_notification_query = (
         db_session.query(Notification)
         .filter_by(user_id=user_id, notif_type=notif_type)
-        .filter(
-            func.coalesce(Notification.additional_data, cast({}, postgresql.JSONB))
-            == additional_data_normalized
-        )
+        .filter(_notification_additional_data_key() == additional_data_normalized)
     )
 
     def return_existing(notification: Notification) -> Notification:
-        # Read-triggered ensure paths should not mutate existing rows: changing
-        # last_shown makes notification GET responses differ on every request.
+        # Read-triggered ensure callers opt out so repeated GETs do not change
+        # last_shown and produce different responses.
         if refresh_existing and not notification.dismissed:
             notification.last_shown = func.now()
             if autocommit:
@@ -79,22 +84,19 @@ def create_notification(
             dismissed=False,
             last_shown=func.now(),
             first_shown=func.now(),
-            additional_data=additional_data,
+            additional_data=additional_data_normalized,
         )
         .on_conflict_do_nothing()
-        .returning(Notification.id)
+        .returning(Notification)
     )
-    inserted_id = db_session.execute(stmt).scalar_one_or_none()
+    notification = db_session.scalars(stmt).one_or_none()
 
-    if inserted_id is None:
+    if notification is None:
         existing_notification = existing_notification_query.first()
         if existing_notification is None:
             raise RuntimeError("Notification insert conflicted but no row was found")
         return return_existing(existing_notification)
 
-    notification = db_session.get(Notification, inserted_id)
-    if notification is None:
-        raise RuntimeError("Inserted notification could not be loaded")
     if autocommit:
         db_session.commit()
     return notification
@@ -112,8 +114,7 @@ def delete_notifications_by_additional_data(
     additional_data_normalized = additional_data if additional_data is not None else {}
     db_session.query(Notification).filter(
         Notification.notif_type == notif_type,
-        func.coalesce(Notification.additional_data, cast({}, postgresql.JSONB))
-        == additional_data_normalized,
+        _notification_additional_data_key() == additional_data_normalized,
     ).delete(synchronize_session=False)
 
 

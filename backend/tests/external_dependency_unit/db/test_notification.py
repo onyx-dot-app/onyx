@@ -164,6 +164,65 @@ def test_create_notification_can_preserve_existing_last_shown(
     assert existing_notification.last_shown == original_last_shown
 
 
+def test_create_notification_normalizes_missing_additional_data(
+    db_session: Session,
+    tenant_context: None,  # noqa: ARG001
+) -> None:
+    user = create_test_user(db_session, "notification_missing_data")
+
+    first = create_notification(
+        user_id=user.id,
+        notif_type=NotificationType.FEATURE_ANNOUNCEMENT,
+        db_session=db_session,
+        title="No additional data",
+    )
+    second = create_notification(
+        user_id=user.id,
+        notif_type=NotificationType.FEATURE_ANNOUNCEMENT,
+        db_session=db_session,
+        title="No additional data",
+    )
+
+    assert second.id == first.id
+    assert second.additional_data == {}
+    matching_ids = db_session.scalars(
+        select(Notification.id).where(
+            Notification.user_id == user.id,
+            Notification.notif_type == NotificationType.FEATURE_ANNOUNCEMENT,
+        )
+    ).all()
+    assert matching_ids == [first.id]
+
+
+def test_create_notification_matches_legacy_json_null_additional_data(
+    db_session: Session,
+    tenant_context: None,  # noqa: ARG001
+) -> None:
+    user = create_test_user(db_session, "notification_legacy_json_null")
+    now = datetime.now(timezone.utc)
+    legacy_notification = Notification(
+        user_id=user.id,
+        notif_type=NotificationType.FEATURE_ANNOUNCEMENT,
+        dismissed=False,
+        last_shown=now,
+        first_shown=now,
+        title="Legacy JSON null",
+        additional_data=None,
+    )
+    db_session.add(legacy_notification)
+    db_session.commit()
+    legacy_notification_id = legacy_notification.id
+
+    existing = create_notification(
+        user_id=user.id,
+        notif_type=NotificationType.FEATURE_ANNOUNCEMENT,
+        db_session=db_session,
+        title="Legacy JSON null",
+    )
+
+    assert existing.id == legacy_notification_id
+
+
 def test_create_notification_handles_concurrent_insert(
     db_session: Session,
     tenant_context: None,  # noqa: ARG001
