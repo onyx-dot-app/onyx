@@ -6,7 +6,7 @@ import uuid
 from collections.abc import Callable, Iterator
 from contextlib import closing, contextmanager
 from functools import partial
-from typing import Any, cast
+from typing import Any, Protocol, cast, runtime_checkable
 
 from fastapi import APIRouter, Depends, Request, Response
 from fastapi.responses import JSONResponse, StreamingResponse
@@ -72,6 +72,8 @@ from onyx.server.manage.llm.models import LLMProviderView, ModelConfigurationVie
 from onyx.server.query_and_chat.token_limit import check_token_rate_limits
 from onyx.tracing.flows import LLMFlow
 from onyx.tracing.framework.create import trace
+from onyx.tracing.framework.span_data import GenerationSpanData
+from onyx.tracing.framework.spans import Span
 from onyx.tracing.framework.traces import Trace
 from onyx.tracing.llm_utils import (
     llm_generation_span,
@@ -233,6 +235,15 @@ def _parse_tool_choice(raw: Any) -> ToolChoiceOptions | None:
 _STREAM_END = object()
 
 
+@runtime_checkable
+class _ClosableStream(Protocol):
+    """LLM.stream is declared Iterator, which carries no close(); every real
+    implementation is a generator, and an abandoned one must be closed so the
+    provider connection is released."""
+
+    def close(self) -> None: ...
+
+
 def _put_stream_item(
     out: "queue.Queue[Any]", item: Any, cancelled: threading.Event
 ) -> bool:
@@ -290,7 +301,7 @@ _UPSTREAM_ERROR = ("The upstream LLM request failed.", "upstream_error")
 
 @contextmanager
 def _stream_worker_guard(
-    span: Any,
+    span: Span[GenerationSpanData] | None,
     model: str,
     state: _StreamAccumulator,
     *,
@@ -318,9 +329,8 @@ def _stream_worker_guard(
         emit_error(message=message, error_type=error_type)
     finally:
         try:
-            close = getattr(state.upstream, "close", None)
-            if callable(close):
-                close()
+            if isinstance(state.upstream, _ClosableStream):
+                state.upstream.close()
         except Exception:
             logger.exception("LLM gateway %s cleanup failed for model %s", label, model)
         try:
