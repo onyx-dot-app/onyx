@@ -16,6 +16,7 @@ from onyx.context.search.models import (
     SearchSettingsCreationRequest,
 )
 from onyx.db.connector_credential_pair import (
+    compute_wont_port_cc_pair_ids,
     fetch_indexable_standard_connector_credential_pair_ids,
     get_connector_credential_pairs,
     get_last_successful_attempt_poll_range_end,
@@ -39,11 +40,14 @@ from onyx.db.port_attempt import (
     port_backfill_has_pending_work,
 )
 from onyx.db.search_settings import (
+    clear_reclaim_intent__no_commit,
     create_search_settings,
     delete_search_settings,
+    find_unreclaimed_past_by_index_name,
     get_current_search_settings,
     get_embedding_provider_from_provider_type,
     get_secondary_search_settings,
+    set_reclaim_intent_on_current__no_commit,
     update_current_search_settings,
     update_search_settings_status,
 )
@@ -142,6 +146,34 @@ def set_new_search_settings(
             **search_settings_new.model_dump()
         )
 
+    # ALT_INDEX_SUFFIX alternation can make this FUTURE's index_name equal a PAST's whose
+    # data isn't reclaimed yet. Refuse before verify_and_create_index_if_necessary below
+    # adopts that same-named index and inherits its stale data.
+    if new_search_settings_request.index_name is not None:
+        _guard_index_name_reuse(db_session, new_search_settings_request.index_name)
+
+    # Reclaim intent for the current PRESENT (the future PAST): after swap, reclaim the old
+    # index + delete the consented not-ported cc_pairs. Resolved server-side BEFORE creating
+    # the FUTURE / its index so a consent rejection can't orphan one. Stamping only sets
+    # columns on PRESENT; it commits with the FUTURE at the atomic commit below.
+    wont_port_cc_pair_ids = compute_wont_port_cc_pair_ids(
+        db_session, search_settings_new.switchover_type
+    )
+    consented_deletions = _resolve_consented_deletions(
+        search_settings_new.acknowledged_wont_port_cc_pair_ids, wont_port_cc_pair_ids
+    )
+    if consented_deletions is None:
+        # Not-ported connectors exist but the caller sent no acknowledgment (e.g. the
+        # pre-consent-modal frontend). Skip reclaim entirely — reclaiming the old index
+        # would drop their data (its only copy) without consent.
+        logger.warning(
+            "Reindex has %d not-ported cc_pair(s) but no consent acknowledgment; "
+            "skipping old-index reclaim.",
+            len(wont_port_cc_pair_ids),
+        )
+    else:
+        set_reclaim_intent_on_current__no_commit(db_session, consented_deletions)
+
     secondary_search_settings = get_secondary_search_settings(db_session)
 
     if secondary_search_settings:
@@ -230,9 +262,52 @@ def set_new_search_settings(
                 poll_range_end=poll_range_end,
             )
 
-    # Atomic: FUTURE row and its seeds become visible together.
+    # Atomic: FUTURE row, its seeds, and the reclaim intent become visible together.
     db_session.commit()
     return IdReturn(id=new_search_settings.id)
+
+
+def _guard_index_name_reuse(db_session: Session, index_name: str) -> None:
+    """Refuse a reindex whose new index_name collides with a PAST index whose data is
+    still present — reusing it would adopt that old generation's data. Covers reclaim-
+    tracked rows (cleared automatically by the background reclaim) and legacy pre-feature
+    rows (reclaim_status NULL, no auto-reclaim — an admin removes them)."""
+    if find_unreclaimed_past_by_index_name(db_session, index_name):
+        raise OnyxError(
+            OnyxErrorCode.CONFLICT,
+            "An index of the same name from an earlier reindex still holds data and "
+            "hasn't been reclaimed. Wait for reclamation to finish, or remove that index, "
+            "before starting the reindex.",
+        )
+
+
+def _resolve_consented_deletions(
+    acknowledged: list[int] | None, server_wont_port: list[int]
+) -> list[int] | None:
+    """Resolve which not-ported cc_pairs the post-swap reclaim may delete, enforcing
+    informed consent. Returns the set to stamp, or None to skip reclaim entirely.
+
+    - Nothing won't-port: return [] — reclaim the old index as pure cleanup (all data
+      ported, no consent needed).
+    - Acknowledged: reject if the recomputed set drifted to include a cc_pair the admin
+      never saw (one that became INVALID/PAUSED after the page loaded) — non-consensual,
+      reconfirm; the opposite drift (a consented connector re-activated) just deletes less.
+    - No acknowledgment but there ARE not-ported cc_pairs (e.g. the pre-consent-modal
+      frontend): return None so the caller skips reclaim — reclaiming would drop their data
+      without consent."""
+    if not server_wont_port:
+        return []
+    if acknowledged is None:
+        return None
+    unacknowledged = set(server_wont_port) - set(acknowledged)
+    if unacknowledged:
+        raise OnyxError(
+            OnyxErrorCode.CONFLICT,
+            "The set of connectors that won't be re-indexed changed since you opened "
+            "this page (one or more became paused or invalid). Reload and review the "
+            "deletion list before starting the reindex.",
+        )
+    return server_wont_port
 
 
 @router.post("/cancel-new-embedding", dependencies=[Depends(require_vector_db)])
@@ -261,6 +336,12 @@ def cancel_new_embedding(
 
         # remove the old index from the vector db
         primary_search_settings = get_current_search_settings(db_session)
+
+        # The canceled reindex stamped reclaim intent on this PRESENT (the would-be PAST);
+        # clear it so a later swap can't act on a stale consent set. No-op if unset.
+        clear_reclaim_intent__no_commit(db_session, primary_search_settings.id)
+        db_session.commit()
+
         document_index = get_default_document_index(
             primary_search_settings, None, db_session
         )

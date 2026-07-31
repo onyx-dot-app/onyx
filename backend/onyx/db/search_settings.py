@@ -1,4 +1,4 @@
-from sqlalchemy import and_, delete, func, select
+from sqlalchemy import and_, delete, func, or_, select
 from sqlalchemy import inspect as sa_inspect
 from sqlalchemy.orm import Session
 
@@ -394,3 +394,25 @@ def record_failure__no_commit(
         search_settings.reclaim_status = IndexReclaimStatus.BLOCKED
         return True
     return False
+
+
+def find_unreclaimed_past_by_index_name(
+    db_session: Session, index_name: str
+) -> list[SearchSettings]:
+    """PAST rows sharing this physical index_name whose data is not yet reclaimed.
+    The name-reuse guard uses this: ALT_INDEX_SUFFIX alternation can make a new FUTURE's
+    index_name equal an old PAST's, and reusing it would adopt the old data. Multiple
+    generations can share one physical index, so this returns all of them.
+
+    "Not reclaimed" = anything but RECLAIMED, including reclaim_status NULL — legacy PAST
+    rows from before this feature, whose orphaned index still physically exists. Only
+    RECLAIMED means the data is confirmed gone."""
+    stmt = select(SearchSettings).where(
+        SearchSettings.status == IndexModelStatus.PAST,
+        SearchSettings.index_name == index_name,
+        or_(
+            SearchSettings.reclaim_status.is_(None),
+            SearchSettings.reclaim_status != IndexReclaimStatus.RECLAIMED,
+        ),
+    )
+    return list(db_session.scalars(stmt))
