@@ -31,7 +31,6 @@ from onyx.auth.permissions import require_permission
 from onyx.auth.schemas import UserRole
 from onyx.auth.users import current_curator_or_admin_user
 from onyx.configs.app_configs import WEB_DOMAIN
-from onyx.db.constants import UNSET, UnsetType
 from onyx.db.engine.sql_engine import get_session
 from onyx.db.enums import (
     EndpointPolicy,
@@ -295,14 +294,14 @@ def _resolve_custom_headers(
     request_headers: dict[str, str] | None,
     request_headers_changed: dict[str, bool],
     existing_headers: dict[str, str],
-) -> dict[str, str] | UnsetType:
-    """Resolve the custom-header dict to store. ``None`` leaves stored headers
-    unchanged (older clients); otherwise the request dict is authoritative,
+) -> dict[str, str]:
+    """Resolve the custom-header dict to store. ``None`` keeps the stored
+    headers (older clients); otherwise the request dict is authoritative,
     each kept key taking the request value when flagged changed (masked
     placeholders rejected) or the stored value otherwise. Stored values are
     matched case-insensitively so a casing-only rename keeps its value."""
     if request_headers is None:
-        return UNSET
+        return existing_headers
     existing_by_lower = {
         name.lower(): value for name, value in existing_headers.items()
     }
@@ -1987,18 +1986,12 @@ def _upsert_mcp_server(
                 detail=f"MCP server with ID {request.existing_server_id} not found",
             )
         _ensure_mcp_server_owner_or_admin(mcp_server, user)
-        # Captured before any config deletion so custom headers survive a
+        # Resolved before any config deletion so custom headers survive a
         # credential change; applied onto the final admin config below.
-        existing_custom_headers = extract_custom_headers(mcp_server)
-        resolved_custom_headers = _resolve_custom_headers(
+        final_custom_headers = _resolve_custom_headers(
             request_headers=request.custom_headers,
             request_headers_changed=request.custom_headers_changed,
-            existing_headers=existing_custom_headers,
-        )
-        final_custom_headers = (
-            existing_custom_headers
-            if isinstance(resolved_custom_headers, UnsetType)
-            else resolved_custom_headers
+            existing_headers=extract_custom_headers(mcp_server),
         )
         client_info: OAuthClientInformationFull | None = None
         existing_admin_config_dict: MCPConnectionData = MCPConnectionData(headers={})
@@ -2212,15 +2205,10 @@ def _upsert_mcp_server(
                 detail="Authenticated user email required to create MCP servers",
             )
 
-        resolved_custom_headers = _resolve_custom_headers(
+        final_custom_headers = _resolve_custom_headers(
             request_headers=request.custom_headers,
             request_headers_changed=request.custom_headers_changed,
             existing_headers={},
-        )
-        final_custom_headers = (
-            {}
-            if isinstance(resolved_custom_headers, UnsetType)
-            else resolved_custom_headers
         )
         mcp_server = create_mcp_server__no_commit(
             owner_email=user.email,

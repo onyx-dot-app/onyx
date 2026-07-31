@@ -66,10 +66,9 @@ export interface MCPAuthFormValues {
   custom_headers: KeyValue[];
 }
 
-// Blocking validation for the custom-header rows, derived from form values so
-// submission stays gated even while the collapsed (Radix-unmounted) editor
-// isn't rendering its own inline errors. HTTP header names are
-// case-insensitive, so duplicates are detected case-insensitively.
+// Derived from form values so submission stays gated even while the collapsed
+// (Radix-unmounted) editor isn't rendering its own inline errors. Header
+// names are case-insensitive.
 function computeCustomHeadersError(rows: KeyValue[]): string | null {
   const seen = new Set<string>();
   for (const row of rows) {
