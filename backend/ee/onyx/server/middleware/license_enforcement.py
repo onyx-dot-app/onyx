@@ -83,7 +83,7 @@ def _is_path_allowed(path: str) -> bool:
     )
 
 
-# Caps the gated re-check at one DB read per worker per interval, since every
+# Caps the gated re-check at one DB re-check per worker per interval, since every
 # request to a genuinely gated instance takes that branch, pre-auth.
 _GATED_RECHECK_INTERVAL_SEC = 30.0
 _last_gated_recheck = 0.0

@@ -5,9 +5,13 @@ from unittest.mock import MagicMock, patch
 
 import pytest
 
-from ee.onyx.server.license.api import _normalize_license_file
+from ee.onyx.server.license.api import claim_license
 from ee.onyx.server.license.models import LicensePayload, PlanType
-from ee.onyx.utils.license import LicenseNotStoredError
+from ee.onyx.utils.license import (
+    LicenseNotStoredError,
+    LicenseRejectedError,
+    normalize_license_file,
+)
 from onyx.error_handling.exceptions import OnyxError
 
 
@@ -20,7 +24,7 @@ class TestNormalizeLicenseFile:
 eyJwYXlsb2FkIjogeyJ2ZXJzaW9uIjogIjEuMCJ9fQ==
 -----END ONYX LICENSE-----"""
 
-        result = _normalize_license_file(content)
+        result = normalize_license_file(content)
 
         assert result == "eyJwYXlsb2FkIjogeyJ2ZXJzaW9uIjogIjEuMCJ9fQ=="
 
@@ -36,7 +40,7 @@ IjEuMCIsICJ0ZW5hbnRfaWQiOiAidGVz
 dCJ9LCAic2lnbmF0dXJlIjogImFiYyJ9
 -----END ONYX LICENSE-----"""
 
-        result = _normalize_license_file(content)
+        result = normalize_license_file(content)
 
         assert "\n" not in result
         assert result == (
@@ -49,7 +53,7 @@ dCJ9LCAic2lnbmF0dXJlIjogImFiYyJ9
         """Content without PEM delimiters is returned unchanged."""
         content = "eyJwYXlsb2FkIjogeyJ2ZXJzaW9uIjogIjEuMCJ9fQ=="
 
-        result = _normalize_license_file(content)
+        result = normalize_license_file(content)
 
         assert result == content
 
@@ -61,7 +65,7 @@ eyJwYXlsb2FkIjogeyJ2ZXJzaW9uIjogIjEuMCJ9fQ==
 -----END ONYX LICENSE-----
   """
 
-        result = _normalize_license_file(content)
+        result = normalize_license_file(content)
 
         assert result == "eyJwYXlsb2FkIjogeyJ2ZXJzaW9uIjogIjEuMCJ9fQ=="
 
@@ -75,14 +79,14 @@ eyJwYXlsb2FkIjogeyJ2ZXJzaW9uIjogIjEuMCJ9fQ=="""
         end_only = """eyJwYXlsb2FkIjogeyJ2ZXJzaW9uIjogIjEuMCJ9fQ==
 -----END ONYX LICENSE-----"""
 
-        assert _normalize_license_file(begin_only) == "".join(begin_only.split())
-        assert _normalize_license_file(end_only) == "".join(end_only.split())
+        assert normalize_license_file(begin_only) == "".join(begin_only.split())
+        assert normalize_license_file(end_only) == "".join(end_only.split())
 
     def test_trailing_newlines_stripped_from_raw_input(self) -> None:
         """Raw license strings with trailing newlines from user paste are cleaned."""
         content = "eyJwYXlsb2FkIjogeyJ2ZXJzaW9uIjogIjEuMCJ9fQ==\n\n"
 
-        result = _normalize_license_file(content)
+        result = normalize_license_file(content)
 
         assert result == "eyJwYXlsb2FkIjogeyJ2ZXJzaW9uIjogIjEuMCJ9fQ=="
 
@@ -93,7 +97,7 @@ eyJwYXlsb2FkIjogeyJ2ZXJzaW9uIjogIjEuMCJ9fQ==
 
 -----END ONYX LICENSE-----"""
 
-        result = _normalize_license_file(content)
+        result = normalize_license_file(content)
 
         assert result == "eyJwYXlsb2FkIjogeyJ2ZXJzaW9uIjogIjEuMCJ9fQ=="
 
@@ -113,7 +117,6 @@ class TestClaimLicenseBustsBillingCache:
     ) -> None:
         """A subscription changed outside the product reaches the instance only
         through this endpoint."""
-        from ee.onyx.server.license.api import claim_license
 
         now = datetime.now(timezone.utc)
         mock_reclaim.return_value = LicensePayload(
@@ -141,7 +144,6 @@ class TestClaimLicenseBustsBillingCache:
     ) -> None:
         """Dropping the entry on failure would send the next reader to the
         upstream that just failed."""
-        from ee.onyx.server.license.api import claim_license
 
         mock_reclaim.side_effect = LicenseNotStoredError("nothing stored")
 
@@ -152,9 +154,9 @@ class TestClaimLicenseBustsBillingCache:
 
 
 class TestClaimSurfacesWhyItFailed:
-    """A rejected license and an absent one need different instructions. Both
-    used to arrive as None and render as "No license found", pointing an admin
-    whose license was refused at a checkout that is not their problem."""
+    """A rejected license and an absent one need different instructions.
+    Collapsing them into one message points an admin whose license was refused
+    at a checkout that is not their problem."""
 
     @pytest.mark.asyncio
     @patch("ee.onyx.server.license.api.invalidate_billing_info_cache")
@@ -163,8 +165,6 @@ class TestClaimSurfacesWhyItFailed:
     async def test_a_rejection_reports_the_upstream_reason(
         self, mock_reclaim: MagicMock, _mock_invalidate: MagicMock
     ) -> None:
-        from ee.onyx.server.license.api import claim_license
-        from ee.onyx.utils.license import LicenseRejectedError
 
         mock_reclaim.side_effect = LicenseRejectedError(
             "Invalid license: Invalid license signature"
@@ -183,7 +183,6 @@ class TestClaimSurfacesWhyItFailed:
     async def test_nothing_stored_still_points_at_checkout(
         self, mock_reclaim: MagicMock, _mock_invalidate: MagicMock
     ) -> None:
-        from ee.onyx.server.license.api import claim_license
 
         mock_reclaim.side_effect = LicenseNotStoredError("nothing stored")
 

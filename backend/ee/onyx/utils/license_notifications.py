@@ -3,7 +3,7 @@
 Drives email + in-app notification side effects. Idempotency is enforced
 through the existing `notification` unique index
 `(user_id, notif_type, COALESCE(additional_data, '{}'::jsonb))`. Pre-existing
-admins for a given (stage, expires_at[, sent_date]) tuple are skipped — only
+admins for a given (stage, expires_at[, sent_date]) tuple are skipped, and only
 freshly-notified admins receive an email.
 """
 
@@ -39,11 +39,11 @@ def _build_trial_copy(
     is a subscription starting rather than access being lost."""
     if stage == ExpiryWarningStage.GRACE:
         return (
-            f"Onyx trial ended — {grace_days_remaining} grace days remaining",
+            f"Onyx trial ended. {grace_days_remaining} grace days remaining",
             f"Your trial ended on {expires_str} and billing has not started. "
             f"You have {grace_days_remaining} day(s) of access remaining. Check "
             "your payment method in Plans & Billing to keep Onyx running.",
-            f"Onyx trial ended — {grace_days_remaining} grace days remaining",
+            f"Onyx trial ended. {grace_days_remaining} grace days remaining",
         )
     when = (
         "within 24 hours" if stage == ExpiryWarningStage.T_1D else f"on {expires_str}"
@@ -108,11 +108,11 @@ def _build_copy(
         )
     if stage == ExpiryWarningStage.GRACE:
         return (
-            f"Onyx license expired — {grace_days_remaining} grace days remaining",
+            f"Onyx license expired. {grace_days_remaining} grace days remaining",
             f"Your license expired on {expires_str}. You have "
             f"{grace_days_remaining} day(s) of grace access remaining before "
             "the instance is gated. Renew now.",
-            f"Onyx license expired — {grace_days_remaining} grace days remaining",
+            f"Onyx license expired. {grace_days_remaining} grace days remaining",
         )
     raise ValueError(f"Unsupported stage for notification copy: {stage}")
 
@@ -122,7 +122,7 @@ def _send_email_for_stage(
 ) -> None:
     if not EMAIL_CONFIGURED:
         logger.warning(
-            "Email not configured — skipping license expiry email to %s", user_email
+            "Email not configured, skipping license expiry email to %s", user_email
         )
         return
     html_body = build_html_email(

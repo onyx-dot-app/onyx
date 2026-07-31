@@ -260,14 +260,12 @@ class TestRefreshLicenseCacheLocking:
     sleep on the cache lock."""
 
     @patch("ee.onyx.db.license.update_license_cache")
-    @patch("ee.onyx.db.license.get_cached_license_metadata", return_value=None)
     @patch("ee.onyx.db.license.get_cache_backend")
     @patch("ee.onyx.utils.license.verify_license_signature")
     def test_refresh_never_waits_on_the_cache_lock(
         self,
         mock_verify: MagicMock,
         mock_get_cache: MagicMock,
-        _mock_cached: MagicMock,
         mock_update_cache: MagicMock,
     ) -> None:
         lock = mock_get_cache.return_value.lock.return_value

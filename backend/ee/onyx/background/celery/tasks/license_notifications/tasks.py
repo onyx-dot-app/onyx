@@ -75,8 +75,8 @@ def _sync_expired_license(
 ) -> tuple[LicensePayload, str | None]:
     """Pull the renewal an expired instance is waiting on.
 
-    Grace begins the moment the subscription renews, so this runs where the
-    stage is already computed rather than on a poll of its own. Returns the
+    A renewal, if one happened, lands exactly when grace begins, so this runs
+    where the stage is already computed rather than on a poll of its own. Returns the
     license now in force and why it is still expired, or None once renewed.
 
     A sales-issued license has no control plane to ask.

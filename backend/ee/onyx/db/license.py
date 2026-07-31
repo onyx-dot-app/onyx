@@ -27,7 +27,7 @@ LICENSE_METADATA_KEY = "license:metadata"
 LICENSE_CACHE_TTL_SECONDS = 86400  # 24 hours
 
 # Serializes the row-read-compare-write in publish_license_metadata. The lease
-# must outlive two SELECTs (license row, seat count) and up to four cache ops.
+# must outlive the row re-read, the seat count, and the cache write it guards.
 _LICENSE_CACHE_LOCK_KEY = "license:metadata:write"
 _LICENSE_CACHE_LOCK_TIMEOUT_SEC = 30
 
@@ -285,9 +285,7 @@ def build_license_metadata(
         get_grace_period_end,
     )
 
-    tenant = tenant_id or get_current_tenant_id()
-
-    used_seats = get_used_seats(tenant)
+    used_seats = get_used_seats(tenant_id)
     # Default the grace window to 14 days past expires_at so the license-
     # enforcement middleware returns GRACE_PERIOD (not GATED_ACCESS) during
     # that window — matching the banner copy and daily admin emails.

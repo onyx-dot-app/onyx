@@ -31,7 +31,9 @@ def _payload(*, expires_delta: timedelta, issued_delta: timedelta) -> LicensePay
     )
 
 
-def _run(*, stored: LicensePayload, reclaim: object) -> MagicMock:
+def _run(
+    *, stored: LicensePayload, reclaim: object = None
+) -> tuple[MagicMock, MagicMock]:
     with (
         patch(f"{TASKS_MODULE}.get_session_with_current_tenant") as mock_session,
         patch(f"{TASKS_MODULE}.get_license") as mock_get_license,
@@ -43,16 +45,16 @@ def _run(*, stored: LicensePayload, reclaim: object) -> MagicMock:
         mock_get_license.return_value = MagicMock(license_data="blob")
         if isinstance(reclaim, Exception):
             mock_reclaim.side_effect = reclaim
-        else:
+        elif reclaim is not None:
             mock_reclaim.return_value = reclaim
         check_license_expiry_notifications_task(tenant_id="tenant_123")
-    return mock_notify
+    return mock_notify, mock_reclaim
 
 
 class TestGraceEntryFetchesTheRenewal:
     def test_a_renewal_silences_the_warning(self) -> None:
-        """The customer renewed. Warning them would be the Tangem failure: a
-        healthy account told to renew immediately."""
+        """The customer renewed. Warning them tells a healthy account to renew
+        immediately."""
         stored = _payload(
             expires_delta=timedelta(days=-1), issued_delta=timedelta(days=-31)
         )
@@ -60,7 +62,7 @@ class TestGraceEntryFetchesTheRenewal:
             expires_delta=timedelta(days=29), issued_delta=timedelta(minutes=-1)
         )
 
-        notify = _run(stored=stored, reclaim=renewed)
+        notify, _ = _run(stored=stored, reclaim=renewed)
 
         notify.assert_not_called()
 
@@ -69,7 +71,7 @@ class TestGraceEntryFetchesTheRenewal:
         stored = _payload(
             expires_delta=timedelta(days=-1), issued_delta=timedelta(days=-31)
         )
-        notify = _run(stored=stored, reclaim=stored)
+        notify, _ = _run(stored=stored, reclaim=stored)
 
         assert "No renewed license" in notify.call_args.kwargs["renewal_error"]
 
@@ -77,7 +79,7 @@ class TestGraceEntryFetchesTheRenewal:
         stored = _payload(
             expires_delta=timedelta(days=-1), issued_delta=timedelta(days=-31)
         )
-        notify = _run(
+        notify, _ = _run(
             stored=stored,
             reclaim=LicenseRejectedError("Invalid license: Invalid license signature"),
         )
@@ -90,7 +92,7 @@ class TestGraceEntryFetchesTheRenewal:
         stored = _payload(
             expires_delta=timedelta(days=-1), issued_delta=timedelta(days=-31)
         )
-        notify = _run(stored=stored, reclaim=requests.ConnectionError("down"))
+        notify, _ = _run(stored=stored, reclaim=requests.ConnectionError("down"))
 
         assert "could not be reached" in notify.call_args.kwargs["renewal_error"]
 
@@ -102,19 +104,10 @@ class TestGraceEntryFetchesTheRenewal:
         stored.stripe_customer_id = None
         assert stored.source == LicenseSource.MANUAL_UPLOAD
 
-        with (
-            patch(f"{TASKS_MODULE}.get_session_with_current_tenant") as mock_session,
-            patch(f"{TASKS_MODULE}.get_license") as mock_get_license,
-            patch(f"{TASKS_MODULE}.verify_license_signature", return_value=stored),
-            patch(f"{TASKS_MODULE}.reclaim_license_from_control_plane") as mock_reclaim,
-            patch(f"{TASKS_MODULE}.notify_admins_for_stage") as mock_notify,
-        ):
-            mock_session.return_value.__enter__.return_value = MagicMock()
-            mock_get_license.return_value = MagicMock(license_data="blob")
-            check_license_expiry_notifications_task(tenant_id="tenant_123")
+        notify, reclaim = _run(stored=stored)
 
-        mock_reclaim.assert_not_called()
-        assert "sales" in mock_notify.call_args.kwargs["renewal_error"]
+        reclaim.assert_not_called()
+        assert "sales" in notify.call_args.kwargs["renewal_error"]
 
     @pytest.mark.parametrize("expires_delta", [timedelta(days=3), timedelta(days=20)])
     def test_no_fetch_before_the_license_actually_expires(
@@ -124,15 +117,6 @@ class TestGraceEntryFetchesTheRenewal:
         the control plane for something it cannot have yet."""
         stored = _payload(expires_delta=expires_delta, issued_delta=timedelta(days=-27))
 
-        with (
-            patch(f"{TASKS_MODULE}.get_session_with_current_tenant") as mock_session,
-            patch(f"{TASKS_MODULE}.get_license") as mock_get_license,
-            patch(f"{TASKS_MODULE}.verify_license_signature", return_value=stored),
-            patch(f"{TASKS_MODULE}.reclaim_license_from_control_plane") as mock_reclaim,
-            patch(f"{TASKS_MODULE}.notify_admins_for_stage"),
-        ):
-            mock_session.return_value.__enter__.return_value = MagicMock()
-            mock_get_license.return_value = MagicMock(license_data="blob")
-            check_license_expiry_notifications_task(tenant_id="tenant_123")
+        _, reclaim = _run(stored=stored)
 
-        mock_reclaim.assert_not_called()
+        reclaim.assert_not_called()

@@ -49,10 +49,7 @@ const MS_PER_DAY = 86_400_000;
 
 /** How much of a trial is left, in words. Rounds up so a partial day still
  *  reads as a day, and floors at "today" so a lagging status cannot go negative. */
-export function trialCountdown(
-  trialEnd: Date,
-  now: number = Date.now()
-): string {
+function trialCountdown(trialEnd: Date, now: number = Date.now()): string {
   const days = Math.ceil((trialEnd.getTime() - now) / MS_PER_DAY);
   if (days <= 0) return "Trial ends today";
   if (days === 1) return "Trial ends tomorrow";
@@ -210,7 +207,7 @@ function SubscriptionCard({
     // The trial ending and the first charge are one event, so both halves of
     // this line have to come from the same date.
     subtitle = `${trialCountdown(trialEnd)}. Payment required on ${formatDateShort(
-      license?.trial_end ?? undefined
+      license?.trial_end
     )}`;
   } else if (billing) {
     subtitle = `Next payment on ${formattedDate}`;

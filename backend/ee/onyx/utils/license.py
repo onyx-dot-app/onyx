@@ -42,12 +42,32 @@ _LICENSE_RECLAIM_DEBOUNCE_TTL_SEC = 15 * 60
 
 # Floor between control-plane reclaims driven by a user action. The billing page
 # fires one on load, so without this a reload loop is an unthrottled proxy call.
+# PEM-style delimiters used in the .lic file format.
+_PEM_BEGIN = "-----BEGIN ONYX LICENSE-----"
+_PEM_END = "-----END ONYX LICENSE-----"
+
+
+def normalize_license_file(content: str) -> str:
+    """Reduce a .lic file to the bare base64 blob.
+
+    Collapses all whitespace, not just the delimiter lines: the stored blob is
+    later sent as a Bearer token and requests rejects a value with newlines.
+    """
+    content = content.strip()
+    if content.startswith(_PEM_BEGIN) and content.endswith(_PEM_END):
+        content = content[len(_PEM_BEGIN) : -len(_PEM_END)]
+    return "".join(content.split())
+
+
 _LICENSE_CLAIM_COOLDOWN_KEY = "license_claim_cooldown"
 _LICENSE_CLAIM_COOLDOWN_SEC = 10
 
 
 def claim_cooldown_is_active() -> bool:
-    """True when a user-driven claim ran within the cooldown. Never raises.
+    """Claim the cooldown slot. True when another claim already holds it.
+
+    Checking is claiming: the SET NX starts the cooldown, so callers must not
+    call this speculatively. Never raises.
 
     Fails open: a Redis outage should not stop an admin from recovering a
     lapsed instance, and the cost of an extra proxy call is one request.
@@ -95,8 +115,8 @@ _LICENSE_PUBLIC_KEY_PATH = (
 def license_from_control_plane_response(response: requests.Response) -> str:
     """Pull the signed blob out of a control-plane license response.
 
-    Every malformed shape raises ValueError, which callers already treat as a
-    retryable upstream fault. An empty string counts as absent rather than
+    Every malformed shape raises ValueError, the retryable-upstream-fault
+    signal. An empty string counts as absent rather than
     reaching signature verification and failing as a corrupt license.
     """
     try:

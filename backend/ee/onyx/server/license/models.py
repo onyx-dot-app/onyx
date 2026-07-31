@@ -41,8 +41,8 @@ class LicensePayload(BaseModel):
     stripe_subscription_id: str | None = None
     stripe_customer_id: str | None = None
     customer_tier: CustomerTier | None = None
-    # Absent on licenses issued before trials were represented here, so callers
-    # must treat None as "not a trial" rather than "trial unknown".
+    # Older licenses omit this field, so None means not-a-trial, never
+    # trial-unknown.
     trial_end: datetime | None = None
 
     @property

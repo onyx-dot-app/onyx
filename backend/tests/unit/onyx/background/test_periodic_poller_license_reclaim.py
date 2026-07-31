@@ -1,6 +1,6 @@
 """Guards license renewal on deployments the poller exists for: no Redis and
-no Celery worker, so the beat entry and the point-of-use scheduler both never
-fire and this thread is the only thing that can renew an expiring license."""
+no Celery worker, so the point-of-use scheduler has nothing to enqueue onto
+and this thread is the only thing that can renew an expiring license."""
 
 from unittest.mock import MagicMock, patch
 

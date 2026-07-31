@@ -230,8 +230,7 @@ class TestReclaimLicenseFromControlPlane:
 
 class TestPublishLicenseCache:
     """Runs after the store commits and outside its lock, so it must never
-    raise, must converge on current row state, and must yield to a newer
-    entry another writer already published."""
+    raise and must converge on current row state."""
 
     @pytest.fixture(autouse=True)
     def _cache_backend(self) -> Generator[MagicMock, None, None]:
@@ -255,12 +254,10 @@ class TestPublishLicenseCache:
 
     @patch("ee.onyx.db.license.invalidate_license_cache")
     @patch("ee.onyx.db.license.update_license_cache")
-    @patch("ee.onyx.db.license.get_cached_license_metadata", return_value=None)
     @patch("ee.onyx.utils.license.logger")
     def test_write_failure_drops_the_superseded_entry(
         self,
         mock_logger: MagicMock,
-        _mock_cached: MagicMock,
         mock_update_cache: MagicMock,
         mock_invalidate: MagicMock,
     ) -> None:
@@ -293,10 +290,8 @@ class TestPublishLicenseCache:
         assert mock_update_cache.call_args.args[0] is row_payload
 
     @patch("ee.onyx.db.license.update_license_cache")
-    @patch("ee.onyx.db.license.get_cached_license_metadata", return_value=None)
     def test_publishes_current_row_state(
         self,
-        _mock_cached: MagicMock,
         mock_update_cache: MagicMock,
         _row_payload: MagicMock,
     ) -> None:
@@ -307,10 +302,8 @@ class TestPublishLicenseCache:
         assert mock_update_cache.call_args.args[0] is _row_payload.return_value
 
     @patch("ee.onyx.db.license.update_license_cache")
-    @patch("ee.onyx.db.license.get_cached_license_metadata", return_value=None)
     def test_the_compare_and_write_is_serialized(
         self,
-        _mock_cached: MagicMock,
         mock_update_cache: MagicMock,
         _cache_backend: MagicMock,
     ) -> None:
@@ -341,10 +334,8 @@ class TestPublishLicenseCache:
     )
     @patch("ee.onyx.db.license.build_license_metadata")
     @patch("ee.onyx.db.license.update_license_cache")
-    @patch("ee.onyx.db.license.get_cached_license_metadata", return_value=None)
     def test_an_unavailable_lock_serves_without_caching(
         self,
-        _mock_cached: MagicMock,
         mock_update_cache: MagicMock,
         mock_build: MagicMock,
         unavailable: Callable[[MagicMock], None],
@@ -365,10 +356,8 @@ class TestPublishLicenseCache:
 
     @patch("ee.onyx.db.license.invalidate_license_cache")
     @patch("ee.onyx.db.license.update_license_cache")
-    @patch("ee.onyx.db.license.get_cached_license_metadata", return_value=None)
     def test_a_deleted_row_is_not_resurrected(
         self,
-        _mock_cached: MagicMock,
         mock_update_cache: MagicMock,
         mock_invalidate: MagicMock,
         _row_present: MagicMock,
@@ -384,10 +373,8 @@ class TestPublishLicenseCache:
 
     @patch("ee.onyx.db.license.invalidate_license_cache")
     @patch("ee.onyx.db.license.update_license_cache")
-    @patch("ee.onyx.db.license.get_cached_license_metadata", return_value=None)
     def test_a_lost_lease_drops_the_entry(
         self,
-        _mock_cached: MagicMock,
         mock_update_cache: MagicMock,
         mock_invalidate: MagicMock,
         _cache_backend: MagicMock,

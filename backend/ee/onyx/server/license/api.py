@@ -32,6 +32,7 @@ from ee.onyx.utils.license import (
     LicenseRejectedError,
     claim_cooldown_is_active,
     license_from_control_plane_response,
+    normalize_license_file,
     reclaim_license_from_control_plane,
     verify_and_store_license,
 )
@@ -47,22 +48,6 @@ from shared_configs.configs import MULTI_TENANT
 logger = setup_logger()
 
 router = APIRouter(prefix="/license")
-
-# PEM-style delimiters used in license file format
-_PEM_BEGIN = "-----BEGIN ONYX LICENSE-----"
-_PEM_END = "-----END ONYX LICENSE-----"
-
-
-def _normalize_license_file(content: str) -> str:
-    """Reduce a .lic file to the bare base64 blob.
-
-    The blob is later sent as a Bearer token, and requests rejects a header
-    value containing newlines.
-    """
-    content = content.strip()
-    if content.startswith(_PEM_BEGIN) and content.endswith(_PEM_END):
-        content = content[len(_PEM_BEGIN) : -len(_PEM_END)]
-    return "".join(content.split())
 
 
 @router.get("")
@@ -178,11 +163,9 @@ async def claim_license(
             OnyxErrorCode.VALIDATION_ERROR,
             "No license found. Provide session_id after checkout.",
         )
-    except LicenseRejectedError as e:
-        # Terminal: the reclaim authenticates with the blob being refused, so
-        # retrying cannot help and the admin has to replace the license.
-        raise OnyxError(OnyxErrorCode.VALIDATION_ERROR, str(e))
-    except ValueError as e:
+    except (LicenseRejectedError, ValueError) as e:
+        # A rejection is terminal: the reclaim authenticates with the blob
+        # being refused, so retrying cannot help.
         raise OnyxError(OnyxErrorCode.VALIDATION_ERROR, str(e))
     except requests.RequestException:
         raise OnyxError(
@@ -210,7 +193,7 @@ async def upload_license(
 
     try:
         content = await license_file.read()
-        license_data = _normalize_license_file(content.decode("utf-8"))
+        license_data = normalize_license_file(content.decode("utf-8"))
     except UnicodeDecodeError:
         raise OnyxError(OnyxErrorCode.INVALID_INPUT, "Invalid license file format")
 

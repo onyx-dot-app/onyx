@@ -1,7 +1,7 @@
 """Guards the reclaim_license_task gating contract: it re-claims only for
 self-hosted deployments whose license is expired or near expiry, swallows
-control-plane failures, and stays on a beat interval tight enough that a
-renewal reaches the instance without a manual sync."""
+control-plane failures, and throttles its own control-plane attempts so its
+triggers (request-path debounce, periodic poller) can fire it freely."""
 
 from datetime import datetime, timedelta, timezone
 from unittest.mock import MagicMock, patch
@@ -30,8 +30,8 @@ def _make_payload(
     # Real datetime: the backoff compares issue dates to tell a renewal from a
     # control plane with nothing new, and MagicMock has no ordering.
     payload.issued_at = datetime.now(timezone.utc) + issued_delta
-    # Explicit: a bare MagicMock attribute is neither enum member, which reads
-    # as re-fetchable and silently skips the manual-license guard.
+    # Explicit: a bare MagicMock attribute equals neither enum member, so it
+    # reads as re-fetchable and silently skips the manual-license guard.
     payload.source = source
     return payload
 
@@ -220,9 +220,9 @@ class TestTerminalAuthRejection:
 
 
 class TestReclaimCadence:
-    """The beat runs far more often than a reclaim should reach the control
-    plane, so this gate is the only thing standing between a 5-minute beat and
-    5-minute polling of the control plane."""
+    """The task can be triggered far more often than a reclaim should reach
+    the control plane, so this gate keeps trigger cadence from becoming
+    control-plane polling cadence."""
 
     def _run(
         self,
