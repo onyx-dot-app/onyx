@@ -27,6 +27,7 @@ from onyx.connectors.cross_connector_utils.miscellaneous_utils import datetime_t
 from onyx.connectors.exceptions import (
     ConnectorValidationError,
     CredentialExpiredError,
+    CredentialInvalidError,
     InsufficientPermissionsError,
     UnexpectedValidationError,
 )
@@ -158,6 +159,22 @@ def box_api_status_code(error: BoxAPIError) -> int | None:
     if error.response_info is None:
         return None
     return error.response_info.status_code
+
+
+def box_oauth_error(error: BoxAPIError) -> tuple[str | None, str | None]:
+    """Extract the OAuth ``error`` / ``error_description`` from a Box token
+    failure. Box returns these in the response body on HTTP 400 (e.g.
+    ``invalid_client`` for a bad secret, ``unauthorized_client`` when the app
+    is not enterprise-authorized), which is where the actionable detail lives."""
+    body = error.response_info.body if error.response_info else None
+    if not isinstance(body, dict):
+        return None, None
+    code = body.get("error")
+    description = body.get("error_description")
+    return (
+        code if isinstance(code, str) else None,
+        description if isinstance(description, str) else None,
+    )
 
 
 def _to_utc(dt: datetime | None) -> datetime | None:
@@ -843,6 +860,17 @@ class BoxConnector(
                 raise InsufficientPermissionsError(
                     "The Box app lacks the scopes needed to authenticate (HTTP 403)."
                 ) from e
+            if status == 400:
+                code, description = box_oauth_error(e)
+                if code in ("invalid_client", "unauthorized_client"):
+                    raise CredentialInvalidError(
+                        f"Box rejected the app credentials ({code}): "
+                        f"{description or e.message}. Verify the Client ID and "
+                        "Client Secret belong to the same app and are current "
+                        "(re-fetch the secret in the Box Developer Console), that "
+                        "App Access Level is 'App + Enterprise Access', and that a "
+                        "Box admin has authorized the app."
+                    ) from e
             raise UnexpectedValidationError(
                 f"Unexpected Box API error during validation (status={status}): "
                 f"{e.message}"

@@ -18,7 +18,9 @@ from box_sdk_gen.schemas.user_mini import UserMini
 from box_sdk_gen.schemas.users import Users
 
 
-def make_box_api_error(status_code: int) -> BoxAPIError:
+def make_box_api_error(
+    status_code: int, body: dict[str, object] | None = None
+) -> BoxAPIError:
     return BoxAPIError(
         request_info=RequestInfo(
             method="GET",
@@ -26,7 +28,9 @@ def make_box_api_error(status_code: int) -> BoxAPIError:
             query_params={},
             headers={},
         ),
-        response_info=ResponseInfo(status_code=status_code, headers={}),
+        response_info=ResponseInfo(
+            status_code=status_code, headers={}, body=body or {}
+        ),
         message=f"fake box error (status={status_code})",
     )
 
