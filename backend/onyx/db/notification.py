@@ -63,12 +63,11 @@ def create_notification(
                 db_session.commit()
         return notification
 
-    # PostgreSQL considers NULL user IDs distinct, so the unique index cannot
-    # arbitrate global-notification duplicates. Preserve their existing lookup.
-    if user_id is None:
-        existing_notification = existing_notification_query.first()
-        if existing_notification is not None:
-            return return_existing(existing_notification)
+    # Avoid an insert attempt (and sequence consumption) on the common
+    # idempotent path. The conflict-safe insert below still arbitrates races.
+    existing_notification = existing_notification_query.first()
+    if existing_notification is not None:
+        return return_existing(existing_notification)
 
     stmt = (
         insert(Notification)

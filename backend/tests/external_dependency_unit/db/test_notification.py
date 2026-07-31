@@ -194,6 +194,7 @@ def test_create_notification_handles_concurrent_insert(
         )
         winning_session.add(winning_notification)
         winning_session.flush()
+        winning_notification_id = winning_notification.id
 
         with ThreadPoolExecutor(max_workers=1) as executor:
             competing_result = executor.submit(create_competing_notification)
@@ -203,7 +204,7 @@ def test_create_notification_handles_concurrent_insert(
             winning_session.commit()
             competing_notification_id = competing_result.result(timeout=5)
 
-    assert competing_notification_id == winning_notification.id
+    assert competing_notification_id == winning_notification_id
     matching_notifications = list(
         db_session.scalars(
             select(Notification).where(
@@ -214,7 +215,7 @@ def test_create_notification_handles_concurrent_insert(
         ).all()
     )
     assert [notification.id for notification in matching_notifications] == [
-        winning_notification.id
+        winning_notification_id
     ]
 
 
