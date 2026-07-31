@@ -49,6 +49,22 @@ logger = setup_logger()
 router = APIRouter(prefix="/proxy")
 
 
+def _drop_billing_snapshot(tenant_id: str) -> None:
+    """Drop this tenant's cached billing snapshot. Best-effort.
+
+    Stripe-driven changes arrive at the control plane by webhook, which this
+    proxy never sees, so callers that know the subscription moved must say so.
+    """
+    try:
+        get_redis_client(tenant_id=tenant_id).delete(BILLING_INFO_CACHE_KEY)
+    except RedisError as exc:
+        logger.warning(
+            "Billing info cache invalidation failed for tenant %s: %s",
+            tenant_id,
+            exc,
+        )
+
+
 def _check_license_enforcement_enabled() -> None:
     """Ensure LICENSE_ENFORCEMENT_ENABLED is true (proxy endpoints only work on cloud DP)."""
     if not LICENSE_ENFORCEMENT_ENABLED:
@@ -473,6 +489,9 @@ async def proxy_license_fetch(
             detail="Control plane returned incomplete license data",
         )
 
+    # A re-claim means the subscription moved, so this snapshot is stale.
+    _drop_billing_snapshot(tenant_id)
+
     # Return license to caller - self-hosted instance stores it via /api/license/claim
     return LicenseFetchResponse(license=license_data, tenant_id=tenant_id)
 
@@ -501,15 +520,7 @@ async def proxy_seat_update(
             "new_seat_count": request_body.new_seat_count,
         },
     )
-    try:
-        redis_client = get_redis_client(tenant_id=tenant_id)
-        redis_client.delete(BILLING_INFO_CACHE_KEY)
-    except RedisError as exc:
-        logger.warning(
-            "Billing info cache invalidation failed for tenant %s: %s",
-            tenant_id,
-            exc,
-        )
+    _drop_billing_snapshot(tenant_id)
 
     # Return license in response - self-hosted instance stores it via /api/license/claim
     return SeatUpdateResponse(

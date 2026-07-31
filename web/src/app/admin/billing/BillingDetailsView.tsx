@@ -406,7 +406,11 @@ function SeatsCard({
     includeApiKeys: false,
   });
 
-  const totalSeats = billing?.seats ?? license?.seats ?? 0;
+  // Seat enforcement reads the license, so preferring the billing snapshot can
+  // render a count the instance would refuse to honor. Seats default to 0
+  // without a license, which is not a count to prefer over billing.
+  const licensedSeats = license?.has_license ? license.seats : undefined;
+  const totalSeats = licensedSeats ?? billing?.seats ?? 0;
   const acceptedUsers =
     usersData?.accepted?.filter((u) => u.is_active).length ?? 0;
   const slackUsers =

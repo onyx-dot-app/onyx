@@ -1,6 +1,13 @@
 """Tests for license API utilities."""
 
+from datetime import datetime, timedelta, timezone
+from unittest.mock import MagicMock, patch
+
+import pytest
+
 from ee.onyx.server.license.api import _normalize_license_file
+from ee.onyx.server.license.models import LicensePayload, PlanType
+from onyx.error_handling.exceptions import OnyxError
 
 
 class TestNormalizeLicenseFile:
@@ -88,3 +95,57 @@ eyJwYXlsb2FkIjogeyJ2ZXJzaW9uIjogIjEuMCJ9fQ==
         result = _normalize_license_file(content)
 
         assert result == "eyJwYXlsb2FkIjogeyJ2ZXJzaW9uIjogIjEuMCJ9fQ=="
+
+
+class TestClaimLicenseBustsBillingCache:
+    """The UI renders the cached billing seat count in preference to the
+    license's, so a claim that leaves it cached shows a stale number for the
+    rest of its TTL."""
+
+    @pytest.mark.asyncio
+    @patch("ee.onyx.server.license.api.invalidate_billing_info_cache")
+    @patch("ee.onyx.server.license.api.reclaim_license_from_control_plane")
+    @patch("ee.onyx.server.license.api.MULTI_TENANT", False)
+    async def test_reclaim_busts_the_billing_snapshot(
+        self,
+        mock_reclaim: MagicMock,
+        mock_invalidate: MagicMock,
+    ) -> None:
+        """A subscription changed outside the product reaches the instance only
+        through this endpoint."""
+        from ee.onyx.server.license.api import claim_license
+
+        now = datetime.now(timezone.utc)
+        mock_reclaim.return_value = LicensePayload(
+            version="1.0",
+            tenant_id="tenant_123",
+            organization_name="Test Org",
+            issued_at=now,
+            expires_at=now + timedelta(days=30),
+            seats=10,
+            plan_type=PlanType.MONTHLY,
+        )
+
+        await claim_license(_=MagicMock(), db_session=MagicMock())
+
+        mock_invalidate.assert_called_once()
+
+    @pytest.mark.asyncio
+    @patch("ee.onyx.server.license.api.invalidate_billing_info_cache")
+    @patch("ee.onyx.server.license.api.reclaim_license_from_control_plane")
+    @patch("ee.onyx.server.license.api.MULTI_TENANT", False)
+    async def test_a_failed_claim_leaves_the_snapshot_alone(
+        self,
+        mock_reclaim: MagicMock,
+        mock_invalidate: MagicMock,
+    ) -> None:
+        """Dropping the entry on failure would send the next reader to the
+        upstream that just failed."""
+        from ee.onyx.server.license.api import claim_license
+
+        mock_reclaim.return_value = None
+
+        with pytest.raises(OnyxError):
+            await claim_license(_=MagicMock(), db_session=MagicMock())
+
+        mock_invalidate.assert_not_called()

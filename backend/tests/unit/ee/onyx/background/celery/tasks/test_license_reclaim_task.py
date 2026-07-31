@@ -1,6 +1,7 @@
 """Guards the reclaim_license_task gating contract: it re-claims only for
 self-hosted deployments whose license is expired or near expiry, swallows
-control-plane failures, and stays registered on the 6-hour beat schedule."""
+control-plane failures, and stays on a beat interval tight enough that a
+renewal reaches the instance without a manual sync."""
 
 from datetime import datetime, timedelta, timezone
 from unittest.mock import MagicMock, patch
@@ -21,14 +22,35 @@ def _make_payload(
     *,
     expires_delta: timedelta,
     source: LicenseSource = LicenseSource.AUTO_FETCH,
+    issued_delta: timedelta = timedelta(days=-30),
 ) -> MagicMock:
     payload = MagicMock()
     payload.tenant_id = "tenant_123"
     payload.expires_at = datetime.now(timezone.utc) + expires_delta
+    # Real datetime: the backoff compares issue dates to tell a renewal from a
+    # control plane with nothing new, and MagicMock has no ordering.
+    payload.issued_at = datetime.now(timezone.utc) + issued_delta
     # Explicit: a bare MagicMock attribute is neither enum member, which reads
     # as re-fetchable and silently skips the manual-license guard.
     payload.source = source
     return payload
+
+
+def _renewal_of(payload: MagicMock) -> MagicMock:
+    """What the control plane returns when a renewal really did happen."""
+    renewed = MagicMock()
+    renewed.issued_at = payload.issued_at + timedelta(days=1)
+    renewed.expires_at = payload.expires_at + timedelta(days=30)
+    return renewed
+
+
+def _unchanged_from(payload: MagicMock) -> MagicMock:
+    """What it returns for a customer who lapsed instead of renewing: the same
+    license back, issue date and all."""
+    unchanged = MagicMock()
+    unchanged.issued_at = payload.issued_at
+    unchanged.expires_at = payload.expires_at
+    return unchanged
 
 
 class TestManualLicensesAreNotReclaimed:
@@ -73,10 +95,10 @@ class TestReclaimLicenseTask:
             patch(f"{TASKS_MODULE}.load_verified_license") as mock_load,
             patch(f"{TASKS_MODULE}.reclaim_license_from_control_plane") as mock_reclaim,
         ):
+            payload = _make_payload(expires_delta=expires_delta)
             mock_session.return_value.__enter__.return_value = db_session
-            mock_load.return_value = StoredLicense(
-                "stored-blob", _make_payload(expires_delta=expires_delta)
-            )
+            mock_load.return_value = StoredLicense("stored-blob", payload)
+            mock_reclaim.return_value = _renewal_of(payload)
 
             reclaim_license_task(tenant_id="tenant_123")
 
@@ -131,7 +153,10 @@ class TestReclaimLicenseTask:
         mock_logger.warning.assert_called_once()
 
 
-def test_reclaim_license_task_is_scheduled_every_six_hours() -> None:
+def test_reclaim_beat_interval_bounds_renewal_latency() -> None:
+    """Nothing pushes a renewed license to a self-hosted instance, so this
+    interval is the ceiling on how long a customer runs on the old one after
+    their subscription renews."""
     reclaim_schedule = next(
         task
         for task in ee_tasks_to_schedule
@@ -139,7 +164,7 @@ def test_reclaim_license_task_is_scheduled_every_six_hours() -> None:
     )
 
     assert reclaim_schedule["name"] == "reclaim-license"
-    assert reclaim_schedule["schedule"] == timedelta(hours=6)
+    assert reclaim_schedule["schedule"] <= timedelta(minutes=5)
     assert reclaim_schedule["options"]["expires"] is not None
 
 
@@ -188,3 +213,164 @@ class TestTerminalAuthRejection:
 
         mock_logger.warning.assert_called_once()
         mock_logger.error.assert_not_called()
+
+
+class TestReclaimCadence:
+    """The beat runs far more often than a reclaim should reach the control
+    plane, so this gate is the only thing standing between a 5-minute beat and
+    5-minute polling of the control plane."""
+
+    def _run(
+        self,
+        expires_delta: timedelta,
+        *,
+        slot_free: bool = True,
+        idle_rounds: int = 0,
+        renewal: bool = True,
+        reclaim_error: Exception | None = None,
+        redis_down: bool = False,
+    ) -> tuple[MagicMock, MagicMock]:
+        with (
+            patch(f"{TASKS_MODULE}.get_session_with_current_tenant") as mock_session,
+            patch(f"{TASKS_MODULE}.load_verified_license") as mock_load,
+            patch(f"{TASKS_MODULE}.reclaim_license_from_control_plane") as mock_reclaim,
+            patch(f"{TASKS_MODULE}.get_redis_client") as mock_redis,
+        ):
+            payload = _make_payload(expires_delta=expires_delta)
+            mock_session.return_value.__enter__.return_value = MagicMock()
+            mock_load.return_value = StoredLicense("stored-blob", payload)
+            if reclaim_error is not None:
+                mock_reclaim.side_effect = reclaim_error
+            else:
+                mock_reclaim.return_value = (
+                    _renewal_of(payload) if renewal else _unchanged_from(payload)
+                )
+            if redis_down:
+                mock_redis.side_effect = ConnectionError("redis down")
+            else:
+                mock_redis.return_value.set.return_value = slot_free
+                mock_redis.return_value.get.return_value = str(idle_rounds).encode()
+                # A held slot is re-checked against the current interval, so it
+                # needs a remaining TTL no wider than the tier being claimed.
+                mock_redis.return_value.ttl.return_value = 1
+            reclaim_license_task(tenant_id="tenant_123")
+        return mock_reclaim, mock_redis
+
+    def test_a_run_outside_the_window_touches_nothing(self) -> None:
+        """This is the common case on every instance, so it has to stay a local
+        expiry check rather than a control-plane request."""
+        mock_reclaim, mock_redis = self._run(timedelta(days=20))
+
+        mock_reclaim.assert_not_called()
+        mock_redis.assert_not_called()
+
+    def test_a_taken_slot_blocks_the_control_plane_call(self) -> None:
+        mock_reclaim, _ = self._run(timedelta(days=3), slot_free=False)
+
+        mock_reclaim.assert_not_called()
+
+    def test_a_free_slot_reaches_the_control_plane(self) -> None:
+        mock_reclaim, _ = self._run(timedelta(days=3))
+
+        mock_reclaim.assert_called_once()
+
+    @pytest.mark.parametrize(
+        ("expires_delta", "expected_interval"),
+        [
+            (timedelta(days=3), 6 * 60 * 60),
+            (timedelta(minutes=30), 60),
+            (timedelta(days=-1), 60),
+        ],
+        ids=["lead-up", "period-ending", "already-expired"],
+    )
+    def test_the_interval_tightens_as_the_period_ends(
+        self, expires_delta: timedelta, expected_interval: int
+    ) -> None:
+        _, mock_redis = self._run(expires_delta)
+
+        assert mock_redis.return_value.set.call_args.kwargs["ex"] == expected_interval
+
+    @pytest.mark.parametrize(
+        ("idle_rounds", "expected_interval"),
+        [(0, 60), (1, 120), (3, 480), (4, 900), (99, 900)],
+    )
+    def test_repeated_futile_attempts_widen_the_interval(
+        self, idle_rounds: int, expected_interval: int
+    ) -> None:
+        """A customer who lapsed rather than renewed would otherwise be polled
+        at the renewal rate for the whole grace period, against a control plane
+        that has nothing to return."""
+        _, mock_redis = self._run(timedelta(days=-1), idle_rounds=idle_rounds)
+
+        assert mock_redis.return_value.set.call_args.kwargs["ex"] == expected_interval
+
+    def test_a_renewal_resets_the_backoff(self) -> None:
+        _, mock_redis = self._run(timedelta(days=-1), idle_rounds=5)
+
+        mock_redis.return_value.delete.assert_called_once()
+        mock_redis.return_value.pipeline.return_value.incr.assert_not_called()
+
+    def test_nothing_newer_widens_the_backoff(self) -> None:
+        _, mock_redis = self._run(timedelta(days=-1), renewal=False)
+
+        pipe = mock_redis.return_value.pipeline.return_value
+        pipe.incr.assert_called_once()
+        pipe.execute.assert_called_once()
+        mock_redis.return_value.delete.assert_not_called()
+
+    def test_an_unreachable_control_plane_also_backs_off(self) -> None:
+        """Retrying a down control plane at the renewal rate helps nobody."""
+        _, mock_redis = self._run(
+            timedelta(days=-1), reclaim_error=requests.ConnectionError("down")
+        )
+
+        mock_redis.return_value.pipeline.return_value.incr.assert_called_once()
+
+    def test_a_redis_outage_still_lets_a_renewal_through(self) -> None:
+        """Failing closed would strand a renewed customer on an expired license
+        for as long as Redis is down."""
+        mock_reclaim, _ = self._run(timedelta(days=-1), redis_down=True)
+
+        mock_reclaim.assert_called_once()
+
+
+class TestThrottleKeysAreTierScoped:
+    """The tier boundary is handled by construction. A lead-up slot lives under
+    its own key, so entering the urgent window never has to detect or shorten
+    it, and two workers crossing the boundary cannot race on one key."""
+
+    def _claim(self, expires_delta: timedelta) -> tuple[bool, MagicMock]:
+        from ee.onyx.background.celery.tasks.license_reclaim.tasks import (
+            _reclaim_slot_is_free,
+        )
+
+        with patch(f"{TASKS_MODULE}.get_redis_client") as mock_redis:
+            mock_redis.return_value.get.return_value = b"0"
+            mock_redis.return_value.set.return_value = True
+            free = _reclaim_slot_is_free(datetime.now(timezone.utc) + expires_delta)
+            return free, mock_redis.return_value.set
+
+    def test_the_two_tiers_use_different_keys(self) -> None:
+        """Sharing one key is what let a six-hour lead-up slot span the
+        approach to expiry."""
+        _, lead_up_set = self._claim(timedelta(days=3))
+        _, urgent_set = self._claim(timedelta(minutes=30))
+
+        assert lead_up_set.call_args.args[0] != urgent_set.call_args.args[0]
+
+    @pytest.mark.parametrize(
+        ("expires_delta", "expected_interval"),
+        [
+            (timedelta(days=3), 6 * 60 * 60),
+            (timedelta(minutes=30), 60),
+            (timedelta(days=-1), 60),
+        ],
+        ids=["lead-up", "period-ending", "already-expired"],
+    )
+    def test_each_tier_claims_its_own_interval(
+        self, expires_delta: timedelta, expected_interval: int
+    ) -> None:
+        _, set_call = self._claim(expires_delta)
+
+        assert set_call.call_args.kwargs["ex"] == expected_interval
+        assert set_call.call_args.kwargs["nx"] is True

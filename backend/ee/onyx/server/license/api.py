@@ -18,9 +18,9 @@ from ee.onyx.configs.app_configs import CLOUD_DATA_PLANE_URL
 from ee.onyx.db.license import delete_license as db_delete_license
 from ee.onyx.db.license import (
     get_license_metadata,
-    invalidate_license_cache,
     refresh_license_cache,
 )
+from ee.onyx.server.billing.api import invalidate_billing_info_cache
 from ee.onyx.server.license.models import (
     LicenseResponse,
     LicenseStatusResponse,
@@ -149,6 +149,10 @@ async def claim_license(
                     "No license found. Provide session_id after checkout.",
                 )
 
+        # A subscription changed outside the product reaches the instance only
+        # here, so this is where the plan snapshot cached beside it goes stale.
+        invalidate_billing_info_cache()
+
         logger.info(
             "License claimed: seats=%s, expires=%s",
             payload.seats,
@@ -258,11 +262,9 @@ async def delete_license(
             "License deletion is only available for self-hosted deployments",
         )
 
-    try:
-        invalidate_license_cache()
-    except Exception as cache_error:
-        logger.warning("Failed to invalidate license cache: %s", cache_error)
-
+    # db_delete_license invalidates after the commit and under the cache lock,
+    # which is the ordering a concurrent reader needs. Doing it here as well
+    # would only clear an entry that read can immediately repopulate.
     deleted = db_delete_license(db_session)
 
     return {"deleted": deleted}

@@ -17,7 +17,11 @@ from sqlalchemy.orm import Session
 
 from ee.onyx.configs.app_configs import CLOUD_DATA_PLANE_URL
 from ee.onyx.server.license.models import LicenseData, LicensePayload
-from ee.onyx.utils.license_expiry import is_license_due_for_reclaim
+from ee.onyx.utils.license_expiry import (
+    LICENSE_RECLAIM_URGENT_INTERVAL,
+    is_license_due_for_reclaim,
+    is_license_reclaim_urgent,
+)
 from onyx.background.celery.versioned_apps.client import app as client_app
 from onyx.cache.factory import get_cache_backend
 from onyx.cache.interface import CacheBackendType
@@ -168,8 +172,9 @@ def _is_stale_replacement(stored_data: str, incoming: LicensePayload) -> bool:
 def publish_license_cache(db_session: Session) -> None:
     """Publish metadata for the committed license row. Never raises.
 
-    Drops the cached entry on failure rather than leaving a superseded one to
-    serve out its TTL.
+    Namespaces off the ambient tenant, which is what readers resolve. Publishing
+    under the license's own tenant_id strands the fresh entry where nothing
+    looks. On failure the entry is dropped rather than left to serve its TTL.
     """
     # Deferred import: ee.onyx.db.license imports this module.
     from ee.onyx.db.license import invalidate_license_cache, publish_license_metadata
@@ -224,6 +229,9 @@ def verify_and_store_license(
     stored = get_license(db_session)
     if stored and _is_stale_replacement(stored.license_data, payload):
         db_session.rollback()
+        # The row is already the better one, but the cache may not be, and a
+        # sync is what a user clicks to clear staleness.
+        publish_license_cache(db_session)
         return payload
     if stored is None and expected_tenant_id is not None:
         # Reclaim renews an existing credential. A deleted row must stay gone.
@@ -370,6 +378,12 @@ def maybe_schedule_license_reclaim(expires_at: datetime, tenant_id: str) -> None
     if CACHE_BACKEND != CacheBackendType.REDIS:
         return
 
+    # A served request is the earliest chance to fetch a replacement.
+    debounce_ttl = (
+        int(LICENSE_RECLAIM_URGENT_INTERVAL.total_seconds())
+        if is_license_reclaim_urgent(expires_at)
+        else _LICENSE_RECLAIM_DEBOUNCE_TTL_SEC
+    )
     try:
         redis_client = get_redis_client()
         # SET NX doubles as the debounce and a cross-process lock: only the
@@ -378,7 +392,7 @@ def maybe_schedule_license_reclaim(expires_at: datetime, tenant_id: str) -> None
             _LICENSE_RECLAIM_DEBOUNCE_KEY,
             "1",
             nx=True,
-            ex=_LICENSE_RECLAIM_DEBOUNCE_TTL_SEC,
+            ex=debounce_ttl,
         ):
             return
 
@@ -387,7 +401,7 @@ def maybe_schedule_license_reclaim(expires_at: datetime, tenant_id: str) -> None
                 OnyxCeleryTask.RECLAIM_LICENSE,
                 kwargs={"tenant_id": tenant_id},
                 priority=OnyxCeleryPriority.HIGH,
-                expires=_LICENSE_RECLAIM_DEBOUNCE_TTL_SEC,
+                expires=debounce_ttl,
             )
         except Exception:
             # The claim above is what stops other requests from enqueueing.

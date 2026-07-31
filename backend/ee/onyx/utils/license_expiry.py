@@ -1,9 +1,9 @@
 """Expiry-derived scheduling for licenses: warning stages and the reclaim window.
 
 Pure logic, no DB and no I/O. Given an `expires_at` and the current time,
-returns the warning stage driving banner copy, notifications, and emails, and
+returns the warning stage driving banner copy, notifications, and emails,
 whether the license is close enough to expiry to re-fetch from the control
-plane.
+plane, and how long to wait between those re-fetch attempts.
 
 Stages:
     NONE  more than 30 days remain, or grace period already exhausted
@@ -22,9 +22,40 @@ LICENSE_GRACE_PERIOD_DAYS = 14
 # the control plane.
 LICENSE_RECLAIM_WINDOW = timedelta(days=7)
 
+# A renewal replaces the license at the period end, so only the approach to it
+# is worth watching closely. The rest of the window keeps its long-standing rate.
+LICENSE_RECLAIM_URGENT_WINDOW = timedelta(hours=1)
+LICENSE_RECLAIM_LEAD_UP_INTERVAL = timedelta(hours=6)
+
+# Widens when no replacement arrives, so a lapsed customer is not polled hard.
+LICENSE_RECLAIM_URGENT_INTERVAL = timedelta(minutes=1)
+LICENSE_RECLAIM_MAX_INTERVAL = timedelta(minutes=15)
+
+# Where doubling reaches the cap. Also bounds the shift on a Redis-read counter.
+_MAX_BACKOFF_DOUBLINGS = 4
+
 
 def is_license_due_for_reclaim(expires_at: datetime) -> bool:
     return expires_at - datetime.now(timezone.utc) <= LICENSE_RECLAIM_WINDOW
+
+
+def is_license_reclaim_urgent(expires_at: datetime) -> bool:
+    return expires_at - datetime.now(timezone.utc) <= LICENSE_RECLAIM_URGENT_WINDOW
+
+
+def license_reclaim_interval(expires_at: datetime, idle_rounds: int) -> timedelta:
+    """How long to wait before the next control-plane reclaim attempt.
+
+    idle_rounds counts consecutive attempts that came back with nothing newer.
+    """
+    if not is_license_reclaim_urgent(expires_at):
+        return LICENSE_RECLAIM_LEAD_UP_INTERVAL
+
+    doublings = min(max(idle_rounds, 0), _MAX_BACKOFF_DOUBLINGS)
+    return min(
+        LICENSE_RECLAIM_URGENT_INTERVAL * (2**doublings),
+        LICENSE_RECLAIM_MAX_INTERVAL,
+    )
 
 
 class ExpiryWarningStage(str, Enum):

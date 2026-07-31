@@ -76,7 +76,8 @@ if not MULTI_TENANT:
         {
             "name": "reclaim-license",
             "task": OnyxCeleryTask.RECLAIM_LICENSE,
-            "schedule": timedelta(hours=6),
+            # Bounds renewal latency. Runs outside the reclaim window are local-only.
+            "schedule": timedelta(minutes=5),
             "options": {
                 "priority": OnyxCeleryPriority.MEDIUM,
                 "expires": BEAT_EXPIRES_DEFAULT,

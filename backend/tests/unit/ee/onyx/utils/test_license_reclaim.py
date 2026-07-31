@@ -82,6 +82,34 @@ class TestVerifyAndStoreLicense:
         mock_upsert.assert_called_once_with(db_session, "signed-license", commit=False)
         mock_publish_cache.assert_called_once_with(db_session)
 
+    @patch("ee.onyx.utils.license.publish_license_cache")
+    @patch("ee.onyx.db.license.get_license")
+    @patch("ee.onyx.db.license.upsert_license")
+    @patch("ee.onyx.utils.license.verify_license_signature")
+    def test_discarding_an_older_license_still_reconciles_the_cache(
+        self,
+        mock_verify: MagicMock,
+        mock_upsert: MagicMock,
+        mock_get_license: MagicMock,
+        mock_publish_cache: MagicMock,
+    ) -> None:
+        """Sync is what a user clicks to clear staleness, so reporting success
+        over a stale entry makes the button useless when it is most needed."""
+        incoming = _make_license_payload()
+        newer = _make_license_payload()
+        newer.issued_at = incoming.issued_at + timedelta(hours=1)
+        mock_get_license.return_value = MagicMock(license_data="stored-license")
+        mock_verify.side_effect = lambda blob: (
+            newer if blob == "stored-license" else incoming
+        )
+
+        db_session = MagicMock()
+        result = verify_and_store_license(db_session, "older-license")
+
+        assert result == incoming
+        mock_upsert.assert_not_called()
+        mock_publish_cache.assert_called_once_with(db_session)
+
     @patch("ee.onyx.db.license.upsert_license")
     @patch("ee.onyx.utils.license.verify_license_signature")
     def test_rejects_unverifiable_blob_without_persisting(
@@ -95,6 +123,39 @@ class TestVerifyAndStoreLicense:
             verify_and_store_license(MagicMock(), "tampered-license")
 
         mock_upsert.assert_not_called()
+
+    @patch("ee.onyx.db.license.update_license_cache")
+    @patch("ee.onyx.db.license.get_cached_license_metadata", return_value=None)
+    @patch("ee.onyx.db.license.get_cache_backend")
+    @patch("ee.onyx.db.license.upsert_license")
+    @patch("ee.onyx.utils.license.verify_license_signature")
+    def test_publishes_into_the_namespace_readers_resolve(
+        self,
+        mock_verify: MagicMock,
+        _mock_upsert: MagicMock,
+        mock_get_cache: MagicMock,
+        _mock_cached: MagicMock,
+        _mock_update_cache: MagicMock,
+    ) -> None:
+        """The license carries the tenant id the control plane assigned, which
+        is not the one an ambient read resolves. Publishing under it strands the
+        fresh entry and a sync appears to do nothing."""
+        from ee.onyx.db.license import get_license_metadata
+
+        lock = mock_get_cache.return_value.lock.return_value
+        lock.acquire.return_value = True
+        lock.owned.return_value = True
+        mock_verify.return_value = _make_license_payload()
+
+        verify_and_store_license(MagicMock(), "signed-license")
+        written = [c.kwargs.get("tenant_id") for c in mock_get_cache.call_args_list]
+
+        mock_get_cache.reset_mock()
+        get_license_metadata(MagicMock())
+        read = [c.kwargs.get("tenant_id") for c in mock_get_cache.call_args_list]
+
+        assert written and read
+        assert set(written) == set(read)
 
 
 class TestReclaimLicenseFromControlPlane:
@@ -422,9 +483,13 @@ class TestMaybeScheduleLicenseReclaim:
         mock_client_app.send_task.assert_not_called()
 
     @pytest.mark.parametrize(
-        "expires_in",
-        [timedelta(days=1), timedelta(days=-3)],
-        ids=["expiring-soon", "already-expired"],
+        ("expires_in", "expected_debounce"),
+        [
+            (timedelta(days=1), 15 * 60),
+            (timedelta(minutes=30), 60),
+            (timedelta(days=-3), 60),
+        ],
+        ids=["expiring-soon", "period-ending", "already-expired"],
     )
     @patch("ee.onyx.utils.license.client_app")
     @patch("ee.onyx.utils.license.get_redis_client")
@@ -433,17 +498,25 @@ class TestMaybeScheduleLicenseReclaim:
         mock_get_redis: MagicMock,
         mock_client_app: MagicMock,
         expires_in: timedelta,
+        expected_debounce: int,
     ) -> None:
+        """Once the period is ending the replacement is expected imminently, so
+        a served request is the earliest chance to fetch it and the debounce
+        tightens. Holding the full window there would strand a renewed customer
+        on an expired license until the next beat."""
         mock_get_redis.return_value.exists.return_value = 0
         mock_get_redis.return_value.set.return_value = True
 
         maybe_schedule_license_reclaim(_expiring_in(expires_in), "tenant_123")
 
+        assert mock_get_redis.return_value.set.call_args.kwargs["ex"] == (
+            expected_debounce
+        )
         mock_client_app.send_task.assert_called_once_with(
             OnyxCeleryTask.RECLAIM_LICENSE,
             kwargs={"tenant_id": "tenant_123"},
             priority=OnyxCeleryPriority.HIGH,
-            expires=15 * 60,
+            expires=expected_debounce,
         )
 
     @patch("ee.onyx.utils.license.get_cache_backend")
