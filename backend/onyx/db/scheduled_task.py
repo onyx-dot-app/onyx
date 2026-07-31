@@ -355,6 +355,33 @@ def has_in_flight_run_for_task(
     return db_session.execute(stmt).first() is not None
 
 
+def get_unfinished_run_for_user(
+    *,
+    db_session: Session,
+    user_id: UUID,
+) -> ScheduledTaskRun | None:
+    """The user's oldest run that has not reached a terminal status, if any.
+
+    "Unfinished" deliberately includes ``AWAITING_APPROVAL`` alongside QUEUED
+    and RUNNING: a run parked on an approval gate still owns the user's sandbox
+    and will resume in it, so anything asking "is this sandbox committed to
+    work?" has to count it.
+    """
+    stmt = (
+        select(ScheduledTaskRun)
+        .join(ScheduledTask, ScheduledTaskRun.task_id == ScheduledTask.id)
+        .where(
+            ScheduledTask.user_id == user_id,
+            ScheduledTaskRun.status.notin_(
+                [s for s in ScheduledTaskRunStatus if s.is_terminal()]
+            ),
+        )
+        .order_by(ScheduledTaskRun.started_at)
+        .limit(1)
+    )
+    return db_session.execute(stmt).scalars().first()
+
+
 def insert_run(
     *,
     db_session: Session,
