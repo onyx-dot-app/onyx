@@ -61,6 +61,7 @@ from onyx.document_index.factory import (
     get_all_document_indices,
     get_default_document_index,
 )
+from onyx.document_index.interfaces_new import TenantState
 from onyx.document_index.opensearch.index_reclaim import (
     ReclaimOutcome,
     reclaim_index_data,
@@ -342,7 +343,10 @@ def _reclaim_abandoned_future(
     try:
         if (
             reclaim_index_data(
-                abandoned_future.index_name, MULTI_TENANT, get_current_tenant_id()
+                abandoned_future.index_name,
+                TenantState(
+                    tenant_id=get_current_tenant_id(), multitenant=MULTI_TENANT
+                ),
             )
             == ReclaimOutcome.COMPLETE
         ):
