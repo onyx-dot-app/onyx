@@ -217,6 +217,18 @@ repos:
             |deployment/docker_compose/env\.(template|prod\.template)
             |deployment/helm/charts/onyx/(values\.yaml|templates/configmap\.yaml)
           )$
+      # Blocks newly added calls to the `getattr` builtin; existing usage is
+      # grandfathered (only lines added in the staged diff / PR ref range are
+      # checked). Bypass per line with a `# allow-getattr` comment, per commit
+      # with `SKIP=no-getattr` or `git commit --no-verify`.
+      - id: no-getattr
+        name: no getattr
+        description: "Block newly added getattr calls in Python (bypass: # allow-getattr / SKIP=no-getattr)"
+        language: system
+        entry: python3 backend/scripts/check_no_getattr.py
+        types: [python]
+        stages: [pre-commit]
+
       - id: bun-install
         name: bun install
         description: "Automatically run 'bun install' after a checkout, pull or rebase"
