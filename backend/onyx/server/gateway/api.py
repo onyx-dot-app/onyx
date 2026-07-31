@@ -75,11 +75,8 @@ _MESSAGES_ADAPTER: TypeAdapter[list[ChatCompletionMessage]] = TypeAdapter(
 )
 
 
-def _gateway_trace(flow: LLMFlow, llm: LLM) -> Trace:
-    return trace(
-        "llm_gateway",
-        metadata={"flow": flow.value, "model": llm.config.model_name},
-    )
+def _gateway_trace(flow: LLMFlow, model: str) -> Trace:
+    return trace("llm_gateway", metadata={"flow": flow.value, "model": model})
 
 
 def resolve_gateway_model(
@@ -245,7 +242,7 @@ def _stream_worker(
     # StreamingResponse, so the trace must be opened here rather than in the
     # endpoint for the generation span to see an active trace.
     with (
-        _gateway_trace(flow, llm),
+        _gateway_trace(flow, llm.config.model_name),
         llm_generation_span(
             llm, flow=flow, input_messages=messages, tools=tools
         ) as span,
@@ -435,7 +432,7 @@ def handle_chat_completion(
         )
 
     with (
-        _gateway_trace(flow, llm),
+        _gateway_trace(flow, llm.config.model_name),
         llm_generation_span(
             llm,
             flow=flow,
