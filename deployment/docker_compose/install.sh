@@ -275,13 +275,23 @@ print_success "onyx-cli installed to ${BIN_PATH}"
 # The rc file PATH entries should be added to for the user's shell; empty when
 # the shell isn't one this script knows how to configure.
 shell_profile() {
+    local p
     case "${SHELL##*/}" in
         zsh)
             echo "${ZDOTDIR:-$HOME}/.zshrc"
             ;;
         bash)
-            # macOS terminals open login shells, which skip .bashrc.
+            # macOS terminals open login shells, which skip .bashrc and read
+            # only the FIRST of these files that exists — append to that one.
+            # Creating .bash_profile above an existing .profile would shadow
+            # it and silently drop the user's setup.
             if [[ "$OS" == "darwin" ]]; then
+                for p in "${HOME}/.bash_profile" "${HOME}/.bash_login" "${HOME}/.profile"; do
+                    if [[ -f "$p" ]]; then
+                        echo "$p"
+                        return 0
+                    fi
+                done
                 echo "${HOME}/.bash_profile"
             else
                 echo "${HOME}/.bashrc"
@@ -299,9 +309,18 @@ shell_profile() {
 # when the shell is unrecognized or the profile can't be written; the caller
 # then falls back to printing manual instructions.
 persist_path() {
-    local profile line bin_dir_ref
+    local profile line bin_dir_ref unsafe
     profile="$(shell_profile)"
     if [[ -z "$profile" ]]; then
+        return 1
+    fi
+
+    # The directory is embedded in profile syntax, where quotes, dollars,
+    # backticks, backslashes, and newlines are shell-active rather than inert
+    # data. A path carrying any of those goes through the manual instructions
+    # instead of being written out as code.
+    unsafe="\"'\\\`\$"
+    if [[ "$BIN_DIR" == *["$unsafe"]* ]] || [[ "$BIN_DIR" == *$'\n'* ]]; then
         return 1
     fi
 
