@@ -17,6 +17,7 @@ from redis.lock import Lock as RedisLock
 from sqlalchemy.orm import Session as DBSession
 
 from onyx.db.models import Sandbox
+from onyx.db.users import fetch_user_by_id
 from onyx.redis.tenant_redis_client import TenantRedisClient
 from onyx.server.features.build.db.build_session import (
     get_active_session_ids_for_user,
@@ -29,7 +30,10 @@ from onyx.server.features.build.sandbox.models import (
 )
 from onyx.server.features.build.session.locks import get_session_creation_lock
 from onyx.server.features.build.session.sandbox_busy import sandbox_busy_claim
-from onyx.server.features.build.session.sandbox_lifecycle import sleep_sandbox
+from onyx.server.features.build.session.sandbox_lifecycle import (
+    provision_sandbox,
+    sleep_sandbox,
+)
 from onyx.utils.logger import setup_logger
 
 logger = setup_logger()
@@ -115,6 +119,16 @@ def _recycle_sandbox(
                     sandbox.id,
                 )
                 return False
+            # Compose discards the runtime, and opencode history lives in it.
+            if not _history_captured(sandbox_manager, sandbox, tenant_id):
+                return _rebuild_sandbox(
+                    db_session,
+                    sandbox_manager,
+                    redis_client,
+                    sandbox,
+                    target,
+                    tenant_id,
+                )
             outcome = sandbox_manager.move_to_image(sandbox.id, target)
     except Exception:
         logger.warning(
@@ -129,9 +143,75 @@ def _recycle_sandbox(
         logger.info("Recycled sandbox %s in place", sandbox.id)
         return True
 
+    if outcome is ImageMoveOutcome.NEEDS_PROVISION:
+        return _provision_after_move(db_session, sandbox_manager, sandbox, tenant_id)
+
     return _rebuild_sandbox(
         db_session, sandbox_manager, redis_client, sandbox, target, tenant_id
     )
+
+
+def _history_captured(
+    sandbox_manager: SandboxManager,
+    sandbox: Sandbox,
+    tenant_id: str,
+) -> bool:
+    """Snapshot the opencode history so a discarded runtime cannot take the chat
+    log with it. Fail closed: rebuilding snapshots anyway, so it keeps it."""
+    if not sandbox_manager.supports_opencode_history_persistence:
+        return False
+    try:
+        sandbox_manager.create_opencode_history_snapshot(sandbox.id, tenant_id)
+        return True
+    except Exception:
+        logger.warning(
+            "Could not capture opencode history for sandbox %s; leaving it in place",
+            sandbox.id,
+            exc_info=True,
+        )
+        return False
+
+
+def _provision_after_move(
+    db_session: DBSession,
+    sandbox_manager: SandboxManager,
+    sandbox: Sandbox,
+    tenant_id: str,
+) -> bool:
+    """Provision a sandbox whose runtime was discarded but whose workspace was
+    kept.
+
+    Reuses ``provision_sandbox`` verbatim, so the sandbox returns with a fresh
+    PAT, restored history, and managed content re-pushed against the new image.
+    """
+    user = fetch_user_by_id(db_session, sandbox.user_id)
+    if user is None:
+        logger.error(
+            "Sandbox %s has no user row and no runtime; the readiness path will "
+            "recover it",
+            sandbox.id,
+        )
+        return False
+
+    # No runtime from here: a failure leaves the row RUNNING with nothing behind
+    # it, which the readiness path recovers on the user's next request.
+    try:
+        provision_sandbox(
+            db_session, sandbox_manager, sandbox, user, sandbox.user_id, tenant_id
+        )
+        db_session.commit()
+    except Exception:
+        logger.error(
+            "Sandbox %s lost its runtime and could not be provisioned again; the "
+            "readiness path will recover it",
+            sandbox.id,
+            exc_info=True,
+        )
+        db_session.rollback()
+        return False
+
+    logger.info("Replaced sandbox %s runtime, keeping its workspaces", sandbox.id)
+    return True
 
 
 def _rebuild_sandbox(

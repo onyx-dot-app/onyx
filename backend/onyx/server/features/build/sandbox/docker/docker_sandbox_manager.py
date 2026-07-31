@@ -124,6 +124,7 @@ from onyx.server.features.build.sandbox.models import (
     CraftMCPServerConfig,
     FileSet,
     FilesystemEntry,
+    ImageMoveOutcome,
     SandboxImageState,
     SandboxImageTarget,
     SandboxInfo,
@@ -989,6 +990,45 @@ class DockerSandboxManager(SandboxManager):
                 logger.info("Sandbox container %s already exists, reusing.", sandbox_id)
                 return self._require_container(sandbox_id), False
             raise RuntimeError(f"Failed to create sandbox container: {e}") from e
+
+    def move_to_image(
+        self,
+        sandbox_id: UUID,
+        target: SandboxImageTarget,  # noqa: ARG002
+    ) -> ImageMoveOutcome:
+        """Remove the container, leaving the named volume for provisioning to
+        adopt, so the workspaces survive a move onto a new image.
+
+        A container's image is fixed at creation, so compose replaces the
+        container rather than swapping under it — hence ``NEEDS_PROVISION``,
+        which only the caller can do. ``target`` is unused: provisioning reads
+        the configured image, which is the one the state read vouched for.
+
+        Everything outside the volume goes, opencode history included, so callers
+        capture that first.
+        """
+        self._close_all_sandbox_buses(sandbox_id)
+
+        container = self._get_container(sandbox_id)
+        if container is None:
+            return ImageMoveOutcome.NEEDS_PROVISION
+
+        try:
+            container.remove(force=True, v=False)
+        except NotFound:
+            return ImageMoveOutcome.NEEDS_PROVISION
+        except APIError as e:
+            logger.warning(
+                "Could not remove sandbox container %s: %s", container.name, e
+            )
+            return ImageMoveOutcome.UNSUPPORTED
+
+        logger.info(
+            "Removed sandbox container %s, keeping volume %s",
+            container.name,
+            _sandbox_volume_name(sandbox_id),
+        )
+        return ImageMoveOutcome.NEEDS_PROVISION
 
     def terminate(self, sandbox_id: UUID) -> None:
         self._close_all_sandbox_buses(sandbox_id)

@@ -246,3 +246,152 @@ def test_busy_sandboxes_do_not_consume_the_budget(
 
     swapped = {call.args[0] for call in manager.move_to_image.call_args_list}
     assert swapped == {rows[2].id, rows[3].id}
+
+
+# --- what each backend can preserve -----------------------------------------
+
+
+@pytest.fixture
+def provisioned(monkeypatch: pytest.MonkeyPatch) -> list[UUID]:
+    """Sandboxes provisioned again after their runtime was replaced."""
+    done: list[UUID] = []
+
+    def fake_provision(
+        _db: Any, _mgr: Any, sandbox: Sandbox, *_a: Any, **_kw: Any
+    ) -> None:
+        done.append(sandbox.id)
+
+    monkeypatch.setattr(recycle, "provision_sandbox", fake_provision)
+    monkeypatch.setattr(recycle, "fetch_user_by_id", lambda *_a: MagicMock())
+    return done
+
+
+def _compose_manager(
+    *,
+    outcome: ImageMoveOutcome = ImageMoveOutcome.NEEDS_PROVISION,
+    history: bool = True,
+) -> MagicMock:
+    """Compose: cannot swap an image, but keeps workspaces outside the runtime."""
+    manager = _manager(live={}, outcome=outcome)
+    manager.supports_opencode_history_persistence = history
+    return manager
+
+
+def test_compose_replaces_the_runtime_and_keeps_the_workspace(
+    sandboxes: list[Sandbox], provisioned: list[UUID], rebuilt: list[UUID]
+) -> None:
+    """The workspace lives in a volume the container doesn't own."""
+    sandbox = _sandbox()
+    sandboxes.append(sandbox)
+    manager = _compose_manager()
+    manager.get_image_state.return_value = SandboxImageState(
+        target=TARGET, live_digests={sandbox.id: OLD_DIGEST}
+    )
+
+    _run(manager)
+
+    manager.move_to_image.assert_called_once_with(sandbox.id, TARGET)
+    assert provisioned == [sandbox.id]
+    assert rebuilt == []
+
+
+def test_history_is_captured_before_the_runtime_goes(
+    sandboxes: list[Sandbox], provisioned: list[UUID]
+) -> None:
+    """History lives in the discarded layer, so it is snapshotted first."""
+    sandbox = _sandbox()
+    sandboxes.append(sandbox)
+    manager = _compose_manager()
+    manager.get_image_state.return_value = SandboxImageState(
+        target=TARGET, live_digests={sandbox.id: OLD_DIGEST}
+    )
+    order: list[str] = []
+    manager.create_opencode_history_snapshot.side_effect = lambda *_a, **_kw: (
+        order.append("snapshot")
+    )
+    manager.move_to_image.side_effect = lambda *_a: (
+        order.append("move") or ImageMoveOutcome.NEEDS_PROVISION
+    )
+
+    _run(manager)
+
+    assert order == ["snapshot", "move"]
+    assert provisioned == [sandbox.id]
+
+
+def test_failed_history_capture_falls_through_to_rebuilding(
+    sandboxes: list[Sandbox], provisioned: list[UUID], rebuilt: list[UUID]
+) -> None:
+    """Fail closed: without the snapshot the history would be silently lost."""
+    sandbox = _sandbox()
+    sandboxes.append(sandbox)
+    manager = _compose_manager()
+    manager.get_image_state.return_value = SandboxImageState(
+        target=TARGET, live_digests={sandbox.id: OLD_DIGEST}
+    )
+    manager.create_opencode_history_snapshot.side_effect = RuntimeError("no filestore")
+
+    _run(manager)
+
+    manager.move_to_image.assert_not_called()
+    assert provisioned == []
+    assert rebuilt == [sandbox.id]
+
+
+@pytest.mark.usefixtures("provisioned")
+def test_backend_without_history_persistence_rebuilds_instead(
+    sandboxes: list[Sandbox], rebuilt: list[UUID]
+) -> None:
+    """Nothing would restore the history a discarded runtime holds."""
+    sandbox = _sandbox()
+    sandboxes.append(sandbox)
+    manager = _compose_manager(history=False)
+    manager.get_image_state.return_value = SandboxImageState(
+        target=TARGET, live_digests={sandbox.id: OLD_DIGEST}
+    )
+
+    _run(manager)
+
+    manager.move_to_image.assert_not_called()
+    assert rebuilt == [sandbox.id]
+
+
+def test_unsupported_move_falls_through_to_rebuilding(
+    sandboxes: list[Sandbox], provisioned: list[UUID], rebuilt: list[UUID]
+) -> None:  # noqa: ARG001
+    """A move that can't happen still has to get the sandbox off the old image."""
+    sandbox = _sandbox()
+    sandboxes.append(sandbox)
+    manager = _compose_manager(outcome=ImageMoveOutcome.UNSUPPORTED)
+    manager.get_image_state.return_value = SandboxImageState(
+        target=TARGET, live_digests={sandbox.id: OLD_DIGEST}
+    )
+
+    _run(manager)
+
+    assert provisioned == []
+    assert rebuilt == [sandbox.id]
+
+
+def test_provisioning_failure_does_not_then_rebuild(
+    sandboxes: list[Sandbox], monkeypatch: pytest.MonkeyPatch, rebuilt: list[UUID]
+) -> None:
+    """Rebuilding here would destroy what the move preserved: with no runtime to
+    snapshot, the rebuild path terminates and takes the workspace volume with it.
+    Stopping leaves it for the readiness path instead."""
+    sandbox = _sandbox()
+    sandboxes.append(sandbox)
+    manager = _compose_manager()
+    manager.get_image_state.return_value = SandboxImageState(
+        target=TARGET, live_digests={sandbox.id: OLD_DIGEST}
+    )
+    monkeypatch.setattr(recycle, "fetch_user_by_id", lambda *_a: MagicMock())
+
+    def boom(*_a: Any, **_kw: Any) -> None:
+        raise RuntimeError("daemon refused")
+
+    monkeypatch.setattr(recycle, "provision_sandbox", boom)
+
+    _run(manager)
+
+    assert rebuilt == []
