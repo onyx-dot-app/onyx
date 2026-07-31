@@ -472,7 +472,7 @@ export default function LanguageModelsPage() {
 
         {/* ── Add Provider groups (always visible) ── */}
         <Disabled disabled={isConfigurationDisabled}>
-          <div className="flex flex-col gap-8">
+          <div className="@container/providercards flex flex-col gap-8">
             {PROVIDER_GROUPS.map((group) => (
               <GeneralLayouts.Section
                 key={group.title}
@@ -494,7 +494,7 @@ export default function LanguageModelsPage() {
                   </Text>
                 )}
 
-                <div className="grid grid-cols-2 gap-2">
+                <div className="grid grid-cols-1 @xl/providercards:grid-cols-2 gap-2">
                   {group.providerNames.map((name) => (
                     <NewProviderCard
                       key={name}
