@@ -827,15 +827,16 @@ def sandbox_mutation_window(
     sandbox: Sandbox,
     session_creation_lock: RedisLock,
     *,
-    still_eligible: Callable[[], bool],
+    still_eligible: Callable[[], bool] | None = None,
 ) -> Iterator[bool]:
     """The exclusive window in which a live sandbox may be mutated, yielding
     whether the caller may proceed.
 
-    Deciding and acting can be minutes apart, so all three preconditions are
-    checked here: session creation excluded for the whole block, the row still
-    RUNNING, and the caller's own reason still valid. ``still_eligible`` owns its
-    logging — only the caller knows what it was waiting for.
+    Deciding and acting can be minutes apart, so the preconditions are checked
+    here: session creation excluded for the whole block, the row still RUNNING,
+    and — for a caller that has one — its own reason still valid.
+    ``still_eligible`` owns its logging; only the caller knows what it was
+    waiting for.
     """
     with _exclude_session_creation(session_creation_lock) as excluded:
         if not excluded:
@@ -856,7 +857,7 @@ def sandbox_mutation_window(
             yield False
             return
 
-        yield still_eligible()
+        yield still_eligible() if still_eligible is not None else True
 
 
 def sleep_sandbox(

@@ -6,24 +6,31 @@ anything uncertain leaves it alone and tries again next pass.
 
 from __future__ import annotations
 
-from contextlib import contextmanager
-from typing import Any, Iterator
+from contextlib import AbstractContextManager, contextmanager
+from typing import Any, Iterator, cast
 from unittest.mock import MagicMock
 from uuid import UUID, uuid4
 
 import pytest
 
 import onyx.server.features.build.session.sandbox_recycle as recycle
+from onyx.db.enums import SandboxStatus
 from onyx.db.models import Sandbox
+from onyx.server.features.build.sandbox.base import SandboxManager
 from onyx.server.features.build.sandbox.models import (
     ImageMoveOutcome,
     SandboxImageState,
     SandboxImageTarget,
 )
+from onyx.server.features.build.sandbox.serve_transport import PromptSlot
 from onyx.server.features.build.session.sandbox_busy import (
     SandboxBusyClaim,
     SandboxBusyKind,
 )
+
+# The barrier's own tests need the real thing; the autouse fixture below replaces
+# it for every other test in the file.
+_REAL_PROMPT_BARRIER = recycle._no_prompts_in_flight
 
 TARGET = SandboxImageTarget(
     ref="docker.io/onyxdotapp/sandbox@sha256:" + "b" * 64,
@@ -32,8 +39,8 @@ TARGET = SandboxImageTarget(
 OLD_DIGEST = "sha256:" + "a" * 64
 
 
-def _sandbox() -> Sandbox:
-    return Sandbox(id=uuid4(), user_id=uuid4())
+def _sandbox(status: SandboxStatus = SandboxStatus.RUNNING) -> Sandbox:
+    return Sandbox(id=uuid4(), user_id=uuid4(), status=status)
 
 
 def _manager(
@@ -85,9 +92,21 @@ def rebuilt(monkeypatch: pytest.MonkeyPatch) -> list[UUID]:
     return slept
 
 
-def _run(manager: MagicMock) -> None:
+@pytest.fixture
+def creation_lock() -> MagicMock:
+    """The per-user session-creation lock, free unless a test says otherwise."""
+    lock = MagicMock()
+    lock.acquire.return_value = True
+    lock.owned.return_value = True
+    return lock
+
+
+def _run(manager: MagicMock, creation_lock: MagicMock | None = None) -> None:
+    redis_client = MagicMock()
+    if creation_lock is not None:
+        redis_client.lock.return_value = creation_lock
     recycle.recycle_sandboxes_on_stale_images(
-        MagicMock(), manager, MagicMock(), "tenant"
+        MagicMock(), manager, redis_client, "tenant"
     )
 
 
@@ -175,6 +194,36 @@ def test_a_prompt_starting_first_defers_the_recycle(
     assert rebuilt == []
 
 
+def test_a_session_being_created_defers_the_recycle(
+    sandboxes: list[Sandbox], creation_lock: MagicMock, rebuilt: list[UUID]
+) -> None:
+    """Session setup execs into the sandbox holding no prompt slot, so only the
+    creation lock can see it — restarting under it fails the session."""
+    sandbox = _sandbox()
+    sandboxes.append(sandbox)
+    creation_lock.acquire.return_value = False
+    manager = _manager(live={sandbox.id: OLD_DIGEST})
+
+    _run(manager, creation_lock)
+
+    manager.move_to_image.assert_not_called()
+    assert rebuilt == []
+
+
+def test_a_sandbox_that_stopped_running_is_left_alone(
+    sandboxes: list[Sandbox], rebuilt: list[UUID]
+) -> None:
+    """A pass can span minutes of swaps; the row is re-read under the lock."""
+    sandbox = _sandbox(status=SandboxStatus.SLEEPING)
+    sandboxes.append(sandbox)
+    manager = _manager(live={sandbox.id: OLD_DIGEST})
+
+    _run(manager)
+
+    manager.move_to_image.assert_not_called()
+    assert rebuilt == []
+
+
 def test_backend_that_cannot_swap_falls_back_to_rebuilding(
     sandboxes: list[Sandbox], rebuilt: list[UUID]
 ) -> None:
@@ -201,6 +250,22 @@ def test_a_swap_that_raises_falls_back_to_rebuilding(
     _run(manager)
 
     assert rebuilt == [sandbox.id]
+
+
+def test_a_disrupted_swap_is_not_rebuilt(
+    sandboxes: list[Sandbox], rebuilt: list[UUID]
+) -> None:
+    """The move landed and did not come up: the old runtime is already gone, so
+    snapshotting the pod would risk terminating a workspace it cannot capture."""
+    sandbox = _sandbox()
+    sandboxes.append(sandbox)
+    manager = _manager(
+        live={sandbox.id: OLD_DIGEST}, outcome=ImageMoveOutcome.DISRUPTED
+    )
+
+    _run(manager)
+
+    assert rebuilt == []
 
 
 def test_recycles_are_bounded_per_pass(
@@ -246,3 +311,106 @@ def test_busy_sandboxes_do_not_consume_the_budget(
 
     swapped = {call.args[0] for call in manager.move_to_image.call_args_list}
     assert swapped == {rows[2].id, rows[3].id}
+
+
+def test_a_pass_is_bounded_by_wall_clock_too(
+    sandboxes: list[Sandbox], monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """The restart count doesn't bound the tick: one slow swap can cost a minute,
+    and the idle reaps sharing this sweep wait behind them."""
+
+    class _Clock:
+        now = 0.0
+
+        def monotonic(self) -> float:
+            return self.now
+
+    clock = _Clock()
+    monkeypatch.setattr(recycle, "time", clock)
+    monkeypatch.setattr(recycle, "_MAX_RECYCLE_SECONDS_PER_PASS", 180.0)
+
+    live = {}
+    for _ in range(5):
+        sandbox = _sandbox()
+        sandboxes.append(sandbox)
+        live[sandbox.id] = OLD_DIGEST
+    manager = _manager(live=live)
+
+    def slow_swap(*_a: Any, **_kw: Any) -> ImageMoveOutcome:
+        clock.now += 100.0
+        return ImageMoveOutcome.MOVED
+
+    manager.move_to_image.side_effect = slow_swap
+
+    _run(manager)
+
+    assert manager.move_to_image.call_count == 2
+
+
+class _SlotManager:
+    """A manager whose prompt slots record what was asked for and held."""
+
+    def __init__(self, refuse: set[UUID] | None = None) -> None:
+        self.refuse = refuse or set()
+        self.requested: list[UUID] = []
+        self.held: list[UUID] = []
+        self.kwargs: dict[str, Any] = {}
+
+    @contextmanager
+    def prompt_slot(
+        self, _sandbox_id: UUID, session_id: UUID, **kwargs: Any
+    ) -> Iterator[PromptSlot]:
+        self.requested.append(session_id)
+        self.kwargs = kwargs
+        acquired = session_id not in self.refuse
+        if acquired:
+            self.held.append(session_id)
+        try:
+            yield PromptSlot(acquired=acquired)
+        finally:
+            if acquired:
+                self.held.remove(session_id)
+
+
+def _barrier(
+    manager: _SlotManager, session_ids: list[UUID]
+) -> AbstractContextManager[bool]:
+    """The real barrier over a manager that only implements ``prompt_slot``."""
+    return _REAL_PROMPT_BARRIER(cast(SandboxManager, manager), uuid4(), session_ids)
+
+
+def test_the_barrier_holds_every_session_slot_at_once() -> None:
+    """One sandbox serves all the user's sessions, so a prompt on any of them
+    would be interrupted by the restart."""
+    manager = _SlotManager()
+    session_ids = [uuid4(), uuid4(), uuid4()]
+
+    with _barrier(manager, session_ids) as held:
+        assert held
+        assert manager.held == session_ids
+
+    assert manager.held == []
+
+
+def test_the_barrier_fails_closed_and_stops_asking() -> None:
+    """A refusal is the answer; the slots already taken are given straight back
+    rather than held while we ask the rest."""
+    session_ids = [uuid4(), uuid4(), uuid4()]
+    manager = _SlotManager(refuse={session_ids[1]})
+
+    with _barrier(manager, session_ids) as held:
+        assert not held
+
+    assert manager.requested == session_ids[:2]
+    assert manager.held == []
+
+
+def test_the_barrier_never_waits_and_never_assumes_a_free_slot() -> None:
+    """A sweep must not block on a live turn, and a cache that cannot answer is
+    not permission to restart the sandbox."""
+    manager = _SlotManager()
+
+    with _barrier(manager, [uuid4()]):
+        pass
+
+    assert manager.kwargs == {"acquire_timeout": 0.0, "fail_open": False}

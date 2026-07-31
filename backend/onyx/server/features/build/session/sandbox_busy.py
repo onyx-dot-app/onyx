@@ -11,7 +11,9 @@ A prompt already streaming is out of scope — ``prompt_slot`` serialises those,
 a caller about to disturb a sandbox should acquire them rather than poll.
 """
 
+from collections.abc import Sequence
 from enum import Enum
+from uuid import UUID
 
 from pydantic import BaseModel, ConfigDict
 from sqlalchemy.orm import Session as DBSession
@@ -47,26 +49,31 @@ def sandbox_busy_claim(
     sandbox: Sandbox,
     *,
     cache: CacheBackend | None = None,
+    session_ids: Sequence[UUID] | None = None,
 ) -> SandboxBusyClaim | None:
-    """The first claim found on this sandbox, cheapest probe first, or None."""
-    cache = cache or get_cache_backend()
-    for probe in (_interactive_turn_claim, _scheduled_run_claim):
-        claim = probe(db_session, sandbox, cache)
-        if claim is not None:
-            return claim
-    return None
+    """The first claim found on this sandbox, cheapest probe first, or None.
+
+    ``session_ids`` lets a caller that has already resolved the user's live
+    sessions — under a lock that keeps the set from growing — reuse them instead
+    of reading them again.
+    """
+    if session_ids is None:
+        session_ids = get_live_session_ids_for_user(sandbox.user_id, db_session)
+    return _interactive_turn_claim(
+        sandbox, session_ids, cache or get_cache_backend()
+    ) or _scheduled_run_claim(db_session, sandbox)
 
 
 def _interactive_turn_claim(
-    db_session: DBSession,
     sandbox: Sandbox,
+    session_ids: Sequence[UUID],
     cache: CacheBackend,
 ) -> SandboxBusyClaim | None:
     """A queued or running turn on any of the user's live sessions.
 
     Queued counts: the user has already been told the message was accepted.
     """
-    for session_id in get_live_session_ids_for_user(sandbox.user_id, db_session):
+    for session_id in session_ids:
         turn = get_active_turn(
             cache=cache,
             session_id=session_id,
@@ -83,7 +90,6 @@ def _interactive_turn_claim(
 def _scheduled_run_claim(
     db_session: DBSession,
     sandbox: Sandbox,
-    cache: CacheBackend,  # noqa: ARG001
 ) -> SandboxBusyClaim | None:
     """A scheduled run that has not finished, including one awaiting approval —
     that one waits on a person and will resume in this sandbox."""

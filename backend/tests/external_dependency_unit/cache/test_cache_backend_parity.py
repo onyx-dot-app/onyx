@@ -84,6 +84,20 @@ class TestLockParity:
         lock.release()
         assert not lock.owned()
 
+    def test_zero_blocking_timeout_fails_fast(self, cache: CacheBackend) -> None:
+        """``blocking_timeout=0`` means try once — never fall back to the lock's
+        own timeout, which turns a caller's fast fail into a long wait."""
+        name = f"parity_lock_{uuid4().hex[:8]}"
+        holder = cache.lock(name, timeout=30)
+        assert holder.acquire(blocking=False)
+        try:
+            contender = cache.lock(name, timeout=30)
+            started = time.monotonic()
+            assert not contender.acquire(blocking=True, blocking_timeout=0)
+            assert time.monotonic() - started < 1.0
+        finally:
+            holder.release()
+
 
 class TestListParity:
     def test_rpush_blpop(self, cache: CacheBackend) -> None:

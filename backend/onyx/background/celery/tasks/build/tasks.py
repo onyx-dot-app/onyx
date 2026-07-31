@@ -59,7 +59,9 @@ def cleanup_idle_sandboxes_task(self: Task, *, tenant_id: str) -> None:  # noqa:
     RUNNING for retry next sweep.
 
     Image recycling rides the same tick: same rows, same "is anyone using this?"
-    question, and one lock keeps a reap and a recycle off the same pod.
+    question, and one lock keeps a reap and a recycle off the same pod. It is
+    bounded in wall clock so a rollout cannot push the rest of the sweep behind
+    it.
     """
     task_logger.info(f"cleanup_idle_sandboxes_task starting for tenant {tenant_id}")
 

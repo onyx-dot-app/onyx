@@ -83,9 +83,16 @@ class PostgresCacheLock(CacheLock):
             if not blocking:
                 return self._try_lock()
 
-            effective_timeout = blocking_timeout or self._timeout
+            # `is None` rather than falsy: blocking_timeout=0 means "try once",
+            # and turning that into the lock's own timeout would block a caller
+            # that asked for a fast fail.
+            effective_timeout = (
+                blocking_timeout if blocking_timeout is not None else self._timeout
+            )
             deadline = (
-                (time.monotonic() + effective_timeout) if effective_timeout else None
+                (time.monotonic() + effective_timeout)
+                if effective_timeout is not None
+                else None
             )
             while True:
                 if self._try_lock():

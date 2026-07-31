@@ -386,6 +386,11 @@ class SandboxManager(_ServeMixin, ABC):
         ``target`` must be one :meth:`get_image_state` vouched for: a sandbox
         restarted onto an image its host lacks cannot serve anything. Only safe
         when no chat work is in flight, which the caller owns.
+
+        The outcome must distinguish having changed nothing (``UNSUPPORTED``,
+        safe to retry another way) from having started a move that did not
+        finish (``DISRUPTED``): only the backend knows which, and the caller's
+        fallbacks assume a pod that was left alone.
         """
         return ImageMoveOutcome.UNSUPPORTED
 

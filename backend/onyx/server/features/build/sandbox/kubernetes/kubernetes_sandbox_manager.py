@@ -704,6 +704,10 @@ class KubernetesSandboxManager(SandboxManager):
         Agent and sidecar go in one patch — a half-swapped pod would pair a new
         agent with an old daemon. Never ``NEEDS_PROVISION``: the workspaces are
         emptyDirs that die with the pod, so they cannot outlive it.
+
+        Once the patch lands the old container is gone whatever happens next, so
+        a failed wait is ``DISRUPTED``, not ``UNSUPPORTED``: the caller must not
+        answer it by snapshotting a pod that may be mid-restart.
         """
         pod_name = self._get_pod_name(str(sandbox_id))
         try:
@@ -735,7 +739,7 @@ class KubernetesSandboxManager(SandboxManager):
         deadline = time.monotonic() + _IMAGE_SWAP_TIMEOUT_SECONDS
         if self._wait_for_swap(sandbox_id, pod_name, target, deadline):
             return ImageMoveOutcome.MOVED
-        return ImageMoveOutcome.UNSUPPORTED
+        return ImageMoveOutcome.DISRUPTED
 
     def _wait_for_swap(
         self,

@@ -63,6 +63,11 @@ class ImageMoveOutcome(str, Enum):
     MOVED = "moved"
     # Runtime discarded, workspace kept; only the caller can provision.
     NEEDS_PROVISION = "needs_provision"
+    # The move was applied but the sandbox did not come back on it. Nothing to
+    # fall back to: the old runtime is already gone, so a caller must leave the
+    # sandbox alone rather than reach for a path that assumes a healthy pod.
+    DISRUPTED = "disrupted"
+    # Nothing was touched; the sandbox is exactly as it was.
     UNSUPPORTED = "unsupported"
 
 

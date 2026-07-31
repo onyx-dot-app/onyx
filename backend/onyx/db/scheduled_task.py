@@ -327,6 +327,11 @@ def advance_next_run_at(
 # Run CRUD
 # ---------------------------------------------------------------------------
 
+# Derived from ``is_terminal`` so a new status counts as in-flight by default.
+_NON_TERMINAL_RUN_STATUSES = tuple(
+    status for status in ScheduledTaskRunStatus if not status.is_terminal()
+)
+
 
 def has_in_flight_run_for_task(
     *,
@@ -360,23 +365,21 @@ def get_unfinished_run_for_user(
     db_session: Session,
     user_id: UUID,
 ) -> ScheduledTaskRun | None:
-    """The user's oldest run that has not reached a terminal status, if any.
+    """One of the user's runs that has not reached a terminal status, if any.
 
     "Unfinished" deliberately includes ``AWAITING_APPROVAL`` alongside QUEUED
     and RUNNING: a run parked on an approval gate still owns the user's sandbox
     and will resume in it, so anything asking "is this sandbox committed to
-    work?" has to count it.
+    work?" has to count it. Which run is returned doesn't matter — any one of
+    them disqualifies the sandbox.
     """
     stmt = (
         select(ScheduledTaskRun)
         .join(ScheduledTask, ScheduledTaskRun.task_id == ScheduledTask.id)
         .where(
             ScheduledTask.user_id == user_id,
-            ScheduledTaskRun.status.notin_(
-                [s for s in ScheduledTaskRunStatus if s.is_terminal()]
-            ),
+            ScheduledTaskRun.status.in_(_NON_TERMINAL_RUN_STATUSES),
         )
-        .order_by(ScheduledTaskRun.started_at)
         .limit(1)
     )
     return db_session.execute(stmt).scalars().first()

@@ -106,26 +106,26 @@ def test_swap_waits_for_the_runtime_not_the_spec() -> None:
     actually restarted the container."""
     mgr, _, sidecar = _manager(pods=[_pod(digest=OLD_DIGEST)])
 
-    assert mgr.move_to_image(SANDBOX_ID, TARGET) is ImageMoveOutcome.UNSUPPORTED
+    assert mgr.move_to_image(SANDBOX_ID, TARGET) is ImageMoveOutcome.DISRUPTED
 
 
 def test_swap_waits_for_readiness() -> None:
     """A restarted container that isn't ready cannot take a turn."""
     mgr, _, sidecar = _manager(pods=[_pod(digest=NEW_DIGEST, ready=False)])
 
-    assert mgr.move_to_image(SANDBOX_ID, TARGET) is ImageMoveOutcome.UNSUPPORTED
+    assert mgr.move_to_image(SANDBOX_ID, TARGET) is ImageMoveOutcome.DISRUPTED
 
 
 def test_swap_waits_for_the_sidecar() -> None:
     mgr, _, sidecar = _manager(pods=[_pod(digest=NEW_DIGEST)], sidecar_healthy=False)
 
-    assert mgr.move_to_image(SANDBOX_ID, TARGET) is ImageMoveOutcome.UNSUPPORTED
+    assert mgr.move_to_image(SANDBOX_ID, TARGET) is ImageMoveOutcome.DISRUPTED
 
 
 @pytest.mark.parametrize("status", [403, 422])
 def test_swap_declines_when_the_cluster_refuses(status: int) -> None:
-    """No `patch` permission, or a cluster rejecting the mutation. Both fall
-    back to rebuilding rather than raising."""
+    """No `patch` permission, or a cluster rejecting the mutation. Nothing was
+    touched, so both fall back to rebuilding rather than raising."""
     mgr, core_api, _sidecar = _manager(pods=[_pod(digest=OLD_DIGEST)])
     core_api.patch_namespaced_pod.side_effect = ApiException(status=status)
 
@@ -139,15 +139,16 @@ def test_swap_declines_when_the_pod_is_gone() -> None:
     assert mgr.move_to_image(SANDBOX_ID, TARGET) is ImageMoveOutcome.UNSUPPORTED
 
 
-def test_swap_declines_when_the_pod_vanishes_mid_swap() -> None:
-    """Evicted between the patch and the restart."""
+def test_swap_reports_disruption_when_the_pod_vanishes_mid_swap() -> None:
+    """Evicted between the patch and the restart. Past the patch the old
+    container is gone whatever happened next, so this is never UNSUPPORTED."""
     mgr, core_api, _sidecar = _manager(pods=[_pod(digest=OLD_DIGEST)])
     core_api.read_namespaced_pod.side_effect = [
         _pod(digest=OLD_DIGEST),
         ApiException(status=404),
     ]
 
-    assert mgr.move_to_image(SANDBOX_ID, TARGET) is ImageMoveOutcome.UNSUPPORTED
+    assert mgr.move_to_image(SANDBOX_ID, TARGET) is ImageMoveOutcome.DISRUPTED
 
 
 def test_kubernetes_never_asks_the_caller_to_provision() -> None:
@@ -194,12 +195,12 @@ def test_swap_requires_the_target_digest_not_merely_a_change() -> None:
         pods=[_pod(digest=None), _pod(digest=OLD_DIGEST), _pod(digest=OLD_DIGEST)]
     )
 
-    assert mgr.move_to_image(SANDBOX_ID, TARGET) is ImageMoveOutcome.UNSUPPORTED
+    assert mgr.move_to_image(SANDBOX_ID, TARGET) is ImageMoveOutcome.DISRUPTED
 
 
 def test_swap_accepts_a_sandbox_already_on_the_target() -> None:
     """Comparing against the target rather than a change also stops a correct
-    sandbox from being reported UNSUPPORTED and rebuilt for no reason."""
+    sandbox from being reported as a failed move and rebuilt for no reason."""
     mgr, _, _sidecar = _manager(pods=[_pod(digest=NEW_DIGEST)])
 
     assert mgr.move_to_image(SANDBOX_ID, TARGET) is ImageMoveOutcome.MOVED
