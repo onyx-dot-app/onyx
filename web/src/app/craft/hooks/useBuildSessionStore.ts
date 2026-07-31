@@ -180,6 +180,17 @@ function convertMessagesToStreamItems(messages: BuildMessage[]): StreamItem[] {
         });
         break;
 
+      case "error":
+        // Persisted terminal-failure rows (e.g. turn hard-cap).
+        if (packet.message) {
+          items.push({
+            type: "error",
+            id: message.id || genId("error"),
+            content: packet.message,
+          });
+        }
+        break;
+
       default:
         break;
     }

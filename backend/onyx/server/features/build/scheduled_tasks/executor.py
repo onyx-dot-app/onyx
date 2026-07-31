@@ -62,7 +62,8 @@ from onyx.server.features.build.session.manager import SessionManager
 from onyx.server.features.build.session.streaming import BuildStreamingState
 from onyx.server.features.build.timeouts import (
     PROVISION_WAIT_SECONDS,
-    TURN_BUDGET_SECONDS,
+    SCHEDULED_RUN_HARD_CAP_SECONDS,
+    SCHEDULED_RUN_SOFT_BUDGET_SECONDS,
 )
 from onyx.utils.logger import setup_logger
 
@@ -163,7 +164,7 @@ def _notify(
 def run_scheduled_task_logic(
     run_id: UUID,
     *,
-    budget_seconds: int = TURN_BUDGET_SECONDS,
+    budget_seconds: int = SCHEDULED_RUN_HARD_CAP_SECONDS,
 ) -> None:
     """Execute a single scheduled-task run end-to-end.
 
@@ -417,6 +418,14 @@ def _drive_agent(
             db_session.commit()
             return False
         try:
+            session_manager.stamp_turn_deadline(
+                sandbox_id,
+                session_id,
+                soft_budget_seconds=min(
+                    SCHEDULED_RUN_SOFT_BUDGET_SECONDS, budget_seconds
+                ),
+                hard_cap_seconds=budget_seconds,
+            )
             for sandbox_event in session_manager.yield_sandbox_events(
                 sandbox_id,
                 session_id,

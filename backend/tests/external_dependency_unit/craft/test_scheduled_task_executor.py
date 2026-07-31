@@ -253,7 +253,7 @@ def test_cleanup_stuck_runs_marks_running_over_threshold_failed(
 ) -> None:
     """A RUNNING run older than the running threshold → ``cleanup_stuck_scheduled_runs`` marks it FAILED.
 
-    Production threshold is ``TURN_BUDGET_SECONDS + TURN_RECLAIM_SLACK_SECONDS``
+    Production threshold is ``SCHEDULED_RUN_HARD_CAP_SECONDS + TURN_RECLAIM_SLACK_SECONDS``
     (i.e. 45 min). Backdating ``started_at`` by 50 min puts the run past that.
     """
     user = make_user(db_session)

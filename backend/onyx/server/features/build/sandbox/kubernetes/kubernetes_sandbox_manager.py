@@ -174,6 +174,8 @@ _OPENCODE_SESSION_TAG_PLUGIN_PATH = "/workspace/opencode-plugins/session-proxy-t
 # Surfaces the no-op `connect_app` tool; always on. Its "ask" permission is what
 # the api-server intercepts to drive the connect-app OAuth flow.
 _OPENCODE_CONNECT_APP_PLUGIN_PATH = "/workspace/opencode-plugins/connect-app.ts"
+# Soft turn-budget wrap-up steer (reads the per-turn deadline stamp).
+_OPENCODE_TURN_BUDGET_PLUGIN_PATH = "/workspace/opencode-plugins/turn-budget.ts"
 
 
 _PROXY_RESOLVE_RETRY_ATTEMPTS = 5
@@ -1105,6 +1107,7 @@ class KubernetesSandboxManager(SandboxManager):
                     disabled_tools=OPENCODE_DISABLED_TOOLS,
                     plugins=[
                         _OPENCODE_CONNECT_APP_PLUGIN_PATH,
+                        _OPENCODE_TURN_BUDGET_PLUGIN_PATH,
                         _OPENCODE_SESSION_TAG_PLUGIN_PATH,
                     ],
                 )

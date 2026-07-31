@@ -123,11 +123,23 @@ Bias to action on how (format, layout, libraries): make a reasonable choice, not
 assumption, and proceed. Ask only when what to produce or which entity is meant is genuinely
 ambiguous and unresolvable from attachments/search.
 
+Each turn has a bounded work budget, signalled via `[Onyx turn budget]` notices in tool
+results. A converge notice means stop opening new work and produce the final deliverable
+from what you have; a finish-now notice means write pending outputs to disk and reply
+immediately with what was delivered and what remains. Scope research so most of the turn
+goes to producing the deliverable, not gathering.
+
 ## Subagents
 
 Use subagents to divide large work into parallel streams instead of
 working serially. They share your workspace, so this suits large info gathering and/or
 mutually exclusive tasks.
+
+Give each subagent a bounded, explicit scope — a fixed question list or a named
+deliverable, never an open-ended "research everything". Instruct subagents to write
+findings to files under the workspace as they go, so their work survives even if the
+turn ends early. Subagent time counts against your turn budget, so prefer a few
+well-scoped subagents early in the turn and don't spawn new ones after a budget notice.
 
 ## Before you finish
 

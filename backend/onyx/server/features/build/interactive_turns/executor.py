@@ -39,9 +39,10 @@ from onyx.server.features.build.session.interrupt_signal import (
 from onyx.server.features.build.session.manager import SessionManager
 from onyx.server.features.build.session.streaming import BuildStreamingState
 from onyx.server.features.build.timeouts import (
+    INTERACTIVE_TURN_HARD_CAP_SECONDS,
+    INTERACTIVE_TURN_SOFT_BUDGET_SECONDS,
     PROMPT_SLOT_FAST_FAIL_ACQUIRE_SECONDS,
     PROMPT_SLOT_WAIT_OUT_ORPHAN_SECONDS,
-    TURN_BUDGET_SECONDS,
 )
 from onyx.utils.logger import setup_logger
 from shared_configs.contextvars import (
@@ -57,6 +58,11 @@ _TOOL_TIMEOUT_CONTINUATION_PROMPT = (
     f"{int(OPENCODE_PROMPT_INACTIVITY_TIMEOUT_SECONDS)}s activity limit with no "
     "output. Don't just retry it; split the work into shorter steps or run it in "
     "the background, then continue."
+)
+
+
+_TURN_ERROR_SUFFIX = (
+    "Files written to the workspace are saved — send a follow-up message to continue."
 )
 
 
@@ -130,9 +136,13 @@ def start_interactive_turn_runner(turn_id: UUID) -> None:
 def run_claimed_interactive_build_turn(
     turn: InteractiveTurn,
     *,
-    budget_seconds: int = TURN_BUDGET_SECONDS,
+    budget_seconds: int = INTERACTIVE_TURN_HARD_CAP_SECONDS,
 ) -> None:
-    """Execute a turn that this runner has already claimed in CacheBackend."""
+    """Execute a turn that this runner has already claimed in CacheBackend.
+
+    ``budget_seconds`` is the hard cap; the soft wrap-up steer is sandbox-side
+    (turn-budget plugin).
+    """
     cache = get_cache_backend()
     runner_id = turn.runner_id
     try:
@@ -202,6 +212,19 @@ def _drive_interactive_turn(
                 )
                 return False
 
+        def persist_turn_error(message: str) -> None:
+            """Best-effort user-visible failure row; never blocks finish_turn."""
+            try:
+                db_session.rollback()
+                session_manager.persist_turn_error(
+                    session_id, turn_index, f"{message} {_TURN_ERROR_SUFFIX}"
+                )
+                db_session.commit()
+            except Exception:
+                logger.exception(
+                    "Failed to persist turn error message for turn %s", turn_id
+                )
+
         prompt_slot_cm = session_manager.prompt_slot(
             sandbox.id,
             session_id,
@@ -237,6 +260,17 @@ def _drive_interactive_turn(
                 raise RuntimeError("Craft session owner or session no longer exists")
             session_manager.reconcile_session_llm_config(sandbox, session, user)
             db_session.commit()
+
+            # Only while holding the slot — a racing loser must not overwrite
+            # the live turn's stamp. Continuations don't restamp.
+            session_manager.stamp_turn_deadline(
+                sandbox.id,
+                session_id,
+                soft_budget_seconds=min(
+                    INTERACTIVE_TURN_SOFT_BUDGET_SECONDS, budget_seconds
+                ),
+                hard_cap_seconds=budget_seconds,
+            )
 
             if interrupt_requested():
                 session_manager.finalize_persist(session_id, state)
@@ -293,6 +327,9 @@ def _drive_interactive_turn(
                         ownership_lost = True
                         session_manager.finalize_persist(session_id, state)
                         db_session.commit()
+                        persist_turn_error(
+                            "This turn was interrupted and could not finish."
+                        )
                         finish_turn(
                             cache=cache,
                             turn_id=turn_id,
@@ -319,6 +356,7 @@ def _drive_interactive_turn(
                     if isinstance(sandbox_event, SandboxError):
                         session_manager.finalize_persist(session_id, state)
                         db_session.commit()
+                        persist_turn_error(sandbox_event.message)
                         finish_turn(
                             cache=cache,
                             turn_id=turn_id,
@@ -371,16 +409,23 @@ def _drive_interactive_turn(
             db_session.commit()
 
             if deadline_exceeded:
+                persist_turn_error(
+                    "This turn was stopped after reaching its "
+                    f"{max(1, round(budget_seconds / 60))}-minute time limit."
+                )
                 finish_turn(
                     cache=cache,
                     turn_id=turn_id,
                     status=TURN_STATUS_FAILED,
-                    error_detail=f"budget exceeded ({budget_seconds}s)",
+                    error_detail=f"hard time cap exceeded ({budget_seconds}s)",
                     runner_id=runner_id,
                 )
                 return
 
             if not result.final_event_seen:
+                persist_turn_error(
+                    "This turn ended before the agent returned a final response."
+                )
                 finish_turn(
                     cache=cache,
                     turn_id=turn_id,
@@ -413,6 +458,7 @@ def _drive_interactive_turn(
                 db_session.commit()
             except Exception:
                 logger.exception("Failed to finalize persistence for turn %s", turn_id)
+            persist_turn_error("This turn failed unexpectedly.")
             finish_turn(
                 cache=cache,
                 turn_id=turn_id,
