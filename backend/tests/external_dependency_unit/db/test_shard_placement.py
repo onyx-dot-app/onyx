@@ -26,7 +26,7 @@ from onyx.db.engine.shard_routing import (
 )
 from onyx.db.engine.shard_version import reset_shard_map_version_poller
 from onyx.db.engine.sql_engine import SYNC_DB_API, SqlEngine, build_connection_string
-from onyx.db.models import PublicBase, TenantShard
+from onyx.db.models import PublicBase, TenantShard, UserTenantMapping
 from onyx.db.tenant_shard import clear_tenant_placement, record_tenant_placement
 
 DEFAULT_SHARD = "default"
@@ -111,11 +111,15 @@ def placement_on_second_shard(
     invalidate_shard_cache()
     reset_shard_map_version_poller()
 
-    # `tenant_shard` normally arrives via the `schema_private` Alembic tree, which this
-    # lane does not run. Only that table, so unrelated models can't break this suite.
+    # These arrive via the `schema_private` Alembic tree, which this lane does not run.
+    # `user_tenant_mapping` is here because the cleanup script deletes from it too.
+    # Named explicitly so unrelated models can't break this suite.
     PublicBase.metadata.create_all(
         get_catalog_engine(),
-        tables=[PublicBase.metadata.tables[f"public.{TenantShard.__tablename__}"]],
+        tables=[
+            PublicBase.metadata.tables[f"public.{model.__tablename__}"]
+            for model in (TenantShard, UserTenantMapping)
+        ],
         checkfirst=True,
     )
 
