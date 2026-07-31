@@ -31,7 +31,10 @@ def _diff_range() -> list[str]:
 
 
 def main(file_paths: list[str]) -> int:
-    """Reports newly added ``getattr`` calls in ``file_paths``, returning the exit code."""
+    """
+    Reports newly added ``getattr`` calls in ``file_paths``, returning the exit
+    code.
+    """
     if not file_paths:
         return 0
     diff = subprocess.run(
