@@ -565,6 +565,7 @@ def get_accessible_documents_for_hierarchy_node_paginated(
     parent_hierarchy_node_id: int,
     user_email: str | None,
     external_group_ids: list[str],
+    user_id: UUID | None,
     limit: int,
     # Sort options
     sort_by_name: bool = False,
@@ -580,7 +581,9 @@ def get_accessible_documents_for_hierarchy_node_paginated(
     stmt = select(DbDocument).where(
         DbDocument.parent_hierarchy_node_id == parent_hierarchy_node_id
     )
-    stmt = apply_document_access_filter(stmt, user_email, external_group_ids)
+    stmt = apply_document_access_filter(
+        stmt, user_email, external_group_ids, user_id=user_id
+    )
 
     # Apply cursor filter based on sort type and direction
     if sort_by_name:
