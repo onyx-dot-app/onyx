@@ -618,9 +618,6 @@ def test_stream_records_accumulated_reasoning_on_span() -> None:
 
 
 def test_stream_worker_opens_trace_so_generation_span_is_real() -> None:
-    """The stream worker runs on its own thread after the endpoint has
-    returned; the generation span is only real if the worker itself opens
-    the trace (a trace opened in the endpoint would not be visible there)."""
     with patch.object(gateway_api, "record_llm_span_output") as record:
         frames = list(_gateway_stream(_ReasoningStreamLLM()))
 

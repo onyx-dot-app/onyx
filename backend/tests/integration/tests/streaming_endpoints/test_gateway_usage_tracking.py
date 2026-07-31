@@ -1,19 +1,3 @@
-"""End-to-end: a call through the OpenAI-compatible LLM gateway
-(POST /gateway/v1/chat/completions), authenticated with a scoped PAT rather
-than a session, must flow through the same per-user usage seam as chat: a
-generation span recorded inside an active tracing trace -> the tracing
-processor -> the background drain thread -> a user_usage rollup -> readable
-back through GET /user/usage, attributed to the PAT's owning user.
-
-The gateway previously opened no trace at all, so its generation spans
-degraded to NoOpSpan and the processor never saw them -- zero usage was
-recorded for every gateway call. Unit tests mock the trace/span seam and
-cannot catch that; this test exercises the real wiring, for both the
-non-streaming path and the streaming path (whose generation span runs on a
-worker thread spawned only after the endpoint has already returned the
-StreamingResponse -- the case most likely to regress silently).
-"""
-
 import time
 
 from onyx.db.enums import Permission
@@ -28,10 +12,8 @@ _POLL_TIMEOUT_SECONDS = 45
 
 
 def _usage_token_total(user: DATestUser) -> int:
-    """Caller's total (input + output) tokens in the current window, summed over
-    the per-model breakdown returned by GET /user/usage. Token counts are
-    recorded regardless of whether the model is priced, so this is robust to the
-    deployment's default-cost config."""
+    """Tokens, not cost: they are recorded regardless of whether the model is
+    priced, so this is robust to the deployment's default-cost config."""
     resp = client.get(
         f"{API_SERVER_URL}/user/usage",
         headers=user.headers,
