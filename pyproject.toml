@@ -138,7 +138,7 @@ dev = [
     "ipykernel==6.29.5",
     "manygo==0.2.0",
     "matplotlib==3.10.8",
-    "ty==0.0.31",
+    "ty==0.0.63",
     "onyx-devtools==0.10.6",
     "openapi-generator-cli==7.17.0",
     "pre-commit==3.2.2",
