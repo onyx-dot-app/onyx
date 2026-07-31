@@ -139,6 +139,7 @@ def create_session(
             session_manager = SessionManager(db_session)
             build_session = session_manager.get_or_create_empty_session(
                 user.id,
+                name=request.name,
                 headless=request.headless,
             )
             sandbox = get_sandbox_by_user_id(db_session, user.id)
