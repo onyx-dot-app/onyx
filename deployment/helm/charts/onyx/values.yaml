@@ -1681,6 +1681,15 @@ sandboxImagePrepull:
   # this at a low/negative class if you want a pending sandbox pod to be able to
   # preempt the prepuller.
   priorityClassName: ""
+  # How often each node re-asks the registry whether the sandbox image tag has
+  # moved. This is the only thing that makes a deployment on a mutable tag
+  # (the default) ever notice new content, and every check is a manifest
+  # request per node — raise it for a large pool, lower it to pick up images
+  # sooner. Floored at 600s by the template, since the kubelet's restart
+  # backoff makes anything shorter both ineffective and noisy. Deployments
+  # that pin an immutable tag or digest per release don't depend on this at
+  # all; their rollout replaces the prepuller outright.
+  recheckIntervalSeconds: 900
   # Nodes that repull at once on a tag bump. Raise to warm a large pool faster,
   # at the cost of a thundering herd against the registry.
   updateMaxUnavailable: "25%"

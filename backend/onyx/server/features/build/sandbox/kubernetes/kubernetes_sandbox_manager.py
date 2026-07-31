@@ -51,6 +51,7 @@ import threading
 import time
 from collections.abc import Iterator, Sequence
 from contextlib import contextmanager
+from itertools import chain
 from pathlib import Path
 from typing import cast
 from uuid import UUID
@@ -113,8 +114,11 @@ from onyx.server.features.build.sandbox.models import (
     FileSet,
     FilesystemEntry,
     RetriableWriteError,
+    SandboxImageState,
+    SandboxImageTarget,
     SandboxInfo,
     SnapshotResult,
+    sandbox_image_digest,
 )
 from onyx.server.features.build.sandbox.nextjs_dev import build_nextjs_start_script
 from onyx.server.features.build.sandbox.serve_transport import (
@@ -178,6 +182,15 @@ _SIDECAR_CONTAINER_NAME = "sidecar"
 
 # Helm-rendered PodTemplate carrying the static sandbox pod shape.
 _PODTEMPLATE_NAME = "sandbox-pod"
+
+# The prepull DaemonSet runs the same ref as the sandbox pods and re-resolves it
+# on a timer; its pods are the only window onto what the nodes hold.
+_PREPULLER_LABEL_SELECTOR = "app.kubernetes.io/component=sandbox-image-prepuller"
+_PREPULLER_CONTAINER_NAME = "prepuller"
+
+# Short-lived: the point is to notice a new image, but it is read every pass.
+_IMAGE_TARGET_TTL_SECONDS = 60.0
+
 
 # Per-session egress tagging plugin, baked into the sandbox image (see
 # docker/Dockerfile). Path must match the COPY destination there.
@@ -261,6 +274,34 @@ def _build_targz(files: FileSet) -> tuple[bytes, str]:
     return raw, hashlib.sha256(raw).hexdigest()
 
 
+def _container_status(pod: client.V1Pod, name: str) -> client.V1ContainerStatus | None:
+    """The runtime's report for one container, app or init."""
+    if pod.status is None:
+        return None
+    statuses = chain(
+        pod.status.container_statuses or [], pod.status.init_container_statuses or []
+    )
+    return next((status for status in statuses if status.name == name), None)
+
+
+def _labelled_sandbox_id(pod: client.V1Pod) -> UUID | None:
+    """The sandbox this pod belongs to, or None if it cannot be tied to one."""
+    raw = ((pod.metadata.labels if pod.metadata else None) or {}).get(LABEL_SANDBOX_ID)
+    try:
+        return UUID(raw) if raw else None
+    except ValueError:
+        logger.warning("Sandbox pod carries an unparseable id label %r", raw)
+        return None
+
+
+def _pinned_ref(ref: str, digest: str) -> str:
+    """``ref`` with its tag replaced by ``digest``, so it can be patched onto a
+    live pod. A colon before the final slash is a registry port, not a tag."""
+    registry, _, name = ref.split("@", 1)[0].rpartition("/")
+    repository = f"{registry}/{name.rsplit(':', 1)[0]}" if registry else name
+    return f"{repository}@{digest}"
+
+
 class KubernetesSandboxManager(SandboxManager):
     """Kubernetes-based sandbox manager for production deployments.
 
@@ -279,6 +320,9 @@ class KubernetesSandboxManager(SandboxManager):
 
     _instance: "KubernetesSandboxManager | None" = None
     _lock = threading.Lock()
+
+    # (target, expiry). Unlocked: a race just resolves the same image twice.
+    _image_target_cache: tuple[SandboxImageTarget | None, float] | None = None
 
     def __new__(cls) -> "KubernetesSandboxManager":
         if cls._instance is None:
@@ -578,6 +622,90 @@ class KubernetesSandboxManager(SandboxManager):
             f"The PodTemplate and api-server versions are likely out of sync — "
             f"apply the matching sandbox PodTemplate."
         )
+
+    def get_image_state(self) -> SandboxImageState:
+        """One prepuller read for the target, one pod list for the fleet."""
+        return SandboxImageState(
+            target=self._current_image_target(),
+            live_digests=self._live_sandbox_digests(),
+        )
+
+    def _current_image_target(self) -> SandboxImageTarget | None:
+        """The image every prepuller pod agrees it has pulled, or None.
+
+        Those pods are the only node-local view the api-server has, and a kubelet
+        reports a digest only for an image it finished pulling — so agreement
+        means "current *and* present on every node a sandbox can land on".
+        Not the PodTemplate: it names a tag, not what the nodes hold.
+        """
+        now = time.monotonic()
+        cached = self._image_target_cache
+        if cached is not None and now < cached[1]:
+            return cached[0]
+
+        target = self._resolve_prepulled_image()
+        self._image_target_cache = (target, now + _IMAGE_TARGET_TTL_SECONDS)
+        return target
+
+    def _resolve_prepulled_image(self) -> SandboxImageTarget | None:
+        try:
+            pods = self._core_api.list_namespaced_pod(
+                namespace=self._namespace,
+                label_selector=_PREPULLER_LABEL_SELECTOR,
+            )
+        except ApiException as e:
+            logger.warning("Could not read prepuller pods: %s", e)
+            return None
+
+        if not pods.items:
+            # sandboxImagePrepull.enabled=false: nothing can vouch for a node.
+            logger.debug("No prepuller pods; cannot confirm a sandbox image")
+            return None
+
+        # From the runtime's report, not the spec: the spec holds the tag it was
+        # told to run, the status holds what that tag resolved to.
+        refs: set[str] = set()
+        digests: set[str] = set()
+        for pod in pods.items:
+            status = _container_status(pod, _PREPULLER_CONTAINER_NAME)
+            digest = sandbox_image_digest(status.image_id if status else None)
+            if status is None or status.image is None or digest is None:
+                return None  # A node that hasn't reported can't be vouched for.
+            refs.add(status.image)
+            digests.add(digest)
+
+        if len(refs) != 1 or len(digests) != 1:
+            logger.info(
+                "Prepuller pods disagree on the sandbox image (%s refs, %s digests); "
+                "waiting for the rollout to settle",
+                len(refs),
+                len(digests),
+            )
+            return None
+
+        ref = next(iter(refs))
+        digest = next(iter(digests))
+        return SandboxImageTarget(ref=_pinned_ref(ref, digest), digest=digest)
+
+    def _live_sandbox_digests(self) -> dict[UUID, str]:
+        """One list call for the whole fleet, keyed by the sandbox-id label."""
+        try:
+            pods = self._core_api.list_namespaced_pod(
+                namespace=self._namespace,
+                label_selector=(f"{LABEL_K8S_COMPONENT}={LABEL_K8S_COMPONENT_SANDBOX}"),
+            )
+        except ApiException as e:
+            logger.warning("Could not list sandbox pods: %s", e)
+            return {}
+
+        digests: dict[UUID, str] = {}
+        for pod in pods.items:
+            sandbox_id = _labelled_sandbox_id(pod)
+            status = _container_status(pod, _SANDBOX_CONTAINER_NAME)
+            digest = sandbox_image_digest(status.image_id if status else None)
+            if sandbox_id is not None and digest is not None:
+                digests[sandbox_id] = digest
+        return digests
 
     def _create_sandbox_service(
         self,

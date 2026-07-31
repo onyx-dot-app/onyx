@@ -124,8 +124,11 @@ from onyx.server.features.build.sandbox.models import (
     CraftMCPServerConfig,
     FileSet,
     FilesystemEntry,
+    SandboxImageState,
+    SandboxImageTarget,
     SandboxInfo,
     SnapshotResult,
+    sandbox_image_digest,
 )
 from onyx.server.features.build.sandbox.nextjs_dev import build_nextjs_start_script
 from onyx.server.features.build.sandbox.serve_transport import ServeConnectionInfo
@@ -1024,6 +1027,64 @@ class DockerSandboxManager(SandboxManager):
             return False
         state = (container.attrs or {}).get("State") or {}
         return state.get("Status") == "running"
+
+    def get_image_state(self) -> SandboxImageState:
+        """One local-store lookup for the target, one daemon call for the fleet."""
+        return SandboxImageState(
+            target=self._current_image_target(),
+            live_digests=self._live_sandbox_digests(),
+        )
+
+    def _current_image_target(self) -> SandboxImageTarget | None:
+        """Whatever the local store holds for the configured ref right now.
+
+        Local IDs on both sides, so a repointed mutable tag is caught without
+        pinning, and an ID resolves only once a pull has finished. Uncached: an
+        out-of-process ``docker compose pull`` is what we want to notice.
+        """
+        try:
+            image_id = self._docker.images.get(self._image).id
+        except (APIError, NotFound) as e:
+            logger.debug("Could not resolve local image %s: %s", self._image, e)
+            return None
+
+        digest = sandbox_image_digest(image_id)
+        # The ref stays configured: there is no live spec to patch a digest onto.
+        return SandboxImageTarget(ref=self._image, digest=digest) if digest else None
+
+    def _live_sandbox_digests(self) -> dict[UUID, str]:
+        """One daemon call for the whole fleet, keyed by the sandbox-id label.
+
+        Stopped containers included: ``_reuse_existing_container`` restarts an
+        exited one, so it would come back on its superseded image.
+        """
+        try:
+            containers = self._docker.containers.list(
+                all=True,
+                filters={"label": f"{LABEL_COMPONENT}={LABEL_COMPONENT_VALUE}"},
+            )
+        except APIError as e:
+            logger.warning("Could not list sandbox containers: %s", e)
+            return {}
+
+        digests: dict[UUID, str] = {}
+        for container in containers:
+            attrs = container.attrs or {}
+            raw_id = (attrs.get("Labels") or {}).get(LABEL_SANDBOX_ID)
+            # `list` reports the resolved image as ImageID; `inspect` nests the
+            # ref under Config, so the two shapes are not interchangeable.
+            digest = sandbox_image_digest(attrs.get("ImageID"))
+            if not raw_id or digest is None:
+                continue
+            try:
+                digests[UUID(raw_id)] = digest
+            except ValueError:
+                logger.warning(
+                    "Sandbox container %s carries an unparseable id label %r",
+                    container.name,
+                    raw_id,
+                )
+        return digests
 
     def _render_agents_md(
         self,

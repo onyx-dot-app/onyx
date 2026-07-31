@@ -172,35 +172,79 @@ def test_prepuller_scheduling_matches_the_sandbox_pod() -> None:
     assert prepuller["tolerations"] == sandbox["tolerations"]
 
 
-def test_prepuller_stays_running_to_pin_layers() -> None:
-    """The kubelet only exempts images referenced by a *running* pod from image
-    GC, so a one-shot pull would leave the layers evictable.
+def test_prepuller_exits_periodically_to_re_resolve_the_tag() -> None:
+    """The restart *is* the image check.
 
-    The command must also be portable: `sleep infinity` is a GNU coreutils
-    extension that dies on busybox/alpine, and a CrashLooping prepuller unpins
-    the image silently.
+    A kubelet re-resolves a tag to a digest only when it starts a container, so a
+    prepuller that never exits never asks the registry whether a mutable tag has
+    moved — and on the default deployment (`global.version: latest`) no node
+    would ever notice new content.
+
+    Two properties have to hold together: it exits on a timer (so the tag gets
+    re-resolved), and it spends essentially all its time running (so the kubelet
+    keeps exempting the image from GC). Also portable: `sleep infinity` is a GNU
+    coreutils extension that dies on busybox/alpine.
     """
     container = _prepuller_pod_spec()["containers"][0]
-    assert container["command"] == ["sh", "-c", "while :; do sleep 86400; done"]
+    assert container["command"] == ["sh", "-c", "sleep 900"]
 
 
-def test_prepuller_pull_policy_matches_the_sandbox_pod() -> None:
-    """Pinning the prepuller to IfNotPresent while the sandbox pods run Always
-    is the tag drift this template exists to prevent, just one level down: on a
-    mutable tag the sandboxes fetch the new digest and the prepuller holds the
-    old one resident and GC-exempt, with nothing to restart it."""
-    args = ["--set", "configMap.SANDBOX_IMAGE_PULL_POLICY=Always"]
+def test_prepuller_recheck_interval_is_configurable() -> None:
+    container = _prepuller_pod_spec(
+        ["--set", "sandboxImagePrepull.recheckIntervalSeconds=1800"]
+    )["containers"][0]
+    assert container["command"] == ["sh", "-c", "sleep 1800"]
+
+
+def test_prepuller_recheck_interval_is_floored() -> None:
+    """The kubelet backs off restarts and only resets the backoff counter once a
+    container has run for ~10 minutes, so a shorter interval stretches itself out
+    anyway — noisily, and with the image briefly unpinned each time."""
+    container = _prepuller_pod_spec(
+        ["--set", "sandboxImagePrepull.recheckIntervalSeconds=30"]
+    )["containers"][0]
+    assert container["command"] == ["sh", "-c", "sleep 600"]
+
+
+def test_prepuller_always_pulls_regardless_of_the_sandbox_pull_policy() -> None:
+    """The prepuller deliberately diverges from the shared pull policy.
+
+    It is the only thing in the deployment that asks the registry whether a
+    mutable tag has moved, and a kubelet only re-resolves on a pull it is told to
+    make. IfNotPresent here would leave every node pinned to the first digest it
+    ever pulled, which is precisely the drift the recheck exists to catch.
+
+    Sandbox pods keep the configured policy: they are created from a ref the
+    api-server has already resolved, so they have nothing to re-resolve.
+    """
+    args = ["--set", "configMap.SANDBOX_IMAGE_PULL_POLICY=IfNotPresent"]
     prepuller = _prepuller_pod_spec(args)["containers"][0]
     sandbox = yaml.safe_load(_render(_PODTEMPLATE_TEMPLATE, args))["template"]["spec"]
 
     assert prepuller["imagePullPolicy"] == "Always"
-    assert {c["imagePullPolicy"] for c in sandbox["containers"]} == {"Always"}
+    assert {c["imagePullPolicy"] for c in sandbox["containers"]} == {"IfNotPresent"}
 
 
-def test_prepuller_pull_policy_defaults_to_if_not_present() -> None:
-    """The chart default must not re-pull on every restart."""
-    container = _prepuller_pod_spec()["containers"][0]
-    assert container["imagePullPolicy"] == "IfNotPresent"
+def test_prepuller_identity_matches_what_the_api_server_queries() -> None:
+    """The api-server reads the current sandbox image off these pods: it lists
+    them by component label and matches the container by name to learn which
+    digest a node resolved. Renaming either silently turns image-driven recycling
+    off, since "no prepuller pods" is deliberately read as "cannot confirm".
+    """
+    pod_template = _prepuller()["spec"]["template"]
+
+    assert (
+        pod_template["metadata"]["labels"]["app.kubernetes.io/component"]
+        == "sandbox-image-prepuller"
+    )
+    assert [c["name"] for c in pod_template["spec"]["containers"]] == ["prepuller"]
+
+
+def test_sandbox_pod_pull_policy_defaults_to_if_not_present() -> None:
+    """Sandbox pods keep the conservative default — they are created from a ref
+    the api-server already resolved, so re-pulling on every start buys nothing."""
+    sandbox = yaml.safe_load(_render(_PODTEMPLATE_TEMPLATE))["template"]["spec"]
+    assert {c["imagePullPolicy"] for c in sandbox["containers"]} == {"IfNotPresent"}
 
 
 def test_prepuller_requests_ephemeral_storage() -> None:
