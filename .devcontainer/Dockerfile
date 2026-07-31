@@ -127,6 +127,24 @@ RUN apt-get update \
        uvx --quiet --from playwright playwright install-deps chromium \
   && apt-get clean && rm -rf /var/lib/apt/lists/*
 
+# Install Google Chrome for the Playwright MCP server (.mcp.json), whose browser
+# tools default to the `chrome` channel and expect /opt/google/chrome/chrome.
+# Unlike Playwright's chromium builds — which must match the driver revision and
+# are therefore installed at test time — the Chrome stable channel is
+# version-independent, so baking it here doesn't fight any lockfile. Installed
+# from Google's direct deb (same source `playwright install chrome` uses).
+# Google ships no linux/arm64 Chrome, so the arm64 image (CI runners) skips it;
+# the MCP browser tools are only used interactively on x64 dev machines.
+RUN if [ "$(dpkg --print-architecture)" = "amd64" ]; then \
+    apt-get update \
+    && curl -fsSL -o /tmp/chrome.deb \
+      https://dl.google.com/linux/direct/google-chrome-stable_current_amd64.deb \
+    && apt-get install -y --no-install-recommends /tmp/chrome.deb \
+    && rm -f /tmp/chrome.deb \
+    && apt-get clean && rm -rf /var/lib/apt/lists/* \
+    && google-chrome --version; \
+  fi
+
 # Install Python 3.13 via uv into a stable, image-level path so venvs
 # created in bind-mounted workspaces survive across `docker run`s.
 ENV UV_PYTHON_INSTALL_DIR=/opt/uv/python
