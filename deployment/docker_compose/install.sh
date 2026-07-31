@@ -286,15 +286,7 @@ PATH_MARKER="# Added by the Onyx installer"
 
 # The startup files get the unexpanded $HOME so they stay portable.
 # shellcheck disable=SC2016
-POSIX_PATH_LINE='export PATH="$HOME/.local/bin:$PATH"'
-
-# fish_add_path only landed in fish 3.2; distros still shipping 3.0/3.1 would
-# hit "Unknown command" on every shell start. contains/set works on every
-# version and prepends the same way.
-# shellcheck disable=SC2016
-FISH_PATH_LINE='if not contains "$HOME/.local/bin" $PATH
-    set -gx PATH "$HOME/.local/bin" $PATH
-end'
+PATH_LINE='export PATH="$HOME/.local/bin:$PATH"'
 
 # Appends `line` to `profile` under PATH_MARKER unless the marker is already
 # there. Returns non-zero when the file cannot be written so the caller can
@@ -317,6 +309,10 @@ append_line_to_profile() {
 # login shell (ssh, macOS Terminal) reads only the first of ~/.bash_profile,
 # ~/.bash_login and ~/.profile, and skips ~/.bashrc unless that file sources
 # it. Patching just one of the two leaves half the sessions without the entry.
+#
+# Any other shell (fish included) is left alone and gets the manual
+# instructions instead — the syntax differs per shell and fish in particular
+# needs a version-dependent incantation.
 resolve_profile_files() {
     local rc
     PROFILE_FILES=()
@@ -342,9 +338,6 @@ resolve_profile_files() {
             # reading ~/.profile at all.
             PROFILE_FILES+=("${HOME}/.profile")
             ;;
-        fish)
-            PROFILE_FILES=("${HOME}/.config/fish/config.fish")
-            ;;
     esac
     return 0
 }
@@ -362,18 +355,11 @@ case ":${PATH}:" in
     *)
         # Persist BIN_DIR into the login shell's profiles so onyx-cli still
         # resolves in new shells once this installer hands over to the CLI.
-        # The script itself runs under bash even when the user's shell is zsh
-        # or fish, hence the $SHELL sniffing. Only the default user-local
-        # location is patched in: an explicit ONYX_CLI_BIN_DIR means the
-        # caller manages their own PATH, and ONYX_CLI_NO_MODIFY_PATH opts out.
+        # The script itself runs under bash even when the user's shell is zsh,
+        # hence the $SHELL sniffing. Only the default user-local location is
+        # patched in: an explicit ONYX_CLI_BIN_DIR means the caller manages
+        # their own PATH, and ONYX_CLI_NO_MODIFY_PATH opts out.
         PROFILE_FILES=()
-        PATH_LINE="$POSIX_PATH_LINE"
-        # What the user can paste into the shell they are in right now.
-        HINT_LINE="export PATH=\"${BIN_DIR}:\$PATH\""
-        if [[ "${SHELL##*/}" == "fish" ]]; then
-            PATH_LINE="$FISH_PATH_LINE"
-            HINT_LINE="set -gx PATH \"${BIN_DIR}\" \$PATH"
-        fi
         if [[ -n "$DEFAULT_USER_BIN_DIR" ]] && [[ -z "$ONYX_CLI_NO_MODIFY_PATH" ]]; then
             resolve_profile_files
         fi
@@ -391,7 +377,7 @@ case ":${PATH}:" in
         else
             print_warning "${BIN_DIR} is not in your PATH — add it to run onyx-cli directly:"
         fi
-        echo -e "   ${BOLD}${HINT_LINE}${NC}"
+        echo -e "   ${BOLD}export PATH=\"${BIN_DIR}:\$PATH\"${NC}"
         # Fix up this process too so anything the CLI spawns can find it.
         export PATH="${BIN_DIR}:${PATH}"
         ;;
