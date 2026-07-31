@@ -9,8 +9,9 @@ load, so the final response is memoized here.
 Entries are keyed by everything that can change the response for a user
 (persona, admin status, group memberships) and namespaced by a per-tenant
 version token, so a single token rewrite invalidates every entry at once.
-Provider mutations bump the token explicitly; changes that bypass the LLM
-provider API (e.g. persona default-model edits) are bounded by the entry TTL.
+Provider mutations and persona edits bump the token explicitly; changes that
+bypass the API layer (e.g. seed-time or Slack-channel persona upserts) are
+bounded by the entry TTL.
 
 Cache failures are non-fatal: readers fall through to Postgres.
 """
@@ -30,9 +31,9 @@ logger = setup_logger()
 _VERSION_KEY = "llm_provider_listing:version"
 _ENTRY_KEY_PREFIX = "llm_provider_listing:entry"
 # Staleness bound only for changes that bypass explicit invalidation (see module
-# docstring); provider mutations rewrite the version token immediately. Keep this
-# high enough that steady-state traffic rarely rebuilds the payload cold.
-ENTRY_TTL_SECONDS = 300
+# docstring); user-facing mutations rewrite the version token immediately. Keep
+# this high enough that steady-state traffic rarely rebuilds the payload cold.
+ENTRY_TTL_SECONDS = 600
 
 
 class ProviderListingCacheLookup(BaseModel):
