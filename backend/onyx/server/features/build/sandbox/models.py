@@ -4,19 +4,22 @@ from datetime import datetime
 from typing import TypeAlias
 from uuid import UUID
 
-from pydantic import BaseModel
+from pydantic import BaseModel, ConfigDict
 
 from onyx.db.enums import SandboxStatus
+from onyx.server.gateway.models import GatewayModelDescriptor
 
 FileSet: TypeAlias = dict[str, bytes]
 
 
-class GatewayModelConfig(BaseModel):
-    id: str
-    display_name: str
-    supports_reasoning: bool = False
-    max_input_tokens: int | None = None
-    max_output_tokens: int | None = None
+class PromptAttachment(BaseModel):
+    """A session-relative file to include in an OpenCode prompt."""
+
+    model_config = ConfigDict(frozen=True)
+
+    name: str
+    path: str
+    mime_type: str
 
 
 class CraftLLMProviderConfig(BaseModel):
@@ -25,7 +28,7 @@ class CraftLLMProviderConfig(BaseModel):
     api_key: str | None
     api_base: str | None
     display_name: str | None = None
-    models: list[GatewayModelConfig] | None = None
+    models: list[GatewayModelDescriptor] | None = None
 
 
 class CraftMCPServerConfig(BaseModel):

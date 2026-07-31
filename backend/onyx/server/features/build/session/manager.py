@@ -60,6 +60,7 @@ from onyx.server.features.build.sandbox.models import (
     CraftLLMProviderConfig,
     DirectoryListing,
     FilesystemEntry,
+    PromptAttachment,
 )
 from onyx.server.features.build.sandbox.serve_transport import (
     PROMPT_SLOT_FAST_FAIL_ACQUIRE_SECONDS,
@@ -254,7 +255,7 @@ class SessionManager:
             session.mcp_config_hash = sandbox.mcp_config_hash
             self._db_session.flush()
 
-    def _session_llm_config(
+    def session_llm_config(
         self, session: BuildSession, user: User
     ) -> CraftLLMProviderConfig:
         """Resolve the LLM config a session's opencode.json should carry from
@@ -269,7 +270,7 @@ class SessionManager:
         session: BuildSession,
         user: User,
     ) -> None:
-        llm_config = self._session_llm_config(session, user)
+        llm_config = self.session_llm_config(session, user)
         mcp_servers = resolve_craft_mcp_servers(self._db_session, user)
         expected = json.dumps(
             build_provider_opencode_config(
@@ -383,7 +384,7 @@ class SessionManager:
 
             if sandbox.status == SandboxStatus.RUNNING:
                 try:
-                    llm_config = self._session_llm_config(session, user)
+                    llm_config = self.session_llm_config(session, user)
                     mcp_servers = resolve_craft_mcp_servers(self._db_session, user)
                     # Rewrite the per-session opencode.json (provider catalog +
                     # current MCP set) and AGENTS.md BEFORE disposing so the
@@ -1024,6 +1025,7 @@ class SessionManager:
         sandbox_id: UUID,
         session_id: UUID,
         user_message_content: str,
+        attachments: list[PromptAttachment] | None = None,
         should_interrupt: Callable[[], bool] | None = None,
         should_abort_on_teardown: Callable[[], bool] | None = None,
         turn_timeout_seconds: float | None = None,
@@ -1039,6 +1041,7 @@ class SessionManager:
             sandbox_id,
             session_id,
             user_message_content,
+            attachments=attachments,
             opencode_session_id=build_session.opencode_session_id,
             agent_provider=build_session.agent_provider,
             agent_model=build_session.agent_model,

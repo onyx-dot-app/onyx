@@ -14,6 +14,7 @@ from onyx.server.features.build.sandbox.event_schema import PromptResponse
 from onyx.server.features.build.sandbox.kubernetes.kubernetes_sandbox_manager import (
     KubernetesSandboxManager,
 )
+from onyx.server.features.build.sandbox.models import PromptAttachment
 
 
 class _FakeServeClient:
@@ -38,6 +39,7 @@ class _FakeServeClient:
         directory: str,  # noqa: ARG002
         model_provider: str | None = None,  # noqa: ARG002
         model_id: str | None = None,  # noqa: ARG002
+        attachments: list[PromptAttachment] | None = None,  # noqa: ARG002
         timeout: float = OPENCODE_PROMPT_INACTIVITY_TIMEOUT_SECONDS,
         absolute_timeout: float | None = None,
         should_interrupt: Callable[[], bool] | None = None,  # noqa: ARG002

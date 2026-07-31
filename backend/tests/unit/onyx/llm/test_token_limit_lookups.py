@@ -138,6 +138,17 @@ class TestGetLlmMaxOutputTokens:
             == 4096
         )
 
+    def test_lookup_strips_proxy_provider_prefix(self) -> None:
+        model_map = {"azure/gpt-5": {"max_output_tokens": 128000}}
+        assert (
+            get_llm_max_output_tokens(
+                model_map=model_map,
+                model_name="openai/gpt-5",
+                model_provider="azure",
+            )
+            == 128000
+        )
+
     def test_model_not_found_returns_fallback(self) -> None:
         assert get_llm_max_output_tokens(
             model_map={},

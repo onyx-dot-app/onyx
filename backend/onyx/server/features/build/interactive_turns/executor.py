@@ -30,6 +30,7 @@ from onyx.server.features.build.sandbox.event_schema import (
     PromptResponse,
 )
 from onyx.server.features.build.sandbox.event_schema import Error as SandboxError
+from onyx.server.features.build.sandbox.models import PromptAttachment
 from onyx.server.features.build.sandbox.serve_transport import (
     PROMPT_SLOT_FAST_FAIL_ACQUIRE_SECONDS,
     PROMPT_SLOT_WAIT_OUT_ORPHAN_SECONDS,
@@ -142,6 +143,7 @@ def run_claimed_interactive_build_turn(
             user_id=turn.user_id,
             prompt=turn.prompt,
             turn_index=turn.turn_index,
+            attachments=turn.attachments,
             budget_seconds=budget_seconds,
             runner_id=runner_id,
             reclaimed=turn.reclaimed,
@@ -167,6 +169,7 @@ def _drive_interactive_turn(
     user_id: UUID,
     prompt: str,
     turn_index: int,
+    attachments: list[PromptAttachment],
     budget_seconds: int,
     runner_id: str | None,
     reclaimed: bool,
@@ -248,7 +251,10 @@ def _drive_interactive_turn(
                 return
 
             def drive_one_prompt(
-                current_prompt: str, *, can_continue: bool
+                current_prompt: str,
+                prompt_attachments: list[PromptAttachment],
+                *,
+                can_continue: bool,
             ) -> _PromptResult:
                 """Stream one opencode prompt to completion, timeout, or a
                 turn-ending failure. On the recoverable inactivity timeout it
@@ -264,6 +270,7 @@ def _drive_interactive_turn(
                     sandbox.id,
                     session_id,
                     current_prompt,
+                    attachments=prompt_attachments,
                     should_interrupt=interrupt_requested,
                     should_abort_on_teardown=lambda: not ownership_lost,
                 )
@@ -341,6 +348,7 @@ def _drive_interactive_turn(
             for attempt in range(MAX_TIMEOUT_CONTINUATIONS + 1):
                 result = drive_one_prompt(
                     current_prompt,
+                    attachments if attempt == 0 else [],
                     can_continue=attempt < MAX_TIMEOUT_CONTINUATIONS,
                 )
                 if result.outcome is not _PromptOutcome.TIMED_OUT:

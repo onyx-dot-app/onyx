@@ -148,12 +148,14 @@ def _run_turn_with_events(
             session_id_arg: UUID,
             prompt: str,
             *,
+            attachments: object,
             should_interrupt: object,
             should_abort_on_teardown: Callable[[], bool],
         ) -> Iterator[object]:
             assert sandbox_id_arg == sandbox_id
             assert session_id_arg == session_id
             assert prompt == "hello"
+            assert attachments == []
             assert should_interrupt is not None
             captured_should_abort_on_teardown.append(should_abort_on_teardown)
             yield from events
@@ -419,6 +421,7 @@ def test_ownership_recheck_after_slot_acquire(
             session_id_arg: UUID,
             prompt: str,
             *,
+            attachments: object,
             should_interrupt: object,
             should_abort_on_teardown: Callable[[], bool],
         ) -> Iterator[object]:
@@ -426,6 +429,7 @@ def test_ownership_recheck_after_slot_acquire(
             assert sandbox_id_arg == sandbox_id
             assert session_id_arg == session_id
             assert prompt == "hello"
+            assert attachments == []
             assert should_interrupt is not None
             assert should_abort_on_teardown() is True
             yield_sandbox_events_called = True
@@ -618,6 +622,7 @@ def test_lost_runner_does_not_clear_reclaimed_turn_interrupt(
             session_id_arg: UUID,
             prompt: str,
             *,
+            attachments: object,
             should_interrupt: object,
             should_abort_on_teardown: Callable[[], bool],
         ) -> Iterator[object]:
@@ -625,6 +630,7 @@ def test_lost_runner_does_not_clear_reclaimed_turn_interrupt(
             assert sandbox_id_arg == sandbox_id
             assert session_id_arg == session_id
             assert prompt == "hello"
+            assert attachments == []
             assert should_interrupt is not None
             captured_should_abort_on_teardown.append(should_abort_on_teardown)
             reclaimed = claim_turn_for_runner(
@@ -798,11 +804,13 @@ def _run_turn_with_batches(
             session_id_arg: UUID,
             prompt: str,
             *,
+            attachments: object,
             should_interrupt: object,
             should_abort_on_teardown: Callable[[], bool],
         ) -> Iterator[object]:
             assert sandbox_id_arg == sandbox_id
             assert session_id_arg == session_id
+            assert attachments == []
             assert should_interrupt is not None
             assert should_abort_on_teardown() is True
             idx = len(prompts_seen)

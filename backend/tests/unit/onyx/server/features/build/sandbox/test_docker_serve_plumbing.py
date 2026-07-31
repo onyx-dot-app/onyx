@@ -30,10 +30,8 @@ from onyx.server.features.build.configs import (
 from onyx.server.features.build.sandbox.docker.docker_sandbox_manager import (
     DockerSandboxManager,
 )
-from onyx.server.features.build.sandbox.models import (
-    CraftLLMProviderConfig,
-    GatewayModelConfig,
-)
+from onyx.server.features.build.sandbox.models import CraftLLMProviderConfig
+from onyx.server.gateway.models import GatewayModelDescriptor
 
 _SBX = UUID("12345678-1234-1234-1234-1234567890ab")
 
@@ -281,9 +279,10 @@ def test_setup_writes_fresh_gateway_catalog_before_instance_start(
         api_key="proxy-placeholder",
         api_base="https://onyx.example.com/gateway/v1",
         models=[
-            GatewayModelConfig(
+            GatewayModelDescriptor(
                 id="13/gpt-5-mini",
                 display_name="GPT-5 Mini",
+                provider="openai",
             )
         ],
     )
