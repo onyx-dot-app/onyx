@@ -12,8 +12,10 @@ from uuid import uuid4
 import pytest
 from sqlalchemy import text
 from sqlalchemy.engine import Engine
+from sqlalchemy.exc import OperationalError, ProgrammingError
 
 from ee.onyx.server.tenants.schema_management import create_schema_if_not_exists
+from onyx.db import tenant_shard as tenant_shard_module
 from onyx.db.engine import shard_registry, shard_routing
 from onyx.db.engine.shard_registry import (
     ShardConfigurationError,
@@ -251,6 +253,37 @@ def test_cleanup_drops_the_schema_from_the_tenants_own_shard(
     assert result["status"] == "success"
     assert not _schema_exists(get_engine_for_shard(SECOND_SHARD), tenant_id)
     assert _mapped_shard(tenant_id) is None
+
+
+def test_clearing_placement_tolerates_a_missing_catalog_table(
+    placement_on_second_shard: dict[str, Any],  # noqa: ARG001
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """Teardown runs on deployments that have not applied the catalog migration, and
+    nothing can be mapped there anyway. Matches the read path's fallback."""
+
+    def _undefined_table() -> Any:
+        orig = Exception('relation "public.tenant_shard" does not exist')
+        orig.pgcode = "42P01"  # ty: ignore[unresolved-attribute]
+        raise ProgrammingError("DELETE", {}, orig)
+
+    monkeypatch.setattr(tenant_shard_module, "get_catalog_engine", _undefined_table)
+    clear_tenant_placement(f"tenant_{uuid4()}")
+
+
+def test_clearing_placement_still_raises_on_other_errors(
+    placement_on_second_shard: dict[str, Any],  # noqa: ARG001
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """Only a missing table is benign; anything else means the delete may not have
+    happened and must not be swallowed."""
+
+    def _boom() -> Any:
+        raise OperationalError("DELETE", {}, Exception("connection refused"))
+
+    monkeypatch.setattr(tenant_shard_module, "get_catalog_engine", _boom)
+    with pytest.raises(OperationalError):
+        clear_tenant_placement(f"tenant_{uuid4()}")
 
 
 def test_cleanup_sweeps_every_shard_not_just_the_mapped_one(

@@ -153,7 +153,7 @@ def reset_shard_overrides() -> None:
         _OVERRIDES = None
 
 
-def _is_undefined_table(exc: BaseException) -> bool:
+def is_undefined_table(exc: BaseException) -> bool:
     """True only for 'public.tenant_shard does not exist'.
 
     Separating this from other failures is what makes the default-shard fallback safe:
@@ -186,7 +186,7 @@ def _lookup_shard_in_catalog(tenant_id: str) -> str | None:
                 {"tenant_id": tenant_id},
             ).first()
     except Exception as e:
-        if _is_undefined_table(e):
+        if is_undefined_table(e):
             # Deployment has not run the catalog migration yet; nothing is mapped.
             return None
         logger.exception("tenant_shard lookup failed for %s", tenant_id)
