@@ -526,8 +526,8 @@ def run_with_timeout(
     timeout: float, func: Callable[..., R], *args: Any, **kwargs: Any
 ) -> R:
     """
-    Executes a function with a timeout. If the function doesn't complete within the specified
-    timeout, raises TimeoutError.
+    Executes a function with a timeout. If the function doesn't complete within
+    the specified timeout, raises TimeoutError.
     """
     context = contextvars.copy_context()
     task = TimeoutThread(timeout, context.run, func, *args, **kwargs)
