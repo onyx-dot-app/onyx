@@ -52,6 +52,7 @@ class TestResolveEffectivePermissions:
             "read:chat",
             "write:chat",
             "generate:image",
+            "use:llm_gateway",
         }
 
     def test_write_chat_implies_read_chat(self) -> None:
@@ -119,6 +120,7 @@ class TestResolveEffectivePermissions:
             "read:chat",
             "write:chat",
             "generate:image",
+            "use:llm_gateway",
             "add:agents",
             "read:agents",
             "manage:connectors",
@@ -182,6 +184,7 @@ class TestGetEffectivePermissions:
             Permission.READ_CHAT,
             Permission.WRITE_CHAT,
             Permission.GENERATE_IMAGE,
+            Permission.USE_LLM_GATEWAY,
         }
 
     def test_empty_column(self) -> None:
@@ -334,6 +337,7 @@ class TestAnonymousUserPermissions:
             Permission.READ_CHAT,
             Permission.WRITE_CHAT,
             Permission.GENERATE_IMAGE,
+            Permission.USE_LLM_GATEWAY,
         }
 
     @pytest.mark.asyncio
@@ -388,6 +392,7 @@ class TestApiSurfaceScopeRegistration:
             "read:chat",
             "write:chat",
             "generate:image",
+            "use:llm_gateway",
         }
         assert IMPLIED_PERMISSIONS["write:chat"] == {"read:chat"}
         # The craft role scope grants company-search and image generation, never

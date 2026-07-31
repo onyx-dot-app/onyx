@@ -9,6 +9,7 @@ EXPECTED_SELECTABLE_SCOPES = {
     Permission.READ_SEARCH.value,
     Permission.READ_CHAT.value,
     Permission.WRITE_CHAT.value,
+    Permission.USE_LLM_GATEWAY.value,
 }
 
 
@@ -28,6 +29,7 @@ def test_scope_implications(permission_basic_user: DATestUser) -> None:
     ]
     assert by_scope[Permission.READ_CHAT.value]["implies"] == []
     assert by_scope[Permission.READ_SEARCH.value]["implies"] == []
+    assert by_scope[Permission.USE_LLM_GATEWAY.value]["implies"] == []
 
 
 def test_scopes_round_trip(permission_basic_user: DATestUser) -> None:
