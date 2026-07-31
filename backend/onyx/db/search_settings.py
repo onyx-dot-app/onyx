@@ -150,12 +150,16 @@ def delete_search_settings(db_session: Session, search_settings_id: int) -> None
     db_session.commit()
 
 
-def get_current_search_settings(db_session: Session) -> SearchSettings:
+def get_current_search_settings(
+    db_session: Session, *, for_update: bool = False
+) -> SearchSettings:
     query = (
         select(SearchSettings)
         .where(SearchSettings.status == IndexModelStatus.PRESENT)
         .order_by(SearchSettings.id.desc())
     )
+    if for_update:
+        query = query.with_for_update()
     result = db_session.execute(query)
     latest_settings = result.scalars().first()
 
@@ -324,6 +328,21 @@ def clear_reclaim_intent__no_commit(
     ss.reclaim_attempts = 0
     ss.reclaim_last_error = None
     ss.pending_cc_pair_deletions = None
+
+
+def mark_abandoned_future_for_reclaim__no_commit(
+    abandoned_future: SearchSettings,
+) -> None:
+    """Mark a PAST index for immediate reclamation — a reverted/superseded FUTURE, or an
+    unreclaimed occupant whose index name a new reindex now needs. Jumps straight to
+    DELETING: the soak window + `_new_index_can_serve` gate exist for swapping out a *live*
+    index, which doesn't apply here (the data was never the live read path, or its name is
+    being reclaimed on demand). Caller commits."""
+    abandoned_future.reclaim_status = IndexReclaimStatus.DELETING
+    abandoned_future.reclaim_stopped_reading_at = None
+    abandoned_future.reclaim_attempts = 0
+    abandoned_future.reclaim_last_error = None
+    abandoned_future.pending_cc_pair_deletions = None
 
 
 def fetch_reclaimable_past_settings(

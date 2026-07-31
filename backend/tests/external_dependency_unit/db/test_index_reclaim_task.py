@@ -23,8 +23,17 @@ from onyx.db.enums import (
     IndexModelStatus,
     IndexReclaimStatus,
 )
-from onyx.db.models import ConnectorCredentialPair, SearchSettings
-from onyx.db.search_settings import create_search_settings, get_search_settings_by_id
+from onyx.db.models import ConnectorCredentialPair, PortAttempt, SearchSettings
+from onyx.db.port_attempt import (
+    create_port_attempt,
+    mark_port_canceled,
+    mark_port_in_progress,
+)
+from onyx.db.search_settings import (
+    create_search_settings,
+    find_unreclaimed_past_by_index_name,
+    get_search_settings_by_id,
+)
 from onyx.document_index.opensearch.client import OpenSearchIndexClient
 from onyx.document_index.opensearch.index_reclaim import ReclaimOutcome
 from tests.external_dependency_unit.indexing_helpers import (
@@ -308,6 +317,59 @@ def test_deleting_single_tenant_end_to_end_drops_real_index(
             pass
         client.close()
         _delete_settings(db_session, ss)
+
+
+def test_reverted_future_reclaim_gates_on_port_then_drops_index_and_unblocks_retry(
+    db_session: Session,
+    tenant_context: None,  # noqa: ARG001
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """End-to-end for the revert-reclaim path (single-tenant, real index): a reverted
+    FUTURE marked straight to DELETING is NOT dropped while a canceled-but-unacked port
+    attempt could still write to it; once the attempt goes terminal the reclaim drops the
+    real index, marks RECLAIMED, and the name-reuse guard clears so the same reindex can
+    be retried."""
+    monkeypatch.setattr(reclaim_tasks, "MULTI_TENANT", False)
+    cc_pair = make_cc_pair(db_session)
+    index_name = f"test_revert_reclaim_{uuid4().hex[:8]}"
+    client = OpenSearchIndexClient(index_name=index_name)
+    client._client.indices.create(index=index_name)
+    ss = _make_past_settings(
+        db_session, IndexReclaimStatus.DELETING, index_name=index_name
+    )
+    # An active (IN_PROGRESS) attempt stands in for a port that could still be writing —
+    # the gate keys on active status, so this is what makes the reclaim defer below.
+    attempt = create_port_attempt(db_session, cc_pair.id, ss.id)
+    mark_port_in_progress(db_session, attempt.id)
+    try:
+        # An active attempt defers the delete: index survives, row stays DELETING, and the
+        # guard still blocks a same-name retry.
+        reclaim_tasks.run_old_index_reclaim(db_session, MagicMock(), "tenant", ss)
+        db_session.refresh(ss)
+        assert ss.reclaim_status == IndexReclaimStatus.DELETING
+        assert client.index_exists() is True
+        assert find_unreclaimed_past_by_index_name(db_session, index_name)
+
+        # The port acks the cancel -> terminal. Now the reclaim drops the real index,
+        # marks RECLAIMED, and the guard clears (retry unblocked).
+        mark_port_canceled(db_session, attempt.id)
+        reclaim_tasks.run_old_index_reclaim(db_session, MagicMock(), "tenant", ss)
+        db_session.refresh(ss)
+        assert ss.reclaim_status == IndexReclaimStatus.RECLAIMED
+        assert client.index_exists() is False
+        assert not find_unreclaimed_past_by_index_name(db_session, index_name)
+    finally:
+        try:
+            client.delete_index()
+        except Exception:
+            pass
+        client.close()
+        db_session.query(PortAttempt).filter(
+            PortAttempt.cc_pair_id == cc_pair.id
+        ).delete(synchronize_session="fetch")
+        db_session.commit()
+        _delete_settings(db_session, ss)
+        cleanup_cc_pair(db_session, cc_pair)
 
 
 # --- reliability ----------------------------------------------------------------

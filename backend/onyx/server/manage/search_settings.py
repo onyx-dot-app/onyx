@@ -5,12 +5,16 @@ from pydantic import BaseModel
 from sqlalchemy.orm import Session
 
 from onyx.auth.permissions import require_permission
+from onyx.background.celery.tasks.index_reclaim.tasks import enqueue_index_reclaim
 from onyx.background.celery.tasks.port.tasks import (
     PortResumeResult,
     resume_paused_port_unit,
 )
 from onyx.background.celery.versioned_apps.client import app as client_app
-from onyx.configs.app_configs import DISABLE_INDEX_UPDATE_ON_SWAP
+from onyx.configs.app_configs import (
+    DISABLE_INDEX_UPDATE_ON_SWAP,
+    OLD_INDEX_RECLAIM_ENABLED,
+)
 from onyx.context.search.models import (
     SavedSearchSettings,
     SearchSettingsCreationRequest,
@@ -23,7 +27,7 @@ from onyx.db.connector_credential_pair import (
     resync_cc_pair,
 )
 from onyx.db.engine.sql_engine import get_session
-from onyx.db.enums import Permission, SwitchoverType
+from onyx.db.enums import IndexReclaimStatus, Permission, SwitchoverType
 from onyx.db.index_attempt import create_synthetic_seed_attempt, expire_index_attempts
 from onyx.db.llm import (
     fetch_default_contextual_rag_model,
@@ -37,6 +41,7 @@ from onyx.db.port_attempt import (
     cancel_active_port_attempts,
     get_reindex_error_rows,
     get_reindex_progress_counts,
+    has_active_port_attempts,
     port_backfill_has_pending_work,
 )
 from onyx.db.search_settings import (
@@ -47,6 +52,7 @@ from onyx.db.search_settings import (
     get_current_search_settings,
     get_embedding_provider_from_provider_type,
     get_secondary_search_settings,
+    mark_abandoned_future_for_reclaim__no_commit,
     set_reclaim_intent_on_current__no_commit,
     update_current_search_settings,
     update_search_settings_status,
@@ -54,6 +60,11 @@ from onyx.db.search_settings import (
 from onyx.document_index.factory import (
     get_all_document_indices,
     get_default_document_index,
+)
+from onyx.document_index.interfaces_new import TenantState
+from onyx.document_index.opensearch.index_reclaim import (
+    ReclaimOutcome,
+    reclaim_index_data,
 )
 from onyx.error_handling.error_codes import OnyxErrorCode
 from onyx.error_handling.exceptions import OnyxError
@@ -113,7 +124,9 @@ def set_new_search_settings(
         enable_contextual_rag=search_settings_new.enable_contextual_rag,
     )
 
-    search_settings = get_current_search_settings(db_session)
+    # Lock PRESENT so concurrent reindex submissions serialize: without it two racers both
+    # pass the no-FUTURE guard below and the loser trips the FUTURE unique index (raw 500).
+    search_settings = get_current_search_settings(db_session, for_update=True)
 
     # An INSTANT backfill targets the PRESENT (not a secondary), so a new reindex would
     # abandon it — live index left short its un-ported docs, PAST source stuck
@@ -128,6 +141,14 @@ def set_new_search_settings(
             OnyxErrorCode.CONFLICT,
             "An INSTANT reindex is still backfilling the live index; wait for it to "
             "finish before starting another reindex.",
+        )
+
+    # One re-index at a time: refuse a new one while a secondary FUTURE is still in flight
+    # (no supersede). Reuse of a retired index's name is handled by _guard_index_name_reuse.
+    if get_secondary_search_settings(db_session) is not None:
+        raise OnyxError(
+            OnyxErrorCode.CONFLICT,
+            "A re-index is already in progress. Cancel it before starting a new one.",
         )
 
     if search_settings_new.index_name is None:
@@ -173,29 +194,6 @@ def set_new_search_settings(
         )
     else:
         set_reclaim_intent_on_current__no_commit(db_session, consented_deletions)
-
-    secondary_search_settings = get_secondary_search_settings(db_session)
-
-    if secondary_search_settings:
-        # Cancel any background indexing jobs.
-        expire_index_attempts(
-            search_settings_id=secondary_search_settings.id, db_session=db_session
-        )
-
-        # Mark previous model as a past model directly.
-        update_search_settings_status(
-            search_settings=secondary_search_settings,
-            new_status=IndexModelStatus.PAST,
-            db_session=db_session,
-        )
-
-        # Cancel in-flight reindex ports for the superseded FUTURE. After the PAST
-        # flip so check_for_port (which only targets the current secondary) won't
-        # enqueue a replacement; the running port task stops at its next batch
-        # boundary once it sees CANCELED.
-        cancel_active_port_attempts(
-            db_session, search_settings_id=secondary_search_settings.id
-        )
 
     # Every new FUTURE reindexes via the port flow (re-embed PRESENT -> FUTURE in
     # place, no connector re-fetch). commit=False here and below so the FUTURE and
@@ -268,17 +266,33 @@ def set_new_search_settings(
 
 
 def _guard_index_name_reuse(db_session: Session, index_name: str) -> None:
-    """Refuse a reindex whose new index_name collides with a PAST index whose data is
-    still present — reusing it would adopt that old generation's data. Covers reclaim-
-    tracked rows (cleared automatically by the background reclaim) and legacy pre-feature
-    rows (reclaim_status NULL, no auto-reclaim — an admin removes them)."""
-    if find_unreclaimed_past_by_index_name(db_session, index_name):
+    """Refuse a reindex whose new index_name still holds a PAST generation's data (reusing
+    it would adopt that data), and pull the occupant into the reclaim cycle so it drains
+    without a manual delete — this is what reclaims legacy NULL / stalled / BLOCKED rows on
+    demand. Mark each skip-soak DELETING, kick its reclaim, then raise so the caller retries
+    once the name is free."""
+    occupants = find_unreclaimed_past_by_index_name(db_session, index_name)
+    if not occupants:
+        return
+    if not OLD_INDEX_RECLAIM_ENABLED:
+        # Reclaim is off (the run task no-ops), so don't strand these as DELETING that will
+        # never drain — just refuse; an operator re-enables reclaim or removes the index.
         raise OnyxError(
             OnyxErrorCode.CONFLICT,
-            "An index of the same name from an earlier reindex still holds data and "
-            "hasn't been reclaimed. Wait for reclamation to finish, or remove that index, "
-            "before starting the reindex.",
+            "An index of the same name from an earlier re-index still holds data, and "
+            "reclamation is disabled. Re-enable reclamation or remove that index first.",
         )
+    for occupant in occupants:
+        mark_abandoned_future_for_reclaim__no_commit(occupant)
+    db_session.commit()
+    tenant_id = get_current_tenant_id()
+    for occupant in occupants:
+        enqueue_index_reclaim(client_app, tenant_id, occupant.id)
+    raise OnyxError(
+        OnyxErrorCode.CONFLICT,
+        "An index of the same name from an earlier re-index still holds data; it's being "
+        "cleaned up now. Start the re-index again in a moment.",
+    )
 
 
 def _resolve_consented_deletions(
@@ -310,6 +324,41 @@ def _resolve_consented_deletions(
     return server_wont_port
 
 
+def _reclaim_abandoned_future(
+    db_session: Session, abandoned_future: SearchSettings, present: SearchSettings
+) -> None:
+    """Reclaim an abandoned (reverted/superseded) FUTURE's index — its partial-port data
+    would otherwise block a later same-name reindex via the name-reuse guard. Marks the
+    row for the reclaim loop; single-tenant additionally drops the index inline so retry
+    works immediately, independent of the reclaim kill switch (MT shares the physical
+    index across tenants, so its per-tenant slice is left to the loop). Caller commits."""
+    mark_abandoned_future_for_reclaim__no_commit(abandoned_future)
+    # Don't drop the index while a canceled port task may still be writing to it; leave the
+    # row DELETING for the reclaim loop.
+    if has_active_port_attempts(db_session, abandoned_future.id):
+        return
+    # Defensive: never drop an index the live PRESENT is serving from.
+    if MULTI_TENANT or abandoned_future.index_name == present.index_name:
+        return
+    try:
+        if (
+            reclaim_index_data(
+                abandoned_future.index_name,
+                TenantState(
+                    tenant_id=get_current_tenant_id(), multitenant=MULTI_TENANT
+                ),
+            )
+            == ReclaimOutcome.COMPLETE
+        ):
+            abandoned_future.reclaim_status = IndexReclaimStatus.RECLAIMED
+    except Exception:
+        logger.exception(
+            "Inline reclaim of abandoned FUTURE index %s failed; leaving it for the "
+            "reclaim loop",
+            abandoned_future.index_name,
+        )
+
+
 @router.post("/cancel-new-embedding", dependencies=[Depends(require_vector_db)])
 def cancel_new_embedding(
     _: User = Depends(require_permission(Permission.FULL_ADMIN_PANEL_ACCESS)),
@@ -317,38 +366,60 @@ def cancel_new_embedding(
 ) -> None:
     secondary_search_settings = get_secondary_search_settings(db_session)
 
-    if secondary_search_settings:
-        expire_index_attempts(
-            search_settings_id=secondary_search_settings.id, db_session=db_session
-        )
+    if secondary_search_settings is None:
+        # No secondary FUTURE to cancel. An INSTANT switchover already promoted the new
+        # model to PRESENT and backfills it in place, so there is nothing to revert to —
+        # surface that instead of silently succeeding (the UI would show a false "canceled").
+        if _active_port_settings(db_session) is not None:
+            raise OnyxError(
+                OnyxErrorCode.CONFLICT,
+                "The new embedding model is already live (INSTANT switchover); an "
+                "in-progress reindex-port backfill can no longer be reverted.",
+            )
+        return
 
-        update_search_settings_status(
-            search_settings=secondary_search_settings,
-            new_status=IndexModelStatus.PAST,
-            db_session=db_session,
-        )
+    expire_index_attempts(
+        search_settings_id=secondary_search_settings.id, db_session=db_session
+    )
 
-        # Stop any in-flight reindex port for the canceled FUTURE; the running
-        # task stops at its next batch boundary once it sees CANCELED.
-        cancel_active_port_attempts(
-            db_session, search_settings_id=secondary_search_settings.id
-        )
+    update_search_settings_status(
+        search_settings=secondary_search_settings,
+        new_status=IndexModelStatus.PAST,
+        db_session=db_session,
+    )
 
-        # remove the old index from the vector db
-        primary_search_settings = get_current_search_settings(db_session)
+    # Stop any in-flight reindex port for the canceled FUTURE; the running
+    # task stops at its next batch boundary once it sees CANCELED.
+    cancel_active_port_attempts(
+        db_session, search_settings_id=secondary_search_settings.id
+    )
 
-        # The canceled reindex stamped reclaim intent on this PRESENT (the would-be PAST);
-        # clear it so a later swap can't act on a stale consent set. No-op if unset.
-        clear_reclaim_intent__no_commit(db_session, primary_search_settings.id)
-        db_session.commit()
+    # remove the old index from the vector db
+    primary_search_settings = get_current_search_settings(db_session)
 
-        document_index = get_default_document_index(
-            primary_search_settings, None, db_session
-        )
-        document_index.verify_and_create_index_if_necessary(
-            embedding_dim=primary_search_settings.final_embedding_dim,
-            embedding_precision=primary_search_settings.embedding_precision,
-        )
+    # The reverted FUTURE index holds abandoned partial-port data — reclaim it so a later
+    # same-model reindex isn't blocked by the name-reuse guard.
+    reverted_settings_id = secondary_search_settings.id
+    _reclaim_abandoned_future(
+        db_session, secondary_search_settings, primary_search_settings
+    )
+
+    # The canceled reindex stamped reclaim intent on this PRESENT (the would-be PAST);
+    # clear it so a later swap can't act on a stale consent set. No-op if unset.
+    clear_reclaim_intent__no_commit(db_session, primary_search_settings.id)
+    db_session.commit()
+
+    document_index = get_default_document_index(
+        primary_search_settings, None, db_session
+    )
+    document_index.verify_and_create_index_if_necessary(
+        embedding_dim=primary_search_settings.final_embedding_dim,
+        embedding_precision=primary_search_settings.embedding_precision,
+    )
+
+    # Kick off reclamation now instead of waiting for the reclaim beat. Safe no-op if the
+    # row is already RECLAIMED (single-tenant inline drop above) or reclaim is disabled.
+    enqueue_index_reclaim(client_app, get_current_tenant_id(), reverted_settings_id)
 
 
 @router.delete("/delete-search-settings")

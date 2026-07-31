@@ -1052,10 +1052,10 @@ MAX_CONSECUTIVE_PORT_FAILURES_BEFORE_PAUSE = max(
 )
 
 # Old-index reclamation (post-reindex deletion of the now-PAST index).
-# Master switch: when False the reclaim beat task no-ops entirely. Ships dark
-# (default off); flip True to go live. Instant kill switch if anything goes wrong.
+# Master switch: when False the reclaim beat task no-ops entirely. Defaults on;
+# set OLD_INDEX_RECLAIM_ENABLED=false as an instant kill switch if anything goes wrong.
 OLD_INDEX_RECLAIM_ENABLED = (
-    os.environ.get("OLD_INDEX_RECLAIM_ENABLED", "").lower() == "true"
+    os.environ.get("OLD_INDEX_RECLAIM_ENABLED", "true").lower() == "true"
 )
 # Soak before deleting a PAST index, anchored to when it stopped being read.
 # 0 = delete immediately once the soak gate is reached.

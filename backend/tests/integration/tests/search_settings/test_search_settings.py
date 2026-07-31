@@ -346,40 +346,35 @@ def test_set_new_then_update_inference_settings(
     _cancel_new_embedding(admin_user)
 
 
-def test_set_new_search_settings_replaces_previous_secondary(
+def test_new_reindex_refused_while_one_in_progress(
     reset: None,  # noqa: ARG001
     admin_user: DATestUser,
     llm_provider: DATestLLMProvider,
 ) -> None:
-    """Calling set-new-search-settings twice should retire the first secondary
-    and replace it with the second."""
+    """Only one re-index at a time: starting a second while the first is in progress is
+    refused (409), and the first is left untouched (not superseded). To change it, cancel
+    the in-progress re-index and start a new one."""
     mc_id = llm_provider.model_configuration_ids[0]
     current = _get_current_search_settings(admin_user)
 
-    # First: no contextual RAG
     resp1 = _set_new_search_settings(
         user=admin_user,
         current_settings=current,
         enable_contextual_rag=False,
     )
     resp1.raise_for_status()
-    first_id = resp1.json()["id"]
 
-    # Second: with contextual RAG
     resp2 = _set_new_search_settings(
         user=admin_user,
         current_settings=current,
         enable_contextual_rag=True,
         contextual_rag_model_configuration_id=mc_id,
     )
-    resp2.raise_for_status()
-    second_id = resp2.json()["id"]
+    assert resp2.status_code == 409
 
-    assert second_id != first_id
-
+    # The in-progress re-index is untouched — still the first one (RAG off).
     secondary = _get_secondary_search_settings(admin_user)
     assert secondary is not None
-    assert secondary["enable_contextual_rag"] is True
-    assert secondary["contextual_rag_model_configuration_id"] == mc_id
+    assert secondary["enable_contextual_rag"] is False
 
     _cancel_new_embedding(admin_user)

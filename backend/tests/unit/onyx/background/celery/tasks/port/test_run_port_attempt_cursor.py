@@ -50,6 +50,9 @@ def _patched(copy_result: tuple[int, bool], attempt: MagicMock) -> Any:
             return_value=MagicMock(port_backfill_source_id=None)
         ),
         "get_current_search_settings": MagicMock(return_value=MagicMock()),
+        "get_secondary_search_settings": MagicMock(return_value=None),
+        # Startup target-validation guard: the attempt's settings is still the port target.
+        "port_target_settings_id": MagicMock(return_value=attempt.search_settings_id),
         "mark_port_in_progress": MagicMock(return_value=True),
         "PortCopier": MagicMock(return_value=copier),
         "get_connector_credential_pair_from_id": MagicMock(return_value=cc_pair),
@@ -96,3 +99,42 @@ def test_cursor_advanced_when_batch_completes() -> None:
     assert kwargs["last_processed_doc_id"] == "d3"
     assert kwargs["docs_ported"] == 3
     patches["mark_port_succeeded"].assert_called_once()
+
+
+def test_copy_batch_bails_between_retries_on_abort() -> None:
+    # A cancel landing mid-batch stops retries: _copy_batch_with_retry returns aborted
+    # instead of exhausting all 5 attempts (each stacked on the embed/model-server timeout).
+    calls = {"n": 0}
+    aborted = {"v": False}
+
+    def copy(*_: Any, **__: Any) -> tuple[int, bool]:
+        calls["n"] += 1
+        aborted["v"] = True  # a cancel arrives during this attempt
+        raise RuntimeError("boom")
+
+    copier = MagicMock()
+    copier.copy_doc_batch.side_effect = copy
+
+    result = port_tasks._copy_batch_with_retry(
+        copier, ["d1"], MagicMock(), should_abort=lambda: aborted["v"]
+    )
+    assert result == (0, True)
+    assert calls["n"] == 1  # bailed after the first failure; did not retry
+
+
+def test_cancels_when_no_longer_port_target() -> None:
+    # A revert/supersede (or stale enqueue) left this attempt pointing at a FUTURE that is
+    # no longer the port target: the startup guard cancels it before any copy work.
+    attempt = _make_attempt()
+    patches = _patched((5, False), attempt)
+    patches["port_target_settings_id"] = MagicMock(
+        return_value=attempt.search_settings_id + 1
+    )
+
+    with patch.multiple(port_tasks, **patches):
+        port_tasks.run_port_attempt(port_attempt_id=1)
+
+    patches["mark_port_canceled"].assert_called_once()
+    patches["mark_port_in_progress"].assert_not_called()
+    patches["commit_port_cursor"].assert_not_called()
+    patches["mark_port_succeeded"].assert_not_called()

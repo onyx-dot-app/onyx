@@ -76,6 +76,7 @@ from onyx.db.port_orphan_candidate import (
     cleanup_stale_port_orphan_candidates,
     clear_port_orphan_candidates,
     get_port_orphan_candidate_doc_ids,
+    port_target_settings_id,
 )
 from onyx.db.search_settings import (
     get_current_search_settings,
@@ -176,6 +177,12 @@ def _copy_batch_with_retry(
                 _PORT_BATCH_MAX_RETRIES,
                 e,
             )
+            # A revert/supersede/deletion landed mid-batch: bail instead of burning the
+            # remaining retries (each stacked on the embed/model-server timeouts). Return
+            # aborted so the caller acks the cancel rather than failing the attempt.
+            if should_abort is not None and should_abort():
+                log.info("Port batch aborted between retries; stopping")
+                return 0, True
             if attempt_num < _PORT_BATCH_MAX_RETRIES:
                 time.sleep(_PORT_BATCH_RETRY_SLEEP_S)
     assert last_error is not None
@@ -274,6 +281,22 @@ def run_port_attempt(port_attempt_id: int, celery_task_id: str | None = None) ->
         if future_search_settings is None:
             mark_port_failed(
                 db_session, port_attempt_id, error_msg="FUTURE search settings missing"
+            )
+            return
+        # Refuse a FUTURE that is no longer the port target: a revert/supersede or stale
+        # enqueue can leave a fresh attempt that cancel_active_port_attempts never flagged.
+        # Safe to cancel outright — nothing is written yet (like the resume path's re-check).
+        target_id = port_target_settings_id(
+            get_current_search_settings(db_session),
+            get_secondary_search_settings(db_session),
+        )
+        if target_id != attempt.search_settings_id:
+            mark_port_canceled(db_session, port_attempt_id)
+            log.info(
+                "PortAttempt targets settings %s, no longer the port target (now %s); "
+                "canceling",
+                attempt.search_settings_id,
+                target_id,
             )
             return
         # Source to copy from: the recorded backfill source when the target was
