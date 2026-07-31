@@ -142,13 +142,35 @@ def test_new_tenants_target_the_configured_shard(
     assert get_shard_for_new_tenant() == SECOND_SHARD
 
 
-def test_unknown_target_shard_raises_rather_than_using_default(
+def test_unknown_target_shard_fails_when_configuration_is_parsed(
     placement_on_second_shard: dict[str, Any],  # noqa: ARG001
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
-    """Fail closed. Falling back to default is the silent misplacement to avoid."""
+    """A typo should stop the process, not fail every signup at request time."""
     monkeypatch.setattr(shard_registry, "ONYX_DB_NEW_TENANT_SHARD", "no-such-shard")
-    with pytest.raises(ShardConfigurationError):
+    shard_registry.reset_shard_specs()
+
+    with pytest.raises(ShardConfigurationError, match="ONYX_DB_NEW_TENANT_SHARD"):
+        shard_registry.get_shard_specs()
+
+
+def test_unknown_target_shard_raises_at_placement_rather_than_using_default(
+    placement_on_second_shard: dict[str, Any],  # noqa: ARG001
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """Second line of defence, behind the parse-time check above.
+
+    The shard table is read here *before* the name is changed, so the configuration is
+    already cached and valid — which is what forces the check inside
+    `get_shard_for_new_tenant` to be the thing that catches this, rather than
+    revalidation. Falling back to the default shard is the silent misplacement that
+    placement exists to prevent.
+    """
+    assert get_shard_for_new_tenant() == SECOND_SHARD
+
+    monkeypatch.setattr(shard_registry, "ONYX_DB_NEW_TENANT_SHARD", "no-such-shard")
+
+    with pytest.raises(ShardConfigurationError, match="ONYX_DB_NEW_TENANT_SHARD"):
         get_shard_for_new_tenant()
 
 
