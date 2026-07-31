@@ -120,6 +120,18 @@ def _helm_template_cmd(extra_args: list[str] | None = None) -> list[str]:
     ]
 
 
+def _render_template(template: str, extra_args: list[str] | None = None) -> str:
+    """Render one chart template, for assertions that aren't about the pod."""
+    result = subprocess.run(
+        [*_helm_template_cmd(extra_args), "--show-only", template],
+        capture_output=True,
+        text=True,
+    )
+    if result.returncode != 0:
+        _skip_or_fail(f"helm template failed (chart deps?): {result.stderr.strip()}")
+    return result.stdout
+
+
 def _render_pod_template_yaml(extra_args: list[str] | None = None) -> str:
     """Render the sandbox-pod PodTemplate from the chart."""
     cmd = [
@@ -655,3 +667,28 @@ def test_service_exposes_push_daemon_port() -> None:
         tenant_id="t-1",
     )
     assert PUSH_DAEMON_PORT in {p.port for p in svc.spec.ports}
+
+
+def test_sandbox_manager_can_patch_pods() -> None:
+    """`swap_to_image` moves a live sandbox onto a new image by mutating its
+    container images, which restarts them in place and leaves the pod — and so
+    the session workspace — intact.
+
+    Without `patch` the api-server silently loses that path and falls back to
+    destroying and rebuilding the sandbox, costing the user a re-provision and a
+    restore. Silent degradation is why this is asserted here.
+    """
+    docs = yaml.safe_load_all(_render_template("templates/sandbox-rbac.yaml"))
+    pod_verbs = {
+        verb
+        for doc in docs
+        if doc
+        and doc["kind"] == "Role"
+        and doc["metadata"]["labels"].get("app.kubernetes.io/component")
+        == "sandbox-manager"
+        for rule in doc["rules"]
+        if "pods" in rule["resources"]
+        for verb in rule["verbs"]
+    }
+
+    assert "patch" in pod_verbs

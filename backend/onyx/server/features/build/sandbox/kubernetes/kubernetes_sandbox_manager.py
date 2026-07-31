@@ -112,6 +112,7 @@ from onyx.server.features.build.sandbox.models import (
     FatalWriteError,
     FileSet,
     FilesystemEntry,
+    ImageMoveOutcome,
     RetriableWriteError,
     SandboxImageState,
     SandboxImageTarget,
@@ -178,6 +179,10 @@ _PREPULLER_CONTAINER_NAME = "prepuller"
 # Short-lived: the point is to notice a new image, but it is read every pass.
 _IMAGE_TARGET_TTL_SECONDS = 60.0
 
+# Covers a container restart plus opencode-serve and the sidecar coming back
+# against an image the node already holds — not a download.
+_IMAGE_SWAP_TIMEOUT_SECONDS = 60.0
+_IMAGE_SWAP_POLL_SECONDS = 2.0
 
 # Per-session egress tagging plugin, baked into the sandbox image (see
 # docker/Dockerfile). Path must match the COPY destination there.
@@ -685,6 +690,134 @@ class KubernetesSandboxManager(SandboxManager):
             target=SandboxImageTarget(ref=_pinned_ref(ref, digest), digest=digest),
             confirmed_nodes=frozenset(reported),
         )
+
+    def move_to_image(
+        self, sandbox_id: UUID, target: SandboxImageTarget
+    ) -> ImageMoveOutcome:
+        """Patch the image and let the kubelet restart just that container.
+
+        The pod survives, so the ``workspace`` and ``opencode-data`` emptyDirs do
+        too: no snapshot, no restore, no re-provision, and the sandbox never
+        leaves RUNNING. Verified on a real cluster, since the pod is
+        ``restartPolicy: Never`` and a replacement container was not a given.
+
+        Agent and sidecar go in one patch — a half-swapped pod would pair a new
+        agent with an old daemon. Never ``NEEDS_PROVISION``: the workspaces are
+        emptyDirs that die with the pod, so they cannot outlive it.
+        """
+        pod_name = self._get_pod_name(str(sandbox_id))
+        try:
+            self._core_api.patch_namespaced_pod(
+                name=pod_name,
+                namespace=self._namespace,
+                body={
+                    "spec": {
+                        "containers": [
+                            {"name": _SANDBOX_CONTAINER_NAME, "image": target.ref}
+                        ],
+                        # sandbox-init keeps its ref; it has already run.
+                        "initContainers": [
+                            {"name": _SIDECAR_CONTAINER_NAME, "image": target.ref}
+                        ],
+                    }
+                },
+            )
+        except ApiException as e:
+            logger.warning(
+                "Sandbox %s image swap to %s was refused: %s",
+                sandbox_id,
+                target.ref,
+                e,
+            )
+            return ImageMoveOutcome.UNSUPPORTED
+
+        logger.info("Swapping sandbox %s onto %s", sandbox_id, target.ref)
+        deadline = time.monotonic() + _IMAGE_SWAP_TIMEOUT_SECONDS
+        if self._wait_for_swap(sandbox_id, pod_name, target, deadline):
+            return ImageMoveOutcome.MOVED
+        return ImageMoveOutcome.UNSUPPORTED
+
+    def _wait_for_swap(
+        self,
+        sandbox_id: UUID,
+        pod_name: str,
+        target: SandboxImageTarget,
+        deadline: float,
+    ) -> bool:
+        """Three waits sharing one budget, each only meaningful once the previous
+        holds: the container reports the target image, the pod goes Ready, and the
+        sidecar answers.
+        """
+        if not self._wait_for_reported_image(pod_name, deadline, target.digest):
+            logger.warning(
+                "Sandbox %s did not come up on %s within %.0fs",
+                sandbox_id,
+                target.digest[:19],
+                _IMAGE_SWAP_TIMEOUT_SECONDS,
+            )
+            return False
+
+        try:
+            if not self._wait_for_pod_ready(pod_name, deadline):
+                return False
+        except RuntimeError as e:
+            # Deleted, or the new container cannot start.
+            logger.warning(
+                "Sandbox %s did not come back after the swap: %s", sandbox_id, e
+            )
+            return False
+
+        return self._wait_for_sidecar(sandbox_id, deadline)
+
+    def _wait_for_reported_image(
+        self, pod_name: str, deadline: float, digest: str
+    ) -> bool:
+        """Poll until the agent container reports it is running ``digest``.
+
+        Compared against the target, not against what it ran before: a status
+        that has not reported yet would let the *old* digest count as a change,
+        and a sandbox already on the target would wait for a change that never
+        comes.
+
+        Polled rather than watched: this is not a pod condition, so it cannot ride
+        ``_wait_for_pod_ready``'s predicate, and the wait is short — the kubelet
+        only has to stop one container and start another from a local image.
+        """
+        while True:
+            try:
+                pod = self._core_api.read_namespaced_pod(
+                    name=pod_name, namespace=self._namespace
+                )
+            except ApiException as e:
+                logger.warning("Lost sight of pod %s mid-swap: %s", pod_name, e)
+                return False
+
+            status = _container_status(pod, _SANDBOX_CONTAINER_NAME)
+            if sandbox_image_digest(status.image_id if status else None) == digest:
+                return True
+            if time.monotonic() >= deadline:
+                return False
+            time.sleep(_IMAGE_SWAP_POLL_SECONDS)
+
+    def _wait_for_sidecar(self, sandbox_id: UUID, deadline: float) -> bool:
+        """Poll the sidecar for the rest of the budget.
+
+        It restarts on its own schedule and has no readiness probe, so the pod can
+        report Ready before the push daemon has bound its port. One probe would
+        send a completed swap down the rebuild path, which snapshots and
+        terminates a sandbox that was already fine.
+        """
+        while True:
+            if self._sidecar_client.is_healthy(
+                sandbox_id=sandbox_id, timeout_seconds=_IMAGE_SWAP_POLL_SECONDS
+            ):
+                return True
+            if time.monotonic() >= deadline:
+                logger.warning(
+                    "Sandbox %s sidecar did not answer after the swap", sandbox_id
+                )
+                return False
+            time.sleep(_IMAGE_SWAP_POLL_SECONDS)
 
     def _movable_sandbox_digests(
         self, confirmed_nodes: frozenset[str]
