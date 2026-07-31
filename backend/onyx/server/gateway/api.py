@@ -525,9 +525,7 @@ def _responses_input_to_raw_messages(request: ResponsesRequest) -> list[dict[str
     )
     raw: list[dict[str, Any]] = []
     for message in litellm_messages:
-        message_dict = cast(
-            dict[str, Any], message if isinstance(message, dict) else dict(message)
-        )
+        message_dict: dict[str, Any] = dict(message)
         role = message_dict.get("role")
         if role in ("system", "developer"):
             raw.append(
