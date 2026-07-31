@@ -128,7 +128,6 @@ def _make_tool(
     mcp_server.server_url = "http://mcp.example"
     mcp_server.auth_type = MCPAuthenticationType.NONE
     mcp_server.transport = None
-    mcp_server.custom_headers = None
     return MCPTool(
         tool_id=1,
         emitter=MagicMock(),

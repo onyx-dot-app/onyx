@@ -233,7 +233,6 @@ def create_mcp_server__no_commit(
     oauth_additional_auth_params: dict[str, str] | None = None,
     admin_connection_config_id: int | None = None,
     is_public: bool = True,
-    custom_headers: dict[str, str] | None = None,
 ) -> MCPServer:
     """Create a new MCP server"""
     new_server = MCPServer(
@@ -251,7 +250,6 @@ def create_mcp_server__no_commit(
         oauth_additional_auth_params=oauth_additional_auth_params,
         admin_connection_config_id=admin_connection_config_id,
         is_public=is_public,
-        custom_headers=custom_headers or None,
     )
     db_session.add(new_server)
     db_session.flush()  # Get the ID without committing
@@ -277,7 +275,6 @@ def update_mcp_server__no_commit(
     last_refreshed_at: datetime.datetime | None = None,
     is_public: bool | None = None,
     available_in_craft: bool | None = None,
-    custom_headers: dict[str, str] | None | UnsetType = UNSET,
 ) -> MCPServer:
     """Update an existing MCP server"""
     server = get_mcp_server_by_id(server_id, db_session)
@@ -314,10 +311,6 @@ def update_mcp_server__no_commit(
         server.last_refreshed_at = last_refreshed_at
     if available_in_craft is not None:
         server.available_in_craft = available_in_craft
-    if not isinstance(custom_headers, UnsetType):
-        server.custom_headers = (  # ty: ignore[invalid-assignment]
-            custom_headers or None
-        )
 
     db_session.flush()  # Don't commit yet, let caller decide when to commit
     return server
@@ -432,11 +425,40 @@ class MCPCredentialsError(Exception):
 
 
 def extract_custom_headers(server: MCPServer) -> dict[str, str]:
-    """The server's admin-defined custom headers as a plain dict (unmasked).
-    Empty when none are configured."""
-    if server.custom_headers is None:
-        return {}
-    return cast(dict[str, str], server.custom_headers.get_value(apply_mask=False))
+    """The server's admin-defined custom headers (unmasked), stored on the
+    admin connection config. Empty when none are configured."""
+    return (
+        extract_connection_data(server.admin_connection_config).get("custom_headers")
+        or {}
+    )
+
+
+def upsert_admin_custom_headers__no_commit(
+    mcp_server: MCPServer, custom_headers: dict[str, str], db_session: Session
+) -> None:
+    """Persist admin custom headers on the admin connection config, creating a
+    bare config for servers that have none (e.g. PT_OAUTH / NONE)."""
+    config = mcp_server.admin_connection_config
+    if config is None:
+        if not custom_headers:
+            return
+        config = create_connection_config(
+            config_data=MCPConnectionData(headers={}, custom_headers=custom_headers),
+            mcp_server_id=mcp_server.id,
+            db_session=db_session,
+        )
+        # Assign the relationship (not just the FK) so same-session readers
+        # don't see a stale cached None.
+        mcp_server.admin_connection_config = config
+        db_session.flush()
+        return
+    config_data = extract_connection_data(config, apply_mask=False)
+    if (config_data.get("custom_headers") or {}) == custom_headers:
+        return
+    config_data["custom_headers"] = custom_headers
+    config.config = config_data  # ty: ignore[invalid-assignment]
+    flag_modified(config, "config")
+    db_session.flush()
 
 
 def render_custom_headers(

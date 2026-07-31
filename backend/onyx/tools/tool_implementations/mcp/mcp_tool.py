@@ -6,7 +6,7 @@ from mcp.client.auth import OAuthClientProvider
 
 from onyx.chat.emitter import Emitter
 from onyx.db.enums import MCPAuthenticationType, MCPTransport
-from onyx.db.mcp import ResolvedMCPCredentials, extract_custom_headers
+from onyx.db.mcp import ResolvedMCPCredentials
 from onyx.db.models import MCPConnectionConfig, MCPServer
 from onyx.server.features.mcp.client import call_mcp_tool
 from onyx.server.features.mcp.models import DENYLISTED_MCP_HEADERS
@@ -79,6 +79,7 @@ class MCPTool(Tool[None]):
         user_id: str = "",
         user_oauth_token: str | None = None,
         additional_headers: dict[str, str] | None = None,
+        custom_headers: dict[str, str] | None = None,
     ) -> None:
         super().__init__(emitter=emitter)
 
@@ -89,6 +90,7 @@ class MCPTool(Tool[None]):
         self._user_id = user_id
         self._user_oauth_token = user_oauth_token
         self._additional_headers = additional_headers or {}
+        self._custom_headers = custom_headers or {}
 
         self._mcp_tool_name = tool_name
         self._name = tool_name  # NOTE: this may change in _disambiguate_mcp_tool_names
@@ -181,7 +183,7 @@ class MCPTool(Tool[None]):
             credentials = ResolvedMCPCredentials(
                 connection_config=self.connection_config,
                 user_oauth_token=self._user_oauth_token,
-                custom_headers=extract_custom_headers(self.mcp_server),
+                custom_headers=self._custom_headers,
                 user_email=self.user_email,
             )
             auth_headers = credentials.build_auth_headers()

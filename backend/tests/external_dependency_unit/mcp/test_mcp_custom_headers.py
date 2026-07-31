@@ -27,6 +27,7 @@ from onyx.db.mcp import (
     create_mcp_server__no_commit,
     extract_custom_headers,
     resolve_mcp_credentials,
+    upsert_admin_custom_headers__no_commit,
 )
 from onyx.db.models import MCPServer, OAuthAccount, User
 from onyx.server.features.mcp.api import _upsert_mcp_server
@@ -75,8 +76,9 @@ def _create_server_with_custom_headers(
         transport=MCPTransport.STREAMABLE_HTTP,
         auth_performer=MCPAuthenticationPerformer.PER_USER,
         db_session=db_session,
-        custom_headers=custom_headers,
     )
+    if custom_headers:
+        upsert_admin_custom_headers__no_commit(server, custom_headers, db_session)
     db_session.commit()
     db_session.refresh(server)
     return server
@@ -206,7 +208,8 @@ class TestUpsert:
             },
         )
         server = _upsert_mcp_server(create_request, db_session, admin)
-        assert isinstance(server.custom_headers, SensitiveValue)
+        assert server.admin_connection_config is not None
+        assert isinstance(server.admin_connection_config.config, SensitiveValue)
         assert extract_custom_headers(server) == {
             _GATEWAY_KEY_HEADER: _GATEWAY_KEY_VALUE,
             _ATTRIBUTION_HEADER: "{user_email}",
@@ -235,6 +238,48 @@ class TestUpsert:
             _GATEWAY_KEY_HEADER: _GATEWAY_KEY_VALUE,
             "x-new-header": "fresh_value",
         }
+
+    def test_custom_headers_survive_shared_token_rotation(
+        self, db_session: Session
+    ) -> None:
+        """Changing the shared API token deletes and recreates the admin
+        config; custom headers must carry over to the new row."""
+        admin = create_test_user(db_session, "rotation_admin")
+        base: dict[str, Any] = {
+            "name": f"Rotation Server {uuid4().hex[:8]}",
+            "server_url": "http://gateway.example.com/mcp",
+            "auth_type": MCPAuthenticationType.API_TOKEN,
+            "auth_performer": MCPAuthenticationPerformer.ADMIN,
+            "transport": MCPTransport.STREAMABLE_HTTP,
+        }
+        server = _upsert_mcp_server(
+            MCPToolCreateRequest(
+                **base,
+                api_token="token_one",
+                api_token_changed=True,
+                custom_headers={_GATEWAY_KEY_HEADER: _GATEWAY_KEY_VALUE},
+            ),
+            db_session,
+            admin,
+        )
+        old_config_id = server.admin_connection_config_id
+        server = _upsert_mcp_server(
+            MCPToolCreateRequest(
+                **base,
+                existing_server_id=server.id,
+                api_token="token_two",
+                api_token_changed=True,
+            ),
+            db_session,
+            admin,
+        )
+        assert server.admin_connection_config_id != old_config_id
+        assert extract_custom_headers(server) == {
+            _GATEWAY_KEY_HEADER: _GATEWAY_KEY_VALUE
+        }
+        # The rotated token is intact alongside the carried-over headers.
+        creds = resolve_mcp_credentials(server, admin, db_session)
+        assert creds.build_auth_headers() == {"Authorization": "Bearer token_two"}
 
     def test_casing_only_rename_keeps_stored_value(self, db_session: Session) -> None:
         """Renaming a header's casing without editing its masked value must
@@ -335,6 +380,7 @@ class TestMCPToolRun:
             user_email=user.email,
             user_id=str(user.id),
             user_oauth_token=creds.user_oauth_token,
+            custom_headers=creds.custom_headers,
         )
 
         captured_headers: dict[str, str] = {}

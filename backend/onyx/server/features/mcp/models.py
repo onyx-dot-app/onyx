@@ -105,6 +105,9 @@ class MCPConnectionData(TypedDict):
     # header template without re-entering the masked API token.
     api_token: NotRequired[str]
     header_substitutions: NotRequired[dict[str, str]]
+    # Admin config only: admin-defined headers sent on every request to the
+    # server, merged below the auth headers.
+    custom_headers: NotRequired[dict[str, str]]
     # Names of fields the user must supply for header substitution. Persisted
     # only on the per-user template config (the admin's connection config that
     # serves as the template); empty/absent on regular per-user configs and on

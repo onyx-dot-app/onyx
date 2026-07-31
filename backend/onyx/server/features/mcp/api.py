@@ -71,6 +71,7 @@ from onyx.db.mcp import (
     render_custom_headers,
     update_connection_config,
     update_mcp_server__no_commit,
+    upsert_admin_custom_headers__no_commit,
     upsert_user_connection_config,
     user_can_access_mcp_server,
 )
@@ -1986,6 +1987,19 @@ def _upsert_mcp_server(
                 detail=f"MCP server with ID {request.existing_server_id} not found",
             )
         _ensure_mcp_server_owner_or_admin(mcp_server, user)
+        # Captured before any config deletion so custom headers survive a
+        # credential change; applied onto the final admin config below.
+        existing_custom_headers = extract_custom_headers(mcp_server)
+        resolved_custom_headers = _resolve_custom_headers(
+            request_headers=request.custom_headers,
+            request_headers_changed=request.custom_headers_changed,
+            existing_headers=existing_custom_headers,
+        )
+        final_custom_headers = (
+            existing_custom_headers
+            if isinstance(resolved_custom_headers, UnsetType)
+            else resolved_custom_headers
+        )
         client_info: OAuthClientInformationFull | None = None
         existing_admin_config_dict: MCPConnectionData = MCPConnectionData(headers={})
         if mcp_server.admin_connection_config:
@@ -2164,8 +2178,7 @@ def _upsert_mcp_server(
         ):
             delete_connection_config(mcp_server.admin_connection_config_id, db_session)
 
-        # Update the server with new values. Custom headers deliberately skip
-        # `changing_connection_config` — editing them must not wipe user creds.
+        # Update the server with new values
         mcp_server = update_mcp_server__no_commit(
             server_id=request.existing_server_id,
             db_session=db_session,
@@ -2180,11 +2193,6 @@ def _upsert_mcp_server(
             oauth_scopes_override=request.oauth_scopes_override,
             oauth_additional_auth_params=request.oauth_additional_auth_params,
             transport=request.transport,
-            custom_headers=_resolve_custom_headers(
-                request_headers=request.custom_headers,
-                request_headers_changed=request.custom_headers_changed,
-                existing_headers=extract_custom_headers(mcp_server),
-            ),
         )
 
         logger.info(
@@ -2209,6 +2217,11 @@ def _upsert_mcp_server(
             request_headers_changed=request.custom_headers_changed,
             existing_headers={},
         )
+        final_custom_headers = (
+            {}
+            if isinstance(resolved_custom_headers, UnsetType)
+            else resolved_custom_headers
+        )
         mcp_server = create_mcp_server__no_commit(
             owner_email=user.email,
             name=request.name,
@@ -2223,11 +2236,6 @@ def _upsert_mcp_server(
             oauth_additional_auth_params=request.oauth_additional_auth_params,
             transport=request.transport or MCPTransport.STREAMABLE_HTTP,
             db_session=db_session,
-            custom_headers=(
-                None
-                if isinstance(resolved_custom_headers, UnsetType)
-                else resolved_custom_headers
-            ),
         )
 
         logger.info(
@@ -2248,12 +2256,17 @@ def _upsert_mcp_server(
             db_session=db_session,
         )
 
-    # PT_OAUTH doesn't need stored connection config (uses user's login token)
+    # PT_OAUTH doesn't need stored connection config (uses user's login token).
+    # Custom headers are still applied in place — never through the
+    # credential-wipe path above, so editing them can't log users out.
     if (
         not changing_connection_config
         or request.auth_type == MCPAuthenticationType.NONE
         or request.auth_type == MCPAuthenticationType.PT_OAUTH
     ):
+        upsert_admin_custom_headers__no_commit(
+            mcp_server, final_custom_headers, db_session
+        )
         return mcp_server
 
     # Create connection configs
@@ -2353,7 +2366,10 @@ def _upsert_mcp_server(
             db_session=db_session,
             admin_connection_config_id=admin_connection_config_id,
         )
+        # The relationship may still point at a deleted/stale config row.
+        db_session.expire(mcp_server, ["admin_connection_config"])
 
+    upsert_admin_custom_headers__no_commit(mcp_server, final_custom_headers, db_session)
     db_session.commit()
     return mcp_server
 

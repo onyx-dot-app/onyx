@@ -24,7 +24,6 @@ def _mcp_tool(
     server.server_url = "https://mcp.example"
     server.auth_type = auth_type
     server.transport = None
-    server.custom_headers = None
     return MCPTool(
         tool_id=1,
         emitter=MagicMock(),
