@@ -40,7 +40,7 @@ class _FakeSidecarClient:
 def test_kubernetes_list_directory_delegates_to_sidecar() -> None:
     manager: KubernetesSandboxManager = object.__new__(KubernetesSandboxManager)
     sidecar_client = _FakeSidecarClient()
-    manager._sidecar_client = sidecar_client  # type: ignore[attr-defined]
+    manager._sidecar_client = sidecar_client  # type: ignore[attr-defined]  # ty: ignore[invalid-assignment]
 
     entries = manager.list_directory(_SANDBOX_ID, _SESSION_ID, ".")
 
@@ -60,7 +60,7 @@ def test_kubernetes_list_directory_maps_sidecar_not_found() -> None:
             )
 
     manager: KubernetesSandboxManager = object.__new__(KubernetesSandboxManager)
-    manager._sidecar_client = NotFoundSidecarClient()  # type: ignore[attr-defined]
+    manager._sidecar_client = NotFoundSidecarClient()  # type: ignore[attr-defined]  # ty: ignore[invalid-assignment]
 
     with pytest.raises(ValueError, match="not found or not a directory"):
         manager.list_directory(_SANDBOX_ID, _SESSION_ID, "missing")
@@ -82,7 +82,7 @@ def test_kubernetes_list_directory_surfaces_unexpected_sidecar_errors(
             raise SidecarStatusError("filesystem list", status_code, body)
 
     manager: KubernetesSandboxManager = object.__new__(KubernetesSandboxManager)
-    manager._sidecar_client = ErrorSidecarClient()  # type: ignore[attr-defined]
+    manager._sidecar_client = ErrorSidecarClient()  # type: ignore[attr-defined]  # ty: ignore[invalid-assignment]
 
     with pytest.raises(RuntimeError, match="Failed to list directory"):
         manager.list_directory(_SANDBOX_ID, _SESSION_ID, "missing")

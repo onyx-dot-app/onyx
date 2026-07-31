@@ -323,9 +323,9 @@ def _known_provider_oauth_metadata(mcp_server: DbMCPServer) -> OAuthMetadata | N
         return None
     parsed = urlparse(mcp_server.oauth_authorization_endpoint)
     return OAuthMetadata(
-        issuer=f"{parsed.scheme}://{parsed.netloc}",  # ty: ignore[invalid-argument-type]
-        authorization_endpoint=mcp_server.oauth_authorization_endpoint,  # ty: ignore[invalid-argument-type]
-        token_endpoint=mcp_server.oauth_token_endpoint,  # ty: ignore[invalid-argument-type]
+        issuer=f"{parsed.scheme}://{parsed.netloc}",
+        authorization_endpoint=mcp_server.oauth_authorization_endpoint,
+        token_endpoint=mcp_server.oauth_token_endpoint,
     )
 
 

@@ -74,7 +74,10 @@ def test_role_completeness_against_sdk_enum() -> None:
     assert all_roles == _EXPECTED_READ_ROLES | {CollaborationRoleField.UPLOADER}
 
 
-@pytest.mark.parametrize("role", sorted(_EXPECTED_READ_ROLES, key=lambda r: r.value))
+_SORTED_READ_ROLES = sorted(_EXPECTED_READ_ROLES, key=lambda r: r.value)
+
+
+@pytest.mark.parametrize("role", _SORTED_READ_ROLES)
 def test_read_capable_roles_grant_access(role: CollaborationRoleField) -> None:
     access = apply_collaborations_to_access(
         BoxAccessContext(), [_user_collab("reader@example.com", role)]

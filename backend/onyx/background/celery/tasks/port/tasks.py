@@ -455,7 +455,7 @@ def run_port_attempt(port_attempt_id: int, celery_task_id: str | None = None) ->
     log.info("Port complete: %d docs, %d chunks", docs_ported, chunks_ported)
 
 
-@shared_task(
+@shared_task(  # ty: ignore[invalid-argument-type]
     name=OnyxCeleryTask.RUN_PORT_ATTEMPT,
     soft_time_limit=_PORT_SOFT_TIME_LIMIT,
     time_limit=_PORT_TIME_LIMIT,
@@ -473,7 +473,7 @@ def run_port_attempt_task(
     )
 
 
-@shared_task(
+@shared_task(  # ty: ignore[invalid-argument-type]
     name=OnyxCeleryTask.RUN_USER_FILE_PORT_ATTEMPT,
     soft_time_limit=_PORT_SOFT_TIME_LIMIT,
     time_limit=_PORT_TIME_LIMIT,
@@ -860,7 +860,7 @@ def resume_paused_port_unit(
     return PortResumeResult.RESUMED
 
 
-@shared_task(
+@shared_task(  # ty: ignore[invalid-argument-type]
     name=OnyxCeleryTask.CHECK_FOR_PORT,
     soft_time_limit=300,
     bind=True,

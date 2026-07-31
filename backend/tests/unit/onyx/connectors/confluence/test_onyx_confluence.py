@@ -31,9 +31,7 @@ def _create_mock_response(
     response.status_code = status_code
     response.url = url
     if json_data is not None:
-        response.json = mock.Mock(  # ty: ignore[invalid-assignment]
-            return_value=json_data
-        )
+        response.json = mock.Mock(return_value=json_data)
     if status_code >= 400:
         response.reason = "Mock Error"
     return response
@@ -46,9 +44,7 @@ def _create_http_error(
     url: str = "",
 ) -> requests.Response:
     response = _create_mock_response(status_code, json_data, url)
-    response.raise_for_status = mock.Mock(  # ty: ignore[invalid-assignment]
-        side_effect=HTTPError(response=response)
-    )
+    response.raise_for_status = mock.Mock(side_effect=HTTPError(response=response))
     return response
 
 
@@ -1242,9 +1238,7 @@ def test_jsonrpc_websudo_html_response_raises_validation_error(
     fake_response._content = websudo_html.encode("utf-8")
 
     post_mock = mock.Mock(return_value=fake_response)
-    confluence_server_client._confluence.post = (  # ty: ignore[invalid-assignment]
-        post_mock
-    )
+    confluence_server_client._confluence.post = post_mock
 
     with pytest.raises(ConnectorValidationError) as exc_info:
         confluence_server_client.get_all_space_permissions_server(space_key="TST")
@@ -1294,9 +1288,7 @@ def test_supports_rest_space_permissions_true_for_dc_91_plus(
     call must not hit /rest/api/server-information a second time.
     """
     server_info_mock = mock.Mock(return_value=_server_information_payload("10.2.10"))
-    confluence_server_client._confluence.get = (  # ty: ignore[invalid-assignment]
-        server_info_mock
-    )
+    confluence_server_client._confluence.get = server_info_mock
 
     assert confluence_server_client.supports_rest_space_permissions() is True
     assert confluence_server_client.get_server_version() == (10, 2)
@@ -1313,9 +1305,7 @@ def test_supports_rest_space_permissions_false_for_dc_pre_91(
     confluence_server_client: OnyxConfluence,
 ) -> None:
     server_info_mock = mock.Mock(return_value=_server_information_payload("8.9.1"))
-    confluence_server_client._confluence.get = (  # ty: ignore[invalid-assignment]
-        server_info_mock
-    )
+    confluence_server_client._confluence.get = server_info_mock
 
     assert confluence_server_client.supports_rest_space_permissions() is False
     assert confluence_server_client.get_server_version() == (8, 9)
@@ -1330,9 +1320,7 @@ def test_supports_rest_space_permissions_false_when_probe_fails(
     dispatchers rely on.
     """
     server_info_mock = mock.Mock(side_effect=requests.ConnectionError("boom"))
-    confluence_server_client._confluence.get = (  # ty: ignore[invalid-assignment]
-        server_info_mock
-    )
+    confluence_server_client._confluence.get = server_info_mock
 
     assert confluence_server_client.supports_rest_space_permissions() is False
     assert confluence_server_client.get_server_version() is None
@@ -1349,9 +1337,7 @@ def test_get_all_space_permissions_server_rest_404_raises_unavailable(
     """
     response = _create_mock_response(404, json_data={}, url="x")
     get_mock = mock.Mock(return_value=response)
-    confluence_server_client._confluence.get = (  # ty: ignore[invalid-assignment]
-        get_mock
-    )
+    confluence_server_client._confluence.get = get_mock
 
     with pytest.raises(ConfluenceRestSpacePermissionsNotAvailableError) as exc_info:
         confluence_server_client.get_all_space_permissions_server_rest(space_key="ENG")
@@ -1371,9 +1357,7 @@ def test_get_all_space_permissions_server_rest_500_raises_insufficient_permissio
     """
     response = _create_mock_response(500, json_data={}, url="x")
     get_mock = mock.Mock(return_value=response)
-    confluence_server_client._confluence.get = (  # ty: ignore[invalid-assignment]
-        get_mock
-    )
+    confluence_server_client._confluence.get = get_mock
 
     with pytest.raises(InsufficientPermissionsError) as exc_info:
         confluence_server_client.get_all_space_permissions_server_rest(space_key="ENG")
@@ -1417,11 +1401,9 @@ def test_get_all_space_permissions_server_rest_happy_path(
     response.status_code = 200
     response.url = "x"
     json_mock = mock.Mock(return_value=permissions_payload)
-    response.json = json_mock  # ty: ignore[invalid-assignment]
+    response.json = json_mock
     get_mock = mock.Mock(return_value=response)
-    confluence_server_client._confluence.get = (  # ty: ignore[invalid-assignment]
-        get_mock
-    )
+    confluence_server_client._confluence.get = get_mock
 
     result = confluence_server_client.get_all_space_permissions_server_rest(
         space_key="ENG"
@@ -1450,9 +1432,7 @@ def test_get_user_email_from_userkey_caches_lookups(
             "displayName": "Alice",
         }
     )
-    confluence_server_client._confluence.get_user_details_by_userkey = (  # ty: ignore[invalid-assignment]
-        user_details_mock
-    )
+    confluence_server_client._confluence.get_user_details_by_userkey = user_details_mock
 
     first = get_user_email_from_userkey__server(
         confluence_server_client, user_key=user_key
@@ -1479,9 +1459,7 @@ def test_get_user_email_from_userkey_caches_negative_result(
     user_details_mock = mock.Mock(
         side_effect=HTTPError(response=_create_mock_response(404, {}, "x"))
     )
-    confluence_server_client._confluence.get_user_details_by_userkey = (  # ty: ignore[invalid-assignment]
-        user_details_mock
-    )
+    confluence_server_client._confluence.get_user_details_by_userkey = user_details_mock
 
     first = get_user_email_from_userkey__server(
         confluence_server_client, user_key=user_key

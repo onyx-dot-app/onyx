@@ -194,7 +194,7 @@ def inference_sections_from_ids(
         chunks_by_doc_id.setdefault(chunk.document_id, []).append(chunk)
 
     inference_sections = [
-        section  # ty: ignore[possibly-unresolved-reference]
+        section
         for chunks in chunks_by_doc_id.values()
         if chunks
         and (

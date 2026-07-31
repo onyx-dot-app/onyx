@@ -157,7 +157,7 @@ def test_dispatch_uses_skip_locked_to_avoid_dupes(
         try:
             barrier.wait(timeout=5)
             results[idx] = dispatch_due_scheduled_tasks.run(
-                tenant_id=POSTGRES_DEFAULT_SCHEMA_STANDARD_VALUE
+                tenant_id=POSTGRES_DEFAULT_SCHEMA_STANDARD_VALUE  # ty: ignore[invalid-argument-type]
             )
         finally:
             CURRENT_TENANT_ID_CONTEXTVAR.reset(token)
@@ -235,7 +235,7 @@ def test_cleanup_stuck_runs_marks_queued_over_threshold_failed(
     db_session.commit()
 
     marked = cleanup_stuck_scheduled_runs.run(
-        tenant_id=POSTGRES_DEFAULT_SCHEMA_STANDARD_VALUE
+        tenant_id=POSTGRES_DEFAULT_SCHEMA_STANDARD_VALUE  # ty: ignore[invalid-argument-type]
     )
     assert marked >= 1
 
@@ -282,7 +282,7 @@ def test_cleanup_stuck_runs_marks_running_over_threshold_failed(
     db_session.commit()
 
     marked = cleanup_stuck_scheduled_runs.run(
-        tenant_id=POSTGRES_DEFAULT_SCHEMA_STANDARD_VALUE
+        tenant_id=POSTGRES_DEFAULT_SCHEMA_STANDARD_VALUE  # ty: ignore[invalid-argument-type]
     )
     assert marked >= 1
 

@@ -159,7 +159,7 @@ def test_effective_settings_are_frozen() -> None:
     """Cached SecuritySettings instances must be immutable from caller code."""
     settings = get_security_settings()
     with pytest.raises(ValidationError):
-        settings.user_directory_admin_only = True  # type: ignore[misc]
+        settings.user_directory_admin_only = True  # type: ignore[misc]  # ty: ignore[invalid-assignment]
 
 
 def test_pre_tenant_returns_env_defaults_without_raising(

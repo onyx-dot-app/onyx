@@ -225,9 +225,7 @@ def _patch_ollama_chunk_parser() -> None:
         except Exception as e:
             raise e
 
-    OllamaChatCompletionResponseIterator.chunk_parser = (  # ty: ignore[invalid-assignment]
-        _patched_chunk_parser
-    )
+    OllamaChatCompletionResponseIterator.chunk_parser = _patched_chunk_parser
 
 
 def _patch_responses_reasoning_summary_newlines() -> None:
@@ -296,7 +294,7 @@ def _patch_responses_reasoning_summary_newlines() -> None:
         return _original_responses_chunk_parser(self, chunk)
 
     _patched_responses_chunk_parser.__name__ = "_patched_responses_chunk_parser"
-    OpenAiResponsesToChatCompletionStreamIterator.chunk_parser = (  # ty: ignore[invalid-assignment]
+    OpenAiResponsesToChatCompletionStreamIterator.chunk_parser = (
         _patched_responses_chunk_parser
     )
 
@@ -376,7 +374,7 @@ def _patch_openai_responses_transform_response() -> None:
         return result
 
     _patched_transform_response.__name__ = "_patched_transform_response"
-    LiteLLMResponsesTransformationHandler.transform_response = (  # ty: ignore[invalid-assignment]
+    LiteLLMResponsesTransformationHandler.transform_response = (
         _patched_transform_response
     )
 
@@ -412,9 +410,7 @@ def _patch_azure_responses_should_fake_stream() -> None:
         return False
 
     _patched_should_fake_stream.__name__ = "_patched_should_fake_stream"
-    AzureOpenAIResponsesAPIConfig.should_fake_stream = (  # ty: ignore[invalid-assignment]
-        _patched_should_fake_stream
-    )
+    AzureOpenAIResponsesAPIConfig.should_fake_stream = _patched_should_fake_stream
 
 
 def _patch_responses_api_usage_format() -> None:
@@ -578,7 +574,7 @@ def _patch_logging_assembled_streaming_response() -> None:
     _patched_get_assembled_streaming_response._is_patched = (  # ty: ignore[unresolved-attribute]
         True
     )
-    LiteLLMLoggingObj._get_assembled_streaming_response = (  # ty: ignore[invalid-assignment]
+    LiteLLMLoggingObj._get_assembled_streaming_response = (
         _patched_get_assembled_streaming_response
     )
 

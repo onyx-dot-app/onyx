@@ -138,7 +138,7 @@ dev = [
     "ipykernel==6.29.5",
     "manygo==0.2.0",
     "matplotlib==3.10.8",
-    "ty==0.0.31",
+    "ty==0.0.63",
     "onyx-devtools==0.10.6",
     "openapi-generator-cli==7.17.0",
     "pre-commit==3.2.2",
@@ -251,6 +251,12 @@ exclude = [
 # with # ty: ignore[rule] comments. New code that introduces these errors will
 # fail CI.
 all = "error"
+# Opted out of the strict default above. Both landed as new rules in ty 0.0.63
+# and are style/strictness rules rather than correctness ones; adopting either
+# is a four-figure mechanical change (no autofix available) and belongs in its
+# own PR rather than a version bump.
+missing-override-decorator = "ignore"  # ~1.1k methods across ~250 files.
+missing-type-argument = "ignore"  # ~1k bare generics across ~350 files.
 
 [tool.uv.workspace]
 members = ["tools/ods"]

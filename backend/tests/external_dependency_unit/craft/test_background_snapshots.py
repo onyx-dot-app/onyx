@@ -163,7 +163,7 @@ def test_running_sandbox_snapshotted_without_termination(
         size_bytes=4321,
     )
 
-    cleanup_idle_sandboxes_task.run(tenant_id=POSTGRES_DEFAULT_SCHEMA_STANDARD_VALUE)
+    cleanup_idle_sandboxes_task.run(tenant_id=POSTGRES_DEFAULT_SCHEMA_STANDARD_VALUE)  # ty: ignore[invalid-argument-type]
 
     db_session.expire_all()
     snapshots = (
@@ -202,7 +202,7 @@ def test_orphan_workspace_removed_and_skipped_during_background_snapshot(
         size_bytes=4321,
     )
 
-    cleanup_idle_sandboxes_task.run(tenant_id=POSTGRES_DEFAULT_SCHEMA_STANDARD_VALUE)
+    cleanup_idle_sandboxes_task.run(tenant_id=POSTGRES_DEFAULT_SCHEMA_STANDARD_VALUE)  # ty: ignore[invalid-argument-type]
 
     assert stubbed_sweep.last_cleanup_session_workspace_payload == {
         "sandbox_id": sandbox.id,
@@ -226,7 +226,7 @@ def test_fresh_snapshot_skipped_by_age_gate(
     session_row = _make_session(db_session, user)
     _add_snapshot(db_session, session_row.id, age_seconds=10)
 
-    cleanup_idle_sandboxes_task.run(tenant_id=POSTGRES_DEFAULT_SCHEMA_STANDARD_VALUE)
+    cleanup_idle_sandboxes_task.run(tenant_id=POSTGRES_DEFAULT_SCHEMA_STANDARD_VALUE)  # ty: ignore[invalid-argument-type]
 
     assert stubbed_sweep.list_session_workspaces_count == 0
     assert stubbed_sweep.create_snapshot_count == 0
@@ -255,7 +255,7 @@ def test_stale_session_defeats_prefilter(
         size_bytes=55,
     )
 
-    cleanup_idle_sandboxes_task.run(tenant_id=POSTGRES_DEFAULT_SCHEMA_STANDARD_VALUE)
+    cleanup_idle_sandboxes_task.run(tenant_id=POSTGRES_DEFAULT_SCHEMA_STANDARD_VALUE)  # ty: ignore[invalid-argument-type]
 
     assert stubbed_sweep.list_session_workspaces_count == 1
     # The per-session age gate still protects the fresh session.
@@ -289,7 +289,7 @@ def test_stale_snapshot_resnapshotted_and_priors_pruned(
         size_bytes=999,
     )
 
-    cleanup_idle_sandboxes_task.run(tenant_id=POSTGRES_DEFAULT_SCHEMA_STANDARD_VALUE)
+    cleanup_idle_sandboxes_task.run(tenant_id=POSTGRES_DEFAULT_SCHEMA_STANDARD_VALUE)  # ty: ignore[invalid-argument-type]
 
     db_session.expire_all()
     snapshots = (
@@ -324,7 +324,7 @@ def test_snapshot_failure_continues_other_sessions(
 
     with caplog.at_level(logging.WARNING):
         cleanup_idle_sandboxes_task.run(
-            tenant_id=POSTGRES_DEFAULT_SCHEMA_STANDARD_VALUE
+            tenant_id=POSTGRES_DEFAULT_SCHEMA_STANDARD_VALUE  # ty: ignore[invalid-argument-type]
         )
 
     db_session.expire_all()
@@ -349,7 +349,7 @@ def test_no_running_sandboxes_is_a_noop(
     make_sandbox(db_session, user, status=SandboxStatus.SLEEPING)
     db_session.commit()
 
-    cleanup_idle_sandboxes_task.run(tenant_id=POSTGRES_DEFAULT_SCHEMA_STANDARD_VALUE)
+    cleanup_idle_sandboxes_task.run(tenant_id=POSTGRES_DEFAULT_SCHEMA_STANDARD_VALUE)  # ty: ignore[invalid-argument-type]
 
     assert stubbed_sweep.list_session_workspaces_count == 0
     assert stubbed_sweep.create_snapshot_count == 0

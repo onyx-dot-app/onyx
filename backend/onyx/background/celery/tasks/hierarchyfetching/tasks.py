@@ -172,7 +172,7 @@ def _try_creating_hierarchy_fetching_task(
             lock.release()
 
 
-@shared_task(
+@shared_task(  # ty: ignore[invalid-argument-type]
     name=OnyxCeleryTask.CHECK_FOR_HIERARCHY_FETCHING,
     soft_time_limit=300,
     bind=True,
@@ -354,7 +354,7 @@ def _run_hierarchy_extraction(
     return total_nodes
 
 
-@shared_task(
+@shared_task(  # ty: ignore[invalid-argument-type]
     name=OnyxCeleryTask.CONNECTOR_HIERARCHY_FETCHING_TASK,
     soft_time_limit=3600,  # 1 hour soft limit
     time_limit=3900,  # 1 hour 5 min hard limit

@@ -59,7 +59,7 @@ def _manager_with(client: _FakeServeClient) -> KubernetesSandboxManager:
     def build_client(*_: Any, **__: Any) -> _FakeServeClient:
         return client
 
-    manager._build_serve_client = build_client  # type: ignore[method-assign]
+    manager._build_serve_client = build_client  # type: ignore[method-assign]  # ty: ignore[invalid-assignment]
     return manager
 
 

@@ -28,6 +28,7 @@ import os
 import shutil
 import subprocess
 from typing import NoReturn
+from uuid import UUID
 
 import pytest
 import yaml
@@ -309,7 +310,7 @@ def _build_pod() -> client.V1Pod:
     pod_template = _render_pod_template()
     mgr: KubernetesSandboxManager = object.__new__(KubernetesSandboxManager)
     mgr._namespace = "onyx-sandboxes"  # type: ignore[attr-defined]
-    mgr._core_api = _FakeCoreApi(pod_template)  # type: ignore[attr-defined]
+    mgr._core_api = _FakeCoreApi(pod_template)  # type: ignore[attr-defined]  # ty: ignore[invalid-assignment]
     return mgr._create_sandbox_pod(  # type: ignore[attr-defined]
         sandbox_id="abc12345-abcd-abcd-abcd-abcdef123456",
         tenant_id="t-1",
@@ -651,7 +652,7 @@ def test_service_exposes_push_daemon_port() -> None:
     mgr: KubernetesSandboxManager = object.__new__(KubernetesSandboxManager)
     mgr._namespace = "onyx-sandboxes"  # type: ignore[attr-defined]
     svc = mgr._create_sandbox_service(  # type: ignore[attr-defined]
-        sandbox_id="abc12345-abcd-abcd-abcd-abcdef123456",
+        sandbox_id=UUID("abc12345-abcd-abcd-abcd-abcdef123456"),
         tenant_id="t-1",
     )
     assert PUSH_DAEMON_PORT in {p.port for p in svc.spec.ports}

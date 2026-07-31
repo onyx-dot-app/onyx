@@ -74,7 +74,7 @@ def _build_async_engine(spec: ShardSpec) -> AsyncEngine:
     }
 
     if POSTGRES_USE_NULL_POOL:
-        engine_kwargs["poolclass"] = pool.NullPool  # ty: ignore[invalid-assignment]
+        engine_kwargs["poolclass"] = pool.NullPool
     else:
         engine_kwargs["pool_size"], engine_kwargs["max_overflow"] = divide_pool_budget(
             POSTGRES_API_SERVER_POOL_SIZE, POSTGRES_API_SERVER_POOL_OVERFLOW

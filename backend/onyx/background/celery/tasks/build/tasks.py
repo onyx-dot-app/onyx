@@ -36,7 +36,7 @@ TIMEOUT_SECONDS = 6000
 SNAPSHOT_INTERVAL_DIVISOR = 4
 
 
-@shared_task(
+@shared_task(  # ty: ignore[invalid-argument-type]
     name=OnyxCeleryTask.CLEANUP_IDLE_SANDBOXES,
     soft_time_limit=TIMEOUT_SECONDS,
     bind=True,

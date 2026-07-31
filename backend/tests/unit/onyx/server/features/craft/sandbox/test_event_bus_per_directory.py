@@ -68,7 +68,7 @@ def mgr(
     m: KubernetesSandboxManager = object.__new__(KubernetesSandboxManager)
     m._init_serve_state()
 
-    m._load_serve_connection_info = (  # type: ignore[assignment]
+    m._load_serve_connection_info = (  # type: ignore[assignment]  # ty: ignore[invalid-assignment]
         lambda sandbox_id: ServeConnectionInfo(
             base_url=f"http://{sandbox_id}.invalid:4096",
             password=None,

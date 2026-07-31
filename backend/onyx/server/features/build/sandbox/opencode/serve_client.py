@@ -1648,7 +1648,7 @@ class OpencodeServeClient:
                 "type": "file",
                 "mime": attachment.mime_type,
                 "filename": attachment.name,
-                "url": (PurePosixPath(directory) / attachment.path).as_uri(),
+                "url": (PurePosixPath(directory) / attachment.path).as_uri(),  # ty: ignore[deprecated]
             }
             for attachment in attachments or []
         )

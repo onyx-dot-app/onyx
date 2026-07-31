@@ -106,7 +106,7 @@ class ThreadSafeDict(MutableMapping[KT, VT]):
     @overload
     def get(self, key: KT, default: VT | _T) -> VT | _T: ...
 
-    def get(self, key: KT, default: Any = None) -> Any:
+    def get(self, key: KT, default: Any = None) -> Any:  # ty: ignore[invalid-method-override]
         """Get a value with a default, atomically."""
         with self.lock:
             return self._dict.get(key, default)
@@ -118,9 +118,7 @@ class ThreadSafeDict(MutableMapping[KT, VT]):
                 return self._dict.pop(key)
             return self._dict.pop(key, default)
 
-    def setdefault(  # ty: ignore[invalid-method-override]
-        self, key: KT, default: VT
-    ) -> VT:
+    def setdefault(self, key: KT, default: VT) -> VT:
         """Set a default value if key is missing, atomically."""
         with self.lock:
             return self._dict.setdefault(key, default)

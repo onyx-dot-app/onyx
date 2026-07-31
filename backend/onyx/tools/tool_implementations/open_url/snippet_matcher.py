@@ -169,7 +169,7 @@ def _normalize_text_with_mapping(text: str) -> tuple[str, list[int]]:
         # Check for HTML entities first (greedy match)
         for entity in sorted_entities:
             if text[i : i + len(entity)] == entity:
-                output = html_entities[entity]  # ty: ignore[invalid-argument-type]
+                output = html_entities[entity]
                 step = len(entity)
                 break
 

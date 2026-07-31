@@ -135,7 +135,7 @@ def revoke_tasks_blocking_deletion(
         task_logger.exception("Exception while revoking external group sync task")
 
 
-@shared_task(
+@shared_task(  # ty: ignore[invalid-argument-type]
     name=OnyxCeleryTask.CHECK_FOR_CONNECTOR_DELETION,
     ignore_result=True,
     soft_time_limit=JOB_TIMEOUT,
