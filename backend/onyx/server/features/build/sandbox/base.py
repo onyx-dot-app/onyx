@@ -36,10 +36,13 @@ from onyx.server.features.build.sandbox.models import (
     FatalWriteError,
     FileSet,
     FilesystemEntry,
+    ImageMoveOutcome,
     PromptAttachment,
     PushFailure,
     PushResult,
     RetriableWriteError,
+    SandboxImageState,
+    SandboxImageTarget,
     SandboxInfo,
     SnapshotResult,
 )
@@ -364,6 +367,27 @@ class SandboxManager(_ServeMixin, ABC):
             True if sandbox is healthy, False otherwise
         """
         ...
+
+    def get_image_state(self) -> SandboxImageState:
+        """The image sandboxes should run and the image each one is running.
+
+        One call for the whole fleet, keyed by the sandbox-id label both backends
+        already set. Reporting nothing known produces no work.
+        """
+        return SandboxImageState(target=None, movable_digests={})
+
+    def move_to_image(
+        self,
+        sandbox_id: UUID,  # noqa: ARG002
+        target: SandboxImageTarget,  # noqa: ARG002
+    ) -> ImageMoveOutcome:
+        """Move a live sandbox onto ``target``, preserving as much as possible.
+
+        ``target`` must be one :meth:`get_image_state` vouched for: a sandbox
+        restarted onto an image its host lacks cannot serve anything. Only safe
+        when no chat work is in flight, which the caller owns.
+        """
+        return ImageMoveOutcome.UNSUPPORTED
 
     def send_message(
         self,

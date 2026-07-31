@@ -50,6 +50,7 @@ import tempfile
 import time
 from collections.abc import Iterator, Sequence
 from contextlib import contextmanager
+from itertools import chain
 from pathlib import Path
 from typing import cast
 from uuid import UUID
@@ -57,6 +58,7 @@ from uuid import UUID
 from kubernetes import client, watch
 from kubernetes.client.rest import ApiException
 from kubernetes.stream import stream as k8s_stream
+from pydantic import BaseModel, ConfigDict
 
 from onyx.cache.factory import get_cache_backend
 from onyx.cache.interface import CACHE_TRANSIENT_ERRORS
@@ -111,9 +113,12 @@ from onyx.server.features.build.sandbox.models import (
     FileSet,
     FilesystemEntry,
     RetriableWriteError,
+    SandboxImageState,
+    SandboxImageTarget,
     SandboxInfo,
     SandboxProvisionContentionError,
     SnapshotResult,
+    sandbox_image_digest,
 )
 from onyx.server.features.build.sandbox.nextjs_dev import build_nextjs_start_script
 from onyx.server.features.build.sandbox.serve_transport import ServeConnectionInfo
@@ -164,6 +169,15 @@ _SIDECAR_CONTAINER_NAME = "sidecar"
 
 # Helm-rendered PodTemplate carrying the static sandbox pod shape.
 _PODTEMPLATE_NAME = "sandbox-pod"
+
+# The prepull DaemonSet runs the same ref as the sandbox pods and re-resolves it
+# on a timer; its pods are the only window onto what the nodes hold.
+_PREPULLER_LABEL_SELECTOR = "app.kubernetes.io/component=sandbox-image-prepuller"
+_PREPULLER_CONTAINER_NAME = "prepuller"
+
+# Short-lived: the point is to notice a new image, but it is read every pass.
+_IMAGE_TARGET_TTL_SECONDS = 60.0
+
 
 # Per-session egress tagging plugin, baked into the sandbox image (see
 # docker/Dockerfile). Path must match the COPY destination there.
@@ -249,6 +263,47 @@ def _build_targz(files: FileSet) -> tuple[bytes, str]:
     return raw, hashlib.sha256(raw).hexdigest()
 
 
+class _PrepullState(BaseModel):
+    """What the prepuller pods report: the image they agree on, and the nodes
+    confirmed to be holding it."""
+
+    model_config = ConfigDict(frozen=True)
+
+    target: SandboxImageTarget | None
+    confirmed_nodes: frozenset[str]
+
+
+_NOTHING_PREPULLED = _PrepullState(target=None, confirmed_nodes=frozenset())
+
+
+def _container_status(pod: client.V1Pod, name: str) -> client.V1ContainerStatus | None:
+    """The runtime's report for one container, app or init."""
+    if pod.status is None:
+        return None
+    statuses = chain(
+        pod.status.container_statuses or [], pod.status.init_container_statuses or []
+    )
+    return next((status for status in statuses if status.name == name), None)
+
+
+def _labelled_sandbox_id(pod: client.V1Pod) -> UUID | None:
+    """The sandbox this pod belongs to, or None if it cannot be tied to one."""
+    raw = ((pod.metadata.labels if pod.metadata else None) or {}).get(LABEL_SANDBOX_ID)
+    try:
+        return UUID(raw) if raw else None
+    except ValueError:
+        logger.warning("Sandbox pod carries an unparseable id label %r", raw)
+        return None
+
+
+def _pinned_ref(ref: str, digest: str) -> str:
+    """``ref`` with its tag replaced by ``digest``, so it can be patched onto a
+    live pod. A colon before the final slash is a registry port, not a tag."""
+    registry, _, name = ref.split("@", 1)[0].rpartition("/")
+    repository = f"{registry}/{name.rsplit(':', 1)[0]}" if registry else name
+    return f"{repository}@{digest}"
+
+
 class KubernetesSandboxManager(SandboxManager):
     """Kubernetes-based sandbox manager for production deployments.
 
@@ -276,6 +331,9 @@ class KubernetesSandboxManager(SandboxManager):
         # WebSocket (resulting in "Handshake status 200 OK" errors).
         self._rest_api_client = client.ApiClient()
         self._stream_api_client = client.ApiClient()
+
+        # (prepull state, expiry). Unlocked: a race just resolves it twice.
+        self._prepull_cache: tuple[_PrepullState, float] | None = None
 
         # Use the REST client for standard CRUD operations
         self._core_api = client.CoreV1Api(api_client=self._rest_api_client)
@@ -557,6 +615,112 @@ class KubernetesSandboxManager(SandboxManager):
             f"The PodTemplate and api-server versions are likely out of sync — "
             f"apply the matching sandbox PodTemplate."
         )
+
+    def get_image_state(self) -> SandboxImageState:
+        """One prepuller read for the target, one pod list for the fleet."""
+        prepull = self._prepull_state()
+        return SandboxImageState(
+            target=prepull.target,
+            movable_digests=self._movable_sandbox_digests(prepull.confirmed_nodes),
+        )
+
+    def _prepull_state(self) -> _PrepullState:
+        """The image the prepuller pods report, and which nodes hold it.
+
+        Those pods are the only node-local view the api-server has, and a kubelet
+        reports a digest only for an image it finished pulling. Not the
+        PodTemplate: it names a tag, not what the nodes hold.
+        """
+        now = time.monotonic()
+        cached = self._prepull_cache
+        if cached is not None and now < cached[1]:
+            return cached[0]
+
+        state = self._resolve_prepull_state()
+        self._prepull_cache = (state, now + _IMAGE_TARGET_TTL_SECONDS)
+        return state
+
+    def _resolve_prepull_state(self) -> _PrepullState:
+        try:
+            pods = self._core_api.list_namespaced_pod(
+                namespace=self._namespace,
+                label_selector=_PREPULLER_LABEL_SELECTOR,
+            )
+        except ApiException as e:
+            logger.warning("Could not read prepuller pods: %s", e)
+            return _NOTHING_PREPULLED
+
+        # Keyed by node, because that is the question that matters: a sandbox may
+        # only be moved onto an image its own host has. A node whose prepuller is
+        # missing or has not reported simply does not appear, so nothing on it is
+        # touched — where fleet-wide agreement would have vouched for it on the
+        # strength of its neighbours.
+        #
+        # From the runtime's report, not the spec: the spec holds the tag it was
+        # told to run, the status holds what that tag resolved to.
+        reported: dict[str, tuple[str, str]] = {}
+        for pod in pods.items:
+            node = pod.spec.node_name if pod.spec else None
+            status = _container_status(pod, _PREPULLER_CONTAINER_NAME)
+            digest = sandbox_image_digest(status.image_id if status else None)
+            if node and status is not None and status.image and digest:
+                reported[node] = (status.image, digest)
+
+        if not reported:
+            # No prepuller at all, or none has finished pulling yet.
+            logger.debug("No prepuller has reported; cannot confirm a sandbox image")
+            return _NOTHING_PREPULLED
+
+        images = set(reported.values())
+        if len(images) != 1:
+            logger.info(
+                "Prepuller pods report %s different images; waiting for the "
+                "rollout to settle",
+                len(images),
+            )
+            return _NOTHING_PREPULLED
+
+        ref, digest = images.pop()
+        return _PrepullState(
+            target=SandboxImageTarget(ref=_pinned_ref(ref, digest), digest=digest),
+            confirmed_nodes=frozenset(reported),
+        )
+
+    def _movable_sandbox_digests(
+        self, confirmed_nodes: frozenset[str]
+    ) -> dict[UUID, str]:
+        """One list call for the fleet, keyed by the sandbox-id label, dropping
+        sandboxes whose host is not confirmed to hold the target."""
+        try:
+            pods = self._core_api.list_namespaced_pod(
+                namespace=self._namespace,
+                label_selector=(f"{LABEL_K8S_COMPONENT}={LABEL_K8S_COMPONENT_SANDBOX}"),
+            )
+        except ApiException as e:
+            logger.warning("Could not list sandbox pods: %s", e)
+            return {}
+
+        digests: dict[UUID, str] = {}
+        unconfirmed = 0
+        for pod in pods.items:
+            sandbox_id = _labelled_sandbox_id(pod)
+            status = _container_status(pod, _SANDBOX_CONTAINER_NAME)
+            digest = sandbox_image_digest(status.image_id if status else None)
+            if sandbox_id is None or digest is None:
+                continue
+            node = pod.spec.node_name if pod.spec else None
+            if node is None or node not in confirmed_nodes:
+                unconfirmed += 1
+                continue
+            digests[sandbox_id] = digest
+
+        if unconfirmed:
+            logger.info(
+                "%s sandbox(es) are on hosts that have not confirmed the image; "
+                "leaving them alone this pass",
+                unconfirmed,
+            )
+        return digests
 
     def _create_sandbox_service(
         self,

@@ -1,6 +1,7 @@
 """Pydantic models for sandbox module communication."""
 
 from datetime import datetime
+from enum import Enum
 from typing import TypeAlias
 from uuid import UUID
 
@@ -54,6 +55,63 @@ class SandboxInfo(BaseModel):
     directory_path: str
     status: SandboxStatus
     last_heartbeat: datetime | None
+
+
+class ImageMoveOutcome(str, Enum):
+    """How far a backend got moving a sandbox onto a new image."""
+
+    MOVED = "moved"
+    # Runtime discarded, workspace kept; only the caller can provision.
+    NEEDS_PROVISION = "needs_provision"
+    UNSUPPORTED = "unsupported"
+
+
+class SandboxImageTarget(BaseModel):
+    """The image sandboxes should run, confirmed present where they run.
+
+    ``ref`` must be digest-pinned: patching a tag onto a pod already running
+    that tag is not a change, so a swap would silently do nothing.
+    """
+
+    model_config = ConfigDict(frozen=True)
+
+    ref: str
+    digest: str
+
+
+class SandboxImageState(BaseModel):
+    """What sandboxes should run and what they are running, as one snapshot.
+
+    ``target`` is None when the backend cannot confirm an image is both current
+    and present where sandboxes run; that means "don't act", never "nothing to
+    do".
+
+    ``movable_digests`` covers only sandboxes that could be moved onto the target
+    right now: their host is confirmed to hold it, and their runtime has reported
+    what they run. A sandbox on a host that cannot be vouched for is absent
+    rather than guessed at, because moving one onto an image its host lacks takes
+    it down until the pull finishes.
+    """
+
+    model_config = ConfigDict(frozen=True)
+
+    target: SandboxImageTarget | None
+    movable_digests: dict[UUID, str]
+
+    def stale_sandbox_ids(self) -> set[UUID]:
+        """Sandboxes running something other than the target, if one is known."""
+        if self.target is None:
+            return set()
+        return {
+            sandbox_id
+            for sandbox_id, digest in self.movable_digests.items()
+            if digest != self.target.digest
+        }
+
+
+def sandbox_image_digest(image: str | None) -> str | None:
+    """The digest of an image reference, with or without a repository prefix."""
+    return image.rpartition("@")[-1] if image else None
 
 
 class SnapshotResult(BaseModel):

@@ -5,7 +5,7 @@ home: https://www.onyx.app/
 sources:
   - "https://github.com/onyx-dot-app/onyx"
 type: application
-version: 0.8.10
+version: 0.8.11
 appVersion: latest
 annotations:
   category: Productivity
@@ -17,20 +17,21 @@ annotations:
       image: docker.io/onyxdotapp/onyx-backend:latest
   artifacthub.io/changes: |
     - kind: changed
-      description: values-localdev.yaml now disables the sandbox image prepuller.
-        Local kind clusters side-load the sandbox image (kind load + IfNotPresent),
-        so there is no registry pull to front-run, and with the localdev defaults
-        (:edge, pullPolicy Always) the prepuller would eagerly pull the ~3.3 GB
-        image from Docker Hub onto the kind node. Production values are unchanged.
-    - kind: fixed
-      description: Fixed "helm upgrade" failing with 'PriorityClass ... value: Forbidden;
-        may not be changed in an update' after the sandbox image prepuller landed in
-        0.8.6. PriorityClass.value is immutable and helm upgrade patches, so the
-        prepuller no longer ships a PriorityClass at all; it was buying very little.
-        Upgrading from 0.8.6 deletes it, and the prepuller runs at the cluster default
-        priority — set sandboxImagePrepull.priorityClassName to an existing class to
-        keep it preemptible. Running pods are unaffected, because pod priority is
-        resolved at admission. The chart now renders no cluster-scoped objects.
+      description: The sandbox image prepuller now re-checks the registry on a timer
+        rather than resolving the image tag once and pinning that digest for the life
+        of the pod. Its container exits every recheckIntervalSeconds and pulls with
+        Always, so each kubelet restart re-resolves the tag. Deployments on a mutable
+        tag (the default, global.version latest) previously never noticed new content
+        published behind it. The api-server reads the digest each node resolved off
+        these pods, which is how it can tell that a live sandbox is running a
+        superseded image.
+    - kind: added
+      description: sandboxImagePrepull.recheckIntervalSeconds sets how often each node
+        re-asks the registry whether the sandbox image tag has moved (default 900,
+        floored at 600 because the kubelet's restart backoff makes shorter intervals
+        both ineffective and noisy). Every check is one manifest request per node, so
+        raise it for a large node pool. Deployments that pin an immutable tag or digest
+        per release do not depend on it; their rollout replaces the prepuller outright.
 dependencies:
   # Helm uses the first condition path that exists: `postgresqlOperator.enabled`
   # is unset by default, so this falls through to `postgresql.enabled`. Set it

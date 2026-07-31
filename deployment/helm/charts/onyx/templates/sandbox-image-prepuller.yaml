@@ -11,6 +11,10 @@ PriorityClass; see the docs above before adding one back.
 {{- $mem := $res.memory | default "32Mi" }}
 {{- $eph := $res.ephemeralStorage | default "64Mi" }}
 {{- $maxUnavailable := $prepull.updateMaxUnavailable | default "25%" }}
+{{/* Floored: the kubelet backs off restarts, and the backoff counter only
+resets once a container has run for ~10 minutes. A shorter interval would
+stretch itself out anyway, and noisily. */}}
+{{- $recheck := max (int ($prepull.recheckIntervalSeconds | default 900)) 600 }}
 {{- if and (eq (include "onyx.craftEnabled" .) "true") $prepull.enabled }}
 {{- $cm := .Values.configMap }}
 {{- $sandboxNs := $cm.SANDBOX_NAMESPACE | default "onyx-sandboxes" }}
@@ -69,13 +73,18 @@ spec:
       containers:
         - name: prepuller
           image: {{ $image }}
-          {{- /* Shared with the sandbox pods: pinning this to IfNotPresent
-          would hold a stale digest on a mutable tag. */}}
-          imagePullPolicy: {{ $pullPolicy }}
-          {{- /* Portable idle loop, not `sleep infinity` (a GNU coreutils
-          extension that dies on busybox/alpine). The pod must stay running:
-          kubelet only exempts images a running pod references from image GC. */}}
-          command: ["sh", "-c", "while :; do sleep 86400; done"]
+          {{- /* Always, deliberately not the shared $pullPolicy: a kubelet
+          re-resolves a tag to a digest only when it starts a container, and
+          this is the only thing in the deployment that ever asks the registry
+          whether a mutable tag has moved. IfNotPresent here would mean no node
+          ever notices new content published behind the tag. */}}
+          imagePullPolicy: Always
+          {{- /* Exits on purpose, so the kubelet restarts it and re-resolves
+          the tag — that restart *is* the periodic image check. It still spends
+          essentially all its time running, which is what keeps the kubelet
+          exempting the image from GC. Plain `sleep`, not `sleep infinity` (a
+          GNU coreutils extension that dies on busybox/alpine). */}}
+          command: ["sh", "-c", "sleep {{ $recheck }}"]
           resources:
             requests:
               cpu: {{ $cpu | quote }}
