@@ -86,6 +86,25 @@ func TestNodeModulesNeedsInstall(t *testing.T) {
 		}
 	})
 
+	t.Run("stamp replaces an existing file it cannot write in place", func(t *testing.T) {
+		// Sessions run as different users against the shared node_modules
+		// volume, so the previous stamp may not be writable — only
+		// replaceable via the directory. Simulate with a read-only stamp.
+		webDir := t.TempDir()
+		writeFile(t, filepath.Join(webDir, "bun.lock"), "lock-v2")
+		writeFile(t, filepath.Join(webDir, "node_modules", "pkg", "index.js"), "")
+		stampPath := filepath.Join(webDir, "node_modules", lockStampName)
+		writeFile(t, stampPath, "stale-hash")
+		if err := os.Chmod(stampPath, 0o444); err != nil {
+			t.Fatal(err)
+		}
+		writeLockStamp(webDir)
+		needs, reason := nodeModulesNeedsInstall(webDir)
+		if needs {
+			t.Fatalf("expected stamp to be replaced despite read-only file, got: %q", reason)
+		}
+	})
+
 	t.Run("no lockfile skips staleness check", func(t *testing.T) {
 		webDir := t.TempDir()
 		writeFile(t, filepath.Join(webDir, "node_modules", "pkg", "index.js"), "")

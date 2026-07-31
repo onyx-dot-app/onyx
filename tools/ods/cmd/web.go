@@ -138,14 +138,37 @@ func nodeModulesNeedsInstall(webDir string) (bool, string) {
 
 // writeLockStamp records the current bun.lock hash after a successful install.
 // Best-effort: a failure only means the next run reinstalls, which is safe.
+//
+// The stamp is replaced via temp file + rename rather than written in place:
+// the devcontainer's node_modules volume is shared across sessions that may
+// run as different users (root agent sessions, the dev user), and an in-place
+// write to a stamp owned by the other user fails — which would silently force
+// a reinstall on every run. Rename needs only directory write permission and
+// atomically replaces the previous owner's file.
 func writeLockStamp(webDir string) {
 	lockHash, err := fileSHA256(filepath.Join(webDir, "bun.lock"))
 	if err != nil {
 		return
 	}
-	stampPath := filepath.Join(webDir, "node_modules", lockStampName)
-	if err := os.WriteFile(stampPath, []byte(lockHash+"\n"), 0o644); err != nil {
-		log.Debugf("Failed to write %s: %v", stampPath, err)
+	nodeModules := filepath.Join(webDir, "node_modules")
+	stampPath := filepath.Join(nodeModules, lockStampName)
+	tmp, err := os.CreateTemp(nodeModules, lockStampName+".tmp-*")
+	if err != nil {
+		log.Debugf("Failed to create stamp temp file in %s: %v", nodeModules, err)
+		return
+	}
+	_, writeErr := tmp.WriteString(lockHash + "\n")
+	// World-readable so sessions running as other users can validate it.
+	chmodErr := tmp.Chmod(0o644)
+	closeErr := tmp.Close()
+	if writeErr != nil || chmodErr != nil || closeErr != nil {
+		_ = os.Remove(tmp.Name())
+		log.Debugf("Failed to write stamp temp file %s: %v/%v/%v", tmp.Name(), writeErr, chmodErr, closeErr)
+		return
+	}
+	if err := os.Rename(tmp.Name(), stampPath); err != nil {
+		_ = os.Remove(tmp.Name())
+		log.Debugf("Failed to replace %s: %v", stampPath, err)
 	}
 }
 
