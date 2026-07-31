@@ -54,6 +54,7 @@ from onyx.server.gateway.models import (
 )
 from onyx.server.manage.llm.models import LLMProviderView, ModelConfigurationView
 from onyx.tracing.flows import LLMFlow
+from onyx.tracing.framework.spans import NoOpSpan
 
 
 def _pat_request(token_scopes: list[Permission] | None) -> Request:
@@ -616,6 +617,19 @@ def test_stream_records_accumulated_reasoning_on_span() -> None:
     assert record.call_args.kwargs["output"] == "done"
 
 
+def test_stream_worker_opens_trace_so_generation_span_is_real() -> None:
+    """The stream worker runs on its own thread after the endpoint has
+    returned; the generation span is only real if the worker itself opens
+    the trace (a trace opened in the endpoint would not be visible there)."""
+    with patch.object(gateway_api, "record_llm_span_output") as record:
+        frames = list(_gateway_stream(_ReasoningStreamLLM()))
+
+    assert frames[-1] == "data: [DONE]\n\n"
+    record.assert_called_once()
+    span = record.call_args.args[0]
+    assert not isinstance(span, NoOpSpan)
+
+
 class _RaisingInvokeLLM(_ConfigOnlyLLM):
     def __init__(self, exc: Exception) -> None:
         super().__init__(
@@ -691,6 +705,36 @@ def test_handle_chat_completion_happy_path_serializes_response() -> None:
     assert payload["choices"][0]["message"]["role"] == "assistant"
     assert payload["choices"][0]["finish_reason"] == "stop"
     assert payload["usage"]["total_tokens"] == 150
+
+
+def test_non_streaming_opens_trace_so_generation_span_is_real() -> None:
+    request = ChatCompletionRequest(
+        model="1/test",
+        messages=[{"role": "user", "content": "hi"}],
+    )
+    response = ModelResponse(
+        id="chatcmpl-3",
+        created="1784577999",
+        choice=Choice(
+            finish_reason="stop",
+            message=Message(content="hello there"),
+        ),
+        usage=_wire_usage(),
+    )
+
+    with (
+        patch.object(
+            gateway_api,
+            "llm_from_provider",
+            return_value=_InvokeLLM(response),
+        ),
+        patch.object(gateway_api, "record_llm_response") as record,
+    ):
+        _handle_completion_call(request)
+
+    record.assert_called_once()
+    span = record.call_args.args[0]
+    assert not isinstance(span, NoOpSpan)
 
 
 @pytest.mark.parametrize(
