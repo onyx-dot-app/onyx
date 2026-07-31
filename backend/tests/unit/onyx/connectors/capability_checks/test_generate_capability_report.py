@@ -1,5 +1,4 @@
 from collections.abc import Callable
-from typing import Any
 from unittest.mock import MagicMock
 
 import pytest
@@ -15,23 +14,31 @@ from onyx.connectors.capability_checks.models import (
     CredentialCapability,
 )
 from onyx.connectors.capability_checks.runner import generate_capability_report
+from onyx.connectors.exceptions import CredentialInvalidError
 from onyx.connectors.interfaces import BaseConnector
 
 
-def _make_check(
-    run: Callable[[CapabilityCheckContext], None],
-    check_id: str,
-    requires_connector_instance: bool = True,
-    requires_connector_config: bool = False,
-) -> CapabilityCheck:
-    return CapabilityCheck(
-        capability=CredentialCapability.INDEXING,
-        check_id=check_id,
-        display_name="Dummy check",
-        run=run,
-        requires_connector_instance=requires_connector_instance,
-        requires_connector_config=requires_connector_config,
-    )
+class _CallableCheck(CapabilityCheck):
+    """Concrete check that delegates ``run`` to an injected callable."""
+
+    def __init__(
+        self,
+        run: Callable[[CapabilityCheckContext], None],
+        check_id: str,
+        requires_connector_instance: bool = True,
+        requires_connector_config: bool = False,
+    ) -> None:
+        super().__init__(
+            capability=CredentialCapability.INDEXING,
+            check_id=check_id,
+            display_name="Dummy check",
+            requires_connector_instance=requires_connector_instance,
+            requires_connector_config=requires_connector_config,
+        )
+        self._run = run
+
+    def run(self, context: CapabilityCheckContext) -> None:
+        self._run(context)
 
 
 def _make_credential() -> MagicMock:
@@ -45,19 +52,16 @@ def _make_credential() -> MagicMock:
 def _patch_runner_environment(
     monkeypatch: pytest.MonkeyPatch,
     checks: list[CapabilityCheck],
-    probe_config: dict[str, Any] | None,
     instantiate_error: Exception | None = None,
 ) -> MagicMock:
     """Stubs registry lookup and connector construction around the orchestrator.
 
     Returns the ``instantiate_connector`` mock for call-shape assertions.
     """
-    connector_class = MagicMock()
-    connector_class.minimal_probe_config.return_value = probe_config
     monkeypatch.setattr(
         runner_module,
         "identify_connector_class",
-        MagicMock(return_value=connector_class),
+        MagicMock(return_value=MagicMock()),
     )
     # The instantiated connector must satisfy ``CapabilityCheckContext``'s
     # isinstance validation, hence the spec.
@@ -76,11 +80,13 @@ def _patch_runner_environment(
     return instantiate
 
 
-def test_configless_run_uses_probe_config(monkeypatch: pytest.MonkeyPatch) -> None:
-    """Verifies a config-less run instantiates via ``minimal_probe_config``."""
+def test_configless_run_attempts_empty_config_instantiation(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """Verifies a config-less run instantiates with an empty config."""
     # Precondition.
-    check = _make_check(MagicMock(return_value=None), check_id="instance_check")
-    instantiate = _patch_runner_environment(monkeypatch, [check], probe_config={})
+    check = _CallableCheck(MagicMock(return_value=None), check_id="instance_check")
+    instantiate = _patch_runner_environment(monkeypatch, [check])
     db_session = MagicMock()
     credential = _make_credential()
 
@@ -107,29 +113,30 @@ def test_configless_run_uses_probe_config(monkeypatch: pytest.MonkeyPatch) -> No
     }
 
 
-def test_probe_config_none_skips_instance_requiring_checks(
+def test_instantiation_failure_still_runs_credential_only_checks(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
-    """Verifies that a None probe config degrades to skips, not a crash."""
+    """Verifies a raising constructor degrades to skips, not a crash."""
     # Precondition.
     # One check needs an instance, the other is a pure credential-shape check.
-    instance_check = _make_check(
+    instance_check = _CallableCheck(
         MagicMock(return_value=None), check_id="instance_check"
     )
-    shape_check = _make_check(
+    shape_check = _CallableCheck(
         MagicMock(return_value=None),
         check_id="shape_check",
         requires_connector_instance=False,
     )
-    instantiate = _patch_runner_environment(
-        monkeypatch, [instance_check, shape_check], probe_config=None
+    _patch_runner_environment(
+        monkeypatch,
+        [instance_check, shape_check],
+        instantiate_error=RuntimeError("Constructor requires a real config."),
     )
 
     # Under test.
     report = generate_capability_report(MagicMock(), _make_credential())
 
     # Postcondition.
-    instantiate.assert_not_called()
     statuses = {result.check_id: result.status for result in report.check_results}
     assert statuses == {
         "instance_check": CapabilityCheckStatus.SKIPPED,
@@ -144,11 +151,10 @@ def test_instantiation_failure_degrades_to_skip(
     Verifies that a raising constructor skips instance checks, not the run.
     """
     # Precondition.
-    check = _make_check(MagicMock(return_value=None), check_id="instance_check")
+    check = _CallableCheck(MagicMock(return_value=None), check_id="instance_check")
     _patch_runner_environment(
         monkeypatch,
         [check],
-        probe_config={},
         instantiate_error=RuntimeError("Constructor requires a real config."),
     )
 
@@ -160,6 +166,34 @@ def test_instantiation_failure_degrades_to_skip(
     assert report.verdicts[CredentialCapability.INDEXING] == CapabilityVerdict.SKIPPED
 
 
+def test_supplied_config_instantiation_failure_is_surfaced(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """
+    Verifies construction failure with a real config is FAILED, not SKIPPED.
+    """
+    # Precondition.
+    check = _CallableCheck(MagicMock(return_value=None), check_id="instance_check")
+    _patch_runner_environment(
+        monkeypatch,
+        [check],
+        instantiate_error=CredentialInvalidError("Missing `slack_bot_token` key."),
+    )
+
+    # Under test.
+    report = generate_capability_report(
+        MagicMock(),
+        _make_credential(),
+        connector_specific_config={"channels": ["general"]},
+        connector_id=42,
+    )
+
+    # Postcondition.
+    assert report.check_results[0].status == CapabilityCheckStatus.FAILED
+    assert report.check_results[0].error_type == "CredentialInvalidError"
+    assert report.verdicts[CredentialCapability.INDEXING] == CapabilityVerdict.FAILED
+
+
 def test_real_config_unlocks_config_requiring_checks(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
@@ -167,12 +201,12 @@ def test_real_config_unlocks_config_requiring_checks(
     Verifies that a supplied config is used to instantiate and reaches checks.
     """
     # Precondition.
-    check = _make_check(
+    check = _CallableCheck(
         MagicMock(return_value=None),
         check_id="config_check",
         requires_connector_config=True,
     )
-    instantiate = _patch_runner_environment(monkeypatch, [check], probe_config=None)
+    instantiate = _patch_runner_environment(monkeypatch, [check])
     connector_specific_config = {"repositories": "onyx"}
 
     # Under test.
@@ -185,7 +219,7 @@ def test_real_config_unlocks_config_requiring_checks(
     )
 
     # Postcondition.
-    # The real config wins over the None probe config.
+    # The real config, not the empty-config fallback, reaches instantiation.
     assert (
         instantiate.call_args.kwargs["connector_specific_config"]
         == connector_specific_config

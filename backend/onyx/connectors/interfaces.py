@@ -90,16 +90,6 @@ class BaseConnector(abc.ABC, Generic[CT]):
         )
         validate_connector_settings_fn(self)
 
-    @classmethod
-    def minimal_probe_config(cls) -> dict[str, Any] | None:
-        """
-        Returns the smallest connector_specific_config this connector can be
-        instantiated with, used for config-less credential-time capability
-        checks. None means the connector cannot be instantiated without real
-        configuration, in which case instance-requiring checks are skipped.
-        """
-        return {}
-
     def set_allow_images(self, value: bool) -> None:
         """Implement if the underlying connector wants to skip/allow image downloading
         based on the application level image analysis setting."""

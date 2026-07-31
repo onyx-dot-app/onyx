@@ -60,7 +60,9 @@ class CapabilityCheckContext(BaseModel):
 
     ``connector`` and ``connector_specific_config`` are None for config-less
     credential-time runs; the runner skips checks that declare a requirement on
-    them.
+    them. ``instantiation_error`` is set when connector construction failed
+    for a supplied config; the runner surfaces it on instance-requiring checks
+    instead of skipping them.
     """
 
     # ``BaseConnector`` is not a pydantic type; validate by isinstance.
@@ -70,6 +72,7 @@ class CapabilityCheckContext(BaseModel):
     credential_json: dict[str, Any]
     connector: BaseConnector | None = None
     connector_specific_config: dict[str, Any] | None = None
+    instantiation_error: Exception | None = None
 
 
 class CapabilityCheck(ABC):

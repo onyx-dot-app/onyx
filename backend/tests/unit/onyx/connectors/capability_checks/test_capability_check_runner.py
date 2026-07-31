@@ -57,12 +57,14 @@ class _OtherCallableCheck(_CallableCheck):
 def _context(
     connector: BaseConnector | None = None,
     connector_specific_config: dict | None = None,
+    instantiation_error: Exception | None = None,
 ) -> CapabilityCheckContext:
     return CapabilityCheckContext(
         source=DocumentSource.SLACK,
         credential_json={},
         connector=connector,
         connector_specific_config=connector_specific_config,
+        instantiation_error=instantiation_error,
     )
 
 
@@ -146,6 +148,46 @@ def test_skips_instance_requiring_check_without_connector() -> None:
     # Postcondition.
     assert results[0].status == CapabilityCheckStatus.SKIPPED
     run.assert_not_called()
+
+
+def test_validation_instantiation_error_fails_instance_checks() -> None:
+    """
+    Verifies a validation-family construction failure is FAILED, not SKIPPED.
+    """
+    # Precondition.
+    run = MagicMock()
+    check = _CallableCheck(run, requires_connector_instance=True)
+    context = _context(
+        connector=None,
+        instantiation_error=InsufficientPermissionsError("Token lacks scopes."),
+    )
+
+    # Under test.
+    results = run_capability_checks([check], context)
+
+    # Postcondition.
+    assert results[0].status == CapabilityCheckStatus.FAILED
+    assert results[0].error_type == "InsufficientPermissionsError"
+    assert "Token lacks scopes." in results[0].message
+    run.assert_not_called()
+
+
+def test_unexpected_instantiation_error_is_indeterminate() -> None:
+    """
+    Verifies an unrecognized construction failure maps to INDETERMINATE.
+    """
+    # Precondition.
+    check = _CallableCheck(MagicMock(), requires_connector_instance=True)
+    context = _context(
+        connector=None, instantiation_error=RuntimeError("Redis unreachable.")
+    )
+
+    # Under test.
+    results = run_capability_checks([check], context)
+
+    # Postcondition.
+    assert results[0].status == CapabilityCheckStatus.INDETERMINATE
+    assert results[0].error_type == "RuntimeError"
 
 
 def test_skips_config_requiring_check_even_with_connector() -> None:
