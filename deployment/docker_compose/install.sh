@@ -276,70 +276,26 @@ mv -f "${TMP_DIR}/onyx-cli" "$BIN_PATH"
 print_success "onyx-cli installed to ${BIN_PATH}"
 
 # --- Make onyx-cli reachable by name ---
-# The install below runs through $BIN_PATH either way, but the deployment is
-# managed afterwards with `onyx-cli deploy status|logs|upgrade|uninstall`, so a
-# PATH that doesn't cover BIN_DIR turns every one of those into "command not
-# found". ~/.local/bin is not on PATH by default on macOS, and Debian's
-# ~/.profile only adds it if the directory already existed at login — which it
-# may not have until this script created it moments ago.
+# The install below runs through $BIN_PATH, but the follow-up `onyx-cli deploy`
+# commands need BIN_DIR on PATH — and ~/.local/bin isn't there by default on
+# macOS, nor on Debian unless it existed at login, which it may not have until
+# this script created it moments ago.
 PATH_MARKER="# Added by the Onyx installer"
 
-# The startup files get the unexpanded $HOME so they stay portable.
-# shellcheck disable=SC2016
-PATH_LINE='export PATH="$HOME/.local/bin:$PATH"'
-
-# Appends `line` to `profile` under PATH_MARKER unless the marker is already
-# there. Returns non-zero when the file cannot be written so the caller can
-# fall back to printing manual instructions.
+# Appends the PATH export to `profile` unless the marker is already there.
+# Returns non-zero when the file cannot be written so the caller can fall back
+# to printing manual instructions.
 append_line_to_profile() {
     local profile="$1"
-    local line="$2"
     if [[ -f "$profile" ]] && grep -Fq "$PATH_MARKER" "$profile" 2>/dev/null; then
         return 0
     fi
-    mkdir -p "$(dirname "$profile")" 2>/dev/null || return 1
     # 2>/dev/null must precede >>: redirections apply left to right, and a
-    # failing append would otherwise print the shell's error before stderr
-    # is silenced.
-    printf '\n%s\n%s\n' "$PATH_MARKER" "$line" 2>/dev/null >> "$profile"
-}
-
-# Fills PROFILE_FILES with every startup file the login shell needs patched.
-# bash usually needs two: ~/.bashrc covers interactive non-login shells, but a
-# login shell (ssh, macOS Terminal) reads only the first of ~/.bash_profile,
-# ~/.bash_login and ~/.profile, and skips ~/.bashrc unless that file sources
-# it. Patching just one of the two leaves half the sessions without the entry.
-#
-# Any other shell (fish included) is left alone and gets the manual
-# instructions instead — the syntax differs per shell and fish in particular
-# needs a version-dependent incantation.
-resolve_profile_files() {
-    local rc
-    PROFILE_FILES=()
-    case "${SHELL##*/}" in
-        zsh)
-            # zsh reads .zshrc for login and non-login interactive shells both.
-            PROFILE_FILES=("${ZDOTDIR:-$HOME}/.zshrc")
-            ;;
-        bash)
-            if [[ -f "${HOME}/.bashrc" ]]; then
-                PROFILE_FILES=("${HOME}/.bashrc")
-            fi
-            for rc in "${HOME}/.bash_profile" "${HOME}/.bash_login" "${HOME}/.profile"; do
-                [[ -f "$rc" ]] || continue
-                # A login profile that sources ~/.bashrc is already covered.
-                if ! grep -qE '(^|[[:space:]])(\.|source)[[:space:]]+[^#]*\.bashrc' "$rc" 2>/dev/null; then
-                    PROFILE_FILES+=("$rc")
-                fi
-                return 0
-            done
-            # No login profile yet: bash falls back to ~/.profile, so create
-            # that one. Creating ~/.bash_profile instead would stop bash from
-            # reading ~/.profile at all.
-            PROFILE_FILES+=("${HOME}/.profile")
-            ;;
-    esac
-    return 0
+    # failing append would otherwise print the shell's error before stderr is
+    # silenced. The line keeps $HOME unexpanded so the profile stays portable.
+    # shellcheck disable=SC2016
+    printf '\n%s\n%s\n' "$PATH_MARKER" 'export PATH="$HOME/.local/bin:$PATH"' \
+        2>/dev/null >> "$profile"
 }
 
 case ":${PATH}:" in
@@ -353,20 +309,35 @@ case ":${PATH}:" in
         fi
         ;;
     *)
-        # Persist BIN_DIR into the login shell's profiles so onyx-cli still
-        # resolves in new shells once this installer hands over to the CLI.
-        # The script itself runs under bash even when the user's shell is zsh,
-        # hence the $SHELL sniffing. Only the default user-local location is
-        # patched in: an explicit ONYX_CLI_BIN_DIR means the caller manages
-        # their own PATH, and ONYX_CLI_NO_MODIFY_PATH opts out.
+        # This script runs under bash even when the user's shell is zsh, hence
+        # the $SHELL sniffing; shells needing other syntax (fish) just get the
+        # printed instructions. An explicit ONYX_CLI_BIN_DIR means the caller
+        # manages their own PATH, and ONYX_CLI_NO_MODIFY_PATH opts out.
         PROFILE_FILES=()
         if [[ -n "$DEFAULT_USER_BIN_DIR" ]] && [[ -z "$ONYX_CLI_NO_MODIFY_PATH" ]]; then
-            resolve_profile_files
+            case "${SHELL##*/}" in
+                zsh)
+                    # zsh reads .zshrc for login and non-login shells both.
+                    PROFILE_FILES=("${ZDOTDIR:-$HOME}/.zshrc")
+                    ;;
+                bash)
+                    # A bash login shell (ssh, macOS Terminal) reads only the
+                    # first profile that exists and skips ~/.bashrc entirely
+                    # unless that profile sources it, so both are needed.
+                    PROFILE_FILES=("${HOME}/.bashrc")
+                    for RC in "${HOME}/.bash_profile" "${HOME}/.bash_login" "${HOME}/.profile"; do
+                        if [[ -f "$RC" ]]; then break; fi
+                    done
+                    if ! grep -qE '(\.|source)[[:space:]].*\.bashrc' "$RC" 2>/dev/null; then
+                        PROFILE_FILES+=("$RC")
+                    fi
+                    ;;
+            esac
         fi
 
         UPDATED=""
         for PROFILE_FILE in "${PROFILE_FILES[@]}"; do
-            if append_line_to_profile "$PROFILE_FILE" "$PATH_LINE"; then
+            if append_line_to_profile "$PROFILE_FILE"; then
                 UPDATED="${UPDATED}${UPDATED:+, }${PROFILE_FILE}"
             fi
         done
