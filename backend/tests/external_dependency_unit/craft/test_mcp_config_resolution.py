@@ -70,7 +70,7 @@ def craft_server(
     off = _server("Off Server", available_in_craft=False)
     db_session.commit()
 
-    yield craft, off  # type: ignore[misc]
+    yield craft, off
     db_session.rollback()
     for server in created:
         db_session.delete(server)

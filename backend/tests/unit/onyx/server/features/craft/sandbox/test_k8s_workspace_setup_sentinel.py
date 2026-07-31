@@ -33,8 +33,8 @@ _LLM_CONFIG = CraftLLMProviderConfig(
 
 def _make_manager(monkeypatch: pytest.MonkeyPatch) -> KubernetesSandboxManager:
     mgr: KubernetesSandboxManager = object.__new__(KubernetesSandboxManager)
-    mgr._namespace = "sandbox-test"  # type: ignore[attr-defined]
-    mgr._stream_core_api = MagicMock()  # type: ignore[attr-defined]
+    mgr._namespace = "sandbox-test"
+    mgr._stream_core_api = MagicMock()
     monkeypatch.setattr(
         mgr,
         "_load_agent_instructions",

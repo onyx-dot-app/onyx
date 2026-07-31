@@ -370,15 +370,15 @@ def test_cql_paginate_all_expansions_handles_internal_pagination_error(
     # Ensure the result is correct
     # NOTE: size does not get updated during _traverse_and_update
     final_results = copy.deepcopy(top_level_raw_response)
-    final_results["results"][0]["child_items"]["results"] = [  # type: ignore
+    final_results["results"][0]["child_items"]["results"] = [  # ty: ignore[invalid-assignment, not-subscriptable]
         {"child_id": 101},
         {"child_id": 102},
     ]
-    final_results["results"][1]["child_items"]["results"] = [  # type: ignore
+    final_results["results"][1]["child_items"]["results"] = [  # ty: ignore[invalid-assignment, not-subscriptable]
         {"child_id": 201},
         {"child_id": 203},
     ]
-    final_results["results"][2]["child_items"]["results"] = [  # type: ignore
+    final_results["results"][2]["child_items"]["results"] = [  # ty: ignore[invalid-assignment, not-subscriptable]
         {"child_id": 301}
     ]
     assert result == final_results["results"]

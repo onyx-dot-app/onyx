@@ -194,7 +194,7 @@ class _StreamingLLM(_ConfigOnlyLLM):
         self._fail = fail
         self._exc = exc or RuntimeError("secret-provider-response")
 
-    def stream(self, *args: object, **kwargs: object):  # type: ignore[no-untyped-def,override]
+    def stream(self, *args: object, **kwargs: object):
         del args, kwargs
         try:
             if self._fail:
@@ -231,7 +231,7 @@ class _RaisingCloseStream:
 
 
 class _RaisingCloseLLM(_ConfigOnlyLLM):
-    def stream(self, *args: object, **kwargs: object) -> _RaisingCloseStream:  # type: ignore[override]
+    def stream(self, *args: object, **kwargs: object) -> _RaisingCloseStream:
         del args, kwargs
         return _RaisingCloseStream()
 
@@ -510,7 +510,7 @@ class _ToolCallStreamLLM(_ConfigOnlyLLM):
             )
         )
 
-    def stream(self, *args: object, **kwargs: object):  # type: ignore[no-untyped-def,override]
+    def stream(self, *args: object, **kwargs: object):
         del args, kwargs
         yield ModelResponseStream(
             id="s1",
@@ -584,7 +584,7 @@ class _ReasoningStreamLLM(_ConfigOnlyLLM):
             )
         )
 
-    def stream(self, *args: object, **kwargs: object):  # type: ignore[no-untyped-def,override]
+    def stream(self, *args: object, **kwargs: object):
         del args, kwargs
         yield ModelResponseStream(
             id="r1",
@@ -628,7 +628,7 @@ class _RaisingInvokeLLM(_ConfigOnlyLLM):
         )
         self._exc = exc
 
-    def invoke(self, *args: object, **kwargs: object):  # type: ignore[no-untyped-def,override]
+    def invoke(self, *args: object, **kwargs: object):
         del args, kwargs
         raise self._exc
 
@@ -645,7 +645,7 @@ class _InvokeLLM(_ConfigOnlyLLM):
         )
         self._response = response
 
-    def invoke(self, *args: object, **kwargs: object) -> ModelResponse:  # type: ignore[override]
+    def invoke(self, *args: object, **kwargs: object) -> ModelResponse:
         del args, kwargs
         return self._response
 

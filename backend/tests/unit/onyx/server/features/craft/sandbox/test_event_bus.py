@@ -589,9 +589,9 @@ def test_reader_self_closes_after_max_consecutive_failures() -> None:
         connect_timeout=0.1,
     )
     # Tighten the schedule so the test runs in <2s.
-    bus._RECONNECT_BACKOFF_INITIAL = 0.05  # type: ignore[misc]
-    bus._RECONNECT_BACKOFF_MAX = 0.05  # type: ignore[misc]
-    bus._RECONNECT_MAX_CONSECUTIVE_FAILURES = 3  # type: ignore[misc]
+    bus._RECONNECT_BACKOFF_INITIAL = 0.05
+    bus._RECONNECT_BACKOFF_MAX = 0.05
+    bus._RECONNECT_MAX_CONSECUTIVE_FAILURES = 3
     sub = bus.subscribe("ses_anything")
     try:
         # Wait up to 5s for the bus to give up and signal close.

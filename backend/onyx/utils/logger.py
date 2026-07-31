@@ -333,7 +333,7 @@ def setup_logger(
 
     _add_file_handlers(logger, formatter)
 
-    logger.notice = (  # type: ignore
+    logger.notice = (  # ty: ignore[unresolved-attribute]
         lambda msg, *args, **kwargs: logger.log(
             logging.getLevelName("NOTICE"), msg, *args, **kwargs
         )

@@ -57,10 +57,10 @@ EXPECTED_EXEC_ENV = {"HOME": "/home/sandbox", "USER": "sandbox"}
 def _bare_manager_with_image(image: str) -> tuple[dsm.DockerSandboxManager, MagicMock]:
     mgr: dsm.DockerSandboxManager = object.__new__(dsm.DockerSandboxManager)
     docker = MagicMock()
-    mgr._docker = docker  # type: ignore[attr-defined]
-    mgr._image = image  # type: ignore[attr-defined]
-    mgr._image_checked = False  # type: ignore[attr-defined]
-    mgr._image_check_lock = threading.Lock()  # type: ignore[attr-defined]
+    mgr._docker = docker
+    mgr._image = image
+    mgr._image_checked = False
+    mgr._image_check_lock = threading.Lock()
     return mgr, docker
 
 
@@ -105,7 +105,7 @@ def test_labels_omit_user_id_when_none() -> None:
 def test_immutable_sandbox_image_uses_cached_image_when_present() -> None:
     mgr, docker = _bare_manager_with_image("onyxdotapp/sandbox:v4.1.2")
 
-    mgr._ensure_sandbox_image()  # type: ignore[attr-defined]
+    mgr._ensure_sandbox_image()
 
     docker.images.get.assert_called_once_with("onyxdotapp/sandbox:v4.1.2")
     docker.images.pull.assert_not_called()
@@ -115,7 +115,7 @@ def test_immutable_sandbox_image_pulls_when_missing() -> None:
     mgr, docker = _bare_manager_with_image("onyxdotapp/sandbox:v4.1.2")
     docker.images.get.side_effect = dsm.NotFound("missing")
 
-    mgr._ensure_sandbox_image()  # type: ignore[attr-defined]
+    mgr._ensure_sandbox_image()
 
     docker.images.pull.assert_called_once_with("onyxdotapp/sandbox:v4.1.2")
 
@@ -123,8 +123,8 @@ def test_immutable_sandbox_image_pulls_when_missing() -> None:
 def test_mutable_sandbox_image_refreshes_once() -> None:
     mgr, docker = _bare_manager_with_image("onyxdotapp/sandbox:latest")
 
-    mgr._ensure_sandbox_image()  # type: ignore[attr-defined]
-    mgr._ensure_sandbox_image()  # type: ignore[attr-defined]
+    mgr._ensure_sandbox_image()
+    mgr._ensure_sandbox_image()
 
     docker.images.pull.assert_called_once_with("onyxdotapp/sandbox:latest")
     docker.images.get.assert_not_called()
@@ -142,9 +142,9 @@ def test_sandbox_image_refresh_is_thread_safe() -> None:
     docker.images.pull.side_effect = pull_image
 
     with ThreadPoolExecutor(max_workers=2) as executor:
-        first = executor.submit(mgr._ensure_sandbox_image)  # type: ignore[attr-defined]
+        first = executor.submit(mgr._ensure_sandbox_image)
         assert pull_started.wait(timeout=1)
-        second = executor.submit(mgr._ensure_sandbox_image)  # type: ignore[attr-defined]
+        second = executor.submit(mgr._ensure_sandbox_image)
         finish_pull.set()
         first.result(timeout=1)
         second.result(timeout=1)
@@ -156,7 +156,7 @@ def test_implicit_latest_sandbox_image_refreshes() -> None:
     image = "onyxdotapp/sandbox"
     mgr, docker = _bare_manager_with_image(image)
 
-    mgr._ensure_sandbox_image()  # type: ignore[attr-defined]
+    mgr._ensure_sandbox_image()
 
     docker.images.pull.assert_called_once_with(image)
     docker.images.get.assert_not_called()
@@ -168,8 +168,8 @@ def test_mutable_sandbox_image_uses_cache_once_if_refresh_fails() -> None:
     mgr, docker = _bare_manager_with_image("onyxdotapp/sandbox:edge")
     docker.images.pull.side_effect = dsm.APIError("registry unavailable")
 
-    mgr._ensure_sandbox_image()  # type: ignore[attr-defined]
-    mgr._ensure_sandbox_image()  # type: ignore[attr-defined]
+    mgr._ensure_sandbox_image()
+    mgr._ensure_sandbox_image()
 
     docker.images.pull.assert_called_once_with("onyxdotapp/sandbox:edge")
     docker.images.get.assert_called_once_with("onyxdotapp/sandbox:edge")
@@ -181,13 +181,13 @@ def test_mutable_sandbox_image_raises_if_refresh_fails_without_cache() -> None:
     docker.images.get.side_effect = dsm.NotFound("missing")
 
     with pytest.raises(RuntimeError, match="Failed to pull sandbox image"):
-        mgr._ensure_sandbox_image()  # type: ignore[attr-defined]
+        mgr._ensure_sandbox_image()
 
 
 def test_local_dev_sandbox_image_uses_cached_image_when_present() -> None:
     mgr, docker = _bare_manager_with_image("onyxdotapp/sandbox:dev")
 
-    mgr._ensure_sandbox_image()  # type: ignore[attr-defined]
+    mgr._ensure_sandbox_image()
 
     docker.images.get.assert_called_once_with("onyxdotapp/sandbox:dev")
     docker.images.pull.assert_not_called()
@@ -197,7 +197,7 @@ def test_registry_port_untagged_image_refreshes_as_implicit_latest() -> None:
     image = "localhost:5001/onyx-sandbox"
     mgr, docker = _bare_manager_with_image(image)
 
-    mgr._ensure_sandbox_image()  # type: ignore[attr-defined]
+    mgr._ensure_sandbox_image()
 
     docker.images.pull.assert_called_once_with(image)
     docker.images.get.assert_not_called()
@@ -207,7 +207,7 @@ def test_digest_sandbox_image_uses_cached_image_when_present() -> None:
     image = "onyxdotapp/sandbox@sha256:abc123"
     mgr, docker = _bare_manager_with_image(image)
 
-    mgr._ensure_sandbox_image()  # type: ignore[attr-defined]
+    mgr._ensure_sandbox_image()
 
     docker.images.get.assert_called_once_with(image)
     docker.images.pull.assert_not_called()

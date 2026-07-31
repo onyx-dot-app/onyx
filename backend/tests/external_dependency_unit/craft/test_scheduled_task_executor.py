@@ -140,7 +140,7 @@ def test_dispatch_uses_skip_locked_to_avoid_dupes(
     # ``self.app`` is a property on the Celery-generated Task subclass;
     # we patch the property to return a fake whose ``send_task`` is a
     # no-op so the dispatcher never touches a broker.
-    task_instance = dispatch_due_scheduled_tasks.run.__self__  # type: ignore[attr-defined]
+    task_instance = dispatch_due_scheduled_tasks.run.__self__
 
     class _FakeApp:
         def send_task(
