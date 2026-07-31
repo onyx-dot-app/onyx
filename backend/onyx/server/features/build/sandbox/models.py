@@ -57,6 +57,10 @@ class SandboxInfo(BaseModel):
     last_heartbeat: datetime | None
 
 
+# Every runtime reports resolved image ids as `[repository@]<algorithm>:<hex>`.
+_DIGEST_PREFIX = "sha256:"
+
+
 class ImageMoveOutcome(str, Enum):
     """How far a backend got moving a sandbox onto a new image."""
 
@@ -115,8 +119,14 @@ class SandboxImageState(BaseModel):
 
 
 def sandbox_image_digest(image: str | None) -> str | None:
-    """The digest of an image reference, with or without a repository prefix."""
-    return image.rpartition("@")[-1] if image else None
+    """The digest of an image reference, with or without a repository prefix.
+
+    None for anything that isn't one: a runtime reporting a tag rather than a
+    resolved id would otherwise hand back the tag as if it were a digest, and
+    every comparison against it says "behind" forever.
+    """
+    digest = image.rpartition("@")[-1] if image else None
+    return digest if digest and digest.startswith(_DIGEST_PREFIX) else None
 
 
 class SnapshotResult(BaseModel):

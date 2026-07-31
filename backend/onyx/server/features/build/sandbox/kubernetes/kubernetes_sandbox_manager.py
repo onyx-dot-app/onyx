@@ -105,6 +105,7 @@ from onyx.server.features.build.sandbox.labels import (
     LABEL_PROVISIONING_ATTEMPT,
     LABEL_SANDBOX_ID,
     LABEL_TENANT_ID,
+    parse_sandbox_id,
 )
 from onyx.server.features.build.sandbox.models import (
     CraftLLMProviderConfig,
@@ -293,12 +294,8 @@ def _container_status(pod: client.V1Pod, name: str) -> client.V1ContainerStatus 
 
 def _labelled_sandbox_id(pod: client.V1Pod) -> UUID | None:
     """The sandbox this pod belongs to, or None if it cannot be tied to one."""
-    raw = ((pod.metadata.labels if pod.metadata else None) or {}).get(LABEL_SANDBOX_ID)
-    try:
-        return UUID(raw) if raw else None
-    except ValueError:
-        logger.warning("Sandbox pod carries an unparseable id label %r", raw)
-        return None
+    labels = (pod.metadata.labels if pod.metadata else None) or {}
+    return parse_sandbox_id(labels.get(LABEL_SANDBOX_ID))
 
 
 def _pinned_ref(ref: str, digest: str) -> str:
@@ -622,8 +619,15 @@ class KubernetesSandboxManager(SandboxManager):
         )
 
     def get_image_state(self) -> SandboxImageState:
-        """One prepuller read for the target, one pod list for the fleet."""
+        """One prepuller read for the target, one pod list for the fleet.
+
+        No target means no work whatever the fleet is running, so the fleet read
+        is skipped entirely — otherwise a deployment with the prepuller disabled
+        pays a namespace-wide list every sweep to learn nothing.
+        """
         prepull = self._prepull_state()
+        if prepull.target is None:
+            return SandboxImageState(target=None, movable_digests={})
         return SandboxImageState(
             target=prepull.target,
             movable_digests=self._movable_sandbox_digests(prepull.confirmed_nodes),

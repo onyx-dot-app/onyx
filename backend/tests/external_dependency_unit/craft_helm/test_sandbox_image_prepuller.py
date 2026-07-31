@@ -32,80 +32,31 @@ reports a broken chart as a skip is worse than no test.
 
 from __future__ import annotations
 
-import os
 import re
-import shutil
-import subprocess
-from typing import NoReturn
 
-import pytest
 import yaml
 
-from tests.common.paths import find_ancestor_containing
+from tests.external_dependency_unit.craft_helm import helm
 
-_REPO_ROOT = find_ancestor_containing("deployment/helm/charts/onyx")
-_CHART_DIR = _REPO_ROOT / "deployment" / "helm" / "charts" / "onyx"
 _PREPULLER_TEMPLATE = "templates/sandbox-image-prepuller.yaml"
 _PODTEMPLATE_TEMPLATE = "templates/sandbox-podtemplate.yaml"
 
 # The chart refuses to render without a push keypair; any valid base64 seed works.
 _FAKE_PUSH_KEY = "ZmFrZWtleWZha2VrZXlmYWtla2V5ZmFrZWtleWZha2VrZXk="
 
-# Substrings helm uses when the gitignored subchart tarballs are absent.
-_MISSING_DEPS_MARKERS = (
-    "found in Chart.yaml, but missing in charts/",
-    "missing in charts/ directory",
-    "no cached repository",
-)
 
-
-def _skip_or_fail(reason: str) -> NoReturn:
-    """Skip locally, but fail in CI — a shard that renders nothing must not
-    report green."""
-    if os.environ.get("CI"):
-        pytest.fail(reason)
-    pytest.skip(reason)
-
-
-def _handle_render_failure(stderr: str) -> NoReturn:
-    """A missing-deps error means we can't run here; anything else is a real
-    chart defect and must not be laundered into a skip."""
-    if any(marker in stderr for marker in _MISSING_DEPS_MARKERS):
-        _skip_or_fail(f"chart dependencies not built: {stderr.strip()}")
-    pytest.fail(f"helm template failed: {stderr.strip()}")
-
-
-def _run_helm(
-    template: str, extra_args: list[str] | None = None
-) -> subprocess.CompletedProcess[str]:
-    helm = shutil.which("helm")
-    if helm is None:
-        _skip_or_fail("helm binary not available")
-    cmd = [
-        helm,
-        "template",
-        "onyx",
-        str(_CHART_DIR),
-        "-n",
-        "onyx",
-        "-f",
-        str(_CHART_DIR / "values-ci.yaml"),
+def _chart_args(extra_args: list[str] | None = None) -> list[str]:
+    return [
         "--kube-version",
         "1.33.0",
         "--set",
         f"auth.sandboxPushSecret.values.private_key={_FAKE_PUSH_KEY}",
         *(extra_args or []),
-        "--show-only",
-        template,
     ]
-    return subprocess.run(cmd, capture_output=True, text=True)
 
 
 def _render(template: str, extra_args: list[str] | None = None) -> str:
-    result = _run_helm(template, extra_args)
-    if result.returncode != 0:
-        _handle_render_failure(result.stderr)
-    return result.stdout
+    return helm.render(_chart_args(extra_args), template)
 
 
 def _renders_nothing(extra_args: list[str]) -> bool:
@@ -115,12 +66,12 @@ def _renders_nothing(extra_args: list[str]) -> bool:
     ("could not find template"), not empty stdout — so a plain string check on
     stdout would pass for a genuinely broken chart too.
     """
-    result = _run_helm(_PREPULLER_TEMPLATE, extra_args)
+    result = helm.run(_chart_args(extra_args), _PREPULLER_TEMPLATE)
     if result.returncode == 0:
         return not result.stdout.strip().strip("-")
     if "could not find template" in result.stderr:
         return True
-    _handle_render_failure(result.stderr)
+    helm.handle_render_failure(result.stderr)
 
 
 def _prepuller(extra_args: list[str] | None = None) -> dict:

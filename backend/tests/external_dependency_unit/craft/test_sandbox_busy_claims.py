@@ -1,25 +1,29 @@
 """Busy-ness claims against real Postgres.
 
-The interactive-turn probe is covered by unit tests (its state lives in the
-cache), but the scheduled-run probe is a join plus a "not terminal" filter — the
-kind of query mocks will happily agree with while it is wrong. This exercises it
-for real.
+Both halves of the gate are queries that mocks will happily agree with while
+they are wrong: the scheduled-run probe is a join plus a "not terminal" filter,
+and which sessions count as live decides both what the turn probe asks about and
+whose prompt slots a recycle has to hold. The turn probe's own logic is a cache
+read, and stays in the unit tests.
 """
 
 from __future__ import annotations
 
 import datetime
+from uuid import uuid4
 
 import pytest
 from sqlalchemy.orm import Session
 
 import onyx.server.features.build.session.sandbox_busy as sandbox_busy
 from onyx.db.enums import (
+    BuildSessionStatus,
     ScheduledTaskRunStatus,
     ScheduledTaskStatus,
     ScheduledTaskTriggerSource,
 )
-from onyx.db.models import ScheduledTask, ScheduledTaskRun, User
+from onyx.db.models import BuildSession, ScheduledTask, ScheduledTaskRun, User
+from onyx.server.features.build.db.build_session import get_live_session_ids_for_user
 from onyx.server.features.build.session.sandbox_busy import (
     SandboxBusyKind,
     sandbox_busy_claim,
@@ -118,3 +122,47 @@ def test_another_users_run_does_not_claim_this_sandbox(
     _seed_run(db_session, make_user(db_session), ScheduledTaskRunStatus.RUNNING)
 
     assert sandbox_busy_claim(db_session, sandbox) is None
+
+
+def _seed_session(
+    db_session: Session, user: User, status: BuildSessionStatus
+) -> BuildSession:
+    session = BuildSession(
+        id=uuid4(), user_id=user.id, name=status.value, status=status
+    )
+    db_session.add(session)
+    db_session.commit()
+    return session
+
+
+def test_live_sessions_are_the_ones_using_the_sandbox(
+    db_session: Session,
+    test_user: User,  # noqa: ARG001
+) -> None:
+    """This set decides what the turn probe asks about *and* whose prompt slots
+    a recycle holds, so both a missing status and a spurious one are wrong.
+
+    INITIALIZING counts because its workspace setup execs into the sandbox;
+    IDLE does not, because its sandbox is already asleep.
+    """
+    user = make_user(db_session)
+    live = {
+        _seed_session(db_session, user, status).id
+        for status in (BuildSessionStatus.INITIALIZING, BuildSessionStatus.ACTIVE)
+    }
+    for status in (BuildSessionStatus.IDLE, BuildSessionStatus.FAILED):
+        _seed_session(db_session, user, status)
+
+    assert set(get_live_session_ids_for_user(user.id, db_session)) == live
+
+
+def test_another_users_sessions_are_not_live_here(
+    db_session: Session,
+    test_user: User,  # noqa: ARG001
+) -> None:
+    """The barrier holds slots keyed on these ids; one user's chat must not
+    block another's recycle."""
+    user = make_user(db_session)
+    _seed_session(db_session, make_user(db_session), BuildSessionStatus.ACTIVE)
+
+    assert get_live_session_ids_for_user(user.id, db_session) == []

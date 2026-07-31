@@ -14,6 +14,7 @@ in restarts and in wall clock so a rollout never takes the sweep over.
 import time
 from collections.abc import Iterator, Sequence
 from contextlib import ExitStack, contextmanager
+from datetime import datetime, timezone
 from uuid import UUID
 
 from redis.lock import Lock as RedisLock
@@ -33,6 +34,7 @@ from onyx.server.features.build.sandbox.models import (
 from onyx.server.features.build.session.locks import get_session_creation_lock
 from onyx.server.features.build.session.sandbox_busy import sandbox_busy_claim
 from onyx.server.features.build.session.sandbox_lifecycle import (
+    is_sandbox_idle,
     sandbox_mutation_window,
     sleep_sandbox,
 )
@@ -69,10 +71,14 @@ def recycle_sandboxes_on_stale_images(
     if target is None or not stale_ids:
         return
 
+    # Idle ones are skipped, not recycled: the reaper is about to reclaim them,
+    # and one whose reap was refused this pass will be tried again next pass.
+    # Restarting it in between costs a user's pod for nothing.
+    now = datetime.now(timezone.utc)
     stale = [
         sandbox
         for sandbox in get_running_sandboxes(db_session)
-        if sandbox.id in stale_ids
+        if sandbox.id in stale_ids and not is_sandbox_idle(sandbox, now)
     ]
     if not stale:
         return

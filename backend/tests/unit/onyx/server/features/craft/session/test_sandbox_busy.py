@@ -93,29 +93,24 @@ def test_every_session_of_the_user_is_checked(
 
 
 @pytest.mark.usefixtures("no_work")
-@pytest.mark.parametrize(
-    "status",
-    [
-        ScheduledTaskRunStatus.QUEUED,
-        ScheduledTaskRunStatus.RUNNING,
-        ScheduledTaskRunStatus.AWAITING_APPROVAL,
-    ],
-)
 def test_unfinished_scheduled_run_claims_the_sandbox(
-    monkeypatch: pytest.MonkeyPatch, status: ScheduledTaskRunStatus
+    monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     """The scheduled executor registers no turn, so only this probe sees it.
-    AWAITING_APPROVAL waits on a person and still owns the sandbox."""
+
+    Which statuses count is the query's business, and is tested against real
+    Postgres; here it is only that a run found becomes a claim.
+    """
     run = MagicMock()
     run.id = uuid4()
-    run.status = status
+    run.status = ScheduledTaskRunStatus.AWAITING_APPROVAL
     monkeypatch.setattr(sandbox_busy, "get_unfinished_run_for_user", lambda **_kw: run)
 
     claim = sandbox_busy_claim(MagicMock(), _sandbox(), cache=MagicMock())
 
     assert claim is not None
     assert claim.kind is SandboxBusyKind.SCHEDULED_RUN
-    assert status.value in claim.detail
+    assert str(run.id) in claim.detail
 
 
 @pytest.mark.usefixtures("no_work")
@@ -132,21 +127,3 @@ def test_interactive_turn_short_circuits_the_scheduled_probe(
 
     assert sandbox_busy_claim(MagicMock(), _sandbox(), cache=MagicMock()) is not None
     scheduled_probe.assert_not_called()
-
-
-def test_initializing_session_is_treated_as_live(
-    monkeypatch: pytest.MonkeyPatch,
-) -> None:
-    """Its workspace setup execs into the sandbox, so disturbing the sandbox
-    under it fails the session — and no turn exists yet to notice."""
-    session_id = uuid4()
-    monkeypatch.setattr(
-        sandbox_busy, "get_live_session_ids_for_user", lambda *_a, **_kw: [session_id]
-    )
-    monkeypatch.setattr(sandbox_busy, "get_unfinished_run_for_user", lambda **_kw: None)
-    monkeypatch.setattr(sandbox_busy, "get_active_turn", lambda **_kw: _turn())
-
-    claim = sandbox_busy_claim(MagicMock(), _sandbox(), cache=MagicMock())
-
-    assert claim is not None
-    assert str(session_id) in claim.detail

@@ -24,10 +24,7 @@ from __future__ import annotations
 
 import base64
 import json
-import os
-import shutil
 import subprocess
-from typing import NoReturn
 
 import pytest
 import yaml
@@ -50,10 +47,8 @@ from onyx.server.features.build.sandbox.image.sandbox_daemon.contract import (
 from onyx.server.features.build.sandbox.kubernetes.kubernetes_sandbox_manager import (
     KubernetesSandboxManager,
 )
-from tests.common.paths import find_ancestor_containing
+from tests.external_dependency_unit.craft_helm import helm
 
-_REPO_ROOT = find_ancestor_containing("deployment/helm/charts/onyx")
-_CHART_DIR = _REPO_ROOT / "deployment" / "helm" / "charts" / "onyx"
 _DEFAULT_KUBE_VERSION_ARGS = ["--kube-version", "1.33.0"]
 _HELM_TEST_SECRET_ARGS = [
     "--set-string",
@@ -94,27 +89,8 @@ def _push_key_env(monkeypatch: pytest.MonkeyPatch) -> None:
     )
 
 
-def _skip_or_fail(reason: str) -> NoReturn:
-    """Skip locally, but fail in CI — a shard that renders nothing must not
-    report green."""
-    if os.environ.get("CI"):
-        pytest.fail(reason)
-    pytest.skip(reason)
-
-
-def _helm_template_cmd(extra_args: list[str] | None = None) -> list[str]:
-    helm = shutil.which("helm")
-    if helm is None:
-        _skip_or_fail("helm binary not available")
+def _chart_args(extra_args: list[str] | None = None) -> list[str]:
     return [
-        helm,
-        "template",
-        "onyx",
-        str(_CHART_DIR),
-        "-n",
-        "onyx",
-        "-f",
-        str(_CHART_DIR / "values-ci.yaml"),
         *_chart_args_with_default_kube_version(extra_args),
         *_HELM_TEST_SECRET_ARGS,
     ]
@@ -122,35 +98,18 @@ def _helm_template_cmd(extra_args: list[str] | None = None) -> list[str]:
 
 def _render_template(template: str, extra_args: list[str] | None = None) -> str:
     """Render one chart template, for assertions that aren't about the pod."""
-    result = subprocess.run(
-        [*_helm_template_cmd(extra_args), "--show-only", template],
-        capture_output=True,
-        text=True,
-    )
-    if result.returncode != 0:
-        _skip_or_fail(f"helm template failed (chart deps?): {result.stderr.strip()}")
-    return result.stdout
+    return helm.render(_chart_args(extra_args), template)
 
 
 def _render_pod_template_yaml(extra_args: list[str] | None = None) -> str:
     """Render the sandbox-pod PodTemplate from the chart."""
-    cmd = [
-        *_helm_template_cmd(extra_args),
-        "--show-only",
-        "templates/sandbox-podtemplate.yaml",
-    ]
-    result = subprocess.run(cmd, capture_output=True, text=True)
-    if result.returncode != 0:
-        _skip_or_fail(f"helm template failed (chart deps?): {result.stderr.strip()}")
-    return result.stdout
+    return _render_template("templates/sandbox-podtemplate.yaml", extra_args)
 
 
 def _render_chart(
     extra_args: list[str] | None = None,
 ) -> subprocess.CompletedProcess[str]:
-    return subprocess.run(
-        _helm_template_cmd(extra_args), capture_output=True, text=True
-    )
+    return helm.run(_chart_args(extra_args))
 
 
 def _render_pod_template() -> client.V1PodTemplate:
@@ -670,7 +629,7 @@ def test_service_exposes_push_daemon_port() -> None:
 
 
 def test_sandbox_manager_can_patch_pods() -> None:
-    """`swap_to_image` moves a live sandbox onto a new image by mutating its
+    """`move_to_image` moves a live sandbox onto a new image by mutating its
     container images, which restarts them in place and leaves the pod — and so
     the session workspace — intact.
 

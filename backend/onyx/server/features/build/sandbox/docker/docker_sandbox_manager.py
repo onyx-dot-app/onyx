@@ -119,6 +119,7 @@ from onyx.server.features.build.sandbox.labels import (
     LABEL_PROVISIONING_ATTEMPT,
     LABEL_SANDBOX_ID,
     LABEL_TENANT_ID,
+    parse_sandbox_id,
 )
 from onyx.server.features.build.sandbox.models import (
     CraftLLMProviderConfig,
@@ -1084,20 +1085,13 @@ class DockerSandboxManager(SandboxManager):
         digests: dict[UUID, str] = {}
         for container in containers:
             attrs = container.attrs or {}
-            raw_id = (attrs.get("Labels") or {}).get(LABEL_SANDBOX_ID)
+            labels = attrs.get("Labels") or {}
+            sandbox_id = parse_sandbox_id(labels.get(LABEL_SANDBOX_ID))
             # `list` reports the resolved image as ImageID; `inspect` nests the
             # ref under Config, so the two shapes are not interchangeable.
             digest = sandbox_image_digest(attrs.get("ImageID"))
-            if not raw_id or digest is None:
-                continue
-            try:
-                digests[UUID(raw_id)] = digest
-            except ValueError:
-                logger.warning(
-                    "Sandbox container %s carries an unparseable id label %r",
-                    container.name,
-                    raw_id,
-                )
+            if sandbox_id is not None and digest is not None:
+                digests[sandbox_id] = digest
         return digests
 
     def _build_agents_md(

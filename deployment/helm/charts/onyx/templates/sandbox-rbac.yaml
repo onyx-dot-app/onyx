@@ -31,7 +31,7 @@ metadata:
     app.kubernetes.io/component: sandbox-manager
 rules:
   # watch is required: _wait_for_pod_ready streams pod events during provision.
-  # patch is required: swap_to_image moves a live sandbox onto a new image by
+  # patch is required: move_to_image moves a live sandbox onto a new image by
   # mutating its container images, which restarts them in place and leaves the
   # pod — and so the session workspace — intact.
   - apiGroups: [""]

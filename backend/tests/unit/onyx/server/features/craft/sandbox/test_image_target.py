@@ -41,6 +41,10 @@ SANDBOX_B = UUID(int=2)
         (DIGEST_A, DIGEST_A),
         (None, None),
         ("", None),
+        # Not a resolved id at all: taking it for one would compare unequal to
+        # every digest, so the sandbox reads as behind forever.
+        (TAG_REF, None),
+        ("latest", None),
     ],
 )
 def test_only_the_digest_is_comparable(
@@ -93,7 +97,9 @@ def _sandbox_pod(
     return cast(client.V1Pod, pod)
 
 
-def _k8s(prepullers: list[client.V1Pod], sandboxes: list[client.V1Pod] | None = None):
+def _k8s(
+    prepullers: list[client.V1Pod], sandboxes: list[client.V1Pod] | None = None
+) -> tuple[KubernetesSandboxManager, MagicMock]:
     core_api = MagicMock()
 
     def listed(*_a: Any, **kwargs: Any) -> SimpleNamespace:
@@ -236,16 +242,29 @@ def test_fleet_digests_omit_pods_that_have_not_reported() -> None:
 
 
 def test_fleet_digests_survive_an_unlistable_namespace() -> None:
-    mgr, core_api = _k8s([], [])
-    core_api.list_namespaced_pod.side_effect = ApiException(status=403)
+    """The prepuller answers and the fleet read doesn't: no work, not a crash.
+    Needs a confirmed target, since without one the fleet is never read."""
+    mgr, core_api = _k8s([])
 
-    assert mgr.get_image_state().movable_digests == {}
+    def prepuller_only(*_a: Any, **kwargs: Any) -> SimpleNamespace:
+        if "prepuller" in kwargs.get("label_selector", ""):
+            return SimpleNamespace(items=[_prepuller_pod(TAG_REF, DIGEST_B)])
+        raise ApiException(status=403)
+
+    core_api.list_namespaced_pod.side_effect = prepuller_only
+
+    state = mgr.get_image_state()
+
+    assert state.target is not None
+    assert state.movable_digests == {}
 
 
 # --- Docker -----------------------------------------------------------------
 
 
-def _docker(image: str = "onyxdotapp/sandbox:latest"):
+def _docker(
+    image: str = "onyxdotapp/sandbox:latest",
+) -> tuple[dsm.DockerSandboxManager, MagicMock]:
     mgr: dsm.DockerSandboxManager = object.__new__(dsm.DockerSandboxManager)
     docker = MagicMock()
     mgr._docker = docker  # type: ignore[attr-defined]
@@ -320,12 +339,20 @@ def test_state_names_only_the_sandboxes_that_are_behind() -> None:
 
 def test_state_produces_no_work_without_a_target() -> None:
     """An unconfirmed image must not make the whole fleet look stale."""
-    mgr, _ = _k8s([], [_sandbox_pod(SANDBOX_A, DIGEST_A)])
+    mgr, core_api = _k8s([], [_sandbox_pod(SANDBOX_A, DIGEST_A)])
 
     state = mgr.get_image_state()
 
     assert state.target is None
     assert state.stale_sandbox_ids() == set()
+    # And the fleet isn't read at all: with the prepuller disabled this runs
+    # every sweep, and a namespace-wide list per tenant buys nothing here.
+    fleet_reads = [
+        call
+        for call in core_api.list_namespaced_pod.call_args_list
+        if "prepuller" not in call.kwargs.get("label_selector", "")
+    ]
+    assert fleet_reads == []
 
 
 def test_sandbox_on_a_node_without_a_prepuller_is_not_movable() -> None:

@@ -7,6 +7,7 @@ anything uncertain leaves it alone and tries again next pass.
 from __future__ import annotations
 
 from contextlib import AbstractContextManager, contextmanager
+from datetime import datetime, timedelta, timezone
 from typing import Any, Iterator, cast
 from unittest.mock import MagicMock
 from uuid import UUID, uuid4
@@ -39,8 +40,17 @@ TARGET = SandboxImageTarget(
 OLD_DIGEST = "sha256:" + "a" * 64
 
 
-def _sandbox(status: SandboxStatus = SandboxStatus.RUNNING) -> Sandbox:
-    return Sandbox(id=uuid4(), user_id=uuid4(), status=status)
+def _sandbox(
+    status: SandboxStatus = SandboxStatus.RUNNING,
+    last_heartbeat: datetime | None = None,
+) -> Sandbox:
+    """RUNNING and recently active — what the drain expects to be handed."""
+    return Sandbox(
+        id=uuid4(),
+        user_id=uuid4(),
+        status=status,
+        last_heartbeat=last_heartbeat or datetime.now(timezone.utc),
+    )
 
 
 def _manager(
@@ -120,38 +130,44 @@ def test_stale_sandbox_is_swapped_in_place(sandboxes: list[Sandbox]) -> None:
     manager.move_to_image.assert_called_once_with(sandbox.id, TARGET)
 
 
-def test_current_sandbox_is_left_alone(sandboxes: list[Sandbox]) -> None:
-    sandbox = _sandbox()
-    sandboxes.append(sandbox)
-    manager = _manager(live={sandbox.id: TARGET.digest})
-
-    _run(manager)
-
-    manager.move_to_image.assert_not_called()
-
-
-def test_nothing_happens_without_a_confirmed_target(
+@pytest.mark.parametrize(
+    "target,reported",
+    [
+        (TARGET, TARGET.digest),
+        (None, OLD_DIGEST),
+        (TARGET, None),
+    ],
+    ids=["already-current", "unconfirmed-target", "unreported"],
+)
+def test_the_drain_acts_only_on_what_the_state_calls_stale(
     sandboxes: list[Sandbox],
+    target: SandboxImageTarget | None,
+    reported: str | None,
 ) -> None:
-    """Restarting onto an image the host lacks would leave it unable to serve."""
+    """Which sandboxes are behind is ``SandboxImageState``'s answer, covered
+    directly in test_image_target; the drain must not second-guess it."""
     sandbox = _sandbox()
     sandboxes.append(sandbox)
-    manager = _manager(target=None, live={sandbox.id: OLD_DIGEST})
+    manager = _manager(target=target, live={sandbox.id: reported} if reported else {})
 
     _run(manager)
 
     manager.move_to_image.assert_not_called()
 
 
-def test_unreported_sandbox_is_left_alone(sandboxes: list[Sandbox]) -> None:
-    """A pod that hasn't reported is either starting or already gone."""
-    sandbox = _sandbox()
+def test_idle_sandbox_is_left_for_the_reaper(
+    sandboxes: list[Sandbox], rebuilt: list[UUID]
+) -> None:
+    """It is about to be reclaimed — and if its reap was refused this pass, it
+    is tried again next pass. Restarting a user's pod in between buys nothing."""
+    sandbox = _sandbox(last_heartbeat=datetime.now(timezone.utc) - timedelta(days=1))
     sandboxes.append(sandbox)
-    manager = _manager(live={})
+    manager = _manager(live={sandbox.id: OLD_DIGEST})
 
     _run(manager)
 
     manager.move_to_image.assert_not_called()
+    assert rebuilt == []
 
 
 def test_busy_sandbox_is_left_on_the_old_image(
