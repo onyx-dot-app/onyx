@@ -1334,11 +1334,8 @@ def test_responses_stream_emits_created_first_and_completed_last() -> None:
 
 
 def test_responses_stream_emits_full_output_item_lifecycle_in_order() -> None:
-    """Regression test: Codex 0.145 rejects any output_text.delta whose item
-    was never opened ("OutputTextDelta without active item"). Every delta
-    must be bracketed by output_item.added/content_part.added before it and
-    output_text.done/content_part.done/output_item.done after, and every
-    lifecycle event's item_id must match the item opened in output_item.added."""
+    """Codex 0.145 rejects any output_text.delta whose item was never opened
+    ("OutputTextDelta without active item")."""
     events = _responses_stream_events(_ChunkStreamLLM(_TEXT_CHUNKS))
     event_types = [e["type"] for e in events]
 
@@ -1377,8 +1374,6 @@ def test_responses_stream_emits_full_output_item_lifecycle_in_order() -> None:
 
 
 def test_responses_stream_tool_call_gets_own_output_item_lifecycle() -> None:
-    """A text-free tool-call turn must still open/close a function_call
-    output item — no text item lifecycle should appear at all."""
     events = _responses_stream_events(
         _ChunkStreamLLM(_TOOL_CALL_CHUNKS), response_id="resp_2"
     )
