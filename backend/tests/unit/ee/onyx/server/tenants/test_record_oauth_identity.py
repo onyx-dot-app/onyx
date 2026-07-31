@@ -348,6 +348,39 @@ def test_rekey_leaves_a_co_owners_subject_link_alone() -> None:
     assert "sub-123" in sql
 
 
+def test_rekey_declines_when_a_row_carries_another_identitys_subject() -> None:
+    """A parked row can pick up a second person's subject once an invite hands
+    the address on. Renaming it promotes them into this workspace, and deleting
+    it cascades their membership away, so touch neither."""
+    source = SimpleNamespace(
+        email="old@example.com", tenant_id="tenant_abc", active=True
+    )
+    with (
+        patch(f"{_MAPPING_MODULE}.MULTI_TENANT", True),
+        patch(f"{_MAPPING_MODULE}.get_catalog_session") as session_ctx,
+    ):
+        db_session = session_ctx.return_value.__enter__.return_value
+        mapping_query = MagicMock()
+        locked = mapping_query.filter.return_value.with_for_update.return_value
+        locked.all.return_value = [source]
+        locked.one_or_none.return_value = None
+        db_session.query.side_effect = [mapping_query, mapping_query]
+        # Address is free, but a subject outside this login's identities is
+        # attached to one of the candidate rows.
+        db_session.scalar.side_effect = [None, "someone-elses-sub"]
+
+        rekey_user_mapping_email(
+            new_email="new@example.com",
+            tenant_id="tenant_abc",
+            oauth_identities=[("google", "sub-123")],
+            previous_email="old@example.com",
+        )
+
+    assert source.email == "old@example.com"
+    db_session.delete.assert_not_called()
+    db_session.commit.assert_not_called()
+
+
 def test_rekey_declines_when_the_address_is_held_elsewhere() -> None:
     """uq_user_active_email_idx spans tenants. Moving the row onto a taken
     address makes the other tenant's row answer this user's next login, so the

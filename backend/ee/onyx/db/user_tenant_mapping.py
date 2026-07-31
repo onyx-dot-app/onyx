@@ -320,6 +320,31 @@ def rekey_user_mapping_email(
             .with_for_update()
             .one_or_none()
         )
+        # A row carries someone else's subject once a declined rekey parks it
+        # and an invite hands the address on. Renaming one promotes them into a
+        # workspace, and deleting one cascades their membership away.
+        candidate_keys = {(row.email, row.tenant_id) for row in matched_mappings}
+        if destination is not None:
+            candidate_keys.add((destination.email, destination.tenant_id))
+        if db_session.scalar(
+            select(UserTenantMappingOAuthAccount.account_id).where(
+                tuple_(
+                    UserTenantMappingOAuthAccount.email,
+                    UserTenantMappingOAuthAccount.tenant_id,
+                ).in_(list(candidate_keys)),
+                ~tuple_(
+                    UserTenantMappingOAuthAccount.oauth_name,
+                    UserTenantMappingOAuthAccount.account_id,
+                ).in_(identities),
+            )
+        ):
+            logger.warning(
+                "Mapping rows in tenant %s carry another identity's subject, "
+                "leaving them as they are",
+                tenant_id,
+            )
+            return
+
         if destination is None:
             normalized_previous = previous_email.lower() if previous_email else None
             destination = next(
