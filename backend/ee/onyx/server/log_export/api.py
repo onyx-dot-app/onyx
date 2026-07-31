@@ -1,4 +1,3 @@
-import os
 import threading
 import time
 from collections.abc import Callable, Generator
@@ -100,13 +99,10 @@ def download_api_server_logs(
 
     handed_off = False
     try:
-        zip_buffer = build_log_zip(get_default_log_directories(), API_SERVER_SCOPE_NOTE)
-
         # The archive is fully materialized before streaming, so its exact size
         # is known and an explicit Content-Length can be sent.
-        zip_buffer.seek(0, os.SEEK_END)
-        zip_size = zip_buffer.tell()
-        zip_buffer.seek(0)
+        built = build_log_zip(get_default_log_directories(), API_SERVER_SCOPE_NOTE)
+        zip_buffer = built.zip_buffer
 
         def cleanup() -> None:
             # Wired to both the generator's ``finally`` and the response
@@ -136,7 +132,7 @@ def download_api_server_logs(
                 "Content-Disposition": (
                     f"attachment; filename=onyx_api_server_logs_{timestamp}.zip"
                 ),
-                "Content-Length": str(zip_size),
+                "Content-Length": str(built.size_bytes),
             },
             background=BackgroundTask(cleanup),
         )

@@ -7,8 +7,8 @@ from pydantic import BaseModel
 class LogExportReceiptStatus(str, Enum):
     UPLOADED = "uploaded"
     # A piece for this host already existed, so only a receipt was written.
-    # Best-effort: collectors running simultaneously on one host may each
-    # report ``UPLOADED`` instead.
+    # Best-effort: collectors running simultaneously on one host may each report
+    # ``UPLOADED`` instead.
     DUPLICATE_HOST = "duplicate_host"
     NO_LOGS_FOUND = "no_logs_found"
     FAILED = "failed"

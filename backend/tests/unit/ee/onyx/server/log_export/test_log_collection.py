@@ -26,7 +26,10 @@ def test_collects_log_files_recursively(tmp_path: Path) -> None:
     (tmp_path / "memory" / "memory_usage.log").write_text("memory line\n")
     (tmp_path / "notes.txt").write_text("not a log\n")
 
-    with build_log_zip([tmp_path], SCOPE_NOTE) as zip_buffer:
+    built = build_log_zip([tmp_path], SCOPE_NOTE)
+    assert built.log_file_count == 3
+    assert built.size_bytes > 0
+    with built.zip_buffer as zip_buffer:
         with zipfile.ZipFile(zip_buffer) as zip_file:
             names = _zip_names(zip_file)
             assert README_FILE_NAME in names
@@ -47,7 +50,8 @@ def test_collects_log_files_recursively(tmp_path: Path) -> None:
 
 
 def test_empty_directory_yields_readme_only(tmp_path: Path) -> None:
-    with build_log_zip([tmp_path], SCOPE_NOTE) as zip_buffer:
+    built = build_log_zip([tmp_path], SCOPE_NOTE)
+    with built.zip_buffer as zip_buffer:
         with zipfile.ZipFile(zip_buffer) as zip_file:
             assert _zip_names(zip_file) == [README_FILE_NAME]
             readme = zip_file.read(README_FILE_NAME).decode("utf-8")
@@ -55,7 +59,8 @@ def test_empty_directory_yields_readme_only(tmp_path: Path) -> None:
 
 
 def test_missing_directory_yields_readme_only(tmp_path: Path) -> None:
-    with build_log_zip([tmp_path / "does_not_exist"], SCOPE_NOTE) as zip_buffer:
+    built = build_log_zip([tmp_path / "does_not_exist"], SCOPE_NOTE)
+    with built.zip_buffer as zip_buffer:
         with zipfile.ZipFile(zip_buffer) as zip_file:
             assert _zip_names(zip_file) == [README_FILE_NAME]
 
@@ -65,7 +70,8 @@ def test_overlapping_directories_deduplicate(tmp_path: Path) -> None:
     nested.mkdir()
     (nested / "worker.log").write_text("worker line\n")
 
-    with build_log_zip([tmp_path, nested], SCOPE_NOTE) as zip_buffer:
+    built = build_log_zip([tmp_path, nested], SCOPE_NOTE)
+    with built.zip_buffer as zip_buffer:
         with zipfile.ZipFile(zip_buffer) as zip_file:
             names = _zip_names(zip_file)
             assert len(names) == 2
@@ -80,7 +86,8 @@ def test_symlink_escaping_log_directory_is_skipped(tmp_path: Path) -> None:
     secret.write_text("not a log\n")
     (log_dir / "evil.log").symlink_to(secret)
 
-    with build_log_zip([log_dir], SCOPE_NOTE) as zip_buffer:
+    built = build_log_zip([log_dir], SCOPE_NOTE)
+    with built.zip_buffer as zip_buffer:
         with zipfile.ZipFile(zip_buffer) as zip_file:
             names = _zip_names(zip_file)
             # README plus ``real.log``; the escaping symlink is dropped.
@@ -94,7 +101,8 @@ def test_symlink_within_log_directory_is_included(tmp_path: Path) -> None:
     target.write_text("aliased content\n")
     (tmp_path / "alias.log").symlink_to(target)
 
-    with build_log_zip([tmp_path], SCOPE_NOTE) as zip_buffer:
+    built = build_log_zip([tmp_path], SCOPE_NOTE)
+    with built.zip_buffer as zip_buffer:
         with zipfile.ZipFile(zip_buffer) as zip_file:
             # The entry is stored under its resolved path, hence ``target.txt``.
             entry = _entry_ending_with(zip_file, "target.txt")
@@ -108,7 +116,8 @@ def test_known_system_logs_are_excluded(tmp_path: Path) -> None:
     (tmp_path / "onyx_debug.log").write_text("debug line\n")
 
     # Under test.
-    with build_log_zip([tmp_path], SCOPE_NOTE) as zip_buffer:
+    built = build_log_zip([tmp_path], SCOPE_NOTE)
+    with built.zip_buffer as zip_buffer:
         # Postcondition.
         with zipfile.ZipFile(zip_buffer) as zip_file:
             names = _zip_names(zip_file)
@@ -128,9 +137,8 @@ def test_shallow_directory_is_not_recursed(tmp_path: Path) -> None:
     (nested / "deep.log").write_text("deep line\n")
 
     # Under test.
-    with build_log_zip(
-        [], SCOPE_NOTE, shallow_log_directories=[tmp_path]
-    ) as zip_buffer:
+    built = build_log_zip([], SCOPE_NOTE, shallow_log_directories=[tmp_path])
+    with built.zip_buffer as zip_buffer:
         # Postcondition.
         with zipfile.ZipFile(zip_buffer) as zip_file:
             names = _zip_names(zip_file)
@@ -149,7 +157,8 @@ def test_unreadable_file_is_skipped_and_noted(tmp_path: Path) -> None:
     unreadable.chmod(0o000)
 
     try:
-        with build_log_zip([tmp_path], SCOPE_NOTE) as zip_buffer:
+        built = build_log_zip([tmp_path], SCOPE_NOTE)
+        with built.zip_buffer as zip_buffer:
             with zipfile.ZipFile(zip_buffer) as zip_file:
                 names = _zip_names(zip_file)
                 assert not any(name.endswith("unreadable.log") for name in names)

@@ -1,20 +1,18 @@
 """File-store layout and lifecycle for admin log exports.
 
-All state for one export lives under ``log_export/{export_id}/`` in the
-default file store: one ``piece_{hostname}.zip`` per container plus one
+All state for one export lives under ``log_export/{export_id}/`` in the default
+file store: one ``piece_{hostname}.zip`` per container plus one
 ``receipt_{worker_name}.json`` per fanned-out worker. Shared by the collector
 celery tasks and the log-export API endpoints.
 """
 
-import os
 import socket
-import zipfile
 from collections.abc import Sequence
 from datetime import datetime, timedelta, timezone
 from io import BytesIO
 from pathlib import Path
 
-from ee.onyx.server.log_export.collection import README_FILE_NAME, build_log_zip
+from ee.onyx.server.log_export.collection import build_log_zip
 from ee.onyx.server.log_export.models import LogExportReceipt, LogExportReceiptStatus
 from onyx.configs.constants import FileOrigin
 from onyx.file_store.file_store import get_default_file_store
@@ -24,8 +22,8 @@ logger = setup_logger()
 
 LOG_EXPORT_FILE_ID_PREFIX = "log_export/"
 
-# How long export artifacts (pieces and receipts) stay in the file store
-# before the hourly cleanup task deletes them.
+# How long export artifacts (pieces and receipts) stay in the file store before
+# the hourly cleanup task deletes them.
 LOG_EXPORT_RETENTION = timedelta(hours=12)
 
 ZIP_FILE_TYPE = "application/zip"
@@ -106,24 +104,19 @@ def collect_logs_into_file_store(
                 scope_note += (
                     " May include top-level system logs from the container image."
                 )
-            zip_buffer = build_log_zip(
+            built = build_log_zip(
                 log_directories,
                 scope_note,
                 shallow_log_directories=shallow_log_directories,
             )
             try:
-                with zipfile.ZipFile(zip_buffer) as zip_file:
-                    file_count = sum(
-                        1 for name in zip_file.namelist() if name != README_FILE_NAME
-                    )
-                if file_count == 0:
+                if built.log_file_count == 0:
                     status = LogExportReceiptStatus.NO_LOGS_FOUND
                 else:
-                    zip_buffer.seek(0, os.SEEK_END)
-                    size_bytes = zip_buffer.tell()
-                    zip_buffer.seek(0)
+                    file_count = built.log_file_count
+                    size_bytes = built.size_bytes
                     file_store.save_file(
-                        content=zip_buffer,
+                        content=built.zip_buffer,
                         display_name=f"piece_{hostname}.zip",
                         file_origin=FileOrigin.LOG_EXPORT,
                         file_type=ZIP_FILE_TYPE,
@@ -131,7 +124,7 @@ def collect_logs_into_file_store(
                     )
                     status = LogExportReceiptStatus.UPLOADED
             finally:
-                zip_buffer.close()
+                built.zip_buffer.close()
     except Exception as e:
         logger.exception(
             "Log export collection failed: export_id=%s worker_name=%s",

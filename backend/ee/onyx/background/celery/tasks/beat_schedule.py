@@ -108,8 +108,11 @@ if not MULTI_TENANT:
             "task": OnyxCeleryTask.EXPORT_LOGS_CLEANUP_TASK,
             "schedule": timedelta(hours=1),
             "options": {
-                "priority": OnyxCeleryPriority.MEDIUM,
+                "priority": OnyxCeleryPriority.LOW,
                 "expires": BEAT_EXPIRES_DEFAULT,
+                # Cleanup belongs on the heavy worker; it shares the queue the
+                # query-history cleanup uses rather than minting a new one,
+                # which would require deployment changes.
                 "queue": OnyxCeleryQueues.CSV_GENERATION,
             },
         },

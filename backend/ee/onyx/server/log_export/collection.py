@@ -4,12 +4,15 @@ Shared by the api_server download endpoint today and intended to be reused by
 per-worker celery collector tasks once fan-out collection lands.
 """
 
+import os
 import socket
 import tempfile
 import zipfile
 from collections.abc import Sequence
 from datetime import datetime, timezone
 from pathlib import Path
+
+from pydantic import BaseModel, ConfigDict
 
 from onyx import __version__
 from onyx.file_store.constants import MAX_IN_MEMORY_SIZE
@@ -21,9 +24,9 @@ README_FILE_NAME = "README.txt"
 LOG_FILE_GLOB = "*.log*"
 
 # Known Debian package-manager logs at the top level of ``/var/log`` in the
-# backend image; build-time noise with no diagnostic value. Exact names only,
-# so unknown system logs fail open: they are collected as noise rather than
-# risking dropped Onyx logs.
+# backend image; build-time noise with no diagnostic value. Exact names only, so
+# unknown system logs fail open: they are collected as noise rather than risking
+# dropped Onyx logs.
 EXCLUDED_SYSTEM_LOG_FILE_NAMES = frozenset(
     {"dpkg.log", "alternatives.log", "fontconfig.log"}
 )
@@ -33,6 +36,19 @@ SENSITIVE_DATA_WARNING = (
     "document titles, search queries, URLs, and error payloads. Review the "
     "contents before sharing them outside your organization."
 )
+
+
+class BuiltLogZip(BaseModel):
+    """A materialized log archive plus metadata gathered while building it."""
+
+    model_config = ConfigDict(frozen=True, arbitrary_types_allowed=True)
+
+    # Positioned at offset 0; the caller owns the buffer and must close it.
+    zip_buffer: tempfile.SpooledTemporaryFile[bytes]
+    # Number of log files in the archive (the README is not counted).
+    log_file_count: int
+    # Total size of the finished archive in bytes.
+    size_bytes: int
 
 
 def get_default_log_directories() -> list[Path]:
@@ -127,7 +143,7 @@ def build_log_zip(
     log_directories: Sequence[Path],
     scope_note: str,
     shallow_log_directories: Sequence[Path] = (),
-) -> tempfile.SpooledTemporaryFile[bytes]:
+) -> BuiltLogZip:
     """Collects every log file under the given directories into a zip.
 
     The archive always contains a ``README.txt`` (sensitive-data warning, scope
@@ -145,12 +161,12 @@ def build_log_zip(
             included verbatim in the README.
         shallow_log_directories: Directories to search without recursing into
             subdirectories (e.g. ``/var/log``, where only the top-level
-            supervisord-captured logs are wanted). Same skip and dedupe rules
-            as ``log_directories``.
+            supervisord-captured logs are wanted). Same skip and dedupe rules as
+            ``log_directories``.
 
     Returns:
-        A spooled temporary file containing the zip archive, positioned at
-        offset 0. The caller owns the file and is responsible for closing it.
+        The archive buffer together with the log-file count and archive size,
+        per ``BuiltLogZip``.
     """
     log_files = _find_log_files(log_directories, shallow_log_directories)
 
@@ -174,5 +190,11 @@ def build_log_zip(
             README_FILE_NAME, _build_readme(scope_note, included, skipped)
         )
 
+    zip_buffer.seek(0, os.SEEK_END)
+    size_bytes = zip_buffer.tell()
     zip_buffer.seek(0)
-    return zip_buffer
+    return BuiltLogZip(
+        zip_buffer=zip_buffer,
+        log_file_count=len(included),
+        size_bytes=size_bytes,
+    )
