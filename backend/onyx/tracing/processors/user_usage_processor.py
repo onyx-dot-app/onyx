@@ -115,8 +115,9 @@ class UserUsageTracingProcessor(TracingProcessor):
 
         user_id = get_current_user_id()
         if user_id is None:
-            # No user id → skip (undercount, never wrong-user). Only chat
-            # endpoints set the var today.
+            # No user id → skip (undercount, never wrong-user). The
+            # optional_user dependency sets this for any authenticated request,
+            # so it is absent only for work started outside one (e.g. Celery).
             return None
 
         model = data.model
