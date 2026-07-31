@@ -1,9 +1,7 @@
 """Tests for _validate_llm_provider_change's custom_config comparison.
 
-In MULTI_TENANT mode, changing api_base or custom_config without re-entering
-the API key is rejected (the stored key must not be redirectable to another
-host). API-surface mode keys (e.g. bifrost_api_mode) only pick a path on the
-same api_base, so changing them alone must NOT force key re-entry.
+Surface-mode keys pick a path on the same api_base, so changing them alone
+must not force key re-entry; everything else still must.
 """
 
 from unittest.mock import patch
@@ -33,10 +31,7 @@ def _validate(
 
 @patch("onyx.server.manage.llm.api.MULTI_TENANT", True)
 def test_surface_mode_only_change_is_allowed() -> None:
-    # Enabling responses mode on an existing provider (no prior custom_config)
-    # must not demand API-key re-entry.
     _validate(None, {BIFROST_API_MODE_CONFIG_KEY: "responses"})
-    # Nor must switching between modes.
     _validate(
         {BIFROST_API_MODE_CONFIG_KEY: "chat_completions"},
         {BIFROST_API_MODE_CONFIG_KEY: "responses"},
@@ -62,8 +57,7 @@ def test_other_custom_config_change_still_rejected() -> None:
 
 @patch("onyx.server.manage.llm.api.MULTI_TENANT", True)
 def test_mode_only_submission_dropping_stored_entries_is_rejected() -> None:
-    # A submission containing only the mode key must not silently delete
-    # stored non-surface entries when persisted wholesale.
+    # The submitted dict is persisted wholesale; dropped entries must reject.
     with pytest.raises(OnyxError):
         _validate(
             {BIFROST_API_MODE_CONFIG_KEY: "chat_completions", "extra": "stored"},

@@ -321,9 +321,8 @@ def _validate_llm_provider_change(
     normalized_existing_api_base = existing_api_base or None
     normalized_new_api_base = new_api_base or None
 
-    # API-surface mode keys (e.g. bifrost_api_mode) only pick a path on the
-    # same api_base — they cannot redirect the stored key to another host, so
-    # changing them must not force key re-entry.
+    # Surface-mode keys only pick a path on the same api_base and cannot
+    # redirect the stored key, so they must not force key re-entry.
     def _without_surface_keys(config: dict[str, str] | None) -> dict[str, str]:
         return {
             k: v
@@ -332,9 +331,8 @@ def _validate_llm_provider_change(
         }
 
     api_base_changed = normalized_new_api_base != normalized_existing_api_base
-    # Gate on the raw submitted config (empty submissions are restored from the
-    # stored config later, never persisted), but compare stripped dicts so a
-    # submission that would drop stored non-surface entries is still rejected.
+    # Gate on the raw config (empty submissions are never persisted); compare
+    # stripped dicts so dropping stored non-surface entries is still rejected.
     custom_config_changed = bool(new_custom_config) and _without_surface_keys(
         new_custom_config
     ) != _without_surface_keys(existing_custom_config)

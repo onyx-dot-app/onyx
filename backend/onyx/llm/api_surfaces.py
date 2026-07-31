@@ -50,9 +50,8 @@ _SELECTABLE_SURFACES: dict[str, tuple[str, dict[str, LlmApiSurface], str]] = {
         },
         PORTKEY_DEFAULT_API_MODE,
     ),
-    # Bifrost also exposes an Anthropic-compatible surface, but it lives under a
-    # different path prefix (/anthropic), so only the OpenAI-compatible modes
-    # are offered here.
+    # Bifrost's Anthropic-compatible surface lives under a different path
+    # prefix (/anthropic), so only the OpenAI-compatible modes are offered.
     LlmProviderNames.BIFROST: (
         BIFROST_API_MODE_CONFIG_KEY,
         {
