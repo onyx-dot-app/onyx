@@ -4,6 +4,7 @@ import base64
 import hashlib
 import json
 import os
+import re
 from datetime import datetime, timezone
 from pathlib import Path
 from typing import NamedTuple
@@ -39,6 +40,43 @@ logger = setup_logger()
 _LICENSE_RECLAIM_DEBOUNCE_KEY = "license_reclaim_debounce"
 _LICENSE_RECLAIM_DEBOUNCE_TTL_SEC = 15 * 60
 
+# Floor between control-plane reclaims driven by a user action. The billing page
+# fires one on load, so without this a reload loop is an unthrottled proxy call.
+_LICENSE_CLAIM_COOLDOWN_KEY = "license_claim_cooldown"
+_LICENSE_CLAIM_COOLDOWN_SEC = 10
+
+
+def claim_cooldown_is_active() -> bool:
+    """True when a user-driven claim ran within the cooldown. Never raises.
+
+    Fails open: a Redis outage should not stop an admin from recovering a
+    lapsed instance, and the cost of an extra proxy call is one request.
+    """
+    try:
+        return not get_redis_client().set(
+            _LICENSE_CLAIM_COOLDOWN_KEY,
+            "1",
+            nx=True,
+            ex=_LICENSE_CLAIM_COOLDOWN_SEC,
+        )
+    except Exception as e:
+        logger.debug("License claim cooldown unavailable: %s", e)
+        return False
+
+
+def clear_claim_cooldown() -> None:
+    """Release the cooldown after a change the next claim has to pick up.
+
+    The cooldown assumes nothing has changed since the last sync. A write that
+    reissues the license breaks that assumption, and the claim that collects it
+    is part of that write rather than a user retrying. Never raises.
+    """
+    try:
+        get_redis_client().delete(_LICENSE_CLAIM_COOLDOWN_KEY)
+    except Exception as e:
+        logger.debug("License claim cooldown unavailable: %s", e)
+
+
 # The control plane authenticates a re-claim with the stored license itself, so
 # a rejected license cannot be fixed by retrying it. Back off for a day, or
 # until a replacement license is stored, instead of every debounce period.
@@ -46,7 +84,7 @@ _LICENSE_RECLAIM_BLOCKED_KEY = "license_reclaim_blocked"
 _LICENSE_RECLAIM_BLOCKED_TTL_SEC = 24 * 60 * 60
 
 # Statuses meaning the stored license itself was refused, not a transient fault.
-AUTH_REJECTED_STATUSES = frozenset({401, 403})
+_AUTH_REJECTED_STATUSES = frozenset({401, 403})
 
 # Path to the license public key file
 _LICENSE_PUBLIC_KEY_PATH = (
@@ -71,13 +109,53 @@ def license_from_control_plane_response(response: requests.Response) -> str:
     return license_data
 
 
-def _get_public_key() -> RSAPublicKey:
-    """Load the public key from file, with env var override."""
-    # Allow env var override for flexibility
+def _load_public_keys(key_pem: str) -> list[RSAPublicKey]:
+    """Parse every PEM public key in *key_pem*, in order.
+
+    Concatenated keys are a trust set rather than a single anchor: rotation
+    signs new licenses with the new key while every license already in the
+    field still verifies, so instances renew themselves instead of all failing
+    at once and needing a hand-uploaded file.
+    """
+    blocks = re.findall(
+        r"-----BEGIN [^-]+-----.*?-----END [^-]+-----", key_pem, flags=re.DOTALL
+    )
+    if not blocks:
+        raise ValueError("No PEM public key found in the configured license key")
+
+    keys: list[RSAPublicKey] = []
+    for block in blocks:
+        key = serialization.load_pem_public_key(block.encode())
+        if not isinstance(key, RSAPublicKey):
+            raise ValueError("Expected RSA public key")
+        keys.append(key)
+    return keys
+
+
+def _verify_against_trust_set(signature: bytes, signed_bytes: bytes) -> None:
+    """Raise InvalidSignature unless some trusted key verifies the signature."""
+    for key in _get_public_keys():
+        try:
+            key.verify(
+                signature,
+                signed_bytes,
+                padding.PSS(
+                    mgf=padding.MGF1(hashes.SHA256()),
+                    salt_length=padding.PSS.MAX_LENGTH,
+                ),
+                hashes.SHA256(),
+            )
+            return
+        except InvalidSignature:
+            continue
+    raise InvalidSignature("No configured public key verifies this license")
+
+
+def _get_public_keys() -> list[RSAPublicKey]:
+    """Trust set for license verification, env var taking priority over file."""
     key_pem = os.environ.get("LICENSE_PUBLIC_KEY_PEM")
 
     if not key_pem:
-        # Read from file
         if not _LICENSE_PUBLIC_KEY_PATH.exists():
             raise ValueError(
                 f"License public key not found at {_LICENSE_PUBLIC_KEY_PATH}. "
@@ -85,10 +163,7 @@ def _get_public_key() -> RSAPublicKey:
             )
         key_pem = _LICENSE_PUBLIC_KEY_PATH.read_text()
 
-    key = serialization.load_pem_public_key(key_pem.encode())
-    if not isinstance(key, RSAPublicKey):
-        raise ValueError("Expected RSA public key")
-    return key
+    return _load_public_keys(key_pem)
 
 
 def verify_license_signature(license_data: str) -> LicensePayload:
@@ -118,17 +193,7 @@ def verify_license_signature(license_data: str) -> LicensePayload:
         signature_bytes = base64.b64decode(license_obj.signature)
 
         # Verify signature using PSS padding (modern standard)
-        public_key = _get_public_key()
-
-        public_key.verify(
-            signature_bytes,
-            payload_json.encode(),
-            padding.PSS(
-                mgf=padding.MGF1(hashes.SHA256()),
-                salt_length=padding.PSS.MAX_LENGTH,
-            ),
-            hashes.SHA256(),
-        )
+        _verify_against_trust_set(signature_bytes, payload_json.encode())
 
         return license_obj.payload
 
@@ -269,12 +334,36 @@ def load_verified_license(db_session: Session) -> StoredLicense | None:
     )
 
 
-def reclaim_license_from_control_plane(db_session: Session) -> LicensePayload | None:
+def _rejection_detail(response: requests.Response) -> str | None:
+    """Pull the upstream's reason out of a refusal, if it gave one."""
+    try:
+        body = response.json()
+    except ValueError:
+        return None
+    detail = body.get("detail") if isinstance(body, dict) else None
+    return detail if isinstance(detail, str) and detail else None
+
+
+class LicenseNotStoredError(Exception):
+    """Nothing is stored to authenticate a reclaim with."""
+
+
+class LicenseRejectedError(Exception):
+    """The control plane refused the stored license as a credential.
+
+    Terminal until the license is replaced, since the reclaim authenticates
+    with the very blob being rejected. Distinct from an unreachable control
+    plane so callers can tell a customer to replace their license rather than
+    to wait.
+    """
+
+
+def reclaim_license_from_control_plane(db_session: Session) -> LicensePayload:
     """Re-fetch this instance's license from the control plane, authenticating with the stored one.
 
-    Returns None when there is no usable stored license to authenticate with,
-    or when that license was already rejected. Raises ValueError when the
-    control plane response has no valid license.
+    Raises LicenseNotStoredError with nothing to authenticate with,
+    LicenseRejectedError when that credential is refused, ValueError on an
+    unusable response, and HTTPError on any other upstream refusal.
 
     Reads and sets the reclaim block itself, so callers must not
     re-implement it.
@@ -284,12 +373,16 @@ def reclaim_license_from_control_plane(db_session: Session) -> LicensePayload | 
 
     stored = load_verified_license(db_session)
     if stored is None:
-        return None
+        raise LicenseNotStoredError("No license stored to authenticate a reclaim")
 
     # Addressed from the stored blob so a cache outage cannot stop a reclaim.
     stored_data, tenant_id = stored.license_data, stored.payload.tenant_id
-    if not tenant_id or license_reclaim_is_blocked(stored_data):
-        return None
+    if not tenant_id:
+        raise LicenseNotStoredError("Stored license carries no tenant")
+    if license_reclaim_is_blocked(stored_data):
+        raise LicenseRejectedError(
+            "The stored license was already refused by the control plane"
+        )
 
     response = requests.get(
         f"{CLOUD_DATA_PLANE_URL}/proxy/license/{tenant_id}",
@@ -299,13 +392,16 @@ def reclaim_license_from_control_plane(db_session: Session) -> LicensePayload | 
         },
         timeout=30,
     )
-    if response.status_code in AUTH_REJECTED_STATUSES:
+    if response.status_code in _AUTH_REJECTED_STATUSES:
         # Only block while this blob is still the stored one, or a slow
         # rejection would suppress the replacement that overtook it.
         db_session.expire_all()
         current = get_license(db_session)
         if current and current.license_data == stored_data:
             block_license_reclaim(stored_data)
+        raise LicenseRejectedError(
+            _rejection_detail(response) or "The control plane refused this license"
+        )
     response.raise_for_status()
 
     return verify_and_store_license(

@@ -265,29 +265,24 @@ class TestVerifyLicenseAuth:
     @patch("ee.onyx.server.tenants.proxy.LICENSE_ENFORCEMENT_ENABLED", True)
     @patch("ee.onyx.server.tenants.proxy.verify_license_signature")
     @patch("ee.onyx.server.tenants.proxy.is_license_valid")
-    async def test_long_expired_license_is_refused_even_when_expiry_is_waived(
+    async def test_a_long_expired_license_still_authenticates_the_way_back_in(
         self,
         mock_is_valid: MagicMock,
         mock_verify: MagicMock,
     ) -> None:
-        """A signed license has no revocation, so an old copy must not stay a
-        credential for whatever the tenant holds today."""
-        from fastapi import HTTPException
-
-        from ee.onyx.server.tenants.proxy import (
-            STALE_LICENSE_AUTH_GRACE,
-            verify_license_auth,
-        )
+        """These routes are how a lapsed customer renews, opens the billing
+        portal, or buys again. Refusing an old license on any age threshold
+        leaves someone still being billed with no self-serve path at all."""
+        from ee.onyx.server.tenants.proxy import verify_license_auth
 
         mock_verify.return_value = make_license_payload(
-            expired=True, expired_days_ago=STALE_LICENSE_AUTH_GRACE.days + 1
+            expired=True, expired_days_ago=3650
         )
         mock_is_valid.return_value = False
 
-        with pytest.raises(HTTPException) as exc_info:
-            verify_license_auth("ancient_license", allow_expired=True)
+        payload = verify_license_auth("ancient_license", allow_expired=True)
 
-        assert exc_info.value.status_code == 401
+        assert payload.tenant_id == "tenant_123"
 
 
 class TestProxyLicenseFetchBustsBillingCache:

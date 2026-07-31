@@ -12,6 +12,7 @@ import pytest
 
 from ee.onyx.server.license.models import LicensePayload, LicenseSource, PlanType
 from ee.onyx.utils.license import (
+    LicenseNotStoredError,
     block_license_reclaim,
     license_fingerprint,
     license_reclaim_is_blocked,
@@ -208,18 +209,21 @@ class TestReclaimLicenseFromControlPlane:
     @patch("ee.onyx.db.license.get_license")
     @patch("ee.onyx.db.license.upsert_license")
     @patch("ee.onyx.utils.license.requests.get")
-    def test_returns_none_when_local_reclaim_prereqs_are_missing(
+    def test_raises_when_there_is_nothing_to_authenticate_with(
         self,
         mock_get_request: MagicMock,
         mock_upsert: MagicMock,
         mock_get_license: MagicMock,
         license_row: MagicMock | None,
     ) -> None:
+        """Distinct from a rejection: nothing stored is a checkout problem, a
+        rejection is a replace-your-license problem, and the admin is told
+        different things."""
         mock_get_license.return_value = license_row
 
-        result = reclaim_license_from_control_plane(MagicMock())
+        with pytest.raises(LicenseNotStoredError):
+            reclaim_license_from_control_plane(MagicMock())
 
-        assert result is None
         mock_get_request.assert_not_called()
         mock_upsert.assert_not_called()
 
@@ -269,19 +273,24 @@ class TestPublishLicenseCache:
 
     @patch("ee.onyx.db.license.update_license_cache")
     @patch("ee.onyx.db.license.get_cached_license_metadata")
-    def test_yields_to_a_newer_cached_entry(
+    def test_row_state_wins_over_a_cached_entry_claiming_a_later_issue(
         self,
         mock_cached: MagicMock,
         mock_update_cache: MagicMock,
         _row_payload: MagicMock,
     ) -> None:
+        """The row is the entitlement, so an entry that outruns it is wrong
+        rather than authoritative. Deferring to it strands enforcement on a
+        license the instance does not hold until the TTL expires."""
+        row_payload = _row_payload.return_value
         mock_cached.return_value = MagicMock(
-            issued_at=_row_payload.return_value.issued_at + timedelta(hours=1)
+            issued_at=row_payload.issued_at + timedelta(hours=1)
         )
 
         publish_license_cache(MagicMock())
 
-        mock_update_cache.assert_not_called()
+        mock_update_cache.assert_called_once()
+        assert mock_update_cache.call_args.args[0] is row_payload
 
     @patch("ee.onyx.db.license.update_license_cache")
     @patch("ee.onyx.db.license.get_cached_license_metadata", return_value=None)

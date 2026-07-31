@@ -11,12 +11,18 @@ Stages:
     T_14D  1 < days_remaining <= 14
     T_1D   0 < days_remaining <=  1
     GRACE license already expired, within the 14-day grace window
+
+A license that runs only to the end of a trial stays at NONE until its final
+few days, since the ladder above assumes a lead-up longer than a whole trial.
 """
 
 from datetime import datetime, timedelta, timezone
 from enum import Enum
 
 LICENSE_GRACE_PERIOD_DAYS = 14
+
+# How close a trial must be to its end before it is worth warning about.
+TRIAL_WARNING_DAYS = 3
 
 # A license inside this window (or already expired) is due for re-claim from
 # the control plane.
@@ -66,9 +72,21 @@ class ExpiryWarningStage(str, Enum):
     GRACE = "grace"
 
 
-def get_expiry_warning_stage(expires_at: datetime) -> ExpiryWarningStage:
+def get_expiry_warning_stage(
+    expires_at: datetime,
+    ends_with_trial: bool = False,
+    self_renewing: bool = False,
+) -> ExpiryWarningStage:
     seconds_remaining = (expires_at - datetime.now(timezone.utc)).total_seconds()
     days_remaining = seconds_remaining / 86400.0
+
+    # A self-renewing license gives an admin nothing to act on before it lapses,
+    # except a trial's end, which is a first charge landing. Expiry that already
+    # happened still warns: it means the renewal did not arrive.
+    if self_renewing and days_remaining > 0:
+        near_trial_end = ends_with_trial and days_remaining <= TRIAL_WARNING_DAYS
+        if not near_trial_end:
+            return ExpiryWarningStage.NONE
 
     if days_remaining > 30:
         return ExpiryWarningStage.NONE

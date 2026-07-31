@@ -34,8 +34,6 @@ def make_license_payload(
         expired: If True, creates an expired license
     """
     now = datetime.now(timezone.utc)
-    # Recently expired by default: the renewal endpoints refuse a license that
-    # lapsed longer ago than STALE_LICENSE_AUTH_GRACE.
     expires_at = (
         now - timedelta(days=expired_days_ago)
         if expired

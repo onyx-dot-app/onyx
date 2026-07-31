@@ -5,7 +5,8 @@ from celery import shared_task
 
 from ee.onyx.server.license.models import LicenseSource
 from ee.onyx.utils.license import (
-    AUTH_REJECTED_STATUSES,
+    LicenseNotStoredError,
+    LicenseRejectedError,
     load_verified_license,
     reclaim_license_from_control_plane,
 )
@@ -112,31 +113,23 @@ def reclaim_license_task(*, tenant_id: str) -> None:  # noqa: ARG001
 
         try:
             renewed = reclaim_license_from_control_plane(db_session)
-        except (requests.RequestException, ValueError) as e:
-            response = getattr(e, "response", None)
-            status_code = response.status_code if response is not None else None
-            if status_code in AUTH_REJECTED_STATUSES:
-                logger.error(
-                    "License reclaim rejected for tenant %s (HTTP %s). The stored "
-                    "license is not accepted by the control plane and must be "
-                    "replaced before renewals can resume.",
-                    payload.tenant_id,
-                    status_code,
-                )
-            else:
-                # A transient outage or a malformed response retries next run.
-                logger.warning(
-                    "Failed to reclaim license for tenant %s: %s", payload.tenant_id, e
-                )
-            # An unreachable control plane is also a reason to ease off.
+        except LicenseRejectedError as e:
+            logger.error(
+                "License reclaim rejected for tenant %s: %s. The stored license "
+                "must be replaced before renewals can resume.",
+                payload.tenant_id,
+                e,
+            )
             _record_attempt(found_newer=False)
             return
-
-        if renewed is None:
+        except LicenseNotStoredError:
+            # The row went away between the load above and here.
+            return
+        except (requests.RequestException, ValueError) as e:
+            # A transient outage or a malformed response retries next run, and
+            # an unreachable control plane is also a reason to ease off.
             logger.warning(
-                "Skipped license reclaim for tenant %s: no usable stored license, "
-                "or it was already rejected by the control plane",
-                payload.tenant_id,
+                "Failed to reclaim license for tenant %s: %s", payload.tenant_id, e
             )
             _record_attempt(found_newer=False)
             return

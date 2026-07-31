@@ -28,6 +28,9 @@ from ee.onyx.server.license.models import (
     SeatUsageResponse,
 )
 from ee.onyx.utils.license import (
+    LicenseNotStoredError,
+    LicenseRejectedError,
+    claim_cooldown_is_active,
     license_from_control_plane_response,
     reclaim_license_from_control_plane,
     verify_and_store_license,
@@ -84,6 +87,7 @@ async def get_license_status(
         status=metadata.status,
         expiry_warning_stage=metadata.expiry_warning_stage,
         source=metadata.source,
+        trial_end=metadata.trial_end,
     )
 
 
@@ -140,12 +144,12 @@ async def claim_license(
                 db_session, license_from_control_plane_response(response)
             )
         else:
-            payload = reclaim_license_from_control_plane(db_session)
-            if payload is None:
+            if claim_cooldown_is_active():
                 raise OnyxError(
-                    OnyxErrorCode.VALIDATION_ERROR,
-                    "No license found. Provide session_id after checkout.",
+                    OnyxErrorCode.RATE_LIMITED,
+                    "A license sync just ran. Try again in a few seconds.",
                 )
+            payload = reclaim_license_from_control_plane(db_session)
 
         # A Stripe-side change lands with this license, so the plan snapshot
         # cached beside it is now stale.
@@ -169,6 +173,15 @@ async def claim_license(
         raise OnyxError(
             OnyxErrorCode.BAD_GATEWAY, detail, status_code_override=status_code
         )
+    except LicenseNotStoredError:
+        raise OnyxError(
+            OnyxErrorCode.VALIDATION_ERROR,
+            "No license found. Provide session_id after checkout.",
+        )
+    except LicenseRejectedError as e:
+        # Terminal: the reclaim authenticates with the blob being refused, so
+        # retrying cannot help and the admin has to replace the license.
+        raise OnyxError(OnyxErrorCode.VALIDATION_ERROR, str(e))
     except ValueError as e:
         raise OnyxError(OnyxErrorCode.VALIDATION_ERROR, str(e))
     except requests.RequestException:
@@ -241,6 +254,7 @@ async def refresh_license_cache_endpoint(
         status=metadata.status,
         expiry_warning_stage=metadata.expiry_warning_stage,
         source=metadata.source,
+        trial_end=metadata.trial_end,
     )
 
 

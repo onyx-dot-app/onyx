@@ -296,7 +296,9 @@ def build_license_metadata(
     # two reads caches the old status for the full default TTL.
     now = datetime.now(timezone.utc)
     status = get_license_status(payload, effective_grace_end, now=now)
-    warning_stage = get_expiry_warning_stage(payload.expires_at)
+    warning_stage = get_expiry_warning_stage(
+        payload.expires_at, payload.ends_with_trial, payload.self_renewing
+    )
 
     metadata = LicenseMetadata(
         tenant_id=payload.tenant_id,
@@ -312,6 +314,7 @@ def build_license_metadata(
         source=payload.source,
         stripe_subscription_id=payload.stripe_subscription_id,
         customer_tier=payload.customer_tier,
+        trial_end=payload.trial_end,
     )
 
     ttl = LICENSE_CACHE_TTL_SECONDS
@@ -376,9 +379,6 @@ def publish_license_metadata(
             invalidate_license_cache(tenant_id)
             return None
         payload = verify_license_signature(license_row.license_data)
-        cached = get_cached_license_metadata(tenant_id)
-        if cached and cached.issued_at > payload.issued_at:
-            return cached
         if lock is None:
             # An unserialized write can overwrite a newer entry or resurrect
             # one a delete just removed, so serve the caller without caching.

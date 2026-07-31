@@ -14,12 +14,11 @@ Auth levels by endpoint:
 - /create-checkout-session: No auth (new customer) or expired license OK (renewal)
 - /claim-license: Session ID based (one-time after Stripe payment)
 - /create-customer-portal-session: Expired license OK (need portal to fix payment)
-- /billing-information: Valid signature required, expired OK within STALE_LICENSE_AUTH_GRACE
-- /license/{tenant_id}: Valid signature required, expired OK within STALE_LICENSE_AUTH_GRACE, path tenant_id must match license tenant_id
+- /billing-information: Valid signature required, expired OK
+- /license/{tenant_id}: Valid signature required, expired OK, path tenant_id must match license tenant_id
 - /seats/update: Valid license required
 """
 
-from datetime import datetime, timedelta, timezone
 from typing import Literal
 
 import httpx
@@ -36,10 +35,6 @@ from onyx.configs.app_configs import CONTROL_PLANE_API_BASE_URL
 from onyx.redis.redis_pool import get_redis_client
 from onyx.redis.tenant_redis_client import TenantRedisClient
 from onyx.utils.logger import setup_logger
-
-# How long past expiry a signed license still authenticates renewal
-# endpoints. Bounds an old copy's life as a bearer credential.
-STALE_LICENSE_AUTH_GRACE = timedelta(days=90)
 
 BILLING_INFO_CACHE_KEY = "proxy:billing-information:v1"
 BILLING_INFO_CACHE_TTL_SEC = 300
@@ -111,27 +106,19 @@ def _extract_license_from_header(
     return authorization.split(" ", 1)[1]
 
 
-def _is_within_stale_license_grace(payload: LicensePayload) -> bool:
-    age = datetime.now(timezone.utc) - payload.expires_at
-    return age <= STALE_LICENSE_AUTH_GRACE
-
-
 def verify_license_auth(
     license_data: str,
     allow_expired: bool = False,
 ) -> LicensePayload:
     """Verify license signature and optionally check expiry.
 
-    Args:
-        license_data: Base64-encoded signed license blob
-        allow_expired: If True, accept expired licenses (for renewal flows)
+    allow_expired carries no age bound. The routes that set it are the ones a
+    lapsed customer needs to become un-lapsed, so refusing an old license there
+    leaves a paying customer with no self-serve way back in. Ownership is still
+    enforced per route.
 
-    Returns:
-        LicensePayload if valid
-
-    Raises:
-        HTTPException: invalid signature, expired (unless allowed), or
-            expired past STALE_LICENSE_AUTH_GRACE.
+    Raises HTTPException on an invalid signature, or on expiry where the route
+    requires a live license.
     """
     _check_license_enforcement_enabled()
 
@@ -140,14 +127,7 @@ def verify_license_auth(
     except ValueError as e:
         raise HTTPException(status_code=401, detail=f"Invalid license: {e}")
 
-    if allow_expired:
-        # No revocation exists, so an old copy must age out as a credential.
-        if not _is_within_stale_license_grace(payload):
-            raise HTTPException(
-                status_code=401,
-                detail="License expired too long ago to be used for renewal",
-            )
-    elif not is_license_valid(payload):
+    if not allow_expired and not is_license_valid(payload):
         raise HTTPException(status_code=401, detail="License has expired")
 
     return payload
@@ -169,7 +149,7 @@ async def get_license_payload(
 async def get_license_payload_allow_expired(
     authorization: str | None = Header(None, alias="Authorization"),
 ) -> LicensePayload:
-    """Dependency: signature must verify, expiry allowed within STALE_LICENSE_AUTH_GRACE.
+    """Dependency: signature must verify, expiry is not checked.
 
     A lapsed instance still has to reach the endpoints that get it un-lapsed.
     """

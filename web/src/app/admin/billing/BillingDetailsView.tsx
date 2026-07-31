@@ -3,7 +3,7 @@
 import { useState } from "react";
 import { markdown } from "@opal/utils";
 import { Section } from "@/layouts/general-layouts";
-import { Content, InputErrorText, InputVertical } from "@opal/layouts";
+import { Content, InputErrorText, InputVertical, toast } from "@opal/layouts";
 import Card from "@/refresh-components/cards/Card";
 import Button from "@/refresh-components/buttons/Button";
 import { Button as OpalButton, MessageCard } from "@opal/components";
@@ -45,6 +45,19 @@ import useUsers from "@/hooks/useUsers";
 // ----------------------------------------------------------------------------
 
 const GRACE_PERIOD_DAYS = 30;
+const MS_PER_DAY = 86_400_000;
+
+/** How much of a trial is left, in words. Rounds up so a partial day still
+ *  reads as a day, and floors at "today" so a lagging status cannot go negative. */
+export function trialCountdown(
+  trialEnd: Date,
+  now: number = Date.now()
+): string {
+  const days = Math.ceil((trialEnd.getTime() - now) / MS_PER_DAY);
+  if (days <= 0) return "Trial ends today";
+  if (days === 1) return "Trial ends tomorrow";
+  return `Trial ends in ${days} days`;
+}
 
 // ----------------------------------------------------------------------------
 // Helpers
@@ -166,9 +179,7 @@ function SubscriptionCard({
 }) {
   const [isReconnecting, setIsReconnecting] = useState(false);
   const [isEndingTrial, setIsEndingTrial] = useState(false);
-  const [endTrialError, setEndTrialError] = useState<string | null>(null);
   const [isSyncing, setIsSyncing] = useState(false);
-  const [syncError, setSyncError] = useState<string | null>(null);
 
   const settings = useSettings();
   const tier = settings.tier;
@@ -186,14 +197,21 @@ function SubscriptionCard({
     (license?.expires_at && new Date(license.expires_at) < new Date());
   const isExpired = isExpiredFromBilling || isExpiredFromLicense;
   const isCanceling = billing?.cancel_at_period_end;
-  // Each handler clears both, so at most one of these is ever set.
-  const actionError = syncError ?? endTrialError;
-
+  // The license is the entitlement, so a Stripe snapshot that disagrees with it
+  // would describe a trial this instance is not actually on.
+  const trialEnd = license?.trial_end ? new Date(license.trial_end) : null;
+  const isOnTrial = trialEnd !== null && trialEnd.getTime() > Date.now();
   let subtitle: string;
   if (isExpired) {
     subtitle = `Expired on ${formattedDate}`;
   } else if (isCanceling) {
     subtitle = `Valid until ${formattedDate}`;
+  } else if (isOnTrial) {
+    // The trial ending and the first charge are one event, so both halves of
+    // this line have to come from the same date.
+    subtitle = `${trialCountdown(trialEnd)}. Payment required on ${formatDateShort(
+      license?.trial_end ?? undefined
+    )}`;
   } else if (billing) {
     subtitle = `Next payment on ${formattedDate}`;
   } else {
@@ -227,13 +245,11 @@ function SubscriptionCard({
 
   const handleSyncLicense = async () => {
     setIsSyncing(true);
-    setSyncError(null);
-    setEndTrialError(null);
     try {
       await claimLicense();
       await onRefresh?.();
     } catch (error) {
-      setSyncError(
+      toast.error(
         error instanceof Error ? error.message : "Failed to sync license"
       );
     } finally {
@@ -243,8 +259,6 @@ function SubscriptionCard({
 
   const handleEndTrial = async () => {
     setIsEndingTrial(true);
-    setEndTrialError(null);
-    setSyncError(null);
     try {
       await endTrial();
       await onRefresh?.();
@@ -264,12 +278,10 @@ function SubscriptionCard({
           }
         } catch (portalError) {
           console.error("Failed to open customer portal:", portalError);
-          setEndTrialError(
-            "Add a payment method first, then try upgrading again."
-          );
+          toast.error("Add a payment method first, then try upgrading again.");
         }
       } else {
-        setEndTrialError(
+        toast.error(
           error instanceof Error ? error.message : "Failed to end trial"
         );
       }
@@ -278,7 +290,8 @@ function SubscriptionCard({
     }
   };
 
-  const isTrialing =
+  // Only cloud exposes ending a trial early. Self-hosted has no such control.
+  const canEndTrialEarly =
     NEXT_PUBLIC_CLOUD_ENABLED && billing?.status === BillingStatus.TRIALING;
 
   return (
@@ -334,7 +347,7 @@ function SubscriptionCard({
               height="auto"
               width="auto"
             >
-              {isTrialing && (
+              {canEndTrialEarly && (
                 <OpalButton
                   disabled={isEndingTrial}
                   onClick={handleEndTrial}
@@ -356,18 +369,13 @@ function SubscriptionCard({
                 </OpalButton>
               )}
               <OpalButton
-                prominence={isTrialing ? "secondary" : "primary"}
+                prominence={canEndTrialEarly ? "secondary" : "primary"}
                 onClick={handleManagePlan}
                 rightIcon={SvgExternalLink}
               >
                 Manage Plan
               </OpalButton>
             </Section>
-          )}
-          {actionError && (
-            <Text secondaryBody className="text-status-error-04">
-              {actionError}
-            </Text>
           )}
           {/* TODO(@raunakab): migrate to opal Button once className/iconClassName is resolved */}
           <Button tertiary onClick={onViewPlans} className="billing-text-link">
@@ -724,6 +732,7 @@ interface BillingDetailsViewProps {
   isManualLicenseOnly?: boolean;
   hasStripeError?: boolean;
   licenseCard?: React.ReactNode;
+  isGraceSyncing?: boolean;
 }
 
 export default function BillingDetailsView({
@@ -735,6 +744,7 @@ export default function BillingDetailsView({
   isManualLicenseOnly,
   hasStripeError,
   licenseCard,
+  isGraceSyncing,
 }: BillingDetailsViewProps) {
   const expirationState = billing ? getExpirationState(billing, license) : null;
   const disableBillingActions =
@@ -742,6 +752,11 @@ export default function BillingDetailsView({
 
   return (
     <Section gap={1} height="auto" width="full">
+      {/* Renewal fetched on arrival while expired. The page renders regardless:
+          billing is the one route a lapsed instance must always reach. */}
+      {isGraceSyncing && (
+        <MessageCard variant="info" title="Checking for a renewed license…" />
+      )}
       {/* Stripe connection error banner */}
       {hasStripeError && (
         <MessageCard

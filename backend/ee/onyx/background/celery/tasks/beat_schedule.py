@@ -74,16 +74,6 @@ if not MULTI_TENANT:
             },
         },
         {
-            "name": "reclaim-license",
-            "task": OnyxCeleryTask.RECLAIM_LICENSE,
-            # Bounds renewal latency. Runs outside the reclaim window are local-only.
-            "schedule": timedelta(minutes=5),
-            "options": {
-                "priority": OnyxCeleryPriority.MEDIUM,
-                "expires": BEAT_EXPIRES_DEFAULT,
-            },
-        },
-        {
             "name": "autogenerate-usage-report",
             "task": OnyxCeleryTask.GENERATE_USAGE_REPORT_TASK,
             "schedule": timedelta(days=30),  # TODO: change this to config flag

@@ -12,7 +12,7 @@ import requests
 from ee.onyx.background.celery.tasks.beat_schedule import ee_tasks_to_schedule
 from ee.onyx.background.celery.tasks.license_reclaim.tasks import reclaim_license_task
 from ee.onyx.server.license.models import LicenseSource
-from ee.onyx.utils.license import StoredLicense
+from ee.onyx.utils.license import LicenseRejectedError, StoredLicense
 from onyx.configs.constants import OnyxCeleryTask
 
 TASKS_MODULE = "ee.onyx.background.celery.tasks.license_reclaim.tasks"
@@ -153,24 +153,21 @@ class TestReclaimLicenseTask:
         mock_logger.warning.assert_called_once()
 
 
-def test_reclaim_beat_interval_bounds_renewal_latency() -> None:
-    """Nothing pushes a renewed license to a self-hosted instance, so this
-    interval is the ceiling on how long a customer runs on the old one after
-    their subscription renews."""
-    reclaim_schedule = next(
+def test_reclaim_runs_only_when_something_asks_for_it() -> None:
+    """No beat entry: an idle instance is covered by the daily expiry task, and
+    an instance with traffic by the request-path scheduler. A beat on top would
+    be a third caller polling for a renewal the other two already fetch."""
+    assert not [
         task
         for task in ee_tasks_to_schedule
         if task["task"] == OnyxCeleryTask.RECLAIM_LICENSE
-    )
-
-    assert reclaim_schedule["name"] == "reclaim-license"
-    assert reclaim_schedule["schedule"] <= timedelta(minutes=5)
-    assert reclaim_schedule["options"]["expires"] is not None
+    ]
 
 
 class TestTerminalAuthRejection:
     """The block lives in reclaim_license_from_control_plane so every entry
-    point honors it. The task only distinguishes the log level."""
+    point honors it. The task branches on the type it raises, not on a status
+    code it re-derives from the exception."""
 
     def _run_with_error(self, error: Exception) -> MagicMock:
         with (
@@ -192,12 +189,19 @@ class TestTerminalAuthRejection:
         response.status_code = status_code
         return requests.HTTPError(response=response)
 
-    @pytest.mark.parametrize("status_code", [401, 403])
-    def test_auth_rejection_is_logged_as_terminal(self, status_code: int) -> None:
-        mock_logger = self._run_with_error(self._http_error(status_code))
+    def test_rejection_is_logged_as_terminal(self) -> None:
+        mock_logger = self._run_with_error(
+            LicenseRejectedError("Invalid license: Invalid license signature")
+        )
 
         mock_logger.error.assert_called_once()
         mock_logger.warning.assert_not_called()
+
+    def test_the_upstream_reason_reaches_the_log(self) -> None:
+        """An admin reading the log needs to know which refusal it was."""
+        mock_logger = self._run_with_error(LicenseRejectedError("Invalid license: bad"))
+
+        assert "Invalid license: bad" in str(mock_logger.error.call_args)
 
     @pytest.mark.parametrize("status_code", [500, 502, 429])
     def test_transient_http_failure_keeps_retrying(self, status_code: int) -> None:

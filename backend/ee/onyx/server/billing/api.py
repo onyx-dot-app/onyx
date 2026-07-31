@@ -56,6 +56,7 @@ from ee.onyx.server.billing.service import (
     get_billing_information as get_billing_service,
 )
 from ee.onyx.server.billing.service import update_seat_count as update_seat_service
+from ee.onyx.utils.license import clear_claim_cooldown
 from onyx.auth.permissions import require_permission
 from onyx.auth.users import User
 from onyx.configs.app_configs import (
@@ -393,6 +394,9 @@ async def update_seats(
     # Bust the billing-info cache so the new seat count is visible on the
     # next /billing-information read.
     invalidate_billing_info_cache()
+    # The follow-up claim carries this write's reissued license, so it must not
+    # be turned away by a cooldown a sync moments earlier had started.
+    clear_claim_cooldown()
 
     return result
 

@@ -7,6 +7,7 @@ import pytest
 
 from ee.onyx.server.license.api import _normalize_license_file
 from ee.onyx.server.license.models import LicensePayload, PlanType
+from ee.onyx.utils.license import LicenseNotStoredError
 from onyx.error_handling.exceptions import OnyxError
 
 
@@ -142,9 +143,51 @@ class TestClaimLicenseBustsBillingCache:
         upstream that just failed."""
         from ee.onyx.server.license.api import claim_license
 
-        mock_reclaim.return_value = None
+        mock_reclaim.side_effect = LicenseNotStoredError("nothing stored")
 
         with pytest.raises(OnyxError):
             await claim_license(_=MagicMock(), db_session=MagicMock())
 
         mock_invalidate.assert_not_called()
+
+
+class TestClaimSurfacesWhyItFailed:
+    """A rejected license and an absent one need different instructions. Both
+    used to arrive as None and render as "No license found", pointing an admin
+    whose license was refused at a checkout that is not their problem."""
+
+    @pytest.mark.asyncio
+    @patch("ee.onyx.server.license.api.invalidate_billing_info_cache")
+    @patch("ee.onyx.server.license.api.reclaim_license_from_control_plane")
+    @patch("ee.onyx.server.license.api.MULTI_TENANT", False)
+    async def test_a_rejection_reports_the_upstream_reason(
+        self, mock_reclaim: MagicMock, _mock_invalidate: MagicMock
+    ) -> None:
+        from ee.onyx.server.license.api import claim_license
+        from ee.onyx.utils.license import LicenseRejectedError
+
+        mock_reclaim.side_effect = LicenseRejectedError(
+            "Invalid license: Invalid license signature"
+        )
+
+        with pytest.raises(OnyxError) as exc:
+            await claim_license(_=MagicMock(), db_session=MagicMock())
+
+        assert "Invalid license" in str(exc.value.detail)
+        assert "session_id" not in str(exc.value.detail)
+
+    @pytest.mark.asyncio
+    @patch("ee.onyx.server.license.api.invalidate_billing_info_cache")
+    @patch("ee.onyx.server.license.api.reclaim_license_from_control_plane")
+    @patch("ee.onyx.server.license.api.MULTI_TENANT", False)
+    async def test_nothing_stored_still_points_at_checkout(
+        self, mock_reclaim: MagicMock, _mock_invalidate: MagicMock
+    ) -> None:
+        from ee.onyx.server.license.api import claim_license
+
+        mock_reclaim.side_effect = LicenseNotStoredError("nothing stored")
+
+        with pytest.raises(OnyxError) as exc:
+            await claim_license(_=MagicMock(), db_session=MagicMock())
+
+        assert "session_id" in str(exc.value.detail)
