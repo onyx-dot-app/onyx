@@ -1161,13 +1161,15 @@ class SessionManager:
         soft_budget_seconds: int,
         hard_cap_seconds: int,
     ) -> None:
-        _streaming.stamp_turn_deadline(
-            self._sandbox_manager,
+        self._sandbox_manager.stamp_turn_deadline(
             sandbox_id,
             session_id,
             soft_budget_seconds=soft_budget_seconds,
             hard_cap_seconds=hard_cap_seconds,
         )
+
+    def clear_turn_deadline(self, sandbox_id: UUID, session_id: UUID) -> None:
+        self._sandbox_manager.clear_turn_deadline(sandbox_id, session_id)
 
     # =========================================================================
     # Artifact Operations

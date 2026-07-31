@@ -33,7 +33,6 @@ from onyx.sandbox_proxy import approval_cache
 from onyx.server.features.build import connect_app
 from onyx.server.features.build.configs import (
     SANDBOX_HEARTBEAT_REFRESH_INTERVAL_SECONDS,
-    TURN_BUDGET_FILE_NAME,
 )
 from onyx.server.features.build.db.build_session import (
     create_message,
@@ -73,7 +72,6 @@ from onyx.server.features.build.timeouts import (
     INTERACTIVE_TURN_HARD_CAP_SECONDS,
     INTERACTIVE_TURN_SOFT_BUDGET_SECONDS,
     PROMPT_SLOT_KEEP_ALIVE_MAX_SECONDS,
-    TURN_FINAL_NOTICE_MARGIN_SECONDS,
 )
 from onyx.utils.logger import setup_logger
 from onyx.utils.threadpool_concurrency import start_thread_with_context
@@ -627,41 +625,6 @@ def _persist_opencode_session_id(
     )
 
 
-def stamp_turn_deadline(
-    sandbox_manager: SandboxManager,
-    sandbox_id: UUID,
-    session_id: UUID,
-    *,
-    soft_budget_seconds: int,
-    hard_cap_seconds: int,
-) -> None:
-    """Write the per-turn deadline stamp turn-budget.ts reads. Best-effort;
-    written at turn start, never restamped by continuations. ``stale_after``
-    self-invalidates the stamp past the hard cap so a failed next-turn write
-    leaves the plugin inert instead of nagging a fresh turn."""
-    now_ms = int(time.time() * 1000)
-    soft_ms = now_ms + soft_budget_seconds * 1000
-    hard_ms = now_ms + hard_cap_seconds * 1000
-    try:
-        sandbox_manager.write_sandbox_file(
-            sandbox_id,
-            f"sessions/{session_id}/{TURN_BUDGET_FILE_NAME}",
-            json.dumps(
-                {
-                    "soft_deadline_epoch_ms": soft_ms,
-                    "final_deadline_epoch_ms": max(
-                        soft_ms, hard_ms - TURN_FINAL_NOTICE_MARGIN_SECONDS * 1000
-                    ),
-                    "stale_after_epoch_ms": hard_ms,
-                }
-            ),
-        )
-    except Exception:
-        logger.warning(
-            "Failed to stamp turn deadline for session %s", session_id, exc_info=True
-        )
-
-
 def persist_sandbox_event(
     db_session: DBSession,
     session_id: UUID,
@@ -897,8 +860,7 @@ def stream_subagent_turn(
         prompt_slot_cm = candidate_cm
 
         # Own stamp: the plugin must not compare against the parent turn's.
-        stamp_turn_deadline(
-            sandbox_manager,
+        sandbox_manager.stamp_turn_deadline(
             sandbox_id,
             session_id,
             soft_budget_seconds=INTERACTIVE_TURN_SOFT_BUDGET_SECONDS,
@@ -995,6 +957,8 @@ def stream_subagent_turn(
         finalize_persist(db_session, session_id, state, routing_meta)
         update_sandbox_heartbeat(db_session, sandbox_id)
         db_session.commit()
+        # Slot still held: a successor's fresh stamp can't be clobbered.
+        sandbox_manager.clear_turn_deadline(sandbox_id, session_id)
 
     except GeneratorExit:
         logger.warning(

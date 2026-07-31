@@ -236,6 +236,23 @@ def _drive_interactive_turn(
         )
         slot = prompt_slot_cm.__enter__()
         if not slot.acquired:
+            # Ownership check first: a stalled runner whose turn was reclaimed
+            # also lands here, and the successor IS processing the message —
+            # it must not leave a false "wasn't processed" row.
+            if touch_turn(cache=cache, turn_id=turn_id, runner_id=runner_id):
+                try:
+                    session_manager.persist_turn_error(
+                        session_id,
+                        turn_index,
+                        "Another turn was still running for this session, so "
+                        "this message wasn't processed. Wait for it to finish, "
+                        "then send your message again.",
+                    )
+                    db_session.commit()
+                except Exception:
+                    logger.exception(
+                        "Failed to persist turn error message for turn %s", turn_id
+                    )
             finish_turn(
                 cache=cache,
                 turn_id=turn_id,
@@ -407,6 +424,10 @@ def _drive_interactive_turn(
 
             session_manager.finalize_persist(session_id, state)
             db_session.commit()
+            # Slot still held here, so a successor's fresh stamp can't be
+            # clobbered; TERMINATED paths (reclaim/slot-lost) skip the clear
+            # because a successor may own the turn.
+            session_manager.clear_turn_deadline(sandbox.id, session_id)
 
             if deadline_exceeded:
                 persist_turn_error(

@@ -102,6 +102,7 @@ def _run_turn_with_events(
     finalized: list[UUID] = []
     turn_errors: list[str] = []
     stamped: list[tuple[int, int]] = []
+    cleared: list[bool] = []
     captured_should_abort_on_teardown: list[Callable[[], bool]] = []
 
     turn = create_interactive_turn(
@@ -202,6 +203,13 @@ def _run_turn_with_events(
             assert session_id_arg == session_id
             stamped.append((soft_budget_seconds, hard_cap_seconds))
 
+        def clear_turn_deadline(
+            self, sandbox_id_arg: UUID, session_id_arg: UUID
+        ) -> None:
+            assert sandbox_id_arg == sandbox_id
+            assert session_id_arg == session_id
+            cleared.append(True)
+
     monkeypatch.setattr(executor, "get_cache_backend", lambda: cache)
     monkeypatch.setattr(
         executor,
@@ -235,6 +243,7 @@ def _run_turn_with_events(
         turn=turn,
         turn_errors=turn_errors,
         stamped=stamped,
+        cleared=cleared,
         user_id=user_id,
     )
 
@@ -260,6 +269,7 @@ def test_runner_succeeds_on_prompt_response(monkeypatch: pytest.MonkeyPatch) -> 
     assert result.turn_errors == []
     # Soft clamps to the test-sized hard cap; stamped once per turn.
     assert result.stamped == [(30, 30)]
+    assert result.cleared == [True]
     assert result.prompt_slot.exited
     assert result.prompt_slot.extend_calls == 1
     assert result.db_session.rollbacks == 0
@@ -418,6 +428,8 @@ def test_lost_lease_fails_turn(monkeypatch: pytest.MonkeyPatch) -> None:
         is None
     )
     assert len(result.turn_errors) == 1
+    # TERMINATED path: a successor may own the turn — never clear its stamp.
+    assert result.cleared == []
     assert result.prompt_slot.exited
     assert result.prompt_slot.lost is True
 
@@ -474,6 +486,9 @@ def test_ownership_recheck_after_slot_acquire(
             del args
 
         def stamp_turn_deadline(self, *args: object, **kwargs: object) -> None:
+            del args, kwargs
+
+        def clear_turn_deadline(self, *args: object, **kwargs: object) -> None:
             del args, kwargs
 
         def prompt_slot(
@@ -550,6 +565,27 @@ def test_prompt_slot_acquire_timeout_reflects_reclaimed(
     ]
 
 
+def test_prompt_slot_busy_persists_error_row(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """Slot held by a non-turn holder (e.g. a subagent follow-up stream):
+    the turn fails AND explains itself in the transcript."""
+    prompt_slot = _FakePromptSlot(enter_result=False)
+
+    result = _run_turn_with_events(monkeypatch, [], prompt_slot=prompt_slot)
+
+    finished = get_turn(result.cache, result.turn.turn_id)
+    assert finished is not None
+    assert finished.status == TURN_STATUS_FAILED
+    assert finished.error_detail == "Concurrent turn in flight for build session."
+    assert len(result.turn_errors) == 1
+    assert "wasn't processed" in result.turn_errors[0]
+    # Never reached the slot-held region: no stamp, no clear.
+    assert result.stamped == []
+    assert result.cleared == []
+    assert result.prompt_slot.exited
+
+
 def test_prompt_slot_busy_does_not_finish_reclaimed_turn(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
@@ -581,6 +617,8 @@ def test_prompt_slot_busy_does_not_finish_reclaimed_turn(
         assert reclaimed is not None
 
     stamp_calls: list[bool] = []
+    clear_calls: list[bool] = []
+    persist_calls: list[str] = []
     prompt_slot = _FakePromptSlot(enter_result=False, on_enter=reclaim_turn)
 
     class FakeSessionManager:
@@ -604,6 +642,16 @@ def test_prompt_slot_busy_does_not_finish_reclaimed_turn(
         def stamp_turn_deadline(self, *args: object, **kwargs: object) -> None:
             del args, kwargs
             stamp_calls.append(True)
+
+        def clear_turn_deadline(self, *args: object, **kwargs: object) -> None:
+            del args, kwargs
+            clear_calls.append(True)
+
+        def persist_turn_error(
+            self, session_id_arg: UUID, turn_index: int, message: str
+        ) -> None:
+            del session_id_arg, turn_index
+            persist_calls.append(message)
 
         def prompt_slot(
             self,
@@ -636,8 +684,11 @@ def test_prompt_slot_busy_does_not_finish_reclaimed_turn(
     assert current.runner_id == reclaimed.runner_id
     active = get_active_turn(cache=cache, session_id=session_id, user_id=user_id)
     assert active is not None
-    # A racing loser must not overwrite the live turn's deadline stamp.
+    # A racing loser must not stamp/clear the live turn's deadline, and must
+    # not persist a false "wasn't processed" row — the successor IS processing.
     assert stamp_calls == []
+    assert clear_calls == []
+    assert persist_calls == []
     assert active.runner_id == reclaimed.runner_id
     assert prompt_slot.exited
 
@@ -685,6 +736,9 @@ def test_lost_runner_does_not_clear_reclaimed_turn_interrupt(
             del args
 
         def stamp_turn_deadline(self, *args: object, **kwargs: object) -> None:
+            del args, kwargs
+
+        def clear_turn_deadline(self, *args: object, **kwargs: object) -> None:
             del args, kwargs
 
         def prompt_slot(
@@ -843,6 +897,7 @@ def _run_turn_with_batches(
     prompts_seen: list[str] = []
     turn_errors: list[str] = []
     stamped: list[tuple[int, int]] = []
+    cleared: list[bool] = []
 
     turn = create_interactive_turn(
         cache=cache,
@@ -931,6 +986,13 @@ def _run_turn_with_batches(
             assert session_id_arg == session_id
             stamped.append((soft_budget_seconds, hard_cap_seconds))
 
+        def clear_turn_deadline(
+            self, sandbox_id_arg: UUID, session_id_arg: UUID
+        ) -> None:
+            assert sandbox_id_arg == sandbox_id
+            assert session_id_arg == session_id
+            cleared.append(True)
+
     monkeypatch.setattr(executor, "get_cache_backend", lambda: cache)
     monkeypatch.setattr(
         executor,
@@ -959,6 +1021,7 @@ def _run_turn_with_batches(
         prompt_slot=prompt_slot,
         turn_errors=turn_errors,
         stamped=stamped,
+        cleared=cleared,
     )
 
 
