@@ -218,6 +218,11 @@ def _run_turn_with_events(
     )
     monkeypatch.setattr(executor, "SessionManager", FakeSessionManager)
     monkeypatch.setattr(
+        executor,
+        "_ready_session_runtime",
+        lambda *_args, **_kwargs: SimpleNamespace(id=sandbox_id),
+    )
+    monkeypatch.setattr(
         executor, "fetch_user_by_id", lambda *_: SimpleNamespace(id=user_id)
     )
     monkeypatch.setattr(executor, "is_interrupt_requested", lambda *_: False)
@@ -534,6 +539,11 @@ def test_ownership_recheck_after_slot_acquire(
     )
     monkeypatch.setattr(executor, "SessionManager", FakeSessionManager)
     monkeypatch.setattr(
+        executor,
+        "_ready_session_runtime",
+        lambda *_args, **_kwargs: SimpleNamespace(id=sandbox_id),
+    )
+    monkeypatch.setattr(
         executor, "fetch_user_by_id", lambda *_: SimpleNamespace(id=user_id)
     )
     monkeypatch.setattr(executor, "is_interrupt_requested", lambda *_: False)
@@ -676,6 +686,11 @@ def test_prompt_slot_busy_does_not_finish_reclaimed_turn(
     )
     monkeypatch.setattr(executor, "SessionManager", FakeSessionManager)
     monkeypatch.setattr(
+        executor,
+        "_ready_session_runtime",
+        lambda *_args, **_kwargs: SimpleNamespace(id=sandbox_id),
+    )
+    monkeypatch.setattr(
         executor, "fetch_user_by_id", lambda *_: SimpleNamespace(id=user_id)
     )
 
@@ -788,6 +803,11 @@ def test_lost_runner_does_not_clear_reclaimed_turn_interrupt(
         lambda: _fake_db_scope(db_session),
     )
     monkeypatch.setattr(executor, "SessionManager", FakeSessionManager)
+    monkeypatch.setattr(
+        executor,
+        "_ready_session_runtime",
+        lambda *_args, **_kwargs: SimpleNamespace(id=sandbox_id),
+    )
     monkeypatch.setattr(
         executor, "fetch_user_by_id", lambda *_: SimpleNamespace(id=user_id)
     )
@@ -1004,6 +1024,11 @@ def _run_turn_with_batches(
         lambda: _fake_db_scope(db_session),
     )
     monkeypatch.setattr(executor, "SessionManager", FakeSessionManager)
+    monkeypatch.setattr(
+        executor,
+        "_ready_session_runtime",
+        lambda *_args, **_kwargs: SimpleNamespace(id=sandbox_id),
+    )
     monkeypatch.setattr(
         executor, "fetch_user_by_id", lambda *_: SimpleNamespace(id=user_id)
     )

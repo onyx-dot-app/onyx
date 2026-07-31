@@ -15,12 +15,10 @@ from sqlalchemy.orm import Session
 from onyx.auth.permissions import require_permission
 from onyx.db.engine.sql_engine import get_session, get_session_with_current_tenant
 from onyx.db.enums import (
-    BuildSessionStatus,
     Permission,
     SandboxStatus,
     ScheduledTaskRunStatus,
 )
-from onyx.db.external_app import get_connectable_apps_for_user
 from onyx.db.models import BuildMessage, Sandbox, User
 from onyx.db.scheduled_task import get_scheduled_run_context
 from onyx.error_handling.error_codes import OnyxErrorCode
@@ -29,24 +27,15 @@ from onyx.redis.redis_pool import get_redis_client
 from onyx.server.features.build.configs import SSE_KEEPALIVE_INTERVAL
 from onyx.server.features.build.db.build_session import (
     get_build_session,
-    reserve_nextjs_port__no_commit,
-    session_runtime_stale,
     set_build_session_sharing_scope,
 )
 from onyx.server.features.build.db.sandbox import (
-    get_latest_snapshot_for_session,
     get_sandbox_by_user_id,
     update_sandbox_heartbeat,
 )
 from onyx.server.features.build.models import UploadResponse
 from onyx.server.features.build.sandbox.factory import get_sandbox_manager
 from onyx.server.features.build.sandbox.models import DirectoryListing
-from onyx.server.features.build.sandbox.util.agent_instructions import (
-    build_connectable_apps_list,
-)
-from onyx.server.features.build.sandbox.util.mcp_config import (
-    resolve_craft_mcp_servers,
-)
 from onyx.server.features.build.session.errors import (
     SandboxProvisioningInProgressError,
     UploadLimitExceededError,
@@ -76,15 +65,12 @@ from onyx.server.features.build.session.models import (
     WebappInfo,
 )
 from onyx.server.features.build.session.sandbox_lifecycle import (
-    ProvisioningPolicy,
     create_session_snapshot_keep_latest,
-    ensure_sandbox_ready,
-    sync_managed_content,
 )
+from onyx.server.features.build.session.session_ready import ensure_session_ready
 from onyx.server.features.build.session.streaming import SSE_KEEPALIVE
 from onyx.server.features.build.timeouts import POLL_INTERVAL_SECONDS
 from onyx.server.features.build.utils import sanitize_filename, validate_file
-from onyx.server.metrics.craft_sandbox import SandboxReadyOutcome
 from onyx.utils.logger import setup_logger
 from shared_configs.contextvars import get_current_tenant_id
 
@@ -399,84 +385,7 @@ def restore_session(
         )
 
     try:
-        # Validate the model configuration before any external work; commit
-        # closes the read transaction without expiring loaded instances.
-        llm_config = SessionManager(db_session).build_llm_configs(user)
-        db_session.commit()
-
-        sandbox, outcome = ensure_sandbox_ready(
-            db_session,
-            sandbox_manager,
-            user.id,
-            policy=ProvisioningPolicy.FAIL,
-        )
-
-        if sandbox_manager.session_workspace_exists(sandbox.id, session_id):
-            session.status = BuildSessionStatus.ACTIVE
-            if session_runtime_stale(session, sandbox):
-                SessionManager(db_session).reload_session_skills(session_id, user)
-            else:
-                update_sandbox_heartbeat(db_session, sandbox.id)
-                db_session.commit()
-            base_response = SessionResponse.from_model(session, sandbox)
-            return DetailedSessionResponse.from_session_response(
-                base_response, session_loaded_in_sandbox=True
-            )
-
-        # Workspace missing: rebuild it (snapshot restore or fresh template).
-        if not session.nextjs_port:
-            reserve_nextjs_port__no_commit(db_session, session)
-            db_session.commit()
-
-        if outcome == SandboxReadyOutcome.ALREADY_RUNNING:
-            # A reused pod may be missing content pushed since it last
-            # synced; fresh provisioning already pushed managed content.
-            sync_managed_content(db_session, sandbox_manager, sandbox.id, user)
-
-        snapshot = get_latest_snapshot_for_session(db_session, session_id)
-        connectable_apps_section = build_connectable_apps_list(
-            get_connectable_apps_for_user(db_session, user)
-        )
-        mcp_servers = resolve_craft_mcp_servers(db_session, user)
-        nextjs_port = session.nextjs_port
-        sandbox_skills_hash = sandbox.skills_hash
-        sandbox_mcp_config_hash = sandbox.mcp_config_hash
-        db_session.commit()
-
-        if snapshot:
-            try:
-                sandbox_manager.restore_snapshot(
-                    sandbox_id=sandbox.id,
-                    session_id=session_id,
-                    snapshot_storage_path=snapshot.storage_path,
-                    nextjs_port=nextjs_port,
-                    llm_config=llm_config,
-                    connectable_apps_section=connectable_apps_section,
-                    mcp_servers=mcp_servers,
-                )
-            except Exception as e:
-                logger.error(
-                    "Snapshot restore failed for session %s: %s", session_id, e
-                )
-                db_session.rollback()
-                session.nextjs_port = None
-                db_session.commit()
-                raise
-        else:
-            sandbox_manager.setup_session_workspace(
-                sandbox_id=sandbox.id,
-                session_id=session_id,
-                llm_config=llm_config,
-                nextjs_port=nextjs_port,
-                connectable_apps_section=connectable_apps_section,
-                mcp_servers=mcp_servers,
-            )
-
-        session.status = BuildSessionStatus.ACTIVE
-        session.skills_hash = sandbox_skills_hash
-        session.mcp_config_hash = sandbox_mcp_config_hash
-        db_session.commit()
-
+        sandbox = ensure_session_ready(db_session, sandbox_manager, session, user)
     except SandboxProvisioningInProgressError as e:
         db_session.rollback()
         raise OnyxError(
@@ -488,24 +397,6 @@ def restore_session(
         raise
     except Exception as e:
         logger.error("Failed to restore session %s: %s", session_id, e, exc_info=True)
-        # Sandbox-level failures are already durably recorded (FAILED) by the
-        # state machine; only a partial workspace needs compensating cleanup so
-        # session_workspace_exists() doesn't later report it restored.
-        try:
-            db_session.rollback()
-            current = get_sandbox_by_user_id(db_session, user.id)
-            db_session.rollback()
-            if current is not None and current.status == SandboxStatus.RUNNING:
-                sandbox_manager.cleanup_session_workspace(current.id, session_id)
-                logger.info(
-                    "Cleaned up partial workspace for session %s after failed restore",
-                    session_id,
-                )
-        except Exception as cleanup_err:
-            logger.warning(
-                "Failed to clean up after restore failure: %s",
-                cleanup_err,
-            )
         raise HTTPException(
             status_code=500,
             detail=f"Failed to restore session: {e}",
