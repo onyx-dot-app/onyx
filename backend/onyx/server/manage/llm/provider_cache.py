@@ -29,7 +29,10 @@ logger = setup_logger()
 
 _VERSION_KEY = "llm_provider_listing:version"
 _ENTRY_KEY_PREFIX = "llm_provider_listing:entry"
-ENTRY_TTL_SECONDS = 60
+# Staleness bound only for changes that bypass explicit invalidation (see module
+# docstring); provider mutations rewrite the version token immediately. Keep this
+# high enough that steady-state traffic rarely rebuilds the payload cold.
+ENTRY_TTL_SECONDS = 300
 
 
 class ProviderListingCacheLookup(BaseModel):
