@@ -11,8 +11,9 @@ import {
   useRef,
 } from "react";
 import { usePathname } from "next/navigation";
-import { Button, ShadowDiv, Spacer, Text } from "@opal/components";
-import { Disabled, Hoverable } from "@opal/core";
+import { Button, ShadowDiv, Spacer, Text, Tooltip } from "@opal/components";
+import { iconWrapper } from "@opal/components/buttons/icon-wrapper";
+import { Disabled, Hoverable, Interactive } from "@opal/core";
 import { SvgSidebar } from "@opal/icons";
 import type { IconFunctionComponent, RichStr } from "@opal/types";
 import { useSidebarState } from "@opal/layouts/root/components";
@@ -142,22 +143,59 @@ function SidebarHeader({
     [setFolded]
   );
 
+  const foldLabel = folded ? "Open Sidebar" : "Close Sidebar";
+
   const closeButton = useMemo(
     () => (
       <Button
         icon={SvgSidebar}
         prominence="tertiary"
-        tooltip={folded ? "Open Sidebar" : "Close Sidebar"}
+        aria-label={foldLabel}
+        tooltip={foldLabel}
         tooltipSide={folded ? "right" : "bottom"}
         size="md"
         onClick={toggleFolded}
       />
     ),
-    [folded, toggleFolded]
+    [folded, foldLabel, toggleFolded]
   );
 
   const Logo = renderAppLogo(foldable ? folded : false);
   const logoEl = <Logo size={SIDEBAR_LOGO_HEIGHT_PX} />;
+
+  // Folded: the logo *is* the unfold control. The fold icon swaps in on hover
+  // (and on keyboard focus), but the button underneath never changes, so the
+  // sidebar can still be opened where there is no hover to reveal anything —
+  // touch devices and keyboard navigation.
+  const foldedLogoButton = (
+    <Tooltip tooltip={foldLabel} side="right">
+      <Interactive.Stateless
+        prominence="tertiary"
+        type="button"
+        onClick={toggleFolded}
+      >
+        <Interactive.Container
+          type="button"
+          size="fit"
+          rounding="sm"
+          aria-label={foldLabel}
+        >
+          <div
+            className="opal-sidebar-header__logo-swap"
+            style={{
+              height: SIDEBAR_LOGO_HEIGHT_PX,
+              width: SIDEBAR_LOGO_HEIGHT_PX,
+            }}
+          >
+            <div className="opal-sidebar-header__logo-rest">{logoEl}</div>
+            <div className="opal-sidebar-header__logo-fold">
+              {iconWrapper(SvgSidebar, "md", false)}
+            </div>
+          </div>
+        </Interactive.Container>
+      </Interactive.Stateless>
+    </Tooltip>
+  );
 
   return (
     <div className="opal-sidebar-header">
@@ -165,11 +203,8 @@ function SidebarHeader({
         <div className="opal-sidebar-header__topbar-inner">
           {!foldable ? (
             logoEl
-          ) : folded && showLogoWhenFolded && logoEl ? (
-            <>
-              <div className="opal-sidebar-root__logo-default">{logoEl}</div>
-              <div className="opal-sidebar-root__logo-hover">{closeButton}</div>
-            </>
+          ) : folded && showLogoWhenFolded ? (
+            foldedLogoButton
           ) : folded ? (
             closeButton
           ) : (

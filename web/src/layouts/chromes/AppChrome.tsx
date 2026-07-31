@@ -371,6 +371,7 @@ function Header() {
                   <Button
                     prominence="internal"
                     icon={SvgSidebar}
+                    aria-label="Open Sidebar"
                     onClick={() => setFolded(false)}
                   />
                 )}
