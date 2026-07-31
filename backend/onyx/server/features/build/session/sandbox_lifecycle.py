@@ -102,7 +102,7 @@ logger = setup_logger()
 
 # Liveness probe on the reconcile/reaper hot paths; tight so a dead pod can't
 # stall an interactive request.
-_HEALTH_PROBE_TIMEOUT_SECONDS = 5.0
+HEALTH_PROBE_TIMEOUT_SECONDS = 5.0
 
 
 # Statuses from which (re-)provisioning a pod is legal.
@@ -531,7 +531,7 @@ def reconcile_sandbox(
         # Claimed RUNNING: verify the pod actually backs it.
         with time_provision_phase(SandboxProvisionPhase.HEALTH_CHECK):
             healthy = sandbox_manager.health_check(
-                sandbox_id, timeout=_HEALTH_PROBE_TIMEOUT_SECONDS
+                sandbox_id, timeout=HEALTH_PROBE_TIMEOUT_SECONDS
             )
         if healthy:
             return _get_sandbox_committed(db_session, sandbox_id), outcome
@@ -832,7 +832,7 @@ def sleep_sandbox(
             sandbox_manager.create_opencode_history_snapshot(sandbox_id, tenant_id)
         except Exception as e:
             if sandbox_manager.health_check(
-                sandbox_id, timeout=_HEALTH_PROBE_TIMEOUT_SECONDS
+                sandbox_id, timeout=HEALTH_PROBE_TIMEOUT_SECONDS
             ):
                 logger.error(
                     "opencode history snapshot failed for sandbox "
@@ -901,7 +901,7 @@ def sleep_sandbox(
     pod_unreachable = False
     if snapshot_failed:
         if sandbox_manager.health_check(
-            sandbox_id, timeout=_HEALTH_PROBE_TIMEOUT_SECONDS
+            sandbox_id, timeout=HEALTH_PROBE_TIMEOUT_SECONDS
         ):
             logger.error(
                 "Snapshot failed for sandbox %s; "
