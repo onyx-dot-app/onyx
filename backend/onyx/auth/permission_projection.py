@@ -79,19 +79,20 @@ def document_set_permissions(
     }
 
 
-TOOL_ACTIONS: frozenset[str] = frozenset({"edit", "delete", "toggle"})
+TOOL_ACTIONS: frozenset[str] = frozenset({"edit", "delete", "toggle", "authenticate"})
 
 
-def tool_permissions(*, can_edit: bool, is_actions_admin: bool) -> dict[str, bool]:
-    """Custom action (OpenAPI tool) affordance map. ``edit`` is the editable decision the
-    write guard enforces (admin, creator, or a manager whose groups cover every agent
-    using the action). ``delete`` and ``toggle`` require global MANAGE_ACTIONS — the
-    routes carry no ``allow_scope``, so a scoped manager may edit a managed action but
-    never delete or enable/disable it."""
+def tool_permissions(*, can_edit: bool, can_manage: bool) -> dict[str, bool]:
+    """Custom action (OpenAPI tool) affordance map. ``edit`` is the write guard's editable
+    decision (admin, creator, or a scoped manager whose groups cover every agent using the
+    action). ``delete``, ``toggle``, and ``authenticate`` (its OAuth config) are ``can_manage``
+    — owner-or-admin — so a scoped manager can edit an in-scope action but not fully manage
+    one they didn't create."""
     return {
         "edit": can_edit,
-        "delete": is_actions_admin,
-        "toggle": is_actions_admin,
+        "delete": can_manage,
+        "toggle": can_manage,
+        "authenticate": can_manage,
     }
 
 

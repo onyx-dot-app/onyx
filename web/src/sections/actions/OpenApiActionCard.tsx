@@ -44,6 +44,9 @@ export default function OpenApiActionCard({
   const canEdit = can(tool, "edit");
   const canDelete = can(tool, "delete");
   const canToggle = can(tool, "toggle");
+  // Authenticate manages the OAuth config (owner-or-admin) — gate on the server capability,
+  // not canEdit, so a scoped non-owner isn't shown a 403 button.
+  const canAuthenticate = can(tool, "authenticate");
 
   const methodSpecs = useMemo<MethodSpec[]>(() => {
     try {
@@ -130,7 +133,9 @@ export default function OpenApiActionCard({
           canToggle ? () => onOpenDisconnectModal?.(tool) : undefined
         }
         onManage={canEdit && onManage ? () => onManage(tool) : undefined}
-        onAuthenticate={canEdit ? () => onAuthenticate(tool) : undefined}
+        onAuthenticate={
+          canAuthenticate ? () => onAuthenticate(tool) : undefined
+        }
         onReconnect={canToggle ? () => handleConnectionUpdate(true) : undefined}
         onDelete={
           canDelete && onDelete ? () => deleteModal.toggle(true) : undefined
@@ -138,6 +143,7 @@ export default function OpenApiActionCard({
       />
     ),
     [
+      canAuthenticate,
       canDelete,
       canEdit,
       canToggle,

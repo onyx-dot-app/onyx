@@ -8,7 +8,6 @@ from sqlalchemy.orm import Session
 
 from onyx.auth.permission_projection import tool_permissions
 from onyx.auth.permissions import get_effective_permissions
-from onyx.auth.permissions import has_global_permission
 from onyx.auth.permissions import has_permission
 from onyx.auth.permissions import require_permission
 from onyx.auth.scoped_permissions import agent_mediated_scope_allows
@@ -20,6 +19,7 @@ from onyx.db.enums import PermissionAuthority
 from onyx.db.models import Tool
 from onyx.db.models import User
 from onyx.db.tools import can_edit_custom_tool
+from onyx.db.tools import can_manage_own_tool
 from onyx.db.tools import create_tool__no_commit
 from onyx.db.tools import delete_tool__no_commit
 from onyx.db.tools import get_action_agent_scope
@@ -116,6 +116,26 @@ def _get_editable_custom_tool(tool_id: int, db_session: Session, user: User) -> 
     )
 
 
+def _get_manageable_custom_tool(tool_id: int, db_session: Session, user: User) -> Tool:
+    """Fetch a custom tool and assert the caller may fully manage it (owner or admin) — the
+    delete/toggle gate."""
+    try:
+        tool = get_tool_by_id(tool_id, db_session)
+    except ValueError as e:
+        raise HTTPException(status_code=404, detail=str(e))
+    if tool.in_code_tool_id is not None:
+        raise HTTPException(
+            status_code=400,
+            detail="Built-in tools cannot be modified through this endpoint.",
+        )
+    if not can_manage_own_tool(user, tool):
+        raise OnyxError(
+            OnyxErrorCode.INSUFFICIENT_PERMISSIONS,
+            "You can only manage actions that you created.",
+        )
+    return tool
+
+
 @admin_router.post("/custom", tags=PUBLIC_API_TAGS)
 def create_custom_tool(
     tool_data: CustomToolCreate,
@@ -172,9 +192,11 @@ def update_custom_tool(
 def delete_custom_tool(
     tool_id: int,
     db_session: Session = Depends(get_session),
-    user: User = Depends(require_permission(Permission.MANAGE_ACTIONS)),
+    user: User = Depends(
+        require_permission(Permission.MANAGE_ACTIONS, allow_scope=True)
+    ),
 ) -> None:
-    _ = _get_editable_custom_tool(tool_id, db_session, user)
+    _ = _get_manageable_custom_tool(tool_id, db_session, user)
     try:
         delete_tool__no_commit(tool_id, db_session)
     except ValueError as e:
@@ -199,7 +221,9 @@ class ToolStatusUpdateResponse(BaseModel):
 def update_tools_status(
     update_data: ToolStatusUpdateRequest,
     db_session: Session = Depends(get_session),
-    user: User = Depends(require_permission(Permission.MANAGE_ACTIONS)),  # noqa: ARG001
+    user: User = Depends(
+        require_permission(Permission.MANAGE_ACTIONS, allow_scope=True)
+    ),
 ) -> ToolStatusUpdateResponse:
     """Enable or disable one or more tools.
 
@@ -218,6 +242,12 @@ def update_tools_status(
     for tool_id in update_data.tool_ids:
         tool = tools_by_id.get(tool_id)
         if tool:
+            # owner-or-admin, checked per tool
+            if not can_manage_own_tool(user, tool):
+                raise OnyxError(
+                    OnyxErrorCode.INSUFFICIENT_PERMISSIONS,
+                    "You can only enable or disable actions that you created.",
+                )
             tool.enabled = update_data.enabled
             updated_tools.append(tool_id)
         else:
@@ -265,8 +295,7 @@ def list_openapi_tools(
     tools = get_tools(db_session, only_openapi=True)
 
     # Only a scoped manager's per-tool edit check queries agent scope; preload their group
-    # set once so the loop issues no query per row. delete/toggle are global MANAGE_ACTIONS.
-    is_actions_admin = has_global_permission(user, Permission.MANAGE_ACTIONS)
+    # set once so the loop issues no query per row.
     managed_group_ids = (
         get_scoped_groups(user, db_session, Permission.MANAGE_ACTIONS)
         if has_permission(user, Permission.MANAGE_ACTIONS) is PermissionAuthority.SCOPED
@@ -284,7 +313,7 @@ def list_openapi_tools(
                     can_edit=can_edit_custom_tool(
                         user, tool, db_session, managed_group_ids
                     ),
-                    is_actions_admin=is_actions_admin,
+                    can_manage=can_manage_own_tool(user, tool),
                 ),
             )
         )

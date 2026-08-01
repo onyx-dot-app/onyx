@@ -66,11 +66,13 @@ from onyx.db.token_limit import insert_global_token_rate_limit
 from onyx.db.tools import can_admin_mcp_server
 from onyx.db.tools import can_edit_custom_tool
 from onyx.db.tools import can_edit_mcp_server
+from onyx.db.tools import can_manage_own_tool
 from onyx.error_handling.exceptions import OnyxError
 from onyx.server.features.mcp.api import _ensure_mcp_server_editable
 from onyx.server.features.mcp.api import _ensure_mcp_server_owner_or_admin
 from onyx.server.features.persona.models import PersonaUpsertRequest
 from onyx.server.features.tool.api import _get_editable_custom_tool
+from onyx.server.features.tool.api import _get_manageable_custom_tool
 from onyx.server.token_rate_limits.models import TokenRateLimitArgs
 from tests.external_dependency_unit.conftest import create_test_user
 
@@ -484,9 +486,10 @@ def _make_skill(
 
 
 def test_tool_projection_matches_gates(db_session: Session) -> None:
-    """edit tracks the real _get_editable_custom_tool decision (admin ∨ creator ∨ scoped);
-    delete/toggle track global MANAGE_ACTIONS. A scoped manager edits a managed action but
-    can never delete or enable/disable it."""
+    """edit tracks _get_editable_custom_tool (admin ∨ creator ∨ scoped-in-scope);
+    delete/toggle/authenticate track _get_manageable_custom_tool (owner-or-admin). The
+    creator fully controls the action they made; a scoped manager in the action's group can
+    edit but not manage it."""
     managed = _make_group(db_session)
 
     in_scope = create_test_user(db_session, "proj-tool-in")
@@ -497,7 +500,9 @@ def test_tool_projection_matches_gates(db_session: Session) -> None:
     _manage(db_session, out_scope, _make_group(db_session))
     out_scope.effective_permissions = []
 
+    # scoped manager who owns the action (via a group unrelated to the action's agents)
     creator = create_test_user(db_session, "proj-tool-creator")
+    _manage(db_session, creator, _make_group(db_session))
     creator.effective_permissions = []
 
     admin = create_test_user(db_session, "proj-tool-admin", is_admin=True)
@@ -511,22 +516,31 @@ def test_tool_projection_matches_gates(db_session: Session) -> None:
     _link_persona_tool(db_session, persona, tool)
 
     for actor in (in_scope, out_scope, creator, admin):
-        enforced = not _guard_raises(
+        edit_enforced = not _guard_raises(
             _get_editable_custom_tool, tool.id, db_session, actor
         )
         can_edit = can_edit_custom_tool(actor, tool, db_session)
-        assert can_edit == enforced, actor.email
-        is_actions_admin = has_global_permission(actor, Permission.MANAGE_ACTIONS)
-        tags = tool_permissions(can_edit=can_edit, is_actions_admin=is_actions_admin)
-        assert tags["edit"] == enforced
-        assert tags["delete"] == is_actions_admin  # A — never a scoped manager
-        assert tags["toggle"] == is_actions_admin  # A
+        assert can_edit == edit_enforced, actor.email
+        manage_enforced = not _guard_raises(
+            _get_manageable_custom_tool, tool.id, db_session, actor
+        )
+        can_manage = can_manage_own_tool(actor, tool)
+        assert can_manage == manage_enforced, actor.email
+        tags = tool_permissions(can_edit=can_edit, can_manage=can_manage)
+        assert tags["edit"] == edit_enforced
+        assert tags["delete"] == manage_enforced
+        assert tags["toggle"] == manage_enforced
+        assert tags["authenticate"] == manage_enforced
 
-    # in-scope manager can edit but not delete/toggle
     assert tool_permissions(
         can_edit=can_edit_custom_tool(in_scope, tool, db_session),
-        is_actions_admin=has_global_permission(in_scope, Permission.MANAGE_ACTIONS),
-    ) == {"edit": True, "delete": False, "toggle": False}
+        can_manage=can_manage_own_tool(in_scope, tool),
+    ) == {"edit": True, "delete": False, "toggle": False, "authenticate": False}
+
+    assert tool_permissions(
+        can_edit=can_edit_custom_tool(creator, tool, db_session),
+        can_manage=can_manage_own_tool(creator, tool),
+    ) == {"edit": True, "delete": True, "toggle": True, "authenticate": True}
 
 
 def test_mcp_projection_matches_gates(db_session: Session) -> None:
@@ -663,9 +677,7 @@ def test_skill_projection_matches_gates(db_session: Session) -> None:
 
 
 def test_actions_and_skill_key_coverage() -> None:
-    assert set(tool_permissions(can_edit=True, is_actions_admin=True)) == set(
-        TOOL_ACTIONS
-    )
+    assert set(tool_permissions(can_edit=True, can_manage=True)) == set(TOOL_ACTIONS)
     assert set(mcp_server_permissions(can_edit=True, can_admin=True)) == set(
         MCP_SERVER_ACTIONS
     )

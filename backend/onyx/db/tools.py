@@ -245,6 +245,19 @@ def can_edit_mcp_server(
     return False
 
 
+def can_manage_own_tool(user: User, tool: Tool) -> bool:
+    """Owner-or-admin gate for a custom action's destructive/auth ops (delete, toggle, OAuth
+    config), matching the routes' ``allow_scope`` guard: a global actions-admin manages any
+    action; a scoped manager only one they created. No MANAGE_ACTIONS authority (or a built-in
+    tool, which has no owner) never passes."""
+    authority = has_permission(user, Permission.MANAGE_ACTIONS)
+    if authority is PermissionAuthority.GLOBAL:
+        return True
+    if authority is PermissionAuthority.SCOPED:
+        return tool.user_id is not None and tool.user_id == user.id
+    return False
+
+
 def can_admin_mcp_server(user: User, server: MCPServer) -> bool:
     """Read-mode of ``_ensure_mcp_server_owner_or_admin``: admin ∨ owner (by email). Gates
     delete, (dis)connect, and status refresh — those routes have no scoped-manager path."""
