@@ -245,6 +245,11 @@ class ResponsesRequest(BaseModel):
     reasoning: dict[str, Any] | None = None
 
 
+# Subset of the Responses error enum we can actually produce; the schema has
+# no timeout code, so timeouts report as server_error.
+ResponsesErrorCode: TypeAlias = Literal["server_error", "rate_limit_exceeded"]
+
+
 class ResponsesOutputTextPart(_WireModel):
     type: Literal["output_text"] = "output_text"
     text: str
@@ -317,6 +322,11 @@ class ResponsesObjectPayload(_WireModel):
     status: str
     model: str
     output: list[ResponsesOutputItem]
+    # Required by the Responses schema even when empty, so a strict SDK client
+    # can parse the object; we do not echo the request's tools.
+    parallel_tool_calls: bool = True
+    tool_choice: str = "auto"
+    tools: list[dict[str, Any]] = Field(default_factory=list)
     usage: ResponsesUsagePayload | None = None
     error: dict[str, Any] | None = None
 
@@ -341,12 +351,21 @@ class ResponsesObjectPayload(_WireModel):
             status=status,
             model=model,
             output=output,
+            parallel_tool_calls=True,
+            tool_choice="auto",
+            tools=[],
             **kwargs,
         )
 
     @classmethod
     def failed(
-        cls, *, response_id: str, created_at: int, model: str, message: str
+        cls,
+        *,
+        response_id: str,
+        created_at: int,
+        model: str,
+        message: str,
+        code: ResponsesErrorCode = "server_error",
     ) -> "ResponsesObjectPayload":
         return cls(
             id=response_id,
@@ -355,7 +374,10 @@ class ResponsesObjectPayload(_WireModel):
             status="failed",
             model=model,
             output=[],
-            error={"message": message, "type": "server_error"},
+            parallel_tool_calls=True,
+            tool_choice="auto",
+            tools=[],
+            error={"code": code, "message": message},
         )
 
 
@@ -374,6 +396,7 @@ class ResponsesOutputTextDeltaEvent(_WireModel):
     output_index: int = 0
     content_index: int = 0
     delta: str
+    logprobs: list[Any] = Field(default_factory=list)
 
     @classmethod
     def create(cls, *, item_id: str, delta: str) -> "ResponsesOutputTextDeltaEvent":
@@ -383,6 +406,7 @@ class ResponsesOutputTextDeltaEvent(_WireModel):
             output_index=0,
             content_index=0,
             delta=delta,
+            logprobs=[],
         )
 
 
@@ -460,6 +484,7 @@ class ResponsesOutputTextDoneEvent(_WireModel):
     output_index: int = 0
     content_index: int = 0
     text: str
+    logprobs: list[Any] = Field(default_factory=list)
 
     @classmethod
     def create(
@@ -471,6 +496,7 @@ class ResponsesOutputTextDoneEvent(_WireModel):
             output_index=output_index,
             content_index=0,
             text=text,
+            logprobs=[],
         )
 
 
@@ -481,16 +507,18 @@ class ResponsesFunctionCallArgumentsDoneEvent(_WireModel):
     item_id: str
     output_index: int = 0
     arguments: str
+    name: str
 
     @classmethod
     def create(
-        cls, *, item_id: str, output_index: int, arguments: str
+        cls, *, item_id: str, output_index: int, arguments: str, name: str
     ) -> "ResponsesFunctionCallArgumentsDoneEvent":
         return cls(
             type="response.function_call_arguments.done",
             item_id=item_id,
             output_index=output_index,
             arguments=arguments,
+            name=name,
         )
 
 

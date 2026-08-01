@@ -1528,6 +1528,60 @@ def test_responses_stream_failure_closes_the_open_text_item() -> None:
     assert events[-1]["response"]["status"] == "failed"
 
 
+def test_responses_stream_events_carry_monotonic_sequence_numbers() -> None:
+    """sequence_number is a required field on every Responses streaming event
+    in the OpenAI schema; strict SDK clients fail validation without it."""
+    events = _responses_stream_events(
+        _ChunkStreamLLM(_TEXT_AND_TOOL_CALL_CHUNKS), response_id="resp_seq"
+    )
+
+    assert [e["sequence_number"] for e in events] == list(range(len(events)))
+
+
+@pytest.mark.parametrize(
+    ("exc", "expected_code"),
+    [
+        (LLMRateLimitError("slow down"), "rate_limit_exceeded"),
+        (LLMTimeoutError("too slow"), "server_error"),
+        (RuntimeError("secret-provider-response"), "server_error"),
+    ],
+)
+def test_responses_stream_failure_uses_schema_error_codes(
+    exc: Exception, expected_code: str
+) -> None:
+    """response.error must be {code, message} with code from the Responses
+    enum, and a rate limit must stay distinguishable for retry-aware clients."""
+    events = _responses_stream_events(
+        _StreamingLLM(threading.Event(), fail=True, exc=exc), response_id="resp_code"
+    )
+
+    error = events[-1]["response"]["error"]
+    assert error["code"] == expected_code
+    assert "type" not in error
+    assert "secret-provider-response" not in error["message"]
+
+
+def test_responses_stream_validates_against_openai_sdk_models() -> None:
+    """The whole emitted stream must parse with the real openai SDK event
+    models, which is what a strict client actually runs."""
+    from openai.types.responses import ResponseStreamEvent
+    from pydantic import TypeAdapter
+
+    adapter: TypeAdapter[Any] = TypeAdapter(ResponseStreamEvent)
+    streams = [
+        _responses_stream_events(
+            _ChunkStreamLLM(_TEXT_AND_TOOL_CALL_CHUNKS), response_id="resp_sdk"
+        ),
+        _responses_stream_events(
+            _FailAfterTextLLM(LLMRateLimitError("slow down")),
+            response_id="resp_sdk_err",
+        ),
+    ]
+    for events in streams:
+        for event in events:
+            adapter.validate_python(event)
+
+
 def test_responses_stream_disconnect_closes_upstream_and_omits_completed() -> None:
     closed = threading.Event()
     with patch.object(gateway_api, "llm_generation_span", return_value=nullcontext()):

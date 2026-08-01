@@ -6,6 +6,7 @@ import uuid
 from collections.abc import Callable, Iterator
 from contextlib import closing, contextmanager
 from functools import partial
+from itertools import count
 from typing import Any, Protocol, cast, runtime_checkable
 
 from fastapi import APIRouter, Depends, Request, Response
@@ -55,6 +56,7 @@ from onyx.server.gateway.models import (
     ResponsesContentPartAddedEvent,
     ResponsesContentPartDoneEvent,
     ResponsesCreatedEvent,
+    ResponsesErrorCode,
     ResponsesFailedEvent,
     ResponsesFunctionCallArgumentsDoneEvent,
     ResponsesFunctionCallItem,
@@ -645,10 +647,13 @@ def _responses_stream_worker(
     out: "queue.Queue[Any]",
     cancelled: threading.Event,
 ) -> None:
+    sequence = count()
+
     def emit(event: Any) -> bool:
-        return _put_stream_item(
-            out, f"data: {json.dumps(event.to_wire())}\n\n", cancelled
-        )
+        # Stamped here rather than in the models so it always matches emission
+        # order and no event can be built without one.
+        payload = {**event.to_wire(), "sequence_number": next(sequence)}
+        return _put_stream_item(out, f"data: {json.dumps(payload)}\n\n", cancelled)
 
     emit(
         ResponsesCreatedEvent.create(
@@ -684,7 +689,11 @@ def _responses_stream_worker(
         return item
 
     def emit_error(*, message: str, error_type: str) -> None:
-        del error_type  # the Responses protocol carries only the message
+        code: ResponsesErrorCode = (
+            "rate_limit_exceeded"
+            if error_type == _RATE_LIMIT_ERROR[1]
+            else "server_error"
+        )
         if text_item_open:
             close_text_item("incomplete")
         emit(
@@ -694,6 +703,7 @@ def _responses_stream_worker(
                     created_at=created_at,
                     model=model,
                     message=message,
+                    code=code,
                 )
             )
         )
@@ -788,6 +798,7 @@ def _responses_stream_worker(
                             item_id=call_item.id,
                             output_index=tool_index,
                             arguments=call_item.arguments,
+                            name=call_item.name,
                         )
                     )
                     emit(
