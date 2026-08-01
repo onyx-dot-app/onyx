@@ -101,8 +101,10 @@ from onyx.server.features.build.sandbox.labels import (
     LABEL_K8S_MANAGED_BY,
     LABEL_K8S_MANAGED_BY_ONYX,
     LABEL_PROVISIONING_ATTEMPT,
+    LABEL_RELEASE,
     LABEL_SANDBOX_ID,
     LABEL_TENANT_ID,
+    current_release_label,
 )
 from onyx.server.features.build.sandbox.models import (
     CraftLLMProviderConfig,
@@ -484,20 +486,25 @@ class KubernetesSandboxManager(SandboxManager):
         spec: client.V1PodSpec = copy.deepcopy(pod_template.template.spec)
         self._overlay_dynamic_fields(spec, sandbox_id)
 
+        labels = {
+            **(pod_template.template.metadata.labels or {}),
+            LABEL_K8S_COMPONENT: LABEL_K8S_COMPONENT_SANDBOX,
+            LABEL_K8S_MANAGED_BY: LABEL_K8S_MANAGED_BY_ONYX,
+            LABEL_SANDBOX_ID: sandbox_id,
+            LABEL_TENANT_ID: tenant_id,
+            LABEL_PROVISIONING_ATTEMPT: str(provisioning_attempt_number),
+        }
+        release = current_release_label()
+        if release is not None:
+            labels[LABEL_RELEASE] = release
+
         return client.V1Pod(
             api_version="v1",
             kind="Pod",
             metadata=client.V1ObjectMeta(
                 name=pod_name,
                 namespace=self._namespace,
-                labels={
-                    **(pod_template.template.metadata.labels or {}),
-                    LABEL_K8S_COMPONENT: LABEL_K8S_COMPONENT_SANDBOX,
-                    LABEL_K8S_MANAGED_BY: LABEL_K8S_MANAGED_BY_ONYX,
-                    LABEL_SANDBOX_ID: sandbox_id,
-                    LABEL_TENANT_ID: tenant_id,
-                    LABEL_PROVISIONING_ATTEMPT: str(provisioning_attempt_number),
-                },
+                labels=labels,
             ),
             spec=spec,
         )
@@ -570,6 +577,23 @@ class KubernetesSandboxManager(SandboxManager):
             f"The PodTemplate and api-server versions are likely out of sync — "
             f"apply the matching sandbox PodTemplate."
         )
+
+    def provisioned_release(self, sandbox_id: UUID) -> str | None:
+        """The release stamped on this sandbox's pod when it was created.
+
+        A pod is created once and never relabelled, so this is the release that
+        provisioned whatever is running now.
+        """
+        try:
+            pod = self._core_api.read_namespaced_pod(
+                name=self._get_pod_name(str(sandbox_id)),
+                namespace=self._namespace,
+            )
+        except ApiException as e:
+            logger.warning("Could not read sandbox pod %s: %s", sandbox_id, e)
+            return None
+        labels = (pod.metadata.labels or {}) if pod.metadata else {}
+        return labels.get(LABEL_RELEASE)
 
     def _create_sandbox_service(
         self,

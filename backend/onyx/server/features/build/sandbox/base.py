@@ -386,6 +386,15 @@ class SandboxManager(_ServeMixin, ABC):
         """
         ...
 
+    def provisioned_release(self, sandbox_id: UUID) -> str | None:  # noqa: ARG002
+        """The release that provisioned this sandbox, recorded at creation.
+
+        Compared against the running release to decide whether the sandbox is
+        on the image that shipped with an earlier one. None means unknown,
+        which never counts as behind.
+        """
+        return None
+
     def send_message(
         self,
         sandbox_id: UUID,
