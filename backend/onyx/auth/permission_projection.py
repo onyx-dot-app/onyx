@@ -82,14 +82,13 @@ def document_set_permissions(
 TOOL_ACTIONS: frozenset[str] = frozenset({"edit", "delete", "toggle", "authenticate"})
 
 
-def tool_permissions(*, can_edit: bool, can_manage: bool) -> dict[str, bool]:
-    """Custom action (OpenAPI tool) affordance map. ``edit`` is the write guard's editable
-    decision (admin, creator, or a scoped manager whose groups cover every agent using the
-    action). ``delete``, ``toggle``, and ``authenticate`` (its OAuth config) are ``can_manage``
-    — owner-or-admin — so a scoped manager can edit an in-scope action but not fully manage
-    one they didn't create."""
+def tool_permissions(*, can_manage: bool) -> dict[str, bool]:
+    """Custom action (OpenAPI tool) affordance map. Every action — edit, delete, toggle, and
+    authenticate (its OAuth config) — is owner-or-admin (``can_manage``): the creator fully
+    controls the action they made and an admin controls any, while a scoped manager may view
+    and create actions but not edit ones they didn't create."""
     return {
-        "edit": can_edit,
+        "edit": can_manage,
         "delete": can_manage,
         "toggle": can_manage,
         "authenticate": can_manage,
@@ -101,17 +100,16 @@ MCP_SERVER_ACTIONS: frozenset[str] = frozenset(
 )
 
 
-def mcp_server_permissions(*, can_edit: bool, can_admin: bool) -> dict[str, bool]:
-    """MCP server affordance map. ``edit`` is the editable decision (admin, owner-by-email,
-    or a manager whose groups cover every agent using the server's tools). ``delete``,
-    ``authenticate``, and ``manage_status`` (connect/disconnect/refresh) are owner-or-admin
-    only — those routes carry no ``allow_scope``, so a manager may edit a managed server
-    but not delete, authenticate, or change its connection status."""
+def mcp_server_permissions(*, can_manage: bool) -> dict[str, bool]:
+    """MCP server affordance map. Every action — edit, delete, authenticate (connect), and
+    manage_status (disconnect/refresh) — is owner-or-admin (``can_manage``): the owner fully
+    controls their server and an admin controls any, while a scoped manager may view servers
+    connected to their groups and create their own but not manage others'."""
     return {
-        "edit": can_edit,
-        "delete": can_admin,
-        "authenticate": can_admin,
-        "manage_status": can_admin,
+        "edit": can_manage,
+        "delete": can_manage,
+        "authenticate": can_manage,
+        "manage_status": can_manage,
     }
 
 

@@ -7,22 +7,15 @@ from pydantic import BaseModel
 from sqlalchemy.orm import Session
 
 from onyx.auth.permission_projection import tool_permissions
-from onyx.auth.permissions import get_effective_permissions
-from onyx.auth.permissions import has_permission
 from onyx.auth.permissions import require_permission
-from onyx.auth.scoped_permissions import agent_mediated_scope_allows
-from onyx.auth.scoped_permissions import get_scoped_groups
 from onyx.configs.constants import PUBLIC_API_TAGS
 from onyx.db.engine.sql_engine import get_session
 from onyx.db.enums import Permission
-from onyx.db.enums import PermissionAuthority
 from onyx.db.models import Tool
 from onyx.db.models import User
-from onyx.db.tools import can_edit_custom_tool
 from onyx.db.tools import can_manage_own_tool
 from onyx.db.tools import create_tool__no_commit
 from onyx.db.tools import delete_tool__no_commit
-from onyx.db.tools import get_action_agent_scope
 from onyx.db.tools import get_tool_by_id
 from onyx.db.tools import get_tools
 from onyx.db.tools import get_tools_by_ids
@@ -63,62 +56,9 @@ def _validate_auth_settings(tool_data: CustomToolCreate | CustomToolUpdate) -> N
                 )
 
 
-def _assert_action_within_managed_scope(
-    tool_id: int, db_session: Session, user: User
-) -> None:
-    """A scoped group manager may edit an action only when every agent using it is
-    private and in a group they manage. An action reachable via a public agent (so
-    org-wide), or used by no agent (no group context), is owner/admin-only."""
-    group_ids, has_public_agent, has_ungrouped_private_agent = get_action_agent_scope(
-        tool_id, db_session
-    )
-    if not agent_mediated_scope_allows(
-        user,
-        db_session,
-        group_ids=group_ids,
-        has_public_agent=has_public_agent,
-        has_ungrouped_private_agent=has_ungrouped_private_agent,
-    ):
-        raise OnyxError(
-            OnyxErrorCode.INSUFFICIENT_PERMISSIONS,
-            "You can only modify actions scoped to groups you manage.",
-        )
-
-
-def _get_editable_custom_tool(tool_id: int, db_session: Session, user: User) -> Tool:
-    """Fetch a custom tool and ensure the caller has permission to edit it."""
-    try:
-        tool = get_tool_by_id(tool_id, db_session)
-    except ValueError as e:
-        raise HTTPException(status_code=404, detail=str(e))
-
-    if tool.in_code_tool_id is not None:
-        raise HTTPException(
-            status_code=400,
-            detail="Built-in tools cannot be modified through this endpoint.",
-        )
-
-    # Admins bypass; owners may always edit the action they created.
-    if Permission.FULL_ADMIN_PANEL_ACCESS in get_effective_permissions(user):
-        return tool
-    if tool.user_id is not None and tool.user_id == user.id:
-        return tool
-
-    # A scoped group manager may edit an action scoped (via its agents) to groups
-    # they manage; everyone else is limited to actions they created.
-    if has_permission(user, Permission.MANAGE_ACTIONS) is PermissionAuthority.SCOPED:
-        _assert_action_within_managed_scope(tool_id, db_session, user)
-        return tool
-
-    raise OnyxError(
-        OnyxErrorCode.INSUFFICIENT_PERMISSIONS,
-        "You can only modify actions that you created.",
-    )
-
-
 def _get_manageable_custom_tool(tool_id: int, db_session: Session, user: User) -> Tool:
-    """Fetch a custom tool and assert the caller may fully manage it (owner or admin) — the
-    delete/toggle gate."""
+    """Fetch a custom tool and assert the caller may manage it (owner or admin) — the gate for
+    every action on it: edit, delete, toggle, and OAuth config."""
     try:
         tool = get_tool_by_id(tool_id, db_session)
     except ValueError as e:
@@ -170,7 +110,7 @@ def update_custom_tool(
         require_permission(Permission.MANAGE_ACTIONS, allow_scope=True)
     ),
 ) -> ToolSnapshot:
-    existing_tool = _get_editable_custom_tool(tool_id, db_session, user)
+    existing_tool = _get_manageable_custom_tool(tool_id, db_session, user)
     if tool_data.definition:
         _validate_tool_definition(tool_data.definition)
     _validate_auth_settings(tool_data)
@@ -294,13 +234,7 @@ def list_openapi_tools(
 ) -> list[ToolSnapshot]:
     tools = get_tools(db_session, only_openapi=True)
 
-    # Only a scoped manager's per-tool edit check queries agent scope; preload their group
-    # set once so the loop issues no query per row.
-    managed_group_ids = (
-        get_scoped_groups(user, db_session, Permission.MANAGE_ACTIONS)
-        if has_permission(user, Permission.MANAGE_ACTIONS) is PermissionAuthority.SCOPED
-        else None
-    )
+    # Every action affordance is owner-or-admin, decided per tool with no query.
     openapi_tools: list[ToolSnapshot] = []
     for tool in tools:
         if not should_expose_tool_to_fe(tool):
@@ -310,10 +244,7 @@ def list_openapi_tools(
             ToolSnapshot.from_model(
                 tool,
                 permissions=tool_permissions(
-                    can_edit=can_edit_custom_tool(
-                        user, tool, db_session, managed_group_ids
-                    ),
-                    can_manage=can_manage_own_tool(user, tool),
+                    can_manage=can_manage_own_tool(user, tool)
                 ),
             )
         )

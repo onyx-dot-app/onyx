@@ -1,3 +1,4 @@
+from collections.abc import Collection
 from typing import Any
 from typing import cast
 from typing import Type
@@ -6,13 +7,11 @@ from uuid import UUID
 
 from sqlalchemy import func
 from sqlalchemy import or_
-from sqlalchemy import Select
 from sqlalchemy import select
 from sqlalchemy.orm import Session
 
 from onyx.auth.permissions import get_effective_permissions
 from onyx.auth.permissions import has_permission
-from onyx.auth.scoped_permissions import agent_mediated_scope_allows
 from onyx.db.constants import UNSET
 from onyx.db.constants import UnsetType
 from onyx.db.enums import MCPServerStatus
@@ -104,152 +103,11 @@ def get_tool_by_id(tool_id: int, db_session: Session) -> Tool:
     return tool
 
 
-def _agent_group_scope(
-    agent_select: Select[tuple[int, bool, int | None]], db_session: Session
-) -> tuple[set[int], bool, bool]:
-    """Shared core of the agent-mediated action/MCP scope. Given a select of
-    ``(persona_id, is_public, owner_group_id)`` for the (non-deleted) agents
-    referencing a resource, return ``(private_agent_group_ids, has_public_agent,
-    has_ungrouped_private_agent)``. A private agent's groups are those it is shared
-    to (``Persona__UserGroup``) plus the group that owns it (``owner_group_id``); an
-    agent with neither is a personal agent outside any managed group and must be
-    tracked explicitly. A public agent is org-wide; a resource used by no agent has
-    no group context (empty set)."""
-    agent_rows = db_session.execute(agent_select).all()
-    has_public_agent = any(is_public for _, is_public, _ in agent_rows)
-    private_owner_groups = {
-        pid: owner_group_id
-        for pid, is_public, owner_group_id in agent_rows
-        if not is_public
-    }
-    if not private_owner_groups:
-        return set(), has_public_agent, False
-    share_rows = db_session.execute(
-        select(Persona__UserGroup.persona_id, Persona__UserGroup.user_group_id).where(
-            Persona__UserGroup.persona_id.in_(private_owner_groups.keys())
-        )
-    ).all()
-    group_ids: set[int] = set()
-    grouped_agent_ids: set[int] = set()
-    for persona_id, user_group_id in share_rows:
-        group_ids.add(user_group_id)
-        grouped_agent_ids.add(persona_id)
-    for persona_id, owner_group_id in private_owner_groups.items():
-        if owner_group_id is not None:
-            group_ids.add(owner_group_id)
-            grouped_agent_ids.add(persona_id)
-    has_ungrouped_private_agent = bool(
-        set(private_owner_groups.keys()) - grouped_agent_ids
-    )
-    return group_ids, has_public_agent, has_ungrouped_private_agent
-
-
-def get_action_agent_scope(
-    tool_id: int, db_session: Session
-) -> tuple[set[int], bool, bool]:
-    """The groups a custom action is exposed to, via the agents that reference it."""
-    return _agent_group_scope(
-        select(Persona.id, Persona.is_public, Persona.owner_group_id)
-        .join(Persona__Tool, Persona__Tool.persona_id == Persona.id)
-        .where(Persona__Tool.tool_id == tool_id, Persona.deleted.is_(False)),
-        db_session,
-    )
-
-
-def get_mcp_server_agent_scope(
-    mcp_server_id: int, db_session: Session
-) -> tuple[set[int], bool, bool]:
-    """The groups an MCP server is exposed to, via the agents that use any of its
-    tools."""
-    return _agent_group_scope(
-        select(Persona.id, Persona.is_public, Persona.owner_group_id)
-        .join(Persona__Tool, Persona__Tool.persona_id == Persona.id)
-        .join(Tool, Tool.id == Persona__Tool.tool_id)
-        .where(Tool.mcp_server_id == mcp_server_id, Persona.deleted.is_(False)),
-        db_session,
-    )
-
-
-# Read-mode mirrors of the write guards — same decision, no policy re-derived — so the
-# projection can stamp affordances; the contract test catches drift.
-
-
-def action_within_managed_scope(
-    tool_id: int,
-    db_session: Session,
-    user: User,
-    managed_group_ids: set[int] | None = None,
-) -> bool:
-    """Read-mode of ``_assert_action_within_managed_scope``: a scoped manager is in scope
-    for a custom action iff every agent using it is private and in a group they manage."""
-    group_ids, has_public_agent, has_ungrouped_private_agent = get_action_agent_scope(
-        tool_id, db_session
-    )
-    return agent_mediated_scope_allows(
-        user,
-        db_session,
-        group_ids=group_ids,
-        has_public_agent=has_public_agent,
-        has_ungrouped_private_agent=has_ungrouped_private_agent,
-        managed_group_ids=managed_group_ids,
-    )
-
-
-def can_edit_custom_tool(
-    user: User,
-    tool: Tool,
-    db_session: Session,
-    managed_group_ids: set[int] | None = None,
-) -> bool:
-    """Read-mode of ``_get_editable_custom_tool`` (admin ∨ creator ∨ scoped branches,
-    minus its 404/400 fetch raises). Built-in tools are never editable here.
-
-    ``managed_group_ids`` lets a list endpoint preload the manager's group set once."""
-    if tool.in_code_tool_id is not None:
-        return False
-    if Permission.FULL_ADMIN_PANEL_ACCESS in get_effective_permissions(user):
-        return True
-    if tool.user_id is not None and tool.user_id == user.id:
-        return True
-    if has_permission(user, Permission.MANAGE_ACTIONS) is PermissionAuthority.SCOPED:
-        return action_within_managed_scope(tool.id, db_session, user, managed_group_ids)
-    return False
-
-
-def can_edit_mcp_server(
-    user: User,
-    server: MCPServer,
-    db_session: Session,
-    managed_group_ids: set[int] | None = None,
-) -> bool:
-    """Read-mode of ``_ensure_mcp_server_editable``: admin ∨ owner (by email) ∨ a scoped
-    manager whose groups cover every agent using the server's tools.
-
-    ``managed_group_ids`` lets a list endpoint preload the manager's group set once."""
-    if Permission.FULL_ADMIN_PANEL_ACCESS in get_effective_permissions(user):
-        return True
-    if server.owner == user.email:
-        return True
-    if has_permission(user, Permission.MANAGE_ACTIONS) is PermissionAuthority.SCOPED:
-        group_ids, has_public_agent, has_ungrouped_private_agent = (
-            get_mcp_server_agent_scope(server.id, db_session)
-        )
-        return agent_mediated_scope_allows(
-            user,
-            db_session,
-            group_ids=group_ids,
-            has_public_agent=has_public_agent,
-            has_ungrouped_private_agent=has_ungrouped_private_agent,
-            managed_group_ids=managed_group_ids,
-        )
-    return False
-
-
 def can_manage_own_tool(user: User, tool: Tool) -> bool:
-    """Owner-or-admin gate for a custom action's destructive/auth ops (delete, toggle, OAuth
+    """Owner-or-admin gate for every action on a custom action (edit, delete, toggle, OAuth
     config), matching the routes' ``allow_scope`` guard: a global actions-admin manages any
-    action; a scoped manager only one they created. No MANAGE_ACTIONS authority (or a built-in
-    tool, which has no owner) never passes."""
+    action, a scoped manager only one they created. No MANAGE_ACTIONS authority — or a built-in
+    tool (no owner) — never passes."""
     authority = has_permission(user, Permission.MANAGE_ACTIONS)
     if authority is PermissionAuthority.GLOBAL:
         return True
@@ -258,12 +116,41 @@ def can_manage_own_tool(user: User, tool: Tool) -> bool:
     return False
 
 
-def can_admin_mcp_server(user: User, server: MCPServer) -> bool:
-    """Read-mode of ``_ensure_mcp_server_owner_or_admin``: admin ∨ owner (by email). Gates
-    delete, (dis)connect, and status refresh — those routes have no scoped-manager path."""
+def can_manage_mcp_server(user: User, server: MCPServer) -> bool:
+    """Owner-or-admin gate for every action on an MCP server (edit, delete, connect, status),
+    matching the routes' ``allow_scope`` guard ∧ FULL_ADMIN-or-owner: a full admin manages any
+    server, a scoped manager only one they own (by email). No MANAGE_ACTIONS authority never
+    passes."""
+    if has_permission(user, Permission.MANAGE_ACTIONS) is PermissionAuthority.NONE:
+        return False
     if Permission.FULL_ADMIN_PANEL_ACCESS in get_effective_permissions(user):
         return True
     return server.owner == user.email
+
+
+def get_mcp_server_ids_connected_to_groups(
+    group_ids: Collection[int], db_session: Session
+) -> set[int]:
+    """MCP server ids exposed to any of ``group_ids`` via an agent — a persona shared to or
+    owned by the group that uses one of the server's tools. The read-visibility set for a
+    scoped manager, who may view servers connected to their groups without managing them."""
+    if not group_ids:
+        return set()
+    rows = db_session.execute(
+        select(Tool.mcp_server_id)
+        .join(Persona__Tool, Persona__Tool.tool_id == Tool.id)
+        .join(Persona, Persona.id == Persona__Tool.persona_id)
+        .outerjoin(Persona__UserGroup, Persona__UserGroup.persona_id == Persona.id)
+        .where(
+            Tool.mcp_server_id.is_not(None),
+            Persona.deleted.is_(False),
+            or_(
+                Persona__UserGroup.user_group_id.in_(group_ids),
+                Persona.owner_group_id.in_(group_ids),
+            ),
+        )
+    ).all()
+    return {server_id for (server_id,) in rows if server_id is not None}
 
 
 def get_tool_by_name(tool_name: str, db_session: Session) -> Tool:

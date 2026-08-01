@@ -7,10 +7,9 @@ manage, and never widen beyond their scope:
 - **Skills**: create/grant/publish only for PRIVATE skills in managed groups;
   the admin list is scoped; DELETE is admin-only.
 - **Agents**: may group-share a PRIVATE agent only to managed groups.
-- **Actions/MCP**: actions have no group of their own, so scope is derived from
-  the agents using them — editable only when every such agent is private and in a
-  managed group; a public-agent or no-agent action is owner/admin-only; DELETE is
-  admin-only.
+- **Actions/MCP**: owner-or-admin — a manager creates and fully manages (edit/delete)
+  their own actions and servers, but cannot manage ones they didn't create, even those
+  connected to their groups via agents.
 - **Token limits**: settable only on a managed group.
 
 Managers are seeded by flipping ``User__UserGroup.is_manager`` directly (no
@@ -35,7 +34,6 @@ from onyx.db.engine.sql_engine import get_session_with_current_tenant
 from onyx.db.enums import MCPAuthenticationPerformer
 from onyx.db.enums import MCPAuthenticationType
 from onyx.db.enums import Permission
-from onyx.db.models import Persona
 from onyx.db.models import User__UserGroup
 from onyx.db.permissions import recompute_user_permissions__no_commit
 from tests.integration.common_utils.managers.persona import PersonaManager
@@ -341,110 +339,65 @@ def test_manager_rosters_agent_shared_to_managed_group(env: _ScopedEnv) -> None:
     assert resp.status_code == 200, resp.text
 
 
-# --- custom actions (agent-mediated scope) ----------------------------------
+# --- custom actions (owner-or-admin) ----------------------------------------
 
 
 def test_manager_creates_own_action(env: _ScopedEnv) -> None:
     _create_custom_tool(env.manager)
 
 
-def test_manager_cannot_edit_unowned_ungrouped_action(env: _ScopedEnv) -> None:
-    # Admin owns the action and no agent uses it → no group context → owner/admin only.
-    tool_id = _create_custom_tool(env.admin)
-    _assert_manager(env, "PUT", f"/admin/tool/custom/{tool_id}", "denied", _tool_body())
-
-
-def test_manager_edits_action_used_by_managed_private_agent(env: _ScopedEnv) -> None:
-    tool_id = _create_custom_tool(env.admin)
-    PersonaManager.create(
-        user_performing_action=env.admin,
-        is_public=False,
-        groups=[env.managed_group.id],
-        tool_ids=[tool_id],
-    )
-    _assert_manager(
-        env, "PUT", f"/admin/tool/custom/{tool_id}", "allowed", _tool_body()
-    )
-
-
-def test_manager_edits_action_used_by_group_owned_agent(env: _ScopedEnv) -> None:
-    # An action used only by a PRIVATE agent OWNED by the manager's group (via
-    # owner_group_id, with no share rows) is in scope through that group ownership.
-    tool_id = _create_custom_tool(env.admin)
-    agent = PersonaManager.create(
-        user_performing_action=env.admin, is_public=False, tool_ids=[tool_id]
-    )
-    # No API creates a group-owned agent in these tests, so re-own it directly
-    # (owner_group_id and user_id are mutually exclusive).
-    with get_session_with_current_tenant() as db_session:
-        db_session.execute(
-            update(Persona)
-            .where(Persona.id == agent.id)
-            .values(user_id=None, owner_group_id=env.managed_group.id)
-        )
-        db_session.commit()
-    _assert_manager(
-        env, "PUT", f"/admin/tool/custom/{tool_id}", "allowed", _tool_body()
-    )
-
-
-def test_manager_cannot_edit_action_used_by_public_agent(env: _ScopedEnv) -> None:
-    tool_id = _create_custom_tool(env.admin)
-    PersonaManager.create(
-        user_performing_action=env.admin,
-        is_public=True,
-        groups=[env.managed_group.id],
-        tool_ids=[tool_id],
-    )
-    _assert_manager(env, "PUT", f"/admin/tool/custom/{tool_id}", "denied", _tool_body())
-
-
-def test_manager_cannot_edit_action_used_by_ungrouped_private_agent(
-    env: _ScopedEnv,
-) -> None:
-    # A private agent in NO group is a personal agent outside the manager's scope;
-    # its presence must block editing even alongside a managed-group agent (the
-    # ungrouped agent adds no group to the union, so it must be tracked explicitly).
-    tool_id = _create_custom_tool(env.admin)
-    PersonaManager.create(
-        user_performing_action=env.admin,
-        is_public=False,
-        groups=[env.managed_group.id],
-        tool_ids=[tool_id],
-    )
-    PersonaManager.create(
-        user_performing_action=env.admin,
-        is_public=False,
-        groups=[],
-        tool_ids=[tool_id],
-    )
-    _assert_manager(env, "PUT", f"/admin/tool/custom/{tool_id}", "denied", _tool_body())
-
-
-def test_manager_cannot_delete_action(env: _ScopedEnv) -> None:
-    # Owns it — still denied: delete is admin-only (no allow_scope on the route).
+def test_manager_edits_own_action(env: _ScopedEnv) -> None:
     tool_id = _create_custom_tool(env.manager)
+    _assert_manager(
+        env, "PUT", f"/admin/tool/custom/{tool_id}", "allowed", _tool_body()
+    )
+
+
+def test_manager_deletes_own_action(env: _ScopedEnv) -> None:
+    tool_id = _create_custom_tool(env.manager)
+    _assert_manager(env, "DELETE", f"/admin/tool/custom/{tool_id}", "allowed")
+
+
+def test_manager_cannot_edit_unowned_action(env: _ScopedEnv) -> None:
+    # Owner-or-admin: a manager can't edit an admin-created action, even one used by an agent
+    # in a group they manage (managers get read visibility + their own, not others').
+    tool_id = _create_custom_tool(env.admin)
+    PersonaManager.create(
+        user_performing_action=env.admin,
+        is_public=False,
+        groups=[env.managed_group.id],
+        tool_ids=[tool_id],
+    )
+    _assert_manager(env, "PUT", f"/admin/tool/custom/{tool_id}", "denied", _tool_body())
+
+
+def test_manager_cannot_delete_unowned_action(env: _ScopedEnv) -> None:
+    tool_id = _create_custom_tool(env.admin)
     _assert_manager(env, "DELETE", f"/admin/tool/custom/{tool_id}", "denied")
 
 
-# --- MCP servers ------------------------------------------------------------
+# --- MCP servers (owner-or-admin) -------------------------------------------
 
 
 def test_manager_creates_mcp_server(env: _ScopedEnv) -> None:
     _create_mcp_server(env.manager)
 
 
-def test_manager_cannot_delete_mcp_server(env: _ScopedEnv) -> None:
-    # Owns it — still denied: MCP delete is admin-only.
+def test_manager_deletes_own_mcp_server(env: _ScopedEnv) -> None:
     server_id = _create_mcp_server(env.manager)
+    _assert_manager(env, "DELETE", f"/admin/mcp/server/{server_id}", "allowed")
+
+
+def test_manager_cannot_delete_unowned_mcp_server(env: _ScopedEnv) -> None:
+    server_id = _create_mcp_server(env.admin)
     _assert_manager(env, "DELETE", f"/admin/mcp/server/{server_id}", "denied")
 
 
 def test_manager_update_via_servers_create_denied_not_masked(
     env: _ScopedEnv,
 ) -> None:
-    # Updating an out-of-scope server through /servers/create must surface the
-    # gate's 403, not a 500 masked by the handler's blanket except.
+    # Updating an unowned server through /servers/create must surface the gate's 403, not a
+    # 500 masked by the handler's blanket except.
     server_id = _create_mcp_server(env.admin)
     body = {
         "name": f"mcp-{uuid4()}",

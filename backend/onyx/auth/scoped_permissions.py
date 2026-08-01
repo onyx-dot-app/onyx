@@ -33,33 +33,6 @@ def get_scoped_groups(
     return fetch_managed_group_ids(user, db_session)
 
 
-def agent_mediated_scope_allows(
-    user: User,
-    db_session: Session,
-    *,
-    group_ids: set[int],
-    has_public_agent: bool,
-    has_ungrouped_private_agent: bool,
-    managed_group_ids: set[int] | None = None,
-) -> bool:
-    """Shared GATE 2 tail for resources whose scope is derived from the agents that
-    reference them (custom actions, MCP servers). A scoped manager is in scope iff
-    every referencing agent is private and in a group they manage: no agent is
-    public or ungrouped-private, there is ≥1 group, and every group is managed.
-    Callers resolve owner/admin bypasses first.
-
-    ``managed_group_ids`` lets a caller pass a preloaded managed set so per-row
-    stamping issues no query; ``None`` re-queries."""
-    if has_public_agent or has_ungrouped_private_agent or not group_ids:
-        return False
-    managed = (
-        managed_group_ids
-        if managed_group_ids is not None
-        else get_scoped_groups(user, db_session, Permission.MANAGE_ACTIONS)
-    )
-    return group_ids.issubset(managed)
-
-
 def within_scope(
     user: User,
     db_session: Session,

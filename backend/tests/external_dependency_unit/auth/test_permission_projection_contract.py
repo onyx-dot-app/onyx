@@ -63,15 +63,12 @@ from onyx.db.persona import is_persona_editable_by_user
 from onyx.db.persona import persona_edit_within_scope
 from onyx.db.skill import get_group_ids_for_skill
 from onyx.db.token_limit import insert_global_token_rate_limit
-from onyx.db.tools import can_admin_mcp_server
-from onyx.db.tools import can_edit_custom_tool
-from onyx.db.tools import can_edit_mcp_server
+from onyx.db.tools import can_manage_mcp_server
 from onyx.db.tools import can_manage_own_tool
 from onyx.error_handling.exceptions import OnyxError
-from onyx.server.features.mcp.api import _ensure_mcp_server_editable
 from onyx.server.features.mcp.api import _ensure_mcp_server_owner_or_admin
+from onyx.server.features.mcp.api import _ensure_mcp_server_viewable
 from onyx.server.features.persona.models import PersonaUpsertRequest
-from onyx.server.features.tool.api import _get_editable_custom_tool
 from onyx.server.features.tool.api import _get_manageable_custom_tool
 from onyx.server.token_rate_limits.models import TokenRateLimitArgs
 from tests.external_dependency_unit.conftest import create_test_user
@@ -486,19 +483,14 @@ def _make_skill(
 
 
 def test_tool_projection_matches_gates(db_session: Session) -> None:
-    """edit tracks _get_editable_custom_tool (admin ∨ creator ∨ scoped-in-scope);
-    delete/toggle/authenticate track _get_manageable_custom_tool (owner-or-admin). The
-    creator fully controls the action they made; a scoped manager in the action's group can
-    edit but not manage it."""
+    """Every action affordance (edit, delete, toggle, authenticate) is owner-or-admin, pinned
+    to _get_manageable_custom_tool. The creator fully controls the action they made; a scoped
+    manager whose group the action is connected to may view/create but not manage it."""
     managed = _make_group(db_session)
 
     in_scope = create_test_user(db_session, "proj-tool-in")
     _manage(db_session, in_scope, managed)
     in_scope.effective_permissions = []
-
-    out_scope = create_test_user(db_session, "proj-tool-out")
-    _manage(db_session, out_scope, _make_group(db_session))
-    out_scope.effective_permissions = []
 
     # scoped manager who owns the action (via a group unrelated to the action's agents)
     creator = create_test_user(db_session, "proj-tool-creator")
@@ -509,56 +501,53 @@ def test_tool_projection_matches_gates(db_session: Session) -> None:
     db_session.commit()
 
     tool = _make_tool(db_session, creator=creator)
-    # a private agent in the managed group references the action -> scoped to `managed`
+    # a private agent in the managed group references the action -> connected to `managed`
     persona = _make_persona(
         db_session, owner=creator, is_public=False, groups=[managed]
     )
     _link_persona_tool(db_session, persona, tool)
 
-    for actor in (in_scope, out_scope, creator, admin):
-        edit_enforced = not _guard_raises(
-            _get_editable_custom_tool, tool.id, db_session, actor
-        )
-        can_edit = can_edit_custom_tool(actor, tool, db_session)
-        assert can_edit == edit_enforced, actor.email
+    for actor in (in_scope, creator, admin):
         manage_enforced = not _guard_raises(
             _get_manageable_custom_tool, tool.id, db_session, actor
         )
         can_manage = can_manage_own_tool(actor, tool)
         assert can_manage == manage_enforced, actor.email
-        tags = tool_permissions(can_edit=can_edit, can_manage=can_manage)
-        assert tags["edit"] == edit_enforced
-        assert tags["delete"] == manage_enforced
-        assert tags["toggle"] == manage_enforced
-        assert tags["authenticate"] == manage_enforced
+        assert tool_permissions(can_manage=can_manage) == {
+            "edit": manage_enforced,
+            "delete": manage_enforced,
+            "toggle": manage_enforced,
+            "authenticate": manage_enforced,
+        }
 
-    assert tool_permissions(
-        can_edit=can_edit_custom_tool(in_scope, tool, db_session),
-        can_manage=can_manage_own_tool(in_scope, tool),
-    ) == {"edit": True, "delete": False, "toggle": False, "authenticate": False}
-
-    assert tool_permissions(
-        can_edit=can_edit_custom_tool(creator, tool, db_session),
-        can_manage=can_manage_own_tool(creator, tool),
-    ) == {"edit": True, "delete": True, "toggle": True, "authenticate": True}
+    # a manager of the action's connected group can't manage it (only creator/admin can)
+    assert tool_permissions(can_manage=can_manage_own_tool(in_scope, tool)) == {
+        "edit": False,
+        "delete": False,
+        "toggle": False,
+        "authenticate": False,
+    }
+    # the creator fully controls the action they made
+    assert tool_permissions(can_manage=can_manage_own_tool(creator, tool)) == {
+        "edit": True,
+        "delete": True,
+        "toggle": True,
+        "authenticate": True,
+    }
 
 
 def test_mcp_projection_matches_gates(db_session: Session) -> None:
-    """edit tracks _ensure_mcp_server_editable (admin ∨ owner ∨ scoped); delete/
-    authenticate/manage_status track _ensure_mcp_server_owner_or_admin (admin ∨ owner). A
-    scoped manager edits a managed server but can never delete/authenticate/change its
-    status."""
+    """Every MCP action affordance is owner-or-admin, pinned to
+    _ensure_mcp_server_owner_or_admin. A scoped manager whose group the server is connected to
+    may view it (_ensure_mcp_server_viewable) but not manage it."""
     managed = _make_group(db_session)
 
     in_scope = create_test_user(db_session, "proj-mcp-in")
     _manage(db_session, in_scope, managed)
     in_scope.effective_permissions = []
 
-    out_scope = create_test_user(db_session, "proj-mcp-out")
-    _manage(db_session, out_scope, _make_group(db_session))
-    out_scope.effective_permissions = []
-
     owner = create_test_user(db_session, "proj-mcp-owner")
+    _manage(db_session, owner, _make_group(db_session))
     owner.effective_permissions = []
 
     admin = create_test_user(db_session, "proj-mcp-admin", is_admin=True)
@@ -569,32 +558,28 @@ def test_mcp_projection_matches_gates(db_session: Session) -> None:
     persona = _make_persona(db_session, owner=owner, is_public=False, groups=[managed])
     _link_persona_tool(db_session, persona, tool)
 
-    for actor in (in_scope, out_scope, owner, admin):
-        edit_enforced = not _guard_raises(
-            _ensure_mcp_server_editable, server, actor, db_session
-        )
-        admin_enforced = not _guard_raises(
+    for actor in (in_scope, owner, admin):
+        manage_enforced = not _guard_raises(
             _ensure_mcp_server_owner_or_admin, server, actor
         )
-        can_edit = can_edit_mcp_server(actor, server, db_session)
-        can_admin = can_admin_mcp_server(actor, server)
-        assert can_edit == edit_enforced, actor.email
-        assert can_admin == admin_enforced, actor.email
-        tags = mcp_server_permissions(can_edit=can_edit, can_admin=can_admin)
-        assert tags["edit"] == edit_enforced
-        assert tags["delete"] == admin_enforced
-        assert tags["authenticate"] == admin_enforced
-        assert tags["manage_status"] == admin_enforced
+        can_manage = can_manage_mcp_server(actor, server)
+        assert can_manage == manage_enforced, actor.email
+        assert mcp_server_permissions(can_manage=can_manage) == {
+            "edit": manage_enforced,
+            "delete": manage_enforced,
+            "authenticate": manage_enforced,
+            "manage_status": manage_enforced,
+        }
 
-    # in-scope manager edits but can't delete/authenticate/manage_status
-    assert mcp_server_permissions(
-        can_edit=can_edit_mcp_server(in_scope, server, db_session),
-        can_admin=can_admin_mcp_server(in_scope, server),
-    ) == {
+    # a manager of the server's connected group may VIEW but not manage it
+    assert not _guard_raises(_ensure_mcp_server_viewable, server, in_scope, db_session)
+    assert can_manage_mcp_server(in_scope, server) is False
+    # the owner fully manages their server
+    assert mcp_server_permissions(can_manage=can_manage_mcp_server(owner, server)) == {
         "edit": True,
-        "delete": False,
-        "authenticate": False,
-        "manage_status": False,
+        "delete": True,
+        "authenticate": True,
+        "manage_status": True,
     }
 
 
@@ -677,10 +662,8 @@ def test_skill_projection_matches_gates(db_session: Session) -> None:
 
 
 def test_actions_and_skill_key_coverage() -> None:
-    assert set(tool_permissions(can_edit=True, can_manage=True)) == set(TOOL_ACTIONS)
-    assert set(mcp_server_permissions(can_edit=True, can_admin=True)) == set(
-        MCP_SERVER_ACTIONS
-    )
+    assert set(tool_permissions(can_manage=True)) == set(TOOL_ACTIONS)
+    assert set(mcp_server_permissions(can_manage=True)) == set(MCP_SERVER_ACTIONS)
     assert set(
         custom_skill_permissions(
             can_edit=True, is_full_admin=True, is_skills_admin=True
