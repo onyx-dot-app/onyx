@@ -25,8 +25,9 @@ class UserGroup(BaseModel):
     is_up_to_date: bool
     is_up_for_deletion: bool
     is_default: bool
-    # Per-action affordance map for the requesting user (mirrors the write-side guards).
-    # Defaults empty (fail-closed); the admin group list stamps the real map.
+    # Per-action affordance map ({"manage": true, ...}) the client reads to show/hide
+    # controls. Empty default = every action denied (missing key is false), so it fails
+    # closed. Only the list-groups endpoint fills it in; the mutation routes leave it empty.
     permissions: dict[str, bool] = Field(default_factory=dict)
 
     @classmethod

@@ -16,8 +16,7 @@ interface AdminListHeaderProps {
   placeholder?: string;
   /** Text shown in the empty-state card when no items exist. */
   emptyStateText: string;
-  /** Called when the action button is clicked. Omit (with actionLabel) to hide it —
-   *  e.g. a scoped manager who may view the list but can't create. */
+  /** Action button click handler. Omit (with actionLabel) to hide the button. */
   onAction?: () => void;
   /** Label for the action button. Omit (with onAction) to hide it. */
   actionLabel?: string;

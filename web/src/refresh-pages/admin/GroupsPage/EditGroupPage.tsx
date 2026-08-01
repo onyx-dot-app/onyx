@@ -88,8 +88,6 @@ function EditGroupPage({ groupId }: EditGroupPageProps) {
     [groups, groupId]
   );
 
-  // Server-stamped per-group affordances. manage (M) gates membership/rename/save;
-  // delete is global MANAGE_USER_GROUPS; edit_permissions/edit_token_limits are FULL_ADMIN.
   const canManage = can(group, "manage");
   const canDelete = can(group, "delete");
   const canEditPermissions = can(group, "edit_permissions");
@@ -97,14 +95,15 @@ function EditGroupPage({ groupId }: EditGroupPageProps) {
 
   const isSyncing = group != null && !group.is_up_to_date;
 
-  // Fetch token rate limits for this group. Skip retry on tier-gated 402
-  // (BUSINESS-tier tenants don't have access) so SWR doesn't churn the form
-  // by repeatedly flipping its isLoading state.
+  // Gate on edit_token_limits so a non-manager (who'd 403 on the read) skips the fetch.
+  // Skip retry on tier-gated 402 so SWR doesn't churn isLoading.
   const { data: tokenRateLimits, isLoading: tokenLimitsLoading } = useSWR<
     TokenRateLimitDisplay[]
-  >(SWR_KEYS.userGroupTokenRateLimit(groupId), errorHandlingFetcher, {
-    onErrorRetry: skipRetryOnAuthError,
-  });
+  >(
+    canEditTokenLimits ? SWR_KEYS.userGroupTokenRateLimit(groupId) : null,
+    errorHandlingFetcher,
+    { onErrorRetry: skipRetryOnAuthError }
+  );
 
   // Fetch permissions for this group (admin only)
   const { data: groupPermissions, isLoading: permissionsLoading } = useSWR<
@@ -201,15 +200,14 @@ function EditGroupPage({ groupId }: EditGroupPageProps) {
   }, []);
 
   const managerIds = useMemo(() => new Set(group?.manager_ids ?? []), [group]);
-  // A manager must be an existing member, so a not-yet-saved member can't be assigned.
+  // Manager must be a saved member (can't assign one that isn't persisted yet).
   const persistedMemberIds = useMemo(
     () => new Set(group?.users.map((u) => u.id) ?? []),
     [group]
   );
   const [pendingManagerId, setPendingManagerId] = useState<string | null>(null);
 
-  // The manager toggle hits its dedicated endpoint immediately (unlike member
-  // add/remove, which defers to Save), then revalidates the group.
+  // Hits its endpoint immediately (member add/remove defers to Save), then revalidates.
   const handleToggleManager = useCallback(
     async (userId: string, makeManager: boolean) => {
       setPendingManagerId(userId);
@@ -348,8 +346,8 @@ function EditGroupPage({ groupId }: EditGroupPageProps) {
         selectedDocSetIds
       );
 
-      // Enterprise + FULL_ADMIN only — token PUT/DELETE are admin-only, so a scoped
-      // manager skips this.
+      // Group-scoped create/update/delete routes admit a group admin, so their full save
+      // (including PUT/DELETE of existing limits) is authorized.
       if (isEnterpriseTier && canEditTokenLimits) {
         await saveTokenLimits(groupId, tokenLimits, tokenRateLimits ?? []);
       }
@@ -581,7 +579,6 @@ function EditGroupPage({ groupId }: EditGroupPageProps) {
                 disabledTooltip={tokenLimitsDisabledTooltip}
               />
 
-              {/* Delete This Group — global MANAGE_USER_GROUPS only */}
               {canDelete && (
                 <Card>
                   <InputHorizontal

@@ -63,8 +63,7 @@ def list_user_groups(
     # implies it) sees every group; a scoped manager sees only the groups they
     # manage. The group list has no built-in membership filter, so restrict it here
     # or a manager would see the whole org.
-    # Resolve the manager's scope + global authority once; per-group stamping is then
-    # pure set math (manages_group with a preloaded set issues no query).
+    # Resolve scope + global authority once so per-group stamping is pure set math (no query).
     managed_group_ids = get_scoped_groups(
         user, db_session, Permission.MANAGE_USER_GROUPS
     )

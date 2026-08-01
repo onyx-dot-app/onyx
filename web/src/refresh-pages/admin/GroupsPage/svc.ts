@@ -228,7 +228,7 @@ async function saveTokenLimits(
     const limit = validLimits[i]!;
     const existingLimit = existing[i]!;
     const updateRes = await fetch(
-      `/api/admin/token-rate-limits/rate-limit/${existingLimit.token_id}`,
+      `/api/admin/token-rate-limits/user-group/${groupId}/rate-limit/${existingLimit.token_id}`,
       {
         method: "PUT",
         headers: { "Content-Type": "application/json" },
@@ -270,7 +270,7 @@ async function saveTokenLimits(
   for (let i = toUpdate; i < existing.length; i++) {
     const existingLimit = existing[i]!;
     const deleteRes = await fetch(
-      `/api/admin/token-rate-limits/rate-limit/${existingLimit.token_id}`,
+      `/api/admin/token-rate-limits/user-group/${groupId}/rate-limit/${existingLimit.token_id}`,
       { method: "DELETE" }
     );
     if (!deleteRes.ok) {
@@ -302,7 +302,6 @@ async function saveGroupPermissions(
   }
 }
 
-// Make/revoke a member as a manager of the group (dedicated PR5 endpoint).
 async function setGroupManager(
   groupId: number,
   userId: string,

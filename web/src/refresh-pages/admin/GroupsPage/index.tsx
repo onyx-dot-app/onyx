@@ -1,7 +1,7 @@
 "use client";
 
 import type { Route } from "next";
-import { useState } from "react";
+import { useMemo, useState } from "react";
 import { useRouter } from "next/navigation";
 import useSWR from "swr";
 import { SvgExternalLink, SvgUsers, SvgSimpleLoader } from "@opal/icons";
@@ -13,6 +13,7 @@ import { Permission } from "@/lib/types";
 import { SWR_KEYS } from "@/lib/swr-keys";
 import { useUser } from "@/providers/UserProvider";
 import { hasPermission } from "@/lib/permissions";
+import { can } from "@/lib/permissions/resource-actions";
 import GroupsList from "./GroupsList";
 import AdminListHeader from "@/sections/admin/AdminListHeader";
 import { IllustrationContent } from "@opal/layouts";
@@ -23,9 +24,8 @@ function GroupsPage() {
   const [searchQuery, setSearchQuery] = useState("");
   const { user } = useUser();
 
-  // Creating a group is global-only (the create route has no allow_scope), so gate on
-  // the global token — not admin_capabilities, which would show it to scoped managers
-  // who would then 403.
+  // Create is global-only (route has no allow_scope); gate on the global token, not
+  // admin_capabilities, which would show it to scoped managers who'd then 403.
   const canCreateGroup = hasPermission(
     user?.effective_permissions ?? [],
     Permission.MANAGE_USER_GROUPS
@@ -36,6 +36,13 @@ function GroupsPage() {
     error,
     isLoading,
   } = useSWR<UserGroup[]>(SWR_KEYS.adminUserGroups, errorHandlingFetcher);
+
+  // The list is READ_USER_GROUPS-scoped (implied by MANAGE_LLMS etc.), so filter to
+  // manageable groups — else a read-only holder sees groups with no open action.
+  const manageableGroups = useMemo(
+    () => (groups ?? []).filter((group) => can(group, "manage")),
+    [groups]
+  );
 
   return (
     <SettingsLayouts.Root>
@@ -65,7 +72,7 @@ function GroupsPage() {
 
       <SettingsLayouts.Body>
         <AdminListHeader
-          hasItems={!isLoading && !error && (groups?.length ?? 0) > 0}
+          hasItems={!isLoading && !error && manageableGroups.length > 0}
           searchQuery={searchQuery}
           onSearchQueryChange={setSearchQuery}
           placeholder="Search groups..."
@@ -89,7 +96,7 @@ function GroupsPage() {
         )}
 
         {!isLoading && !error && groups && (
-          <GroupsList groups={groups} searchQuery={searchQuery} />
+          <GroupsList groups={manageableGroups} searchQuery={searchQuery} />
         )}
       </SettingsLayouts.Body>
     </SettingsLayouts.Root>
