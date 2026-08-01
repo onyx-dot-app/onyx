@@ -229,8 +229,13 @@ class ModelListResponse(_WireModel):
 
 
 class ResponsesRequest(BaseModel):
-    """Codex sends ``store: false`` and no ``previous_response_id``, so
-    conversation persistence is intentionally not implemented."""
+    """Conversation persistence is not implemented: every request must carry its
+    own history. ``previous_response_id`` is declared so it is refused rather
+    than silently ignored by ``extra="allow"``.
+
+    ``store`` stays tolerated-and-ignored on purpose — the retrieval endpoint it
+    implies does not exist, so a caller cannot be misled into trusting stored
+    state mid-turn, and OpenAI's own default is ``true``."""
 
     model_config = ConfigDict(extra="allow")
 
@@ -243,6 +248,7 @@ class ResponsesRequest(BaseModel):
     max_output_tokens: int | None = None
     temperature: float | None = None
     reasoning: dict[str, Any] | None = None
+    previous_response_id: str | None = None
 
 
 # Subset of the Responses error enum we can actually produce; the schema has
