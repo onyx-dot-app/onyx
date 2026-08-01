@@ -5,10 +5,9 @@ import { SelectButton } from "@opal/components";
 import { BuildLLMPopover } from "@/app/craft/components/BuildLLMPopover";
 import { useLLMProviders } from "@/lib/languageModels/hooks";
 import { getModelIcon } from "@/lib/languageModels";
-import {
-  BuildLlmSelection,
-  getDefaultLlmSelection,
-} from "@/app/craft/onboarding/constants";
+import { BuildLlmSelection } from "@/app/craft/onboarding/constants";
+import { getPreferredLlmSelection } from "@/app/craft/utils/llmPreferences";
+import { useUser } from "@/providers/UserProvider";
 
 interface ModelPickerButtonProps {
   // null → show the recommended default.
@@ -24,10 +23,11 @@ export default function ModelPickerButton({
   disabled = false,
 }: ModelPickerButtonProps) {
   const { llmProviders } = useLLMProviders();
+  const { user } = useUser();
 
   const effective = useMemo(
-    () => selection ?? getDefaultLlmSelection(llmProviders),
-    [selection, llmProviders]
+    () => selection ?? getPreferredLlmSelection(user?.id, llmProviders),
+    [selection, user?.id, llmProviders]
   );
 
   const displayName = useMemo(() => {

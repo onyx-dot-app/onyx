@@ -88,7 +88,7 @@ function Main() {
                 href="https://docs.unstructured.io/welcome"
                 target="_blank"
                 rel="noopener noreferrer"
-                className="text-action-link-05 underline-offset-4 hover:underline"
+                className="text-action-selection-05 underline-offset-4 hover:underline"
               >
                 here
               </a>

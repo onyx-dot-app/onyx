@@ -1,4 +1,4 @@
-import type { Meta, StoryObj } from "@storybook/react";
+import type { Meta, StoryObj } from "@storybook/react-vite";
 import { SWRConfig } from "swr";
 import { UserProvider } from "@/providers/UserProvider";
 import { BuildOnboardingProvider } from "@/app/craft/onboarding/BuildOnboardingProvider";
@@ -50,6 +50,7 @@ const llmResponse: LLMProviderResponse<LLMProviderDescriptor> = {
   providers: llmProviders,
   default_text: null,
   default_vision: null,
+  default_chat_naming: null,
 };
 
 const fallback = { [SWR_KEYS.llmProviders]: llmResponse };

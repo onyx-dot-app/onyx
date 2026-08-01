@@ -1,7 +1,8 @@
 from datetime import datetime
+from pathlib import PurePosixPath
 from typing import TYPE_CHECKING, Any, Union
 
-from pydantic import BaseModel
+from pydantic import BaseModel, ConfigDict, Field, field_validator
 
 from onyx.configs.constants import MessageType
 from onyx.db.enums import (
@@ -188,15 +189,45 @@ class SetSessionSharingResponse(BaseModel):
 
 
 # ===== Message Models =====
+class MessageAttachment(BaseModel):
+    """A sandbox file attached to a user message."""
+
+    name: str
+    path: str
+    mime_type: str
+
+    @field_validator("path")
+    @classmethod
+    def validate_attachment_path(cls, value: str) -> str:
+        path = PurePosixPath(value)
+        if (
+            path.is_absolute()
+            or len(path.parts) < 2
+            or path.parts[0] != "attachments"
+            or ".." in path.parts
+        ):
+            raise ValueError("Attachment path must be inside the attachments directory")
+        return value
+
+
 class MessageRequest(BaseModel):
     """Request to send a message to the CLI agent."""
 
     content: str
     client_request_id: str | None = None
+    attachments: list[MessageAttachment] = Field(default_factory=list)
     # Per-message model override from the composer; both set together.
     provider: str | None = None
     provider_id: int | None = None
     model: str | None = None
+
+
+class SubagentMessageRequest(BaseModel):
+    """A subagent follow-up does not support native file prompt parts."""
+
+    model_config = ConfigDict(extra="forbid")
+
+    content: str
 
 
 class MessageInterruptResponse(BaseModel):

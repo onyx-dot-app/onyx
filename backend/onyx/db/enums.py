@@ -217,6 +217,22 @@ class IndexModelStatus(str, PyEnum):
         return self == IndexModelStatus.FUTURE
 
 
+class IndexReclaimStatus(str, PyEnum):
+    """Lifecycle of reclaiming a now-PAST index's data after a reindex-port.
+
+    PENDING: consented at reindex submit; waiting for the swap + port to drain.
+    SOAKING: the old index stopped being read; waiting out the retention window.
+    DELETING: deleting the old index's data (loops until count-verified empty).
+    BLOCKED: parked after repeated failures; alerted, needs operator/cooldown revival.
+    On success the PAST row is deleted, so there is no persisted terminal state.
+    """
+
+    PENDING = "PENDING"
+    SOAKING = "SOAKING"
+    DELETING = "DELETING"
+    BLOCKED = "BLOCKED"
+
+
 class ChatSessionSharedStatus(str, PyEnum):
     PUBLIC = "public"
     PRIVATE = "private"
@@ -317,8 +333,20 @@ class OpenSearchTenantMigrationStatus(str, PyEnum):
 
 # Onyx Build Mode Enums
 class BuildSessionStatus(str, PyEnum):
+    """Lifecycle of a build session.
+
+    INITIALIZING: reserved identity committed; workspace/OpenCode setup is
+                  still reconciling (or was interrupted and is repairable).
+    ACTIVE:       workspace, config, and OpenCode session are usable.
+    IDLE:         sandbox slept; workspace must be restored before use.
+    FAILED:       initialization failed after the sandbox came up; the
+                  session identity is retained and repaired on retry.
+    """
+
+    INITIALIZING = "initializing"
     ACTIVE = "active"
     IDLE = "idle"
+    FAILED = "failed"
 
 
 class SessionOrigin(str, PyEnum):
@@ -545,6 +573,7 @@ class LLMModelFlowType(str, PyEnum):
     VISION = "vision"
     CONTEXTUAL_RAG = "contextual_rag"
     REASONING = "reasoning"
+    CHAT_NAMING = "chat_naming"
 
 
 class HookPoint(str, PyEnum):

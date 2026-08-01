@@ -9,6 +9,10 @@
 
 global:
   # Global version for all Onyx components (overrides .Chart.AppVersion)
+  # Every Onyx image publishes a -dev twin for each of its tags (e.g. "latest-dev",
+  # "v1.2.3-dev"), so this single value can select the dev variant of the whole
+  # deployment. Today only the backend image actually differs: its -dev twin adds
+  # debugging tools (vim, nano, curl, ps, psql) that the default image leaves out.
   version: "latest"
   # Global pull policy for all Onyx component images
   pullPolicy: "IfNotPresent"
@@ -308,6 +312,8 @@ config:
 tooling:
   pgInto:
     # -- Mounts a small helper script into app pods that opens psql using the pod's POSTGRES_* env vars.
+    # NOTE: the default backend images do not ship psql; set a -dev suffixed global.version
+    # (e.g. v1.2.3-dev) or use an image that provides the client binary.
     enabled: false
     # -- Where to place the helper inside the container.
     mountPath: /usr/local/bin/pginto
@@ -658,6 +664,14 @@ celery_beat:
   # this worker only — this becomes `--loglevel=<value>` on the celery worker
   # command and takes precedence over LOG_LEVEL inside the worker process.
   logLevel: ""
+  # Path of beat's schedule file. Kept under /tmp — where the chart mounts an
+  # emptyDir (unless volumeMounts below already provide /tmp) — so beat runs
+  # under hardened securityContexts (non-root or readOnlyRootFilesystem),
+  # which can't write celery's default location, the working directory /app.
+  # Set to "" to restore celery's default.
+  schedulePath: "/tmp/celerybeat-schedule"
+  # Extra CLI args appended to the celery beat command, after the flags above.
+  extraArgs: []
   podAnnotations: {}
   podLabels:
     scope: onyx-backend-celery
@@ -1316,6 +1330,8 @@ auth:
       rootUser: ""
       rootPassword: ""
   oauth:
+    # Legacy pre-v4.4 SSO credentials. Imported into an SSO provider entry on
+    # upgrade. Planned for removal in v4.5.
     # -- Enable or disable this secret entirely. Will remove from env var configurations and remove any created secrets.
     enabled: false
     # -- Overwrite the default secret name, ignored if existingSecret is defined
@@ -1455,15 +1471,19 @@ configMap:
   # Leave SANDBOX_PROXY_PORT unset; the chart owns the internal proxy port.
   # SANDBOX_PROXY_HOST defaults to the chart-managed Service DNS name and may be
   # overridden only if sandboxes must reach a different proxy host.
+  # MODEL_SERVER_HOST / INDEXING_MODEL_SERVER_HOST default to the chart-managed
+  # model Services; set them here to point at external model servers instead
+  # (the chart defaults are then not rendered).
   # See deployment/helm/README.md for the external-Redis / ElastiCache path.
 
-  # Auth type: "basic" (default), "google_oauth", "oidc", or "saml"
-  # UPGRADE NOTE: Default changed from "disabled" to "basic" in 0.4.34.
+  # Authentication is always enabled (email/password). SSO (Google/OIDC/SAML)
+  # and its per-provider options are configured in the admin panel (Admin
+  # Panel > Organization > SSO Providers), not through environment variables.
+  # AUTH_TYPE stays as an inert default for the pre-v4.4 SSO import on
+  # upgrade. Planned for removal in v4.5.
   # Set auth.userauth.enabled=true and provide auth.userauth.values.user_auth_secret
-  # before enabling flows that require it.
+  # (signs password reset and email verification tokens and OAuth login state).
   AUTH_TYPE: "basic"
-  # Enable PKCE for OIDC login flow. Leave empty/false for backward compatibility.
-  OIDC_PKCE_ENABLED: ""
   # Opt-in: capture IdP directory claims at OAuth/OIDC login and use them to
   # enrich chat prompts and resolve {{user.<key>}} agent placeholders. Sends
   # directory data to the configured LLM, so off by default.
@@ -1527,6 +1547,10 @@ configMap:
   # Query Options
   DOC_TIME_DECAY: ""
   HYBRID_ALPHA: ""
+  # TEMPORARY (self-hosted only, will be removed soon): comma-separated document set
+  # NAMES. When set, the Onyx Search UI returns results only from those sets (chat is
+  # unaffected). Empty = no restriction.
+  FORCED_DOCUMENT_SET_NAMES: ""
   # Don't change the NLP models unless you know what you're doing
   EMBEDDING_BATCH_SIZE: ""
   DOCUMENT_ENCODER_MODEL: ""
@@ -1636,6 +1660,30 @@ sandboxPod:
       operator: Equal
       value: sandbox
       effect: NoSchedule
+
+# -- Pre-pull the sandbox image onto the sandbox node pool (DaemonSet), so a
+# user's first sandbox on a node doesn't pay the image pull (~31s measured).
+# Image and pull policy are shared with the sandbox-pod PodTemplate; scheduling
+# follows sandboxPod above. Only rendered when configMap.ENABLE_CRAFT is true.
+#
+# Costs ~3.3 GB of unreclaimable disk per sandbox node, on the same disk as the
+# sandbox workspaces. Disable on nodes without that headroom. Pin global.version
+# to an immutable tag when using this: a mutable tag like `latest` gets held at
+# whichever digest the node pulled first.
+sandboxImagePrepull:
+  enabled: true
+  resources:
+    cpu: 10m
+    memory: 32Mi
+    ephemeralStorage: 64Mi
+  # Name of an EXISTING PriorityClass to run the prepuller under. The chart
+  # creates none, so an unset value means the cluster default priority. Point
+  # this at a low/negative class if you want a pending sandbox pod to be able to
+  # preempt the prepuller.
+  priorityClassName: ""
+  # Nodes that repull at once on a tag bump. Raise to warm a large pool faster,
+  # at the cost of a thundering herd against the registry.
+  updateMaxUnavailable: "25%"
 
 # -- Sandbox egress proxy.
 sandboxProxy:

@@ -1,4 +1,5 @@
 import json
+import math
 import os
 import urllib.parse
 from datetime import datetime, timezone
@@ -77,6 +78,17 @@ DISABLE_USER_KNOWLEDGE = os.environ.get("DISABLE_USER_KNOWLEDGE", "").lower() ==
 # Disables vector DB (Vespa/OpenSearch) entirely. When True, connectors and RAG search
 # are disabled but core chat, tools, user file uploads, and Projects still work.
 DISABLE_VECTOR_DB = os.environ.get("DISABLE_VECTOR_DB", "").lower() == "true"
+
+# TEMPORARY (will be removed soon): operator-forced Search-UI scope (self-hosted only) —
+# comma-separated document set NAMES. When set, the Onyx Search UI is restricted to those sets
+# (AND'd on top of any persona/user scope; ACL still enforced) — chat/other flows are unaffected,
+# and it is disabled under MULTI_TENANT. Empty = no restriction. Names match the index directly; a
+# name that doesn't exist matches nothing (fail-closed) and is logged. Read at import — restart to change.
+FORCED_DOCUMENT_SET_NAMES: list[str] = [
+    name.strip()
+    for name in os.environ.get("FORCED_DOCUMENT_SET_NAMES", "").split(",")
+    if name.strip()
+]
 
 # Which backend to use for caching, locks, and ephemeral state.
 # "redis" (default) or "postgres" (only valid when DISABLE_VECTOR_DB=true).
@@ -603,14 +615,54 @@ POSTGRES_HOST = os.environ.get("POSTGRES_HOST") or "127.0.0.1"
 POSTGRES_PORT = os.environ.get("POSTGRES_PORT") or "5432"
 POSTGRES_DB = os.environ.get("POSTGRES_DB") or "postgres"
 AWS_REGION_NAME = os.environ.get("AWS_REGION_NAME") or "us-east-2"
-# Comma-separated replica / multi-host list. If unset, defaults to POSTGRES_HOST
-# only.
-_POSTGRES_HOSTS_STR = os.environ.get("POSTGRES_HOSTS", "").strip()
-POSTGRES_HOSTS: list[str] = (
-    [h.strip() for h in _POSTGRES_HOSTS_STR.split(",") if h.strip()]
-    if _POSTGRES_HOSTS_STR
-    else [POSTGRES_HOST]
+
+# --- Tenant sharding (multi-database) ---------------------------------------
+# Onyx addresses a tenant by schema (`schema_translate_map`). These settings let
+# tenants additionally be spread across separate physical databases ("shards").
+#
+# ONYX_DB_SHARDS is a JSON object of shard name -> connection overrides, e.g.
+#   {"shard-b": {"host": "other.rds.amazonaws.com", "db": "danswer"}}
+# Keys not supplied for a shard fall back to the POSTGRES_* values above.
+#
+# When unset, exactly one shard exists (named by ONYX_DB_DEFAULT_SHARD, built
+# from POSTGRES_*), which is the single-database behavior Onyx has always had.
+ONYX_DB_SHARDS_JSON = os.environ.get("ONYX_DB_SHARDS", "").strip()
+# Shard that hosts tenants with no explicit mapping.
+ONYX_DB_DEFAULT_SHARD = os.environ.get("ONYX_DB_DEFAULT_SHARD") or "default"
+# Shard that holds the shared `public` catalog tables (user_tenant_mapping etc.)
+# and the tenant -> shard map itself. Must be resolvable without a lookup.
+ONYX_DB_CATALOG_SHARD = os.environ.get("ONYX_DB_CATALOG_SHARD") or ONYX_DB_DEFAULT_SHARD
+# Operator escape hatch: JSON object of tenant_id -> shard name, consulted
+# before the catalog table. Intended for incident response, not routine use.
+ONYX_DB_SHARD_OVERRIDES_JSON = os.environ.get("ONYX_DB_SHARD_OVERRIDES", "").strip()
+# How long a resolved tenant -> shard mapping is cached in-process. This is the
+# backstop on staleness when the Redis version channel is unavailable.
+ONYX_DB_SHARD_MAP_TTL_SECONDS = int(
+    os.environ.get("ONYX_DB_SHARD_MAP_TTL_SECONDS") or 60
 )
+# How often a process re-reads the shared shard-map version from Redis. Bounds how
+# quickly a migrator's map flip reaches every process in the common case; the freeze
+# window itself is bounded by the TTL above, since a Redis-partitioned process never
+# sees the flip at all.
+ONYX_DB_SHARD_MAP_VERSION_POLL_SECONDS = float(
+    os.environ.get("ONYX_DB_SHARD_MAP_VERSION_POLL_SECONDS") or 5
+)
+
+if ONYX_DB_SHARD_MAP_TTL_SECONDS <= 0:
+    raise ValueError(
+        f"ONYX_DB_SHARD_MAP_TTL_SECONDS must be positive, got "
+        f"{ONYX_DB_SHARD_MAP_TTL_SECONDS}"
+    )
+if (
+    not math.isfinite(ONYX_DB_SHARD_MAP_VERSION_POLL_SECONDS)
+    or ONYX_DB_SHARD_MAP_VERSION_POLL_SECONDS <= 0
+):
+    # A non-finite interval would stop the poller permanently, silently reducing
+    # flip propagation to the TTL path.
+    raise ValueError(
+        f"ONYX_DB_SHARD_MAP_VERSION_POLL_SECONDS must be a positive finite number, "
+        f"got {ONYX_DB_SHARD_MAP_VERSION_POLL_SECONDS}"
+    )
 
 POSTGRES_API_SERVER_POOL_SIZE = int(
     os.environ.get("POSTGRES_API_SERVER_POOL_SIZE") or 40
@@ -997,6 +1049,31 @@ MAX_CONCURRENT_USER_FILE_PORT_ATTEMPTS = max(
 # _MAX_TRACKED_FAILED_RETRIES (db/port_attempt.py) sizes its streak history to cover it.
 MAX_CONSECUTIVE_PORT_FAILURES_BEFORE_PAUSE = max(
     1, _non_negative_int_env("MAX_CONSECUTIVE_PORT_FAILURES_BEFORE_PAUSE", 5)
+)
+
+# Old-index reclamation (post-reindex deletion of the now-PAST index).
+# Master switch: when False the reclaim beat task no-ops entirely. Ships dark
+# (default off); flip True to go live. Instant kill switch if anything goes wrong.
+OLD_INDEX_RECLAIM_ENABLED = (
+    os.environ.get("OLD_INDEX_RECLAIM_ENABLED", "").lower() == "true"
+)
+# Soak before deleting a PAST index, anchored to when it stopped being read.
+# 0 = delete immediately once the soak gate is reached.
+OLD_INDEX_RETENTION_HOURS = _non_negative_int_env("OLD_INDEX_RETENTION_HOURS", 24)
+# Bounds the blast radius of a runaway task.
+OLD_INDEX_RECLAIM_MAX_PER_RUN = max(
+    1, _non_negative_int_env("OLD_INDEX_RECLAIM_MAX_PER_RUN", 5)
+)
+# Consecutive failures on one reclaim before it is parked as BLOCKED and alerted.
+OLD_INDEX_RECLAIM_MAX_ATTEMPTS = max(
+    1, _non_negative_int_env("OLD_INDEX_RECLAIM_MAX_ATTEMPTS", 5)
+)
+# Max docs a single reclaim delete_by_query removes before returning, so one call
+# can't run past the OpenSearch client HTTP timeout (60s) on a huge tenant. The reclaim
+# loop re-runs until the tenant's slice is empty. Conservative default leaves margin on
+# a slow / loaded cluster (the fleet-reindex case); tune up for fast clusters.
+OLD_INDEX_RECLAIM_DELETE_BATCH_SIZE = max(
+    1, _non_negative_int_env("OLD_INDEX_RECLAIM_DELETE_BATCH_SIZE", 10_000)
 )
 
 _CELERY_WORKER_DOCFETCHING_CONCURRENCY_DEFAULT = 1

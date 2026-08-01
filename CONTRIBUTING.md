@@ -317,6 +317,11 @@ docker compose up -d --build
 > Pulling the pre-built `onyxdotapp/onyx-web-server` / `onyxdotapp/onyx-model-server` images
 > (the default `docker compose up -d` without `--build`) does not require this.
 
+> **Note:** `docker-compose.yml`, `docker-compose.prod.yml` and
+> `docker-compose.prod-no-letsencrypt.yml` are generated from `docker-compose.template.yml`
+> by `ods generate-compose` (enforced by the `docker-compose-sync` pre-commit hook) — edit
+> the template, not the generated files. See `deployment/docker_compose/README.md`.
+
 ---
 
 ## macOS-Specific Notes

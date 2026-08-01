@@ -167,7 +167,7 @@ def enqueue_user_file_project_sync_task(
     return True
 
 
-@shared_task(
+@shared_task(  # ty: ignore[invalid-argument-type]
     name=OnyxCeleryTask.CHECK_FOR_USER_FILE_PROCESSING,
     soft_time_limit=300,
     bind=True,
@@ -728,7 +728,7 @@ def process_user_file_impl(
             file_lock.release()
 
 
-@shared_task(
+@shared_task(  # ty: ignore[invalid-argument-type]
     name=OnyxCeleryTask.PROCESS_SINGLE_USER_FILE,
     bind=True,
     ignore_result=True,
@@ -744,7 +744,7 @@ def process_single_user_file(
     )
 
 
-@shared_task(
+@shared_task(  # ty: ignore[invalid-argument-type]
     name=OnyxCeleryTask.CHECK_FOR_USER_FILE_DELETE,
     soft_time_limit=300,
     bind=True,
@@ -964,7 +964,7 @@ def delete_user_file_impl(
             file_lock.release()
 
 
-@shared_task(
+@shared_task(  # ty: ignore[invalid-argument-type]
     name=OnyxCeleryTask.DELETE_SINGLE_USER_FILE,
     bind=True,
     ignore_result=True,
@@ -980,7 +980,7 @@ def process_single_user_file_delete(
     )
 
 
-@shared_task(
+@shared_task(  # ty: ignore[invalid-argument-type]
     name=OnyxCeleryTask.CHECK_FOR_USER_FILE_PROJECT_SYNC,
     soft_time_limit=300,
     bind=True,
@@ -1182,7 +1182,7 @@ def project_sync_user_file_impl(
             file_lock.release()
 
 
-@shared_task(
+@shared_task(  # ty: ignore[invalid-argument-type]
     name=OnyxCeleryTask.PROCESS_SINGLE_USER_FILE_PROJECT_SYNC,
     bind=True,
     ignore_result=True,

@@ -35,6 +35,8 @@ payload snapshots so tests assert observable manager outcomes:
   ``last_cleanup_session_workspace_payload``,
   ``last_restore_snapshot_payload``, ``last_send_message_payload``,
   ``last_write_sandbox_file_payload``, ``last_write_files_to_sandbox_payload``.
+- ``session_runtime_call_order`` records config regeneration, instance disposal,
+  and session prewarming in invocation order.
 
 Usage
 -----
@@ -60,6 +62,7 @@ from onyx.server.features.build.sandbox.models import (
     CraftMCPServerConfig,
     FileSet,
     FilesystemEntry,
+    PromptAttachment,
     SandboxInfo,
     SnapshotResult,
 )
@@ -206,6 +209,7 @@ class StubSandboxManager(SandboxManager):
         self.health_check_count: int = 0
         self.ensure_opencode_session_count: int = 0
         self.last_ensure_opencode_session_payload: dict[str, Any] | None = None
+        self.session_runtime_call_order: list[str] = []
         self.send_message_count: int = 0
         self.subscribe_to_opencode_session_count: int = 0
         self.list_directory_count: int = 0
@@ -281,7 +285,8 @@ class StubSandboxManager(SandboxManager):
         sandbox_id: UUID,
         user_id: UUID,
         tenant_id: str,
-        onyx_pat: str | None = None,
+        onyx_pat: str | None,
+        provisioning_attempt_number: int,
     ) -> SandboxInfo:
         self.provision_count += 1
         self.last_provision_payload = {
@@ -289,6 +294,7 @@ class StubSandboxManager(SandboxManager):
             "user_id": user_id,
             "tenant_id": tenant_id,
             "onyx_pat": onyx_pat,
+            "provisioning_attempt_number": provisioning_attempt_number,
         }
         if self.provision_returns is None:
             raise _not_configured("provision")
@@ -350,6 +356,7 @@ class StubSandboxManager(SandboxManager):
         llm_config: CraftLLMProviderConfig | None = None,
         mcp_servers: Sequence[CraftMCPServerConfig] = (),
     ) -> None:
+        self.session_runtime_call_order.append("regenerate_session_config")
         self.regenerate_session_config_count += 1
         self.last_regenerate_session_config_payload = {
             "sandbox_id": sandbox_id,
@@ -453,7 +460,7 @@ class StubSandboxManager(SandboxManager):
             raise _not_configured("list_session_workspaces")
         return list(self.list_session_workspaces_returns)
 
-    def health_check(self, sandbox_id: UUID, timeout: float = 60.0) -> bool:
+    def health_check(self, sandbox_id: UUID, timeout: float) -> bool:
         self.health_check_count += 1
         self.last_health_check_payload = {
             "sandbox_id": sandbox_id,
@@ -488,6 +495,7 @@ class StubSandboxManager(SandboxManager):
         sandbox_id: UUID,
         session_id: UUID,
     ) -> None:
+        self.session_runtime_call_order.append("dispose_opencode_instance")
         self.dispose_opencode_instance_count += 1
         self.last_dispose_opencode_instance_payload = {
             "sandbox_id": sandbox_id,
@@ -506,6 +514,7 @@ class StubSandboxManager(SandboxManager):
     ) -> str | None:
         # Override the real _ServeMixin preflight (which POSTs /session over
         # HTTP to a pod) so send_message tests run fully in-memory.
+        self.session_runtime_call_order.append("ensure_opencode_session")
         self.ensure_opencode_session_count += 1
         self.last_ensure_opencode_session_payload = {
             "sandbox_id": sandbox_id,
@@ -520,6 +529,7 @@ class StubSandboxManager(SandboxManager):
         session_id: UUID,
         message: str,
         *,
+        attachments: list[PromptAttachment] | None = None,
         opencode_session_id: str | None = None,
         agent_provider: str | None = None,
         agent_model: str | None = None,
@@ -533,6 +543,7 @@ class StubSandboxManager(SandboxManager):
             "sandbox_id": sandbox_id,
             "session_id": session_id,
             "message": message,
+            "attachments": attachments,
             "opencode_session_id": opencode_session_id,
             "agent_provider": agent_provider,
             "agent_model": agent_model,

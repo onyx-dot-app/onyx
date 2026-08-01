@@ -13,7 +13,8 @@ import { ApplicationStatus } from "@/lib/settings/types";
 import Text from "@/refresh-components/texts/Text";
 import { SvgLock } from "@opal/icons";
 
-const linkClassName = "text-action-link-05 hover:text-action-link-06 underline";
+const linkClassName =
+  "text-action-selection-05 hover:text-action-selection-06 underline";
 
 interface ResubscriptionSessionResponse {
   sessionId: string | null;

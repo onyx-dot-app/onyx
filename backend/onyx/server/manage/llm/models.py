@@ -225,6 +225,10 @@ class ModelConfigurationView(BaseModel):
     name: str
     is_visible: bool
     max_input_tokens: int | None = None
+    # The persisted override/source value, before static-provider capability
+    # enrichment. Internal consumers use this to distinguish an intentional
+    # limit from a fallback inferred from the display model name.
+    configured_max_input_tokens: int | None = Field(default=None, exclude=True)
     supports_image_input: bool
     supports_reasoning: bool = False
     # True when this is the provider's recommended default model.
@@ -258,6 +262,7 @@ class ModelConfigurationView(BaseModel):
                 name=model_configuration_model.name,
                 is_visible=model_configuration_model.is_visible,
                 max_input_tokens=model_configuration_model.max_input_tokens,
+                configured_max_input_tokens=model_configuration_model.max_input_tokens,
                 # Dynamic/custom-config providers under-report vision; fall back
                 # to the LiteLLM cost map when no VISION flow is stored.
                 supports_image_input=(
@@ -317,6 +322,7 @@ class ModelConfigurationView(BaseModel):
                     model_provider=provider_name,
                 )
             ),
+            configured_max_input_tokens=model_configuration_model.max_input_tokens,
             supports_image_input=(
                 True
                 if LLMModelFlowType.VISION
@@ -500,6 +506,7 @@ class LLMProviderResponse(BaseModel, Generic[T]):
     providers: list[T]
     default_text: DefaultModel | None = None
     default_vision: DefaultModel | None = None
+    default_chat_naming: DefaultModel | None = None
 
     @classmethod
     def from_models(
@@ -507,11 +514,13 @@ class LLMProviderResponse(BaseModel, Generic[T]):
         providers: list[T],
         default_text: DefaultModel | None = None,
         default_vision: DefaultModel | None = None,
+        default_chat_naming: DefaultModel | None = None,
     ) -> LLMProviderResponse[T]:
         return cls(
             providers=providers,
             default_text=default_text,
             default_vision=default_vision,
+            default_chat_naming=default_chat_naming,
         )
 
 
@@ -655,6 +664,22 @@ class OpenAICompatibleModelsRequest(BaseModel):
 
 class OpenAICompatibleFinalModelResponse(BaseModel):
     name: str  # Model ID (e.g. "meta-llama/Llama-3-8B-Instruct")
+    display_name: str  # Human-readable name from API
+    max_input_tokens: int | None
+    supports_image_input: bool
+    supports_reasoning: bool
+
+
+# Portkey dynamic models fetch
+class PortkeyModelsRequest(BaseModel):
+    api_base: str
+    api_key: str | None = None
+    # Existing provider id; resolves the stored key and syncs fetched models on edit
+    provider_id: int | None = None
+
+
+class PortkeyFinalModelResponse(BaseModel):
+    name: str  # Model ID (e.g. "gpt-4o", "claude-sonnet-5")
     display_name: str  # Human-readable name from API
     max_input_tokens: int | None
     supports_image_input: bool

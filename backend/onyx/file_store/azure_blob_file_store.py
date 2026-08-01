@@ -293,7 +293,7 @@ class AzureBlobBackedFileStore(FileStore):
             return temp_file
         else:
             # No encoding is set on download_blob(), so readall() returns bytes.
-            content = cast(bytes, blob_client.download_blob().readall())
+            content = blob_client.download_blob().readall()
             return BytesIO(content)
 
     def read_file_record(

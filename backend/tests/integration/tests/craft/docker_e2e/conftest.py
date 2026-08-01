@@ -42,11 +42,25 @@ class ProvisionSandbox(Protocol):
         *,
         llm_provider_type: str | None = None,
         llm_model_name: str | None = None,
+        headless: bool = True,
     ) -> DockerSandbox: ...
 
 
 def _container_name(sandbox_id: str) -> str:
     return f"sandbox-{sandbox_id.split('-')[0]}"
+
+
+def remove_container(container_name: str) -> None:
+    try:
+        subprocess.run(
+            ["docker", "rm", "-f", container_name],
+            capture_output=True,
+            text=True,
+            timeout=30.0,
+            check=False,
+        )
+    except Exception as exc:
+        print(f"WARNING: failed to remove container {container_name!r}: {exc}")
 
 
 def _docker_exec(
@@ -74,11 +88,13 @@ def _provision_sandbox(
     *,
     llm_provider_type: str | None = None,
     llm_model_name: str | None = None,
+    headless: bool = True,
 ) -> DockerSandbox:
     # Both default to None on the create request, so passing them through
     # unconditionally is equivalent to omitting them.
     session = BuildSessionManager.create(
         user,
+        headless=headless,
         llm_provider_type=llm_provider_type,
         llm_model_name=llm_model_name,
     )

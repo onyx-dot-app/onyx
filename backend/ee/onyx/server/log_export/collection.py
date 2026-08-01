@@ -45,10 +45,16 @@ def _find_log_files(log_directories: Sequence[Path]) -> list[Path]:
     for directory in log_directories:
         if not directory.is_dir():
             continue
+        root = directory.resolve()
         for path in sorted(directory.rglob(LOG_FILE_GLOB)):
             if not path.is_file():
                 continue
             resolved = path.resolve()
+            if not resolved.is_relative_to(root):
+                # A planted ``*.log*`` symlink pointing outside the log
+                # directory would otherwise pull arbitrary server-readable
+                # files into the archive.
+                continue
             if resolved in seen:
                 continue
             seen.add(resolved)

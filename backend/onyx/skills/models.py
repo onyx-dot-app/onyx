@@ -4,6 +4,7 @@ from typing import Final
 from pydantic import BaseModel, ConfigDict, Field, field_validator
 
 SKILL_NAME_PATTERN: Final[re.Pattern[str]] = re.compile(r"^[a-z0-9]+(?:-[a-z0-9]+)*$")
+GITHUB_SKILL_MAX_COUNT: Final[int] = 500
 
 
 class SkillMetadata(BaseModel):
@@ -74,3 +75,22 @@ class CustomSkillBundleContents(BaseModel):
 
     instructions_markdown: str
     files: list[SkillBundleFile]
+
+
+class GitHubRepository(BaseModel):
+    model_config = ConfigDict(frozen=True)
+
+    owner: str
+    repo: str
+    revision: str
+    subpath: str | None = None
+
+
+class GitHubSkillBundle(BaseModel):
+    model_config = ConfigDict(frozen=True)
+
+    path: str
+    name: str
+    description: str | None
+    bundle_bytes: bytes | None
+    unavailable_reason: str | None = None

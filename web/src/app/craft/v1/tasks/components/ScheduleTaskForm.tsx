@@ -22,6 +22,7 @@ import {
 import EntryPickerPopover from "@/sections/input/EntryPickerPopover";
 import useUserSkills from "@/hooks/useUserSkills";
 import useUserExternalApps from "@/hooks/useUserExternalApps";
+import { useCraftMcpServers } from "@/lib/tools/hooks";
 import {
   detectSlashTrigger,
   pickerEntryConnectionPath,
@@ -86,9 +87,11 @@ export default function ScheduleTaskForm({
   const promptTextareaRef = useRef<HTMLTextAreaElement>(null);
   const { data: skillsData } = useUserSkills();
   const { data: externalAppsData } = useUserExternalApps();
+  const { data: craftMcpData } = useCraftMcpServers();
   const pickerSections = useMemo(
-    () => toPickerSections(skillsData, externalAppsData),
-    [skillsData, externalAppsData]
+    () =>
+      toPickerSections(skillsData, externalAppsData, craftMcpData?.mcp_servers),
+    [skillsData, externalAppsData, craftMcpData]
   );
   const [skillPicker, setSkillPicker] = useState<{
     open: boolean;

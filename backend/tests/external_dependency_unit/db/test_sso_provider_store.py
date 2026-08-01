@@ -68,6 +68,8 @@ def test_create_and_fetch_roundtrip(db_session: Session, provider_name: str) -> 
     assert fetched.config.get_value(apply_mask=False) == {
         **_GOOGLE_CONFIG,
         "legacy_callback": False,
+        "pkce_enabled": False,
+        "scopes": [],
     }
     assert fetched.config.get_value(apply_mask=True)["client_secret"] != "super-secret"
 
@@ -179,6 +181,8 @@ def test_partial_update_preserves_config(
     assert updated.config.get_value(apply_mask=False) == {
         **_GOOGLE_CONFIG,
         "legacy_callback": False,
+        "pkce_enabled": False,
+        "scopes": [],
     }
 
 

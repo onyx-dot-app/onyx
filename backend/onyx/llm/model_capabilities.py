@@ -185,9 +185,7 @@ def get_llm_max_output_tokens(
     """Best effort attempt to get the max output tokens for the LLM."""
     default_output_tokens = int(GEN_AI_MODEL_FALLBACK_MAX_TOKENS)
 
-    model_obj = model_map.get(f"{model_provider}/{model_name}")
-    if not model_obj:
-        model_obj = model_map.get(model_name)
+    model_obj = find_model_obj(model_map, model_provider, model_name)
 
     if not model_obj:
         logger.warning(

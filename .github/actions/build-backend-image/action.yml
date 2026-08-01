@@ -55,6 +55,8 @@ runs:
       with:
         context: ./backend
         file: ./backend/Dockerfile
+        # The production image; the Dockerfile's default (last) stage is the dev variant.
+        target: runtime
         push: true
         build-args: |
           BASE_IMAGE_REGISTRY=${{ env.BASE_IMAGE_REGISTRY }}

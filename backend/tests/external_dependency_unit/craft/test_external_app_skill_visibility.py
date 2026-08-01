@@ -2,13 +2,13 @@
 
 from __future__ import annotations
 
-from uuid import UUID
+from uuid import UUID, uuid4
 
 import pytest
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
 
-from onyx.db.enums import SkillSharePermission
+from onyx.db.enums import ExternalAppType, SkillSharePermission
 from onyx.db.external_app import (
     get_external_app_by_skill_id,
     get_skills_for_external_app,
@@ -24,6 +24,8 @@ from onyx.db.skill import (
 )
 from onyx.error_handling.error_codes import OnyxErrorCode
 from onyx.error_handling.exceptions import OnyxError
+from onyx.server.features.skill.response_helpers import skill_response_for_user
+from onyx.skills.built_in import EXTERNAL_APP_BUILT_IN_SKILL_IDS
 from tests.external_dependency_unit.craft.db_helpers import (
     make_built_in_skill_row,
     make_external_app,
@@ -438,3 +440,37 @@ def test_regular_shared_skill_still_requires_enabled_preference(
     )
 
     assert skill.id in _runtime_skill_ids(user, db_session)
+
+
+def test_builtin_skill_response_carries_its_external_app_dependency(
+    db_session: Session,
+    test_user: User,  # noqa: ARG001
+) -> None:
+    """A built-in provider's associated skill is a built-in row, so the built-in
+    response has to carry the dependency too. Callers that read it off the custom
+    variant only (the Apps page, skill cards) otherwise see "no dependency" for
+    every built-in app and cannot tell "ready" from "never looked"."""
+    user = make_user(db_session)
+    skill = make_built_in_skill_row(
+        db_session,
+        built_in_skill_id=EXTERNAL_APP_BUILT_IN_SKILL_IDS[ExternalAppType.SLACK],
+        name=f"slack-{uuid4().hex[:8]}",
+    )
+    app = make_external_app(db_session, skill=skill, auth_template=_AUTH_TEMPLATE)
+    db_session.flush()
+
+    response = skill_response_for_user(skill, user, db_session)
+    assert response.source == "builtin"
+    dependency = response.external_app
+    assert dependency is not None
+    assert dependency.external_app_id == app.id
+    assert dependency.enabled is True
+    # Unconnected: the app is enabled but this user has no credentials.
+    assert dependency.ready is False
+
+    make_user_credential(db_session, app=app, user=user, user_credentials=_FULL_CREDS)
+    db_session.flush()
+
+    connected = skill_response_for_user(skill, user, db_session).external_app
+    assert connected is not None
+    assert connected.ready is True

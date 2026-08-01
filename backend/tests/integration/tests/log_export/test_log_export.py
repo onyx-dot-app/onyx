@@ -32,6 +32,16 @@ class TestLogExport:
             assert "api_server" in readme
             assert "WARNING" in readme
 
+    def test_sequential_downloads_both_succeed(self, admin_user: DATestUser) -> None:
+        # The export lock must be released once a download completes; a wedged
+        # lock would 429 every subsequent request until the server restarts.
+        for _ in range(2):
+            response = client.get(
+                f"{API_SERVER_URL}/admin/log-export/download",
+                headers=admin_user.headers,
+            )
+            assert response.status_code == 200
+
     def test_non_admin_cannot_download_log_zip(self, basic_user: DATestUser) -> None:
         response = client.get(
             f"{API_SERVER_URL}/admin/log-export/download",

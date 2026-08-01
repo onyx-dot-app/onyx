@@ -1,9 +1,6 @@
-from collections import Counter
 from dataclasses import dataclass
 
-from onyx.llm.model_capabilities import get_llm_max_output_tokens, get_model_map
 from onyx.llm.well_known_providers.llm_provider_options import (
-    get_provider_display_name,
     get_recommendations,
 )
 from onyx.server.features.build.configs import (
@@ -13,10 +10,13 @@ from onyx.server.features.build.configs import (
 )
 from onyx.server.features.build.sandbox.models import (
     CraftLLMProviderConfig,
-    GatewayModelConfig,
 )
 from onyx.server.gateway.configs import GATEWAY_PATH_PREFIX
-from onyx.server.manage.llm.models import LLMProviderView, ModelConfigurationView
+from onyx.server.gateway.model_catalog import (
+    build_gateway_model_catalog,
+    ordered_gateway_providers,
+)
+from onyx.server.manage.llm.models import LLMProviderView
 from onyx.utils.logger import setup_logger
 
 logger = setup_logger()
@@ -28,14 +28,6 @@ def _visible_models_by_name(provider: LLMProviderView) -> list[str]:
     return sorted(
         model.name for model in provider.model_configurations if model.is_visible
     )
-
-
-def _provider_label(provider: LLMProviderView) -> str:
-    return provider.name or get_provider_display_name(provider.provider)
-
-
-def _model_display_name(model: ModelConfigurationView) -> str:
-    return model.custom_display_name or model.display_name or model.name
 
 
 @dataclass(frozen=True)
@@ -89,15 +81,6 @@ def parse_agent_selection(
     return None
 
 
-def _gateway_provider_order(
-    providers: list[LLMProviderView],
-) -> list[LLMProviderView]:
-    return sorted(
-        providers,
-        key=lambda provider: (_provider_label(provider).casefold(), provider.id),
-    )
-
-
 def _select_gateway_default(
     providers: list[LLMProviderView],
     selection: AgentSelection | None,
@@ -123,7 +106,7 @@ def _select_gateway_default(
     # (recommended-models.json, kept current by the update-recommended-models
     # workflow) in provider order, else the first provider's first visible model.
     recommendations = get_recommendations()
-    ordered = _gateway_provider_order(providers)
+    ordered = ordered_gateway_providers(providers)
     fallback: tuple[int, str] | None = None
     for provider in ordered:
         visible = _visible_models_by_name(provider)
@@ -144,44 +127,10 @@ def build_onyx_gateway_config(
     if not ONYX_SERVER_URL:
         return None
 
-    # Sorted so the rendered config is byte-stable across DB reads: the
-    # model_configurations relationship has no ORDER BY, and the per-turn
-    # reconcile compares the rendered JSON byte-for-byte to decide whether to
-    # restart the opencode instance.
-    visible_models = [
-        (provider, model)
-        for provider in _gateway_provider_order(gateway_providers)
-        for model in sorted(
-            (m for m in provider.model_configurations if m.is_visible),
-            key=lambda m: m.name,
-        )
-    ]
+    models = build_gateway_model_catalog(gateway_providers)
     default_selection = _select_gateway_default(gateway_providers, selection)
-    if not visible_models or default_selection is None:
+    if not models or default_selection is None:
         return None
-
-    display_name_counts = Counter(
-        _model_display_name(model) for _, model in visible_models
-    )
-    # Model configs don't track max output tokens; derive it from the litellm
-    # map (as the main app does) so opencode's per-model limit is accurate.
-    model_map = get_model_map()
-    models: list[GatewayModelConfig] = []
-    for provider, model in visible_models:
-        display_name = _model_display_name(model)
-        if display_name_counts[display_name] > 1:
-            display_name = f"{display_name} ({_provider_label(provider)})"
-        models.append(
-            GatewayModelConfig(
-                id=f"{provider.id}/{model.name}",
-                display_name=display_name,
-                supports_reasoning=model.supports_reasoning,
-                max_input_tokens=model.max_input_tokens,
-                max_output_tokens=get_llm_max_output_tokens(
-                    model_map, model.name, provider.provider
-                ),
-            )
-        )
 
     api_root = ONYX_SERVER_URL.rstrip("/")
     api_base = f"{api_root}{GATEWAY_PATH_PREFIX}/v1"

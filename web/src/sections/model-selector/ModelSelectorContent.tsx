@@ -26,6 +26,7 @@ import { Disabled, Hoverable, Interactive } from "@opal/core";
 import {
   GLOBAL_DEFAULT_LLM_OPTION,
   LLMOption,
+  ModelOptionProvider,
   buildLlmOptions,
   groupLlmOptions,
   llmOptionKey,
@@ -143,8 +144,8 @@ function formatContextWindow(tokens: number): string {
   return tokens >= 1000 ? `${Math.round(tokens / 1000)}K` : `${tokens}`;
 }
 
-/** Both views render at this height so the popover never resizes. */
-const PANE_HEIGHT_CLASS = "h-[352px]";
+/** Fixed-height scroll box: the popover clips overflow instead of scrolling. */
+const DETAIL_PANE_HEIGHT_CLASS = "h-[352px]";
 
 const SLIDER_THUMB_CLASS =
   "block size-3 rounded-full bg-background-neutral-00 shadow-[0_0_2px_1px_rgba(0,0,0,0.15)] focus:outline-none";
@@ -160,7 +161,7 @@ function SelectedCheckIcon(props: IconProps) {
   return (
     <SvgCheck
       {...props}
-      className={cn(props.className, "text-action-link-05")}
+      className={cn(props.className, "text-action-selection-05")}
     />
   );
 }
@@ -235,13 +236,25 @@ function SettingRow({
 }: SettingRowProps) {
   return (
     <Disabled disabled={disabled} tooltip={disabledTooltip} tooltipSide="top">
-      <div className="flex flex-col rounded-08 p-1.5">
-        <div className="flex flex-row items-center gap-2">
-          <div className="flex size-5 items-center justify-center text-text-04">
-            <Icon size={16} />
-          </div>
-          <Text font="main-ui-action">{title}</Text>
-          <div className="flex-1" />
+      <Section
+        alignItems="stretch"
+        height="auto"
+        gap={0}
+        padding={0.375}
+        className="rounded-08"
+      >
+        <Section
+          flexDirection="row"
+          justifyContent="between"
+          height="auto"
+          gap={0.5}
+        >
+          <Section flexDirection="row" width="fit" height="auto" gap={0.5}>
+            <Section width={1.25} height={1.25} className="text-text-04">
+              <Icon size={16} />
+            </Section>
+            <Text font="main-ui-action">{title}</Text>
+          </Section>
           {value !== undefined && (
             <Tooltip tooltip={valueTooltip} side="top">
               <Text font="secondary-mono" color="text-04">
@@ -249,12 +262,14 @@ function SettingRow({
               </Text>
             </Tooltip>
           )}
-        </div>
+        </Section>
         {children}
-        <Text font="secondary-body" color="text-03">
-          {caption}
-        </Text>
-      </div>
+        <Section alignItems="stretch" height="auto" className="mt-2">
+          <Text font="secondary-body" color="text-03">
+            {caption}
+          </Text>
+        </Section>
+      </Section>
     </Disabled>
   );
 }
@@ -321,7 +336,7 @@ function ModelDetailPane({ option, managers, onBack }: ModelDetailPaneProps) {
   return (
     <div
       className={cn(
-        PANE_HEIGHT_CLASS,
+        DETAIL_PANE_HEIGHT_CLASS,
         "flex w-full flex-col gap-1 overflow-y-auto"
       )}
     >
@@ -449,6 +464,8 @@ function ModelDetailPane({ option, managers, onBack }: ModelDetailPaneProps) {
 
 export interface ModelSelectorContentProps {
   currentModelName?: string;
+  providerOptions?: ModelOptionProvider[];
+  includeHiddenModels?: boolean;
   requiresImageInput?: boolean;
   onSelect: (option: LLMOption) => void;
   isSelected: (option: LLMOption) => boolean;
@@ -462,6 +479,8 @@ export interface ModelSelectorContentProps {
 
 export default function ModelSelectorContent({
   currentModelName,
+  providerOptions,
+  includeHiddenModels = false,
   requiresImageInput,
   onSelect,
   isSelected,
@@ -471,8 +490,14 @@ export default function ModelSelectorContent({
   modelDetail,
 }: ModelSelectorContentProps) {
   const [detailOption, setDetailOption] = useState<LLMOption | null>(null);
-  const { llmProviders, isLoading, defaultText } =
-    useCurrentAgentLLMProviders();
+  const {
+    llmProviders: currentAgentProviderOptions,
+    isLoading: currentAgentProvidersLoading,
+    defaultText,
+  } = useCurrentAgentLLMProviders();
+  const llmProviders = providerOptions ?? currentAgentProviderOptions;
+  const isLoading =
+    providerOptions === undefined && currentAgentProvidersLoading;
 
   const globalDefaultDisplayName = useMemo(() => {
     if (!defaultText || !llmProviders) return null;
@@ -487,8 +512,8 @@ export default function ModelSelectorContent({
   const scrollContainerRef = externalScrollRef ?? internalScrollRef;
 
   const llmOptions = useMemo(
-    () => buildLlmOptions(llmProviders, currentModelName),
-    [llmProviders, currentModelName]
+    () => buildLlmOptions(llmProviders, currentModelName, includeHiddenModels),
+    [llmProviders, currentModelName, includeHiddenModels]
   );
 
   const filteredOptions = useMemo(() => {
@@ -597,7 +622,7 @@ export default function ModelSelectorContent({
   }
 
   return (
-    <div className={cn(PANE_HEIGHT_CLASS, "flex w-full flex-col gap-1")}>
+    <Section gap={0.5}>
       <InputTypeIn
         searchIcon
         variant="internal"
@@ -709,6 +734,6 @@ export default function ModelSelectorContent({
                   })),
         ]}
       </PopoverMenu>
-    </div>
+    </Section>
   );
 }

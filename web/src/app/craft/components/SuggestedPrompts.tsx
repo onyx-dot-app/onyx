@@ -61,7 +61,7 @@ export default function SuggestedPrompts({
             onClick={() => handlePillClick(domain.id)}
             className={cn(
               "inline-flex items-center gap-1.5 rounded-12 px-3 py-2 cursor-pointer transition-colors",
-              "focus-visible:outline-hidden focus-visible:ring-2 focus-visible:ring-action-link-01 focus-visible:ring-offset-2",
+              "focus-visible:outline-hidden focus-visible:ring-2 focus-visible:ring-action-selection-01 focus-visible:ring-offset-2",
               expandedId === domain.id
                 ? "bg-background-tint-01 text-text-05"
                 : "text-text-03 hover:bg-background-tint-02 hover:text-text-04"
@@ -112,7 +112,7 @@ export default function SuggestedPrompts({
                     "w-full rounded-12 px-3 py-2.5 text-left",
                     "hover:bg-background-tint-02",
                     "transition-colors cursor-pointer",
-                    "focus-visible:outline-hidden focus-visible:ring-2 focus-visible:ring-action-link-01 focus-visible:ring-offset-2"
+                    "focus-visible:outline-hidden focus-visible:ring-2 focus-visible:ring-action-selection-01 focus-visible:ring-offset-2"
                   )}
                 >
                   <Text font="main-content-body" color="text-04">

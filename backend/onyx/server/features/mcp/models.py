@@ -594,6 +594,13 @@ class MCPServer(BaseModel):
         None,
         description="Admin's credential key-value pairs for template substitution and storage",
     )
+    craft_connected: Optional[bool] = Field(
+        None,
+        description=(
+            "Whether Craft can authenticate this user against the server. "
+            "None outside the Craft listing, the only one that computes it."
+        ),
+    )
 
 
 class MCPServersResponse(BaseModel):

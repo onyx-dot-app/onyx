@@ -30,6 +30,7 @@ import {
 } from "@/app/craft/contexts/UploadFilesContext";
 import useUserSkills from "@/hooks/useUserSkills";
 import useUserExternalApps from "@/hooks/useUserExternalApps";
+import { useCraftMcpServers } from "@/lib/tools/hooks";
 import {
   pickerEntryConnectionPath,
   pickerEntryKey,
@@ -55,7 +56,7 @@ export interface CraftInputBarProps {
   sandboxInitializing?: boolean;
   noBottomRounding?: boolean;
   queuedMessages?: readonly QueuedMessage[];
-  onQueueMessage?: (text: string) => void;
+  onQueueMessage?: (text: string, files: BuildFile[]) => void;
   onRemoveQueuedMessage?: (index: number) => void;
   onInterrupt?: () => void;
   isInterrupting?: boolean;
@@ -65,6 +66,11 @@ export interface CraftInputBarProps {
   } | null;
   /** Seed the active entry chips. For stories/tests; production callers leave unset. */
   initialEntries?: PickerEntry[];
+}
+
+function withEntryPrefixes(message: string, entries: PickerEntry[]): string {
+  const prefixes = entries.map(pickerEntryPromptPrefix).join(" ");
+  return prefixes ? `${prefixes} ${message}` : message;
 }
 
 const CraftInputBar = memo(
@@ -101,9 +107,10 @@ const CraftInputBar = memo(
 
       const { data: skillsData } = useUserSkills();
       const { data: appsData } = useUserExternalApps();
+      const { data: craftMcpData } = useCraftMcpServers();
       const pickerSections = useMemo(
-        () => toPickerSections(skillsData, appsData),
-        [skillsData, appsData]
+        () => toPickerSections(skillsData, appsData, craftMcpData?.mcp_servers),
+        [skillsData, appsData, craftMcpData]
       );
 
       const { data: libraryTree, mutate: mutateLibrary } = useSWR(
@@ -197,17 +204,27 @@ const CraftInputBar = memo(
 
       const handleSubmit = useCallback(
         (message: string) => {
-          const entryPrefixes = activeEntries
-            .map(pickerEntryPromptPrefix)
-            .join(" ");
-          const fullMessage = entryPrefixes
-            ? `${entryPrefixes} ${message}`
-            : message;
-          onSubmit(fullMessage, currentMessageFiles);
+          onSubmit(
+            withEntryPrefixes(message, activeEntries),
+            currentMessageFiles
+          );
           setActiveEntries([]);
           clearFiles({ suppressRefetch: true });
         },
         [activeEntries, currentMessageFiles, onSubmit, clearFiles]
+      );
+
+      const handleQueueMessage = useCallback(
+        (message: string) => {
+          if (!onQueueMessage) return;
+          onQueueMessage(
+            withEntryPrefixes(message, activeEntries),
+            currentMessageFiles
+          );
+          setActiveEntries([]);
+          clearFiles({ suppressRefetch: true });
+        },
+        [activeEntries, currentMessageFiles, onQueueMessage, clearFiles]
       );
 
       // Always rendered so the strip can animate its own collapse/expand.
@@ -278,7 +295,7 @@ const CraftInputBar = memo(
             sandboxInitializing={sandboxInitializing}
             submitBlocked={hasUploadingFiles}
             queuedMessages={queuedMessages}
-            onQueueMessage={onQueueMessage}
+            onQueueMessage={onQueueMessage ? handleQueueMessage : undefined}
             onRemoveQueuedMessage={onRemoveQueuedMessage}
             onInterrupt={onInterrupt}
             isInterrupting={isInterrupting}

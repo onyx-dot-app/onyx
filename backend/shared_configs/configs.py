@@ -229,9 +229,6 @@ IGNORED_SYNCING_TENANT_LIST = (
     else None
 )
 
-ENVIRONMENT = os.environ.get("ENVIRONMENT") or "not_explicitly_set"
-
-
 #####
 # Usage Limits Configuration (meant for cloud, off by default for self-hosted)
 #####

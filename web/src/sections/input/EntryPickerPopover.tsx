@@ -15,12 +15,12 @@ import {
   filterPickerSections,
   flattenSections,
   pickerEntryKey,
-  type PickerApp,
   type PickerEntry,
   type PickerSections,
 } from "@/lib/skills/picker";
-import { getAppTypeLogo } from "@/app/craft/v1/apps/registry";
+import { pickerEntryIcon } from "@/lib/skills/pickerIcons";
 import { cn } from "@opal/utils";
+import type { IconFunctionComponent } from "@opal/types";
 
 interface EntryPickerPopoverProps {
   open: boolean;
@@ -182,41 +182,55 @@ function buildMenuChildren({
     ];
   }
 
-  const skillsCount = filtered.skills.length;
-  const children: ReactNode[] = [];
+  // Groups must stay in `flattenSections` order — keyboard nav indexes into that
+  // flat list, so a running index is what keeps the two aligned.
+  const groups: { label: string; entries: PickerEntry[] }[] = [
+    { label: "Skills", entries: filtered.skills },
+    { label: "Apps", entries: filtered.apps },
+    { label: "MCP servers", entries: filtered.mcpServers },
+  ];
 
-  flatEntries.forEach((entry, idx) => {
-    if (idx === 0 && skillsCount > 0) {
-      children.push(<SectionHeader key="skills-header" label="Skills" />);
-    }
-    if (idx === skillsCount && filtered.apps.length > 0) {
-      if (skillsCount > 0) children.push(null);
-      children.push(<SectionHeader key="apps-header" label="Apps" />);
-    }
-    const selected = idx === selectedIndex;
+  const children: ReactNode[] = [];
+  let idx = 0;
+
+  for (const group of groups) {
+    if (group.entries.length === 0) continue;
+    if (children.length > 0) children.push(null);
     children.push(
-      entry.kind === "app" ? (
-        <AppRow
-          key={pickerEntryKey(entry)}
-          app={entry}
-          selected={selected}
-          onHover={() => onHover(idx)}
-          onPick={() => onSelect(entry)}
-          rowIndex={idx}
-        />
-      ) : (
-        <SkillRow
-          key={`skill-${entry.slug}`}
-          slug={entry.slug}
-          description={entry.description}
-          selected={selected}
-          onHover={() => onHover(idx)}
-          onPick={() => onSelect(entry)}
-          rowIndex={idx}
-        />
-      )
+      <SectionHeader key={`${group.label}-header`} label={group.label} />
     );
-  });
+    for (const entry of group.entries) {
+      const rowProps = {
+        key: pickerEntryKey(entry),
+        selected: idx === selectedIndex,
+        onHover: () => onHover(idx),
+        onPick: () => onSelect(entry),
+        rowIndex: idx,
+      };
+      children.push(
+        entry.kind === "skill" ? (
+          <SkillRow
+            {...rowProps}
+            slug={entry.slug}
+            description={entry.description}
+          />
+        ) : (
+          <ConnectableRow
+            {...rowProps}
+            logo={pickerEntryIcon(entry)}
+            name={entry.name}
+            authenticated={entry.authenticated}
+            testId={
+              entry.kind === "app"
+                ? `app-picker-row-${entry.externalAppId}`
+                : `mcp-picker-row-${entry.mcpServerId}`
+            }
+          />
+        )
+      );
+      idx += 1;
+    }
+  }
 
   return children;
 }
@@ -269,24 +283,37 @@ function SkillRow({
   );
 }
 
-interface AppRowProps {
-  app: PickerApp;
+interface ConnectableRowProps {
+  logo: IconFunctionComponent;
+  name: string;
+  authenticated: boolean;
+  testId: string;
   selected: boolean;
   onHover: () => void;
   onPick: () => void;
   rowIndex: number;
 }
 
-function AppRow({ app, selected, onHover, onPick, rowIndex }: AppRowProps) {
-  const Logo = getAppTypeLogo(app.appType);
-  const unauth = !app.authenticated;
+// Shared by external apps and MCP servers: identical affordances, and the
+// section header above already says which kind the row is.
+function ConnectableRow({
+  logo: Logo,
+  name,
+  authenticated,
+  testId,
+  selected,
+  onHover,
+  onPick,
+  rowIndex,
+}: ConnectableRowProps) {
+  const unauth = !authenticated;
   return (
     <div className="cursor-pointer">
       <LineItem
         interactive={false}
         selected={selected}
         emphasized={selected}
-        description={app.authenticated ? "Connected" : "Connection required"}
+        description={authenticated ? "Connected" : "Connection required"}
         onMouseEnter={onHover}
         onMouseDown={(e) => {
           e.preventDefault();
@@ -300,7 +327,7 @@ function AppRow({ app, selected, onHover, onPick, rowIndex }: AppRowProps) {
           ) : undefined
         }
         data-row-index={rowIndex}
-        data-testid={`app-picker-row-${app.externalAppId}`}
+        data-testid={testId}
       >
         <span
           className={cn(
@@ -309,7 +336,7 @@ function AppRow({ app, selected, onHover, onPick, rowIndex }: AppRowProps) {
           )}
         >
           <Logo className="h-4 w-4 shrink-0" />
-          <span>{app.name}</span>
+          <span>{name}</span>
         </span>
       </LineItem>
     </div>

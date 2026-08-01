@@ -1,4 +1,4 @@
-import type { Meta, StoryObj } from "@storybook/react";
+import type { Meta, StoryObj } from "@storybook/react-vite";
 import SkillsStaleNotice from "@/app/craft/components/SkillsStaleNotice";
 
 const meta: Meta<typeof SkillsStaleNotice> = {

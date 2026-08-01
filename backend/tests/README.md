@@ -88,10 +88,12 @@ Enables EE mode for a test, with proper teardown and cache clearing.
 # Whole file (in a test module, NOT in conftest.py)
 pytestmark = pytest.mark.usefixtures("enable_ee")
 
+
 # Whole directory — add an autouse wrapper to the directory's conftest.py
 @pytest.fixture(autouse=True)
-def _enable_ee_for_directory(enable_ee: None) -> None:  
+def _enable_ee_for_directory(enable_ee: None) -> None:
     """Wraps the shared enable_ee fixture with autouse for this directory."""
+
 
 # Single test
 def test_something(enable_ee: None) -> None: ...

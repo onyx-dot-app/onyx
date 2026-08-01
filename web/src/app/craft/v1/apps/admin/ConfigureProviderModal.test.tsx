@@ -198,6 +198,20 @@ describe("ConfigureProviderModal", () => {
     expect(onClose).not.toHaveBeenCalled();
   });
 
+  it("directs GitHub imports through the Skills page", () => {
+    renderExistingProvider();
+    fireEvent.click(screen.getByRole("button", { name: "Create skill" }));
+
+    expect(
+      screen.getByRole("button", { name: /Import from GitHub/ })
+    ).toHaveAttribute("aria-disabled", "true");
+    expect(
+      screen.getByText(
+        "If your skills are in GitHub, import them on the Skills page first, then associate them with this app."
+      )
+    ).toBeInTheDocument();
+  });
+
   it("restores unsaved provider settings after upload is canceled", () => {
     const { onClose } = renderExistingProvider();
     fireEvent.change(screen.getByPlaceholderText("Token"), {

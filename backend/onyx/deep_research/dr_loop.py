@@ -70,10 +70,9 @@ from onyx.tools.models import ToolCallInfo, ToolCallKickoff
 from onyx.tools.tool_implementations.open_url.open_url_tool import OpenURLTool
 from onyx.tools.tool_implementations.search.search_tool import SearchTool
 from onyx.tools.tool_implementations.web_search.web_search_tool import WebSearchTool
-from onyx.tracing.framework.create import function_span, trace
+from onyx.tracing.framework.create import ChatTraceMetadata, function_span, trace
 from onyx.utils.logger import setup_logger
 from onyx.utils.timing import log_function_time
-from shared_configs.contextvars import get_current_tenant_id
 
 logger = setup_logger()
 
@@ -215,11 +214,10 @@ def run_deep_research_llm_loop(
     with trace(
         "run_deep_research_llm_loop",
         group_id=chat_session_id,
-        metadata={
-            "tenant_id": get_current_tenant_id(),
-            "chat_session_id": chat_session_id,
-            "user_id": user_identity.user_id if user_identity else None,
-        },
+        metadata=ChatTraceMetadata(
+            chat_session_id=chat_session_id,
+            user_id=user_identity.user_id if user_identity else None,
+        ).model_dump(),
     ):
         # Here for lazy load LiteLLM
         from onyx.llm.litellm_singleton.config import initialize_litellm

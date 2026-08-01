@@ -367,7 +367,7 @@ class TestIsPerSiteGraphFailure:
         # ClientRequestException with response=None. The retry layer owns
         # those, so we treat None as "not per-site".
         exc = _make_client_request_exception(404)
-        exc.response = None  # type: ignore[assignment]
+        exc.response = None
         assert _is_per_site_graph_failure(exc) is False
 
     def test_itemnotfound_404_is_per_site(self) -> None:

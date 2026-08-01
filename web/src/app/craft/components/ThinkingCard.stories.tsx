@@ -1,4 +1,4 @@
-import type { Meta, StoryObj } from "@storybook/react";
+import type { Meta, StoryObj } from "@storybook/react-vite";
 import ThinkingCard from "@/app/craft/components/ThinkingCard";
 
 const THINKING_CONTENT = `Inspecting the current Craft session state and tracing the packet flow.
