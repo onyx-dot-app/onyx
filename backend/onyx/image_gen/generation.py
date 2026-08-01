@@ -110,6 +110,12 @@ def _default_provider_and_model(
     return llm_provider.provider, config.model_configuration.name, credentials
 
 
+def ensure_image_generation_configured() -> None:
+    """Raises ImageGenerationNotConfiguredError if no default provider is set up."""
+    with get_session_with_current_tenant() as db_session:
+        _default_provider_and_model(db_session)
+
+
 def is_image_generation_configured(db_session: Session) -> bool:
     try:
         _default_provider_and_model(db_session)

@@ -116,8 +116,8 @@
 }
 
 .opal-auxiliary-tag[data-type="editable"][data-color="gray"]:not(
-    [data-disabled]
-  ):hover {
+  [data-disabled]
+):hover {
   @apply bg-background-tint-03;
 }
 

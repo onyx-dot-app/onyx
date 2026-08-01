@@ -365,7 +365,7 @@ function EdgeLayer({ sharpGroups, reduceMotion }: EdgeLayerProps) {
                 strokeWidth={3}
                 strokeLinecap="round"
                 strokeDasharray="1 59"
-                stroke="var(--action-link-05)"
+                stroke="var(--action-selection-05)"
                 vectorEffect="non-scaling-stroke"
                 animate={{ strokeDashoffset: [0, -60] }}
                 transition={{ duration: 1.4, repeat: Infinity, ease: "linear" }}

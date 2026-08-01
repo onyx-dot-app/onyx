@@ -1,6 +1,7 @@
 """The unified ``PATCH /admin/apps/{id}`` update path, single-tenant (non-managed,
-so config fields are editable): full update, partial update, and push-failure
-rollback. The managed (cloud) variant lives in ``test_managed_external_apps.py``.
+so config fields are editable): full update, partial update, and sandbox
+reconciliation ordering. The managed (cloud) variant lives in
+``test_managed_external_apps.py``.
 """
 
 from __future__ import annotations
@@ -13,7 +14,10 @@ from sqlalchemy.orm import Session
 
 import onyx.server.features.build.external_apps.api as api
 from onyx.db.enums import ExternalAppType
-from onyx.db.external_app import get_external_app_by_id
+from onyx.db.external_app import (
+    get_external_app_by_id,
+    get_skills_for_external_app,
+)
 from onyx.db.models import ExternalApp, Skill, User
 from onyx.server.features.build.external_apps.models import UpdateExternalAppRequest
 from tests.external_dependency_unit.craft.db_helpers import (
@@ -58,9 +62,11 @@ def test_patch_updates_config_on_non_managed_built_in(
     test_user: User,
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
-    monkeypatch.setattr(api, "push_skill_to_affected_sandboxes", _noop)
+    monkeypatch.setattr(api, "push_skills_for_users", _noop)
     app = _slack_app(db_session)
     app_id = app.id
+    [original_skill] = get_skills_for_external_app(db_session, app_id)
+    original_skill_description = original_skill.description
 
     new_patterns = ["https://slack.com/api/chat.postMessage"]
     new_auth = {"Authorization": "Bearer {access_token}"}
@@ -68,7 +74,6 @@ def test_patch_updates_config_on_non_managed_built_in(
         external_app_id=app_id,
         request=UpdateExternalAppRequest(
             name="Slack — Eng",
-            description="Engineering workspace",
             upstream_url_patterns=new_patterns,
             auth_template=new_auth,
             organization_credentials={"shared": "value"},
@@ -78,15 +83,16 @@ def test_patch_updates_config_on_non_managed_built_in(
     )
 
     assert resp.name == "Slack — Eng"
-    assert resp.description == "Engineering workspace"
     assert resp.upstream_url_patterns == new_patterns
     assert resp.auth_template == new_auth
 
     db_session.expire_all()
     stored = get_external_app_by_id(db_session, app_id)
     assert stored is not None
+    [skill] = get_skills_for_external_app(db_session, app_id)
     assert stored.name == "Slack — Eng"
-    assert stored.skill.name == "slack"
+    assert skill.name == "slack"
+    assert skill.description == original_skill_description
     assert list(stored.upstream_url_patterns) == new_patterns
     assert stored.auth_template == new_auth
     assert stored.organization_credentials.get_value(apply_mask=False) == {
@@ -94,30 +100,32 @@ def test_patch_updates_config_on_non_managed_built_in(
     }
 
 
-def test_patch_rolls_back_when_push_fails(
+def test_patch_commits_before_sandbox_reconciliation(
     db_session: Session,
     test_user: User,
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
-    """Push failure leaves the app update uncommitted."""
     app = _slack_app(db_session)
     app_id = app.id
-    original_description = app.skill.description
+    observed_names: list[str] = []
 
-    def _boom(*_args: object, **_kwargs: object) -> None:
-        raise RuntimeError("push failed")
+    def _observe_committed_state(*_args: object, **_kwargs: object) -> None:
+        with Session(db_session.get_bind()) as observer:
+            stored = get_external_app_by_id(observer, app_id)
+            assert stored is not None
+            observed_names.append(stored.name)
 
-    monkeypatch.setattr(api, "push_skill_to_affected_sandboxes", _boom)
+    monkeypatch.setattr(
+        api,
+        "push_skills_for_users",
+        _observe_committed_state,
+    )
 
-    with pytest.raises(RuntimeError):
-        api.update_external_app_admin(
-            external_app_id=app_id,
-            request=UpdateExternalAppRequest(description="changed"),
-            _=test_user,
-            db_session=db_session,
-        )
+    api.update_external_app_admin(
+        external_app_id=app_id,
+        request=UpdateExternalAppRequest(name="changed"),
+        _=test_user,
+        db_session=db_session,
+    )
 
-    db_session.rollback()
-    stored = get_external_app_by_id(db_session, app_id)
-    assert stored is not None
-    assert stored.skill.description == original_description
+    assert observed_names == ["changed"]

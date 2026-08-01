@@ -10,6 +10,7 @@ import {
   SvgClock,
   SvgExpand,
   SvgLoader,
+  SvgPauseCircle,
 } from "@opal/icons";
 import ReindexErrorsModal from "@/views/admin/IndexSettingsPage/ReindexErrorsModal";
 import { useReindexProgress } from "@/lib/indexing/hooks";
@@ -19,7 +20,14 @@ interface ReindexProgressBannerProps {
   onCancel: () => void;
 }
 
-const ZERO = { total: 0, waiting: 0, in_progress: 0, completed: 0, failed: 0 };
+const ZERO = {
+  total: 0,
+  waiting: 0,
+  in_progress: 0,
+  completed: 0,
+  failed: 0,
+  paused: 0,
+};
 
 // Stable identity so the spinner doesn't remount (and restart at 0°) each poll.
 const SpinningLoader: IconFunctionComponent = (props) => (
@@ -32,7 +40,8 @@ export default function ReindexProgressBanner({
 }: ReindexProgressBannerProps) {
   const [errorsOpen, setErrorsOpen] = useState(false);
   const { data } = useReindexProgress({ pollIntervalMs: 5000 });
-  const { total, waiting, in_progress, completed, failed } = data ?? ZERO;
+  const { total, waiting, in_progress, completed, failed, paused } =
+    data ?? ZERO;
 
   const description = markdown(
     `New embedding settings${
@@ -61,7 +70,7 @@ export default function ReindexProgressBanner({
                   <Tag color="purple" icon={SvgClock} title={String(waiting)} />
                   <Tag
                     color="blue"
-                    icon={SpinningLoader}
+                    icon={in_progress > 0 ? SpinningLoader : SvgLoader}
                     title={String(in_progress)}
                   />
                   <Tag
@@ -74,14 +83,19 @@ export default function ReindexProgressBanner({
                     icon={SvgAlertCircle}
                     title={String(failed)}
                   />
-                  {failed > 0 && (
+                  <Tag
+                    color="amber"
+                    icon={SvgPauseCircle}
+                    title={String(paused)}
+                  />
+                  {(failed > 0 || paused > 0) && (
                     <Button
                       icon={SvgExpand}
-                      variant="danger"
+                      variant={failed > 0 ? "danger" : "default"}
                       prominence="tertiary"
                       size="sm"
-                      tooltip="View re-index errors"
-                      aria-label="View re-index errors"
+                      tooltip="View units needing attention"
+                      aria-label="View units needing attention"
                       onClick={() => setErrorsOpen(true)}
                     />
                   )}

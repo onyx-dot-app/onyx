@@ -174,6 +174,7 @@ export interface ReindexProgress {
   in_progress: number;
   completed: number;
   failed: number;
+  paused: number;
 }
 
 /** Mirrors backend `ReindexErrorRow`; exactly one of cc_pair_id / user_id set. */
@@ -183,4 +184,5 @@ export interface ReindexErrorRow {
   user_id: string | null;
   name: string;
   error_msg: string | null;
+  paused: boolean;
 }

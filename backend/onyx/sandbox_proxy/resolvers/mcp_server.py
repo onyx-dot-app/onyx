@@ -10,17 +10,18 @@ short-TTL per-tenant cache — the one deliberate DB touch on the claims path.
 
 from __future__ import annotations
 
-import posixpath
 import threading
-from urllib.parse import unquote, urlparse
 from uuid import UUID
 
 from cachetools import TTLCache
 from mitmproxy import http
-from pydantic import BaseModel
 
 from onyx.db.engine.sql_engine import get_session_with_tenant
-from onyx.db.enums import MCPAuthenticationPerformer, MCPAuthenticationType
+from onyx.db.enums import (
+    GatedAppKind,
+    MCPAuthenticationPerformer,
+    MCPAuthenticationType,
+)
 from onyx.db.mcp import (
     MCPCredentialsError,
     extract_connection_data,
@@ -37,6 +38,15 @@ from onyx.sandbox_proxy.credential_injection import (
     InjectionContext,
 )
 from onyx.sandbox_proxy.logging_utils import short_log_id
+from onyx.sandbox_proxy.mcp_jsonrpc import McpRpcKind, classify_mcp_request
+from onyx.sandbox_proxy.resolvers.mcp_matching import (
+    AmbiguousMCPTargetError,
+    CraftMCPTarget,
+    host_targets,
+    match_request,
+    normalized_request_path,
+    parse_target,
+)
 from onyx.server.features.mcp.oauth import (
     mcp_token_expired,
     refresh_mcp_oauth_token_if_expired,
@@ -48,52 +58,6 @@ from shared_configs.contextvars import CURRENT_TENANT_ID_CONTEXTVAR
 logger = setup_logger()
 
 _TARGET_CACHE_TTL_S = 30.0
-_SCHEME_DEFAULT_PORTS = {"http": 80, "https": 443}
-
-
-class _CraftMCPTarget(BaseModel):
-    """One craft-enabled server's parsed `server_url`, ready for matching."""
-
-    model_config = {"frozen": True}
-
-    server_id: int
-    scheme: str
-    host: str
-    port: int
-    path_prefix: str  # no trailing slash; "" claims the whole host
-
-
-def _parse_target(server_id: int, server_url: str) -> _CraftMCPTarget | None:
-    parsed = urlparse(server_url)
-    scheme = (parsed.scheme or "").lower()
-    port = parsed.port or _SCHEME_DEFAULT_PORTS.get(scheme)
-    if not scheme or not parsed.hostname or port is None:
-        logger.warning(
-            "craft MCP server %s has an unusable server_url; "
-            "it will not be reachable from Craft",
-            server_id,
-        )
-        return None
-    return _CraftMCPTarget(
-        server_id=server_id,
-        scheme=scheme,
-        host=parsed.hostname.lower(),
-        port=port,
-        path_prefix=parsed.path.rstrip("/"),
-    )
-
-
-def _normalized_request_path(raw_path: str) -> str:
-    """Percent-decode and collapse `.`/`..` so prefix matching can't be escaped
-    by traversal (`/mcp/../admin`) the upstream would resolve to another path."""
-    path = unquote(raw_path.split("?", 1)[0].split("#", 1)[0])
-    return posixpath.normpath(path)
-
-
-def _path_matches(request_path: str, path_prefix: str) -> bool:
-    if not path_prefix:
-        return True
-    return request_path == path_prefix or request_path.startswith(path_prefix + "/")
 
 
 class MCPServerResolver(CredentialResolver):
@@ -101,27 +65,70 @@ class MCPServerResolver(CredentialResolver):
 
     def __init__(self, cache_ttl_s: float = _TARGET_CACHE_TTL_S) -> None:
         self._cache_lock = threading.Lock()
-        self._targets_by_tenant: TTLCache[str, tuple[_CraftMCPTarget, ...]] = TTLCache(
+        # Host ownership (claims): user-agnostic, so a claimed host never forwards
+        # bare for a user lacking access — it fails closed at resolve() instead.
+        self._targets_by_tenant: TTLCache[str, tuple[CraftMCPTarget, ...]] = TTLCache(
             maxsize=10_000, ttl=cache_ttl_s
+        )
+        # Attribution (match): the host set filtered to these ids, so ambiguity is
+        # only ever raised between servers the user can reach.
+        self._accessible_ids_by_user: TTLCache[tuple[str, UUID], frozenset[int]] = (
+            TTLCache(maxsize=10_000, ttl=cache_ttl_s)
         )
 
     def claims(self, request: http.Request, ctx: InjectionContext) -> bool:
-        # A matched request belongs to an external app on a shared host (MCP
-        # servers aren't in that catalog) — defer to ExternalAppResolver.
-        if ctx.matched_actions is not None:
+        # A request the external-app matcher attributed belongs to that resolver
+        # on a shared host (MCP servers aren't in that catalog) — defer. An MCP
+        # `tools/call` the evaluator gated is still ours to inject onto.
+        actions = ctx.matched_actions
+        if actions is not None and actions.target.kind is not GatedAppKind.MCP_SERVER:
             return False
-        return bool(self._host_targets(request, ctx.sandbox.tenant_id))
+        return bool(
+            host_targets(
+                self._targets(ctx.sandbox.tenant_id),
+                request.scheme,
+                request.host,
+                request.port,
+            )
+        )
 
     def resolve(self, request: http.Request, ctx: InjectionContext) -> dict[str, str]:
-        tenant_id = ctx.sandbox.tenant_id
-        user_id = ctx.sandbox.user_id
-        path = _normalized_request_path(request.path)
-        candidates = [
-            t
-            for t in self._host_targets(request, tenant_id)
-            if _path_matches(path, t.path_prefix)
-        ]
-        if not candidates:
+        actions = ctx.matched_actions
+        if actions is not None and actions.target.kind is GatedAppKind.MCP_SERVER:
+            # Gated request: inject for the exact server the gate evaluated
+            # (fresh attribution), never a re-match against this resolver's
+            # 30s target cache — a stale cache could pick a different server.
+            return self._resolve_for_server(actions.target.id, ctx)
+        # Ungated requests only get credentials for protocol plumbing. A tool
+        # call (or anything unclassifiable) reaching injection ungated means the
+        # evaluator failed and the gate fell open — fail closed here so no
+        # invocation ever forwards with credentials but without a verdict.
+        classification = classify_mcp_request(request.method or "", request.raw_content)
+        if classification.kind is not McpRpcKind.PLUMBING:
+            raise CredentialUnavailableError(
+                f"non-plumbing MCP request on {request.host} reached credential "
+                "injection without a gate verdict; blocked",
+                sandbox_detail=(
+                    "This MCP request could not be verified by the approval "
+                    "gate. Retry the tool call."
+                ),
+            )
+        try:
+            target = match_request(
+                self._user_targets(ctx.sandbox.tenant_id, ctx.sandbox.user_id), request
+            )
+        except AmbiguousMCPTargetError as e:
+            raise CredentialUnavailableError(
+                str(e),
+                sandbox_detail=(
+                    "Multiple MCP servers in Onyx are configured with the same "
+                    "URL, so Craft cannot tell which one's credentials to use. "
+                    "Ask a workspace admin to remove the duplicate MCP server "
+                    "configuration."
+                ),
+            ) from e
+        if target is None:
+            path = normalized_request_path(request.path or "")
             raise CredentialUnavailableError(
                 f"request path {path!r} on MCP host {request.host} matches no "
                 "configured server_url prefix",
@@ -132,28 +139,15 @@ class MCPServerResolver(CredentialResolver):
                     "reachable on this host."
                 ),
             )
-        # Longest prefix wins when servers share a host. A tie at the longest
-        # prefix means two configs claim the same endpoint with no way to tell
-        # which owns the request — fail closed rather than inject an arbitrary
-        # config's credentials.
-        longest = max(len(t.path_prefix) for t in candidates)
-        winners = [t for t in candidates if len(t.path_prefix) == longest]
-        if len(winners) > 1:
-            raise CredentialUnavailableError(
-                f"request path {path!r} on MCP host {request.host} matches "
-                f"{len(winners)} MCP servers ({sorted(w.server_id for w in winners)}) "
-                "at the same endpoint; credential attribution is ambiguous",
-                sandbox_detail=(
-                    "Multiple MCP servers in Onyx are configured with the same "
-                    "URL, so Craft cannot tell which one's credentials to use. "
-                    "Ask a workspace admin to remove the duplicate MCP server "
-                    "configuration."
-                ),
-            )
-        target = winners[0]
+        return self._resolve_for_server(target.server_id, ctx)
 
+    def _resolve_for_server(
+        self, server_id: int, ctx: InjectionContext
+    ) -> dict[str, str]:
+        tenant_id = ctx.sandbox.tenant_id
+        user_id = ctx.sandbox.user_id
         with get_session_with_tenant(tenant_id=tenant_id) as db:
-            server = get_mcp_server_by_id(target.server_id, db)
+            server = get_mcp_server_by_id(server_id, db)
             admin_managed = server.auth_performer == MCPAuthenticationPerformer.ADMIN
             if not server.available_in_craft:
                 # Flag flipped since the cache entry was built.
@@ -219,21 +213,7 @@ class MCPServerResolver(CredentialResolver):
             auth_type=server.auth_type.value if server.auth_type else None,
         )
 
-    def _host_targets(
-        self, request: http.Request, tenant_id: str
-    ) -> list[_CraftMCPTarget]:
-        # Scheme must match so an HTTPS server's bearer is never injected onto a
-        # plaintext request to the same host:port.
-        scheme = request.scheme.lower()
-        host = request.host.lower()
-        port = request.port
-        return [
-            t
-            for t in self._targets(tenant_id)
-            if t.scheme == scheme and t.host == host and t.port == port
-        ]
-
-    def _targets(self, tenant_id: str) -> tuple[_CraftMCPTarget, ...]:
+    def _targets(self, tenant_id: str) -> tuple[CraftMCPTarget, ...]:
         with self._cache_lock:
             cached = self._targets_by_tenant.get(tenant_id)
         if cached is not None:
@@ -245,12 +225,38 @@ class MCPServerResolver(CredentialResolver):
             self._targets_by_tenant[tenant_id] = targets
         return targets
 
-    def _load_targets(self, tenant_id: str) -> tuple[_CraftMCPTarget, ...]:
+    def _load_targets(self, tenant_id: str) -> tuple[CraftMCPTarget, ...]:
         with get_session_with_tenant(tenant_id=tenant_id) as db:
-            # No user at claim time; access is enforced in resolve().
+            # ``None`` skips the access filter — every server, for host ownership.
             servers = get_craft_enabled_mcp_servers(db, None)
-            parsed = [_parse_target(s.id, s.server_url) for s in servers]
+            parsed = [parse_target(s.id, s.server_url) for s in servers]
         return tuple(t for t in parsed if t is not None)
+
+    def _user_targets(
+        self, tenant_id: str, user_id: UUID
+    ) -> tuple[CraftMCPTarget, ...]:
+        accessible = self._accessible_ids(tenant_id, user_id)
+        return tuple(t for t in self._targets(tenant_id) if t.server_id in accessible)
+
+    def _accessible_ids(self, tenant_id: str, user_id: UUID) -> frozenset[int]:
+        key = (tenant_id, user_id)
+        with self._cache_lock:
+            cached = self._accessible_ids_by_user.get(key)
+        if cached is not None:
+            return cached
+        ids = self._load_accessible_ids(tenant_id, user_id)
+        with self._cache_lock:
+            self._accessible_ids_by_user[key] = ids
+        return ids
+
+    def _load_accessible_ids(self, tenant_id: str, user_id: UUID) -> frozenset[int]:
+        with get_session_with_tenant(tenant_id=tenant_id) as db:
+            user = fetch_user_by_id(db, user_id)
+            # Missing user → no servers; ``None`` would skip the filter, so guard.
+            servers = (
+                get_craft_enabled_mcp_servers(db, user) if user is not None else []
+            )
+            return frozenset(s.id for s in servers)
 
 
 def _refresh_oauth_headers(

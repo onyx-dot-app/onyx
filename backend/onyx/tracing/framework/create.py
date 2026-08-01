@@ -4,7 +4,10 @@ from collections.abc import Iterator, Mapping, Sequence
 from contextlib import contextmanager
 from typing import TYPE_CHECKING, Any
 
+from pydantic import BaseModel, Field
+
 from onyx.utils.logger import setup_logger
+from shared_configs.contextvars import get_current_tenant_id
 
 from .setup import get_trace_provider
 from .span_data import AgentSpanData, FunctionSpanData, GenerationSpanData
@@ -15,6 +18,12 @@ if TYPE_CHECKING:
     pass
 
 logger = setup_logger(__name__)
+
+
+class ChatTraceMetadata(BaseModel):
+    tenant_id: str = Field(default_factory=get_current_tenant_id)
+    chat_session_id: str | None = None
+    user_id: str | None = None
 
 
 def trace(

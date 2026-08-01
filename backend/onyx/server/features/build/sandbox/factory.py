@@ -30,6 +30,9 @@ def get_sandbox_manager() -> SandboxManager:
     if _sandbox_manager_instance is None:
         with _sandbox_manager_lock:
             if _sandbox_manager_instance is None:
+                # Assign only after the constructor returns, so a failed init
+                # isn't cached; the next call retries.
+                manager: SandboxManager
                 if SANDBOX_BACKEND == SandboxBackend.KUBERNETES:
                     # Deferred: avoid loading the kubernetes client stack on
                     # docker deployments (and vice versa).
@@ -37,16 +40,18 @@ def get_sandbox_manager() -> SandboxManager:
                         KubernetesSandboxManager,
                     )
 
-                    _sandbox_manager_instance = KubernetesSandboxManager()
+                    manager = KubernetesSandboxManager()
                     logger.info("Using KubernetesSandboxManager for sandbox operations")
                 elif SANDBOX_BACKEND == SandboxBackend.DOCKER:
                     from onyx.server.features.build.sandbox.docker.docker_sandbox_manager import (
                         DockerSandboxManager,
                     )
 
-                    _sandbox_manager_instance = DockerSandboxManager()
+                    manager = DockerSandboxManager()
                     logger.info("Using DockerSandboxManager for sandbox operations")
                 else:
                     raise ValueError(f"Unknown sandbox backend: {SANDBOX_BACKEND}")
+
+                _sandbox_manager_instance = manager
 
     return _sandbox_manager_instance

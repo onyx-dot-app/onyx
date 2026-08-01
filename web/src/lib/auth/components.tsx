@@ -400,6 +400,9 @@ export function EmailPasswordForm({
         errorMsg = "Invalid email or password";
       } else if (errorDetail === "NO_WEB_LOGIN_AND_HAS_NO_PASSWORD") {
         errorMsg = "Create an account to set a password";
+      } else if (errorDetail === "PASSWORD_LOGIN_DISABLED") {
+        errorMsg =
+          "Password login is turned off. Sign in with your identity provider.";
       } else if (typeof errorDetail === "string") {
         errorMsg = errorDetail;
       }
@@ -450,6 +453,7 @@ export function EmailPasswordForm({
                   <PasswordInputTypeInField
                     name="password"
                     placeholder="Password"
+                    mask="native"
                     data-testid="password"
                     autoComplete={
                       isSignup ? "new-password" : "current-password"
@@ -472,9 +476,9 @@ export function EmailPasswordForm({
             {user?.is_anonymous_user && (
               <Link
                 href="/app"
-                className="text-xs text-action-link-05 cursor-pointer text-center w-full font-medium mx-auto"
+                className="text-xs text-action-selection-05 cursor-pointer text-center w-full font-medium mx-auto"
               >
-                <span className="hover:border-b hover:border-dotted hover:border-action-link-05">
+                <span className="hover:border-b hover:border-dotted hover:border-action-selection-05">
                   or continue as guest
                 </span>
               </Link>

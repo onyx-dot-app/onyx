@@ -1,7 +1,6 @@
-// Picks a renderer for a node's packets and derives the processed message state (citations,
-// documents, completion). A full pass over the node's packets runs whenever the array changes; the
-// array's identity changes each stream flush, so this recomputes as packets arrive. Cheap at chat
-// scale — the processor itself stays incremental-capable for 9b, which can host it differently.
+// Derives a node's processed message state (citations, documents, completion) and whether any renderer
+// matches its packets. Reprocesses on each stream flush (packet-array identity changes); cheap at chat
+// scale.
 import { useMemo } from "react";
 
 import { Message } from "@/chat/interfaces";
@@ -11,15 +10,13 @@ import {
   processPackets,
 } from "@/chat/messageProcessor";
 import { Packet } from "@/chat/streamingModels";
-import {
-  findRenderer,
-  MessageRenderer,
-} from "@/components/chat/renderers/registry";
+import { findRenderer } from "@/components/chat/renderers/registry";
 
 export interface PacketDisplay {
-  renderer: MessageRenderer | null;
   packets: Packet[];
   processed: ProcessedMessageState;
+  // Drives the answer-vs-loader gate in MessageRow.
+  hasRenderer: boolean;
 }
 
 export function usePacketDisplay(node: Message): PacketDisplay {
@@ -27,7 +24,10 @@ export function usePacketDisplay(node: Message): PacketDisplay {
     () => processPackets(createInitialState(node.nodeId), node.packets),
     [node.nodeId, node.packets],
   );
-  const renderer = useMemo(() => findRenderer(node.packets), [node.packets]);
+  const hasRenderer = useMemo(
+    () => findRenderer(node.packets) != null,
+    [node.packets],
+  );
 
-  return { renderer, packets: node.packets, processed };
+  return { packets: node.packets, processed, hasRenderer };
 }

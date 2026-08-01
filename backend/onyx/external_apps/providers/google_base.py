@@ -67,7 +67,6 @@ class GoogleOAuthProvider(OAuthExternalAppProvider, abstract=True):
         app_name: str,
         scope: str,
         upstream_url_patterns: list[str],
-        description: str,
         google_api_name: str,
         endpoint_catalog: list[EndpointSpec],
     ) -> OAuthProviderSpec:
@@ -88,7 +87,6 @@ class GoogleOAuthProvider(OAuthExternalAppProvider, abstract=True):
                 },
             ),
             descriptor=AdminDescriptorSpec(
-                description=description,
                 upstream_url_patterns=upstream_url_patterns,
                 auth_template={"Authorization": "Bearer {access_token}"},
                 required_org_credential_fields=list(_CLIENT_CREDENTIAL_FIELDS),

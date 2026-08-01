@@ -1,4 +1,4 @@
-from sqlalchemy import and_, delete, select
+from sqlalchemy import and_, delete, func, select
 from sqlalchemy import inspect as sa_inspect
 from sqlalchemy.orm import Session
 
@@ -12,6 +12,7 @@ from onyx.db.models import (
     CloudEmbeddingProvider,
     IndexAttempt,
     IndexModelStatus,
+    IndexReclaimStatus,
     SearchSettings,
 )
 from onyx.server.manage.embedding.models import (
@@ -279,3 +280,105 @@ def update_search_settings_status(
 
 def user_has_overridden_embedding_model() -> bool:
     return DOCUMENT_ENCODER_MODEL != DEFAULT_DOCUMENT_ENCODER_MODEL
+
+
+# Old-index reclamation (post-reindex deletion of the now-PAST index).
+# Reclaim lifecycle lives as columns on SearchSettings (see models.py). The mutation
+# helpers only touch the row; the caller owns the commit. The reclaim beat task drives
+# the state machine one step per tick.
+
+# States the beat task still acts on. BLOCKED is parked (alerted) and excluded.
+_ACTIONABLE_RECLAIM_STATUSES = [
+    IndexReclaimStatus.PENDING,
+    IndexReclaimStatus.SOAKING,
+    IndexReclaimStatus.DELETING,
+]
+
+
+def set_reclaim_intent_on_current__no_commit(
+    db_session: Session, consented_cc_pair_ids: list[int]
+) -> None:
+    """Mark the current PRESENT index (the future PAST) for reclamation at reindex
+    submit. Stores the consented not-ported cc_pairs. No-op if there is no PRESENT.
+    Caller commits (atomically with FUTURE creation)."""
+    present = db_session.scalar(
+        select(SearchSettings).where(SearchSettings.status == IndexModelStatus.PRESENT)
+    )
+    if present is None:
+        return
+    present.reclaim_status = IndexReclaimStatus.PENDING
+    present.pending_cc_pair_deletions = consented_cc_pair_ids or None
+    present.reclaim_attempts = 0
+    present.reclaim_last_error = None
+
+
+def clear_reclaim_intent__no_commit(
+    db_session: Session, search_settings_id: int
+) -> None:
+    """Undo reclaim intent (e.g. reindex canceled before swap). Caller commits."""
+    ss = db_session.get(SearchSettings, search_settings_id)
+    if ss is None:
+        return
+    ss.reclaim_status = None
+    ss.reclaim_stopped_reading_at = None
+    ss.reclaim_attempts = 0
+    ss.reclaim_last_error = None
+    ss.pending_cc_pair_deletions = None
+
+
+def fetch_reclaimable_past_settings(
+    db_session: Session, limit: int
+) -> list[SearchSettings]:
+    """PAST indices still needing reclamation (PENDING/SOAKING/DELETING), oldest
+    first, capped at `limit`. BLOCKED rows are excluded (parked + alerted)."""
+    stmt = (
+        select(SearchSettings)
+        .where(
+            SearchSettings.status == IndexModelStatus.PAST,
+            SearchSettings.reclaim_status.in_(_ACTIONABLE_RECLAIM_STATUSES),
+        )
+        .order_by(SearchSettings.id)
+        .limit(limit)
+    )
+    return list(db_session.scalars(stmt))
+
+
+def advance_to_soaking__no_commit(search_settings: SearchSettings) -> bool:
+    """PENDING -> SOAKING: the index stopped being read; start the soak clock.
+    Anchors `reclaim_stopped_reading_at` to now (DB clock). No-op returning False
+    unless currently PENDING, so a repeat/out-of-order call can't re-stamp the anchor
+    and extend the soak. Caller commits."""
+    if search_settings.reclaim_status != IndexReclaimStatus.PENDING:
+        return False
+    search_settings.reclaim_status = IndexReclaimStatus.SOAKING
+    search_settings.reclaim_stopped_reading_at = func.now()
+    search_settings.reclaim_attempts = 0
+    search_settings.reclaim_last_error = None
+    return True
+
+
+def advance_to_deleting__no_commit(search_settings: SearchSettings) -> bool:
+    """SOAKING -> DELETING: soak elapsed + new index healthy. No-op returning False
+    unless currently SOAKING, so a call can't skip the soak. Caller commits."""
+    if search_settings.reclaim_status != IndexReclaimStatus.SOAKING:
+        return False
+    search_settings.reclaim_status = IndexReclaimStatus.DELETING
+    search_settings.reclaim_attempts = 0
+    search_settings.reclaim_last_error = None
+    return True
+
+
+def record_failure__no_commit(
+    search_settings: SearchSettings,
+    error: str,
+    max_attempts: int,
+) -> bool:
+    """Record a reclaim-step failure. Bumps the attempt counter; parks the row as
+    BLOCKED once it reaches `max_attempts`. Returns True if it is now BLOCKED.
+    Caller commits."""
+    search_settings.reclaim_attempts = (search_settings.reclaim_attempts or 0) + 1
+    search_settings.reclaim_last_error = error[:2000]
+    if search_settings.reclaim_attempts >= max_attempts:
+        search_settings.reclaim_status = IndexReclaimStatus.BLOCKED
+        return True
+    return False

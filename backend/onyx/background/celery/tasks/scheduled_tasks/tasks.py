@@ -51,8 +51,12 @@ from onyx.db.scheduled_task import (
     mark_run_status,
 )
 from onyx.server.features.build.scheduled_tasks.executor import (
-    DEFAULT_EXECUTOR_BUDGET_SECONDS,
     run_scheduled_task_logic,
+)
+from onyx.server.features.build.timeouts import (
+    QUEUE_RESIDENCY_SECONDS,
+    TURN_BUDGET_SECONDS,
+    TURN_RECLAIM_SLACK_SECONDS,
 )
 from onyx.server.features.build.utils import is_craft_enabled_for_user
 from onyx.server.settings.store import load_settings
@@ -65,25 +69,21 @@ from onyx.server.settings.store import load_settings
 # concurrent ticks just see "no rows" and exit.
 DISPATCH_BATCH_SIZE = 50
 
-# How long the executor message can sit on the `scheduled_tasks` queue
-# before Celery drops it. After 15 min we'd rather let the next beat tick
-# re-dispatch a new run row than execute a stale one.
-RUN_EXPIRES_SECONDS = 15 * 60
-
-# Stuck-run sweeper thresholds. The QUEUED threshold needs to comfortably
-# exceed the longest plausible queue wait + executor startup. The RUNNING
-# threshold should exceed the executor budget by enough margin that a
-# well-behaved run that hits its own budget gets there first and marks
-# itself FAILED (rather than the sweeper). Budget is 30 min by default;
-# 45 min gives 50% slack.
-STUCK_QUEUED_OLDER_THAN = timedelta(minutes=15)
-STUCK_RUNNING_OLDER_THAN = timedelta(seconds=DEFAULT_EXECUTOR_BUDGET_SECONDS + 15 * 60)
+# Celery expiry and the stuck-QUEUED sweep are one policy: a run that sat
+# queued past the residency limit is dropped unexecuted and its row reclaimed
+# by the same threshold. A RUNNING row is stuck only past budget + slack, so a
+# well-behaved run that hits its own budget always marks itself FAILED first.
+RUN_EXPIRES_SECONDS = QUEUE_RESIDENCY_SECONDS
+STUCK_QUEUED_OLDER_THAN = timedelta(seconds=QUEUE_RESIDENCY_SECONDS)
+STUCK_RUNNING_OLDER_THAN = timedelta(
+    seconds=TURN_BUDGET_SECONDS + TURN_RECLAIM_SLACK_SECONDS
+)
 
 
 # --- Dispatch ----------------------------------------------------------------
 
 
-@shared_task(
+@shared_task(  # ty: ignore[invalid-argument-type]
     name=OnyxCeleryTask.SCHEDULED_TASKS_DISPATCH_DUE,
     ignore_result=True,
     bind=True,
@@ -209,7 +209,7 @@ def dispatch_due_scheduled_tasks(self: Task, *, tenant_id: str) -> int:
 # --- Run executor wrapper ----------------------------------------------------
 
 
-@shared_task(
+@shared_task(  # ty: ignore[invalid-argument-type]
     name=OnyxCeleryTask.SCHEDULED_TASKS_RUN,
     ignore_result=True,
     # acks_late=False so a worker crash doesn't cause Celery to retry the
@@ -244,7 +244,7 @@ def run_scheduled_task(self: Task, *, run_id: str, tenant_id: str) -> None:
 # --- Stuck-run sweeper -------------------------------------------------------
 
 
-@shared_task(
+@shared_task(  # ty: ignore[invalid-argument-type]
     name=OnyxCeleryTask.SCHEDULED_TASKS_CLEANUP_STUCK,
     ignore_result=True,
     bind=True,

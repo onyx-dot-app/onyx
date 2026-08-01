@@ -22,8 +22,11 @@ import {
 import EntryPickerPopover from "@/sections/input/EntryPickerPopover";
 import useUserSkills from "@/hooks/useUserSkills";
 import useUserExternalApps from "@/hooks/useUserExternalApps";
+import { useCraftMcpServers } from "@/lib/tools/hooks";
 import {
   detectSlashTrigger,
+  pickerEntryConnectionPath,
+  pickerEntryPromptPrefix,
   toPickerSections,
   type PickerEntry,
 } from "@/lib/skills/picker";
@@ -84,9 +87,11 @@ export default function ScheduleTaskForm({
   const promptTextareaRef = useRef<HTMLTextAreaElement>(null);
   const { data: skillsData } = useUserSkills();
   const { data: externalAppsData } = useUserExternalApps();
+  const { data: craftMcpData } = useCraftMcpServers();
   const pickerSections = useMemo(
-    () => toPickerSections(skillsData, externalAppsData),
-    [skillsData, externalAppsData]
+    () =>
+      toPickerSections(skillsData, externalAppsData, craftMcpData?.mcp_servers),
+    [skillsData, externalAppsData, craftMcpData]
   );
   const [skillPicker, setSkillPicker] = useState<{
     open: boolean;
@@ -135,14 +140,15 @@ export default function ScheduleTaskForm({
 
   const handleSkillPickerSelect = useCallback(
     (entry: PickerEntry) => {
-      if (entry.kind === "app" && !entry.authenticated) {
+      const connectionPath = pickerEntryConnectionPath(entry);
+      if (connectionPath) {
         setSkillPicker((s) => ({ ...s, open: false }));
-        router.push(`/craft/v1/apps?connect=${entry.slug}`);
+        router.push(connectionPath);
         return;
       }
       setSkillPicker((prev) => {
         if (!prev.open) return prev;
-        const replacement = `/${entry.slug} `;
+        const replacement = `${pickerEntryPromptPrefix(entry)} `;
         const newPrompt =
           prompt.slice(0, prev.slashIndex) +
           replacement +

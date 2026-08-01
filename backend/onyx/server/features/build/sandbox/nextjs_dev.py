@@ -47,6 +47,23 @@ fi
 
     return f"""
 set -e
+# Replay safety: a live server already attached to this session keeps its
+# port; spawning a second one would fail to bind and leave a zombie. The
+# check-and-spawn is serialized under its own flock so two replays (e.g. a
+# timed-out setup still running beside its retry) can't both spawn, and the
+# guard verifies process identity via cwd — PIDs recycle in a pod full of
+# short-lived tool processes, so a stale nextjs.pid could otherwise match an
+# unrelated live process and skip the spawn forever.
+(
+flock -x 9
+NEXTJS_PID=""
+if [ -f {session_path}/nextjs.pid ]; then
+    NEXTJS_PID="$(cat {session_path}/nextjs.pid)"
+fi
+if [ -n "$NEXTJS_PID" ] && kill -0 "$NEXTJS_PID" 2>/dev/null && \
+   [ "$(readlink /proc/$NEXTJS_PID/cwd 2>/dev/null)" = "{session_path}/outputs/web" ]; then
+    echo "Next.js server already running (PID $NEXTJS_PID); reusing"
+else
 cd {session_path}/outputs/web
 {install_check}
 export ONYX_WEBAPP_BASE_PATH="/api/build/sessions/$(basename {session_path})/webapp"
@@ -76,8 +93,12 @@ export default nextConfig;
 EOF
 fi
 echo "Starting Next.js dev server on port {nextjs_port}..."
-nohup bun run dev -- -H 0.0.0.0 -p {nextjs_port} > {session_path}/nextjs.log 2>&1 &
+# 9>&-: the server must not inherit the lock fd, or it would hold the
+# check-and-spawn lock for its entire lifetime.
+nohup bun run dev -- -H 0.0.0.0 -p {nextjs_port} > {session_path}/nextjs.log 2>&1 9>&- &
 NEXTJS_PID=$!
 echo "Next.js server started with PID $NEXTJS_PID"
 echo $NEXTJS_PID > {session_path}/nextjs.pid
+fi
+) 9>{session_path}.nextjs.lock
 """

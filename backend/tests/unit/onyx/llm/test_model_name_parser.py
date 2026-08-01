@@ -16,7 +16,7 @@ def test_bedrock_model_with_enrichment() -> None:
 
     assert result.raw_name == "bedrock/anthropic.claude-3-5-sonnet-20241022-v2:0"
     assert result.provider == LlmProviderNames.BEDROCK
-    assert result.vendor == LlmProviderNames.ANTHROPIC
+    assert result.vendor == "Anthropic"
     assert result.display_name == "Claude Sonnet 3.5"
     assert result.provider_display_name == "Claude (Bedrock - Anthropic)"
 
@@ -45,7 +45,7 @@ def test_gpt_model_fallback_keeps_gpt_prefix() -> None:
     result = parse_litellm_model_name("azure/gpt-4o-mini-custom")
 
     assert result.display_name == "GPT-4o Mini Custom"
-    assert result.vendor == "openai"
+    assert result.vendor == "OpenAI"
 
 
 def test_unknown_model_fallback() -> None:

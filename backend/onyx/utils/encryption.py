@@ -151,19 +151,21 @@ MASK_CREDENTIALS_WHITELIST = {
     "wiki_base",
     "cloud_name",
     "cloud_id",
+    # OAuth scope lists are public identifiers, not secrets, and masked list
+    # items cannot round-trip through a chip editor.
+    "scopes",
 }
 
 
 def mask_credential_dict(credential_dict: dict[str, Any]) -> dict[str, Any]:
     masked_creds: dict[str, Any] = {}
     for key, val in credential_dict.items():
-        if isinstance(val, str):
-            # we want to pass the authentication_method field through so the frontend
-            # can disambiguate credentials created by different methods
-            if key in MASK_CREDENTIALS_WHITELIST:
-                masked_creds[key] = val
-            else:
-                masked_creds[key] = mask_string(val)
+        # Whitelisted keys pass through whole (e.g. authentication_method so
+        # the frontend can disambiguate credential kinds) whatever their type.
+        if key in MASK_CREDENTIALS_WHITELIST:
+            masked_creds[key] = val
+        elif isinstance(val, str):
+            masked_creds[key] = mask_string(val)
         elif isinstance(val, dict):
             masked_creds[key] = mask_credential_dict(val)
         elif isinstance(val, list):

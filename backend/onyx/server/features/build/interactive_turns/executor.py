@@ -11,10 +11,10 @@ from uuid import UUID
 from onyx.cache.factory import get_cache_backend
 from onyx.cache.interface import CACHE_TRANSIENT_ERRORS, CacheBackend
 from onyx.db.engine.sql_engine import get_session_with_current_tenant
+from onyx.db.users import fetch_user_by_id
 from onyx.server.features.build.configs import (
     OPENCODE_PROMPT_INACTIVITY_TIMEOUT_SECONDS,
 )
-from onyx.server.features.build.db.build_session import update_session_activity
 from onyx.server.features.build.interactive_turns.state import (
     TURN_STATUS_CANCELLED,
     TURN_STATUS_FAILED,
@@ -30,10 +30,7 @@ from onyx.server.features.build.sandbox.event_schema import (
     PromptResponse,
 )
 from onyx.server.features.build.sandbox.event_schema import Error as SandboxError
-from onyx.server.features.build.sandbox.serve_transport import (
-    PROMPT_SLOT_FAST_FAIL_ACQUIRE_SECONDS,
-    PROMPT_SLOT_WAIT_OUT_ORPHAN_SECONDS,
-)
+from onyx.server.features.build.sandbox.models import PromptAttachment
 from onyx.server.features.build.sandbox.sse import SSEKeepalive
 from onyx.server.features.build.session.interrupt_signal import (
     clear_interrupt,
@@ -41,6 +38,11 @@ from onyx.server.features.build.session.interrupt_signal import (
 )
 from onyx.server.features.build.session.manager import SessionManager
 from onyx.server.features.build.session.streaming import BuildStreamingState
+from onyx.server.features.build.timeouts import (
+    PROMPT_SLOT_FAST_FAIL_ACQUIRE_SECONDS,
+    PROMPT_SLOT_WAIT_OUT_ORPHAN_SECONDS,
+    TURN_BUDGET_SECONDS,
+)
 from onyx.utils.logger import setup_logger
 from shared_configs.contextvars import (
     CURRENT_TENANT_ID_CONTEXTVAR,
@@ -48,8 +50,6 @@ from shared_configs.contextvars import (
 )
 
 logger = setup_logger()
-
-DEFAULT_INTERACTIVE_TURN_BUDGET_SECONDS = 30 * 60
 
 MAX_TIMEOUT_CONTINUATIONS = 2
 _TOOL_TIMEOUT_CONTINUATION_PROMPT = (
@@ -130,7 +130,7 @@ def start_interactive_turn_runner(turn_id: UUID) -> None:
 def run_claimed_interactive_build_turn(
     turn: InteractiveTurn,
     *,
-    budget_seconds: int = DEFAULT_INTERACTIVE_TURN_BUDGET_SECONDS,
+    budget_seconds: int = TURN_BUDGET_SECONDS,
 ) -> None:
     """Execute a turn that this runner has already claimed in CacheBackend."""
     cache = get_cache_backend()
@@ -142,6 +142,7 @@ def run_claimed_interactive_build_turn(
             user_id=turn.user_id,
             prompt=turn.prompt,
             turn_index=turn.turn_index,
+            attachments=turn.attachments,
             budget_seconds=budget_seconds,
             runner_id=runner_id,
             reclaimed=turn.reclaimed,
@@ -167,6 +168,7 @@ def _drive_interactive_turn(
     user_id: UUID,
     prompt: str,
     turn_index: int,
+    attachments: list[PromptAttachment],
     budget_seconds: int,
     runner_id: str | None,
     reclaimed: bool,
@@ -222,14 +224,19 @@ def _drive_interactive_turn(
             return
 
         try:
-            # Re-fence after the (possibly long) slot wait: a reclaim acquire
+            # Re-check ownership after the (possibly long) slot wait: a reclaim acquire
             # can block past RUNNER_STALE_AFTER_SECONDS, letting another
             # runner steal the turn — it must not reach the prompt POST.
             if not touch_turn(cache=cache, turn_id=turn_id, runner_id=runner_id):
                 logger.info("Interactive turn %s runner ownership lost", turn_id)
                 return
 
-            update_session_activity(session_id, db_session)
+            session = session_manager.get_session(session_id, user_id)
+            user = fetch_user_by_id(db_session, user_id)
+            if session is None or user is None:
+                raise RuntimeError("Craft session owner or session no longer exists")
+            session_manager.reconcile_session_llm_config(sandbox, session, user)
+            db_session.commit()
 
             if interrupt_requested():
                 session_manager.finalize_persist(session_id, state)
@@ -243,7 +250,10 @@ def _drive_interactive_turn(
                 return
 
             def drive_one_prompt(
-                current_prompt: str, *, can_continue: bool
+                current_prompt: str,
+                prompt_attachments: list[PromptAttachment],
+                *,
+                can_continue: bool,
             ) -> _PromptResult:
                 """Stream one opencode prompt to completion, timeout, or a
                 turn-ending failure. On the recoverable inactivity timeout it
@@ -259,6 +269,7 @@ def _drive_interactive_turn(
                     sandbox.id,
                     session_id,
                     current_prompt,
+                    attachments=prompt_attachments,
                     should_interrupt=interrupt_requested,
                     should_abort_on_teardown=lambda: not ownership_lost,
                 )
@@ -336,6 +347,7 @@ def _drive_interactive_turn(
             for attempt in range(MAX_TIMEOUT_CONTINUATIONS + 1):
                 result = drive_one_prompt(
                     current_prompt,
+                    attachments if attempt == 0 else [],
                     can_continue=attempt < MAX_TIMEOUT_CONTINUATIONS,
                 )
                 if result.outcome is not _PromptOutcome.TIMED_OUT:

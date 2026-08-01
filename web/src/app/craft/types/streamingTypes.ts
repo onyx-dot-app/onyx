@@ -77,8 +77,15 @@ export interface BuildMessage {
   content: string;
   timestamp: Date;
   turn_index?: number;
+  attachments?: BuildMessageAttachment[];
   /** Structured sandbox event data (tool calls, thinking, plans) */
   message_metadata?: Record<string, any> | null;
+}
+
+export interface BuildMessageAttachment {
+  name: string;
+  path: string;
+  mimeType: string;
 }
 
 // =============================================================================
@@ -171,7 +178,7 @@ export interface ApiSessionResponse {
   id: string;
   user_id: string | null;
   name: string | null;
-  status: "active" | "idle" | "archived";
+  status: "initializing" | "active" | "idle" | "failed";
   created_at: string;
   last_activity_at: string;
   sandbox: ApiSandboxResponse | null;

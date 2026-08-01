@@ -15,6 +15,7 @@ from onyx.configs.app_configs import (
 from onyx.db.engine.sql_engine import get_session_with_current_tenant
 from onyx.db.enums import LLMModelFlowType
 from onyx.db.models import LLMProvider, ModelConfiguration
+from onyx.llm.exceptions import ClassifiedLLMError
 from onyx.llm.interfaces import LLM, LLMUserIdentity
 from onyx.llm.model_capabilities import (
     get_max_input_tokens,
@@ -149,6 +150,15 @@ def litellm_exception_to_error_msg(
     error_code = "UNKNOWN_ERROR"
     is_retryable = True
 
+    # This is raised by us in cases where we already have computed the stuff we
+    # normally pull out of litellm errors. Just send it through.
+    if isinstance(core_exception, ClassifiedLLMError):
+        return (
+            core_exception.client_error_msg,
+            core_exception.error_code,
+            core_exception.is_retryable,
+        )
+
     if custom_error_msg_mappings:
         for error_msg_pattern, custom_error_msg in custom_error_msg_mappings.items():
             if error_msg_pattern in error_msg:
@@ -213,11 +223,13 @@ def litellm_exception_to_error_msg(
         elif hasattr(core_exception, "api_error"):
             api_error = core_exception.api_error
             if isinstance(api_error, dict):
-                upstream_detail = (
-                    api_error.get("message")  # ty: ignore[invalid-argument-type]
-                    or api_error.get("detail")  # ty: ignore[invalid-argument-type]
-                    or api_error.get("error")  # ty: ignore[invalid-argument-type]
+                detail_value = (
+                    api_error.get("message")
+                    or api_error.get("detail")
+                    or api_error.get("error")
                 )
+                if detail_value:
+                    upstream_detail = str(detail_value)
         if not upstream_detail:
             upstream_detail = str(core_exception)
         upstream_detail = str(upstream_detail).strip()

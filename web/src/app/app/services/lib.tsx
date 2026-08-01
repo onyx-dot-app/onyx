@@ -4,6 +4,7 @@ import {
   StreamStopInfo,
 } from "@/lib/search/interfaces";
 import { handleSSEStream } from "@/lib/search/streamingUtils";
+import { ReasoningEffortOverride } from "@/lib/languageModels/types";
 import { FeedbackType } from "@/app/app/interfaces";
 import {
   BackendMessage,
@@ -13,6 +14,8 @@ import {
   Message,
   MessageResponseIDInfo,
   MultiModelMessageResponseIDInfo,
+  RateLimitDetails,
+  RATE_LIMITED_ERROR_CODE,
   ResearchType,
   RetrievalType,
   StreamingError,
@@ -55,6 +58,23 @@ export async function updateTemperatureOverrideForChatSession(
     body: JSON.stringify({
       chat_session_id: chatSessionId,
       temperature_override: newTemperature,
+    }),
+  });
+  return response;
+}
+
+export async function updateReasoningEffortForChatSession(
+  chatSessionId: string,
+  newReasoningEffort: ReasoningEffortOverride | null
+) {
+  const response = await fetch("/api/chat/update-chat-session-reasoning", {
+    method: "PUT",
+    headers: {
+      "Content-Type": "application/json",
+    },
+    body: JSON.stringify({
+      chat_session_id: chatSessionId,
+      reasoning_effort_override: newReasoningEffort,
     }),
   });
   return response;
@@ -197,6 +217,31 @@ export async function* sendMessage({
 
   if (!response.ok) {
     const data = await response.json().catch(() => ({}));
+
+    // Surface the usage rate-limit (429) as a structured StreamingError packet
+    // so the chat UI can render the dedicated usage-limit banner. Throwing a
+    // bare Error here would flatten error_code/reset_at into an opaque string.
+    if (
+      response.status === 429 &&
+      data.error_code === RATE_LIMITED_ERROR_CODE
+    ) {
+      const rateLimitDetails: RateLimitDetails = {
+        scope: data.scope,
+        reset_at: data.reset_at,
+        retry_after_seconds: data.retry_after_seconds,
+      };
+      const streamingError: StreamingError = {
+        error: data.detail ?? "You've reached your usage limit.",
+        stack_trace: "",
+        error_code: RATE_LIMITED_ERROR_CODE,
+        // Regenerate would just re-trip the limit, so this is not retryable.
+        is_retryable: false,
+        details: rateLimitDetails,
+      };
+      yield streamingError;
+      return;
+    }
+
     throw new Error(data.detail ?? `HTTP error! status: ${response.status}`);
   }
 

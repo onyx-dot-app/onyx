@@ -1,5 +1,6 @@
 """LLM cost calculation utilities."""
 
+from pydantic import BaseModel
 from sqlalchemy.orm import Session
 
 from onyx.configs.app_configs import (
@@ -14,12 +15,20 @@ from onyx.utils.logger import setup_logger
 logger = setup_logger()
 
 
+class ModelPrice(BaseModel):
+    model: str
+    provider: str | None
+    input_per_mtok: float | None
+    output_per_mtok: float | None
+    cache_per_mtok: float | None
+
+
 def get_model_price_per_million(
     model: str,
     provider: str | None,
     db_session: Session | None = None,
-) -> tuple[float | None, float | None]:
-    """Override-aware USD/Mtok for UI; (None, None) if unpriced; never raises."""
+) -> ModelPrice:
+    """Return override-aware USD per million tokens without raising."""
     if db_session is not None:
         try:
             rates = cost_overrides.get_override(db_session, model, provider or "")
@@ -27,23 +36,45 @@ def get_model_price_per_million(
             logger.exception("Override lookup failed for model %s", model)
             rates = None
         if rates is not None:
-            return rates.input_cost_per_mtok, rates.output_cost_per_mtok
+            return ModelPrice(
+                model=model,
+                provider=provider,
+                input_per_mtok=rates.input_cost_per_mtok,
+                output_per_mtok=rates.output_cost_per_mtok,
+                cache_per_mtok=rates.cache_read_cost_per_mtok,
+            )
 
     try:
         import litellm
 
-        # custom_llm_provider disambiguates non-self-identifying names so the
-        # same model resolves the same way it does for billing.
         entry = litellm.get_model_info(model=model, custom_llm_provider=provider)
         input_per_tok = entry.get("input_cost_per_token")
         output_per_tok = entry.get("output_cost_per_token")
-        return (
-            float(input_per_tok) * 1_000_000 if input_per_tok is not None else None,
-            float(output_per_tok) * 1_000_000 if output_per_tok is not None else None,
+        cache_per_tok = entry.get("cache_read_input_token_cost")
+        return ModelPrice(
+            model=model,
+            provider=provider,
+            input_per_mtok=(
+                float(input_per_tok) * 1_000_000 if input_per_tok is not None else None
+            ),
+            output_per_mtok=(
+                float(output_per_tok) * 1_000_000
+                if output_per_tok is not None
+                else None
+            ),
+            cache_per_mtok=(
+                float(cache_per_tok) * 1_000_000 if cache_per_tok is not None else None
+            ),
         )
     except Exception:
         logger.debug("No price-per-million for model %s (provider %s)", model, provider)
-        return None, None
+        return ModelPrice(
+            model=model,
+            provider=provider,
+            input_per_mtok=None,
+            output_per_mtok=None,
+            cache_per_mtok=None,
+        )
 
 
 def _image_cost_cents(model: str, provider: str | None) -> float:

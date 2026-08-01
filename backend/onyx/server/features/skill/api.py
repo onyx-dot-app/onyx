@@ -1,5 +1,6 @@
 import io
 import zipfile
+from contextlib import ExitStack
 from typing import Annotated
 from uuid import UUID
 
@@ -7,13 +8,23 @@ from fastapi import APIRouter, Depends, File, Form, UploadFile
 from pydantic import ValidationError
 from sqlalchemy.orm import Session
 
-from onyx.auth.permissions import require_permission
+from onyx.auth.permissions import get_effective_permissions, require_permission
 from onyx.auth.schemas import UserRole
-from onyx.db.engine.sql_engine import get_session
-from onyx.db.enums import AccountType, Permission, SkillSharePermission
+from onyx.db.engine.sql_engine import get_session, get_session_with_tenant
+from onyx.db.enums import (
+    AccountType,
+    ExternalAppType,
+    Permission,
+    SkillSharePermission,
+)
+from onyx.db.external_app import (
+    associate_custom_skill_with_external_app__no_commit,
+    get_built_in_external_app,
+    get_external_app_by_id,
+)
 from onyx.db.models import Skill, User
 from onyx.db.skill import (
-    SkillAccessPolicy,
+    SkillManagementPolicy,
     add_new_skill__no_commit,
     affected_user_ids_for_skill,
     delete_skill,
@@ -29,8 +40,17 @@ from onyx.db.skill import (
 from onyx.db.users import fetch_user_by_id
 from onyx.error_handling.error_codes import OnyxErrorCode
 from onyx.error_handling.exceptions import OnyxError
+from onyx.external_apps.credentials import resolve_injection_headers
+from onyx.external_apps.token_refresh import ensure_fresh_credentials
 from onyx.file_store.file_store import get_default_file_store
 from onyx.server.features.skill.models import (
+    GitHubImportedSkill,
+    GitHubSkillNotImported,
+    GitHubSkillPreview,
+    GitHubSkillsImportRequest,
+    GitHubSkillsImportResponse,
+    GitHubSkillsPreviewRequest,
+    GitHubSkillsPreviewResponse,
     SkillBundleInspectResponse,
     SkillCreateRequest,
     SkillEditableDetailResponse,
@@ -65,10 +85,29 @@ from onyx.skills.ingest import (
     ingested_skill_bundle,
     save_skill_bundle_bytes,
 )
+from onyx.skills.ingest_from_github import fetch_github_skill_bundles
 from onyx.skills.metadata import parse_skill_document
 from onyx.skills.push import push_skill_to_affected_sandboxes, push_skills_for_users
+from shared_configs.contextvars import get_current_tenant_id
 
 user_router = APIRouter(prefix="/skills")
+
+
+def _github_authorization_header(user: User) -> str | None:
+    tenant_id = get_current_tenant_id()
+    with get_session_with_tenant(tenant_id=tenant_id) as db_session:
+        github_app = get_built_in_external_app(db_session, ExternalAppType.GITHUB)
+        if github_app is None or not github_app.enabled:
+            return None
+        github_app_id = github_app.id
+
+    ensure_fresh_credentials(tenant_id, github_app_id, user.id)
+    with get_session_with_tenant(tenant_id=tenant_id) as db_session:
+        return resolve_injection_headers(
+            db_session,
+            github_app_id,
+            user.id,
+        ).get("Authorization")
 
 
 def _ensure_can_edit_org_visibility(skill: Skill, user: User) -> None:
@@ -137,7 +176,7 @@ def list_skills_for_current_user(
     db_session: Session = Depends(get_session),
 ) -> SkillsList:
     rows = list_skills(
-        policy=SkillAccessPolicy.VIEW,
+        policy=SkillManagementPolicy.VIEW,
         user=user,
         db_session=db_session,
     )
@@ -172,7 +211,7 @@ def fetch_skill_for_current_user(
 ) -> SkillResponse:
     skill = fetch_skill(
         skill_id,
-        policy=SkillAccessPolicy.VIEW,
+        policy=SkillManagementPolicy.VIEW,
         user=user,
         db_session=db_session,
     )
@@ -189,13 +228,13 @@ def preview_skill_for_current_user(
 ) -> SkillPreviewResponse:
     skill = fetch_skill(
         skill_id,
-        policy=SkillAccessPolicy.VIEW,
+        policy=SkillManagementPolicy.VIEW,
         user=user,
         db_session=db_session,
     )
     if skill is None:
         raise OnyxError(OnyxErrorCode.NOT_FOUND, "Skill not found")
-    return skill_preview_response(skill)
+    return skill_preview_response(skill, user, db_session)
 
 
 @user_router.post("/custom")
@@ -243,6 +282,128 @@ def create_custom_skill(
     )
 
 
+@user_router.post("/github/preview")
+def preview_github_skills(
+    request: GitHubSkillsPreviewRequest,
+    user: User = Depends(require_permission(Permission.BASIC_ACCESS)),
+) -> GitHubSkillsPreviewResponse:
+    repository, skills = fetch_github_skill_bundles(
+        request.repository,
+        _github_authorization_header(user),
+    )
+    return GitHubSkillsPreviewResponse(
+        repository=f"{repository.owner}/{repository.repo}",
+        revision=repository.revision,
+        subpath=repository.subpath,
+        skills=[
+            GitHubSkillPreview(
+                path=skill.path,
+                name=skill.name,
+                description=skill.description,
+                unavailable_reason=skill.unavailable_reason,
+            )
+            for skill in skills
+        ],
+    )
+
+
+@user_router.post("/github/import")
+def import_github_skills(
+    request: GitHubSkillsImportRequest,
+    user: User = Depends(require_permission(Permission.BASIC_ACCESS)),
+    db_session: Session = Depends(get_session),
+) -> GitHubSkillsImportResponse:
+    _, discovered_skills = fetch_github_skill_bundles(
+        request.repository,
+        _github_authorization_header(user),
+        revision=request.revision,
+        subpath=request.subpath,
+        selected_paths=set(request.paths),
+    )
+    skills_by_path = {skill.path: skill for skill in discovered_skills}
+    selected_paths = list(dict.fromkeys(request.paths))
+    not_imported: list[GitHubSkillNotImported] = []
+    created: list[tuple[Skill, bool]] = []
+
+    file_store = get_default_file_store()
+    with ExitStack() as ingested_bundles:
+        for path in selected_paths:
+            selected_skill = skills_by_path.get(path)
+            if selected_skill is None:
+                not_imported.append(
+                    GitHubSkillNotImported(
+                        path=path,
+                        name=path.rsplit("/", maxsplit=1)[-1],
+                        reason="This skill was not found in the previewed revision.",
+                    )
+                )
+                continue
+            if (
+                selected_skill.bundle_bytes is None
+                or selected_skill.unavailable_reason is not None
+            ):
+                not_imported.append(
+                    GitHubSkillNotImported(
+                        path=path,
+                        name=selected_skill.name,
+                        reason=selected_skill.unavailable_reason
+                        or "This skill cannot be imported.",
+                    )
+                )
+                continue
+
+            ingested = ingested_bundles.enter_context(
+                ingested_skill_bundle(
+                    selected_skill.bundle_bytes,
+                    f"{selected_skill.name}.zip",
+                    file_store,
+                    expected_name=selected_skill.name,
+                )
+            )
+            skill = add_new_skill__no_commit(
+                Skill(
+                    name=ingested.canonical_name,
+                    description=ingested.description,
+                    bundle_file_id=ingested.bundle_file_id,
+                    bundle_sha256=ingested.bundle_sha256,
+                    is_valid=True,
+                    author_user_id=user.id,
+                ),
+                db_session,
+            )
+            enabled = enable_new_skill_if_name_available__no_commit(
+                skill,
+                user.id,
+                db_session,
+            )
+            created.append((skill, enabled))
+        db_session.commit()
+
+    if any(enabled for _, enabled in created):
+        push_skills_for_users({user.id}, db_session)
+        db_session.commit()
+
+    return GitHubSkillsImportResponse(
+        imported=[
+            GitHubImportedSkill(
+                skill=skill_response_for_user(
+                    skill,
+                    user,
+                    db_session,
+                    include_share_details=True,
+                ),
+                disabled_reason=(
+                    None
+                    if enabled
+                    else f"Another skill named “{skill.name}” is already enabled."
+                ),
+            )
+            for skill, enabled in created
+        ],
+        not_imported=not_imported,
+    )
+
+
 @user_router.post("/custom/editor")
 def create_custom_skill_from_editor(
     name: Annotated[str, Form(min_length=1)],
@@ -250,9 +411,23 @@ def create_custom_skill_from_editor(
     instructions_markdown: Annotated[str, Form(min_length=1)],
     upload: Annotated[UploadFile | None, File()] = None,
     auto_enable: Annotated[bool, Form()] = True,
+    external_app_id: Annotated[int | None, Form(gt=0)] = None,
     user: User = Depends(require_permission(Permission.BASIC_ACCESS)),
     db_session: Session = Depends(get_session),
 ) -> SkillEditableDetailResponse:
+    if external_app_id is not None:
+        if (
+            user.role != UserRole.ADMIN
+            and Permission.FULL_ADMIN_PANEL_ACCESS
+            not in get_effective_permissions(user)
+        ):
+            raise OnyxError(
+                OnyxErrorCode.INSUFFICIENT_PERMISSIONS,
+                "Only administrators can create a skill for an external app.",
+            )
+        if get_external_app_by_id(db_session, external_app_id) is None:
+            raise OnyxError(OnyxErrorCode.NOT_FOUND, "External app not found.")
+
     try:
         create_request = SkillCreateRequest(
             name=name,
@@ -286,6 +461,7 @@ def create_custom_skill_from_editor(
         instructions_markdown=create_request.instructions_markdown,
     )
     file_store = get_default_file_store()
+    should_auto_enable = auto_enable and external_app_id is None
     with ingested_skill_bundle(
         bundle_bytes,
         f"{canonical_name}.zip",
@@ -303,7 +479,13 @@ def create_custom_skill_from_editor(
             ),
             db_session,
         )
-        if auto_enable and not enable_new_skill_if_name_available__no_commit(
+        if external_app_id is not None:
+            associate_custom_skill_with_external_app__no_commit(
+                db_session,
+                external_app_id=external_app_id,
+                skill_id=skill.id,
+            )
+        if should_auto_enable and not enable_new_skill_if_name_available__no_commit(
             skill, user.id, db_session
         ):
             raise OnyxError(
@@ -312,7 +494,7 @@ def create_custom_skill_from_editor(
             )
         db_session.commit()
 
-    if auto_enable:
+    if should_auto_enable:
         push_skill_to_affected_sandboxes(skill, db_session)
         db_session.commit()
 
@@ -327,7 +509,7 @@ def fetch_custom_skill_for_edit(
 ) -> SkillEditableDetailResponse:
     skill = fetch_skill(
         skill_id,
-        policy=SkillAccessPolicy.EDIT,
+        policy=SkillManagementPolicy.EDIT,
         user=user,
         db_session=db_session,
     )
@@ -378,7 +560,7 @@ def replace_current_user_skill_bundle(
 ) -> SkillResponse:
     skill = fetch_skill(
         skill_id,
-        policy=SkillAccessPolicy.EDIT,
+        policy=SkillManagementPolicy.EDIT,
         user=user,
         db_session=db_session,
         lock_for_update=True,
@@ -423,7 +605,7 @@ def upload_current_user_skill_files(
 ) -> SkillEditableDetailResponse:
     skill = fetch_skill(
         skill_id,
-        policy=SkillAccessPolicy.EDIT,
+        policy=SkillManagementPolicy.EDIT,
         user=user,
         db_session=db_session,
         lock_for_update=True,
@@ -451,7 +633,7 @@ def remove_current_user_skill_file(
 ) -> SkillEditableDetailResponse:
     skill = fetch_skill(
         skill_id,
-        policy=SkillAccessPolicy.EDIT,
+        policy=SkillManagementPolicy.EDIT,
         user=user,
         db_session=db_session,
         lock_for_update=True,
@@ -479,7 +661,7 @@ def patch_current_user_skill(
 ) -> SkillResponse:
     skill = fetch_skill(
         skill_id,
-        policy=SkillAccessPolicy.EDIT,
+        policy=SkillManagementPolicy.EDIT,
         user=user,
         db_session=db_session,
         lock_for_update=True,
@@ -578,7 +760,7 @@ def share_current_user_skill(
 ) -> SkillResponse:
     skill = fetch_skill(
         skill_id,
-        policy=SkillAccessPolicy.EDIT,
+        policy=SkillManagementPolicy.EDIT,
         user=user,
         db_session=db_session,
         lock_for_update=True,
@@ -653,14 +835,14 @@ def transfer_current_user_skill_ownership(
 ) -> SkillResponse:
     skill = fetch_skill(
         skill_id,
-        policy=SkillAccessPolicy.VIEW,
+        policy=SkillManagementPolicy.VIEW,
         user=user,
         db_session=db_session,
         lock_for_update=True,
     )
     if skill is None:
         raise OnyxError(OnyxErrorCode.NOT_FOUND, "Skill not found")
-    if skill.built_in_skill_id is not None:
+    if not skill.is_custom:
         raise OnyxError(
             OnyxErrorCode.INVALID_INPUT,
             f"Skill '{skill.name}' is a built-in and cannot change ownership.",
@@ -731,7 +913,7 @@ def delete_current_user_skill(
 ) -> None:
     skill = fetch_skill(
         skill_id,
-        policy=SkillAccessPolicy.EDIT,
+        policy=SkillManagementPolicy.EDIT,
         user=user,
         db_session=db_session,
         lock_for_update=True,

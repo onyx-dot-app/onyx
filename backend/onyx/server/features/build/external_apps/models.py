@@ -1,4 +1,5 @@
 from typing import Any
+from uuid import UUID
 
 from pydantic import BaseModel, ConfigDict
 
@@ -22,7 +23,6 @@ class CreateBuiltInExternalAppRequest(BaseModel):
     """
 
     name: str
-    description: str
     app_type: ExternalAppType
     upstream_url_patterns: list[str]
     auth_template: dict[str, Any]
@@ -32,27 +32,42 @@ class CreateBuiltInExternalAppRequest(BaseModel):
     action_policies: dict[str, EndpointPolicy] | None = None
 
 
+class CreateCustomExternalAppRequest(BaseModel):
+    """Create a custom external-app gateway without creating skill content."""
+
+    name: str
+    upstream_url_patterns: list[str]
+    auth_template: dict[str, str]
+    organization_credentials: dict[str, str]
+
+
 class UpdateExternalAppRequest(BaseModel):
     """Partial update of an existing app, keyed solely by the path ``id``
     (``PATCH /admin/apps/{id}``). Every field is optional; ``None`` means "leave
     untouched", so a narrow request won't blank the rest.
 
-    This is the single update path for built-in apps. For Onyx-managed built-ins
+    This is the single update path for all apps. For Onyx-managed built-ins
     (cloud) the gateway-config fields (``upstream_url_patterns``,
     ``auth_template``, ``organization_credentials``) are Onyx-owned and ignored —
-    only ``enabled`` and ``action_policies`` take effect. Custom-app field edits
-    (and bundle replacement) go through ``POST /admin/apps/custom`` instead, since
-    that path is multipart.
+    only ``enabled`` and ``action_policies`` take effect.
     """
 
     enabled: bool | None = None
     name: str | None = None
-    description: str | None = None
     upstream_url_patterns: list[str] | None = None
     auth_template: dict[str, Any] | None = None
     organization_credentials: dict[str, str] | None = None
+    # When present, atomically replaces only the app's custom-skill
+    # associations. System-managed built-in associations are preserved.
+    associated_skill_ids: list[UUID] | None = None
     # Full-replace stored overrides when present (empty clears); None leaves them.
     action_policies: dict[str, EndpointPolicy] | None = None
+
+
+class ExternalAppAssociatedSkill(BaseModel):
+    id: UUID
+    name: str
+    is_valid: bool | None
 
 
 class ExternalAppAdminResponse(BaseModel):
@@ -60,7 +75,6 @@ class ExternalAppAdminResponse(BaseModel):
 
     id: int
     name: str
-    description: str
     app_type: ExternalAppType
     upstream_url_patterns: list[str]
     auth_template: dict[str, Any]
@@ -68,6 +82,7 @@ class ExternalAppAdminResponse(BaseModel):
     enabled: bool
     # The merged per-action policy view (built-in apps; empty for custom).
     actions: list[ActionPolicyView]
+    associated_skills: list[ExternalAppAssociatedSkill]
     # Onyx-managed built-in (cloud): creds/config Onyx-owned and blanked above;
     # admin may only set availability and policies. UI hides the rest.
     is_onyx_managed: bool = False
@@ -98,8 +113,6 @@ class ExternalAppUserResponse(BaseModel):
 
     id: int
     name: str
-    description: str
-    slug: str
     app_type: ExternalAppType
     credential_keys: list[str]
     credential_values: dict[str, Any]

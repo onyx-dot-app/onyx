@@ -919,6 +919,8 @@ export default function AppPage({ firstMessage }: ChatPageProps) {
                             onAdd={multiModel.addModel}
                             onRemove={multiModel.removeModel}
                             onReplace={multiModel.replaceModel}
+                            temperatureManager={llmManager}
+                            reasoningManager={llmManager}
                           />
                         )}
                     </Section>
@@ -939,7 +941,7 @@ export default function AppPage({ firstMessage }: ChatPageProps) {
                       "relative w-full flex flex-col",
                       onboardingVisible && "min-h-0",
                       !fullWidthActive &&
-                        "max-w-(--app-page-main-content-width)"
+                        "md:max-w-(--app-page-main-content-width)"
                     )}
                   >
                     {/* Scroll to bottom button - positioned absolutely above AppInputBar */}
@@ -999,6 +1001,8 @@ export default function AppPage({ firstMessage }: ChatPageProps) {
                             onAdd={multiModel.addModel}
                             onRemove={multiModel.removeModel}
                             onReplace={multiModel.replaceModel}
+                            temperatureManager={llmManager}
+                            reasoningManager={llmManager}
                           />
                         </div>
                       )}

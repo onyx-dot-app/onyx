@@ -50,11 +50,13 @@ IMPLIED_PERMISSIONS: dict[str, set[str]] = {
         Permission.READ_CHAT.value,
         Permission.WRITE_CHAT.value,
         Permission.GENERATE_IMAGE.value,
+        Permission.USE_LLM_GATEWAY.value,
     },
     Permission.WRITE_CHAT.value: {Permission.READ_CHAT.value},
     Permission.CRAFT_SANDBOX.value: {
         Permission.READ_SEARCH.value,
         Permission.GENERATE_IMAGE.value,
+        Permission.USE_LLM_GATEWAY.value,
     },
 }
 

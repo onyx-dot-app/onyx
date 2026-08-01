@@ -50,7 +50,13 @@ def test_resolve_oidc_returns_config(monkeypatch: pytest.MonkeyPatch) -> None:
     )
     resolved, config = oidc_multi._resolve_oidc_provider(_DB, "okta")
     assert resolved is provider
-    assert config == {**_OIDC_CONFIG, "legacy_callback": False}
+    assert config == {
+        **_OIDC_CONFIG,
+        "legacy_callback": False,
+        "require_verified_email": False,
+        "pkce_enabled": False,
+        "scopes": [],
+    }
 
 
 def test_resolve_google_returns_config(monkeypatch: pytest.MonkeyPatch) -> None:
@@ -63,7 +69,12 @@ def test_resolve_google_returns_config(monkeypatch: pytest.MonkeyPatch) -> None:
         oidc_multi, "fetch_sso_provider_by_name", lambda **_kw: provider
     )
     _resolved, config = oidc_multi._resolve_oidc_provider(_DB, "google")
-    assert config == {**_GOOGLE_CONFIG, "legacy_callback": False}
+    assert config == {
+        **_GOOGLE_CONFIG,
+        "legacy_callback": False,
+        "pkce_enabled": False,
+        "scopes": [],
+    }
 
 
 def test_resolve_fail_closed_unknown(monkeypatch: pytest.MonkeyPatch) -> None:
@@ -127,6 +138,78 @@ def test_build_client_oidc_uses_provider_name(monkeypatch: pytest.MonkeyPatch) -
     assert client.name == "okta"
 
 
+def _openid_stub_with_discovery(scopes_supported: list[str] | None) -> Any:
+    class _FakeOpenID:
+        def __init__(
+            self,
+            _client_id: str,
+            _client_secret: str,
+            _config_url: str,
+            *,
+            name: str,
+            base_scopes: list[str] | None = None,
+            **_kwargs: Any,
+        ) -> None:
+            self.name = name
+            self.base_scopes = list(base_scopes or [])
+            self.openid_configuration: dict[str, Any] = (
+                {}
+                if scopes_supported is None
+                else {"scopes_supported": scopes_supported}
+            )
+
+    return _FakeOpenID
+
+
+def test_offline_access_dropped_when_idp_does_not_advertise_it(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    # Amazon Cognito advertises scopes_supported without offline_access and
+    # rejects the whole authorize request when it is included.
+    monkeypatch.setattr(
+        oidc_multi,
+        "VerifiedEmailOpenID",
+        _openid_stub_with_discovery(["openid", "email", "profile"]),
+    )
+    client = oidc_multi._build_client(_provider(), dict(_OIDC_CONFIG))
+    assert "offline_access" not in (client.base_scopes or [])
+
+
+def test_offline_access_kept_when_idp_advertises_it(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    monkeypatch.setattr(
+        oidc_multi,
+        "VerifiedEmailOpenID",
+        _openid_stub_with_discovery(["openid", "email", "offline_access"]),
+    )
+    client = oidc_multi._build_client(_provider(), dict(_OIDC_CONFIG))
+    assert "offline_access" in (client.base_scopes or [])
+
+
+def test_offline_access_kept_when_discovery_has_no_scopes_supported(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    monkeypatch.setattr(
+        oidc_multi, "VerifiedEmailOpenID", _openid_stub_with_discovery(None)
+    )
+    client = oidc_multi._build_client(_provider(), dict(_OIDC_CONFIG))
+    assert "offline_access" in (client.base_scopes or [])
+
+
+def test_explicitly_configured_offline_access_is_never_dropped(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    monkeypatch.setattr(
+        oidc_multi,
+        "VerifiedEmailOpenID",
+        _openid_stub_with_discovery(["openid", "email"]),
+    )
+    config = {**_OIDC_CONFIG, "scopes": ["openid", "email", "offline_access"]}
+    client = oidc_multi._build_client(_provider(), config)
+    assert "offline_access" in (client.base_scopes or [])
+
+
 @pytest.mark.asyncio
 async def test_client_cache_hits_and_rebuilds_on_config_change(
     monkeypatch: pytest.MonkeyPatch,
@@ -158,7 +241,12 @@ def test_decode_state_accepts_valid() -> None:
     state = generate_state_token(
         {"next_url": "/", "provider_name": "okta", CSRF_TOKEN_KEY: csrf}, _TEST_SECRET
     )
-    request = cast(Any, SimpleNamespace(cookies={CSRF_TOKEN_COOKIE_NAME: csrf}))
+    request = cast(
+        Any,
+        SimpleNamespace(
+            cookies={CSRF_TOKEN_COOKIE_NAME: csrf}, state=SimpleNamespace()
+        ),
+    )
     data = decode_and_validate_oauth_state(
         request=request,
         state_value=state,
@@ -189,7 +277,12 @@ def test_decode_state_rejects_wrong_provider() -> None:
     state = generate_state_token(
         {"next_url": "/", "provider_name": "okta", CSRF_TOKEN_KEY: csrf}, _TEST_SECRET
     )
-    request = cast(Any, SimpleNamespace(cookies={CSRF_TOKEN_COOKIE_NAME: csrf}))
+    request = cast(
+        Any,
+        SimpleNamespace(
+            cookies={CSRF_TOKEN_COOKIE_NAME: csrf}, state=SimpleNamespace()
+        ),
+    )
     with pytest.raises(OnyxError):
         decode_and_validate_oauth_state(
             request=request,
@@ -257,6 +350,53 @@ def test_validate_config_accepts_legacy_callback_for_oauth_types() -> None:
     )
 
 
+def test_validate_config_require_verified_email_is_oidc_only() -> None:
+    from onyx.db.sso_provider import validate_sso_config
+
+    oidc = validate_sso_config(
+        SSOProviderType.OIDC, {**_OIDC_CONFIG, "require_verified_email": True}
+    )
+    assert oidc["require_verified_email"] is True
+    # Omitting the flag stays valid and defaults off.
+    assert (
+        validate_sso_config(SSOProviderType.OIDC, dict(_OIDC_CONFIG))[
+            "require_verified_email"
+        ]
+        is False
+    )
+    # The flag only parameterizes the OIDC client, and the Google config
+    # model forbids unknown keys.
+    with pytest.raises(ValueError):
+        validate_sso_config(
+            SSOProviderType.GOOGLE_OAUTH,
+            {**_GOOGLE_CONFIG, "require_verified_email": True},
+        )
+
+
+def test_build_client_passes_require_verified_email(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    def _fake_openid(
+        _client_id: str,
+        _client_secret: str,
+        _config_url: str,
+        *,
+        require_verified_email: bool = False,
+        **_kwargs: Any,
+    ) -> Any:
+        return SimpleNamespace(require_verified_email=require_verified_email)
+
+    monkeypatch.setattr(oidc_multi, "VerifiedEmailOpenID", _fake_openid)
+    client = cast(
+        Any,
+        oidc_multi._build_client(
+            _provider(name="entra"),
+            {**_OIDC_CONFIG, "require_verified_email": True},
+        ),
+    )
+    assert client.require_verified_email is True
+
+
 def test_validate_config_rejects_legacy_callback_for_saml() -> None:
     from onyx.db.sso_provider import validate_sso_config
 
@@ -307,7 +447,12 @@ def test_fixed_callback_rejects_state_without_provider(
     monkeypatch.setattr(oidc_multi, "USER_AUTH_SECRET", _TEST_SECRET)
     csrf = generate_csrf_token()
     state = generate_state_token({"next_url": "/", CSRF_TOKEN_KEY: csrf}, _TEST_SECRET)
-    request = cast(Any, SimpleNamespace(cookies={CSRF_TOKEN_COOKIE_NAME: csrf}))
+    request = cast(
+        Any,
+        SimpleNamespace(
+            cookies={CSRF_TOKEN_COOKIE_NAME: csrf}, state=SimpleNamespace()
+        ),
+    )
     with pytest.raises(OnyxError):
         asyncio.run(
             oidc_multi.oidc_login_callback(
@@ -320,3 +465,114 @@ def test_fixed_callback_rejects_state_without_provider(
                 user_manager=cast(Any, None),
             )
         )
+
+
+def test_validate_config_pkce_and_scopes_on_oauth_types() -> None:
+    from onyx.db.sso_provider import validate_sso_config
+
+    oidc = validate_sso_config(
+        SSOProviderType.OIDC,
+        {**_OIDC_CONFIG, "pkce_enabled": True, "scopes": ["openid", "email"]},
+    )
+    assert oidc["pkce_enabled"] is True
+    assert oidc["scopes"] == ["openid", "email"]
+    google = validate_sso_config(
+        SSOProviderType.GOOGLE_OAUTH,
+        {**_GOOGLE_CONFIG, "pkce_enabled": True, "scopes": ["openid"]},
+    )
+    assert google["pkce_enabled"] is True
+    # SAML has no OAuth flow, so the fields are invalid there.
+    with pytest.raises(ValueError):
+        validate_sso_config(
+            SSOProviderType.SAML,
+            {
+                "idp_entity_id": "e",
+                "idp_sso_url": "https://idp/sso",
+                "idp_x509_cert": "cert",
+                "sp_entity_id": "sp",
+                "pkce_enabled": True,
+            },
+        )
+
+
+def test_pkce_row_true_sufficient_env_can_force_on(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    monkeypatch.setattr(oidc_multi, "OIDC_PKCE_ENABLED", False)
+    assert oidc_multi._pkce_enabled({"pkce_enabled": True}) is True
+    assert oidc_multi._pkce_enabled({"pkce_enabled": False}) is False
+    assert oidc_multi._pkce_enabled({}) is False
+    # The deployment-wide env flag still forces PKCE on while it exists.
+    monkeypatch.setattr(oidc_multi, "OIDC_PKCE_ENABLED", True)
+    assert oidc_multi._pkce_enabled({"pkce_enabled": False}) is True
+
+
+def test_build_client_scopes_row_over_env(monkeypatch: pytest.MonkeyPatch) -> None:
+    captured: dict[str, Any] = {}
+
+    def _fake_openid(
+        _client_id: str,
+        _client_secret: str,
+        _config_url: str,
+        *,
+        base_scopes: list[str],
+        **_kwargs: Any,
+    ) -> Any:
+        captured["scopes"] = base_scopes
+        return SimpleNamespace(base_scopes=base_scopes)
+
+    monkeypatch.setattr(oidc_multi, "VerifiedEmailOpenID", _fake_openid)
+    monkeypatch.setattr(oidc_multi, "OIDC_SCOPE_OVERRIDE", ["env-scope"])
+
+    # Row scopes win over the env override.
+    oidc_multi._build_client(
+        _provider(), {**_OIDC_CONFIG, "scopes": ["openid", "profile"]}
+    )
+    assert captured["scopes"] == ["openid", "profile", "offline_access"]
+
+    # Empty row scopes fall back to the env override.
+    oidc_multi._build_client(_provider(), {**_OIDC_CONFIG, "scopes": []})
+    assert captured["scopes"] == ["env-scope", "offline_access"]
+
+
+def test_build_client_google_scopes_row_over_env(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    monkeypatch.setattr(oidc_multi, "GOOGLE_OAUTH_SCOPE_OVERRIDE", ["env-scope"])
+    provider = _provider(name="google", provider_type=SSOProviderType.GOOGLE_OAUTH)
+
+    client = oidc_multi._build_client(
+        provider, {**_GOOGLE_CONFIG, "scopes": ["openid", "email"]}
+    )
+    assert client.base_scopes == ["openid", "email"]
+
+    client = oidc_multi._build_client(provider, {**_GOOGLE_CONFIG, "scopes": []})
+    assert client.base_scopes == ["env-scope"]
+
+
+def test_state_pins_pkce_mode() -> None:
+    # The callback must honor the mode the authorize leg minted, not the
+    # row's current setting, so mid-flow provider edits cannot break logins.
+    csrf = generate_csrf_token()
+    state = generate_state_token(
+        {
+            "next_url": "/",
+            "provider_name": "okta",
+            "pkce": True,
+            CSRF_TOKEN_KEY: csrf,
+        },
+        _TEST_SECRET,
+    )
+    request = cast(
+        Any,
+        SimpleNamespace(
+            cookies={CSRF_TOKEN_COOKIE_NAME: csrf}, state=SimpleNamespace()
+        ),
+    )
+    data = decode_and_validate_oauth_state(
+        request=request,
+        state_value=state,
+        state_secret=_TEST_SECRET,
+        expected_provider_name="okta",
+    )
+    assert data["pkce"] is True

@@ -114,6 +114,7 @@ SLACK_SERVICE_ACCOUNT_EMAIL = (
 ).lower()
 
 # Key-Value store keys
+KV_PASSWORD_AUTH_ENABLED_KEY = "password_auth_enabled_override"
 KV_REINDEX_KEY = "needs_reindexing"
 KV_UNSTRUCTURED_API_KEY = "unstructured_api_key"
 KV_USER_STORE_KEY = "INVITED_USERS"
@@ -484,6 +485,8 @@ class OnyxRedisLocks:
     CHECK_PORT_BEAT_LOCK = "da_lock:check_port_beat"
     CHECK_CHECKPOINT_CLEANUP_BEAT_LOCK = "da_lock:check_checkpoint_cleanup_beat"
     CHECK_INDEX_ATTEMPT_CLEANUP_BEAT_LOCK = "da_lock:check_index_attempt_cleanup_beat"
+    CHECK_OLD_INDEX_RECLAIM_BEAT_LOCK = "da_lock:check_old_index_reclaim_beat"
+    OLD_INDEX_RECLAIM_LOCK_PREFIX = "da_lock:old_index_reclaim"
     CHECK_CONNECTOR_DOC_PERMISSIONS_SYNC_BEAT_LOCK = (
         "da_lock:check_connector_doc_permissions_sync_beat"
     )
@@ -626,10 +629,14 @@ class OnyxCeleryTask:
     CHECK_FOR_INDEX_ATTEMPT_CLEANUP = "check_for_index_attempt_cleanup"
     CLEANUP_INDEX_ATTEMPT = "cleanup_index_attempt"
 
+    # Old-index reclamation (post-reindex deletion of the now-PAST index)
+    CHECK_FOR_OLD_INDEX_RECLAIM = "check_for_old_index_reclaim"
+
     MONITOR_BACKGROUND_PROCESSES = "monitor_background_processes"
     MONITOR_CELERY_QUEUES = "monitor_celery_queues"
     MONITOR_PROCESS_MEMORY = "monitor_process_memory"
     CELERY_BEAT_HEARTBEAT = "celery_beat_heartbeat"
+    EMIT_VERSION_TELEMETRY = "emit_version_telemetry"
 
     CONNECTOR_PERMISSION_SYNC_GENERATOR_TASK = (
         "connector_permission_sync_generator_task"

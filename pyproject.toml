@@ -10,12 +10,12 @@ dependencies = [
     "google-genai==1.52.0",
     "litellm[google]==1.93.0",
     "openai==2.38.0",
-    "pydantic==2.11.7",
+    "pydantic==2.12.5",
     # Shared so structured JSON logging (LOG_FORMAT=json) works in the
     # model_server image too, not just the backend.
     "python-json-logger==4.1.0",
     "prometheus_client>=0.21.1",
-    "prometheus_fastapi_instrumentator==8.0.0",
+    "prometheus_fastapi_instrumentator==8.0.2",
     "sentry-sdk==2.14.0",
     "tenacity==9.1.2",
     "uvicorn==0.49.0",
@@ -62,13 +62,13 @@ backend = [
     "kubernetes==31.0.0",
     "trafilatura==1.12.2",
     "langchain-core==1.3.3",
-    "lxml==6.1.0",
+    "lxml==6.1.1",
     # NOTE: Do not update without understanding the patching behavior in
     # get_markitdown_converter in
     # backend/onyx/file_processing/extract_file_text.py and what impacts
     # updating might have on this behavior.
     "markitdown[pdf, docx, pptx, xlsx, xls]==0.1.2",
-    "mcp[cli]==1.27.0",
+    "mcp[cli]==1.28.1",
     "msal==1.34.0",
     "msoffcrypto-tool==6.0.0",
     "Office365-REST-Python-Client==2.6.2",
@@ -111,7 +111,7 @@ backend = [
     "unstructured==0.18.27",
     "unstructured-client==0.42.6",
     "zulip==0.8.2",
-    "hubspot-api-client==11.1.0",
+    "hubspot-api-client==12.0.0",
     "asana==5.0.8",
     "dropbox==12.0.2",
     "stripe==10.12.0",
@@ -138,10 +138,9 @@ dev = [
     "ipykernel==6.29.5",
     "manygo==0.2.0",
     "matplotlib==3.10.8",
-    "ty==0.0.31",
-    "onyx-devtools==0.10.1",
+    "ty==0.0.63",
+    "onyx-devtools==0.10.6",
     "openapi-generator-cli==7.17.0",
-    "pandas-stubs~=2.3.3",
     "pre-commit==3.2.2",
     "pytest-alembic==0.12.1",
     "pytest-asyncio==1.4.0",
@@ -154,7 +153,7 @@ dev = [
     "release-tag==0.5.2",
     # Keep in sync with the pinned `ruff==` in the ruff / ruff-format hooks in
     # .pre-commit-config.yaml, which install ruff into an isolated overlay.
-    "ruff==0.15.21",
+    "ruff==0.16.0",
     "types-docker==7.1.0.20260518",
     "types-beautifulsoup4==4.12.0.3",
     "types-html5lib==1.1.11.13",
@@ -252,6 +251,12 @@ exclude = [
 # with # ty: ignore[rule] comments. New code that introduces these errors will
 # fail CI.
 all = "error"
+# Opted out of the strict default above. Both landed as new rules in ty 0.0.63
+# and are style/strictness rules rather than correctness ones; adopting either
+# is a four-figure mechanical change (no autofix available) and belongs in its
+# own PR rather than a version bump.
+missing-override-decorator = "ignore"  # ~1.1k methods across ~250 files.
+missing-type-argument = "ignore"  # ~1k bare generics across ~350 files.
 
 [tool.uv.workspace]
 members = ["tools/ods"]

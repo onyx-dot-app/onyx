@@ -480,6 +480,33 @@ async def test_multi_tenant_capture_keys_by_mapped_tenant(
 
 
 @pytest.mark.asyncio
+async def test_capture_uses_subject_resolved_tenant_after_email_rename(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    monkeypatch.setattr(claims_capture, "MULTI_TENANT", True)
+    redis, pipe = _redis_with_pipeline()
+
+    with (
+        patch(
+            "onyx.auth.login_claims_capture.get_async_redis_connection",
+            return_value=redis,
+        ),
+        patch(
+            "onyx.auth.login_claims_capture.fetch_ee_implementation_or_noop"
+        ) as resolve_by_email,
+    ):
+        await capture_oauth_login_claims(
+            _FakeOAuthClient(),
+            "renamed@example.com",
+            _make_token({"sub": "abc"}),
+            tenant_id="tenant_from_subject",
+        )
+
+    assert "tenant_from_subject" in pipe.hset.call_args.args[0]
+    resolve_by_email.assert_not_called()
+
+
+@pytest.mark.asyncio
 async def test_multi_tenant_capture_skips_unmapped_email(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:

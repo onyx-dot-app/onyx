@@ -9,7 +9,12 @@ from github.GithubException import GithubException, UnknownObjectException
 from github.RateLimit import RateLimit
 from github.Requester import Requester
 
-from onyx.connectors.github.connector import GithubConnector, _is_indexable_path
+from onyx.connectors.exceptions import ConnectorValidationError
+from onyx.connectors.github.connector import (
+    GithubConnector,
+    GithubConnectorStage,
+    _is_indexable_path,
+)
 from onyx.connectors.github.models import SerializedRepository
 from onyx.connectors.models import ConnectorFailure, Document
 from tests.unit.onyx.connectors.utils import load_everything_from_checkpoint_connector
@@ -110,7 +115,9 @@ def create_mock_repo() -> Callable[..., MagicMock]:
 
 
 def _build_connector(
-    mock_github_client: MagicMock, include_files: bool = True
+    mock_github_client: MagicMock,
+    include_files: bool = True,
+    branch: str | None = None,
 ) -> GithubConnector:
     connector = GithubConnector(
         repo_owner="test-org",
@@ -118,6 +125,7 @@ def _build_connector(
         include_prs=False,
         include_issues=False,
         include_files=include_files,
+        branch=branch,
     )
     connector.github_client = mock_github_client
     return connector
@@ -327,6 +335,150 @@ def test_empty_repository_tree_skips_file_stage(
 
     assert _all_items(outputs) == []
     assert outputs[-1].next_checkpoint.has_more is False
+
+
+def test_branch_override_threads_through_listing_fetching_and_urls(
+    mock_github_client: MagicMock,
+    create_mock_repo: Callable[..., MagicMock],
+) -> None:
+    connector = _build_connector(mock_github_client, branch="gh-pages")
+    mock_repo = create_mock_repo(
+        {
+            "index.md": b"# Site home",
+            "docs/setup.md": b"setup guide",
+        }
+    )
+    mock_github_client.get_repo.return_value = mock_repo
+
+    with patch.object(SerializedRepository, "to_Repository", return_value=mock_repo):
+        outputs = load_everything_from_checkpoint_connector(connector, 0, time.time())
+
+    docs = [i for i in _all_items(outputs) if isinstance(i, Document)]
+    ids = sorted(d.id for d in docs)
+    assert ids == [
+        "https://github.com/test-org/test-repo/blob/gh-pages/docs/setup.md",
+        "https://github.com/test-org/test-repo/blob/gh-pages/index.md",
+    ]
+    for doc in docs:
+        assert doc.metadata.get("branch") == "gh-pages"
+
+    # Both the tree listing and every content fetch must target the branch.
+    mock_repo.get_git_tree.assert_called_once_with("gh-pages", recursive=True)
+    for call in mock_repo.get_contents.call_args_list:
+        assert call.kwargs["ref"] == "gh-pages"
+
+
+def test_default_branch_used_when_branch_unset(
+    mock_github_client: MagicMock,
+    create_mock_repo: Callable[..., MagicMock],
+) -> None:
+    connector = _build_connector(mock_github_client)
+    mock_repo = create_mock_repo({"README.md": b"# Hello"})
+    mock_github_client.get_repo.return_value = mock_repo
+
+    with patch.object(SerializedRepository, "to_Repository", return_value=mock_repo):
+        load_everything_from_checkpoint_connector(connector, 0, time.time())
+
+    mock_repo.get_git_tree.assert_called_once_with("main", recursive=True)
+    for call in mock_repo.get_contents.call_args_list:
+        assert call.kwargs["ref"] == "main"
+
+
+def test_blank_branch_normalized_to_none() -> None:
+    assert GithubConnector(repo_owner="o", branch="").branch is None
+    assert GithubConnector(repo_owner="o", branch="   ").branch is None
+    assert GithubConnector(repo_owner="o", branch=None).branch is None
+    assert GithubConnector(repo_owner="o", branch=" gh-pages ").branch == "gh-pages"
+
+
+def test_resumed_checkpoint_from_other_branch_relists(
+    mock_github_client: MagicMock,
+    create_mock_repo: Callable[..., MagicMock],
+) -> None:
+    """A checkpoint resumed after the branch setting changed must re-list.
+
+    Otherwise paths listed from the old branch pair with content fetches from
+    the new branch — deleted paths fail and new-branch-only files are skipped.
+    """
+    connector = _build_connector(mock_github_client, branch="gh-pages")
+    mock_repo = create_mock_repo({"new-only.md": b"new content"})
+
+    checkpoint = connector.build_dummy_checkpoint()
+    checkpoint.stage = GithubConnectorStage.FILES
+    checkpoint.file_paths = ["old-only.md"]  # listed from the previous branch
+    checkpoint.file_paths_branch = "main"
+    checkpoint.curr_page = 1
+
+    items = list(
+        connector._fetch_repo_files(
+            mock_repo,
+            checkpoint,
+            start=None,
+            is_slim=False,
+            repo_external_access=None,
+        )
+    )
+
+    docs = [i for i in items if isinstance(i, Document)]
+    assert [d.id for d in docs] == [
+        "https://github.com/test-org/test-repo/blob/gh-pages/new-only.md"
+    ]
+    mock_repo.get_git_tree.assert_called_once_with("gh-pages", recursive=True)
+    assert checkpoint.file_paths == ["new-only.md"]
+    assert checkpoint.file_paths_branch == "gh-pages"
+
+
+def test_resumed_branch_change_bypasses_pushed_at_gate(
+    mock_github_client: MagicMock,
+    create_mock_repo: Callable[..., MagicMock],
+) -> None:
+    """Re-listing after a branch change must ignore the pushed_at gate.
+
+    The new branch was never indexed, so an old pushed_at must not cause the
+    re-listing to be skipped with an empty path list.
+    """
+    connector = _build_connector(mock_github_client, branch="gh-pages")
+    mock_repo = create_mock_repo(
+        {"new-only.md": b"new content"},
+        pushed_at=datetime(2020, 1, 1),
+    )
+
+    checkpoint = connector.build_dummy_checkpoint()
+    checkpoint.stage = GithubConnectorStage.FILES
+    checkpoint.file_paths = ["old-only.md"]  # listed from the previous branch
+    checkpoint.file_paths_branch = "main"
+    checkpoint.curr_page = 1
+
+    # poll window starts well after the repo's last push
+    items = list(
+        connector._fetch_repo_files(
+            mock_repo,
+            checkpoint,
+            start=datetime(2023, 1, 1, tzinfo=timezone.utc),
+            is_slim=False,
+            repo_external_access=None,
+        )
+    )
+
+    docs = [i for i in items if isinstance(i, Document)]
+    assert [d.id for d in docs] == [
+        "https://github.com/test-org/test-repo/blob/gh-pages/new-only.md"
+    ]
+    assert checkpoint.file_paths_branch == "gh-pages"
+
+
+def test_nonexistent_branch_raises_clear_error(
+    mock_github_client: MagicMock,
+    create_mock_repo: Callable[..., MagicMock],
+) -> None:
+    connector = _build_connector(mock_github_client, branch="no-such-branch")
+    mock_repo = create_mock_repo({})
+    mock_repo.get_git_tree.side_effect = GithubException(
+        404, {"message": "Not Found"}, {}
+    )
+
+    with pytest.raises(ConnectorValidationError, match="no-such-branch"):
+        connector._list_indexable_files(mock_repo)
 
 
 def test_prs_disabled_404_does_not_crash_files(

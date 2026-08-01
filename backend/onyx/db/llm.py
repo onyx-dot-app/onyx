@@ -20,6 +20,7 @@ from onyx.db.models import (
 )
 from onyx.db.models import LLMProvider as LLMProviderModel
 from onyx.db.models import Tool as ToolModel
+from onyx.db.persona import get_raw_personas_for_user
 from onyx.llm.utils import model_supports_image_input
 from onyx.llm.well_known_providers.auto_update_models import LLMRecommendations
 from onyx.server.manage.embedding.models import (
@@ -564,6 +565,72 @@ def fetch_first_accessible_llm_provider_by_type(
     return provider
 
 
+def fetch_all_accessible_llm_providers(
+    db_session: Session, user: User
+) -> list[LLMProviderView]:
+    """Every provider the ``user`` can access (is_public / group rules).
+    persona=None below: Craft has no persona context, so a provider restricted
+    to specific personas is intentionally excluded even when otherwise
+    public."""
+    provider_models = db_session.scalars(
+        select(LLMProviderModel)
+        .order_by(LLMProviderModel.id.asc())
+        .options(
+            selectinload(LLMProviderModel.model_configurations),
+            selectinload(LLMProviderModel.groups),
+            selectinload(LLMProviderModel.personas),
+        )
+    )
+    user_group_ids = fetch_user_group_ids(db_session, user)
+    is_admin = user.role == UserRole.ADMIN
+    # This per-turn catalog never uses the key (the gateway injects it per
+    # selected model), so skip the per-provider decrypt + audit.
+    return [
+        LLMProviderView.from_model(p, include_api_key=False)
+        for p in provider_models
+        if can_user_access_llm_provider(
+            p, user_group_ids, persona=None, is_admin=is_admin
+        )
+    ]
+
+
+def fetch_all_llm_providers_accessible_in_any_context(
+    db_session: Session, user: User
+) -> list[LLMProviderView]:
+    """Return providers usable globally or through any agent the user can access."""
+    accessible_persona_ids = {
+        persona.id
+        for persona in get_raw_personas_for_user(
+            user,
+            db_session,
+            get_editable=False,
+            include_slack_bot_personas=True,
+        )
+    }
+    provider_models = fetch_existing_llm_providers(db_session, [])
+    user_group_ids = fetch_user_group_ids(db_session, user)
+    is_admin = user.role == UserRole.ADMIN
+
+    def is_accessible(provider: LLMProviderModel) -> bool:
+        if can_user_access_llm_provider(
+            provider, user_group_ids, persona=None, is_admin=is_admin
+        ):
+            return True
+        return any(
+            persona.id in accessible_persona_ids
+            and can_user_access_llm_provider(
+                provider, user_group_ids, persona, is_admin=is_admin
+            )
+            for persona in provider.personas
+        )
+
+    return [
+        LLMProviderView.from_model(provider, include_api_key=False)
+        for provider in provider_models
+        if is_accessible(provider)
+    ]
+
+
 def fetch_existing_llm_provider(
     name: str, db_session: Session
 ) -> LLMProviderModel | None:
@@ -594,6 +661,25 @@ def fetch_existing_llm_provider_by_id(
     )
 
     return provider_model
+
+
+def fetch_accessible_llm_provider_by_id(
+    db_session: Session, user: User, provider_id: int
+) -> LLMProviderView | None:
+    """``provider_id``'s view when ``user`` may access it (is_public / group
+    rules; persona-restricted providers are excluded — no persona context)."""
+    provider_model = fetch_existing_llm_provider_by_id(provider_id, db_session)
+    if provider_model is None:
+        return None
+    user_group_ids = fetch_user_group_ids(db_session, user)
+    if not can_user_access_llm_provider(
+        provider_model,
+        user_group_ids,
+        persona=None,
+        is_admin=user.role == UserRole.ADMIN,
+    ):
+        return None
+    return LLMProviderView.from_model(provider_model)
 
 
 def fetch_existing_llm_provider_by_name_and_type(
@@ -684,6 +770,12 @@ def fetch_default_contextual_rag_model(
     db_session: Session,
 ) -> ModelConfiguration | None:
     return fetch_default_model(db_session, LLMModelFlowType.CONTEXTUAL_RAG)
+
+
+def fetch_default_chat_naming_model(
+    db_session: Session,
+) -> ModelConfiguration | None:
+    return fetch_default_model(db_session, LLMModelFlowType.CHAT_NAMING)
 
 
 def fetch_default_model(
@@ -824,6 +916,40 @@ def update_default_vision_provider(
         model=vision_model,
         flow_type=LLMModelFlowType.VISION,
     )
+
+
+def update_default_chat_naming_provider(
+    provider_id: int, chat_naming_model: str, db_session: Session
+) -> None:
+    provider = db_session.scalar(
+        select(LLMProviderModel).where(
+            LLMProviderModel.id == provider_id,
+        )
+    )
+
+    if provider is None:
+        raise ValueError(f"LLM Provider with id={provider_id} does not exist")
+
+    _update_default_model(
+        db_session=db_session,
+        provider_id=provider_id,
+        model=chat_naming_model,
+        flow_type=LLMModelFlowType.CHAT_NAMING,
+    )
+
+
+def update_no_default_chat_naming_provider(
+    db_session: Session,
+) -> None:
+    db_session.execute(
+        update(LLMModelFlow)
+        .where(
+            LLMModelFlow.llm_model_flow_type == LLMModelFlowType.CHAT_NAMING,
+            LLMModelFlow.is_default == True,  # noqa: E712
+        )
+        .values(is_default=False)
+    )
+    db_session.commit()
 
 
 def update_no_default_contextual_rag_provider(

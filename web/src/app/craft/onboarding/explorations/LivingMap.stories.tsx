@@ -1,4 +1,4 @@
-import type { Meta, StoryObj } from "@storybook/react";
+import type { Meta, StoryObj } from "@storybook/react-vite";
 import LivingMapModal from "@/app/craft/onboarding/components/LivingMapModal";
 import { LIVING_MAP_STAGES } from "@/app/craft/onboarding/components/LivingMapDiagram";
 import WelcomePageMock from "@/app/craft/onboarding/explorations/WelcomePageMock";

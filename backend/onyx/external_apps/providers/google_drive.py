@@ -138,10 +138,6 @@ class GoogleDriveProvider(GoogleOAuthProvider, OnyxManagedExtApp):
             # The Docs API lives on its own host.
             "https://docs\\.googleapis\\.com/.*",
         ],
-        description=(
-            "Search, read, create, and edit files and Google Docs in your "
-            "Google Drive inside Onyx Craft."
-        ),
         google_api_name="Google Drive API and Google Docs API",
         endpoint_catalog=_ENDPOINTS,
     )

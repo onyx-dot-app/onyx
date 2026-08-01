@@ -137,6 +137,12 @@ class SecuritySettingsOverrides(BaseModel):
     password_require_special_char: bool | None = Field(
         default=None, json_schema_extra=_operator_locked()
     )
+    # Single-tenant kill switch: off refuses password login and public signup,
+    # SSO is unaffected. KV-backed (no security_settings column) so it
+    # backports without a schema migration.
+    password_auth_enabled: bool | None = Field(
+        default=None, json_schema_extra=_operator_locked()
+    )
 
     @field_validator("valid_email_domains")
     @classmethod
@@ -192,6 +198,7 @@ class SecuritySettings(BaseModel):
     password_require_lowercase: bool
     password_require_digit: bool
     password_require_special_char: bool
+    password_auth_enabled: bool
 
     @model_validator(mode="after")
     def _check_password_length_invariants(self) -> Self:

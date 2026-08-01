@@ -1,5 +1,5 @@
 import React from "react";
-import type { Meta, StoryObj } from "@storybook/react";
+import type { Meta, StoryObj } from "@storybook/react-vite";
 import Calendar from "./Calendar";
 import * as TooltipPrimitive from "@radix-ui/react-tooltip";
 import type { DateRange } from "react-day-picker";

@@ -7,8 +7,9 @@ opencode-auth + push-key env, proxy hostAliases IP).
 {{- $cm := .Values.configMap }}
 {{- $sandboxNs := $cm.SANDBOX_NAMESPACE | default "onyx-sandboxes" }}
 {{- $saName := (index $cm "SANDBOX_SERVICE_ACCOUNT_NAME") | default "sandbox" }}
-{{- $image := (index $cm "SANDBOX_CONTAINER_IMAGE") | default (printf "onyxdotapp/sandbox:%s" (.Values.global.version | default .Chart.AppVersion)) }}
-{{- $pullPolicy := (index $cm "SANDBOX_IMAGE_PULL_POLICY") | default .Values.global.pullPolicy }}
+{{/* Shared with the image-prepull DaemonSet so the pinned ref can't drift. */}}
+{{- $image := include "onyx.sandboxImage" . }}
+{{- $pullPolicy := include "onyx.sandboxImagePullPolicy" . }}
 {{- $cpuReq := (index $cm "SANDBOX_POD_CPU_REQUEST") | default "1000m" }}
 {{- $memReq := (index $cm "SANDBOX_POD_MEMORY_REQUEST") | default "2Gi" }}
 {{- $cpuLim := (index $cm "SANDBOX_POD_CPU_LIMIT") | default "2000m" }}
@@ -25,7 +26,7 @@ kubelet evicts sandbox pods first under node disk pressure. */}}
 {{- $proxyPort := include "onyx.sandboxProxyPort" . }}
 {{- $proxyHost := include "onyx.sandboxProxyHost" . }}
 {{- $caConfigMap := (index $cm "SANDBOX_PROXY_CA_CONFIGMAP") | default "sandbox-proxy-ca-bundle" }}
-{{- $serverUrl := (index $cm "SANDBOX_API_SERVER_URL") }}
+{{- $serverUrl := (index $cm "ONYX_SERVER_URL") }}
 {{- $sandboxPod := .Values.sandboxPod | default dict }}
 {{- $caBundleFile := "/etc/ssl/sandbox/ca-bundle.crt" }}
 apiVersion: v1
@@ -140,6 +141,8 @@ template:
         env:
           - { name: ONYX_PAT, value: "replaced_by_egress_proxy" }
           - { name: ONYX_SERVER_URL, value: "{{ $serverUrl }}" }
+          {{/* The deployment value is the exact API base; do not append the CLI default. */}}
+          - { name: ONYX_API_PREFIX, value: "" }
           - { name: GH_TOKEN, value: "replaced_by_egress_proxy" }
           - { name: GH_NO_UPDATE_NOTIFIER, value: "1" }
           - { name: OPENCODE_DATA_HOME, value: "/workspace/opencode-data" }

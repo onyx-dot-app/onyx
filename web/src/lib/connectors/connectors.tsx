@@ -313,11 +313,21 @@ export const connectorConfigs: Record<
         label: "Include Documents?",
         name: "include_files",
         description:
-          "Index text-based documents (markdown, text, etc.) from the default branch of repositories",
+          "Index text-based documents (markdown, text, etc.) from repositories",
         optional: true,
       },
     ],
-    advanced_values: [],
+    advanced_values: [
+      {
+        type: "text",
+        query: "Enter the branch to index documents from:",
+        label: "Branch",
+        name: "branch",
+        optional: true,
+        description:
+          "Branch to index documents from (e.g. gh-pages). Leave blank to use each repository's default branch. Only applies when 'Include Documents?' is enabled. After changing this on an existing connector, trigger a re-index to pick up the new branch immediately.",
+      },
+    ],
   },
   testrail: {
     description: "Configure TestRail connector",
@@ -2084,6 +2094,7 @@ export interface GithubConfig {
   include_prs: boolean;
   include_issues: boolean;
   include_files: boolean;
+  branch?: string;
 }
 
 export interface GitlabConfig {

@@ -18,6 +18,7 @@ from onyx.context.search.models import SearchDoc
 from onyx.db.memory import UserMemoryContext
 from onyx.db.models import ChatMessage, ChatSession, Persona
 from onyx.llm.interfaces import LLM, LLMUserIdentity
+from onyx.llm.models import ReasoningEffort
 from onyx.onyxbot.slack.models import SlackContext
 from onyx.server.query_and_chat.models import SendMessageRequest
 from onyx.tools.models import ChatFile, ToolCallInfo
@@ -203,6 +204,7 @@ class ChatTurnSetup:
     # Processing-fence value and stream-buffer key — single source for the run id
     processing_run_id: int
     reserved_token_count: int
+    reasoning_effort: ReasoningEffort
     search_params: SearchParams
     all_injected_file_metadata: dict[str, FileToolMetadata]
     available_files: AvailableFiles

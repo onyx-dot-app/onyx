@@ -111,7 +111,6 @@ class AdminDescriptorSpec(BaseModel):
 
     model_config = ConfigDict(frozen=True)
 
-    description: str
     upstream_url_patterns: list[str]
     auth_template: dict[str, str]
     required_org_credential_fields: list[OrgCredentialField]

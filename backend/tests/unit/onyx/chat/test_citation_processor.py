@@ -806,6 +806,25 @@ def test_code_block_plaintext_added(
     assert "```plaintext" in output
 
 
+def test_bare_fence_labeling_does_not_corrupt_other_fences(
+    mock_search_docs: CitationMapping,  # noqa: ARG001
+) -> None:
+    """Labeling a bare fence must leave the segment's other fences untouched
+    (the first token buffers three fences at labeling time)."""
+    processor = DynamicCitationProcessor()
+
+    tokens: list[str | None] = [
+        "A:\n```\nx\n```\nB:\n```bash",
+        "\necho hi\n```\nDone.\n",
+    ]
+    output, _ = process_tokens(processor, tokens)
+
+    assert output.count("```plaintext") == 1
+    assert "x\n```\nB:" in output
+    assert "```plaintextbash" not in output
+    assert "```bash" in output
+
+
 def test_citation_outside_code_block_processed(
     mock_search_docs: CitationMapping,
 ) -> None:

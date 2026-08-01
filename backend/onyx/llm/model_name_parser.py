@@ -35,7 +35,7 @@ class ParsedModelName(BaseModel):
 
     raw_name: str  # Original: "bedrock/anthropic.claude-3-5-sonnet-20241022-v2:0"
     provider: str  # "bedrock", "azure", "openai", etc. (the API route)
-    vendor: str | None = None  # From enrichment: "anthropic", "openai", "meta", etc.
+    vendor: str | None = None  # Display-cased: "Anthropic", "OpenAI", "Meta", etc.
     version: str | None = None  # From enrichment: "20241022-v2:0", "v1:0", etc.
     region: str | None = None  # Extracted: "us", "eu", or None
     display_name: str  # From enrichment: "Claude 3.5 Sonnet"
@@ -114,10 +114,8 @@ def _infer_vendor_from_model_name(model_name: str) -> str | None:
 
         # Try to match against known prefixes (sorted by length to match longest first)
         for prefix in sorted(MODEL_PREFIX_TO_VENDOR.keys(), key=len, reverse=True):
-            if base_name.startswith(prefix):  # ty: ignore[invalid-argument-type]
-                return MODEL_PREFIX_TO_VENDOR[  # ty: ignore[invalid-argument-type]
-                    prefix
-                ]
+            if base_name.startswith(prefix):
+                return MODEL_PREFIX_TO_VENDOR[prefix]
     except Exception:
         pass
 
@@ -264,7 +262,8 @@ def parse_litellm_model_name(raw_name: str) -> ParsedModelName:
     return ParsedModelName(
         raw_name=raw_name,
         provider=provider,
-        vendor=vendor,
+        # Display-cased for UI grouping, matching extract_vendor_from_model_name
+        vendor=_format_name(vendor) if vendor else None,
         version=version,
         region=region,
         display_name=display_name,

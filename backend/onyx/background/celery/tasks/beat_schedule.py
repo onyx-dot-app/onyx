@@ -422,6 +422,17 @@ if not MULTI_TENANT:
                     "queue": OnyxCeleryQueues.PRIMARY,
                 },
             },
+            # hourly tick; the task itself enforces a once-per-day cadence
+            {
+                "name": "emit-version-telemetry",
+                "task": OnyxCeleryTask.EMIT_VERSION_TELEMETRY,
+                "schedule": timedelta(hours=1),
+                "options": {
+                    "priority": OnyxCeleryPriority.LOW,
+                    "expires": BEAT_EXPIRES_DEFAULT,
+                    "queue": OnyxCeleryQueues.MONITORING,
+                },
+            },
         ]
     )
 

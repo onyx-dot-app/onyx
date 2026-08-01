@@ -32,7 +32,6 @@ from onyx.db.models import BuildSession
 from onyx.sandbox_proxy import approval_cache
 from onyx.server.features.build import connect_app
 from onyx.server.features.build.configs import (
-    PROMPT_SLOT_KEEP_ALIVE_MAX_SECONDS,
     SANDBOX_HEARTBEAT_REFRESH_INTERVAL_SECONDS,
 )
 from onyx.server.features.build.db.build_session import (
@@ -65,9 +64,11 @@ from onyx.server.features.build.sandbox.event_schema import (
     ToolCallStart,
 )
 from onyx.server.features.build.sandbox.event_schema import Error as SandboxError
+from onyx.server.features.build.sandbox.models import PromptAttachment
 from onyx.server.features.build.sandbox.opencode.serve_client import _merge_field_meta
 from onyx.server.features.build.sandbox.serve_transport import PromptSlot
 from onyx.server.features.build.sandbox.sse import SSEKeepalive
+from onyx.server.features.build.timeouts import PROMPT_SLOT_KEEP_ALIVE_MAX_SECONDS
 from onyx.utils.logger import setup_logger
 from onyx.utils.threadpool_concurrency import start_thread_with_context
 from shared_configs.contextvars import CURRENT_TENANT_ID_CONTEXTVAR
@@ -356,7 +357,7 @@ def merge_events_with_announces(
             output.put(
                 ConnectAppRequestPacket(
                     request_id=request.request_id,
-                    app_slug=request.app_slug,
+                    external_app_id=request.external_app_id,
                     reason=request.reason,
                 )
             )
@@ -488,6 +489,7 @@ def yield_sandbox_events(
     session_id: UUID,
     user_message_content: str,
     *,
+    attachments: list[PromptAttachment] | None = None,
     opencode_session_id: str | None,
     agent_provider: str | None,
     agent_model: str | None,
@@ -522,6 +524,7 @@ def yield_sandbox_events(
         sandbox_id,
         session_id,
         user_message_content,
+        attachments=attachments,
         opencode_session_id=opencode_session_id,
         agent_provider=agent_provider,
         agent_model=agent_model,

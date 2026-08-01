@@ -10,6 +10,7 @@ from sqlalchemy.orm import Session
 from onyx.configs.app_configs import WEB_DOMAIN
 from onyx.configs.constants import FileOrigin
 from onyx.db.models import UserFile
+from onyx.db.user_file import get_user_file_by_id
 from onyx.file_store.file_store import get_default_file_store
 from onyx.file_store.models import ChatFileType, FileDescriptor, InMemoryChatFile
 from onyx.server.query_and_chat.chat_utils import mime_type_to_chat_file_type
@@ -90,7 +91,7 @@ def load_chat_file_by_id(file_id: str) -> InMemoryChatFile:
 def load_user_file(file_id: UUID, db_session: Session) -> InMemoryChatFile:
     status = "not_loaded"
 
-    user_file = db_session.query(UserFile).filter(UserFile.id == file_id).first()
+    user_file = get_user_file_by_id(file_id, db_session)
     if not user_file:
         raise ValueError(f"User file with id {file_id} not found")
 
@@ -207,10 +208,7 @@ def get_user_files(
 
     # 1. Fetch UserFile records for specific file IDs
     for user_file_id in user_file_ids:
-        # Query the database for a UserFile with the matching ID
-        user_file = (
-            db_session.query(UserFile).filter(UserFile.id == user_file_id).first()
-        )
+        user_file = get_user_file_by_id(user_file_id, db_session)
         # If found, add it to the list
         if user_file is not None:
             user_files.append(user_file)

@@ -52,6 +52,7 @@ class TestResolveEffectivePermissions:
             "read:chat",
             "write:chat",
             "generate:image",
+            "use:llm_gateway",
         }
 
     def test_write_chat_implies_read_chat(self) -> None:
@@ -119,6 +120,7 @@ class TestResolveEffectivePermissions:
             "read:chat",
             "write:chat",
             "generate:image",
+            "use:llm_gateway",
             "add:agents",
             "read:agents",
             "manage:connectors",
@@ -142,7 +144,12 @@ class TestResolveEffectivePermissions:
         """The Craft sandbox PAT may only company-search — it must NOT inherit the
         chat surfaces (the reason it isn't `basic`)."""
         result = resolve_effective_permissions({"craft_sandbox"})
-        assert result == {"craft_sandbox", "read:search", "generate:image"}
+        assert result == {
+            "craft_sandbox",
+            "read:search",
+            "generate:image",
+            "use:llm_gateway",
+        }
         assert "read:chat" not in result
         assert "write:chat" not in result
         assert "basic" not in result
@@ -177,6 +184,7 @@ class TestGetEffectivePermissions:
             Permission.READ_CHAT,
             Permission.WRITE_CHAT,
             Permission.GENERATE_IMAGE,
+            Permission.USE_LLM_GATEWAY,
         }
 
     def test_empty_column(self) -> None:
@@ -329,6 +337,7 @@ class TestAnonymousUserPermissions:
             Permission.READ_CHAT,
             Permission.WRITE_CHAT,
             Permission.GENERATE_IMAGE,
+            Permission.USE_LLM_GATEWAY,
         }
 
     @pytest.mark.asyncio
@@ -354,7 +363,7 @@ class TestAnonymousUserPermissions:
 
 class TestApiSurfaceScopeRegistration:
     # Hardcoded spec: the complete implied-only set (4 READ_* capability reads
-    # + 5 API-surface scopes). Equality, not subset, so an accidentally
+    # + 6 API-surface scopes). Equality, not subset, so an accidentally
     # over-broad set (a real capability made un-grantable) is also caught.
     EXPECTED_IMPLIED = {
         "read:connectors",
@@ -365,6 +374,7 @@ class TestApiSurfaceScopeRegistration:
         "read:chat",
         "write:chat",
         "generate:image",
+        "use:llm_gateway",
         "read:admin",
     }
 
@@ -382,6 +392,7 @@ class TestApiSurfaceScopeRegistration:
             "read:chat",
             "write:chat",
             "generate:image",
+            "use:llm_gateway",
         }
         assert IMPLIED_PERMISSIONS["write:chat"] == {"read:chat"}
         # The craft role scope grants company-search and image generation, never
@@ -389,4 +400,5 @@ class TestApiSurfaceScopeRegistration:
         assert IMPLIED_PERMISSIONS["craft_sandbox"] == {
             "read:search",
             "generate:image",
+            "use:llm_gateway",
         }

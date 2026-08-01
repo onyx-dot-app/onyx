@@ -10,6 +10,7 @@ from typing import Any
 
 from pydantic import BaseModel, ConfigDict
 
+from onyx.llm.api_surfaces import SURFACE_SELECTION_CONFIG_KEYS
 from onyx.llm.constants import LlmProviderNames
 from onyx.llm.well_known_providers.constants import (
     AWS_ACCESS_KEY_ID_KWARG,
@@ -61,7 +62,7 @@ _PROVIDER_CUSTOM_CONFIG_KWARGS: dict[str, dict[str, str]] = {
 }
 
 # UI form state stored in custom_config; exempt from validation, env injection, and drop warnings.
-UI_ONLY_CONFIG_KEYS = frozenset({"BEDROCK_AUTH_METHOD"})
+UI_ONLY_CONFIG_KEYS = frozenset({"BEDROCK_AUTH_METHOD"}) | SURFACE_SELECTION_CONFIG_KEYS
 
 
 class CustomConfigMapping(BaseModel):

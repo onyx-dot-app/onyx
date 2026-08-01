@@ -33,6 +33,8 @@ export default function LoginPage({
     nextUrl ?? (isFirstUser ? "/app?new_team=true" : null);
 
   const ssoProviders = authTypeMetadata?.ssoProviders ?? [];
+  // Kill switch off: hide password login/signup. Backend refuses regardless.
+  const passwordAuthEnabled = authTypeMetadata?.passwordAuthEnabled !== false;
 
   return (
     <div className="flex flex-col w-full justify-center">
@@ -82,20 +84,25 @@ export default function LoginPage({
                   />
                 ))}
               </div>
-              <div className="flex flex-row items-center w-full gap-2">
-                <div className="flex-1 border-t border-text-01" />
-                <Text as="p" text03 mainUiMuted>
-                  or
-                </Text>
-                <div className="flex-1 border-t border-text-01" />
-              </div>
+              {passwordAuthEnabled && (
+                /* raw-ok: pre-existing or-divider markup */
+                <div className="flex flex-row items-center w-full gap-2">
+                  <div className="flex-1 border-t border-text-01" />
+                  <Text as="p" text03 mainUiMuted>
+                    or
+                  </Text>
+                  <div className="flex-1 border-t border-text-01" />
+                </div>
+              )}
             </>
           )}
-          <EmailPasswordForm label="submit" nextUrl={effectiveNextUrl} />
+          {passwordAuthEnabled && (
+            <EmailPasswordForm label="submit" nextUrl={effectiveNextUrl} />
+          )}
         </div>
       )}
 
-      {!hidePageRedirect && (
+      {!hidePageRedirect && passwordAuthEnabled && (
         <p className="text-center mt-4">
           Don&apos;t have an account?{" "}
           <span

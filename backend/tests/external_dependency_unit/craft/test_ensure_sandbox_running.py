@@ -20,6 +20,7 @@ manager method, so each test must declare the slice of the manager it uses.
 from __future__ import annotations
 
 from collections.abc import Callable
+from datetime import datetime, timezone
 from uuid import UUID, uuid4
 
 import pytest
@@ -131,6 +132,8 @@ def test_wakes_dormant_sandbox(
     existing = sandbox(user=test_user, status=initial_status)
     stub_sandbox_manager.provision_returns = _running_info(existing.id)
     stub_sandbox_manager.write_files_to_sandbox_silent = True
+    # A FAILED revive tears down any wedged runtime before re-provisioning.
+    stub_sandbox_manager.terminate_silent = True
 
     result = session_manager_with_stub.ensure_sandbox_running(test_user.id)
     db_session.commit()
@@ -153,6 +156,10 @@ def test_provisioning_transitions_to_running_during_wait(
     """A concurrent provisioner finishes mid-wait: re-enter the state machine on
     the new RUNNING status and return it without provisioning ourselves."""
     existing = sandbox(user=test_user, status=SandboxStatus.PROVISIONING)
+    # A recent attempt timestamp marks the concurrent provisioner as live —
+    # a stale (or NULL) timestamp would be taken over instead of waited on.
+    existing.provisioning_started_at = datetime.now(timezone.utc)
+    db_session.commit()
 
     # Simulate the "other" provisioner finishing: the poll loop's first
     # ``time.sleep`` flips the row to RUNNING and commits so the next
@@ -192,12 +199,14 @@ def test_provisioning_times_out_raises(
     stub_sandbox_manager: StubSandboxManager,
     session_manager_with_stub: SessionManager,
 ) -> None:
-    """Stuck PROVISIONING + 0s wait -> ``SandboxProvisioningError`` without provisioning.
+    """Live PROVISIONING + 0s wait -> ``SandboxProvisioningError`` without provisioning.
 
     This is the deterministic-timeout contract that
     ``test_scheduled_task_executor.py::test_run_fails_when_wake_fails`` relies on.
     """
     existing = sandbox(user=test_user, status=SandboxStatus.PROVISIONING)
+    existing.provisioning_started_at = datetime.now(timezone.utc)
+    db_session.commit()
 
     with pytest.raises(SandboxProvisioningError):
         session_manager_with_stub.ensure_sandbox_running(
@@ -212,3 +221,31 @@ def test_provisioning_times_out_raises(
     assert refreshed is not None
     assert refreshed.id == existing.id
     assert refreshed.status == SandboxStatus.PROVISIONING
+
+
+def test_stale_provisioning_attempt_is_taken_over(
+    db_session: Session,  # noqa: ARG001
+    test_user: User,
+    sandbox: Callable[..., Sandbox],
+    stub_sandbox_manager: StubSandboxManager,
+    session_manager_with_stub: SessionManager,
+) -> None:
+    """A committed PROVISIONING row whose attempt is dead (no live timestamp —
+    e.g. the provisioning process crashed) is resumed under a new attempt number
+    instead of being waited on or rejected."""
+    existing = sandbox(user=test_user, status=SandboxStatus.PROVISIONING)
+    assert existing.provisioning_started_at is None  # crashed-attempt shape
+
+    stub_sandbox_manager.provision_returns = _running_info(existing.id)
+    stub_sandbox_manager.write_files_to_sandbox_silent = True
+    # Taking over a stale attempt tears down its half-built runtime first.
+    stub_sandbox_manager.terminate_silent = True
+
+    result = session_manager_with_stub.ensure_sandbox_running(
+        test_user.id,
+        provisioning_wait_seconds=0.0,
+    )
+
+    assert result.id == existing.id
+    assert result.status == SandboxStatus.RUNNING
+    assert stub_sandbox_manager.provision_count == 1

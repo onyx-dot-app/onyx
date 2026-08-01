@@ -543,9 +543,7 @@ def align_basic_advanced(
     for adv_ind in range(1, len(adv_sections)):
         heading = adv_sections[adv_ind].text.split(HEADING_DELIMITER)[0]
         # retrieve the longest part of the heading that is not a smart chip
-        heading_key = max(  # ty: ignore[unresolved-attribute]
-            heading.split(SMART_CHIP_CHAR), key=len
-        ).strip()
+        heading_key = max(heading.split(SMART_CHIP_CHAR), key=len).strip()
         if heading_key == "":
             logger.warning(
                 "Cannot match heading: %s, its link will come from the following section",
@@ -592,6 +590,9 @@ def _get_external_access_for_raw_gdrive_file(
     admin_drive_service: GoogleDriveService,
     fallback_user_email: str,
     add_prefix: bool = False,
+    fallback_drive_service_factory: (
+        Callable[[], GoogleDriveService | None] | None
+    ) = None,
 ) -> ExternalAccess:
     """
     Get the external access for a raw Google Drive file.
@@ -611,6 +612,7 @@ def _get_external_access_for_raw_gdrive_file(
                 GoogleDriveService,
                 str,
                 bool,
+                Callable[[], GoogleDriveService | None] | None,
             ],
             ExternalAccess,
         ],
@@ -627,6 +629,7 @@ def _get_external_access_for_raw_gdrive_file(
         admin_drive_service,
         fallback_user_email,
         add_prefix,
+        fallback_drive_service_factory,
     )
 
 
@@ -972,6 +975,14 @@ def build_slim_document(
                 user_email=permission_sync_context.primary_admin_email,
             ),
             fallback_user_email=retriever_email,
+            fallback_drive_service_factory=lambda: (
+                None
+                if retriever_email == owner_email
+                else get_drive_service(
+                    creds,
+                    user_email=retriever_email,
+                )
+            ),
         )
         if permission_sync_context
         else None

@@ -9,11 +9,11 @@ from sqlalchemy.orm import Session
 
 from onyx.auth.schemas import UserRole
 from onyx.db.enums import SkillSharePermission
-from onyx.db.models import Skill__User, Skill__UserGroup, UserSkillPreference
+from onyx.db.models import Skill, Skill__User, Skill__UserGroup, UserSkillPreference
 from onyx.db.skill import (
-    SkillAccessPolicy,
+    add_new_skill__no_commit,
     enable_new_skill_if_name_available__no_commit,
-    list_skills,
+    list_runtime_skills_for_user,
     replace_skill_shares,
     set_skill_enabled_for_user,
     skill_user_states,
@@ -24,6 +24,7 @@ from onyx.error_handling.exceptions import OnyxError
 from onyx.server.features.skill.response_helpers import skill_response_for_user
 from tests.external_dependency_unit.craft.db_helpers import (
     make_built_in_skill_row,
+    make_external_app,
     make_group,
     make_skill,
     make_user,
@@ -103,6 +104,29 @@ def test_new_skill_is_enabled_only_when_name_is_available(
             )
         )
     ) == {first_skill.id}
+
+
+def test_new_skill_name_is_not_reserved_by_external_app_association(
+    db_session: Session,
+) -> None:
+    name = f"shared-skill-name-{uuid4().hex[:8]}"
+    associated_skill = make_skill(db_session, name=name, is_public=True)
+    make_external_app(db_session, skill=associated_skill, auth_template={})
+    standalone_skill = Skill(
+        id=uuid4(),
+        name=name,
+        description="Independent skill with the same runtime name",
+        bundle_file_id=f"bundle-{uuid4().hex[:8]}",
+        bundle_sha256="0" * 64,
+        is_valid=True,
+    )
+
+    add_new_skill__no_commit(standalone_skill, db_session)
+
+    assert set(db_session.scalars(select(Skill.id).where(Skill.name == name))) == {
+        associated_skill.id,
+        standalone_skill.id,
+    }
 
 
 def test_orphaned_private_skill_has_boolean_admin_state(
@@ -332,8 +356,7 @@ def test_same_name_skills_switch_atomically_per_user(db_session: Session) -> Non
 
     assert {
         skill.id
-        for skill in list_skills(
-            policy=SkillAccessPolicy.USE,
+        for skill in list_runtime_skills_for_user(
             user=first_user,
             db_session=db_session,
         )
@@ -341,8 +364,7 @@ def test_same_name_skills_switch_atomically_per_user(db_session: Session) -> Non
     } == {first_skill.id}
     assert {
         skill.id
-        for skill in list_skills(
-            policy=SkillAccessPolicy.USE,
+        for skill in list_runtime_skills_for_user(
             user=second_user,
             db_session=db_session,
         )

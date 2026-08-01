@@ -55,10 +55,10 @@ Both `Stateless` and `Stateful` support `interaction?: "rest" | "hover" | "activ
 
 | | Primary | Secondary | Tertiary | Internal |
 |---|---|---|---|---|
-| **Rest** | `action-link-05` | `background-tint-01` | `transparent` | `transparent` |
-| **Hover** | `action-link-04` | `background-tint-02` | `background-tint-02` | `background-tint-00` |
-| **Active** | `action-link-06` | `background-tint-00` | `background-tint-00` | `background-tint-00` |
-| **Disabled** | `action-link-02` | `background-neutral-02` | `transparent` | `transparent` |
+| **Rest** | `action-selection-05` | `background-tint-01` | `transparent` | `transparent` |
+| **Hover** | `action-selection-04` | `background-tint-02` | `background-tint-02` | `background-tint-00` |
+| **Active** | `action-selection-06` | `background-tint-00` | `background-tint-00` | `background-tint-00` |
+| **Disabled** | `action-selection-02` | `background-neutral-02` | `transparent` | `transparent` |
 
 **Foreground**
 
@@ -67,7 +67,7 @@ Both `Stateless` and `Stateful` support `interaction?: "rest" | "hover" | "activ
 | **Rest** | `text-light-05` | `action-text-link-05` | `action-text-link-05` | `action-text-link-05` |
 | **Hover** | `text-light-05` | `action-text-link-05` | `action-text-link-05` | `action-text-link-05` |
 | **Active** | `text-light-05` | `action-text-link-05` | `action-text-link-05` | `action-text-link-05` |
-| **Disabled** | `text-01` | `action-link-03` | `action-link-03` | `action-link-03` |
+| **Disabled** | `text-01` | `action-selection-03` | `action-selection-03` | `action-selection-03` |
 
 ### Stateless: Danger
 
@@ -104,7 +104,7 @@ Both `Stateless` and `Stateful` support `interaction?: "rest" | "hover" | "activ
 
 | | Select-Heavy | Select-Light |
 |---|---|---|
-| **Rest** | `action-link-01` | `transparent` |
+| **Rest** | `action-selection-01` | `transparent` |
 | **Hover** | `background-tint-02` | `background-tint-02` |
 | **Active** | `background-tint-00` | `background-tint-00` |
 | **Disabled** | `transparent` | `transparent` |
@@ -122,10 +122,10 @@ Both `Stateless` and `Stateful` support `interaction?: "rest" | "hover" | "activ
 
 | | Text | Icon |
 |---|---|---|
-| **Rest** | `action-link-05` | `action-link-05` |
-| **Hover** | `action-link-05` | `action-link-05` |
-| **Active** | `action-link-05` | `action-link-05` |
-| **Disabled** | `action-link-03` | `action-link-03` |
+| **Rest** | `action-selection-05` | `action-selection-05` |
+| **Hover** | `action-selection-05` | `action-selection-05` |
+| **Active** | `action-selection-05` | `action-selection-05` |
+| **Disabled** | `action-selection-03` | `action-selection-03` |
 
 ### Stateful: Sidebar
 

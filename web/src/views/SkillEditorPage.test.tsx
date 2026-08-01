@@ -8,8 +8,10 @@ import {
 } from "@tests/setup/test-utils";
 import SkillEditorPage from "@/views/SkillEditorPage";
 import type { SkillEditableDetail } from "@/lib/skills/types";
+import { SWR_KEYS } from "@/lib/swr-keys";
 
 const mockCreateCustomSkillFromEditor = jest.fn();
+const mockDeleteUserSkill = jest.fn();
 const mockRouterReplace = jest.fn();
 const mockRouterPush = jest.fn();
 const mockGetSkillCreationDraft = jest.fn();
@@ -31,6 +33,37 @@ async function fillRequiredFields(user: ReturnType<typeof setupUser>) {
     screen.getByPlaceholderText("Write the skill instructions."),
     "Write the requested report."
   );
+}
+
+function existingSkill(
+  overrides: Partial<SkillEditableDetail> = {}
+): SkillEditableDetail {
+  return {
+    source: "custom",
+    id: "existing-id",
+    name: "report-writer",
+    description: "Writes reports",
+    instructions_markdown: "Write the requested report.",
+    files: [],
+    is_available: true,
+    unavailable_reason: null,
+    is_valid: true,
+    is_personal: true,
+    enabled: true,
+    can_toggle: true,
+    author_user_id: "author-id",
+    author_email: "author@example.com",
+    owner: { id: "author-id", email: "author@example.com" },
+    ownership_vacant: false,
+    created_at: null,
+    updated_at: null,
+    user_shares: [],
+    group_shares: [],
+    public_permission: null,
+    user_permission: "OWNER",
+    external_app: null,
+    ...overrides,
+  };
 }
 
 jest.mock("next/navigation", () => ({
@@ -64,6 +97,7 @@ jest.mock("@/lib/skills/api", () => ({
   ...jest.requireActual("@/lib/skills/api"),
   createCustomSkillFromEditor: (...args: unknown[]) =>
     mockCreateCustomSkillFromEditor(...args),
+  deleteUserSkill: (...args: unknown[]) => mockDeleteUserSkill(...args),
 }));
 
 jest.mock("@/sections/skills/SkillFilesPicker", () => ({
@@ -74,6 +108,8 @@ jest.mock("@/sections/skills/SkillFilesPicker", () => ({
 describe("SkillEditorPage", () => {
   beforeEach(() => {
     mockCreateCustomSkillFromEditor.mockReset();
+    mockDeleteUserSkill.mockReset();
+    mockDeleteUserSkill.mockResolvedValue(undefined);
     mockRouterReplace.mockReset();
     mockRouterPush.mockReset();
     mockGetSkillCreationDraft.mockReset();
@@ -111,7 +147,7 @@ describe("SkillEditorPage", () => {
     );
     await waitFor(() =>
       expect(consoleError).toHaveBeenCalledWith(
-        "Failed to refresh skill list after creation",
+        "Failed to refresh skill data after creation",
         expect.any(Error)
       )
     );
@@ -172,6 +208,94 @@ describe("SkillEditorPage", () => {
     expect(mockRouterReplace).toHaveBeenCalledWith("/craft/v1/skills");
   });
 
+  it("creates an app-associated skill disabled and returns to that app", async () => {
+    const user = setupUser();
+    const appRefresh = deferred<void>();
+    mockCreateCustomSkillFromEditor.mockResolvedValue({
+      id: "created-id",
+      name: "report-writer",
+      enabled: false,
+    } as SkillEditableDetail);
+    mockMutate.mockImplementation((key: string) =>
+      key === SWR_KEYS.buildExternalAppsAdmin
+        ? appRefresh.promise
+        : Promise.resolve()
+    );
+
+    render(<SkillEditorPage externalAppId={42} externalAppName="Acme CRM" />);
+    expect(
+      screen.getByText("Add an organization skill to app “Acme CRM”")
+    ).toBeInTheDocument();
+    await fillRequiredFields(user);
+    await user.click(screen.getByRole("button", { name: "Save" }));
+
+    await waitFor(() =>
+      expect(mockCreateCustomSkillFromEditor).toHaveBeenCalledWith(
+        {
+          name: "report-writer",
+          description: "Writes reports",
+          instructions_markdown: "Write the requested report.",
+          auto_enable: false,
+          external_app_id: 42,
+        },
+        undefined
+      )
+    );
+    expect(mockRouterReplace).not.toHaveBeenCalled();
+
+    await act(async () => {
+      appRefresh.resolve();
+      await appRefresh.promise;
+    });
+    await waitFor(() =>
+      expect(mockRouterReplace).toHaveBeenCalledWith(
+        "/admin/craft/apps?editAppId=42"
+      )
+    );
+  });
+
+  it("keeps an app-associated creation open with a clear name conflict", async () => {
+    const user = setupUser();
+    mockCreateCustomSkillFromEditor.mockRejectedValue(
+      Object.assign(new Error("This app already has a skill with that name"), {
+        errorCode: "SKILL_NAME_CONFLICT",
+      })
+    );
+
+    render(<SkillEditorPage externalAppId={42} externalAppName="Acme CRM" />);
+    await fillRequiredFields(user);
+    await user.click(screen.getByRole("button", { name: "Save" }));
+
+    expect(
+      await screen.findByText("Choose a different skill name")
+    ).toBeInTheDocument();
+    expect(
+      screen.getByText(
+        "App “Acme CRM” already has an associated skill named “report-writer”."
+      )
+    ).toBeInTheDocument();
+    expect(screen.getByPlaceholderText("Name your skill")).toHaveValue(
+      "report-writer"
+    );
+    expect(
+      screen.getByPlaceholderText("What does this skill help with?")
+    ).toHaveValue("Writes reports");
+    expect(
+      screen.getByPlaceholderText("Write the skill instructions.")
+    ).toHaveValue("Write the requested report.");
+    expect(mockRouterReplace).not.toHaveBeenCalled();
+    expect(mockCreateCustomSkillFromEditor).toHaveBeenCalledTimes(1);
+
+    await user.clear(screen.getByPlaceholderText("Name your skill"));
+    await user.type(
+      screen.getByPlaceholderText("Name your skill"),
+      "report-writer-v2"
+    );
+    expect(
+      screen.queryByText("Choose a different skill name")
+    ).not.toBeInTheDocument();
+  });
+
   it("confirms before canceling a create page with unsaved changes", async () => {
     const user = setupUser();
     render(<SkillEditorPage />);
@@ -196,30 +320,7 @@ describe("SkillEditorPage", () => {
 
   it("confirms before leaving an existing skill with unsaved changes", async () => {
     const user = setupUser();
-    const skill: SkillEditableDetail = {
-      source: "custom",
-      id: "existing-id",
-      name: "report-writer",
-      description: "Writes reports",
-      instructions_markdown: "Write the requested report.",
-      files: [],
-      is_available: true,
-      unavailable_reason: null,
-      is_valid: true,
-      is_personal: true,
-      enabled: true,
-      can_toggle: true,
-      author_user_id: "author-id",
-      author_email: "author@example.com",
-      owner: { id: "author-id", email: "author@example.com" },
-      ownership_vacant: false,
-      created_at: null,
-      updated_at: null,
-      user_shares: [],
-      group_shares: [],
-      public_permission: null,
-      user_permission: "OWNER",
-    };
+    const skill = existingSkill();
     mockUseSWR.mockReturnValue({
       data: skill,
       error: undefined,
@@ -241,6 +342,125 @@ describe("SkillEditorPage", () => {
     await user.click(screen.getByRole("button", { name: "Discard changes" }));
     expect(mockRouterPush).toHaveBeenCalledWith("/craft/v1/skills");
     expect(mockDiscardSkillCreationDraft).not.toHaveBeenCalled();
+  });
+
+  it("returns an app-launched edit to that app on Cancel", async () => {
+    const user = setupUser();
+    const skill = existingSkill();
+    mockUseSWR.mockReturnValue({
+      data: skill,
+      error: undefined,
+      isLoading: false,
+      mutate: mockRefreshSkill,
+    });
+
+    render(
+      <SkillEditorPage
+        skillId={skill.id}
+        externalAppId={42}
+        externalAppName="Acme CRM"
+      />
+    );
+    await user.click(screen.getByRole("button", { name: "Cancel" }));
+
+    expect(mockRouterPush).toHaveBeenCalledWith(
+      "/admin/craft/apps?editAppId=42"
+    );
+  });
+
+  it("refreshes app associations before returning after skill deletion", async () => {
+    const user = setupUser();
+    const appRefresh = deferred<void>();
+    const skill = existingSkill({
+      external_app: {
+        external_app_id: 42,
+        name: "Acme CRM",
+        enabled: true,
+        ready: true,
+      },
+    });
+    mockUseSWR.mockReturnValue({
+      data: skill,
+      error: undefined,
+      isLoading: false,
+      mutate: mockRefreshSkill,
+    });
+    mockMutate.mockImplementation((key: string) =>
+      key === SWR_KEYS.buildExternalAppsAdmin
+        ? appRefresh.promise
+        : Promise.resolve()
+    );
+
+    render(
+      <SkillEditorPage
+        skillId={skill.id}
+        externalAppId={42}
+        externalAppName="Acme CRM"
+      />
+    );
+    await user.click(screen.getByRole("button", { name: "Delete skill" }));
+    await user.click(screen.getByRole("button", { name: "Delete" }));
+
+    await waitFor(() =>
+      expect(mockDeleteUserSkill).toHaveBeenCalledWith(skill.id)
+    );
+    expect(mockRouterPush).not.toHaveBeenCalled();
+
+    await act(async () => {
+      appRefresh.resolve();
+      await appRefresh.promise;
+    });
+
+    await waitFor(() =>
+      expect(mockRouterPush).toHaveBeenCalledWith(
+        "/admin/craft/apps?editAppId=42"
+      )
+    );
+    expect(mockMutate).toHaveBeenCalledWith(SWR_KEYS.buildExternalAppsAdmin);
+    expect(mockMutate).toHaveBeenCalledWith(SWR_KEYS.userSkills);
+  });
+
+  it("returns app-launched skill creation to that app on Cancel", async () => {
+    const user = setupUser();
+
+    render(<SkillEditorPage externalAppId={42} externalAppName="Acme CRM" />);
+    await user.click(screen.getByRole("button", { name: "Cancel" }));
+
+    expect(mockRouterPush).toHaveBeenCalledWith(
+      "/admin/craft/apps?editAppId=42"
+    );
+  });
+
+  it("shows the app dependency and required organization visibility", () => {
+    const skill = existingSkill({
+      is_personal: false,
+      public_permission: "VIEWER",
+      external_app: {
+        external_app_id: 42,
+        name: "Acme CRM",
+        enabled: true,
+        ready: false,
+      },
+    });
+    mockUseSWR.mockReturnValue({
+      data: skill,
+      error: undefined,
+      isLoading: false,
+      mutate: mockRefreshSkill,
+    });
+
+    render(<SkillEditorPage skillId={skill.id} />);
+
+    expect(
+      screen.getByText(
+        "Connect app “Acme CRM” from the Apps page to use this skill."
+      )
+    ).toBeInTheDocument();
+    expect(
+      screen.getByText(
+        "Organization-wide viewer access is required while this skill is associated with app “Acme CRM”."
+      )
+    ).toBeInTheDocument();
   });
 
   it("requires confirmation before retrying a same-name creation disabled", async () => {
