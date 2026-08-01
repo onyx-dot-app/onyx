@@ -8,10 +8,12 @@ from unittest.mock import MagicMock, patch
 
 import pytest
 from fastapi import Request
+from fastapi.responses import StreamingResponse
 from sqlalchemy.orm import Session
 
 from onyx.error_handling.error_codes import OnyxErrorCode
 from onyx.error_handling.exceptions import OnyxError
+from onyx.llm.interfaces import LLM
 from onyx.llm.model_response import (
     ChatCompletionDeltaToolCall,
     ChatCompletionMessageToolCall,
@@ -37,10 +39,12 @@ from onyx.server.gateway import api as gateway_api
 from onyx.server.gateway.api import _MESSAGES_ADAPTER
 from onyx.server.gateway.models import (
     AnthropicCountTokensRequest,
+    AnthropicMessageResponse,
     AnthropicMessagesRequest,
 )
 from onyx.tracing.flows import LLMFlow
 from tests.unit.onyx.server.gateway.test_llm_gateway_api import (
+    _ChunkStreamLLM,
     _InvokeLLM,
     _model,
     _provider,
@@ -348,7 +352,9 @@ def test_anthropic_messages_request_tolerates_unknown_top_level_fields() -> None
     assert request.model == "1/test"
 
 
-def _handle_anthropic_call(request: AnthropicMessagesRequest) -> Any:
+def _handle_anthropic_call(
+    request: AnthropicMessagesRequest,
+) -> StreamingResponse | AnthropicMessageResponse:
     provider = _provider(1, "openai", [_model("test")])
     return gateway_api.handle_anthropic_messages(
         request=request,
@@ -398,6 +404,7 @@ def test_handle_anthropic_messages_happy_path_serializes_response() -> None:
     ):
         result = _handle_anthropic_call(_anthropic_request())
 
+    assert isinstance(result, AnthropicMessageResponse)
     payload = result.to_wire()
     assert payload["type"] == "message"
     assert payload["role"] == "assistant"
@@ -482,7 +489,7 @@ def test_handle_anthropic_messages_sanitizes_generic_invoke_failure() -> None:
 
 
 def _anthropic_stream_events(
-    llm: Any,
+    llm: LLM,
     *,
     tools: list[dict[str, Any]] | None = None,
     model: str = "1/test",
@@ -516,16 +523,6 @@ def _anthropic_stream_events(
         assert data["type"] == event_line.removeprefix("event: ")
         events.append(data)
     return events
-
-
-class _AnthropicChunkStreamLLM(_StreamingLLM):
-    def __init__(self, chunks: list[ModelResponseStream]) -> None:
-        super().__init__(threading.Event())
-        self._chunks = chunks
-
-    def stream(self, *args: object, **kwargs: object) -> Any:  # type: ignore[override]
-        del args, kwargs
-        yield from self._chunks
 
 
 _TEXT_AND_TOOL_CALL_CHUNKS = [
@@ -580,9 +577,7 @@ _TEXT_AND_TOOL_CALL_CHUNKS = [
 
 
 def test_anthropic_stream_emits_text_then_tool_use_then_stop_in_order() -> None:
-    events = _anthropic_stream_events(
-        _AnthropicChunkStreamLLM(_TEXT_AND_TOOL_CALL_CHUNKS)
-    )
+    events = _anthropic_stream_events(_ChunkStreamLLM(_TEXT_AND_TOOL_CALL_CHUNKS))
     event_types = [e["type"] for e in events]
 
     assert event_types == [
@@ -650,7 +645,7 @@ _TEXT_ONLY_CHUNKS = [
 
 
 def test_anthropic_stream_text_only_ends_with_end_turn() -> None:
-    events = _anthropic_stream_events(_AnthropicChunkStreamLLM(_TEXT_ONLY_CHUNKS))
+    events = _anthropic_stream_events(_ChunkStreamLLM(_TEXT_ONLY_CHUNKS))
 
     message_delta = next(e for e in events if e["type"] == "message_delta")
     assert message_delta["delta"]["stop_reason"] == "end_turn"

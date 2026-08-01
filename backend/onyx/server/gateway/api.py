@@ -62,6 +62,7 @@ from onyx.server.gateway.models import (
     AnthropicMessageStartEvent,
     AnthropicMessageStopEvent,
     AnthropicPingEvent,
+    AnthropicStreamEvent,
     AnthropicTextBlock,
     AnthropicTextDelta,
     AnthropicToolUseBlock,
@@ -104,7 +105,15 @@ from onyx.utils.logger import setup_logger
 from onyx.utils.threadpool_concurrency import start_thread_with_context
 
 if TYPE_CHECKING:
+    from litellm.types.llms.anthropic import (
+        AnthopicMessagesAssistantMessageParam,
+        AnthropicMessagesUserMessageParam,
+    )
     from litellm.types.llms.openai import ChatCompletionToolParam
+
+    _AnthropicAdapterMessage = (
+        AnthropicMessagesUserMessageParam | AnthopicMessagesAssistantMessageParam
+    )
 
 logger = setup_logger()
 
@@ -994,7 +1003,7 @@ def _anthropic_messages_to_raw_messages(
 
     adapter = LiteLLMAnthropicMessagesAdapter()
     translated = adapter.translate_anthropic_messages_to_openai(
-        messages=cast(Any, messages)
+        messages=cast("list[_AnthropicAdapterMessage]", messages)
     )
     raw: list[dict[str, Any]] = []
     system_message = _anthropic_system_to_raw_message(system)
@@ -1137,7 +1146,7 @@ def _anthropic_stream_worker(
     out: "queue.Queue[Any]",
     cancelled: threading.Event,
 ) -> None:
-    def emit(event: Any) -> bool:
+    def emit(event: AnthropicStreamEvent) -> bool:
         payload = event.to_wire()
         return _put_stream_item(
             out, f"event: {payload['type']}\ndata: {json.dumps(payload)}\n\n", cancelled

@@ -770,10 +770,34 @@ class AnthropicMessageStopEvent(_WireModel):
         return cls(type="message_stop")
 
 
+class AnthropicErrorPayload(_WireModel):
+    type: str
+    message: str
+
+    @classmethod
+    def create(cls, *, error_type: str, message: str) -> "AnthropicErrorPayload":
+        return cls(type=error_type, message=message)
+
+
 class AnthropicErrorEvent(_WireModel):
     type: Literal["error"] = "error"
-    error: dict[str, Any]
+    error: AnthropicErrorPayload
 
     @classmethod
     def create(cls, *, message: str, error_type: str) -> "AnthropicErrorEvent":
-        return cls(type="error", error={"type": error_type, "message": message})
+        return cls(
+            type="error",
+            error=AnthropicErrorPayload.create(error_type=error_type, message=message),
+        )
+
+
+AnthropicStreamEvent: TypeAlias = (
+    AnthropicMessageStartEvent
+    | AnthropicPingEvent
+    | AnthropicContentBlockStartEvent
+    | AnthropicContentBlockDeltaEvent
+    | AnthropicContentBlockStopEvent
+    | AnthropicMessageDeltaEvent
+    | AnthropicMessageStopEvent
+    | AnthropicErrorEvent
+)
