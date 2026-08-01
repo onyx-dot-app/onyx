@@ -141,13 +141,15 @@ def update_group_token_limit_settings(
     _authorize_group_token_rate_limit_write(
         user, db_session, group_id=group_id, rate_limit_id=rate_limit_id
     )
-    return TokenRateLimitDisplay.from_db(
+    rate_limit_display = TokenRateLimitDisplay.from_db(
         update_token_rate_limit(
             db_session=db_session,
             token_rate_limit_id=rate_limit_id,
             token_rate_limit_settings=token_limit_settings,
         )
     )
+    any_rate_limit_exists.cache_clear()
+    return rate_limit_display
 
 
 @router.delete("/user-group/{group_id}/rate-limit/{rate_limit_id}")
