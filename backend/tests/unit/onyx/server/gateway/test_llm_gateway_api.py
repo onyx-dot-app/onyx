@@ -2,7 +2,7 @@ from __future__ import annotations
 
 import json
 import threading
-from collections.abc import Awaitable, Callable, Iterator
+from collections.abc import Awaitable, Callable, Generator, Iterator
 from contextlib import contextmanager, nullcontext
 from pathlib import Path
 from typing import Any, cast
@@ -10,6 +10,7 @@ from unittest.mock import MagicMock, patch
 
 import pytest
 from fastapi import FastAPI, Request
+from fastapi.responses import StreamingResponse
 from fastapi.routing import APIRoute
 from sqlalchemy.orm import Session
 
@@ -131,6 +132,25 @@ class _ConfigOnlyLLM(LLM):
         return self._config
 
 
+class _ChunkStreamLLM(_ConfigOnlyLLM):
+    def __init__(
+        self, chunks: list[ModelResponseStream], provider: str = "openai"
+    ) -> None:
+        super().__init__(
+            LLMConfig(
+                model_provider=provider,
+                model_name="test",
+                temperature=0,
+                max_input_tokens=1_000,
+            )
+        )
+        self._chunks = chunks
+
+    def stream(self, *args: object, **kwargs: object):  # type: ignore[no-untyped-def,override]
+        del args, kwargs
+        yield from self._chunks
+
+
 def test_resolve_model_preserves_slashes_after_provider_id() -> None:
     model = _model("anthropic/claude-3.5-sonnet")
     provider = _provider(23, "openrouter", [model])
@@ -241,16 +261,19 @@ class _RaisingCloseLLM(_ConfigOnlyLLM):
 
 
 def _gateway_stream(llm: LLM):
-    return gateway_api._stream_sse(
-        llm=llm,
-        flow=LLMFlow.CRAFT_LLM_GENERATION,
-        messages=[UserMessage(content="hello")],
-        tools=None,
-        tool_choice=None,
-        structured_response_format=None,
-        max_tokens=None,
-        reasoning_effort=ReasoningEffort.AUTO,
-        model="1/test",
+    return gateway_api._run_bridged_stream(
+        gateway_api._stream_worker,
+        {
+            "llm": llm,
+            "flow": LLMFlow.CRAFT_LLM_GENERATION,
+            "messages": [UserMessage(content="hello")],
+            "tools": None,
+            "tool_choice": None,
+            "structured_response_format": None,
+            "max_tokens": None,
+            "reasoning_effort": ReasoningEffort.AUTO,
+            "model": "1/test",
+        },
     )
 
 
@@ -503,58 +526,47 @@ def test_completion_payload_serializes_openai_shape() -> None:
     }
 
 
-class _ToolCallStreamLLM(_ConfigOnlyLLM):
-    def __init__(self) -> None:
-        super().__init__(
-            LLMConfig(
-                model_provider="openai",
-                model_name="test",
-                temperature=0,
-                max_input_tokens=1_000,
+_TOOL_CALL_STREAM_CHUNKS = [
+    ModelResponseStream(
+        id="s1",
+        created="0",
+        choice=StreamingChoice(
+            delta=Delta(
+                tool_calls=[
+                    ChatCompletionDeltaToolCall(
+                        id="call_1",
+                        index=0,
+                        function=FunctionCall(name="bash", arguments=""),
+                    )
+                ]
             )
-        )
-
-    def stream(self, *args: object, **kwargs: object):
-        del args, kwargs
-        yield ModelResponseStream(
-            id="s1",
-            created="0",
-            choice=StreamingChoice(
-                delta=Delta(
-                    tool_calls=[
-                        ChatCompletionDeltaToolCall(
-                            id="call_1",
-                            index=0,
-                            function=FunctionCall(name="bash", arguments=""),
-                        )
-                    ]
-                )
-            ),
-        )
-        yield ModelResponseStream(
-            id="s1",
-            created="0",
-            choice=StreamingChoice(
-                delta=Delta(
-                    tool_calls=[
-                        ChatCompletionDeltaToolCall(
-                            index=0,
-                            function=FunctionCall(arguments='{"cmd":"ls"}'),
-                        )
-                    ]
-                )
-            ),
-        )
-        yield ModelResponseStream(
-            id="s1",
-            created="0",
-            choice=StreamingChoice(finish_reason="tool_calls", delta=Delta()),
-            usage=_wire_usage(),
-        )
+        ),
+    ),
+    ModelResponseStream(
+        id="s1",
+        created="0",
+        choice=StreamingChoice(
+            delta=Delta(
+                tool_calls=[
+                    ChatCompletionDeltaToolCall(
+                        index=0,
+                        function=FunctionCall(arguments='{"cmd":"ls"}'),
+                    )
+                ]
+            )
+        ),
+    ),
+    ModelResponseStream(
+        id="s1",
+        created="0",
+        choice=StreamingChoice(finish_reason="tool_calls", delta=Delta()),
+        usage=_wire_usage(),
+    ),
+]
 
 
 def test_stream_emits_openai_tool_call_deltas_and_usage() -> None:
-    frames = list(_gateway_stream(_ToolCallStreamLLM()))
+    frames = list(_gateway_stream(_ChunkStreamLLM(_TOOL_CALL_STREAM_CHUNKS)))
 
     assert frames[-1] == "data: [DONE]\n\n"
     payloads = [json.loads(frame.removeprefix("data: ")) for frame in frames[:-1]]
@@ -577,34 +589,27 @@ def test_stream_emits_openai_tool_call_deltas_and_usage() -> None:
     assert final["usage"]["prompt_tokens_details"]["cached_tokens"] == 100
 
 
-class _ReasoningStreamLLM(_ConfigOnlyLLM):
-    def __init__(self) -> None:
-        super().__init__(
-            LLMConfig(
-                model_provider="anthropic",
-                model_name="test",
-                temperature=0,
-                max_input_tokens=1_000,
-            )
-        )
+_REASONING_STREAM_CHUNKS = [
+    ModelResponseStream(
+        id="r1",
+        created="0",
+        choice=StreamingChoice(delta=Delta(reasoning_content="thinking ")),
+    ),
+    ModelResponseStream(
+        id="r1",
+        created="0",
+        choice=StreamingChoice(delta=Delta(reasoning_content="hard")),
+    ),
+    ModelResponseStream(
+        id="r1",
+        created="0",
+        choice=StreamingChoice(finish_reason="stop", delta=Delta(content="done")),
+    ),
+]
 
-    def stream(self, *args: object, **kwargs: object):
-        del args, kwargs
-        yield ModelResponseStream(
-            id="r1",
-            created="0",
-            choice=StreamingChoice(delta=Delta(reasoning_content="thinking ")),
-        )
-        yield ModelResponseStream(
-            id="r1",
-            created="0",
-            choice=StreamingChoice(delta=Delta(reasoning_content="hard")),
-        )
-        yield ModelResponseStream(
-            id="r1",
-            created="0",
-            choice=StreamingChoice(finish_reason="stop", delta=Delta(content="done")),
-        )
+
+def _reasoning_stream_llm() -> _ChunkStreamLLM:
+    return _ChunkStreamLLM(_REASONING_STREAM_CHUNKS, provider="anthropic")
 
 
 def test_stream_records_accumulated_reasoning_on_span() -> None:
@@ -612,7 +617,7 @@ def test_stream_records_accumulated_reasoning_on_span() -> None:
         patch.object(gateway_api, "llm_generation_span"),
         patch.object(gateway_api, "record_llm_span_output") as record,
     ):
-        frames = list(_gateway_stream(_ReasoningStreamLLM()))
+        frames = list(_gateway_stream(_reasoning_stream_llm()))
 
     assert frames[-1] == "data: [DONE]\n\n"
     record.assert_called_once()
@@ -646,7 +651,7 @@ def _assert_gateway_trace(active: Any) -> None:
 def test_stream_worker_opens_trace_before_generation_span() -> None:
     traces: list[Any] = []
     with _capture_trace_at_generation_span(traces):
-        frames = list(_gateway_stream(_ReasoningStreamLLM()))
+        frames = list(_gateway_stream(_reasoning_stream_llm()))
 
     assert frames[-1] == "data: [DONE]\n\n"
     (active,) = traces
@@ -1245,13 +1250,423 @@ def test_handle_responses_request_non_streaming_returns_completed_response() -> 
     assert payload["usage"]["input_tokens"] == 120
 
 
-def test_handle_responses_request_rejects_streaming() -> None:
-    request = ResponsesRequest(model="1/test", input="say hi", stream=True)
+_TEXT_CHUNKS = [
+    ModelResponseStream(
+        id="r1", created="0", choice=StreamingChoice(delta=Delta(content="Hi"))
+    ),
+    # Two content chunks: with one, a regression re-opening the output item
+    # per delta (Codex-fatal) would still pass.
+    ModelResponseStream(
+        id="r1", created="0", choice=StreamingChoice(delta=Delta(content=" there"))
+    ),
+    ModelResponseStream(
+        id="r1",
+        created="0",
+        choice=StreamingChoice(finish_reason="stop", delta=Delta()),
+        usage=_wire_usage(),
+    ),
+]
 
-    with pytest.raises(OnyxError) as exc_info:
-        _handle_responses_call(request)
+_TOOL_CALL_CHUNKS = [
+    ModelResponseStream(
+        id="s1",
+        created="0",
+        choice=StreamingChoice(
+            delta=Delta(
+                tool_calls=[
+                    ChatCompletionDeltaToolCall(
+                        id="call_1",
+                        index=0,
+                        function=FunctionCall(name="bash", arguments='{"cmd":"ls"}'),
+                    )
+                ]
+            )
+        ),
+    ),
+    ModelResponseStream(
+        id="s1",
+        created="0",
+        choice=StreamingChoice(finish_reason="tool_calls", delta=Delta()),
+    ),
+]
 
-    assert exc_info.value.error_code is OnyxErrorCode.NOT_IMPLEMENTED
+
+def _responses_stream_events(
+    llm: LLM,
+    *,
+    tools: list[dict[str, Any]] | None = None,
+    model: str = "1/test",
+    response_id: str = "resp_1",
+    span: Any | None = None,
+) -> list[dict[str, Any]]:
+    with patch.object(
+        gateway_api, "llm_generation_span", return_value=nullcontext(span)
+    ):
+        frames = list(
+            gateway_api._run_bridged_stream(
+                gateway_api._responses_stream_worker,
+                {
+                    "llm": llm,
+                    "flow": LLMFlow.CRAFT_LLM_GENERATION,
+                    "messages": [UserMessage(content="hi")],
+                    "tools": tools,
+                    "tool_choice": None,
+                    "max_tokens": None,
+                    "reasoning_effort": ReasoningEffort.AUTO,
+                    "model": model,
+                    "response_id": response_id,
+                    "created_at": 100,
+                },
+            )
+        )
+    return [json.loads(frame.removeprefix("data: ")) for frame in frames]
+
+
+def test_responses_stream_emits_created_first_and_completed_last() -> None:
+    events = _responses_stream_events(_ChunkStreamLLM(_TEXT_CHUNKS))
+    assert events[0]["type"] == "response.created"
+    assert events[0]["response"]["status"] == "in_progress"
+    assert events[-1]["type"] == "response.completed"
+    assert events[-1]["response"]["status"] == "completed"
+    assert events[-1]["response"]["output"][0]["content"][0]["text"] == "Hi there"
+    delta_events = [e for e in events if e["type"] == "response.output_text.delta"]
+    assert [e["delta"] for e in delta_events] == ["Hi", " there"]
+
+
+def test_responses_stream_emits_full_output_item_lifecycle_in_order() -> None:
+    """Codex 0.145 rejects any output_text.delta whose item was never opened
+    ("OutputTextDelta without active item")."""
+    events = _responses_stream_events(_ChunkStreamLLM(_TEXT_CHUNKS))
+    event_types = [e["type"] for e in events]
+
+    assert event_types == [
+        "response.created",
+        "response.output_item.added",
+        "response.content_part.added",
+        "response.output_text.delta",
+        "response.output_text.delta",
+        "response.output_text.done",
+        "response.content_part.done",
+        "response.output_item.done",
+        "response.completed",
+    ]
+
+    added_event = events[1]
+    assert added_event["item"]["type"] == "message"
+    assert added_event["item"]["status"] == "in_progress"
+    message_item_id = added_event["item"]["id"]
+
+    for event in events[2:-1]:
+        item_id = (
+            event.get("item_id")
+            if "item_id" in event
+            else event.get("item", {}).get("id")
+        )
+        assert item_id == message_item_id
+
+    assert [e["delta"] for e in events[3:5]] == ["Hi", " there"]
+    assert events[5]["text"] == "Hi there"
+    assert events[6]["part"]["text"] == "Hi there"
+    done_item_event = events[7]
+    assert done_item_event["item"]["status"] == "completed"
+    assert done_item_event["item"]["content"][0]["text"] == "Hi there"
+    assert events[-1]["response"]["output"] == [done_item_event["item"]]
+
+
+def test_responses_stream_tool_call_gets_own_output_item_lifecycle() -> None:
+    events = _responses_stream_events(
+        _ChunkStreamLLM(_TOOL_CALL_CHUNKS), response_id="resp_2"
+    )
+    event_types = [e["type"] for e in events]
+
+    assert event_types == [
+        "response.created",
+        "response.output_item.added",
+        "response.function_call_arguments.done",
+        "response.output_item.done",
+        "response.completed",
+    ]
+
+    added_event = events[1]
+    assert added_event["item"]["type"] == "function_call"
+    assert added_event["output_index"] == 0
+    call_item_id = added_event["item"]["id"]
+
+    args_done_event = events[2]
+    assert args_done_event["item_id"] == call_item_id
+    assert args_done_event["arguments"] == '{"cmd":"ls"}'
+
+    done_event = events[3]
+    assert done_event["item"]["id"] == call_item_id
+    assert done_event["item"]["status"] == "completed"
+
+    assert [item["id"] for item in events[-1]["response"]["output"]] == [call_item_id]
+
+
+_TEXT_AND_TOOL_CALL_CHUNKS = [
+    ModelResponseStream(
+        id="m1", created="0", choice=StreamingChoice(delta=Delta(content="Running"))
+    ),
+    ModelResponseStream(
+        id="m1",
+        created="0",
+        choice=StreamingChoice(
+            delta=Delta(
+                tool_calls=[
+                    ChatCompletionDeltaToolCall(
+                        id="call_9",
+                        index=0,
+                        function=FunctionCall(name="bash", arguments='{"cmd":"ls"}'),
+                    )
+                ]
+            )
+        ),
+    ),
+    ModelResponseStream(
+        id="m1",
+        created="0",
+        choice=StreamingChoice(finish_reason="tool_calls", delta=Delta()),
+    ),
+]
+
+
+def test_responses_stream_text_and_tool_call_get_separate_output_indices() -> None:
+    """Reusing output_index 0 for both makes Codex reject the tool call."""
+    events = _responses_stream_events(
+        _ChunkStreamLLM(_TEXT_AND_TOOL_CALL_CHUNKS), response_id="resp_3"
+    )
+
+    message_id = events[1]["item"]["id"]
+    assert events[1]["output_index"] == 0
+
+    call_added = next(
+        e
+        for e in events
+        if e["type"] == "response.output_item.added"
+        and e["item"]["type"] == "function_call"
+    )
+    assert call_added["output_index"] == 1
+    assert call_added["item"]["id"] != message_id
+
+    args_done = next(
+        e for e in events if e["type"] == "response.function_call_arguments.done"
+    )
+    assert args_done["output_index"] == 1
+    assert args_done["item_id"] == call_added["item"]["id"]
+
+    output = events[-1]["response"]["output"]
+    assert [item["type"] for item in output] == ["message", "function_call"]
+    assert output[0]["content"][0]["text"] == "Running"
+    assert [item["id"] for item in output] == [message_id, call_added["item"]["id"]]
+
+
+@pytest.mark.parametrize(
+    "exc",
+    [
+        LLMRateLimitError("slow down"),
+        LLMTimeoutError("too slow"),
+        RuntimeError("secret-provider-response"),
+    ],
+)
+def test_responses_stream_upstream_failure_emits_response_failed(
+    exc: Exception,
+) -> None:
+    events = _responses_stream_events(
+        _StreamingLLM(threading.Event(), fail=True, exc=exc), response_id="resp_err"
+    )
+
+    assert events[0]["type"] == "response.created"
+    assert events[-1]["type"] == "response.failed"
+    assert events[-1]["response"]["status"] == "failed"
+    assert events[-1]["response"]["id"] == "resp_err"
+    assert "secret-provider-response" not in json.dumps(events)
+    assert not any(e["type"] == "response.completed" for e in events)
+
+
+class _FailAfterTextLLM(_ConfigOnlyLLM):
+    def __init__(self, exc: Exception) -> None:
+        super().__init__(
+            LLMConfig(
+                model_provider="openai",
+                model_name="test",
+                temperature=0,
+                max_input_tokens=1_000,
+            )
+        )
+        self._exc = exc
+
+    def stream(self, *args: object, **kwargs: object):  # type: ignore[no-untyped-def,override]
+        del args, kwargs
+        yield ModelResponseStream(
+            id="p1", created="0", choice=StreamingChoice(delta=Delta(content="partial"))
+        )
+        raise self._exc
+
+
+def test_responses_stream_failure_closes_the_open_text_item() -> None:
+    events = _responses_stream_events(
+        _FailAfterTextLLM(RuntimeError("boom")), response_id="resp_partial"
+    )
+    event_types = [e["type"] for e in events]
+
+    assert event_types == [
+        "response.created",
+        "response.output_item.added",
+        "response.content_part.added",
+        "response.output_text.delta",
+        "response.output_text.done",
+        "response.content_part.done",
+        "response.output_item.done",
+        "response.failed",
+    ]
+    item_id = events[1]["item"]["id"]
+    assert events[1]["item"]["status"] == "in_progress"
+    done_item = events[6]["item"]
+    assert done_item["id"] == item_id
+    assert done_item["status"] == "incomplete"
+    assert done_item["content"][0]["text"] == "partial"
+    assert events[-1]["response"]["status"] == "failed"
+
+
+def test_responses_stream_events_carry_monotonic_sequence_numbers() -> None:
+    """sequence_number is a required field on every Responses streaming event
+    in the OpenAI schema; strict SDK clients fail validation without it."""
+    events = _responses_stream_events(
+        _ChunkStreamLLM(_TEXT_AND_TOOL_CALL_CHUNKS), response_id="resp_seq"
+    )
+
+    assert [e["sequence_number"] for e in events] == list(range(len(events)))
+
+
+@pytest.mark.parametrize(
+    ("exc", "expected_code"),
+    [
+        (LLMRateLimitError("slow down"), "rate_limit_exceeded"),
+        (LLMTimeoutError("too slow"), "server_error"),
+        (RuntimeError("secret-provider-response"), "server_error"),
+    ],
+)
+def test_responses_stream_failure_uses_schema_error_codes(
+    exc: Exception, expected_code: str
+) -> None:
+    """response.error must be {code, message} with code from the Responses
+    enum, and a rate limit must stay distinguishable for retry-aware clients."""
+    events = _responses_stream_events(
+        _StreamingLLM(threading.Event(), fail=True, exc=exc), response_id="resp_code"
+    )
+
+    error = events[-1]["response"]["error"]
+    assert error["code"] == expected_code
+    assert "type" not in error
+    assert "secret-provider-response" not in error["message"]
+
+
+def test_responses_stream_validates_against_openai_sdk_models() -> None:
+    """The whole emitted stream must parse with the real openai SDK event
+    models, which is what a strict client actually runs."""
+    from openai.types.responses import ResponseStreamEvent
+    from pydantic import TypeAdapter
+
+    adapter: TypeAdapter[Any] = TypeAdapter(ResponseStreamEvent)
+    streams = [
+        _responses_stream_events(
+            _ChunkStreamLLM(_TEXT_AND_TOOL_CALL_CHUNKS), response_id="resp_sdk"
+        ),
+        _responses_stream_events(
+            _FailAfterTextLLM(LLMRateLimitError("slow down")),
+            response_id="resp_sdk_err",
+        ),
+    ]
+    for events in streams:
+        for event in events:
+            adapter.validate_python(event)
+
+
+def test_responses_stream_disconnect_closes_upstream_and_omits_completed() -> None:
+    closed = threading.Event()
+    with patch.object(gateway_api, "llm_generation_span", return_value=nullcontext()):
+        stream = gateway_api._run_bridged_stream(
+            gateway_api._responses_stream_worker,
+            {
+                "llm": _StreamingLLM(closed),
+                "flow": LLMFlow.CRAFT_LLM_GENERATION,
+                "messages": [UserMessage(content="hi")],
+                "tools": None,
+                "tool_choice": None,
+                "max_tokens": None,
+                "reasoning_effort": ReasoningEffort.AUTO,
+                "model": "1/test",
+                "response_id": "resp_gone",
+                "created_at": 100,
+            },
+        )
+        seen = [json.loads(next(stream).removeprefix("data: ")) for _ in range(2)]
+        cast(Generator[str, None, None], stream).close()
+
+    assert closed.wait(timeout=2)
+    assert seen[0]["type"] == "response.created"
+    assert not any(event["type"] == "response.completed" for event in seen)
+
+
+def test_responses_stream_records_output_usage_and_reasoning_on_span() -> None:
+    """The span must be truthy: with a null span every assertion here passes
+    silently, because the worker skips all span recording."""
+    span = MagicMock()
+
+    with patch.object(gateway_api, "record_llm_span_output") as record:
+        _responses_stream_events(
+            _reasoning_stream_llm(), span=span, response_id="resp_span"
+        )
+
+    record.assert_called_once()
+    assert record.call_args.args[0] is span
+    assert record.call_args.kwargs["reasoning"] == "thinking hard"
+    assert record.call_args.kwargs["output"] == "done"
+
+    with patch.object(gateway_api, "record_llm_span_output") as record:
+        _responses_stream_events(
+            _ChunkStreamLLM(_TEXT_CHUNKS), span=span, response_id="resp_usage"
+        )
+
+    usage = record.call_args.kwargs["usage"]
+    assert usage is not None and usage.prompt_tokens == 120
+
+
+@pytest.mark.asyncio
+async def test_handle_responses_request_streaming_returns_event_stream() -> None:
+    request = ResponsesRequest.model_validate({**_codex_fixture(), "stream": True})
+
+    with (
+        patch.object(
+            gateway_api, "llm_from_provider", return_value=_ChunkStreamLLM(_TEXT_CHUNKS)
+        ),
+        patch.object(gateway_api, "llm_generation_span", return_value=nullcontext()),
+    ):
+        result = _handle_responses_call(request)
+
+        assert isinstance(result, StreamingResponse)
+        assert result.media_type == "text/event-stream"
+        events = [
+            json.loads(frame.removeprefix("data: "))
+            async for frame in result.body_iterator
+        ]
+
+    # The invariant Codex enforces: no event may reference an unopened item.
+    assert events[0]["type"] == "response.created"
+    assert events[-1]["type"] == "response.completed"
+    open_items: set[str] = set()
+    for event in events:
+        if event["type"] == "response.output_item.added":
+            open_items.add(event["item"]["id"])
+        elif event["type"] in (
+            "response.output_text.delta",
+            "response.output_text.done",
+            "response.content_part.added",
+            "response.content_part.done",
+        ):
+            assert event["item_id"] in open_items, (
+                f"{event['type']} referenced unopened item {event['item_id']}"
+            )
 
 
 def test_responses_gateway_route_carries_same_permission_dependency() -> None:

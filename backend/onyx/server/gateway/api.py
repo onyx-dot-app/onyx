@@ -4,8 +4,10 @@ import threading
 import time
 import uuid
 from collections.abc import Callable, Iterator
-from contextlib import closing
-from typing import Any, cast
+from contextlib import closing, contextmanager
+from functools import partial
+from itertools import count
+from typing import Any, Protocol, cast, runtime_checkable
 
 from fastapi import APIRouter, Depends, Request, Response
 from fastapi.responses import JSONResponse, StreamingResponse
@@ -50,10 +52,21 @@ from onyx.server.gateway.models import (
     ChatCompletionRequest,
     ChatCompletionResponse,
     ModelListResponse,
+    ResponsesCompletedEvent,
+    ResponsesContentPartAddedEvent,
+    ResponsesContentPartDoneEvent,
+    ResponsesCreatedEvent,
+    ResponsesErrorCode,
+    ResponsesFailedEvent,
+    ResponsesFunctionCallArgumentsDoneEvent,
     ResponsesFunctionCallItem,
     ResponsesMessageItem,
     ResponsesObjectPayload,
     ResponsesOutputItem,
+    ResponsesOutputItemAddedEvent,
+    ResponsesOutputItemDoneEvent,
+    ResponsesOutputTextDeltaEvent,
+    ResponsesOutputTextDoneEvent,
     ResponsesOutputTextPart,
     ResponsesRequest,
 )
@@ -61,6 +74,8 @@ from onyx.server.manage.llm.models import LLMProviderView, ModelConfigurationVie
 from onyx.server.query_and_chat.token_limit import check_token_rate_limits
 from onyx.tracing.flows import LLMFlow
 from onyx.tracing.framework.create import trace
+from onyx.tracing.framework.span_data import GenerationSpanData
+from onyx.tracing.framework.spans import Span
 from onyx.tracing.framework.traces import Trace
 from onyx.tracing.llm_utils import (
     llm_generation_span,
@@ -222,6 +237,15 @@ def _parse_tool_choice(raw: Any) -> ToolChoiceOptions | None:
 _STREAM_END = object()
 
 
+@runtime_checkable
+class _ClosableStream(Protocol):
+    """LLM.stream is declared Iterator, which carries no close(); every real
+    implementation is a generator, and an abandoned one must be closed so the
+    provider connection is released."""
+
+    def close(self) -> None: ...
+
+
 def _put_stream_item(
     out: "queue.Queue[Any]", item: Any, cancelled: threading.Event
 ) -> bool:
@@ -246,6 +270,88 @@ def _emit_stream_error(
     _put_stream_item(out, "data: [DONE]\n\n", cancelled)
 
 
+class _StreamAccumulator:
+    def __init__(self) -> None:
+        self.content: list[str] = []
+        self.reasoning: list[str] = []
+        self.usage: Usage | None = None
+        self.tool_call_buffer: dict[int, ChatCompletionDeltaToolCall] = {}
+        self.upstream: Iterator[ModelResponseStream] | None = None
+
+    def observe(self, chunk: ModelResponseStream) -> None:
+        if chunk.usage:
+            self.usage = chunk.usage
+        if chunk.choice.delta.content:
+            self.content.append(chunk.choice.delta.content)
+        if chunk.choice.delta.reasoning_content:
+            self.reasoning.append(chunk.choice.delta.reasoning_content)
+        for delta_tc in chunk.choice.delta.tool_calls:
+            _merge_tool_call_delta(self.tool_call_buffer, delta_tc)
+
+    @property
+    def text(self) -> str:
+        return "".join(self.content)
+
+
+_RATE_LIMIT_ERROR = (
+    "The selected model is temporarily rate limited.",
+    "rate_limit_error",
+)
+_TIMEOUT_ERROR = ("The selected model did not respond in time.", "timeout_error")
+_UPSTREAM_ERROR = ("The upstream LLM request failed.", "upstream_error")
+
+
+@contextmanager
+def _stream_worker_guard(
+    span: Span[GenerationSpanData] | None,
+    model: str,
+    state: _StreamAccumulator,
+    *,
+    label: str,
+    emit_error: Callable[..., None],
+    out: "queue.Queue[Any]",
+    cancelled: threading.Event,
+) -> Iterator[None]:
+    """The HTTP status is already sent by the time a worker runs, so upstream
+    failures surface in-band as a protocol error frame rather than raising."""
+    try:
+        yield
+    except Exception as exc:
+        if isinstance(exc, LLMRateLimitError):
+            message, error_type = _RATE_LIMIT_ERROR
+        elif isinstance(exc, LLMTimeoutError):
+            message, error_type = _TIMEOUT_ERROR
+        else:
+            message, error_type = _UPSTREAM_ERROR
+        if span is not None:
+            span.set_error({"message": f"{type(exc).__name__}: {exc}", "data": None})
+        logger.exception(
+            "LLM gateway %s failed (%s) for model %s", label, error_type, model
+        )
+        emit_error(message=message, error_type=error_type)
+    finally:
+        try:
+            if isinstance(state.upstream, _ClosableStream):
+                state.upstream.close()
+        except Exception:
+            logger.exception("LLM gateway %s cleanup failed for model %s", label, model)
+        try:
+            if span is not None:
+                record_llm_span_output(
+                    span,
+                    output=state.text or None,
+                    usage=state.usage,
+                    reasoning="".join(state.reasoning) or None,
+                    tool_calls=_finalize_tool_calls(state.tool_call_buffer),
+                )
+        except Exception:
+            logger.exception(
+                "LLM gateway %s span cleanup failed for model %s", label, model
+            )
+        finally:
+            _put_stream_item(out, _STREAM_END, cancelled)
+
+
 def _stream_worker(
     llm: LLM,
     flow: LLMFlow,
@@ -268,14 +374,18 @@ def _stream_worker(
             llm, flow=flow, input_messages=messages, tools=tools
         ) as span,
     ):
-        accumulated_content: list[str] = []
-        accumulated_reasoning: list[str] = []
-        final_usage: Usage | None = None
-        tool_call_buffer: dict[int, ChatCompletionDeltaToolCall] = {}
+        state = _StreamAccumulator()
         sent_role = False
-        upstream: Iterator[ModelResponseStream] | None = None
-        try:
-            upstream = llm.stream(
+        with _stream_worker_guard(
+            span,
+            model,
+            state,
+            label="stream",
+            emit_error=partial(_emit_stream_error, out, cancelled),
+            out=out,
+            cancelled=cancelled,
+        ):
+            state.upstream = llm.stream(
                 prompt=messages,
                 tools=tools,
                 tool_choice=tool_choice,
@@ -283,17 +393,10 @@ def _stream_worker(
                 max_tokens=max_tokens,
                 reasoning_effort=reasoning_effort,
             )
-            for chunk in upstream:
+            for chunk in state.upstream:
                 if cancelled.is_set():
                     break
-                if chunk.usage:
-                    final_usage = chunk.usage
-                if chunk.choice.delta.content:
-                    accumulated_content.append(chunk.choice.delta.content)
-                if chunk.choice.delta.reasoning_content:
-                    accumulated_reasoning.append(chunk.choice.delta.reasoning_content)
-                for delta_tc in chunk.choice.delta.tool_calls:
-                    _merge_tool_call_delta(tool_call_buffer, delta_tc)
+                state.observe(chunk)
                 payload = ChatCompletionChunk.from_stream_chunk(
                     chunk, model, include_role=not sent_role
                 )
@@ -304,117 +407,52 @@ def _stream_worker(
                     break
             else:
                 _put_stream_item(out, "data: [DONE]\n\n", cancelled)
-        except LLMRateLimitError as exc:
-            if span is not None:
-                span.set_error(
-                    {"message": f"{type(exc).__name__}: {exc}", "data": None}
-                )
-            logger.exception("LLM gateway stream rate limited for model %s", model)
-            # The HTTP status is already sent; surface the failure in-band the
-            # way OpenAI-compatible servers do so the client fails the turn.
-            _emit_stream_error(
-                out,
-                cancelled,
-                message="The selected model is temporarily rate limited.",
-                error_type="rate_limit_error",
-            )
-        except LLMTimeoutError as exc:
-            if span is not None:
-                span.set_error(
-                    {"message": f"{type(exc).__name__}: {exc}", "data": None}
-                )
-            logger.exception("LLM gateway stream timed out for model %s", model)
-            _emit_stream_error(
-                out,
-                cancelled,
-                message="The selected model did not respond in time.",
-                error_type="timeout_error",
-            )
-        except Exception as exc:
-            if span is not None:
-                span.set_error(
-                    {"message": f"{type(exc).__name__}: {exc}", "data": None}
-                )
-            logger.exception("LLM gateway stream failed for model %s", model)
-            _emit_stream_error(
-                out,
-                cancelled,
-                message="The upstream LLM request failed.",
-                error_type="upstream_error",
-            )
-        finally:
-            try:
-                close = getattr(upstream, "close", None)
-                if callable(close):
-                    close()
-            except Exception:
-                logger.exception(
-                    "LLM gateway stream cleanup failed for model %s", model
-                )
-            try:
-                if span is not None:
-                    record_llm_span_output(
-                        span,
-                        output="".join(accumulated_content) or None,
-                        usage=final_usage,
-                        reasoning="".join(accumulated_reasoning) or None,
-                        tool_calls=_finalize_tool_calls(tool_call_buffer),
-                    )
-            except Exception:
-                logger.exception("LLM gateway span cleanup failed for model %s", model)
-            finally:
-                _put_stream_item(out, _STREAM_END, cancelled)
 
 
-def _stream_sse(
-    llm: LLM,
-    flow: LLMFlow,
-    messages: list[ChatCompletionMessage],
-    tools: list[dict[str, Any]] | None,
-    tool_choice: ToolChoiceOptions | None,
-    structured_response_format: dict[str, Any] | None,
-    max_tokens: int | None,
-    reasoning_effort: ReasoningEffort,
-    model: str,
+def _run_bridged_stream(
+    worker: Callable[..., None], worker_kwargs: dict[str, Any]
 ) -> Iterator[str]:
-    """Bridge the worker through a queue so the whole stream consumption —
+    """Bridge a stream worker through a queue so the whole consumption —
     including the generation span's ContextVar enter/exit — happens on ONE
     thread. Yielding directly from a sync generator breaks under Starlette,
     which resumes the generator on varying threadpool threads (ContextVar
     tokens can't be reset across contexts)."""
     out: "queue.Queue[Any]" = queue.Queue(maxsize=256)
     cancelled = threading.Event()
-    worker = start_thread_with_context(
-        _stream_worker,
+    worker_thread = start_thread_with_context(
+        worker,
         name="llm-gateway-stream",
         daemon=True,
-        kwargs={
-            "llm": llm,
-            "flow": flow,
-            "messages": messages,
-            "tools": tools,
-            "tool_choice": tool_choice,
-            "structured_response_format": structured_response_format,
-            "max_tokens": max_tokens,
-            "reasoning_effort": reasoning_effort,
-            "model": model,
-            "out": out,
-            "cancelled": cancelled,
-        },
+        kwargs={**worker_kwargs, "out": out, "cancelled": cancelled},
     )
     try:
         while True:
-            try:
-                item = out.get(timeout=0.5)
-            except queue.Empty:
-                if not worker.is_alive():
+            if worker_thread.is_alive():
+                try:
+                    item = out.get(timeout=0.5)
+                except queue.Empty:
+                    continue
+            else:
+                # Worker died before signalling: drain, or the stream truncates.
+                try:
+                    item = out.get_nowait()
+                except queue.Empty:
                     return
-                continue
             if item is _STREAM_END:
                 return
             yield item
     finally:
         cancelled.set()
+
+
+def _sse_response(
+    worker: Callable[..., None], worker_kwargs: dict[str, Any]
+) -> StreamingResponse:
+    return StreamingResponse(
+        _run_bridged_stream(worker, worker_kwargs),
+        media_type="text/event-stream",
+        headers={"Cache-Control": "no-cache", "X-Accel-Buffering": "no"},
+    )
 
 
 def handle_chat_completion(
@@ -434,20 +472,19 @@ def handle_chat_completion(
     max_tokens = request.max_completion_tokens or request.max_tokens
 
     if request.stream:
-        return StreamingResponse(
-            _stream_sse(
-                llm=llm,
-                flow=flow,
-                messages=messages,
-                tools=request.tools,
-                tool_choice=tool_choice,
-                structured_response_format=request.response_format,
-                max_tokens=max_tokens,
-                reasoning_effort=reasoning_effort,
-                model=request.model,
-            ),
-            media_type="text/event-stream",
-            headers={"Cache-Control": "no-cache", "X-Accel-Buffering": "no"},
+        return _sse_response(
+            _stream_worker,
+            {
+                "llm": llm,
+                "flow": flow,
+                "messages": messages,
+                "tools": request.tools,
+                "tool_choice": tool_choice,
+                "structured_response_format": request.response_format,
+                "max_tokens": max_tokens,
+                "reasoning_effort": reasoning_effort,
+                "model": request.model,
+            },
         )
 
     with (
@@ -585,7 +622,7 @@ def _build_responses_output_items(
             ResponsesMessageItem.create(
                 id=message_item_id,
                 status="completed",
-                content=[ResponsesOutputTextPart.create(content)],
+                content=[ResponsesOutputTextPart.create(text=content)],
             )
         )
     items.extend(
@@ -596,17 +633,199 @@ def _build_responses_output_items(
     return items
 
 
+def _responses_stream_worker(
+    llm: LLM,
+    flow: LLMFlow,
+    messages: list[ChatCompletionMessage],
+    tools: list[dict[str, Any]] | None,
+    tool_choice: ToolChoiceOptions | None,
+    max_tokens: int | None,
+    reasoning_effort: ReasoningEffort,
+    model: str,
+    response_id: str,
+    created_at: int,
+    out: "queue.Queue[Any]",
+    cancelled: threading.Event,
+) -> None:
+    sequence = count()
+
+    def emit(event: Any) -> bool:
+        # Stamped here rather than in the models so it always matches emission
+        # order and no event can be built without one.
+        payload = {**event.to_wire(), "sequence_number": next(sequence)}
+        return _put_stream_item(out, f"data: {json.dumps(payload)}\n\n", cancelled)
+
+    emit(
+        ResponsesCreatedEvent.create(
+            ResponsesObjectPayload.from_parts(
+                response_id=response_id,
+                created_at=created_at,
+                model=model,
+                status="in_progress",
+                output=[],
+            )
+        )
+    )
+    message_item_id = _new_id("msg")
+    state = _StreamAccumulator()
+    text_item_open = False
+
+    def close_text_item(status: str) -> ResponsesMessageItem:
+        part = ResponsesOutputTextPart.create(text=state.text)
+        item = ResponsesMessageItem.create(
+            id=message_item_id, status=status, content=[part]
+        )
+        emit(
+            ResponsesOutputTextDoneEvent.create(
+                item_id=message_item_id, output_index=0, text=state.text
+            )
+        )
+        emit(
+            ResponsesContentPartDoneEvent.create(
+                item_id=message_item_id, output_index=0, part=part
+            )
+        )
+        emit(ResponsesOutputItemDoneEvent.create(output_index=0, item=item))
+        return item
+
+    def emit_error(*, message: str, error_type: str) -> None:
+        code: ResponsesErrorCode = (
+            "rate_limit_exceeded"
+            if error_type == _RATE_LIMIT_ERROR[1]
+            else "server_error"
+        )
+        if text_item_open:
+            close_text_item("incomplete")
+        emit(
+            ResponsesFailedEvent.create(
+                ResponsesObjectPayload.failed(
+                    response_id=response_id,
+                    created_at=created_at,
+                    model=model,
+                    message=message,
+                    code=code,
+                )
+            )
+        )
+
+    # Runs on its own thread after the endpoint has returned the
+    # StreamingResponse, so the trace must be opened here rather than in the
+    # endpoint for the generation span to see an active trace.
+    with (
+        _gateway_trace(flow, llm.config.model_name),
+        llm_generation_span(
+            llm, flow=flow, input_messages=messages, tools=tools
+        ) as span,
+    ):
+        with _stream_worker_guard(
+            span,
+            model,
+            state,
+            label="responses stream",
+            emit_error=emit_error,
+            out=out,
+            cancelled=cancelled,
+        ):
+            state.upstream = llm.stream(
+                prompt=messages,
+                tools=tools,
+                tool_choice=tool_choice,
+                max_tokens=max_tokens,
+                reasoning_effort=reasoning_effort,
+            )
+            for chunk in state.upstream:
+                if cancelled.is_set():
+                    break
+                state.observe(chunk)
+                if not chunk.choice.delta.content:
+                    continue
+                if not text_item_open:
+                    # Open the item before the first delta; Codex drops
+                    # deltas for items it has not seen added.
+                    if not emit(
+                        ResponsesOutputItemAddedEvent.create(
+                            output_index=0,
+                            item=ResponsesMessageItem.create(
+                                id=message_item_id, status="in_progress", content=[]
+                            ),
+                        )
+                    ):
+                        break
+                    if not emit(
+                        ResponsesContentPartAddedEvent.create(
+                            item_id=message_item_id,
+                            output_index=0,
+                            part=ResponsesOutputTextPart.create(text=""),
+                        )
+                    ):
+                        break
+                    text_item_open = True
+                if not emit(
+                    ResponsesOutputTextDeltaEvent.create(
+                        item_id=message_item_id,
+                        delta=chunk.choice.delta.content,
+                    )
+                ):
+                    break
+            else:
+                # Build each item once and reuse it below: re-deriving items
+                # for the terminal payload remints ids the client never saw.
+                completed_items: list[ResponsesOutputItem] = []
+                if text_item_open:
+                    completed_items.append(close_text_item("completed"))
+                # Filter before enumerating, or a dropped nameless call leaves
+                # a hole in the output_index sequence.
+                call_items = [
+                    item
+                    for item in (
+                        _function_call_item(tool_call)
+                        for tool_call in _finalize_tool_calls(state.tool_call_buffer)
+                        or []
+                    )
+                    if item is not None
+                ]
+                for tool_index, call_item in enumerate(
+                    call_items, start=len(completed_items)
+                ):
+                    completed_items.append(call_item)
+                    emit(
+                        ResponsesOutputItemAddedEvent.create(
+                            output_index=tool_index, item=call_item
+                        )
+                    )
+                    emit(
+                        ResponsesFunctionCallArgumentsDoneEvent.create(
+                            item_id=call_item.id,
+                            output_index=tool_index,
+                            arguments=call_item.arguments,
+                            name=call_item.name,
+                        )
+                    )
+                    emit(
+                        ResponsesOutputItemDoneEvent.create(
+                            output_index=tool_index, item=call_item
+                        )
+                    )
+                emit(
+                    ResponsesCompletedEvent.create(
+                        ResponsesObjectPayload.from_parts(
+                            response_id=response_id,
+                            created_at=created_at,
+                            model=model,
+                            status="completed",
+                            output=completed_items,
+                            usage=state.usage,
+                        )
+                    )
+                )
+
+
 def handle_responses_request(
     request: ResponsesRequest,
     provider: LLMProviderView,
     model_config: ModelConfigurationView,
     flow: LLMFlow,
-) -> ResponsesObjectPayload:
-    if request.stream:
-        raise OnyxError(
-            OnyxErrorCode.NOT_IMPLEMENTED,
-            "Streaming is not yet supported on the Responses API.",
-        )
+) -> StreamingResponse | ResponsesObjectPayload:
     llm = llm_from_provider(
         model_name=model_config.name,
         llm_provider=provider,
@@ -622,6 +841,23 @@ def handle_responses_request(
     max_tokens = request.max_output_tokens
     response_id = _new_id("resp")
     created_at = int(time.time())
+
+    if request.stream:
+        return _sse_response(
+            _responses_stream_worker,
+            {
+                "llm": llm,
+                "flow": flow,
+                "messages": messages,
+                "tools": tools,
+                "tool_choice": tool_choice,
+                "max_tokens": max_tokens,
+                "reasoning_effort": reasoning_effort,
+                "model": request.model,
+                "response_id": response_id,
+                "created_at": created_at,
+            },
+        )
 
     with (
         _gateway_trace(flow, llm.config.model_name),
@@ -730,4 +966,6 @@ def gateway_responses(
         model_config=model_config,
         flow=flow,
     )
+    if isinstance(result, StreamingResponse):
+        return result
     return JSONResponse(content=result.to_wire())

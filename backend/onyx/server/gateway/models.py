@@ -245,13 +245,18 @@ class ResponsesRequest(BaseModel):
     reasoning: dict[str, Any] | None = None
 
 
+# Subset of the Responses error enum we can actually produce; the schema has
+# no timeout code, so timeouts report as server_error.
+ResponsesErrorCode: TypeAlias = Literal["server_error", "rate_limit_exceeded"]
+
+
 class ResponsesOutputTextPart(_WireModel):
     type: Literal["output_text"] = "output_text"
     text: str
     annotations: list[Any] = Field(default_factory=list)
 
     @classmethod
-    def create(cls, text: str) -> "ResponsesOutputTextPart":
+    def create(cls, *, text: str) -> "ResponsesOutputTextPart":
         return cls(type="output_text", text=text, annotations=[])
 
 
@@ -317,6 +322,11 @@ class ResponsesObjectPayload(_WireModel):
     status: str
     model: str
     output: list[ResponsesOutputItem]
+    # Required by the Responses schema even when empty, so a strict SDK client
+    # can parse the object; we do not echo the request's tools.
+    parallel_tool_calls: bool = True
+    tool_choice: str = "auto"
+    tools: list[dict[str, Any]] = Field(default_factory=list)
     usage: ResponsesUsagePayload | None = None
     error: dict[str, Any] | None = None
 
@@ -341,5 +351,190 @@ class ResponsesObjectPayload(_WireModel):
             status=status,
             model=model,
             output=output,
+            parallel_tool_calls=True,
+            tool_choice="auto",
+            tools=[],
             **kwargs,
         )
+
+    @classmethod
+    def failed(
+        cls,
+        *,
+        response_id: str,
+        created_at: int,
+        model: str,
+        message: str,
+        code: ResponsesErrorCode = "server_error",
+    ) -> "ResponsesObjectPayload":
+        return cls(
+            id=response_id,
+            object="response",
+            created_at=created_at,
+            status="failed",
+            model=model,
+            output=[],
+            parallel_tool_calls=True,
+            tool_choice="auto",
+            tools=[],
+            error={"code": code, "message": message},
+        )
+
+
+class ResponsesCreatedEvent(_WireModel):
+    type: Literal["response.created"] = "response.created"
+    response: ResponsesObjectPayload
+
+    @classmethod
+    def create(cls, response: ResponsesObjectPayload) -> "ResponsesCreatedEvent":
+        return cls(type="response.created", response=response)
+
+
+class ResponsesOutputTextDeltaEvent(_WireModel):
+    type: Literal["response.output_text.delta"] = "response.output_text.delta"
+    item_id: str
+    output_index: int = 0
+    content_index: int = 0
+    delta: str
+    logprobs: list[Any] = Field(default_factory=list)
+
+    @classmethod
+    def create(cls, *, item_id: str, delta: str) -> "ResponsesOutputTextDeltaEvent":
+        return cls(
+            type="response.output_text.delta",
+            item_id=item_id,
+            output_index=0,
+            content_index=0,
+            delta=delta,
+            logprobs=[],
+        )
+
+
+class ResponsesOutputItemAddedEvent(_WireModel):
+    type: Literal["response.output_item.added"] = "response.output_item.added"
+    output_index: int = 0
+    item: ResponsesOutputItem
+
+    @classmethod
+    def create(
+        cls, *, output_index: int, item: ResponsesOutputItem
+    ) -> "ResponsesOutputItemAddedEvent":
+        return cls(
+            type="response.output_item.added", output_index=output_index, item=item
+        )
+
+
+class ResponsesOutputItemDoneEvent(_WireModel):
+    type: Literal["response.output_item.done"] = "response.output_item.done"
+    output_index: int = 0
+    item: ResponsesOutputItem
+
+    @classmethod
+    def create(
+        cls, *, output_index: int, item: ResponsesOutputItem
+    ) -> "ResponsesOutputItemDoneEvent":
+        return cls(
+            type="response.output_item.done", output_index=output_index, item=item
+        )
+
+
+class ResponsesContentPartAddedEvent(_WireModel):
+    type: Literal["response.content_part.added"] = "response.content_part.added"
+    item_id: str
+    output_index: int = 0
+    content_index: int = 0
+    part: ResponsesOutputTextPart
+
+    @classmethod
+    def create(
+        cls, *, item_id: str, output_index: int, part: ResponsesOutputTextPart
+    ) -> "ResponsesContentPartAddedEvent":
+        return cls(
+            type="response.content_part.added",
+            item_id=item_id,
+            output_index=output_index,
+            content_index=0,
+            part=part,
+        )
+
+
+class ResponsesContentPartDoneEvent(_WireModel):
+    type: Literal["response.content_part.done"] = "response.content_part.done"
+    item_id: str
+    output_index: int = 0
+    content_index: int = 0
+    part: ResponsesOutputTextPart
+
+    @classmethod
+    def create(
+        cls, *, item_id: str, output_index: int, part: ResponsesOutputTextPart
+    ) -> "ResponsesContentPartDoneEvent":
+        return cls(
+            type="response.content_part.done",
+            item_id=item_id,
+            output_index=output_index,
+            content_index=0,
+            part=part,
+        )
+
+
+class ResponsesOutputTextDoneEvent(_WireModel):
+    type: Literal["response.output_text.done"] = "response.output_text.done"
+    item_id: str
+    output_index: int = 0
+    content_index: int = 0
+    text: str
+    logprobs: list[Any] = Field(default_factory=list)
+
+    @classmethod
+    def create(
+        cls, *, item_id: str, output_index: int, text: str
+    ) -> "ResponsesOutputTextDoneEvent":
+        return cls(
+            type="response.output_text.done",
+            item_id=item_id,
+            output_index=output_index,
+            content_index=0,
+            text=text,
+            logprobs=[],
+        )
+
+
+class ResponsesFunctionCallArgumentsDoneEvent(_WireModel):
+    type: Literal["response.function_call_arguments.done"] = (
+        "response.function_call_arguments.done"
+    )
+    item_id: str
+    output_index: int = 0
+    arguments: str
+    name: str
+
+    @classmethod
+    def create(
+        cls, *, item_id: str, output_index: int, arguments: str, name: str
+    ) -> "ResponsesFunctionCallArgumentsDoneEvent":
+        return cls(
+            type="response.function_call_arguments.done",
+            item_id=item_id,
+            output_index=output_index,
+            arguments=arguments,
+            name=name,
+        )
+
+
+class ResponsesCompletedEvent(_WireModel):
+    type: Literal["response.completed"] = "response.completed"
+    response: ResponsesObjectPayload
+
+    @classmethod
+    def create(cls, response: ResponsesObjectPayload) -> "ResponsesCompletedEvent":
+        return cls(type="response.completed", response=response)
+
+
+class ResponsesFailedEvent(_WireModel):
+    type: Literal["response.failed"] = "response.failed"
+    response: ResponsesObjectPayload
+
+    @classmethod
+    def create(cls, response: ResponsesObjectPayload) -> "ResponsesFailedEvent":
+        return cls(type="response.failed", response=response)
