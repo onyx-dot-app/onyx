@@ -205,12 +205,14 @@ function EditGroupPage({ groupId }: EditGroupPageProps) {
     () => new Set(group?.users.map((u) => u.id) ?? []),
     [group]
   );
-  const [pendingManagerId, setPendingManagerId] = useState<string | null>(null);
+  const [pendingManagerIds, setPendingManagerIds] = useState<Set<string>>(
+    () => new Set()
+  );
 
   // Hits its endpoint immediately (member add/remove defers to Save), then revalidates.
   const handleToggleManager = useCallback(
     async (userId: string, makeManager: boolean) => {
-      setPendingManagerId(userId);
+      setPendingManagerIds((prev) => new Set(prev).add(userId));
       try {
         await setGroupManager(groupId, userId, makeManager);
         await mutate(SWR_KEYS.adminUserGroups);
@@ -220,7 +222,11 @@ function EditGroupPage({ groupId }: EditGroupPageProps) {
           err instanceof Error ? err.message : "Failed to update manager"
         );
       } finally {
-        setPendingManagerId(null);
+        setPendingManagerIds((prev) => {
+          const next = new Set(prev);
+          next.delete(userId);
+          return next;
+        });
       }
     },
     [groupId, mutate]
@@ -237,7 +243,7 @@ function EditGroupPage({ groupId }: EditGroupPageProps) {
           const userId = row.id ?? row.email;
           const isManager = managerIds.has(userId);
           const isPersisted = persistedMemberIds.has(userId);
-          const isPending = pendingManagerId === userId;
+          const isPending = pendingManagerIds.has(userId);
           return (
             <div className="flex items-center gap-1">
               <IconButton
@@ -276,7 +282,7 @@ function EditGroupPage({ groupId }: EditGroupPageProps) {
       handleToggleManager,
       managerIds,
       persistedMemberIds,
-      pendingManagerId,
+      pendingManagerIds,
       canManage,
     ]
   );
