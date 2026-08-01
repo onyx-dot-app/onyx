@@ -61,8 +61,7 @@ class CustomSkillResponse(BaseModel):
     updated_at: datetime.datetime | None = None
     granted_group_ids: list[int] = []
     is_personal: bool
-    # Per-action affordance map for the requesting user (mirrors the write-side guards).
-    # Defaults empty (fail-closed); the admin skills list stamps the real map.
+    # Server-stamped affordance map; fail-closed empty (only the admin skills list stamps it).
     permissions: dict[str, bool] = Field(default_factory=dict)
 
     @classmethod

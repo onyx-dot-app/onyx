@@ -221,7 +221,7 @@ def test_cc_pair_projection_matches_gates(db_session: Session) -> None:
         assert tags["delete"] == admin_authority  # A — never a scoped manager
         assert tags["publish"] == admin_authority  # A
 
-    # the whole point of the fix: an in-scope manager can edit but not delete/publish
+    # in-scope manager can edit but not delete/publish
     manager_editable = within_scope(
         in_scope,
         db_session,
@@ -522,7 +522,7 @@ def test_tool_projection_matches_gates(db_session: Session) -> None:
         assert tags["delete"] == is_actions_admin  # A — never a scoped manager
         assert tags["toggle"] == is_actions_admin  # A
 
-    # the fix: an in-scope manager can edit but not delete/toggle
+    # in-scope manager can edit but not delete/toggle
     assert tool_permissions(
         can_edit=can_edit_custom_tool(in_scope, tool, db_session),
         is_actions_admin=has_global_permission(in_scope, Permission.MANAGE_ACTIONS),
@@ -572,7 +572,7 @@ def test_mcp_projection_matches_gates(db_session: Session) -> None:
         assert tags["authenticate"] == admin_enforced
         assert tags["manage_status"] == admin_enforced
 
-    # the fix: an in-scope manager edits but can't delete/authenticate/manage_status
+    # in-scope manager edits but can't delete/authenticate/manage_status
     assert mcp_server_permissions(
         can_edit=can_edit_mcp_server(in_scope, server, db_session),
         can_admin=can_admin_mcp_server(in_scope, server),
@@ -645,7 +645,7 @@ def test_skill_projection_matches_gates(db_session: Session) -> None:
         assert tags["delete"] == is_full_admin
         assert tags["publish"] == publish_enforced  # global MANAGE_SKILLS
 
-    # the fix: an in-scope manager edits/re-grants but can't delete or publish
+    # in-scope manager edits/re-grants but can't delete or publish
     assert custom_skill_permissions(
         can_edit=within_scope(
             in_scope,

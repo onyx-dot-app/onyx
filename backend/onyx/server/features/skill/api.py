@@ -126,8 +126,7 @@ def _split_rows(
             group_ids = get_group_ids_for_skill(skill.id, db_session)
             skill_perms: dict[str, bool] | None = None
             if user is not None:
-                # Read-affordance: within_scope on the skill's own groups, mirroring the
-                # patch guard's current==requested check.
+                # Read-affordance mirroring the patch guard: within_scope on the skill's own groups.
                 skill_perms = custom_skill_permissions(
                     can_edit=within_scope(
                         user,

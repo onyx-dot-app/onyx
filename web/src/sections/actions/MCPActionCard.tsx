@@ -112,9 +112,6 @@ export default function MCPActionCard({
   const [isToolsRefreshing, setIsToolsRefreshing] = useState(false);
   const deleteModal = useCreateModal();
 
-  // Affordances ride on the server-stamped map: edit gates manage/edit-config/rename,
-  // authenticate gates connect, manage_status gates (dis)connect + refresh, delete the
-  // delete button.
   const canEdit = can(server, "edit");
   const canDelete = can(server, "delete");
   const canAuthenticate = can(server, "authenticate");

@@ -32,8 +32,7 @@ import { toast } from "@/hooks/useToast";
 export default function UserSkillsPage() {
   const { data, error, isLoading, refresh } = useUserSkills();
   const { user } = useUser();
-  // MANAGE_SKILLS (via admin_capabilities) reveals the manage entry to scoped skill
-  // managers, not just full admins.
+  // Gate on admin_capabilities/MANAGE_SKILLS so scoped skill managers reach the manage entry, not just admins.
   const canManageSkills = useCapabilities(Permission.MANAGE_SKILLS);
   const [searchQuery, setSearchQuery] = useState("");
   const [createOpen, setCreateOpen] = useState(false);

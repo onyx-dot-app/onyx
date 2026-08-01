@@ -43,7 +43,7 @@ export interface CustomSkill {
   created_at: string | null;
   updated_at: string | null;
   granted_group_ids: number[];
-  // Per-action affordance map for the requesting user (server-stamped, fail-closed).
+  // Server-stamped affordance map; fail-closed (absent = denied).
   permissions?: Record<string, boolean>;
 }
 

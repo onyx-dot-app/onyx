@@ -39,7 +39,7 @@ export interface MCPServer {
   status: MCPServerStatus;
   last_refreshed_at?: string;
   tool_count: number;
-  // Per-action affordance map for the requesting user (server-stamped, fail-closed).
+  // Server-stamped affordance map; fail-closed (absent = denied).
   permissions?: Record<string, boolean>;
 }
 
@@ -115,7 +115,7 @@ export interface ToolSnapshot {
   agent_creation_selectable: boolean;
   default_enabled: boolean;
 
-  // Per-action affordance map for the requesting user (server-stamped, fail-closed).
+  // Server-stamped affordance map; fail-closed (absent = denied).
   permissions?: Record<string, boolean>;
 }
 

@@ -40,8 +40,6 @@ export default function CustomSkillRowActions({
 }: CustomSkillRowActionsProps) {
   const [popoverOpen, setPopoverOpen] = useState(false);
 
-  // Row affordances ride on the server-stamped map: edit gates replace/disable,
-  // manage_access gates visibility grants, delete is admin-only.
   const canEdit = can(skill, "edit");
   const canManageAccess = can(skill, "manage_access");
   const canDelete = can(skill, "delete");

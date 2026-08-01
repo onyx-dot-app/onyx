@@ -17,8 +17,8 @@ interface SkillSharePickerProps {
   onIsPublicChange: (isPublic: boolean) => void;
   groupIds: number[];
   onGroupIdsChange: (groupIds: number[]) => void;
-  // Publishing org-wide is admin-only; a scoped manager can grant to groups but not
-  // flip a skill public. Defaults open so non-skill callers are unaffected.
+  // Publish (org-wide) is admin-only; a scoped manager grants to groups but can't flip public.
+  // Defaults open so non-skill callers are unaffected.
   canPublish?: boolean;
 }
 

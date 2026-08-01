@@ -41,8 +41,6 @@ export default function OpenApiActionCard({
   const [updatingStatus, setUpdatingStatus] = useState(false);
   const deleteModal = useCreateModal();
 
-  // Affordances ride on the server-stamped map: edit gates manage/auth-config/rename,
-  // toggle gates enable/disable, delete is global MANAGE_ACTIONS.
   const canEdit = can(tool, "edit");
   const canDelete = can(tool, "delete");
   const canToggle = can(tool, "toggle");

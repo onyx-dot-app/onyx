@@ -170,12 +170,16 @@ def get_mcp_server_agent_scope(
     )
 
 
-# Read-mode mirrors of the tool/MCP write guards: same decision, no policy re-derived, so
-# the projection can stamp affordances. Guards stay the boundary; drift is caught by the
-# permission-projection contract test.
+# Read-mode mirrors of the write guards — same decision, no policy re-derived — so the
+# projection can stamp affordances; the contract test catches drift.
 
 
-def action_within_managed_scope(tool_id: int, db_session: Session, user: User) -> bool:
+def action_within_managed_scope(
+    tool_id: int,
+    db_session: Session,
+    user: User,
+    managed_group_ids: set[int] | None = None,
+) -> bool:
     """Read-mode of ``_assert_action_within_managed_scope``: a scoped manager is in scope
     for a custom action iff every agent using it is private and in a group they manage."""
     group_ids, has_public_agent, has_ungrouped_private_agent = get_action_agent_scope(
@@ -187,12 +191,20 @@ def action_within_managed_scope(tool_id: int, db_session: Session, user: User) -
         group_ids=group_ids,
         has_public_agent=has_public_agent,
         has_ungrouped_private_agent=has_ungrouped_private_agent,
+        managed_group_ids=managed_group_ids,
     )
 
 
-def can_edit_custom_tool(user: User, tool: Tool, db_session: Session) -> bool:
+def can_edit_custom_tool(
+    user: User,
+    tool: Tool,
+    db_session: Session,
+    managed_group_ids: set[int] | None = None,
+) -> bool:
     """Read-mode of ``_get_editable_custom_tool`` (admin ∨ creator ∨ scoped branches,
-    minus its 404/400 fetch raises). Built-in tools are never editable here."""
+    minus its 404/400 fetch raises). Built-in tools are never editable here.
+
+    ``managed_group_ids`` lets a list endpoint preload the manager's group set once."""
     if tool.in_code_tool_id is not None:
         return False
     if Permission.FULL_ADMIN_PANEL_ACCESS in get_effective_permissions(user):
@@ -200,13 +212,20 @@ def can_edit_custom_tool(user: User, tool: Tool, db_session: Session) -> bool:
     if tool.user_id is not None and tool.user_id == user.id:
         return True
     if has_permission(user, Permission.MANAGE_ACTIONS) is PermissionAuthority.SCOPED:
-        return action_within_managed_scope(tool.id, db_session, user)
+        return action_within_managed_scope(tool.id, db_session, user, managed_group_ids)
     return False
 
 
-def can_edit_mcp_server(user: User, server: MCPServer, db_session: Session) -> bool:
+def can_edit_mcp_server(
+    user: User,
+    server: MCPServer,
+    db_session: Session,
+    managed_group_ids: set[int] | None = None,
+) -> bool:
     """Read-mode of ``_ensure_mcp_server_editable``: admin ∨ owner (by email) ∨ a scoped
-    manager whose groups cover every agent using the server's tools."""
+    manager whose groups cover every agent using the server's tools.
+
+    ``managed_group_ids`` lets a list endpoint preload the manager's group set once."""
     if Permission.FULL_ADMIN_PANEL_ACCESS in get_effective_permissions(user):
         return True
     if server.owner == user.email:
@@ -221,6 +240,7 @@ def can_edit_mcp_server(user: User, server: MCPServer, db_session: Session) -> b
             group_ids=group_ids,
             has_public_agent=has_public_agent,
             has_ungrouped_private_agent=has_ungrouped_private_agent,
+            managed_group_ids=managed_group_ids,
         )
     return False
 

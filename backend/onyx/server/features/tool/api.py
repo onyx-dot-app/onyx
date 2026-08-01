@@ -12,6 +12,7 @@ from onyx.auth.permissions import has_global_permission
 from onyx.auth.permissions import has_permission
 from onyx.auth.permissions import require_permission
 from onyx.auth.scoped_permissions import agent_mediated_scope_allows
+from onyx.auth.scoped_permissions import get_scoped_groups
 from onyx.configs.constants import PUBLIC_API_TAGS
 from onyx.db.engine.sql_engine import get_session
 from onyx.db.enums import Permission
@@ -263,9 +264,14 @@ def list_openapi_tools(
 ) -> list[ToolSnapshot]:
     tools = get_tools(db_session, only_openapi=True)
 
-    # delete/toggle are global MANAGE_ACTIONS; resolve once. edit is per-tool and only
-    # queries agent scope for a scoped manager (admin/creator/non-manager short-circuit).
+    # Only a scoped manager's per-tool edit check queries agent scope; preload their group
+    # set once so the loop issues no query per row. delete/toggle are global MANAGE_ACTIONS.
     is_actions_admin = has_global_permission(user, Permission.MANAGE_ACTIONS)
+    managed_group_ids = (
+        get_scoped_groups(user, db_session, Permission.MANAGE_ACTIONS)
+        if has_permission(user, Permission.MANAGE_ACTIONS) is PermissionAuthority.SCOPED
+        else None
+    )
     openapi_tools: list[ToolSnapshot] = []
     for tool in tools:
         if not should_expose_tool_to_fe(tool):
@@ -275,7 +281,9 @@ def list_openapi_tools(
             ToolSnapshot.from_model(
                 tool,
                 permissions=tool_permissions(
-                    can_edit=can_edit_custom_tool(user, tool, db_session),
+                    can_edit=can_edit_custom_tool(
+                        user, tool, db_session, managed_group_ids
+                    ),
                     is_actions_admin=is_actions_admin,
                 ),
             )

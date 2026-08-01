@@ -8,8 +8,8 @@ interface CraftManageLayoutProps {
   children: React.ReactNode;
 }
 
-// admin_capabilities + MANAGE_SKILLS (not effective_permissions) so a scoped skills
-// manager — whose admin routes are allow_scope=True — reaches the page, not just admins.
+// Gate on admin_capabilities, not effective_permissions, so a scoped skills manager
+// (admin routes are allow_scope=True) reaches the page, not just full admins.
 export default async function CraftManageLayout({
   children,
 }: CraftManageLayoutProps) {

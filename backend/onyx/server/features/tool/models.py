@@ -22,8 +22,7 @@ class ToolSnapshot(BaseModel):
     oauth_config_name: str | None = None
     enabled: bool = True
 
-    # Per-action affordance map for the requesting user (mirrors the write-side guard).
-    # Defaults empty (fail-closed); the admin actions list stamps the real map.
+    # Server-stamped affordance map; fail-closed empty (only the admin actions list stamps it).
     permissions: dict[str, bool] = Field(default_factory=dict)
 
     # Visibility settings computed from TOOL_VISIBILITY_CONFIG

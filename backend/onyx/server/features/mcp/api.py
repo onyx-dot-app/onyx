@@ -38,6 +38,7 @@ from onyx.auth.permissions import get_effective_permissions
 from onyx.auth.permissions import has_permission
 from onyx.auth.permissions import require_permission
 from onyx.auth.scoped_permissions import agent_mediated_scope_allows
+from onyx.auth.scoped_permissions import get_scoped_groups
 from onyx.configs.app_configs import WEB_DOMAIN
 from onyx.db.engine.sql_engine import get_session
 from onyx.db.engine.sql_engine import get_session_with_current_tenant
@@ -2314,6 +2315,10 @@ def get_mcp_server_detail(
         db_session,
         include_auth_config=True,
         request_user=user,
+        permissions=mcp_server_permissions(
+            can_edit=can_edit_mcp_server(user, server, db_session),
+            can_admin=can_admin_mcp_server(user, server),
+        ),
     )
 
 
@@ -2376,15 +2381,23 @@ def get_mcp_servers_for_admin(
     try:
         db_mcp_servers = get_all_mcp_servers(db)
 
-        # Stamp per-server affordances; edit/delete short-circuit for admins and owners, so
-        # only a scoped manager runs the per-server agent-scope query.
+        # Only a scoped manager's per-server edit check queries agent scope (admins/owners
+        # short-circuit); preload their group set once so the loop issues no query per row.
+        managed_group_ids = (
+            get_scoped_groups(user, db, Permission.MANAGE_ACTIONS)
+            if has_permission(user, Permission.MANAGE_ACTIONS)
+            is PermissionAuthority.SCOPED
+            else None
+        )
         mcp_servers = [
             _db_mcp_server_to_api_mcp_server(
                 db_server,
                 db,
                 request_user=user,
                 permissions=mcp_server_permissions(
-                    can_edit=can_edit_mcp_server(user, db_server, db),
+                    can_edit=can_edit_mcp_server(
+                        user, db_server, db, managed_group_ids
+                    ),
                     can_admin=can_admin_mcp_server(user, db_server),
                 ),
             )
@@ -2649,9 +2662,14 @@ def update_mcp_server_simple(
 
     db_session.commit()
 
-    # Return the updated server in API format
     return _db_mcp_server_to_api_mcp_server(
-        updated_server, db_session, request_user=user
+        updated_server,
+        db_session,
+        request_user=user,
+        permissions=mcp_server_permissions(
+            can_edit=can_edit_mcp_server(user, updated_server, db_session),
+            can_admin=can_admin_mcp_server(user, updated_server),
+        ),
     )
 
 
