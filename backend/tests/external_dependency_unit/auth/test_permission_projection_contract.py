@@ -5,12 +5,20 @@ stamps matches whether the guard raises, across an actor matrix — so the affor
 the client renders can't silently drift from what the backend enforces.
 """
 
+import asyncio
+import inspect
 from collections.abc import Callable
+from types import SimpleNamespace
 from uuid import uuid4
 
 from sqlalchemy.orm import Session
 
 from ee.onyx.db.analytics import user_can_view_assistant_stats
+from ee.onyx.db.token_limit import insert_user_group_token_rate_limit
+from ee.onyx.server.token_rate_limits.api import _authorize_group_token_rate_limit_write
+from ee.onyx.server.token_rate_limits.api import get_group_token_limit_settings
+from ee.onyx.server.user_group.api import delete_user_group
+from ee.onyx.server.user_group.api import set_user_group_permissions
 from onyx.auth.permission_projection import CC_PAIR_ACTIONS
 from onyx.auth.permission_projection import cc_pair_permissions
 from onyx.auth.permission_projection import CUSTOM_SKILL_ACTIONS
@@ -23,6 +31,8 @@ from onyx.auth.permission_projection import PERSONA_ACTIONS
 from onyx.auth.permission_projection import persona_permissions
 from onyx.auth.permission_projection import TOOL_ACTIONS
 from onyx.auth.permission_projection import tool_permissions
+from onyx.auth.permission_projection import USER_GROUP_ACTIONS
+from onyx.auth.permission_projection import user_group_permissions
 from onyx.auth.permissions import has_global_permission
 from onyx.auth.scoped_permissions import assert_manages_group
 from onyx.auth.scoped_permissions import assert_within_scope
@@ -52,6 +62,7 @@ from onyx.db.persona import get_persona_by_id
 from onyx.db.persona import is_persona_editable_by_user
 from onyx.db.persona import persona_edit_within_scope
 from onyx.db.skill import get_group_ids_for_skill
+from onyx.db.token_limit import insert_global_token_rate_limit
 from onyx.db.tools import can_admin_mcp_server
 from onyx.db.tools import can_edit_custom_tool
 from onyx.db.tools import can_edit_mcp_server
@@ -60,6 +71,7 @@ from onyx.server.features.mcp.api import _ensure_mcp_server_editable
 from onyx.server.features.mcp.api import _ensure_mcp_server_owner_or_admin
 from onyx.server.features.persona.models import PersonaUpsertRequest
 from onyx.server.features.tool.api import _get_editable_custom_tool
+from onyx.server.token_rate_limits.models import TokenRateLimitArgs
 from tests.external_dependency_unit.conftest import create_test_user
 
 
@@ -71,6 +83,17 @@ def _guard_raises(
         return False
     except OnyxError:
         return True
+
+
+def _route_admits(
+    route_func: Callable[..., object], guard_param: str, actor: User
+) -> bool:
+    """True iff the route's ``require_permission`` admits ``actor`` (unrestricted token).
+    Runs the real dependency, so the assertion tracks the route decorator — not the bool
+    that built the map, which can't catch a FULL_ADMIN vs MANAGE_USER_GROUPS drift."""
+    depends = inspect.signature(route_func).parameters[guard_param].default
+    request = SimpleNamespace(state=SimpleNamespace(token_scopes=None))
+    return not _guard_raises(lambda: asyncio.run(depends.dependency(request, actor)))
 
 
 def _make_group(db_session: Session) -> UserGroup:
@@ -651,3 +674,166 @@ def test_actions_and_skill_key_coverage() -> None:
             can_edit=True, is_full_admin=True, is_skills_admin=True
         )
     ) == set(CUSTOM_SKILL_ACTIONS)
+
+
+def test_user_group_projection_matches_gates(db_session: Session) -> None:
+    """Each flag is pinned to its real route, not the bool that built it: manage and
+    edit_token_limits → assert_manages_group (per-group scoped — the token read route now
+    admits scope), delete → delete-group (global MANAGE_USER_GROUPS), edit_permissions →
+    permission-toggle (FULL_ADMIN). groups_admin (global MANAGE_USER_GROUPS, not full admin)
+    separates the two levels; out_scope (manages a different group) pins the per-group gate."""
+    managed = _make_group(db_session)
+
+    in_scope = create_test_user(db_session, "proj-ug-in")
+    _manage(db_session, in_scope, managed)
+    in_scope.effective_permissions = []
+
+    out_scope = create_test_user(db_session, "proj-ug-out")
+    _manage(db_session, out_scope, _make_group(db_session))
+    out_scope.effective_permissions = []
+
+    groups_admin = create_test_user(db_session, "proj-ug-groupsadmin")
+    groups_admin.effective_permissions = [Permission.MANAGE_USER_GROUPS.value]
+
+    admin = create_test_user(db_session, "proj-ug-admin", is_admin=True)
+    db_session.commit()
+
+    for actor in (in_scope, out_scope, groups_admin, admin):
+        manage_enforced = not _guard_raises(
+            assert_manages_group, actor, db_session, group_id=managed.id
+        )
+        # the token-limit POST guard (scoped create) is the same managed-scope decision
+        token_create_enforced = not _guard_raises(
+            assert_within_scope,
+            actor,
+            db_session,
+            permission=Permission.MANAGE_USER_GROUPS,
+            current_group_ids=[managed.id],
+            requested_group_ids=[managed.id],
+            is_non_public=True,
+        )
+        can_manage = manages_group(actor, db_session, group_id=managed.id)
+        assert can_manage == manage_enforced, actor.email
+        assert can_manage == token_create_enforced, actor.email
+
+        tags = user_group_permissions(
+            can_manage=can_manage,
+            is_user_groups_admin=has_global_permission(
+                actor, Permission.MANAGE_USER_GROUPS
+            ),
+            is_full_admin=has_global_permission(
+                actor, Permission.FULL_ADMIN_PANEL_ACCESS
+            ),
+        )
+        assert tags["manage"] == manage_enforced, actor.email
+        assert tags["delete"] == _route_admits(delete_user_group, "_", actor), (
+            actor.email
+        )
+        assert tags["edit_permissions"] == _route_admits(
+            set_user_group_permissions, "user", actor
+        ), actor.email
+        # edit_token_limits rides the token read route: GATE 1 admits scope, GATE 2 is
+        # assert_manages_group — net per-group decision, so AND the two.
+        token_read_gate1 = _route_admits(get_group_token_limit_settings, "user", actor)
+        assert tags["edit_token_limits"] == (token_read_gate1 and manage_enforced), (
+            actor.email
+        )
+
+    assert user_group_permissions(
+        can_manage=manages_group(in_scope, db_session, group_id=managed.id),
+        is_user_groups_admin=has_global_permission(
+            in_scope, Permission.MANAGE_USER_GROUPS
+        ),
+        is_full_admin=has_global_permission(
+            in_scope, Permission.FULL_ADMIN_PANEL_ACCESS
+        ),
+    ) == {
+        "manage": True,
+        "delete": False,
+        "edit_permissions": False,
+        # scoped manager now fully manages its group's token limits
+        "edit_token_limits": True,
+    }
+
+    # groups_admin (global MANAGE_USER_GROUPS, not full admin): manages token limits and
+    # deletes the group, but can't edit permissions (FULL_ADMIN).
+    assert user_group_permissions(
+        can_manage=manages_group(groups_admin, db_session, group_id=managed.id),
+        is_user_groups_admin=has_global_permission(
+            groups_admin, Permission.MANAGE_USER_GROUPS
+        ),
+        is_full_admin=has_global_permission(
+            groups_admin, Permission.FULL_ADMIN_PANEL_ACCESS
+        ),
+    ) == {
+        "manage": True,
+        "delete": True,
+        "edit_permissions": False,
+        "edit_token_limits": True,
+    }
+
+
+def test_user_group_key_coverage() -> None:
+    assert set(
+        user_group_permissions(
+            can_manage=True, is_user_groups_admin=True, is_full_admin=True
+        )
+    ) == set(USER_GROUP_ACTIONS)
+
+
+def test_group_token_rate_limit_write_scope(db_session: Session) -> None:
+    """A group token-limit write needs the caller to manage the group AND the limit to
+    belong to it — so a group admin fully manages its limits, but a global/per-user limit or
+    another group's limit can't be reached through the group path."""
+    managed = _make_group(db_session)
+    other = _make_group(db_session)
+
+    args = TokenRateLimitArgs(enabled=True, token_budget=1000, period_hours=24)
+    managed_limit = insert_user_group_token_rate_limit(
+        db_session=db_session, token_rate_limit_settings=args, group_id=managed.id
+    )
+    global_limit = insert_global_token_rate_limit(db_session, args)
+
+    in_scope = create_test_user(db_session, "proj-trl-in")
+    _manage(db_session, in_scope, managed)
+    in_scope.effective_permissions = []
+
+    out_scope = create_test_user(db_session, "proj-trl-out")
+    _manage(db_session, out_scope, other)
+    out_scope.effective_permissions = []
+
+    groups_admin = create_test_user(db_session, "proj-trl-groupsadmin")
+    groups_admin.effective_permissions = [Permission.MANAGE_USER_GROUPS.value]
+
+    admin = create_test_user(db_session, "proj-trl-admin", is_admin=True)
+
+    plain = create_test_user(db_session, "proj-trl-plain")
+    plain.effective_permissions = []
+    db_session.commit()
+
+    def denied(actor: User, group_id: int, rate_limit_id: int) -> bool:
+        return _guard_raises(
+            _authorize_group_token_rate_limit_write,
+            actor,
+            db_session,
+            group_id=group_id,
+            rate_limit_id=rate_limit_id,
+        )
+
+    assert not denied(admin, managed.id, managed_limit.id)
+    assert not denied(groups_admin, managed.id, managed_limit.id)
+    assert not denied(in_scope, managed.id, managed_limit.id)
+    assert denied(out_scope, managed.id, managed_limit.id)
+    assert denied(plain, managed.id, managed_limit.id)
+
+    # a global limit can't be reached through the group path — even for a full admin
+    assert denied(admin, managed.id, global_limit.id)
+
+    # the limit must belong to the claimed group (can't reach managed's limit via other)
+    assert denied(out_scope, other.id, managed_limit.id)
+    assert denied(in_scope, other.id, managed_limit.id)
+
+    # an unknown id folds into the same OnyxError 404, not the helper's raw ValueError
+    nonexistent_limit_id = -1
+    assert denied(in_scope, managed.id, nonexistent_limit_id)
+    assert denied(admin, managed.id, nonexistent_limit_id)
