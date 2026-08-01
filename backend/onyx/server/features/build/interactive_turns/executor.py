@@ -424,10 +424,6 @@ def _drive_interactive_turn(
 
             session_manager.finalize_persist(session_id, state)
             db_session.commit()
-            # Slot still held here, so a successor's fresh stamp can't be
-            # clobbered; TERMINATED paths (reclaim/slot-lost) skip the clear
-            # because a successor may own the turn.
-            session_manager.clear_turn_deadline(sandbox.id, session_id)
 
             if deadline_exceeded:
                 persist_turn_error(
@@ -488,19 +484,35 @@ def _drive_interactive_turn(
                 runner_id=runner_id,
             )
         finally:
+            # True on every exit where this runner still owns the turn (normal
+            # end, owned failure, cancel, exception); False once a successor
+            # owns it (reclaim / slot-lost with a new turn). A successor sets
+            # the active-turn pointer at creation, before it ever stamps, so
+            # this guard clears our deadline exactly when no other turn's stamp
+            # can be clobbered.
             try:
-                if _can_clear_interrupt_fence(
+                still_owns_turn = _can_clear_interrupt_fence(
                     cache=cache,
                     turn_id=turn_id,
                     session_id=session_id,
                     user_id=user_id,
                     runner_id=runner_id,
-                ):
-                    clear_interrupt(session_id, cache)
+                )
             except CACHE_TRANSIENT_ERRORS:
                 logger.warning(
-                    "[SANDBOX-SERVE] failed to clear interrupt fence for session %s",
+                    "[SANDBOX-SERVE] interrupt-fence ownership check failed for session %s",
                     session_id,
                     exc_info=True,
                 )
+                still_owns_turn = False
+            if still_owns_turn:
+                try:
+                    clear_interrupt(session_id, cache)
+                except CACHE_TRANSIENT_ERRORS:
+                    logger.warning(
+                        "[SANDBOX-SERVE] failed to clear interrupt fence for session %s",
+                        session_id,
+                        exc_info=True,
+                    )
+                session_manager.clear_turn_deadline(sandbox.id, session_id)
             prompt_slot_cm.__exit__(None, None, None)

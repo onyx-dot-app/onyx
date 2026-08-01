@@ -310,6 +310,9 @@ def test_runner_fails_turn_on_sandbox_error(
     assert result.finalized == [result.session_id]
     assert len(result.turn_errors) == 1
     assert "provider model not found" in result.turn_errors[0]
+    # Owned failure exit: the deadline stamp is cleared so a failed next-turn
+    # restamp can't inherit this turn's deadline.
+    assert result.cleared == [True]
     assert result.prompt_slot.exited
     assert result.db_session.rollbacks >= 1
 
@@ -428,8 +431,9 @@ def test_lost_lease_fails_turn(monkeypatch: pytest.MonkeyPatch) -> None:
         is None
     )
     assert len(result.turn_errors) == 1
-    # TERMINATED path: a successor may own the turn — never clear its stamp.
-    assert result.cleared == []
+    # Slot lost but no successor claimed the turn, so this runner still owns
+    # the turn record — the deadline stamp is cleared on exit.
+    assert result.cleared == [True]
     assert result.prompt_slot.exited
     assert result.prompt_slot.lost is True
 
