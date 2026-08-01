@@ -832,3 +832,8 @@ def test_group_token_rate_limit_write_scope(db_session: Session) -> None:
     # the limit must belong to the claimed group (can't reach managed's limit via other)
     assert denied(out_scope, other.id, managed_limit.id)
     assert denied(in_scope, other.id, managed_limit.id)
+
+    # an unknown id folds into the same OnyxError 404, not the helper's raw ValueError
+    nonexistent_limit_id = -1
+    assert denied(in_scope, managed.id, nonexistent_limit_id)
+    assert denied(admin, managed.id, nonexistent_limit_id)

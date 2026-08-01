@@ -117,9 +117,12 @@ def _authorize_group_token_rate_limit_write(
         requested_group_ids=[group_id],
         is_non_public=True,
     )
-    scope, resolved_group_id = get_token_rate_limit_scope_and_group(
-        db_session, rate_limit_id
-    )
+    try:
+        scope, resolved_group_id = get_token_rate_limit_scope_and_group(
+            db_session, rate_limit_id
+        )
+    except ValueError:
+        scope, resolved_group_id = None, None
     if scope != TokenRateLimitScope.USER_GROUP or resolved_group_id != group_id:
         raise OnyxError(
             OnyxErrorCode.NOT_FOUND, "Token rate limit not found for this group."
