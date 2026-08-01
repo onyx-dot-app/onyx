@@ -29,7 +29,9 @@ from onyx.llm.model_response import (
 from onyx.llm.models import (
     AssistantMessage,
     ReasoningEffort,
+    RedactedThinkingBlock,
     SystemMessage,
+    ThinkingBlock,
     ToolChoiceOptions,
     ToolMessage,
     UserMessage,
@@ -799,4 +801,233 @@ def test_gateway_anthropic_count_tokens_includes_tools() -> None:
                 },
             }
         ],
+    )
+
+
+def test_anthropic_signed_thinking_blocks_survive_input_translation() -> None:
+    messages = [
+        {"role": "user", "content": "hi"},
+        {
+            "role": "assistant",
+            "content": [
+                {"type": "thinking", "thinking": "hmm", "signature": "sig-1"},
+                {"type": "redacted_thinking", "data": "opaque"},
+                {"type": "thinking", "thinking": "unsigned", "signature": ""},
+                {"type": "text", "text": "sure"},
+            ],
+        },
+        {"role": "user", "content": "go on"},
+    ]
+
+    raw = gateway_api._anthropic_messages_to_raw_messages(messages, None)
+
+    assistant_message = next(m for m in raw if m["role"] == "assistant")
+    assert assistant_message["thinking_blocks"] == [
+        {"type": "thinking", "thinking": "hmm", "signature": "sig-1"},
+        {"type": "redacted_thinking", "data": "opaque"},
+    ]
+
+    validated = _MESSAGES_ADAPTER.validate_python(raw)
+    validated_assistant = next(m for m in validated if isinstance(m, AssistantMessage))
+    assert validated_assistant.thinking_blocks is not None
+    thinking, redacted = validated_assistant.thinking_blocks
+    assert isinstance(thinking, ThinkingBlock)
+    assert thinking.signature == "sig-1"
+    assert isinstance(redacted, RedactedThinkingBlock)
+    assert redacted.data == "opaque"
+    dumped = validated_assistant.model_dump(exclude_none=True)
+    assert dumped["thinking_blocks"][0]["signature"] == "sig-1"
+
+
+def test_thinking_only_assistant_message_is_not_dropped() -> None:
+    message = AssistantMessage(
+        content=None,
+        thinking_blocks=[ThinkingBlock(thinking="hmm", signature="sig-1")],
+    )
+    assert gateway_api._drop_empty_text(message) is message
+
+
+def test_handle_anthropic_messages_prepends_thinking_blocks() -> None:
+    response = ModelResponse(
+        id="msg-1",
+        created="1784577999",
+        choice=Choice(
+            finish_reason="stop",
+            message=Message(
+                content="Sure thing",
+                thinking_blocks=[
+                    ThinkingBlock(thinking="let me see", signature="sig-1"),
+                    RedactedThinkingBlock(data="opaque"),
+                ],
+            ),
+        ),
+        usage=None,
+    )
+
+    with patch.object(
+        gateway_api, "llm_from_provider", return_value=_InvokeLLM(response)
+    ):
+        result = _handle_anthropic_call(_anthropic_request())
+
+    assert isinstance(result, AnthropicMessageResponse)
+    assert result.to_wire()["content"] == [
+        {"type": "thinking", "thinking": "let me see", "signature": "sig-1"},
+        {"type": "redacted_thinking", "data": "opaque"},
+        {"type": "text", "text": "Sure thing"},
+    ]
+
+
+def test_handle_anthropic_messages_reasoning_content_becomes_unsigned_thinking() -> (
+    None
+):
+    response = ModelResponse(
+        id="msg-1",
+        created="1784577999",
+        choice=Choice(
+            finish_reason="stop",
+            message=Message(content="Hi", reasoning_content="pondering"),
+        ),
+        usage=None,
+    )
+
+    with patch.object(
+        gateway_api, "llm_from_provider", return_value=_InvokeLLM(response)
+    ):
+        result = _handle_anthropic_call(_anthropic_request())
+
+    assert isinstance(result, AnthropicMessageResponse)
+    assert result.to_wire()["content"] == [
+        {"type": "thinking", "thinking": "pondering", "signature": ""},
+        {"type": "text", "text": "Hi"},
+    ]
+
+
+_THINKING_TEXT_AND_TOOL_CHUNKS = [
+    ModelResponseStream(
+        id="a3",
+        created="0",
+        choice=StreamingChoice(
+            delta=Delta(
+                reasoning_content="I ",
+                thinking_blocks=[ThinkingBlock(thinking="I ")],
+            )
+        ),
+    ),
+    ModelResponseStream(
+        id="a3",
+        created="0",
+        choice=StreamingChoice(
+            delta=Delta(
+                reasoning_content="think",
+                thinking_blocks=[ThinkingBlock(thinking="think")],
+            )
+        ),
+    ),
+    ModelResponseStream(
+        id="a3",
+        created="0",
+        choice=StreamingChoice(
+            delta=Delta(thinking_blocks=[ThinkingBlock(signature="sig-1")])
+        ),
+    ),
+    ModelResponseStream(
+        id="a3", created="0", choice=StreamingChoice(delta=Delta(content="Hi"))
+    ),
+    ModelResponseStream(
+        id="a3",
+        created="0",
+        choice=StreamingChoice(
+            delta=Delta(
+                tool_calls=[
+                    ChatCompletionDeltaToolCall(
+                        id="call_1",
+                        index=0,
+                        function=FunctionCall(name="Bash", arguments='{"cmd":"ls"}'),
+                    )
+                ]
+            )
+        ),
+    ),
+    ModelResponseStream(
+        id="a3",
+        created="0",
+        choice=StreamingChoice(finish_reason="tool_calls", delta=Delta()),
+    ),
+]
+
+
+def test_anthropic_stream_emits_thinking_block_before_text_and_tools() -> None:
+    events = _anthropic_stream_events(_ChunkStreamLLM(_THINKING_TEXT_AND_TOOL_CHUNKS))
+
+    thinking_start = next(
+        e
+        for e in events
+        if e["type"] == "content_block_start"
+        and e["content_block"]["type"] == "thinking"
+    )
+    assert thinking_start["index"] == 0
+    assert thinking_start["content_block"] == {
+        "type": "thinking",
+        "thinking": "",
+        "signature": "",
+    }
+
+    content_deltas = [e for e in events if e["type"] == "content_block_delta"]
+    assert [d["delta"]["type"] for d in content_deltas] == [
+        "thinking_delta",
+        "thinking_delta",
+        "signature_delta",
+        "text_delta",
+        "input_json_delta",
+    ]
+    assert [d["index"] for d in content_deltas] == [0, 0, 0, 1, 2]
+    assert content_deltas[0]["delta"]["thinking"] == "I "
+    assert content_deltas[2]["delta"]["signature"] == "sig-1"
+
+    text_start = next(
+        e
+        for e in events
+        if e["type"] == "content_block_start" and e["content_block"]["type"] == "text"
+    )
+    assert text_start["index"] == 1
+    tool_start = next(
+        e
+        for e in events
+        if e["type"] == "content_block_start"
+        and e["content_block"]["type"] == "tool_use"
+    )
+    assert tool_start["index"] == 2
+
+    stop_indexes = [e["index"] for e in events if e["type"] == "content_block_stop"]
+    assert stop_indexes == [0, 1, 2]
+
+    message_delta = next(e for e in events if e["type"] == "message_delta")
+    assert message_delta["delta"]["stop_reason"] == "tool_use"
+
+
+def test_anthropic_stream_reasoning_content_fallback_emits_unsigned_thinking() -> None:
+    chunks = [
+        ModelResponseStream(
+            id="a4",
+            created="0",
+            choice=StreamingChoice(delta=Delta(reasoning_content="pondering")),
+        ),
+        ModelResponseStream(
+            id="a4", created="0", choice=StreamingChoice(delta=Delta(content="Hi"))
+        ),
+        ModelResponseStream(
+            id="a4",
+            created="0",
+            choice=StreamingChoice(finish_reason="stop", delta=Delta()),
+        ),
+    ]
+    events = _anthropic_stream_events(_ChunkStreamLLM(chunks))
+
+    delta_types = [
+        e["delta"]["type"] for e in events if e["type"] == "content_block_delta"
+    ]
+    assert delta_types == ["thinking_delta", "text_delta"]
+    assert not any(
+        e["type"] == "content_block_delta" and e["delta"]["type"] == "signature_delta"
+        for e in events
     )
