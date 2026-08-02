@@ -11,6 +11,7 @@ from collections.abc import Callable
 from types import SimpleNamespace
 from uuid import uuid4
 
+from fastapi import HTTPException
 from sqlalchemy.orm import Session
 
 from ee.onyx.db.analytics import user_can_view_assistant_stats
@@ -49,6 +50,7 @@ from onyx.db.models import DocumentSet__UserGroup
 from onyx.db.models import MCPServer
 from onyx.db.models import Persona
 from onyx.db.models import Persona__Tool
+from onyx.db.models import Persona__User
 from onyx.db.models import Persona__UserGroup
 from onyx.db.models import Skill
 from onyx.db.models import Skill__UserGroup
@@ -60,6 +62,7 @@ from onyx.db.persona import _assert_persona_update_within_managed_scope
 from onyx.db.persona import can_delete_persona
 from onyx.db.persona import can_edit_persona
 from onyx.db.persona import can_view_persona_stats
+from onyx.db.persona import fetch_persona_by_id_for_user
 from onyx.db.persona import get_persona_by_id
 from onyx.db.persona import is_persona_editable_by_user
 from onyx.db.persona import persona_edit_within_scope
@@ -367,13 +370,12 @@ def test_persona_projection_matches_gates(db_session: Session) -> None:
         global_version._is_ee = prev_ee
 
     # concrete: an in-scope manager can edit/share but not view_stats/delete/feature/reorder
+    in_scope_editable = is_persona_editable_by_user(db_session, persona.id, in_scope)
     mgr_map = persona_permissions(
         can_edit=can_edit_persona(
-            in_scope,
-            persona,
-            db_session,
-            is_editable=is_persona_editable_by_user(db_session, persona.id, in_scope),
+            in_scope, persona, db_session, is_editable=in_scope_editable
         ),
+        can_share=in_scope_editable,
         can_view_stats=can_view_persona_stats(in_scope, persona),
         can_delete=can_delete_persona(in_scope, persona, db_session),
         is_manage_agents_admin=has_global_permission(
@@ -386,6 +388,62 @@ def test_persona_projection_matches_gates(db_session: Session) -> None:
     assert mgr_map["edit"] is True and mgr_map["share"] is True
     assert mgr_map["view_stats"] is False
     assert not any(mgr_map[a] for a in ("delete", "publish", "feature", "reorder"))
+
+
+def test_persona_share_projection_tracks_share_guard_not_edit(
+    db_session: Session,
+) -> None:
+    """share follows the share guard (fetch_persona_by_id_for_user / get_editable), which is
+    broader than edit's managed-scope AND gate: an EDITOR-shared manager outside the agent's
+    groups may share it but not update it, so ``share`` must not reuse ``can_edit``."""
+    managed = _make_group(db_session)
+    unmanaged = _make_group(db_session)
+
+    # Manager of `unmanaged`, EDITOR-shared on an agent grouped in `managed` (out of scope).
+    editor = create_test_user(db_session, "share-editor")
+    _manage(db_session, editor, unmanaged)
+    editor.effective_permissions = []
+
+    owner = create_test_user(db_session, "share-owner")
+    owner.effective_permissions = []
+    db_session.commit()
+
+    persona = _make_persona(db_session, owner=owner, is_public=False, groups=[managed])
+    db_session.add(
+        Persona__User(
+            persona_id=persona.id,
+            user_id=editor.id,
+            permission=PersonaSharePermission.EDITOR,
+        )
+    )
+    db_session.commit()
+
+    is_editable = is_persona_editable_by_user(db_session, persona.id, editor)
+    can_edit = can_edit_persona(editor, persona, db_session, is_editable=is_editable)
+
+    # The real share-endpoint gate: does the editable fetch admit them?
+    try:
+        fetch_persona_by_id_for_user(
+            db_session=db_session, persona_id=persona.id, user=editor, get_editable=True
+        )
+        share_allowed = True
+    except HTTPException:
+        share_allowed = False
+
+    assert is_editable is True  # EDITOR-shared → in the editable set
+    assert can_edit is False  # ...but out of managed scope → can't update
+    assert share_allowed is True  # ...yet the share endpoint admits them
+
+    tags = persona_permissions(
+        can_edit=can_edit,
+        can_share=is_editable,
+        can_view_stats=can_view_persona_stats(editor, persona),
+        can_delete=can_delete_persona(editor, persona, db_session),
+        is_manage_agents_admin=has_global_permission(editor, Permission.MANAGE_AGENTS),
+        is_full_admin=has_global_permission(editor, Permission.FULL_ADMIN_PANEL_ACCESS),
+    )
+    assert tags["share"] == share_allowed  # share tracks the share guard...
+    assert tags["edit"] is False  # ...not the stricter edit guard
 
 
 def test_document_set_projection_matches_gates(db_session: Session) -> None:
@@ -438,6 +496,7 @@ def test_persona_and_doc_set_key_coverage() -> None:
     persona_keys = set(
         persona_permissions(
             can_edit=True,
+            can_share=True,
             can_view_stats=True,
             can_delete=True,
             is_manage_agents_admin=True,

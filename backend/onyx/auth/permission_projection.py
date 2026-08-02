@@ -36,20 +36,23 @@ PERSONA_ACTIONS: frozenset[str] = frozenset(
 def persona_permissions(
     *,
     can_edit: bool,
+    can_share: bool,
     can_view_stats: bool,
     can_delete: bool,
     is_manage_agents_admin: bool,
     is_full_admin: bool,
 ) -> dict[str, bool]:
-    """Agent (persona) affordance map. ``edit``/``share`` are the scoped
-    editable-and-managed-scope decision (share shares edit's gate). ``view_stats`` is
+    """Agent (persona) affordance map. ``edit`` is the editable-AND-managed-scope decision
+    the update guard enforces; ``share`` is the broader editable decision the share guard
+    enforces (get_editable alone, no scope AND) — an EDITOR-shared manager outside the
+    agent's groups may share but not update, so share is not edit's gate. ``view_stats`` is
     owner-or-full-admin. ``delete``/``publish`` are owner-or-admin (the handler's own
     ownership check, not the route token). ``feature``/``list`` need global MANAGE_AGENTS
     and ``reorder`` needs full admin — so a scoped manager may edit a managed agent but
     not delete, publish, feature, list, or reorder it."""
     return {
         "edit": can_edit,
-        "share": can_edit,
+        "share": can_share,
         "view_stats": can_view_stats,
         "delete": can_delete,
         "publish": can_delete,

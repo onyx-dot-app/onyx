@@ -605,13 +605,13 @@ def get_persona(
         snapshot.user_permission = get_persona_access_level(
             persona, user, user_group_ids
         )
+        is_editable = is_persona_editable_by_user(db_session, persona.id, user)
         snapshot.permissions = persona_permissions(
             can_edit=can_edit_persona(
-                user,
-                persona,
-                db_session,
-                is_editable=is_persona_editable_by_user(db_session, persona.id, user),
+                user, persona, db_session, is_editable=is_editable
             ),
+            # share tracks the share guard (get_editable), broader than edit's scope gate
+            can_share=is_editable,
             can_view_stats=can_view_persona_stats(user, persona),
             can_delete=can_delete_persona(user, persona, db_session),
             is_manage_agents_admin=has_global_permission(

@@ -514,14 +514,17 @@ def stamp_minimal_persona_permissions(
     is_manage_agents_admin = has_global_permission(user, Permission.MANAGE_AGENTS)
     is_full_admin = has_global_permission(user, Permission.FULL_ADMIN_PANEL_ACCESS)
     for snapshot, persona in zip(snapshots, personas):
+        is_editable = persona.id in editable_ids
         snapshot.permissions = persona_permissions(
             can_edit=can_edit_persona(
                 user,
                 persona,
                 db_session,
-                is_editable=persona.id in editable_ids,
+                is_editable=is_editable,
                 managed_group_ids=managed_group_ids,
             ),
+            # share tracks the share guard (get_editable), broader than edit's scope gate
+            can_share=is_editable,
             can_view_stats=can_view_persona_stats(user, persona),
             can_delete=can_delete_persona(
                 user, persona, db_session, user_group_ids=user_group_ids
