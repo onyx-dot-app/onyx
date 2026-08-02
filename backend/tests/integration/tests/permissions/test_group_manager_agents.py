@@ -7,10 +7,9 @@ manage, and never widen beyond their scope:
 - **Skills**: create/grant/publish only for PRIVATE skills in managed groups;
   the admin list is scoped; DELETE is admin-only.
 - **Agents**: may group-share a PRIVATE agent only to managed groups.
-- **Actions/MCP**: actions have no group of their own, so scope is derived from
-  the agents using them — editable only when every such agent is private and in a
-  managed group; a public-agent or no-agent action is owner/admin-only; DELETE is
-  admin-only.
+- **Actions/MCP**: owner-or-admin — a manager creates and fully manages (edit/delete)
+  their own actions and servers, but cannot manage ones they didn't create, even those
+  connected to their groups via agents.
 - **Token limits**: settable only on a managed group.
 
 Managers are seeded by flipping ``User__UserGroup.is_manager`` directly (no
@@ -28,13 +27,13 @@ from typing import NamedTuple
 from uuid import uuid4
 
 import pytest
+import requests
 from sqlalchemy import update
 
 from onyx.db.engine.sql_engine import get_session_with_current_tenant
 from onyx.db.enums import MCPAuthenticationPerformer
 from onyx.db.enums import MCPAuthenticationType
 from onyx.db.enums import Permission
-from onyx.db.models import Persona
 from onyx.db.models import User__UserGroup
 from onyx.db.permissions import recompute_user_permissions__no_commit
 from tests.integration.common_utils.managers.persona import PersonaManager
@@ -145,6 +144,19 @@ _TOKEN_LIMIT_BODY: dict[str, Any] = {
 }
 
 
+def _assert_manager(
+    env: _ScopedEnv,
+    method: str,
+    path: str,
+    expected: str,
+    body: dict[str, Any] | None = None,
+) -> requests.Response:
+    """Call ``path`` as the scoped manager and assert the permission gate's verdict."""
+    resp = call_endpoint(method, path, body, env.manager.headers, env.manager.cookies)
+    assert_response(resp, method, path, "manager", expected)
+    return resp
+
+
 # --- skills -----------------------------------------------------------------
 
 
@@ -159,25 +171,22 @@ def test_manager_cannot_grant_skill_to_unmanaged_group(env: _ScopedEnv) -> None:
         env.manager, is_public=False, group_ids=[env.managed_group.id]
     )
     path = f"/admin/skills/custom/{skill.id}/grants"
-    resp = call_endpoint(
+    _assert_manager(
+        env,
         "PUT",
         path,
+        "denied",
         {"group_ids": [env.managed_group.id, env.other_group.id]},
-        env.manager.headers,
-        env.manager.cookies,
     )
-    assert_response(resp, "PUT", path, "manager", "denied")
 
 
 def test_manager_cannot_publish_skill(env: _ScopedEnv) -> None:
     skill = SkillManager.create_custom(
         env.manager, is_public=False, group_ids=[env.managed_group.id]
     )
-    path = f"/admin/skills/custom/{skill.id}"
-    resp = call_endpoint(
-        "PATCH", path, {"is_public": True}, env.manager.headers, env.manager.cookies
+    _assert_manager(
+        env, "PATCH", f"/admin/skills/custom/{skill.id}", "denied", {"is_public": True}
     )
-    assert_response(resp, "PATCH", path, "manager", "denied")
 
 
 def test_manager_cannot_delete_skill(env: _ScopedEnv) -> None:
@@ -185,9 +194,7 @@ def test_manager_cannot_delete_skill(env: _ScopedEnv) -> None:
     skill = SkillManager.create_custom(
         env.manager, is_public=False, group_ids=[env.managed_group.id]
     )
-    path = f"/admin/skills/custom/{skill.id}"
-    resp = call_endpoint("DELETE", path, None, env.manager.headers, env.manager.cookies)
-    assert_response(resp, "DELETE", path, "manager", "denied")
+    _assert_manager(env, "DELETE", f"/admin/skills/custom/{skill.id}", "denied")
 
 
 def test_manager_skill_admin_list_is_scoped(env: _ScopedEnv) -> None:
@@ -223,15 +230,13 @@ def test_manager_cannot_share_agent_to_unmanaged_group(env: _ScopedEnv) -> None:
         is_public=False,
         groups=[env.managed_group.id],
     )
-    path = f"/persona/{agent.id}/share"
-    resp = call_endpoint(
+    _assert_manager(
+        env,
         "PATCH",
-        path,
+        f"/persona/{agent.id}/share",
+        "denied",
         {"group_ids": [env.managed_group.id, env.other_group.id]},
-        env.manager.headers,
-        env.manager.cookies,
     )
-    assert_response(resp, "PATCH", path, "manager", "denied")
 
 
 def test_manager_cannot_publish_agent(env: _ScopedEnv) -> None:
@@ -242,15 +247,13 @@ def test_manager_cannot_publish_agent(env: _ScopedEnv) -> None:
         is_public=False,
         groups=[env.managed_group.id],
     )
-    path = f"/persona/{agent.id}"
-    resp = call_endpoint(
+    _assert_manager(
+        env,
         "PATCH",
-        path,
+        f"/persona/{agent.id}",
+        "denied",
         _persona_upsert_body(is_public=True, groups=[env.managed_group.id]),
-        env.manager.headers,
-        env.manager.cookies,
     )
-    assert_response(resp, "PATCH", path, "manager", "denied")
 
 
 def test_manager_cannot_capture_public_agent_via_share(env: _ScopedEnv) -> None:
@@ -270,29 +273,25 @@ def test_manager_cannot_capture_public_agent_via_share(env: _ScopedEnv) -> None:
     assert publish.status_code == 200, publish.text
     # The manager must not pull the now-public agent back to private AND keep the
     # group share in one call — the gate anchors on the original (public) state.
-    path = f"/persona/{agent.id}/share"
-    resp = call_endpoint(
+    _assert_manager(
+        env,
         "PATCH",
-        path,
+        f"/persona/{agent.id}/share",
+        "denied",
         {"is_public": False, "group_ids": [env.managed_group.id]},
-        env.manager.headers,
-        env.manager.cookies,
     )
-    assert_response(resp, "PATCH", path, "manager", "denied")
 
 
 def test_manager_creates_personal_agent(env: _ScopedEnv) -> None:
     # A scoped manager may create a private no-group personal agent like any
     # ADD_AGENTS user; the managed-group gate applies only once a group is involved.
-    path = "/persona"
-    resp = call_endpoint(
+    _assert_manager(
+        env,
         "POST",
-        path,
+        "/persona",
+        "allowed",
         _persona_upsert_body(is_public=False, groups=[]),
-        env.manager.headers,
-        env.manager.cookies,
     )
-    assert_response(resp, "POST", path, "manager", "allowed")
 
 
 def test_add_agents_user_creates_personal_agent_with_empty_groups(
@@ -340,132 +339,66 @@ def test_manager_rosters_agent_shared_to_managed_group(env: _ScopedEnv) -> None:
     assert resp.status_code == 200, resp.text
 
 
-# --- custom actions (agent-mediated scope) ----------------------------------
+# --- custom actions (owner-or-admin) ----------------------------------------
 
 
 def test_manager_creates_own_action(env: _ScopedEnv) -> None:
     _create_custom_tool(env.manager)
 
 
-def test_manager_cannot_edit_unowned_ungrouped_action(env: _ScopedEnv) -> None:
-    # Admin owns the action and no agent uses it → no group context → owner/admin only.
-    tool_id = _create_custom_tool(env.admin)
-    path = f"/admin/tool/custom/{tool_id}"
-    resp = call_endpoint(
-        "PUT", path, _tool_body(), env.manager.headers, env.manager.cookies
-    )
-    assert_response(resp, "PUT", path, "manager", "denied")
-
-
-def test_manager_edits_action_used_by_managed_private_agent(env: _ScopedEnv) -> None:
-    tool_id = _create_custom_tool(env.admin)
-    PersonaManager.create(
-        user_performing_action=env.admin,
-        is_public=False,
-        groups=[env.managed_group.id],
-        tool_ids=[tool_id],
-    )
-    path = f"/admin/tool/custom/{tool_id}"
-    resp = call_endpoint(
-        "PUT", path, _tool_body(), env.manager.headers, env.manager.cookies
-    )
-    assert_response(resp, "PUT", path, "manager", "allowed")
-
-
-def test_manager_edits_action_used_by_group_owned_agent(env: _ScopedEnv) -> None:
-    # An action used only by a PRIVATE agent OWNED by the manager's group (via
-    # owner_group_id, with no share rows) is in scope through that group ownership.
-    tool_id = _create_custom_tool(env.admin)
-    agent = PersonaManager.create(
-        user_performing_action=env.admin, is_public=False, tool_ids=[tool_id]
-    )
-    # No API creates a group-owned agent in these tests, so re-own it directly
-    # (owner_group_id and user_id are mutually exclusive).
-    with get_session_with_current_tenant() as db_session:
-        db_session.execute(
-            update(Persona)
-            .where(Persona.id == agent.id)
-            .values(user_id=None, owner_group_id=env.managed_group.id)
-        )
-        db_session.commit()
-    path = f"/admin/tool/custom/{tool_id}"
-    resp = call_endpoint(
-        "PUT", path, _tool_body(), env.manager.headers, env.manager.cookies
-    )
-    assert_response(resp, "PUT", path, "manager", "allowed")
-
-
-def test_manager_cannot_edit_action_used_by_public_agent(env: _ScopedEnv) -> None:
-    tool_id = _create_custom_tool(env.admin)
-    PersonaManager.create(
-        user_performing_action=env.admin,
-        is_public=True,
-        groups=[env.managed_group.id],
-        tool_ids=[tool_id],
-    )
-    path = f"/admin/tool/custom/{tool_id}"
-    resp = call_endpoint(
-        "PUT", path, _tool_body(), env.manager.headers, env.manager.cookies
-    )
-    assert_response(resp, "PUT", path, "manager", "denied")
-
-
-def test_manager_cannot_edit_action_used_by_ungrouped_private_agent(
-    env: _ScopedEnv,
-) -> None:
-    # A private agent in NO group is a personal agent outside the manager's scope;
-    # its presence must block editing even alongside a managed-group agent (the
-    # ungrouped agent adds no group to the union, so it must be tracked explicitly).
-    tool_id = _create_custom_tool(env.admin)
-    PersonaManager.create(
-        user_performing_action=env.admin,
-        is_public=False,
-        groups=[env.managed_group.id],
-        tool_ids=[tool_id],
-    )
-    PersonaManager.create(
-        user_performing_action=env.admin,
-        is_public=False,
-        groups=[],
-        tool_ids=[tool_id],
-    )
-    path = f"/admin/tool/custom/{tool_id}"
-    resp = call_endpoint(
-        "PUT", path, _tool_body(), env.manager.headers, env.manager.cookies
-    )
-    assert_response(resp, "PUT", path, "manager", "denied")
-
-
-def test_manager_cannot_delete_action(env: _ScopedEnv) -> None:
-    # Owns it — still denied: delete is admin-only (no allow_scope on the route).
+def test_manager_edits_own_action(env: _ScopedEnv) -> None:
     tool_id = _create_custom_tool(env.manager)
-    path = f"/admin/tool/custom/{tool_id}"
-    resp = call_endpoint("DELETE", path, None, env.manager.headers, env.manager.cookies)
-    assert_response(resp, "DELETE", path, "manager", "denied")
+    _assert_manager(
+        env, "PUT", f"/admin/tool/custom/{tool_id}", "allowed", _tool_body()
+    )
 
 
-# --- MCP servers ------------------------------------------------------------
+def test_manager_deletes_own_action(env: _ScopedEnv) -> None:
+    tool_id = _create_custom_tool(env.manager)
+    _assert_manager(env, "DELETE", f"/admin/tool/custom/{tool_id}", "allowed")
+
+
+def test_manager_cannot_edit_unowned_action(env: _ScopedEnv) -> None:
+    # Owner-or-admin: a manager can't edit an admin-created action, even one used by an agent
+    # in a group they manage (managers get read visibility + their own, not others').
+    tool_id = _create_custom_tool(env.admin)
+    PersonaManager.create(
+        user_performing_action=env.admin,
+        is_public=False,
+        groups=[env.managed_group.id],
+        tool_ids=[tool_id],
+    )
+    _assert_manager(env, "PUT", f"/admin/tool/custom/{tool_id}", "denied", _tool_body())
+
+
+def test_manager_cannot_delete_unowned_action(env: _ScopedEnv) -> None:
+    tool_id = _create_custom_tool(env.admin)
+    _assert_manager(env, "DELETE", f"/admin/tool/custom/{tool_id}", "denied")
+
+
+# --- MCP servers (owner-or-admin) -------------------------------------------
 
 
 def test_manager_creates_mcp_server(env: _ScopedEnv) -> None:
     _create_mcp_server(env.manager)
 
 
-def test_manager_cannot_delete_mcp_server(env: _ScopedEnv) -> None:
-    # Owns it — still denied: MCP delete is admin-only.
+def test_manager_deletes_own_mcp_server(env: _ScopedEnv) -> None:
     server_id = _create_mcp_server(env.manager)
-    path = f"/admin/mcp/server/{server_id}"
-    resp = call_endpoint("DELETE", path, None, env.manager.headers, env.manager.cookies)
-    assert_response(resp, "DELETE", path, "manager", "denied")
+    _assert_manager(env, "DELETE", f"/admin/mcp/server/{server_id}", "allowed")
+
+
+def test_manager_cannot_delete_unowned_mcp_server(env: _ScopedEnv) -> None:
+    server_id = _create_mcp_server(env.admin)
+    _assert_manager(env, "DELETE", f"/admin/mcp/server/{server_id}", "denied")
 
 
 def test_manager_update_via_servers_create_denied_not_masked(
     env: _ScopedEnv,
 ) -> None:
-    # Updating an out-of-scope server through /servers/create must surface the
-    # gate's 403, not a 500 masked by the handler's blanket except.
+    # Updating an unowned server through /servers/create must surface the gate's 403, not a
+    # 500 masked by the handler's blanket except.
     server_id = _create_mcp_server(env.admin)
-    path = "/admin/mcp/servers/create"
     body = {
         "name": f"mcp-{uuid4()}",
         "server_url": "https://example.com/mcp",
@@ -473,24 +406,69 @@ def test_manager_update_via_servers_create_denied_not_masked(
         "auth_performer": MCPAuthenticationPerformer.ADMIN.value,
         "existing_server_id": server_id,
     }
-    resp = call_endpoint("POST", path, body, env.manager.headers, env.manager.cookies)
-    assert_response(resp, "POST", path, "manager", "denied")
+    _assert_manager(env, "POST", "/admin/mcp/servers/create", "denied", body)
 
 
 # --- token limits -----------------------------------------------------------
 
 
-def test_manager_sets_token_limit_on_managed_group(env: _ScopedEnv) -> None:
-    path = f"/admin/token-rate-limits/user-group/{env.managed_group.id}"
+def _group_limit_path(group_id: int, limit_id: int | None = None) -> str:
+    base = f"/admin/token-rate-limits/user-group/{group_id}"
+    return base if limit_id is None else f"{base}/rate-limit/{limit_id}"
+
+
+def _create_group_token_limit(user: DATestUser, group_id: int) -> int:
+    """Create a token limit on ``group_id`` as ``user`` (must succeed); returns its id."""
     resp = call_endpoint(
-        "POST", path, _TOKEN_LIMIT_BODY, env.manager.headers, env.manager.cookies
+        "POST",
+        _group_limit_path(group_id),
+        _TOKEN_LIMIT_BODY,
+        user.headers,
+        user.cookies,
     )
-    assert_response(resp, "POST", path, "manager", "allowed")
+    assert resp.status_code == 200, resp.text
+    return int(resp.json()["token_id"])
+
+
+def test_manager_sets_token_limit_on_managed_group(env: _ScopedEnv) -> None:
+    path = _group_limit_path(env.managed_group.id)
+    _assert_manager(env, "POST", path, "allowed", _TOKEN_LIMIT_BODY)
 
 
 def test_manager_cannot_set_token_limit_on_unmanaged_group(env: _ScopedEnv) -> None:
-    path = f"/admin/token-rate-limits/user-group/{env.other_group.id}"
-    resp = call_endpoint(
-        "POST", path, _TOKEN_LIMIT_BODY, env.manager.headers, env.manager.cookies
+    path = _group_limit_path(env.other_group.id)
+    _assert_manager(env, "POST", path, "denied", _TOKEN_LIMIT_BODY)
+
+
+def test_manager_reads_token_limits_on_managed_group(env: _ScopedEnv) -> None:
+    _assert_manager(env, "GET", _group_limit_path(env.managed_group.id), "allowed")
+
+
+def test_manager_cannot_read_token_limits_on_unmanaged_group(env: _ScopedEnv) -> None:
+    _assert_manager(env, "GET", _group_limit_path(env.other_group.id), "denied")
+
+
+def test_manager_updates_token_limit_on_managed_group(env: _ScopedEnv) -> None:
+    limit_id = _create_group_token_limit(env.manager, env.managed_group.id)
+    path = _group_limit_path(env.managed_group.id, limit_id)
+    _assert_manager(env, "PUT", path, "allowed", _TOKEN_LIMIT_BODY)
+
+
+def test_manager_cannot_update_token_limit_on_unmanaged_group(env: _ScopedEnv) -> None:
+    limit_id = _create_group_token_limit(env.admin, env.other_group.id)
+    path = _group_limit_path(env.other_group.id, limit_id)
+    _assert_manager(env, "PUT", path, "denied", _TOKEN_LIMIT_BODY)
+
+
+def test_manager_deletes_token_limit_on_managed_group(env: _ScopedEnv) -> None:
+    limit_id = _create_group_token_limit(env.manager, env.managed_group.id)
+    _assert_manager(
+        env, "DELETE", _group_limit_path(env.managed_group.id, limit_id), "allowed"
     )
-    assert_response(resp, "POST", path, "manager", "denied")
+
+
+def test_manager_cannot_delete_token_limit_on_unmanaged_group(env: _ScopedEnv) -> None:
+    limit_id = _create_group_token_limit(env.admin, env.other_group.id)
+    _assert_manager(
+        env, "DELETE", _group_limit_path(env.other_group.id, limit_id), "denied"
+    )

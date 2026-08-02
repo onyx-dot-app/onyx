@@ -5,30 +5,52 @@ stamps matches whether the guard raises, across an actor matrix — so the affor
 the client renders can't silently drift from what the backend enforces.
 """
 
+import asyncio
+import inspect
 from collections.abc import Callable
+from types import SimpleNamespace
 from uuid import uuid4
 
 from sqlalchemy.orm import Session
 
 from ee.onyx.db.analytics import user_can_view_assistant_stats
+from ee.onyx.db.token_limit import insert_user_group_token_rate_limit
+from ee.onyx.server.token_rate_limits.api import _authorize_group_token_rate_limit_write
+from ee.onyx.server.token_rate_limits.api import get_group_token_limit_settings
+from ee.onyx.server.user_group.api import delete_user_group
+from ee.onyx.server.user_group.api import set_user_group_permissions
 from onyx.auth.permission_projection import CC_PAIR_ACTIONS
 from onyx.auth.permission_projection import cc_pair_permissions
+from onyx.auth.permission_projection import CUSTOM_SKILL_ACTIONS
+from onyx.auth.permission_projection import custom_skill_permissions
 from onyx.auth.permission_projection import DOCUMENT_SET_ACTIONS
 from onyx.auth.permission_projection import document_set_permissions
+from onyx.auth.permission_projection import MCP_SERVER_ACTIONS
+from onyx.auth.permission_projection import mcp_server_permissions
 from onyx.auth.permission_projection import PERSONA_ACTIONS
 from onyx.auth.permission_projection import persona_permissions
+from onyx.auth.permission_projection import TOOL_ACTIONS
+from onyx.auth.permission_projection import tool_permissions
+from onyx.auth.permission_projection import USER_GROUP_ACTIONS
+from onyx.auth.permission_projection import user_group_permissions
 from onyx.auth.permissions import has_global_permission
 from onyx.auth.scoped_permissions import assert_manages_group
 from onyx.auth.scoped_permissions import assert_within_scope
 from onyx.auth.scoped_permissions import manages_group
 from onyx.auth.scoped_permissions import within_scope
 from onyx.db.document_set import fetch_all_document_sets_for_user
+from onyx.db.enums import MCPServerStatus
 from onyx.db.enums import Permission
 from onyx.db.enums import PersonaSharePermission
 from onyx.db.models import DocumentSet
 from onyx.db.models import DocumentSet__UserGroup
+from onyx.db.models import MCPServer
 from onyx.db.models import Persona
+from onyx.db.models import Persona__Tool
 from onyx.db.models import Persona__UserGroup
+from onyx.db.models import Skill
+from onyx.db.models import Skill__UserGroup
+from onyx.db.models import Tool
 from onyx.db.models import User
 from onyx.db.models import User__UserGroup
 from onyx.db.models import UserGroup
@@ -39,17 +61,38 @@ from onyx.db.persona import can_view_persona_stats
 from onyx.db.persona import get_persona_by_id
 from onyx.db.persona import is_persona_editable_by_user
 from onyx.db.persona import persona_edit_within_scope
+from onyx.db.skill import get_group_ids_for_skill
+from onyx.db.token_limit import insert_global_token_rate_limit
+from onyx.db.tools import can_manage_mcp_server
+from onyx.db.tools import can_manage_own_tool
 from onyx.error_handling.exceptions import OnyxError
+from onyx.server.features.mcp.api import _ensure_mcp_server_owner_or_admin
+from onyx.server.features.mcp.api import _ensure_mcp_server_viewable
 from onyx.server.features.persona.models import PersonaUpsertRequest
+from onyx.server.features.tool.api import _get_manageable_custom_tool
+from onyx.server.token_rate_limits.models import TokenRateLimitArgs
 from tests.external_dependency_unit.conftest import create_test_user
 
 
-def _guard_raises(guard: Callable[..., None], *args: object, **kwargs: object) -> bool:
+def _guard_raises(
+    guard: Callable[..., object], *args: object, **kwargs: object
+) -> bool:
     try:
         guard(*args, **kwargs)
         return False
     except OnyxError:
         return True
+
+
+def _route_admits(
+    route_func: Callable[..., object], guard_param: str, actor: User
+) -> bool:
+    """True iff the route's ``require_permission`` admits ``actor`` (unrestricted token).
+    Runs the real dependency, so the assertion tracks the route decorator — not the bool
+    that built the map, which can't catch a FULL_ADMIN vs MANAGE_USER_GROUPS drift."""
+    depends = inspect.signature(route_func).parameters[guard_param].default
+    request = SimpleNamespace(state=SimpleNamespace(token_scopes=None))
+    return not _guard_raises(lambda: asyncio.run(depends.dependency(request, actor)))
 
 
 def _make_group(db_session: Session) -> UserGroup:
@@ -177,7 +220,7 @@ def test_cc_pair_projection_matches_gates(db_session: Session) -> None:
         assert tags["delete"] == admin_authority  # A — never a scoped manager
         assert tags["publish"] == admin_authority  # A
 
-    # the whole point of the fix: an in-scope manager can edit but not delete/publish
+    # in-scope manager can edit but not delete/publish
     manager_editable = within_scope(
         in_scope,
         db_session,
@@ -380,3 +423,412 @@ def test_persona_and_doc_set_key_coverage() -> None:
         document_set_permissions(is_editable=True, is_document_sets_admin=True)
     )
     assert ds_keys == set(DOCUMENT_SET_ACTIONS)
+
+
+def _make_tool(
+    db_session: Session,
+    *,
+    creator: User | None = None,
+    in_code: str | None = None,
+    mcp_server_id: int | None = None,
+) -> Tool:
+    tool = Tool(
+        name=f"proj-tool-{uuid4().hex[:12]}",
+        description="contract",
+        user_id=creator.id if creator else None,
+        in_code_tool_id=in_code,
+        mcp_server_id=mcp_server_id,
+    )
+    db_session.add(tool)
+    db_session.flush()
+    return tool
+
+
+def _make_mcp_server(db_session: Session, *, owner_email: str) -> MCPServer:
+    server = MCPServer(
+        name=f"proj-mcp-{uuid4().hex[:12]}",
+        owner=owner_email,
+        server_url="https://mcp.example.com",
+        status=MCPServerStatus.CONNECTED,
+    )
+    db_session.add(server)
+    db_session.flush()
+    return server
+
+
+def _link_persona_tool(db_session: Session, persona: Persona, tool: Tool) -> None:
+    db_session.add(Persona__Tool(persona_id=persona.id, tool_id=tool.id))
+    db_session.commit()
+
+
+def _make_skill(
+    db_session: Session, *, is_public: bool, groups: list[UserGroup]
+) -> Skill:
+    skill = Skill(
+        id=uuid4(),
+        slug=f"proj-skill-{uuid4().hex[:12]}",
+        name="contract skill",
+        description="contract",
+        # custom skills need a bundle source (ck_skill_definition_source)
+        bundle_file_id=f"proj-bundle-{uuid4().hex}",
+        bundle_sha256="0" * 64,
+        is_public=is_public,
+    )
+    db_session.add(skill)
+    db_session.flush()
+    for group in groups:
+        db_session.add(Skill__UserGroup(skill_id=skill.id, user_group_id=group.id))
+    db_session.commit()
+    return skill
+
+
+def test_tool_projection_matches_gates(db_session: Session) -> None:
+    """Every action affordance (edit, delete, toggle, authenticate) is owner-or-admin, pinned
+    to _get_manageable_custom_tool. The creator fully controls the action they made; a scoped
+    manager whose group the action is connected to may view/create but not manage it."""
+    managed = _make_group(db_session)
+
+    in_scope = create_test_user(db_session, "proj-tool-in")
+    _manage(db_session, in_scope, managed)
+    in_scope.effective_permissions = []
+
+    # scoped manager who owns the action (via a group unrelated to the action's agents)
+    creator = create_test_user(db_session, "proj-tool-creator")
+    _manage(db_session, creator, _make_group(db_session))
+    creator.effective_permissions = []
+
+    admin = create_test_user(db_session, "proj-tool-admin", is_admin=True)
+    db_session.commit()
+
+    tool = _make_tool(db_session, creator=creator)
+    # a private agent in the managed group references the action -> connected to `managed`
+    persona = _make_persona(
+        db_session, owner=creator, is_public=False, groups=[managed]
+    )
+    _link_persona_tool(db_session, persona, tool)
+
+    for actor in (in_scope, creator, admin):
+        manage_enforced = not _guard_raises(
+            _get_manageable_custom_tool, tool.id, db_session, actor
+        )
+        can_manage = can_manage_own_tool(actor, tool)
+        assert can_manage == manage_enforced, actor.email
+        assert tool_permissions(can_manage=can_manage) == {
+            "edit": manage_enforced,
+            "delete": manage_enforced,
+            "toggle": manage_enforced,
+            "authenticate": manage_enforced,
+        }
+
+    # a manager of the action's connected group can't manage it (only creator/admin can)
+    assert tool_permissions(can_manage=can_manage_own_tool(in_scope, tool)) == {
+        "edit": False,
+        "delete": False,
+        "toggle": False,
+        "authenticate": False,
+    }
+    # the creator fully controls the action they made
+    assert tool_permissions(can_manage=can_manage_own_tool(creator, tool)) == {
+        "edit": True,
+        "delete": True,
+        "toggle": True,
+        "authenticate": True,
+    }
+
+
+def test_mcp_projection_matches_gates(db_session: Session) -> None:
+    """Every MCP action affordance is owner-or-admin, pinned to
+    _ensure_mcp_server_owner_or_admin. A scoped manager whose group the server is connected to
+    may view it (_ensure_mcp_server_viewable) but not manage it."""
+    managed = _make_group(db_session)
+
+    in_scope = create_test_user(db_session, "proj-mcp-in")
+    _manage(db_session, in_scope, managed)
+    in_scope.effective_permissions = []
+
+    owner = create_test_user(db_session, "proj-mcp-owner")
+    _manage(db_session, owner, _make_group(db_session))
+    owner.effective_permissions = []
+
+    admin = create_test_user(db_session, "proj-mcp-admin", is_admin=True)
+    db_session.commit()
+
+    server = _make_mcp_server(db_session, owner_email=owner.email)
+    tool = _make_tool(db_session, mcp_server_id=server.id)
+    persona = _make_persona(db_session, owner=owner, is_public=False, groups=[managed])
+    _link_persona_tool(db_session, persona, tool)
+
+    for actor in (in_scope, owner, admin):
+        manage_enforced = not _guard_raises(
+            _ensure_mcp_server_owner_or_admin, server, actor
+        )
+        can_manage = can_manage_mcp_server(actor, server)
+        assert can_manage == manage_enforced, actor.email
+        assert mcp_server_permissions(can_manage=can_manage) == {
+            "edit": manage_enforced,
+            "delete": manage_enforced,
+            "authenticate": manage_enforced,
+            "manage_status": manage_enforced,
+        }
+
+    # a manager of the server's connected group may VIEW but not manage it
+    assert not _guard_raises(_ensure_mcp_server_viewable, server, in_scope, db_session)
+    assert can_manage_mcp_server(in_scope, server) is False
+    # the owner fully manages their server
+    assert mcp_server_permissions(can_manage=can_manage_mcp_server(owner, server)) == {
+        "edit": True,
+        "delete": True,
+        "authenticate": True,
+        "manage_status": True,
+    }
+
+
+def test_skill_projection_matches_gates(db_session: Session) -> None:
+    """edit/manage_access track the assert_within_scope guard on the skill's groups;
+    delete is FULL_ADMIN; publish (make public) is global MANAGE_SKILLS. A scoped manager
+    edits/re-grants a managed skill but can never delete or publish it."""
+    managed = _make_group(db_session)
+
+    in_scope = create_test_user(db_session, "proj-skill-in")
+    _manage(db_session, in_scope, managed)
+    in_scope.effective_permissions = []
+
+    out_scope = create_test_user(db_session, "proj-skill-out")
+    _manage(db_session, out_scope, _make_group(db_session))
+    out_scope.effective_permissions = []
+
+    admin = create_test_user(db_session, "proj-skill-admin", is_admin=True)
+    db_session.commit()
+
+    skill = _make_skill(db_session, is_public=False, groups=[managed])
+    group_ids = get_group_ids_for_skill(skill.id, db_session)
+
+    for actor in (in_scope, out_scope, admin):
+        edit_enforced = not _guard_raises(
+            assert_within_scope,
+            actor,
+            db_session,
+            permission=Permission.MANAGE_SKILLS,
+            current_group_ids=group_ids,
+            requested_group_ids=group_ids,
+            is_non_public=not skill.is_public,
+        )
+        # publish drives the same guard with the requested public state
+        publish_enforced = not _guard_raises(
+            assert_within_scope,
+            actor,
+            db_session,
+            permission=Permission.MANAGE_SKILLS,
+            current_group_ids=group_ids,
+            requested_group_ids=group_ids,
+            is_non_public=False,
+        )
+        can_edit = within_scope(
+            actor,
+            db_session,
+            permission=Permission.MANAGE_SKILLS,
+            current_group_ids=group_ids,
+            requested_group_ids=group_ids,
+            is_non_public=not skill.is_public,
+        )
+        assert can_edit == edit_enforced, actor.email
+        is_full_admin = has_global_permission(actor, Permission.FULL_ADMIN_PANEL_ACCESS)
+        is_skills_admin = has_global_permission(actor, Permission.MANAGE_SKILLS)
+        tags = custom_skill_permissions(
+            can_edit=can_edit,
+            is_full_admin=is_full_admin,
+            is_skills_admin=is_skills_admin,
+        )
+        assert tags["edit"] == edit_enforced
+        assert tags["manage_access"] == edit_enforced
+        assert tags["delete"] == is_full_admin
+        assert tags["publish"] == publish_enforced  # global MANAGE_SKILLS
+
+    # in-scope manager edits/re-grants but can't delete or publish
+    assert custom_skill_permissions(
+        can_edit=within_scope(
+            in_scope,
+            db_session,
+            permission=Permission.MANAGE_SKILLS,
+            current_group_ids=group_ids,
+            requested_group_ids=group_ids,
+            is_non_public=not skill.is_public,
+        ),
+        is_full_admin=has_global_permission(
+            in_scope, Permission.FULL_ADMIN_PANEL_ACCESS
+        ),
+        is_skills_admin=has_global_permission(in_scope, Permission.MANAGE_SKILLS),
+    ) == {"edit": True, "manage_access": True, "delete": False, "publish": False}
+
+
+def test_actions_and_skill_key_coverage() -> None:
+    assert set(tool_permissions(can_manage=True)) == set(TOOL_ACTIONS)
+    assert set(mcp_server_permissions(can_manage=True)) == set(MCP_SERVER_ACTIONS)
+    assert set(
+        custom_skill_permissions(
+            can_edit=True, is_full_admin=True, is_skills_admin=True
+        )
+    ) == set(CUSTOM_SKILL_ACTIONS)
+
+
+def test_user_group_projection_matches_gates(db_session: Session) -> None:
+    """Each flag is pinned to its real route, not the bool that built it: manage and
+    edit_token_limits → assert_manages_group (per-group scoped — the token read route now
+    admits scope), delete → delete-group (global MANAGE_USER_GROUPS), edit_permissions →
+    permission-toggle (FULL_ADMIN). groups_admin (global MANAGE_USER_GROUPS, not full admin)
+    separates the two levels; out_scope (manages a different group) pins the per-group gate."""
+    managed = _make_group(db_session)
+
+    in_scope = create_test_user(db_session, "proj-ug-in")
+    _manage(db_session, in_scope, managed)
+    in_scope.effective_permissions = []
+
+    out_scope = create_test_user(db_session, "proj-ug-out")
+    _manage(db_session, out_scope, _make_group(db_session))
+    out_scope.effective_permissions = []
+
+    groups_admin = create_test_user(db_session, "proj-ug-groupsadmin")
+    groups_admin.effective_permissions = [Permission.MANAGE_USER_GROUPS.value]
+
+    admin = create_test_user(db_session, "proj-ug-admin", is_admin=True)
+    db_session.commit()
+
+    for actor in (in_scope, out_scope, groups_admin, admin):
+        manage_enforced = not _guard_raises(
+            assert_manages_group, actor, db_session, group_id=managed.id
+        )
+        # the token-limit POST guard (scoped create) is the same managed-scope decision
+        token_create_enforced = not _guard_raises(
+            assert_within_scope,
+            actor,
+            db_session,
+            permission=Permission.MANAGE_USER_GROUPS,
+            current_group_ids=[managed.id],
+            requested_group_ids=[managed.id],
+            is_non_public=True,
+        )
+        can_manage = manages_group(actor, db_session, group_id=managed.id)
+        assert can_manage == manage_enforced, actor.email
+        assert can_manage == token_create_enforced, actor.email
+
+        tags = user_group_permissions(
+            can_manage=can_manage,
+            is_user_groups_admin=has_global_permission(
+                actor, Permission.MANAGE_USER_GROUPS
+            ),
+            is_full_admin=has_global_permission(
+                actor, Permission.FULL_ADMIN_PANEL_ACCESS
+            ),
+        )
+        assert tags["manage"] == manage_enforced, actor.email
+        assert tags["delete"] == _route_admits(delete_user_group, "_", actor), (
+            actor.email
+        )
+        assert tags["edit_permissions"] == _route_admits(
+            set_user_group_permissions, "user", actor
+        ), actor.email
+        # edit_token_limits rides the token read route: GATE 1 admits scope, GATE 2 is
+        # assert_manages_group — net per-group decision, so AND the two.
+        token_read_gate1 = _route_admits(get_group_token_limit_settings, "user", actor)
+        assert tags["edit_token_limits"] == (token_read_gate1 and manage_enforced), (
+            actor.email
+        )
+
+    assert user_group_permissions(
+        can_manage=manages_group(in_scope, db_session, group_id=managed.id),
+        is_user_groups_admin=has_global_permission(
+            in_scope, Permission.MANAGE_USER_GROUPS
+        ),
+        is_full_admin=has_global_permission(
+            in_scope, Permission.FULL_ADMIN_PANEL_ACCESS
+        ),
+    ) == {
+        "manage": True,
+        "delete": False,
+        "edit_permissions": False,
+        # scoped manager now fully manages its group's token limits
+        "edit_token_limits": True,
+    }
+
+    # groups_admin (global MANAGE_USER_GROUPS, not full admin): manages token limits and
+    # deletes the group, but can't edit permissions (FULL_ADMIN).
+    assert user_group_permissions(
+        can_manage=manages_group(groups_admin, db_session, group_id=managed.id),
+        is_user_groups_admin=has_global_permission(
+            groups_admin, Permission.MANAGE_USER_GROUPS
+        ),
+        is_full_admin=has_global_permission(
+            groups_admin, Permission.FULL_ADMIN_PANEL_ACCESS
+        ),
+    ) == {
+        "manage": True,
+        "delete": True,
+        "edit_permissions": False,
+        "edit_token_limits": True,
+    }
+
+
+def test_user_group_key_coverage() -> None:
+    assert set(
+        user_group_permissions(
+            can_manage=True, is_user_groups_admin=True, is_full_admin=True
+        )
+    ) == set(USER_GROUP_ACTIONS)
+
+
+def test_group_token_rate_limit_write_scope(db_session: Session) -> None:
+    """A group token-limit write needs the caller to manage the group AND the limit to
+    belong to it — so a group admin fully manages its limits, but a global/per-user limit or
+    another group's limit can't be reached through the group path."""
+    managed = _make_group(db_session)
+    other = _make_group(db_session)
+
+    args = TokenRateLimitArgs(enabled=True, token_budget=1000, period_hours=24)
+    managed_limit = insert_user_group_token_rate_limit(
+        db_session=db_session, token_rate_limit_settings=args, group_id=managed.id
+    )
+    global_limit = insert_global_token_rate_limit(db_session, args)
+
+    in_scope = create_test_user(db_session, "proj-trl-in")
+    _manage(db_session, in_scope, managed)
+    in_scope.effective_permissions = []
+
+    out_scope = create_test_user(db_session, "proj-trl-out")
+    _manage(db_session, out_scope, other)
+    out_scope.effective_permissions = []
+
+    groups_admin = create_test_user(db_session, "proj-trl-groupsadmin")
+    groups_admin.effective_permissions = [Permission.MANAGE_USER_GROUPS.value]
+
+    admin = create_test_user(db_session, "proj-trl-admin", is_admin=True)
+
+    plain = create_test_user(db_session, "proj-trl-plain")
+    plain.effective_permissions = []
+    db_session.commit()
+
+    def denied(actor: User, group_id: int, rate_limit_id: int) -> bool:
+        return _guard_raises(
+            _authorize_group_token_rate_limit_write,
+            actor,
+            db_session,
+            group_id=group_id,
+            rate_limit_id=rate_limit_id,
+        )
+
+    assert not denied(admin, managed.id, managed_limit.id)
+    assert not denied(groups_admin, managed.id, managed_limit.id)
+    assert not denied(in_scope, managed.id, managed_limit.id)
+    assert denied(out_scope, managed.id, managed_limit.id)
+    assert denied(plain, managed.id, managed_limit.id)
+
+    # a global limit can't be reached through the group path — even for a full admin
+    assert denied(admin, managed.id, global_limit.id)
+
+    # the limit must belong to the claimed group (can't reach managed's limit via other)
+    assert denied(out_scope, other.id, managed_limit.id)
+    assert denied(in_scope, other.id, managed_limit.id)
+
+    # an unknown id folds into the same OnyxError 404, not the helper's raw ValueError
+    nonexistent_limit_id = -1
+    assert denied(in_scope, managed.id, nonexistent_limit_id)
+    assert denied(admin, managed.id, nonexistent_limit_id)

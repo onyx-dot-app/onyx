@@ -77,3 +77,81 @@ def document_set_permissions(
         "delete": is_document_sets_admin,
         "publish": is_document_sets_admin,
     }
+
+
+TOOL_ACTIONS: frozenset[str] = frozenset({"edit", "delete", "toggle", "authenticate"})
+
+
+def tool_permissions(*, can_manage: bool) -> dict[str, bool]:
+    """Custom action (OpenAPI tool) affordance map. Every action — edit, delete, toggle, and
+    authenticate (its OAuth config) — is owner-or-admin (``can_manage``): the creator fully
+    controls the action they made and an admin controls any, while a scoped manager may view
+    and create actions but not edit ones they didn't create."""
+    return {
+        "edit": can_manage,
+        "delete": can_manage,
+        "toggle": can_manage,
+        "authenticate": can_manage,
+    }
+
+
+MCP_SERVER_ACTIONS: frozenset[str] = frozenset(
+    {"edit", "delete", "authenticate", "manage_status"}
+)
+
+
+def mcp_server_permissions(*, can_manage: bool) -> dict[str, bool]:
+    """MCP server affordance map. Every action — edit, delete, authenticate (connect), and
+    manage_status (disconnect/refresh) — is owner-or-admin (``can_manage``): the owner fully
+    controls their server and an admin controls any, while a scoped manager may view servers
+    connected to their groups and create their own but not manage others'."""
+    return {
+        "edit": can_manage,
+        "delete": can_manage,
+        "authenticate": can_manage,
+        "manage_status": can_manage,
+    }
+
+
+CUSTOM_SKILL_ACTIONS: frozenset[str] = frozenset(
+    {"edit", "manage_access", "delete", "publish"}
+)
+
+
+def custom_skill_permissions(
+    *, can_edit: bool, is_full_admin: bool, is_skills_admin: bool
+) -> dict[str, bool]:
+    """Custom skill affordance map. ``edit`` (replace bundle, enable/disable) and
+    ``manage_access`` (group grants) are the managed-scope editable decision the write
+    guard enforces. ``delete`` is FULL_ADMIN only (its route requires
+    FULL_ADMIN_PANEL_ACCESS, no ``allow_scope``); ``publish`` (make org-wide public)
+    needs global MANAGE_SKILLS — a scoped manager fails the guard's non-public check when
+    flipping a skill public."""
+    return {
+        "edit": can_edit,
+        "manage_access": can_edit,
+        "delete": is_full_admin,
+        "publish": is_skills_admin,
+    }
+
+
+USER_GROUP_ACTIONS: frozenset[str] = frozenset(
+    {"manage", "delete", "edit_permissions", "edit_token_limits"}
+)
+
+
+def user_group_permissions(
+    *, can_manage: bool, is_user_groups_admin: bool, is_full_admin: bool
+) -> dict[str, bool]:
+    """User group affordance map. ``manage`` (rename, membership, assign agents, set
+    manager) and ``edit_token_limits`` are the per-group ``manages_group`` decision — group
+    in the manager's managed set, or global MANAGE_USER_GROUPS. A scoped manager gets full
+    token-limit CRUD for groups they manage: every token route (read/create/update/delete)
+    now admits scope. ``delete`` needs global MANAGE_USER_GROUPS (its route has no
+    ``allow_scope``). ``edit_permissions`` is FULL_ADMIN (the permission-toggle route)."""
+    return {
+        "manage": can_manage,
+        "delete": is_user_groups_admin,
+        "edit_permissions": is_full_admin,
+        "edit_token_limits": can_manage,
+    }
