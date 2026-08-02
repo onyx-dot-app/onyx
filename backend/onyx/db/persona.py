@@ -15,6 +15,7 @@ from sqlalchemy.orm import selectinload
 from sqlalchemy.orm import Session
 
 from onyx.access.hierarchy_access import get_user_external_group_ids
+from onyx.auth.permission_projection import persona_permissions
 from onyx.auth.permissions import has_global_permission
 from onyx.auth.permissions import has_permission
 from onyx.auth.scoped_permissions import assert_within_scope
@@ -44,6 +45,7 @@ from onyx.db.models import UserGroup
 from onyx.db.notification import create_notification
 from onyx.db.persona_sharing import get_persona_access_level
 from onyx.db.persona_sharing import get_user_group_ids_for_user
+from onyx.db.scoped_permissions import fetch_managed_group_ids
 from onyx.db.scoped_permissions import scoped_group_ids_subquery
 from onyx.db.scoped_permissions import within_managed_scope_clause
 from onyx.db.users import user_is_admin
@@ -448,20 +450,85 @@ def can_view_persona_stats(user: User, persona: Persona) -> bool:
     )
 
 
-def can_delete_persona(user: User, persona: Persona, db_session: Session) -> bool:
+def can_delete_persona(
+    user: User,
+    persona: Persona,
+    db_session: Session,
+    *,
+    user_group_ids: set[int] | None = None,
+) -> bool:
     """Owner-or-admin — mirrors the delete/publish handlers' ownership check (via
     ``get_persona_by_id(is_for_edit=True)``): a global MANAGE_AGENTS holder, the owner,
     or an owner-group member. A scoped manager is NOT included: deleting or publishing a
-    managed-group agent is owner/admin only, not a manager scope."""
+    managed-group agent is owner/admin only, not a manager scope.
+
+    ``user_group_ids`` lets a caller pass a preloaded set so per-row stamping issues no
+    DB query; ``None`` re-queries."""
     if has_global_permission(user, Permission.MANAGE_AGENTS):
         return True
     if persona.user_id == user.id:
         return True
     if persona.owner_group_id is not None:
-        return persona.owner_group_id in get_user_group_ids_for_user(
-            db_session, user.id
+        group_ids = (
+            user_group_ids
+            if user_group_ids is not None
+            else get_user_group_ids_for_user(db_session, user.id)
         )
+        return persona.owner_group_id in group_ids
     return False
+
+
+def _editable_persona_ids_among(
+    db_session: Session, user: User, persona_ids: list[int]
+) -> set[int]:
+    """Subset of ``persona_ids`` the user may edit, via the same get_editable filter the
+    write path enforces — one query for the whole page instead of a per-persona check."""
+    if not persona_ids:
+        return set()
+    stmt = select(Persona).where(Persona.id.in_(persona_ids))
+    stmt = _add_user_filters(stmt=stmt, user=user, get_editable=True)
+    return {persona.id for persona in db_session.scalars(stmt).all()}
+
+
+def stamp_minimal_persona_permissions(
+    snapshots: list[MinimalPersonaSnapshot],
+    personas: Sequence[Persona],
+    user: User,
+    db_session: Session,
+    user_group_ids: set[int],
+) -> None:
+    """Stamp each list snapshot with the same affordance map the single-agent GET does,
+    so cards gate their icons without a per-card refetch. Shared inputs (editable set,
+    managed scope, admin flags) are batched so a page costs a fixed number of queries,
+    not one per persona. ``snapshots`` and ``personas`` must be in the same order."""
+    editable_ids = _editable_persona_ids_among(
+        db_session, user, [persona.id for persona in personas]
+    )
+    # Only scoped managers consult the managed set (GLOBAL/NONE short-circuit earlier);
+    # preload it once so per-row can_edit_persona issues no query.
+    managed_group_ids = (
+        fetch_managed_group_ids(user, db_session)
+        if has_permission(user, Permission.MANAGE_AGENTS) is PermissionAuthority.SCOPED
+        else None
+    )
+    is_manage_agents_admin = has_global_permission(user, Permission.MANAGE_AGENTS)
+    is_full_admin = has_global_permission(user, Permission.FULL_ADMIN_PANEL_ACCESS)
+    for snapshot, persona in zip(snapshots, personas):
+        snapshot.permissions = persona_permissions(
+            can_edit=can_edit_persona(
+                user,
+                persona,
+                db_session,
+                is_editable=persona.id in editable_ids,
+                managed_group_ids=managed_group_ids,
+            ),
+            can_view_stats=can_view_persona_stats(user, persona),
+            can_delete=can_delete_persona(
+                user, persona, db_session, user_group_ids=user_group_ids
+            ),
+            is_manage_agents_admin=is_manage_agents_admin,
+            is_full_admin=is_full_admin,
+        )
 
 
 def create_update_persona(
@@ -723,19 +790,26 @@ def get_minimal_persona_snapshots_for_user(
             Document.parent_hierarchy_node
         ),
         selectinload(Persona.user),
+        # groups feeds the per-agent edit affordance (persona_edit_within_scope);
+        # eager-load it so stamping the page's permissions isn't an N+1.
+        selectinload(Persona.groups),
         selectinload(Persona.owner_group),
         selectinload(Persona.user_shares),
         selectinload(Persona.group_shares),
     )
     results = db_session.scalars(stmt).all()
     user_group_ids = get_user_group_ids_for_user(db_session, user.id)
-    return [
+    snapshots = [
         MinimalPersonaSnapshot.from_model(
             persona,
             user_permission=get_persona_access_level(persona, user, user_group_ids),
         )
         for persona in results
     ]
+    stamp_minimal_persona_permissions(
+        snapshots, results, user, db_session, user_group_ids
+    )
+    return snapshots
 
 
 def get_persona_snapshots_for_user(
@@ -878,6 +952,9 @@ def get_minimal_persona_snapshots_paginated(
             ),
         ),
         selectinload(Persona.user),
+        # groups feeds the per-agent edit affordance (persona_edit_within_scope);
+        # eager-load it so stamping the page's permissions isn't an N+1.
+        selectinload(Persona.groups),
         selectinload(Persona.owner_group),
         selectinload(Persona.user_shares),
         selectinload(Persona.group_shares),
@@ -885,13 +962,17 @@ def get_minimal_persona_snapshots_paginated(
 
     results = db_session.scalars(stmt).all()
     user_group_ids = get_user_group_ids_for_user(db_session, user.id)
-    return [
+    snapshots = [
         MinimalPersonaSnapshot.from_model(
             persona,
             user_permission=get_persona_access_level(persona, user, user_group_ids),
         )
         for persona in results
     ]
+    stamp_minimal_persona_permissions(
+        snapshots, results, user, db_session, user_group_ids
+    )
+    return snapshots
 
 
 def get_persona_snapshots_paginated(

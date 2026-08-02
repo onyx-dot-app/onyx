@@ -493,7 +493,9 @@ def share_persona(
 @basic_router.delete("/{persona_id}", tags=PUBLIC_API_TAGS)
 def delete_persona(
     persona_id: int,
-    user: User = Depends(require_permission(Permission.ADD_AGENTS)),
+    # allow_scope so an owner who only holds ADD_AGENTS by scope isn't 403'd at the
+    # door; mark_persona_as_deleted is GATE 2 (owner-or-admin via get_persona_by_id).
+    user: User = Depends(require_permission(Permission.ADD_AGENTS, allow_scope=True)),
     db_session: Session = Depends(get_session),
 ) -> None:
     mark_persona_as_deleted(

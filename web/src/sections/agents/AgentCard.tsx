@@ -55,8 +55,9 @@ export default function AgentCard({ agent }: AgentCardProps) {
   const shareAgentModal = useCreateModal();
   const agentViewerModal = useCreateModal();
   const { agent: fullAgent, refresh: refreshAgent } = useAgent(agent.id);
-  // Per-item affordances come from the full agent the server stamped, not ownership.
-  const canUpdateFeaturedStatus = can(fullAgent, "feature");
+  // Affordances read the map the list endpoint stamped on `agent`, so icons render with
+  // the card instead of popping in after the per-card fullAgent fetch resolves.
+  const canUpdateFeaturedStatus = can(agent, "feature");
 
   // Start chat and auto-pin unpinned agents to the sidebar
   const handleStartChat = useCallback(() => {
@@ -141,7 +142,7 @@ export default function AgentCard({ agent }: AgentCardProps) {
               description={agent.description}
               rightChildren={
                 <>
-                  {can(fullAgent, "view_stats") && businessTier && (
+                  {can(agent, "view_stats") && businessTier && (
                     // TODO(@raunakab): migrate to opal Button once className/iconClassName is resolved
                     <IconButton
                       icon={SvgBarChart}
@@ -153,7 +154,7 @@ export default function AgentCard({ agent }: AgentCardProps) {
                       className="hidden group-hover/AgentCard:flex"
                     />
                   )}
-                  {can(fullAgent, "edit") && (
+                  {can(agent, "edit") && (
                     // TODO(@raunakab): migrate to opal Button once className/iconClassName is resolved
                     <IconButton
                       icon={SvgEdit}
@@ -165,7 +166,7 @@ export default function AgentCard({ agent }: AgentCardProps) {
                       className="hidden group-hover/AgentCard:flex"
                     />
                   )}
-                  {can(fullAgent, "share") && (
+                  {can(agent, "share") && (
                     // TODO(@raunakab): migrate to opal Button once className/iconClassName is resolved
                     <IconButton
                       icon={SvgShare}

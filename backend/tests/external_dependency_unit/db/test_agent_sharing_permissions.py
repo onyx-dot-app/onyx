@@ -13,6 +13,7 @@ from onyx.db.enums import PersonaSharingStatus
 from onyx.db.models import Persona__User
 from onyx.db.models import User
 from onyx.db.persona import fetch_persona_by_id_for_user
+from onyx.db.persona import get_minimal_persona_snapshots_for_user
 from onyx.db.persona import update_persona_access
 from onyx.db.persona_sharing import derive_persona_sharing_status
 from onyx.db.persona_sharing import get_persona_access_level
@@ -221,3 +222,34 @@ def test_sharing_status_derivation(db_session: Session) -> None:
 
     public_persona = create_test_persona(db_session, owner, is_public=True)
     assert derive_persona_sharing_status(public_persona) == PersonaSharingStatus.PUBLIC
+
+
+def _list_snapshot(db_session: Session, user: User, persona_id: int):
+    snapshots = get_minimal_persona_snapshots_for_user(
+        user=user, db_session=db_session, get_editable=False
+    )
+    return next(s for s in snapshots if s.id == persona_id)
+
+
+def test_list_stamps_affordance_map_for_owner(db_session: Session) -> None:
+    """The list endpoint stamps the per-agent permissions map, so a card gates its icons
+    from list data instead of a per-card full-agent refetch (the flicker Nik flagged)."""
+    owner = create_test_user(db_session, "list-owner")
+    persona = create_test_persona(db_session, owner)
+
+    snap = _list_snapshot(db_session, owner, persona.id)
+    assert snap.permissions.get("edit") is True
+    assert snap.permissions.get("delete") is True
+
+
+def test_list_affordance_map_fail_closed_for_viewer(db_session: Session) -> None:
+    """A viewer-shared user gets the map stamped but every mutating affordance false —
+    the client can't render an edit/delete control the write guard would 403."""
+    owner = create_test_user(db_session, "list-owner2")
+    viewer = create_test_user(db_session, "list-viewer")
+    persona = create_test_persona(db_session, owner)
+    share_persona_with_user(db_session, persona, viewer, PersonaSharePermission.VIEWER)
+
+    snap = _list_snapshot(db_session, viewer, persona.id)
+    assert snap.permissions.get("edit") is False
+    assert snap.permissions.get("delete") is False

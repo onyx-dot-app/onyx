@@ -53,6 +53,8 @@ export interface MinimalAgent {
   builtin_persona: boolean;
   labels?: AgentLabel[];
   owner: MinimalUserSnapshot | null;
+  // per-action affordance map stamped by the list endpoints; empty/absent → fail-closed
+  permissions?: Record<string, boolean>;
 }
 
 export interface Agent extends MinimalAgent {

@@ -34,6 +34,7 @@ from onyx.auth.permission_projection import tool_permissions
 from onyx.auth.permission_projection import USER_GROUP_ACTIONS
 from onyx.auth.permission_projection import user_group_permissions
 from onyx.auth.permissions import has_global_permission
+from onyx.auth.permissions import has_permission
 from onyx.auth.scoped_permissions import assert_manages_group
 from onyx.auth.scoped_permissions import assert_within_scope
 from onyx.auth.scoped_permissions import manages_group
@@ -41,6 +42,7 @@ from onyx.auth.scoped_permissions import within_scope
 from onyx.db.document_set import fetch_all_document_sets_for_user
 from onyx.db.enums import MCPServerStatus
 from onyx.db.enums import Permission
+from onyx.db.enums import PermissionAuthority
 from onyx.db.enums import PersonaSharePermission
 from onyx.db.models import DocumentSet
 from onyx.db.models import DocumentSet__UserGroup
@@ -68,9 +70,11 @@ from onyx.db.tools import can_manage_own_tool
 from onyx.error_handling.exceptions import OnyxError
 from onyx.server.features.mcp.api import _ensure_mcp_server_owner_or_admin
 from onyx.server.features.mcp.api import _ensure_mcp_server_viewable
+from onyx.server.features.persona.api import delete_persona
 from onyx.server.features.persona.models import PersonaUpsertRequest
 from onyx.server.features.tool.api import _get_manageable_custom_tool
 from onyx.server.token_rate_limits.models import TokenRateLimitArgs
+from onyx.utils.variable_functionality import global_version
 from tests.external_dependency_unit.conftest import create_test_user
 
 
@@ -339,6 +343,28 @@ def test_persona_projection_matches_gates(db_session: Session) -> None:
         assert can_delete_persona(actor, persona, db_session) == delete_allowed, (
             actor.email
         )
+
+    # A group-manager who owns their agent must get past the delete route's first gate
+    # (that is what allow_scope=True does). Without it they'd hit a 403 even though the
+    # projection shows them a delete button. The checks above only test the ownership
+    # rule, so they can't catch a missing allow_scope — this does.
+    #
+    # Force EE: in CE every user gets ADD_AGENTS globally, so a manager would pass the
+    # gate regardless and this check would prove nothing.
+    prev_ee = global_version._is_ee
+    global_version.set_ee()
+    try:
+        # In EE the manager holds ADD_AGENTS only by scope. If that ever changes to
+        # GLOBAL the check below tests nothing, so fail loudly here instead.
+        assert (
+            has_permission(in_scope, Permission.ADD_AGENTS)
+            is PermissionAuthority.SCOPED
+        ), "manager should hold ADD_AGENTS only by scope"
+        assert _route_admits(delete_persona, "user", in_scope), (
+            "delete route must let scoped managers past its first gate (allow_scope=True)"
+        )
+    finally:
+        global_version._is_ee = prev_ee
 
     # concrete: an in-scope manager can edit/share but not view_stats/delete/feature/reorder
     mgr_map = persona_permissions(
