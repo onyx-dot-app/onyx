@@ -306,7 +306,6 @@ const DocumentSetTable = ({
                             );
                           }
                           refresh();
-                          refresh();
                         }}
                       />
                     ) : (
