@@ -77,7 +77,6 @@ from onyx.server.features.persona.api import delete_persona
 from onyx.server.features.persona.models import PersonaUpsertRequest
 from onyx.server.features.tool.api import _get_manageable_custom_tool
 from onyx.server.token_rate_limits.models import TokenRateLimitArgs
-from onyx.utils.variable_functionality import global_version
 from tests.external_dependency_unit.conftest import create_test_user
 
 
@@ -347,28 +346,6 @@ def test_persona_projection_matches_gates(db_session: Session) -> None:
             actor.email
         )
 
-    # A group-manager who owns their agent must get past the delete route's first gate
-    # (that is what allow_scope=True does). Without it they'd hit a 403 even though the
-    # projection shows them a delete button. The checks above only test the ownership
-    # rule, so they can't catch a missing allow_scope — this does.
-    #
-    # Force EE: in CE every user gets ADD_AGENTS globally, so a manager would pass the
-    # gate regardless and this check would prove nothing.
-    prev_ee = global_version._is_ee
-    global_version.set_ee()
-    try:
-        # In EE the manager holds ADD_AGENTS only by scope. If that ever changes to
-        # GLOBAL the check below tests nothing, so fail loudly here instead.
-        assert (
-            has_permission(in_scope, Permission.ADD_AGENTS)
-            is PermissionAuthority.SCOPED
-        ), "manager should hold ADD_AGENTS only by scope"
-        assert _route_admits(delete_persona, "user", in_scope), (
-            "delete route must let scoped managers past its first gate (allow_scope=True)"
-        )
-    finally:
-        global_version._is_ee = prev_ee
-
     # concrete: an in-scope manager can edit/share but not view_stats/delete/feature/reorder
     in_scope_editable = is_persona_editable_by_user(db_session, persona.id, in_scope)
     mgr_map = persona_permissions(
@@ -388,6 +365,30 @@ def test_persona_projection_matches_gates(db_session: Session) -> None:
     assert mgr_map["edit"] is True and mgr_map["share"] is True
     assert mgr_map["view_stats"] is False
     assert not any(mgr_map[a] for a in ("delete", "publish", "feature", "reorder"))
+
+
+def test_delete_persona_route_admits_scoped_owner(
+    enable_ee: None,  # noqa: ARG001 -- side-effect fixture: forces EE for the whole test
+    db_session: Session,
+) -> None:
+    """The delete route must admit a scoped ADD_AGENTS holder (allow_scope=True); otherwise an
+    owner who holds ADD_AGENTS only by scope is 403'd before the GATE-2 ownership check, making
+    the projection's delete=true a lie for them. The gate checks above can't catch a missing
+    allow_scope. enable_ee so ADD_AGENTS is genuinely scoped — CE auto-grants it globally, which
+    would pass the gate regardless and prove nothing."""
+    manager = create_test_user(db_session, "del-route-mgr")
+    _manage(db_session, manager, _make_group(db_session))
+    manager.effective_permissions = []
+    db_session.commit()
+
+    # Premise: if the manager ever holds ADD_AGENTS globally, the route check below tests
+    # nothing — fail loudly here instead of passing vacuously.
+    assert (
+        has_permission(manager, Permission.ADD_AGENTS) is PermissionAuthority.SCOPED
+    ), "manager should hold ADD_AGENTS only by scope"
+    assert _route_admits(delete_persona, "user", manager), (
+        "delete route must admit scoped managers at GATE 1 (allow_scope=True)"
+    )
 
 
 def test_persona_share_projection_tracks_share_guard_not_edit(
