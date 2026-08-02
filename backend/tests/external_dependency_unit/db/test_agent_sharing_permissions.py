@@ -17,6 +17,9 @@ from onyx.db.persona import get_minimal_persona_snapshots_for_user
 from onyx.db.persona import update_persona_access
 from onyx.db.persona_sharing import derive_persona_sharing_status
 from onyx.db.persona_sharing import get_persona_access_level
+from onyx.error_handling.error_codes import OnyxErrorCode
+from onyx.error_handling.exceptions import OnyxError
+from onyx.server.features.persona.api import delete_persona
 from tests.external_dependency_unit.conftest import create_test_user
 from tests.external_dependency_unit.db.agent_sharing_helpers import create_test_persona
 from tests.external_dependency_unit.db.agent_sharing_helpers import (
@@ -253,3 +256,16 @@ def test_list_affordance_map_fail_closed_for_viewer(db_session: Session) -> None
     snap = _list_snapshot(db_session, viewer, persona.id)
     assert snap.permissions.get("edit") is False
     assert snap.permissions.get("delete") is False
+
+
+def test_delete_persona_unowned_raises_403_not_400(db_session: Session) -> None:
+    """A non-owner admitted past GATE 1 (allow_scope) must get a 403 authorization denial, not
+    the generic 400 the global ValueError handler produces for get_persona_by_id's raise."""
+    owner = create_test_user(db_session, "del-owner")
+    stranger = create_test_user(db_session, "del-stranger")
+    persona = create_test_persona(db_session, owner)
+
+    with pytest.raises(OnyxError) as exc_info:
+        delete_persona(persona_id=persona.id, user=stranger, db_session=db_session)
+    assert exc_info.value.error_code == OnyxErrorCode.INSUFFICIENT_PERMISSIONS
+    assert exc_info.value.status_code == 403

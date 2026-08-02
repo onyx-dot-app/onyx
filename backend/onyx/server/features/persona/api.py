@@ -493,16 +493,24 @@ def share_persona(
 @basic_router.delete("/{persona_id}", tags=PUBLIC_API_TAGS)
 def delete_persona(
     persona_id: int,
-    # allow_scope so an owner who only holds ADD_AGENTS by scope isn't 403'd at the
-    # door; mark_persona_as_deleted is GATE 2 (owner-or-admin via get_persona_by_id).
+    # allow_scope admits an owner who holds ADD_AGENTS only by scope; ownership is enforced
+    # below (mark_persona_as_deleted → get_persona_by_id).
     user: User = Depends(require_permission(Permission.ADD_AGENTS, allow_scope=True)),
     db_session: Session = Depends(get_session),
 ) -> None:
-    mark_persona_as_deleted(
-        persona_id=persona_id,
-        user=user,
-        db_session=db_session,
-    )
+    try:
+        mark_persona_as_deleted(
+            persona_id=persona_id,
+            user=user,
+            db_session=db_session,
+        )
+    except ValueError as e:
+        # A non-owner failed the ownership check; its ValueError would 400 via the global
+        # handler, so surface the real authorization failure as a 403.
+        raise OnyxError(
+            OnyxErrorCode.INSUFFICIENT_PERMISSIONS,
+            "You can only delete agents you created.",
+        ) from e
 
 
 @basic_router.get("")
