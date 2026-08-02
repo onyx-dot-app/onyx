@@ -1426,7 +1426,12 @@ def upsert_persona(
         existing_persona.default_model_configuration_id = default_model_configuration_id
         existing_persona.starter_messages = starter_messages
         existing_persona.deleted = False  # Un-delete if previously deleted
-        if is_public is not None:
+        # Publishing (org-wide public) is owner-or-admin — matches the share route and the
+        # publish projection. An editor-shared user may edit content but not flip an agent
+        # they don't own to public; the change is silently dropped, like is_listed/is_featured.
+        if is_public is not None and (
+            user is None or can_delete_persona(user, existing_persona, db_session)
+        ):
             existing_persona.is_public = is_public
         if remove_image or uploaded_image_id:
             existing_persona.uploaded_image_id = uploaded_image_id

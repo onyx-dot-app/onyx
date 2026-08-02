@@ -16,6 +16,7 @@ from onyx.db.models import User
 from onyx.db.persona import fetch_persona_by_id_for_user
 from onyx.db.persona import get_minimal_persona_snapshots_for_user
 from onyx.db.persona import update_persona_access
+from onyx.db.persona import upsert_persona
 from onyx.db.persona_sharing import derive_persona_sharing_status
 from onyx.db.persona_sharing import get_persona_access_level
 from onyx.error_handling.error_codes import OnyxErrorCode
@@ -298,3 +299,38 @@ def test_add_agents_user_does_not_see_others_private_agents(
     assert public.id in visible
     assert shared.id in visible
     assert others_private.id not in visible  # ADD_AGENTS no longer grants see-all
+
+
+def _edit_persona(
+    db_session: Session, persona_id: int, user: User, is_public: bool
+) -> None:
+    """Run the update-path setter as ``user`` requesting ``is_public``."""
+    upsert_persona(
+        user=user,
+        name=f"edit-{is_public}",
+        description="",
+        starter_messages=None,
+        system_prompt="",
+        task_prompt="",
+        datetime_aware=False,
+        is_public=is_public,
+        db_session=db_session,
+        persona_id=persona_id,
+    )
+
+
+def test_editor_cannot_publish_via_update(db_session: Session) -> None:
+    """An EDITOR-shared user may edit the agent but not flip it public via the update path —
+    is_public from a non-owner is dropped (owner-or-admin only, matching the share route)."""
+    owner = create_test_user(db_session, "pub-owner")
+    editor = create_test_user(db_session, "pub-editor")
+    persona = create_test_persona(db_session, owner, is_public=False)
+    share_persona_with_user(db_session, persona, editor, PersonaSharePermission.EDITOR)
+
+    _edit_persona(db_session, persona.id, editor, is_public=True)
+    db_session.refresh(persona)
+    assert persona.is_public is False  # editor's publish attempt is dropped
+
+    _edit_persona(db_session, persona.id, owner, is_public=True)
+    db_session.refresh(persona)
+    assert persona.is_public is True  # owner can publish
