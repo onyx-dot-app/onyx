@@ -218,6 +218,7 @@ function EditGroupPage({ groupId }: EditGroupPageProps) {
         await mutate(SWR_KEYS.adminUserGroups);
         toast.success(makeManager ? "Manager assigned" : "Manager revoked");
       } catch (err) {
+        console.error("Failed to update manager:", err);
         toast.error(
           err instanceof Error ? err.message : "Failed to update manager"
         );
