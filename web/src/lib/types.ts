@@ -452,6 +452,8 @@ export interface DocumentSetSummary {
   is_public: boolean;
   users: string[];
   groups: number[];
+  // per-action affordance map for the requesting user (mirrors the write-side gate)
+  permissions: Record<string, boolean>;
   federated_connector_summaries: FederatedConnectorSummary[];
 }
 
@@ -549,6 +551,8 @@ export interface UserGroup {
   is_up_to_date: boolean;
   is_up_for_deletion: boolean;
   is_default: boolean;
+  // Server-stamped affordance map; fail-closed (absent = denied).
+  permissions?: Record<string, boolean>;
 }
 
 export enum ValidSources {

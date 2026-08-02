@@ -229,6 +229,10 @@ class MinimalPersonaSnapshot(BaseModel):
     owner_group: PersonaOwnerGroupSnapshot | None
     # Computed for the requesting user when the list endpoint provides it
     user_permission: PersonaAccessLevel | None = None
+    # Per-action affordance map for the requesting user; empty on paths that don't
+    # stamp it (fail-closed on the client). List endpoints stamp it so each card
+    # doesn't refetch the full agent just to gate its icons.
+    permissions: dict[str, bool] = Field(default_factory=dict)
 
     @classmethod
     def from_model(
@@ -396,6 +400,8 @@ class FullPersonaSnapshot(PersonaSnapshot):
     search_start_date: datetime | None = None
     # Per-requesting-user context, set by the single-persona endpoint
     user_permission: PersonaAccessLevel | None = None
+    # per-action affordance map for the requesting user; stamped by the endpoint
+    permissions: dict[str, bool] = Field(default_factory=dict)
     admin_count: int = 0
     ownership_vacant: bool = False
 

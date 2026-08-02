@@ -17,6 +17,8 @@ interface SkillSharePickerProps {
   onIsPublicChange: (isPublic: boolean) => void;
   groupIds: number[];
   onGroupIdsChange: (groupIds: number[]) => void;
+  // Org-wide publish is admin-only; fail closed so an omitted value disables the switch.
+  canPublish?: boolean;
 }
 
 /**
@@ -32,6 +34,7 @@ export default function SkillSharePicker({
   onIsPublicChange,
   groupIds,
   onGroupIdsChange,
+  canPublish = false,
 }: SkillSharePickerProps) {
   const {
     data: groupsData,
@@ -137,7 +140,11 @@ export default function SkillSharePicker({
               description="Make this skill available to everyone in your organization."
               withLabel
             >
-              <Switch checked={isPublic} onCheckedChange={onIsPublicChange} />
+              <Switch
+                checked={isPublic}
+                onCheckedChange={onIsPublicChange}
+                disabled={!canPublish}
+              />
             </InputHorizontal>
           </Section>
         </Tabs.Content>
