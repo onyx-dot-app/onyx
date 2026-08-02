@@ -7,7 +7,6 @@ import { InputDivider, InputPadder, InputVertical, toast } from "@opal/layouts";
 import {
   LLMProviderFormProps,
   LLMProviderName,
-  LLMProviderView,
 } from "@/lib/languageModels/types";
 import * as Yup from "yup";
 import {
@@ -25,6 +24,7 @@ import {
   ModalWrapper,
 } from "@/sections/modals/languageModels/shared";
 import {
+  buildTargetUri,
   isValidAzureTargetUri,
   parseAzureTargetUri,
 } from "@/lib/azureTargetUri";
@@ -63,16 +63,6 @@ function AzureModelSelection() {
       }}
     />
   );
-}
-
-function buildTargetUri(existingLlmProvider?: LLMProviderView): string {
-  if (!existingLlmProvider?.api_base || !existingLlmProvider?.api_version) {
-    return "";
-  }
-
-  const deploymentName =
-    existingLlmProvider.deployment_name || "your-deployment";
-  return `${existingLlmProvider.api_base}/openai/deployments/${deploymentName}/chat/completions?api-version=${existingLlmProvider.api_version}`;
 }
 
 const processValues = (values: AzureModalValues): AzureModalValues => {
