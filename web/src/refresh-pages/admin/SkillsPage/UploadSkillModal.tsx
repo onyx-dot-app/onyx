@@ -9,6 +9,9 @@ import { Section } from "@/layouts/general-layouts";
 import SkillSharePicker from "@/refresh-pages/admin/SkillsPage/SkillSharePicker";
 import { createCustomSkill } from "@/lib/skills/api";
 import { toast } from "@/hooks/useToast";
+import { useUser } from "@/providers/UserProvider";
+import { hasPermission } from "@/lib/permissions";
+import { Permission } from "@/lib/types";
 
 interface UploadSkillModalProps {
   open: boolean;
@@ -22,15 +25,21 @@ export default function UploadSkillModal({
   onClose,
   onUploaded,
 }: UploadSkillModalProps) {
+  // Publish is global MANAGE_SKILLS; read effective (global) permissions, not
+  // adminCapabilities — the scoped bundle would over-grant a group manager.
+  const { permissions } = useUser();
+  const canPublish = hasPermission(permissions, Permission.MANAGE_SKILLS);
+
   const [file, setFile] = useState<File | null>(null);
-  const [isPublic, setIsPublic] = useState(true);
+  // Default private for scoped managers; the server 403s their public create.
+  const [isPublic, setIsPublic] = useState(canPublish);
   const [groupIds, setGroupIds] = useState<number[]>([]);
   const [submitting, setSubmitting] = useState(false);
   const fileInputRef = useRef<HTMLInputElement>(null);
 
   function reset() {
     setFile(null);
-    setIsPublic(true);
+    setIsPublic(canPublish);
     setGroupIds([]);
   }
 
@@ -117,6 +126,7 @@ export default function UploadSkillModal({
                 onIsPublicChange={setIsPublic}
                 groupIds={groupIds}
                 onGroupIdsChange={setGroupIds}
+                canPublish={canPublish}
               />
             </Section>
           </Section>

@@ -17,8 +17,7 @@ interface SkillSharePickerProps {
   onIsPublicChange: (isPublic: boolean) => void;
   groupIds: number[];
   onGroupIdsChange: (groupIds: number[]) => void;
-  // Publish (org-wide) is admin-only; a scoped manager grants to groups but can't flip public.
-  // Defaults open so non-skill callers are unaffected.
+  // Org-wide publish is admin-only; fail closed so an omitted value disables the switch.
   canPublish?: boolean;
 }
 
@@ -35,7 +34,7 @@ export default function SkillSharePicker({
   onIsPublicChange,
   groupIds,
   onGroupIdsChange,
-  canPublish = true,
+  canPublish = false,
 }: SkillSharePickerProps) {
   const {
     data: groupsData,

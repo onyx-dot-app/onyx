@@ -73,7 +73,6 @@ export interface ToolItemProps {
 
   // Handlers
   onToggle?: (enabled: boolean) => void;
-  // Whether the caller may change tool status; a viewer sees the state but can't toggle it.
   canToggle?: boolean;
 
   // Optional styling
