@@ -112,7 +112,7 @@ def _create_custom_tool(user: DATestUser) -> int:
 
 
 def _create_mcp_server(user: DATestUser) -> int:
-    """Create a simple MCP server as ``user`` (must succeed); returns its id."""
+    """Create an MCP server as ``user`` (must succeed); returns its id."""
     body = {
         "name": f"mcp-{uuid4()}",
         "description": "escalation test",
@@ -155,9 +155,6 @@ def _assert_manager(
     resp = call_endpoint(method, path, body, env.manager.headers, env.manager.cookies)
     assert_response(resp, method, path, "manager", expected)
     return resp
-
-
-# --- skills -----------------------------------------------------------------
 
 
 def test_manager_creates_private_skill_in_managed_group(env: _ScopedEnv) -> None:
@@ -211,9 +208,6 @@ def test_manager_skill_admin_list_is_scoped(env: _ScopedEnv) -> None:
     custom_ids = {c["id"] for c in resp.json()["customs"]}
     assert str(mine.id) in custom_ids
     assert str(theirs.id) not in custom_ids
-
-
-# --- agents -----------------------------------------------------------------
 
 
 def test_manager_shares_agent_to_managed_group(env: _ScopedEnv) -> None:
@@ -339,9 +333,7 @@ def test_manager_rosters_agent_shared_to_managed_group(env: _ScopedEnv) -> None:
     assert resp.status_code == 200, resp.text
 
 
-# --- custom actions (owner-or-admin) ----------------------------------------
-
-
+# Custom actions: owner-or-admin gating (not group-scoped like skills/agents).
 def test_manager_creates_own_action(env: _ScopedEnv) -> None:
     _create_custom_tool(env.manager)
 
@@ -376,9 +368,7 @@ def test_manager_cannot_delete_unowned_action(env: _ScopedEnv) -> None:
     _assert_manager(env, "DELETE", f"/admin/tool/custom/{tool_id}", "denied")
 
 
-# --- MCP servers (owner-or-admin) -------------------------------------------
-
-
+# MCP servers: owner-or-admin gating (not group-scoped like skills/agents).
 def test_manager_creates_mcp_server(env: _ScopedEnv) -> None:
     _create_mcp_server(env.manager)
 
@@ -407,9 +397,6 @@ def test_manager_update_via_servers_create_denied_not_masked(
         "existing_server_id": server_id,
     }
     _assert_manager(env, "POST", "/admin/mcp/servers/create", "denied", body)
-
-
-# --- token limits -----------------------------------------------------------
 
 
 def _group_limit_path(group_id: int, limit_id: int | None = None) -> str:
