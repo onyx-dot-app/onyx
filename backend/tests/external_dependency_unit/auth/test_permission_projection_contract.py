@@ -497,6 +497,39 @@ def test_persona_edit_share_editable_without_add_agents(
     )  # ...and to edit — both routes gate on editable, not ADD_AGENTS
 
 
+def test_persona_publish_projection_is_owner_not_add_agents(
+    enable_ee: None,  # noqa: ARG001 -- side-effect fixture: forces EE for the whole test
+    db_session: Session,
+) -> None:
+    """publish (org-wide public, via the share route's is_owner_or_admin gate) is owner-or-admin,
+    NOT ADD_AGENTS-gated. An owner without ADD_AGENTS can publish but cannot delete (delete's
+    route requires ADD_AGENTS). enable_ee because CE auto-grants ADD_AGENTS, masking this."""
+    owner = create_test_user(db_session, "publish-owner")
+    owner.effective_permissions = []
+    db_session.commit()
+
+    persona = _make_persona(db_session, owner=owner, is_public=False, groups=[])
+    is_editable = is_persona_editable_by_user(db_session, persona.id, owner)
+    holds_add_agents = (
+        has_permission(owner, Permission.ADD_AGENTS) is not PermissionAuthority.NONE
+    )
+    assert holds_add_agents is False  # owner holds no ADD_AGENTS authority under EE
+
+    tags = persona_permissions(
+        can_edit=can_edit_persona(owner, persona, db_session, is_editable=is_editable),
+        can_share=is_editable,
+        can_view_stats=can_view_persona_stats(owner, persona),
+        can_delete=can_delete_persona(owner, persona, db_session),
+        holds_add_agents=holds_add_agents,
+        is_manage_agents_admin=has_global_permission(owner, Permission.MANAGE_AGENTS),
+        is_full_admin=has_global_permission(owner, Permission.FULL_ADMIN_PANEL_ACCESS),
+    )
+    assert (
+        tags["publish"] is True
+    )  # owner may publish via the share route (no ADD_AGENTS)
+    assert tags["delete"] is False  # ...but delete's route requires ADD_AGENTS
+
+
 def test_document_set_projection_matches_gates(db_session: Session) -> None:
     """edit tracks the editable filter, which equals the within_scope decision the write
     guard enforces; delete/publish track global MANAGE_DOCUMENT_SETS."""

@@ -46,17 +46,18 @@ def persona_permissions(
     """Agent (persona) affordance map. ``edit``/``share`` gate on editable alone (their routes are
     BASIC_ACCESS) — an editor-shared user without ADD_AGENTS may still edit and manage sharing.
     ``edit`` is the editable-AND-managed-scope decision the update guard enforces; ``share`` is the
-    broader editable decision the share guard enforces (get_editable, no scope AND). ``delete``/
-    ``publish`` AND in ``holds_add_agents`` — the ADD_AGENTS authority their routes gate on at
-    GATE 1 (allow_scope), so an owner lacking it is 403'd there. ``view_stats`` is
-    owner-or-full-admin; ``delete``/``publish`` are owner-or-admin. ``feature``/``list`` need
-    global MANAGE_AGENTS (which implies ADD_AGENTS) and ``reorder`` full admin."""
+    broader editable decision the share guard enforces (get_editable, no scope AND). ``publish``
+    (make org-wide public, via the share route's is_owner_or_admin gate) is owner-or-admin — no
+    ADD_AGENTS. ``delete`` ANDs ``holds_add_agents``: its route gates on ADD_AGENTS at GATE 1
+    (allow_scope), so an owner lacking it is 403'd there. ``view_stats`` is owner-or-full-admin.
+    ``feature``/``list`` need global MANAGE_AGENTS (which implies ADD_AGENTS) and ``reorder`` full
+    admin."""
     return {
         "edit": can_edit,
         "share": can_share,
         "view_stats": can_view_stats,
         "delete": can_delete and holds_add_agents,
-        "publish": can_delete and holds_add_agents,
+        "publish": can_delete,
         "feature": is_manage_agents_admin,
         "list": is_manage_agents_admin,
         "reorder": is_full_admin,
