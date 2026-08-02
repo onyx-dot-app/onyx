@@ -8,6 +8,8 @@ export interface TokenRateLimitArgs {
   enabled: boolean;
   token_budget: number | null;
   period_hours: number;
+  // Cents at the API boundary; the UI collects dollars and converts.
+  cost_budget_cents?: number | null;
 }
 
 export interface TokenRateLimit {
@@ -15,6 +17,7 @@ export interface TokenRateLimit {
   enabled: boolean;
   token_budget: number | null;
   period_hours: number;
+  cost_budget_cents: number | null;
 }
 
 export interface TokenRateLimitDisplay extends TokenRateLimit {

@@ -71,6 +71,7 @@ from onyx.server.features.persona.models import (
     PersonaUpsertRequest,
 )
 from onyx.server.manage.llm.api import get_valid_model_configuration_ids_for_persona
+from onyx.server.manage.llm.provider_cache import invalidate_provider_listing_cache
 from onyx.server.models import DisplayPriorityRequest
 from onyx.server.settings.store import load_settings
 from onyx.utils.logger import setup_logger
@@ -362,6 +363,9 @@ def update_persona(
         user=user,
         db_session=db_session,
     )
+    # The persona's default model is baked into the cached LLM provider listing
+    # (see onyx/server/manage/llm/provider_cache.py), so edits must drop it.
+    invalidate_provider_listing_cache()
     return persona_snapshot
 
 

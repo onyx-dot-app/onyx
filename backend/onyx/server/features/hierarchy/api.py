@@ -78,6 +78,7 @@ def list_accessible_hierarchy_nodes(
         source=source,
         user_email=user_email,
         external_group_ids=external_group_ids,
+        user_id=user.id,
     )
     return HierarchyNodesResponse(
         nodes=[
@@ -112,6 +113,7 @@ def list_accessible_hierarchy_node_documents(
         parent_hierarchy_node_id=documents_request.parent_hierarchy_node_id,
         user_email=user_email,
         external_group_ids=external_group_ids,
+        user_id=user.id,
         limit=DOCUMENT_PAGE_SIZE + 1,
         sort_by_name=sort_by_name,
         sort_ascending=sort_ascending,
@@ -163,6 +165,7 @@ def search_hierarchy_nodes(
         user_email=user_email,
         external_group_ids=external_group_ids,
         limit=HIERARCHY_NODE_SEARCH_LIMIT,
+        user_id=user.id,
     )
     return HierarchyNodeSearchResponse(
         nodes=[

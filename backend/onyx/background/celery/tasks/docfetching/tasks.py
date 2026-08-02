@@ -320,7 +320,7 @@ def process_job_result(
     return result
 
 
-@shared_task(
+@shared_task(  # ty: ignore[invalid-argument-type]
     name=OnyxCeleryTask.CONNECTOR_DOC_FETCHING_TASK,
     bind=True,
     acks_late=False,

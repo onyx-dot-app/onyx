@@ -41,7 +41,6 @@ from onyx.server.features.build.sandbox.image.sandbox_daemon.contract import (
 )
 from onyx.server.features.build.sandbox.kubernetes import sidecar_client
 from onyx.server.features.build.sandbox.kubernetes.kubernetes_sandbox_manager import (
-    OPENCODE_HISTORY_RESTORE_TIMEOUT_SECONDS,
     KubernetesSandboxManager,
     _build_targz,
 )
@@ -106,7 +105,7 @@ def _service_host(mgr: KubernetesSandboxManager) -> Callable[[UUID], str]:
 
 
 def _make_manager() -> KubernetesSandboxManager:
-    """Construct a manager without invoking _initialize (which needs a K8s config).
+    """Construct a manager without invoking __init__ (which needs a K8s config).
 
     ``write_files_to_sandbox`` resolves the sidecar host via the Service FQDN,
     then POSTs over the mocked ``httpx.Client``. Bypass ``__new__`` cache with
@@ -125,9 +124,9 @@ def _make_manager() -> KubernetesSandboxManager:
     ]
     core_api.read_namespaced_pod.return_value = pod_obj
 
-    mgr._core_api = core_api  # type: ignore[attr-defined]
-    mgr._namespace = "sandbox-test"  # type: ignore[attr-defined]
-    mgr._sidecar_client = SidecarClient(host=_service_host(mgr))  # type: ignore[attr-defined]
+    mgr._core_api = core_api
+    mgr._namespace = "sandbox-test"
+    mgr._sidecar_client = SidecarClient(host=_service_host(mgr))
     return mgr
 
 
@@ -657,7 +656,7 @@ def test_push_connect_error_is_retriable() -> None:
 def test_create_opencode_history_snapshot_204_preserves_stable_snapshot() -> None:
     mgr = _make_manager()
     snapshot_manager = MagicMock()
-    mgr._snapshot_manager = snapshot_manager  # type: ignore[attr-defined]
+    mgr._snapshot_manager = snapshot_manager
     resp = _resp(204)
 
     with patch(_HTTPX_CLIENT_PATH, _mock_httpx_stream_client(resp)):
@@ -689,7 +688,7 @@ def test_restore_opencode_history_posts_archive_to_sidecar(
         write_stream.write(archive_body)
 
     snapshot_manager.restore_snapshot_to_stream.side_effect = restore_to_stream
-    mgr._snapshot_manager = snapshot_manager  # type: ignore[attr-defined]
+    mgr._snapshot_manager = snapshot_manager
 
     def fake_post_archive(
         *,
@@ -705,14 +704,19 @@ def test_restore_opencode_history_posts_archive_to_sidecar(
         assert archive_file.read() == archive_body
         assert sha256_hex == hashlib.sha256(archive_body).hexdigest()
         assert operation_label == "opencode history restore"
-        assert timeout_seconds == OPENCODE_HISTORY_RESTORE_TIMEOUT_SECONDS
+        assert timeout_seconds == 90.0
         calls.append("restore")
 
     sidecar_client = MagicMock()
     sidecar_client.post_archive.side_effect = fake_post_archive
     monkeypatch.setattr(mgr, "_sidecar_client", sidecar_client)
 
-    assert mgr.restore_opencode_history_snapshot(sandbox_id, "tenant-test") is True
+    assert (
+        mgr.restore_opencode_history_snapshot(
+            sandbox_id, "tenant-test", timeout_seconds=90.0
+        )
+        is True
+    )
 
     sidecar_client.post_archive.assert_called_once()
     assert calls == ["restore"]
@@ -727,7 +731,7 @@ def test_restore_opencode_history_marks_sidecar_ready_when_no_snapshot(
 
     snapshot_manager = MagicMock()
     snapshot_manager.has_opencode_history_snapshot.return_value = False
-    mgr._snapshot_manager = snapshot_manager  # type: ignore[attr-defined]
+    mgr._snapshot_manager = snapshot_manager
 
     def fake_mark_restored(
         *,
@@ -739,13 +743,18 @@ def test_restore_opencode_history_marks_sidecar_ready_when_no_snapshot(
         assert sandbox_id == expected_sandbox_id
         assert endpoint_path == SIDECAR_OPENCODE_HISTORY_MARK_RESTORED_PATH
         assert operation_label == "opencode history restore marker"
-        assert timeout_seconds == OPENCODE_HISTORY_RESTORE_TIMEOUT_SECONDS
+        assert timeout_seconds == 90.0
 
     sidecar_client = MagicMock()
     sidecar_client.post_empty.side_effect = fake_mark_restored
     monkeypatch.setattr(mgr, "_sidecar_client", sidecar_client)
 
-    assert mgr.restore_opencode_history_snapshot(sandbox_id, "tenant-test") is False
+    assert (
+        mgr.restore_opencode_history_snapshot(
+            sandbox_id, "tenant-test", timeout_seconds=90.0
+        )
+        is False
+    )
 
     sidecar_client.post_empty.assert_called_once()
 
@@ -784,6 +793,7 @@ def test_provision_cleans_up_pod_when_opencode_history_restore_fails(
             user_id=_sandbox_id(),
             tenant_id="tenant-test",
             onyx_pat="pat",
+            provisioning_attempt_number=1,
         )
 
     cleanup_resources_mock.assert_called_once_with(str(sandbox_id))
@@ -815,6 +825,7 @@ def test_provision_existing_healthy_pod_does_not_restore_opencode_history(
         user_id=_sandbox_id(),
         tenant_id="tenant-test",
         onyx_pat="pat",
+        provisioning_attempt_number=1,
     )
 
     assert info.sandbox_id == sandbox_id
@@ -858,6 +869,7 @@ def test_provision_conflicting_healthy_pod_skips_startup_restore(
         user_id=_sandbox_id(),
         tenant_id="tenant-test",
         onyx_pat="pat",
+        provisioning_attempt_number=1,
     )
 
     assert info.sandbox_id == sandbox_id
@@ -900,13 +912,17 @@ def test_provision_conflicting_not_ready_pod_runs_startup_restore(
     monkeypatch.setattr(
         mgr,
         "_wait_for_pod_ready",
-        MagicMock(side_effect=lambda _pod_name: calls.append("pod-ready") or True),
+        MagicMock(
+            side_effect=lambda _pod_name, _deadline: calls.append("pod-ready") or True
+        ),
     )
     monkeypatch.setattr(
         mgr,
         "_wait_for_opencode_serve_ready",
         MagicMock(
-            side_effect=lambda _sandbox_id: calls.append("opencode-ready") or True
+            side_effect=lambda _sandbox_id, timeout: (  # noqa: ARG005
+                calls.append("opencode-ready") or True
+            )
         ),
     )
 
@@ -915,6 +931,7 @@ def test_provision_conflicting_not_ready_pod_runs_startup_restore(
         user_id=_sandbox_id(),
         tenant_id="tenant-test",
         onyx_pat="pat",
+        provisioning_attempt_number=1,
     )
 
     assert info.sandbox_id == sandbox_id
@@ -957,6 +974,7 @@ def test_provision_conflicting_not_ready_pod_restore_failure_does_not_cleanup(
             user_id=_sandbox_id(),
             tenant_id="tenant-test",
             onyx_pat="pat",
+            provisioning_attempt_number=1,
         )
 
     cleanup_resources_mock.assert_not_called()

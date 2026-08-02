@@ -437,22 +437,18 @@ def process_jira_issue(
     if creator is not None and (
         basic_expert_info := best_effort_basic_expert_info(creator)
     ):
-        people.add(basic_expert_info)  # ty: ignore[possibly-unresolved-reference]
-        metadata_dict[_FIELD_REPORTER] = basic_expert_info.get_semantic_name()  # ty: ignore[possibly-unresolved-reference]
-        if (
-            email := basic_expert_info.get_email()  # ty: ignore[possibly-unresolved-reference]
-        ):
+        people.add(basic_expert_info)
+        metadata_dict[_FIELD_REPORTER] = basic_expert_info.get_semantic_name()
+        if email := basic_expert_info.get_email():
             metadata_dict[_FIELD_REPORTER_EMAIL] = email
 
     assignee = best_effort_get_field_from_issue(issue, _FIELD_ASSIGNEE)
     if assignee is not None and (
         basic_expert_info := best_effort_basic_expert_info(assignee)
     ):
-        people.add(basic_expert_info)  # ty: ignore[possibly-unresolved-reference]
-        metadata_dict[_FIELD_ASSIGNEE] = basic_expert_info.get_semantic_name()  # ty: ignore[possibly-unresolved-reference]
-        if (
-            email := basic_expert_info.get_email()  # ty: ignore[possibly-unresolved-reference]
-        ):
+        people.add(basic_expert_info)
+        metadata_dict[_FIELD_ASSIGNEE] = basic_expert_info.get_semantic_name()
+        if email := basic_expert_info.get_email():
             metadata_dict[_FIELD_ASSIGNEE_EMAIL] = email
 
     metadata_dict[_FIELD_KEY] = issue.key

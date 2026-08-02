@@ -45,6 +45,7 @@ from onyx.server.features.build.sandbox.models import (
 )
 from onyx.server.features.build.sandbox.serve_transport import _ServeMixin
 from onyx.server.features.build.sandbox.sse import SSEKeepalive
+from onyx.server.features.build.timeouts import BULK_TRANSFER_TIMEOUT_SECONDS
 from onyx.utils.logger import setup_logger
 
 logger = setup_logger()
@@ -118,9 +119,11 @@ class SandboxManager(_ServeMixin, ABC):
         sandbox_id: UUID,
         user_id: UUID,
         tenant_id: str,
-        onyx_pat: str | None = None,
+        onyx_pat: str | None,
+        provisioning_attempt_number: int,
     ) -> SandboxInfo:
-        """Provision a new sandbox for a user.
+        """Provision a new sandbox for a user. Returns only once the sandbox
+        is RUNNING; every failure raises.
 
         Craft MCP servers and the gateway provider catalog are NOT registered
         here — they live in the per-session ``opencode.json`` (see
@@ -138,6 +141,11 @@ class SandboxManager(_ServeMixin, ABC):
             user_id: User identifier who owns this sandbox
             tenant_id: Tenant identifier for multi-tenant isolation
             onyx_pat: Raw PAT token to inject as ONYX_PAT env var in the sandbox
+            provisioning_attempt_number: This attempt's number; stamped onto
+                backend resources at creation so operators can attribute
+                orphans (never read programmatically — the attempt-number
+                condition on DB status writes is what blocks stale
+                attempts).
 
         Returns:
             SandboxInfo with the provisioned sandbox details
@@ -291,7 +299,7 @@ class SandboxManager(_ServeMixin, ABC):
         self,
         sandbox_id: UUID,
         tenant_id: str,
-        timeout_seconds: float = 300.0,
+        timeout_seconds: float = BULK_TRANSFER_TIMEOUT_SECONDS,
     ) -> bool:
         """Snapshot sandbox-global opencode history if this backend supports it.
 
@@ -345,11 +353,12 @@ class SandboxManager(_ServeMixin, ABC):
         ...
 
     @abstractmethod
-    def health_check(self, sandbox_id: UUID, timeout: float = 60.0) -> bool:
+    def health_check(self, sandbox_id: UUID, timeout: float) -> bool:
         """Check if the sandbox is healthy.
 
         Args:
             sandbox_id: The sandbox ID to check
+            timeout: Probe timeout, chosen by the caller for its path.
 
         Returns:
             True if sandbox is healthy, False otherwise

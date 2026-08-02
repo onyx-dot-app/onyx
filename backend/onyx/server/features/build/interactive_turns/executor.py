@@ -31,10 +31,6 @@ from onyx.server.features.build.sandbox.event_schema import (
 )
 from onyx.server.features.build.sandbox.event_schema import Error as SandboxError
 from onyx.server.features.build.sandbox.models import PromptAttachment
-from onyx.server.features.build.sandbox.serve_transport import (
-    PROMPT_SLOT_FAST_FAIL_ACQUIRE_SECONDS,
-    PROMPT_SLOT_WAIT_OUT_ORPHAN_SECONDS,
-)
 from onyx.server.features.build.sandbox.sse import SSEKeepalive
 from onyx.server.features.build.session.interrupt_signal import (
     clear_interrupt,
@@ -42,6 +38,11 @@ from onyx.server.features.build.session.interrupt_signal import (
 )
 from onyx.server.features.build.session.manager import SessionManager
 from onyx.server.features.build.session.streaming import BuildStreamingState
+from onyx.server.features.build.timeouts import (
+    PROMPT_SLOT_FAST_FAIL_ACQUIRE_SECONDS,
+    PROMPT_SLOT_WAIT_OUT_ORPHAN_SECONDS,
+    TURN_BUDGET_SECONDS,
+)
 from onyx.utils.logger import setup_logger
 from shared_configs.contextvars import (
     CURRENT_TENANT_ID_CONTEXTVAR,
@@ -49,8 +50,6 @@ from shared_configs.contextvars import (
 )
 
 logger = setup_logger()
-
-DEFAULT_INTERACTIVE_TURN_BUDGET_SECONDS = 30 * 60
 
 MAX_TIMEOUT_CONTINUATIONS = 2
 _TOOL_TIMEOUT_CONTINUATION_PROMPT = (
@@ -131,7 +130,7 @@ def start_interactive_turn_runner(turn_id: UUID) -> None:
 def run_claimed_interactive_build_turn(
     turn: InteractiveTurn,
     *,
-    budget_seconds: int = DEFAULT_INTERACTIVE_TURN_BUDGET_SECONDS,
+    budget_seconds: int = TURN_BUDGET_SECONDS,
 ) -> None:
     """Execute a turn that this runner has already claimed in CacheBackend."""
     cache = get_cache_backend()
@@ -225,7 +224,7 @@ def _drive_interactive_turn(
             return
 
         try:
-            # Re-fence after the (possibly long) slot wait: a reclaim acquire
+            # Re-check ownership after the (possibly long) slot wait: a reclaim acquire
             # can block past RUNNER_STALE_AFTER_SECONDS, letting another
             # runner steal the turn — it must not reach the prompt POST.
             if not touch_turn(cache=cache, turn_id=turn_id, runner_id=runner_id):

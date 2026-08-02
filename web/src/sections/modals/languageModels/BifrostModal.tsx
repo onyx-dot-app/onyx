@@ -4,7 +4,9 @@ import { markdown } from "@opal/utils";
 import { useSWRConfig } from "swr";
 import { useFormikContext } from "formik";
 import { InputDivider, toast } from "@opal/layouts";
+import { Tabs, Text } from "@opal/components";
 import {
+  BifrostApiMode,
   LLMProviderFormProps,
   LLMProviderName,
   LLMProviderView,
@@ -28,6 +30,26 @@ import {
 } from "@/sections/modals/languageModels/shared";
 import { refreshLlmProviderCaches } from "@/lib/languageModels/cache";
 
+const DEFAULT_API_MODE: BifrostApiMode = "chat_completions";
+const BIFROST_API_MODE_KEY = "bifrost_api_mode";
+
+const API_MODE_TABS: {
+  value: BifrostApiMode;
+  title: string;
+  subtitle: string;
+}[] = [
+  {
+    value: "chat_completions",
+    title: "Chat Completions API",
+    subtitle: "/v1/chat/completions",
+  },
+  {
+    value: "responses",
+    title: "Responses API",
+    subtitle: "/v1/responses",
+  },
+];
+
 interface BifrostModalValues extends BaseLLMFormValues {
   api_key: string;
   api_base: string;
@@ -43,6 +65,12 @@ function BifrostModalInternals({
   isOnboarding,
 }: BifrostModalInternalsProps) {
   const formikProps = useFormikContext<BifrostModalValues>();
+  const { setFieldValue, values } = formikProps;
+
+  const mode =
+    (values.custom_config?.[BIFROST_API_MODE_KEY] as
+      | BifrostApiMode
+      | undefined) ?? DEFAULT_API_MODE;
 
   const isFetchDisabled = !formikProps.values.api_base;
 
@@ -66,6 +94,31 @@ function BifrostModalInternals({
 
   return (
     <>
+      <Tabs
+        value={mode}
+        onValueChange={(next) =>
+          setFieldValue("custom_config", {
+            ...values.custom_config,
+            [BIFROST_API_MODE_KEY]: next as BifrostApiMode,
+          })
+        }
+      >
+        <Tabs.List>
+          {API_MODE_TABS.map((tab) => (
+            <Tabs.Trigger key={tab.value} value={tab.value}>
+              <div className="flex flex-col items-start">
+                <Text font="main-ui-action" color="inherit">
+                  {tab.title}
+                </Text>
+                <Text font="secondary-body" color="text-03">
+                  {tab.subtitle}
+                </Text>
+              </div>
+            </Tabs.Trigger>
+          ))}
+        </Tabs.List>
+      </Tabs>
+
       <APIBaseField
         subDescription="Paste your Bifrost gateway endpoint URL (including API version)."
         placeholder="https://your-bifrost-gateway.com/v1"
@@ -119,6 +172,17 @@ export default function BifrostModal({
     LLMProviderName.BIFROST,
     existingLlmProvider
   ) as BifrostModalValues;
+
+  // useInitialValues drops custom_config, so seed it for submitProvider's
+  // custom_config_changed diff, preserving any other stored entries.
+  const initialMode =
+    (existingLlmProvider?.custom_config?.[BIFROST_API_MODE_KEY] as
+      | BifrostApiMode
+      | undefined) ?? DEFAULT_API_MODE;
+  initialValues.custom_config = {
+    ...existingLlmProvider?.custom_config,
+    [BIFROST_API_MODE_KEY]: initialMode,
+  };
 
   const validationSchema = buildValidationSchema(isOnboarding, {
     apiBase: true,

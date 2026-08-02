@@ -52,6 +52,7 @@ from onyx.server.features.build.scheduled_tasks.schedule import (
     human_readable,
     next_n_fires,
 )
+from onyx.server.features.build.timeouts import QUEUE_RESIDENCY_SECONDS
 from onyx.utils.datetime import datetime_to_utc
 from onyx.utils.logger import setup_logger
 from shared_configs.contextvars import get_current_tenant_id
@@ -62,11 +63,6 @@ logger = setup_logger()
 # ---------------------------------------------------------------------------
 # Constants
 # ---------------------------------------------------------------------------
-
-# Number of seconds before a queued executor task is dropped. Mirrors
-# ``check-for-pruning`` and ``check-for-indexing`` — 15 minutes is plenty for
-# the worker to pick up the task; anything still queued past that is dead.
-EXECUTOR_TASK_EXPIRES_SECONDS = 900
 
 # Number of future fires returned by the detail endpoint for UI preview.
 NEXT_RUNS_PREVIEW_COUNT = 3
@@ -343,7 +339,7 @@ def _enqueue_executor(run_id: UUID) -> None:
         kwargs={"run_id": str(run_id), "tenant_id": tenant_id},
         queue=OnyxCeleryQueues.SCHEDULED_TASKS,
         priority=OnyxCeleryPriority.MEDIUM,
-        expires=EXECUTOR_TASK_EXPIRES_SECONDS,
+        expires=QUEUE_RESIDENCY_SECONDS,
     )
 
 

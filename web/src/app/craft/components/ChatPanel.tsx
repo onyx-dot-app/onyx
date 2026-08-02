@@ -43,10 +43,11 @@ import ModelPickerButton from "@/app/craft/components/ModelPickerButton";
 import { useLLMProviders } from "@/lib/languageModels/hooks";
 import {
   BuildLlmSelection,
-  getDefaultLlmSelection,
   hasSupportedCraftProvider,
   resolveSessionLlmSelection,
 } from "@/app/craft/onboarding/constants";
+import { getPreferredLlmSelection } from "@/app/craft/utils/llmPreferences";
+import { useUser } from "@/providers/UserProvider";
 import ScheduledRunBanner, {
   useScheduledRunContext,
 } from "@/app/craft/components/ScheduledRunBanner";
@@ -114,6 +115,7 @@ export default function BuildChatPanel({
   const hasSession = useHasSession();
   const isRunning = useIsRunning();
   const displayIsRunning = isRunning || scheduledRunInFlight;
+  const hasInterruptibleTurn = session?.status === "running";
   const wasInterrupted = useWasInterrupted();
   const { setLeftSidebarFolded, leftSidebarFolded, videoBackgroundEnabled } =
     useBuildContext();
@@ -126,7 +128,9 @@ export default function BuildChatPanel({
   // exists (the model picker stays enabled so admins can connect from it).
   const hasProvider = hasSupportedCraftProvider(llmProviders);
   // Picker shows the session's stored model unless the user picks another.
-  // The pick is keyed by session so it can't leak across sessions.
+  // The pick is keyed by session so it can't leak across sessions; only when
+  // neither exists does the user's persisted preference (or the recommended
+  // default) apply.
   const sessionModel = useMemo<BuildLlmSelection | null>(
     () =>
       resolveSessionLlmSelection(
@@ -139,10 +143,14 @@ export default function BuildChatPanel({
   const [modelBySession, setModelBySession] = useState<
     Record<string, BuildLlmSelection>
   >({});
-  const selectedModel =
-    (sessionId ? modelBySession[sessionId] : undefined) ??
-    sessionModel ??
-    getDefaultLlmSelection(llmProviders);
+  const { user } = useUser();
+  const selectedModel = useMemo(
+    () =>
+      (sessionId ? modelBySession[sessionId] : undefined) ??
+      sessionModel ??
+      getPreferredLlmSelection(user?.id, llmProviders),
+    [sessionId, modelBySession, sessionModel, user?.id, llmProviders]
+  );
 
   const contextUsage = useMemo(() => {
     const usage = session?.contextUsage;
@@ -678,6 +686,7 @@ export default function BuildChatPanel({
                 {isMobile && leftSidebarFolded && (
                   <OpalButton
                     icon={SvgSidebar}
+                    aria-label="Open Sidebar"
                     onClick={() => setLeftSidebarFolded(false)}
                     prominence="tertiary"
                     size="sm"
@@ -841,7 +850,9 @@ export default function BuildChatPanel({
                     isRunning={displayIsRunning}
                     isInterrupting={isInterrupting}
                     onInterrupt={
-                      scheduledRunInFlight ? undefined : handleInterrupt
+                      hasInterruptibleTurn && !scheduledRunInFlight
+                        ? handleInterrupt
+                        : undefined
                     }
                     disabled={
                       isViewingSubagent || scheduledRunInFlight || !hasProvider

@@ -155,8 +155,8 @@ def test_load_from_checkpoint_happy_path(
     assert confluence_client is not None, "bad test setup"
 
     # Mock space retrieval for hierarchy nodes (called at start of first batch)
-    confluence_client.retrieve_confluence_spaces = (  # ty: ignore[invalid-assignment]
-        MagicMock(return_value=iter([{"key": "TEST", "name": "Test Space"}]))
+    confluence_client.retrieve_confluence_spaces = MagicMock(
+        return_value=iter([{"key": "TEST", "name": "Test Space"}])
     )
 
     get_mock = MagicMock()
@@ -226,8 +226,8 @@ def test_load_from_checkpoint_with_page_processing_error(
     assert confluence_client is not None, "bad test setup"
 
     # Mock space retrieval for hierarchy nodes (called at start of first batch)
-    confluence_client.retrieve_confluence_spaces = (  # ty: ignore[invalid-assignment]
-        MagicMock(return_value=iter([{"key": "TEST", "name": "Test Space"}]))
+    confluence_client.retrieve_confluence_spaces = MagicMock(
+        return_value=iter([{"key": "TEST", "name": "Test Space"}])
     )
 
     get_mock = MagicMock()
@@ -321,8 +321,8 @@ def test_retrieve_all_slim_docs_perm_sync(
     assert confluence_client is not None, "bad test setup"
 
     # Mock space retrieval for hierarchy nodes
-    confluence_client.retrieve_confluence_spaces = (  # ty: ignore[invalid-assignment]
-        MagicMock(return_value=iter([{"key": "TEST", "name": "Test Space"}]))
+    confluence_client.retrieve_confluence_spaces = MagicMock(
+        return_value=iter([{"key": "TEST", "name": "Test Space"}])
     )
 
     get_mock = MagicMock()
@@ -446,8 +446,8 @@ def test_checkpoint_progress(
     assert confluence_client is not None, "bad test setup"
 
     # Mock space retrieval for hierarchy nodes (called at start of first batch)
-    confluence_client.retrieve_confluence_spaces = (  # ty: ignore[invalid-assignment]
-        MagicMock(return_value=iter([{"key": "TEST", "name": "Test Space"}]))
+    confluence_client.retrieve_confluence_spaces = MagicMock(
+        return_value=iter([{"key": "TEST", "name": "Test Space"}])
     )
 
     get_mock = MagicMock()

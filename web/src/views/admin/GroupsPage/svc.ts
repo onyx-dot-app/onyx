@@ -202,15 +202,27 @@ async function updateDocSetGroupSharing(
 const HOURS_PER_DAY = 24;
 
 interface TokenLimitPayload {
+  tokenId?: number | null;
+  enabled?: boolean;
   tokenBudget: number | null;
   periodDays: number | null;
+  costBudgetDollars: number | null;
 }
 
 interface ExistingTokenLimit {
   token_id: number;
   enabled: boolean;
-  token_budget: number;
+  token_budget: number | null;
   period_hours: number;
+  cost_budget_cents: number | null;
+}
+
+interface ValidTokenLimit {
+  tokenId: number | null;
+  enabled: boolean;
+  tokenBudget: number | null;
+  periodDays: number;
+  costBudgetCents: number | null;
 }
 
 async function saveTokenLimits(
@@ -218,48 +230,56 @@ async function saveTokenLimits(
   limits: TokenLimitPayload[],
   existing: ExistingTokenLimit[]
 ): Promise<void> {
-  // Filter to only valid (non-null) limits
-  const validLimits = limits.filter(
-    (l): l is { tokenBudget: number; periodDays: number } =>
-      l.tokenBudget != null && l.periodDays != null
-  );
+  const validLimits: ValidTokenLimit[] = limits
+    .map((l) => {
+      const costBudgetCents =
+        l.costBudgetDollars != null
+          ? Math.round(l.costBudgetDollars * 100)
+          : null;
+      return {
+        tokenId: l.tokenId ?? null,
+        enabled: l.enabled ?? true,
+        tokenBudget: l.tokenBudget,
+        periodDays: l.periodDays,
+        costBudgetCents,
+      };
+    })
+    .filter(
+      (l): l is ValidTokenLimit =>
+        l.periodDays != null &&
+        (l.tokenBudget != null || l.costBudgetCents != null)
+    );
 
-  // Update existing limits (match by index position)
-  const toUpdate = Math.min(validLimits.length, existing.length);
-  for (let i = 0; i < toUpdate; i++) {
-    const limit = validLimits[i]!;
-    const existingLimit = existing[i]!;
+  for (const limit of validLimits.filter((item) => item.tokenId !== null)) {
     const updateRes = await fetch(
-      `/api/admin/token-rate-limits/rate-limit/${existingLimit.token_id}`,
+      `/api/admin/token-rate-limits/rate-limit/${limit.tokenId}`,
       {
         method: "PUT",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
-          enabled: existingLimit.enabled,
+          enabled: limit.enabled,
           token_budget: limit.tokenBudget,
           period_hours: limit.periodDays * HOURS_PER_DAY,
+          cost_budget_cents: limit.costBudgetCents,
         }),
       }
     );
     if (!updateRes.ok) {
-      throw new Error(
-        `Failed to update token rate limit ${existingLimit.token_id}`
-      );
+      throw new Error(`Failed to update token rate limit ${limit.tokenId}`);
     }
   }
 
-  // Create new limits beyond existing count
-  for (let i = toUpdate; i < validLimits.length; i++) {
-    const limit = validLimits[i]!;
+  for (const limit of validLimits.filter((item) => item.tokenId === null)) {
     const createRes = await fetch(
       `/api/admin/token-rate-limits/user-group/${groupId}`,
       {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
-          enabled: true,
+          enabled: limit.enabled,
           token_budget: limit.tokenBudget,
           period_hours: limit.periodDays * HOURS_PER_DAY,
+          cost_budget_cents: limit.costBudgetCents,
         }),
       }
     );
@@ -268,9 +288,13 @@ async function saveTokenLimits(
     }
   }
 
-  // Delete excess existing limits
-  for (let i = toUpdate; i < existing.length; i++) {
-    const existingLimit = existing[i]!;
+  const retainedIds = new Set(
+    validLimits.flatMap((limit) =>
+      limit.tokenId === null ? [] : [limit.tokenId]
+    )
+  );
+  for (const existingLimit of existing) {
+    if (retainedIds.has(existingLimit.token_id)) continue;
     const deleteRes = await fetch(
       `/api/admin/token-rate-limits/rate-limit/${existingLimit.token_id}`,
       { method: "DELETE" }

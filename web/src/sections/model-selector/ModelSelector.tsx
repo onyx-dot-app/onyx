@@ -6,6 +6,7 @@ import { getModelIcon } from "@/lib/languageModels";
 import {
   GLOBAL_DEFAULT_LLM_OPTION,
   LLMOption,
+  ModelOptionProvider,
 } from "@/lib/languageModels/options";
 import { useCurrentAgentLLMProviders } from "@/lib/languageModels/hooks";
 import ModelSelectorContent, {
@@ -18,6 +19,8 @@ export interface ModelSelectorProps {
   /** The currently selected model, identified by model_configuration_id. */
   value: number | null;
   onChange: (option: LLMOption) => void;
+  providerOptions?: ModelOptionProvider[];
+  includeHiddenModels?: boolean;
   requiresImageInput?: boolean;
 
   /**
@@ -52,6 +55,8 @@ export interface ModelSelectorProps {
 export default function ModelSelector({
   value,
   onChange,
+  providerOptions,
+  includeHiddenModels = false,
   requiresImageInput,
   renderTrigger,
   temperatureManager,
@@ -60,7 +65,9 @@ export default function ModelSelector({
   includeGlobalDefault = false,
   side = "top",
 }: ModelSelectorProps) {
-  const { llmProviders, defaultText } = useCurrentAgentLLMProviders();
+  const { llmProviders: currentAgentProviderOptions, defaultText } =
+    useCurrentAgentLLMProviders();
+  const llmProviders = providerOptions ?? currentAgentProviderOptions;
   const [open, setOpen] = useState(false);
   const scrollContainerRef = useRef<HTMLDivElement>(null);
 
@@ -143,6 +150,8 @@ export default function ModelSelector({
       <Popover.Content side={side} align="end" width="xl" sticky="partial">
         <ModelSelectorContent
           currentModelName={currentOption?.modelName}
+          providerOptions={providerOptions}
+          includeHiddenModels={includeHiddenModels}
           requiresImageInput={requiresImageInput}
           onSelect={handleSelect}
           isSelected={isSelected}

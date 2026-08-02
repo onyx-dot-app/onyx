@@ -2,14 +2,14 @@
 
 These tests exercise the pure logic added by the
 docker-sandbox-serve port — no Docker engine required. We use
-``object.__new__(DockerSandboxManager)`` to bypass ``_initialize``
+``object.__new__(DockerSandboxManager)`` to bypass ``__init__``
 (which would try to open the Docker socket) and verify:
 
 - ``_load_serve_connection_info`` produces the expected container-name
   fallback URL or localhost-published URL + cleartext password from a mocked
   container's ``inspect`` data, yields a ``None`` password for legacy
   containers, and returns ``None`` when the container is gone.
-- ``_render_agents_md`` produces shell-escaped AGENTS.md content.
+- ``_build_agents_md`` renders AGENTS.md content.
 """
 
 from __future__ import annotations
@@ -48,16 +48,15 @@ def _skip_api_url_probe(monkeypatch: pytest.MonkeyPatch) -> None:
 def _bare_manager() -> DockerSandboxManager:
     """
     DockerSandboxManager without touching the Docker socket: skips
-    ``_initialize`` so contributors without docker running can still run
+    ``__init__`` so contributors without docker running can still run
     these tests.
     """
-    DockerSandboxManager._instance = None
     mgr: DockerSandboxManager = object.__new__(DockerSandboxManager)
-    mgr._agent_instructions_template_path = (  # type: ignore[attr-defined]
+    mgr._agent_instructions_template_path = (
         dsm.Path(dsm.__file__).parent.parent.parent / "AGENTS.template.md"
     )
-    mgr._image_checked = True  # type: ignore[attr-defined]
-    mgr._image_check_lock = dsm.threading.Lock()  # type: ignore[attr-defined]
+    mgr._image_checked = True
+    mgr._image_check_lock = dsm.threading.Lock()
     mgr._init_serve_state()
     return mgr
 
@@ -67,7 +66,7 @@ def test_load_serve_connection_info_uses_container_name_and_port() -> None:
     mgr = _bare_manager()
     fake_container = MagicMock()
     fake_container.attrs = {"Config": {"Env": []}}
-    mgr._docker = MagicMock()  # type: ignore[attr-defined]
+    mgr._docker = MagicMock()
     mgr._docker.containers.get.return_value = fake_container
 
     info = mgr._load_serve_connection_info(_SBX)
@@ -94,7 +93,7 @@ def test_load_serve_connection_info_prefers_localhost_published_port_in_dev(
             },
         },
     }
-    mgr._docker = MagicMock()  # type: ignore[attr-defined]
+    mgr._docker = MagicMock()
     mgr._docker.containers.get.return_value = fake_container
 
     info = mgr._load_serve_connection_info(_SBX)
@@ -116,7 +115,7 @@ def test_load_serve_connection_info_ignores_published_port_outside_dev() -> None
             },
         },
     }
-    mgr._docker = MagicMock()  # type: ignore[attr-defined]
+    mgr._docker = MagicMock()
     mgr._docker.containers.get.return_value = fake_container
 
     info = mgr._load_serve_connection_info(_SBX)
@@ -143,7 +142,7 @@ def test_load_serve_connection_info_normalizes_wildcard_host_ip_in_dev(
             },
         },
     }
-    mgr._docker = MagicMock()  # type: ignore[attr-defined]
+    mgr._docker = MagicMock()
     mgr._docker.containers.get.return_value = fake_container
 
     info = mgr._load_serve_connection_info(_SBX)
@@ -168,7 +167,7 @@ def test_load_serve_connection_info_parses_password_from_container_env() -> None
             ]
         }
     }
-    mgr._docker = MagicMock()  # type: ignore[attr-defined]
+    mgr._docker = MagicMock()
     mgr._docker.containers.get.return_value = fake_container
 
     info = mgr._load_serve_connection_info(_SBX)
@@ -187,7 +186,7 @@ def test_load_serve_connection_info_yields_none_password_for_legacy() -> None:
     fake_container.attrs = {
         "Config": {"Env": ["ONYX_PAT=pat", "ONYX_SERVER_URL=https://onyx.example.com"]}
     }
-    mgr._docker = MagicMock()  # type: ignore[attr-defined]
+    mgr._docker = MagicMock()
     mgr._docker.containers.get.return_value = fake_container
 
     info = mgr._load_serve_connection_info(_SBX)
@@ -201,7 +200,7 @@ def test_load_serve_connection_info_returns_none_when_container_missing() -> Non
     gracefully, not raise.
     """
     mgr = _bare_manager()
-    mgr._docker = MagicMock()  # type: ignore[attr-defined]
+    mgr._docker = MagicMock()
     mgr._docker.containers.get.side_effect = dsm.NotFound("gone")
 
     assert mgr._load_serve_connection_info(_SBX) is None
@@ -222,7 +221,7 @@ def test_load_serve_connection_info_handles_password_with_equals_sign() -> None:
             ]
         }
     }
-    mgr._docker = MagicMock()  # type: ignore[attr-defined]
+    mgr._docker = MagicMock()
     mgr._docker.containers.get.return_value = fake_container
 
     info = mgr._load_serve_connection_info(_SBX)
@@ -240,11 +239,11 @@ def llm_config() -> CraftLLMProviderConfig:
     )
 
 
-def test_render_agents_md_returns_escaped_string(
+def test_build_agents_md_renders_instructions(
     llm_config: CraftLLMProviderConfig,
 ) -> None:
     mgr = _bare_manager()
-    agents_md = mgr._render_agents_md(
+    agents_md = mgr._build_agents_md(
         agent_provider=llm_config.provider,
         agent_model=llm_config.model_name,
         nextjs_port=None,
@@ -252,7 +251,6 @@ def test_render_agents_md_returns_escaped_string(
     )
     assert isinstance(agents_md, str)
     assert agents_md
-    assert "'" not in agents_md or "'\\''" in agents_md
     assert "## Skills" not in agents_md
     assert "{{AVAILABLE_SKILLS_SECTION}}" not in agents_md
 
@@ -273,7 +271,7 @@ def test_setup_writes_fresh_gateway_catalog_before_instance_start(
         manager, "_require_container", MagicMock(return_value=MagicMock())
     )
     monkeypatch.setattr(
-        manager, "_render_agents_md", MagicMock(return_value="instructions")
+        manager, "_build_agents_md", MagicMock(return_value="instructions")
     )
     gateway = CraftLLMProviderConfig(
         provider="onyx",
@@ -333,7 +331,7 @@ def test_attachments_section_is_inserted_before_connectable_apps(
 
 def test_init_serve_state_is_idempotent() -> None:
     """
-    ``_init_serve_state`` is called from ``_initialize``; provision paths must
+    ``_init_serve_state`` is called from ``__init__``; provision paths must
     not blow up if called twice.
     """
     mgr = _bare_manager()
@@ -377,17 +375,17 @@ def test_provision_generates_fresh_password_and_injects_into_container_env(
     monkeypatch.setattr(
         DockerSandboxManager,
         "_wait_for_opencode_serve_ready",
-        lambda self, sandbox_id: True,  # noqa: ARG005 — patched callable
+        lambda self, sandbox_id, timeout: True,  # noqa: ARG005 — patched callable
     )
 
     mgr = _bare_manager()
     # Mock the Docker client surface used by provision().
-    mgr._docker = MagicMock()  # type: ignore[attr-defined]
-    mgr._image = "onyxdotapp/sandbox:test"  # type: ignore[attr-defined]
-    mgr._network_name = "onyx_craft_sandbox"  # type: ignore[attr-defined]
-    mgr._memory_limit = "2g"  # type: ignore[attr-defined]
-    mgr._cpu_limit = 1.0  # type: ignore[attr-defined]
-    mgr._compose_project = None  # type: ignore[attr-defined]
+    mgr._docker = MagicMock()
+    mgr._image = "onyxdotapp/sandbox:test"
+    mgr._network_name = "onyx_craft_sandbox"
+    mgr._memory_limit = "2g"
+    mgr._cpu_limit = 1.0
+    mgr._compose_project = None
     # No existing container.
     mgr._docker.containers.get.side_effect = dsm.NotFound("none")
     # _ensure_sandbox_network — pretend it exists already.
@@ -395,7 +393,7 @@ def test_provision_generates_fresh_password_and_injects_into_container_env(
     # _ensure_sandbox_volume — pretend it exists already.
     mgr._docker.volumes.get.return_value = MagicMock()
     # No durable opencode history, so the fresh-container restore is a no-op.
-    mgr._snapshot_manager = MagicMock()  # type: ignore[attr-defined]
+    mgr._snapshot_manager = MagicMock()
     mgr._snapshot_manager.has_opencode_history_snapshot.return_value = False
 
     # Provision creates the container stopped, restores history, then starts it;
@@ -417,6 +415,7 @@ def test_provision_generates_fresh_password_and_injects_into_container_env(
         user_id=UUID("aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa"),
         tenant_id="tenant-abc",
         onyx_pat="pat-redacted",
+        provisioning_attempt_number=1,
     )
 
     assert info.status.value == "running"
@@ -459,7 +458,7 @@ def test_terminate_closes_event_bus_and_tombstones_sandbox() -> None:
     ``_terminated_sandboxes`` so a late subscribe can't race in.
     """
     mgr = _bare_manager()
-    mgr._docker = MagicMock()  # type: ignore[attr-defined]
+    mgr._docker = MagicMock()
     mgr._docker.containers.get.return_value = None
     mgr._docker.volumes.get.side_effect = dsm.NotFound("none")
 
@@ -486,7 +485,7 @@ def test_reuse_existing_container_removes_created_state() -> None:
     opencode history -- starting it would skip the restore.
     """
     mgr = _bare_manager()
-    mgr._docker = MagicMock()  # type: ignore[attr-defined]
+    mgr._docker = MagicMock()
 
     stranded = MagicMock()
     stranded.name = "sandbox-12345678"
@@ -506,7 +505,7 @@ def test_reuse_existing_container_starts_exited() -> None:
     populated; reuse should start it rather than discard it.
     """
     mgr = _bare_manager()
-    mgr._docker = MagicMock()  # type: ignore[attr-defined]
+    mgr._docker = MagicMock()
 
     exited = MagicMock()
     exited.name = "sandbox-12345678"
@@ -534,18 +533,18 @@ def test_provision_removes_container_when_history_restore_fails(
     monkeypatch.setattr(dsm, "validate_sandbox_api_url", lambda *_: None)
 
     mgr = _bare_manager()
-    mgr._docker = MagicMock()  # type: ignore[attr-defined]
-    mgr._image = "onyxdotapp/sandbox:test"  # type: ignore[attr-defined]
-    mgr._network_name = "onyx_craft_sandbox"  # type: ignore[attr-defined]
-    mgr._memory_limit = "2g"  # type: ignore[attr-defined]
-    mgr._cpu_limit = 1.0  # type: ignore[attr-defined]
-    mgr._compose_project = None  # type: ignore[attr-defined]
+    mgr._docker = MagicMock()
+    mgr._image = "onyxdotapp/sandbox:test"
+    mgr._network_name = "onyx_craft_sandbox"
+    mgr._memory_limit = "2g"
+    mgr._cpu_limit = 1.0
+    mgr._compose_project = None
     mgr._docker.containers.get.side_effect = dsm.NotFound("none")
     mgr._docker.networks.get.return_value = MagicMock()
     mgr._docker.volumes.get.return_value = MagicMock()
 
     # FileStore lookup blows up partway through the history restore.
-    mgr._snapshot_manager = MagicMock()  # type: ignore[attr-defined]
+    mgr._snapshot_manager = MagicMock()
     mgr._snapshot_manager.has_opencode_history_snapshot.side_effect = RuntimeError(
         "filestore unavailable"
     )
@@ -560,6 +559,7 @@ def test_provision_removes_container_when_history_restore_fails(
             user_id=UUID("aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa"),
             tenant_id="tenant-abc",
             onyx_pat="pat-redacted",
+            provisioning_attempt_number=1,
         )
 
     # Half-provisioned container is force-removed; opencode never started.

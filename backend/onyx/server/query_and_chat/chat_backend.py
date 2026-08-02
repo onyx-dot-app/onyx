@@ -62,6 +62,7 @@ from onyx.db.chat_search import search_chat_sessions
 from onyx.db.engine.sql_engine import get_session, get_session_with_current_tenant
 from onyx.db.enums import Permission
 from onyx.db.feedback import create_chat_message_feedback, remove_chat_message_feedback
+from onyx.db.llm import fetch_default_chat_naming_model
 from onyx.db.models import ChatMessage, ChatSessionSharedStatus, Persona, User
 from onyx.db.persona import get_persona_by_id
 from onyx.db.usage import UsageType, increment_usage
@@ -543,13 +544,25 @@ def rename_chat_session(
             chat_session_id=chat_session_id,
             db_session=db_session,
         )
+        # Admin-designated dedicated naming model (so a single-stream local
+        # session model isn't blocked by naming calls) takes priority over the
+        # session's model.
+        naming_model = fetch_default_chat_naming_model(db_session)
+        naming_override = (
+            LLMOverride(
+                model_provider=naming_model.llm_provider.name,
+                model_version=naming_model.name,
+            )
+            if naming_model is not None
+            else chat_session.llm_override
+        )
     new_name = _generate_or_fallback_chat_session_name(
         chat_history=full_history,
         request=request,
         user=user,
         chat_session_id=chat_session_id,
         persona=chat_session.persona,
-        llm_override=chat_session.llm_override,
+        llm_override=naming_override,
     )
 
     with get_session_with_current_tenant() as db_session:

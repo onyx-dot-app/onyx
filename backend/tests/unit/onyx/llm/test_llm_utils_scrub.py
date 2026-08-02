@@ -6,6 +6,7 @@ from echoing API keys back through error messages.
 from collections.abc import Iterable
 from typing import Any
 
+from onyx.llm.exceptions import ClassifiedLLMError
 from onyx.llm.interfaces import LLM, LLMConfig
 from onyx.llm.utils import (
     collect_credential_values,
@@ -21,6 +22,7 @@ _SECRET_KEY = "sk-anthropic-supersecret-DO-NOT-LEAK-1234567890"
 _SECRET_VERTEX_BLOB = (
     '{"private_key":"-----BEGIN PRIVATE KEY-----abc-----END PRIVATE KEY-----"}'
 )
+_CLASSIFIED_ERROR_CODE = "MODEL_REFUSAL"
 
 
 class _StubLLM(LLM):
@@ -185,6 +187,22 @@ def test_safe_error_preserves_classification_and_redacts_fallback() -> None:
     assert custom_secret not in error_info.message
     assert error_info.error_code == "UNKNOWN_ERROR"
     assert error_info.is_retryable is True
+
+
+def test_safe_error_redacts_classified_error_without_losing_metadata() -> None:
+    llm = _StubLLM(_make_config())
+    error = ClassifiedLLMError(
+        client_error_msg=f"Provider declined request for key {_SECRET_KEY}",
+        error_code=_CLASSIFIED_ERROR_CODE,
+        is_retryable=False,
+    )
+
+    error_info = litellm_exception_to_safe_error(error, llm)
+
+    assert _SECRET_KEY not in error_info.message
+    assert "[REDACTED]" in error_info.message
+    assert error_info.error_code == _CLASSIFIED_ERROR_CODE
+    assert error_info.is_retryable is False
 
 
 # ---------------------------------------------------------------------------

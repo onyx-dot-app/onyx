@@ -88,9 +88,11 @@ repos:
               |docker-compose\.onyx-lite\.yml
               |docker-compose\.craft\.yml
               |env\.template
+              |env\.prod\.template
+              |env\.nginx\.template
               |README\.md
             )
-            |deployment/data/nginx/(app\.conf\.template|run-nginx\.sh)
+            |deployment/data/nginx/(app\.conf\.template|app\.conf\.template\.prod|run-nginx\.sh)
             |cli/internal/deploy/deployfiles/embedded/.+
           )$
       - id: uv-run

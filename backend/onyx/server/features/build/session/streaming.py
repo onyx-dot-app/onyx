@@ -32,7 +32,6 @@ from onyx.db.models import BuildSession
 from onyx.sandbox_proxy import approval_cache
 from onyx.server.features.build import connect_app
 from onyx.server.features.build.configs import (
-    PROMPT_SLOT_KEEP_ALIVE_MAX_SECONDS,
     SANDBOX_HEARTBEAT_REFRESH_INTERVAL_SECONDS,
 )
 from onyx.server.features.build.db.build_session import (
@@ -69,6 +68,7 @@ from onyx.server.features.build.sandbox.models import PromptAttachment
 from onyx.server.features.build.sandbox.opencode.serve_client import _merge_field_meta
 from onyx.server.features.build.sandbox.serve_transport import PromptSlot
 from onyx.server.features.build.sandbox.sse import SSEKeepalive
+from onyx.server.features.build.timeouts import PROMPT_SLOT_KEEP_ALIVE_MAX_SECONDS
 from onyx.utils.logger import setup_logger
 from onyx.utils.threadpool_concurrency import start_thread_with_context
 from shared_configs.contextvars import CURRENT_TENANT_ID_CONTEXTVAR

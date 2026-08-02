@@ -100,9 +100,10 @@ def inspect_custom_bundle(zip_bytes: bytes) -> CustomSkillBundleContents:
             "Stored skill bundle SKILL.md must be UTF-8 encoded.",
         ) from exc
 
+    sorted_files = sorted(files, key=lambda entry: entry.path)
     return CustomSkillBundleContents(
         instructions_markdown=strip_skill_md_frontmatter(skill_md),
-        files=sorted(files, key=lambda entry: entry.path),
+        files=sorted_files,
     )
 
 

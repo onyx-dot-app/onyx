@@ -135,7 +135,7 @@ def _parse_shard_specs() -> dict[str, ShardSpec]:
         unknown = set(overrides) - {"host", "port", "db", "user", "password"}
         if unknown:
             raise ShardConfigurationError(
-                f"ONYX_DB_SHARDS['{name}'] has unknown keys: {sorted(unknown)}"
+                f"ONYX_DB_SHARDS['{name}'] has unknown keys: {sorted(map(str, unknown))}"
             )
         # POSTGRES_PASSWORD is already percent-encoded at config load; an explicit
         # override is raw, so encode it here to match. Without this a password
@@ -346,6 +346,15 @@ def get_shard_spec(shard_name: str) -> ShardSpec:
             f"No configuration for shard '{shard_name}' (known: {sorted(specs)})"
         )
     return spec
+
+
+def validate_shard_name(shard_name: str) -> None:
+    """Raise unless this names a configured shard.
+
+    For callers that want the check without the spec, so a bad `-x shard=` fails at
+    argument-parsing time rather than after connecting somewhere unintended.
+    """
+    get_shard_spec(shard_name)
 
 
 def get_engine_for_shard(shard_name: str) -> Engine:

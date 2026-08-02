@@ -122,7 +122,7 @@ def test_get_interactive_turn_events_waits_then_forwards_live_stream(
         ) -> Iterator[str]:
             assert session_id_arg == session_id
             assert user_id_arg == user_id
-            assert keepalive_seconds == turns_api.LIVE_STREAM_KEEPALIVE_SECONDS
+            assert keepalive_seconds == turns_api.SSE_KEEPALIVE_INTERVAL
             finish_turn(
                 cache=cache,
                 turn_id=turn_id,
@@ -286,7 +286,7 @@ def test_get_interactive_turn_events_yields_failed_turn_error_after_stream_chunk
         ) -> Iterator[str]:
             assert session_id_arg == session_id
             assert user_id_arg == user_id
-            assert keepalive_seconds == turns_api.LIVE_STREAM_KEEPALIVE_SECONDS
+            assert keepalive_seconds == turns_api.SSE_KEEPALIVE_INTERVAL
             finish_turn(
                 cache=cache,
                 turn_id=turn_id,
@@ -354,7 +354,7 @@ def test_get_interactive_turn_events_retries_runner_start_mid_stream(
         ) -> Iterator[str]:
             assert session_id_arg == session_id
             assert user_id_arg == user_id
-            assert keepalive_seconds == turns_api.LIVE_STREAM_KEEPALIVE_SECONDS
+            assert keepalive_seconds == turns_api.SSE_KEEPALIVE_INTERVAL
             for i in range(3):
                 yield (
                     "event: message\n"
@@ -429,7 +429,7 @@ def test_get_interactive_turn_events_rate_limits_runner_retry_within_window(
         ) -> Iterator[str]:
             assert session_id_arg == session_id
             assert user_id_arg == user_id
-            assert keepalive_seconds == turns_api.LIVE_STREAM_KEEPALIVE_SECONDS
+            assert keepalive_seconds == turns_api.SSE_KEEPALIVE_INTERVAL
             for i in range(3):
                 yield (
                     "event: message\n"

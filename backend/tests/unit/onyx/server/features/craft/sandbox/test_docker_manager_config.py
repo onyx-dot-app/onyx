@@ -57,10 +57,10 @@ EXPECTED_EXEC_ENV = {"HOME": "/home/sandbox", "USER": "sandbox"}
 def _bare_manager_with_image(image: str) -> tuple[dsm.DockerSandboxManager, MagicMock]:
     mgr: dsm.DockerSandboxManager = object.__new__(dsm.DockerSandboxManager)
     docker = MagicMock()
-    mgr._docker = docker  # type: ignore[attr-defined]
-    mgr._image = image  # type: ignore[attr-defined]
-    mgr._image_checked = False  # type: ignore[attr-defined]
-    mgr._image_check_lock = threading.Lock()  # type: ignore[attr-defined]
+    mgr._docker = docker
+    mgr._image = image
+    mgr._image_checked = False
+    mgr._image_check_lock = threading.Lock()
     return mgr, docker
 
 
@@ -105,7 +105,7 @@ def test_labels_omit_user_id_when_none() -> None:
 def test_immutable_sandbox_image_uses_cached_image_when_present() -> None:
     mgr, docker = _bare_manager_with_image("onyxdotapp/sandbox:v4.1.2")
 
-    mgr._ensure_sandbox_image()  # type: ignore[attr-defined]
+    mgr._ensure_sandbox_image()
 
     docker.images.get.assert_called_once_with("onyxdotapp/sandbox:v4.1.2")
     docker.images.pull.assert_not_called()
@@ -115,7 +115,7 @@ def test_immutable_sandbox_image_pulls_when_missing() -> None:
     mgr, docker = _bare_manager_with_image("onyxdotapp/sandbox:v4.1.2")
     docker.images.get.side_effect = dsm.NotFound("missing")
 
-    mgr._ensure_sandbox_image()  # type: ignore[attr-defined]
+    mgr._ensure_sandbox_image()
 
     docker.images.pull.assert_called_once_with("onyxdotapp/sandbox:v4.1.2")
 
@@ -123,8 +123,8 @@ def test_immutable_sandbox_image_pulls_when_missing() -> None:
 def test_mutable_sandbox_image_refreshes_once() -> None:
     mgr, docker = _bare_manager_with_image("onyxdotapp/sandbox:latest")
 
-    mgr._ensure_sandbox_image()  # type: ignore[attr-defined]
-    mgr._ensure_sandbox_image()  # type: ignore[attr-defined]
+    mgr._ensure_sandbox_image()
+    mgr._ensure_sandbox_image()
 
     docker.images.pull.assert_called_once_with("onyxdotapp/sandbox:latest")
     docker.images.get.assert_not_called()
@@ -142,9 +142,9 @@ def test_sandbox_image_refresh_is_thread_safe() -> None:
     docker.images.pull.side_effect = pull_image
 
     with ThreadPoolExecutor(max_workers=2) as executor:
-        first = executor.submit(mgr._ensure_sandbox_image)  # type: ignore[attr-defined]
+        first = executor.submit(mgr._ensure_sandbox_image)
         assert pull_started.wait(timeout=1)
-        second = executor.submit(mgr._ensure_sandbox_image)  # type: ignore[attr-defined]
+        second = executor.submit(mgr._ensure_sandbox_image)
         finish_pull.set()
         first.result(timeout=1)
         second.result(timeout=1)
@@ -156,7 +156,7 @@ def test_implicit_latest_sandbox_image_refreshes() -> None:
     image = "onyxdotapp/sandbox"
     mgr, docker = _bare_manager_with_image(image)
 
-    mgr._ensure_sandbox_image()  # type: ignore[attr-defined]
+    mgr._ensure_sandbox_image()
 
     docker.images.pull.assert_called_once_with(image)
     docker.images.get.assert_not_called()
@@ -168,8 +168,8 @@ def test_mutable_sandbox_image_uses_cache_once_if_refresh_fails() -> None:
     mgr, docker = _bare_manager_with_image("onyxdotapp/sandbox:edge")
     docker.images.pull.side_effect = dsm.APIError("registry unavailable")
 
-    mgr._ensure_sandbox_image()  # type: ignore[attr-defined]
-    mgr._ensure_sandbox_image()  # type: ignore[attr-defined]
+    mgr._ensure_sandbox_image()
+    mgr._ensure_sandbox_image()
 
     docker.images.pull.assert_called_once_with("onyxdotapp/sandbox:edge")
     docker.images.get.assert_called_once_with("onyxdotapp/sandbox:edge")
@@ -181,13 +181,13 @@ def test_mutable_sandbox_image_raises_if_refresh_fails_without_cache() -> None:
     docker.images.get.side_effect = dsm.NotFound("missing")
 
     with pytest.raises(RuntimeError, match="Failed to pull sandbox image"):
-        mgr._ensure_sandbox_image()  # type: ignore[attr-defined]
+        mgr._ensure_sandbox_image()
 
 
 def test_local_dev_sandbox_image_uses_cached_image_when_present() -> None:
     mgr, docker = _bare_manager_with_image("onyxdotapp/sandbox:dev")
 
-    mgr._ensure_sandbox_image()  # type: ignore[attr-defined]
+    mgr._ensure_sandbox_image()
 
     docker.images.get.assert_called_once_with("onyxdotapp/sandbox:dev")
     docker.images.pull.assert_not_called()
@@ -197,7 +197,7 @@ def test_registry_port_untagged_image_refreshes_as_implicit_latest() -> None:
     image = "localhost:5001/onyx-sandbox"
     mgr, docker = _bare_manager_with_image(image)
 
-    mgr._ensure_sandbox_image()  # type: ignore[attr-defined]
+    mgr._ensure_sandbox_image()
 
     docker.images.pull.assert_called_once_with(image)
     docker.images.get.assert_not_called()
@@ -207,7 +207,7 @@ def test_digest_sandbox_image_uses_cached_image_when_present() -> None:
     image = "onyxdotapp/sandbox@sha256:abc123"
     mgr, docker = _bare_manager_with_image(image)
 
-    mgr._ensure_sandbox_image()  # type: ignore[attr-defined]
+    mgr._ensure_sandbox_image()
 
     docker.images.get.assert_called_once_with(image)
     docker.images.pull.assert_not_called()
@@ -233,6 +233,7 @@ def kwargs() -> ContainerCreateKwargs:
         volume_name="onyx-craft-sandbox-12345678",
         memory_limit="2g",
         cpu_limit=1.0,
+        provisioning_attempt_number=1,
         opencode_password=_OPENCODE_PASSWORD,
         opencode_config_json=_OPENCODE_CONFIG_JSON,
     )
@@ -260,6 +261,7 @@ def proxy_kwargs() -> ContainerCreateKwargs:
         volume_name="onyx-craft-sandbox-12345678",
         memory_limit="2g",
         cpu_limit=1.0,
+        provisioning_attempt_number=1,
         opencode_password=_OPENCODE_PASSWORD,
         opencode_config_json=_OPENCODE_CONFIG_JSON,
         sandbox_proxy_host="sandbox-proxy",
@@ -425,6 +427,7 @@ def test_container_kwargs_publishes_serve_on_localhost_in_dev(
         volume_name="onyx-craft-sandbox-12345678",
         memory_limit="2g",
         cpu_limit=1.0,
+        provisioning_attempt_number=1,
         opencode_password=_OPENCODE_PASSWORD,
         opencode_config_json=_OPENCODE_CONFIG_JSON,
     )
@@ -548,6 +551,7 @@ def test_container_kwargs_warns_on_internal_compose_host(
             volume_name="vol",
             memory_limit="2g",
             cpu_limit=1.0,
+            provisioning_attempt_number=1,
             opencode_password=_OPENCODE_PASSWORD,
             opencode_config_json=_OPENCODE_CONFIG_JSON,
         )
@@ -575,6 +579,7 @@ def test_container_kwargs_no_warning_for_public_url(
             volume_name="vol",
             memory_limit="2g",
             cpu_limit=1.0,
+            provisioning_attempt_number=1,
             opencode_password=_OPENCODE_PASSWORD,
             opencode_config_json=_OPENCODE_CONFIG_JSON,
         )
@@ -601,6 +606,7 @@ def test_container_kwargs_no_warning_for_craft_api_alias(
             volume_name="vol",
             memory_limit="2g",
             cpu_limit=1.0,
+            provisioning_attempt_number=1,
             opencode_password=_OPENCODE_PASSWORD,
             opencode_config_json=_OPENCODE_CONFIG_JSON,
         )
@@ -839,8 +845,69 @@ def test_proxy_kwargs_requires_ca_volume() -> None:
             volume_name="vol",
             memory_limit="2g",
             cpu_limit=1.0,
+            provisioning_attempt_number=1,
             opencode_password=_OPENCODE_PASSWORD,
             opencode_config_json=_OPENCODE_CONFIG_JSON,
             sandbox_proxy_host="sandbox-proxy",
             proxy_ca_volume_name=None,
         )
+
+
+def _craft_compose_services() -> dict:
+    compose_path = REPO_ROOT / "deployment/docker_compose/docker-compose.craft.yml"
+    return yaml.safe_load(compose_path.read_text())["services"]
+
+
+def test_compose_prepulls_the_image_the_sandboxes_run() -> None:
+    """The prepull entry exists so `docker compose pull` fetches the sandbox
+    image, and must name the *same* ref the sandbox containers get. A drifted
+    ref warms an image nobody runs while every sandbox still cold-pulls, and
+    nothing looks wrong — the only symptom is the slow provision it exists to
+    remove.
+    """
+    services = _craft_compose_services()
+    prepull_image = services["sandbox-image-prepull"]["image"]
+
+    for service_name in ("api_server", "background"):
+        assert (
+            f"SANDBOX_CONTAINER_IMAGE={prepull_image}"
+            in services[service_name]["environment"]
+        )
+
+
+def test_compose_prepull_never_starts_a_container() -> None:
+    """It is an image reference, not a workload. `replicas: 0` keeps `up` from
+    creating anything, so nothing idles doing nothing and `up --wait` — which
+    install.sh passes by default — stays green. A one-shot that exited would
+    fail that wait; a long-lived idler would leave a pointless container.
+    """
+    prepull = _craft_compose_services()["sandbox-image-prepull"]
+
+    assert prepull["deploy"]["replicas"] == 0
+    # No socket, no volumes, no sandbox bridge: nothing is supposed to run.
+    for key in ("volumes", "networks", "restart"):
+        assert key not in prepull
+
+
+def test_compose_prepull_is_inert_even_if_it_does_start() -> None:
+    """`deploy` is ignored by the legacy standalone docker-compose, which
+    install.sh accepts with no minimum version. If `replicas: 0` is dropped, a
+    container *is* created — and this image's own ENTRYPOINT starts
+    `opencode serve` on 0.0.0.0:4096 with no password, staying up so nothing
+    looks broken. The override is the only thing standing between a dropped
+    `deploy` key and an unauthenticated agent server on the compose network.
+    """
+    prepull = _craft_compose_services()["sandbox-image-prepull"]
+
+    assert prepull["entrypoint"] == ["/bin/true"]
+
+
+def test_embedded_craft_compose_copy_is_in_sync() -> None:
+    """onyx-cli go:embeds a byte-identical copy (go:embed can't reach outside
+    the cli module). See tools/ods/internal/deployfilessync."""
+    source = REPO_ROOT / "deployment/docker_compose/docker-compose.craft.yml"
+    embedded = (
+        REPO_ROOT
+        / "cli/internal/deploy/deployfiles/embedded/docker_compose/docker-compose.craft.yml"
+    )
+    assert embedded.read_text() == source.read_text()

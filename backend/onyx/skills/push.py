@@ -28,9 +28,8 @@ from onyx.server.features.build.db.sandbox import (
     lock_sandbox_skills_hashes,
     set_sandbox_skills_hashes__no_commit,
 )
-from onyx.server.features.build.sandbox.base import SandboxManager
 from onyx.server.features.build.sandbox.factory import get_sandbox_manager
-from onyx.server.features.build.sandbox.models import FileSet, PushResult
+from onyx.server.features.build.sandbox.models import FileSet
 from onyx.server.features.build.sandbox.util.agent_instructions import (
     build_connectable_apps_list,
 )
@@ -252,24 +251,6 @@ def build_user_skills_payload(user: User, db_session: Session) -> tuple[str, Fil
         get_connectable_apps_for_user(db_session, user)
     )
     return connectable_apps_section, files
-
-
-def hydrate_sandbox_skills(
-    sandbox_id: UUID,
-    user: User,
-    db_session: Session,
-    *,
-    sandbox_manager: SandboxManager,
-    files: FileSet | None = None,
-) -> PushResult:
-    """Push all visible skills to a single sandbox (cold-start hydration)."""
-    if files is None:
-        files = build_skills_fileset_for_user(user, db_session)
-    return sandbox_manager.push_to_sandbox(
-        sandbox_id=sandbox_id,
-        mount_path=SKILLS_MOUNT_PATH,
-        files=files,
-    )
 
 
 def push_skill_to_affected_sandboxes(skill: Skill, db_session: Session) -> None:

@@ -1,9 +1,101 @@
-import { useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
 import { SvgChevronDown, SvgChevronRight } from "@opal/icons";
 import { Button } from "@opal/components";
 import { CopyButton } from "@opal/components";
 import { getErrorIcon, getErrorTitle } from "./errorHelpers";
+import {
+  RateLimitDetails,
+  RATE_LIMITED_ERROR_CODE,
+} from "@/app/app/interfaces";
+
+const COUNTDOWN_TICK_MS = 1_000;
+
+function formatRateLimitReset(resetMs: number, nowMs: number): string {
+  const remainingMs = resetMs - nowMs;
+  if (remainingMs <= 0) return "You can try again now.";
+
+  const plural = (n: number, unit: string) =>
+    `${n} ${unit}${n === 1 ? "" : "s"}`;
+  const minutes = Math.ceil(remainingMs / 60_000);
+  const hours = Math.ceil(remainingMs / 3_600_000);
+  const days = Math.ceil(remainingMs / 86_400_000);
+  const relative =
+    minutes < 60
+      ? plural(minutes, "minute")
+      : hours < 48
+        ? plural(hours, "hour")
+        : plural(days, "day");
+  const resetDate = new Date(resetMs);
+  // For multi-day resets a date is clearer than just a clock time.
+  const at =
+    days >= 2
+      ? resetDate.toLocaleDateString(undefined, {
+          month: "short",
+          day: "numeric",
+        })
+      : resetDate.toLocaleTimeString(undefined, {
+          hour: "numeric",
+          minute: "2-digit",
+        });
+  return `Resets in ${relative} (${at}).`;
+}
+
+function resolveResetMs(
+  resetAt?: string,
+  retryAfterSeconds?: number
+): number | null {
+  if (resetAt) {
+    const parsed = Date.parse(resetAt);
+    if (!Number.isNaN(parsed)) return parsed;
+  }
+  if (typeof retryAfterSeconds === "number") {
+    return Date.now() + retryAfterSeconds * 1_000;
+  }
+  return null;
+}
+
+interface RateLimitBannerProps {
+  error: string;
+  errorCode: string;
+  details: RateLimitDetails;
+}
+
+function RateLimitBanner({ error, errorCode, details }: RateLimitBannerProps) {
+  const [nowMs, setNowMs] = useState(Date.now());
+  const resetMs = useMemo(
+    () => resolveResetMs(details.reset_at, details.retry_after_seconds),
+    [details.reset_at, details.retry_after_seconds]
+  );
+
+  useEffect(() => {
+    if (resetMs === null) return;
+
+    setNowMs(Date.now());
+    const interval = window.setInterval(
+      () => setNowMs(Date.now()),
+      COUNTDOWN_TICK_MS
+    );
+    return () => window.clearInterval(interval);
+  }, [resetMs]);
+
+  const resetLine =
+    resetMs === null ? null : formatRateLimitReset(resetMs, nowMs);
+  return (
+    <div className="text-red-700 mt-4 text-sm my-auto">
+      <Alert variant="broken">
+        {getErrorIcon(errorCode)}
+        <AlertTitle>{getErrorTitle(errorCode)}</AlertTitle>
+        <AlertDescription className="flex flex-col gap-y-1">
+          <span>{error || "You've reached your usage limit."}</span>
+          {resetLine && (
+            <span className="text-xs text-muted-foreground">{resetLine}</span>
+          )}
+        </AlertDescription>
+      </Alert>
+    </div>
+  );
+}
 
 interface ResubmitProps {
   resubmit: () => void;
@@ -36,6 +128,16 @@ export const ErrorBanner = ({
   resubmit?: () => void;
 }) => {
   const [isStackTraceExpanded, setIsStackTraceExpanded] = useState(false);
+
+  if (errorCode === RATE_LIMITED_ERROR_CODE) {
+    return (
+      <RateLimitBanner
+        error={error}
+        errorCode={errorCode}
+        details={(details as RateLimitDetails) ?? {}}
+      />
+    );
+  }
 
   return (
     <div className="text-red-700 mt-4 text-sm my-auto">

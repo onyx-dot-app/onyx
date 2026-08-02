@@ -178,7 +178,7 @@ export interface ApiSessionResponse {
   id: string;
   user_id: string | null;
   name: string | null;
-  status: "active" | "idle" | "archived";
+  status: "initializing" | "active" | "idle" | "failed";
   created_at: string;
   last_activity_at: string;
   sandbox: ApiSandboxResponse | null;

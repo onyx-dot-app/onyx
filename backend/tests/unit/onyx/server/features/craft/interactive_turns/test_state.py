@@ -4,7 +4,6 @@ from collections.abc import Callable
 from uuid import UUID, uuid4
 
 from onyx.server.features.build.interactive_turns.state import (
-    REQUEST_ID_TTL_SECONDS,
     TURN_STATUS_FAILED,
     TURN_STATUS_QUEUED,
     TURN_STATUS_RUNNING,
@@ -19,6 +18,7 @@ from onyx.server.features.build.interactive_turns.state import (
     touch_turn,
 )
 from onyx.server.features.build.sandbox.models import PromptAttachment
+from onyx.server.features.build.timeouts import REQUEST_ID_TTL_SECONDS
 from tests.unit.fakes import FakeCache
 
 

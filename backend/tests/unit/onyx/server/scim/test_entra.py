@@ -269,7 +269,7 @@ class TestEntraUserLifecycle:
         patch_req = ScimPatchRequest(
             Operations=[
                 ScimPatchOperation(
-                    op="Replace",  # ty: ignore[invalid-argument-type]
+                    op="Replace",
                     path="active",
                     value=False,
                 )
@@ -303,7 +303,7 @@ class TestEntraUserLifecycle:
         patch_req = ScimPatchRequest(
             Operations=[
                 ScimPatchOperation(
-                    op="Add",  # ty: ignore[invalid-argument-type]
+                    op="Add",
                     path="externalId",
                     value="entra-ext-999",
                 )
@@ -738,7 +738,7 @@ class TestEntraGroupLifecycle:
         patch_req = ScimPatchRequest(
             Operations=[
                 ScimPatchOperation(
-                    op="Add",  # ty: ignore[invalid-argument-type]
+                    op="Add",
                     path="members",
                     value=[ScimGroupMember(value=uid)],
                 )
@@ -777,7 +777,7 @@ class TestEntraGroupLifecycle:
         patch_req = ScimPatchRequest(
             Operations=[
                 ScimPatchOperation(
-                    op="Remove",  # ty: ignore[invalid-argument-type]
+                    op="Remove",
                     path=f'members[value eq "{uid}"]',
                 )
             ]
