@@ -15,6 +15,7 @@ from sqlalchemy.orm import Session
 
 from onyx.auth.permission_projection import persona_permissions
 from onyx.auth.permissions import has_global_permission
+from onyx.auth.permissions import has_permission
 from onyx.auth.permissions import require_permission
 from onyx.auth.users import current_chat_accessible_user
 from onyx.auth.users import current_limited_user
@@ -24,6 +25,7 @@ from onyx.configs.constants import MilestoneRecordType
 from onyx.configs.constants import PUBLIC_API_TAGS
 from onyx.db.engine.sql_engine import get_session
 from onyx.db.enums import Permission
+from onyx.db.enums import PermissionAuthority
 from onyx.db.enums import PersonaSharePermission
 from onyx.db.file_record import get_filerecord_by_file_id_optional
 from onyx.db.models import User
@@ -343,7 +345,9 @@ def create_persona(
 def update_persona(
     persona_id: int,
     persona_upsert_request: PersonaUpsertRequest,
-    user: User = Depends(require_permission(Permission.ADD_AGENTS, allow_scope=True)),
+    # Editable is the gate (get_editable fetch in create_update_persona), not ADD_AGENTS — an
+    # editor-shared user should be able to edit the agent they were granted access to.
+    user: User = Depends(require_permission(Permission.BASIC_ACCESS)),
     db_session: Session = Depends(get_session),
 ) -> PersonaSnapshot:
     _validate_user_knowledge_enabled(persona_upsert_request, "update")
@@ -450,7 +454,9 @@ class PersonaShareRequest(BaseModel):
 def share_persona(
     persona_id: int,
     persona_share_request: PersonaShareRequest,
-    user: User = Depends(require_permission(Permission.ADD_AGENTS, allow_scope=True)),
+    # Editable is the gate (get_editable fetch in update_persona_shared), not ADD_AGENTS — an
+    # editor-shared user should still manage the agent's sharing.
+    user: User = Depends(require_permission(Permission.BASIC_ACCESS)),
     db_session: Session = Depends(get_session),
 ) -> None:
     user_shares = (
@@ -622,6 +628,9 @@ def get_persona(
             can_share=is_editable,
             can_view_stats=can_view_persona_stats(user, persona),
             can_delete=can_delete_persona(user, persona, db_session),
+            # delete/publish also gate on ADD_AGENTS (GATE 1); edit/share don't
+            holds_add_agents=has_permission(user, Permission.ADD_AGENTS)
+            is not PermissionAuthority.NONE,
             is_manage_agents_admin=has_global_permission(
                 user, Permission.MANAGE_AGENTS
             ),

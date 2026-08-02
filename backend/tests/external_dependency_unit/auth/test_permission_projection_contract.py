@@ -355,6 +355,8 @@ def test_persona_projection_matches_gates(db_session: Session) -> None:
         can_share=in_scope_editable,
         can_view_stats=can_view_persona_stats(in_scope, persona),
         can_delete=can_delete_persona(in_scope, persona, db_session),
+        holds_add_agents=has_permission(in_scope, Permission.ADD_AGENTS)
+        is not PermissionAuthority.NONE,
         is_manage_agents_admin=has_global_permission(
             in_scope, Permission.MANAGE_AGENTS
         ),
@@ -440,11 +442,59 @@ def test_persona_share_projection_tracks_share_guard_not_edit(
         can_share=is_editable,
         can_view_stats=can_view_persona_stats(editor, persona),
         can_delete=can_delete_persona(editor, persona, db_session),
+        holds_add_agents=has_permission(editor, Permission.ADD_AGENTS)
+        is not PermissionAuthority.NONE,
         is_manage_agents_admin=has_global_permission(editor, Permission.MANAGE_AGENTS),
         is_full_admin=has_global_permission(editor, Permission.FULL_ADMIN_PANEL_ACCESS),
     )
     assert tags["share"] == share_allowed  # share tracks the share guard...
     assert tags["edit"] is False  # ...not the stricter edit guard
+
+
+def test_persona_edit_share_editable_without_add_agents(
+    enable_ee: None,  # noqa: ARG001 -- side-effect fixture: forces EE for the whole test
+    db_session: Session,
+) -> None:
+    """edit and share gate on editable alone (their routes are BASIC_ACCESS): an EDITOR-shared
+    user without ADD_AGENTS may still edit and manage sharing, so both are True. enable_ee
+    because CE auto-grants ADD_AGENTS, which would mask that they need no create permission."""
+    owner = create_test_user(db_session, "add-share-owner")
+    owner.effective_permissions = []
+    # EDITOR-shared, but no ADD_AGENTS authority: not a manager, empty permissions.
+    editor = create_test_user(db_session, "add-share-editor")
+    editor.effective_permissions = []
+    db_session.commit()
+
+    persona = _make_persona(db_session, owner=owner, is_public=False, groups=[])
+    db_session.add(
+        Persona__User(
+            persona_id=persona.id,
+            user_id=editor.id,
+            permission=PersonaSharePermission.EDITOR,
+        )
+    )
+    db_session.commit()
+
+    is_editable = is_persona_editable_by_user(db_session, persona.id, editor)
+    holds_add_agents = (
+        has_permission(editor, Permission.ADD_AGENTS) is not PermissionAuthority.NONE
+    )
+    assert is_editable is True  # EDITOR-shared → editable
+    assert holds_add_agents is False  # ...but no ADD_AGENTS authority under EE
+
+    tags = persona_permissions(
+        can_edit=can_edit_persona(editor, persona, db_session, is_editable=is_editable),
+        can_share=is_editable,
+        can_view_stats=can_view_persona_stats(editor, persona),
+        can_delete=can_delete_persona(editor, persona, db_session),
+        holds_add_agents=holds_add_agents,
+        is_manage_agents_admin=has_global_permission(editor, Permission.MANAGE_AGENTS),
+        is_full_admin=has_global_permission(editor, Permission.FULL_ADMIN_PANEL_ACCESS),
+    )
+    assert tags["share"] is True  # editable is enough to share (no ADD_AGENTS needed)
+    assert (
+        tags["edit"] is True
+    )  # ...and to edit — both routes gate on editable, not ADD_AGENTS
 
 
 def test_document_set_projection_matches_gates(db_session: Session) -> None:
@@ -500,6 +550,7 @@ def test_persona_and_doc_set_key_coverage() -> None:
             can_share=True,
             can_view_stats=True,
             can_delete=True,
+            holds_add_agents=True,
             is_manage_agents_admin=True,
             is_full_admin=True,
         )

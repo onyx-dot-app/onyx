@@ -39,23 +39,24 @@ def persona_permissions(
     can_share: bool,
     can_view_stats: bool,
     can_delete: bool,
+    holds_add_agents: bool,
     is_manage_agents_admin: bool,
     is_full_admin: bool,
 ) -> dict[str, bool]:
-    """Agent (persona) affordance map. ``edit`` is the editable-AND-managed-scope decision
-    the update guard enforces; ``share`` is the broader editable decision the share guard
-    enforces (get_editable alone, no scope AND) — an EDITOR-shared manager outside the
-    agent's groups may share but not update, so share is not edit's gate. ``view_stats`` is
-    owner-or-full-admin. ``delete``/``publish`` are owner-or-admin (the handler's own
-    ownership check, not the route token). ``feature``/``list`` need global MANAGE_AGENTS
-    and ``reorder`` needs full admin — so a scoped manager may edit a managed agent but
-    not delete, publish, feature, list, or reorder it."""
+    """Agent (persona) affordance map. ``edit``/``share`` gate on editable alone (their routes are
+    BASIC_ACCESS) — an editor-shared user without ADD_AGENTS may still edit and manage sharing.
+    ``edit`` is the editable-AND-managed-scope decision the update guard enforces; ``share`` is the
+    broader editable decision the share guard enforces (get_editable, no scope AND). ``delete``/
+    ``publish`` AND in ``holds_add_agents`` — the ADD_AGENTS authority their routes gate on at
+    GATE 1 (allow_scope), so an owner lacking it is 403'd there. ``view_stats`` is
+    owner-or-full-admin; ``delete``/``publish`` are owner-or-admin. ``feature``/``list`` need
+    global MANAGE_AGENTS (which implies ADD_AGENTS) and ``reorder`` full admin."""
     return {
         "edit": can_edit,
         "share": can_share,
         "view_stats": can_view_stats,
-        "delete": can_delete,
-        "publish": can_delete,
+        "delete": can_delete and holds_add_agents,
+        "publish": can_delete and holds_add_agents,
         "feature": is_manage_agents_admin,
         "list": is_manage_agents_admin,
         "reorder": is_full_admin,
