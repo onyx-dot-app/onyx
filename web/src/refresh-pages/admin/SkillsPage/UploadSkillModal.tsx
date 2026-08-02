@@ -37,6 +37,18 @@ export default function UploadSkillModal({
   const [submitting, setSubmitting] = useState(false);
   const fileInputRef = useRef<HTMLInputElement>(null);
 
+  // Always-mounted modal: the useState above can capture a stale canPublish while permissions
+  // are still loading. Re-sync the default each time the dialog opens (by then permissions have
+  // loaded). Done during render, not in an effect, so the picker's tab mounts from the corrected
+  // value instead of a frame late.
+  const [wasOpen, setWasOpen] = useState(open);
+  if (open !== wasOpen) {
+    setWasOpen(open);
+    if (open) {
+      setIsPublic(canPublish);
+    }
+  }
+
   function reset() {
     setFile(null);
     setIsPublic(canPublish);
