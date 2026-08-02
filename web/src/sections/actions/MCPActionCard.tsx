@@ -315,10 +315,14 @@ export default function MCPActionCard({
           enabledCount={tools.filter((tool) => tool.isEnabled).length}
           showOnlyEnabled={showOnlyEnabled}
           onToggleShowOnlyEnabled={handleToggleShowOnlyEnabled}
-          onUpdateToolsStatus={(enabled) => {
-            const toolIds = tools.map((tool) => parseInt(tool.id));
-            onUpdateToolsStatus?.(serverId, toolIds, enabled, mutate);
-          }}
+          onUpdateToolsStatus={
+            canManageStatus
+              ? (enabled) => {
+                  const toolIds = tools.map((tool) => parseInt(tool.id));
+                  onUpdateToolsStatus?.(serverId, toolIds, enabled, mutate);
+                }
+              : undefined
+          }
           isEmpty={filteredTools.length === 0}
           searchQuery={searchQuery}
           emptyMessage="No tools available"
@@ -333,6 +337,7 @@ export default function MCPActionCard({
               icon={tool.icon}
               isAvailable={tool.isAvailable}
               isEnabled={tool.isEnabled}
+              canToggle={canManageStatus}
               onToggle={(enabled) =>
                 onToolToggle?.(serverId, tool.id, enabled, mutate)
               }
