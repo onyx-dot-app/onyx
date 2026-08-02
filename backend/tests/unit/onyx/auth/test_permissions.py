@@ -68,8 +68,12 @@ class TestResolveEffectivePermissions:
         assert "read:search" not in resolve_effective_permissions({"write:chat"})
 
     def test_single_implication(self) -> None:
-        result = resolve_effective_permissions({"add:agents"})
-        assert result == {"add:agents", "read:agents"}
+        result = resolve_effective_permissions({"manage:connectors"})
+        assert result == {"manage:connectors", "read:connectors"}
+
+    def test_add_agents_implies_nothing(self) -> None:
+        """ADD_AGENTS must NOT imply READ_AGENTS — creating agents grants no see-all."""
+        assert resolve_effective_permissions({"add:agents"}) == {"add:agents"}
 
     def test_manage_agents_implies_add_and_reads(self) -> None:
         """manage:agents implies add:agents, read:agents, and read:document_sets."""
@@ -132,7 +136,6 @@ class TestResolveEffectivePermissions:
             "read:chat",
             "write:chat",
             "add:agents",
-            "read:agents",
             "manage:connectors",
             "read:connectors",
         }
@@ -164,11 +167,12 @@ class TestGetEffectivePermissions:
         global_version.unset_ee()
 
     def test_expands_implied_permissions(self) -> None:
-        """Column stores only granted; get_effective_permissions expands implied."""
+        """Column stores only granted; get_effective_permissions expands implied. ADD_AGENTS
+        implies nothing — it must not grant READ_AGENTS (see-all-agents)."""
         user = MagicMock()
         user.effective_permissions = ["add:agents"]
         result = get_effective_permissions(user)
-        assert result == {Permission.ADD_AGENTS, Permission.READ_AGENTS}
+        assert result == {Permission.ADD_AGENTS}
 
     def test_admin_expands_to_all(self) -> None:
         user = MagicMock()
@@ -208,7 +212,7 @@ class TestCEUngatedPermissions:
         user.effective_permissions = ["basic"]
         result = get_effective_permissions(user)
         assert Permission.ADD_AGENTS in result
-        assert Permission.READ_AGENTS in result
+        assert Permission.READ_AGENTS not in result  # ADD_AGENTS doesn't grant see-all
         assert Permission.BASIC_ACCESS in result
 
     def test_empty_user_gets_ungated_permissions_in_ce(self) -> None:
@@ -216,7 +220,7 @@ class TestCEUngatedPermissions:
         user.effective_permissions = []
         result = get_effective_permissions(user)
         assert Permission.ADD_AGENTS in result
-        assert Permission.READ_AGENTS in result
+        assert Permission.READ_AGENTS not in result  # ADD_AGENTS doesn't grant see-all
 
     def test_basic_user_does_not_get_ungated_permissions_in_ee(self) -> None:
         global_version.set_ee()

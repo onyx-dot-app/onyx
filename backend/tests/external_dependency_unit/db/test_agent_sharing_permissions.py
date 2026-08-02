@@ -7,6 +7,7 @@ import pytest
 from fastapi import HTTPException
 from sqlalchemy.orm import Session
 
+from onyx.db.enums import Permission
 from onyx.db.enums import PersonaAccessLevel
 from onyx.db.enums import PersonaSharePermission
 from onyx.db.enums import PersonaSharingStatus
@@ -269,3 +270,31 @@ def test_delete_persona_unowned_raises_403_not_400(db_session: Session) -> None:
         delete_persona(persona_id=persona.id, user=stranger, db_session=db_session)
     assert exc_info.value.error_code == OnyxErrorCode.INSUFFICIENT_PERMISSIONS
     assert exc_info.value.status_code == 403
+
+
+def test_add_agents_user_does_not_see_others_private_agents(
+    db_session: Session,
+) -> None:
+    """ADD_AGENTS must not imply READ_AGENTS (see-all): the browse list shows own / shared /
+    public, never another user's private agent."""
+    creator = create_test_user(db_session, "add-agents-creator")
+    creator.effective_permissions = [Permission.ADD_AGENTS.value]
+    stranger = create_test_user(db_session, "agent-stranger")
+    db_session.commit()
+
+    own = create_test_persona(db_session, creator)
+    public = create_test_persona(db_session, stranger, is_public=True)
+    shared = create_test_persona(db_session, stranger)
+    share_persona_with_user(db_session, shared, creator, PersonaSharePermission.VIEWER)
+    others_private = create_test_persona(db_session, stranger)
+
+    visible = {
+        snap.id
+        for snap in get_minimal_persona_snapshots_for_user(
+            user=creator, db_session=db_session, get_editable=False
+        )
+    }
+    assert own.id in visible
+    assert public.id in visible
+    assert shared.id in visible
+    assert others_private.id not in visible  # ADD_AGENTS no longer grants see-all
