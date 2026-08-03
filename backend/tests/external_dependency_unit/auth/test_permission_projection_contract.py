@@ -64,6 +64,7 @@ from onyx.db.models import Persona__User
 from onyx.db.models import Persona__UserGroup
 from onyx.db.models import Skill
 from onyx.db.models import Skill__UserGroup
+from onyx.db.models import TokenRateLimit__UserGroup
 from onyx.db.models import Tool
 from onyx.db.models import User
 from onyx.db.models import User__UserGroup
@@ -1005,3 +1006,50 @@ def test_group_token_rate_limit_write_scope(db_session: Session) -> None:
     nonexistent_limit_id = -1
     assert denied(in_scope, managed.id, nonexistent_limit_id)
     assert denied(admin, managed.id, nonexistent_limit_id)
+
+
+def test_group_token_rate_limit_write_multi_group_scope(db_session: Session) -> None:
+    """Defensive: no API path attaches a limit to more than one group, but the schema allows
+    many-to-many. If a limit ever spanned groups, a mutation would hit all of them, so a manager
+    of only one attached group must be denied — the guard checks every attached group, not one
+    arbitrary association; global holders manage all groups so they pass. Builds the multi-group
+    state directly (no API can) to lock in the guard's behavior if that ever changes."""
+    managed = _make_group(db_session)
+    unmanaged = _make_group(db_session)
+
+    args = TokenRateLimitArgs(enabled=True, token_budget=1000, period_hours=24)
+    # limit attached to BOTH a managed and an unmanaged group
+    shared_limit = insert_user_group_token_rate_limit(
+        db_session=db_session, token_rate_limit_settings=args, group_id=managed.id
+    )
+    db_session.add(
+        TokenRateLimit__UserGroup(
+            rate_limit_id=shared_limit.id, user_group_id=unmanaged.id
+        )
+    )
+    db_session.commit()
+
+    in_scope = create_test_user(db_session, "proj-trl-multi-in")
+    _manage(db_session, in_scope, managed)
+    in_scope.effective_permissions = []
+
+    groups_admin = create_test_user(db_session, "proj-trl-multi-groupsadmin")
+    groups_admin.effective_permissions = [Permission.MANAGE_USER_GROUPS.value]
+
+    admin = create_test_user(db_session, "proj-trl-multi-admin", is_admin=True)
+    db_session.commit()
+
+    def denied(actor: User) -> bool:
+        return _guard_raises(
+            _authorize_group_token_rate_limit_write,
+            actor,
+            db_session,
+            group_id=managed.id,
+            rate_limit_id=shared_limit.id,
+        )
+
+    # manager of `managed` only: mutating the shared limit would also hit `unmanaged`, so deny
+    assert denied(in_scope)
+    # global MANAGE_USER_GROUPS holders manage every group, so the shared limit is reachable
+    assert not denied(groups_admin)
+    assert not denied(admin)
