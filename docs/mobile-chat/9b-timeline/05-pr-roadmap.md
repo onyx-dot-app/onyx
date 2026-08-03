@@ -151,9 +151,11 @@ that changes the timeline on screen.
 ## PR 9b.6 — Reasoning renderer
 - **Goal:** The one wired step renderer — streamed reasoning with heading, 500 ms min-thinking, markdown body.
 - **Scope (in):** `reasoningState.ts` (pure `extractFirstParagraph` + `constructCurrentReasoningState`);
-  `ReasoningRenderer.tsx` (render-prop; 500 ms gate; icon `circle`; `noPaddingRight`; `supportsCollapsible`);
-  `ReasoningTextWindow.tsx` (maxHeight markdown window); register reasoning in `findRenderer`.
-- **Out of scope:** `AgentTimeline` composition (9b.7); the copy/download modal + translateY auto-scroll (deferred).
+  `ReasoningRenderer.tsx` (render-prop; 500 ms gate; icon `circle`; `noPaddingRight`; **no** `supportsCollapsible`
+  — owner call, strict web parity); `ReasoningTextWindow.tsx` (fixed-height auto-following `ScrollView`);
+  `ReasoningTextSheet.tsx` (full-text + Copy, via `expo-clipboard`); register reasoning in `findRenderer`, with
+  the 11 unwired tool predicates restored ahead of it so the last slot can't claim every closed tool group.
+- **Out of scope:** `AgentTimeline` composition (9b.7); web's Download button (no mobile analog).
 - **Files:**
   | File | New/Modified | Slice |
   |------|--------------|-------|

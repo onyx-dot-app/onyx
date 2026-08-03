@@ -279,10 +279,17 @@ mobile/src/
 - **`ReasoningRenderer.tsx`** — `constructCurrentReasoningState(packets)` (hasStart/hasEnd/content=join deltas),
   `extractFirstParagraph(content)` (markdown-heading → step title, ≤60 chars), 500 ms min-thinking gate
   (`useState(start)` + timer ref in effect; `animate` gates the floor), then
-  `children([{ icon: SvgCircle, status: title ?? "Thinking", content: <ReasoningTextWindow .../>, noPaddingRight:true, supportsCollapsible:true }])`.
-- **`ReasoningTextWindow.tsx`** — maxHeight 192px (8×24) overflow-hidden `View` wrapping `StreamingMarkdown
-  content={displayContent} isStreaming={!hasEnd} variant="muted"`. (Web's pixel-perfect translateY auto-scroll +
-  copy/download modal are **not** ported in 9b — §8.)
+  `children([{ icon: SvgCircle, status: title || "Thinking", content: <ReasoningTextWindow .../>, noPaddingRight:true }])`.
+  **As built:** `supportsCollapsible` is left unset (owner call, strict web parity) — web's ReasoningRenderer
+  doesn't set it, `StepContainer` never gates its body on `isExpanded`, and web's
+  `hideHeader = isSingleStep && !supportsCollapsible` intentionally drops the step header on a reasoning-only turn.
+- **`ReasoningTextWindow.tsx`** — 192px-tall (8×24) `ScrollView` wrapping `StreamingMarkdown
+  content={displayContent} isStreaming={!hasEnd} variant="muted"`; auto-scrolls to the newest lines while
+  streaming (`onContentSizeChange` → `scrollToEnd`), `scrollEnabled` only once closed, and reveals a
+  "View full text" button when the content overflows. A clipping `View` cannot work here — see §8(c).
+- **`ReasoningTextSheet.tsx`** — the ExpandableTextDisplay modal analog, on 9a's `CitedSourcesSheet` shape
+  (RN `Modal` + `ScrollView`): full reasoning (heading included), byte-size subtitle, line count, **Copy**
+  (`expo-clipboard`). Mounted only while open. Web's Download is dropped.
 - **`findRenderer.ts`** — the full priority chain (chat → deep-research → research-agent → coding-agent →
   web-search → internal-search → image → python → file-reader → custom-tool → fetch → memory → **reasoning
   last**). For 9b only **chat→MessageTextRenderer** and **reasoning→ReasoningRenderer** are wired; the other 11
@@ -353,8 +360,11 @@ mobile/src/
 8. **Documented, intentional divergences from web (per the WEB-PARITY PRINCIPLE — the "as-built" note must list
    these):** (a) the two restructured hooks (§1) — behavior-preserving; (b) shimmer = reanimated **opacity pulse**,
    not web's `background-clip:text` gradient (no RN equivalent) — reuse the existing 9a `ThinkingLabel`; (c)
-   `ReasoningTextWindow` = fixed **maxHeight window**, not web's pixel-perfect `translateY` auto-scroll; copy/
-   download modal deferred; (d) **`ParallelTimelineTabs`/`ParallelStreamingHeader` dormant** — parallel turns
+   `ReasoningTextWindow` = fixed-height **ScrollView** (auto-scrolls to follow the stream, user-scrollable once
+   closed), not web's pixel-perfect `translateY` auto-scroll; a clipping `View` is **not** an option — the markdown
+   is a native measure leaf and both platforms clamp its height to Yoga's `AtMost` constraint, so it can never
+   overflow and no `justifyContent` trick shifts it. `ReasoningTextSheet` ports the ExpandableTextDisplay modal
+   (full text + size + line count + **Copy**); web's **Download** is dropped (no mobile analog); (d) **`ParallelTimelineTabs`/`ParallelStreamingHeader` dormant** — parallel turns
    **linearized** into a sequential list for 9b (no `@opal` pill Tabs on mobile); (e) SEARCH header sub-labels
    generic until the search phase; (f) entrance/`transition-colors` CSS animations optional (reanimated
    `FadeIn`/`Layout` or dropped); (g) memory tooltip/modal dropped (memory renderer is a later phase); (h) `expandedText`

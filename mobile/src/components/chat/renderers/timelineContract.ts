@@ -45,6 +45,11 @@ export interface FullChatState {
   documentMap?: Map<string, SearchDoc>;
   // Opens a cited source (9a); used by later source-row renderers.
   openSource?: (doc: SearchDoc) => void;
+  // Opens the long-form reader the message row owns, identified by the step's packet-group key.
+  // Two reasons it takes a key rather than the text: the timeline auto-collapses when the answer
+  // starts, so a reader owned inside the step would be unmounted mid-read; and a snapshot string
+  // would freeze while the step keeps streaming, so the row re-derives the text on every flush.
+  openFullText?: (groupKey: string) => void;
 }
 
 export type MessageRenderer<

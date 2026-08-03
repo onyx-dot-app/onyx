@@ -4,6 +4,7 @@ import { View } from "react-native";
 
 import { selectSources } from "@/chat/citations";
 import { Message } from "@/chat/interfaces";
+import { resolveGroupReasoning } from "@/chat/timeline/reasoningState";
 import { MinimalAgent } from "@/chat/agents";
 import { getErrorTitle } from "@/chat/errorHelpers";
 import { fileDescriptorToDisplayFile } from "@/chat/fileDescriptors";
@@ -16,6 +17,7 @@ import {
 import { FileCard } from "@/components/chat/FileCard";
 import { RendererComponent } from "@/components/chat/renderers/RendererComponent";
 import type { FullChatState } from "@/components/chat/renderers/registry";
+import { ReasoningTextSheet } from "@/components/chat/timeline/ReasoningTextSheet";
 import { Icon } from "@/components/ui/icon";
 import { Text } from "@/components/ui/text";
 import SvgAlertCircle from "@/icons/alert-circle";
@@ -78,9 +80,20 @@ function AssistantMessage({
   node: Message;
   agent: MinimalAgent | null;
 }) {
-  const { packets, processed, hasRenderer } = usePacketDisplay(node);
+  const { packets, processed, hasDisplayContent } = usePacketDisplay(node);
   const [sourcesOpen, setSourcesOpen] = useState(false);
-  const hasContent = hasRenderer && packets.length > 0;
+  // Which step's text the full-text reader is showing. Owned here, not in the step: the timeline
+  // auto-collapses when the answer starts, which would unmount the step mid-read.
+  const [fullTextKey, setFullTextKey] = useState<string | null>(null);
+  const hasContent = hasDisplayContent && packets.length > 0;
+
+  // Re-derived every flush so the reader stays live while the step streams on — parking the string
+  // at open time would freeze the body and make Copy yield a truncated prefix. Reasoning is the only
+  // renderer using the reader today; other long-form steps would resolve their own group here.
+  const fullText = useMemo(
+    () => resolveGroupReasoning(processed.groupedPacketsMap, fullTextKey),
+    [fullTextKey, processed],
+  );
 
   // Only after the answer completes, to avoid mid-stream layout shift.
   const sources = useMemo(
@@ -96,6 +109,7 @@ function AssistantMessage({
       citations: processed.citationMap,
       documentMap: processed.documentMap,
       openSource,
+      openFullText: setFullTextKey,
     }),
     [agent, processed.citationMap, processed.documentMap],
   );
@@ -142,6 +156,13 @@ function AssistantMessage({
             sources={sources}
           />
         </View>
+      ) : null}
+      {fullText !== null ? (
+        <ReasoningTextSheet
+          visible
+          onClose={() => setFullTextKey(null)}
+          content={fullText}
+        />
       ) : null}
     </View>
   );
