@@ -12,6 +12,7 @@ in ``external_dependency_unit``.
 
 from uuid import uuid4
 
+import pytest
 from sqlalchemy.orm import Session
 
 from onyx.configs.constants import DocumentSource, FileOrigin
@@ -117,4 +118,75 @@ def test_list_connector_files_batched_lookup(db_session: Session) -> None:
         db_session.delete(connector)
         for file_id in [sized_id_a, sized_id_b, legacy_id]:
             delete_filerecord_by_file_id(file_id=file_id, db_session=db_session)
+        db_session.commit()
+
+
+def test_list_connector_files_degrades_to_basic_info_on_lookup_failure(
+    db_session: Session, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """A record-lookup failure must not fail the listing — entries degrade to
+    id + name with no size/date, matching the old per-file fallback."""
+    admin_user = create_test_user(db_session, "files_admin_fb", role=UserRole.ADMIN)
+
+    suffix = uuid4().hex[:8]
+    file_id = f"test-files-{suffix}-fb"
+
+    connector = Connector(
+        name=f"test-file-connector-{suffix}",
+        source=DocumentSource.FILE,
+        input_type=InputType.LOAD_STATE,
+        connector_specific_config={
+            "file_locations": [file_id],
+            "file_names": ["fb.txt"],
+        },
+        refresh_freq=None,
+        prune_freq=None,
+        indexing_start=None,
+    )
+    db_session.add(connector)
+    db_session.flush()
+
+    credential = Credential(
+        source=DocumentSource.FILE,
+        credential_json={},
+        user_id=admin_user.id,
+        admin_public=True,
+    )
+    db_session.add(credential)
+    db_session.flush()
+
+    cc_pair = ConnectorCredentialPair(
+        connector_id=connector.id,
+        credential_id=credential.id,
+        name=f"test-file-cc-pair-{suffix}",
+        status=ConnectorCredentialPairStatus.ACTIVE,
+        access_type=AccessType.PUBLIC,
+        auto_sync_options=None,
+    )
+    db_session.add(cc_pair)
+    db_session.commit()
+
+    def _boom(*_args: object, **_kwargs: object) -> None:
+        raise RuntimeError("simulated record-lookup failure")
+
+    monkeypatch.setattr(
+        "onyx.server.documents.connector.get_filerecords_by_file_ids", _boom
+    )
+
+    try:
+        response = list_connector_files(
+            connector_id=connector.id,
+            user=admin_user,
+            db_session=db_session,
+        )
+
+        assert len(response.files) == 1
+        assert response.files[0].file_id == file_id
+        assert response.files[0].file_name == "fb.txt"
+        assert response.files[0].file_size is None
+        assert response.files[0].upload_date is None
+    finally:
+        db_session.delete(cc_pair)
+        db_session.delete(credential)
+        db_session.delete(connector)
         db_session.commit()

@@ -95,6 +95,7 @@ from onyx.db.index_attempt import (
 from onyx.db.models import (
     ConnectorCredentialPair,
     FederatedConnector,
+    FileRecord,
     IndexAttempt,
     IndexingStatus,
     User,
@@ -456,10 +457,20 @@ def list_connector_files(
 
     # Single batched query — per-file record + object-store size lookups made
     # this endpoint O(N) round-trips and unusably slow for large connectors.
-    records_by_id = {
-        record.file_id: record
-        for record in get_filerecords_by_file_ids(file_locations, db_session)
-    }
+    # A record-lookup failure degrades to basic entries (id + name) rather
+    # than failing the whole listing, matching the old per-file behavior.
+    records_by_id: dict[str, FileRecord] = {}
+    try:
+        records_by_id = {
+            record.file_id: record
+            for record in get_filerecords_by_file_ids(file_locations, db_session)
+        }
+    except Exception:
+        logger.warning(
+            "Failed to load file records for connector %s; returning basic file info",
+            connector_id,
+            exc_info=True,
+        )
 
     files = []
     for file_id, file_name in zip(file_locations, file_names):

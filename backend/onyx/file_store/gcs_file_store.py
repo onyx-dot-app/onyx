@@ -205,8 +205,17 @@ class GCSBackedFileStore(FileStore):
                 )
                 db_session.commit()
         except Exception:
+            # Clean up the uploaded blob only when this save was creating a
+            # brand-new file. On an overwrite of an existing file_id the
+            # committed record still references this key after rollback, so
+            # deleting the blob would turn a failed overwrite into data loss.
             try:
-                blob.delete()
+                with get_session_with_current_tenant() as cleanup_session:
+                    existing_record = get_filerecord_by_file_id_optional(
+                        file_id=file_id, db_session=cleanup_session
+                    )
+                if existing_record is None:
+                    blob.delete()
             except Exception:
                 logger.warning(
                     "Failed to clean up orphaned GCS blob %s/%s "
