@@ -48,7 +48,6 @@ from onyx.db.persona_sharing import get_user_group_ids_for_user
 from onyx.db.scoped_permissions import fetch_managed_group_ids
 from onyx.db.scoped_permissions import scoped_group_ids_subquery
 from onyx.db.scoped_permissions import within_managed_scope_clause
-from onyx.db.users import user_is_admin
 from onyx.server.features.persona.models import FullPersonaSnapshot
 from onyx.server.features.persona.models import MinimalPersonaSnapshot
 from onyx.server.features.persona.models import PersonaSharedNotificationData
@@ -657,19 +656,11 @@ def update_persona_shared(
         db_session=db_session, persona_id=persona_id, user=user, get_editable=True
     )
 
-    # Org-wide visibility is an owner/admin decision. EDITOR-level sharees may
-    # edit user/group shares but must not flip is_public / public_permission
-    # (the same guard update_persona_public_status enforces).
-    is_owner_or_admin: bool = (
-        user_is_admin(user)
-        or persona.user_id == user.id
-        or (
-            persona.owner_group_id is not None
-            and persona.owner_group_id
-            in get_user_group_ids_for_user(db_session, user.id)
-        )
-    )
-    if not is_owner_or_admin:
+    # Org-wide visibility is an owner/admin decision. EDITOR-level sharees may edit
+    # user/group shares but must not flip is_public / public_permission. Reuse the
+    # delete/publish predicate so this exactly matches the `publish` projection and the
+    # /public route (global MANAGE_AGENTS, owner, or owner-group) — not just FULL_ADMIN.
+    if not can_delete_persona(user, persona, db_session):
         is_public = None
         public_permission = None
 
