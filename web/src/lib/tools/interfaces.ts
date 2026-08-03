@@ -67,6 +67,7 @@ export interface MCPTool {
   icon?: React.FunctionComponent<IconProps>;
   isAvailable: boolean;
   isEnabled: boolean;
+  permissions?: Record<string, boolean>;
 }
 
 export interface MethodSpec {

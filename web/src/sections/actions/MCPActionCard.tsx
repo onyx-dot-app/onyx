@@ -316,7 +316,9 @@ export default function MCPActionCard({
           showOnlyEnabled={showOnlyEnabled}
           onToggleShowOnlyEnabled={handleToggleShowOnlyEnabled}
           onUpdateToolsStatus={
-            canManageStatus
+            // Bulk toggles all tools; the status route 403s the whole batch unless every
+            // tool is manageable, so only offer it when the user can toggle each one.
+            tools.length > 0 && tools.every((tool) => can(tool, "toggle"))
               ? (enabled) => {
                   const toolIds = tools.map((tool) => parseInt(tool.id));
                   onUpdateToolsStatus?.(serverId, toolIds, enabled, mutate);
@@ -337,7 +339,7 @@ export default function MCPActionCard({
               icon={tool.icon}
               isAvailable={tool.isAvailable}
               isEnabled={tool.isEnabled}
-              canToggle={canManageStatus}
+              canToggle={can(tool, "toggle")}
               onToggle={(enabled) =>
                 onToolToggle?.(serverId, tool.id, enabled, mutate)
               }

@@ -34,6 +34,7 @@ from onyx.auth.oauth_token_manager import exchange_oauth_code_for_token
 from onyx.auth.oauth_token_manager import OAuthFlowParams
 from onyx.auth.oauth_token_manager import validate_oauth_endpoint_url
 from onyx.auth.permission_projection import mcp_server_permissions
+from onyx.auth.permission_projection import tool_permissions
 from onyx.auth.permissions import get_effective_permissions
 from onyx.auth.permissions import has_permission
 from onyx.auth.permissions import require_permission
@@ -68,6 +69,7 @@ from onyx.db.models import MCPServer as DbMCPServer
 from onyx.db.models import Tool
 from onyx.db.models import User
 from onyx.db.tools import can_manage_mcp_server
+from onyx.db.tools import can_manage_own_tool
 from onyx.db.tools import create_tool__no_commit
 from onyx.db.tools import delete_tool__no_commit
 from onyx.db.tools import get_mcp_server_ids_connected_to_groups
@@ -1739,9 +1741,17 @@ def get_mcp_server_tools_snapshots(
     else:
         _ensure_mcp_server_viewable(mcp_server, user, db)
 
-    # Fetch and return tools from database
+    # Fetch and return tools from database. Stamp each tool's toggle affordance
+    # (owner-or-admin, per tool) so the UI gates per tool, matching the status route:
+    # a global actions-admin toggles any tool, at parity with OpenAPI actions.
     mcp_tools = get_tools_by_mcp_server_id(server_id, db, order_by_id=True)
-    return [ToolSnapshot.from_model(tool) for tool in mcp_tools]
+    return [
+        ToolSnapshot.from_model(
+            tool,
+            permissions=tool_permissions(can_manage=can_manage_own_tool(user, tool)),
+        )
+        for tool in mcp_tools
+    ]
 
 
 @router.get("/server/{server_id}/tools")
