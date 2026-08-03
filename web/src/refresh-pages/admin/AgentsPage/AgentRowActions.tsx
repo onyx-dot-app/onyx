@@ -61,14 +61,14 @@ export default function AgentRowActions({
   const { agent: fullAgent, refresh: refreshAgent } = useAgent(agent.id);
   const shareModal = useCreateModal();
 
-  // Per-row affordances ride on the full agent's server-stamped permission map,
-  // so a scoped manager only sees actions the backend will actually allow.
-  const canEdit = can(fullAgent, "edit");
-  const canList = can(fullAgent, "list");
-  const canUpdateFeaturedStatus = can(fullAgent, "feature");
-  const canShare = can(fullAgent, "share");
-  const canViewStats = can(fullAgent, "view_stats");
-  const canDeleteRow = !agent.builtin_persona && can(fullAgent, "delete");
+  // Gate on the list row's stamped permissions so controls render immediately, not after the
+  // per-row fetch; fullAgent is only for the share modal's details below.
+  const canEdit = can(agent, "edit");
+  const canList = can(agent, "list");
+  const canUpdateFeaturedStatus = can(agent, "feature");
+  const canShare = can(agent, "share");
+  const canViewStats = can(agent, "view_stats");
+  const canDeleteRow = !agent.builtin_persona && can(agent, "delete");
   const hasOverflowItems =
     canList || canShare || (businessTier && canViewStats) || canDeleteRow;
 
