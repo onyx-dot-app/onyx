@@ -725,6 +725,39 @@ def test_anthropic_messages_endpoint_enforces_token_rate_limits() -> None:
     handle.assert_not_called()
 
 
+def test_anthropic_messages_endpoint_threads_authorized_flow_to_handler() -> None:
+    provider = _provider(1, "anthropic", [_model("test")])
+    model_config = provider.model_configurations[0]
+    request = _anthropic_request()
+    with (
+        patch.object(
+            gateway_api,
+            "gateway_request_flow",
+            MagicMock(return_value=LLMFlow.LLM_GATEWAY),
+        ),
+        patch.object(gateway_api, "check_token_rate_limits"),
+        patch.object(
+            gateway_api,
+            "resolve_gateway_model",
+            return_value=(provider, model_config),
+        ),
+        patch.object(gateway_api, "handle_anthropic_messages") as handle,
+    ):
+        handle.return_value.to_wire.return_value = {}
+        gateway_api.gateway_anthropic_messages(
+            request=request,
+            http_request=MagicMock(spec=Request),
+            user=MagicMock(),
+            db_session=MagicMock(spec=Session),
+        )
+    handle.assert_called_once_with(
+        request=request,
+        provider=provider,
+        model_config=model_config,
+        flow=LLMFlow.LLM_GATEWAY,
+    )
+
+
 def test_anthropic_count_tokens_endpoint_rejects_non_gateway_credentials() -> None:
     request = AnthropicCountTokensRequest(
         model="1/test", messages=[{"role": "user", "content": "hi"}]

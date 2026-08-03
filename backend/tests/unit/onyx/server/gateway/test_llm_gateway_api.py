@@ -867,7 +867,7 @@ def test_gateway_route_has_single_permission_dependency() -> None:
     assert len(auth_dependencies) == 1
 
 
-def test_endpoint_applies_craft_policy() -> None:
+def test_endpoint_threads_authorized_flow_to_handler() -> None:
     request = ChatCompletionRequest(
         model="1/test",
         messages=[{"role": "user", "content": "hi"}],
