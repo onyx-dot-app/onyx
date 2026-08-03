@@ -9,6 +9,7 @@ import { InputTypeIn } from "@opal/components";
 import Text from "@/refresh-components/texts/Text";
 import { Divider } from "@opal/components";
 import type { MCPAuthFormValues } from "@/sections/actions/modals/MCPAuthenticationModal";
+import { MCPAuthenticationType } from "@/lib/tools/interfaces";
 import { SvgUser } from "@opal/icons";
 
 interface PerUserAuthConfigProps {
@@ -33,9 +34,12 @@ export function PerUserAuthConfig({
     }))
   );
 
-  // Initialize auth template if not exists
+  // API-token setup keeps its existing bearer default.
   useEffect(() => {
-    if (!values.auth_template) {
+    if (
+      values.auth_type === MCPAuthenticationType.API_TOKEN &&
+      Object.keys(values.auth_template?.headers || {}).length === 0
+    ) {
       const initialHeaders = { Authorization: "Bearer {api_key}" };
       setFieldValue("auth_template", {
         headers: initialHeaders,
@@ -43,7 +47,7 @@ export function PerUserAuthConfig({
       });
       setHeadersDraft([{ key: "Authorization", value: "Bearer {api_key}" }]);
     }
-  }, [values.auth_template, setFieldValue]);
+  }, [values.auth_template, values.auth_type, setFieldValue]);
 
   // Update headers from KeyValue array
   const handleHeadersChange = (items: KeyValue[]) => {
@@ -100,6 +104,10 @@ export function PerUserAuthConfig({
   const requiredFields: string[] = values.auth_template?.required_fields?.length
     ? values.auth_template.required_fields
     : computeRequiredFieldsFromHeaders(values.auth_template?.headers || {});
+  const credentialFields =
+    mode === "shared"
+      ? requiredFields.filter((field) => field !== "api_key")
+      : requiredFields;
   const userCredentials = values.user_credentials || {};
 
   // Shared templates must render the org's single shared key, so at least one
@@ -161,8 +169,7 @@ export function PerUserAuthConfig({
         />
       </FormField>
 
-      {/* Only show user credentials section if there are required fields */}
-      {mode === "per-user" && requiredFields.length > 0 && (
+      {credentialFields.length > 0 && (
         <>
           <Divider paddingParallel="fit" paddingPerpendicular="fit" />
 
@@ -171,18 +178,21 @@ export function PerUserAuthConfig({
               <SvgUser className="w-4 h-4 stroke-text-04 mt-0.5" />
               <div className="flex flex-col gap-1">
                 <Text text04 secondaryAction as="p">
-                  Only for your own account
+                  {mode === "per-user"
+                    ? "Only for your own account"
+                    : "Shared organization values"}
                 </Text>
                 <Text text03 secondaryBody as="p">
-                  The following credentials will not be shared with your
-                  organization.
+                  {mode === "per-user"
+                    ? "The following credentials will not be shared with your organization."
+                    : "These values are used for every user in your organization."}
                 </Text>
               </div>
             </div>
 
             {/* User Credentials Fields */}
             <div className="flex flex-col gap-3">
-              {requiredFields.map((field: string) => {
+              {credentialFields.map((field: string) => {
                 const isSecretField =
                   field.toLowerCase().includes("key") ||
                   field.toLowerCase().includes("token") ||

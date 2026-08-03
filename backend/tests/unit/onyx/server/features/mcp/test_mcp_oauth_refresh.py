@@ -381,9 +381,7 @@ def test_no_refresh_without_persisted_expiry(monkeypatch: pytest.MonkeyPatch) ->
 def test_refresh_persists_via_real_onyx_token_storage(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
-    """Persists via the real `OnyxTokenStorage.set_tokens`, so `headers` is
-    replaced with just the new `Authorization` value (not merged) — other
-    static headers are dropped, same as a non-SSE refresh."""
+    """OAuth refresh replaces Authorization without dropping custom headers."""
     config_data: dict[str, Any] = {
         "headers": {"Authorization": "Bearer OLD", "X-Custom": "static-value"},
         MCPOAuthKeys.TOKENS.value: {
@@ -408,7 +406,10 @@ def test_refresh_persists_via_real_onyx_token_storage(
     header = refresh_mcp_oauth_token_if_expired(_server_stub(), 42, "user-1")
 
     assert header == "Bearer NEW"
-    assert config_data["headers"] == {"Authorization": "Bearer NEW"}
+    assert config_data["headers"] == {
+        "Authorization": "Bearer NEW",
+        "X-Custom": "static-value",
+    }
 
 
 def test_refresh_failure_is_non_fatal_to_caller(
