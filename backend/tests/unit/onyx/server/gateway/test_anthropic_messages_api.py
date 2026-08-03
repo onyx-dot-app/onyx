@@ -682,10 +682,7 @@ def test_anthropic_stream_upstream_failure_emits_single_error_frame(
 def test_anthropic_messages_endpoint_rejects_non_gateway_credentials() -> None:
     request = _anthropic_request()
     with (
-        patch.dict(
-            gateway_api._FLOW_ACCESS_CHECKS,
-            {LLMFlow.CRAFT_LLM_GENERATION: MagicMock(return_value=False)},
-        ),
+        patch.object(gateway_api, "is_gateway_request", MagicMock(return_value=False)),
         pytest.raises(OnyxError) as exc_info,
     ):
         gateway_api.gateway_anthropic_messages(
@@ -703,10 +700,7 @@ def test_anthropic_messages_endpoint_enforces_token_rate_limits() -> None:
     rate_limited = OnyxError(OnyxErrorCode.RATE_LIMITED, "over budget")
 
     with (
-        patch.dict(
-            gateway_api._FLOW_ACCESS_CHECKS,
-            {LLMFlow.CRAFT_LLM_GENERATION: MagicMock(return_value=True)},
-        ),
+        patch.object(gateway_api, "is_gateway_request", MagicMock(return_value=True)),
         patch.object(
             gateway_api, "check_token_rate_limits", side_effect=rate_limited
         ) as rate_check,
@@ -732,10 +726,7 @@ def test_anthropic_count_tokens_endpoint_rejects_non_gateway_credentials() -> No
         model="1/test", messages=[{"role": "user", "content": "hi"}]
     )
     with (
-        patch.dict(
-            gateway_api._FLOW_ACCESS_CHECKS,
-            {LLMFlow.CRAFT_LLM_GENERATION: MagicMock(return_value=False)},
-        ),
+        patch.object(gateway_api, "is_gateway_request", MagicMock(return_value=False)),
         pytest.raises(OnyxError) as exc_info,
     ):
         gateway_api.gateway_anthropic_count_tokens(
@@ -763,10 +754,7 @@ def test_gateway_anthropic_count_tokens_includes_tools() -> None:
         ],
     )
     with (
-        patch.dict(
-            gateway_api._FLOW_ACCESS_CHECKS,
-            {LLMFlow.CRAFT_LLM_GENERATION: MagicMock(return_value=True)},
-        ),
+        patch.object(gateway_api, "is_gateway_request", MagicMock(return_value=True)),
         patch.object(
             gateway_api,
             "resolve_gateway_model",

@@ -32,6 +32,10 @@ class LLMFlow(StrEnum):
     BUILD_SESSION_NAMING = "build_session_naming"
     CRAFT_LLM_GENERATION = "craft_llm_generation"
 
+    # LLM gateway traffic from external clients (Claude Code, codex, ...)
+    # authorized by a use:llm_gateway PAT rather than a Craft sandbox token.
+    LLM_GATEWAY = "llm_gateway"
+
     # Federated search helpers
     SLACK_DATE_EXTRACTION = "slack_date_extraction"
     SLACK_QUERY_EXPANSION = "slack_query_expansion"

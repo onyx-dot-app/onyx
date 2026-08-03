@@ -126,13 +126,6 @@ logger = setup_logger()
 
 router = APIRouter(prefix=GATEWAY_PATH_PREFIX)
 
-# Callers never supply the flow; the endpoint picks it and this mapping
-# enforces the matching credential.
-_FLOW_ACCESS_CHECKS: dict[LLMFlow, Callable[[Request, User], bool]] = {
-    LLMFlow.CRAFT_LLM_GENERATION: is_gateway_request,
-}
-
-
 _MESSAGES_ADAPTER: TypeAdapter[list[ChatCompletionMessage]] = TypeAdapter(
     list[ChatCompletionMessage]
 )
@@ -142,14 +135,26 @@ def _gateway_trace(flow: LLMFlow, model: str) -> Trace:
     return trace("llm_gateway", metadata={"flow": flow.value, "model": model})
 
 
+def _gateway_flow(http_request: Request) -> LLMFlow:
+    """Callers never supply the flow; it is derived from the credential that
+    authorized the request. Craft sandbox tokens are Craft traffic; a directly
+    granted use:llm_gateway PAT is external gateway traffic (Claude Code,
+    codex, ...), which tracing and usage metering must attribute separately."""
+    token_scopes: list[Permission] | None = getattr(
+        http_request.state, "token_scopes", None
+    )
+    if token_scopes and Permission.CRAFT_SANDBOX in token_scopes:
+        return LLMFlow.CRAFT_LLM_GENERATION
+    return LLMFlow.LLM_GATEWAY
+
+
 def _authorize_gateway_request(http_request: Request, user: User) -> LLMFlow:
-    flow = LLMFlow.CRAFT_LLM_GENERATION
-    if not _FLOW_ACCESS_CHECKS[flow](http_request, user):
+    if not is_gateway_request(http_request, user):
         raise OnyxError(
             OnyxErrorCode.INSUFFICIENT_PERMISSIONS,
             "This credential is not authorized to use the Onyx LLM gateway.",
         )
-    return flow
+    return _gateway_flow(http_request)
 
 
 def resolve_gateway_model(
