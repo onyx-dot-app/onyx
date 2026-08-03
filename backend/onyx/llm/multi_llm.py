@@ -171,6 +171,25 @@ def _normalize_content(raw: Any) -> str:
     return str(raw)
 
 
+# Providers not in this set forward the unknown `thinking_blocks` key verbatim,
+# so strip it for them.
+_THINKING_BLOCK_PROVIDERS = {
+    LlmProviderNames.ANTHROPIC,
+    LlmProviderNames.BEDROCK,
+    LlmProviderNames.BEDROCK_CONVERSE,
+    LlmProviderNames.VERTEX_AI,
+}
+
+
+def _strip_thinking_blocks_from_messages(
+    messages: list[dict[str, Any]],
+) -> list[dict[str, Any]]:
+    return [
+        {key: value for key, value in msg.items() if key != "thinking_blocks"}
+        for msg in messages
+    ]
+
+
 def _strip_tool_content_from_messages(
     messages: list[dict[str, Any]],
 ) -> list[dict[str, Any]]:
@@ -834,6 +853,15 @@ class LitellmLLM(LLM):
                 passthrough_kwargs["api_key"] = self._api_key or None
 
             messages = _prompt_to_dicts(prompt)
+
+            if not (
+                is_claude_model
+                and (
+                    self._model_provider in _THINKING_BLOCK_PROVIDERS
+                    or self._api_surface is LlmApiSurface.ANTHROPIC_MESSAGES
+                )
+            ):
+                messages = _strip_thinking_blocks_from_messages(messages)
 
             # Bedrock's Converse API requires toolConfig when messages
             # contain toolUse/toolResult content blocks. When no tools are

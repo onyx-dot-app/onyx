@@ -33,10 +33,13 @@ from onyx.llm.model_response import (
     Usage,
 )
 from onyx.llm.models import (
+    AnyThinkingBlock,
     AssistantMessage,
     ChatCompletionMessage,
     ReasoningEffort,
+    RedactedThinkingBlock,
     TextContentPart,
+    ThinkingBlock,
     ToolCall,
     ToolChoiceOptions,
     UserMessage,
@@ -62,9 +65,13 @@ from onyx.server.gateway.models import (
     AnthropicMessageStartEvent,
     AnthropicMessageStopEvent,
     AnthropicPingEvent,
+    AnthropicRedactedThinkingBlock,
+    AnthropicSignatureDelta,
     AnthropicStreamEvent,
     AnthropicTextBlock,
     AnthropicTextDelta,
+    AnthropicThinkingBlock,
+    AnthropicThinkingDelta,
     AnthropicToolUseBlock,
     AnthropicUsagePayload,
     ChatCompletionChunk,
@@ -201,7 +208,11 @@ def _drop_empty_text(message: ChatCompletionMessage) -> ChatCompletionMessage | 
     if isinstance(message, AssistantMessage):
         if isinstance(message.content, str) and not message.content.strip():
             message = message.model_copy(update={"content": None})
-        if message.content is None and not message.tool_calls:
+        if (
+            message.content is None
+            and not message.tool_calls
+            and not message.thinking_blocks
+        ):
             return None
         return message
     if isinstance(message, UserMessage):
@@ -435,7 +446,7 @@ def _stream_worker(
             )
             for chunk in state.upstream:
                 if cancelled.is_set():
-                    return
+                    break
                 state.observe(chunk)
                 payload = ChatCompletionChunk.from_stream_chunk(
                     chunk, model, include_role=not sent_role
@@ -444,8 +455,9 @@ def _stream_worker(
                 if not _put_stream_item(
                     out, f"data: {json.dumps(payload.to_wire())}\n\n", cancelled
                 ):
-                    return
-            _put_stream_item(out, "data: [DONE]\n\n", cancelled)
+                    break
+            else:
+                _put_stream_item(out, "data: [DONE]\n\n", cancelled)
 
 
 def _run_bridged_stream(
@@ -774,7 +786,7 @@ def _responses_stream_worker(
             )
             for chunk in state.upstream:
                 if cancelled.is_set():
-                    return
+                    break
                 state.observe(chunk)
                 if not chunk.choice.delta.content:
                     continue
@@ -789,7 +801,7 @@ def _responses_stream_worker(
                             ),
                         )
                     ):
-                        return
+                        break
                     if not emit(
                         ResponsesContentPartAddedEvent.create(
                             item_id=message_item_id,
@@ -797,7 +809,7 @@ def _responses_stream_worker(
                             part=ResponsesOutputTextPart.create(text=""),
                         )
                     ):
-                        return
+                        break
                     text_item_open = True
                 if not emit(
                     ResponsesOutputTextDeltaEvent.create(
@@ -805,56 +817,58 @@ def _responses_stream_worker(
                         delta=chunk.choice.delta.content,
                     )
                 ):
-                    return
-            # Build each item once and reuse it below: re-deriving items
-            # for the terminal payload remints ids the client never saw.
-            completed_items: list[ResponsesOutputItem] = []
-            if text_item_open:
-                completed_items.append(close_text_item("completed"))
-            # Filter before enumerating, or a dropped nameless call leaves
-            # a hole in the output_index sequence.
-            call_items = [
-                item
-                for item in (
-                    _function_call_item(tool_call)
-                    for tool_call in _finalize_tool_calls(state.tool_call_buffer) or []
-                )
-                if item is not None
-            ]
-            for tool_index, call_item in enumerate(
-                call_items, start=len(completed_items)
-            ):
-                completed_items.append(call_item)
+                    break
+            else:
+                # Build each item once and reuse it below: re-deriving items
+                # for the terminal payload remints ids the client never saw.
+                completed_items: list[ResponsesOutputItem] = []
+                if text_item_open:
+                    completed_items.append(close_text_item("completed"))
+                # Filter before enumerating, or a dropped nameless call leaves
+                # a hole in the output_index sequence.
+                call_items = [
+                    item
+                    for item in (
+                        _function_call_item(tool_call)
+                        for tool_call in _finalize_tool_calls(state.tool_call_buffer)
+                        or []
+                    )
+                    if item is not None
+                ]
+                for tool_index, call_item in enumerate(
+                    call_items, start=len(completed_items)
+                ):
+                    completed_items.append(call_item)
+                    emit(
+                        ResponsesOutputItemAddedEvent.create(
+                            output_index=tool_index, item=call_item
+                        )
+                    )
+                    emit(
+                        ResponsesFunctionCallArgumentsDoneEvent.create(
+                            item_id=call_item.id,
+                            output_index=tool_index,
+                            arguments=call_item.arguments,
+                            name=call_item.name,
+                        )
+                    )
+                    emit(
+                        ResponsesOutputItemDoneEvent.create(
+                            output_index=tool_index, item=call_item
+                        )
+                    )
                 emit(
-                    ResponsesOutputItemAddedEvent.create(
-                        output_index=tool_index, item=call_item
+                    ResponsesCompletedEvent.create(
+                        ResponsesObjectPayload.from_parts(
+                            response_id=response_id,
+                            created_at=created_at,
+                            model=model,
+                            status="completed",
+                            output=completed_items,
+                            usage=state.usage,
+                        )
                     )
                 )
-                emit(
-                    ResponsesFunctionCallArgumentsDoneEvent.create(
-                        item_id=call_item.id,
-                        output_index=tool_index,
-                        arguments=call_item.arguments,
-                        name=call_item.name,
-                    )
-                )
-                emit(
-                    ResponsesOutputItemDoneEvent.create(
-                        output_index=tool_index, item=call_item
-                    )
-                )
-            emit(
-                ResponsesCompletedEvent.create(
-                    ResponsesObjectPayload.from_parts(
-                        response_id=response_id,
-                        created_at=created_at,
-                        model=model,
-                        status="completed",
-                        output=completed_items,
-                        usage=state.usage,
-                    )
-                )
-            )
 
 
 def handle_responses_request(
@@ -967,6 +981,31 @@ def _anthropic_system_to_raw_message(
     return None
 
 
+def _replayable_thinking_blocks(
+    raw_blocks: Any,
+) -> list[dict[str, Any]] | None:
+    """Unsigned thinking blocks would be rejected by Anthropic's signature
+    check, so they are dropped rather than forwarded."""
+    if not isinstance(raw_blocks, list):
+        return None
+    kept: list[dict[str, Any]] = []
+    for block in raw_blocks:
+        if not isinstance(block, dict):
+            continue
+        block_type = block.get("type")
+        if block_type == "redacted_thinking" and block.get("data"):
+            kept.append({"type": "redacted_thinking", "data": block["data"]})
+        elif block_type == "thinking" and block.get("signature"):
+            kept.append(
+                {
+                    "type": "thinking",
+                    "thinking": block.get("thinking") or "",
+                    "signature": block["signature"],
+                }
+            )
+    return kept or None
+
+
 def _anthropic_messages_to_raw_messages(
     messages: list[dict[str, Any]], system: str | list[dict[str, Any]] | None
 ) -> list[dict[str, Any]]:
@@ -1009,6 +1048,10 @@ def _anthropic_messages_to_raw_messages(
     for message in translated:
         message_dict: dict[str, Any] = dict(message)
         role = message_dict.get("role")
+        if role == "assistant":
+            message_dict["thinking_blocks"] = _replayable_thinking_blocks(
+                message_dict.get("thinking_blocks")
+            )
         if role in ("system", "tool") and isinstance(message_dict.get("content"), list):
             message_dict["content"] = _flatten_text_content(message_dict["content"])
         elif role == "assistant" and isinstance(message_dict.get("content"), list):
@@ -1108,11 +1151,33 @@ def _anthropic_stop_reason(finish_reason: str | None, has_tool_use: bool) -> str
     if mapped == "max_tokens":
         return mapped
     # Otherwise tool calls dominate: providers routinely report finish_reason
-    # "stop" on tool-call turns, and reporting end_turn would make clients
-    # treat the turn as final and drop the tool calls.
+    # "stop" on tool-call turns.
     if has_tool_use:
         return "tool_use"
     return mapped
+
+
+def _anthropic_thinking_content_blocks(
+    thinking_blocks: list[AnyThinkingBlock] | None,
+    reasoning_content: str | None,
+) -> list[AnthropicContentBlock]:
+    """Unsigned fallback blocks are safe to emit because the input path drops
+    unsigned blocks on replay, so they can never reach a signature check."""
+    blocks: list[AnthropicContentBlock] = []
+    for block in thinking_blocks or []:
+        if isinstance(block, RedactedThinkingBlock):
+            blocks.append(AnthropicRedactedThinkingBlock.create(data=block.data))
+        elif block.thinking or block.signature:
+            blocks.append(
+                AnthropicThinkingBlock.create(
+                    thinking=block.thinking, signature=block.signature or ""
+                )
+            )
+    if not blocks and reasoning_content:
+        blocks.append(
+            AnthropicThinkingBlock.create(thinking=reasoning_content, signature="")
+        )
+    return blocks
 
 
 def _anthropic_tool_use_blocks(
@@ -1186,7 +1251,76 @@ def _anthropic_stream_worker(
         ) as span,
     ):
         state = _StreamAccumulator()
-        text_block_open = False
+        open_kind: str | None = None
+        open_index: int | None = None
+        next_index = 0
+
+        def close_open_block() -> bool:
+            nonlocal open_kind, open_index
+            if open_index is None:
+                return True
+            index = open_index
+            open_kind = None
+            open_index = None
+            return emit(AnthropicContentBlockStopEvent.create(index=index))
+
+        def ensure_block_open(kind: str) -> bool:
+            nonlocal open_kind, open_index, next_index
+            if open_kind == kind:
+                return True
+            if not close_open_block():
+                return False
+            content_block: AnthropicContentBlock = (
+                AnthropicThinkingBlock.create(thinking="", signature="")
+                if kind == "thinking"
+                else AnthropicTextBlock.create(text="")
+            )
+            open_kind = kind
+            open_index = next_index
+            next_index += 1
+            return emit(
+                AnthropicContentBlockStartEvent.create(
+                    index=open_index, content_block=content_block
+                )
+            )
+
+        def emit_thinking_deltas(blocks: list[AnyThinkingBlock]) -> bool:
+            nonlocal next_index
+            for block in blocks:
+                if isinstance(block, RedactedThinkingBlock):
+                    if not close_open_block():
+                        return False
+                    index = next_index
+                    next_index += 1
+                    if not emit(
+                        AnthropicContentBlockStartEvent.create(
+                            index=index,
+                            content_block=AnthropicRedactedThinkingBlock.create(
+                                data=block.data
+                            ),
+                        )
+                    ) or not emit(AnthropicContentBlockStopEvent.create(index=index)):
+                        return False
+                    continue
+                if not ensure_block_open("thinking"):
+                    return False
+                assert open_index is not None
+                if block.thinking and not emit(
+                    AnthropicContentBlockDeltaEvent.create(
+                        index=open_index,
+                        delta=AnthropicThinkingDelta.create(thinking=block.thinking),
+                    )
+                ):
+                    return False
+                if block.signature and not emit(
+                    AnthropicContentBlockDeltaEvent.create(
+                        index=open_index,
+                        delta=AnthropicSignatureDelta.create(signature=block.signature),
+                    )
+                ):
+                    return False
+            return True
+
         with _stream_worker_guard(
             span,
             model,
@@ -1206,72 +1340,74 @@ def _anthropic_stream_worker(
             finish_reason: str | None = None
             for chunk in state.upstream:
                 if cancelled.is_set():
-                    return
+                    break
                 state.observe(chunk)
                 if chunk.choice.finish_reason is not None:
                     finish_reason = chunk.choice.finish_reason
-                if chunk.choice.delta.content:
-                    if not text_block_open:
-                        if not emit(
-                            AnthropicContentBlockStartEvent.create(
-                                index=0,
-                                content_block=AnthropicTextBlock.create(text=""),
-                            )
-                        ):
-                            return
-                        text_block_open = True
+                delta = chunk.choice.delta
+                # Anthropic-family chunks carry reasoning_content mirroring
+                # thinking_blocks, so only one of the two may be emitted.
+                if delta.thinking_blocks:
+                    if not emit_thinking_deltas(delta.thinking_blocks):
+                        break
+                elif delta.reasoning_content:
+                    if not emit_thinking_deltas(
+                        [ThinkingBlock(thinking=delta.reasoning_content)]
+                    ):
+                        break
+                if delta.content:
+                    if not ensure_block_open("text"):
+                        break
+                    assert open_index is not None
                     if not emit(
                         AnthropicContentBlockDeltaEvent.create(
-                            index=0,
-                            delta=AnthropicTextDelta.create(
-                                text=chunk.choice.delta.content
-                            ),
+                            index=open_index,
+                            delta=AnthropicTextDelta.create(text=delta.content),
                         )
                     ):
-                        return
-            if text_block_open:
-                emit(AnthropicContentBlockStopEvent.create(index=0))
-            finalized_tool_calls = _finalize_tool_calls(state.tool_call_buffer)
-            tool_blocks = _anthropic_tool_use_blocks(finalized_tool_calls)
-            named_tool_calls = [
-                tc for tc in finalized_tool_calls or [] if tc.function.name
-            ]
-            index = 1 if text_block_open else 0
-            for tool_index, (tool_block, tool_call) in enumerate(
-                zip(tool_blocks, named_tool_calls), start=index
-            ):
-                emit(
-                    AnthropicContentBlockStartEvent.create(
-                        index=tool_index,
-                        content_block=AnthropicToolUseBlock.create(
-                            id=tool_block.id, name=tool_block.name, input={}
-                        ),
-                    )
-                )
-                emit(
-                    AnthropicContentBlockDeltaEvent.create(
-                        index=tool_index,
-                        delta=AnthropicInputJsonDelta.create(
-                            partial_json=tool_call.function.arguments or "{}"
-                        ),
-                    )
-                )
-                emit(AnthropicContentBlockStopEvent.create(index=tool_index))
-            emit(
-                AnthropicMessageDeltaEvent.create(
-                    delta=AnthropicMessageDeltaPayload.create(
-                        stop_reason=_anthropic_stop_reason(
-                            finish_reason, bool(tool_blocks)
+                        break
+            else:
+                close_open_block()
+                finalized_tool_calls = _finalize_tool_calls(state.tool_call_buffer)
+                tool_blocks = _anthropic_tool_use_blocks(finalized_tool_calls)
+                named_tool_calls = [
+                    tc for tc in finalized_tool_calls or [] if tc.function.name
+                ]
+                for tool_index, (tool_block, tool_call) in enumerate(
+                    zip(tool_blocks, named_tool_calls), start=next_index
+                ):
+                    emit(
+                        AnthropicContentBlockStartEvent.create(
+                            index=tool_index,
+                            content_block=AnthropicToolUseBlock.create(
+                                id=tool_block.id, name=tool_block.name, input={}
+                            ),
                         )
-                    ),
-                    usage=(
-                        AnthropicUsagePayload.from_usage(state.usage)
-                        if state.usage
-                        else AnthropicUsagePayload.zero()
-                    ),
+                    )
+                    emit(
+                        AnthropicContentBlockDeltaEvent.create(
+                            index=tool_index,
+                            delta=AnthropicInputJsonDelta.create(
+                                partial_json=tool_call.function.arguments or "{}"
+                            ),
+                        )
+                    )
+                    emit(AnthropicContentBlockStopEvent.create(index=tool_index))
+                emit(
+                    AnthropicMessageDeltaEvent.create(
+                        delta=AnthropicMessageDeltaPayload.create(
+                            stop_reason=_anthropic_stop_reason(
+                                finish_reason, bool(tool_blocks)
+                            )
+                        ),
+                        usage=(
+                            AnthropicUsagePayload.from_usage(state.usage)
+                            if state.usage
+                            else AnthropicUsagePayload.zero()
+                        ),
+                    )
                 )
-            )
-            emit(AnthropicMessageStopEvent.create())
+                emit(AnthropicMessageStopEvent.create())
 
 
 def handle_anthropic_messages(
@@ -1351,7 +1487,10 @@ def handle_anthropic_messages(
         if span is not None:
             record_llm_response(span, response)
 
-    content: list[AnthropicContentBlock] = []
+    content: list[AnthropicContentBlock] = _anthropic_thinking_content_blocks(
+        response.choice.message.thinking_blocks,
+        response.choice.message.reasoning_content,
+    )
     if response.choice.message.content:
         content.append(AnthropicTextBlock.create(text=response.choice.message.content))
     try:

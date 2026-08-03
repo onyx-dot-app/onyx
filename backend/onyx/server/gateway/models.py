@@ -603,7 +603,31 @@ class AnthropicToolUseBlock(_WireModel):
         return cls(type="tool_use", id=id, name=name, input=input)
 
 
-AnthropicContentBlock: TypeAlias = AnthropicTextBlock | AnthropicToolUseBlock
+class AnthropicThinkingBlock(_WireModel):
+    type: Literal["thinking"] = "thinking"
+    thinking: str
+    signature: str
+
+    @classmethod
+    def create(cls, *, thinking: str, signature: str) -> "AnthropicThinkingBlock":
+        return cls(type="thinking", thinking=thinking, signature=signature)
+
+
+class AnthropicRedactedThinkingBlock(_WireModel):
+    type: Literal["redacted_thinking"] = "redacted_thinking"
+    data: str
+
+    @classmethod
+    def create(cls, *, data: str) -> "AnthropicRedactedThinkingBlock":
+        return cls(type="redacted_thinking", data=data)
+
+
+AnthropicContentBlock: TypeAlias = (
+    AnthropicTextBlock
+    | AnthropicToolUseBlock
+    | AnthropicThinkingBlock
+    | AnthropicRedactedThinkingBlock
+)
 
 
 class AnthropicUsagePayload(_WireModel):
@@ -720,14 +744,40 @@ class AnthropicInputJsonDelta(_WireModel):
         return cls(type="input_json_delta", partial_json=partial_json)
 
 
+class AnthropicThinkingDelta(_WireModel):
+    type: Literal["thinking_delta"] = "thinking_delta"
+    thinking: str
+
+    @classmethod
+    def create(cls, *, thinking: str) -> "AnthropicThinkingDelta":
+        return cls(type="thinking_delta", thinking=thinking)
+
+
+class AnthropicSignatureDelta(_WireModel):
+    type: Literal["signature_delta"] = "signature_delta"
+    signature: str
+
+    @classmethod
+    def create(cls, *, signature: str) -> "AnthropicSignatureDelta":
+        return cls(type="signature_delta", signature=signature)
+
+
+AnthropicContentDelta: TypeAlias = (
+    AnthropicTextDelta
+    | AnthropicInputJsonDelta
+    | AnthropicThinkingDelta
+    | AnthropicSignatureDelta
+)
+
+
 class AnthropicContentBlockDeltaEvent(_WireModel):
     type: Literal["content_block_delta"] = "content_block_delta"
     index: int
-    delta: AnthropicTextDelta | AnthropicInputJsonDelta
+    delta: AnthropicContentDelta
 
     @classmethod
     def create(
-        cls, *, index: int, delta: AnthropicTextDelta | AnthropicInputJsonDelta
+        cls, *, index: int, delta: AnthropicContentDelta
     ) -> "AnthropicContentBlockDeltaEvent":
         return cls(type="content_block_delta", index=index, delta=delta)
 
