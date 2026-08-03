@@ -5,6 +5,9 @@ from typing import TYPE_CHECKING, Any, List
 from pydantic import BaseModel, Field
 
 from onyx.llm.models import AnyThinkingBlock, RedactedThinkingBlock, ThinkingBlock
+from onyx.utils.logger import setup_logger
+
+logger = setup_logger()
 
 
 class FunctionCall(BaseModel):
@@ -124,6 +127,9 @@ def _parse_thinking_blocks(
     parsed: list[AnyThinkingBlock] = []
     for block in thinking_blocks:
         if not isinstance(block, dict):
+            logger.warning(
+                "Dropping malformed thinking block of type %s", type(block).__name__
+            )
             continue
         if block.get("type") == "redacted_thinking":
             parsed.append(RedactedThinkingBlock(data=block.get("data") or ""))
