@@ -42,24 +42,27 @@ class ShardCapacityCollector(Collector):
         self._expires_at = 0.0
 
     def _tenant_counts(self) -> dict[str, int]:
+        # The refresh runs under the lock, not just the cache read. Releasing it around
+        # the scan would let concurrent scrapes each run their own, and let a slower
+        # older refresh overwrite a newer result on the way out. A scrape that arrives
+        # mid-refresh waits and then reads the fresh value.
         with self._lock:
             if time.monotonic() < self._expires_at:
                 return self._counts
 
-        counts: dict[str, int] = {}
-        for shard_name in sorted(get_shard_specs()):
-            try:
-                counts[shard_name] = count_tenant_schemas_on_shard(shard_name)
-            except Exception:
-                # Per shard: one unreachable database must not suppress the others.
-                # A capacity alert that goes blank during an unrelated outage is worse
-                # than one missing a single series.
-                logger.exception("Failed counting tenants on shard %s", shard_name)
+            counts: dict[str, int] = {}
+            for shard_name in sorted(get_shard_specs()):
+                try:
+                    counts[shard_name] = count_tenant_schemas_on_shard(shard_name)
+                except Exception:
+                    # Per shard: one unreachable database must not suppress the others.
+                    # A capacity alert that goes blank during an unrelated outage is
+                    # worse than one missing a single series.
+                    logger.exception("Failed counting tenants on shard %s", shard_name)
 
-        with self._lock:
             self._counts = counts
             self._expires_at = time.monotonic() + self._ttl
-        return counts
+            return counts
 
     def collect(self) -> Iterator[Metric]:
         gauge = GaugeMetricFamily(

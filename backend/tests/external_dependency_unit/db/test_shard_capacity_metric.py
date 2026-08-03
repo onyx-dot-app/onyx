@@ -5,31 +5,28 @@ physically live — a mapping that disagrees with reality must not be able to hi
 capacity from the alert.
 """
 
+import time
 from collections.abc import Generator
+from concurrent.futures import ThreadPoolExecutor
 from typing import Any
 from uuid import uuid4
 
 import pytest
-from sqlalchemy import create_engine, text
-from sqlalchemy.engine import Engine
 from sqlalchemy.exc import OperationalError
 
 from onyx.db.engine import shard_registry, shard_routing, tenant_utils
 from onyx.db.engine.shard_registry import get_engine_for_shard
 from onyx.db.engine.shard_routing import invalidate_shard_cache
-from onyx.db.engine.sql_engine import SYNC_DB_API, SqlEngine, build_connection_string
+from onyx.db.engine.sql_engine import SqlEngine
 from onyx.server.metrics import shard_capacity
 from onyx.server.metrics.shard_capacity import ShardCapacityCollector
+from tests.external_dependency_unit.db.shard_test_utils import (
+    DEFAULT_SHARD,
+    create_schema,
+    drop_schema,
+)
 
-DEFAULT_SHARD = "default"
 SECOND_SHARD = "shard-test-b"
-
-
-def _admin_engine() -> Engine:
-    return create_engine(
-        build_connection_string(db_api=SYNC_DB_API, db="postgres"),
-        isolation_level="AUTOCOMMIT",
-    )
 
 
 def _counts(collector: ShardCapacityCollector) -> dict[str, float]:
@@ -39,27 +36,6 @@ def _counts(collector: ShardCapacityCollector) -> dict[str, float]:
         for metric in collector.collect()
         for sample in metric.samples
     }
-
-
-@pytest.fixture(scope="module")
-def second_database() -> Generator[str, None, None]:
-    db_name = f"onyx_capacity_test_{uuid4().hex[:8]}"
-    admin = _admin_engine()
-    with admin.connect() as conn:
-        conn.execute(text(f'CREATE DATABASE "{db_name}"'))
-    try:
-        yield db_name
-    finally:
-        with admin.connect() as conn:
-            conn.execute(
-                text(
-                    "SELECT pg_terminate_backend(pid) FROM pg_stat_activity "
-                    "WHERE datname = :db AND pid <> pg_backend_pid()"
-                ),
-                {"db": db_name},
-            )
-            conn.execute(text(f'DROP DATABASE IF EXISTS "{db_name}"'))
-        admin.dispose()
 
 
 @pytest.fixture(scope="function")
@@ -85,18 +61,14 @@ def two_shards(
     yield {"created": created}
 
     for shard, tenant_id in created:
-        with get_engine_for_shard(shard).connect() as conn:
-            conn.execute(text(f'DROP SCHEMA IF EXISTS "{tenant_id}" CASCADE'))
-            conn.commit()
+        drop_schema(get_engine_for_shard(shard), tenant_id)
     shard_registry.reset_shard_specs()
     invalidate_shard_cache()
 
 
 def _make_tenant(two_shards: dict[str, Any], shard: str) -> str:
     tenant_id = f"tenant_{uuid4()}"
-    with get_engine_for_shard(shard).connect() as conn:
-        conn.execute(text(f'CREATE SCHEMA IF NOT EXISTS "{tenant_id}"'))
-        conn.commit()
+    create_schema(get_engine_for_shard(shard), tenant_id)
     two_shards["created"].append((shard, tenant_id))
     return tenant_id
 
@@ -154,6 +126,32 @@ def test_an_unreachable_shard_does_not_suppress_the_others(
     counts = _counts(ShardCapacityCollector())
 
     assert counts == {SECOND_SHARD: 7}
+
+
+def test_concurrent_scrapes_refresh_once(
+    two_shards: dict[str, Any],  # noqa: ARG001
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """Prometheus can scrape a replica while a refresh is in flight. Without the lock
+    held across the scan, each scrape runs its own, and a slower older one can overwrite
+    a newer result on the way out."""
+    scans = 0
+
+    def _count(shard_name: str) -> int:  # noqa: ARG001
+        nonlocal scans
+        scans += 1
+        time.sleep(0.05)
+        return 3
+
+    monkeypatch.setattr(shard_capacity, "count_tenant_schemas_on_shard", _count)
+    collector = ShardCapacityCollector()
+
+    with ThreadPoolExecutor(max_workers=4) as pool:
+        results = list(pool.map(lambda _: _counts(collector), range(4)))
+
+    # Two shards, scanned once each — not once per concurrent scrape.
+    assert scans == 2
+    assert all(r == results[0] for r in results)
 
 
 def test_no_series_outside_multi_tenant_mode(
