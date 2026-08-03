@@ -47,7 +47,7 @@ from onyx.llm.models import (
 from onyx.llm.multi_llm import LLMRateLimitError, LLMTimeoutError
 from onyx.llm.prompt_cache.processor import process_with_prompt_cache
 from onyx.llm.tracing_wrap import _finalize_tool_calls, _merge_tool_call_delta
-from onyx.server.features.build.craft_gateway import is_gateway_request
+from onyx.server.features.build.craft_gateway import gateway_request_flow
 from onyx.server.gateway.configs import GATEWAY_PATH_PREFIX
 from onyx.server.gateway.model_catalog import build_gateway_model_catalog
 from onyx.server.gateway.models import (
@@ -135,22 +135,14 @@ def _gateway_trace(flow: LLMFlow, model: str) -> Trace:
     return trace("llm_gateway", metadata={"flow": flow.value, "model": model})
 
 
-def _gateway_flow(http_request: Request) -> LLMFlow:
-    token_scopes: list[Permission] | None = getattr(
-        http_request.state, "token_scopes", None
-    )
-    if token_scopes and Permission.CRAFT_SANDBOX in token_scopes:
-        return LLMFlow.CRAFT_LLM_GENERATION
-    return LLMFlow.LLM_GATEWAY
-
-
 def _authorize_gateway_request(http_request: Request, user: User) -> LLMFlow:
-    if not is_gateway_request(http_request, user):
+    flow = gateway_request_flow(http_request, user)
+    if flow is None:
         raise OnyxError(
             OnyxErrorCode.INSUFFICIENT_PERMISSIONS,
             "This credential is not authorized to use the Onyx LLM gateway.",
         )
-    return _gateway_flow(http_request)
+    return flow
 
 
 def resolve_gateway_model(

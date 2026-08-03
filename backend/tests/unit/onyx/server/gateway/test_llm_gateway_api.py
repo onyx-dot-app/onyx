@@ -47,7 +47,7 @@ from onyx.llm.models import FunctionCall as ToolFunctionCall
 from onyx.llm.multi_llm import LLMRateLimitError, LLMTimeoutError
 from onyx.server.auth_check import check_router_auth
 from onyx.server.features.build import craft_gateway
-from onyx.server.features.build.craft_gateway import is_gateway_request
+from onyx.server.features.build.craft_gateway import gateway_request_flow
 from onyx.server.gateway import api as gateway_api
 from onyx.server.gateway.api import _MESSAGES_ADAPTER
 from onyx.server.gateway.configs import GATEWAY_PATH_PREFIX
@@ -878,9 +878,9 @@ def test_endpoint_applies_craft_policy() -> None:
     user = cast(User, MagicMock(spec=User))
     http_request = cast(Request, MagicMock(spec=Request))
 
-    check_access = MagicMock(return_value=True)
+    check_access = MagicMock(return_value=LLMFlow.LLM_GATEWAY)
     with (
-        patch.object(gateway_api, "is_gateway_request", check_access),
+        patch.object(gateway_api, "gateway_request_flow", check_access),
         patch.object(
             gateway_api,
             "resolve_gateway_model",
@@ -918,7 +918,11 @@ def test_endpoint_enforces_token_rate_limits_before_calling_provider() -> None:
 
     rate_limited = OnyxError(OnyxErrorCode.RATE_LIMITED, "over budget")
     with (
-        patch.object(gateway_api, "is_gateway_request", MagicMock(return_value=True)),
+        patch.object(
+            gateway_api,
+            "gateway_request_flow",
+            MagicMock(return_value=LLMFlow.LLM_GATEWAY),
+        ),
         patch.object(
             gateway_api, "check_token_rate_limits", side_effect=rate_limited
         ) as rate_check,
@@ -940,12 +944,16 @@ def test_endpoint_enforces_token_rate_limits_before_calling_provider() -> None:
 
 
 def test_gateway_flow_follows_credential_type() -> None:
-    http_request = cast(Request, MagicMock(spec=Request))
-    http_request.state.token_scopes = [Permission.CRAFT_SANDBOX]
-    assert gateway_api._gateway_flow(http_request) is LLMFlow.CRAFT_LLM_GENERATION
-
-    http_request.state.token_scopes = [Permission.USE_LLM_GATEWAY]
-    assert gateway_api._gateway_flow(http_request) is LLMFlow.LLM_GATEWAY
+    user = cast(User, MagicMock(spec=User))
+    with patch.object(craft_gateway, "is_craft_enabled_for_user", return_value=True):
+        assert (
+            gateway_request_flow(_pat_request([Permission.CRAFT_SANDBOX]), user)
+            is LLMFlow.CRAFT_LLM_GENERATION
+        )
+        assert (
+            gateway_request_flow(_pat_request([Permission.USE_LLM_GATEWAY]), user)
+            is LLMFlow.LLM_GATEWAY
+        )
 
 
 def test_endpoint_rejects_non_gateway_credentials() -> None:
@@ -954,7 +962,7 @@ def test_endpoint_rejects_non_gateway_credentials() -> None:
         messages=[{"role": "user", "content": "hi"}],
     )
     with (
-        patch.object(gateway_api, "is_gateway_request", MagicMock(return_value=False)),
+        patch.object(gateway_api, "gateway_request_flow", MagicMock(return_value=None)),
         pytest.raises(OnyxError) as exc_info,
     ):
         gateway_api.gateway_chat_completions(
@@ -987,7 +995,7 @@ class TestGatewayAuthComposition:
         with patch.object(
             craft_gateway, "is_craft_enabled_for_user", return_value=False
         ):
-            assert is_gateway_request(request, user)
+            assert gateway_request_flow(request, user) is LLMFlow.LLM_GATEWAY
 
     @pytest.mark.asyncio
     async def test_craft_sandbox_pat_still_works_unchanged(self) -> None:
@@ -999,11 +1007,11 @@ class TestGatewayAuthComposition:
         with patch.object(
             craft_gateway, "is_craft_enabled_for_user", return_value=True
         ):
-            assert is_gateway_request(request, user)
+            assert gateway_request_flow(request, user) is LLMFlow.CRAFT_LLM_GENERATION
         with patch.object(
             craft_gateway, "is_craft_enabled_for_user", return_value=False
         ):
-            assert not is_gateway_request(request, user)
+            assert gateway_request_flow(request, user) is None
 
     @pytest.mark.asyncio
     async def test_unrestricted_pat_is_rejected(self) -> None:
@@ -1011,7 +1019,7 @@ class TestGatewayAuthComposition:
         user = self._basic_user()
         request = _pat_request(None)
 
-        assert not is_gateway_request(request, user)
+        assert gateway_request_flow(request, user) is None
 
     @pytest.mark.asyncio
     async def test_session_and_api_key_auth_are_rejected(self) -> None:
@@ -1019,7 +1027,7 @@ class TestGatewayAuthComposition:
         user = self._basic_user()
         request = Request({"type": "http", "headers": []})
 
-        assert not is_gateway_request(request, user)
+        assert gateway_request_flow(request, user) is None
 
     @pytest.mark.asyncio
     async def test_gateway_scope_alone_passes_both_gates(self) -> None:
@@ -1031,7 +1039,7 @@ class TestGatewayAuthComposition:
         with patch.object(
             craft_gateway, "is_craft_enabled_for_user", return_value=False
         ):
-            assert is_gateway_request(request, user)
+            assert gateway_request_flow(request, user) is LLMFlow.LLM_GATEWAY
 
     @pytest.mark.asyncio
     async def test_read_search_scope_alone_fails_base_permission_gate(self) -> None:
@@ -1045,7 +1053,7 @@ class TestGatewayAuthComposition:
         with patch.object(
             craft_gateway, "is_craft_enabled_for_user", return_value=False
         ):
-            assert not is_gateway_request(request, user)
+            assert gateway_request_flow(request, user) is None
 
 
 def _catalog_provider() -> LLMProviderView:
@@ -1059,7 +1067,11 @@ def _catalog_provider() -> LLMProviderView:
 def test_list_models_returns_openai_shape_excluding_hidden_models() -> None:
     provider = _catalog_provider()
     with (
-        patch.object(gateway_api, "is_gateway_request", MagicMock(return_value=True)),
+        patch.object(
+            gateway_api,
+            "gateway_request_flow",
+            MagicMock(return_value=LLMFlow.LLM_GATEWAY),
+        ),
         patch.object(
             gateway_api,
             "fetch_all_accessible_llm_providers",
@@ -1083,7 +1095,11 @@ def test_list_models_returns_openai_shape_excluding_hidden_models() -> None:
 def test_list_models_ids_round_trip_through_resolve_gateway_model() -> None:
     provider = _catalog_provider()
     with (
-        patch.object(gateway_api, "is_gateway_request", MagicMock(return_value=True)),
+        patch.object(
+            gateway_api,
+            "gateway_request_flow",
+            MagicMock(return_value=LLMFlow.LLM_GATEWAY),
+        ),
         patch.object(
             gateway_api, "fetch_all_accessible_llm_providers", return_value=[provider]
         ),
@@ -1110,7 +1126,7 @@ def test_list_models_ids_round_trip_through_resolve_gateway_model() -> None:
 
 def test_list_models_rejects_non_gateway_credentials() -> None:
     with (
-        patch.object(gateway_api, "is_gateway_request", MagicMock(return_value=False)),
+        patch.object(gateway_api, "gateway_request_flow", MagicMock(return_value=None)),
         pytest.raises(OnyxError) as exc_info,
     ):
         gateway_api.gateway_list_models(
@@ -1718,7 +1734,7 @@ def test_responses_gateway_route_carries_same_permission_dependency() -> None:
 def test_responses_endpoint_rejects_non_gateway_credentials() -> None:
     request = ResponsesRequest(model="1/test", input="hi")
     with (
-        patch.object(gateway_api, "is_gateway_request", MagicMock(return_value=False)),
+        patch.object(gateway_api, "gateway_request_flow", MagicMock(return_value=None)),
         pytest.raises(OnyxError) as exc_info,
     ):
         gateway_api.gateway_responses(
@@ -1759,7 +1775,11 @@ def test_responses_endpoint_enforces_token_rate_limits_before_calling_provider()
 
     rate_limited = OnyxError(OnyxErrorCode.RATE_LIMITED, "over budget")
     with (
-        patch.object(gateway_api, "is_gateway_request", MagicMock(return_value=True)),
+        patch.object(
+            gateway_api,
+            "gateway_request_flow",
+            MagicMock(return_value=LLMFlow.LLM_GATEWAY),
+        ),
         patch.object(
             gateway_api, "check_token_rate_limits", side_effect=rate_limited
         ) as rate_check,
@@ -1789,7 +1809,11 @@ def test_responses_endpoint_resolves_model_same_way_as_chat_route() -> None:
     http_request = cast(Request, MagicMock(spec=Request))
 
     with (
-        patch.object(gateway_api, "is_gateway_request", MagicMock(return_value=True)),
+        patch.object(
+            gateway_api,
+            "gateway_request_flow",
+            MagicMock(return_value=LLMFlow.LLM_GATEWAY),
+        ),
         patch.object(
             gateway_api,
             "resolve_gateway_model",
