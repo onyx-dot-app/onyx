@@ -544,3 +544,260 @@ class ResponsesFailedEvent(_WireModel):
     @classmethod
     def create(cls, response: ResponsesObjectPayload) -> "ResponsesFailedEvent":
         return cls(type="response.failed", response=response)
+
+
+class AnthropicMessagesRequest(BaseModel):
+    """Anthropic Messages API request. ``extra="allow"`` so unknown params
+    (new client fields, provider-specific extensions) are tolerated rather
+    than rejected. ``stop_sequences`` is declared but tolerated-and-ignored:
+    the LLM interface has no stop support, and refusing the request would
+    block Claude Code outright — a dropped stop sequence degrades output
+    shape but cannot corrupt the conversation. ``top_p``/``top_k`` stay
+    tolerated (undeclared) for the same reason: dropping them only shapes
+    sampling. ``metadata`` is accepted and unused."""
+
+    model_config = ConfigDict(extra="allow")
+
+    model: str
+    messages: list[dict[str, Any]]
+    max_tokens: int
+    system: str | list[dict[str, Any]] | None = None
+    tools: list[dict[str, Any]] | None = None
+    tool_choice: dict[str, Any] | None = None
+    stream: bool = False
+    temperature: float | None = None
+    thinking: dict[str, Any] | None = None
+    output_config: dict[str, Any] | None = None
+    stop_sequences: list[str] | None = None
+    metadata: dict[str, Any] | None = None
+
+
+class AnthropicCountTokensRequest(BaseModel):
+    model_config = ConfigDict(extra="allow")
+
+    model: str
+    messages: list[dict[str, Any]]
+    system: str | list[dict[str, Any]] | None = None
+    tools: list[dict[str, Any]] | None = None
+
+
+class AnthropicTextBlock(_WireModel):
+    type: Literal["text"] = "text"
+    text: str
+
+    @classmethod
+    def create(cls, *, text: str) -> "AnthropicTextBlock":
+        return cls(type="text", text=text)
+
+
+class AnthropicToolUseBlock(_WireModel):
+    type: Literal["tool_use"] = "tool_use"
+    id: str
+    name: str
+    input: dict[str, Any]
+
+    @classmethod
+    def create(
+        cls, *, id: str, name: str, input: dict[str, Any]
+    ) -> "AnthropicToolUseBlock":
+        return cls(type="tool_use", id=id, name=name, input=input)
+
+
+AnthropicContentBlock: TypeAlias = AnthropicTextBlock | AnthropicToolUseBlock
+
+
+class AnthropicUsagePayload(_WireModel):
+    input_tokens: int
+    output_tokens: int
+    cache_creation_input_tokens: int
+    cache_read_input_tokens: int
+
+    @classmethod
+    def from_usage(cls, usage: Usage) -> "AnthropicUsagePayload":
+        # LiteLLM normalizes usage to OpenAI accounting, where prompt_tokens
+        # INCLUDES cache reads/writes; Anthropic's input_tokens EXCLUDES both.
+        input_tokens = max(
+            usage.prompt_tokens
+            - usage.cache_read_input_tokens
+            - usage.cache_creation_input_tokens,
+            0,
+        )
+        return cls(
+            input_tokens=input_tokens,
+            output_tokens=usage.completion_tokens,
+            cache_creation_input_tokens=usage.cache_creation_input_tokens,
+            cache_read_input_tokens=usage.cache_read_input_tokens,
+        )
+
+    @classmethod
+    def zero(cls) -> "AnthropicUsagePayload":
+        return cls(
+            input_tokens=0,
+            output_tokens=0,
+            cache_creation_input_tokens=0,
+            cache_read_input_tokens=0,
+        )
+
+
+class AnthropicMessageResponse(_WireModel):
+    id: str
+    type: Literal["message"] = "message"
+    role: Literal["assistant"] = "assistant"
+    model: str
+    content: list[AnthropicContentBlock]
+    stop_reason: str | None
+    stop_sequence: str | None
+    usage: AnthropicUsagePayload
+
+    @classmethod
+    def from_parts(
+        cls,
+        *,
+        message_id: str,
+        model: str,
+        content: list[AnthropicContentBlock],
+        stop_reason: str | None,
+        usage: AnthropicUsagePayload,
+    ) -> "AnthropicMessageResponse":
+        # stop_sequence is assigned explicitly (present-and-null) — exclude_unset
+        # would otherwise drop it, but the wire contract always carries the key.
+        return cls(
+            id=message_id,
+            type="message",
+            role="assistant",
+            model=model,
+            content=content,
+            stop_reason=stop_reason,
+            stop_sequence=None,
+            usage=usage,
+        )
+
+
+class AnthropicMessageStartEvent(_WireModel):
+    type: Literal["message_start"] = "message_start"
+    message: AnthropicMessageResponse
+
+    @classmethod
+    def create(cls, message: AnthropicMessageResponse) -> "AnthropicMessageStartEvent":
+        return cls(type="message_start", message=message)
+
+
+class AnthropicPingEvent(_WireModel):
+    type: Literal["ping"] = "ping"
+
+    @classmethod
+    def create(cls) -> "AnthropicPingEvent":
+        return cls(type="ping")
+
+
+class AnthropicContentBlockStartEvent(_WireModel):
+    type: Literal["content_block_start"] = "content_block_start"
+    index: int
+    content_block: AnthropicContentBlock
+
+    @classmethod
+    def create(
+        cls, *, index: int, content_block: AnthropicContentBlock
+    ) -> "AnthropicContentBlockStartEvent":
+        return cls(type="content_block_start", index=index, content_block=content_block)
+
+
+class AnthropicTextDelta(_WireModel):
+    type: Literal["text_delta"] = "text_delta"
+    text: str
+
+    @classmethod
+    def create(cls, *, text: str) -> "AnthropicTextDelta":
+        return cls(type="text_delta", text=text)
+
+
+class AnthropicInputJsonDelta(_WireModel):
+    type: Literal["input_json_delta"] = "input_json_delta"
+    partial_json: str
+
+    @classmethod
+    def create(cls, *, partial_json: str) -> "AnthropicInputJsonDelta":
+        return cls(type="input_json_delta", partial_json=partial_json)
+
+
+class AnthropicContentBlockDeltaEvent(_WireModel):
+    type: Literal["content_block_delta"] = "content_block_delta"
+    index: int
+    delta: AnthropicTextDelta | AnthropicInputJsonDelta
+
+    @classmethod
+    def create(
+        cls, *, index: int, delta: AnthropicTextDelta | AnthropicInputJsonDelta
+    ) -> "AnthropicContentBlockDeltaEvent":
+        return cls(type="content_block_delta", index=index, delta=delta)
+
+
+class AnthropicContentBlockStopEvent(_WireModel):
+    type: Literal["content_block_stop"] = "content_block_stop"
+    index: int
+
+    @classmethod
+    def create(cls, *, index: int) -> "AnthropicContentBlockStopEvent":
+        return cls(type="content_block_stop", index=index)
+
+
+class AnthropicMessageDeltaPayload(_WireModel):
+    stop_reason: str | None
+    stop_sequence: str | None
+
+    @classmethod
+    def create(cls, *, stop_reason: str | None) -> "AnthropicMessageDeltaPayload":
+        return cls(stop_reason=stop_reason, stop_sequence=None)
+
+
+class AnthropicMessageDeltaEvent(_WireModel):
+    type: Literal["message_delta"] = "message_delta"
+    delta: AnthropicMessageDeltaPayload
+    usage: AnthropicUsagePayload
+
+    @classmethod
+    def create(
+        cls, *, delta: AnthropicMessageDeltaPayload, usage: AnthropicUsagePayload
+    ) -> "AnthropicMessageDeltaEvent":
+        return cls(type="message_delta", delta=delta, usage=usage)
+
+
+class AnthropicMessageStopEvent(_WireModel):
+    type: Literal["message_stop"] = "message_stop"
+
+    @classmethod
+    def create(cls) -> "AnthropicMessageStopEvent":
+        return cls(type="message_stop")
+
+
+class AnthropicErrorPayload(_WireModel):
+    type: str
+    message: str
+
+    @classmethod
+    def create(cls, *, error_type: str, message: str) -> "AnthropicErrorPayload":
+        return cls(type=error_type, message=message)
+
+
+class AnthropicErrorEvent(_WireModel):
+    type: Literal["error"] = "error"
+    error: AnthropicErrorPayload
+
+    @classmethod
+    def create(cls, *, message: str, error_type: str) -> "AnthropicErrorEvent":
+        return cls(
+            type="error",
+            error=AnthropicErrorPayload.create(error_type=error_type, message=message),
+        )
+
+
+AnthropicStreamEvent: TypeAlias = (
+    AnthropicMessageStartEvent
+    | AnthropicPingEvent
+    | AnthropicContentBlockStartEvent
+    | AnthropicContentBlockDeltaEvent
+    | AnthropicContentBlockStopEvent
+    | AnthropicMessageDeltaEvent
+    | AnthropicMessageStopEvent
+    | AnthropicErrorEvent
+)

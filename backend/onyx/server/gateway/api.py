@@ -7,7 +7,7 @@ from collections.abc import Callable, Iterator
 from contextlib import closing, contextmanager
 from functools import partial
 from itertools import count
-from typing import Any, Protocol, cast, runtime_checkable
+from typing import TYPE_CHECKING, Any, Protocol, cast, runtime_checkable
 
 from fastapi import APIRouter, Depends, Request, Response
 from fastapi.responses import JSONResponse, StreamingResponse
@@ -48,6 +48,25 @@ from onyx.server.features.build.craft_gateway import is_gateway_request
 from onyx.server.gateway.configs import GATEWAY_PATH_PREFIX
 from onyx.server.gateway.model_catalog import build_gateway_model_catalog
 from onyx.server.gateway.models import (
+    AnthropicContentBlock,
+    AnthropicContentBlockDeltaEvent,
+    AnthropicContentBlockStartEvent,
+    AnthropicContentBlockStopEvent,
+    AnthropicCountTokensRequest,
+    AnthropicErrorEvent,
+    AnthropicInputJsonDelta,
+    AnthropicMessageDeltaEvent,
+    AnthropicMessageDeltaPayload,
+    AnthropicMessageResponse,
+    AnthropicMessagesRequest,
+    AnthropicMessageStartEvent,
+    AnthropicMessageStopEvent,
+    AnthropicPingEvent,
+    AnthropicStreamEvent,
+    AnthropicTextBlock,
+    AnthropicTextDelta,
+    AnthropicToolUseBlock,
+    AnthropicUsagePayload,
     ChatCompletionChunk,
     ChatCompletionRequest,
     ChatCompletionResponse,
@@ -84,6 +103,17 @@ from onyx.tracing.llm_utils import (
 )
 from onyx.utils.logger import setup_logger
 from onyx.utils.threadpool_concurrency import start_thread_with_context
+
+if TYPE_CHECKING:
+    from litellm.types.llms.anthropic import (
+        AnthopicMessagesAssistantMessageParam,
+        AnthropicMessagesUserMessageParam,
+    )
+    from litellm.types.llms.openai import ChatCompletionToolParam
+
+    _AnthropicAdapterMessage = (
+        AnthropicMessagesUserMessageParam | AnthopicMessagesAssistantMessageParam
+    )
 
 logger = setup_logger()
 
@@ -405,7 +435,7 @@ def _stream_worker(
             )
             for chunk in state.upstream:
                 if cancelled.is_set():
-                    break
+                    return
                 state.observe(chunk)
                 payload = ChatCompletionChunk.from_stream_chunk(
                     chunk, model, include_role=not sent_role
@@ -414,9 +444,8 @@ def _stream_worker(
                 if not _put_stream_item(
                     out, f"data: {json.dumps(payload.to_wire())}\n\n", cancelled
                 ):
-                    break
-            else:
-                _put_stream_item(out, "data: [DONE]\n\n", cancelled)
+                    return
+            _put_stream_item(out, "data: [DONE]\n\n", cancelled)
 
 
 def _run_bridged_stream(
@@ -745,7 +774,7 @@ def _responses_stream_worker(
             )
             for chunk in state.upstream:
                 if cancelled.is_set():
-                    break
+                    return
                 state.observe(chunk)
                 if not chunk.choice.delta.content:
                     continue
@@ -760,7 +789,7 @@ def _responses_stream_worker(
                             ),
                         )
                     ):
-                        break
+                        return
                     if not emit(
                         ResponsesContentPartAddedEvent.create(
                             item_id=message_item_id,
@@ -768,7 +797,7 @@ def _responses_stream_worker(
                             part=ResponsesOutputTextPart.create(text=""),
                         )
                     ):
-                        break
+                        return
                     text_item_open = True
                 if not emit(
                     ResponsesOutputTextDeltaEvent.create(
@@ -776,58 +805,56 @@ def _responses_stream_worker(
                         delta=chunk.choice.delta.content,
                     )
                 ):
-                    break
-            else:
-                # Build each item once and reuse it below: re-deriving items
-                # for the terminal payload remints ids the client never saw.
-                completed_items: list[ResponsesOutputItem] = []
-                if text_item_open:
-                    completed_items.append(close_text_item("completed"))
-                # Filter before enumerating, or a dropped nameless call leaves
-                # a hole in the output_index sequence.
-                call_items = [
-                    item
-                    for item in (
-                        _function_call_item(tool_call)
-                        for tool_call in _finalize_tool_calls(state.tool_call_buffer)
-                        or []
-                    )
-                    if item is not None
-                ]
-                for tool_index, call_item in enumerate(
-                    call_items, start=len(completed_items)
-                ):
-                    completed_items.append(call_item)
-                    emit(
-                        ResponsesOutputItemAddedEvent.create(
-                            output_index=tool_index, item=call_item
-                        )
-                    )
-                    emit(
-                        ResponsesFunctionCallArgumentsDoneEvent.create(
-                            item_id=call_item.id,
-                            output_index=tool_index,
-                            arguments=call_item.arguments,
-                            name=call_item.name,
-                        )
-                    )
-                    emit(
-                        ResponsesOutputItemDoneEvent.create(
-                            output_index=tool_index, item=call_item
-                        )
-                    )
+                    return
+            # Build each item once and reuse it below: re-deriving items
+            # for the terminal payload remints ids the client never saw.
+            completed_items: list[ResponsesOutputItem] = []
+            if text_item_open:
+                completed_items.append(close_text_item("completed"))
+            # Filter before enumerating, or a dropped nameless call leaves
+            # a hole in the output_index sequence.
+            call_items = [
+                item
+                for item in (
+                    _function_call_item(tool_call)
+                    for tool_call in _finalize_tool_calls(state.tool_call_buffer) or []
+                )
+                if item is not None
+            ]
+            for tool_index, call_item in enumerate(
+                call_items, start=len(completed_items)
+            ):
+                completed_items.append(call_item)
                 emit(
-                    ResponsesCompletedEvent.create(
-                        ResponsesObjectPayload.from_parts(
-                            response_id=response_id,
-                            created_at=created_at,
-                            model=model,
-                            status="completed",
-                            output=completed_items,
-                            usage=state.usage,
-                        )
+                    ResponsesOutputItemAddedEvent.create(
+                        output_index=tool_index, item=call_item
                     )
                 )
+                emit(
+                    ResponsesFunctionCallArgumentsDoneEvent.create(
+                        item_id=call_item.id,
+                        output_index=tool_index,
+                        arguments=call_item.arguments,
+                        name=call_item.name,
+                    )
+                )
+                emit(
+                    ResponsesOutputItemDoneEvent.create(
+                        output_index=tool_index, item=call_item
+                    )
+                )
+            emit(
+                ResponsesCompletedEvent.create(
+                    ResponsesObjectPayload.from_parts(
+                        response_id=response_id,
+                        created_at=created_at,
+                        model=model,
+                        status="completed",
+                        output=completed_items,
+                        usage=state.usage,
+                    )
+                )
+            )
 
 
 def handle_responses_request(
@@ -929,6 +956,427 @@ def handle_responses_request(
     )
 
 
+def _anthropic_system_to_raw_message(
+    system: str | list[dict[str, Any]] | None,
+) -> dict[str, Any] | None:
+    if isinstance(system, str):
+        return {"role": "system", "content": system} if system.strip() else None
+    if isinstance(system, list):
+        text = _flatten_text_content(system)
+        return {"role": "system", "content": text} if text else None
+    return None
+
+
+def _anthropic_messages_to_raw_messages(
+    messages: list[dict[str, Any]], system: str | list[dict[str, Any]] | None
+) -> list[dict[str, Any]]:
+    """LiteLLM's Anthropic adapter handles text/image/tool_use/tool_result block
+    translation; system is prepended separately, and any residual list-of-parts
+    content on system/tool messages is collapsed because our SystemMessage/
+    ToolMessage content is str-only."""
+    from litellm.llms.anthropic.experimental_pass_through.adapters.transformation import (
+        LiteLLMAnthropicMessagesAdapter,
+    )
+
+    for message in messages:
+        content = message.get("content")
+        if not isinstance(content, list):
+            continue
+        for block in content:
+            if not isinstance(block, dict) or block.get("type") != "tool_result":
+                continue
+            tool_result_content = block.get("content")
+            if not isinstance(tool_result_content, list):
+                continue
+            if any(
+                not isinstance(part, dict) or part.get("type") != "text"
+                for part in tool_result_content
+            ):
+                raise OnyxError(
+                    OnyxErrorCode.INVALID_INPUT,
+                    "Multimodal tool_result content is not supported by the "
+                    "Onyx gateway.",
+                )
+
+    adapter = LiteLLMAnthropicMessagesAdapter()
+    translated = adapter.translate_anthropic_messages_to_openai(
+        messages=cast("list[_AnthropicAdapterMessage]", messages)
+    )
+    raw: list[dict[str, Any]] = []
+    system_message = _anthropic_system_to_raw_message(system)
+    if system_message is not None:
+        raw.append(system_message)
+    for message in translated:
+        message_dict: dict[str, Any] = dict(message)
+        role = message_dict.get("role")
+        if role in ("system", "tool") and isinstance(message_dict.get("content"), list):
+            message_dict["content"] = _flatten_text_content(message_dict["content"])
+        elif role == "assistant" and isinstance(message_dict.get("content"), list):
+            message_dict["content"] = (
+                _flatten_text_content(message_dict["content"]) or None
+            )
+        raw.append(message_dict)
+    return raw
+
+
+def _anthropic_tools(
+    raw_tools: list[dict[str, Any]] | None,
+) -> list[dict[str, Any]] | None:
+    if not raw_tools:
+        return None
+    tools: list[dict[str, Any]] = []
+    for tool in raw_tools:
+        name = tool.get("name")
+        input_schema = tool.get("input_schema")
+        if not name or input_schema is None:
+            identifier = name or tool.get("type") or "<unknown>"
+            raise OnyxError(
+                OnyxErrorCode.INVALID_INPUT,
+                f"Tool {identifier!r} is not supported by the Onyx gateway; "
+                "only client tools with an input_schema are accepted.",
+            )
+        function: dict[str, Any] = {"name": name, "parameters": input_schema}
+        if "description" in tool:
+            function["description"] = tool["description"]
+        tools.append({"type": "function", "function": function})
+    return tools
+
+
+def _anthropic_tool_choice(raw: dict[str, Any] | None) -> ToolChoiceOptions | None:
+    if raw is None:
+        return None
+    choice_type = raw.get("type")
+    if choice_type == "auto":
+        return ToolChoiceOptions.AUTO
+    if choice_type == "any":
+        return ToolChoiceOptions.REQUIRED
+    if choice_type == "none":
+        return ToolChoiceOptions.NONE
+    if choice_type == "tool":
+        # Silently downgrading to auto would let the model ignore a tool the
+        # caller required, so refuse instead of guessing.
+        raise OnyxError(
+            OnyxErrorCode.INVALID_INPUT,
+            "Named-function tool_choice is not supported by the Onyx gateway.",
+        )
+    raise OnyxError(
+        OnyxErrorCode.INVALID_INPUT,
+        f"Unsupported tool_choice type {choice_type!r}; expected one of "
+        "auto, any, none.",
+    )
+
+
+def _anthropic_reasoning_effort(
+    thinking: dict[str, Any] | None, output_config: dict[str, Any] | None
+) -> ReasoningEffort:
+    """Anthropic has two thinking APIs: legacy ``thinking.type=enabled`` with
+    ``budget_tokens``, and adaptive ``thinking.type=adaptive`` where effort
+    lives in top-level ``output_config.effort``. The downstream LLM layer
+    re-derives the right API per model from the single ReasoningEffort, so
+    both request shapes must map faithfully here."""
+    if thinking is not None and thinking.get("type") == "disabled":
+        return ReasoningEffort.OFF
+    effort_raw = (output_config or {}).get("effort")
+    if isinstance(effort_raw, str):
+        return _parse_reasoning_effort(effort_raw)
+    if thinking is None or thinking.get("type") == "adaptive":
+        # Adaptive without an explicit effort: leave it to the downstream
+        # adaptive default rather than pinning an effort tier.
+        return ReasoningEffort.AUTO
+    from litellm.llms.anthropic.experimental_pass_through.adapters.transformation import (
+        LiteLLMAnthropicMessagesAdapter,
+    )
+
+    effort = LiteLLMAnthropicMessagesAdapter.translate_anthropic_thinking_to_reasoning_effort(
+        thinking
+    )
+    return _parse_reasoning_effort(effort)
+
+
+_ANTHROPIC_STOP_REASONS = {
+    "stop": "end_turn",
+    "length": "max_tokens",
+    "tool_calls": "tool_use",
+    "content_filter": "refusal",
+}
+
+
+def _anthropic_stop_reason(finish_reason: str | None, has_tool_use: bool) -> str:
+    mapped = _ANTHROPIC_STOP_REASONS.get(finish_reason or "", "end_turn")
+    # Truncation dominates: a generation cut off mid-tool-call must not be
+    # reported as a completed tool_use turn (matches Anthropic's own API).
+    if mapped == "max_tokens":
+        return mapped
+    # Otherwise tool calls dominate: providers routinely report finish_reason
+    # "stop" on tool-call turns, and reporting end_turn would make clients
+    # treat the turn as final and drop the tool calls.
+    if has_tool_use:
+        return "tool_use"
+    return mapped
+
+
+def _anthropic_tool_use_blocks(
+    tool_calls: list[ToolCall] | list[ChatCompletionMessageToolCall] | None,
+) -> list[AnthropicToolUseBlock]:
+    blocks: list[AnthropicToolUseBlock] = []
+    for tool_call in tool_calls or []:
+        name = tool_call.function.name
+        if not name:
+            continue
+        arguments = tool_call.function.arguments
+        try:
+            parsed_input = json.loads(arguments) if arguments else {}
+        except json.JSONDecodeError as e:
+            raise ValueError("Upstream tool arguments are not valid JSON") from e
+        if not isinstance(parsed_input, dict):
+            raise ValueError("Upstream tool arguments must be a JSON object")
+        blocks.append(
+            AnthropicToolUseBlock.create(id=tool_call.id, name=name, input=parsed_input)
+        )
+    return blocks
+
+
+def _anthropic_stream_worker(
+    llm: LLM,
+    flow: LLMFlow,
+    messages: list[ChatCompletionMessage],
+    tools: list[dict[str, Any]] | None,
+    tool_choice: ToolChoiceOptions | None,
+    max_tokens: int,
+    reasoning_effort: ReasoningEffort,
+    model: str,
+    message_id: str,
+    out: "queue.Queue[Any]",
+    cancelled: threading.Event,
+) -> None:
+    def emit(event: AnthropicStreamEvent) -> bool:
+        payload = event.to_wire()
+        return _put_stream_item(
+            out, f"event: {payload['type']}\ndata: {json.dumps(payload)}\n\n", cancelled
+        )
+
+    emit(
+        AnthropicMessageStartEvent.create(
+            AnthropicMessageResponse.from_parts(
+                message_id=message_id,
+                model=model,
+                content=[],
+                stop_reason=None,
+                usage=AnthropicUsagePayload.zero(),
+            )
+        )
+    )
+    emit(AnthropicPingEvent.create())
+
+    def emit_error(*, message: str, error_type: str) -> None:
+        anthropic_error_type = (
+            "rate_limit_error" if error_type == "rate_limit_error" else "api_error"
+        )
+        emit(
+            AnthropicErrorEvent.create(message=message, error_type=anthropic_error_type)
+        )
+
+    # Runs on its own thread after the endpoint has returned the
+    # StreamingResponse, so the trace must be opened here rather than in the
+    # endpoint for the generation span to see an active trace.
+    with (
+        _gateway_trace(flow, llm.config.model_name),
+        llm_generation_span(
+            llm, flow=flow, input_messages=messages, tools=tools
+        ) as span,
+    ):
+        state = _StreamAccumulator()
+        text_block_open = False
+        with _stream_worker_guard(
+            span,
+            model,
+            state,
+            label="anthropic stream",
+            emit_error=emit_error,
+            out=out,
+            cancelled=cancelled,
+        ):
+            state.upstream = llm.stream(
+                prompt=messages,
+                tools=tools,
+                tool_choice=tool_choice,
+                max_tokens=max_tokens,
+                reasoning_effort=reasoning_effort,
+            )
+            finish_reason: str | None = None
+            for chunk in state.upstream:
+                if cancelled.is_set():
+                    return
+                state.observe(chunk)
+                if chunk.choice.finish_reason is not None:
+                    finish_reason = chunk.choice.finish_reason
+                if chunk.choice.delta.content:
+                    if not text_block_open:
+                        if not emit(
+                            AnthropicContentBlockStartEvent.create(
+                                index=0,
+                                content_block=AnthropicTextBlock.create(text=""),
+                            )
+                        ):
+                            return
+                        text_block_open = True
+                    if not emit(
+                        AnthropicContentBlockDeltaEvent.create(
+                            index=0,
+                            delta=AnthropicTextDelta.create(
+                                text=chunk.choice.delta.content
+                            ),
+                        )
+                    ):
+                        return
+            if text_block_open:
+                emit(AnthropicContentBlockStopEvent.create(index=0))
+            finalized_tool_calls = _finalize_tool_calls(state.tool_call_buffer)
+            tool_blocks = _anthropic_tool_use_blocks(finalized_tool_calls)
+            named_tool_calls = [
+                tc for tc in finalized_tool_calls or [] if tc.function.name
+            ]
+            index = 1 if text_block_open else 0
+            for tool_index, (tool_block, tool_call) in enumerate(
+                zip(tool_blocks, named_tool_calls), start=index
+            ):
+                emit(
+                    AnthropicContentBlockStartEvent.create(
+                        index=tool_index,
+                        content_block=AnthropicToolUseBlock.create(
+                            id=tool_block.id, name=tool_block.name, input={}
+                        ),
+                    )
+                )
+                emit(
+                    AnthropicContentBlockDeltaEvent.create(
+                        index=tool_index,
+                        delta=AnthropicInputJsonDelta.create(
+                            partial_json=tool_call.function.arguments or "{}"
+                        ),
+                    )
+                )
+                emit(AnthropicContentBlockStopEvent.create(index=tool_index))
+            emit(
+                AnthropicMessageDeltaEvent.create(
+                    delta=AnthropicMessageDeltaPayload.create(
+                        stop_reason=_anthropic_stop_reason(
+                            finish_reason, bool(tool_blocks)
+                        )
+                    ),
+                    usage=(
+                        AnthropicUsagePayload.from_usage(state.usage)
+                        if state.usage
+                        else AnthropicUsagePayload.zero()
+                    ),
+                )
+            )
+            emit(AnthropicMessageStopEvent.create())
+
+
+def handle_anthropic_messages(
+    request: AnthropicMessagesRequest,
+    provider: LLMProviderView,
+    model_config: ModelConfigurationView,
+    flow: LLMFlow,
+) -> StreamingResponse | AnthropicMessageResponse:
+    llm = llm_from_provider(
+        model_name=model_config.name,
+        llm_provider=provider,
+        temperature=request.temperature,
+    )
+    raw_messages = _anthropic_messages_to_raw_messages(request.messages, request.system)
+    messages = _prepare_messages(llm, raw_messages)
+    tools = _anthropic_tools(request.tools)
+    tool_choice = _anthropic_tool_choice(request.tool_choice)
+    reasoning_effort = _anthropic_reasoning_effort(
+        request.thinking, request.output_config
+    )
+    max_tokens = request.max_tokens
+    message_id = _new_id("msg")
+
+    if request.stream:
+        return _sse_response(
+            _anthropic_stream_worker,
+            {
+                "llm": llm,
+                "flow": flow,
+                "messages": messages,
+                "tools": tools,
+                "tool_choice": tool_choice,
+                "max_tokens": max_tokens,
+                "reasoning_effort": reasoning_effort,
+                "model": request.model,
+                "message_id": message_id,
+            },
+        )
+
+    with (
+        _gateway_trace(flow, llm.config.model_name),
+        llm_generation_span(
+            llm,
+            flow=flow,
+            input_messages=messages,
+            tools=tools,
+        ) as span,
+    ):
+        try:
+            response = llm.invoke(
+                prompt=messages,
+                tools=tools,
+                tool_choice=tool_choice,
+                max_tokens=max_tokens,
+                reasoning_effort=reasoning_effort,
+            )
+        except LLMRateLimitError as e:
+            raise OnyxError(
+                OnyxErrorCode.RATE_LIMITED,
+                "The selected model is temporarily rate limited.",
+            ) from e
+        except LLMTimeoutError as e:
+            raise OnyxError(
+                OnyxErrorCode.BAD_GATEWAY,
+                "The selected model did not respond in time.",
+            ) from e
+        except Exception as e:
+            if span is not None:
+                span.set_error({"message": f"{type(e).__name__}: {e}", "data": None})
+            logger.exception(
+                "LLM gateway anthropic invoke failed for model %s", request.model
+            )
+            raise OnyxError(
+                OnyxErrorCode.BAD_GATEWAY,
+                "The upstream LLM request failed.",
+            ) from e
+        if span is not None:
+            record_llm_response(span, response)
+
+    content: list[AnthropicContentBlock] = []
+    if response.choice.message.content:
+        content.append(AnthropicTextBlock.create(text=response.choice.message.content))
+    try:
+        tool_blocks = _anthropic_tool_use_blocks(response.choice.message.tool_calls)
+    except ValueError as e:
+        raise OnyxError(
+            OnyxErrorCode.BAD_GATEWAY,
+            "The upstream LLM returned invalid tool arguments.",
+        ) from e
+    content.extend(tool_blocks)
+    return AnthropicMessageResponse.from_parts(
+        message_id=message_id,
+        model=request.model,
+        content=content,
+        stop_reason=_anthropic_stop_reason(
+            response.choice.finish_reason, bool(tool_blocks)
+        ),
+        usage=(
+            AnthropicUsagePayload.from_usage(response.usage)
+            if response.usage
+            else AnthropicUsagePayload.zero()
+        ),
+    )
+
+
 @router.get("/v1/models")
 def gateway_list_models(
     http_request: Request,
@@ -985,3 +1433,59 @@ def gateway_responses(
     if isinstance(result, StreamingResponse):
         return result
     return JSONResponse(content=result.to_wire())
+
+
+@router.post("/v1/messages")
+def gateway_anthropic_messages(
+    request: AnthropicMessagesRequest,
+    http_request: Request,
+    user: User = Depends(require_permission(Permission.USE_LLM_GATEWAY)),
+    db_session: Session = Depends(get_session),
+) -> Response:
+    flow = _authorize_gateway_request(http_request, user)
+    check_token_rate_limits(user)
+    with closing(db_session):
+        provider, model_config = resolve_gateway_model(db_session, user, request.model)
+    result = handle_anthropic_messages(
+        request=request,
+        provider=provider,
+        model_config=model_config,
+        flow=flow,
+    )
+    if isinstance(result, StreamingResponse):
+        return result
+    # Serialize explicitly: FastAPI's default model serialization would emit
+    # unset fields as nulls, violating the wire contract's presence semantics.
+    return JSONResponse(content=result.to_wire())
+
+
+@router.post("/v1/messages/count_tokens")
+def gateway_anthropic_count_tokens(
+    request: AnthropicCountTokensRequest,
+    http_request: Request,
+    user: User = Depends(require_permission(Permission.USE_LLM_GATEWAY)),
+    db_session: Session = Depends(get_session),
+) -> Response:
+    # No token rate limit check: nothing is generated by this endpoint.
+    _authorize_gateway_request(http_request, user)
+    with closing(db_session):
+        _provider, model_config = resolve_gateway_model(db_session, user, request.model)
+    raw_messages = _anthropic_messages_to_raw_messages(request.messages, request.system)
+    tools = _anthropic_tools(request.tools)
+    from onyx.llm.litellm_singleton import litellm
+
+    try:
+        input_tokens = litellm.token_counter(
+            model=model_config.name,
+            messages=raw_messages,
+            tools=cast("list[ChatCompletionToolParam] | None", tools),
+        )
+    except Exception:
+        logger.exception("LLM gateway token count failed for model %s", request.model)
+        # Rough fallback so Claude Code's context tracking degrades instead of
+        # breaking.
+        countable_input: dict[str, Any] = {"messages": raw_messages}
+        if tools is not None:
+            countable_input["tools"] = tools
+        input_tokens = len(json.dumps(countable_input)) // 4
+    return JSONResponse(content={"input_tokens": input_tokens})
