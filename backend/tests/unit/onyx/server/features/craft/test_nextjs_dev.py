@@ -188,9 +188,10 @@ def test_bootstrap_script_embeds_port_write_and_env_exports() -> None:
 def test_bootstrap_script_short_circuits_on_live_pid() -> None:
     script = build_webapp_bootstrap_script(_SESSION_PATH, 3010)
 
+    assert 'kill -0 "$NEXTJS_PID" 2>/dev/null' in script
     assert (
-        'if [ -f "$SESSION_PATH/nextjs.pid" ] '
-        '&& kill -0 "$(cat "$SESSION_PATH/nextjs.pid")" 2>/dev/null; then' in script
+        '[ "$(readlink /proc/$NEXTJS_PID/cwd 2>/dev/null)" '
+        '= "$SESSION_PATH/outputs/web" ]' in script
     )
     assert "already running" in script
     assert "exit 2" in script

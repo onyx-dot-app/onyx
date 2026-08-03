@@ -135,7 +135,15 @@ PORT={nextjs_port}
 
     flock -x 9
 
-    if [ -f "$SESSION_PATH/nextjs.pid" ] && kill -0 "$(cat "$SESSION_PATH/nextjs.pid")" 2>/dev/null; then
+    # PIDs recycle in a pod full of short-lived tool processes, so a bare
+    # kill -0 could match an unrelated live process; verify identity via cwd
+    # like the embedded start script does.
+    NEXTJS_PID=""
+    if [ -f "$SESSION_PATH/nextjs.pid" ]; then
+        NEXTJS_PID="$(cat "$SESSION_PATH/nextjs.pid")"
+    fi
+    if [ -n "$NEXTJS_PID" ] && kill -0 "$NEXTJS_PID" 2>/dev/null && \\
+       [ "$(readlink /proc/$NEXTJS_PID/cwd 2>/dev/null)" = "$SESSION_PATH/outputs/web" ]; then
         echo "webapp already running on port $PORT (logs: nextjs.log)"
         exit 2
     fi
