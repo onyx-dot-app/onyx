@@ -35,7 +35,7 @@ from onyx.llm.interfaces import (
     LLMConfig,
     LLMUserIdentity,
     ReasoningEffort,
-    ToolChoiceOptions,
+    ToolChoice,
 )
 from onyx.llm.model_capabilities import (
     is_true_openai_model,
@@ -47,6 +47,8 @@ from onyx.llm.models import (
     ANTHROPIC_ADAPTIVE_REASONING_EFFORT,
     ANTHROPIC_REASONING_EFFORT_BUDGET,
     OPENAI_REASONING_EFFORT,
+    NamedToolChoice,
+    ToolChoiceOptions,
 )
 from onyx.llm.request_context import get_llm_mock_response
 from onyx.llm.utils import build_litellm_passthrough_kwargs
@@ -571,7 +573,7 @@ class LitellmLLM(LLM):
         self,
         prompt: LanguageModelInput,
         tools: list[dict] | None,
-        tool_choice: ToolChoiceOptions | None,
+        tool_choice: ToolChoice | None,
         stream: bool,
         parallel_tool_calls: bool,
         reasoning_effort: ReasoningEffort = ReasoningEffort.AUTO,
@@ -674,6 +676,8 @@ class LitellmLLM(LLM):
         # enforces the forced tool. Matched by model name rather than
         # `is_reasoning` because the litellm/local registry lags behind new
         # Qwen releases (e.g. qwen3.7-plus).
+        # A NamedToolChoice is deliberately NOT downgraded here: the caller
+        # explicitly forced one specific tool and accepts the reasoning skip.
         if (is_claude_model or is_qwen_model) and (
             tool_choice == ToolChoiceOptions.REQUIRED
         ):
@@ -889,7 +893,13 @@ class LitellmLLM(LLM):
             # Only pass tool_choice when tools are present — some providers (e.g. Fireworks)
             # reject requests where tool_choice is explicitly null.
             if tools and tool_choice is not None:
-                optional_kwargs["tool_choice"] = tool_choice
+                if isinstance(tool_choice, NamedToolChoice):
+                    optional_kwargs["tool_choice"] = {
+                        "type": "function",
+                        "function": {"name": tool_choice.name},
+                    }
+                else:
+                    optional_kwargs["tool_choice"] = tool_choice
 
             if not _env_injection_enabled() and self._env_only_custom_config:
                 _warn_dropped_env_only_keys(
@@ -1003,7 +1013,7 @@ class LitellmLLM(LLM):
         self,
         prompt: LanguageModelInput,
         tools: list[dict] | None = None,
-        tool_choice: ToolChoiceOptions | None = None,
+        tool_choice: ToolChoice | None = None,
         structured_response_format: dict | None = None,
         timeout_override: int | None = None,
         max_tokens: int | None = None,
@@ -1101,7 +1111,7 @@ class LitellmLLM(LLM):
         self,
         prompt: LanguageModelInput,
         tools: list[dict] | None = None,
-        tool_choice: ToolChoiceOptions | None = None,
+        tool_choice: ToolChoice | None = None,
         structured_response_format: dict | None = None,
         timeout_override: int | None = None,
         max_tokens: int | None = None,

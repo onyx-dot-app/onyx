@@ -36,6 +36,7 @@ from onyx.llm.models import (
     ChatCompletionMessage,
     ImageContentPart,
     ImageUrlDetail,
+    NamedToolChoice,
     ReasoningEffort,
     SystemMessage,
     TextContentPart,
@@ -828,7 +829,20 @@ def test_parse_tool_choice(raw: object, expected: ToolChoiceOptions | None) -> N
 
 @pytest.mark.parametrize(
     "raw",
-    ["bogus", {"type": "function", "function": {"name": "bash"}}],
+    [
+        {"type": "function", "function": {"name": "bash"}},
+        {"type": "function", "name": "bash"},
+    ],
+)
+def test_parse_tool_choice_maps_named_function(raw: object) -> None:
+    """Both the Chat Completions and Responses API wire shapes for a named
+    tool_choice must map to the same NamedToolChoice."""
+    assert gateway_api._parse_tool_choice(raw) == NamedToolChoice(name="bash")
+
+
+@pytest.mark.parametrize(
+    "raw",
+    ["bogus", {"type": "bogus"}, {"type": "function", "function": {}}],
 )
 def test_parse_tool_choice_refuses_unsupported(raw: object) -> None:
     """A tool_choice we cannot honor must fail loudly. Downgrading to auto lets
@@ -838,6 +852,38 @@ def test_parse_tool_choice_refuses_unsupported(raw: object) -> None:
         gateway_api._parse_tool_choice(raw)
 
     assert exc_info.value.error_code is OnyxErrorCode.INVALID_INPUT
+
+
+@pytest.mark.parametrize(
+    ("tool_choice", "tools", "should_raise"),
+    [
+        (ToolChoiceOptions.AUTO, None, False),
+        (ToolChoiceOptions.REQUIRED, [], False),
+        (None, None, False),
+        (
+            NamedToolChoice(name="bash"),
+            [{"type": "function", "function": {"name": "bash"}}],
+            False,
+        ),
+        (
+            NamedToolChoice(name="bash"),
+            [{"type": "function", "function": {"name": "other"}}],
+            True,
+        ),
+        (NamedToolChoice(name="bash"), None, True),
+    ],
+)
+def test_require_named_tool(
+    tool_choice: ToolChoiceOptions | NamedToolChoice | None,
+    tools: list[dict[str, Any]] | None,
+    should_raise: bool,
+) -> None:
+    if should_raise:
+        with pytest.raises(OnyxError) as exc_info:
+            gateway_api._require_named_tool(tool_choice, tools)
+        assert exc_info.value.error_code is OnyxErrorCode.INVALID_INPUT
+    else:
+        gateway_api._require_named_tool(tool_choice, tools)
 
 
 def test_gateway_route_exposes_standard_auth_dependency() -> None:
