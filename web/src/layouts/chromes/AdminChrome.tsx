@@ -14,7 +14,11 @@ import { SvgSidebar, SvgSimpleLoader } from "@opal/icons";
 import { RootLayout, useSidebarState } from "@opal/layouts";
 import { Section } from "@/layouts/general-layouts";
 import { isVectorDbRequiredRoute, matchAdminRoute } from "@/lib/admin-routes";
-import { getFirstPermittedAdminRoute, hasPermission } from "@/lib/permissions";
+import {
+  getFirstPermittedAdminRoute,
+  hasAnyAdminPermission,
+  hasPermission,
+} from "@/lib/permissions";
 import LiteModeIndexingNotice from "@/sections/admin/LiteModeIndexingNotice";
 
 export interface AdminChromeProps {
@@ -32,14 +36,13 @@ export default function AdminChrome({
   const pathname = usePathname();
   const settings = useSettingsContext();
   const router = useRouter();
-  const { adminCapabilities: liveAdminCapabilities } = useUser();
+  const { user, adminCapabilities: liveAdminCapabilities } = useUser();
 
-  // Prefer the live value so mid-session changes reflect without a reload; an empty client
-  // set means still-loading (every admin here has capabilities), so use the server seed then.
-  const adminCapabilities =
-    liveAdminCapabilities.length > 0
-      ? liveAdminCapabilities
-      : initialAdminCapabilities;
+  // Seed only until /api/me loads (`user` still null); then use the live set, so a now-empty
+  // set (capabilities revoked) denies instead of falling back to the stale seed.
+  const adminCapabilities = user
+    ? liveAdminCapabilities
+    : initialAdminCapabilities;
 
   // Match-only per-page gate: if this page is a known admin route the user lacks the
   // permission for (a group manager landing on a full-admin page), send them to their
@@ -50,9 +53,14 @@ export default function AdminChrome({
     !hasPermission(adminCapabilities, matched.requiredPermission);
 
   useEffect(() => {
-    if (denied) {
-      router.replace(getFirstPermittedAdminRoute(adminCapabilities) as Route);
-    }
+    if (!denied) return;
+    // Some reach left → first permitted page; fully revoked → /app (else they'd bounce to an
+    // admin page they still can't open).
+    router.replace(
+      (hasAnyAdminPermission(adminCapabilities)
+        ? getFirstPermittedAdminRoute(adminCapabilities)
+        : "/app") as Route
+    );
   }, [denied, router, adminCapabilities]);
 
   // Certain admin panels have their own custom sidebar.
