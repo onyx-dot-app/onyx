@@ -67,9 +67,9 @@ def validate_sharepoint_perm_sync(connector: SharepointConnector) -> None:
     connector.probe_group_members_permission()
 
 
-# The single source of truth for which connectors carry a real perm-sync
-# probe: ``validate_perm_sync`` dispatches through it, and the capability
-# check framework derives probe-bearing sources from it via
+# The single source of truth for which connectors carry a real perm-sync probe:
+# ``validate_perm_sync`` dispatches through it, and the capability check
+# framework derives probe-bearing sources from it via
 # ``source_has_perm_sync_probe``. Values take the matching connector subclass;
 # ``Any`` because a heterogeneous dict cannot express the per-entry pairing.
 _VALIDATOR_BY_CONNECTOR_CLASS: dict[type[BaseConnector], Callable[[Any], None]] = {
@@ -98,10 +98,9 @@ def source_has_perm_sync_probe(source: DocumentSource) -> bool:
     """
     Returns whether ``validate_perm_sync`` reaches a real probe for a source.
 
-    Mirrors the isinstance dispatch above (``issubclass``, so a connector
-    class deriving from a probe-bearing one counts the same way). Only
-    meaningful for sources with a connector class; callers gate on
-    sync-capability first.
+    Mirrors the isinstance dispatch above (``issubclass``, so a connector class
+    deriving from a probe-bearing one counts the same way). Only meaningful for
+    sources with a connector class; callers gate on sync-capability first.
     """
     connector_class = identify_connector_class(source)
     return any(

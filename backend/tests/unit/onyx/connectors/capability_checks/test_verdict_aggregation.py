@@ -152,8 +152,8 @@ def test_required_skip_blocks_pass() -> None:
 
 def test_required_skip_outranks_optional_failure() -> None:
     """
-    Verifies precedence: an unverified required core blocks the warnings
-    verdict a non-required failure would otherwise produce.
+    Verifies precedence: an unverified required core blocks the warnings verdict
+    a non-required failure would otherwise produce.
     """
     # Precondition.
     results = [

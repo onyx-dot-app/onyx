@@ -72,9 +72,9 @@ def get_perm_sync_capability_checks(source: DocumentSource) -> list[CapabilityCh
     ``validate_perm_sync`` fallback -- but only for probe-bearing sources,
     derived from that blob's own dispatch table via
     ``source_has_perm_sync_probe``. Sync-capable sources where the blob is a
-    no-op get no perm-sync checks at all until named ones are registered;
-    their verdict renders as "no checks available yet" rather than a trivial
-    PASSED built on a no-op probe.
+    no-op get no perm-sync checks at all until named ones are registered; their
+    verdict renders as "no checks available yet" rather than a trivial PASSED
+    built on a no-op probe.
     """
     applicable = get_applicable_perm_sync_capabilities(source)
     registered_by_capability: dict[CredentialCapability, list[CapabilityCheck]] = {
