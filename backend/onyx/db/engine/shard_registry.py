@@ -31,6 +31,7 @@ from sqlalchemy.engine import Engine, create_engine
 from onyx.configs.app_configs import (
     ONYX_DB_CATALOG_SHARD,
     ONYX_DB_DEFAULT_SHARD,
+    ONYX_DB_NEW_TENANT_SHARD,
     ONYX_DB_SHARDS_JSON,
     POSTGRES_DB,
     POSTGRES_HOST,
@@ -75,18 +76,21 @@ class ShardSpec:
     __str__ = __repr__
 
 
-def _validate_catalog_shard(specs: dict[str, ShardSpec]) -> None:
-    """Fail at startup if the catalog shard names something that does not exist.
+def _validate_named_shards(specs: dict[str, ShardSpec]) -> None:
+    """Fail at startup if a settings-named shard does not exist.
 
-    Checked on the unconfigured path too: pointing ONYX_DB_CATALOG_SHARD at a name
-    without also defining ONYX_DB_SHARDS otherwise starts cleanly and then breaks
-    every catalog session at request time.
+    Checked on the unconfigured path too: naming one of these without also defining
+    ONYX_DB_SHARDS otherwise starts cleanly and then breaks at request time — every
+    catalog session for the former, every signup for the latter.
     """
-    if ONYX_DB_CATALOG_SHARD not in specs:
-        raise ShardConfigurationError(
-            f"ONYX_DB_CATALOG_SHARD='{ONYX_DB_CATALOG_SHARD}' is not a configured shard "
-            f"(known: {sorted(specs)})"
-        )
+    for setting, name in (
+        ("ONYX_DB_CATALOG_SHARD", ONYX_DB_CATALOG_SHARD),
+        ("ONYX_DB_NEW_TENANT_SHARD", ONYX_DB_NEW_TENANT_SHARD),
+    ):
+        if name not in specs:
+            raise ShardConfigurationError(
+                f"{setting}='{name}' is not a configured shard (known: {sorted(specs)})"
+            )
 
 
 def _parse_shard_specs() -> dict[str, ShardSpec]:
@@ -106,7 +110,7 @@ def _parse_shard_specs() -> dict[str, ShardSpec]:
     specs: dict[str, ShardSpec] = {default_spec.name: default_spec}
 
     if not ONYX_DB_SHARDS_JSON:
-        _validate_catalog_shard(specs)
+        _validate_named_shards(specs)
         return specs
 
     try:
@@ -156,7 +160,7 @@ def _parse_shard_specs() -> dict[str, ShardSpec]:
             password=password,
         )
 
-    _validate_catalog_shard(specs)
+    _validate_named_shards(specs)
 
     return specs
 
@@ -236,6 +240,11 @@ def get_default_shard_name() -> str:
 
 def get_catalog_shard_name() -> str:
     return ONYX_DB_CATALOG_SHARD
+
+
+def get_new_tenant_shard_name() -> str:
+    """Shard that newly created tenants are placed on."""
+    return ONYX_DB_NEW_TENANT_SHARD
 
 
 class ShardRegistry:

@@ -45,10 +45,12 @@ from onyx.db.engine.sql_engine import (
     get_session_with_tenant,
 )
 from onyx.db.models import PublicBase, TenantShard
+from tests.external_dependency_unit.db.shard_test_utils import (
+    DEFAULT_SHARD,
+    schema_exists,
+)
 
-# Shard names used throughout. DEFAULT_SHARD must match ONYX_DB_DEFAULT_SHARD,
-# which the `two_shards` fixture pins.
-DEFAULT_SHARD = "default"
+# SECOND_SHARD is per-suite; DEFAULT_SHARD is shared.
 SECOND_SHARD = "shard-test-b"
 
 # Standalone probe table. `schema=None` so `schema_translate_map` rewrites it to
@@ -83,38 +85,6 @@ def _clear_tenant_shard(tenant_id: str) -> None:
             {"t": tenant_id},
         )
         conn.commit()
-
-
-def _admin_engine() -> Engine:
-    """Engine on the `postgres` maintenance DB, for CREATE/DROP DATABASE."""
-    from sqlalchemy import create_engine
-
-    return create_engine(
-        build_connection_string(db_api=SYNC_DB_API, db="postgres"),
-        isolation_level="AUTOCOMMIT",
-    )
-
-
-@pytest.fixture(scope="module")
-def second_database() -> Generator[str, None, None]:
-    """Create a throwaway second database for the duration of the module."""
-    db_name = f"onyx_shard_test_{uuid4().hex[:8]}"
-    admin = _admin_engine()
-    with admin.connect() as conn:
-        conn.execute(text(f'CREATE DATABASE "{db_name}"'))
-    try:
-        yield db_name
-    finally:
-        with admin.connect() as conn:
-            conn.execute(
-                text(
-                    "SELECT pg_terminate_backend(pid) FROM pg_stat_activity "
-                    "WHERE datname = :db AND pid <> pg_backend_pid()"
-                ),
-                {"db": db_name},
-            )
-            conn.execute(text(f'DROP DATABASE IF EXISTS "{db_name}"'))
-        admin.dispose()
 
 
 @pytest.fixture(scope="function")
@@ -399,19 +369,6 @@ def test_propagation_window_exceeds_the_poll_interval(
     )
 
 
-def _schema_exists(engine: Engine, schema: str) -> bool:
-    with engine.connect() as conn:
-        return (
-            conn.execute(
-                text(
-                    "SELECT 1 FROM information_schema.schemata WHERE schema_name = :s"
-                ),
-                {"s": schema},
-            ).scalar()
-            is not None
-        )
-
-
 def test_schema_creation_follows_the_shard_map(
     two_shards: dict[str, Any],  # noqa: ARG001
 ) -> None:
@@ -432,8 +389,8 @@ def test_schema_creation_follows_the_shard_map(
     try:
         create_schema_if_not_exists(tenant_id)
 
-        assert _schema_exists(second_engine, tenant_id)
-        assert not _schema_exists(default_engine, tenant_id)
+        assert schema_exists(second_engine, tenant_id)
+        assert not schema_exists(default_engine, tenant_id)
     finally:
         with second_engine.connect() as conn:
             conn.execute(text(f'DROP SCHEMA IF EXISTS "{tenant_id}" CASCADE'))
@@ -450,11 +407,11 @@ def test_drop_schema_follows_the_shard_map(two_shards: dict[str, Any]) -> None:
 
     tenant_b = two_shards["tenant_b"]
     second_engine = shard_registry.get_engine_for_shard(SECOND_SHARD)
-    assert _schema_exists(second_engine, tenant_b)
+    assert schema_exists(second_engine, tenant_b)
 
     drop_schema(tenant_b)
 
-    assert not _schema_exists(second_engine, tenant_b)
+    assert not schema_exists(second_engine, tenant_b)
 
 
 def test_alembic_url_targets_the_tenants_shard(two_shards: dict[str, Any]) -> None:
