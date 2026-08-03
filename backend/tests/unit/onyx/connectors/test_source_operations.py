@@ -327,3 +327,56 @@ def test_decorator_rejects_blank_variant_names() -> None:
             consumes=OperationConsumes.CREDENTIAL,
             variants=("public", ""),
         )
+
+
+@pytest.mark.usefixtures("isolated_registry")
+def test_variant_bearing_operation_requires_a_declared_variant() -> None:
+    """
+    Verifies calls to a variant-bearing operation must classify themselves
+    with ``variant=`` so coverage attribution reflects real call sites.
+    """
+
+    # Precondition.
+    class _VariantOperations(SourceOperations):
+        source = DocumentSource.SLACK
+
+        @source_operation(
+            capabilities={CredentialCapability.INDEXING},
+            consumes=OperationConsumes.CREDENTIAL,
+            variants=("public", "private"),
+        )
+        def list_channels(self, *, variant: str | None = None) -> str | None:
+            return variant
+
+    gateway = _VariantOperations()
+
+    # Under test and postcondition.
+    assert gateway.list_channels(variant="public") == "public"
+    with pytest.raises(TypeError, match="declares variants"):
+        gateway.list_channels(variant="bogus")
+    with pytest.raises(TypeError, match="declares variants"):
+        gateway.list_channels()
+    # The wrap preserves the stamped spec.
+    assert _VariantOperations.operation_specs()["list_channels"].variants == (
+        "public",
+        "private",
+    )
+
+
+@pytest.mark.usefixtures("isolated_registry")
+def test_variantless_operation_is_not_wrapped() -> None:
+    """Verifies operations without variants keep their bare call shape."""
+
+    # Precondition.
+    class _PlainOperations(SourceOperations):
+        source = DocumentSource.SLACK
+
+        @source_operation(
+            capabilities={CredentialCapability.INDEXING},
+            consumes=OperationConsumes.CREDENTIAL,
+        )
+        def fetch_history(self) -> str:
+            return "history"
+
+    # Under test and postcondition.
+    assert _PlainOperations().fetch_history() == "history"

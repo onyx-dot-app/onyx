@@ -16,6 +16,7 @@ fire requests outside any wrapper, and returning plain data is what makes the
 gateway boundary real.
 """
 
+import functools
 import inspect
 from abc import ABC
 from collections.abc import Callable, Collection, Mapping
@@ -26,7 +27,7 @@ from typing import Any, ClassVar, TypeVar, cast
 from pydantic import BaseModel, ConfigDict
 
 from onyx.configs.constants import DocumentSource
-from onyx.connectors.capability_checks.models import CredentialCapability
+from onyx.connectors.capabilities import CredentialCapability
 
 _SPEC_ATTR = "__source_operation_spec__"
 
@@ -55,9 +56,12 @@ class SourceOperationSpec(BaseModel):
     name: str
     capabilities: frozenset[CredentialCapability]
     # Named forms of the operation where a parameter changes the required
-    # permission (e.g. Slack ``conversations.list`` public vs private). Coverage
-    # is counted per (operation, variant); empty means the operation itself is
-    # the single coverage unit.
+    # permission (e.g. Slack ``conversations.list`` public vs private).
+    # Coverage is counted per (operation, variant); empty means the operation
+    # itself is the single coverage unit. A variant-bearing operation must be
+    # invoked with a ``variant="<name>"`` keyword -- the method may branch on
+    # it or ignore it, but the call site must classify itself; the base class
+    # enforces this at runtime and the coverage harness attributes calls by it.
     variants: tuple[str, ...] = ()
     consumes: OperationConsumes
     # Exempts the operation (all variants) from the check-coverage requirement.
@@ -114,6 +118,24 @@ def source_operation(
     return stamp
 
 
+def _enforce_variant_kwarg(
+    func: Callable[..., Any], spec: SourceOperationSpec
+) -> Callable[..., Any]:
+    """Wraps a variant-bearing operation to require a declared ``variant=``."""
+
+    @functools.wraps(func)
+    def wrapped(self: "SourceOperations", *args: Any, **kwargs: Any) -> Any:
+        variant = kwargs.get("variant")
+        if variant not in spec.variants:
+            raise TypeError(
+                f"{spec.name} declares variants {spec.variants}; call it "
+                f"with variant= one of those, got {variant!r}."
+            )
+        return func(self, *args, **kwargs)
+
+    return wrapped
+
+
 # Internal: use ``monkeypatch.setattr(module, "_SOURCE_OPERATIONS_BY_SOURCE",
 # {})`` to isolate in tests.
 _SOURCE_OPERATIONS_BY_SOURCE: dict[DocumentSource, type["SourceOperations"]] = {}
@@ -139,7 +161,14 @@ class SourceOperations(ABC):
 
     source: ClassVar[DocumentSource]
 
-    _operation_specs: ClassVar[Mapping[str, SourceOperationSpec]] = MappingProxyType({})
+    # The SDK module roots this gateway wraps (e.g. ``("slack_sdk",)``). The
+    # import-fence test asserts these are imported only from the gateway's
+    # file within the connector's OSS and EE perm-sync directories.
+    sdk_modules: ClassVar[tuple[str, ...]] = ()
+
+    _operation_specs: ClassVar[Mapping[str, SourceOperationSpec]] = MappingProxyType(
+        {}
+    )
 
     def __init_subclass__(cls, **kwargs: Any) -> None:
         super().__init_subclass__(**kwargs)
@@ -211,6 +240,14 @@ class SourceOperations(ABC):
                 f"{unstamped}. Stamp them with @source_operation or make "
                 "them private."
             )
+
+        # Variant-bearing operations must self-classify at every call site;
+        # wrapping here makes production calls carry the same ``variant=``
+        # attribution the coverage harness counts, so coverage claims stay
+        # honest. (Auto-wrap precedent: ``LLM.__init_subclass__``.)
+        for name, spec in specs.items():
+            if spec.variants:
+                setattr(cls, name, _enforce_variant_kwarg(vars(cls)[name], spec))
 
         cls._operation_specs = MappingProxyType(specs)
         _SOURCE_OPERATIONS_BY_SOURCE[source] = cls
