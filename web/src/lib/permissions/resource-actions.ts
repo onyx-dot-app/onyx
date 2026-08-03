@@ -13,17 +13,30 @@ export const RESOURCE_ACTIONS = {
   MCPServer: ["edit", "delete", "authenticate", "manage_status"],
   CustomSkill: ["edit", "manage_access", "delete", "publish"],
   UserGroup: ["manage", "delete", "edit_permissions", "edit_token_limits"],
+  Agent: [
+    "edit",
+    "share",
+    "view_stats",
+    "delete",
+    "publish",
+    "feature",
+    "list",
+    "reorder",
+  ],
 } as const;
 
 export type ResourceName = keyof typeof RESOURCE_ACTIONS;
 export type ResourceAction<R extends ResourceName> =
   (typeof RESOURCE_ACTIONS)[R][number];
 
+// Union of all actions — makes a typo a compile error, not a silent false.
+export type AnyResourceAction = ResourceAction<ResourceName>;
+
 // Fail-closed: a missing resource or unstamped key reads as false, so a control the
 // server hasn't authorized (or a new action an older client predates) never renders.
 export function can(
   resource: WithPermissions | null | undefined,
-  action: string
+  action: AnyResourceAction
 ): boolean {
   return resource?.permissions?.[action] ?? false;
 }

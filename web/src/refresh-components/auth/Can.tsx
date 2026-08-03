@@ -1,8 +1,12 @@
-import { can, WithPermissions } from "@/lib/permissions/resource-actions";
+import {
+  AnyResourceAction,
+  can,
+  WithPermissions,
+} from "@/lib/permissions/resource-actions";
 
 interface CanProps {
   resource: WithPermissions | null | undefined;
-  action: string;
+  action: AnyResourceAction;
   children: React.ReactNode;
   fallback?: React.ReactNode;
 }
