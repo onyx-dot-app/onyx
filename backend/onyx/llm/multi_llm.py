@@ -854,7 +854,13 @@ class LitellmLLM(LLM):
 
             messages = _prompt_to_dicts(prompt)
 
-            if self._model_provider not in _THINKING_BLOCK_PROVIDERS:
+            if not (
+                is_claude_model
+                and (
+                    self._model_provider in _THINKING_BLOCK_PROVIDERS
+                    or self._api_surface is LlmApiSurface.ANTHROPIC_MESSAGES
+                )
+            ):
                 messages = _strip_thinking_blocks_from_messages(messages)
 
             # Bedrock's Converse API requires toolConfig when messages
