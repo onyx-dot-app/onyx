@@ -27,6 +27,7 @@ import { toast } from "@/hooks/useToast";
 import { errorHandlingFetcher, skipRetryOnAuthError } from "@/lib/fetcher";
 import type { UserGroup } from "@/lib/types";
 import { useSettingsContext } from "@/providers/SettingsProvider";
+import { useUser } from "@/providers/UserProvider";
 import { Tier } from "@/interfaces/settings";
 import { tierAtLeast } from "@/lib/tiers";
 import type { MemberRow, TokenRateLimitDisplay } from "./interfaces";
@@ -62,6 +63,8 @@ function EditGroupPage({ groupId }: EditGroupPageProps) {
   const router = useRouter();
   const { mutate } = useSWRConfig();
   const settings = useSettingsContext();
+  const { user } = useUser();
+  const currentUserId = user?.id;
   const isEnterpriseTier = tierAtLeast(
     settings?.settings.tier,
     Tier.ENTERPRISE
@@ -245,20 +248,26 @@ function EditGroupPage({ groupId }: EditGroupPageProps) {
           const isManager = managerIds.has(userId);
           const isPersisted = persistedMemberIds.has(userId);
           const isPending = pendingManagerIds.has(userId);
+          // Block self-revoke: dropping your own manager row loses your access mid-edit,
+          // leaving a stale editable page; an admin or another manager can do it instead.
+          const isSelfRevoke =
+            isManager && currentUserId != null && userId === currentUserId;
           return (
             <div className="flex items-center gap-1">
               <IconButton
                 icon={isPending ? SvgSimpleLoader : SvgShield}
                 tertiary
                 transient={isManager}
-                disabled={!isPersisted || isPending}
+                disabled={!isPersisted || isPending || isSelfRevoke}
                 aria-label={isManager ? "Revoke manager" : "Make manager"}
                 tooltip={
                   !isPersisted
                     ? "Save the group before assigning a manager"
-                    : isManager
-                      ? "Revoke manager"
-                      : "Make manager"
+                    : isSelfRevoke
+                      ? "You can't revoke your own manager access"
+                      : isManager
+                        ? "Revoke manager"
+                        : "Make manager"
                 }
                 onClick={(e) => {
                   e.stopPropagation();
@@ -285,6 +294,7 @@ function EditGroupPage({ groupId }: EditGroupPageProps) {
       persistedMemberIds,
       pendingManagerIds,
       canManage,
+      currentUserId,
     ]
   );
 
