@@ -435,7 +435,7 @@ def _stream_worker(
             )
             for chunk in state.upstream:
                 if cancelled.is_set():
-                    break
+                    return
                 state.observe(chunk)
                 payload = ChatCompletionChunk.from_stream_chunk(
                     chunk, model, include_role=not sent_role
@@ -444,9 +444,8 @@ def _stream_worker(
                 if not _put_stream_item(
                     out, f"data: {json.dumps(payload.to_wire())}\n\n", cancelled
                 ):
-                    break
-            else:
-                _put_stream_item(out, "data: [DONE]\n\n", cancelled)
+                    return
+            _put_stream_item(out, "data: [DONE]\n\n", cancelled)
 
 
 def _run_bridged_stream(
@@ -775,7 +774,7 @@ def _responses_stream_worker(
             )
             for chunk in state.upstream:
                 if cancelled.is_set():
-                    break
+                    return
                 state.observe(chunk)
                 if not chunk.choice.delta.content:
                     continue
@@ -790,7 +789,7 @@ def _responses_stream_worker(
                             ),
                         )
                     ):
-                        break
+                        return
                     if not emit(
                         ResponsesContentPartAddedEvent.create(
                             item_id=message_item_id,
@@ -798,7 +797,7 @@ def _responses_stream_worker(
                             part=ResponsesOutputTextPart.create(text=""),
                         )
                     ):
-                        break
+                        return
                     text_item_open = True
                 if not emit(
                     ResponsesOutputTextDeltaEvent.create(
@@ -806,58 +805,56 @@ def _responses_stream_worker(
                         delta=chunk.choice.delta.content,
                     )
                 ):
-                    break
-            else:
-                # Build each item once and reuse it below: re-deriving items
-                # for the terminal payload remints ids the client never saw.
-                completed_items: list[ResponsesOutputItem] = []
-                if text_item_open:
-                    completed_items.append(close_text_item("completed"))
-                # Filter before enumerating, or a dropped nameless call leaves
-                # a hole in the output_index sequence.
-                call_items = [
-                    item
-                    for item in (
-                        _function_call_item(tool_call)
-                        for tool_call in _finalize_tool_calls(state.tool_call_buffer)
-                        or []
-                    )
-                    if item is not None
-                ]
-                for tool_index, call_item in enumerate(
-                    call_items, start=len(completed_items)
-                ):
-                    completed_items.append(call_item)
-                    emit(
-                        ResponsesOutputItemAddedEvent.create(
-                            output_index=tool_index, item=call_item
-                        )
-                    )
-                    emit(
-                        ResponsesFunctionCallArgumentsDoneEvent.create(
-                            item_id=call_item.id,
-                            output_index=tool_index,
-                            arguments=call_item.arguments,
-                            name=call_item.name,
-                        )
-                    )
-                    emit(
-                        ResponsesOutputItemDoneEvent.create(
-                            output_index=tool_index, item=call_item
-                        )
-                    )
+                    return
+            # Build each item once and reuse it below: re-deriving items
+            # for the terminal payload remints ids the client never saw.
+            completed_items: list[ResponsesOutputItem] = []
+            if text_item_open:
+                completed_items.append(close_text_item("completed"))
+            # Filter before enumerating, or a dropped nameless call leaves
+            # a hole in the output_index sequence.
+            call_items = [
+                item
+                for item in (
+                    _function_call_item(tool_call)
+                    for tool_call in _finalize_tool_calls(state.tool_call_buffer) or []
+                )
+                if item is not None
+            ]
+            for tool_index, call_item in enumerate(
+                call_items, start=len(completed_items)
+            ):
+                completed_items.append(call_item)
                 emit(
-                    ResponsesCompletedEvent.create(
-                        ResponsesObjectPayload.from_parts(
-                            response_id=response_id,
-                            created_at=created_at,
-                            model=model,
-                            status="completed",
-                            output=completed_items,
-                            usage=state.usage,
-                        )
+                    ResponsesOutputItemAddedEvent.create(
+                        output_index=tool_index, item=call_item
                     )
                 )
+                emit(
+                    ResponsesFunctionCallArgumentsDoneEvent.create(
+                        item_id=call_item.id,
+                        output_index=tool_index,
+                        arguments=call_item.arguments,
+                        name=call_item.name,
+                    )
+                )
+                emit(
+                    ResponsesOutputItemDoneEvent.create(
+                        output_index=tool_index, item=call_item
+                    )
+                )
+            emit(
+                ResponsesCompletedEvent.create(
+                    ResponsesObjectPayload.from_parts(
+                        response_id=response_id,
+                        created_at=created_at,
+                        model=model,
+                        status="completed",
+                        output=completed_items,
+                        usage=state.usage,
+                    )
+                )
+            )
 
 
 def handle_responses_request(
@@ -1209,7 +1206,7 @@ def _anthropic_stream_worker(
             finish_reason: str | None = None
             for chunk in state.upstream:
                 if cancelled.is_set():
-                    break
+                    return
                 state.observe(chunk)
                 if chunk.choice.finish_reason is not None:
                     finish_reason = chunk.choice.finish_reason
@@ -1221,7 +1218,7 @@ def _anthropic_stream_worker(
                                 content_block=AnthropicTextBlock.create(text=""),
                             )
                         ):
-                            break
+                            return
                         text_block_open = True
                     if not emit(
                         AnthropicContentBlockDeltaEvent.create(
@@ -1231,56 +1228,50 @@ def _anthropic_stream_worker(
                             ),
                         )
                     ):
-                        break
-            else:
-                # Intentional for-else, matching the sibling stream workers:
-                # the completion frames below must be emitted ONLY when the
-                # upstream stream exhausted cleanly — any break above
-                # (cancellation, failed emit) must skip straight to the
-                # guard's teardown.
-                if text_block_open:
-                    emit(AnthropicContentBlockStopEvent.create(index=0))
-                finalized_tool_calls = _finalize_tool_calls(state.tool_call_buffer)
-                tool_blocks = _anthropic_tool_use_blocks(finalized_tool_calls)
-                named_tool_calls = [
-                    tc for tc in finalized_tool_calls or [] if tc.function.name
-                ]
-                index = 1 if text_block_open else 0
-                for tool_index, (tool_block, tool_call) in enumerate(
-                    zip(tool_blocks, named_tool_calls), start=index
-                ):
-                    emit(
-                        AnthropicContentBlockStartEvent.create(
-                            index=tool_index,
-                            content_block=AnthropicToolUseBlock.create(
-                                id=tool_block.id, name=tool_block.name, input={}
-                            ),
-                        )
-                    )
-                    emit(
-                        AnthropicContentBlockDeltaEvent.create(
-                            index=tool_index,
-                            delta=AnthropicInputJsonDelta.create(
-                                partial_json=tool_call.function.arguments or "{}"
-                            ),
-                        )
-                    )
-                    emit(AnthropicContentBlockStopEvent.create(index=tool_index))
+                        return
+            if text_block_open:
+                emit(AnthropicContentBlockStopEvent.create(index=0))
+            finalized_tool_calls = _finalize_tool_calls(state.tool_call_buffer)
+            tool_blocks = _anthropic_tool_use_blocks(finalized_tool_calls)
+            named_tool_calls = [
+                tc for tc in finalized_tool_calls or [] if tc.function.name
+            ]
+            index = 1 if text_block_open else 0
+            for tool_index, (tool_block, tool_call) in enumerate(
+                zip(tool_blocks, named_tool_calls), start=index
+            ):
                 emit(
-                    AnthropicMessageDeltaEvent.create(
-                        delta=AnthropicMessageDeltaPayload.create(
-                            stop_reason=_anthropic_stop_reason(
-                                finish_reason, bool(tool_blocks)
-                            )
-                        ),
-                        usage=(
-                            AnthropicUsagePayload.from_usage(state.usage)
-                            if state.usage
-                            else AnthropicUsagePayload.zero()
+                    AnthropicContentBlockStartEvent.create(
+                        index=tool_index,
+                        content_block=AnthropicToolUseBlock.create(
+                            id=tool_block.id, name=tool_block.name, input={}
                         ),
                     )
                 )
-                emit(AnthropicMessageStopEvent.create())
+                emit(
+                    AnthropicContentBlockDeltaEvent.create(
+                        index=tool_index,
+                        delta=AnthropicInputJsonDelta.create(
+                            partial_json=tool_call.function.arguments or "{}"
+                        ),
+                    )
+                )
+                emit(AnthropicContentBlockStopEvent.create(index=tool_index))
+            emit(
+                AnthropicMessageDeltaEvent.create(
+                    delta=AnthropicMessageDeltaPayload.create(
+                        stop_reason=_anthropic_stop_reason(
+                            finish_reason, bool(tool_blocks)
+                        )
+                    ),
+                    usage=(
+                        AnthropicUsagePayload.from_usage(state.usage)
+                        if state.usage
+                        else AnthropicUsagePayload.zero()
+                    ),
+                )
+            )
+            emit(AnthropicMessageStopEvent.create())
 
 
 def handle_anthropic_messages(
