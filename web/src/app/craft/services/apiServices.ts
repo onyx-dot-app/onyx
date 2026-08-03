@@ -20,6 +20,10 @@ import {
   ApprovalSubmitDecision,
   ApprovalView,
 } from "@/app/craft/types/approvals";
+import {
+  RATE_LIMITED_ERROR_CODE,
+  RateLimitDetails,
+} from "@/app/app/interfaces";
 import { BUILD_API_BASE } from "@/app/craft/v1/constants";
 import { CRAFT_GATEWAY_PROVIDER } from "@/app/craft/onboarding/constants";
 import type { BuildLlmSelection } from "@/app/craft/onboarding/constants";
@@ -371,6 +375,30 @@ export async function fetchMessages(
   }));
 }
 
+// 429 JSON body emitted by the backend usage rate-limiter (token/cost budgets).
+interface RateLimited429Body {
+  error_code?: string;
+  detail?: string;
+  scope?: string;
+  reset_at?: string;
+  retry_after_seconds?: number;
+}
+
+/**
+ * Thrown when the backend's usage rate-limiter (org/user token + cost
+ * budgets) rejects a turn with a structured 429. Carries the reset details
+ * so the UI can render the same rate-limit banner as chat.
+ */
+export class RateLimitedError extends Error {
+  public readonly details: RateLimitDetails;
+
+  constructor(message: string, details: RateLimitDetails) {
+    super(message);
+    this.name = "RateLimitedError";
+    this.details = details;
+  }
+}
+
 export async function createTurn(
   sessionId: string,
   content: string,
@@ -405,6 +433,22 @@ export async function createTurn(
   );
 
   if (!res.ok) {
+    if (res.status === 429) {
+      const body: RateLimited429Body | null = await res
+        .json()
+        .catch(() => null);
+      if (body?.error_code === RATE_LIMITED_ERROR_CODE) {
+        throw new RateLimitedError(
+          body.detail || "You've reached your usage limit.",
+          {
+            scope: body.scope,
+            reset_at: body.reset_at,
+            retry_after_seconds: body.retry_after_seconds,
+          }
+        );
+      }
+      throw new Error(body?.detail || `Failed to create turn: ${res.status}`);
+    }
     throw new Error(await errorDetail(res, "Failed to create turn"));
   }
 
