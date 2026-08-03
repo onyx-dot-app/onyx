@@ -20,12 +20,12 @@ assume it exists.
     onyx-cli search "<query>" ["<query>" ...]
 
 Each query is a full search pass that takes tens of seconds. Queries passed
-in one invocation run concurrently, so batch your independent questions into
-a single call — reach for separate sequential calls only when a query depends
-on an earlier result. Keep scripted post-processing (Python, heredoc parsers)
-out of the shell call that runs searches — write output to files and parse in
-a separate command, so a hung parse can't hit the shell timeout and discard
-the completed searches with it.
+in one invocation (up to 3) run concurrently, so batch your independent
+questions into a single call — reach for separate sequential calls only when
+a query depends on an earlier result. Keep scripted post-processing (custom
+scripts, heredoc parsers) out of the shell call that runs searches — write
+output to files and parse in a separate command, so a hung parse can't hit
+the shell timeout and discard the completed searches with it.
 
 | Flag | Description | Example |
 |------|-------------|---------|
@@ -37,7 +37,9 @@ the completed searches with it.
 
 Stdout is JSON. A single query returns a top-level `results` array; multiple
 queries return a `searches` array of `{query, results}` entries in argument
-order (a failed query carries an `error` field instead of results). Each
+order. A failed query has an `error` field and null `results`; the command
+exits non-zero only when every query fails, so check per-query `error`
+fields even on a zero exit. Each
 result has `title`, `url`, `source_type`, `content`, and `updated_at`.
 Results contain only documents the LLM judged relevant, ordered by relevance;
 `content` is the full chunk text of each. Cite results by title and URL when

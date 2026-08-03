@@ -33,7 +33,7 @@ func TestSearch_NoQuery(t *testing.T) {
 	cmd.RunE = func(cmd *cobra.Command, args []string) error {
 		if len(args) == 0 {
 			return exitcodes.New(exitcodes.BadRequest,
-				"no query provided\n  Usage: onyx-cli search \"your query\"")
+				"no query provided\n  Usage: onyx-cli search \"your query\" [\"another query\" ...]")
 		}
 		return origRunE(cmd, args)
 	}
@@ -758,24 +758,81 @@ func TestTruncateMultiSearchOutput_LargestFittingCapDespiteNonMonotoneSizes(t *t
 	}
 }
 
+func TestTruncateMultiSearchOutput_OversizedSingleResultFallsBackToContentTrim(t *testing.T) {
+	// A one-result entry cannot shrink below k=1, so no uniform cap fits when
+	// that single result outweighs the whole budget. The fallback must reduce
+	// entries independently: the huge entry gets content-trimmed while the
+	// small entry's results survive untouched — not the k=0 wipe-everything
+	// envelope.
+	output := multiSearchOutput{Searches: []multiSearchEntry{
+		{Query: "huge", Results: []searchOutputResult{{
+			Title:      "Big doc",
+			SourceType: "slack",
+			Content:    strings.Repeat("x", 5000),
+		}}},
+		{Query: "small", Results: makeSearchResults(3, 40)},
+	}}
+	fullData, err := json.MarshalIndent(output, "", "  ")
+	if err != nil {
+		t.Fatalf("marshal failed: %v", err)
+	}
+	limit := 3000
+
+	reduced, err := truncateMultiSearchOutput(output, limit, len(fullData), "/tmp/full.json")
+	if err != nil {
+		t.Fatalf("truncateMultiSearchOutput failed: %v", err)
+	}
+	data, err := json.MarshalIndent(reduced, "", "  ")
+	if err != nil {
+		t.Fatalf("marshal failed: %v", err)
+	}
+	if len(data) > limit {
+		t.Fatalf("envelope is %d bytes, want <= %d", len(data), limit)
+	}
+
+	huge := reduced.Searches[0]
+	if huge.Truncation == nil || !huge.Truncation.ContentTruncated {
+		t.Fatalf("huge entry: truncation=%+v, want content-trimmed", huge.Truncation)
+	}
+	if len(huge.Results) != 1 || len(huge.Results[0].Content) == 0 || len(huge.Results[0].Content) >= 5000 {
+		t.Errorf("huge entry: %d results, content length %d, want 1 result with trimmed content",
+			len(huge.Results), len(huge.Results[0].Content))
+	}
+	small := reduced.Searches[1]
+	if small.Truncation != nil || len(small.Results) != 3 {
+		t.Errorf("small entry: truncation=%v results=%d, want untouched", small.Truncation, len(small.Results))
+	}
+}
+
 func TestClampError(t *testing.T) {
 	if got := clampError(errors.New("nope")); got != "nope" {
 		t.Errorf("short error = %q, want unchanged", got)
 	}
 
-	// Multibyte runes verify the cut lands on a rune boundary.
-	long := errors.New(strings.Repeat("héllo→wörld ", 500))
-	got := clampError(long)
-	if len(got) > maxInlineErrorBytes+len(" … (truncated)") {
-		t.Errorf("clamped length = %d, want <= %d", len(got), maxInlineErrorBytes+len(" … (truncated)"))
-	}
-	if !utf8.ValidString(got) {
-		t.Error("clamped message is not valid UTF-8")
-	}
-	if !strings.HasSuffix(got, " … (truncated)") {
-		t.Errorf("clamped message should note truncation, got suffix %q", got[len(got)-30:])
-	}
-	if !strings.HasPrefix(long.Error(), strings.TrimSuffix(got, " … (truncated)")) {
-		t.Error("clamped message is not a prefix of the original")
+	// The budget bounds the JSON-encoded size: HTML-escaped bytes (&, <, >)
+	// expand six-fold under encoding/json, so an HTML error page must be cut
+	// well below the raw-byte budget. Multibyte runes verify the cut lands on
+	// a rune boundary.
+	for name, long := range map[string]error{
+		"html_page": errors.New(strings.Repeat("<div>&amp;</div> héllo ", 300)),
+		"multibyte": errors.New(strings.Repeat("héllo→wörld ", 500)),
+	} {
+		got := clampError(long)
+		encoded, err := json.Marshal(got)
+		if err != nil {
+			t.Fatalf("%s: marshal failed: %v", name, err)
+		}
+		if len(encoded) > maxInlineErrorBytes {
+			t.Errorf("%s: encoded length = %d, want <= %d", name, len(encoded), maxInlineErrorBytes)
+		}
+		if !utf8.ValidString(got) {
+			t.Errorf("%s: clamped message is not valid UTF-8", name)
+		}
+		if !strings.HasSuffix(got, " … (truncated)") {
+			t.Errorf("%s: clamped message should note truncation, got suffix %q", name, got[len(got)-30:])
+		}
+		if !strings.HasPrefix(long.Error(), strings.TrimSuffix(got, " … (truncated)")) {
+			t.Errorf("%s: clamped message is not a prefix of the original", name)
+		}
 	}
 }

@@ -9,7 +9,6 @@ import (
 	"sync"
 	"syscall"
 	"time"
-	"unicode/utf8"
 
 	"github.com/onyx-dot-app/onyx/cli/internal/exitcodes"
 	"github.com/onyx-dot-app/onyx/cli/internal/iostreams"
@@ -78,16 +77,17 @@ type rawMultiSearchEntry struct {
 // further back than this.
 const maxSearchDays = 36500
 
-// maxSearchQueries bounds one invocation. Each query runs an LLM-backed
-// pipeline server-side, and an unquoted shell glob can expand into hundreds
-// of arguments — better to error than fire a search per filename.
-const maxSearchQueries = 32
+// maxSearchQueries bounds one invocation to the number of /search calls we
+// are willing to run in parallel — every accepted query is in flight at
+// once. Each query is a full LLM-backed pipeline server-side, and an
+// unquoted shell glob can expand into hundreds of arguments — better to
+// error than fire a search per filename.
+const maxSearchQueries = 3
 
-// maxConcurrentSearches bounds parallel /search calls in one invocation.
-const maxConcurrentSearches = 3
-
-// maxInlineErrorBytes caps in-band per-query error strings so an oversized
-// upstream error body can't blow through the --max-output contract.
+// maxInlineErrorBytes caps the JSON-encoded size of each in-band per-query
+// error string so a single upstream error body (e.g. a full HTML error page)
+// can't dwarf the --max-output budget. Error entries are never dropped, so
+// enough failing queries can still exceed the budget collectively.
 const maxInlineErrorBytes = 2000
 
 // truncationHint explains the truncation object to LLM consumers.
@@ -112,17 +112,23 @@ func toSearchOutput(resp models.SearchResponse) searchOutput {
 
 // clampError renders an error for in-band JSON output, trimming oversized
 // messages (e.g. a whole HTML error page in an API error body) at a rune
-// boundary.
+// boundary. The budget bounds the JSON-encoded size, not the raw length —
+// encoding expands HTML-escaped and control bytes up to six-fold.
 func clampError(err error) string {
 	msg := err.Error()
-	if len(msg) <= maxInlineErrorBytes {
+	if data, err := json.Marshal(msg); err == nil && len(data) <= maxInlineErrorBytes {
 		return msg
 	}
-	cut := maxInlineErrorBytes
-	for cut > 0 && !utf8.RuneStart(msg[cut]) {
-		cut--
+	const suffix = " … (truncated)"
+	runes := []rune(msg)
+	fit, _, err := largestFit(len(runes), maxInlineErrorBytes, func(n int) ([]byte, error) {
+		return json.Marshal(string(runes[:n]) + suffix)
+	})
+	if err != nil {
+		// Unreachable: marshaling a string cannot fail.
+		return suffix
 	}
-	return msg[:cut] + " … (truncated)"
+	return string(runes[:fit]) + suffix
 }
 
 // writeJSONReduced prints payload as pretty JSON. When the payload exceeds
@@ -248,12 +254,14 @@ func truncateSearchOutput(
 // truncateMultiSearchOutput builds a valid multi-query envelope that fits
 // under limit by capping every entry's results at the largest uniform
 // per-query count k that fits: small result sets pass through whole while
-// large ones lose their lowest-relevance tail first. Capped entries carry
-// truncation metadata pointing at the combined full response on disk. Fit is
-// measured on the real envelope; it exceeds limit only when even the k=0
-// render does (truncation metadata and clamped per-query error strings alone
-// exceed the budget) — valid JSON and one entry per query beat the byte
-// bound.
+// large ones lose their lowest-relevance tail first. When no k fits (a lone
+// result can outweigh the whole budget), each entry is instead reduced
+// against an even share of the budget, trimming content where needed. Capped
+// entries carry truncation metadata pointing at the combined full response
+// on disk. Fit is measured on the real envelope; it exceeds limit only when
+// even the k=0 render does (truncation metadata and clamped per-query error
+// strings alone exceed the budget) — valid JSON and one entry per query beat
+// the byte bound.
 func truncateMultiSearchOutput(
 	full multiSearchOutput, limit int, totalBytes int, fullPath string,
 ) (multiSearchOutput, error) {
@@ -298,6 +306,40 @@ func truncateMultiSearchOutput(
 		if len(data) <= limit {
 			return out, nil
 		}
+	}
+
+	// A single result larger than the whole budget defeats the uniform cap —
+	// a one-result entry cannot shrink below k=1. Before wiping every query,
+	// reduce each entry independently against an even share of the budget,
+	// reusing the single-query trimmer (drops results, then trims content).
+	share := limit / len(full.Searches)
+	shared := multiSearchOutput{Searches: make([]multiSearchEntry, 0, len(full.Searches))}
+	for _, entry := range full.Searches {
+		single := searchOutput{Results: entry.Results}
+		data, err := json.MarshalIndent(single, "", "  ")
+		if err != nil {
+			return multiSearchOutput{}, err
+		}
+		if entry.Error != "" || len(data) <= share {
+			shared.Searches = append(shared.Searches, entry)
+			continue
+		}
+		reduced, err := truncateSearchOutput(single, share, totalBytes, fullPath)
+		if err != nil {
+			return multiSearchOutput{}, err
+		}
+		shared.Searches = append(shared.Searches, multiSearchEntry{
+			Query:      entry.Query,
+			Results:    reduced.Results,
+			Truncation: reduced.Truncation,
+		})
+	}
+	data, err := json.MarshalIndent(shared, "", "  ")
+	if err != nil {
+		return multiSearchOutput{}, err
+	}
+	if len(data) <= limit {
+		return shared, nil
 	}
 	out, _, err := render(0)
 	return out, err
@@ -390,10 +432,10 @@ Results are retrieved using the full search pipeline: LLM query expansion,
 hybrid retrieval, document selection, and context expansion — the same
 search quality as the Onyx chat interface.
 
-Multiple queries run concurrently in one invocation, so batching independent
-queries is much faster than separate sequential calls. Flags apply to every
-query. The command fails only when every query fails; otherwise failed
-queries carry an in-band "error" field.
+Multiple queries (up to 3 per invocation) run concurrently, so batching
+independent queries is much faster than separate sequential calls. Flags
+apply to every query. The command fails only when every query fails;
+otherwise failed queries carry an in-band "error" field with null results.
 
 By default, output is a lean JSON shape tuned for LLM consumers. One query:
 {"results": [{title, url, source_type, content, updated_at}, ...]}.
@@ -426,11 +468,11 @@ result sets pass through whole.`,
 
 			if len(args) == 0 {
 				return exitcodes.New(exitcodes.BadRequest,
-					"no query provided\n  Usage: onyx-cli search \"your query\"")
+					"no query provided\n  Usage: onyx-cli search \"your query\" [\"another query\" ...]")
 			}
 			if len(args) > maxSearchQueries {
 				return exitcodes.New(exitcodes.BadRequest, fmt.Sprintf(
-					"%d queries exceeds the limit of %d — did an unquoted glob or sentence expand into separate arguments?",
+					"%d queries exceeds the per-invocation limit of %d — split the batch into smaller calls, and check that an unquoted glob or sentence didn't expand into separate arguments",
 					len(args), maxSearchQueries))
 			}
 
@@ -462,14 +504,17 @@ result sets pass through whole.`,
 			ctx, stop := signal.NotifyContext(cmd.Context(), os.Interrupt, syscall.SIGTERM)
 			defer stop()
 
+			// All-single-word arguments often mean one unquoted query. The
+			// shell strips quotes before argv, so this can only ever be a
+			// hint — not a guard.
+			if len(args) > 1 && !strings.ContainsAny(strings.Join(args, ""), " \t") {
+				fmt.Fprintln(ios.ErrOut, "note: each argument searches separately — quote multi-word queries")
+			}
+
 			isTTY := ios.IsStdoutTTY
 			if isTTY {
 				if len(args) > 1 {
 					fmt.Fprintf(ios.ErrOut, "\033[2mSearching (%d queries)...\033[0m\n", len(args))
-					// All-single-word arguments often mean one unquoted query.
-					if !strings.ContainsAny(strings.Join(args, ""), " \t") {
-						fmt.Fprintf(ios.ErrOut, "\033[2m(each argument searches separately — quote multi-word queries)\033[0m\n")
-					}
 				} else {
 					fmt.Fprintf(ios.ErrOut, "\033[2mSearching...\033[0m\n")
 				}
@@ -477,30 +522,17 @@ result sets pass through whole.`,
 
 			responses := make([]*models.SearchResponse, len(args))
 			errs := make([]error, len(args))
-			sem := make(chan struct{}, maxConcurrentSearches)
 			var wg sync.WaitGroup
 			for i, query := range args {
 				wg.Add(1)
 				go func(i int, query string) {
 					defer wg.Done()
-					sem <- struct{}{}
-					defer func() { <-sem }()
 					flags := baseFlags
 					flags.query = query
 					responses[i], errs[i] = client.Search(ctx, buildSearchRequest(flags))
 				}(i, query)
 			}
 			wg.Wait()
-
-			// An interrupted run must not masquerade as a successful partial
-			// one: surface the first cancellation error and exit non-zero.
-			if ctx.Err() != nil {
-				for _, err := range errs {
-					if err != nil {
-						return apiErrorToExit(err, "search failed")
-					}
-				}
-			}
 
 			failures := 0
 			for _, err := range errs {
@@ -509,10 +541,28 @@ result sets pass through whole.`,
 				}
 			}
 			if failures == len(args) {
-				for i := 1; i < len(args); i++ {
-					fmt.Fprintf(ios.ErrOut, "search failed for %q: %v\n", args[i], clampError(errs[i]))
+				label := "search failed"
+				if len(args) > 1 {
+					for i := 1; i < len(args); i++ {
+						fmt.Fprintf(ios.ErrOut, "search failed for %q: %s\n", args[i], clampError(errs[i]))
+					}
+					label = fmt.Sprintf("search failed for %q", args[0])
 				}
-				return apiErrorToExit(errs[0], "search failed")
+				return apiErrorToExit(errs[0], label)
+			}
+
+			// An interrupted batch still prints the responses it completed
+			// (with in-band errors for the rest) but must not exit 0 —
+			// interruptErr replaces the final nil return so callers know the
+			// run is incomplete.
+			var interruptErr error
+			if ctx.Err() != nil {
+				for _, err := range errs {
+					if err != nil {
+						interruptErr = apiErrorToExit(err, "search interrupted")
+						break
+					}
+				}
 			}
 
 			truncateAt := 0
@@ -529,9 +579,12 @@ result sets pass through whole.`,
 						return fmt.Errorf("failed to marshal response: %w", err)
 					}
 					fmt.Fprintln(ios.Out, string(data))
-					return nil
+					return interruptErr
 				}
-				return writeSearchJSON(ios, toSearchOutput(*responses[0]), truncateAt)
+				if err := writeSearchJSON(ios, toSearchOutput(*responses[0]), truncateAt); err != nil {
+					return err
+				}
+				return interruptErr
 			}
 
 			if searchRaw {
@@ -552,7 +605,7 @@ result sets pass through whole.`,
 					return fmt.Errorf("failed to marshal response: %w", err)
 				}
 				fmt.Fprintln(ios.Out, string(data))
-				return nil
+				return interruptErr
 			}
 
 			output := multiSearchOutput{Searches: make([]multiSearchEntry, 0, len(args))}
@@ -565,7 +618,10 @@ result sets pass through whole.`,
 				}
 				output.Searches = append(output.Searches, entry)
 			}
-			return writeMultiSearchJSON(ios, output, truncateAt)
+			if err := writeMultiSearchJSON(ios, output, truncateAt); err != nil {
+				return err
+			}
+			return interruptErr
 		},
 	}
 
