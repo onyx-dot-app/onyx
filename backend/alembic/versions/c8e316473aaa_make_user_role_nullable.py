@@ -20,7 +20,6 @@ import sqlalchemy as sa
 from alembic import op
 
 
-# revision identifiers, used by Alembic.
 revision = "c8e316473aaa"
 down_revision = "8f2c4a1d9e3b"
 branch_labels: str | None = None
@@ -37,9 +36,8 @@ def upgrade() -> None:
 
 
 def downgrade() -> None:
-    # Backfill any NULLs written while the column was optional before we
-    # restore the NOT NULL constraint, otherwise the downgrade would fail
-    # against rows inserted after the upgrade.
+    # Backfill NULLs written while the column was optional; otherwise
+    # restoring NOT NULL fails against rows inserted after the upgrade.
     op.execute("UPDATE \"user\" SET role = 'BASIC' WHERE role IS NULL")
     op.alter_column(
         "user",

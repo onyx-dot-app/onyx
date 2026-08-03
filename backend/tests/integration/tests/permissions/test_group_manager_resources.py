@@ -116,9 +116,6 @@ def _doc_set_body(
     return body
 
 
-# --- cc_pair create (GATE 2) ------------------------------------------------
-
-
 def test_admin_creates_public_cc_pair_bypasses_gate(env: _ScopedEnv) -> None:
     # Control: a global holder is not scope-restricted (PUBLIC, no groups).
     CCPairManager.create_from_scratch(
@@ -172,9 +169,6 @@ def test_manager_cannot_create_cc_pair_without_groups(env: _ScopedEnv) -> None:
         env.manager.cookies,
     )
     assert_response(resp, "PUT", path, "manager", "denied")
-
-
-# --- document set create / edit (GATE 2) ------------------------------------
 
 
 def test_manager_creates_private_doc_set_in_managed_group(env: _ScopedEnv) -> None:
@@ -270,9 +264,6 @@ def test_manager_edits_doc_set_within_managed_group(env: _ScopedEnv) -> None:
     DocumentSetManager.edit(doc_set, user_performing_action=env.manager)
 
 
-# --- DELETE stays admin-only ------------------------------------------------
-
-
 def test_manager_cannot_delete_doc_set(env: _ScopedEnv) -> None:
     cc_pair = CCPairManager.create_from_scratch(
         user_performing_action=env.manager,
@@ -308,10 +299,9 @@ def test_manager_cannot_delete_cc_pair(env: _ScopedEnv) -> None:
     assert_response(resp, "POST", path, "manager", "denied")
 
 
-# --- re-keyed read filter authorizes the mutate routes ----------------------
-
-
 def test_manager_pauses_own_managed_cc_pair(env: _ScopedEnv) -> None:
+    # Pause/status (mutate routes) authorize via the re-keyed read/editable filter,
+    # not a separate scope check — so managed-scope access gates mutation too.
     cc_pair = CCPairManager.create_from_scratch(
         user_performing_action=env.manager,
         access_type=AccessType.PRIVATE,
@@ -338,9 +328,6 @@ def test_manager_cannot_pause_unmanaged_cc_pair(env: _ScopedEnv) -> None:
     assert_response(resp, "PUT", path, "manager", "denied")
 
 
-# --- membership is not managership ------------------------------------------
-
-
 def test_plain_member_cannot_create_doc_set(env: _ScopedEnv) -> None:
     # A group member without is_manager has NONE authority — rejected at GATE 1.
     member = UserManager.create(name="plain_member")
@@ -355,9 +342,6 @@ def test_plain_member_cannot_create_doc_set(env: _ScopedEnv) -> None:
         member.cookies,
     )
     assert_response(resp, "POST", _DOC_SET_PATH, "member", "denied")
-
-
-# --- cc_pair permissions map on the DTO -------------------------------------
 
 
 def test_admin_cc_pair_detail_carries_permissions_map(env: _ScopedEnv) -> None:

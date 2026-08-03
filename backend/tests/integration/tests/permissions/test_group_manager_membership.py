@@ -121,9 +121,7 @@ def _insert_stale_cc_pair_junction(group_id: int, cc_pair_id: int) -> None:
         db_session.commit()
 
 
-# --- manager assignment endpoint (GATE 2 = admin or manager-of-that-group) ---
-
-
+# Manager-assignment endpoint — GATE 2 = admin or manager-of-that-group.
 def test_admin_assigns_manager(env: _ScopedEnv) -> None:
     path = _manager_path(env.managed_group.id)
     resp = call_endpoint(
@@ -214,9 +212,6 @@ def test_plain_member_cannot_assign(env: _ScopedEnv) -> None:
     assert_response(resp, "PUT", path, "member", "denied")
 
 
-# --- membership edits (group ∈ managed) -------------------------------------
-
-
 def test_manager_adds_user_to_managed_group(env: _ScopedEnv) -> None:
     UserGroupManager.add_users(
         env.managed_group, [env.outsider.id], user_performing_action=env.manager
@@ -269,9 +264,7 @@ def test_manager_cannot_patch_unmanaged_group(env: _ScopedEnv) -> None:
     assert_response(resp, "PATCH", path, "manager", "denied")
 
 
-# --- cc_pair re-attach gate (§ junction-rewrite escalation) ------------------
-
-
+# cc_pair re-attach gate — the junction-rewrite escalation vector.
 def test_manager_cannot_attach_public_cc_pair(env: _ScopedEnv) -> None:
     public_cc_pair = CCPairManager.create_from_scratch(
         user_performing_action=env.admin, access_type=AccessType.PUBLIC, groups=[]
@@ -341,9 +334,6 @@ def test_manager_attaches_groupless_private_cc_pair(env: _ScopedEnv) -> None:
     assert resp.status_code == 200, resp.text
 
 
-# --- scoped group list + /me/permissions ------------------------------------
-
-
 def test_manager_group_list_only_managed(env: _ScopedEnv) -> None:
     groups = UserGroupManager.get_all(user_performing_action=env.manager)
     group_ids = {g.id for g in groups}
@@ -383,9 +373,7 @@ def test_member_me_permissions_not_manager(env: _ScopedEnv) -> None:
     assert set(info.admin_capabilities) == set(info.effective_permissions)
 
 
-# --- group create / delete / permissions stay admin-only --------------------
-
-
+# Group create/delete/set-permissions stay admin-only.
 def test_manager_cannot_create_group(env: _ScopedEnv) -> None:
     resp = call_endpoint(
         "POST",

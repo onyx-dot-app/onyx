@@ -71,10 +71,9 @@ def test_access_matrix(
 
 
 # PUT /manage/admin/user-group/{id}/permissions is admin-only (not
-# MANAGE_USER_GROUPS) to prevent privilege escalation — a group manager
-# could otherwise grant their own group any toggleable permission. The
-# endpoint must remain gated on FULL_ADMIN_PANEL_ACCESS, so holders of
-# MANAGE_USER_GROUPS are expected to be denied here.
+# MANAGE_USER_GROUPS) to prevent privilege escalation: a group manager
+# could otherwise grant their own group any toggleable permission. Gated
+# on FULL_ADMIN_PANEL_ACCESS, so MANAGE_USER_GROUPS holders are denied here.
 _SET_PERMISSIONS_USER_KINDS: list[tuple[str, str]] = [
     ("admin", "allowed"),
     ("holder", "denied"),
