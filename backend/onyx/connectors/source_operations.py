@@ -64,7 +64,10 @@ class SourceOperationSpec(BaseModel):
     # Exempts the operation (all variants) from the check-coverage
     # requirement. The reason string is mandatory and reviewable: side effects
     # (e.g. ``conversations.join``), graceful production degradation, or "not
-    # yet tested" during incremental migration.
+    # yet tested" during incremental migration. To exempt a single variant,
+    # split it into its own operation and annotate the split-off half: a
+    # variant that permanently cannot be probed while its sibling can is a
+    # different operation.
     untested: str | None = None
 
 
@@ -95,8 +98,8 @@ def source_operation(
             func,
             _SPEC_ATTR,
             SourceOperationSpec(
-                # Only plain functions are stampable (the base class rejects
-                # staticmethod/classmethod/property), so the cast is safe.
+                # The cast is safe for anything that ultimately registers:
+                # the class-level scan rejects everything but plain functions.
                 name=cast(FunctionType, func).__name__,
                 capabilities=frozenset(capabilities),
                 variants=tuple(variant_list),
@@ -118,10 +121,15 @@ class SourceOperations(ABC):
     """Base class for per-connector source-operation gateways.
 
     Subclass contract, enforced at import time:
+    - Subclass ``SourceOperations`` directly and nothing else: no mixins and
+      no gateway inheritance, since inherited members would bypass the
+      own-namespace scan below. Shared logic goes in private module-level
+      helpers.
     - Set ``source`` to the ``DocumentSource`` the gateway serves; one gateway
       per source.
     - Every public method must be classified with ``@source_operation``.
-      Helpers (including any staticmethod/classmethod/property) stay private.
+      Helpers (including any staticmethod/classmethod/property) stay private;
+      data models live at module level.
 
     The gateway owns client construction from the credential plus optional
     connector config; operations return plain data, never live SDK objects.
@@ -129,10 +137,19 @@ class SourceOperations(ABC):
 
     source: ClassVar[DocumentSource]
 
-    _operation_specs: ClassVar[Mapping[str, SourceOperationSpec]]
+    _operation_specs: ClassVar[Mapping[str, SourceOperationSpec]] = MappingProxyType({})
 
     def __init_subclass__(cls, **kwargs: Any) -> None:
         super().__init_subclass__(**kwargs)
+
+        if cls.__bases__ != (SourceOperations,):
+            raise TypeError(
+                f"{cls.__name__} must subclass SourceOperations directly and "
+                "nothing else: mixins and gateway inheritance would bypass "
+                "the import-time enforcement, which scans only the class's "
+                "own namespace. Put shared logic in private module-level "
+                "helpers."
+            )
 
         source = getattr(cls, "source", None)
         if not isinstance(source, DocumentSource):
@@ -149,6 +166,11 @@ class SourceOperations(ABC):
         for name, member in vars(cls).items():
             if name.startswith("_"):
                 continue
+            if isinstance(member, type):
+                raise TypeError(
+                    f"{cls.__name__}.{name}: public nested class is not "
+                    "allowed on a gateway; define data models at module level."
+                )
             if isinstance(member, (staticmethod, classmethod, property)):
                 raise TypeError(
                     f"{cls.__name__}.{name}: public staticmethod/classmethod/"
@@ -160,6 +182,12 @@ class SourceOperations(ABC):
             spec = getattr(member, _SPEC_ATTR, None)
             if spec is None:
                 unstamped.append(name)
+            elif spec.name != name:
+                raise TypeError(
+                    f"{cls.__name__}.{name} is an aliased assignment of the "
+                    f"operation stamped as {spec.name!r}; define it as a "
+                    "plain method under its own name."
+                )
             else:
                 specs[name] = spec
         if unstamped:

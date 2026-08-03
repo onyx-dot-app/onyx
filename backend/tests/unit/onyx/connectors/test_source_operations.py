@@ -88,6 +88,42 @@ def test_non_document_source_fails_at_import() -> None:
 
 
 @pytest.mark.usefixtures("isolated_registry")
+def test_mixin_bases_are_rejected() -> None:
+    """
+    Verifies mixins cannot smuggle unscanned public methods past enforcement.
+    """
+
+    # Precondition.
+    class _PaginationMixin:
+        def fetch_all_pages(self) -> None:
+            return None
+
+    # Under test and postcondition.
+    with pytest.raises(TypeError, match="directly and nothing else"):
+
+        class _MixedOperations(_PaginationMixin, SourceOperations):
+            source = DocumentSource.SLACK
+
+
+@pytest.mark.usefixtures("isolated_registry")
+def test_gateway_inheritance_is_rejected() -> None:
+    """
+    Verifies a gateway cannot be subclassed: inherited operations would be
+    invisible to ``operation_specs`` and silently under-counted by coverage.
+    """
+
+    # Precondition.
+    class _SlackOperations(SourceOperations):
+        source = DocumentSource.SLACK
+
+    # Under test and postcondition.
+    with pytest.raises(TypeError, match="directly and nothing else"):
+
+        class _SlackCloudOperations(_SlackOperations):
+            source = DocumentSource.GITHUB
+
+
+@pytest.mark.usefixtures("isolated_registry")
 def test_duplicate_source_registration_fails() -> None:
     """Verifies the one-gateway-per-source rule."""
 
@@ -150,6 +186,60 @@ def test_public_property_is_rejected() -> None:
                 return ""
 
 
+@pytest.mark.usefixtures("isolated_registry")
+def test_public_classmethod_is_rejected() -> None:
+    """Verifies classmethods cannot bypass classification either."""
+    # Under test and postcondition.
+    with pytest.raises(TypeError, match="make it private"):
+
+        class _ClassmethodOperations(SourceOperations):
+            source = DocumentSource.SLACK
+
+            @classmethod
+            def build_client(cls) -> None:
+                return None
+
+
+@pytest.mark.usefixtures("isolated_registry")
+def test_public_nested_class_is_rejected() -> None:
+    """Verifies nested classes get their own accurate rejection message."""
+    # Under test and postcondition.
+    with pytest.raises(TypeError, match="define data models at module level"):
+
+        class _NestedModelOperations(SourceOperations):
+            source = DocumentSource.SLACK
+
+            class Channel:
+                pass
+
+
+@pytest.mark.usefixtures("isolated_registry")
+def test_aliased_operation_assignment_is_rejected() -> None:
+    """Verifies a stamped operation cannot register under a different name."""
+
+    # Precondition.
+    def _shared_impl(_self: SourceOperations) -> None:
+        return None
+
+    stamped = source_operation(
+        capabilities={CredentialCapability.INDEXING},
+        consumes=OperationConsumes.CREDENTIAL,
+    )(_shared_impl)
+
+    # Under test and postcondition.
+    with pytest.raises(TypeError, match="aliased assignment"):
+
+        class _AliasedOperations(SourceOperations):
+            source = DocumentSource.SLACK
+            list_a = stamped
+
+
+def test_base_operation_specs_is_empty() -> None:
+    """Verifies the accessor is total on the base class itself."""
+    # Under test and postcondition.
+    assert SourceOperations.operation_specs() == {}
+
+
 def test_decorator_rejects_empty_capabilities() -> None:
     """Verifies an operation must serve at least one capability."""
     # Under test and postcondition.
@@ -176,4 +266,15 @@ def test_decorator_rejects_duplicate_variants() -> None:
             capabilities={CredentialCapability.INDEXING},
             consumes=OperationConsumes.CREDENTIAL,
             variants=("public", "public"),
+        )
+
+
+def test_decorator_rejects_blank_variant_names() -> None:
+    """Verifies variant names must be non-empty."""
+    # Under test and postcondition.
+    with pytest.raises(ValueError, match="Variant names must be non-empty"):
+        source_operation(
+            capabilities={CredentialCapability.INDEXING},
+            consumes=OperationConsumes.CREDENTIAL,
+            variants=("public", ""),
         )
