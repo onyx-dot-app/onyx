@@ -11,22 +11,24 @@ const mockedApi = api as jest.Mocked<typeof api>;
 const SESSION_ID = "11111111-1111-1111-1111-111111111111";
 
 // Minimal DetailedSessionResponse shapes — loadSession only reads status,
-// session_loaded_in_sandbox, and sandbox.{status,nextjs_port}.
+// session_loaded_in_sandbox, nextjs_port, and sandbox.status.
 function sleepingSession(): unknown {
   return {
     id: SESSION_ID,
     status: "idle",
+    nextjs_port: null,
     session_loaded_in_sandbox: false,
-    sandbox: { id: "sb1", status: "sleeping", nextjs_port: null },
+    sandbox: { id: "sb1", status: "sleeping" },
   };
 }
 
-function runningSession(): unknown {
+function runningSession(nextjsPort: number | null = null): unknown {
   return {
     id: SESSION_ID,
     status: "active",
+    nextjs_port: nextjsPort,
     session_loaded_in_sandbox: true,
-    sandbox: { id: "sb1", status: "running", nextjs_port: null },
+    sandbox: { id: "sb1", status: "running" },
   };
 }
 
@@ -61,6 +63,17 @@ describe("loadSession restore status", () => {
 
     const session = useBuildSessionStore.getState().sessions.get(SESSION_ID);
     expect(session?.sandbox?.status).toBe("running");
+  });
+
+  it("builds the webapp URL from the session port", async () => {
+    mockedApi.fetchSession.mockResolvedValue(runningSession(3210) as never);
+    mockedApi.fetchArtifacts.mockResolvedValue([{ type: "web_app" }] as never);
+
+    await useBuildSessionStore.getState().loadSession(SESSION_ID);
+
+    expect(
+      useBuildSessionStore.getState().sessions.get(SESSION_ID)?.webappUrl
+    ).toBe("http://localhost:3210");
   });
 
   it("marks the sandbox failed when restore itself fails", async () => {

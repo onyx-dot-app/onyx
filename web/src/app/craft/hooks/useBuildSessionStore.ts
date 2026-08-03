@@ -4,7 +4,6 @@ import { create } from "zustand";
 import { DELETE_SUCCESS_DISPLAY_DURATION_MS } from "@/app/craft/constants";
 
 import {
-  ApiSandboxResponse,
   ApiSessionResponse,
   Artifact,
   ArtifactType,
@@ -14,6 +13,7 @@ import {
   SessionHistoryItem,
   SessionOrigin,
   SessionStatus,
+  SandboxRuntimeState,
 } from "@/app/craft/types/streamingTypes";
 
 import {
@@ -648,8 +648,8 @@ export interface BuildSessionData {
   turnGeneration: number;
   error: string | null;
   webappUrl: string | null;
-  /** Sandbox info from backend */
-  sandbox: ApiSandboxResponse | null;
+  /** Backend sandbox state plus transient client-owned lifecycle states. */
+  sandbox: SandboxRuntimeState | null;
   /** Model this session runs on (from the row); seeds the composer picker. */
   agentProvider: string | null;
   agentModel: string | null;
@@ -1544,8 +1544,8 @@ export const useBuildSessionStore = create<BuildSessionStore>()((set, get) => ({
       const hasWebapp = artifacts.some(
         (a) => a.type === "nextjs_app" || a.type === "web_app"
       );
-      if (hasWebapp && sessionData.sandbox?.nextjs_port) {
-        webappUrl = `http://localhost:${sessionData.sandbox.nextjs_port}`;
+      if (hasWebapp && sessionData.nextjs_port) {
+        webappUrl = `http://localhost:${sessionData.nextjs_port}`;
       }
 
       const resolvedActiveTurnId =
