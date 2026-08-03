@@ -1095,7 +1095,9 @@ def get_connector_status(
 @router.post("/admin/connector/indexing-status", tags=PUBLIC_API_TAGS)
 def get_connector_indexing_status(
     request: IndexingStatusRequest,
-    user: User = Depends(require_permission(Permission.MANAGE_CONNECTORS)),
+    user: User = Depends(
+        require_permission(Permission.MANAGE_CONNECTORS, allow_scope=True)
+    ),
     db_session: Session = Depends(get_session),
 ) -> list[ConnectorIndexingStatusLiteResponse]:
     tenant_id = get_current_tenant_id()
@@ -1208,6 +1210,14 @@ def get_connector_indexing_status(
     latest_successful_index_attempts = cast(
         list[IndexAttempt], latest_successful_index_attempts
     )
+
+    # A scoped manager is always a member of the groups they manage, so their editable (managed)
+    # pairs also match the non-editable member query above; drop the overlap so each renders once
+    # (as editable, taking precedence over the read-only row).
+    editable_ids = {cc_pair.id for cc_pair in editable_cc_pairs}
+    non_editable_cc_pairs = [
+        cc_pair for cc_pair in non_editable_cc_pairs if cc_pair.id not in editable_ids
+    ]
 
     document_count_info = get_document_counts_for_all_cc_pairs(db_session)
 
