@@ -96,6 +96,13 @@ def test_named_checks_ignore_the_probe_allowlist(
     with registered named checks still returns them.
     """
     # Precondition.
+    # The ratchet requires a gateway wherever named checks register.
+    monkeypatch.setattr(source_operations_module, "_SOURCE_OPERATIONS_BY_SOURCE", {})
+
+    class _SlackOperations(SourceOperations):
+        source = DocumentSource.SLACK
+        sdk_modules = ()
+
     named_check = _NamedCheck(
         capability=CredentialCapability.DOC_PERMISSION_SYNC,
         check_id="slack_named_check",
