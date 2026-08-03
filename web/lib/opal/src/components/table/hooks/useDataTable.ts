@@ -445,12 +445,29 @@ export default function useDataTable<TData extends RowData>(
     setPagination((prev) => ({ ...prev, pageIndex: clamped - 1 }));
   };
 
+  // TanStack's bulk deselect deletes every id regardless of getCanSelect(), so a clear
+  // would drop a selected-but-protected row (e.g. the current manager, kept selected so
+  // Save can't revoke their own access). Keep those — only deselect needs this.
+  const deselectKeepingProtected = (rows: Row<TData>[]): RowSelectionState => {
+    const next = { ...rowSelection };
+    for (const row of rows) {
+      if (row.getCanSelect()) delete next[row.id];
+    }
+    return next;
+  };
+
   const clearSelection = () => {
-    table.resetRowSelection();
+    table.setRowSelection(
+      deselectKeepingProtected(table.getCoreRowModel().flatRows)
+    );
   };
 
   const toggleAllPageRowsSelected = (selected: boolean) => {
-    table.toggleAllPageRowsSelected(selected);
+    if (selected) {
+      table.toggleAllPageRowsSelected(true);
+      return;
+    }
+    table.setRowSelection(deselectKeepingProtected(table.getRowModel().rows));
   };
 
   // TODO (@raunakab): In server-side mode, these only operate on the loaded
@@ -458,7 +475,13 @@ export default function useDataTable<TData extends RowData>(
   // doesn't have. Fixing this requires a server-side callback (e.g.
   // `onSelectAll`) and a `totalItems`-aware selection model.
   const toggleAllRowsSelected = (selected: boolean) => {
-    table.toggleAllRowsSelected(selected);
+    if (selected) {
+      table.toggleAllRowsSelected(true);
+      return;
+    }
+    table.setRowSelection(
+      deselectKeepingProtected(table.getCoreRowModel().flatRows)
+    );
   };
 
   const isAllRowsSelected = table.getIsAllRowsSelected();
