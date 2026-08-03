@@ -4,6 +4,7 @@ import { View } from "react-native";
 
 import { selectSources } from "@/chat/citations";
 import { Message } from "@/chat/interfaces";
+import { StopReason } from "@/chat/streamingModels";
 import { resolveGroupReasoning } from "@/chat/timeline/reasoningState";
 import { MinimalAgent } from "@/chat/agents";
 import { getErrorTitle } from "@/chat/errorHelpers";
@@ -21,9 +22,10 @@ import { ReasoningTextSheet } from "@/components/chat/timeline/ReasoningTextShee
 import { Icon } from "@/components/ui/icon";
 import { Text } from "@/components/ui/text";
 import SvgAlertCircle from "@/icons/alert-circle";
-import { usePacketDisplay } from "@/hooks/usePacketDisplay";
+import { usePacedTurnGroups } from "@/hooks/timeline/usePacedTurnGroups";
+import { usePacketProcessor } from "@/hooks/timeline/usePacketProcessor";
 
-// The renderer's onComplete drives the timeline pacing gate (9b.7); nothing consumes it in PR4.
+// Non-final display groups don't complete the message.
 const NOOP = (): void => {};
 
 function UserMessage({ node }: { node: Message }) {
@@ -80,16 +82,38 @@ function AssistantMessage({
   node: Message;
   agent: MinimalAgent | null;
 }) {
-  const { packets, processed, hasDisplayContent } = usePacketDisplay(node);
+  const {
+    processed,
+    toolTurnGroups,
+    displayGroups,
+    hasSteps,
+    stopPacketSeen,
+    stopReason,
+    isGeneratingImage,
+    generatedImageCount,
+    finalAnswerComing,
+    toolProcessingDuration,
+    onRenderComplete,
+  } = usePacketProcessor(node.packets, node.nodeId);
+
+  // Withholds the answer until every step has been revealed.
+  const { pacedTurnGroups, pacedDisplayGroups, pacedFinalAnswerComing } =
+    usePacedTurnGroups(
+      toolTurnGroups,
+      displayGroups,
+      stopPacketSeen,
+      node.nodeId,
+      finalAnswerComing,
+    );
+
   const [sourcesOpen, setSourcesOpen] = useState(false);
   // Which step's text the full-text reader is showing. Owned here, not in the step: the timeline
   // auto-collapses when the answer starts, which would unmount the step mid-read.
   const [fullTextKey, setFullTextKey] = useState<string | null>(null);
-  const hasContent = hasDisplayContent && packets.length > 0;
+  const hasDisplayContent = pacedDisplayGroups.length > 0;
 
-  // Re-derived every flush so the reader stays live while the step streams on — parking the string
-  // at open time would freeze the body and make Copy yield a truncated prefix. Reasoning is the only
-  // renderer using the reader today; other long-form steps would resolve their own group here.
+  // Re-derived every flush so the reader keeps up with a step that is still streaming; parking the
+  // string at open time would freeze the body and make Copy yield a truncated prefix.
   const fullText = useMemo(
     () => resolveGroupReasoning(processed.groupedPacketsMap, fullTextKey),
     [fullTextKey, processed],
@@ -101,8 +125,9 @@ function AssistantMessage({
     [processed],
   );
 
-  // Context a renderer may read. This identity churns each flush, but RendererComponent's memo keys on
-  // agent.id, not this object, so that's harmless.
+  // Keyed on the maps, not on web's `citations.length` proxy: web gets away with a count because it
+  // mutates one map in place, but mobile rebuilds state each flush, so a count would pin a stale map
+  // and a re-cited document would resolve against old metadata.
   const chatState = useMemo<FullChatState>(
     () => ({
       agent,
@@ -114,33 +139,57 @@ function AssistantMessage({
     [agent, processed.citationMap, processed.documentMap],
   );
 
-  // Web AgentMessage: the timeline (above) owns the loader; answer and sources sit below.
+  // The timeline owns the loading state, so there's no separate spinner here.
   return (
     <View className="gap-12 py-6">
       <AgentTimeline
-        agent={agent}
-        isLoading={!hasContent && !processed.isComplete}
+        turnGroups={pacedTurnGroups}
+        chatState={chatState}
+        stopPacketSeen={stopPacketSeen}
+        stopReason={stopReason}
+        hasDisplayContent={hasDisplayContent}
+        finalAnswerComing={pacedFinalAnswerComing}
+        processingDurationSeconds={node.processingDurationSeconds ?? undefined}
+        isGeneratingImage={isGeneratingImage}
+        generatedImageCount={generatedImageCount}
+        toolProcessingDuration={toolProcessingDuration}
+        streamingStartTime={node.streamingStartedAt}
       />
-      {hasContent ? (
+      {hasDisplayContent ? (
         // px-12 aligns the answer under the avatar rail (web's px-3).
+        <View className="gap-12 px-12">
+          {pacedDisplayGroups.map((displayGroup, groupIndex) => (
+            <RendererComponent
+              key={`${displayGroup.turn_index}-${displayGroup.tab_index}`}
+              packets={displayGroup.packets}
+              chatState={chatState}
+              messageNodeId={node.nodeId}
+              hasTimelineThinking={pacedTurnGroups.length > 0 || hasSteps}
+              // Only the last group completes the message.
+              onComplete={
+                groupIndex === pacedDisplayGroups.length - 1
+                  ? onRenderComplete
+                  : NOOP
+              }
+              animate={!stopPacketSeen}
+              stopPacketSeen={stopPacketSeen}
+              stopReason={stopReason}
+            >
+              {(results) => (
+                <>
+                  {results.map((result, index) => (
+                    <Fragment key={index}>{result.content}</Fragment>
+                  ))}
+                </>
+              )}
+            </RendererComponent>
+          ))}
+        </View>
+      ) : stopReason === StopReason.USER_CANCELLED ? (
         <View className="px-12">
-          <RendererComponent
-            packets={packets}
-            chatState={chatState}
-            messageNodeId={node.nodeId}
-            onComplete={NOOP}
-            animate={!processed.isComplete}
-            stopPacketSeen={processed.stopPacketSeen}
-            stopReason={processed.stopReason}
-          >
-            {(results) => (
-              <>
-                {results.map((result, index) => (
-                  <Fragment key={index}>{result.content}</Fragment>
-                ))}
-              </>
-            )}
-          </RendererComponent>
+          <Text font="secondary-body" color="text-04">
+            User has stopped generation
+          </Text>
         </View>
       ) : null}
       {sources && sources.hasSources ? (
@@ -188,6 +237,9 @@ export const MessageRow = memo(
     prev.node.message === next.node.message &&
     prev.node.messageId === next.node.messageId &&
     prev.node.errorCode === next.node.errorCode &&
+    prev.node.streamingStartedAt === next.node.streamingStartedAt &&
+    prev.node.processingDurationSeconds ===
+      next.node.processingDurationSeconds &&
     prev.node.packets.length === next.node.packets.length &&
     prev.node.files === next.node.files &&
     prev.agent === next.agent,

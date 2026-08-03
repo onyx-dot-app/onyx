@@ -13,7 +13,7 @@ import {
 } from "@/api/chat/sessions";
 import { streamChatMessage, type StreamEvent } from "@/api/chat/stream";
 import { ChatFileType, type FileDescriptor } from "@/chat/interfaces";
-import { PacketType } from "@/chat/streamingModels";
+import { PacketType, StopReason } from "@/chat/streamingModels";
 import { useChatController } from "@/hooks/useChatController";
 import { useChatSessionStore } from "@/state/chatSessionStore";
 
@@ -148,6 +148,73 @@ describe("useChatController", () => {
       (body as unknown as { parent_message_id: number | null })
         .parent_message_id,
     ).toBeNull();
+  });
+
+  it("stamps streamingStartedAt on the assistant node so the timeline timer has an anchor", async () => {
+    useChatSessionStore.getState().ensureSession("s1");
+    streamMock.mockReturnValue(scripted([startPacket("Hi"), endPacket()]));
+
+    const before = Date.now();
+    const { result } = renderHook(() => useChatController("s1"), { wrapper });
+    await act(async () => {
+      await result.current.submit("hi");
+    });
+    await waitFor(() => expect(result.current.chatState).toBe("input"));
+
+    const [userNode, agentNode] = result.current.messages;
+    expect(agentNode!.streamingStartedAt).toBeGreaterThanOrEqual(before);
+    expect(agentNode!.streamingStartedAt).toBeLessThanOrEqual(Date.now());
+    expect(userNode!.streamingStartedAt).toBeUndefined();
+  });
+
+  it("closes a user-stopped turn with a synthetic stop packet", async () => {
+    useChatSessionStore.getState().ensureSession("s1");
+    stopSessionMock.mockResolvedValue();
+    // Ends only on abort, like the real one when its reader is cut — which is exactly why the
+    // backend's own stop packet never arrives.
+    streamMock.mockImplementation((_body, signal) =>
+      (async function* () {
+        yield startPacket("Thinking");
+        await new Promise<void>((resolve) => {
+          if (signal.aborted) resolve();
+          else signal.addEventListener("abort", () => resolve());
+        });
+      })(),
+    );
+
+    const { result } = renderHook(() => useChatController("s1"), { wrapper });
+    await act(async () => {
+      await result.current.submit("hi");
+    });
+    await act(async () => {
+      result.current.stop();
+    });
+    await waitFor(() => expect(result.current.chatState).toBe("input"));
+
+    // Without this the turn keeps looking like it is streaming until the session reloads.
+    const agentNode = result.current.messages[1]!;
+    const stopPacket = agentNode.packets.at(-1)!;
+    expect(stopPacket.obj.type).toBe(PacketType.STOP);
+    expect((stopPacket.obj as { stop_reason?: string }).stop_reason).toBe(
+      StopReason.USER_CANCELLED,
+    );
+  });
+
+  it("does not append a synthetic stop to a turn that ended on its own", async () => {
+    useChatSessionStore.getState().ensureSession("s1");
+    streamMock.mockReturnValue(scripted([startPacket("Hi"), endPacket()]));
+
+    const { result } = renderHook(() => useChatController("s1"), { wrapper });
+    await act(async () => {
+      await result.current.submit("hi");
+    });
+    await waitFor(() => expect(result.current.chatState).toBe("input"));
+
+    expect(
+      result.current.messages[1]!.packets.some(
+        (p) => p.obj.type === PacketType.STOP,
+      ),
+    ).toBe(false);
   });
 
   it("surfaces a mid-stream backend error as an error node (no stuck placeholder)", async () => {
