@@ -80,6 +80,11 @@ LITELLM_NATIVE_LOGGER_NAMES: tuple[str, ...] = (
 
 _third_party_log_levels_capped = False
 
+# Levels this cap itself applied, per logger name. Lets a later re-cap at a
+# more permissive app level replace our own earlier, stricter cap while still
+# preserving levels that other modules raised explicitly.
+_cap_applied_levels: dict[str, int] = {}
+
 
 def get_log_level_from_str(log_level_str: str = LOG_LEVEL) -> int:
     log_level_dict = {
@@ -105,7 +110,9 @@ def cap_third_party_log_levels(
     Levels are set explicitly by logger name, so the cap holds no matter which
     handler tree the process uses (uvicorn, celery root logger, plain stdout)
     and even when the root logger runs at DEBUG. Never lowers a level that
-    another module already raised (e.g. httpx -> WARNING).
+    another module raised explicitly (e.g. httpx -> WARNING); levels this cap
+    applied itself are replaceable, so re-running at a more permissive app
+    level relaxes the cap instead of ratcheting.
     """
     global _third_party_log_levels_capped
     _third_party_log_levels_capped = True
@@ -118,12 +125,14 @@ def cap_third_party_log_levels(
     )
     for logger_name in THIRD_PARTY_CAPPED_LOGGER_NAMES:
         third_party_logger = logging.getLogger(logger_name)
-        if allow_debug:
-            third_party_logger.setLevel(max(level, third_party_logger.level))
-        else:
-            third_party_logger.setLevel(
-                max(logging.INFO, level, third_party_logger.level)
-            )
+        existing_level = third_party_logger.level
+        # A level equal to what this cap last set is ours to replace; anything
+        # else was raised externally and is preserved.
+        if _cap_applied_levels.get(logger_name) == existing_level:
+            existing_level = logging.NOTSET
+        cap_target = level if allow_debug else max(logging.INFO, level)
+        third_party_logger.setLevel(max(cap_target, existing_level))
+        _cap_applied_levels[logger_name] = cap_target
 
 
 def remove_litellm_native_log_handlers() -> None:
