@@ -54,6 +54,19 @@ def get_filerecord_by_file_id(
     return filestore
 
 
+def get_filerecords_by_file_ids(
+    file_ids: list[str],
+    db_session: Session,
+) -> list[FileRecord]:
+    """Fetch all matching file records in a single query. Missing IDs are
+    simply absent from the result."""
+    if not file_ids:
+        return []
+    return list(
+        db_session.scalars(select(FileRecord).where(FileRecord.file_id.in_(file_ids)))
+    )
+
+
 def get_filerecord_by_prefix(
     prefix: str,
     db_session: Session,
@@ -156,6 +169,7 @@ def upsert_filerecord(
     object_key: str,
     db_session: Session,
     file_metadata: dict | None = None,
+    file_size: int | None = None,
 ) -> FileRecord:
     """Atomic upsert using INSERT ... ON CONFLICT DO UPDATE to avoid
     race conditions when concurrent calls target the same file_id."""
@@ -167,6 +181,7 @@ def upsert_filerecord(
         file_metadata=file_metadata,
         bucket_name=bucket_name,
         object_key=object_key,
+        file_size=file_size,
     )
     stmt = stmt.on_conflict_do_update(
         index_elements=[FileRecord.file_id],
@@ -177,6 +192,7 @@ def upsert_filerecord(
             "file_metadata": stmt.excluded.file_metadata,
             "bucket_name": stmt.excluded.bucket_name,
             "object_key": stmt.excluded.object_key,
+            "file_size": stmt.excluded.file_size,
         },
     )
     db_session.execute(stmt)

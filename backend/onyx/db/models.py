@@ -4661,6 +4661,10 @@ class FileRecord(Base):
     bucket_name: Mapped[str] = mapped_column(String)
     object_key: Mapped[str] = mapped_column(String)
 
+    # Size of the stored content in bytes. NULL for rows written before this
+    # column existed (size unknown without a per-object storage lookup).
+    file_size: Mapped[int | None] = mapped_column(BigInteger, nullable=True)
+
     # Timestamps for external storage
     created_at: Mapped[datetime.datetime] = mapped_column(
         DateTime(timezone=True), server_default=func.now()

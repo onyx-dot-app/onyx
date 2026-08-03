@@ -85,6 +85,7 @@ from onyx.db.enums import (
     ProcessingMode,
 )
 from onyx.db.federated import fetch_all_federated_connectors_parallel
+from onyx.db.file_record import get_filerecords_by_file_ids
 from onyx.db.index_attempt import (
     get_index_attempts_for_cc_pair,
     get_latest_index_attempts_by_status,
@@ -453,38 +454,29 @@ def list_connector_files(
         file_locations, file_names
     )
 
-    file_store = get_default_file_store()
-    files = []
+    # Single batched query — per-file record + object-store size lookups made
+    # this endpoint O(N) round-trips and unusably slow for large connectors.
+    records_by_id = {
+        record.file_id: record
+        for record in get_filerecords_by_file_ids(file_locations, db_session)
+    }
 
+    files = []
     for file_id, file_name in zip(file_locations, file_names):
-        try:
-            file_record = file_store.read_file_record(file_id)
-            file_size = None
-            upload_date = None
-            if file_record:
-                file_size = file_store.get_file_size(file_id)
-                upload_date = (
-                    file_record.created_at.isoformat()
-                    if file_record.created_at
+        record = records_by_id.get(file_id)
+        files.append(
+            ConnectorFileInfo(
+                file_id=file_id,
+                file_name=file_name,
+                # None for records written before sizes were persisted
+                file_size=record.file_size if record else None,
+                upload_date=(
+                    record.created_at.isoformat()
+                    if record and record.created_at
                     else None
-                )
-            files.append(
-                ConnectorFileInfo(
-                    file_id=file_id,
-                    file_name=file_name,
-                    file_size=file_size,
-                    upload_date=upload_date,
-                )
+                ),
             )
-        except Exception as e:
-            logger.warning("Error reading file record for %s: %s", file_id, e)
-            # Include file with basic info even if record fetch fails
-            files.append(
-                ConnectorFileInfo(
-                    file_id=file_id,
-                    file_name=file_name,
-                )
-            )
+        )
 
     return ConnectorFilesResponse(files=files)
 

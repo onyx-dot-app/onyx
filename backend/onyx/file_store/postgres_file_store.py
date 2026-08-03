@@ -157,6 +157,7 @@ class PostgresBackedFileStore(FileStore):
                     object_key=str(oid),
                     db_session=session,
                     file_metadata=file_metadata,
+                    file_size=len(file_bytes),
                 )
                 upsert_file_content(
                     file_id=file_id,
@@ -302,6 +303,7 @@ class PostgresBackedFileStore(FileStore):
                     object_key=old_record.object_key,
                     db_session=session,
                     file_metadata=file_metadata,
+                    file_size=old_record.file_size,
                 )
 
                 # 2. Move file_content in-place — the LO OID is never

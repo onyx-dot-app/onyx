@@ -392,6 +392,9 @@ class S3BackedFileStore(FileStore):
                 object_key=s3_key,
                 db_session=db_session,
                 file_metadata=file_metadata,
+                file_size=(
+                    len(file_content) if isinstance(file_content, bytes) else None
+                ),
             )
             db_session.commit()
 
@@ -549,6 +552,7 @@ class S3BackedFileStore(FileStore):
                     object_key=old_file_record.object_key,
                     db_session=db_session,
                     file_metadata=file_metadata,
+                    file_size=old_file_record.file_size,
                 )
 
                 delete_filerecord_by_file_id(file_id=old_file_id, db_session=db_session)
