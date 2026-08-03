@@ -1105,11 +1105,17 @@ _ANTHROPIC_STOP_REASONS = {
 
 
 def _anthropic_stop_reason(finish_reason: str | None, has_tool_use: bool) -> str:
-    # Tool calls dominate: providers routinely report finish_reason "stop" on
-    # tool-call turns.
+    mapped = _ANTHROPIC_STOP_REASONS.get(finish_reason or "", "end_turn")
+    # Truncation dominates: a generation cut off mid-tool-call must not be
+    # reported as a completed tool_use turn (matches Anthropic's own API).
+    if mapped == "max_tokens":
+        return mapped
+    # Otherwise tool calls dominate: providers routinely report finish_reason
+    # "stop" on tool-call turns, and reporting end_turn would make clients
+    # treat the turn as final and drop the tool calls.
     if has_tool_use:
         return "tool_use"
-    return _ANTHROPIC_STOP_REASONS.get(finish_reason or "", "end_turn")
+    return mapped
 
 
 def _anthropic_tool_use_blocks(
@@ -1227,6 +1233,11 @@ def _anthropic_stream_worker(
                     ):
                         break
             else:
+                # Intentional for-else, matching the sibling stream workers:
+                # the completion frames below must be emitted ONLY when the
+                # upstream stream exhausted cleanly — any break above
+                # (cancellation, failed emit) must skip straight to the
+                # guard's teardown.
                 if text_block_open:
                     emit(AnthropicContentBlockStopEvent.create(index=0))
                 finalized_tool_calls = _finalize_tool_calls(state.tool_call_buffer)
