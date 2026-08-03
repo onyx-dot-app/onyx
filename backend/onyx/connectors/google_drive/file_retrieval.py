@@ -368,6 +368,13 @@ def _resolve_file_or_shortcut(
     logger.debug(
         "Resolved Drive shortcut %s to target %s", file.get("id"), target.get("id")
     )
+    # Use the shortcut's own modifiedTime: listings are filtered and ordered by
+    # it, so this preserves the invariant that a retrieved item's modifiedTime
+    # lies within the requested time range — the target's can sit far outside
+    # it, which would corrupt the checkpoint frontier and re-poll windows.
+    listing_modified_time = file.get(GoogleFields.MODIFIED_TIME.value)
+    if listing_modified_time is not None:
+        target[GoogleFields.MODIFIED_TIME.value] = listing_modified_time
     return target
 
 

@@ -478,6 +478,18 @@ def test_omits_temperature_for_no_sampling_params_models(model_name: str) -> Non
         assert "temperature" not in kwargs
 
 
+def test_empty_tools_list_is_omitted(default_multi_llm: LitellmLLM) -> None:
+    # Some OpenAI-compatible servers reject requests carrying `tools: []`;
+    # an empty list must be dropped from the request entirely.
+    with patch("litellm.completion") as mock_completion:
+        mock_completion.return_value = []
+
+        messages: LanguageModelInput = [UserMessage(content="Hi")]
+        list(default_multi_llm.stream(messages, tools=[]))
+
+        assert mock_completion.call_args.kwargs["tools"] is None
+
+
 def test_claude_only_in_deployment_name_omits_temperature_and_reasons() -> None:
     # Custom providers (e.g. Azure AI Foundry) may carry the model identity only
     # in the deployment alias — the string actually sent to LiteLLM — while
