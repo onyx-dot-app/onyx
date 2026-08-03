@@ -319,19 +319,9 @@ function EditGroupPage({ groupId }: EditGroupPageProps) {
   const handleSelectionChange = useCallback(
     (ids: string[]) => {
       if (!initialized) return;
-      const next = [...ids, ...hiddenMemberIds];
-      // A manager must stay a member; keep yourself selected so unchecking can't drop your
-      // own access on Save.
-      if (
-        currentUserId != null &&
-        managerIds.has(currentUserId) &&
-        !next.includes(currentUserId)
-      ) {
-        next.push(currentUserId);
-      }
-      setSelectedUserIds(next);
+      setSelectedUserIds([...ids, ...hiddenMemberIds]);
     },
-    [initialized, hiddenMemberIds, currentUserId, managerIds]
+    [initialized, hiddenMemberIds]
   );
 
   async function handleSave() {
@@ -560,6 +550,16 @@ function EditGroupPage({ groupId }: EditGroupPageProps) {
                     pageSize={PAGE_SIZE}
                     searchTerm={searchTerm}
                     selectionBehavior="multi-select"
+                    // Can't deselect yourself while you manage this group (would drop your
+                    // access on Save).
+                    canSelectRow={(row) => {
+                      const uid = row.id ?? row.email;
+                      return !(
+                        currentUserId != null &&
+                        uid === currentUserId &&
+                        managerIds.has(uid)
+                      );
+                    }}
                     initialRowSelection={currentRowSelection}
                     onSelectionChange={handleSelectionChange}
                     footer={{}}

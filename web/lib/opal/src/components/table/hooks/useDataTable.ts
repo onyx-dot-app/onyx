@@ -10,6 +10,7 @@ import {
   getFilteredRowModel,
   type Table,
   type ColumnDef,
+  type Row,
   type RowData,
   type SortingState,
   type RowSelectionState,
@@ -91,8 +92,9 @@ interface UseDataTableOptions<TData extends RowData> {
   columns: ColumnDef<TData, any>[];
   /** Rows per page. Set `Infinity` to disable pagination. @default 10 */
   pageSize?: number;
-  /** Whether rows can be selected. @default true */
-  enableRowSelection?: boolean;
+  /** Whether rows can be selected — boolean, or a per-row predicate (false → row can't be
+   *  toggled, stays at its initial selection). @default true */
+  enableRowSelection?: boolean | ((row: Row<TData>) => boolean);
   /** Whether columns can be resized. @default true */
   enableColumnResizing?: boolean;
   /** Stable row identity function. TanStack tracks selection by ID instead of array index. */
