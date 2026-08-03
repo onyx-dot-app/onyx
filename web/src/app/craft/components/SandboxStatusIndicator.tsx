@@ -10,6 +10,15 @@ import {
   useIsPreProvisioningFailed,
 } from "@/app/craft/hooks/useBuildSessionStore";
 import { Text } from "@opal/components";
+import type { SandboxRuntimeStatus } from "@/app/craft/types/streamingTypes";
+
+type SandboxDisplayStatus = SandboxRuntimeStatus | "ready" | "loading";
+
+interface SandboxStatusConfig {
+  color: string;
+  pulse: boolean;
+  label: string;
+}
 
 const STATUS_CONFIG = {
   provisioning: {
@@ -22,7 +31,6 @@ const STATUS_CONFIG = {
     pulse: false,
     label: "Sandbox running",
   },
-  idle: { color: "bg-status-warning-05", pulse: false, label: "Sandbox idle" },
   sleeping: {
     color: "bg-status-info-05",
     pulse: false,
@@ -53,18 +61,14 @@ const STATUS_CONFIG = {
     pulse: true,
     label: "Finding sandbox...",
   },
-} as const;
-
-type Status = keyof typeof STATUS_CONFIG;
-
-interface SandboxStatusIndicatorProps {}
+} as const satisfies Record<SandboxDisplayStatus, SandboxStatusConfig>;
 
 /**
  * Derives the current sandbox status from session state or pre-provisioning state.
  *
  * Priority:
- * 1. Actual sandbox status from backend (if session has sandbox info)
- * 2. Session exists but no sandbox info → "running" (optimistic for consumed pre-provisioned sessions)
+ * 1. Session runtime status (backend status or client-owned restoration)
+ * 2. Session exists but no sandbox info → "loading"
  * 3. Pre-provisioning failed → "failed"
  * 4. Pre-provisioning in progress → "provisioning" (only when no session - welcome page)
  * 5. Pre-provisioning ready (not yet consumed) → "ready"
@@ -79,29 +83,23 @@ function deriveSandboxStatus(
   isPreProvisioning: boolean,
   isReady: boolean,
   isFailed: boolean
-): Status {
-  // 1. Backend is source of truth when available
+): SandboxDisplayStatus {
   if (session?.sandbox) {
-    return session.sandbox.status as Status;
+    return session.sandbox.status;
   }
-  // 2. Session exists but no sandbox info - assume running
-  // (This handles consumed pre-provisioned sessions before sandbox loads)
+  // A session without sandbox data has not established a runtime state yet.
   if (session) {
-    return "running";
+    return "loading";
   }
-  // 3. Pre-provisioning failed
   if (isFailed) {
     return "failed";
   }
-  // 4. No session - check pre-provisioning state (welcome page)
   if (isPreProvisioning) {
     return "provisioning";
   }
-  // 5. Pre-provisioning ready but not consumed
   if (isReady) {
     return "ready";
   }
-  // 6. No session, no pre-provisioning state - loading
   return "loading";
 }
 
@@ -111,9 +109,7 @@ function deriveSandboxStatus(
  * Shows actual sandbox state when a session exists, otherwise shows
  * pre-provisioning state (provisioning/ready).
  */
-export default function SandboxStatusIndicator(
-  _props: SandboxStatusIndicatorProps = {}
-) {
+export default function SandboxStatusIndicator() {
   const session = useSession();
   const isPreProvisioning = useIsPreProvisioning();
   const isReady = useIsPreProvisioningReady();

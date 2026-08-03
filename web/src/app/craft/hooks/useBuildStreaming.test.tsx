@@ -960,8 +960,9 @@ describe("useBuildStreaming thinking packets", () => {
     jest.mocked(fetchSession).mockResolvedValue({
       id: sessionId,
       status: "active",
+      nextjs_port: null,
       session_loaded_in_sandbox: true,
-      sandbox: { id: "sandbox-1", status: "running", nextjs_port: null },
+      sandbox: { id: "sandbox-1", status: "running" },
       agent_provider: "openai",
       agent_model: "gpt-5-mini",
     } as never);
