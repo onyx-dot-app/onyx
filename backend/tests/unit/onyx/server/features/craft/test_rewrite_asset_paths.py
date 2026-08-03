@@ -54,8 +54,6 @@ class TestNextjsProxyMountContract:
         ) in source
         assert "export WEBAPP_ASSET_PREFIX" not in source
         assert 'grep -q "WEBAPP_ASSET_PREFIX" next.config.ts' in source
-        # The legacy rewrite now injects the scaffold template verbatim, so the
-        # basePath/assetPrefix contract is pinned on the template itself.
         template = SANDBOX_WEB_NEXT_CONFIG.read_text()
         assert "nextConfig.basePath = webappBasePath" in template
         assert "nextConfig.assetPrefix = webappBasePath" in template

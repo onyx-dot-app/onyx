@@ -1,8 +1,7 @@
 import type { NextConfig } from "next";
 
-// basePath is per-session. Prefer the managed env var, but fall back to the
-// session id in the cwd (.../sessions/<id>/outputs/web) so a dev server the
-// agent starts by hand still serves under the path the preview proxy expects.
+// The cwd fallback lets a dev server the agent starts by hand still serve
+// under the path the preview proxy expects.
 function resolveWebappBasePath(): string | undefined {
   if (process.env.ONYX_WEBAPP_BASE_PATH) {
     return process.env.ONYX_WEBAPP_BASE_PATH;

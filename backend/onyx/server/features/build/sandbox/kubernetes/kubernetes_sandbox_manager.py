@@ -533,9 +533,8 @@ class KubernetesSandboxManager(SandboxManager):
                     )
                 ),
             ),
-            # Deployment-global (same for every session), so a dev server the
-            # agent starts by hand inherits the dev-origin allowlist the managed
-            # start path also sets.
+            # In the pod env so a dev server the agent starts by hand inherits
+            # the allowlist the managed start path also sets.
             client.V1EnvVar(
                 name="ONYX_WEBAPP_ALLOWED_DEV_ORIGINS",
                 value=allowed_dev_origins(),

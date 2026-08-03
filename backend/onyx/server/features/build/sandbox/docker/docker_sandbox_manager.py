@@ -560,9 +560,8 @@ def build_container_create_kwargs(
         "ONYX_API_PREFIX": "",
         OPENCODE_SERVER_PASSWORD: opencode_password,
         "OPENCODE_CONFIG_CONTENT": opencode_config_json,
-        # Deployment-global (same for every session), so a dev server the agent
-        # starts by hand inherits the dev-origin allowlist the managed start
-        # path also sets.
+        # In the container env so a dev server the agent starts by hand
+        # inherits the allowlist the managed start path also sets.
         "ONYX_WEBAPP_ALLOWED_DEV_ORIGINS": allowed_dev_origins(),
     }
 

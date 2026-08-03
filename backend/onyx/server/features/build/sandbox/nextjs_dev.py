@@ -40,9 +40,7 @@ def build_nextjs_start_script(
     Returns:
         Shell script string to start the NextJS server.
     """
-    # Legacy sessions (scaffolded with a WEBAPP_ASSET_PREFIX placeholder config)
-    # get rewritten to the current template. Read it rather than duplicate it, so
-    # the two can't drift.
+    # Read the template rather than duplicate it, so the two can't drift.
     template_next_config = _TEMPLATE_NEXT_CONFIG.read_text().strip()
 
     install_check = ""
@@ -57,9 +55,8 @@ fi
 
     return f"""
 set -e
-# Naive-path fallback: the session's dedicated port, read by the template's
-# `dev` script (`next dev -p $(cat ../../.nextjs-port ...)`) so a `bun run dev`
-# the agent runs by hand still binds the port the preview proxy routes to.
+# Read by the template's `dev` script so a `bun run dev` the agent runs by
+# hand still binds the port the preview proxy routes to.
 echo {nextjs_port} > {session_path}/.nextjs-port
 # Replay safety: a live server already attached to this session keeps its
 # port; spawning a second one would fail to bind and leave a zombie. The
@@ -89,9 +86,8 @@ if grep -q "WEBAPP_ASSET_PREFIX" next.config.ts 2>/dev/null; then
 EOF
 fi
 echo "Starting Next.js dev server on port {nextjs_port}..."
-# Port comes from ONYX_WEBAPP_PORT (exported above), resolved by the template's
-# `dev` script — a single source of truth shared with the agent's naive path,
-# and no duplicate -p flag.
+# No -p here: the template's `dev` script resolves ONYX_WEBAPP_PORT itself,
+# and a second -p would collide with its own.
 # 9>&-: the server must not inherit the lock fd, or it would hold the
 # check-and-spawn lock for its entire lifetime.
 nohup bun run dev -- -H 0.0.0.0 > {session_path}/nextjs.log 2>&1 9>&- &
