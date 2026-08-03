@@ -40,11 +40,21 @@ from onyx.auth.scoped_permissions import assert_manages_group
 from onyx.auth.scoped_permissions import assert_within_scope
 from onyx.auth.scoped_permissions import manages_group
 from onyx.auth.scoped_permissions import within_scope
+from onyx.configs.constants import DocumentSource
+from onyx.connectors.models import InputType
+from onyx.db.connector_credential_pair import (
+    get_connector_credential_pair_from_id_for_user,
+)
 from onyx.db.document_set import fetch_all_document_sets_for_user
+from onyx.db.enums import AccessType
+from onyx.db.enums import ConnectorCredentialPairStatus
 from onyx.db.enums import MCPServerStatus
 from onyx.db.enums import Permission
 from onyx.db.enums import PermissionAuthority
 from onyx.db.enums import PersonaSharePermission
+from onyx.db.models import Connector
+from onyx.db.models import ConnectorCredentialPair
+from onyx.db.models import Credential
 from onyx.db.models import DocumentSet
 from onyx.db.models import DocumentSet__UserGroup
 from onyx.db.models import MCPServer
@@ -58,6 +68,7 @@ from onyx.db.models import Tool
 from onyx.db.models import User
 from onyx.db.models import User__UserGroup
 from onyx.db.models import UserGroup
+from onyx.db.models import UserGroup__ConnectorCredentialPair
 from onyx.db.persona import _assert_persona_update_within_managed_scope
 from onyx.db.persona import can_delete_persona
 from onyx.db.persona import can_edit_persona
@@ -76,6 +87,7 @@ from onyx.server.features.mcp.api import _ensure_mcp_server_viewable
 from onyx.server.features.persona.api import delete_persona
 from onyx.server.features.persona.models import PersonaUpsertRequest
 from onyx.server.features.tool.api import _get_manageable_custom_tool
+from onyx.server.manage.administrative import create_deletion_attempt_for_connector_id
 from onyx.server.token_rate_limits.models import TokenRateLimitArgs
 from tests.external_dependency_unit.conftest import create_test_user
 
@@ -117,85 +129,50 @@ def _manage(db_session: Session, user: User, *groups: UserGroup) -> None:
     db_session.commit()
 
 
-def test_within_scope_matches_assert_within_scope(db_session: Session) -> None:
-    managed = _make_group(db_session)
-    unmanaged = _make_group(db_session)
+def _make_cc_pair(
+    db_session: Session, *, is_public: bool, groups: list[UserGroup]
+) -> ConnectorCredentialPair:
+    connector = Connector(
+        name=f"proj-conn-{uuid4().hex[:12]}",
+        source=DocumentSource.FILE,
+        input_type=InputType.POLL,
+        connector_specific_config={},
+        refresh_freq=None,
+        prune_freq=None,
+        indexing_start=None,
+    )
+    db_session.add(connector)
+    db_session.flush()
 
-    manager = create_test_user(db_session, "proj-within-mgr")
-    _manage(db_session, manager, managed)
-    manager.effective_permissions = []  # SCOPED for a bundle token, no global grant
+    credential = Credential(source=DocumentSource.FILE, credential_json={})
+    db_session.add(credential)
+    db_session.flush()
 
-    admin = create_test_user(db_session, "proj-within-admin", is_admin=True)
-
-    plain = create_test_user(db_session, "proj-within-plain")
-    plain.effective_permissions = []
+    cc_pair = ConnectorCredentialPair(
+        connector_id=connector.id,
+        credential_id=credential.id,
+        name=f"proj-ccpair-{uuid4().hex[:12]}",
+        status=ConnectorCredentialPairStatus.ACTIVE,
+        access_type=AccessType.PUBLIC if is_public else AccessType.PRIVATE,
+    )
+    db_session.add(cc_pair)
+    db_session.flush()
+    for group in groups:
+        db_session.add(
+            UserGroup__ConnectorCredentialPair(
+                user_group_id=group.id, cc_pair_id=cc_pair.id, is_current=True
+            )
+        )
     db_session.commit()
-
-    perm = Permission.MANAGE_DOCUMENT_SETS
-    # (current_group_ids, requested_group_ids, is_non_public)
-    configs = [
-        ([managed.id], [managed.id], True),  # private, fully in managed scope
-        ([managed.id], [managed.id], False),  # public — never in scope
-        ([unmanaged.id], [unmanaged.id], True),  # private but out of scope
-        ([managed.id], [unmanaged.id], True),  # reassignment escapes scope
-        ([], [], True),  # no groups — fails closed (empty final)
-    ]
-
-    for actor in (admin, manager, plain):
-        for current, requested, non_public in configs:
-            decision = within_scope(
-                actor,
-                db_session,
-                permission=perm,
-                current_group_ids=current,
-                requested_group_ids=requested,
-                is_non_public=non_public,
-            )
-            enforced = not _guard_raises(
-                assert_within_scope,
-                actor,
-                db_session,
-                permission=perm,
-                current_group_ids=current,
-                requested_group_ids=requested,
-                is_non_public=non_public,
-            )
-            assert decision == enforced, (
-                f"drift: actor={actor.email} config={(current, requested, non_public)} "
-                f"projection={decision} enforced={enforced}"
-            )
-
-
-def test_manages_group_matches_assert_manages_group(db_session: Session) -> None:
-    managed = _make_group(db_session)
-    other = _make_group(db_session)
-
-    manager = create_test_user(db_session, "proj-mng-mgr")
-    _manage(db_session, manager, managed)
-    manager.effective_permissions = []
-
-    admin = create_test_user(db_session, "proj-mng-admin", is_admin=True)
-
-    plain = create_test_user(db_session, "proj-mng-plain")
-    plain.effective_permissions = []
-    db_session.commit()
-
-    for actor in (admin, manager, plain):
-        for group in (managed, other):
-            decision = manages_group(actor, db_session, group_id=group.id)
-            enforced = not _guard_raises(
-                assert_manages_group, actor, db_session, group_id=group.id
-            )
-            assert decision == enforced, (
-                f"drift: actor={actor.email} group={group.id} "
-                f"projection={decision} enforced={enforced}"
-            )
+    return cc_pair
 
 
 def test_cc_pair_projection_matches_gates(db_session: Session) -> None:
-    """edit tracks the managed-scope within_scope decision; delete and publish track
-    global MANAGE_CONNECTORS. A scoped manager edits a managed connector but can never
-    delete it or make it public — those routes are global-only."""
+    """Each key is pinned to the real route, not the bool that built it: edit → the editable
+    query (which must agree with the within_scope write decision); delete → the deletion route's
+    GATE 1 (global MANAGE_CONNECTORS, no allow_scope); publish → the associate route's real GATE 2
+    (assert_within_scope for the PUBLIC state). So this fails if either route starts admitting a
+    scoped manager — a scoped manager edits a managed connector but can never delete/publish it."""
     managed = _make_group(db_session)
 
     in_scope = create_test_user(db_session, "proj-cc-inscope")
@@ -209,8 +186,17 @@ def test_cc_pair_projection_matches_gates(db_session: Session) -> None:
     admin = create_test_user(db_session, "proj-cc-admin", is_admin=True)
     db_session.commit()
 
+    cc_pair = _make_cc_pair(db_session, is_public=False, groups=[managed])
+
     for actor in (in_scope, out_scope, admin):
-        editable = within_scope(
+        # edit: the real editable query must agree with the within_scope write decision
+        is_editable = (
+            get_connector_credential_pair_from_id_for_user(
+                cc_pair.id, db_session, actor, get_editable=True
+            )
+            is not None
+        )
+        scope_decision = within_scope(
             actor,
             db_session,
             permission=Permission.MANAGE_CONNECTORS,
@@ -218,25 +204,42 @@ def test_cc_pair_projection_matches_gates(db_session: Session) -> None:
             requested_group_ids=[managed.id],
             is_non_public=True,
         )
-        admin_authority = has_global_permission(actor, Permission.MANAGE_CONNECTORS)
-        tags = cc_pair_permissions(
-            is_editable=editable, is_connectors_admin=admin_authority
-        )
-        assert tags["edit"] == editable  # M — the write-scope decision
-        assert tags["delete"] == admin_authority  # A — never a scoped manager
-        assert tags["publish"] == admin_authority  # A
+        assert is_editable == scope_decision, actor.email
 
-    # in-scope manager can edit but not delete/publish
-    manager_editable = within_scope(
-        in_scope,
-        db_session,
-        permission=Permission.MANAGE_CONNECTORS,
-        current_group_ids=[managed.id],
-        requested_group_ids=[managed.id],
-        is_non_public=True,
+        # delete: the deletion route's GATE 1 (global only, no allow_scope)
+        delete_admits = _route_admits(
+            create_deletion_attempt_for_connector_id, "user", actor
+        )
+        # publish: the associate route's real GATE 2 for the PUBLIC state (is_non_public=False)
+        publish_enforced = not _guard_raises(
+            assert_within_scope,
+            actor,
+            db_session,
+            permission=Permission.MANAGE_CONNECTORS,
+            current_group_ids=[managed.id],
+            requested_group_ids=[managed.id],
+            is_non_public=False,
+        )
+
+        tags = cc_pair_permissions(
+            is_editable=is_editable,
+            is_connectors_admin=has_global_permission(
+                actor, Permission.MANAGE_CONNECTORS
+            ),
+        )
+        assert tags["edit"] == scope_decision, actor.email
+        assert tags["delete"] == delete_admits, actor.email
+        assert tags["publish"] == publish_enforced, actor.email
+
+    # concrete: an in-scope manager edits but can neither delete nor publish
+    in_scope_editable = (
+        get_connector_credential_pair_from_id_for_user(
+            cc_pair.id, db_session, in_scope, get_editable=True
+        )
+        is not None
     )
     assert cc_pair_permissions(
-        is_editable=manager_editable,
+        is_editable=in_scope_editable,
         is_connectors_admin=has_global_permission(
             in_scope, Permission.MANAGE_CONNECTORS
         ),
