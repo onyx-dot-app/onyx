@@ -638,6 +638,36 @@ ONYX_DB_CATALOG_SHARD = os.environ.get("ONYX_DB_CATALOG_SHARD") or ONYX_DB_DEFAU
 ONYX_DB_NEW_TENANT_SHARD = (
     os.environ.get("ONYX_DB_NEW_TENANT_SHARD") or ONYX_DB_DEFAULT_SHARD
 )
+# Connection pool for shards other than the default one. Unset means each shard gets
+# the same budget as the default, which is correct because a connection limit belongs
+# to a database rather than to the fleet. Set these lower while a new shard is still
+# filling up.
+ONYX_DB_SHARD_POOL_SIZE = (
+    int(os.environ["ONYX_DB_SHARD_POOL_SIZE"])
+    if os.environ.get("ONYX_DB_SHARD_POOL_SIZE")
+    else None
+)
+ONYX_DB_SHARD_POOL_OVERFLOW = (
+    int(os.environ["ONYX_DB_SHARD_POOL_OVERFLOW"])
+    if os.environ.get("ONYX_DB_SHARD_POOL_OVERFLOW")
+    else None
+)
+
+# Checked here so a bad value stops the process rather than surfacing on the first
+# request routed to a shard, whose engine is built lazily.
+if ONYX_DB_SHARD_POOL_SIZE is not None and ONYX_DB_SHARD_POOL_SIZE < 1:
+    # SQLAlchemy reads pool_size=0 as "no size limit", so a 0 here would uncap the
+    # shard rather than constrain it — the opposite of why this setting exists.
+    raise ValueError(
+        f"ONYX_DB_SHARD_POOL_SIZE must be at least 1, got {ONYX_DB_SHARD_POOL_SIZE}"
+    )
+if ONYX_DB_SHARD_POOL_OVERFLOW is not None and ONYX_DB_SHARD_POOL_OVERFLOW < 0:
+    # 0 is meaningful (no overflow past pool_size); negative means unlimited.
+    raise ValueError(
+        f"ONYX_DB_SHARD_POOL_OVERFLOW must be zero or greater, got "
+        f"{ONYX_DB_SHARD_POOL_OVERFLOW}"
+    )
+
 # Operator escape hatch: JSON object of tenant_id -> shard name, consulted
 # before the catalog table. Intended for incident response, not routine use.
 ONYX_DB_SHARD_OVERRIDES_JSON = os.environ.get("ONYX_DB_SHARD_OVERRIDES", "").strip()
