@@ -67,7 +67,7 @@ describe("hasAnyAdminPermission", () => {
   });
 
   it("returns false when the user only holds non-admin permissions", () => {
-    // BASIC_ACCESS is not gating any admin route — it should not unlock admin.
+    // BASIC_ACCESS gates no admin route, so it must not unlock admin.
     expect(hasAnyAdminPermission([Permission.BASIC_ACCESS])).toBe(false);
   });
 
@@ -86,9 +86,8 @@ describe("hasAnyAdminPermission", () => {
 
 describe("getFirstPermittedAdminRoute", () => {
   it("returns the first sidebar-labelled route for a full admin", () => {
-    // FULL_ADMIN_PANEL_ACCESS unlocks every route — we expect the very first
-    // entry in ADMIN_ROUTES declaration order that has a non-empty
-    // sidebarLabel. Today that is LLM_MODELS.
+    // FULL_ADMIN_PANEL_ACCESS unlocks every route, so the first ADMIN_ROUTES
+    // entry (declaration order) with a non-empty sidebarLabel wins — today LLM_MODELS.
     expect(
       getFirstPermittedAdminRoute([Permission.FULL_ADMIN_PANEL_ACCESS])
     ).toBe(ADMIN_ROUTES.LLM_MODELS.path);

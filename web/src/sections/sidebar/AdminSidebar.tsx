@@ -41,7 +41,7 @@ export default function AdminSidebar() {
   }, [focusSearch, folded]);
   const pathname = usePathname();
   const { customAnalyticsEnabled } = useCustomAnalyticsEnabled();
-  const { permissions } = useUser();
+  const { adminCapabilities } = useUser();
   const settings = useSettingsContext();
   const tier = settings?.settings.tier;
   const { data: billingData, isLoading: billingLoading } =
@@ -69,7 +69,7 @@ export default function AdminSidebar() {
       !settings?.settings.hide_query_history_from_admin_panel,
   };
 
-  const allItems = buildItems(permissions, flags, settings);
+  const allItems = buildItems(adminCapabilities, flags, settings);
 
   const itemExtractor = useCallback((item: SidebarItemEntry) => item.name, []);
 

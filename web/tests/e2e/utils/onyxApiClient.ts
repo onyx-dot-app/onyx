@@ -776,10 +776,11 @@ export class OnyxApiClient {
 
   async getCurrentUserPermissions(): Promise<string[]> {
     const response = await this.get("/me/permissions");
-    return await this.handleResponse(
+    const body = await this.handleResponse<{ permissions: string[] }>(
       response,
       "Failed to fetch current user permissions"
     );
+    return body.permissions;
   }
 
   async addUserToAdminGroup(email: string): Promise<void> {

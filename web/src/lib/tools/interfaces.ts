@@ -39,6 +39,8 @@ export interface MCPServer {
   status: MCPServerStatus;
   last_refreshed_at?: string;
   tool_count: number;
+  // Server-stamped affordance map; fail-closed (absent = denied).
+  permissions?: Record<string, boolean>;
 }
 
 export interface MCPServersResponse {
@@ -65,6 +67,7 @@ export interface MCPTool {
   icon?: React.FunctionComponent<IconProps>;
   isAvailable: boolean;
   isEnabled: boolean;
+  permissions?: Record<string, boolean>;
 }
 
 export interface MethodSpec {
@@ -112,6 +115,9 @@ export interface ToolSnapshot {
   chat_selectable: boolean;
   agent_creation_selectable: boolean;
   default_enabled: boolean;
+
+  // Server-stamped affordance map; fail-closed (absent = denied).
+  permissions?: Record<string, boolean>;
 }
 
 export enum MCPAuthenticationType {

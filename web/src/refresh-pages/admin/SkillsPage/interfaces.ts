@@ -43,6 +43,8 @@ export interface CustomSkill {
   created_at: string | null;
   updated_at: string | null;
   granted_group_ids: number[];
+  // Server-stamped affordance map; fail-closed (absent = denied).
+  permissions?: Record<string, boolean>;
 }
 
 export interface SkillsList {

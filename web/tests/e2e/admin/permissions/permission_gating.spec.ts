@@ -73,7 +73,6 @@ test.describe("Permission gating — MANAGE_AGENTS", () => {
 
     const { groupId, email, password } = testUserContext;
 
-    // Admin creates a custom agent
     const agentName = `E2E Manage Agent ${Date.now()}`;
     const agentId = await adminClient.createAgent(agentName, "Test agent");
 
@@ -114,7 +113,6 @@ test.describe("Permission gating — MANAGE_AGENTS", () => {
       await page.waitForLoadState("networkidle");
       expect(page.url()).toContain("/app");
     } finally {
-      // Cleanup: delete the agent
       await page.context().clearCookies();
       await loginAs(page, "admin");
       const cleanupClient = new OnyxApiClient(page.request);
@@ -139,7 +137,6 @@ test.describe("Permission gating — MANAGE_LLMS", () => {
 
     const { groupId, email, password } = testUserContext;
 
-    // Admin creates an LLM provider
     const providerName = `E2E Manage LLM ${Date.now()}`;
     const providerId = await adminClient.createProvider(providerName);
 
@@ -182,7 +179,6 @@ test.describe("Permission gating — MANAGE_LLMS", () => {
       await page.waitForLoadState("networkidle");
       expect(page.url()).toContain("/app");
     } finally {
-      // Cleanup: delete the provider
       await page.context().clearCookies();
       await loginAs(page, "admin");
       const cleanupClient = new OnyxApiClient(page.request);
@@ -207,7 +203,6 @@ test.describe("Permission gating — MANAGE_CONNECTORS", () => {
 
     const { groupId, email, password } = testUserContext;
 
-    // Admin creates a file connector
     const connectorName = `E2E Manage Connector ${Date.now()}`;
     const ccPairId = await adminClient.createFileConnector(connectorName);
 
@@ -261,7 +256,6 @@ test.describe("Permission gating — MANAGE_CONNECTORS", () => {
       await page.waitForLoadState("networkidle");
       expect(page.url()).toContain("/app");
     } finally {
-      // Cleanup: delete the connector
       await page.context().clearCookies();
       await loginAs(page, "admin");
       const cleanupClient = new OnyxApiClient(page.request);
@@ -286,7 +280,6 @@ test.describe("Permission gating — MANAGE_DOCUMENT_SETS", () => {
 
     const { groupId, email, password } = testUserContext;
 
-    // Admin creates a public file connector
     const connectorName = `E2E DocSet Connector ${Date.now()}`;
     const ccPairId = await adminClient.createFileConnector(
       connectorName,
@@ -340,17 +333,17 @@ test.describe("Permission gating — MANAGE_DOCUMENT_SETS", () => {
         page.getByLabel("admin-page-title").getByText("New Document Set")
       ).toBeVisible({ timeout: 10000 });
 
-      // Open the connector dropdown and verify the admin-created connector is listed
+      // Open the connector dropdown
       const connectorSearchInput = page.getByTestId("connector-search-input");
       await expect(connectorSearchInput).toBeVisible({ timeout: 10000 });
       await connectorSearchInput.click();
 
-      // Verify the connector is visible (proves implied READ_CONNECTORS)
+      // Connector visible proves implied READ_CONNECTORS
       await expect(page.getByText(connectorName)).toBeVisible({
         timeout: 10000,
       });
 
-      // Verify group selector loaded successfully (proves implied READ_USER_GROUPS)
+      // Group selector loaded proves implied READ_USER_GROUPS
       await expect(
         page.getByText("Assign group access for this document set")
       ).toBeVisible({ timeout: 10000 });
@@ -381,7 +374,6 @@ test.describe("Permission gating — MANAGE_DOCUMENT_SETS", () => {
       await page.waitForLoadState("networkidle");
       expect(page.url()).toContain("/app");
     } finally {
-      // Cleanup: delete the connector and extra group
       await page.context().clearCookies();
       await loginAs(page, "admin");
       const cleanupClient = new OnyxApiClient(page.request);
@@ -407,7 +399,6 @@ test.describe("Permission gating — MANAGE_ACTIONS", () => {
 
     const { groupId, email, password } = testUserContext;
 
-    // Admin creates an OpenAPI custom tool and an MCP server
     const toolName = `E2E Manage Tool ${Date.now()}`;
     const toolId = await adminClient.createCustomTool(toolName);
 
@@ -473,7 +464,6 @@ test.describe("Permission gating — MANAGE_ACTIONS", () => {
       await page.waitForLoadState("networkidle");
       expect(page.url()).toContain("/app");
     } finally {
-      // Cleanup: delete the tool and MCP server
       await page.context().clearCookies();
       await loginAs(page, "admin");
       const cleanupClient = new OnyxApiClient(page.request);
@@ -499,7 +489,6 @@ test.describe("Permission gating — MANAGE_SERVICE_ACCOUNT_API_KEYS", () => {
 
     const { groupId, email, password } = testUserContext;
 
-    // Admin creates a service account
     const accountName = `E2E Service Account ${Date.now()}`;
     const apiKeyId = await adminClient.createServiceAccount(accountName);
 
@@ -561,7 +550,6 @@ test.describe("Permission gating — MANAGE_SERVICE_ACCOUNT_API_KEYS", () => {
       await page.waitForLoadState("networkidle");
       expect(page.url()).toContain("/app");
     } finally {
-      // Cleanup: delete the service account and extra group
       await page.context().clearCookies();
       await loginAs(page, "admin");
       const cleanupClient = new OnyxApiClient(page.request);
@@ -647,7 +635,6 @@ test.describe("Permission gating — MANAGE_BOTS", () => {
       await page.waitForLoadState("networkidle");
       expect(page.url()).toContain("/app");
     } finally {
-      // Cleanup: delete the Discord guild
       await page.context().clearCookies();
       await loginAs(page, "admin");
       const cleanupClient = new OnyxApiClient(page.request);
@@ -713,7 +700,6 @@ test.describe("Permission gating — READ_QUERY_HISTORY", () => {
       await page.waitForLoadState("networkidle");
       expect(page.url()).toContain("/app");
     } finally {
-      // Cleanup: delete the chat session
       await page.context().clearCookies();
       await loginAs(page, "admin");
       const cleanupClient = new OnyxApiClient(page.request);
@@ -803,7 +789,7 @@ test.describe("Permission gating — CREATE_USER_API_KEYS", () => {
       await expect(newTokenButton).toBeVisible({ timeout: 10000 });
       await expect(newTokenButton).toBeDisabled();
     } finally {
-      // Cleanup: delete the PAT (only requires BASIC_ACCESS)
+      // Delete the PAT (only requires BASIC_ACCESS)
       if (createdPatId !== undefined) {
         await page.context().clearCookies();
         await apiLogin(page, email, password);
@@ -910,7 +896,7 @@ test.describe("Permission gating — MANAGE_USER_GROUPS", () => {
         timeout: 10000,
       });
 
-      // Dismiss the connectors popover by pressing Escape before opening agents
+      // Dismiss the connectors popover before opening agents
       await page.keyboard.press("Escape");
 
       // Open agents popover and verify item (proves READ_AGENTS)
@@ -932,7 +918,7 @@ test.describe("Permission gating — MANAGE_USER_GROUPS", () => {
       await page.waitForLoadState("networkidle");
       expect(page.url()).toContain("/app");
     } finally {
-      // Cleanup: delete resources (doc set before connector since it references it)
+      // Delete doc set before connector since it references it
       await page.context().clearCookies();
       await loginAs(page, "admin");
       const cleanupClient = new OnyxApiClient(page.request);
