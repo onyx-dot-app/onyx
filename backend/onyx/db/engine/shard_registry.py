@@ -13,10 +13,9 @@ Design notes:
 - With no ``ONYX_DB_SHARDS`` configured there is exactly one shard and this module is
   a thin pass-through to ``SqlEngine``.
 
-Connection budget: the *total* pool across shards is held roughly constant rather than
-multiplied per shard — see ``divide_pool_budget``. Multiplying it would put N times the
-connection load on the database/pooler, which is how this deployment has hurt itself
-before.
+Connection budget: applied per shard rather than split across them — see
+``pool_budget_for_shard``. A connection limit belongs to a database, so a pool against
+one shard costs another shard nothing.
 """
 
 import json
@@ -32,6 +31,8 @@ from onyx.configs.app_configs import (
     ONYX_DB_CATALOG_SHARD,
     ONYX_DB_DEFAULT_SHARD,
     ONYX_DB_NEW_TENANT_SHARD,
+    ONYX_DB_SHARD_POOL_OVERFLOW,
+    ONYX_DB_SHARD_POOL_SIZE,
     ONYX_DB_SHARDS_JSON,
     POSTGRES_DB,
     POSTGRES_HOST,
@@ -206,17 +207,34 @@ def is_sharded() -> bool:
     return len(get_shard_specs()) > 1
 
 
-def divide_pool_budget(pool_size: int, max_overflow: int) -> tuple[int, int]:
-    """Divide SQLAlchemy pool settings by the shard count.
+def pool_budget_for_shard(
+    shard_name: str, pool_size: int, max_overflow: int
+) -> tuple[int, int]:
+    """SQLAlchemy pool settings for one shard's engine.
 
-    Returns ``(pool_size, max_overflow)`` for ``create_engine`` — divided so N shards
-    don't open N times the connections, which has hurt this deployment before.
-    Unchanged with one shard. An explicit ``max_overflow=0`` (celery beat) stays 0.
+    A connection limit is a property of a *database*, not of the fleet: a pool against
+    one shard consumes nothing from another shard's ``max_connections``. So the budget
+    is applied per shard rather than split across them. Splitting would shrink the
+    default shard's pool the moment a second shard is configured — cutting capacity on
+    the database still carrying every tenant, to relieve one that is empty.
+
+    Extra shards can be given a smaller allocation of their own while they are filling
+    up. An explicit ``max_overflow=0`` (celery beat) stays 0.
     """
-    divisor = max(1, len(get_shard_specs()))
+    if is_default_shard(shard_name):
+        return pool_size, max_overflow
+
     return (
-        max(1, pool_size // divisor),
-        0 if max_overflow == 0 else max(1, max_overflow // divisor),
+        ONYX_DB_SHARD_POOL_SIZE if ONYX_DB_SHARD_POOL_SIZE is not None else pool_size,
+        (
+            0
+            if max_overflow == 0
+            else (
+                ONYX_DB_SHARD_POOL_OVERFLOW
+                if ONYX_DB_SHARD_POOL_OVERFLOW is not None
+                else max_overflow
+            )
+        ),
     )
 
 
@@ -313,6 +331,16 @@ class ShardRegistry:
         )
 
         engine_kwargs: dict[str, Any] = dict(profile.engine_kwargs)
+        # NullPool deployments carry no pool sizing to override.
+        if "pool_size" in engine_kwargs:
+            (
+                engine_kwargs["pool_size"],
+                engine_kwargs["max_overflow"],
+            ) = pool_budget_for_shard(
+                spec.name,
+                engine_kwargs["pool_size"],
+                engine_kwargs.get("max_overflow", 0),
+            )
         engine = create_engine(connection_string, **engine_kwargs)
 
         if profile.use_iam:

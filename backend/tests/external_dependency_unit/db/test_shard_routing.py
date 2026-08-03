@@ -9,8 +9,10 @@ routes per-DSN, not per-host, so a second database is a faithful stand-in for a
 second instance and keeps the tests self-contained.
 """
 
+import os
 from collections.abc import AsyncGenerator, Generator
-from typing import Any
+from typing import Any, cast
+from unittest import mock
 from uuid import uuid4
 
 import pytest
@@ -18,8 +20,9 @@ import pytest_asyncio
 from sqlalchemy import Column, Integer, MetaData, String, Table, select, text
 from sqlalchemy.engine import Engine
 from sqlalchemy.exc import OperationalError, ProgrammingError
+from sqlalchemy.pool import QueuePool
 
-from onyx.configs.app_configs import POSTGRES_DB
+from onyx.configs.app_configs import POSTGRES_API_SERVER_POOL_SIZE, POSTGRES_DB
 from onyx.db.engine import shard_registry, shard_routing, shard_version
 from onyx.db.engine.shard_registry import (
     ShardConfigurationError,
@@ -287,16 +290,114 @@ def test_requesting_an_unconfigured_shard_raises(two_shards: dict[str, Any]) -> 
         shard_registry.get_engine_for_shard("no-such-shard")
 
 
-def test_pool_budget_is_divided_not_multiplied(two_shards: dict[str, Any]) -> None:  # noqa: ARG001
-    """Adding a shard must not multiply the connection load on the database."""
+def test_pool_budget_is_per_shard_not_split(two_shards: dict[str, Any]) -> None:  # noqa: ARG001
+    """Configuring a second shard must not shrink the first shard's pool.
+
+    A connection limit belongs to a database: a pool against the new shard consumes
+    nothing from the default shard's `max_connections`. Splitting would cut capacity on
+    the database still carrying every tenant in order to relieve one that is empty.
+    """
     assert len(get_shard_specs()) == 2
     assert shard_registry.is_sharded()
 
-    pool_size, max_overflow = shard_registry.divide_pool_budget(20, 10)
-    assert (pool_size, max_overflow) == (10, 5)
+    assert shard_registry.pool_budget_for_shard(DEFAULT_SHARD, 20, 10) == (20, 10)
+    assert shard_registry.pool_budget_for_shard(SECOND_SHARD, 20, 10) == (20, 10)
 
-    # An explicit zero-overflow budget (celery beat) must survive the division.
-    assert shard_registry.divide_pool_budget(20, 0) == (10, 0)
+    # An explicit zero-overflow budget (celery beat) stays 0 on every shard.
+    assert shard_registry.pool_budget_for_shard(SECOND_SHARD, 20, 0) == (20, 0)
+
+
+def test_shard_pool_settings_are_rejected_at_config_parse(
+    two_shards: dict[str, Any],  # noqa: ARG001
+) -> None:
+    """A bad value must stop the process, not surface on the first request routed to a
+    shard — those engines are built lazily, so the failure would land far from its cause.
+
+    0 is rejected for pool_size specifically because SQLAlchemy reads it as "no size
+    limit", which uncaps the shard instead of constraining it.
+    """
+    import importlib
+
+    from onyx.configs import app_configs
+
+    for value, setting in (
+        ("0", "ONYX_DB_SHARD_POOL_SIZE"),
+        ("-1", "ONYX_DB_SHARD_POOL_SIZE"),
+        ("-1", "ONYX_DB_SHARD_POOL_OVERFLOW"),
+    ):
+        with mock.patch.dict(os.environ, {setting: value}):
+            with pytest.raises(ValueError, match=setting):
+                importlib.reload(app_configs)
+
+    # Restore the module other tests imported from.
+    importlib.reload(app_configs)
+
+
+def test_zero_overflow_is_a_valid_shard_setting(
+    two_shards: dict[str, Any],  # noqa: ARG001
+) -> None:
+    """Unlike pool_size, 0 overflow is meaningful — it means no growth past pool_size."""
+    import importlib
+
+    from onyx.configs import app_configs
+
+    with mock.patch.dict(os.environ, {"ONYX_DB_SHARD_POOL_OVERFLOW": "0"}):
+        importlib.reload(app_configs)
+        assert app_configs.ONYX_DB_SHARD_POOL_OVERFLOW == 0
+
+    importlib.reload(app_configs)
+
+
+def test_shard_engines_are_actually_built_with_their_own_pool(
+    two_shards: dict[str, Any],  # noqa: ARG001
+) -> None:
+    """The arithmetic only matters if the engines consume it.
+
+    Asserts on the pools of the real sync and async engines rather than on the helper's
+    return value, so a regression in the engine wiring cannot pass while the helper
+    stays correct.
+    """
+    from onyx.db.engine.async_sql_engine import (
+        abandon_async_engines,
+        get_async_engine_for_shard,
+    )
+
+    SqlEngine.reset_engine()
+    abandon_async_engines()
+    shard_registry.ShardRegistry.reset()
+    SqlEngine.init_engine(pool_size=7, max_overflow=3)
+
+    default_pool = cast(QueuePool, SqlEngine.get_engine().pool)
+    shard_pool = cast(QueuePool, shard_registry.get_engine_for_shard(SECOND_SHARD).pool)
+
+    # Two shards configured: the old behaviour would have halved both to 3 and 1.
+    assert default_pool.size() == 7
+    assert shard_pool.size() == 7
+
+    # Same for the async engines, which size themselves independently.
+    async_shard_pool = cast(
+        QueuePool, get_async_engine_for_shard(SECOND_SHARD).sync_engine.pool
+    )
+    assert async_shard_pool.size() == POSTGRES_API_SERVER_POOL_SIZE
+
+    # Restore what the fixture built, so its teardown still has an engine.
+    SqlEngine.reset_engine()
+    abandon_async_engines()
+    shard_registry.ShardRegistry.reset()
+    SqlEngine.init_engine(pool_size=5, max_overflow=2)
+
+
+def test_extra_shards_can_be_given_a_smaller_pool(
+    two_shards: dict[str, Any],  # noqa: ARG001
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """A shard that is still filling up does not need the default's full budget."""
+    monkeypatch.setattr(shard_registry, "ONYX_DB_SHARD_POOL_SIZE", 4)
+    monkeypatch.setattr(shard_registry, "ONYX_DB_SHARD_POOL_OVERFLOW", 2)
+
+    # The default shard is deliberately unaffected by the override.
+    assert shard_registry.pool_budget_for_shard(DEFAULT_SHARD, 20, 10) == (20, 10)
+    assert shard_registry.pool_budget_for_shard(SECOND_SHARD, 20, 10) == (4, 2)
 
 
 def _poll_immediately(monkeypatch: pytest.MonkeyPatch) -> None:
