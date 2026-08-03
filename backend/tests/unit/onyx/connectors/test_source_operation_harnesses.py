@@ -4,13 +4,16 @@ from typing import Any
 
 import pytest
 
+from ee.onyx.connectors import capability_checks as ee_capability_checks
 from onyx.configs.constants import DocumentSource
 from onyx.connectors import source_operations as source_operations_module
 from onyx.connectors.capabilities import CredentialCapability
+from onyx.connectors.capability_checks import registry
 from onyx.connectors.capability_checks.models import (
     CapabilityCheck,
     CapabilityCheckContext,
 )
+from onyx.connectors.capability_checks.registry import get_capability_checks
 from onyx.connectors.source_operations import (
     OperationConsumes,
     SourceOperations,
@@ -55,6 +58,7 @@ def gateway_class(
 
     class _Gateway(SourceOperations):
         source = DocumentSource.SLACK
+        sdk_modules = ()
 
         @source_operation(
             capabilities={CredentialCapability.INDEXING},
@@ -196,12 +200,56 @@ def test_raising_check_still_counts_its_calls(
     assert compute_uncovered_units(gateway_class, checks) == []
 
 
+@pytest.mark.usefixtures("enable_ee")
+def test_coverage_pipeline_sees_ee_perm_sync_checks(
+    gateway_class: type[SourceOperations],
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """
+    Verifies the real check-fetch path resolves EE checks under ``enable_ee``:
+    perm-sync-tagged units are coverable only by EE-registered checks, so a
+    coverage run without EE resolution would report them uncovered.
+    """
+    # Precondition.
+    monkeypatch.setitem(
+        registry._INDEXING_CHECKS_BY_SOURCE,
+        gateway_class.source,
+        [
+            _ScriptedCheck(
+                CredentialCapability.INDEXING,
+                "indexing_check",
+                lambda operations: (
+                    operations.list_channels(variant="public"),
+                    operations.list_channels(variant="private"),
+                    operations.fetch_history(),
+                ),
+            )
+        ],
+    )
+    monkeypatch.setitem(
+        ee_capability_checks._DOC_PERMISSION_SYNC_CHECKS_BY_SOURCE,
+        gateway_class.source,
+        [
+            _ScriptedCheck(
+                CredentialCapability.DOC_PERMISSION_SYNC,
+                "perm_sync_check",
+                lambda operations: operations.fetch_history(),
+            )
+        ],
+    )
+
+    # Under test.
+    checks = get_capability_checks(gateway_class.source)
+
+    # Postcondition.
+    assert compute_uncovered_units(gateway_class, checks) == []
+
+
 def test_fence_finder_flags_imports_outside_the_gateway(tmp_path: Path) -> None:
     """Verifies SDK imports are flagged everywhere except the gateway file."""
     # Precondition.
-    (tmp_path / "source_operations.py").write_text(
-        "import slack_sdk\nfrom slack_sdk.web import WebClient\n"
-    )
+    gateway_file = tmp_path / "source_operations.py"
+    gateway_file.write_text("import slack_sdk\nfrom slack_sdk.web import WebClient\n")
     (tmp_path / "utils.py").write_text(
         "import json\nfrom slack_sdk.web import WebClient\n"
     )
@@ -211,7 +259,9 @@ def test_fence_finder_flags_imports_outside_the_gateway(tmp_path: Path) -> None:
     (tmp_path / "clean.py").write_text("from . import utils\nimport requests\n")
 
     # Under test.
-    violations = find_import_fence_violations([tmp_path], ("slack_sdk",))
+    violations = find_import_fence_violations(
+        [tmp_path], ("slack_sdk",), allowed_file=gateway_file
+    )
 
     # Postcondition.
     assert [
@@ -223,10 +273,41 @@ def test_fence_finder_flags_imports_outside_the_gateway(tmp_path: Path) -> None:
     ]
 
 
-def test_fence_finder_ignores_missing_directories() -> None:
+def test_fence_exempts_the_exact_gateway_file_not_its_basename(
+    tmp_path: Path,
+) -> None:
+    """
+    Verifies a file merely sharing the gateway basename (in the EE tree or
+    nested) is scanned like any other.
+    """
+    # Precondition.
+    oss_dir = tmp_path / "oss"
+    ee_dir = tmp_path / "ee"
+    oss_dir.mkdir()
+    ee_dir.mkdir()
+    gateway_file = oss_dir / "source_operations.py"
+    gateway_file.write_text("import slack_sdk\n")
+    (ee_dir / "source_operations.py").write_text("import slack_sdk\n")
+
+    # Under test.
+    violations = find_import_fence_violations(
+        [oss_dir, ee_dir], ("slack_sdk",), allowed_file=gateway_file
+    )
+
+    # Postcondition.
+    assert [
+        (Path(violation.file).parent.name, violation.module) for violation in violations
+    ] == [("ee", "slack_sdk")]
+
+
+def test_fence_finder_ignores_missing_directories(tmp_path: Path) -> None:
     """Verifies sources without an EE perm-sync directory scan cleanly."""
     # Under test and postcondition.
     assert (
-        find_import_fence_violations([Path("/nonexistent/for/sure")], ("slack_sdk",))
+        find_import_fence_violations(
+            [Path("/nonexistent/for/sure")],
+            ("slack_sdk",),
+            allowed_file=tmp_path / "source_operations.py",
+        )
         == []
     )

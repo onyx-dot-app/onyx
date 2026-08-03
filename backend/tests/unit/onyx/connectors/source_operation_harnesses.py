@@ -7,6 +7,7 @@ they can be unit-tested against synthetic gateways and directories.
 
 import ast
 import importlib
+import sys
 from collections.abc import Collection, Sequence
 from pathlib import Path
 from unittest.mock import MagicMock
@@ -30,19 +31,22 @@ from onyx.connectors.source_operations import (
 def import_all_source_operation_gateways() -> None:
     """Imports every connector's gateway module so registration fires.
 
-    Asserts every discovered module registered a gateway for its directory's
-    source, so discovery rot (a rename, a glob mismatch) surfaces as a loud
-    collection error instead of vacuously skipped harnesses.
+    Asserts every discovered module defines a registered gateway, so
+    discovery rot (a rename, a glob mismatch) surfaces as a loud collection
+    error instead of vacuously skipped harnesses. Deliberately does NOT
+    assume the directory name matches ``source.value`` (``google_site/`` vs
+    ``google_sites``, ``blob/`` serving several sources already violate it).
     """
     connectors_dir = Path(onyx.connectors.__file__).parent
     for path in sorted(connectors_dir.glob("*/source_operations.py")):
-        source_value = path.parent.name
-        importlib.import_module(f"onyx.connectors.{source_value}.source_operations")
-        registered = {source.value for source in registered_source_operations()}
-        assert source_value in registered, (
-            f"{path} was imported but registered no gateway for "
-            f"{source_value!r}; the coverage and fence harnesses would "
-            "silently skip it."
+        module_name = f"onyx.connectors.{path.parent.name}.source_operations"
+        importlib.import_module(module_name)
+        assert any(
+            gateway.__module__ == module_name
+            for gateway in registered_source_operations().values()
+        ), (
+            f"{path} was imported but defines no registered gateway; the "
+            "coverage and fence harnesses would silently skip it."
         )
 
 
@@ -82,6 +86,9 @@ def compute_uncovered_units(
         except Exception:
             pass
         for name, _args, kwargs in spy.mock_calls:
+            # Chained calls (``spy.op().foo()``) yield junk segments like
+            # ``op()``; they never match a registered operation name, so they
+            # sit harmlessly in the exercised set.
             operation = name.split(".")[0]
             if not operation:
                 continue
@@ -114,27 +121,42 @@ class FenceViolation(BaseModel):
     module: str
 
 
-def fence_directories_for_source(source_value: str) -> list[Path]:
-    """Returns the directories the import fence scans for a source."""
-    return [
-        Path(onyx.connectors.__file__).parent / source_value,
-        Path(ee.onyx.external_permissions.__file__).parent / source_value,
-    ]
+def gateway_fence_paths(
+    gateway_class: type[SourceOperations],
+) -> tuple[Path, list[Path]]:
+    """Returns the gateway's own file and the directories the fence scans.
+
+    Both derive from the gateway class itself, not from a directory-naming
+    convention: ``google_site/`` (source value ``google_sites``) and ``blob/``
+    (one directory serving several sources) already break name-based paths.
+    """
+    module_file = sys.modules[gateway_class.__module__].__file__
+    assert module_file is not None, "Gateway modules always have a file."
+    gateway_file = Path(module_file).resolve()
+    oss_dir = gateway_file.parent
+    ee_dir = Path(ee.onyx.external_permissions.__file__).parent / oss_dir.name
+    return gateway_file, [oss_dir, ee_dir]
 
 
 def find_import_fence_violations(
     directories: Collection[Path],
     sdk_modules: Collection[str],
-    allowed_filename: str = "source_operations.py",
+    allowed_file: Path,
 ) -> list[FenceViolation]:
-    """Finds imports of fenced SDK modules outside the gateway file."""
+    """Finds imports of fenced SDK modules outside the gateway's own file.
+
+    The exemption is the exact gateway file: another file that merely shares
+    the ``source_operations.py`` basename (in the EE tree, or nested) is
+    scanned like any other.
+    """
     roots = set(sdk_modules)
+    allowed = allowed_file.resolve()
     violations: list[FenceViolation] = []
     for directory in directories:
         if not directory.is_dir():
             continue
         for path in sorted(directory.rglob("*.py")):
-            if path.name == allowed_filename:
+            if path.resolve() == allowed:
                 continue
             tree = ast.parse(path.read_text(), filename=str(path))
             for node in ast.walk(tree):

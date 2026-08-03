@@ -27,6 +27,7 @@ def test_gateway_registers_and_collects_specs() -> None:
     # Precondition and under test (registration fires at class creation).
     class _SlackOperations(SourceOperations):
         source = DocumentSource.SLACK
+        sdk_modules = ()
 
         @source_operation(
             capabilities={CredentialCapability.INDEXING},
@@ -66,6 +67,7 @@ def test_unstamped_public_method_fails_at_import() -> None:
 
         class _LeakyOperations(SourceOperations):
             source = DocumentSource.SLACK
+            sdk_modules = ()
 
             def fetch_page(self) -> None:
                 return None
@@ -119,11 +121,22 @@ def test_gateway_inheritance_is_rejected() -> None:
     # Precondition.
     class _SlackOperations(SourceOperations):
         source = DocumentSource.SLACK
+        sdk_modules = ()
 
     # Under test and postcondition.
     with pytest.raises(TypeError, match="directly and nothing else"):
 
         class _SlackCloudOperations(_SlackOperations):
+            source = DocumentSource.GITHUB
+
+
+@pytest.mark.usefixtures("isolated_registry")
+def test_missing_sdk_modules_declaration_fails_at_import() -> None:
+    """Verifies the import fence cannot be skipped by omission."""
+    # Under test and postcondition.
+    with pytest.raises(TypeError, match="must declare ``sdk_modules``"):
+
+        class _UndeclaredOperations(SourceOperations):
             source = DocumentSource.GITHUB
 
 
@@ -134,12 +147,14 @@ def test_duplicate_source_registration_fails() -> None:
     # Precondition.
     class _FirstOperations(SourceOperations):
         source = DocumentSource.SLACK
+        sdk_modules = ()
 
     # Under test and postcondition.
     with pytest.raises(TypeError, match="already registered by _FirstOperations"):
 
         class _SecondOperations(SourceOperations):
             source = DocumentSource.SLACK
+            sdk_modules = ()
 
 
 @pytest.mark.usefixtures("isolated_registry")
@@ -149,6 +164,7 @@ def test_private_helpers_and_data_attrs_are_allowed() -> None:
     # Under test.
     class _TidyOperations(SourceOperations):
         source = DocumentSource.SLACK
+        sdk_modules = ()
         docs_link = "https://docs.onyx.app/connectors/slack"
 
         def _build_client(self) -> None:
@@ -170,6 +186,7 @@ def test_public_staticmethod_is_rejected() -> None:
 
         class _StaticOperations(SourceOperations):
             source = DocumentSource.SLACK
+            sdk_modules = ()
 
             @staticmethod
             def build_client() -> None:
@@ -184,6 +201,7 @@ def test_public_property_is_rejected() -> None:
 
         class _PropertyOperations(SourceOperations):
             source = DocumentSource.SLACK
+            sdk_modules = ()
 
             @property
             def team_id(self) -> str:
@@ -216,6 +234,7 @@ def test_public_classmethod_is_rejected() -> None:
 
         class _ClassmethodOperations(SourceOperations):
             source = DocumentSource.SLACK
+            sdk_modules = ()
 
             @classmethod
             def build_client(cls) -> None:
@@ -230,6 +249,7 @@ def test_public_nested_class_is_rejected() -> None:
 
         class _NestedModelOperations(SourceOperations):
             source = DocumentSource.SLACK
+            sdk_modules = ()
 
             class Channel:
                 pass
@@ -253,6 +273,7 @@ def test_aliased_operation_assignment_is_rejected() -> None:
 
         class _AliasedOperations(SourceOperations):
             source = DocumentSource.SLACK
+            sdk_modules = ()
             list_a = stamped
 
 
@@ -339,6 +360,7 @@ def test_variant_bearing_operation_requires_a_declared_variant() -> None:
     # Precondition.
     class _VariantOperations(SourceOperations):
         source = DocumentSource.SLACK
+        sdk_modules = ()
 
         @source_operation(
             capabilities={CredentialCapability.INDEXING},
@@ -370,6 +392,7 @@ def test_variantless_operation_is_not_wrapped() -> None:
     # Precondition.
     class _PlainOperations(SourceOperations):
         source = DocumentSource.SLACK
+        sdk_modules = ()
 
         @source_operation(
             capabilities={CredentialCapability.INDEXING},

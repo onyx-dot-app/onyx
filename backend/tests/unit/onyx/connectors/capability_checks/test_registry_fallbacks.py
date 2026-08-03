@@ -55,6 +55,7 @@ def test_registered_source_gets_no_fallback(monkeypatch: pytest.MonkeyPatch) -> 
 
     class _GithubOperations(SourceOperations):
         source = DocumentSource.GITHUB
+        sdk_modules = ()
 
     named_check = _NamedCheck(
         capability=CredentialCapability.INDEXING,

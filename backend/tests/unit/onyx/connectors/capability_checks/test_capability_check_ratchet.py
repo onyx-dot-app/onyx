@@ -12,6 +12,9 @@ from onyx.connectors.capability_checks.models import (
 )
 from onyx.connectors.capability_checks.registry import get_capability_checks
 from onyx.connectors.source_operations import SourceOperations
+from tests.unit.onyx.connectors.source_operation_harnesses import (
+    import_all_source_operation_gateways,
+)
 
 
 class _NamedCheck(CapabilityCheck):
@@ -30,6 +33,7 @@ def isolated_gateway_registry(monkeypatch: pytest.MonkeyPatch) -> None:
 def _register_github_gateway() -> None:
     class _GithubOperations(SourceOperations):
         source = DocumentSource.GITHUB
+        sdk_modules = ()
 
 
 @pytest.mark.usefixtures("isolated_gateway_registry")
@@ -124,3 +128,28 @@ def test_fallback_path_needs_no_gateway() -> None:
 
     # Postcondition.
     assert any(check.is_fallback for check in checks)
+
+
+def test_every_source_resolves_checks_without_tripping_the_ratchet() -> None:
+    """
+    Verifies real registrations satisfy the ratchet in CI rather than first
+    firing at report time, and smoke-tests fallback synthesis for the whole
+    enum.
+    """
+    # Precondition.
+    import_all_source_operation_gateways()
+
+    # Under test and postcondition.
+    for source in DocumentSource:
+        assert get_capability_checks(source)
+
+
+@pytest.mark.usefixtures("enable_ee")
+def test_every_source_resolves_checks_with_ee_enabled() -> None:
+    """Verifies the same holds with EE resolution on."""
+    # Precondition.
+    import_all_source_operation_gateways()
+
+    # Under test and postcondition.
+    for source in DocumentSource:
+        assert get_capability_checks(source)

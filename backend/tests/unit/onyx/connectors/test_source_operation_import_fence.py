@@ -14,8 +14,8 @@ from onyx.connectors.source_operations import (
     registered_source_operations,
 )
 from tests.unit.onyx.connectors.source_operation_harnesses import (
-    fence_directories_for_source,
     find_import_fence_violations,
+    gateway_fence_paths,
     import_all_source_operation_gateways,
 )
 
@@ -36,9 +36,11 @@ def test_sdk_imports_stay_inside_the_gateway(
 ) -> None:
     """Verifies the source SDK is imported only from the gateway file."""
     # Under test.
+    gateway_file, directories = gateway_fence_paths(gateway_class)
     violations = find_import_fence_violations(
-        fence_directories_for_source(gateway_class.source.value),
+        directories,
         gateway_class.sdk_modules,
+        allowed_file=gateway_file,
     )
 
     # Postcondition.

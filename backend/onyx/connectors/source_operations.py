@@ -151,9 +151,11 @@ class SourceOperations(ABC):
       helpers.
     - Set ``source`` to the ``DocumentSource`` the gateway serves; one gateway
       per source.
-    - Every public method must be classified with ``@source_operation``. Helpers
-      (including any staticmethod/classmethod/property) stay private; data
-      models live at module level.
+    - Declare ``sdk_modules``; an explicit empty tuple marks an SDK-less
+      connector.
+    - Every public method must be classified with ``@source_operation``.
+      Helpers (including any staticmethod/classmethod/property) stay private;
+      data models live at module level.
 
     The gateway owns client construction from the credential plus optional
     connector config; operations return plain data, never live SDK objects.
@@ -163,12 +165,13 @@ class SourceOperations(ABC):
 
     # The SDK module roots this gateway wraps (e.g. ``("slack_sdk",)``). The
     # import-fence test asserts these are imported only from the gateway's
-    # file within the connector's OSS and EE perm-sync directories.
-    sdk_modules: ClassVar[tuple[str, ...]] = ()
+    # own file within the connector's OSS and EE perm-sync directories. Every
+    # gateway must declare this explicitly; an empty tuple marks a genuinely
+    # SDK-less connector as a conspicuous, reviewable decision rather than an
+    # accidentally unfenced one.
+    sdk_modules: ClassVar[tuple[str, ...]]
 
-    _operation_specs: ClassVar[Mapping[str, SourceOperationSpec]] = MappingProxyType(
-        {}
-    )
+    _operation_specs: ClassVar[Mapping[str, SourceOperationSpec]] = MappingProxyType({})
 
     def __init_subclass__(cls, **kwargs: Any) -> None:
         super().__init_subclass__(**kwargs)
@@ -192,6 +195,12 @@ class SourceOperations(ABC):
             raise TypeError(
                 f"{cls.__name__} cannot register {source.value}: already "
                 f"registered by {registered.__name__}. One gateway per source."
+            )
+        if "sdk_modules" not in vars(cls):
+            raise TypeError(
+                f"{cls.__name__} must declare ``sdk_modules`` so the import "
+                "fence knows what to guard; declare an explicit empty tuple "
+                "for a genuinely SDK-less connector."
             )
 
         specs: dict[str, SourceOperationSpec] = {}

@@ -144,6 +144,7 @@ def test_registered_checks_clobber_only_their_capability(
 
     class _GoogleDriveOperations(SourceOperations):
         source = DocumentSource.GOOGLE_DRIVE
+        sdk_modules = ()
 
     named_check = _NamedCheck(
         capability=CredentialCapability.DOC_PERMISSION_SYNC,

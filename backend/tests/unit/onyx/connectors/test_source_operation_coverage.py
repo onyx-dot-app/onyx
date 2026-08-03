@@ -22,6 +22,7 @@ from tests.unit.onyx.connectors.source_operation_harnesses import (
 import_all_source_operation_gateways()
 
 
+@pytest.mark.usefixtures("enable_ee")
 @pytest.mark.parametrize(
     "gateway_class",
     list(registered_source_operations().values()),
@@ -30,7 +31,11 @@ import_all_source_operation_gateways()
 def test_every_operation_unit_is_exercised_by_a_check(
     gateway_class: type[SourceOperations],
 ) -> None:
-    """Verifies check coverage of every non-exempt (operation, variant) unit."""
+    """Verifies check coverage of every non-exempt (operation, variant) unit.
+
+    Runs with EE enabled: perm-sync checks live only in the EE registries, so
+    perm-sync-tagged units are coverable only when EE resolution is on.
+    """
     # Precondition.
     checks = get_capability_checks(gateway_class.source)
 
@@ -40,6 +45,7 @@ def test_every_operation_unit_is_exercised_by_a_check(
     # Postcondition.
     assert not uncovered, (
         f"{gateway_class.source.value} has operation units no capability "
-        f"check exercises: {uncovered}. Add a check composing them or "
-        'annotate the operation untested="<reason>".'
+        f"check exercises: {uncovered}. Add a check composing them "
+        '(variant-bearing operations must be invoked with variant="<name>") '
+        'or annotate the operation untested="<reason>".'
     )
