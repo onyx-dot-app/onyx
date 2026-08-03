@@ -89,6 +89,13 @@ def _setup_prometheus_collectors(sender: Any) -> bool:
 
         setup_indexing_pipeline_metrics(sender.app)
         logger.info("Prometheus indexing pipeline collectors registered")
+
+        from prometheus_client.registry import REGISTRY
+
+        from onyx.server.metrics.shard_capacity import ShardCapacityCollector
+
+        REGISTRY.register(ShardCapacityCollector())
+        logger.info("Prometheus shard capacity collector registered")
         return True
     except Exception:
         logger.exception("Failed to register Prometheus indexing pipeline collectors")
