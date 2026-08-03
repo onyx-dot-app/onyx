@@ -205,16 +205,23 @@ class GCSBackedFileStore(FileStore):
                 )
                 db_session.commit()
         except Exception:
-            # Clean up the uploaded blob only when this save was creating a
-            # brand-new file. On an overwrite of an existing file_id the
-            # committed record still references this key after rollback, so
-            # deleting the blob would turn a failed overwrite into data loss.
+            # Clean up the uploaded blob unless a committed record still
+            # references this exact object — on a failed overwrite the record
+            # survives the rollback, so deleting the blob it points at would
+            # turn the failed save into data loss. A record pointing at a
+            # different bucket/key does not reference this upload, so the
+            # blob is safe (and necessary) to remove.
             try:
                 with get_session_with_current_tenant() as cleanup_session:
                     existing_record = get_filerecord_by_file_id_optional(
                         file_id=file_id, db_session=cleanup_session
                     )
-                if existing_record is None:
+                record_references_upload = (
+                    existing_record is not None
+                    and existing_record.bucket_name == self._bucket_name
+                    and existing_record.object_key == object_key
+                )
+                if not record_references_upload:
                     blob.delete()
             except Exception:
                 logger.warning(
