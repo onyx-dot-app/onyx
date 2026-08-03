@@ -67,9 +67,9 @@ class TestResolveEffectivePermissions:
         """The chat write surface must not leak into the search surface."""
         assert "read:search" not in resolve_effective_permissions({"write:chat"})
 
-    def test_single_implication(self) -> None:
-        result = resolve_effective_permissions({"manage:connectors"})
-        assert result == {"manage:connectors", "read:connectors"}
+    def test_manage_service_account_api_keys_implies_read_user_groups(self) -> None:
+        result = resolve_effective_permissions({"manage:service_account_api_keys"})
+        assert result == {"manage:service_account_api_keys", "read:user_groups"}
 
     def test_add_agents_implies_nothing(self) -> None:
         """ADD_AGENTS must NOT imply READ_AGENTS — creating agents grants no see-all."""
