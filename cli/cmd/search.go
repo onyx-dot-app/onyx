@@ -48,9 +48,8 @@ type searchTruncation struct {
 	Hint             string `json:"hint"`
 }
 
-// multiSearchEntry is one query's outcome in multi-query output. On failure
-// Error is set and Results is null; otherwise Results (and Truncation, when
-// the entry was reduced) mirror the single-query shape.
+// multiSearchEntry is one query's outcome. On failure Error is set and
+// Results is null; otherwise it mirrors the single-query shape.
 type multiSearchEntry struct {
 	Query      string               `json:"query"`
 	Error      string               `json:"error,omitempty"`
@@ -77,17 +76,12 @@ type rawMultiSearchEntry struct {
 // further back than this.
 const maxSearchDays = 36500
 
-// maxSearchQueries bounds one invocation to the number of /search calls we
-// are willing to run in parallel — every accepted query is in flight at
-// once. Each query is a full LLM-backed pipeline server-side, and an
-// unquoted shell glob can expand into hundreds of arguments — better to
-// error than fire a search per filename.
+// maxSearchQueries caps one invocation at the number of /search calls run in
+// parallel — every accepted query is in flight at once.
 const maxSearchQueries = 3
 
 // maxInlineErrorBytes caps the JSON-encoded size of each in-band per-query
-// error string so a single upstream error body (e.g. a full HTML error page)
-// can't dwarf the --max-output budget. Error entries are never dropped, so
-// enough failing queries can still exceed the budget collectively.
+// error string (an upstream error body can be a whole HTML page).
 const maxInlineErrorBytes = 2000
 
 // truncationHint explains the truncation object to LLM consumers.
@@ -110,10 +104,8 @@ func toSearchOutput(resp models.SearchResponse) searchOutput {
 	return out
 }
 
-// clampError renders an error for in-band JSON output, trimming oversized
-// messages (e.g. a whole HTML error page in an API error body) at a rune
-// boundary. The budget bounds the JSON-encoded size, not the raw length —
-// encoding expands HTML-escaped and control bytes up to six-fold.
+// clampError bounds an error's JSON-encoded size for in-band output — the
+// encoded size is what matters, since escaping expands some bytes six-fold.
 func clampError(err error) string {
 	msg := err.Error()
 	if data, err := json.Marshal(msg); err == nil && len(data) <= maxInlineErrorBytes {
@@ -131,10 +123,9 @@ func clampError(err error) string {
 	return string(runes[:fit]) + suffix
 }
 
-// writeJSONReduced prints payload as pretty JSON. When the payload exceeds
-// truncateAt bytes (> 0), the full response is saved to a temp file first —
-// dropped data must never be unrecoverable — and the smaller envelope built
-// by reduce is printed instead. Human-oriented notes go to stderr only.
+// writeJSONReduced prints payload as pretty JSON. When it exceeds truncateAt
+// bytes (> 0), the full response is saved to a temp file — dropped data must
+// never be unrecoverable — and the envelope built by reduce prints instead.
 func writeJSONReduced[T any](
 	ios *iostreams.IOStreams, payload T, truncateAt int,
 	reduce func(totalBytes int, fullPath string) (T, error),
@@ -173,8 +164,6 @@ func writeJSONReduced[T any](
 	return nil
 }
 
-// writeSearchJSON prints single-query output, reducing oversized payloads to
-// a truncation envelope.
 func writeSearchJSON(ios *iostreams.IOStreams, output searchOutput, truncateAt int) error {
 	return writeJSONReduced(ios, output, truncateAt,
 		func(totalBytes int, fullPath string) (searchOutput, error) {
@@ -182,8 +171,6 @@ func writeSearchJSON(ios *iostreams.IOStreams, output searchOutput, truncateAt i
 		})
 }
 
-// writeMultiSearchJSON prints multi-query output, reducing oversized payloads
-// by capping per-query result counts.
 func writeMultiSearchJSON(ios *iostreams.IOStreams, output multiSearchOutput, truncateAt int) error {
 	return writeJSONReduced(ios, output, truncateAt,
 		func(totalBytes int, fullPath string) (multiSearchOutput, error) {
@@ -251,17 +238,12 @@ func truncateSearchOutput(
 	return out, err
 }
 
-// truncateMultiSearchOutput builds a valid multi-query envelope that fits
-// under limit by capping every entry's results at the largest uniform
-// per-query count k that fits: small result sets pass through whole while
-// large ones lose their lowest-relevance tail first. When no k fits (a lone
-// result can outweigh the whole budget), each entry is instead reduced
-// against an even share of the budget, trimming content where needed. Capped
-// entries carry truncation metadata pointing at the combined full response
-// on disk. Fit is measured on the real envelope; it exceeds limit only when
-// even the k=0 render does (truncation metadata and clamped per-query error
-// strings alone exceed the budget) — valid JSON and one entry per query beat
-// the byte bound.
+// truncateMultiSearchOutput fits multi-query output under limit by capping
+// every entry at the largest uniform result count k that fits, so small
+// result sets pass through whole. When no k fits (one result can outweigh
+// the whole budget), entries are instead reduced against an even share each.
+// The k=0 render is the floor: valid JSON and one entry per query beat the
+// byte bound.
 func truncateMultiSearchOutput(
 	full multiSearchOutput, limit int, totalBytes int, fullPath string,
 ) (multiSearchOutput, error) {
@@ -293,11 +275,9 @@ func truncateMultiSearchOutput(
 		return out, data, err
 	}
 
-	// Rendered size is not monotone in k — an entry sheds its truncation
-	// metadata once k reaches its result count — so binary search would skip
-	// fitting candidates. Scan k from the top instead: maxResults is small
-	// (LLM-selected results), so the extra marshals are negligible next to
-	// one search round trip.
+	// Rendered size is not monotone in k (an entry sheds its truncation
+	// metadata once k reaches its result count), so binary search would skip
+	// fitting candidates; scan from the top instead.
 	for k := maxResults; k > 0; k-- {
 		out, data, err := render(k)
 		if err != nil {
@@ -308,10 +288,8 @@ func truncateMultiSearchOutput(
 		}
 	}
 
-	// A single result larger than the whole budget defeats the uniform cap —
-	// a one-result entry cannot shrink below k=1. Before wiping every query,
-	// reduce each entry independently against an even share of the budget,
-	// reusing the single-query trimmer (drops results, then trims content).
+	// A one-result entry cannot shrink below k=1, so one oversized result
+	// defeats every k. Reduce each entry against an even share instead.
 	share := limit / len(full.Searches)
 	shared := multiSearchOutput{Searches: make([]multiSearchEntry, 0, len(full.Searches))}
 	for _, entry := range full.Searches {
@@ -504,9 +482,8 @@ result sets pass through whole.`,
 			ctx, stop := signal.NotifyContext(cmd.Context(), os.Interrupt, syscall.SIGTERM)
 			defer stop()
 
-			// All-single-word arguments often mean one unquoted query. The
-			// shell strips quotes before argv, so this can only ever be a
-			// hint — not a guard.
+			// All-single-word args often mean one unquoted query; the shell
+			// strips quotes before argv, so a hint is all this can be.
 			if len(args) > 1 && !strings.ContainsAny(strings.Join(args, ""), " \t") {
 				fmt.Fprintln(ios.ErrOut, "note: each argument searches separately — quote multi-word queries")
 			}
@@ -551,10 +528,8 @@ result sets pass through whole.`,
 				return apiErrorToExit(errs[0], label)
 			}
 
-			// An interrupted batch still prints the responses it completed
-			// (with in-band errors for the rest) but must not exit 0 —
-			// interruptErr replaces the final nil return so callers know the
-			// run is incomplete.
+			// An interrupted batch prints what it completed but must not
+			// exit 0; interruptErr replaces the final nil returns below.
 			var interruptErr error
 			if ctx.Err() != nil {
 				for _, err := range errs {

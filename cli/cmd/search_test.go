@@ -622,9 +622,8 @@ func TestWriteMultiSearchJSON_OverLimitTruncatesPerQuery(t *testing.T) {
 		t.Errorf("ShownResults = %d with %d results, want a reduced prefix",
 			tr.ShownResults, len(big.Results))
 	}
-	// The cap is uniform: every truncated entry keeps the same result count.
-	// (That the survivors are the relevance-ordered prefix is pinned
-	// byte-for-byte by the oracle test below.)
+	// The cap is uniform; the oracle test pins that survivors are the
+	// relevance-ordered prefix.
 	if big2.Truncation.ShownResults != tr.ShownResults || len(big2.Results) != len(big.Results) {
 		t.Errorf("caps differ: %d vs %d results, want uniform",
 			len(big.Results), len(big2.Results))
@@ -662,17 +661,16 @@ func TestWriteMultiSearchJSON_OverLimitTruncatesPerQuery(t *testing.T) {
 }
 
 func TestTruncateMultiSearchOutput_LargestFittingCapDespiteNonMonotoneSizes(t *testing.T) {
-	// Rendered size is not monotone in the uniform cap k: an entry sheds its
-	// ~300-byte truncation metadata once k reaches its result count, so with
-	// small results a mid-range k can render smaller than both k-1 and k=0.
-	// A binary search over k skips such dips — returning a smaller k, or an
-	// over-limit k=0 envelope even though a fitting k exists. Pin the
-	// contract with an oracle: for every limit that any k-envelope fits,
-	// the reducer must return exactly the largest fitting k's envelope.
+	// Envelope size is not monotone in the uniform cap k (an entry sheds its
+	// truncation metadata once k reaches its result count); a binary search
+	// over k once shipped an over-limit k=0 render despite a fitting k.
+	// Oracle: for every limit where some k-envelope fits, the reducer must
+	// return exactly the largest fitting k's envelope. Unique titles make
+	// the byte comparison also pin the relevance-ordered prefix.
 	mini := func(n int) []searchOutputResult {
 		results := make([]searchOutputResult, n)
 		for i := range results {
-			results[i] = searchOutputResult{Title: "d", SourceType: "s"}
+			results[i] = searchOutputResult{Title: fmt.Sprintf("d%d", i), SourceType: "s"}
 		}
 		return results
 	}
@@ -755,11 +753,9 @@ func TestTruncateMultiSearchOutput_LargestFittingCapDespiteNonMonotoneSizes(t *t
 }
 
 func TestTruncateMultiSearchOutput_OversizedSingleResultFallsBackToContentTrim(t *testing.T) {
-	// A one-result entry cannot shrink below k=1, so no uniform cap fits when
-	// that single result outweighs the whole budget. The fallback must reduce
-	// entries independently: the huge entry gets content-trimmed while the
-	// small entry's results survive untouched — not the k=0 wipe-everything
-	// envelope.
+	// One result larger than the whole budget defeats every uniform cap. The
+	// fallback must content-trim the huge entry while the small entry's
+	// results survive — not fall to the k=0 wipe-everything envelope.
 	output := multiSearchOutput{Searches: []multiSearchEntry{
 		{Query: "huge", Results: []searchOutputResult{{
 			Title:      "Big doc",
@@ -805,10 +801,9 @@ func TestClampError(t *testing.T) {
 		t.Errorf("short error = %q, want unchanged", got)
 	}
 
-	// The budget bounds the JSON-encoded size: HTML-escaped bytes (&, <, >)
-	// expand six-fold under encoding/json, so an HTML error page must be cut
-	// well below the raw-byte budget. Multibyte runes verify the cut lands on
-	// a rune boundary.
+	// HTML-escaped bytes expand six-fold under encoding/json, so the clamp
+	// must bound the encoded size, not the raw length; the multibyte fixture
+	// verifies the cut lands on a rune boundary.
 	for name, long := range map[string]error{
 		"html_page": errors.New(strings.Repeat("<div>&amp;</div> héllo ", 300)),
 		"multibyte": errors.New(strings.Repeat("héllo→wörld ", 500)),
