@@ -12,8 +12,11 @@ from uuid import UUID
 
 from onyx.server.features.build.sandbox import nextjs_dev
 from onyx.server.features.build.sandbox.nextjs_dev import (
+    WEBAPP_ABSENT_SENTINEL,
+    WEBAPP_AUTOSTART_SENTINEL,
     build_nextjs_start_script,
     build_webapp_bootstrap_script,
+    build_webapp_restore_script,
     build_webapp_script_write_snippet,
 )
 from onyx.server.features.build.sandbox.session_workspace import (
@@ -251,3 +254,28 @@ def test_webapp_script_write_snippet_removes_before_writing() -> None:
     remove_index = snippet.index("rm -f")
     write_index = snippet.index("printf")
     assert remove_index < write_index
+
+
+def test_restore_script_rewrites_scripts_before_gated_autostart() -> None:
+    script = build_webapp_restore_script(_SESSION_PATH, 3010)
+
+    # Script rewrite (with the new port) must come before the auto-start gate.
+    assert build_webapp_script_write_snippet(_SESSION_PATH, 3010) in script
+    gate = f"[ -f {_SESSION_PATH}/outputs/web/package.json ]"
+    assert gate in script
+    assert script.index("printf") < script.index(gate)
+
+    # The auto-start must exec the tamper-hardened canonical copy, gated on
+    # the webapp actually existing in the restored snapshot, and backgrounded.
+    autostart = f"nohup bash {_SESSION_PATH}/start-webapp.sh"
+    assert autostart in script
+    assert script.index(gate) < script.index(autostart)
+    assert f"> {_SESSION_PATH}/webapp-bootstrap.log 2>&1 &" in script
+
+    # Exactly one sentinel per branch; k8s restore relies on them for success.
+    assert WEBAPP_AUTOSTART_SENTINEL in script
+    assert WEBAPP_ABSENT_SENTINEL in script
+
+
+def test_restore_script_is_valid_bash() -> None:
+    _assert_valid_bash(build_webapp_restore_script(_SESSION_PATH, 3010))

@@ -130,7 +130,7 @@ from onyx.server.features.build.sandbox.models import (
 )
 from onyx.server.features.build.sandbox.nextjs_dev import (
     allowed_dev_origins,
-    build_webapp_script_write_snippet,
+    build_webapp_restore_script,
 )
 from onyx.server.features.build.sandbox.serve_transport import ServeConnectionInfo
 from onyx.server.features.build.sandbox.session_workspace import (
@@ -1478,22 +1478,9 @@ fi
         )
 
         if nextjs_port is not None:
-            # Ports change across sleep/wake, so the two script copies are
-            # always rewritten. Auto-start only if the restored snapshot
-            # actually contains a webapp, and background it so wake isn't
-            # blocked on a cold bun install (node_modules is excluded from
-            # snapshots).
-            write_snippet = build_webapp_script_write_snippet(session_path, nextjs_port)
-            restore_webapp_script = f"""
-set -e
-{write_snippet}
-if [ -f {session_path}/outputs/web/package.json ]; then
-    nohup bash {session_path}/start-webapp.sh > {session_path}/webapp-bootstrap.log 2>&1 &
-    echo "ONYX_WEBAPP_AUTOSTART"
-else
-    echo "ONYX_WEBAPP_ABSENT"
-fi
-"""
+            restore_webapp_script = build_webapp_restore_script(
+                session_path, nextjs_port
+            )
             try:
                 _run_in_container_as_sandbox_user(
                     container,

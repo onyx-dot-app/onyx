@@ -116,8 +116,10 @@ from onyx.server.features.build.sandbox.models import (
     SnapshotResult,
 )
 from onyx.server.features.build.sandbox.nextjs_dev import (
+    WEBAPP_ABSENT_SENTINEL,
+    WEBAPP_AUTOSTART_SENTINEL,
     allowed_dev_origins,
-    build_webapp_script_write_snippet,
+    build_webapp_restore_script,
 )
 from onyx.server.features.build.sandbox.serve_transport import ServeConnectionInfo
 from onyx.server.features.build.sandbox.session_workspace import (
@@ -1377,11 +1379,12 @@ class KubernetesSandboxManager(SandboxManager):
 
         Executes kubectl exec to:
         1. Create sessions/$session_id/ directory
-        2. Copy outputs template from local templates (downloaded during init)
-        3. Write AGENTS.md
-        4. Write opencode.json with LLM config
-        5. Start Next.js dev server (skipped when ``nextjs_port`` is None,
-           e.g. for headless scheduled-task fires that don't need a preview).
+        2. Write AGENTS.md
+        3. Write opencode.json with LLM config
+        4. Write the tamper-hardened ``start-webapp.sh`` pair (skipped when
+           ``nextjs_port`` is None, e.g. for headless scheduled-task fires
+           that don't need a preview). Does NOT scaffold ``outputs/web`` or
+           start a dev server — webapp provisioning is lazy.
 
         Args:
             sandbox_id: The sandbox ID (must be provisioned)
@@ -1845,25 +1848,10 @@ echo "Session cleanup complete"
             )
 
             if nextjs_port is not None:
-                # Ports change across sleep/wake, so the two script copies
-                # are always rewritten. Auto-start only if the restored
-                # snapshot actually contains a webapp, and background it so
-                # wake isn't blocked on a cold bun install (node_modules is
-                # excluded from snapshots).
-                write_snippet = build_webapp_script_write_snippet(
+                restore_webapp_script = build_webapp_restore_script(
                     safe_session_path, nextjs_port
                 )
-                restore_webapp_script = f"""
-set -e
-{write_snippet}
-if [ -f {safe_session_path}/outputs/web/package.json ]; then
-    nohup bash {safe_session_path}/start-webapp.sh > {safe_session_path}/webapp-bootstrap.log 2>&1 &
-    echo "ONYX_WEBAPP_AUTOSTART"
-else
-    echo "ONYX_WEBAPP_ABSENT"
-fi
-"""
-                k8s_stream(
+                exec_response = k8s_stream(
                     self._stream_core_api.connect_get_namespaced_pod_exec,
                     name=pod_name,
                     namespace=self._namespace,
@@ -1875,6 +1863,18 @@ fi
                     tty=False,
                     _request_timeout=WORKSPACE_SETUP_DEADLINE_SECONDS,
                 )
+                # The exec client returns buffered output without raising on
+                # timeout or nonzero exit, so the sentinel is the only
+                # reliable success signal (same contract as workspace setup).
+                if (
+                    WEBAPP_AUTOSTART_SENTINEL not in exec_response
+                    and WEBAPP_ABSENT_SENTINEL not in exec_response
+                ):
+                    raise RuntimeError(
+                        f"Webapp bootstrap-script restore for session "
+                        f"{session_id} did not complete (output tail: "
+                        f"{exec_response[-500:]!r})"
+                    )
         except ApiException as e:
             raise RuntimeError(f"Failed to restore snapshot: {e}") from e
 

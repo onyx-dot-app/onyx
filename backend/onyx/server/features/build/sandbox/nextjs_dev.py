@@ -189,6 +189,36 @@ exit 1
 """
 
 
+# Restore-script sentinels: the k8s exec client returns buffered output
+# without raising on timeout or nonzero exit, so callers verify one of these
+# appeared instead of trusting a clean return.
+WEBAPP_AUTOSTART_SENTINEL = "ONYX_WEBAPP_AUTOSTART"
+WEBAPP_ABSENT_SENTINEL = "ONYX_WEBAPP_ABSENT"
+
+
+def build_webapp_restore_script(session_path: str, nextjs_port: int) -> str:
+    """Builds the shell script both sandbox managers run after a snapshot
+    restore.
+
+    Ports change across sleep/wake, so the script is always rewritten. Auto-starts the dev server only if the restored snapshot
+    actually contains a webapp (``outputs/web/package.json``), and backgrounds
+    it so wake isn't blocked on a cold bun install (node_modules is excluded
+    from snapshots). Echoes exactly one of the sentinels above on completion;
+    they are diagnostics for Docker and the success signal for Kubernetes.
+    """
+    write_snippet = build_webapp_script_write_snippet(session_path, nextjs_port)
+    return f"""
+set -e
+{write_snippet}
+if [ -f {session_path}/outputs/web/package.json ]; then
+    nohup bash {session_path}/start-webapp.sh > {session_path}/webapp-bootstrap.log 2>&1 &
+    echo "{WEBAPP_AUTOSTART_SENTINEL}"
+else
+    echo "{WEBAPP_ABSENT_SENTINEL}"
+fi
+"""
+
+
 def build_webapp_script_write_snippet(session_path: str, nextjs_port: int) -> str:
     """Builds a shell snippet (no shebang, no ``set -e``) that writes the
     ``chmod 444`` bootstrap script to the session root.
