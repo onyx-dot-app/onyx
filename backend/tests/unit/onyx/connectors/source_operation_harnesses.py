@@ -21,14 +21,29 @@ from onyx.connectors.capability_checks.models import (
     CapabilityCheckContext,
 )
 from onyx.connectors.interfaces import BaseConnector
-from onyx.connectors.source_operations import SourceOperations
+from onyx.connectors.source_operations import (
+    SourceOperations,
+    registered_source_operations,
+)
 
 
 def import_all_source_operation_gateways() -> None:
-    """Imports every connector's gateway module so registration fires."""
+    """Imports every connector's gateway module so registration fires.
+
+    Asserts every discovered module registered a gateway for its directory's
+    source, so discovery rot (a rename, a glob mismatch) surfaces as a loud
+    collection error instead of vacuously skipped harnesses.
+    """
     connectors_dir = Path(onyx.connectors.__file__).parent
     for path in sorted(connectors_dir.glob("*/source_operations.py")):
-        importlib.import_module(f"onyx.connectors.{path.parent.name}.source_operations")
+        source_value = path.parent.name
+        importlib.import_module(f"onyx.connectors.{source_value}.source_operations")
+        registered = {source.value for source in registered_source_operations()}
+        assert source_value in registered, (
+            f"{path} was imported but registered no gateway for "
+            f"{source_value!r}; the coverage and fence harnesses would "
+            "silently skip it."
+        )
 
 
 class UncoveredUnit(BaseModel):
