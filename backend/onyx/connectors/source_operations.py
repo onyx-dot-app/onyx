@@ -1,21 +1,19 @@
 """Source operations: the per-connector gateway for all remote source calls.
 
-Validation that is written as parallel probe code duplicates the connector's
-API calls and drifts as the connector evolves. The source operations layer
-makes that drift structurally hard: each migrated connector has one
-conspicuous gateway class (``backend/onyx/connectors/<source>/
-source_operations.py``) subclassing ``SourceOperations``, and every remote
-interaction with the source is a method on it. Connector indexing code, EE
-perm-sync code, and capability checks all call these methods and nothing else
-makes source API calls.
+Validation that is written as parallel probe code duplicates the connector's API
+calls and drifts as the connector evolves. The source operations layer makes
+that drift structurally hard: each migrated connector has one conspicuous
+gateway class (``backend/onyx/connectors/<source>/ source_operations.py``)
+subclassing ``SourceOperations``, and every remote interaction with the source
+is a method on it. Connector indexing code, EE perm-sync code, and capability
+checks all call these methods and nothing else makes source API calls.
 
 Every public method on a gateway must be classified via the
 ``@source_operation`` decorator; ``__init_subclass__`` raises at import time
-otherwise, so adding an unclassified source call to a gateway is impossible
-rather than just discouraged. Operations return plain data (dicts/models),
-never live SDK objects: lazy-loading libraries (PyGithub attribute access,
-office365 fluent chains) can fire requests outside any wrapper, and returning
-plain data is what makes the gateway boundary real.
+otherwise. Operations return plain data (dicts/models), never live SDK objects:
+lazy-loading libraries (PyGithub attribute access, office365 fluent chains) can
+fire requests outside any wrapper, and returning plain data is what makes the
+gateway boundary real.
 """
 
 from abc import ABC
@@ -38,8 +36,8 @@ class OperationConsumes(str, Enum):
     """What an operation needs in order to run.
 
     Capability checks composing an operation derive their skip semantics from
-    this: config-consuming operations cannot run on config-less
-    credential-time report runs.
+    this: config-consuming operations cannot run on config-less credential-time
+    report runs.
     """
 
     CREDENTIAL = "credential"
@@ -56,18 +54,18 @@ class SourceOperationSpec(BaseModel):
     name: str
     capabilities: frozenset[CredentialCapability]
     # Named forms of the operation where a parameter changes the required
-    # permission (e.g. Slack ``conversations.list`` public vs private).
-    # Coverage is counted per (operation, variant); empty means the operation
-    # itself is the single coverage unit.
+    # permission (e.g. Slack ``conversations.list`` public vs private). Coverage
+    # is counted per (operation, variant); empty means the operation itself is
+    # the single coverage unit.
     variants: tuple[str, ...] = ()
     consumes: OperationConsumes
-    # Exempts the operation (all variants) from the check-coverage
-    # requirement. The reason string is mandatory and reviewable: side effects
-    # (e.g. ``conversations.join``), graceful production degradation, or "not
-    # yet tested" during incremental migration. To exempt a single variant,
-    # split it into its own operation and annotate the split-off half: a
-    # variant that permanently cannot be probed while its sibling can is a
-    # different operation.
+    # Exempts the operation (all variants) from the check-coverage requirement.
+    # The reason string is mandatory and reviewable: e.g. side effects (e.g.
+    # ``conversations.join``), graceful production degradation, or "not yet
+    # tested" during incremental migration. To exempt a single variant, split it
+    # into its own operation and annotate the split-off half: a variant that
+    # permanently cannot be probed while its sibling can is a different
+    # operation.
     untested: str | None = None
 
 
@@ -98,8 +96,8 @@ def source_operation(
             func,
             _SPEC_ATTR,
             SourceOperationSpec(
-                # The cast is safe for anything that ultimately registers:
-                # the class-level scan rejects everything but plain functions.
+                # The cast is safe for anything that ultimately registers: the
+                # class-level scan rejects everything but plain functions.
                 name=cast(FunctionType, func).__name__,
                 capabilities=frozenset(capabilities),
                 variants=tuple(variant_list),
@@ -127,9 +125,9 @@ class SourceOperations(ABC):
       helpers.
     - Set ``source`` to the ``DocumentSource`` the gateway serves; one gateway
       per source.
-    - Every public method must be classified with ``@source_operation``.
-      Helpers (including any staticmethod/classmethod/property) stay private;
-      data models live at module level.
+    - Every public method must be classified with ``@source_operation``. Helpers
+      (including any staticmethod/classmethod/property) stay private; data
+      models live at module level.
 
     The gateway owns client construction from the credential plus optional
     connector config; operations return plain data, never live SDK objects.
@@ -151,7 +149,9 @@ class SourceOperations(ABC):
                 "helpers."
             )
 
-        source = getattr(cls, "source", None)
+        # Read the subclass's own namespace, like the method scan below: the
+        # flat-base rule means there is nowhere else a value could come from.
+        source = vars(cls).get("source")
         if not isinstance(source, DocumentSource):
             raise TypeError(f"{cls.__name__} must set ``source`` to a DocumentSource.")
         registered = _SOURCE_OPERATIONS_BY_SOURCE.get(source)

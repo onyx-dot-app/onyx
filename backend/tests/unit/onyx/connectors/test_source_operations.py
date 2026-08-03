@@ -56,7 +56,9 @@ def test_gateway_registers_and_collects_specs() -> None:
 
 @pytest.mark.usefixtures("isolated_registry")
 def test_unstamped_public_method_fails_at_import() -> None:
-    """Verifies the forcing function: unclassified public methods cannot exist."""
+    """
+    Verifies the forcing function: unclassified public methods cannot exist.
+    """
     # Under test and postcondition.
     with pytest.raises(TypeError, match="unclassified public methods.*fetch_page"):
 
