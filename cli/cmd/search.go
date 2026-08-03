@@ -84,7 +84,7 @@ const maxSearchDays = 36500
 const maxSearchQueries = 32
 
 // maxConcurrentSearches bounds parallel /search calls in one invocation.
-const maxConcurrentSearches = 4
+const maxConcurrentSearches = 3
 
 // maxInlineErrorBytes caps in-band per-query error strings so an oversized
 // upstream error body can't blow through the --max-output contract.
