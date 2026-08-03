@@ -291,6 +291,35 @@ def test_urls_and_emails_in_code_are_left_alone() -> None:
     assert "code `a@b.com` span" == _render("code `a@b.com` span")
 
 
+def test_ordered_list_resumes_numbering_after_a_fenced_block() -> None:
+    # The fence closes the list, so the tail arrives as a separate list that
+    # has to pick up where the first one stopped
+    message = "1. one\n2. two:\n\n```\ncode\n```\n\n3. three"
+
+    assert message == format_slack_message(message)
+
+
+def test_nested_list_opens_an_indented_line_of_its_own() -> None:
+    assert "1. one\n2. two:\n  • a\n  • b\n3. three" == format_slack_message(
+        "1. one\n2. two:\n   - a\n   - b\n3. three"
+    )
+
+
+def test_code_is_left_literal_by_every_pre_parse_transform() -> None:
+    # Link conversion, HTML stripping and destination normalization all run
+    # before mistune sees the text, so each has to honor the code guard
+    for snippet in (
+        "`<mailto:admin@onyx.app|admin@onyx.app>`",
+        "`<https://onyx.app/docs|onyx.app/docs>`",
+        "`<div>hi</div>`",
+        "`[label](https://onyx.app/x)`",
+    ):
+        assert f"see {snippet} here" == format_slack_message(f"see {snippet} here")
+
+    fenced = "```\n[label](https://onyx.app/x)\n```"
+    assert fenced == format_slack_message(fenced)
+
+
 def test_url_link_drops_redundant_label() -> None:
     assert "<https://onyx.app>" == _render("[https://onyx.app](https://onyx.app)")
 

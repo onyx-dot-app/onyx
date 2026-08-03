@@ -21,8 +21,8 @@ _HTML_TAG_PATTERN = re.compile(
     r"<(?!https?://|mailto:)/?[a-zA-Z][^>]*>",
 )
 
-# Matches fenced code blocks (``` ... ```) so we can skip sanitization inside them
-_FENCED_CODE_BLOCK_PATTERN = re.compile(r"```[\s\S]*?```")
+# Fenced blocks before inline spans, so a fence wins over its own backticks
+_CODE_PATTERN = re.compile(r"```[\s\S]*?```|`[^`\n]*`")
 
 # Matches the start of any markdown link: [text]( or [[n]](
 # The inner group handles nested brackets for citation links like [[1]](.
@@ -89,9 +89,9 @@ def _sanitize_html(text: str) -> str:
 def _transform_outside_code_blocks(
     message: str, transform: Callable[[str], str]
 ) -> str:
-    """Apply *transform* only to text outside fenced code blocks."""
-    parts = _FENCED_CODE_BLOCK_PATTERN.split(message)
-    code_blocks = _FENCED_CODE_BLOCK_PATTERN.findall(message)
+    """Apply *transform* only where markdown does not keep the text literal."""
+    parts = _CODE_PATTERN.split(message)
+    code_blocks = _CODE_PATTERN.findall(message)
 
     result: list[str] = []
     for i, part in enumerate(parts):
@@ -290,7 +290,9 @@ def format_slack_message(message: str | None, render_links: bool = True) -> str:
         return ""
     message = _transform_outside_code_blocks(message, _sanitize_html)
     message = _convert_slack_links_to_markdown(message)
-    normalized_message = _normalize_link_destinations(message)
+    normalized_message = _transform_outside_code_blocks(
+        message, _normalize_link_destinations
+    )
     plugins: list["PluginRef"] = ["strikethrough", "table"]
     if render_links:
         plugins.append(_slack_autolink)
@@ -331,15 +333,24 @@ class SlackRenderer(HTMLRenderer):
     def strikethrough(self, text: str) -> str:
         return f"~{text}~"
 
-    def list(self, text: str, ordered: bool, **attrs: Any) -> str:  # noqa: ARG002
+    def list(self, text: str, ordered: bool, **attrs: Any) -> str:
+        depth = attrs.get("depth", 0)
+        # A fenced block or blank line closes a list, so the remaining items
+        # arrive as a fresh list carrying the number they have to resume from
+        number = attrs.get("start", 1)
         lines = text.split("\n")
-        count = 0
         for i, line in enumerate(lines):
-            if line.startswith("li: "):
-                count += 1
-                prefix = f"{count}. " if ordered else "• "
-                lines[i] = f"{prefix}{line[4:]}"
-        return "\n".join(lines) + "\n"
+            if not line.startswith("li: "):
+                continue
+            prefix = f"{number}. " if ordered else "• "
+            lines[i] = f"{'  ' * depth}{prefix}{line[4:]}"
+            number += 1
+
+        rendered = "\n".join(lines)
+        if not depth:
+            return rendered + "\n"
+        # A nested list is appended to its parent item's text, mid-line
+        return "\n" + rendered.rstrip("\n")
 
     def list_item(self, text: str) -> str:
         return f"li: {text}\n"
