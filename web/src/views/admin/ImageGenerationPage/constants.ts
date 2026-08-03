@@ -39,6 +39,14 @@ export const IMAGE_PROVIDER_GROUPS: ProviderGroup[] = [
         description:
           "A capable image generation model from OpenAI with strong prompt adherence.",
       },
+      {
+        image_provider_id: "openai_compatible",
+        model_name: "gpt-image-1",
+        provider_name: "openai",
+        title: "OpenAI-Compatible (Custom)",
+        description:
+          "Connect any self-hosted or 3rd-party OpenAI-compatible image model (ComfyUI, Stable Diffusion, FLUX, etc.).",
+      },
     ],
   },
   {

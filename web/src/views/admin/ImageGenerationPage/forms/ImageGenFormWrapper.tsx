@@ -67,7 +67,8 @@ export function ImageGenFormWrapper<T extends FormValues>({
           if (getInitialValuesFromCredentials) {
             const credValues = getInitialValuesFromCredentials(
               creds,
-              imageProvider
+              imageProvider,
+              existingConfig
             );
             setMergedInitialValues((prev) => ({ ...prev, ...credValues }));
           }
