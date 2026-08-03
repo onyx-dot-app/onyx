@@ -2,7 +2,7 @@
 
 import { useState, useEffect, useCallback, useMemo } from "react";
 import { MinimalOnyxDocument } from "@/lib/search/interfaces";
-import Modal from "@/refresh-components/Modal";
+import { Modal } from "@opal/components";
 import Text from "@/refresh-components/texts/Text";
 import { Button } from "@opal/components";
 import { SvgSimpleLoader } from "@opal/icons";

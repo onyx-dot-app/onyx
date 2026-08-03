@@ -11,7 +11,7 @@ import ActionCard from "@/sections/actions/ActionCard";
 import Actions from "@/sections/actions/Actions";
 import ToolItem from "@/sections/actions/ToolItem";
 import ToolsList from "@/sections/actions/ToolsList";
-import { useCreateModal } from "@/refresh-components/contexts/ModalContext";
+import { useCreateModal } from "@opal/components";
 import {
   ActionStatus,
   ToolSnapshot,
@@ -31,7 +31,7 @@ import { Button } from "@opal/components";
 import Text from "@/refresh-components/texts/Text";
 import { timeAgo } from "@opal/time";
 import { cn } from "@opal/utils";
-import Modal from "@/refresh-components/layouts/ConfirmationModalLayout";
+import { ConfirmationModalLayout as Modal } from "@opal/layouts";
 
 export interface MCPActionCardProps {
   // Server identification

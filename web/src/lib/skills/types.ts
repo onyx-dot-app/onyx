@@ -21,19 +21,27 @@ export interface SkillGroupShare {
   permission: SkillSharePermission;
 }
 
+export interface SkillExternalAppDependency {
+  external_app_id: number;
+  name: string;
+  enabled: boolean;
+  ready: boolean;
+}
+
 export interface Skill {
   source: SkillSource;
   id: string;
-  slug: string;
   name: string;
   description: string;
 
   is_available: boolean | null;
   unavailable_reason: string | null;
+  is_valid: boolean | null;
 
   /** True for private personal skills: not public, no direct/group shares. */
   is_personal: boolean;
-  enabled: boolean | null;
+  enabled: boolean;
+  can_toggle: boolean;
   author_user_id: string | null;
   author_email: string | null;
   owner: {
@@ -47,6 +55,7 @@ export interface Skill {
   group_shares: SkillGroupShare[];
   public_permission: SkillSharePermission | null;
   user_permission: SkillAccessLevel | null;
+  external_app: SkillExternalAppDependency | null;
 }
 
 export type BuiltinSkill = Skill & {
@@ -56,7 +65,6 @@ export type BuiltinSkill = Skill & {
 
 export type CustomSkill = Skill & {
   source: "custom";
-  enabled: boolean;
 };
 
 export interface SkillsList {
@@ -71,8 +79,52 @@ export interface SkillPreview {
   description: string;
   author_email: string | null;
   instructions_markdown: string;
+  external_app: SkillExternalAppDependency | null;
 }
 
 export type SkillEditableDetail = CustomSkill & {
   instructions_markdown: string;
+  files: SkillBundleFile[];
 };
+
+export interface SkillBundleFile {
+  path: string;
+  size: number;
+}
+
+export interface SkillBundleContents {
+  name: string;
+  description: string;
+  instructions_markdown: string;
+  files: SkillBundleFile[];
+}
+
+export interface GitHubSkillPreview {
+  path: string;
+  name: string;
+  description: string | null;
+  unavailable_reason: string | null;
+}
+
+export interface GitHubSkillsPreview {
+  repository: string;
+  revision: string;
+  subpath: string | null;
+  skills: GitHubSkillPreview[];
+}
+
+export interface GitHubImportedSkill {
+  skill: CustomSkill;
+  disabled_reason: string | null;
+}
+
+export interface GitHubSkillNotImported {
+  path: string;
+  name: string;
+  reason: string;
+}
+
+export interface GitHubSkillsImportResult {
+  imported: GitHubImportedSkill[];
+  not_imported: GitHubSkillNotImported[];
+}

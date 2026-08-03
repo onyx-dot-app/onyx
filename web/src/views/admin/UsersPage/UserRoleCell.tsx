@@ -12,7 +12,7 @@ import type { IconFunctionComponent } from "@opal/types";
 import Text from "@/refresh-components/texts/Text";
 import { Popover } from "@opal/components";
 import LineItem from "@/refresh-components/buttons/LineItem";
-import { toast } from "@/hooks/useToast";
+import { toast } from "@opal/layouts";
 import { setUserRole } from "./svc";
 import type { UserRow } from "./interfaces";
 

@@ -2,33 +2,33 @@ from collections.abc import Callable
 from typing import cast
 
 from sqlalchemy import cast as sa_cast
-from sqlalchemy import or_
-from sqlalchemy import select
+from sqlalchemy import or_, select
 from sqlalchemy.dialects import postgresql
 from sqlalchemy.orm import Session
 
 from onyx.access.models import DocumentAccess
 from onyx.access.utils import prefix_user_email
-from onyx.configs.constants import DocumentSource
-from onyx.configs.constants import FileOrigin
-from onyx.configs.constants import PUBLIC_DOC_PAT
-from onyx.db.document import get_access_info_for_document
-from onyx.db.document import get_access_info_for_documents
-from onyx.db.models import ChatMessage
-from onyx.db.models import ChatSession
-from onyx.db.models import ChatSessionSharedStatus
-from onyx.db.models import Connector
-from onyx.db.models import Document
-from onyx.db.models import DocumentByConnectorCredentialPair
-from onyx.db.models import FileRecord
-from onyx.db.models import Persona
-from onyx.db.models import Persona__User
-from onyx.db.models import Persona__UserFile
-from onyx.db.models import User
-from onyx.db.models import UserFile
+from onyx.configs.constants import PUBLIC_DOC_PAT, DocumentSource, FileOrigin
+from onyx.db.document import get_access_info_for_document, get_access_info_for_documents
+from onyx.db.models import (
+    ChatMessage,
+    ChatSession,
+    ChatSessionSharedStatus,
+    Connector,
+    Document,
+    DocumentByConnectorCredentialPair,
+    FileRecord,
+    Persona,
+    Persona__User,
+    Persona__UserFile,
+    User,
+    UserFile,
+)
 from onyx.db.user_file import fetch_user_files_with_access_relationships
-from onyx.utils.variable_functionality import fetch_ee_implementation_or_noop
-from onyx.utils.variable_functionality import fetch_versioned_implementation
+from onyx.utils.variable_functionality import (
+    fetch_ee_implementation_or_noop,
+    fetch_versioned_implementation,
+)
 
 
 def _get_access_for_document(
@@ -121,10 +121,18 @@ def _get_acl_for_user(
     matches one entry in the returned set.
 
     Anonymous users only have access to public documents.
+
+    Addresses the user was renamed away from match too. Indexed ACLs keep
+    naming the old one until the source system re-syncs, and the alias is
+    revoked as soon as the address belongs to somebody else.
     """
     if user.is_anonymous:
         return {PUBLIC_DOC_PAT}
-    return {prefix_user_email(user.email), PUBLIC_DOC_PAT}
+    return {
+        prefix_user_email(user.email),
+        *(prefix_user_email(email) for email in user.prior_emails),
+        PUBLIC_DOC_PAT,
+    }
 
 
 def get_acl_for_user(user: User, db_session: Session | None = None) -> set[str]:

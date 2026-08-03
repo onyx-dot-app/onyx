@@ -14,17 +14,21 @@ from uuid import uuid4
 
 import pytest
 
-from onyx.server.features.build.configs import SANDBOX_BACKEND
-from onyx.server.features.build.configs import SANDBOX_PROXY_INJECTED_PLACEHOLDER
-from onyx.server.features.build.configs import SandboxBackend
+from onyx.server.features.build.configs import (
+    SANDBOX_BACKEND,
+    SANDBOX_PROXY_INJECTED_PLACEHOLDER,
+    SandboxBackend,
+)
 from onyx.server.features.build.sandbox.docker.docker_sandbox_manager import (
     SANDBOX_EXEC_USER,
 )
 from tests.integration.common_utils.managers.user import UserManager
 from tests.integration.common_utils.test_models import DATestUser
-from tests.integration.tests.craft.docker_e2e.conftest import DockerExec
-from tests.integration.tests.craft.docker_e2e.conftest import DockerSandbox
-from tests.integration.tests.craft.docker_e2e.conftest import ProvisionSandbox
+from tests.integration.tests.craft.docker_e2e.conftest import (
+    DockerExec,
+    DockerSandbox,
+    ProvisionSandbox,
+)
 
 pytestmark = pytest.mark.skipif(
     SANDBOX_BACKEND != SandboxBackend.DOCKER,

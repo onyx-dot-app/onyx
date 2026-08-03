@@ -1,3 +1,6 @@
+import type { DocumentSource } from "@/chat/sources";
+import type { ToolSnapshot } from "@/chat/tools";
+
 export const DEFAULT_AGENT_ID = 0;
 
 // Backend StarterMessage is exactly {name, message} — no description.
@@ -12,6 +15,8 @@ export interface AgentLabel {
 }
 
 // Selection subset of MinimalPersonaSnapshot; rich fields added when a slice needs them.
+// `tools` + `knowledge_sources` already ride the /persona wire (persona/models.py:202,212);
+// the input-bar controls consume them.
 export interface MinimalAgent {
   id: number;
   name: string;
@@ -25,6 +30,8 @@ export interface MinimalAgent {
   builtin_persona: boolean;
   display_priority: number | null;
   labels: AgentLabel[];
+  tools: ToolSnapshot[];
+  knowledge_sources: DocumentSource[];
 }
 
 // Explicit `pinned_assistants` (in order, unknown ids dropped), or — when null/undefined —

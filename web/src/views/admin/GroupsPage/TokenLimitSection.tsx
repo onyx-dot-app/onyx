@@ -18,9 +18,14 @@ import SimpleCollapsible from "@/refresh-components/SimpleCollapsible";
 // ---------------------------------------------------------------------------
 
 export interface TokenLimit {
+  tokenId: number | null;
+  enabled: boolean;
   tokenBudget: number | null;
-  periodHours: number | null;
+  periodDays: number | null;
+  costBudgetDollars: number | null;
 }
+
+type TokenLimitValueField = "tokenBudget" | "periodDays" | "costBudgetDollars";
 
 interface TokenLimitSectionProps {
   limits: TokenLimit[];
@@ -54,12 +59,24 @@ function TokenLimitSection({
 
   function addLimit() {
     const emptyIndex = limits.findIndex(
-      (l) => l.tokenBudget === null && l.periodHours === null
+      (l) =>
+        l.tokenBudget === null &&
+        l.periodDays === null &&
+        l.costBudgetDollars === null
     );
     if (emptyIndex !== -1) return;
     const key = nextKeyRef.current++;
     keysRef.current = [...keysRef.current, key];
-    onLimitsChange([...limits, { tokenBudget: null, periodHours: null }]);
+    onLimitsChange([
+      ...limits,
+      {
+        tokenId: null,
+        enabled: true,
+        tokenBudget: null,
+        periodDays: null,
+        costBudgetDollars: null,
+      },
+    ]);
   }
 
   function removeLimit(index: number) {
@@ -69,7 +86,7 @@ function TokenLimitSection({
 
   function updateLimit(
     index: number,
-    field: keyof TokenLimit,
+    field: TokenLimitValueField,
     value: number | null
   ) {
     onLimitsChange(
@@ -103,7 +120,15 @@ function TokenLimitSection({
                     Token Limit
                   </Text>
                   <Text mainUiMuted text03 className="ml-0.5">
-                    (thousand tokens)
+                    (thousands)
+                  </Text>
+                </div>
+                <div className="flex-1 flex items-center min-w-[160px]">
+                  <Text mainUiAction text04>
+                    Cost Limit
+                  </Text>
+                  <Text mainUiMuted text03 className="ml-0.5">
+                    (USD)
                   </Text>
                 </div>
                 <div className="flex-1 flex items-center min-w-[160px]">
@@ -111,7 +136,7 @@ function TokenLimitSection({
                     Time Window
                   </Text>
                   <Text mainUiMuted text03 className="ml-0.5">
-                    (hours)
+                    (UTC days)
                   </Text>
                 </div>
               </div>
@@ -126,16 +151,26 @@ function TokenLimitSection({
                     <InputNumber
                       value={limit.tokenBudget}
                       onChange={(v) => updateLimit(i, "tokenBudget", v)}
-                      min={0}
-                      placeholder="Token limit in thousands"
+                      min={1}
+                      placeholder="Token limit (thousands)"
                     />
                   </div>
                   <div className="flex-1">
                     <InputNumber
-                      value={limit.periodHours}
-                      onChange={(v) => updateLimit(i, "periodHours", v)}
+                      value={limit.costBudgetDollars}
+                      onChange={(v) => updateLimit(i, "costBudgetDollars", v)}
+                      min={0.01}
+                      step={0.01}
+                      decimalPlaces={2}
+                      placeholder="Cost limit"
+                    />
+                  </div>
+                  <div className="flex-1">
+                    <InputNumber
+                      value={limit.periodDays}
+                      onChange={(v) => updateLimit(i, "periodDays", v)}
                       min={1}
-                      placeholder="24"
+                      placeholder="1"
                     />
                   </div>
                   <IconButton

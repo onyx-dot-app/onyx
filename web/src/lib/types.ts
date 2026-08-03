@@ -173,6 +173,7 @@ export type ValidStatuses =
   | "success"
   | "completed_with_errors"
   | "canceled"
+  | "interrupted"
   | "failed"
   | "in_progress"
   | "not_started";
@@ -569,6 +570,7 @@ export enum ValidSources {
   UserFile = "user_file",
   GoogleSites = "google_sites",
   Loopio = "loopio",
+  Box = "box",
   Dropbox = "dropbox",
   Discord = "discord",
   Salesforce = "salesforce",
@@ -599,6 +601,8 @@ export enum ValidSources {
   Bitbucket = "bitbucket",
   TestRail = "testrail",
   Braintrust = "braintrust",
+  Lumapps = "lumapps",
+  Canvas = "canvas",
 
   // Craft-specific sources
   CraftFile = "craft_file",
@@ -626,6 +630,8 @@ export const validAutoSyncSources = [
   ValidSources.GitHub,
   ValidSources.Sharepoint,
   ValidSources.Teams,
+  ValidSources.Canvas,
+  ValidSources.Box,
 ] as const;
 
 // Create a type from the array elements

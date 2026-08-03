@@ -7,9 +7,11 @@ from fastapi import Request
 from passlib.hash import sha256_crypt
 from pydantic import BaseModel
 
-from onyx.auth.constants import API_KEY_LENGTH
-from onyx.auth.constants import API_KEY_PREFIX
-from onyx.auth.constants import DEPRECATED_API_KEY_PREFIX
+from onyx.auth.constants import (
+    API_KEY_LENGTH,
+    API_KEY_PREFIX,
+    DEPRECATED_API_KEY_PREFIX,
+)
 from onyx.auth.schemas import UserRole
 from onyx.auth.utils import get_hashed_bearer_token_from_request
 from onyx.configs.app_configs import API_KEY_HASH_ROUNDS

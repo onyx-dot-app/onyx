@@ -1,7 +1,6 @@
 from ee.onyx.feature_flags.posthog_provider import PostHogFeatureFlagProvider
 from ee.onyx.utils.posthog_client import posthog
-from onyx.feature_flags.interface import FeatureFlagProvider
-from onyx.feature_flags.interface import NoOpFeatureFlagProvider
+from onyx.feature_flags.interface import FeatureFlagProvider, NoOpFeatureFlagProvider
 
 
 def get_posthog_feature_flag_provider() -> FeatureFlagProvider:

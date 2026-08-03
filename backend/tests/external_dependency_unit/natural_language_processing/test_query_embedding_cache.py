@@ -7,11 +7,9 @@ from prometheus_client import REGISTRY
 from redis.exceptions import RedisError
 
 from onyx.cache.factory import get_cache_backend
-from onyx.natural_language_processing.query_embedding_cache import _build_key
 from onyx.natural_language_processing.query_embedding_cache import (
+    _build_key,
     cache_query_embeddings,
-)
-from onyx.natural_language_processing.query_embedding_cache import (
     get_cached_query_embeddings,
 )
 from shared_configs.contextvars import CURRENT_TENANT_ID_CONTEXTVAR

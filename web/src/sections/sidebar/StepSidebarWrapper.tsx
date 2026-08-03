@@ -4,7 +4,7 @@ import { ReactNode } from "react";
 import type { IconProps } from "@opal/types";
 import { SidebarLayouts } from "@opal/layouts";
 import { SidebarTab } from "@opal/components";
-import { renderAppLogo } from "@/lib/app/utils";
+import { renderSidebarLogo } from "@/lib/sidebar/utils";
 import { useShowLogoWhenFolded } from "@/lib/sidebar/hooks";
 
 export interface StepSidebarProps {
@@ -25,7 +25,7 @@ export default function StepSidebar({
   return (
     <SidebarLayouts.Root>
       <SidebarLayouts.Header
-        renderAppLogo={renderAppLogo}
+        renderAppLogo={renderSidebarLogo}
         showLogoWhenFolded={showLogoWhenFolded}
       >
         <SidebarTab icon={buttonIcon} href={buttonHref}>

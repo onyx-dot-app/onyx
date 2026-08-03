@@ -48,6 +48,26 @@ func runDesktopScript(args []string) {
 		log.Fatalf("Failed to find desktop directory: %v", err)
 	}
 
+	// desktop is a member of the root bun workspace (see the root package.json
+	// "workspaces" field), so its dependencies are hoisted to and installed from
+	// the repo root rather than desktop/node_modules.
+	root, err := paths.GitRoot()
+	if err != nil {
+		log.Fatalf("Failed to find repo root: %v", err)
+	}
+	rootNodeModules := filepath.Join(root, "node_modules")
+	if needsInstall, reason := nodeModulesNeedsInstall(rootNodeModules); needsInstall {
+		log.Infof("%s, running bun install --frozen-lockfile...", reason)
+		installCmd := exec.Command("bun", "install", "--frozen-lockfile")
+		installCmd.Dir = root
+		installCmd.Stdout = os.Stdout
+		installCmd.Stderr = os.Stderr
+		installCmd.Stdin = os.Stdin
+		if err := installCmd.Run(); err != nil {
+			log.Fatalf("Failed to run bun install: %v", err)
+		}
+	}
+
 	scriptName := args[0]
 	scriptArgs := args[1:]
 	if len(scriptArgs) > 0 && scriptArgs[0] == "--" {

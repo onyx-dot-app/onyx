@@ -24,10 +24,10 @@ import {
   SvgUser,
   SvgNotificationBubble,
 } from "@opal/icons";
-import { Content } from "@opal/layouts";
+import { Content, toast } from "@opal/layouts";
 import { Section } from "@/layouts/general-layouts";
-import { toast } from "@/hooks/useToast";
 import useAppFocus from "@/hooks/useAppFocus";
+import useScreenSize from "@/hooks/useScreenSize";
 import { useSettings } from "@/lib/settings/hooks";
 import UserAvatar from "@/refresh-components/avatars/UserAvatar";
 import { useNotificationSummary } from "@/hooks/useNotifications";
@@ -78,9 +78,7 @@ function SettingsPopover({
 
         const encodedRedirect = encodeURIComponent(currentUrl);
 
-        router.push(
-          `/auth/login?disableAutoRedirect=true&next=${encodedRedirect}`
-        );
+        router.push(`/auth/login?next=${encodedRedirect}`);
       })
 
       .catch(() => {
@@ -202,6 +200,7 @@ export default function AccountPopover({
   >(undefined);
   const { user } = useUser();
   const appFocus = useAppFocus();
+  const { isMobile } = useScreenSize();
   const { vectorDbEnabled } = useSettings();
   const { undismissedCount, refresh: refreshNotificationSummary } =
     useNotificationSummary();
@@ -250,8 +249,8 @@ export default function AccountPopover({
       </Popover.Trigger>
 
       <Popover.Content
-        align="end"
-        side="right"
+        align={isMobile ? "start" : "end"}
+        side={isMobile ? "top" : "right"}
         width={popupState === "Notifications" ? "2xl" : "lg"}
       >
         {popupState === "Settings" && (

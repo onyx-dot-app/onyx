@@ -3,18 +3,15 @@ from collections.abc import Callable
 from typing import Any
 from uuid import UUID
 
-from pydantic import BaseModel
-from pydantic import ConfigDict
+from pydantic import BaseModel, ConfigDict
 from sqlalchemy.orm import Session
 
-from onyx.configs.constants import DocumentSource
-from onyx.configs.constants import FederatedConnectorSource
-from onyx.context.search.models import ChunkIndexRequest
-from onyx.context.search.models import InferenceChunk
+from onyx.configs.constants import DocumentSource, FederatedConnectorSource
+from onyx.context.search.models import ChunkIndexRequest, InferenceChunk
 from onyx.db.federated import (
     get_federated_connector_document_set_mappings_by_document_set_names,
+    list_federated_connector_oauth_tokens,
 )
-from onyx.db.federated import list_federated_connector_oauth_tokens
 from onyx.db.models import FederatedConnector__DocumentSet
 from onyx.db.slack_bot import fetch_slack_bots
 from onyx.federated_connectors.factory import get_federated_connector
@@ -259,26 +256,24 @@ def get_federated_retrieval_functions(
 
         connector = get_federated_connector(
             oauth_token.federated_connector.source,
-            oauth_token.federated_connector.credentials.get_value(  # ty: ignore[unresolved-attribute]
-                apply_mask=False
-            ),
+            oauth_token.federated_connector.credentials.get_value(apply_mask=False),
         )
 
         # Capture variables by value to avoid lambda closure issues
-        access_token = oauth_token.token.get_value(  # ty: ignore[unresolved-attribute]
-            apply_mask=False
-        )
+        access_token = oauth_token.token.get_value(apply_mask=False)
 
         def create_retrieval_function(
             conn: FederatedConnector,
             ent: dict[str, Any],
             token: str,
         ) -> Callable[[ChunkIndexRequest], list[InferenceChunk]]:
-            return lambda query: conn.search(
-                query,
-                ent,
-                access_token=token,
-                limit=None,  # Let connector use its own max_messages_per_query config
+            return (
+                lambda query: conn.search(
+                    query,
+                    ent,
+                    access_token=token,
+                    limit=None,  # Let connector use its own max_messages_per_query config
+                )
             )
 
         federated_retrieval_infos.append(

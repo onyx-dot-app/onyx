@@ -2,8 +2,7 @@
 
 import hashlib
 import json
-from datetime import datetime
-from datetime import timezone
+from datetime import datetime, timezone
 
 from onyx.configs.model_configs import PROMPT_CACHE_REDIS_TTL_MULTIPLIER
 from onyx.key_value_store.store import PgRedisKVStore

@@ -12,7 +12,7 @@ Lifecycle (see ``docs/craft/features/scheduled-tasks/overview.md``):
    marked it failed).
 2. Get the user's sandbox to a RUNNING state via
    ``SessionManager.ensure_sandbox_running`` — creates a sandbox if the
-   user has none, waits up to ``PROVISIONING_WAIT_SECONDS`` for any
+   user has none, waits up to ``PROVISION_WAIT_SECONDS`` for any
    concurrent provisioner, and wakes SLEEPING / TERMINATED / FAILED
    sandboxes in place. SKIP only if the wait window elapses with the
    sandbox still PROVISIONING (``sandbox_provisioning``); any other
@@ -41,39 +41,37 @@ import time
 from typing import Any
 from uuid import UUID
 
-from onyx.configs.constants import MessageType
-from onyx.configs.constants import NotificationType
+from onyx.configs.constants import MessageType, NotificationType
 from onyx.db.engine.sql_engine import get_session_with_current_tenant
-from onyx.db.enums import ScheduledTaskErrorClass
-from onyx.db.enums import ScheduledTaskRunStatus
-from onyx.db.enums import SessionOrigin
+from onyx.db.enums import ScheduledTaskErrorClass, ScheduledTaskRunStatus, SessionOrigin
 from onyx.db.notification import create_notification
-from onyx.db.scheduled_task import get_run
-from onyx.db.scheduled_task import mark_run_status
-from onyx.server.features.build.db.build_session import create_message
-from onyx.server.features.build.db.build_session import get_session_messages
-from onyx.server.features.build.sandbox.event_schema import Error
-from onyx.server.features.build.sandbox.event_schema import PromptResponse
-from onyx.server.features.build.sandbox.event_schema import RequestPermissionRequest
-from onyx.server.features.build.sandbox.event_schema import TURN_ERROR_CODE_TIMEOUT
+from onyx.db.scheduled_task import get_run, mark_run_status
+from onyx.server.features.build.db.build_session import (
+    create_message,
+    get_session_messages,
+)
+from onyx.server.features.build.db.sandbox import update_sandbox_heartbeat
+from onyx.server.features.build.sandbox.event_schema import (
+    TURN_ERROR_CODE_TIMEOUT,
+    Error,
+    PromptResponse,
+    RequestPermissionRequest,
+)
+from onyx.server.features.build.session.locks import session_creation_lock
 from onyx.server.features.build.session.manager import SessionManager
 from onyx.server.features.build.session.streaming import BuildStreamingState
+from onyx.server.features.build.timeouts import (
+    PROVISION_WAIT_SECONDS,
+    TURN_BUDGET_SECONDS,
+)
 from onyx.utils.logger import setup_logger
 
 logger = setup_logger()
 
 
-# Per-run wall-clock budget (monotonic). Tasks that blow past this are
-# marked ``failed (error_class=timeout)``. The stuck-run sweeper uses a
-# slightly larger threshold (45 min) so a hung run that fails to honor the
-# budget still gets cleaned up out-of-band.
-DEFAULT_EXECUTOR_BUDGET_SECONDS = 30 * 60
-
 # Summary length on the run row (per spec: ~120 chars of final agent
 # message).
 SUMMARY_MAX_CHARS = 120
-
-PROVISIONING_WAIT_SECONDS = 120
 
 
 def _clip_summary(text: str) -> str:
@@ -165,7 +163,7 @@ def _notify(
 def run_scheduled_task_logic(
     run_id: UUID,
     *,
-    budget_seconds: int = DEFAULT_EXECUTOR_BUDGET_SECONDS,
+    budget_seconds: int = TURN_BUDGET_SECONDS,
 ) -> None:
     """Execute a single scheduled-task run end-to-end.
 
@@ -220,15 +218,14 @@ def run_scheduled_task_logic(
         task_prompt = task.prompt
 
         # ensure_sandbox_running handles every state we care about:
-        # creates a sandbox if none exists, waits up to
-        # PROVISIONING_WAIT_SECONDS for any concurrent provisioner, wakes
-        # SLEEPING / TERMINATED / FAILED, and recovers a RUNNING-but-
-        # unhealthy pod.
+        # creates a sandbox if none exists, waits out any concurrent
+        # provisioner, wakes SLEEPING / TERMINATED / FAILED, and recovers a
+        # RUNNING-but-unhealthy pod.
         try:
             session_manager = SessionManager(db_session)
             sandbox = session_manager.ensure_sandbox_running(
                 task_user_id,
-                provisioning_wait_seconds=PROVISIONING_WAIT_SECONDS,
+                provisioning_wait_seconds=PROVISION_WAIT_SECONDS,
             )
             db_session.commit()
         except Exception as exc:
@@ -344,39 +341,41 @@ def _drive_agent(
     with get_session_with_current_tenant() as db_session:
         session_manager = SessionManager(db_session)
 
-        # Create the BuildSession. SCHEDULED origin keeps it out of the
-        # Craft sidebar (see `get_user_build_sessions`).
-        build_session = session_manager.create_session__no_commit(
-            user_id=task_user_id,
-            origin=SessionOrigin.SCHEDULED,
-            name=f"Scheduled: {task_name}",
-        )
-        session_id = build_session.id
+        with session_creation_lock(task_user_id):
+            # Create the BuildSession. SCHEDULED origin keeps it out of the
+            # Craft sidebar (see `get_user_build_sessions`).
+            build_session = session_manager.create_session(
+                user_id=task_user_id,
+                origin=SessionOrigin.SCHEDULED,
+                name=f"Scheduled: {task_name}",
+            )
+            session_id = build_session.id
 
-        # Persist the user prompt as turn 0 so the transcript matches an
-        # interactive run exactly (interactive flow does the same in
-        # `_stream_cli_agent_response`).
-        create_message(
-            session_id=session_id,
-            message_type=MessageType.USER,
-            turn_index=0,
-            message_metadata={
-                "type": "user_message",
-                "content": {"type": "text", "text": task_prompt},
-            },
-            db_session=db_session,
-        )
+            # Persist the user prompt as turn 0 so the transcript matches an
+            # interactive run exactly (interactive flow does the same in
+            # `_stream_cli_agent_response`).
+            create_message(
+                session_id=session_id,
+                message_type=MessageType.USER,
+                turn_index=0,
+                message_metadata={
+                    "type": "user_message",
+                    "content": {"type": "text", "text": task_prompt},
+                },
+                db_session=db_session,
+            )
 
-        # Wire the session id onto the run row so the UI can deep-link
-        # from the run history into the session view as soon as anything
-        # is persisted.
-        mark_run_status(
-            db_session=db_session,
-            run_id=run_id,
-            status=ScheduledTaskRunStatus.RUNNING,
-            session_id=session_id,
-        )
-        db_session.commit()
+            # Wire the session id onto the run row so the UI can deep-link
+            # from the run history into the session view as soon as anything
+            # is persisted.
+            mark_run_status(
+                db_session=db_session,
+                run_id=run_id,
+                status=ScheduledTaskRunStatus.RUNNING,
+                session_id=session_id,
+            )
+            update_sandbox_heartbeat(db_session, sandbox_id)
+            db_session.commit()
 
         state = BuildStreamingState(turn_index=0)
         deadline = time.monotonic() + budget_seconds
@@ -419,7 +418,10 @@ def _drive_agent(
             return False
         try:
             for sandbox_event in session_manager.yield_sandbox_events(
-                sandbox_id, session_id, task_prompt
+                sandbox_id,
+                session_id,
+                task_prompt,
+                turn_timeout_seconds=float(budget_seconds),
             ):
                 slot.extend()
                 if slot.lost:
@@ -625,10 +627,3 @@ def _drive_agent(
             # approval gate, budget exceeded, exception). Matches the
             # interactive path's finally in _stream_cli_agent_response.
             prompt_slot_cm.__exit__(None, None, None)
-
-
-# Re-export for the Celery task wrapper.
-__all__ = [
-    "DEFAULT_EXECUTOR_BUDGET_SECONDS",
-    "run_scheduled_task_logic",
-]

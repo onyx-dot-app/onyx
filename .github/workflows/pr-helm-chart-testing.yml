@@ -40,7 +40,7 @@ jobs:
           version: v3.19.0
 
       - name: Set up chart-testing
-        uses: helm/chart-testing-action@2e2940618cb426dce2999631d543b53cdcfc8527
+        uses: helm/chart-testing-action@d6db0ca01d3598ea552ccf97edb5de6fe6b54ce0
         with:
           uv_version: "0.11.25"
 

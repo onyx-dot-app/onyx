@@ -9,12 +9,14 @@ import ast
 from pathlib import Path
 
 import pytest
-from scripts.env_inventory import classify_var
-from scripts.env_inventory import diff_baseline
-from scripts.env_inventory import EnvVisitor
-from scripts.env_inventory import format_baseline
-from scripts.env_inventory import is_sensitive
-from scripts.env_inventory import read_baseline
+from scripts.env_inventory import (
+    EnvVisitor,
+    classify_var,
+    diff_baseline,
+    format_baseline,
+    is_sensitive,
+    read_baseline,
+)
 
 
 @pytest.mark.parametrize(

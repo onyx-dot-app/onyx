@@ -2,24 +2,18 @@ import json
 import threading
 from collections.abc import Iterator
 from contextlib import contextmanager
-from http.server import BaseHTTPRequestHandler
-from http.server import ThreadingHTTPServer
+from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from typing import Any
 from unittest.mock import patch
 
 import pytest
 
-from onyx.llm.constants import LlmProviderNames
-from onyx.llm.constants import WELL_KNOWN_PROVIDER_NAMES
-from onyx.llm.models import ReasoningEffort
-from onyx.llm.models import UserMessage
+from onyx.llm.constants import WELL_KNOWN_PROVIDER_NAMES, LlmProviderNames
+from onyx.llm.model_capabilities import find_model_obj, get_model_map
+from onyx.llm.models import ReasoningEffort, UserMessage
 from onyx.llm.multi_llm import LitellmLLM
-from onyx.llm.utils import find_model_obj
-from onyx.llm.utils import get_model_map
 from onyx.llm.well_known_providers.llm_provider_options import (
     _get_provider_to_models_map,
-)
-from onyx.llm.well_known_providers.llm_provider_options import (
     _load_bundled_recommendations,
 )
 

@@ -10,40 +10,90 @@ from __future__ import annotations
 
 import io
 import logging
-from typing import Callable
-from uuid import uuid4
+from typing import Any, Callable
+from uuid import UUID, uuid4
 
 import pytest
-from sqlalchemy.orm import Session
+from fastapi_users.password import PasswordHelper
+from sqlalchemy.orm import Query, Session
 
-from onyx.configs.constants import FileOrigin
-from onyx.configs.constants import MessageType
-from onyx.db.enums import ArtifactType
-from onyx.db.enums import BuildSessionStatus
-from onyx.db.enums import SandboxStatus
-from onyx.db.enums import SessionOrigin
-from onyx.db.models import Artifact
-from onyx.db.models import BuildMessage
-from onyx.db.models import BuildSession
-from onyx.db.models import Sandbox
-from onyx.db.models import Snapshot
-from onyx.db.models import User
+from onyx.auth.schemas import UserRole
+from onyx.configs.constants import FileOrigin, MessageType
+from onyx.db.enums import (
+    AccountType,
+    ArtifactType,
+    BuildSessionStatus,
+    SandboxStatus,
+    SessionOrigin,
+)
+from onyx.db.models import Artifact, BuildMessage, BuildSession, Sandbox, Snapshot, User
 from onyx.error_handling.error_codes import OnyxErrorCode
 from onyx.error_handling.exceptions import OnyxError
 from onyx.file_store.file_store import get_default_file_store
 from onyx.redis.redis_pool import get_redis_client
-from onyx.server.features.build.db.build_session import allocate_nextjs_port
-from onyx.server.features.build.db.build_session import get_user_build_sessions
+from onyx.server.features.build.db.build_session import (
+    get_user_build_sessions,
+    reserve_nextjs_port__no_commit,
+    session_runtime_stale,
+)
 from onyx.server.features.build.db.sandbox import get_sandbox_by_user_id
 from onyx.server.features.build.sandbox.models import SandboxInfo
-from onyx.server.features.build.sandbox.user_library import USER_LIBRARY_MOUNT_PATH
-from onyx.server.features.build.session.api import restore_session
+from onyx.server.features.build.sandbox.user_library import (
+    USER_LIBRARY_MOUNT_PATH,
+    build_user_library_fileset,
+)
+from onyx.server.features.build.sandbox.util.mcp_config import (
+    craft_mcp_fingerprint,
+    resolve_craft_mcp_servers,
+)
+from onyx.server.features.build.session import locks as session_locks
+from onyx.server.features.build.session.api import (
+    reload_session_skills,
+    restore_session,
+)
+from onyx.server.features.build.session.locks import (
+    SessionCreationLockAcquisitionError,
+    get_session_creation_lock,
+    session_creation_lock,
+)
 from onyx.server.features.build.session.manager import SessionManager
+from onyx.server.features.build.session.sandbox_lifecycle import (
+    ManagedContentPayload,
+    push_managed_content,
+    record_managed_content_hashes__no_commit,
+    refresh_mcp_config_hashes_for_users,
+)
+from onyx.skills.push import compute_skill_runtime_hash
 from shared_configs.configs import POSTGRES_DEFAULT_SCHEMA_STANDARD_VALUE
 from tests.common.craft.stubs import StubSandboxManager
-from tests.external_dependency_unit.craft.redis_helpers import (
-    assert_lock_serializes_two_threads,
-)
+
+
+def _hydrate_managed_content_for_test(
+    db_session: Session,
+    stub_sandbox_manager: StubSandboxManager,
+    sandbox_id: UUID,
+    user: User,
+    connectable_apps_section: str,
+    skills_files: dict[str, bytes],
+) -> bool:
+    """build → push → record with an explicit skills payload, mirroring the
+    production reconcile sequence."""
+    payload = ManagedContentPayload(
+        connectable_apps_section=connectable_apps_section,
+        skills_files=skills_files,
+        skills_hash=compute_skill_runtime_hash(skills_files, connectable_apps_section),
+        mcp_fingerprint=craft_mcp_fingerprint(
+            resolve_craft_mcp_servers(db_session, user)
+        ),
+        library_files=build_user_library_fileset(user.id, db_session),
+    )
+    db_session.commit()
+    skills_hydrated = push_managed_content(stub_sandbox_manager, sandbox_id, payload)
+    record_managed_content_hashes__no_commit(
+        db_session, sandbox_id, payload, skills_hydrated
+    )
+    return skills_hydrated
+
 
 # Built-in skill rows are seeded by ``setup_postgres`` (run once per
 # tenant in ``full_setup``) and persist across tests. The session
@@ -54,6 +104,112 @@ from tests.external_dependency_unit.craft.redis_helpers import (
 # =============================================================================
 # Create
 # =============================================================================
+
+
+def test_warm_content_hash_change_marks_only_live_session_stale(
+    db_session: Session,
+    test_user: User,
+    sandbox: Callable[..., Sandbox],
+    stub_sandbox_manager: StubSandboxManager,
+) -> None:
+    sandbox_row = sandbox(user=test_user, status=SandboxStatus.RUNNING)
+    stub_sandbox_manager.write_files_to_sandbox_silent = True
+
+    assert _hydrate_managed_content_for_test(
+        db_session,
+        stub_sandbox_manager,
+        sandbox_row.id,
+        test_user,
+        connectable_apps_section="first apps",
+        skills_files={"first/SKILL.md": b"first"},
+    )
+    db_session.commit()
+    db_session.refresh(sandbox_row)
+    assert sandbox_row.skills_hash is not None
+
+    existing_session = BuildSession(
+        user_id=test_user.id,
+        status=BuildSessionStatus.ACTIVE,
+        opencode_session_id="existing-opencode",
+        skills_hash=sandbox_row.skills_hash,
+    )
+    new_session = BuildSession(
+        user_id=test_user.id,
+        status=BuildSessionStatus.ACTIVE,
+        skills_hash=sandbox_row.skills_hash,
+    )
+    db_session.add_all([existing_session, new_session])
+    db_session.commit()
+
+    assert _hydrate_managed_content_for_test(
+        db_session,
+        stub_sandbox_manager,
+        sandbox_row.id,
+        test_user,
+        connectable_apps_section="second apps",
+        skills_files={"first/SKILL.md": b"first"},
+    )
+    db_session.commit()
+    db_session.refresh(sandbox_row)
+    assert session_runtime_stale(existing_session, sandbox_row)
+    assert not session_runtime_stale(new_session, sandbox_row)
+
+
+def test_mcp_config_hash_change_marks_session_stale_independent_of_skills(
+    db_session: Session,
+    test_user: User,
+    sandbox: Callable[..., Sandbox],
+    stub_sandbox_manager: StubSandboxManager,
+) -> None:
+    sandbox_row = sandbox(user=test_user, status=SandboxStatus.RUNNING)
+    stub_sandbox_manager.write_files_to_sandbox_silent = True
+
+    assert _hydrate_managed_content_for_test(
+        db_session,
+        stub_sandbox_manager,
+        sandbox_row.id,
+        test_user,
+        connectable_apps_section="apps",
+        skills_files={"a/SKILL.md": b"x"},
+    )
+    db_session.commit()
+    db_session.refresh(sandbox_row)
+    # Provisioning stamps the MCP fingerprint alongside the skills hash.
+    assert sandbox_row.mcp_config_hash is not None
+
+    session = BuildSession(
+        user_id=test_user.id,
+        status=BuildSessionStatus.ACTIVE,
+        opencode_session_id="oc",
+        skills_hash=sandbox_row.skills_hash,
+        mcp_config_hash=sandbox_row.mcp_config_hash,
+    )
+    db_session.add(session)
+    db_session.commit()
+    assert not session_runtime_stale(session, sandbox_row)
+
+    # An MCP-config change bumps only mcp_config_hash — the session goes stale
+    # while its skill payload (skills_hash) is untouched.
+    sandbox_row.mcp_config_hash = "different-mcp-fingerprint"
+    db_session.flush()
+    assert session.skills_hash == sandbox_row.skills_hash
+    assert session_runtime_stale(session, sandbox_row)
+
+
+def test_refresh_mcp_config_hashes_stamps_current_fingerprint(
+    db_session: Session,
+    test_user: User,
+    sandbox: Callable[..., Sandbox],
+) -> None:
+    sandbox_row = sandbox(user=test_user, status=SandboxStatus.RUNNING)
+    sandbox_row.mcp_config_hash = "stale"
+    db_session.commit()
+
+    refresh_mcp_config_hashes_for_users({test_user.id}, db_session)
+
+    db_session.refresh(sandbox_row)
+    expected = craft_mcp_fingerprint(resolve_craft_mcp_servers(db_session, test_user))
+    assert sandbox_row.mcp_config_hash == expected
 
 
 class TestCreateSession:
@@ -78,27 +234,37 @@ class TestCreateSession:
         )
         stub_sandbox_manager.setup_session_workspace_silent = True
         stub_sandbox_manager.write_files_to_sandbox_silent = True
+        stub_sandbox_manager.write_sandbox_file_silent = True
 
         sm = session_manager_with_stub
-        build_session = sm.create_session__no_commit(user_id=test_user.id)
-        db_session.commit()
+        build_session = sm.create_session(user_id=test_user.id)
         db_session.refresh(build_session)
 
         sandbox_row = get_sandbox_by_user_id(db_session, test_user.id)
         assert sandbox_row is not None
         assert sandbox_row.user_id == test_user.id
-        # Status was set to RUNNING by _provision_sandbox.
+        # Reconciliation finalized the row at RUNNING.
         assert sandbox_row.status == SandboxStatus.RUNNING
+        # The session is finalized ACTIVE only after workspace + opencode
+        # setup completed.
+        assert build_session.status == BuildSessionStatus.ACTIVE
         # provision() was called exactly once for this first creation.
         assert stub_sandbox_manager.provision_count == 1
         assert build_session.user_id == test_user.id
         assert build_session.opencode_session_id == "stub-opencode-session"
+        assert build_session.skills_hash == sandbox_row.skills_hash
+        assert build_session.skills_hash is not None
         assert stub_sandbox_manager.ensure_opencode_session_count == 1
         assert stub_sandbox_manager.last_ensure_opencode_session_payload == {
             "sandbox_id": sandbox_row.id,
             "session_id": build_session.id,
             "opencode_session_id": None,
         }
+        assert stub_sandbox_manager.last_setup_session_workspace_payload is not None
+        assert (
+            "skills_section"
+            not in stub_sandbox_manager.last_setup_session_workspace_payload
+        )
 
     def test_create_session_reuses_existing_sandbox(
         self,
@@ -115,11 +281,11 @@ class TestCreateSession:
         stub_sandbox_manager.health_check_returns = True
         stub_sandbox_manager.setup_session_workspace_silent = True
         stub_sandbox_manager.write_files_to_sandbox_silent = True
+        stub_sandbox_manager.write_sandbox_file_silent = True
         # provision_returns NOT configured — any provision() call would raise.
 
         sm = session_manager_with_stub
-        new_session = sm.create_session__no_commit(user_id=test_user.id)
-        db_session.commit()
+        new_session = sm.create_session(user_id=test_user.id)
         db_session.refresh(new_session)
 
         # Same single sandbox row for this user.
@@ -130,6 +296,8 @@ class TestCreateSession:
         assert stub_sandbox_manager.provision_count == 0
         assert stub_sandbox_manager.health_check_count >= 1
         assert new_session.opencode_session_id == "stub-opencode-session"
+        assert new_session.skills_hash == rows[0].skills_hash
+        assert new_session.skills_hash is not None
         assert stub_sandbox_manager.ensure_opencode_session_count == 1
         assert stub_sandbox_manager.last_ensure_opencode_session_payload == {
             "sandbox_id": existing_id,
@@ -169,7 +337,10 @@ class TestEmptySessionReuse:
         stub_sandbox_manager.ensure_opencode_session_returns = (
             "refreshed-opencode-session"
         )
+        stub_sandbox_manager.read_file_returns = b"{}"
         stub_sandbox_manager.write_files_to_sandbox_silent = True
+        stub_sandbox_manager.regenerate_session_config_silent = True
+        stub_sandbox_manager.dispose_opencode_instance_silent = True
 
         sm = session_manager_with_stub
         result = sm.get_or_create_empty_session(user_id=test_user.id)
@@ -178,11 +349,21 @@ class TestEmptySessionReuse:
 
         assert result.id == existing_empty.id
         assert result.opencode_session_id == "refreshed-opencode-session"
+        assert stub_sandbox_manager.regenerate_session_config_count == 1
+        assert stub_sandbox_manager.last_dispose_opencode_instance_payload == {
+            "sandbox_id": sandbox_row.id,
+            "session_id": existing_empty.id,
+        }
         assert stub_sandbox_manager.last_ensure_opencode_session_payload == {
             "sandbox_id": sandbox_row.id,
             "session_id": existing_empty.id,
             "opencode_session_id": "stale-opencode-session",
         }
+        assert stub_sandbox_manager.session_runtime_call_order == [
+            "regenerate_session_config",
+            "dispose_opencode_instance",
+            "ensure_opencode_session",
+        ]
         # No new sandbox was provisioned, and only one BuildSession row exists
         # for this user.
         rows = (
@@ -196,7 +377,7 @@ class TestEmptySessionReuse:
         assert reused_sandbox is not None
         assert sandbox_row.id == reused_sandbox.id
 
-    def test_stale_empty_session_replaced_when_workspace_missing(
+    def test_stale_empty_session_repaired_in_place_when_workspace_missing(
         self,
         db_session: Session,
         test_user: User,
@@ -204,9 +385,11 @@ class TestEmptySessionReuse:
         session_manager_with_stub: SessionManager,
         stub_sandbox_manager: StubSandboxManager,
     ) -> None:
-        # Regression for SHA ff3b82d15a: workspace missing on disk despite
-        # the sandbox row claiming RUNNING => delete stale empty session,
-        # create a fresh one (which reuses the still-healthy sandbox row).
+        # Workspace missing on disk despite the sandbox row claiming RUNNING
+        # => the committed empty-session identity is repaired in place: it
+        # returns to INITIALIZING, the workspace is rebuilt under the SAME
+        # session ID, and it finalizes back to ACTIVE. The row is never
+        # deleted and replaced.
         sandbox_row = sandbox(user=test_user, status=SandboxStatus.RUNNING)
         stale_empty = BuildSession(
             id=uuid4(),
@@ -221,37 +404,38 @@ class TestEmptySessionReuse:
 
         stub_sandbox_manager.health_check_returns = True
         stub_sandbox_manager.session_workspace_exists_returns = False
-        stub_sandbox_manager.supports_opencode_history_persistence = True
-        stub_sandbox_manager.cleanup_session_workspace_silent = True
         stub_sandbox_manager.setup_session_workspace_silent = True
         stub_sandbox_manager.write_files_to_sandbox_silent = True
+        stub_sandbox_manager.write_sandbox_file_silent = True
 
         sm = session_manager_with_stub
-        new_session = sm.get_or_create_empty_session(user_id=test_user.id)
-        db_session.commit()
+        repaired = sm.get_or_create_empty_session(user_id=test_user.id)
 
-        # Stale session is gone; new one took its place.
+        # Same committed identity, rebuilt workspace, finalized ACTIVE.
+        assert repaired.id == stale_id
+        db_session.refresh(repaired)
+        assert repaired.status == BuildSessionStatus.ACTIVE
+        assert repaired.nextjs_port is not None
+        assert stub_sandbox_manager.setup_session_workspace_count == 1
         assert (
-            db_session.query(BuildSession)
-            .filter(BuildSession.id == stale_id)
-            .one_or_none()
-            is None
+            stub_sandbox_manager.last_setup_session_workspace_payload is not None
+            and stub_sandbox_manager.last_setup_session_workspace_payload["session_id"]
+            == stale_id
         )
-        assert new_session.id != stale_id
 
-        # Sandbox row reused (still RUNNING — health check passed at the
-        # create_session step too).
+        # Exactly one session row for the user — no replacement was created.
+        rows = (
+            db_session.query(BuildSession)
+            .filter(BuildSession.user_id == test_user.id)
+            .all()
+        )
+        assert len(rows) == 1
+
+        # Sandbox row reused, never re-provisioned.
         reused_sandbox = get_sandbox_by_user_id(db_session, test_user.id)
         assert reused_sandbox is not None
         assert reused_sandbox.id == sandbox_row.id
-        assert stub_sandbox_manager.delete_opencode_session_count == 1
-        assert stub_sandbox_manager.last_delete_opencode_session_payload == {
-            "sandbox_id": sandbox_row.id,
-            "session_id": stale_id,
-            "opencode_session_id": "stale-opencode-session",
-        }
-        assert stub_sandbox_manager.create_opencode_history_snapshot_count == 0
-        assert stub_sandbox_manager.cleanup_session_workspace_count == 1
+        assert stub_sandbox_manager.provision_count == 0
 
 
 # =============================================================================
@@ -259,7 +443,7 @@ class TestEmptySessionReuse:
 # =============================================================================
 
 
-class TestDeleteSession:
+class TestDeleteSessionCascade:
     def test_delete_session_cascades_messages_and_artifacts(
         self,
         db_session: Session,
@@ -326,6 +510,85 @@ class TestDeleteSession:
             is None
         )
 
+
+class TestReloadSessionSkills:
+    def test_disposes_runtime_and_clears_stale_state(
+        self,
+        db_session: Session,
+        test_user: User,
+        sandbox: Callable[..., Sandbox],
+        stub_sandbox_manager: StubSandboxManager,
+        monkeypatch: pytest.MonkeyPatch,
+    ) -> None:
+        sandbox_row = sandbox(user=test_user, status=SandboxStatus.RUNNING)
+        sandbox_row.skills_hash = "current"
+        session_row = BuildSession(
+            user_id=test_user.id,
+            status=BuildSessionStatus.ACTIVE,
+            opencode_session_id="stale-opencode",
+            skills_hash="old",
+        )
+        db_session.add(session_row)
+        db_session.commit()
+        monkeypatch.setattr(
+            "onyx.server.features.build.session.manager.get_sandbox_manager",
+            lambda: stub_sandbox_manager,
+        )
+        stub_sandbox_manager.regenerate_session_config_silent = True
+        stub_sandbox_manager.dispose_opencode_instance_silent = True
+        stub_sandbox_manager.write_sandbox_file_silent = True
+
+        response = reload_session_skills(session_row.id, test_user, db_session)
+
+        assert response.skills_stale is False
+        db_session.refresh(session_row)
+        assert session_row.skills_hash == sandbox_row.skills_hash
+        assert stub_sandbox_manager.regenerate_session_config_count == 1
+        assert stub_sandbox_manager.last_dispose_opencode_instance_payload == {
+            "sandbox_id": sandbox_row.id,
+            "session_id": session_row.id,
+        }
+        assert stub_sandbox_manager.last_prompt_slot_payload == {
+            "sandbox_id": sandbox_row.id,
+            "build_session_id": session_row.id,
+            "acquire_timeout": 0.1,
+            "fail_open": False,
+        }
+
+    def test_active_turn_leaves_stale_state_unchanged(
+        self,
+        db_session: Session,
+        test_user: User,
+        sandbox: Callable[..., Sandbox],
+        stub_sandbox_manager: StubSandboxManager,
+        monkeypatch: pytest.MonkeyPatch,
+    ) -> None:
+        sandbox_row = sandbox(user=test_user, status=SandboxStatus.RUNNING)
+        sandbox_row.skills_hash = "current"
+        session_row = BuildSession(
+            user_id=test_user.id,
+            status=BuildSessionStatus.ACTIVE,
+            opencode_session_id="busy-opencode",
+            skills_hash="old",
+        )
+        db_session.add(session_row)
+        db_session.commit()
+        stub_sandbox_manager.prompt_slot_returns = False
+        monkeypatch.setattr(
+            "onyx.server.features.build.session.manager.get_sandbox_manager",
+            lambda: stub_sandbox_manager,
+        )
+
+        with pytest.raises(OnyxError) as exc_info:
+            reload_session_skills(session_row.id, test_user, db_session)
+
+        assert exc_info.value.error_code == OnyxErrorCode.CONFLICT
+        db_session.refresh(session_row)
+        assert session_runtime_stale(session_row, sandbox_row)
+        assert stub_sandbox_manager.dispose_opencode_instance_count == 0
+
+
+class TestDeleteSession:
     def test_delete_session_deletes_live_opencode_session_best_effort(
         self,
         db_session: Session,
@@ -368,8 +631,25 @@ class TestDeleteSession:
             is None
         )
 
+    @pytest.mark.parametrize(
+        ("delete_result", "expected_log"),
+        [
+            pytest.param(
+                RuntimeError("opencode offline"),
+                "Best-effort opencode session delete failed",
+                id="raises",
+            ),
+            pytest.param(
+                False,
+                "Best-effort opencode session delete returned false",
+                id="returns-false",
+            ),
+        ],
+    )
     def test_delete_session_ignores_live_opencode_delete_failure(
         self,
+        delete_result: bool | Exception,
+        expected_log: str,
         db_session: Session,
         test_user: User,
         sandbox: Callable[..., Sandbox],
@@ -381,17 +661,15 @@ class TestDeleteSession:
         session_row = BuildSession(
             id=uuid4(),
             user_id=test_user.id,
-            name="opencode-delete-fails",
+            name="opencode-delete-failure",
             status=BuildSessionStatus.ACTIVE,
-            opencode_session_id="ses_delete_fails",
+            opencode_session_id="ses_delete_failure",
         )
         db_session.add(session_row)
         db_session.commit()
 
         stub_sandbox_manager.cleanup_session_workspace_silent = True
-        stub_sandbox_manager.delete_opencode_session_returns = RuntimeError(
-            "opencode offline"
-        )
+        stub_sandbox_manager.delete_opencode_session_returns = delete_result
 
         with caplog.at_level(logging.WARNING):
             deleted = session_manager_with_stub.delete_session(
@@ -407,52 +685,7 @@ class TestDeleteSession:
             .one_or_none()
             is None
         )
-        assert any(
-            "Best-effort opencode session delete failed" in r.getMessage()
-            for r in caplog.records
-        )
-
-    def test_delete_session_ignores_live_opencode_delete_false(
-        self,
-        db_session: Session,
-        test_user: User,
-        sandbox: Callable[..., Sandbox],
-        session_manager_with_stub: SessionManager,
-        stub_sandbox_manager: StubSandboxManager,
-        caplog: pytest.LogCaptureFixture,
-    ) -> None:
-        sandbox(user=test_user, status=SandboxStatus.RUNNING)
-        session_row = BuildSession(
-            id=uuid4(),
-            user_id=test_user.id,
-            name="opencode-delete-false",
-            status=BuildSessionStatus.ACTIVE,
-            opencode_session_id="ses_delete_false",
-        )
-        db_session.add(session_row)
-        db_session.commit()
-
-        stub_sandbox_manager.cleanup_session_workspace_silent = True
-        stub_sandbox_manager.delete_opencode_session_returns = False
-
-        with caplog.at_level(logging.WARNING):
-            deleted = session_manager_with_stub.delete_session(
-                session_id=session_row.id, user_id=test_user.id
-            )
-
-        assert deleted is True
-        assert stub_sandbox_manager.delete_opencode_session_count == 1
-        assert stub_sandbox_manager.cleanup_session_workspace_count == 1
-        assert (
-            db_session.query(BuildSession)
-            .filter(BuildSession.id == session_row.id)
-            .one_or_none()
-            is None
-        )
-        assert any(
-            "Best-effort opencode session delete returned false" in r.getMessage()
-            for r in caplog.records
-        )
+        assert any(expected_log in record.getMessage() for record in caplog.records)
 
     def test_delete_session_refuses_active_prompt_slot(
         self,
@@ -492,8 +725,10 @@ class TestDeleteSession:
             is not None
         )
 
-    def test_delete_session_allows_sleeping_sandbox_with_durable_opencode_history(
+    @pytest.mark.parametrize("has_history", [False, True])
+    def test_delete_session_allows_sleeping_sandbox(
         self,
+        has_history: bool,
         db_session: Session,
         test_user: User,
         sandbox: Callable[..., Sandbox],
@@ -504,59 +739,24 @@ class TestDeleteSession:
         session_row = BuildSession(
             id=uuid4(),
             user_id=test_user.id,
-            name="sleeping-opencode-owner",
+            name="sleeping-session",
             status=BuildSessionStatus.ACTIVE,
             opencode_session_id="ses_sleeping",
         )
         db_session.add(session_row)
         db_session.flush()
-        db_session.add(
-            BuildMessage(
-                session_id=session_row.id,
-                turn_index=0,
-                type=MessageType.ASSISTANT,
-                message_metadata={
-                    "type": "agent_message",
-                    "content": {"type": "text", "text": "built"},
-                },
+        if has_history:
+            db_session.add(
+                BuildMessage(
+                    session_id=session_row.id,
+                    turn_index=0,
+                    type=MessageType.ASSISTANT,
+                    message_metadata={
+                        "type": "agent_message",
+                        "content": {"type": "text", "text": "built"},
+                    },
+                )
             )
-        )
-        db_session.commit()
-
-        stub_sandbox_manager.supports_opencode_history_persistence = True
-
-        deleted = session_manager_with_stub.delete_session(
-            session_id=session_row.id, user_id=test_user.id
-        )
-        db_session.commit()
-
-        assert deleted is True
-        assert stub_sandbox_manager.delete_opencode_session_count == 0
-        assert stub_sandbox_manager.create_opencode_history_snapshot_count == 0
-        assert (
-            db_session.query(BuildSession)
-            .filter(BuildSession.id == session_row.id)
-            .one_or_none()
-            is None
-        )
-
-    def test_delete_session_allows_empty_session_in_sleeping_sandbox(
-        self,
-        db_session: Session,
-        test_user: User,
-        sandbox: Callable[..., Sandbox],
-        session_manager_with_stub: SessionManager,
-        stub_sandbox_manager: StubSandboxManager,
-    ) -> None:
-        sandbox(user=test_user, status=SandboxStatus.SLEEPING)
-        session_row = BuildSession(
-            id=uuid4(),
-            user_id=test_user.id,
-            name="sleeping-empty-session",
-            status=BuildSessionStatus.ACTIVE,
-            opencode_session_id="prewarmed-empty-opencode",
-        )
-        db_session.add(session_row)
         db_session.commit()
 
         stub_sandbox_manager.supports_opencode_history_persistence = True
@@ -827,10 +1027,19 @@ class TestPortAllocator:
                     nextjs_port=port,
                 )
             )
+        target = BuildSession(
+            id=uuid4(),
+            user_id=test_user.id,
+            name="wants-a-port",
+            status=BuildSessionStatus.INITIALIZING,
+        )
+        db_session.add(target)
         db_session.commit()
 
-        allocated = allocate_nextjs_port(db_session)
+        allocated = reserve_nextjs_port__no_commit(db_session, target)
+        db_session.commit()
         assert allocated == 50003
+        assert target.nextjs_port == 50003
 
     def test_nextjs_port_allocator_raises_when_range_exhausted(
         self,
@@ -857,11 +1066,129 @@ class TestPortAllocator:
                     nextjs_port=port,
                 )
             )
+        target = BuildSession(
+            id=uuid4(),
+            user_id=test_user.id,
+            name="no-port-left",
+            status=BuildSessionStatus.INITIALIZING,
+        )
+        db_session.add(target)
         db_session.commit()
 
         with pytest.raises(OnyxError) as exc_info:
-            allocate_nextjs_port(db_session)
+            reserve_nextjs_port__no_commit(db_session, target)
         assert exc_info.value.error_code == OnyxErrorCode.SERVICE_UNAVAILABLE
+
+    def test_nextjs_port_uniqueness_is_scoped_per_user(
+        self,
+        db_session: Session,
+        test_user: User,
+        monkeypatch: pytest.MonkeyPatch,
+    ) -> None:
+        # Ports only collide within one user's sandbox: another user holding
+        # the sole port in the range must not block this user's allocation.
+        monkeypatch.setattr(
+            "onyx.server.features.build.db.build_session.SANDBOX_NEXTJS_PORT_START",
+            50250,
+        )
+        monkeypatch.setattr(
+            "onyx.server.features.build.db.build_session.SANDBOX_NEXTJS_PORT_END",
+            50251,
+        )
+
+        password_helper = PasswordHelper()
+        other_user = User(
+            id=uuid4(),
+            email=f"build_test_{uuid4().hex[:8]}@example.com",
+            hashed_password=password_helper.hash(password_helper.generate()),
+            is_active=True,
+            is_verified=True,
+            role=UserRole.EXT_PERM_USER,
+            account_type=AccountType.EXT_PERM_USER,
+        )
+        db_session.add(other_user)
+        db_session.add(
+            BuildSession(
+                id=uuid4(),
+                user_id=other_user.id,
+                name="other-user-occupies-50250",
+                status=BuildSessionStatus.ACTIVE,
+                nextjs_port=50250,
+            )
+        )
+        target = BuildSession(
+            id=uuid4(),
+            user_id=test_user.id,
+            name="same-port-different-user",
+            status=BuildSessionStatus.INITIALIZING,
+        )
+        db_session.add(target)
+        db_session.commit()
+
+        allocated = reserve_nextjs_port__no_commit(db_session, target)
+        db_session.commit()
+        assert allocated == 50250
+
+    def test_nextjs_port_reservation_retries_on_unique_collision(
+        self,
+        db_session: Session,
+        test_user: User,
+        monkeypatch: pytest.MonkeyPatch,
+    ) -> None:
+        # A port that the availability scan missed (e.g. reserved by a
+        # concurrent transaction) trips the partial unique index; the
+        # reservation must roll back just that attempt and take the next
+        # port instead of failing.
+        monkeypatch.setattr(
+            "onyx.server.features.build.db.build_session.SANDBOX_NEXTJS_PORT_START",
+            50200,
+        )
+        monkeypatch.setattr(
+            "onyx.server.features.build.db.build_session.SANDBOX_NEXTJS_PORT_END",
+            50204,
+        )
+
+        occupant = BuildSession(
+            id=uuid4(),
+            user_id=test_user.id,
+            name="occupies-50200",
+            status=BuildSessionStatus.ACTIVE,
+            nextjs_port=50200,
+        )
+        target = BuildSession(
+            id=uuid4(),
+            user_id=test_user.id,
+            name="collides-then-retries",
+            status=BuildSessionStatus.INITIALIZING,
+        )
+        db_session.add_all([occupant, target])
+        db_session.commit()
+
+        # Hide the occupant from the availability scan so the first candidate
+        # collides on the unique index, exercising the savepoint retry.
+        # `Session.query` is a variadic overload set, so the interceptor's
+        # varargs cannot be typed more precisely than Any.
+        original_query = db_session.query
+        scan_hidden = False
+
+        def _scan_without_occupant(*entities: Any, **kwargs: Any) -> Query[Any]:
+            nonlocal scan_hidden
+            query = original_query(*entities, **kwargs)
+            if entities == (BuildSession.nextjs_port,):
+                scan_hidden = True
+                return query.filter(BuildSession.id != occupant.id)
+            return query
+
+        monkeypatch.setattr(db_session, "query", _scan_without_occupant)
+
+        allocated = reserve_nextjs_port__no_commit(db_session, target)
+        db_session.commit()
+
+        # Tripwire: if the reservation's scan changes shape, this test must
+        # fail loudly instead of silently no longer exercising the collision.
+        assert scan_hidden, "availability-scan hook never engaged"
+        assert allocated == 50201
+        assert target.nextjs_port == 50201
 
 
 # =============================================================================
@@ -874,16 +1201,29 @@ class TestConcurrentCreateLock:
         self,
         db_session: Session,  # noqa: ARG002
         test_user: User,
+        monkeypatch: pytest.MonkeyPatch,
     ) -> None:
-        # Same lock contract as sessions_api.create_session: lock key is
-        # ``session_create:{user_id}``. Two threads contend; the second
-        # observes the first holding it.
         redis_client = get_redis_client(
             tenant_id=POSTGRES_DEFAULT_SCHEMA_STANDARD_VALUE
         )
-        lock_key = f"session_create:{test_user.id}"
+        held_lock = get_session_creation_lock(redis_client, test_user.id)
+        assert held_lock.acquire(blocking=False)
 
-        assert_lock_serializes_two_threads(redis_client, lock_key)
+        monkeypatch.setattr(
+            session_locks,
+            "SESSION_FLOW_LOCK_WAIT_SECONDS",
+            0.05,
+        )
+        try:
+            with pytest.raises(SessionCreationLockAcquisitionError):
+                with session_creation_lock(test_user.id):
+                    pytest.fail("contending session creation acquired the lock")
+        finally:
+            held_lock.release()
+
+        # Exiting the owner releases the lock for the next session creation.
+        with session_creation_lock(test_user.id):
+            pass
 
 
 # =============================================================================
@@ -906,12 +1246,15 @@ class TestRestoreSession:
         # restore endpoint flips the row's status. Drive the real
         # ``restore_session`` handler from sessions_api so the assertion
         # exercises production code, not a hand-rolled stand-in.
-        sandbox(user=test_user, status=SandboxStatus.RUNNING)
+        sandbox_row = sandbox(user=test_user, status=SandboxStatus.RUNNING)
+        sandbox_row.skills_hash = "current"
         idle_session = BuildSession(
             id=uuid4(),
             user_id=test_user.id,
             name="needs-restore",
             status=BuildSessionStatus.IDLE,
+            opencode_session_id="stale-opencode",
+            skills_hash="old",
         )
         db_session.add(idle_session)
         db_session.commit()
@@ -932,6 +1275,9 @@ class TestRestoreSession:
         stub_sandbox_manager.session_workspace_exists_returns = True
         stub_sandbox_manager.setup_session_workspace_silent = True
         stub_sandbox_manager.write_files_to_sandbox_silent = True
+        stub_sandbox_manager.write_sandbox_file_silent = True
+        stub_sandbox_manager.regenerate_session_config_silent = True
+        stub_sandbox_manager.dispose_opencode_instance_silent = True
 
         # Patch the import site used by ``restore_session``.
         monkeypatch.setattr(
@@ -947,6 +1293,11 @@ class TestRestoreSession:
 
         db_session.refresh(idle_session)
         assert idle_session.status == BuildSessionStatus.ACTIVE
+        assert idle_session.skills_hash == sandbox_row.skills_hash
+        assert stub_sandbox_manager.last_dispose_opencode_instance_payload == {
+            "sandbox_id": sandbox_row.id,
+            "session_id": idle_session.id,
+        }
 
     def test_sleeping_sandbox_restore_provisions_and_restores_latest_snapshot(
         self,
@@ -984,6 +1335,7 @@ class TestRestoreSession:
         stub_sandbox_manager.session_workspace_exists_returns = False
         stub_sandbox_manager.restore_snapshot_silent = True
         stub_sandbox_manager.write_files_to_sandbox_silent = True
+        stub_sandbox_manager.write_sandbox_file_silent = True
 
         monkeypatch.setattr(
             "onyx.server.features.build.session.api.get_sandbox_manager",
@@ -1003,6 +1355,8 @@ class TestRestoreSession:
         assert refreshed_sandbox.status == SandboxStatus.RUNNING
         assert refreshed_session is not None
         assert refreshed_session.status == BuildSessionStatus.ACTIVE
+        assert refreshed_session.skills_hash == refreshed_sandbox.skills_hash
+        assert refreshed_session.skills_hash is not None
         assert refreshed_session.nextjs_port is not None
         assert stub_sandbox_manager.last_restore_snapshot_payload is not None
         assert stub_sandbox_manager.last_restore_snapshot_payload["sandbox_id"] == (
@@ -1014,6 +1368,9 @@ class TestRestoreSession:
         assert (
             stub_sandbox_manager.last_restore_snapshot_payload["snapshot_storage_path"]
             == snapshot.storage_path
+        )
+        assert (
+            "skills_section" not in stub_sandbox_manager.last_restore_snapshot_payload
         )
         assert stub_sandbox_manager.last_write_files_to_sandbox_payload is not None
         assert (
@@ -1049,14 +1406,16 @@ class TestRestoreSession:
             lambda: stub_sandbox_manager,
         )
 
-        def _raise_port_exhausted(_db_session: Session) -> int:
+        def _raise_port_exhausted(
+            _db_session: Session, _build_session: BuildSession
+        ) -> int:
             raise OnyxError(
                 OnyxErrorCode.SERVICE_UNAVAILABLE,
                 "No available ports in configured range",
             )
 
         monkeypatch.setattr(
-            "onyx.server.features.build.session.api.allocate_nextjs_port",
+            "onyx.server.features.build.session.api.reserve_nextjs_port__no_commit",
             _raise_port_exhausted,
         )
 
@@ -1081,7 +1440,7 @@ class TestSidebarOriginFilter:
         db_session: Session,
         test_user: User,
     ) -> None:
-        """``get_user_build_sessions`` filters out ``origin=SCHEDULED`` rows.
+        """``get_user_build_sessions`` filters out non-INTERACTIVE rows.
 
         Relocated from ``backend/tests/integration/tests/craft/
         test_scheduled_tasks_api.py`` — the original test inserted
@@ -1095,12 +1454,12 @@ class TestSidebarOriginFilter:
         The covering composite index
         ``ix_build_session_user_origin_created`` is built for this exact
         ``(user_id, origin, created_at DESC)`` shape — a regression here
-        would silently leak scheduled-task fire sessions into the Craft
-        sidebar.
+        would silently leak scheduled-task fire or Slack sessions into the
+        Craft sidebar.
         """
-        # Both sessions need a BuildMessage row because
+        # Every session needs a BuildMessage row because
         # ``get_user_build_sessions`` requires ``EXISTS messages`` —
-        # without one, BOTH origin types would be filtered and we'd have
+        # without one, ALL origin types would be filtered and we'd have
         # nothing to compare against.
         interactive = BuildSession(
             id=uuid4(),
@@ -1116,7 +1475,14 @@ class TestSidebarOriginFilter:
             status=BuildSessionStatus.ACTIVE,
             origin=SessionOrigin.SCHEDULED,
         )
-        db_session.add_all([interactive, scheduled])
+        slack_session = BuildSession(
+            id=uuid4(),
+            user_id=test_user.id,
+            name="slack-thread",
+            status=BuildSessionStatus.ACTIVE,
+            origin=SessionOrigin.SLACK,
+        )
+        db_session.add_all([interactive, scheduled, slack_session])
         db_session.flush()
         db_session.add_all(
             [
@@ -1138,6 +1504,15 @@ class TestSidebarOriginFilter:
                         "content": {"text": "fire"},
                     },
                 ),
+                BuildMessage(
+                    session_id=slack_session.id,
+                    turn_index=0,
+                    type=MessageType.USER,
+                    message_metadata={
+                        "type": "user_message",
+                        "content": {"text": "@bot hi"},
+                    },
+                ),
             ]
         )
         db_session.commit()
@@ -1145,7 +1520,8 @@ class TestSidebarOriginFilter:
         listed = get_user_build_sessions(test_user.id, db_session)
         listed_ids = {s.id for s in listed}
 
-        # Observable outcome: the SCHEDULED row is invisible to the
+        # Observable outcome: SCHEDULED and SLACK rows are invisible to the
         # sidebar query while the INTERACTIVE row is visible.
         assert interactive.id in listed_ids
         assert scheduled.id not in listed_ids
+        assert slack_session.id not in listed_ids

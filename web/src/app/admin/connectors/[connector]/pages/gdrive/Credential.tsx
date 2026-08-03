@@ -1,4 +1,3 @@
-import { toast } from "@/hooks/useToast";
 import React, { useState, useEffect } from "react";
 import * as Yup from "yup";
 import { useRouter } from "next/navigation";
@@ -8,7 +7,7 @@ import { DOCS_ADMINS_PATH } from "@/lib/constants";
 import { Form, Formik } from "formik";
 import { User } from "@/lib/types";
 import { Button, Text } from "@opal/components";
-import { Section } from "@opal/layouts";
+import { Section, toast } from "@opal/layouts";
 import InputFile from "@/refresh-components/inputs/InputFile";
 import InputTypeInField from "@/refresh-components/form/InputTypeInField";
 import {

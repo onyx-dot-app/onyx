@@ -14,8 +14,7 @@ so they stream PIT pages.
 """
 
 from collections import defaultdict
-from collections.abc import Callable
-from collections.abc import Iterable
+from collections.abc import Callable, Iterable
 
 from onyx.db.models import SearchSettings
 from onyx.document_index.factory import build_opensearch_document_index
@@ -25,15 +24,15 @@ from onyx.document_index.opensearch.opensearch_document_index import (
 )
 from onyx.document_index.opensearch.schema import DocumentChunkWithoutVectors
 from onyx.indexing.chunker import DEFAULT_CONTEXTUAL_RAG_RESERVED_TOKENS
-from onyx.indexing.embedder import DefaultIndexingEmbedder
-from onyx.indexing.embedder import IndexingEmbedder
-from onyx.indexing.port_reembed import AugmentationReembedContext
-from onyx.indexing.port_reembed import re_embed_chunks
-from onyx.indexing.port_reembed import ReembedStrategy
-from onyx.indexing.port_reembed import select_reembed_strategy
+from onyx.indexing.embedder import DefaultIndexingEmbedder, IndexingEmbedder
+from onyx.indexing.port_reembed import (
+    AugmentationReembedContext,
+    ReembedStrategy,
+    re_embed_chunks,
+    select_reembed_strategy,
+)
 from onyx.llm.factory import get_contextual_rag_llm_for_search_settings
-from onyx.natural_language_processing.utils import BaseTokenizer
-from onyx.natural_language_processing.utils import get_tokenizer
+from onyx.natural_language_processing.utils import BaseTokenizer, get_tokenizer
 from shared_configs.configs import DOC_EMBEDDING_CONTEXT_SIZE
 
 # Cap per bulk write so it can't run long unheartbeated and get a live port stall-failed.
@@ -130,6 +129,13 @@ def copy_present_chunks_to_future(
         )
         if not reembedded:
             continue
+        # Mark these as port writes so the orphan sweep can delete a resurrected doc
+        # (create-only re-add after a concurrent delete) without touching a legitimately
+        # re-added one, whose forward-written chunks are unmarked. DocumentChunk is
+        # frozen, so rebuild via model_copy rather than mutating.
+        reembedded = [
+            chunk.model_copy(update={"written_by_port": True}) for chunk in reembedded
+        ]
         # Stop writing the instant the attempt is cancelled (e.g. by a deletion).
         if should_abort is not None and should_abort():
             return chunks_written, True
@@ -182,6 +188,12 @@ class PortCopier:
         self._augmentation_ctx: AugmentationReembedContext | None = None
         if self._strategy is ReembedStrategy.AUGMENTATION:
             self._augmentation_ctx = _build_augmentation_ctx(future_search_settings)
+
+    def delete_port_written(self, document_ids: list[str]) -> int:
+        """Delete only the port-written chunks of these docs from the target index —
+        used by the orphan sweep to remove a resurrected doc while leaving a
+        legitimately re-added one (unmarked chunks) intact. Returns chunks deleted."""
+        return self._future_index.delete_port_written_chunks(document_ids)
 
     def copy_doc_batch(
         self,

@@ -16,13 +16,11 @@ from __future__ import annotations
 
 import socket
 import struct
-from collections.abc import Generator
-from collections.abc import Iterator
+from collections.abc import Generator, Iterator
 from contextlib import contextmanager
 from dataclasses import dataclass
 
-from docker.errors import APIError
-from docker.errors import NotFound
+from docker.errors import APIError, NotFound
 from docker.models.containers import Container
 
 from onyx.utils.logger import setup_logger

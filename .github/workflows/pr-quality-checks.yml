@@ -28,7 +28,7 @@ jobs:
         with:
           python-version: "3.13"
       - name: Setup Terraform
-        uses: hashicorp/setup-terraform@5e8dbf3c6d9deaf4193ca7a8fb23f2ac83bb6c85 # ratchet:hashicorp/setup-terraform@v4.0.0
+        uses: hashicorp/setup-terraform@dfe3c3f87815947d99a8997f908cb6525fc44e9e # ratchet:hashicorp/setup-terraform@v4.0.1
       - name: Setup bun
         uses: oven-sh/setup-bun@0c5077e51419868618aeaa5fe8019c62421857d6 # ratchet:oven-sh/setup-bun@v2 # zizmor: ignore[cache-poisoning]
         with:
@@ -38,7 +38,7 @@ jobs:
         run: bun install --frozen-lockfile
       - uses: j178/prek-action@bdca6f102f98e2b4c7029491a53dfd366469e33d
         env:
-          SKIP: ty
+          SKIP: ty,desktop-rust-fmt,desktop-rust-clippy
         with:
           prek-version: '0.3.4'
           extra-args: ${{ github.event_name == 'pull_request' && format('--from-ref {0} --to-ref {1}', github.event.pull_request.base.sha, github.event.pull_request.head.sha) || github.event_name == 'merge_group' && format('--from-ref {0} --to-ref {1}', github.event.merge_group.base_sha, github.event.merge_group.head_sha) || github.ref_name == 'main' && '--all-files' || '' }}

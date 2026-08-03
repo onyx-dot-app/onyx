@@ -8,12 +8,12 @@ import {
   activateVoiceProvider,
   deactivateVoiceProvider,
 } from "@/lib/voice/svc";
-import { PageLoader } from "@/refresh-components/PageLoader";
+import { PageLoader } from "@opal/layouts";
 import { Content } from "@opal/layouts";
 import { MessageCard, Text } from "@opal/components";
 import { Section } from "@/layouts/general-layouts";
 import { ADMIN_ROUTES } from "@/lib/admin-routes";
-import { useCreateModal } from "@/refresh-components/contexts/ModalContext";
+import { useCreateModal } from "@opal/components";
 import {
   VoiceProviderSetupModal,
   VoiceDisconnectModal,

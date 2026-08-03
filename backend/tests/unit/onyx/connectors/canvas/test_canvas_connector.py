@@ -1,45 +1,51 @@
 """Tests for Canvas connector — client, credentials, conversion."""
 
-from datetime import datetime
-from datetime import timezone
+from datetime import datetime, timezone
 from typing import Any
-from unittest.mock import MagicMock
-from unittest.mock import patch
+from unittest.mock import MagicMock, patch
 
 import pytest
 
-from ee.onyx.external_permissions.canvas.access import CanvasCoursePermissionContext
-from ee.onyx.external_permissions.canvas.access import get_announcement_permissions
-from ee.onyx.external_permissions.canvas.access import get_assignment_permissions
-from ee.onyx.external_permissions.canvas.access import get_page_permissions
+from ee.onyx.external_permissions.canvas.access import (
+    CanvasCoursePermissionContext,
+    get_announcement_permissions,
+    get_assignment_permissions,
+    get_page_permissions,
+)
 from ee.onyx.external_permissions.canvas.group_sync import (
     _referenced_group_and_section_ids,
 )
 from onyx.access.models import ExternalAccess
 from onyx.configs.constants import DocumentSource
 from onyx.connectors.canvas.client import CanvasApiClient
-from onyx.connectors.canvas.connector import _in_time_window
-from onyx.connectors.canvas.connector import _parse_canvas_dt
-from onyx.connectors.canvas.connector import _unix_to_canvas_time
-from onyx.connectors.canvas.connector import canvas_all_users_group_id
-from onyx.connectors.canvas.connector import canvas_course_group_id
-from onyx.connectors.canvas.connector import canvas_group_group_id
-from onyx.connectors.canvas.connector import canvas_section_group_id
-from onyx.connectors.canvas.connector import CanvasAnnouncement
-from onyx.connectors.canvas.connector import CanvasAnnouncementSection
-from onyx.connectors.canvas.connector import CanvasAssignment
-from onyx.connectors.canvas.connector import CanvasAssignmentOverride
-from onyx.connectors.canvas.connector import CanvasConnector
-from onyx.connectors.canvas.connector import CanvasConnectorCheckpoint
-from onyx.connectors.canvas.connector import CanvasPage
-from onyx.connectors.canvas.connector import CanvasStage
-from onyx.connectors.exceptions import CredentialExpiredError
-from onyx.connectors.exceptions import InsufficientPermissionsError
-from onyx.connectors.exceptions import UnexpectedValidationError
-from onyx.connectors.models import ConnectorFailure
-from onyx.connectors.models import ConnectorMissingCredentialError
-from onyx.connectors.models import Document
-from onyx.connectors.models import HierarchyNode
+from onyx.connectors.canvas.connector import (
+    CanvasAnnouncement,
+    CanvasAnnouncementSection,
+    CanvasAssignment,
+    CanvasAssignmentOverride,
+    CanvasConnector,
+    CanvasConnectorCheckpoint,
+    CanvasPage,
+    CanvasStage,
+    _in_time_window,
+    _parse_canvas_dt,
+    _unix_to_canvas_time,
+    canvas_all_users_group_id,
+    canvas_course_group_id,
+    canvas_group_group_id,
+    canvas_section_group_id,
+)
+from onyx.connectors.exceptions import (
+    CredentialExpiredError,
+    InsufficientPermissionsError,
+    UnexpectedValidationError,
+)
+from onyx.connectors.models import (
+    ConnectorFailure,
+    ConnectorMissingCredentialError,
+    Document,
+    HierarchyNode,
+)
 from onyx.error_handling.error_codes import OnyxErrorCode
 from onyx.error_handling.exceptions import OnyxError
 
@@ -1081,6 +1087,36 @@ class TestListAnnouncements:
         assert result[0].id == 30
         assert result[1].id == 31
 
+    @patch("onyx.connectors.canvas.connector.time.time", return_value=86400.0)
+    @patch("onyx.connectors.canvas.client.rl_requests")
+    def test_defaults_to_complete_time_range(
+        self,
+        mock_requests: MagicMock,
+        mock_time: MagicMock,
+    ) -> None:
+        mock_requests.get.return_value = _mock_response(json_data=[])
+        connector = _build_connector()
+
+        connector._list_announcements(course_id=1)
+
+        _, kwargs = mock_requests.get.call_args
+        assert kwargs["params"]["start_date"] == "1970-01-01T00:00:00Z"
+        assert kwargs["params"]["end_date"] == "1970-01-02T00:00:00Z"
+        mock_time.assert_called_once_with()
+
+    @patch("onyx.connectors.canvas.client.rl_requests")
+    def test_uses_explicit_time_range(self, mock_requests: MagicMock) -> None:
+        mock_requests.get.return_value = _mock_response(json_data=[])
+        connector = _build_connector()
+        start = datetime(2025, 6, 1, tzinfo=timezone.utc).timestamp()
+        end = datetime(2025, 7, 1, tzinfo=timezone.utc).timestamp()
+
+        connector._list_announcements(course_id=1, start=start, end=end)
+
+        _, kwargs = mock_requests.get.call_args
+        assert kwargs["params"]["start_date"] == "2025-06-01T00:00:00Z"
+        assert kwargs["params"]["end_date"] == "2025-07-01T00:00:00Z"
+
     @patch("onyx.connectors.canvas.client.rl_requests")
     def test_empty_response(self, mock_requests: MagicMock) -> None:
         mock_requests.get.return_value = _mock_response(json_data=[])
@@ -1803,6 +1839,17 @@ class TestRetrieveAllSlimDocsPermSync:
             "canvas-assignment-1-20",
             "canvas-announcement-1-30",
         }
+        announcement_call = next(
+            call
+            for call in mock_requests.get.call_args_list
+            if call.args[0].endswith("/announcements")
+        )
+        assert announcement_call.kwargs["params"]["start_date"] == (
+            "2025-07-01T00:00:00Z"
+        )
+        assert announcement_call.kwargs["params"]["end_date"] == (
+            "2025-07-02T00:00:00Z"
+        )
 
     @patch("onyx.connectors.canvas.client.rl_requests")
     def test_permission_error_fails_sync(self, mock_requests: MagicMock) -> None:
@@ -1854,12 +1901,20 @@ class TestCanvasGroupSyncHelpers:
             )
         ]
 
-        group_ids, section_ids = _referenced_group_and_section_ids(connector, 1)
+        indexing_start = datetime(2025, 6, 1, tzinfo=timezone.utc).timestamp()
+        group_ids, section_ids = _referenced_group_and_section_ids(
+            connector,
+            1,
+            indexing_start,
+        )
 
         assert group_ids == {99}
         assert section_ids == {10, 11}
         connector._list_assignments.assert_called_once_with(1)
-        connector._list_announcements.assert_called_once_with(1)
+        connector._list_announcements.assert_called_once_with(
+            1,
+            start=indexing_start,
+        )
 
 
 class TestCanvasPermissionMapping:

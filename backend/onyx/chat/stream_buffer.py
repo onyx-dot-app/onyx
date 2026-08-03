@@ -13,13 +13,14 @@ to the DB-rendered message rather than replaying a broken sequence.
 import zlib
 from uuid import UUID
 
-from pydantic import BaseModel
-from pydantic import ValidationError
+from pydantic import BaseModel, ValidationError
 
 from onyx.cache.interface import CacheBackend
-from onyx.configs.chat_configs import CHAT_STREAM_BUFFER_DONE_TTL_S
-from onyx.configs.chat_configs import CHAT_STREAM_BUFFER_MAX_BYTES
-from onyx.configs.chat_configs import CHAT_STREAM_BUFFER_TTL_S
+from onyx.configs.chat_configs import (
+    CHAT_STREAM_BUFFER_DONE_TTL_S,
+    CHAT_STREAM_BUFFER_MAX_BYTES,
+    CHAT_STREAM_BUFFER_TTL_S,
+)
 from onyx.utils.logger import setup_logger
 
 logger = setup_logger()

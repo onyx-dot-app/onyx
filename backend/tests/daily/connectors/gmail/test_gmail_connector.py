@@ -1,15 +1,11 @@
 from collections.abc import Callable
-from typing import Any
-from typing import cast
-from unittest.mock import MagicMock
-from unittest.mock import patch
+from typing import Any, cast
+from unittest.mock import MagicMock, patch
 
 import pytest
 
 from onyx.connectors.gmail.connector import GmailConnector
-from onyx.connectors.models import Document
-from onyx.connectors.models import HierarchyNode
-from onyx.connectors.models import SlimDocument
+from onyx.connectors.models import Document, HierarchyNode, SlimDocument
 from tests.unit.onyx.connectors.utils import load_everything_from_checkpoint_connector
 from tests.utils.secret_names import TestSecret
 

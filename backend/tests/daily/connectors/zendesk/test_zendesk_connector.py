@@ -6,8 +6,7 @@ from typing import cast
 import pytest
 
 from onyx.configs.constants import DocumentSource
-from onyx.connectors.models import Document
-from onyx.connectors.models import HierarchyNode
+from onyx.connectors.models import Document, HierarchyNode
 from onyx.connectors.zendesk.connector import ZendeskConnector
 from tests.daily.connectors.utils import load_all_from_connector
 from tests.utils.secret_names import TestSecret

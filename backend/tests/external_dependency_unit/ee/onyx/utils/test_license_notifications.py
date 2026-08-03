@@ -5,9 +5,7 @@ against a real PostgreSQL database. The email send path is patched so we can
 assert "fresh insert only" behavior without configuring SendGrid.
 """
 
-from datetime import datetime
-from datetime import timedelta
-from datetime import timezone
+from datetime import datetime, timedelta, timezone
 from unittest.mock import patch
 from uuid import UUID
 
@@ -18,9 +16,7 @@ from sqlalchemy.orm import Session
 from ee.onyx.utils.license_expiry import ExpiryWarningStage
 from ee.onyx.utils.license_notifications import notify_admins_for_stage
 from onyx.configs.constants import NotificationType
-from onyx.db.models import Notification
-from onyx.db.models import User
-from onyx.db.models import UserRole
+from onyx.db.models import Notification, User, UserRole
 from tests.external_dependency_unit.conftest import create_test_user
 
 EXPIRES_AT = datetime(2026, 6, 1, 12, 0, 0, tzinfo=timezone.utc)

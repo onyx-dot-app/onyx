@@ -11,8 +11,7 @@ from redis.exceptions import LockNotOwnedError
 from redis.lock import Lock as RedisLock
 
 from onyx.cache.interface import CacheLockLostError
-from onyx.cache.redis_backend import RedisCacheBackend
-from onyx.cache.redis_backend import RedisCacheLock
+from onyx.cache.redis_backend import RedisCacheBackend, RedisCacheLock
 from onyx.redis.tenant_redis_client import TenantRedisClient
 
 

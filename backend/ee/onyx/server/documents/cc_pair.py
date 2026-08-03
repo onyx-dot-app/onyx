@@ -1,9 +1,7 @@
 from datetime import datetime
 from http import HTTPStatus
 
-from fastapi import APIRouter
-from fastapi import Depends
-from fastapi import HTTPException
+from fastapi import APIRouter, Depends, HTTPException
 from sqlalchemy.orm import Session
 
 from ee.onyx.background.celery.tasks.doc_permission_syncing.tasks import (

@@ -1,5 +1,5 @@
 import React, { useState } from "react";
-import Modal from "@/refresh-components/Modal";
+import { Modal } from "@opal/components";
 import Text from "@/refresh-components/texts/Text";
 import { Badge } from "@/components/ui/badge";
 import { AccessType } from "@/lib/types";

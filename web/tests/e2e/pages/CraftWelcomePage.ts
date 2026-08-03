@@ -11,7 +11,6 @@ import { type Page, type Locator, expect } from "@playwright/test";
 export class CraftWelcomePage {
   readonly page: Page;
   readonly introHeading: Locator;
-  readonly introGetStartedButton: Locator;
   readonly llmSetup: Locator;
   readonly llmSetupToggle: Locator;
   readonly lockedState: Locator;
@@ -20,10 +19,8 @@ export class CraftWelcomePage {
 
   constructor(page: Page) {
     this.page = page;
-    this.introHeading = page.getByText("What is Onyx Craft?");
-    this.introGetStartedButton = page.getByRole("button", {
-      name: "Get Started!",
-    });
+    // Fixed title of the Living Map intro tour.
+    this.introHeading = page.getByText("Meet Craft", { exact: true });
     this.llmSetup = page.locator('[aria-label="craft-llm-setup"]');
     this.llmSetupToggle = this.llmSetup.getByRole("switch");
     this.lockedState = page.locator('[aria-label="craft-llm-locked"]');
@@ -35,10 +32,10 @@ export class CraftWelcomePage {
     await this.page.goto("/craft/v1");
   }
 
-  /** Dismisses the first-visit intro modal. */
+  /** Dismisses the first-visit intro tour (Escape closes the dialog). */
   async dismissIntro(): Promise<void> {
     await expect(this.introHeading).toBeVisible({ timeout: 15000 });
-    await this.introGetStartedButton.click();
+    await this.page.keyboard.press("Escape");
     await expect(this.introHeading).not.toBeVisible();
   }
 

@@ -7,27 +7,31 @@ eliminating the need for an external S3/MinIO service.
 import tempfile
 import uuid
 from io import BytesIO
-from typing import Any
-from typing import cast
-from typing import IO
+from typing import IO, Any, cast
 
 import puremagic
 from psycopg2.extensions import connection as Psycopg2Connection
 from sqlalchemy.orm import Session
 
 from onyx.configs.constants import FileOrigin
-from onyx.db.engine.sql_engine import get_session_with_current_tenant
-from onyx.db.engine.sql_engine import get_session_with_current_tenant_if_none
-from onyx.db.file_content import delete_file_content_by_file_id
-from onyx.db.file_content import get_file_content_by_file_id
-from onyx.db.file_content import get_file_content_by_file_id_optional
-from onyx.db.file_content import transfer_file_content_file_id
-from onyx.db.file_content import upsert_file_content
-from onyx.db.file_record import delete_filerecord_by_file_id
-from onyx.db.file_record import get_filerecord_by_file_id
-from onyx.db.file_record import get_filerecord_by_file_id_optional
-from onyx.db.file_record import get_filerecord_by_prefix
-from onyx.db.file_record import upsert_filerecord
+from onyx.db.engine.sql_engine import (
+    get_session_with_current_tenant,
+    get_session_with_current_tenant_if_none,
+)
+from onyx.db.file_content import (
+    delete_file_content_by_file_id,
+    get_file_content_by_file_id,
+    get_file_content_by_file_id_optional,
+    transfer_file_content_file_id,
+    upsert_file_content,
+)
+from onyx.db.file_record import (
+    delete_filerecord_by_file_id,
+    get_filerecord_by_file_id,
+    get_filerecord_by_file_id_optional,
+    get_filerecord_by_prefix,
+    upsert_filerecord,
+)
 from onyx.db.models import FileRecord
 from onyx.db.models import FileRecord as FileStoreModel
 from onyx.file_store.file_store import FileStore

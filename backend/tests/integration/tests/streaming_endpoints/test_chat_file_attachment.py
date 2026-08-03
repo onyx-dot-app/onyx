@@ -6,8 +6,10 @@ from tests.integration.common_utils.http_client import client
 from tests.integration.common_utils.managers.chat import ChatSessionManager
 from tests.integration.common_utils.managers.file import FileManager
 from tests.integration.common_utils.managers.llm_provider import LLMProviderManager
-from tests.integration.common_utils.test_file_utils import create_test_image
-from tests.integration.common_utils.test_file_utils import create_test_text_file
+from tests.integration.common_utils.test_file_utils import (
+    create_test_image,
+    create_test_text_file,
+)
 from tests.integration.common_utils.test_models import DATestUser
 
 

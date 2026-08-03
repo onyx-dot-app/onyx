@@ -40,6 +40,9 @@ class IndexingStatus(str, PyEnum):
     IN_PROGRESS = "in_progress"
     SUCCESS = "success"
     CANCELED = "canceled"
+    # Worker stopped mid-run by infrastructure (deploy / autoscaling), not a real
+    # error or a user. Terminal but resumable, and not counted as a failure.
+    INTERRUPTED = "interrupted"
     FAILED = "failed"
     COMPLETED_WITH_ERRORS = "completed_with_errors"
 
@@ -48,9 +51,20 @@ class IndexingStatus(str, PyEnum):
             IndexingStatus.SUCCESS,
             IndexingStatus.COMPLETED_WITH_ERRORS,
             IndexingStatus.CANCELED,
+            IndexingStatus.INTERRUPTED,
             IndexingStatus.FAILED,
         }
         return self in terminal_states
+
+    def should_reuse_checkpoint(self) -> bool:
+        # Terminal states where the crawl stopped before finishing, so the next
+        # attempt continues from the saved checkpoint and poll window instead of
+        # restarting. SUCCESS / COMPLETED_WITH_ERRORS finished, so they start fresh.
+        return self in {
+            IndexingStatus.FAILED,
+            IndexingStatus.CANCELED,
+            IndexingStatus.INTERRUPTED,
+        }
 
     def is_successful(self) -> bool:
         return (
@@ -91,6 +105,9 @@ class PortAttemptStatus(str, PyEnum):
     SUCCESS = "SUCCESS"
     FAILED = "FAILED"
     CANCELED = "CANCELED"
+    # Auto-parked failing unit; non-terminal + non-settled so it blocks the swap until
+    # the operator resumes or skips.
+    PAUSED = "PAUSED"
 
     def is_terminal(self) -> bool:
         return self in {
@@ -101,6 +118,11 @@ class PortAttemptStatus(str, PyEnum):
 
     def is_successful(self) -> bool:
         return self == PortAttemptStatus.SUCCESS
+
+    def is_resting(self) -> bool:
+        # terminal + PAUSED: the owning task must stop, else a stall-failed-then-paused
+        # worker could drive a paused attempt back to SUCCESS
+        return self.is_terminal() or self == PortAttemptStatus.PAUSED
 
 
 class IndexingMode(str, PyEnum):
@@ -193,6 +215,22 @@ class IndexModelStatus(str, PyEnum):
 
     def is_future(self) -> bool:
         return self == IndexModelStatus.FUTURE
+
+
+class IndexReclaimStatus(str, PyEnum):
+    """Lifecycle of reclaiming a now-PAST index's data after a reindex-port.
+
+    PENDING: consented at reindex submit; waiting for the swap + port to drain.
+    SOAKING: the old index stopped being read; waiting out the retention window.
+    DELETING: deleting the old index's data (loops until count-verified empty).
+    BLOCKED: parked after repeated failures; alerted, needs operator/cooldown revival.
+    On success the PAST row is deleted, so there is no persisted terminal state.
+    """
+
+    PENDING = "PENDING"
+    SOAKING = "SOAKING"
+    DELETING = "DELETING"
+    BLOCKED = "BLOCKED"
 
 
 class ChatSessionSharedStatus(str, PyEnum):
@@ -295,21 +333,36 @@ class OpenSearchTenantMigrationStatus(str, PyEnum):
 
 # Onyx Build Mode Enums
 class BuildSessionStatus(str, PyEnum):
+    """Lifecycle of a build session.
+
+    INITIALIZING: reserved identity committed; workspace/OpenCode setup is
+                  still reconciling (or was interrupted and is repairable).
+    ACTIVE:       workspace, config, and OpenCode session are usable.
+    IDLE:         sandbox slept; workspace must be restored before use.
+    FAILED:       initialization failed after the sandbox came up; the
+                  session identity is retained and repaired on retry.
+    """
+
+    INITIALIZING = "initializing"
     ACTIVE = "active"
     IDLE = "idle"
+    FAILED = "failed"
 
 
 class SessionOrigin(str, PyEnum):
     """How a BuildSession was created.
 
     INTERACTIVE: session started by a user in the Craft UI.
-    SCHEDULED:   session started by the scheduled-tasks executor (or any
-                 future non-interactive caller). Sessions with this origin
-                 are excluded from the Craft sidebar list.
+    SCHEDULED:   session started by the scheduled-tasks executor. Sessions
+                 with this origin are excluded from the Craft sidebar list.
+    SLACK:       session started by a Slack thread mention. Surfaces in
+                 Slack (and a future admin list), not the user sidebar.
+                 Excluded from the Craft sidebar list.
     """
 
     INTERACTIVE = "INTERACTIVE"
     SCHEDULED = "SCHEDULED"
+    SLACK = "SLACK"
 
 
 class SharingScope(str, PyEnum):
@@ -452,6 +505,19 @@ POLICY_SEVERITY: dict[EndpointPolicy, int] = {
 }
 
 
+class GatedAppKind(str, PyEnum):
+    """Which catalog a gated egress action belongs to.
+
+    The approval pipeline (matched actions, approval rows, per-tool policy,
+    pre-approvals, session grants) is shared across surfaces; this discriminates
+    whether the target id refers to an ``external_app`` or an ``mcp_server`` row,
+    since the two live in separate tables under a single approval flow.
+    """
+
+    EXTERNAL_APP = "EXTERNAL_APP"
+    MCP_SERVER = "MCP_SERVER"
+
+
 class PatType(str, PyEnum):
     USER = "USER"
     CRAFT = "CRAFT"
@@ -507,6 +573,7 @@ class LLMModelFlowType(str, PyEnum):
     VISION = "vision"
     CONTEXTUAL_RAG = "contextual_rag"
     REASONING = "reasoning"
+    CHAT_NAMING = "chat_naming"
 
 
 class HookPoint(str, PyEnum):
@@ -548,6 +615,7 @@ class Permission(str, PyEnum):
     WRITE_CHAT = "write:chat"
     READ_ADMIN = "read:admin"
     GENERATE_IMAGE = "generate:image"
+    USE_LLM_GATEWAY = "use:llm_gateway"
 
     # Add / Manage pairs
     ADD_AGENTS = "add:agents"
@@ -589,6 +657,7 @@ Permission.IMPLIED = frozenset(
         Permission.WRITE_CHAT,
         Permission.READ_ADMIN,
         Permission.GENERATE_IMAGE,
+        Permission.USE_LLM_GATEWAY,
     }
 )
 

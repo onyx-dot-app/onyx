@@ -1,15 +1,16 @@
 """Unit tests for the config-driven document push (non-EE)."""
 
 from collections.abc import Iterator
-from unittest.mock import MagicMock
-from unittest.mock import patch
+from unittest.mock import MagicMock, patch
 
 import httpx
 import pytest
 
-from onyx.indexing.document_push import DocumentPushPayload
-from onyx.indexing.document_push import get_document_push_config
-from onyx.indexing.document_push import push_document_via_config
+from onyx.indexing.document_push import (
+    DocumentPushPayload,
+    get_document_push_config,
+    push_document_via_config,
+)
 
 _MODULE = "onyx.indexing.document_push"
 

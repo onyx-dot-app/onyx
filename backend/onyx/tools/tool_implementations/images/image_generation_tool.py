@@ -1,38 +1,44 @@
 import json
 import threading
-from typing import Any
-from typing import cast
+from typing import Any, cast
 
 import requests
 from sqlalchemy.orm import Session
 from typing_extensions import override
 
 from onyx.chat.emitter import Emitter
-from onyx.configs.app_configs import IMAGE_MODEL_NAME
-from onyx.configs.app_configs import IMAGE_MODEL_PROVIDER
+from onyx.configs.app_configs import IMAGE_MODEL_NAME, IMAGE_MODEL_PROVIDER
 from onyx.file_store.models import ChatFileType
-from onyx.file_store.utils import build_frontend_file_url
-from onyx.file_store.utils import load_chat_file_by_id
-from onyx.file_store.utils import save_files
+from onyx.file_store.utils import (
+    build_frontend_file_url,
+    load_chat_file_by_id,
+    save_files,
+)
 from onyx.image_gen.factory import get_image_generation_provider
-from onyx.image_gen.generation import generate_images_with_provider
-from onyx.image_gen.generation import is_image_generation_configured
-from onyx.image_gen.generation import resolve_image_size
-from onyx.image_gen.interfaces import ImageGenerationProviderCredentials
-from onyx.image_gen.interfaces import ImageShape
-from onyx.image_gen.interfaces import ReferenceImage
+from onyx.image_gen.generation import (
+    generate_images_with_provider,
+    is_image_generation_configured,
+    resolve_image_size,
+)
+from onyx.image_gen.interfaces import (
+    ImageGenerationProviderCredentials,
+    ImageShape,
+    ReferenceImage,
+)
 from onyx.server.query_and_chat.placement import Placement
-from onyx.server.query_and_chat.streaming_models import GeneratedImage
-from onyx.server.query_and_chat.streaming_models import ImageGenerationFinal
-from onyx.server.query_and_chat.streaming_models import ImageGenerationToolHeartbeat
-from onyx.server.query_and_chat.streaming_models import ImageGenerationToolStart
-from onyx.server.query_and_chat.streaming_models import Packet
+from onyx.server.query_and_chat.streaming_models import (
+    GeneratedImage,
+    ImageGenerationFinal,
+    ImageGenerationToolHeartbeat,
+    ImageGenerationToolStart,
+    Packet,
+)
 from onyx.tools.interface import Tool
-from onyx.tools.models import ToolCallException
-from onyx.tools.models import ToolExecutionException
-from onyx.tools.models import ToolResponse
-from onyx.tools.tool_implementations.images.models import FinalImageGenerationResponse
-from onyx.tools.tool_implementations.images.models import ImageGenerationResponse
+from onyx.tools.models import ToolCallException, ToolExecutionException, ToolResponse
+from onyx.tools.tool_implementations.images.models import (
+    FinalImageGenerationResponse,
+    ImageGenerationResponse,
+)
 from onyx.utils.b64 import get_image_type_from_bytes
 from onyx.utils.logger import setup_logger
 from onyx.utils.threadpool_concurrency import run_functions_tuples_in_parallel

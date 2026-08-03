@@ -14,6 +14,7 @@ import { getChatSession } from "@/api/chat/sessions";
 import {
   isHeartbeat,
   isPacket,
+  isStreamError,
   resumeChatMessage,
   StreamHttpError,
 } from "@/api/chat/stream";
@@ -95,9 +96,28 @@ async function runResumeStream(
       0,
       controller.signal,
     )) {
-      // re-check focus/abort on every event (heartbeats included) so navigate-away unwinds during
-      // quiet phases; heartbeats carry no content, so they aren't rendered
+      // re-check focus/abort on every event (heartbeats included) so navigate-away unwinds during quiet phases
       if (!stillCurrent()) break;
+      if (isStreamError(event)) {
+        // Errored run: show it immediately rather than waiting on (or getting stuck if it fails)
+        // the snapshot settle below. Matches the live-send path in useChatController.
+        console.warn("resume-stream received a backend error", {
+          sessionId,
+          errorCode: event.error_code ?? null,
+          error: event.error,
+        });
+        pending = [];
+        if (flushTimer) {
+          clearTimeout(flushTimer);
+          flushTimer = null;
+        }
+        store.getState().patchNode(sessionId, nodeId, {
+          type: "error",
+          message: event.error,
+          errorCode: event.error_code ?? null,
+        });
+        break;
+      }
       if (isPacket(event) && !isHeartbeat(event)) {
         pending.push(event);
         scheduleFlush();

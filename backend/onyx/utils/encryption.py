@@ -1,10 +1,8 @@
 from typing import Any
-from urllib.parse import urlparse
-from urllib.parse import urlunparse
+from urllib.parse import urlparse, urlunparse
 
 from onyx.configs.app_configs import ENCRYPTION_KEY_SECRET
-from onyx.configs.constants import MASK_CREDENTIAL_CHAR
-from onyx.configs.constants import MASK_CREDENTIAL_LONG_RE
+from onyx.configs.constants import MASK_CREDENTIAL_CHAR, MASK_CREDENTIAL_LONG_RE
 from onyx.connectors.google_utils.shared_constants import (
     DB_CREDENTIALS_AUTHENTICATION_METHOD,
 )
@@ -153,19 +151,21 @@ MASK_CREDENTIALS_WHITELIST = {
     "wiki_base",
     "cloud_name",
     "cloud_id",
+    # OAuth scope lists are public identifiers, not secrets, and masked list
+    # items cannot round-trip through a chip editor.
+    "scopes",
 }
 
 
 def mask_credential_dict(credential_dict: dict[str, Any]) -> dict[str, Any]:
     masked_creds: dict[str, Any] = {}
     for key, val in credential_dict.items():
-        if isinstance(val, str):
-            # we want to pass the authentication_method field through so the frontend
-            # can disambiguate credentials created by different methods
-            if key in MASK_CREDENTIALS_WHITELIST:
-                masked_creds[key] = val
-            else:
-                masked_creds[key] = mask_string(val)
+        # Whitelisted keys pass through whole (e.g. authentication_method so
+        # the frontend can disambiguate credential kinds) whatever their type.
+        if key in MASK_CREDENTIALS_WHITELIST:
+            masked_creds[key] = val
+        elif isinstance(val, str):
+            masked_creds[key] = mask_string(val)
         elif isinstance(val, dict):
             masked_creds[key] = mask_credential_dict(val)
         elif isinstance(val, list):

@@ -1,7 +1,6 @@
 import os
 from collections.abc import Generator
-from datetime import datetime
-from datetime import timezone
+from datetime import datetime, timezone
 
 import pytest
 
@@ -15,10 +14,12 @@ from tests.integration.common_utils.managers.credential import CredentialManager
 from tests.integration.common_utils.managers.llm_provider import LLMProviderManager
 from tests.integration.common_utils.managers.user import UserManager
 from tests.integration.common_utils.reset import reset_all
-from tests.integration.common_utils.test_models import DATestCCPair
-from tests.integration.common_utils.test_models import DATestConnector
-from tests.integration.common_utils.test_models import DATestCredential
-from tests.integration.common_utils.test_models import DATestUser
+from tests.integration.common_utils.test_models import (
+    DATestCCPair,
+    DATestConnector,
+    DATestCredential,
+    DATestUser,
+)
 
 SharepointTestEnvSetupTuple = tuple[
     DATestUser,  # admin_user

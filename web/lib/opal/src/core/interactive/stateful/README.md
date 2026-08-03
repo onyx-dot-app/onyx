@@ -19,7 +19,7 @@ Stateful interactive surface primitive for elements that maintain a value state 
 ## Variants
 
 - **`select-light`** — Transparent selected background. For inline toggles.
-- **`select-heavy`** — Tinted selected background (`action-link-01`). For list rows, model pickers, buttons.
+- **`select-heavy`** — Tinted selected background (`action-selection-01`). For list rows, model pickers, buttons.
 - **`select-card`** — Like `select-heavy`, but the filled state gets a visible background (`background-tint-00`) with neutral foreground. Designed for larger surfaces (cards) where background carries more of the visual distinction than foreground color alone.
 - **`select-tinted`** — Like `select-heavy` but with a tinted rest background (`background-tint-01`).
 - **`select-filter`** — Like `select-tinted` for empty/filled; selected state uses inverted backgrounds and inverted text.

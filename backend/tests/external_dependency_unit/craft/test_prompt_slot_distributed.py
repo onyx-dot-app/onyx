@@ -25,7 +25,7 @@ from onyx.server.features.build.sandbox.kubernetes.kubernetes_sandbox_manager im
 
 def _make_replica() -> KubernetesSandboxManager:
     """A fresh manager (its own state, like a separate pod); skips
-    ``_initialize`` so no kube config is needed."""
+    ``__init__`` so no kube config is needed."""
     m: KubernetesSandboxManager = object.__new__(KubernetesSandboxManager)
     m._init_serve_state()
     return m
@@ -98,6 +98,18 @@ def test_fails_open_when_cache_unavailable(
     monkeypatch.setattr(serve_transport, "get_cache_backend", _boom)
     with _make_replica().prompt_slot(uuid4(), uuid4()) as acquired:
         assert acquired.acquired is True
+
+
+@pytest.mark.usefixtures("slot_env")
+def test_can_fail_closed_when_cache_unavailable(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    def _boom() -> None:
+        raise RedisError("cache down")
+
+    monkeypatch.setattr(serve_transport, "get_cache_backend", _boom)
+    with _make_replica().prompt_slot(uuid4(), uuid4(), fail_open=False) as acquired:
+        assert acquired.acquired is False
 
 
 @pytest.mark.usefixtures("slot_env")

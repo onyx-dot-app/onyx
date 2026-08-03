@@ -44,10 +44,13 @@ jobs:
       # The repo keeps web/lib/opal/package.json at 0.0.0; the opal/v* tag is the
       # source of truth. Stamp the version from the tag here — after the frozen
       # install (which expects the committed 0.0.0) and before build/publish.
+      # `npm pkg set` edits package.json only; `npm version` reifies the tree via
+      # arborist, which crashes (null Link.matches) on the bun-installed
+      # node_modules with the file:../shared link.
       - name: Set version from tag
         run: |
           TAG_VERSION="${GITHUB_REF_NAME#opal/v}"
-          npm version "${TAG_VERSION}" --no-git-tag-version --allow-same-version
+          npm pkg set version="${TAG_VERSION}"
 
       # Opal's CSS build inlines @onyx-ai/shared's generated design tokens, and its
       # dts build (tsup `dts: { resolve: true }`) inlines shared's contracts types

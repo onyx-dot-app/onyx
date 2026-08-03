@@ -1,36 +1,42 @@
 import copy
 import time
-from collections.abc import Callable
-from collections.abc import Iterator
-from typing import Any
-from typing import cast
+from collections.abc import Callable, Iterator
+from typing import Any, cast
 
 import requests
 from pydantic import BaseModel
 from requests.exceptions import HTTPError
 from typing_extensions import override
 
-from onyx.configs.app_configs import REQUEST_TIMEOUT_SECONDS
-from onyx.configs.app_configs import ZENDESK_CONNECTOR_SKIP_ARTICLE_LABELS
+from onyx.configs.app_configs import (
+    REQUEST_TIMEOUT_SECONDS,
+    ZENDESK_CONNECTOR_SKIP_ARTICLE_LABELS,
+)
 from onyx.configs.constants import DocumentSource
 from onyx.connectors.cross_connector_utils.miscellaneous_utils import time_str_to_utc
 from onyx.connectors.cross_connector_utils.rate_limit_wrapper import rate_limit_builder
-from onyx.connectors.exceptions import ConnectorValidationError
-from onyx.connectors.exceptions import CredentialExpiredError
-from onyx.connectors.exceptions import InsufficientPermissionsError
-from onyx.connectors.interfaces import CheckpointedConnector
-from onyx.connectors.interfaces import CheckpointOutput
-from onyx.connectors.interfaces import ConnectorFailure
-from onyx.connectors.interfaces import GenerateSlimDocumentOutput
-from onyx.connectors.interfaces import SecondsSinceUnixEpoch
-from onyx.connectors.interfaces import SlimConnectorWithPermSync
-from onyx.connectors.models import BasicExpertInfo
-from onyx.connectors.models import ConnectorCheckpoint
-from onyx.connectors.models import Document
-from onyx.connectors.models import DocumentFailure
-from onyx.connectors.models import HierarchyNode
-from onyx.connectors.models import SlimDocument
-from onyx.connectors.models import TextSection
+from onyx.connectors.exceptions import (
+    ConnectorValidationError,
+    CredentialExpiredError,
+    InsufficientPermissionsError,
+)
+from onyx.connectors.interfaces import (
+    CheckpointedConnector,
+    CheckpointOutput,
+    ConnectorFailure,
+    GenerateSlimDocumentOutput,
+    SecondsSinceUnixEpoch,
+    SlimConnectorWithPermSync,
+)
+from onyx.connectors.models import (
+    BasicExpertInfo,
+    ConnectorCheckpoint,
+    Document,
+    DocumentFailure,
+    HierarchyNode,
+    SlimDocument,
+    TextSection,
+)
 from onyx.file_processing.html_utils import parse_html_page_basic
 from onyx.indexing.indexing_heartbeat import IndexingHeartbeatInterface
 from onyx.utils.retry_after import parse_retry_after_seconds

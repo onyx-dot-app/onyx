@@ -1,3 +1,4 @@
+from onyx.connectors.box.connector import BoxConnector
 from onyx.connectors.canvas.connector import CanvasConnector
 from onyx.connectors.confluence.connector import ConfluenceConnector
 from onyx.connectors.google_drive.connector import GoogleDriveConnector
@@ -35,6 +36,16 @@ def validate_drive_perm_sync(connector: GoogleDriveConnector) -> None:
     connector.probe_directory_admin_permission()
 
 
+def validate_box_perm_sync(connector: BoxConnector) -> None:
+    """
+    Group sync enumerates enterprise groups and users, which the indexing path
+    never touches. Probe those scopes here so a Box app missing the 'Manage
+    groups' / 'Manage users' scopes fails at connector creation instead of
+    every group-sync tick.
+    """
+    connector.probe_group_listing_permission()
+
+
 def validate_sharepoint_perm_sync(connector: SharepointConnector) -> None:
     """
     Validate that the connector is configured correctly for permissions syncing.
@@ -58,7 +69,9 @@ def validate_perm_sync(connector: BaseConnector) -> None:
 
     Default is a no-op (always successful).
     """
-    if isinstance(connector, CanvasConnector):
+    if isinstance(connector, BoxConnector):
+        validate_box_perm_sync(connector)
+    elif isinstance(connector, CanvasConnector):
         validate_canvas_perm_sync(connector)
     elif isinstance(connector, ConfluenceConnector):
         validate_confluence_perm_sync(connector)

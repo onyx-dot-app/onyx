@@ -1,13 +1,13 @@
 from onyx.configs.constants import DocumentSource
-from onyx.context.search.models import InferenceChunk
-from onyx.context.search.models import InferenceSection
-from onyx.context.search.models import SearchDoc
+from onyx.context.search.models import InferenceChunk, InferenceSection, SearchDoc
 from onyx.tools.tool_implementations.open_url.models import WebContent
 from onyx.tools.tool_implementations.open_url.snippet_matcher import (
     find_snippet_in_content,
 )
-from onyx.tools.tool_implementations.web_search.models import WEB_SEARCH_PREFIX
-from onyx.tools.tool_implementations.web_search.models import WebSearchResult
+from onyx.tools.tool_implementations.web_search.models import (
+    WEB_SEARCH_PREFIX,
+    WebSearchResult,
+)
 
 TRUNCATED_CONTENT_SUFFIX = " [...truncated]"
 TRUNCATED_CONTENT_PREFIX = "[...truncated] "

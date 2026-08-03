@@ -926,8 +926,7 @@ import io
 import json
 import threading
 from collections.abc import Generator
-from http.server import BaseHTTPRequestHandler
-from http.server import HTTPServer
+from http.server import BaseHTTPRequestHandler, HTTPServer
 from typing import Any
 from unittest.mock import patch
 
@@ -941,24 +940,29 @@ import onyx.tools.tool_implementations.python.code_interpreter_client as ci_mod
 from onyx.chat.process_message import handle_stream_message_objects
 from onyx.db.models import Persona
 from onyx.db.tools import get_builtin_tool
-from onyx.file_store.models import ChatFileType
-from onyx.file_store.models import FileDescriptor
+from onyx.file_store.models import ChatFileType, FileDescriptor
 from onyx.server.features.projects.api import upload_user_files
 from onyx.server.query_and_chat.chat_backend import get_chat_session
 from onyx.server.query_and_chat.models import SendMessageRequest
-from onyx.server.query_and_chat.streaming_models import Packet
-from onyx.server.query_and_chat.streaming_models import PythonToolDelta
-from onyx.server.query_and_chat.streaming_models import PythonToolStart
-from onyx.server.query_and_chat.streaming_models import SectionEnd
-from onyx.server.query_and_chat.streaming_models import ToolCallArgumentDelta
+from onyx.server.query_and_chat.streaming_models import (
+    Packet,
+    PythonToolDelta,
+    PythonToolStart,
+    SectionEnd,
+    ToolCallArgumentDelta,
+)
 from onyx.tools.tool_implementations.python.python_tool import PythonTool
 from tests.external_dependency_unit.answer.stream_test_builder import StreamTestBuilder
-from tests.external_dependency_unit.answer.stream_test_utils import create_chat_session
-from tests.external_dependency_unit.answer.stream_test_utils import create_placement
+from tests.external_dependency_unit.answer.stream_test_utils import (
+    create_chat_session,
+    create_placement,
+)
 from tests.external_dependency_unit.conftest import create_test_user
-from tests.external_dependency_unit.mock_llm import LLMAnswerResponse
-from tests.external_dependency_unit.mock_llm import LLMToolCallResponse
-from tests.external_dependency_unit.mock_llm import use_mock_llm
+from tests.external_dependency_unit.mock_llm import (
+    LLMAnswerResponse,
+    LLMToolCallResponse,
+    use_mock_llm,
+)
 
 # ---------------------------------------------------------------------------
 # Mock Code Interpreter Server
@@ -1201,7 +1205,7 @@ def test_code_interpreter_receives_chat_files(
     ):
         mock_llm.add_response(
             LLMToolCallResponse(
-                tool_name="python",
+                tool_name="run_python",
                 tool_call_id="call_test_1",
                 tool_call_argument_tokens=[json.dumps({"code": code})],
             )
@@ -1282,7 +1286,7 @@ def test_code_interpreter_replay_packets_include_code_and_output(
             # Phase 1: LLM requests python tool execution.
             handler.add_response(
                 LLMToolCallResponse(
-                    tool_name="python",
+                    tool_name="run_python",
                     tool_call_id="call_replay_test",
                     tool_call_argument_tokens=[json.dumps({"code": code})],
                 )
@@ -1290,7 +1294,7 @@ def test_code_interpreter_replay_packets_include_code_and_output(
                 Packet(
                     placement=create_placement(0),
                     obj=ToolCallArgumentDelta(
-                        tool_type="python",
+                        tool_type="run_python",
                         argument_deltas={"code": code},
                     ),
                 ),
@@ -1405,7 +1409,7 @@ def test_code_interpreter_streaming_fallback_to_batch(
     ):
         mock_llm.add_response(
             LLMToolCallResponse(
-                tool_name="python",
+                tool_name="run_python",
                 tool_call_id="call_fallback",
                 tool_call_argument_tokens=[json.dumps({"code": code})],
             )

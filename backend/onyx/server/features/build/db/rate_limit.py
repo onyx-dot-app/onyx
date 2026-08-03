@@ -7,8 +7,7 @@ from sqlalchemy import func
 from sqlalchemy.orm import Session
 
 from onyx.configs.constants import MessageType
-from onyx.db.models import BuildMessage
-from onyx.db.models import BuildSession
+from onyx.db.models import BuildMessage, BuildSession
 
 
 def count_user_messages_in_window(

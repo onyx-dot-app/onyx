@@ -3,13 +3,13 @@ from uuid import UUID
 from sqlalchemy.orm import Session
 
 from onyx.db.enums import PersonaSharePermission
-from onyx.db.models import Persona
-from onyx.db.models import Persona__UserGroup
-from onyx.db.models import User
-from onyx.db.persona import _transfer_persona_ownership
-from onyx.db.persona import apply_persona_user_share_diff
-from onyx.db.persona import mark_persona_user_files_for_sync
-from onyx.db.persona import resolve_desired_user_shares
+from onyx.db.models import Persona, Persona__UserGroup, User
+from onyx.db.persona import (
+    _transfer_persona_ownership,
+    apply_persona_user_share_diff,
+    mark_persona_user_files_for_sync,
+    resolve_desired_user_shares,
+)
 
 
 def _resolve_desired_group_shares(

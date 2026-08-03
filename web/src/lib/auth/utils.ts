@@ -1,3 +1,48 @@
+// ---------------------------------------------------------------------------
+// Auth URL helpers
+// ---------------------------------------------------------------------------
+
+export function getAuthUrl(
+  multiTenant: boolean,
+  nextUrl: string | null
+): string | null {
+  const params = new URLSearchParams({ redirect: "true" });
+  if (nextUrl) params.set("next", nextUrl);
+
+  return multiTenant ? `/api/auth/oauth/authorize?${params}` : null;
+}
+
+// ---------------------------------------------------------------------------
+// Password predicate functions
+// ---------------------------------------------------------------------------
+
+export function passwordMeetsLengthRequirements(
+  password: string,
+  min: number,
+  max: number
+): boolean {
+  return password.length >= min && password.length <= max;
+}
+
+export function passwordHasUppercase(password: string): boolean {
+  return /[A-Z]/.test(password);
+}
+
+export function passwordHasLowercase(password: string): boolean {
+  return /[a-z]/.test(password);
+}
+
+export function passwordHasDigit(password: string): boolean {
+  return /\d/.test(password);
+}
+
+// Mirrors backend PASSWORD_SPECIAL_CHARS = "!@#$%^&*()_+-=[]{}|;:,.<>?"
+export function passwordHasSpecialChar(password: string): boolean {
+  return /[!@#$%^&*()_+\-=[\]{}|;:,.<>?]/.test(password);
+}
+
+// ---------------------------------------------------------------------------
+
 /**
  * Validates a redirect URL to prevent Open Redirect vulnerabilities.
  * Only allows internal paths (relative URLs starting with /).

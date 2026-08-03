@@ -1,13 +1,11 @@
-from fastapi import APIRouter
-from fastapi import Depends
+from fastapi import APIRouter, Depends
 from sqlalchemy.orm import Session
 
 from onyx.auth.permissions import require_permission
 from onyx.auth.users import current_curator_or_admin_user
 from onyx.configs.chat_configs import NUM_RETURNED_HITS
 from onyx.configs.constants import DocumentSource
-from onyx.context.search.models import IndexFilters
-from onyx.context.search.models import SearchDoc
+from onyx.context.search.models import IndexFilters, SearchDoc
 from onyx.context.search.preprocessing.access_filters import (
     build_access_filters_for_user,
 )
@@ -17,10 +15,12 @@ from onyx.db.models import User
 from onyx.db.search_settings import get_current_search_settings
 from onyx.db.tag import find_tags
 from onyx.document_index.factory import get_default_document_index
-from onyx.server.query_and_chat.models import AdminSearchRequest
-from onyx.server.query_and_chat.models import AdminSearchResponse
-from onyx.server.query_and_chat.models import SourceTag
-from onyx.server.query_and_chat.models import TagResponse
+from onyx.server.query_and_chat.models import (
+    AdminSearchRequest,
+    AdminSearchResponse,
+    SourceTag,
+    TagResponse,
+)
 from onyx.server.utils_vector_db import require_vector_db
 from onyx.utils.logger import setup_logger
 from shared_configs.contextvars import get_current_tenant_id
@@ -46,7 +46,8 @@ def admin_search(
     final_filters = IndexFilters(
         source_type=question.filters.source_type,
         document_set=question.filters.document_set,
-        time_cutoff=question.filters.time_cutoff,
+        created_at_range=question.filters.created_at_range,
+        updated_at_range=question.filters.updated_at_range,
         tags=question.filters.tags,
         access_control_list=user_acl_filters,
         tenant_id=tenant_id,

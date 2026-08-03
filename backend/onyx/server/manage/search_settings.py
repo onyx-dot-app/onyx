@@ -1,53 +1,71 @@
-from fastapi import APIRouter
-from fastapi import Depends
-from fastapi import HTTPException
-from fastapi import status
+from uuid import UUID
+
+from fastapi import APIRouter, Depends, HTTPException, status
+from pydantic import BaseModel
 from sqlalchemy.orm import Session
 
 from onyx.auth.permissions import require_permission
+from onyx.background.celery.tasks.port.tasks import (
+    PortResumeResult,
+    resume_paused_port_unit,
+)
+from onyx.background.celery.versioned_apps.client import app as client_app
 from onyx.configs.app_configs import DISABLE_INDEX_UPDATE_ON_SWAP
-from onyx.context.search.models import SavedSearchSettings
-from onyx.context.search.models import SearchSettingsCreationRequest
+from onyx.context.search.models import (
+    SavedSearchSettings,
+    SearchSettingsCreationRequest,
+)
 from onyx.db.connector_credential_pair import (
     fetch_indexable_standard_connector_credential_pair_ids,
+    get_connector_credential_pairs,
+    get_last_successful_attempt_poll_range_end,
+    resync_cc_pair,
 )
-from onyx.db.connector_credential_pair import get_connector_credential_pairs
-from onyx.db.connector_credential_pair import get_last_successful_attempt_poll_range_end
-from onyx.db.connector_credential_pair import resync_cc_pair
 from onyx.db.engine.sql_engine import get_session
-from onyx.db.enums import Permission
-from onyx.db.enums import SwitchoverType
-from onyx.db.index_attempt import create_synthetic_seed_attempt
-from onyx.db.index_attempt import expire_index_attempts
-from onyx.db.llm import fetch_default_contextual_rag_model
-from onyx.db.llm import update_default_contextual_model
-from onyx.db.llm import update_no_default_contextual_rag_provider
-from onyx.db.models import IndexModelStatus
-from onyx.db.models import User
-from onyx.db.port_attempt import cancel_active_port_attempts
-from onyx.db.port_attempt import port_backfill_has_pending_work
-from onyx.db.search_settings import create_search_settings
-from onyx.db.search_settings import delete_search_settings
-from onyx.db.search_settings import get_current_search_settings
-from onyx.db.search_settings import get_embedding_provider_from_provider_type
-from onyx.db.search_settings import get_secondary_search_settings
-from onyx.db.search_settings import update_current_search_settings
-from onyx.db.search_settings import update_search_settings_status
-from onyx.document_index.factory import get_all_document_indices
-from onyx.document_index.factory import get_default_document_index
+from onyx.db.enums import Permission, SwitchoverType
+from onyx.db.index_attempt import create_synthetic_seed_attempt, expire_index_attempts
+from onyx.db.llm import (
+    fetch_default_contextual_rag_model,
+    update_default_contextual_model,
+    update_no_default_contextual_rag_provider,
+)
+from onyx.db.models import IndexModelStatus, SearchSettings, User
+from onyx.db.port_attempt import (
+    ReindexErrorRow,
+    ReindexProgressCounts,
+    cancel_active_port_attempts,
+    get_reindex_error_rows,
+    get_reindex_progress_counts,
+    port_backfill_has_pending_work,
+)
+from onyx.db.search_settings import (
+    create_search_settings,
+    delete_search_settings,
+    get_current_search_settings,
+    get_embedding_provider_from_provider_type,
+    get_secondary_search_settings,
+    update_current_search_settings,
+    update_search_settings_status,
+)
+from onyx.document_index.factory import (
+    get_all_document_indices,
+    get_default_document_index,
+)
 from onyx.error_handling.error_codes import OnyxErrorCode
 from onyx.error_handling.exceptions import OnyxError
-from onyx.file_processing.unstructured import delete_unstructured_api_key
-from onyx.file_processing.unstructured import get_unstructured_api_key
-from onyx.file_processing.unstructured import update_unstructured_api_key
+from onyx.file_processing.unstructured import (
+    delete_unstructured_api_key,
+    get_unstructured_api_key,
+    update_unstructured_api_key,
+)
 from onyx.natural_language_processing.search_nlp_models import clean_model_name
 from onyx.server.manage.embedding.models import SearchSettingsDeleteRequest
 from onyx.server.manage.models import FullModelVersionResponse
 from onyx.server.models import IdReturn
 from onyx.server.utils_vector_db import require_vector_db
 from onyx.utils.logger import setup_logger
-from shared_configs.configs import ALT_INDEX_SUFFIX
-from shared_configs.configs import MULTI_TENANT
+from shared_configs.configs import ALT_INDEX_SUFFIX, MULTI_TENANT
+from shared_configs.contextvars import get_current_tenant_id
 
 router = APIRouter(prefix="/search-settings")
 logger = setup_logger()
@@ -286,6 +304,94 @@ def get_secondary_search_settings_endpoint(
         return None
 
     return SavedSearchSettings.from_db_model(secondary_search_settings)
+
+
+def _active_port_settings(db_session: Session) -> SearchSettings | None:
+    secondary = get_secondary_search_settings(db_session)
+    if secondary is not None and secondary.use_port_flow:
+        return secondary
+    present = get_current_search_settings(db_session)
+    if (
+        present.use_port_flow
+        and present.port_backfill_source_id is not None
+        and port_backfill_has_pending_work(db_session, present.id)
+    ):
+        return present
+    return None
+
+
+@router.get("/reindex-progress")
+def get_reindex_progress(
+    _: User = Depends(require_permission(Permission.FULL_ADMIN_PANEL_ACCESS)),
+    db_session: Session = Depends(get_session),
+) -> ReindexProgressCounts:
+    target = _active_port_settings(db_session)
+    if target is None:
+        return ReindexProgressCounts(
+            total=0, waiting=0, in_progress=0, completed=0, failed=0, paused=0
+        )
+    return get_reindex_progress_counts(db_session, target.id)
+
+
+@router.get("/reindex-errors")
+def get_reindex_errors(
+    _: User = Depends(require_permission(Permission.FULL_ADMIN_PANEL_ACCESS)),
+    db_session: Session = Depends(get_session),
+) -> list[ReindexErrorRow]:
+    target = _active_port_settings(db_session)
+    if target is None:
+        return []
+    return get_reindex_error_rows(db_session, target.id)
+
+
+class PortActionRequest(BaseModel):
+    """Resume one paused port unit — exactly one scope set."""
+
+    cc_pair_id: int | None = None
+    user_id: UUID | None = None
+
+
+class PortActionResponse(BaseModel):
+    ok: bool
+
+
+@router.post("/reindex/port/resume")
+def resume_paused_port(
+    request: PortActionRequest,
+    _: User = Depends(require_permission(Permission.FULL_ADMIN_PANEL_ACCESS)),
+    db_session: Session = Depends(get_session),
+) -> PortActionResponse:
+    if (request.cc_pair_id is None) == (request.user_id is None):
+        raise OnyxError(
+            OnyxErrorCode.INVALID_INPUT,
+            "Exactly one of cc_pair_id / user_id must be set.",
+        )
+    target = _active_port_settings(db_session)
+    if target is None:
+        raise OnyxError(OnyxErrorCode.CONFLICT, "No reindex port is currently active.")
+    result = resume_paused_port_unit(
+        client_app,
+        get_current_tenant_id(),
+        request.cc_pair_id,
+        request.user_id,
+        target.id,
+    )
+    if result is PortResumeResult.NOT_PAUSED:
+        raise OnyxError(
+            OnyxErrorCode.CONFLICT,
+            "That unit is not paused (it may have already been resumed or is still "
+            "retrying).",
+        )
+    if result is PortResumeResult.DISPATCH_FAILED:
+        # The unit WAS resumed (a fresh attempt is committed), but the task broker was
+        # unavailable so it wasn't dispatched now. Don't report an immediate resume — the
+        # scheduler re-enqueues it within a few minutes.
+        raise OnyxError(
+            OnyxErrorCode.SERVICE_UNAVAILABLE,
+            "The unit was resumed but could not be dispatched right now (the task queue is "
+            "unavailable). It will start automatically within a few minutes.",
+        )
+    return PortActionResponse(ok=True)
 
 
 @router.get("/get-all-search-settings")

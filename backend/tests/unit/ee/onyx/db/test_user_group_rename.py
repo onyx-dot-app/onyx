@@ -1,7 +1,6 @@
 """Tests for user group rename DB operation."""
 
-from unittest.mock import MagicMock
-from unittest.mock import patch
+from unittest.mock import MagicMock, patch
 
 import pytest
 

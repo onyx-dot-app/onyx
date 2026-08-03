@@ -28,12 +28,10 @@ endpoint; ``None`` means "no signal":
 
 import json
 import time
-from typing import Any
-from typing import TypeVar
+from typing import Any, TypeVar
 
 import httpx
-from pydantic import BaseModel
-from pydantic import ValidationError
+from pydantic import BaseModel, ValidationError
 
 from onyx.utils.logger import setup_logger
 

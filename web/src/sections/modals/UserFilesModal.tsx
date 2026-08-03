@@ -8,8 +8,8 @@ import type { IconProps } from "@opal/types";
 import { getFileExtension, isImageExtension } from "@/lib/utils";
 import { UserFileStatus } from "@/lib/projects/types";
 import AttachmentButton from "@/refresh-components/buttons/AttachmentButton";
-import Modal from "@/refresh-components/Modal";
-import { useModal } from "@/refresh-components/contexts/ModalContext";
+import { Modal } from "@opal/components";
+import { useModal } from "@opal/components";
 import TextSeparator from "@/refresh-components/TextSeparator";
 import {
   SvgEye,

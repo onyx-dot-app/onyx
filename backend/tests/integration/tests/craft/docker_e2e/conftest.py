@@ -3,18 +3,18 @@
 from __future__ import annotations
 
 import subprocess
-from typing import NamedTuple
-from typing import Protocol
+from typing import NamedTuple, Protocol
 from uuid import UUID
 
 import pytest
 
 from onyx.db.engine.sql_engine import get_session_with_tenant
-from onyx.db.enums import EndpointPolicy
-from onyx.db.enums import ExternalAppType
-from onyx.db.enums import SandboxStatus
-from onyx.db.external_app import create_external_app
-from onyx.db.external_app import get_built_in_external_app
+from onyx.db.enums import EndpointPolicy, ExternalAppType, SandboxStatus
+from onyx.db.external_app import (
+    associate_built_in_skill__no_commit,
+    create_external_app,
+    get_built_in_external_app,
+)
 from tests.integration.common_utils.managers.build_session import BuildSessionManager
 from tests.integration.common_utils.test_models import DATestUser
 
@@ -42,11 +42,25 @@ class ProvisionSandbox(Protocol):
         *,
         llm_provider_type: str | None = None,
         llm_model_name: str | None = None,
+        headless: bool = True,
     ) -> DockerSandbox: ...
 
 
 def _container_name(sandbox_id: str) -> str:
     return f"sandbox-{sandbox_id.split('-')[0]}"
+
+
+def remove_container(container_name: str) -> None:
+    try:
+        subprocess.run(
+            ["docker", "rm", "-f", container_name],
+            capture_output=True,
+            text=True,
+            timeout=30.0,
+            check=False,
+        )
+    except Exception as exc:
+        print(f"WARNING: failed to remove container {container_name!r}: {exc}")
 
 
 def _docker_exec(
@@ -74,11 +88,13 @@ def _provision_sandbox(
     *,
     llm_provider_type: str | None = None,
     llm_model_name: str | None = None,
+    headless: bool = True,
 ) -> DockerSandbox:
     # Both default to None on the create request, so passing them through
     # unconditionally is equivalent to omitting them.
     session = BuildSessionManager.create(
         user,
+        headless=headless,
         llm_provider_type=llm_provider_type,
         llm_model_name=llm_model_name,
     )
@@ -106,7 +122,7 @@ def provision_sandbox() -> ProvisionSandbox:
 @pytest.fixture(scope="module")
 def slack_external_app() -> None:
     """
-    Seeds Slack directly with ``enabled=True`` and an ``ASK`` policy on
+    Seeds Slack directly with an ``ASK`` policy on
     ``slack.messages.write`` so the gate matcher claims ``chat.postMessage``.
 
     Unlike the cloud migration that seeds built-in apps per tenant (when
@@ -117,18 +133,14 @@ def slack_external_app() -> None:
     with get_session_with_tenant(tenant_id="public") as db:
         existing = get_built_in_external_app(db, ExternalAppType.SLACK)
         if existing is None:
-            create_external_app(
+            app = create_external_app(
                 db_session=db,
                 name="Slack",
-                description="Slack integration for gate-flow e2e tests.",
-                bundle_file_id="",
-                bundle_sha256="",
                 app_type=ExternalAppType.SLACK,
                 upstream_url_patterns=["https://slack\\.com/api/.*"],
                 auth_template={"Authorization": "Bearer {access_token}"},
                 organization_credentials={"access_token": "fake-test-token"},
-                enabled=True,
-                is_public=True,
                 action_policies={"slack.messages.write": EndpointPolicy.ASK},
             )
+            associate_built_in_skill__no_commit(db, app)
             db.commit()

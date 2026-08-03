@@ -3,10 +3,8 @@
 import { useCallback, useState, useMemo, useEffect } from "react";
 import { useUser } from "@/providers/UserProvider";
 import { useLLMProviders } from "@/lib/languageModels/hooks";
-import {
-  OnboardingModalMode,
-  OnboardingModalController,
-} from "@/app/craft/onboarding/types";
+import { track, AnalyticsEvent } from "@/lib/analytics/utils";
+import { OnboardingModalController } from "@/app/craft/onboarding/types";
 import {
   getCraftOnboardingSeen,
   setCraftOnboardingSeen,
@@ -23,8 +21,7 @@ export function useOnboardingModal(): OnboardingModalController {
     (state) => state.ensurePreProvisionedSession
   );
 
-  // Modal mode state
-  const [mode, setMode] = useState<OnboardingModalMode>({ type: "closed" });
+  const [introOpen, setIntroOpen] = useState(false);
   const [hasInitialized, setHasInitialized] = useState(false);
   const [activeProviderKey, setActiveProviderKey] = useState<string | null>(
     null
@@ -39,23 +36,28 @@ export function useOnboardingModal(): OnboardingModalController {
   // welcome page, so the intro is not conditioned on provider state.
   useEffect(() => {
     if (hasInitialized || !user) return;
-
-    if (!getCraftOnboardingSeen()) {
-      setMode({ type: "initial-onboarding" });
-    }
-
+    setIntroOpen(!getCraftOnboardingSeen(user.id));
     setHasInitialized(true);
   }, [hasInitialized, user]);
 
-  // Complete onboarding callback — fired when the intro is done. Kicks off
-  // pre-provisioning early — unless no provider exists yet, where session
-  // create would just fail (the connect success path triggers it instead).
-  const completeOnboarding = useCallback(async () => {
-    setCraftOnboardingSeen();
+  // Bail-out (Escape / X): remember the intro was seen, but don't count it as
+  // a completion.
+  const dismissOnboarding = useCallback(() => {
+    if (user) setCraftOnboardingSeen(user.id);
+    setIntroOpen(false);
+  }, [user]);
+
+  // Explicit finish (final CTA). Kicks off pre-provisioning early — unless no
+  // provider exists yet, where session create would just fail (the connect
+  // success path triggers it instead).
+  const completeOnboarding = useCallback(() => {
+    if (user) setCraftOnboardingSeen(user.id);
+    track(AnalyticsEvent.COMPLETED_CRAFT_ONBOARDING);
     if (hasAnyProvider) {
       ensurePreProvisionedSession();
     }
-  }, [ensurePreProvisionedSession, hasAnyProvider]);
+    setIntroOpen(false);
+  }, [user, ensurePreProvisionedSession, hasAnyProvider]);
 
   // Any well-known provider type — getProvider resolves the matching modal.
   const openProviderModal = useCallback((providerKey: string) => {
@@ -66,17 +68,10 @@ export function useOnboardingModal(): OnboardingModalController {
     setActiveProviderKey(null);
   }, []);
 
-  const close = useCallback(() => {
-    setMode({ type: "closed" });
-  }, []);
-
-  const isOpen = mode.type !== "closed";
-
   return {
-    mode,
-    isOpen,
-    close,
+    introOpen,
     completeOnboarding,
+    dismissOnboarding,
     activeProviderKey,
     openProviderModal,
     closeProviderModal,

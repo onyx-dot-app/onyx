@@ -1,25 +1,16 @@
 """Database operations for CLI agent sandbox management."""
 
 import datetime
+from typing import Literal
 from uuid import UUID
 
-from sqlalchemy import func
-from sqlalchemy import or_
-from sqlalchemy import select
+from sqlalchemy import func, or_, select, update
 from sqlalchemy.orm import Session
 
 from onyx.auth.pat import hash_pat
-from onyx.db.enums import BuildSessionStatus
-from onyx.db.enums import PatType
-from onyx.db.enums import Permission
-from onyx.db.enums import SandboxStatus
-from onyx.db.models import BuildSession
-from onyx.db.models import PersonalAccessToken
-from onyx.db.models import Sandbox
-from onyx.db.models import Snapshot
-from onyx.db.models import User
-from onyx.db.pat import create_pat
-from onyx.db.pat import revoke_pat
+from onyx.db.enums import BuildSessionStatus, PatType, Permission, SandboxStatus
+from onyx.db.models import BuildSession, PersonalAccessToken, Sandbox, Snapshot, User
+from onyx.db.pat import create_pat, revoke_pat
 from onyx.utils.logger import setup_logger
 
 logger = setup_logger()
@@ -99,48 +90,160 @@ def get_sandbox_by_user_id(db_session: Session, user_id: UUID) -> Sandbox | None
     return db_session.execute(stmt).scalar_one_or_none()
 
 
+def begin_provisioning_attempt__no_commit(
+    db_session: Session,
+    sandbox: Sandbox,
+) -> int:
+    """Authorize a new external provisioning attempt: assign the next attempt
+    number and mark the sandbox ``PROVISIONING``. Must run inside the
+    per-user reservation transaction (user row locked) so concurrent
+    reservers get distinct numbers.
+
+    Returns the new attempt number, which the attempt must present to the
+    conditional transitions below.
+    """
+    sandbox.status = SandboxStatus.PROVISIONING
+    sandbox.provisioning_attempt_number += 1
+    sandbox.provisioning_started_at = datetime.datetime.now(datetime.timezone.utc)
+    db_session.flush()
+    return sandbox.provisioning_attempt_number
+
+
+def begin_recovery_attempt__no_commit(
+    db_session: Session,
+    sandbox_id: UUID,
+    expected_attempt_number: int,
+) -> int | None:
+    """Take over an unhealthy ``RUNNING`` sandbox for a new provisioning
+    attempt — applied only if the row is still RUNNING under
+    ``expected_attempt_number`` (recovery happens outside the reservation lock).
+    Returns the new attempt number, or None when the row already moved on."""
+    result = db_session.execute(
+        update(Sandbox)
+        .where(
+            Sandbox.id == sandbox_id,
+            Sandbox.provisioning_attempt_number == expected_attempt_number,
+            Sandbox.status == SandboxStatus.RUNNING,
+        )
+        .values(
+            status=SandboxStatus.PROVISIONING,
+            provisioning_attempt_number=expected_attempt_number + 1,
+            provisioning_started_at=datetime.datetime.now(datetime.timezone.utc),
+        )
+    )
+    if result.rowcount != 1:  # ty: ignore[unresolved-attribute]
+        return None
+    return expected_attempt_number + 1
+
+
+def finalize_provisioning_attempt__no_commit(
+    db_session: Session,
+    sandbox_id: UUID,
+    attempt_number: int,
+    to_status: Literal[SandboxStatus.RUNNING, SandboxStatus.FAILED],
+) -> bool:
+    """Record the attempt's outcome — applied only if the row is still
+    ``PROVISIONING`` under this attempt's number. Returns False when a newer
+    attempt has taken over: the caller's external work must not be recorded
+    as the current runtime. ``RUNNING`` also stamps the heartbeat so the
+    fresh pod gets a proper idle-timeout baseline."""
+    values: dict[str, object] = {"status": to_status}
+    if to_status == SandboxStatus.RUNNING:
+        values["last_heartbeat"] = datetime.datetime.now(datetime.timezone.utc)
+    result = db_session.execute(
+        update(Sandbox)
+        .where(
+            Sandbox.id == sandbox_id,
+            Sandbox.provisioning_attempt_number == attempt_number,
+            Sandbox.status == SandboxStatus.PROVISIONING,
+        )
+        .values(**values)
+    )
+    return result.rowcount == 1  # ty: ignore[unresolved-attribute]
+
+
+def sleep_running_sandbox__no_commit(
+    db_session: Session,
+    sandbox_id: UUID,
+    attempt_number: int,
+) -> bool:
+    """``RUNNING`` → ``SLEEPING`` for the idle reaper — applied only if the
+    sandbox still belongs to attempt ``attempt_number``. Returns False when the
+    row moved on (a concurrent recovery or create started a newer attempt /
+    left RUNNING), so the reaper must not clobber that decision."""
+    result = db_session.execute(
+        update(Sandbox)
+        .where(
+            Sandbox.id == sandbox_id,
+            Sandbox.provisioning_attempt_number == attempt_number,
+            Sandbox.status == SandboxStatus.RUNNING,
+        )
+        .values(status=SandboxStatus.SLEEPING)
+    )
+    return result.rowcount == 1  # ty: ignore[unresolved-attribute]
+
+
 def get_sandbox_by_id(db_session: Session, sandbox_id: UUID) -> Sandbox | None:
     """Get sandbox by its ID."""
     stmt = select(Sandbox).where(Sandbox.id == sandbox_id)
     return db_session.execute(stmt).scalar_one_or_none()
 
 
-def update_sandbox_status__no_commit(
+def set_sandbox_skills_hashes__no_commit(
     db_session: Session,
-    sandbox_id: UUID,
-    status: SandboxStatus,
-) -> Sandbox:
-    """Update sandbox status.
-
-    When transitioning to RUNNING, also sets last_heartbeat to now. This ensures
-    newly provisioned sandboxes have a proper idle timeout baseline (rather than
-    being immediately considered idle due to NULL heartbeat).
-
-    NOTE: This function uses flush() instead of commit(). The caller is
-    responsible for committing the transaction when ready.
-    """
-    sandbox = get_sandbox_by_id(db_session, sandbox_id)
-    if not sandbox:
-        raise ValueError(f"Sandbox {sandbox_id} not found")
-
-    sandbox.status = status
-
-    # Set heartbeat when sandbox becomes active to establish idle timeout baseline
-    if status == SandboxStatus.RUNNING:
-        sandbox.last_heartbeat = datetime.datetime.now(datetime.timezone.utc)
-
+    skills_hashes: dict[UUID, str],
+) -> None:
+    """Record the skill runtime state successfully synchronized to each sandbox."""
+    if not skills_hashes:
+        return
+    sandboxes = db_session.scalars(
+        select(Sandbox).where(Sandbox.id.in_(skills_hashes))
+    ).all()
+    for sandbox in sandboxes:
+        sandbox.skills_hash = skills_hashes[sandbox.id]
     db_session.flush()
-    return sandbox
+
+
+def set_sandbox_mcp_config_hashes__no_commit(
+    db_session: Session,
+    mcp_config_hashes: dict[UUID, str],
+) -> None:
+    """Record each sandbox's current craft MCP fingerprint. Tracked separately
+    from ``skills_hash`` so an MCP change doesn't ride the skill-file push."""
+    if not mcp_config_hashes:
+        return
+    sandboxes = db_session.scalars(
+        select(Sandbox).where(Sandbox.id.in_(mcp_config_hashes))
+    ).all()
+    for sandbox in sandboxes:
+        sandbox.mcp_config_hash = mcp_config_hashes[sandbox.id]
+    db_session.flush()
+
+
+def lock_sandbox_skills_hashes(
+    db_session: Session,
+    sandbox_ids: set[UUID],
+) -> dict[UUID, str | None]:
+    """Lock sandboxes while their managed skill files and hashes are updated."""
+    if not sandbox_ids:
+        return {}
+    rows = db_session.execute(
+        select(Sandbox.id, Sandbox.skills_hash)
+        .where(Sandbox.id.in_(sandbox_ids))
+        .order_by(Sandbox.id)
+        .with_for_update()
+    )
+    return {sandbox_id: skills_hash for sandbox_id, skills_hash in rows}
 
 
 def update_sandbox_heartbeat(db_session: Session, sandbox_id: UUID) -> Sandbox:
-    """Update sandbox last_heartbeat to now."""
+    """Update the heartbeat without committing the caller's transaction."""
     sandbox = get_sandbox_by_id(db_session, sandbox_id)
     if not sandbox:
         raise ValueError(f"Sandbox {sandbox_id} not found")
 
     sandbox.last_heartbeat = datetime.datetime.now(datetime.timezone.utc)
-    db_session.commit()
+    db_session.flush()
     return sandbox
 
 
@@ -176,18 +279,6 @@ def user_has_stale_active_session(
         .limit(1)
     )
     return db_session.execute(stmt).first() is not None
-
-
-def get_running_sandbox_count(
-    db_session: Session,
-) -> int:
-    """Get count of all running sandboxes (for limit enforcement).
-
-    Per-tenant by virtue of schema-scoped sessions on multi-tenant.
-    """
-    stmt = select(func.count(Sandbox.id)).where(Sandbox.status == SandboxStatus.RUNNING)
-    result = db_session.execute(stmt).scalar()
-    return result or 0
 
 
 def create_snapshot__no_commit(

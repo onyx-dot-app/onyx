@@ -1,5 +1,4 @@
-from typing import Type
-from typing import Union
+from typing import Type, Union
 
 from onyx.tools.tool_implementations.coding_agent.coding_agent_tool import (
     CodingAgentTool,
@@ -61,21 +60,21 @@ def get_built_in_tool_by_id(in_code_tool_id: str) -> Type[BUILT_IN_TOOL_TYPES]:
     return BUILT_IN_TOOL_MAP[in_code_tool_id]
 
 
+def _tool_llm_name(cls: Type[BUILT_IN_TOOL_TYPES]) -> str:
+    """Extract the LLM-facing tool name from a tool class."""
+    name_attr = cls.__dict__.get("name")
+    if isinstance(name_attr, property) and name_attr.fget is not None:
+        return name_attr.fget(cls)
+    if isinstance(name_attr, str):
+        return name_attr
+    raise ValueError(
+        f"Built-in tool {cls.__name__} must define a valid LLM-facing tool name"
+    )
+
+
 def _build_tool_name_to_class() -> dict[str, Type[BUILT_IN_TOOL_TYPES]]:
     """Build a mapping from LLM-facing tool name to tool class."""
-    result: dict[str, Type[BUILT_IN_TOOL_TYPES]] = {}
-    for cls in BUILT_IN_TOOL_MAP.values():
-        name_attr = cls.__dict__.get("name")
-        if isinstance(name_attr, property) and name_attr.fget is not None:
-            tool_name = name_attr.fget(cls)
-        elif isinstance(name_attr, str):
-            tool_name = name_attr
-        else:
-            raise ValueError(
-                f"Built-in tool {cls.__name__} must define a valid LLM-facing tool name"
-            )
-        result[tool_name] = cls
-    return result
+    return {_tool_llm_name(cls): cls for cls in BUILT_IN_TOOL_MAP.values()}
 
 
 TOOL_NAME_TO_CLASS: dict[str, Type[BUILT_IN_TOOL_TYPES]] = _build_tool_name_to_class()

@@ -3,16 +3,25 @@
 from __future__ import annotations
 
 import json
-from dataclasses import asdict
-from dataclasses import dataclass
-from datetime import datetime
-from datetime import timezone
+from dataclasses import asdict, dataclass
+from datetime import datetime, timezone
 from enum import StrEnum
-from uuid import UUID
-from uuid import uuid4
+from uuid import UUID, uuid4
 
-from onyx.cache.interface import CacheBackend
-from onyx.cache.interface import CacheLock
+from onyx.cache.interface import CacheBackend, CacheLock
+from onyx.server.features.build.sandbox.models import PromptAttachment
+from onyx.server.features.build.timeouts import (
+    ACTIVE_TURN_TTL_SECONDS,
+    REQUEST_ID_TTL_SECONDS,
+    RUNNER_STALE_AFTER_SECONDS,
+)
+from onyx.utils.datetime import datetime_to_utc
+
+# Turn-state mutex: guards a handful of Redis round-trips per mutation; the
+# lease only needs to exceed the longest critical section. Ownership is
+# decided by the runner_id compare, never by this lease.
+TURN_LOCK_LEASE_SECONDS = 60.0
+TURN_LOCK_WAIT_SECONDS = 10.0
 
 
 class InteractiveTurnStatus(StrEnum):
@@ -30,11 +39,6 @@ TURN_STATUS_FAILED = InteractiveTurnStatus.FAILED
 TURN_STATUS_CANCELLED = InteractiveTurnStatus.CANCELLED
 
 ACTIVE_TURN_STATUSES = frozenset((TURN_STATUS_QUEUED, TURN_STATUS_RUNNING))
-ACTIVE_TURN_TTL_SECONDS = 45 * 60
-REQUEST_ID_TTL_SECONDS = 60 * 60
-TURN_LOCK_LEASE_SECONDS = 60.0
-TURN_LOCK_WAIT_SECONDS = 10.0
-RUNNER_STALE_AFTER_SECONDS = 90.0
 
 
 class InteractiveTurnLockError(Exception):
@@ -49,6 +53,7 @@ class InteractiveTurn:
     prompt: str
     status: InteractiveTurnStatus
     turn_index: int
+    attachments: list[PromptAttachment]
     last_heartbeat_at: datetime | None = None
     error_detail: str | None = None
     runner_id: str | None = None
@@ -77,6 +82,7 @@ def create_interactive_turn(
     client_request_id: str,
     prompt: str,
     turn_index: int,
+    attachments: list[PromptAttachment] | None = None,
 ) -> InteractiveTurn:
     now = datetime.now(tz=timezone.utc)
     turn = InteractiveTurn(
@@ -86,6 +92,7 @@ def create_interactive_turn(
         prompt=prompt,
         status=TURN_STATUS_QUEUED,
         turn_index=turn_index,
+        attachments=attachments or [],
         last_heartbeat_at=now,
     )
     _save_turn(cache, turn, ex=ACTIVE_TURN_TTL_SECONDS)
@@ -275,16 +282,16 @@ def _runner_is_stale(
 ) -> bool:
     if turn.last_heartbeat_at is None:
         return True
-    heartbeat = turn.last_heartbeat_at
-    if heartbeat.tzinfo is None:
-        heartbeat = heartbeat.replace(tzinfo=timezone.utc)
-    age = datetime.now(tz=timezone.utc) - heartbeat
+    age = datetime.now(tz=timezone.utc) - datetime_to_utc(turn.last_heartbeat_at)
     return age.total_seconds() >= stale_after_seconds
 
 
 def _save_turn(cache: CacheBackend, turn: InteractiveTurn, *, ex: int) -> None:
     payload = asdict(turn)
     payload.pop("reclaimed", None)
+    payload["attachments"] = [
+        attachment.model_dump() for attachment in turn.attachments
+    ]
     for field in ("turn_id", "session_id", "user_id"):
         payload[field] = str(payload[field])
     for field in ("last_heartbeat_at",):
@@ -305,6 +312,10 @@ def _load_turn(raw: bytes | None) -> InteractiveTurn | None:
             prompt=payload["prompt"],
             status=InteractiveTurnStatus(payload["status"]),
             turn_index=int(payload["turn_index"]),
+            attachments=[
+                PromptAttachment(**attachment)
+                for attachment in payload.get("attachments", [])
+            ],
             last_heartbeat_at=_parse_dt(payload.get("last_heartbeat_at")),
             error_detail=payload.get("error_detail"),
             runner_id=payload.get("runner_id"),

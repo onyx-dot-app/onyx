@@ -4,8 +4,7 @@ Backed by the ``encrypted_key_value_store`` table and never mirrored to the cach
 secrets stay encrypted at rest and out of Redis. Tenant context is picked up from the
 current-tenant contextvar, matching the plain KV store."""
 
-from typing import Any
-from typing import cast
+from typing import Any, cast
 
 from sqlalchemy.dialects.postgresql import insert as pg_insert
 

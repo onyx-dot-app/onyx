@@ -5,30 +5,27 @@ from typing import Any
 import pytest
 
 from onyx.chat import llm_step as llm_step_module
-from onyx.chat.llm_step import _extract_tool_call_kickoffs
-from onyx.chat.llm_step import _increment_turns
-from onyx.chat.llm_step import _parse_tool_args_to_dict
-from onyx.chat.llm_step import _resolve_tool_arguments
-from onyx.chat.llm_step import _XmlToolCallContentFilter
-from onyx.chat.llm_step import extract_tool_calls_from_response_text
-from onyx.chat.llm_step import translate_history_to_llm_format
-from onyx.chat.models import ChatLoadedFile
-from onyx.chat.models import ChatMessageSimple
-from onyx.chat.models import ToolCallSimple
+from onyx.chat.llm_step import (
+    _extract_tool_call_kickoffs,
+    _increment_turns,
+    _parse_tool_args_to_dict,
+    _resolve_tool_arguments,
+    _XmlToolCallContentFilter,
+    extract_tool_calls_from_response_text,
+    translate_history_to_llm_format,
+)
+from onyx.chat.models import ChatLoadedFile, ChatMessageSimple, ToolCallSimple
 from onyx.configs.constants import MessageType
 from onyx.file_store.models import ChatFileType
 from onyx.llm.constants import LlmProviderNames
-from onyx.llm.interfaces import LLMConfig
-from onyx.llm.interfaces import ToolChoiceOptions
-from onyx.llm.models import AssistantMessage
-from onyx.llm.models import TextContentPart
-from onyx.llm.models import ToolMessage
-from onyx.llm.models import UserMessage
-from onyx.llm.well_known_providers.constants import AZURE_PROVIDER_NAME
-from onyx.llm.well_known_providers.constants import OPENAI_PROVIDER_NAME
+from onyx.llm.interfaces import LLMConfig, ToolChoiceOptions
+from onyx.llm.models import AssistantMessage, TextContentPart, ToolMessage, UserMessage
+from onyx.llm.well_known_providers.constants import (
+    AZURE_PROVIDER_NAME,
+    OPENAI_PROVIDER_NAME,
+)
 from onyx.prompts.chat_prompts import IMAGE_DROP_REMINDER
-from onyx.prompts.constants import SYSTEM_REMINDER_TAG_CLOSE
-from onyx.prompts.constants import SYSTEM_REMINDER_TAG_OPEN
+from onyx.prompts.constants import SYSTEM_REMINDER_TAG_CLOSE, SYSTEM_REMINDER_TAG_OPEN
 from onyx.server.query_and_chat.placement import Placement
 from onyx.utils.postgres_sanitization import sanitize_string
 
@@ -750,9 +747,7 @@ class TestEmptyAnswerRecovery:
 
     @staticmethod
     def _content_stream(chunks: list[str]) -> Any:
-        from onyx.llm.model_response import Delta
-        from onyx.llm.model_response import ModelResponseStream
-        from onyx.llm.model_response import StreamingChoice
+        from onyx.llm.model_response import Delta, ModelResponseStream, StreamingChoice
 
         def _gen(*_args: Any, **_kwargs: Any) -> Any:
             for i, chunk in enumerate(chunks):
@@ -781,8 +776,7 @@ class TestEmptyAnswerRecovery:
         from unittest.mock import patch
 
         from onyx.chat import llm_step as _llm_step_module
-        from onyx.chat.citation_processor import CitationMode
-        from onyx.chat.citation_processor import DynamicCitationProcessor
+        from onyx.chat.citation_processor import CitationMode, DynamicCitationProcessor
         from onyx.chat.llm_step import run_llm_step_pkt_generator
 
         llm = self._make_llm()
@@ -980,3 +974,67 @@ class TestEmptyAnswerRecovery:
             p.obj.content for p in packets if isinstance(p.obj, AgentResponseDelta)
         )
         assert emitted == ""
+
+
+class TestFinishReasonPropagation:
+    """The terminal finish_reason must survive into LlmStepResult so run_llm_loop
+    can classify a model refusal (e.g. Anthropic stop_reason="refusal", which
+    LiteLLM normalizes to "content_filter") instead of raising a generic
+    EmptyLLMResponseError."""
+
+    @staticmethod
+    def _run_stream(chunks: list[tuple[str | None, str | None]]) -> Any:
+        from unittest.mock import MagicMock
+
+        from onyx.chat.llm_step import run_llm_step_pkt_generator
+        from onyx.llm.model_response import Delta, ModelResponseStream, StreamingChoice
+
+        llm = MagicMock()
+        llm.config = LLMConfig(
+            model_provider=LlmProviderNames.ANTHROPIC.value,
+            model_name="claude-fable-5",
+            temperature=0.0,
+            max_input_tokens=100_000,
+        )
+
+        def _gen(*_args: Any, **_kwargs: Any) -> Any:
+            for content, finish_reason in chunks:
+                yield ModelResponseStream(
+                    id="chunk",
+                    created="0",
+                    choice=StreamingChoice(
+                        finish_reason=finish_reason,
+                        delta=Delta(content=content),
+                    ),
+                )
+
+        llm.stream = _gen
+
+        gen = run_llm_step_pkt_generator(
+            history=[],
+            tool_definitions=[],
+            tool_choice=ToolChoiceOptions.AUTO,
+            llm=llm,
+            placement=Placement(turn_index=0),
+            state_container=None,
+            citation_processor=None,
+        )
+        while True:
+            try:
+                next(gen)
+            except StopIteration as stop:
+                llm_step_result, _ = stop.value
+                return llm_step_result
+
+    def test_refusal_stream_preserves_terminal_finish_reason(self) -> None:
+        """The exact shape from the bug report: HTTP 200, a terminal
+        content_filter finish reason, and zero content/tool calls."""
+        result = self._run_stream([(None, None), (None, "content_filter")])
+        assert result.finish_reason == "content_filter"
+        assert result.answer is None
+        assert result.tool_calls is None
+
+    def test_normal_stream_records_terminal_stop(self) -> None:
+        result = self._run_stream([("Hello", None), (" world", "stop")])
+        assert result.finish_reason == "stop"
+        assert result.answer == "Hello world"

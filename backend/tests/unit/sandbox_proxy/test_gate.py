@@ -15,42 +15,48 @@ import asyncio
 import base64
 import json
 import logging
-from collections.abc import Iterator
-from contextlib import contextmanager
+from contextlib import nullcontext
 from dataclasses import dataclass
-from typing import AbstractSet
-from typing import Any
+from typing import AbstractSet, Any
 from unittest.mock import MagicMock
-from uuid import UUID
-from uuid import uuid4
+from uuid import UUID, uuid4
 
 import pytest
-from mitmproxy import connection
-from mitmproxy import http
+from mitmproxy import connection, http
 from mitmproxy.proxy import server_hooks
 from redis.exceptions import RedisError
+from sqlalchemy.orm import Session
 
-from onyx.db.enums import ApprovalDecidedVia
-from onyx.db.enums import ApprovalDecision
-from onyx.db.enums import EndpointPolicy
-from onyx.external_apps.matching.engine import AllMatchedActions
-from onyx.external_apps.matching.engine import MatchedAction
+from onyx.cache.interface import CacheBackend
+from onyx.db.enums import (
+    ApprovalDecidedVia,
+    ApprovalDecision,
+    EndpointPolicy,
+    GatedAppKind,
+)
+from onyx.external_apps.matching.engine import (
+    AllMatchedActions,
+    GatedTarget,
+    MatchedAction,
+)
 from onyx.sandbox_proxy.addons import gate
-from onyx.sandbox_proxy.addons.gate import GateAddon
-from onyx.sandbox_proxy.addons.gate import ParkedApprovals
-from onyx.sandbox_proxy.credential_injection import CredentialInjectionDispatcher
-from onyx.sandbox_proxy.credential_injection import CredentialResolver
-from onyx.sandbox_proxy.credential_injection import CredentialUnavailableError
-from onyx.sandbox_proxy.credential_injection import InjectionOutcome
+from onyx.sandbox_proxy.addons.gate import GateAddon, ParkedApprovals
+from onyx.sandbox_proxy.credential_injection import (
+    CredentialInjectionDispatcher,
+    CredentialResolver,
+    CredentialUnavailableError,
+    InjectionOutcome,
+)
 from onyx.sandbox_proxy.errors import SandboxProxyError
-from onyx.sandbox_proxy.identity import ResolvedSandbox
-from onyx.sandbox_proxy.identity import SessionContext
+from onyx.sandbox_proxy.identity import ResolvedSandbox, SessionContext
 from onyx.sandbox_proxy.request_evaluator import RequestEvaluator
-from tests.unit.sandbox_proxy.conftest import make_flow
-from tests.unit.sandbox_proxy.conftest import make_matched_actions
-from tests.unit.sandbox_proxy.conftest import make_resolved_sandbox
-from tests.unit.sandbox_proxy.conftest import RecordingCredentialResolver
-from tests.unit.sandbox_proxy.conftest import StubResolver
+from tests.unit.sandbox_proxy.conftest import (
+    RecordingCredentialResolver,
+    StubResolver,
+    make_flow,
+    make_matched_actions,
+    make_resolved_sandbox,
+)
 
 # ---------------------------------------------------------------------------
 # Stubs
@@ -103,13 +109,19 @@ def _ctx(
 @pytest.fixture(autouse=True)
 def _patch_gate_session(monkeypatch: pytest.MonkeyPatch) -> None:
     """The gate opens tenant sessions via `gate.get_session_with_tenant`.
-    Default it to a dummy MagicMock-yielding session; tests asserting on
-    session-open ordering re-patch it with `_recorder_db_factory(ops)`."""
-    monkeypatch.setattr(gate, "get_session_with_tenant", _recorder_db_factory([]))
+    Unit tests treat the session as an opaque collaborator; persistence and
+    transaction behavior are covered by external-dependency tests."""
+    monkeypatch.setattr(
+        gate,
+        "get_session_with_tenant",
+        lambda **_kwargs: nullcontext(MagicMock(spec=Session)),
+    )
+    # The stub sessions can't answer the target → gated_app_id lookup.
+    monkeypatch.setattr(gate, "get_gated_app_id", lambda _db, _kind, _target_id: 1)
     monkeypatch.setattr(
         gate.action_approval,
         "list_session_grant_action_approvals",
-        lambda _db, *, session_id, external_app_id: [],  # noqa: ARG005
+        lambda _db, *, session_id, gated_app_id: [],  # noqa: ARG005
     )
 
 
@@ -157,8 +169,7 @@ _MATCH_MULTI_ASK = AllMatchedActions(
             policy=EndpointPolicy.ASK,
         ),
     ),
-    app_name="Slack",
-    external_app_id=42,
+    target=GatedTarget(kind=GatedAppKind.EXTERNAL_APP, id=42, app_name="Slack"),
     payload={"text": "hi"},
 )
 _MATCH_ALWAYS = make_matched_actions(
@@ -556,14 +567,24 @@ def _stub_grants(
     monkeypatch: pytest.MonkeyPatch,
     result: tuple[UUID, list[int]] | None | Exception,
 ) -> list[UUID]:
-    """Stub the gate's grant lookup; returns the recorded session_ids."""
+    """Stub the gate's grant lookup; returns the recorded session_ids.
+
+    Callers pass granted external-app ids; the stub wraps them as the
+    ``(kind, id)`` targets the real lookup now returns."""
     calls: list[UUID] = []
 
-    def _lookup(*, db_session: Any, session_id: UUID) -> tuple[UUID, list[int]] | None:  # noqa: ARG001
+    def _lookup(
+        *,
+        db_session: Any,  # noqa: ARG001
+        session_id: UUID,
+    ) -> tuple[UUID, set[tuple[GatedAppKind, int]]] | None:
         calls.append(session_id)
         if isinstance(result, Exception):
             raise result
-        return result
+        if result is None:
+            return None
+        run_id, app_ids = result
+        return run_id, {(GatedAppKind.EXTERNAL_APP, app_id) for app_id in app_ids}
 
     monkeypatch.setattr(gate, "get_live_scheduled_run_grants", _lookup)
     return calls
@@ -647,12 +668,13 @@ async def test_pre_approved_scheduled_run_skips_park(
     assert len(inserted) == 1
     assert inserted[0]["decision"] == ApprovalDecision.APPROVED
     assert inserted[0]["decided_via"] == ApprovalDecidedVia.PRE_APPROVAL
-    assert inserted[0]["external_app_id"] == _GRANTED_APP_ID
+    assert inserted[0]["target"] == (GatedAppKind.EXTERNAL_APP, _GRANTED_APP_ID)
     # Dedup contract: additional_data is exactly the stable (run, app) pair.
     assert len(notified) == 1
     assert notified[0]["additional_data"] == {
         "run_id": str(_RUN_ID),
-        "external_app_id": _GRANTED_APP_ID,
+        "target_kind": GatedAppKind.EXTERNAL_APP.value,
+        "target_id": _GRANTED_APP_ID,
     }
 
 
@@ -714,7 +736,7 @@ async def test_session_grant_db_fallback_hydrates_cache(
     monkeypatch.setattr(
         gate.action_approval,
         "list_session_grant_action_approvals",
-        lambda _db, *, session_id, external_app_id: [grant_source],  # noqa: ARG005
+        lambda _db, *, session_id, gated_app_id: [grant_source],  # noqa: ARG005
     )
     flow = make_flow(proxy_auth=_basic_auth(_TAG_UUID))
 
@@ -1419,173 +1441,6 @@ def test_parked_approvals_remove_last_cleans_tenant_entry() -> None:
 
 
 # ---------------------------------------------------------------------------
-# _persist_approval_row
-# ---------------------------------------------------------------------------
-
-
-class _RecorderSession:
-    """Records the ordered DB ops so a test can pin commit-before-announce."""
-
-    def __init__(self, ops: list[str]) -> None:
-        self._ops = ops
-
-    def add(self, obj: Any) -> None:  # noqa: ARG002
-        self._ops.append("add")
-
-    def flush(self) -> None:
-        self._ops.append("flush")
-
-    def commit(self) -> None:
-        self._ops.append("commit")
-
-    # Chained query for create_notification's idempotency check; first()
-    # returns None to force the create-new-row path.
-    def query(self, *_args: Any, **_kwargs: Any) -> "_RecorderSession":
-        return self
-
-    def filter_by(self, *_args: Any, **_kwargs: Any) -> "_RecorderSession":
-        return self
-
-    def filter(self, *_args: Any, **_kwargs: Any) -> "_RecorderSession":
-        return self
-
-    def first(self) -> None:
-        return None
-
-
-def _recorder_db_factory(ops: list[str]) -> Any:
-    @contextmanager
-    def factory(tenant_id: str) -> Iterator[_RecorderSession]:  # noqa: ARG001
-        yield _RecorderSession(ops)
-
-    return factory
-
-
-class _RecorderCache:
-    """Stub `CacheBackend` recording the rpush/expire that announce uses."""
-
-    def __init__(self, ops: list[str], rpush_raises: Exception | None = None) -> None:
-        self._ops = ops
-        self._rpush_raises = rpush_raises
-        self.rpush_calls: list[tuple[str, Any]] = []
-        self.expire_calls: list[tuple[str, int]] = []
-
-    def rpush(self, key: str, value: Any) -> None:
-        if self._rpush_raises is not None:
-            raise self._rpush_raises
-        self._ops.append(f"rpush:{key}")
-        self.rpush_calls.append((key, value))
-
-    def expire(self, key: str, ttl: int) -> None:
-        self._ops.append(f"expire:{key}")
-        self.expire_calls.append((key, ttl))
-
-
-def test_persist_approval_row_commits_announces_notifies(
-    monkeypatch: pytest.MonkeyPatch,
-) -> None:
-    """Pin the commit path: row committed before announce, announce
-    RPUSHed onto `approval:announce:{session_id}`, and the id registered
-    with the parked-approvals drain."""
-    ops: list[str] = []
-    approval_id = UUID("22222222-2222-2222-2222-222222222222")
-
-    # Stub insert to return a fixed id so the side effects can be pinned.
-    inserted_payload: dict[str, Any] = {}
-
-    def _fake_insert(
-        db: Any,  # noqa: ARG001
-        **kwargs: Any,
-    ) -> Any:
-        inserted_payload.update(kwargs)
-        ops.append("insert")
-        return MagicMock(approval_id=approval_id)
-
-    monkeypatch.setattr(gate.action_approval, "insert_action_approval", _fake_insert)
-
-    cache = _RecorderCache(ops)
-    monkeypatch.setattr(gate, "get_session_with_tenant", _recorder_db_factory(ops))
-    addon = _build(
-        resolver=StubResolver(),
-        matcher=_StubMatcher(),
-        cache_factory=lambda tenant_id: cache,  # noqa: ARG005
-    )
-
-    ctx = _ctx(tenant_id="tenant-1")
-    returned = addon._persist_approval_row(ctx, _MATCH)
-
-    assert returned == approval_id
-    assert inserted_payload == {
-        "session_id": ctx.session_id,
-        "actions": [a.model_dump(mode="json") for a in _MATCH.actions],
-        "app_name": _MATCH.app_name,
-        "payload": _MATCH.payload,
-        "external_app_id": _MATCH.external_app_id,
-    }
-
-    # insert -> commit -> rpush: announce must not precede the commit,
-    # or the FE could read the row before it's persisted.
-    insert_at = ops.index("insert")
-    commit_at = ops.index("commit")
-    rpush_at = next(i for i, op in enumerate(ops) if op.startswith("rpush:"))
-    assert insert_at < commit_at < rpush_at, ops
-
-    # Announce key is the session-specific list the merger BLPOPs on.
-    assert cache.rpush_calls == [
-        (f"approval:announce:{ctx.session_id}", str(approval_id))
-    ]
-    # Registered for the SIGTERM drain.
-    assert dict(addon._parked.snapshot()) == {"tenant-1": {approval_id}}
-
-
-def test_persist_approval_row_announce_failure_is_swallowed(
-    monkeypatch: pytest.MonkeyPatch,
-) -> None:
-    """A Redis blip on announce must not roll back the row or skip the
-    notify dispatch; the sub-steps run independently."""
-    approval_id = UUID("33333333-3333-3333-3333-333333333333")
-    ops: list[str] = []
-
-    def _fake_insert(
-        db: Any,  # noqa: ARG001
-        **kwargs: Any,  # noqa: ARG001
-    ) -> Any:
-        ops.append("insert")
-        return MagicMock(approval_id=approval_id)
-
-    monkeypatch.setattr(gate.action_approval, "insert_action_approval", _fake_insert)
-
-    cache = _RecorderCache(ops, rpush_raises=RedisError("connection refused"))
-    monkeypatch.setattr(gate, "get_session_with_tenant", _recorder_db_factory(ops))
-    addon = _build(
-        resolver=StubResolver(),
-        matcher=_StubMatcher(),
-        cache_factory=lambda tenant_id: cache,  # noqa: ARG005
-    )
-
-    notify_calls: list[tuple[UUID, SessionContext, AllMatchedActions]] = []
-
-    def _fake_notify(
-        _self: Any, aid: UUID, ctx_arg: SessionContext, match_arg: AllMatchedActions
-    ) -> None:
-        notify_calls.append((aid, ctx_arg, match_arg))
-
-    monkeypatch.setattr(GateAddon, "_notify_approval_requested", _fake_notify)
-
-    ctx = _ctx(tenant_id="tenant-1")
-    # Must not propagate the RedisError.
-    returned = addon._persist_approval_row(ctx, _MATCH)
-    assert returned == approval_id
-    assert dict(addon._parked.snapshot()) == {"tenant-1": {approval_id}}
-
-    # Failed announce must not short-circuit the notify dispatch.
-    assert notify_calls == [(approval_id, ctx, _MATCH)]
-    assert ops.index("insert") < ops.index("commit")
-    # rpush raised before recording, so no rpush op is present.
-    assert not any(op.startswith("rpush:") for op in ops)
-
-
-# ---------------------------------------------------------------------------
 # _await_decision
 # ---------------------------------------------------------------------------
 
@@ -1606,7 +1461,7 @@ async def test_await_decision_wake_received_returns_decision(
 
     monkeypatch.setattr(gate.approval_cache, "wait_for_wake", _fake_wait_for_wake)
 
-    cache = _RecorderCache([])
+    cache = MagicMock(spec=CacheBackend)
     addon = _build(
         resolver=StubResolver(),
         matcher=_StubMatcher(),
@@ -1635,7 +1490,7 @@ async def test_await_decision_timeout_claims_expired(
 
     monkeypatch.setattr(gate.approval_cache, "wait_for_wake", _fake_wait_for_wake)
 
-    cache = _RecorderCache([])
+    cache = MagicMock(spec=CacheBackend)
     addon = _build(
         resolver=StubResolver(),
         matcher=_StubMatcher(),
@@ -1674,7 +1529,7 @@ async def test_await_decision_cancelled_claims_expired_and_reraises(
 
     monkeypatch.setattr(gate.approval_cache, "wait_for_wake", _fake_wait_for_wake)
 
-    cache = _RecorderCache([])
+    cache = MagicMock(spec=CacheBackend)
     addon = _build(
         resolver=StubResolver(),
         matcher=_StubMatcher(),
@@ -1709,9 +1564,9 @@ async def test_drain_inflight_walks_parked_per_tenant(
     """Drain wakes every parked approval on its own tenant's cache, never
     cross-tenant, and leaves `_parked` untouched (removal is owned by
     `_await_decision.finally`)."""
-    cache_t1 = _RecorderCache([])
-    cache_t2 = _RecorderCache([])
-    per_tenant_caches: dict[str, _RecorderCache] = {
+    cache_t1 = MagicMock(spec=CacheBackend)
+    cache_t2 = MagicMock(spec=CacheBackend)
+    per_tenant_caches: dict[str, CacheBackend] = {
         "tenant-1": cache_t1,
         "tenant-2": cache_t2,
     }
@@ -1737,7 +1592,7 @@ async def test_drain_inflight_walks_parked_per_tenant(
         lambda _aid, _tid: ApprovalDecision.EXPIRED,
     )
 
-    send_wake_calls: list[tuple[UUID, ApprovalDecision, _RecorderCache]] = []
+    send_wake_calls: list[tuple[UUID, ApprovalDecision, CacheBackend]] = []
 
     def _fake_send_wake(aid: UUID, decision: ApprovalDecision, cache: Any) -> None:
         send_wake_calls.append((aid, decision, cache))
@@ -1765,9 +1620,9 @@ async def test_drain_inflight_completes_when_inflight_set_empty() -> None:
     """Nothing parked or inflight: drain returns immediately."""
     cache_factory_calls: list[str] = []
 
-    def _tracking_cache_factory(tenant_id: str) -> _RecorderCache:
+    def _tracking_cache_factory(tenant_id: str) -> CacheBackend:
         cache_factory_calls.append(tenant_id)
-        return _RecorderCache([])
+        return MagicMock(spec=CacheBackend)
 
     addon = _build(
         resolver=StubResolver(),
@@ -1799,7 +1654,7 @@ def test_terminalize_happy_path_writes_wake(
     The wake carries the arbiter's decision (APPROVED here if the API
     won the race), not unconditionally EXPIRED."""
     approval_id = uuid4()
-    cache = _RecorderCache([])
+    cache = MagicMock(spec=CacheBackend)
     addon = _build(
         resolver=StubResolver(),
         matcher=_StubMatcher(),
@@ -1830,7 +1685,7 @@ def test_terminalize_db_failure_skips_wake(
     """If the claim raises, there's no decision to forward, so send_wake
     must not be called; the exception is swallowed."""
     approval_id = uuid4()
-    cache = _RecorderCache([])
+    cache = MagicMock(spec=CacheBackend)
     addon = _build(
         resolver=StubResolver(),
         matcher=_StubMatcher(),
@@ -1862,7 +1717,7 @@ def test_terminalize_wake_failure_swallowed(
     """send_wake raising must not propagate; the parked BLPOP times out
     and re-reads the already-terminal row from Postgres."""
     approval_id = uuid4()
-    cache = _RecorderCache([])
+    cache = MagicMock(spec=CacheBackend)
     addon = _build(
         resolver=StubResolver(),
         matcher=_StubMatcher(),

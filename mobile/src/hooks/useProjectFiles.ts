@@ -1,76 +1,91 @@
 import { useCallback, useEffect, useMemo } from "react";
 import { useQueryClient } from "@tanstack/react-query";
+import { useShallow } from "zustand/react/shallow";
 
 import { QUERY_KEYS } from "@/api/query-keys";
-import {
-  getUserFileStatuses,
-  linkFileToProject,
-  unlinkFileFromProject,
-} from "@/api/files/files";
-import {
-  generateTempId,
-  uploadUserFile,
-  type NormalizedAsset,
-} from "@/api/files/upload";
+import { linkFileToProject, unlinkFileFromProject } from "@/api/files/files";
 import { pickDocuments, pickImages } from "@/api/files/pickers";
 import { getErrorMessage } from "@/api/errors";
-import { useWorkspaceSettings } from "@/api/settings";
-import {
-  isProcessingStatus,
-  type ProjectDetails,
-  type ProjectFile,
-} from "@/chat/contracts/projects";
-import { buildOptimisticFile, partitionBySize } from "@/lib/files";
-import { useProjectUploads, useUploadStore } from "@/state/uploadStore";
+import { type NormalizedAsset } from "@/api/files/upload";
+import type { ProjectFile } from "@/chat/contracts/projects";
+import { toast } from "@/hooks/useToast";
+import { useUpload } from "@/hooks/useUpload";
 import { useSession } from "@/state/session";
-
-const POLL_INTERVAL_MS = 3000;
+import {
+  EMPTY_FILES,
+  EMPTY_IDS,
+  useFilesByIds,
+  useLiveFiles,
+  useUserFileStore,
+  type UploadTarget,
+} from "@/state/userFileStore";
 
 export interface UseProjectFiles {
-  // Optimistic (uploading) entries first, then committed files.
+  // In-flight uploads first, then committed files as live store records.
   files: ProjectFile[];
-  progressById: Map<string, number>;
-  errors: string[];
-  isBusy: boolean;
   addDocuments: () => Promise<void>;
   addImages: () => Promise<void>;
   linkRecent: (fileId: string) => Promise<void>;
   removeFile: (fileId: string) => Promise<void>;
-  dismissErrors: () => void;
 }
 
-// Project file management: optimistic uploads, link/unlink, size pre-check, and
-// indexing-status polling layered over the committed list from useProjectDetails.
+// Store owns file data; this hook owns project membership — committed files rendered as their live
+// store records (fresh poll status), with in-flight uploads prepended.
 export function useProjectFiles(
   projectId: number | null,
   committedFiles: ProjectFile[] | null | undefined,
 ): UseProjectFiles {
   const queryClient = useQueryClient();
   const serverUrl = useSession((state) => state.serverUrl);
-  const { settings } = useWorkspaceSettings();
-  const maxUploadMb = settings.user_file_max_upload_size_mb;
+  const upload = useUpload();
 
-  const bucket = useProjectUploads(projectId);
-  const begin = useUploadStore((state) => state.begin);
-  const setProgress = useUploadStore((state) => state.setProgress);
-  const finish = useUploadStore((state) => state.finish);
-  const setErrors = useUploadStore((state) => state.setErrors);
-  const clearErrors = useUploadStore((state) => state.clearErrors);
+  const target = useMemo<UploadTarget | null>(
+    () => (projectId == null ? null : { kind: "project", projectId }),
+    [projectId],
+  );
 
-  const committed = committedFiles ?? [];
+  // Seed the store from the committed list; clears finished uploads so they can't resurrect as phantom optimistic rows.
+  const upsert = useUserFileStore((state) => state.upsert);
+  useEffect(() => {
+    if (projectId != null && committedFiles) {
+      upsert(committedFiles, { kind: "project", projectId });
+    }
+  }, [projectId, committedFiles, upsert]);
 
-  const { files, progressById } = useMemo(() => {
-    const optimistic = bucket ? [...bucket.uploads.values()] : [];
-    const progress = new Map<string, number>();
-    optimistic.forEach((upload) =>
-      progress.set(upload.file.id, upload.progress),
+  const committed = useLiveFiles(committedFiles ?? EMPTY_FILES);
+
+  const optimisticIds = useUserFileStore(
+    useShallow((state) =>
+      projectId == null
+        ? EMPTY_IDS
+        : Object.values(state.tasksById)
+            .filter(
+              (task) =>
+                task.target.kind === "project" &&
+                task.target.projectId === projectId,
+            )
+            .map((task) => task.clientId),
+    ),
+  );
+  const optimistic = useFilesByIds(optimisticIds);
+
+  const files = useMemo(() => {
+    const committedFileIds = new Set(committed.map((file) => file.id));
+    const optimisticOnly = optimistic.filter(
+      (file) => !committedFileIds.has(file.id),
     );
-    return {
-      files: [...optimistic.map((upload) => upload.file), ...committed],
-      progressById: progress,
-    };
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [bucket, committedFiles]);
+    return [...optimisticOnly, ...committed];
+  }, [optimistic, committed]);
+
+  const runPicked = useCallback(
+    async (pick: () => Promise<NormalizedAsset[]>) => {
+      if (target != null) await upload.pickAndUpload(pick, target);
+    },
+    [target, upload],
+  );
+
+  const addDocuments = useCallback(() => runPicked(pickDocuments), [runPicked]);
+  const addImages = useCallback(() => runPicked(pickImages), [runPicked]);
 
   const invalidateProject = useCallback(
     () =>
@@ -80,95 +95,6 @@ export function useProjectFiles(
     [queryClient, serverUrl, projectId],
   );
 
-  const runUpload = useCallback(
-    async (assets: NormalizedAsset[]) => {
-      if (projectId == null || assets.length === 0) return;
-
-      // Size pre-check mirrors web's client-side guard.
-      const { valid, rejections: rejected } = partitionBySize(
-        assets,
-        maxUploadMb,
-      );
-
-      if (valid.length === 0) {
-        setErrors(projectId, rejected);
-        return;
-      }
-
-      const items = valid.map((asset) => ({ asset, tempId: generateTempId() }));
-      begin(
-        projectId,
-        items.map(({ asset, tempId }) => buildOptimisticFile(asset, tempId)),
-      );
-      // begin() clears errors; re-surface size rejections now so they show while
-      // the uploads are still in flight.
-      if (rejected.length > 0) setErrors(projectId, rejected);
-
-      try {
-        // One request per file (the native uploader takes a single file).
-        await Promise.all(
-          items.map(async ({ asset, tempId }) => {
-            try {
-              const result = await uploadUserFile(
-                asset,
-                projectId,
-                tempId,
-                (ratio) => setProgress(projectId, tempId, ratio),
-              );
-              result.rejected_files.forEach((file) =>
-                rejected.push(`${file.file_name}: ${file.reason}`),
-              );
-            } catch (error) {
-              console.warn(`upload failed for ${asset.name}`, error);
-              rejected.push(`${asset.name} could not be uploaded`);
-            }
-          }),
-        );
-        // Refetch first (picks up the created files), then drop optimistic entries.
-        await invalidateProject();
-      } catch (error) {
-        // Uploads landed server-side but the refetch failed; focus-refetch recovers.
-        console.warn("project refetch after upload failed", error);
-        rejected.push("Uploaded, but the file list didn't refresh.");
-      } finally {
-        items.forEach(({ tempId }) => finish(projectId, tempId));
-        if (rejected.length > 0) setErrors(projectId, rejected);
-        else clearErrors(projectId);
-      }
-    },
-    [
-      projectId,
-      maxUploadMb,
-      begin,
-      setProgress,
-      finish,
-      setErrors,
-      clearErrors,
-      invalidateProject,
-    ],
-  );
-
-  // Wraps the picker so a permission denial / native error surfaces inline
-  // instead of vanishing (the sheet is already closed by the time this runs).
-  const runPicked = useCallback(
-    async (pick: () => Promise<NormalizedAsset[]>) => {
-      try {
-        await runUpload(await pick());
-      } catch (error) {
-        console.warn("file picker failed", error);
-        if (projectId != null) {
-          setErrors(projectId, [
-            getErrorMessage(error, "Couldn't open the file picker."),
-          ]);
-        }
-      }
-    },
-    [runUpload, projectId, setErrors],
-  );
-
-  const addDocuments = useCallback(() => runPicked(pickDocuments), [runPicked]);
-  const addImages = useCallback(() => runPicked(pickImages), [runPicked]);
-
   const linkRecent = useCallback(
     async (fileId: string) => {
       if (projectId == null) return;
@@ -177,94 +103,38 @@ export function useProjectFiles(
         await invalidateProject();
       } catch (error) {
         console.warn("link file to project failed", error);
-        setErrors(projectId, [
-          getErrorMessage(error, "Couldn't add that file."),
-        ]);
+        toast.error(getErrorMessage(error, "Couldn't add that file."));
       }
     },
-    [projectId, invalidateProject, setErrors],
+    [projectId, invalidateProject],
   );
 
   const removeFile = useCallback(
     async (fileId: string) => {
       if (projectId == null) return;
+      // An in-flight upload is keyed by a client temp id and isn't on the server yet — cancel it
+      // locally; unlinking would send the temp id to the server (4xx) and leave the chip stuck.
+      const store = useUserFileStore.getState();
+      if (store.tasksById[fileId]?.status === "uploading") {
+        store.removeFile(fileId, { kind: "project", projectId });
+        return;
+      }
       try {
         await unlinkFileFromProject(projectId, fileId);
         await invalidateProject();
       } catch (error) {
         console.warn("unlink file from project failed", error);
-        setErrors(projectId, [
-          getErrorMessage(error, "Couldn't remove that file."),
-        ]);
+        toast.error(getErrorMessage(error, "Couldn't remove that file."));
       }
     },
-    [projectId, invalidateProject, setErrors],
+    [projectId, invalidateProject],
   );
-
-  const dismissErrors = useCallback(() => {
-    if (projectId != null) clearErrors(projectId);
-  }, [projectId, clearErrors]);
-
-  // Poll still-working files, patching the cached details. `trackedKey` is a stable
-  // string (change-detection only, never decoded) so the effect doesn't reset the
-  // timer each render (committed is a fresh array).
-  const trackedIds = useMemo(
-    () =>
-      committed
-        .filter((file) => isProcessingStatus(file.status))
-        .map((file) => file.id)
-        .sort(),
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-    [committedFiles],
-  );
-  const trackedKey = trackedIds.join(",");
-
-  useEffect(() => {
-    if (projectId == null || trackedIds.length === 0) return;
-    let cancelled = false;
-
-    const interval = setInterval(() => {
-      void (async () => {
-        try {
-          const statuses = await getUserFileStatuses(trackedIds);
-          if (cancelled) return;
-          queryClient.setQueryData<ProjectDetails>(
-            QUERY_KEYS.userProject(serverUrl, projectId),
-            (old) => {
-              if (!old?.files) return old;
-              const byId = new Map(statuses.map((file) => [file.id, file]));
-              return {
-                ...old,
-                // /statuses returns the same UserFileSnapshot shape as /details,
-                // so take the full polled file (forward-compatible with new fields).
-                files: old.files.map((file) => byId.get(file.id) ?? file),
-              };
-            },
-          );
-        } catch (error) {
-          // transient poll failure — retry next tick
-          console.warn("file status poll failed", error);
-        }
-      })();
-    }, POLL_INTERVAL_MS);
-
-    return () => {
-      cancelled = true;
-      clearInterval(interval);
-    };
-    // trackedIds is re-read via trackedKey (stable when its contents are unchanged)
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [projectId, serverUrl, trackedKey, queryClient]);
 
   return {
     files,
-    progressById,
-    errors: bucket?.errors ?? [],
-    isBusy: (bucket?.uploads.size ?? 0) > 0,
     addDocuments,
     addImages,
     linkRecent,
     removeFile,
-    dismissErrors,
   };
 }

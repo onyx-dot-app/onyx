@@ -3,8 +3,7 @@
 import asyncio
 from typing import NamedTuple
 
-from onyx.db.discord_bot import get_guild_configs
-from onyx.db.discord_bot import get_or_create_discord_service_api_key
+from onyx.db.discord_bot import get_guild_configs, get_or_create_discord_service_api_key
 from onyx.db.engine.sql_engine import get_session_with_tenant
 from onyx.db.engine.tenant_utils import get_all_tenant_ids
 from onyx.onyxbot.discord.exceptions import CacheError

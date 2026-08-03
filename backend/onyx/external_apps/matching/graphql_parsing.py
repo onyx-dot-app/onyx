@@ -8,12 +8,14 @@ the rule-matching layer.
 
 import json
 
-from graphql import FieldNode
-from graphql import FragmentDefinitionNode
-from graphql import FragmentSpreadNode
-from graphql import GraphQLSyntaxError
-from graphql import InlineFragmentNode
-from graphql import OperationDefinitionNode
+from graphql import (
+    FieldNode,
+    FragmentDefinitionNode,
+    FragmentSpreadNode,
+    GraphQLSyntaxError,
+    InlineFragmentNode,
+    OperationDefinitionNode,
+)
 from graphql import parse as parse_graphql
 from graphql.language import SelectionSetNode
 

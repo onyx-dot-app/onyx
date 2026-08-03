@@ -7,17 +7,21 @@ from typing import Any
 
 from onyx.utils.platform_utils import is_running_in_container
 from onyx.utils.tenant import get_tenant_id_short_string
-from shared_configs.configs import DEV_LOGGING_ENABLED
-from shared_configs.configs import JSON_LOGGING
-from shared_configs.configs import LOG_FILE_NAME
-from shared_configs.configs import LOG_LEVEL
-from shared_configs.configs import LOG_TO_FILE
-from shared_configs.configs import MULTI_TENANT
-from shared_configs.configs import POSTGRES_DEFAULT_SCHEMA
-from shared_configs.configs import SLACK_CHANNEL_ID
-from shared_configs.contextvars import CURRENT_TENANT_ID_CONTEXTVAR
-from shared_configs.contextvars import INDEX_ATTEMPT_INFO_CONTEXTVAR
-from shared_configs.contextvars import ONYX_REQUEST_ID_CONTEXTVAR
+from shared_configs.configs import (
+    DEV_LOGGING_ENABLED,
+    JSON_LOGGING,
+    LOG_FILE_NAME,
+    LOG_LEVEL,
+    LOG_TO_FILE,
+    MULTI_TENANT,
+    POSTGRES_DEFAULT_SCHEMA,
+    SLACK_CHANNEL_ID,
+)
+from shared_configs.contextvars import (
+    CURRENT_TENANT_ID_CONTEXTVAR,
+    INDEX_ATTEMPT_INFO_CONTEXTVAR,
+    ONYX_REQUEST_ID_CONTEXTVAR,
+)
 
 logging.addLevelName(logging.INFO + 5, "NOTICE")
 
@@ -329,7 +333,7 @@ def setup_logger(
 
     _add_file_handlers(logger, formatter)
 
-    logger.notice = (  # type: ignore
+    logger.notice = (  # ty: ignore[unresolved-attribute]
         lambda msg, *args, **kwargs: logger.log(
             logging.getLevelName("NOTICE"), msg, *args, **kwargs
         )

@@ -2,12 +2,11 @@
 
 import AuthFlowContainer from "@/components/auth/AuthFlowContainer";
 
-import { useUser } from "@/providers/UserProvider";
-import { redirect, useRouter } from "next/navigation";
+import { useRouter } from "next/navigation";
 import type { Route } from "next";
 import { Formik, Form, FormikHelpers } from "formik";
 import * as Yup from "yup";
-import { toast } from "@/hooks/useToast";
+import { toast } from "@opal/layouts";
 import { TextFormField } from "@/components/Field";
 import { Button } from "@opal/components";
 import Text from "@/refresh-components/texts/Text";
@@ -19,14 +18,6 @@ const ImpersonateSchema = Yup.object().shape({
 
 export default function ImpersonatePage() {
   const router = useRouter();
-  const { user, isCloudSuperuser } = useUser();
-  if (!user) {
-    redirect("/auth/login");
-  }
-
-  if (!isCloudSuperuser) {
-    redirect("/app" as Route);
-  }
 
   const handleImpersonate = async (
     values: { email: string; apiKey: string },

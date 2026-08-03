@@ -11,10 +11,8 @@ the correct files.
 """
 
 from collections.abc import Generator
-from unittest.mock import MagicMock
-from unittest.mock import patch
-from uuid import UUID
-from uuid import uuid4
+from unittest.mock import MagicMock, patch
+from uuid import UUID, uuid4
 
 import pytest
 import sqlalchemy as sa

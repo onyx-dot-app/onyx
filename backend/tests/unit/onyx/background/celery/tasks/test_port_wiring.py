@@ -15,8 +15,7 @@ from pathlib import Path
 
 from onyx.background.celery.tasks.beat_schedule import beat_task_templates
 from onyx.configs.app_configs import DISABLE_VECTOR_DB
-from onyx.configs.constants import OnyxCeleryQueues
-from onyx.configs.constants import OnyxCeleryTask
+from onyx.configs.constants import OnyxCeleryQueues, OnyxCeleryTask
 
 
 def _find_supervisord_conf() -> Path:

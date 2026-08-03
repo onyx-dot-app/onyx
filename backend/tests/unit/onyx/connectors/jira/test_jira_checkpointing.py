@@ -1,29 +1,23 @@
 import time
-from collections.abc import Callable
-from collections.abc import Generator
-from datetime import datetime
-from datetime import timezone
-from typing import Any
-from typing import cast
-from unittest.mock import MagicMock
-from unittest.mock import patch
+from collections.abc import Callable, Generator
+from datetime import datetime, timezone
+from typing import Any, cast
+from unittest.mock import MagicMock, patch
 
 import pytest
-from jira import JIRA
-from jira import JIRAError
+from jira import JIRA, JIRAError
 from jira.resources import Issue
 
 from onyx.configs.constants import DocumentSource
-from onyx.connectors.exceptions import ConnectorValidationError
-from onyx.connectors.exceptions import CredentialExpiredError
-from onyx.connectors.exceptions import InsufficientPermissionsError
-from onyx.connectors.exceptions import UnexpectedValidationError
-from onyx.connectors.jira.connector import JiraConnector
-from onyx.connectors.jira.connector import JiraConnectorCheckpoint
+from onyx.connectors.exceptions import (
+    ConnectorValidationError,
+    CredentialExpiredError,
+    InsufficientPermissionsError,
+    UnexpectedValidationError,
+)
+from onyx.connectors.jira.connector import JiraConnector, JiraConnectorCheckpoint
 from onyx.connectors.jira.utils import JIRA_SERVER_API_VERSION
-from onyx.connectors.models import ConnectorFailure
-from onyx.connectors.models import Document
-from onyx.connectors.models import SlimDocument
+from onyx.connectors.models import ConnectorFailure, Document, SlimDocument
 from onyx.utils.logger import setup_logger
 from tests.unit.onyx.connectors.utils import load_everything_from_checkpoint_connector
 

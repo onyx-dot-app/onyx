@@ -2,11 +2,8 @@ import copy
 import csv
 import io
 import json
-from collections.abc import Callable
-from collections.abc import Mapping
-from datetime import datetime
-from datetime import timedelta
-from datetime import timezone
+from collections.abc import Callable, Mapping
+from datetime import datetime, timedelta, timezone
 from enum import Enum
 from typing import Any
 
@@ -14,22 +11,26 @@ import requests
 from pydantic import BaseModel
 
 from onyx.configs.constants import DocumentSource
-from onyx.connectors.cross_connector_utils.rate_limit_wrapper import rate_limit_builder
 from onyx.connectors.cross_connector_utils.rate_limit_wrapper import (
+    rate_limit_builder,
     wrap_request_to_handle_ratelimiting,
 )
-from onyx.connectors.exceptions import ConnectorValidationError
-from onyx.connectors.exceptions import CredentialInvalidError
-from onyx.connectors.interfaces import CheckpointedConnector
-from onyx.connectors.interfaces import CheckpointOutput
-from onyx.connectors.interfaces import SecondsSinceUnixEpoch
-from onyx.connectors.models import ConnectorCheckpoint
-from onyx.connectors.models import ConnectorFailure
-from onyx.connectors.models import ConnectorMissingCredentialError
-from onyx.connectors.models import Document
-from onyx.connectors.models import EntityFailure
-from onyx.connectors.models import TabularSection
-from onyx.connectors.models import TextSection
+from onyx.connectors.exceptions import ConnectorValidationError, CredentialInvalidError
+from onyx.connectors.interfaces import (
+    CheckpointedConnector,
+    CheckpointOutput,
+    SecondsSinceUnixEpoch,
+)
+from onyx.connectors.models import (
+    ConnectorCheckpoint,
+    ConnectorFailure,
+    ConnectorMissingCredentialError,
+    Document,
+    EntityFailure,
+    TabularSection,
+    TextSection,
+)
+from onyx.utils.datetime import datetime_to_utc
 from onyx.utils.logger import setup_logger
 from onyx.utils.retry_wrapper import retry_builder
 
@@ -90,8 +91,7 @@ def _parse_time(time_str: str | None) -> datetime | None:
     if not time_str:
         return None
     try:
-        dt = datetime.fromisoformat(time_str.replace("Z", "+00:00"))
-        return dt if dt.tzinfo else dt.replace(tzinfo=timezone.utc)
+        return datetime_to_utc(datetime.fromisoformat(time_str.replace("Z", "+00:00")))
     except ValueError:
         return None
 

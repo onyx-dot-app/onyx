@@ -4,12 +4,16 @@ import aiohttp
 
 from onyx.chat.models import ChatFullResponse
 from onyx.onyxbot.discord.constants import API_REQUEST_TIMEOUT
-from onyx.onyxbot.discord.exceptions import APIConnectionError
-from onyx.onyxbot.discord.exceptions import APIResponseError
-from onyx.onyxbot.discord.exceptions import APITimeoutError
-from onyx.server.query_and_chat.models import ChatSessionCreationRequest
-from onyx.server.query_and_chat.models import MessageOrigin
-from onyx.server.query_and_chat.models import SendMessageRequest
+from onyx.onyxbot.discord.exceptions import (
+    APIConnectionError,
+    APIResponseError,
+    APITimeoutError,
+)
+from onyx.server.query_and_chat.models import (
+    ChatSessionCreationRequest,
+    MessageOrigin,
+    SendMessageRequest,
+)
 from onyx.utils.logger import setup_logger
 from onyx.utils.variable_functionality import build_api_server_url_for_http_requests
 

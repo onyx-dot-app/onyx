@@ -3,45 +3,53 @@ from typing import cast
 
 import pytz
 import timeago
-from slack_sdk.models.blocks import ActionsBlock
-from slack_sdk.models.blocks import Block
-from slack_sdk.models.blocks import ButtonElement
-from slack_sdk.models.blocks import ContextBlock
-from slack_sdk.models.blocks import DividerBlock
-from slack_sdk.models.blocks import HeaderBlock
-from slack_sdk.models.blocks import Option
-from slack_sdk.models.blocks import RadioButtonsElement
-from slack_sdk.models.blocks import SectionBlock
+from slack_sdk.models.blocks import (
+    ActionsBlock,
+    Block,
+    ButtonElement,
+    ContextBlock,
+    DividerBlock,
+    HeaderBlock,
+    Option,
+    RadioButtonsElement,
+    SectionBlock,
+)
 from slack_sdk.models.blocks.basic_components import MarkdownTextObject
 from slack_sdk.models.blocks.block_elements import ImageElement
 
 from onyx.chat.models import ChatBasicResponse
 from onyx.configs.app_configs import WEB_DOMAIN
-from onyx.configs.constants import DocumentSource
-from onyx.configs.constants import SearchFeedbackType
+from onyx.configs.constants import DocumentSource, SearchFeedbackType
 from onyx.configs.onyxbot_configs import ONYX_BOT_NUM_DOCS_TO_DISPLAY
 from onyx.context.search.models import SearchDoc
 from onyx.db.chat import get_chat_session_by_message_id
 from onyx.db.engine.sql_engine import get_session_with_current_tenant
 from onyx.db.models import ChannelConfig
-from onyx.onyxbot.slack.constants import CONTINUE_IN_WEB_UI_ACTION_ID
-from onyx.onyxbot.slack.constants import DISLIKE_BLOCK_ACTION_ID
-from onyx.onyxbot.slack.constants import FOLLOWUP_BUTTON_ACTION_ID
-from onyx.onyxbot.slack.constants import FOLLOWUP_BUTTON_RESOLVED_ACTION_ID
-from onyx.onyxbot.slack.constants import IMMEDIATE_RESOLVED_BUTTON_ACTION_ID
-from onyx.onyxbot.slack.constants import KEEP_TO_YOURSELF_ACTION_ID
-from onyx.onyxbot.slack.constants import LIKE_BLOCK_ACTION_ID
-from onyx.onyxbot.slack.constants import SHOW_EVERYONE_ACTION_ID
+from onyx.onyxbot.slack.constants import (
+    CONTINUE_IN_WEB_UI_ACTION_ID,
+    DISLIKE_BLOCK_ACTION_ID,
+    FOLLOWUP_BUTTON_ACTION_ID,
+    FOLLOWUP_BUTTON_RESOLVED_ACTION_ID,
+    IMMEDIATE_RESOLVED_BUTTON_ACTION_ID,
+    KEEP_TO_YOURSELF_ACTION_ID,
+    LIKE_BLOCK_ACTION_ID,
+    SHOW_EVERYONE_ACTION_ID,
+)
 from onyx.onyxbot.slack.formatting import format_slack_message
 from onyx.onyxbot.slack.icons import source_to_github_img_link
-from onyx.onyxbot.slack.models import ActionValuesEphemeralMessage
-from onyx.onyxbot.slack.models import ActionValuesEphemeralMessageChannelConfig
-from onyx.onyxbot.slack.models import ActionValuesEphemeralMessageMessageInfo
-from onyx.onyxbot.slack.models import SlackMessageInfo
-from onyx.onyxbot.slack.utils import build_continue_in_web_ui_id
-from onyx.onyxbot.slack.utils import build_feedback_id
-from onyx.onyxbot.slack.utils import build_publish_ephemeral_message_id
-from onyx.onyxbot.slack.utils import remove_slack_text_interactions
+from onyx.onyxbot.slack.models import (
+    ActionValuesEphemeralMessage,
+    ActionValuesEphemeralMessageChannelConfig,
+    ActionValuesEphemeralMessageMessageInfo,
+    SlackMessageInfo,
+)
+from onyx.onyxbot.slack.utils import (
+    build_continue_in_web_ui_id,
+    build_feedback_id,
+    build_publish_ephemeral_message_id,
+    remove_slack_text_interactions,
+)
+from onyx.utils.datetime import datetime_to_utc
 from onyx.utils.text_processing import decode_escapes
 
 _MAX_BLURB_LEN = 45
@@ -52,12 +60,7 @@ def _format_doc_updated_at(updated_at: datetime | None) -> str | None:
     if updated_at is None:
         return None
 
-    if updated_at.tzinfo is None or updated_at.tzinfo.utcoffset(updated_at) is None:
-        aware_updated_at = updated_at.replace(tzinfo=pytz.utc)
-    else:
-        aware_updated_at = updated_at.astimezone(pytz.utc)
-
-    return timeago.format(aware_updated_at, datetime.now(pytz.utc))
+    return timeago.format(datetime_to_utc(updated_at), datetime.now(pytz.utc))
 
 
 def get_feedback_reminder_blocks(thread_link: str, include_followup: bool) -> Block:

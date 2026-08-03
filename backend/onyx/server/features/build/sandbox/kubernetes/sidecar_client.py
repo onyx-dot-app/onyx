@@ -6,38 +6,30 @@ import base64
 import binascii
 import hashlib
 import time
-from collections.abc import Callable
-from collections.abc import Iterator
+from collections.abc import Callable, Iterator
 from contextlib import contextmanager
-from typing import cast
-from typing import IO
+from typing import IO, cast
 from uuid import UUID
 
 import httpx
 from cryptography.hazmat.primitives.asymmetric.ed25519 import Ed25519PrivateKey
-from cryptography.hazmat.primitives.serialization import Encoding
-from cryptography.hazmat.primitives.serialization import PublicFormat
+from cryptography.hazmat.primitives.serialization import Encoding, PublicFormat
 
 from onyx.server.features.build.configs import SANDBOX_PUSH_PRIVATE_KEY
 from onyx.server.features.build.sandbox.image.sandbox_daemon.contract import (
+    PUSH_DAEMON_PORT,
+    SIDECAR_FILESYSTEM_LIST_PATH,
+    SIDECAR_HEALTH_PATH,
+    SIDECAR_PUSH_PATH,
     FilesystemListRequest,
-)
-from onyx.server.features.build.sandbox.image.sandbox_daemon.contract import (
     FilesystemListResponse,
 )
-from onyx.server.features.build.sandbox.image.sandbox_daemon.contract import (
-    PUSH_DAEMON_PORT,
-)
-from onyx.server.features.build.sandbox.image.sandbox_daemon.contract import (
-    SIDECAR_FILESYSTEM_LIST_PATH,
-)
-from onyx.server.features.build.sandbox.image.sandbox_daemon.contract import (
-    SIDECAR_HEALTH_PATH,
-)
-from onyx.server.features.build.sandbox.image.sandbox_daemon.contract import (
-    SIDECAR_PUSH_PATH,
-)
 from onyx.server.features.build.sandbox.models import FilesystemEntry
+from onyx.server.features.build.timeouts import (
+    BULK_TRANSFER_TIMEOUT_SECONDS,
+    CONNECT_TIMEOUT_SECONDS,
+    RPC_TIMEOUT_SECONDS,
+)
 
 _SIDECAR_CHUNK_SIZE = 8 * 1024 * 1024
 
@@ -143,7 +135,7 @@ class SidecarClient:
         sandbox_id: UUID,
         session_id: UUID,
         path: str,
-        timeout_seconds: float = 30.0,
+        timeout_seconds: float = RPC_TIMEOUT_SECONDS,
     ) -> list[FilesystemEntry]:
         payload = FilesystemListRequest(session_id=session_id, path=path)
         body = payload.model_dump_json().encode()
@@ -235,7 +227,7 @@ class SidecarClient:
         archive_file: IO[bytes],
         sha256_hex: str,
         operation_label: str,
-        timeout_seconds: float = 300.0,
+        timeout_seconds: float = BULK_TRANSFER_TIMEOUT_SECONDS,
     ) -> None:
         def body() -> Iterator[bytes]:
             archive_file.seek(0)
@@ -261,7 +253,7 @@ class SidecarClient:
         sandbox_id: UUID,
         endpoint_path: str,
         operation_label: str,
-        timeout_seconds: float = 300.0,
+        timeout_seconds: float = BULK_TRANSFER_TIMEOUT_SECONDS,
     ) -> None:
         body = b""
         self._post(
@@ -363,7 +355,7 @@ class SidecarClient:
     def _timeout_for_post(remaining_seconds: float) -> httpx.Timeout:
         return httpx.Timeout(
             remaining_seconds,
-            connect=min(5.0, remaining_seconds),
+            connect=min(CONNECT_TIMEOUT_SECONDS, remaining_seconds),
             read=remaining_seconds,
             write=remaining_seconds,
         )

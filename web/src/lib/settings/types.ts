@@ -40,6 +40,7 @@ export interface Settings {
   deep_research_enabled?: boolean;
   multi_model_chat_enabled?: boolean;
   search_ui_enabled?: boolean;
+  auto_detect_search_filters?: boolean;
 
   // Image processing settings
   image_extraction_and_analysis_enabled?: boolean;
@@ -65,6 +66,10 @@ export interface Settings {
 
   // Workspace default for Craft access; per-user overrides win.
   craft_default_enabled?: boolean;
+
+  // Workspace-wide instructions injected into every Craft agent's system
+  // prompt (AGENTS.md).
+  craft_instructions?: string | null;
 
   // Dev/debug flag: when true, the Craft UI renders an "Opencode pod logs"
   // button that streams the user's sandbox pod logs in real time. Backed

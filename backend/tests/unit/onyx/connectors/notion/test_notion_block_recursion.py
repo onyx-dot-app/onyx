@@ -10,9 +10,11 @@ from typing import Any
 from unittest.mock import patch
 
 from onyx.connectors.models import Document
-from onyx.connectors.notion.connector import BlockReadOutput
-from onyx.connectors.notion.connector import NotionConnector
-from onyx.connectors.notion.connector import NotionPage
+from onyx.connectors.notion.connector import (
+    BlockReadOutput,
+    NotionConnector,
+    NotionPage,
+)
 
 # Pinned per test for determinism; _DEEP is well past it to force the overflow.
 _PROD_RECURSION_LIMIT = 1000
@@ -78,7 +80,9 @@ class TestDeepNesting:
         connector.workspace_id = "ws-1"
 
         def fake_read_blocks(
-            base_block_id: str, _containing_page_id: str | None = None
+            base_block_id: str,
+            _containing_page_id: str | None = None,
+            is_slim: bool = False,  # noqa: ARG001
         ) -> BlockReadOutput:
             level = int(base_block_id.rsplit("-", 1)[1])
             next_level = level + 1

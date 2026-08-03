@@ -9,9 +9,12 @@
   update. These rules let the web app reserve the strip itself, so the fix
   reaches every existing install via the remote bundle without a desktop release.
 
-  Activated by the `onyx-desktop` class added to <html> (see the inline detector
-  in app/layout.tsx). All rules are gated on `html.onyx-desktop`, so browser
-  users are completely unaffected. The selectors are deliberately more specific
+  Activated by the `onyx-desktop` class added to <html> on macOS only (see the
+  inline detector in app/layout.tsx) — the overlay title bar is macOS-specific;
+  Linux and Windows keep native window decorations (and, on Linux, an in-window
+  menu bar), so reserving the strip there would just leave a gap above the app.
+  All rules are gated on `html.onyx-desktop`, so browser users are completely
+  unaffected. The selectors are deliberately more specific
   than the shim's (`.onyx-desktop` + element/id), and this sheet is imported
   unlayered, so it deterministically wins over every shim version — producing a
   single inset (never a doubled 72px gap) regardless of which shim is present.
@@ -54,7 +57,7 @@ html.onyx-desktop .h-screen,
 html.onyx-desktop .max-h-screen,
 html.onyx-desktop .opal-sidebar-root__column,
 html.onyx-desktop .opal-sidebar-root__overlay[data-variant="mobile"],
-html.onyx-desktop .opal-sidebar-root__overlay[data-variant="medium"] {
+html.onyx-desktop .opal-sidebar-root__overlay[data-variant="small"] {
   height: calc(100dvh - var(--onyx-titlebar-height)) !important;
   max-height: calc(100dvh - var(--onyx-titlebar-height)) !important;
 }
@@ -69,7 +72,7 @@ html.onyx-desktop .min-h-screen {
   the title bar.
 */
 html.onyx-desktop .opal-sidebar-root__overlay[data-variant="mobile"],
-html.onyx-desktop .opal-sidebar-root__overlay[data-variant="medium"],
+html.onyx-desktop .opal-sidebar-root__overlay[data-variant="small"],
 html.onyx-desktop .opal-sidebar-root__backdrop {
   top: var(--onyx-titlebar-height) !important;
   bottom: 0 !important;

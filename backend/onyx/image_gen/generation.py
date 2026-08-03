@@ -4,12 +4,13 @@ from sqlalchemy.orm import Session
 from onyx.db.engine.sql_engine import get_session_with_current_tenant
 from onyx.db.image_generation import get_default_image_generation_config
 from onyx.image_gen.exceptions import ImageGenerationNotConfiguredError
-from onyx.image_gen.factory import get_image_generation_provider
-from onyx.image_gen.factory import validate_credentials
-from onyx.image_gen.interfaces import ImageGenerationProvider
-from onyx.image_gen.interfaces import ImageGenerationProviderCredentials
-from onyx.image_gen.interfaces import ImageShape
-from onyx.image_gen.interfaces import ReferenceImage
+from onyx.image_gen.factory import get_image_generation_provider, validate_credentials
+from onyx.image_gen.interfaces import (
+    ImageGenerationProvider,
+    ImageGenerationProviderCredentials,
+    ImageShape,
+    ReferenceImage,
+)
 from onyx.utils.logger import setup_logger
 
 logger = setup_logger()
@@ -107,6 +108,12 @@ def _default_provider_and_model(
             "The configured image generation provider has invalid credentials."
         )
     return llm_provider.provider, config.model_configuration.name, credentials
+
+
+def ensure_image_generation_configured() -> None:
+    """Raises ImageGenerationNotConfiguredError if no default provider is set up."""
+    with get_session_with_current_tenant() as db_session:
+        _default_provider_and_model(db_session)
 
 
 def is_image_generation_configured(db_session: Session) -> bool:

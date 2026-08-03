@@ -1,26 +1,14 @@
 from collections.abc import Sequence
 from datetime import datetime
 
-from sqlalchemy import asc
-from sqlalchemy import BinaryExpression
-from sqlalchemy import ColumnElement
-from sqlalchemy import desc
-from sqlalchemy import distinct
-from sqlalchemy.orm import contains_eager
-from sqlalchemy.orm import joinedload
-from sqlalchemy.orm import Session
-from sqlalchemy.sql import case
-from sqlalchemy.sql import func
-from sqlalchemy.sql import select
-from sqlalchemy.sql.expression import literal
-from sqlalchemy.sql.expression import UnaryExpression
+from sqlalchemy import BinaryExpression, ColumnElement, asc, desc, distinct
+from sqlalchemy.orm import Session, contains_eager, joinedload
+from sqlalchemy.sql import case, func, select
+from sqlalchemy.sql.expression import UnaryExpression, literal
 
 from ee.onyx.background.task_name_builders import QUERY_HISTORY_TASK_NAME_PREFIX
 from onyx.configs.constants import QAFeedbackType
-from onyx.db.models import ChatMessage
-from onyx.db.models import ChatMessageFeedback
-from onyx.db.models import ChatSession
-from onyx.db.models import TaskQueueState
+from onyx.db.models import ChatMessage, ChatMessageFeedback, ChatSession, TaskQueueState
 from onyx.db.tasks import get_all_tasks_with_prefix
 
 

@@ -23,6 +23,7 @@ import {
 import { bindAppStateFocus } from "@/query/focus";
 import { bindOnlineManager } from "@/query/online";
 import { SidebarProvider } from "@/components/sidebar";
+import { ToastHost } from "@/components/ui/ToastHost";
 import { AuthGate } from "@/components/auth/AuthGate";
 
 SplashScreen.preventAutoHideAsync();
@@ -66,6 +67,7 @@ export default function RootLayout() {
               <AuthGate>
                 <Stack screenOptions={{ headerShown: false }} />
               </AuthGate>
+              <ToastHost />
               <PortalHost />
             </SidebarProvider>
           </PersistQueryClientProvider>

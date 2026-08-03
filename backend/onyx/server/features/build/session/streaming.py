@@ -17,10 +17,8 @@ import json
 import queue as queue_lib
 import threading
 import time
-from collections.abc import Callable
-from collections.abc import Generator
-from datetime import datetime
-from datetime import timezone
+from collections.abc import Callable, Generator
+from datetime import datetime, timezone
 from typing import Any
 from uuid import UUID
 
@@ -33,35 +31,44 @@ from onyx.db.enums import SandboxStatus
 from onyx.db.models import BuildSession
 from onyx.sandbox_proxy import approval_cache
 from onyx.server.features.build import connect_app
-from onyx.server.features.build.configs import OPENCODE_PROMPT_TIMEOUT_SECONDS
 from onyx.server.features.build.configs import (
     SANDBOX_HEARTBEAT_REFRESH_INTERVAL_SECONDS,
 )
-from onyx.server.features.build.db.build_session import create_message
-from onyx.server.features.build.db.build_session import get_build_session
-from onyx.server.features.build.db.build_session import update_session_activity
-from onyx.server.features.build.db.build_session import upsert_agent_plan
-from onyx.server.features.build.db.sandbox import get_sandbox_by_user_id
-from onyx.server.features.build.db.sandbox import update_sandbox_heartbeat
-from onyx.server.features.build.packets import ApprovalRequestedPacket
-from onyx.server.features.build.packets import BuildPacket
-from onyx.server.features.build.packets import CompactionPacket
-from onyx.server.features.build.packets import ConnectAppRequestPacket
-from onyx.server.features.build.packets import ContextUsagePacket
-from onyx.server.features.build.packets import ErrorPacket
-from onyx.server.features.build.packets import SubagentStartedPacket
+from onyx.server.features.build.db.build_session import (
+    create_message,
+    get_build_session,
+    update_session_activity,
+    upsert_agent_plan,
+)
+from onyx.server.features.build.db.sandbox import (
+    get_sandbox_by_user_id,
+    update_sandbox_heartbeat,
+)
+from onyx.server.features.build.packets import (
+    ApprovalRequestedPacket,
+    BuildPacket,
+    CompactionPacket,
+    ConnectAppRequestPacket,
+    ContextUsagePacket,
+    ErrorPacket,
+    SubagentStartedPacket,
+)
 from onyx.server.features.build.sandbox.base import SandboxManager
-from onyx.server.features.build.sandbox.event_schema import AgentMessageChunk
-from onyx.server.features.build.sandbox.event_schema import AgentPlanUpdate
-from onyx.server.features.build.sandbox.event_schema import AgentThoughtChunk
-from onyx.server.features.build.sandbox.event_schema import CurrentModeUpdate
+from onyx.server.features.build.sandbox.event_schema import (
+    AgentMessageChunk,
+    AgentPlanUpdate,
+    AgentThoughtChunk,
+    CurrentModeUpdate,
+    PromptResponse,
+    ToolCallProgress,
+    ToolCallStart,
+)
 from onyx.server.features.build.sandbox.event_schema import Error as SandboxError
-from onyx.server.features.build.sandbox.event_schema import PromptResponse
-from onyx.server.features.build.sandbox.event_schema import ToolCallProgress
-from onyx.server.features.build.sandbox.event_schema import ToolCallStart
+from onyx.server.features.build.sandbox.models import PromptAttachment
 from onyx.server.features.build.sandbox.opencode.serve_client import _merge_field_meta
 from onyx.server.features.build.sandbox.serve_transport import PromptSlot
 from onyx.server.features.build.sandbox.sse import SSEKeepalive
+from onyx.server.features.build.timeouts import PROMPT_SLOT_KEEP_ALIVE_MAX_SECONDS
 from onyx.utils.logger import setup_logger
 from onyx.utils.threadpool_concurrency import start_thread_with_context
 from shared_configs.contextvars import CURRENT_TENANT_ID_CONTEXTVAR
@@ -350,7 +357,7 @@ def merge_events_with_announces(
             output.put(
                 ConnectAppRequestPacket(
                     request_id=request.request_id,
-                    app_slug=request.app_slug,
+                    external_app_id=request.external_app_id,
                     reason=request.reason,
                 )
             )
@@ -468,6 +475,7 @@ def _refresh_sandbox_heartbeat_best_effort(sandbox_id: UUID) -> None:
     try:
         with get_session_with_current_tenant() as hb_session:
             update_sandbox_heartbeat(hb_session, sandbox_id)
+            hb_session.commit()
     except Exception:
         logger.warning(
             "Failed to refresh heartbeat for sandbox %s", sandbox_id, exc_info=True
@@ -481,11 +489,13 @@ def yield_sandbox_events(
     session_id: UUID,
     user_message_content: str,
     *,
+    attachments: list[PromptAttachment] | None = None,
     opencode_session_id: str | None,
     agent_provider: str | None,
     agent_model: str | None,
     should_interrupt: Callable[[], bool] | None = None,
     should_abort_on_teardown: Callable[[], bool] | None = None,
+    turn_timeout_seconds: float | None = None,
 ) -> Generator[Any, None, None]:
     """Drive the agent to completion, yielding raw sandbox events.
 
@@ -514,12 +524,14 @@ def yield_sandbox_events(
         sandbox_id,
         session_id,
         user_message_content,
+        attachments=attachments,
         opencode_session_id=opencode_session_id,
         agent_provider=agent_provider,
         agent_model=agent_model,
         on_opencode_session_resolved=_persist_resolved_id,
         should_interrupt=should_interrupt,
         should_abort_on_teardown=should_abort_on_teardown,
+        turn_timeout_seconds=turn_timeout_seconds,
     )
     try:
         for sandbox_event in event_stream:
@@ -852,7 +864,7 @@ def stream_subagent_turn(
             target=slot.keep_alive,
             name=f"prompt-slot-renewal-{session_id}",
             daemon=True,
-            args=(slot_renewal_stop, OPENCODE_PROMPT_TIMEOUT_SECONDS),
+            args=(slot_renewal_stop, PROMPT_SLOT_KEEP_ALIVE_MAX_SECONDS),
         )
 
         # Routing metadata merged into every forwarded subagent event and
@@ -932,6 +944,7 @@ def stream_subagent_turn(
         # Flush the accumulated assistant message tagged with routing _meta.
         finalize_persist(db_session, session_id, state, routing_meta)
         update_sandbox_heartbeat(db_session, sandbox_id)
+        db_session.commit()
 
     except GeneratorExit:
         logger.warning(

@@ -6,15 +6,18 @@ import discord
 from pydantic import BaseModel
 
 from onyx.chat.models import ChatFullResponse
-from onyx.db.discord_bot import get_channel_config_by_discord_ids
-from onyx.db.discord_bot import get_guild_config_by_discord_id
+from onyx.db.discord_bot import (
+    get_channel_config_by_discord_ids,
+    get_guild_config_by_discord_id,
+)
 from onyx.db.engine.sql_engine import get_session_with_tenant
-from onyx.db.models import DiscordChannelConfig
-from onyx.db.models import DiscordGuildConfig
+from onyx.db.models import DiscordChannelConfig, DiscordGuildConfig
 from onyx.onyxbot.discord.api_client import OnyxAPIClient
-from onyx.onyxbot.discord.constants import MAX_CONTEXT_MESSAGES
-from onyx.onyxbot.discord.constants import MAX_MESSAGE_LENGTH
-from onyx.onyxbot.discord.constants import THINKING_EMOJI
+from onyx.onyxbot.discord.constants import (
+    MAX_CONTEXT_MESSAGES,
+    MAX_MESSAGE_LENGTH,
+    THINKING_EMOJI,
+)
 from onyx.onyxbot.discord.exceptions import APIError
 from onyx.utils.logger import setup_logger
 

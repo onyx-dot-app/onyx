@@ -1,15 +1,13 @@
 import random
 import time
 from collections.abc import Generator
-from datetime import datetime
-from datetime import timezone
+from datetime import datetime, timezone
 from typing import Any
 
 from office365.graph_client import GraphClient
 from office365.runtime.client_request_exception import ClientRequestException
 from office365.runtime.queries.client_query import ClientQuery
-from office365.teams.channels.channel import Channel
-from office365.teams.channels.channel import ConversationMember
+from office365.teams.channels.channel import Channel, ConversationMember
 
 from onyx.access.models import ExternalAccess
 from onyx.connectors.interfaces import SecondsSinceUnixEpoch

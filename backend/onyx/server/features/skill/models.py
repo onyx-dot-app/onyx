@@ -1,21 +1,18 @@
 """Pydantic request and response models for the skills API."""
 
 import datetime
-from typing import Any
-from typing import Literal
+from typing import Any, Literal
 from uuid import UUID
 
-from pydantic import BaseModel
-from pydantic import ConfigDict
-from pydantic import Field
-from pydantic import model_validator
+from pydantic import BaseModel, ConfigDict, Field, model_validator
 from sqlalchemy.orm import Session
 
-from onyx.db.enums import SkillAccessLevel
-from onyx.db.enums import SkillSharePermission
+from onyx.db.enums import SkillAccessLevel, SkillSharePermission
 from onyx.db.models import Skill
 from onyx.server.models import MinimalUserSnapshot
 from onyx.skills.built_in import BuiltInSkillDefinition
+from onyx.skills.models import GITHUB_SKILL_MAX_COUNT, SkillBundleFile
+from onyx.utils.github import GITHUB_COMMIT_SHA_PATTERN
 
 
 class SkillUserShare(BaseModel):
@@ -29,17 +26,25 @@ class SkillGroupShare(BaseModel):
     permission: SkillSharePermission
 
 
+class SkillExternalAppDependencyResponse(BaseModel):
+    external_app_id: int
+    name: str
+    enabled: bool
+    ready: bool
+
+
 class SkillResponse(BaseModel):
     source: Literal["builtin", "custom"]
     id: UUID
-    slug: str
     name: str
     description: str
 
     is_available: bool | None = None
     unavailable_reason: str | None = None
+    is_valid: bool | None = None
 
-    enabled: bool | None = None
+    enabled: bool
+    can_toggle: bool
     author_user_id: UUID | None = None
     author_email: str | None = None
     owner: MinimalUserSnapshot | None = None
@@ -51,6 +56,7 @@ class SkillResponse(BaseModel):
     public_permission: SkillSharePermission | None = None
     is_personal: bool = False
     user_permission: SkillAccessLevel | None = None
+    external_app: SkillExternalAppDependencyResponse | None = None
 
     @classmethod
     def from_builtin(
@@ -58,16 +64,21 @@ class SkillResponse(BaseModel):
         skill: Skill,
         definition: BuiltInSkillDefinition,
         db_session: Session,
+        enabled: bool,
+        can_toggle: bool,
+        external_app: SkillExternalAppDependencyResponse | None = None,
     ) -> "SkillResponse":
         return cls(
             source="builtin",
             id=skill.id,
-            slug=skill.slug,
             name=skill.name,
             description=skill.description,
             is_available=definition.is_available(db_session),
             unavailable_reason=definition.unavailable_reason,
+            enabled=enabled,
+            can_toggle=can_toggle,
             user_permission=SkillAccessLevel.VIEWER,
+            external_app=external_app,
         )
 
     @classmethod
@@ -75,8 +86,11 @@ class SkillResponse(BaseModel):
         cls,
         skill: Skill,
         *,
+        enabled: bool,
+        can_toggle: bool = True,
         user_permission: SkillAccessLevel | None = None,
         include_share_details: bool = False,
+        external_app: SkillExternalAppDependencyResponse | None = None,
     ) -> "SkillResponse":
         user_shares = [
             SkillUserShare(
@@ -100,10 +114,11 @@ class SkillResponse(BaseModel):
         return cls(
             source="custom",
             id=skill.id,
-            slug=skill.slug,
             name=skill.name,
             description=skill.description,
-            enabled=skill.enabled,
+            is_valid=skill.is_valid,
+            enabled=enabled,
+            can_toggle=can_toggle,
             author_user_id=skill.author_user_id,
             author_email=skill.author.email if skill.author is not None else None,
             owner=(
@@ -123,6 +138,7 @@ class SkillResponse(BaseModel):
             and not user_shares
             and not group_shares,
             user_permission=user_permission,
+            external_app=external_app,
         )
 
 
@@ -138,6 +154,7 @@ class SkillPreviewResponse(BaseModel):
     description: str
     author_email: str | None = None
     instructions_markdown: str
+    external_app: SkillExternalAppDependencyResponse | None = None
 
     @classmethod
     def from_builtin(
@@ -145,6 +162,7 @@ class SkillPreviewResponse(BaseModel):
         skill: Skill,
         *,
         instructions_markdown: str,
+        external_app: SkillExternalAppDependencyResponse | None = None,
     ) -> "SkillPreviewResponse":
         return cls(
             source="builtin",
@@ -153,6 +171,7 @@ class SkillPreviewResponse(BaseModel):
             description=skill.description,
             author_email=None,
             instructions_markdown=instructions_markdown,
+            external_app=external_app,
         )
 
     @classmethod
@@ -161,6 +180,7 @@ class SkillPreviewResponse(BaseModel):
         skill: Skill,
         *,
         instructions_markdown: str,
+        external_app: SkillExternalAppDependencyResponse | None = None,
     ) -> "SkillPreviewResponse":
         return cls(
             source="custom",
@@ -169,21 +189,92 @@ class SkillPreviewResponse(BaseModel):
             description=skill.description,
             author_email=skill.author.email if skill.author is not None else None,
             instructions_markdown=instructions_markdown,
+            external_app=external_app,
         )
 
 
 class SkillEditableDetailResponse(SkillResponse):
     instructions_markdown: str
+    files: list[SkillBundleFile]
+
+
+class SkillBundleInspectResponse(BaseModel):
+    name: str
+    description: str
+    instructions_markdown: str
+    files: list[SkillBundleFile]
+
+
+class GitHubSkillPreview(BaseModel):
+    path: str
+    name: str
+    description: str | None
+    unavailable_reason: str | None
+
+
+class GitHubSkillsPreviewRequest(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    repository: str
+
+
+class GitHubSkillsPreviewResponse(BaseModel):
+    repository: str
+    revision: str
+    subpath: str | None
+    skills: list[GitHubSkillPreview]
+
+
+class GitHubSkillsImportRequest(GitHubSkillsPreviewRequest):
+    revision: str = Field(pattern=GITHUB_COMMIT_SHA_PATTERN)
+    subpath: str | None = None
+    paths: list[str] = Field(min_length=1, max_length=GITHUB_SKILL_MAX_COUNT)
+
+
+class GitHubImportedSkill(BaseModel):
+    skill: SkillResponse
+    disabled_reason: str | None = None
+
+
+class GitHubSkillNotImported(BaseModel):
+    path: str
+    name: str
+    reason: str
+
+
+class GitHubSkillsImportResponse(BaseModel):
+    imported: list[GitHubImportedSkill]
+    not_imported: list[GitHubSkillNotImported]
+
+
+class SkillEnableRequest(BaseModel):
+    enabled: bool
+    replace_conflict: bool = False
+
+
+class SkillCreateRequest(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    name: str
+    description: str
+    instructions_markdown: str
+
+    @model_validator(mode="after")
+    def _strip_values(self) -> "SkillCreateRequest":
+        for field in ("name", "description", "instructions_markdown"):
+            stripped = getattr(self, field).strip()
+            if not stripped:
+                raise ValueError(f"{field} cannot be empty")
+            setattr(self, field, stripped)
+        return self
 
 
 class SkillPatchRequest(BaseModel):
     model_config = ConfigDict(extra="forbid")
 
-    name: str | None = None
     description: str | None = None
     instructions_markdown: str | None = None
     public_permission: SkillSharePermission | None = None
-    enabled: bool | None = None
 
     @model_validator(mode="before")
     @classmethod
@@ -192,10 +283,8 @@ class SkillPatchRequest(BaseModel):
         fields; null ``public_permission`` is valid and revokes org access."""
         if isinstance(data, dict):
             for field in (
-                "name",
                 "description",
                 "instructions_markdown",
-                "enabled",
             ):
                 if field in data and data[field] is None:
                     raise ValueError(f"{field} cannot be null")
@@ -203,7 +292,7 @@ class SkillPatchRequest(BaseModel):
 
     @model_validator(mode="after")
     def _strip_values(self) -> "SkillPatchRequest":
-        for field in ("name", "description", "instructions_markdown"):
+        for field in ("description", "instructions_markdown"):
             value = getattr(self, field)
             if value is None:
                 continue
@@ -215,13 +304,11 @@ class SkillPatchRequest(BaseModel):
 
     @property
     def has_details_update(self) -> bool:
-        return bool(
-            self.model_fields_set & {"name", "description", "instructions_markdown"}
-        )
+        return bool(self.model_fields_set & {"description", "instructions_markdown"})
 
     @property
     def has_db_field_update(self) -> bool:
-        return bool(self.model_fields_set & {"public_permission", "enabled"})
+        return "public_permission" in self.model_fields_set
 
 
 class SkillUserShareRequest(BaseModel):

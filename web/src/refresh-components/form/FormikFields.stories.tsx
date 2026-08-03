@@ -16,7 +16,7 @@
  * - PasswordInputTypeInField
  */
 
-import type { Meta, StoryObj } from "@storybook/react";
+import type { Meta, StoryObj } from "@storybook/react-vite";
 import { Formik, Form } from "formik";
 import React from "react";
 

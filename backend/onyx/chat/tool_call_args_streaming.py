@@ -1,12 +1,9 @@
-from collections.abc import Generator
-from collections.abc import Mapping
-from typing import Any
-from typing import Type
+from collections.abc import Generator, Mapping
+from typing import Any, Type
 
 from onyx.llm.model_response import ChatCompletionDeltaToolCall
 from onyx.server.query_and_chat.placement import Placement
-from onyx.server.query_and_chat.streaming_models import Packet
-from onyx.server.query_and_chat.streaming_models import ToolCallArgumentDelta
+from onyx.server.query_and_chat.streaming_models import Packet, ToolCallArgumentDelta
 from onyx.tools.built_in_tools import TOOL_NAME_TO_CLASS
 from onyx.tools.interface import Tool
 from onyx.utils.jsonriver import Parser

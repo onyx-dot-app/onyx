@@ -30,8 +30,7 @@ import {
 import { fetchBedrockModels } from "@/lib/languageModels/svc";
 import { Card, MessageCard } from "@opal/components";
 import { Section } from "@/layouts/general-layouts";
-import { InputDivider, InputPadder, InputVertical } from "@opal/layouts";
-import { toast } from "@/hooks/useToast";
+import { InputDivider, InputPadder, InputVertical, toast } from "@opal/layouts";
 import { refreshLlmProviderCaches } from "@/lib/languageModels/cache";
 
 const AWS_REGION_OPTIONS = [

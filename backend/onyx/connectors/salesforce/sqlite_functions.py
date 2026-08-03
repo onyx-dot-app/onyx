@@ -5,17 +5,18 @@ import sqlite3
 import time
 from collections.abc import Iterator
 from pathlib import Path
-from typing import Any
-from typing import cast
+from typing import Any, cast
 
 from onyx.connectors.models import BasicExpertInfo
-from onyx.connectors.salesforce.utils import ACCOUNT_OBJECT_TYPE
-from onyx.connectors.salesforce.utils import ID_FIELD
-from onyx.connectors.salesforce.utils import NAME_FIELD
-from onyx.connectors.salesforce.utils import remove_sqlite_db_files
-from onyx.connectors.salesforce.utils import SalesforceObject
-from onyx.connectors.salesforce.utils import USER_OBJECT_TYPE
-from onyx.connectors.salesforce.utils import validate_salesforce_id
+from onyx.connectors.salesforce.utils import (
+    ACCOUNT_OBJECT_TYPE,
+    ID_FIELD,
+    NAME_FIELD,
+    USER_OBJECT_TYPE,
+    SalesforceObject,
+    remove_sqlite_db_files,
+    validate_salesforce_id,
+)
 from onyx.utils.logger import setup_logger
 from shared_configs.utils import batch_list
 

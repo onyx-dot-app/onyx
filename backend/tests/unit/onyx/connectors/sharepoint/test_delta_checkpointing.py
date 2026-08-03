@@ -13,20 +13,23 @@ from __future__ import annotations
 
 from collections import deque
 from collections.abc import Generator
-from datetime import datetime
-from datetime import timezone
+from datetime import datetime, timezone
 from typing import Any
 
 import pytest
 
-from onyx.connectors.models import ConnectorFailure
-from onyx.connectors.models import Document
-from onyx.connectors.models import DocumentSource
-from onyx.connectors.models import TextSection
-from onyx.connectors.sharepoint.connector import DriveItemData
-from onyx.connectors.sharepoint.connector import SharepointConnector
-from onyx.connectors.sharepoint.connector import SharepointConnectorCheckpoint
-from onyx.connectors.sharepoint.connector import SiteDescriptor
+from onyx.connectors.models import (
+    ConnectorFailure,
+    Document,
+    DocumentSource,
+    TextSection,
+)
+from onyx.connectors.sharepoint.connector import (
+    DriveItemData,
+    SharepointConnector,
+    SharepointConnectorCheckpoint,
+    SiteDescriptor,
+)
 
 # ---------------------------------------------------------------------------
 # Constants

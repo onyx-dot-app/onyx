@@ -4,15 +4,19 @@ from __future__ import annotations
 
 from uuid import uuid4
 
-from onyx.server.features.build.user_library.api import DeleteFileResponse
-from onyx.server.features.build.user_library.api import LibraryEntryResponse
-from onyx.server.features.build.user_library.api import UploadResponse
+from onyx.server.features.build.user_library.api import (
+    DeleteFileResponse,
+    LibraryEntryResponse,
+    UploadResponse,
+)
 from tests.integration.common_utils.test_models import DATestUser
-from tests.integration.tests.craft.user_library_http import delete_user_library_file
-from tests.integration.tests.craft.user_library_http import list_user_library_tree
-from tests.integration.tests.craft.user_library_http import make_zip_bytes
-from tests.integration.tests.craft.user_library_http import upload_user_library_files
-from tests.integration.tests.craft.user_library_http import upload_user_library_zip
+from tests.integration.tests.craft.user_library_http import (
+    delete_user_library_file,
+    list_user_library_tree,
+    make_zip_bytes,
+    upload_user_library_files,
+    upload_user_library_zip,
+)
 
 
 def _find_doc_by_name(

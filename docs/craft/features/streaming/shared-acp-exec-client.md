@@ -218,11 +218,11 @@ move.
 This is pure code motion — no new behavior to test. Verification is:
 
 - **Existing unit tests must still pass**, especially
-  `backend/tests/unit/onyx/server/features/build/sandbox/test_docker_acp_exec_client.py`
+  `backend/tests/unit/onyx/server/features/craft/sandbox/test_docker_acp_exec_client.py`
   (which exercises Docker's `start` + initialize round-trip via a fake
   framed socket and asserts `is_running` flips correctly on `stop`).
 - **K8s unit test sweep**: run anything under
-  `backend/tests/unit/onyx/server/features/build/sandbox/` to confirm
+  `backend/tests/unit/onyx/server/features/craft/sandbox/` to confirm
   no K8s-specific assertions regress.
 - **Ty + ruff**: the codebase's pre-commit hooks must pass cleanly on
   both subclasses and the base.

@@ -20,12 +20,14 @@ the explicit ``POSTGRES_SSL*`` settings only apply when IAM is off.
 import functools
 import ssl
 
-from onyx.configs.app_configs import POSTGRES_SSLCERT
-from onyx.configs.app_configs import POSTGRES_SSLKEY
-from onyx.configs.app_configs import POSTGRES_SSLKEY_PASSWORD
-from onyx.configs.app_configs import POSTGRES_SSLMODE
-from onyx.configs.app_configs import POSTGRES_SSLROOTCERT
-from onyx.configs.app_configs import USE_IAM_AUTH
+from onyx.configs.app_configs import (
+    POSTGRES_SSLCERT,
+    POSTGRES_SSLKEY,
+    POSTGRES_SSLKEY_PASSWORD,
+    POSTGRES_SSLMODE,
+    POSTGRES_SSLROOTCERT,
+    USE_IAM_AUTH,
+)
 from onyx.db.engine.iam_auth import create_ssl_context_if_iam
 from onyx.utils.tls import build_ssl_context
 

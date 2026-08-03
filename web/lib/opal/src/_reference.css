@@ -22,3 +22,9 @@
 @import "@onyx-ai/shared/typography.css";
 @import "./styles/sizes.css";
 @import "./styles/typography.css";
+
+/* Applies when the primary input cannot hover (touch devices) — the
+   complement of Tailwind v4's hover-gated `hover:`/`group-hover:` variants.
+   Use it to keep hover-revealed controls visible on mobile, e.g.
+   `opacity-0 group-hover:opacity-100 no-hover:opacity-100`. */
+@custom-variant no-hover (@media (hover: none));

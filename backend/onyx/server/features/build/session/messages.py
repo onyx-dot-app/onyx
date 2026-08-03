@@ -1,47 +1,56 @@
 """API endpoints for Build Mode message management."""
 
 from collections.abc import Generator
-from uuid import UUID
-from uuid import uuid4
+from typing import Any
+from uuid import UUID, uuid4
 
-from fastapi import APIRouter
-from fastapi import Depends
-from fastapi import HTTPException
+from fastapi import APIRouter, Depends, HTTPException
 from fastapi.responses import StreamingResponse
 from sqlalchemy.orm import Session
 
 from onyx.auth.permissions import require_permission
 from onyx.cache.factory import get_cache_backend
-from onyx.configs.constants import MessageType
-from onyx.configs.constants import PUBLIC_API_TAGS
-from onyx.db.engine.sql_engine import get_session
-from onyx.db.engine.sql_engine import get_session_with_current_tenant
+from onyx.configs.constants import PUBLIC_API_TAGS, MessageType
+from onyx.db.engine.sql_engine import get_session, get_session_with_current_tenant
 from onyx.db.enums import Permission
 from onyx.db.models import User
 from onyx.error_handling.error_codes import OnyxErrorCode
 from onyx.error_handling.exceptions import OnyxError
-from onyx.server.features.build.db.build_session import count_user_messages
-from onyx.server.features.build.db.build_session import create_message
-from onyx.server.features.build.db.build_session import get_build_session
-from onyx.server.features.build.db.sandbox import get_sandbox_by_user_id
-from onyx.server.features.build.db.sandbox import update_sandbox_heartbeat
+from onyx.server.features.build.db.build_session import (
+    count_user_messages,
+    create_message,
+    get_build_session,
+    session_runtime_stale,
+)
+from onyx.server.features.build.db.sandbox import (
+    get_sandbox_by_user_id,
+    update_sandbox_heartbeat,
+)
 from onyx.server.features.build.interactive_turns.executor import (
     start_interactive_turn_runner,
 )
 from onyx.server.features.build.interactive_turns.models import InteractiveTurnResponse
-from onyx.server.features.build.interactive_turns.state import acquire_active_turn_lock
-from onyx.server.features.build.interactive_turns.state import create_interactive_turn
-from onyx.server.features.build.interactive_turns.state import finish_turn
-from onyx.server.features.build.interactive_turns.state import get_active_turn
-from onyx.server.features.build.interactive_turns.state import get_turn_for_request
-from onyx.server.features.build.interactive_turns.state import InteractiveTurnLockError
-from onyx.server.features.build.interactive_turns.state import TURN_STATUS_FAILED
+from onyx.server.features.build.interactive_turns.state import (
+    TURN_STATUS_FAILED,
+    InteractiveTurnLockError,
+    acquire_active_turn_lock,
+    create_interactive_turn,
+    finish_turn,
+    get_active_turn,
+    get_turn_for_request,
+)
+from onyx.server.features.build.sandbox.models import PromptAttachment
 from onyx.server.features.build.session.errors import RateLimitError
+from onyx.server.features.build.session.llm_config import GatewaySelection
 from onyx.server.features.build.session.manager import SessionManager
-from onyx.server.features.build.session.models import MessageInterruptResponse
-from onyx.server.features.build.session.models import MessageListResponse
-from onyx.server.features.build.session.models import MessageRequest
-from onyx.server.features.build.session.models import MessageResponse
+from onyx.server.features.build.session.models import (
+    MessageInterruptResponse,
+    MessageListResponse,
+    MessageRequest,
+    MessageResponse,
+    SubagentMessageRequest,
+)
+from onyx.server.query_and_chat.token_limit import check_token_rate_limits
 from onyx.utils.logger import setup_logger
 
 logger = setup_logger()
@@ -131,22 +140,64 @@ def send_message(
                 "This session is busy with a previous turn.",
             )
 
+        session_manager = SessionManager(db_session)
+        sandbox = get_sandbox_by_user_id(db_session, user.id)
+        if session_runtime_stale(session, sandbox):
+            session_manager.reload_session_skills(session_id, user)
+
         check_build_rate_limits(user=user, db_session=db_session)
+        # Craft turns also respect the org/user token + cost budgets. No-op when
+        # none are configured; raises the structured 429 when over budget.
+        check_token_rate_limits(user)
 
         turn_index = count_user_messages(session_id, db_session)
-        if request.provider and request.model:
+        if request.provider_id is not None and request.model:
+            session.agent_provider, session.agent_model = GatewaySelection(
+                request.provider_id, request.model
+            ).to_columns()
+        elif request.provider and request.model:
             session.agent_provider = request.provider
             session.agent_model = request.model
+        message_metadata: dict[str, Any] = {
+            "type": "user_message",
+            "content": {"type": "text", "text": request.content},
+        }
+        if request.attachments:
+            message_metadata["attachments"] = [
+                attachment.model_dump() for attachment in request.attachments
+            ]
         create_message(
             session_id=session_id,
             message_type=MessageType.USER,
             turn_index=turn_index,
-            message_metadata={
-                "type": "user_message",
-                "content": {"type": "text", "text": request.content},
-            },
+            message_metadata=message_metadata,
             db_session=db_session,
         )
+
+        prompt_attachments = [
+            PromptAttachment(
+                name=attachment.name,
+                path=attachment.path,
+                mime_type=attachment.mime_type,
+            )
+            for attachment in request.attachments
+            if attachment.mime_type.startswith("image/")
+        ]
+        if prompt_attachments:
+            llm_config = session_manager.session_llm_config(session, user)
+            selected_model = next(
+                (
+                    model
+                    for model in llm_config.models or []
+                    if model.id == llm_config.model_name
+                ),
+                None,
+            )
+            if (
+                selected_model is None
+                or "image" not in selected_model.capabilities.input_modalities
+            ):
+                prompt_attachments = []
 
         turn = create_interactive_turn(
             cache=cache,
@@ -155,6 +206,7 @@ def send_message(
             client_request_id=client_request_id,
             prompt=request.content,
             turn_index=turn_index,
+            attachments=prompt_attachments,
         )
 
         try:
@@ -192,9 +244,11 @@ def send_message(
 def send_subagent_message(
     session_id: UUID,
     subagent_session_id: str,
-    request: MessageRequest,
+    request: SubagentMessageRequest,
     user: User = Depends(require_permission(Permission.BASIC_ACCESS)),
     _rate_limit_check: None = Depends(check_build_rate_limits),
+    # Craft turns also respect the org/user token + cost budgets (no-op when none).
+    _token_rate_limit_check: None = Depends(check_token_rate_limits),
 ) -> StreamingResponse:
     """
     Send a follow-up message to a subagent's child opencode session and
@@ -218,6 +272,7 @@ def send_subagent_message(
                 sandbox = get_sandbox_by_user_id(db_session, user.id)
                 if sandbox and sandbox.status.is_active():
                     update_sandbox_heartbeat(db_session, sandbox.id)
+                    db_session.commit()
 
                 session_manager = SessionManager(db_session)
                 for chunk in session_manager.send_subagent_message(

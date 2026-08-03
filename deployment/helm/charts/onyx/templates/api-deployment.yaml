@@ -107,6 +107,7 @@ spec:
             {{- end }}
             {{- include "onyx.envSecrets" . | nindent 12}}
             {{- include "onyx.envSecretsRestricted" . | nindent 12}}
+            {{- include "onyx.metricsAuthEnv" . | nindent 12}}
             {{- with include "onyx.customCACerts.env" . }}
             {{- . | nindent 12 }}
             {{- end }}

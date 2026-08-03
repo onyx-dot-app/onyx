@@ -1,20 +1,5 @@
-import { useQuery } from "@tanstack/react-query";
-
 import { apiFetch } from "@/api/client";
-import { QUERY_KEYS } from "@/api/query-keys";
-import { useSession } from "@/state/session";
 import type { ProjectFile } from "@/chat/contracts/projects";
-
-// Recent library files (across projects); fetched only while the picker is open.
-export function useRecentFiles(enabled: boolean) {
-  const serverUrl = useSession((state) => state.serverUrl);
-  return useQuery({
-    queryKey: QUERY_KEYS.userRecentFiles(serverUrl),
-    enabled: enabled && serverUrl !== null,
-    queryFn: ({ signal }) =>
-      apiFetch<ProjectFile[]>("/user/files/recent", { signal }),
-  });
-}
 
 export function getUserFileStatuses(fileIds: string[]): Promise<ProjectFile[]> {
   return apiFetch<ProjectFile[]>("/user/projects/file/statuses", {
@@ -33,7 +18,7 @@ export function linkFileToProject(
   );
 }
 
-// Unlinks (204); the file stays in the user's library.
+// The file stays in the user's library.
 export function unlinkFileFromProject(
   projectId: number,
   fileId: string,

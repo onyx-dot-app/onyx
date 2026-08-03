@@ -26,16 +26,17 @@ import json
 import signal
 import subprocess
 import sys
-from datetime import datetime
-from datetime import timezone
+from datetime import datetime, timezone
 from pathlib import Path
 
-from scripts.tenant_cleanup.cleanup_utils import confirm_step
-from scripts.tenant_cleanup.cleanup_utils import execute_control_plane_query
-from scripts.tenant_cleanup.cleanup_utils import find_worker_pod
-from scripts.tenant_cleanup.cleanup_utils import get_tenant_status
-from scripts.tenant_cleanup.cleanup_utils import read_tenant_ids_from_csv
-from scripts.tenant_cleanup.cleanup_utils import TenantNotFoundInControlPlaneError
+from scripts.tenant_cleanup.cleanup_utils import (
+    TenantNotFoundInControlPlaneError,
+    confirm_step,
+    execute_control_plane_query,
+    find_worker_pod,
+    get_tenant_status,
+    read_tenant_ids_from_csv,
+)
 
 
 def signal_handler(signum: int, frame: object) -> None:  # noqa: ARG001

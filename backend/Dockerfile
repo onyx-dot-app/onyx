@@ -77,15 +77,13 @@ RUN groupadd -g 1001 onyx && \
     chown onyx:onyx /var/log/onyx
 
 # Install runtime system dependencies only (no build toolchain).
-# curl included just for users' convenience
 # zip for Vespa step further down
 # ca-certificates for HTTPS
 # libxmlsec1-openssl is the runtime counterpart to the build-time libxmlsec1-dev
-# postgresql-client for easy manual tests
-# procps so kubernetes exec sessions can use ps aux for debugging
+# Interactive debugging tools (curl, vim, nano, psql, ps) are deliberately absent to keep the
+# shipped image minimal; they live in the dev stage below, published with a -dev tag suffix.
 RUN apt-get update && \
     apt-get install -y \
-        curl \
         zip \
         ca-certificates \
         libgnutls30 \
@@ -93,9 +91,6 @@ RUN apt-get update && \
         libmount1 \
         libsmartcols1 \
         libuuid1 \
-        nano \
-        vim \
-        procps \
         libjemalloc2 \
         libxmlsec1-openssl \
         && \
@@ -123,16 +118,14 @@ COPY --from=builder \
 # removed for CVE surface reduction (requires --allow-remove-essential). It must be removed AFTER the
 # first `playwright install-deps`, because the font/X11 packages that install-deps pulls in run perl
 # scripts in their dpkg configure step. The second `playwright install-deps` then restores any
-# chromium runtime libs (libnss3, libnspr4, etc.) that autoremove swept up in the cascade.
+# chromium runtime libs (libnss3, libnspr4, etc.) that autoremove swept up in the cascade. The
+# runtime image stays perl-free from here on.
 RUN ln -s /usr/local/bin/supervisord /usr/bin/supervisord && \
     playwright install chromium && \
     playwright install-deps chromium && \
     apt-get remove -y --allow-remove-essential perl-base && \
     apt-get autoremove -y && \
     playwright install-deps chromium && \
-    # Re-install after autoremove: perl-base removal cascades through postgresql-client's
-    # perl dependency, sweeping it up. Install it here (post-autoremove) so it survives.
-    apt-get install -y postgresql-client && \
     rm -rf /var/lib/apt/lists/* && \
     apt-get clean
 
@@ -195,3 +188,28 @@ ENV LD_PRELOAD=libjemalloc.so.2
 # Default command which does nothing
 # This container is used by api server and background which specify their own CMD
 CMD ["tail", "-f", "/dev/null"]
+
+
+####################################################################################################
+# Dev stage
+#
+# Superset of the runtime image, published with a -dev tag suffix (e.g. v1.2.3-dev, latest-dev).
+# Adds interactive debugging conveniences that are deliberately excluded from the shipped image:
+# curl for poking APIs, postgresql-client for manual DB inspection (pulls perl-base back in,
+# acceptable here), procps so `ps aux` works in exec sessions, and the nano/vim editors.
+#
+# NOTE: as the last stage this is the default build target; builds of the shipped image must pin
+# --target runtime (release and CI workflows and the docker-compose build blocks all do).
+####################################################################################################
+FROM runtime AS dev
+
+RUN apt-get update && \
+    apt-get install -y \
+        curl \
+        nano \
+        postgresql-client \
+        procps \
+        vim \
+        && \
+    rm -rf /var/lib/apt/lists/* && \
+    apt-get clean

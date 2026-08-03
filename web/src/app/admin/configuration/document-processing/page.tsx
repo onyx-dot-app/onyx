@@ -6,7 +6,7 @@ import { Button } from "@opal/components";
 import { InputTypeIn } from "@opal/components";
 import useSWR from "swr";
 import { SWR_KEYS } from "@/lib/swr-keys";
-import { PageLoader } from "@/refresh-components/PageLoader";
+import { PageLoader } from "@opal/layouts";
 import { SettingsLayouts } from "@opal/layouts";
 import Text from "@/refresh-components/texts/Text";
 import { cn } from "@opal/utils";
@@ -88,7 +88,7 @@ function Main() {
                 href="https://docs.unstructured.io/welcome"
                 target="_blank"
                 rel="noopener noreferrer"
-                className="text-action-link-05 underline-offset-4 hover:underline"
+                className="text-action-selection-05 underline-offset-4 hover:underline"
               >
                 here
               </a>

@@ -15,9 +15,11 @@ from onyx.configs.constants import FileOrigin
 from onyx.file_processing.file_types import SPREADSHEET_MIME_TYPE
 from onyx.file_store.file_store import get_default_file_store
 from onyx.file_store.models import ChatFileType
-from onyx.server.query_and_chat.chat_utils import is_spreadsheet_mime_type
-from onyx.server.query_and_chat.chat_utils import mime_type_to_chat_file_type
-from onyx.server.query_and_chat.chat_utils import parse_spreadsheet_for_preview
+from onyx.server.query_and_chat.chat_utils import (
+    is_spreadsheet_mime_type,
+    mime_type_to_chat_file_type,
+    parse_spreadsheet_for_preview,
+)
 
 
 def _build_xlsx() -> bytes:

@@ -10,29 +10,31 @@ from onyx.context.search.utils import convert_inference_sections_to_search_docs
 from onyx.db.engine.sql_engine import get_session_with_current_tenant
 from onyx.db.web_search import fetch_active_web_search_provider
 from onyx.server.query_and_chat.placement import Placement
-from onyx.server.query_and_chat.streaming_models import Packet
-from onyx.server.query_and_chat.streaming_models import SearchToolDocumentsDelta
-from onyx.server.query_and_chat.streaming_models import SearchToolQueriesDelta
-from onyx.server.query_and_chat.streaming_models import SearchToolStart
+from onyx.server.query_and_chat.streaming_models import (
+    Packet,
+    SearchToolDocumentsDelta,
+    SearchToolQueriesDelta,
+    SearchToolStart,
+)
 from onyx.tools.interface import Tool
-from onyx.tools.models import ToolCallException
-from onyx.tools.models import ToolResponse
-from onyx.tools.models import WebSearchToolOverrideKwargs
+from onyx.tools.models import (
+    ToolCallException,
+    ToolResponse,
+    WebSearchToolOverrideKwargs,
+)
 from onyx.tools.tool_implementations.utils import (
     convert_inference_sections_to_llm_string,
 )
-from onyx.tools.tool_implementations.web_search.models import DEFAULT_MAX_RESULTS
-from onyx.tools.tool_implementations.web_search.models import WebSearchResult
-from onyx.tools.tool_implementations.web_search.providers import (
-    build_search_provider_from_config,
+from onyx.tools.tool_implementations.web_search.models import (
+    DEFAULT_MAX_RESULTS,
+    WebSearchResult,
 )
 from onyx.tools.tool_implementations.web_search.providers import (
+    build_search_provider_from_config,
     provider_requires_api_key,
 )
 from onyx.tools.tool_implementations.web_search.utils import (
     filter_web_search_results_with_no_title_or_snippet,
-)
-from onyx.tools.tool_implementations.web_search.utils import (
     inference_section_from_internet_search_result,
 )
 from onyx.utils.logger import setup_logger

@@ -18,7 +18,7 @@ import { TooltipProvider } from "@radix-ui/react-tooltip";
 import StatsOverlayLoader from "@/components/dev/StatsOverlayLoader";
 import { cn } from "@opal/utils";
 import AppHealthBanner from "@/sections/banners/HealthBanner";
-import LicenseExpiryBanner from "@/sections/banners/LicenseExpiryBanner";
+import BannerQueue from "@/sections/banners/BannerQueue";
 import { AuthenticationShell } from "@/lib/auth/components";
 import ProductGatingWrapper from "@/providers/ProductGatingWrapper";
 import SWRConfigProvider from "@/providers/SWRConfigProvider";
@@ -77,18 +77,24 @@ export default function Layout({ children }: LayoutProps) {
           content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=0, interactive-widget=resizes-content"
         />
 
-        {/* When running inside the Tauri desktop wrapper, tag <html> as desktop
-            so the native title-bar reservation in css/desktop-titlebar.css
-            engages before paint. Tauri injects its IPC globals via an init
-            script that runs before page scripts, so this synchronous check sees
-            them; the class then persists across client-side navigations. No-op
-            in a browser. */}
+        {/* When running inside the Tauri desktop wrapper on macOS, tag <html>
+            as desktop so the native title-bar reservation in
+            css/desktop-titlebar.css engages before paint. macOS is the only
+            platform with an overlay title bar (traffic lights float over the
+            content); Linux and Windows keep native window decorations, so
+            reserving the strip there would only push content down. Tauri
+            injects its IPC globals via an init script that runs before page
+            scripts, so this synchronous check sees them; the class then
+            persists across client-side navigations. No-op in a browser. */}
         <Script
           id="onyx-desktop-detector"
           strategy="beforeInteractive"
           dangerouslySetInnerHTML={{
             __html: `
-              if ('__TAURI_INTERNALS__' in window || '__TAURI__' in window) {
+              if (
+                ('__TAURI_INTERNALS__' in window || '__TAURI__' in window) &&
+                navigator.platform.startsWith('Mac')
+              ) {
                 document.documentElement.classList.add('onyx-desktop');
               }
             `,
@@ -124,7 +130,7 @@ export default function Layout({ children }: LayoutProps) {
               <PHProvider>
                 <SWRConfigProvider>
                   <AppHealthBanner />
-                  <LicenseExpiryBanner />
+                  <BannerQueue />
                   <AuthenticationShell>
                     <AppProvider>
                       <PostHogRuntimeInitializer />

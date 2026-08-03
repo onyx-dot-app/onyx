@@ -23,8 +23,8 @@ export interface ProjectFile {
   chat_file_type: ChatFileType;
   token_count: number | null;
   created_at: string;
-  // client marker for an optimistic upload; the upload endpoint echoes it, but
-  // the client reconciles via refetch, so the echo isn't read back.
+  // Client marker for an optimistic upload; the upload endpoint echoes it back, and reconcile()
+  // uses that echo as the primary key to match the returned server file to its local record.
   temp_id?: string | null;
 }
 
@@ -47,6 +47,16 @@ export function isProcessingStatus(status: UserFileStatus | string): boolean {
     upper === UserFileStatus.UPLOADING ||
     upper === UserFileStatus.PROCESSING ||
     upper === UserFileStatus.INDEXING
+  );
+}
+
+// Server-side processing (has a real id, so it is pollable) — excludes the client-only UPLOADING.
+export function isServerProcessingStatus(
+  status: UserFileStatus | string,
+): boolean {
+  const upper = String(status).toUpperCase();
+  return (
+    upper === UserFileStatus.PROCESSING || upper === UserFileStatus.INDEXING
   );
 }
 

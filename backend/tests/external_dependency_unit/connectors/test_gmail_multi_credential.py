@@ -1,10 +1,8 @@
 """Creating a Gmail credential preserves existing Gmail credential rows."""
 
 from collections.abc import Generator
-from dataclasses import dataclass
-from dataclasses import field
-from uuid import UUID
-from uuid import uuid4
+from dataclasses import dataclass, field
+from uuid import UUID, uuid4
 
 import pytest
 from sqlalchemy import select
@@ -12,8 +10,7 @@ from sqlalchemy.orm import Session
 
 from onyx.auth.schemas import UserRole
 from onyx.configs.constants import DocumentSource
-from onyx.db.models import Credential
-from onyx.db.models import User
+from onyx.db.models import Credential, User
 from onyx.server.documents.credential import create_credential_from_model
 from onyx.server.documents.models import CredentialBase
 from tests.external_dependency_unit.conftest import create_test_user

@@ -1,37 +1,37 @@
 import time
-from collections.abc import Callable
-from collections.abc import Generator
+from collections.abc import Callable, Generator
 from contextlib import contextmanager
 from typing import Any
 
-from sqlalchemy import Engine
-from sqlalchemy import event
-from sqlalchemy.orm import Session
-from sqlalchemy.orm import sessionmaker
+from sqlalchemy import Engine, event
+from sqlalchemy.orm import Session, sessionmaker
 from sqlalchemy.orm.session import SessionTransaction
 
 from onyx.chat.chat_state import ChatStateContainer
 from onyx.chat.models import ChatFullResponse
-from onyx.chat.process_message import gather_stream_full
-from onyx.chat.process_message import handle_stream_message_objects
+from onyx.chat.process_message import gather_stream_full, handle_stream_message_objects
 from onyx.configs.constants import DEFAULT_PERSONA_ID
 from onyx.db.chat import create_chat_session
 from onyx.db.engine.sql_engine import get_sqlalchemy_engine
 from onyx.db.users import get_user_by_email
-from onyx.evals.models import ChatFullEvalResult
-from onyx.evals.models import EvalationAck
-from onyx.evals.models import EvalConfigurationOptions
-from onyx.evals.models import EvalMessage
-from onyx.evals.models import EvalProvider
-from onyx.evals.models import EvalTimings
-from onyx.evals.models import EvalToolResult
-from onyx.evals.models import MultiTurnEvalResult
-from onyx.evals.models import ToolAssertion
+from onyx.evals.models import (
+    ChatFullEvalResult,
+    EvalationAck,
+    EvalConfigurationOptions,
+    EvalMessage,
+    EvalProvider,
+    EvalTimings,
+    EvalToolResult,
+    MultiTurnEvalResult,
+    ToolAssertion,
+)
 from onyx.evals.provider import get_provider
 from onyx.llm.override_models import LLMOverride
-from onyx.server.query_and_chat.models import AUTO_PLACE_AFTER_LATEST_MESSAGE
-from onyx.server.query_and_chat.models import ChatSessionCreationRequest
-from onyx.server.query_and_chat.models import SendMessageRequest
+from onyx.server.query_and_chat.models import (
+    AUTO_PLACE_AFTER_LATEST_MESSAGE,
+    ChatSessionCreationRequest,
+    SendMessageRequest,
+)
 from onyx.utils.logger import setup_logger
 from shared_configs.contextvars import get_current_tenant_id
 

@@ -10,12 +10,10 @@ import json
 
 import pytest
 
-from onyx.auth.mobile_sso.code_store import consume_sso_code
-from onyx.auth.mobile_sso.code_store import store_sso_code
+from onyx.auth.mobile_sso.code_store import consume_sso_code, store_sso_code
 from onyx.auth.pkce import compute_s256_challenge
 from onyx.auth.users import generate_pkce_pair
-from onyx.configs.app_configs import MOBILE_SSO_CODE_PREFIX
-from onyx.configs.app_configs import MOBILE_SSO_CODE_TTL_SECONDS
+from onyx.configs.app_configs import MOBILE_SSO_CODE_PREFIX, MOBILE_SSO_CODE_TTL_SECONDS
 from onyx.redis.redis_pool import get_async_redis_connection
 
 

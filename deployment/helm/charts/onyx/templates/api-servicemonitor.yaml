@@ -14,6 +14,7 @@ spec:
       - {{ .Release.Namespace }}
   selector:
     matchLabels:
+      {{- include "onyx.selectorLabels" . | nindent 6 }}
       app: {{ .Values.api.deploymentLabels.app }}
   endpoints:
     - port: api-server-port

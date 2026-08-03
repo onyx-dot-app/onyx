@@ -342,7 +342,10 @@
    --------------------------------------------------------------------------- */
 
 .opal-content-md-title-row {
-  @apply flex items-center w-full;
+  /* min-w-0: as a flex item next to the icon, the row's automatic minimum
+     width would push a clamped title past the container edge, clipping the
+     ellipsis out of view. */
+  @apply flex items-center w-full min-w-0;
   gap: 0.25rem;
 }
 

@@ -1,9 +1,4 @@
-import { Image } from "expo-image";
-import { useMemo } from "react";
-import { View } from "react-native";
-
-import { getBaseUrl } from "@/api/config";
-import { useAuthToken } from "@/hooks/useAuthToken";
+import { BearerImage } from "@/components/ui/BearerImage";
 
 interface AttachmentImageProps {
   fileId: string;
@@ -11,44 +6,14 @@ interface AttachmentImageProps {
   radius?: number;
 }
 
-// Auth'd image preview (GET /chat/file/{file_id}) for an attachment thumbnail. Mirrors
-// AgentImage: caching is disabled because the URL isn't keyed by auth, so a shared cache
-// could serve one account's file to the next after a switch. Neutral placeholder until the
-// bearer resolves.
+// Auth'd attachment thumbnail (GET /chat/file/{file_id}) — a rounded square via the shared
+// BearerImage primitive.
 export function AttachmentImage({
   fileId,
   size,
   radius = 8,
 }: AttachmentImageProps) {
-  const token = useAuthToken();
-  const dimension = useMemo(
-    () => ({ width: size, height: size, borderRadius: radius }),
-    [size, radius],
-  );
-  // Stable source ref (cachePolicy="none" means a fresh object would trigger a re-fetch).
-  // baseUrl is a dep so the source changes at an instance switch, not just on fileId/token.
-  const baseUrl = getBaseUrl();
-  const source = useMemo(
-    () =>
-      token
-        ? {
-            uri: `${baseUrl}/chat/file/${fileId}`,
-            headers: { Authorization: `Bearer ${token}` },
-          }
-        : null,
-    [baseUrl, fileId, token],
-  );
-
-  if (!source) {
-    return <View style={dimension} className="bg-background-tint-01" />;
-  }
-
   return (
-    <Image
-      source={source}
-      style={dimension}
-      contentFit="cover"
-      cachePolicy="none"
-    />
+    <BearerImage path={`/chat/file/${fileId}`} size={size} radius={radius} />
   );
 }

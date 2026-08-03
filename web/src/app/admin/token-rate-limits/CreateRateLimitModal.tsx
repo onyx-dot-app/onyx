@@ -3,22 +3,26 @@
 import * as Yup from "yup";
 import { Button } from "@opal/components";
 import { useEffect, useState } from "react";
-import Modal from "@/refresh-components/Modal";
+import { Modal } from "@opal/components";
 import { Form, Formik } from "formik";
 import { SelectorFormField, TextFormField } from "@/components/Field";
 import { UserGroup } from "@/lib/types";
 import { Scope } from "./types";
-import { toast } from "@/hooks/useToast";
+import { toast } from "@opal/layouts";
 import { SvgSettings } from "@opal/icons";
+
+const HOURS_PER_DAY = 24;
+
 interface CreateRateLimitModalProps {
   isOpen: boolean;
   setIsOpen: (isOpen: boolean) => void;
   onSubmit: (
     target_scope: Scope,
     period_hours: number,
-    token_budget: number,
+    token_budget: number | null,
+    cost_budget_cents: number | null,
     group_id: number
-  ) => void;
+  ) => Promise<void>;
   forSpecificScope?: Scope;
   forSpecificUserGroup?: number;
 }
@@ -67,18 +71,38 @@ export default function CreateRateLimitModal({
         <Formik
           initialValues={{
             enabled: true,
-            period_hours: "",
+            period_days: "",
             token_budget: "",
+            cost_budget_dollars: "",
             target_scope: forSpecificScope || Scope.GLOBAL,
             user_group_id: forSpecificUserGroup,
           }}
           validationSchema={Yup.object().shape({
-            period_hours: Yup.number()
+            period_days: Yup.number()
               .required("Time Window is a required field")
-              .min(1, "Time Window must be at least 1 hour"),
+              .integer("Time Window must be a whole number of days")
+              .min(1, "Time Window must be at least 1 day"),
             token_budget: Yup.number()
-              .required("Token Budget is a required field")
-              .min(1, "Token Budget must be at least 1"),
+              // Empty (no token budget) is allowed — a cost-only limit. Without
+              // this, "" coerces to NaN and trips .min(1) even when only a cost
+              // budget is set. Mirrors the cost_budget_dollars transform below.
+              .transform((value, original) =>
+                original === "" ? undefined : value
+              )
+              .min(1, "Token Budget must be at least 1")
+              .test(
+                "budget-required",
+                "Set a token budget and/or a cost budget",
+                (value, context) =>
+                  value != null || context.parent.cost_budget_dollars != null
+              ),
+            cost_budget_dollars: Yup.number()
+              // Empty (no cost budget) is allowed; a 0 would make the gate fire
+              // on the first request (cost_since >= 0 is always true).
+              .transform((value, original) =>
+                original === "" ? undefined : value
+              )
+              .moreThan(0, "Cost Budget must be greater than 0"),
             target_scope: Yup.string().required(
               "Target Scope is a required field"
             ),
@@ -94,15 +118,22 @@ export default function CreateRateLimitModal({
               }
             ),
           })}
-          onSubmit={async (values, formikHelpers) => {
-            formikHelpers.setSubmitting(true);
-            onSubmit(
+          onSubmit={async (values) => {
+            // Empty token field → null (cost-only); the gate skips a null budget.
+            // Sending 0 would mean "0-token limit" and block every request.
+            const tokenBudget =
+              values.token_budget === "" ? null : Number(values.token_budget);
+            const costBudgetCents =
+              values.cost_budget_dollars === ""
+                ? null
+                : Math.round(Number(values.cost_budget_dollars) * 100);
+            await onSubmit(
               values.target_scope,
-              Number(values.period_hours),
-              Number(values.token_budget),
+              Number(values.period_days) * HOURS_PER_DAY,
+              tokenBudget,
+              costBudgetCents,
               Number(values.user_group_id)
             );
-            return formikHelpers.setSubmitting(false);
           }}
         >
           {({ isSubmitting, values, setFieldValue }) => (
@@ -136,14 +167,20 @@ export default function CreateRateLimitModal({
                     />
                   )}
                 <TextFormField
-                  name="period_hours"
-                  label="Time Window (Hours)"
+                  name="period_days"
+                  label="Time Window (UTC Days)"
                   type="number"
                   placeholder=""
                 />
                 <TextFormField
                   name="token_budget"
-                  label="Token Budget (Thousands)"
+                  label="Token Budget (Thousands, optional)"
+                  type="number"
+                  placeholder=""
+                />
+                <TextFormField
+                  name="cost_budget_dollars"
+                  label="Cost Budget (USD per period, optional)"
                   type="number"
                   placeholder=""
                 />

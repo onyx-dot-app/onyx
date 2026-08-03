@@ -4,8 +4,7 @@ from google.auth.exceptions import RefreshError
 from google.auth.transport.requests import AuthorizedSession
 from google.oauth2.credentials import Credentials as OAuthCredentials
 from google.oauth2.service_account import Credentials as ServiceAccountCredentials
-from googleapiclient.discovery import build
-from googleapiclient.discovery import Resource
+from googleapiclient.discovery import Resource, build
 
 from onyx.utils.logger import setup_logger
 
@@ -75,7 +74,7 @@ def _get_google_service(
 ) -> GoogleDriveService | GoogleDocsService | AdminService | GmailService:
     creds = get_impersonated_creds(creds, user_email)
     service: Resource = build(service_name, service_version, credentials=creds)
-    return service
+    return service  # ty: ignore[invalid-return-type]
 
 
 def get_impersonated_creds(

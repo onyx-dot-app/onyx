@@ -18,8 +18,8 @@ import {
   type BuildFile,
   UploadFileStatus,
 } from "@/app/craft/contexts/UploadFilesContext";
-import { getAppTypeLogo } from "@/app/craft/v1/apps/registry";
-import type { PickerEntry } from "@/lib/skills/picker";
+import { pickerEntryIcon } from "@/lib/skills/pickerIcons";
+import { pickerEntryKey, type PickerEntry } from "@/lib/skills/picker";
 
 interface InputChipProps {
   icon: ReactNode;
@@ -131,8 +131,7 @@ interface EntryChipProps {
 }
 
 function EntryChip({ entry, onRemove, onClick }: EntryChipProps) {
-  const Logo = entry.kind === "app" ? getAppTypeLogo(entry.appType) : null;
-  const Icon = Logo ?? SvgSparkle;
+  const Icon = pickerEntryIcon(entry);
 
   return (
     <InputChip
@@ -149,7 +148,7 @@ export interface InputChipStripProps {
   files: BuildFile[];
   entries: PickerEntry[];
   onRemoveFile: (id: string) => void;
-  onRemoveEntry: (slug: string) => void;
+  onRemoveEntry: (entryKey: string) => void;
   onClickEntry?: (entry: PickerEntry, chipEl: HTMLElement) => void;
 }
 
@@ -189,7 +188,7 @@ export function InputChipStrip({
             <AnimatePresence initial={false} mode="popLayout">
               {entries.map((entry) => (
                 <motion.div
-                  key={`entry-${entry.slug}`}
+                  key={pickerEntryKey(entry)}
                   layout
                   initial={{ opacity: 0, scale: 0.85 }}
                   animate={{ opacity: 1, scale: 1 }}
@@ -198,7 +197,7 @@ export function InputChipStrip({
                 >
                   <EntryChip
                     entry={entry}
-                    onRemove={() => onRemoveEntry(entry.slug)}
+                    onRemove={() => onRemoveEntry(pickerEntryKey(entry))}
                     onClick={
                       onClickEntry ? (el) => onClickEntry(entry, el) : undefined
                     }

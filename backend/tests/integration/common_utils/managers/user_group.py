@@ -4,11 +4,9 @@ from uuid import uuid4
 import httpx
 
 from ee.onyx.server.user_group.models import UserGroup
-from tests.integration.common_utils.constants import API_SERVER_URL
-from tests.integration.common_utils.constants import MAX_DELAY
+from tests.integration.common_utils.constants import API_SERVER_URL, MAX_DELAY
 from tests.integration.common_utils.http_client import client
-from tests.integration.common_utils.test_models import DATestUser
-from tests.integration.common_utils.test_models import DATestUserGroup
+from tests.integration.common_utils.test_models import DATestUser, DATestUserGroup
 
 
 class UserGroupManager:

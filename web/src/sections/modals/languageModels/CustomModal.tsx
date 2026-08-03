@@ -31,13 +31,13 @@ import Text from "@/refresh-components/texts/Text";
 import { Button, Card, EmptyMessageCard } from "@opal/components";
 import { SvgMinusCircle, SvgPlusCircle } from "@opal/icons";
 import { markdown } from "@opal/utils";
-import { toast } from "@/hooks/useToast";
 import { refreshLlmProviderCaches } from "@/lib/languageModels/cache";
 import {
   Content,
   InputDivider,
   InputPadder,
   InputVertical,
+  toast,
 } from "@opal/layouts";
 import { Section } from "@/layouts/general-layouts";
 

@@ -16,8 +16,10 @@ in that recalculation window.
 
 from typing import Any
 
-from onyx.connectors.freshdesk.connector import _create_doc_from_ticket
-from onyx.connectors.freshdesk.connector import _create_metadata_from_ticket
+from onyx.connectors.freshdesk.connector import (
+    _create_doc_from_ticket,
+    _create_metadata_from_ticket,
+)
 
 
 def _ticket(**overrides: Any) -> dict[str, Any]:

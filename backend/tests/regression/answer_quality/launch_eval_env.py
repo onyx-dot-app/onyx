@@ -3,10 +3,12 @@ from types import SimpleNamespace
 
 import yaml
 
-from tests.regression.answer_quality.cli_utils import manage_data_directories
-from tests.regression.answer_quality.cli_utils import set_env_variables
-from tests.regression.answer_quality.cli_utils import start_docker_compose
-from tests.regression.answer_quality.cli_utils import switch_to_commit
+from tests.regression.answer_quality.cli_utils import (
+    manage_data_directories,
+    set_env_variables,
+    start_docker_compose,
+    switch_to_commit,
+)
 
 
 def load_config(config_filename: str) -> SimpleNamespace:

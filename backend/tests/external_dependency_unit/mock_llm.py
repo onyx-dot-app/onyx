@@ -3,31 +3,30 @@ from __future__ import annotations
 import abc
 import threading
 import time
-from collections.abc import Generator
-from collections.abc import Iterator
+from collections.abc import Generator, Iterator
 from contextlib import contextmanager
 from enum import Enum
-from typing import Any
-from typing import cast
-from typing import Generic
-from typing import Literal
-from typing import TypeVar
+from typing import Any, Generic, Literal, TypeVar, cast
 from unittest.mock import patch
 
 from pydantic import BaseModel
 
-from onyx.llm.interfaces import LanguageModelInput
-from onyx.llm.interfaces import LLM
-from onyx.llm.interfaces import LLMConfig
-from onyx.llm.interfaces import LLMUserIdentity
-from onyx.llm.interfaces import ReasoningEffort
-from onyx.llm.interfaces import ToolChoiceOptions
-from onyx.llm.model_response import ChatCompletionDeltaToolCall
-from onyx.llm.model_response import Delta
-from onyx.llm.model_response import FunctionCall
-from onyx.llm.model_response import ModelResponse
-from onyx.llm.model_response import ModelResponseStream
-from onyx.llm.model_response import StreamingChoice
+from onyx.llm.interfaces import (
+    LLM,
+    LanguageModelInput,
+    LLMConfig,
+    LLMUserIdentity,
+    ReasoningEffort,
+    ToolChoiceOptions,
+)
+from onyx.llm.model_response import (
+    ChatCompletionDeltaToolCall,
+    Delta,
+    FunctionCall,
+    ModelResponse,
+    ModelResponseStream,
+    StreamingChoice,
+)
 
 T = TypeVar("T")
 

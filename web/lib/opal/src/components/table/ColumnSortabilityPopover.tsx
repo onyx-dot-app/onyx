@@ -72,7 +72,7 @@ function SortingPopover<TData extends RowData>({
             sizePreset="main-ui"
             rightChildren={
               currentSort === null ? (
-                <SvgCheck size={16} className="text-action-link-05" />
+                <SvgCheck size={16} className="text-action-selection-05" />
               ) : undefined
             }
             onClick={() => {
@@ -96,7 +96,7 @@ function SortingPopover<TData extends RowData>({
                 sizePreset="main-ui"
                 rightChildren={
                   isSorted ? (
-                    <SvgCheck size={16} className="text-action-link-05" />
+                    <SvgCheck size={16} className="text-action-selection-05" />
                   ) : undefined
                 }
                 onClick={() => {
@@ -121,7 +121,7 @@ function SortingPopover<TData extends RowData>({
                 sizePreset="main-ui"
                 rightChildren={
                   !currentSort.desc ? (
-                    <SvgCheck size={16} className="text-action-link-05" />
+                    <SvgCheck size={16} className="text-action-selection-05" />
                   ) : undefined
                 }
                 onClick={() => {
@@ -136,7 +136,7 @@ function SortingPopover<TData extends RowData>({
                 sizePreset="main-ui"
                 rightChildren={
                   currentSort.desc ? (
-                    <SvgCheck size={16} className="text-action-link-05" />
+                    <SvgCheck size={16} className="text-action-selection-05" />
                   ) : undefined
                 }
                 onClick={() => {

@@ -87,7 +87,8 @@ Create env vars from secrets (global secrets only — skips entries with allPods
 */}}
 {{- define "onyx.envSecrets" -}}
     {{- range $secretSuffix, $secretContent := .Values.auth }}
-    {{- if and (ne (toString $secretContent.enabled) "false") ($secretContent.secretKeys) (ne (toString (index $secretContent "allPods" | default "true")) "false") }}
+    {{- $allPods := or (not (hasKey $secretContent "allPods")) (ne (toString $secretContent.allPods) "false") }}
+    {{- if and (ne $secretSuffix "metricsAuth") (ne (toString $secretContent.enabled) "false") ($secretContent.secretKeys) $allPods }}
     {{- range $name, $key := $secretContent.secretKeys }}
 - name: {{ $name | upper | replace "-" "_" | quote }}
   valueFrom:
@@ -104,7 +105,8 @@ Create env vars from secrets restricted to specific pods (entries with allPods: 
 */}}
 {{- define "onyx.envSecretsRestricted" -}}
     {{- range $secretSuffix, $secretContent := .Values.auth }}
-    {{- if and (ne (toString $secretContent.enabled) "false") ($secretContent.secretKeys) (eq (toString (index $secretContent "allPods" | default "true")) "false") }}
+    {{- $restricted := and (hasKey $secretContent "allPods") (eq (toString $secretContent.allPods) "false") }}
+    {{- if and (ne $secretSuffix "metricsAuth") (ne (toString $secretContent.enabled) "false") ($secretContent.secretKeys) $restricted }}
     {{- range $name, $key := $secretContent.secretKeys }}
 - name: {{ $name | upper | replace "-" "_" | quote }}
   valueFrom:
@@ -113,6 +115,20 @@ Create env vars from secrets restricted to specific pods (entries with allPods: 
       key: {{ default $name $key }}
     {{- end }}
     {{- end }}
+    {{- end }}
+{{- end }}
+
+{{/*
+Inject metrics auth only into pods that expose the protected endpoint.
+*/}}
+{{- define "onyx.metricsAuthEnv" -}}
+    {{- $metricsAuth := .Values.auth.metricsAuth | default dict }}
+    {{- if dig "enabled" false $metricsAuth }}
+- name: METRICS_AUTH_TOKEN
+  valueFrom:
+    secretKeyRef:
+      name: {{ include "onyx.secretName" $metricsAuth }}
+      key: {{ default "METRICS_AUTH_TOKEN" (dig "secretKeys" "METRICS_AUTH_TOKEN" "" $metricsAuth) }}
     {{- end }}
 {{- end }}
 
@@ -200,6 +216,20 @@ Return the configured autoscaling engine; defaults to HPA when unset.
 */}}
 {{- define "onyx.craftEnabled" -}}
 {{- if eq (toString (index .Values.configMap "ENABLE_CRAFT" | default "")) "true" -}}true{{- end -}}
+{{- end }}
+
+{{/*
+Sandbox container image and pull policy. Shared by the sandbox-pod PodTemplate
+and the image-prepull DaemonSet: the prepull only pins layers the sandbox pods
+actually use if both resolve to the identical reference, and a drift here is
+invisible (the DaemonSet looks healthy while every sandbox still cold-pulls).
+*/}}
+{{- define "onyx.sandboxImage" -}}
+{{- (index .Values.configMap "SANDBOX_CONTAINER_IMAGE") | default (printf "onyxdotapp/sandbox:%s" (.Values.global.version | default .Chart.AppVersion)) -}}
+{{- end }}
+
+{{- define "onyx.sandboxImagePullPolicy" -}}
+{{- (index .Values.configMap "SANDBOX_IMAGE_PULL_POLICY") | default .Values.global.pullPolicy -}}
 {{- end }}
 
 {{- define "onyx.sandboxProxyHost" -}}

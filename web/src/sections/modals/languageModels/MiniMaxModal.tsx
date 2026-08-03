@@ -21,9 +21,8 @@ import {
   ModelAccessField,
   ModelSelectionField,
 } from "@/sections/modals/languageModels/shared";
-import { InputDivider, InputPadder, InputVertical } from "@opal/layouts";
+import { InputDivider, InputPadder, InputVertical, toast } from "@opal/layouts";
 import { refreshLlmProviderCaches } from "@/lib/languageModels/cache";
-import { toast } from "@/hooks/useToast";
 
 export const MINIMAX_ENDPOINT_OPTIONS = [
   {

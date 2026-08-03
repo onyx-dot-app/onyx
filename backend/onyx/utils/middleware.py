@@ -3,19 +3,17 @@ import hashlib
 import logging
 import re
 import uuid
-from collections.abc import Awaitable
-from collections.abc import Callable
-from datetime import datetime
-from datetime import timezone
+from collections.abc import Awaitable, Callable
+from datetime import datetime, timezone
 
-from fastapi import FastAPI
-from fastapi import Request
-from fastapi import Response
+from fastapi import FastAPI, Request, Response
 from fastapi.routing import APIRoute
 
-from shared_configs.contextvars import CURRENT_ENDPOINT_CONTEXTVAR
-from shared_configs.contextvars import CURRENT_TENANT_ID_CONTEXTVAR
-from shared_configs.contextvars import ONYX_REQUEST_ID_CONTEXTVAR
+from shared_configs.contextvars import (
+    CURRENT_ENDPOINT_CONTEXTVAR,
+    CURRENT_TENANT_ID_CONTEXTVAR,
+    ONYX_REQUEST_ID_CONTEXTVAR,
+)
 
 
 def add_onyx_tenant_id_middleware(

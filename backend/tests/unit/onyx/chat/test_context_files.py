@@ -6,19 +6,18 @@ Covers:
 - Search filter / search_usage determination in the caller
 """
 
-from unittest.mock import MagicMock
-from unittest.mock import patch
-from uuid import UUID
-from uuid import uuid4
+from unittest.mock import MagicMock, patch
+from uuid import UUID, uuid4
 
 from onyx.chat.models import ExtractedContextFiles
-from onyx.chat.process_message import determine_search_params
-from onyx.chat.process_message import extract_context_files
-from onyx.chat.process_message import resolve_context_user_files
+from onyx.chat.process_message import (
+    determine_search_params,
+    extract_context_files,
+    resolve_context_user_files,
+)
 from onyx.configs.constants import DEFAULT_PERSONA_ID
 from onyx.db.models import UserFile
-from onyx.file_store.models import ChatFileType
-from onyx.file_store.models import InMemoryChatFile
+from onyx.file_store.models import ChatFileType, InMemoryChatFile
 from onyx.tools.models import SearchToolUsage
 
 # ---------------------------------------------------------------------------

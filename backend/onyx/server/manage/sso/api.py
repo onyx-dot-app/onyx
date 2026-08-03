@@ -1,7 +1,6 @@
 from typing import Any
 
-from fastapi import APIRouter
-from fastapi import Depends
+from fastapi import APIRouter, Depends
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
 
@@ -9,20 +8,27 @@ from onyx.auth.permissions import require_permission
 from onyx.configs.app_configs import WEB_DOMAIN
 from onyx.db.engine.sql_engine import get_session
 from onyx.db.enums import Permission
-from onyx.db.models import SSOProvider
-from onyx.db.models import User
-from onyx.db.sso_provider import create_sso_provider
-from onyx.db.sso_provider import fetch_sso_providers
-from onyx.db.sso_provider import set_sso_provider_enabled
-from onyx.db.sso_provider import update_sso_provider
+from onyx.db.models import SSOProvider, User
+from onyx.db.sso_provider import (
+    create_sso_provider,
+    fetch_sso_providers,
+    set_sso_provider_enabled,
+    update_sso_provider,
+)
 from onyx.error_handling.error_codes import OnyxErrorCode
 from onyx.error_handling.exceptions import OnyxError
-from onyx.server.manage.sso.models import SSOProviderCreateRequest
-from onyx.server.manage.sso.models import SSOProviderEnabledRequest
-from onyx.server.manage.sso.models import SSOProviderResponse
-from onyx.server.manage.sso.models import SSOProviderUpdateRequest
-from onyx.utils.encryption import reject_masked_credentials
-from onyx.utils.encryption import restore_masked_credentials
+from onyx.server.manage.get_state import invalidate_sso_provider_options_cache
+from onyx.server.manage.sso.models import (
+    SSOProviderCreateRequest,
+    SSOProviderEnabledRequest,
+    SSOProviderResponse,
+    SSOProviderUpdateRequest,
+)
+from onyx.server.security.store import (
+    load_effective_uncached,
+    security_settings_write_lock,
+)
+from onyx.utils.encryption import reject_masked_credentials, restore_masked_credentials
 from onyx.utils.variable_functionality import fetch_ee_implementation_or_noop
 
 admin_router = APIRouter(prefix="/admin/sso")
@@ -93,6 +99,7 @@ def create_sso_provider_endpoint(
     except ValueError as e:
         raise OnyxError(OnyxErrorCode.INVALID_INPUT, str(e)) from e
 
+    invalidate_sso_provider_options_cache()
     return SSOProviderResponse.from_model(provider, WEB_DOMAIN)
 
 
@@ -129,6 +136,7 @@ def update_sso_provider_endpoint(
     except ValueError as e:
         raise OnyxError(OnyxErrorCode.INVALID_INPUT, str(e)) from e
 
+    invalidate_sso_provider_options_cache()
     return SSOProviderResponse.from_model(updated_provider, WEB_DOMAIN)
 
 
@@ -144,9 +152,28 @@ def set_sso_provider_enabled_endpoint(
         _require_business_tier_for_additional_enabled_provider(
             db_session, exclude_provider_id=provider_id
         )
-    provider = set_sso_provider_enabled(
-        db_session=db_session,
-        provider_id=provider_id,
-        enabled=request.enabled,
-    )
+        provider = set_sso_provider_enabled(
+            db_session=db_session,
+            provider_id=provider_id,
+            enabled=True,
+        )
+    else:
+        # Both lockout guards run under the shared write lock on fresh state.
+        with security_settings_write_lock():
+            if not load_effective_uncached().password_auth_enabled and not any(
+                other.id != provider_id
+                for other in fetch_sso_providers(db_session, enabled_only=True)
+            ):
+                raise OnyxError(
+                    OnyxErrorCode.INVALID_INPUT,
+                    "Re-enable password login before disabling the last SSO "
+                    "provider, otherwise no one can sign in.",
+                )
+            provider = set_sso_provider_enabled(
+                db_session=db_session,
+                provider_id=provider_id,
+                enabled=False,
+            )
+
+    invalidate_sso_provider_options_cache()
     return SSOProviderResponse.from_model(provider, WEB_DOMAIN)

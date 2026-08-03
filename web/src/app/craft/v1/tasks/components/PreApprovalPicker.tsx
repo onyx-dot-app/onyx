@@ -55,8 +55,7 @@ export default function PreApprovalPicker({
     return (
       <Card background="none" border="dashed" rounding="lg">
         <Text font="secondary-body" color="text-03">
-          No external apps are enabled for your org yet. Ask an admin to enable
-          one.
+          No external apps are configured for your organization yet.
         </Text>
       </Card>
     );
@@ -99,7 +98,7 @@ function PreApprovalRow({ app, checked, onToggle }: PreApprovalRowProps) {
       }}
       className={cn(
         "rounded-12 cursor-pointer transition-shadow",
-        checked && "ring-2 ring-action-link-04"
+        checked && "ring-2 ring-action-selection-04"
       )}
       data-testid={`pre-approval-app-${app.id}`}
     >
@@ -109,7 +108,7 @@ function PreApprovalRow({ app, checked, onToggle }: PreApprovalRowProps) {
           <div className="flex-1 flex flex-col gap-0.5 min-w-0">
             <Text font="main-ui-action">{app.name}</Text>
             <Text font="secondary-body" color="text-03">
-              {app.description}
+              {app.authenticated ? "Connected" : "Connection required"}
             </Text>
           </div>
           {/* Visual only — the row owns clicks/keys so the control never

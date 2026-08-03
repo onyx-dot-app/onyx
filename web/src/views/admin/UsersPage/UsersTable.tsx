@@ -2,7 +2,7 @@
 
 import { useMemo, useState } from "react";
 import { Table, createTableColumns } from "@opal/components";
-import { Content } from "@opal/layouts";
+import { Content, toast } from "@opal/layouts";
 import { Button } from "@opal/components";
 import { SvgDownload, SvgSimpleLoader } from "@opal/icons";
 import SvgNoResult from "@opal/illustrations/no-result";
@@ -11,7 +11,6 @@ import { UserRole, UserStatus, USER_STATUS_LABELS } from "@/lib/types";
 import { timeAgo } from "@opal/time";
 import Text from "@/refresh-components/texts/Text";
 import { InputTypeIn } from "@opal/components";
-import { toast } from "@/hooks/useToast";
 import useAdminUsers from "@/hooks/useAdminUsers";
 import useGroups from "@/hooks/useGroups";
 import { downloadUsersCsv } from "./svc";

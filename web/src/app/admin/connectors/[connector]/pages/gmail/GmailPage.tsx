@@ -3,7 +3,7 @@
 import React from "react";
 import { ErrorCallout } from "@/components/ErrorCallout";
 import { LoadingAnimation } from "@/components/Loading";
-import { toast } from "@/hooks/useToast";
+import { toast } from "@opal/layouts";
 import { ValidSources } from "@/lib/types";
 import {
   Credential,

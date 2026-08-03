@@ -2,13 +2,10 @@ from __future__ import annotations
 
 import base64
 import binascii
-from email import message_from_bytes
-from email import policy
+from email import message_from_bytes, policy
 from email.message import EmailMessage
-from email.utils import formataddr
-from email.utils import getaddresses
-from typing import Any
-from typing import Protocol
+from email.utils import formataddr, getaddresses
+from typing import Any, Protocol
 
 
 class PayloadDecoder(Protocol):

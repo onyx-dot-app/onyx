@@ -96,3 +96,7 @@ Web is different: web uses **Tailwind's default step scale**, where `p-6` = step
   `mobile/src/chat/` (NOT shared) by decision — see `docs/mobile-chat/05-pr-roadmap.md` (PR 2 Decision).
 - Editing the shared package requires rebuilding its `dist` (`bun run build` in `web/lib/shared`); the
   mobile `file:` dep consumes `dist`. Web jest resolves it from `src` via a `moduleNameMapper`.
+- Mobile's `preinstall` hook builds `web/lib/shared`'s `dist` (a git-ignored artifact) **before** bun
+  links the `file:` dep, so a fresh `bun install` can't hit an unresolved `@onyx-ai/shared/dist`. It
+  must be `preinstall`, not `postinstall`: bun's link farm only includes `dist` if it exists at link
+  time. Active token/source edits still hot-rebuild via `bun run dev` in `web/lib/shared`.

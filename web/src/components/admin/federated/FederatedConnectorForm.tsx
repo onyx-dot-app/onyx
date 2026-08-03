@@ -26,7 +26,7 @@ import {
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
 import { DropdownMenuItemWithTooltip } from "@/components/ui/dropdown-menu-with-tooltip";
-import { toast } from "@/hooks/useToast";
+import { toast } from "@opal/layouts";
 
 import { Badge } from "@/components/ui/badge";
 import { Tooltip } from "@opal/components";

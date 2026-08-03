@@ -18,11 +18,13 @@ from office365.runtime.client_request_exception import ClientRequestException
 from requests import Response
 from requests.exceptions import HTTPError
 
-from onyx.connectors.sharepoint.connector import _is_per_site_graph_failure
-from onyx.connectors.sharepoint.connector import GRAPH_INVALID_REQUEST_CODE
-from onyx.connectors.sharepoint.connector import PER_SITE_GRAPH_FAILURE_STATUSES
-from onyx.connectors.sharepoint.connector import SharepointConnector
-from onyx.connectors.sharepoint.connector import SiteDescriptor
+from onyx.connectors.sharepoint.connector import (
+    GRAPH_INVALID_REQUEST_CODE,
+    PER_SITE_GRAPH_FAILURE_STATUSES,
+    SharepointConnector,
+    SiteDescriptor,
+    _is_per_site_graph_failure,
+)
 
 SITE_URL = "https://tenant.sharepoint.com/sites/ClassicSite"
 FAKE_SITE_ID = "tenant.sharepoint.com,abc123,def456"
@@ -365,7 +367,7 @@ class TestIsPerSiteGraphFailure:
         # ClientRequestException with response=None. The retry layer owns
         # those, so we treat None as "not per-site".
         exc = _make_client_request_exception(404)
-        exc.response = None  # type: ignore[assignment]
+        exc.response = None
         assert _is_per_site_graph_failure(exc) is False
 
     def test_itemnotfound_404_is_per_site(self) -> None:

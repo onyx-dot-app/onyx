@@ -53,12 +53,8 @@ import jwt
 import uvicorn
 from cryptography.hazmat.primitives import serialization
 from cryptography.hazmat.primitives.asymmetric import rsa
-from fastapi import FastAPI
-from fastapi import Form
-from fastapi import Request
-from fastapi.responses import JSONResponse
-from fastapi.responses import PlainTextResponse
-from fastapi.responses import RedirectResponse
+from fastapi import FastAPI, Form, Request
+from fastapi.responses import JSONResponse, PlainTextResponse, RedirectResponse
 
 KEY_ID = "mock-oidc-key-1"
 

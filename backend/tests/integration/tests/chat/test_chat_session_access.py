@@ -4,13 +4,14 @@ import httpx
 import pytest
 
 from onyx.auth.schemas import UserRole
-from tests.integration.common_utils.constants import API_SERVER_URL
-from tests.integration.common_utils.constants import GENERAL_HEADERS
+from tests.integration.common_utils.constants import API_SERVER_URL, GENERAL_HEADERS
 from tests.integration.common_utils.http_client import client
 from tests.integration.common_utils.managers.chat import ChatSessionManager
-from tests.integration.common_utils.managers.user import build_email
-from tests.integration.common_utils.managers.user import DEFAULT_PASSWORD
-from tests.integration.common_utils.managers.user import UserManager
+from tests.integration.common_utils.managers.user import (
+    DEFAULT_PASSWORD,
+    UserManager,
+    build_email,
+)
 from tests.integration.common_utils.reset import reset_all
 from tests.integration.common_utils.test_models import DATestUser
 
@@ -60,10 +61,10 @@ def _is_user_already_exists_detail(detail: object) -> bool:
             or "register_user_already_exists" in normalized
         )
     if isinstance(detail, dict):
-        code = detail.get("code")  # ty: ignore[invalid-argument-type]
+        code = detail.get("code")
         if isinstance(code, str) and code.lower() == "register_user_already_exists":
             return True
-        message = detail.get("message")  # ty: ignore[invalid-argument-type]
+        message = detail.get("message")
         if isinstance(message, str) and "already exists" in message.lower():
             return True
     return False

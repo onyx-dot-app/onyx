@@ -1,10 +1,13 @@
-from onyx.configs.app_configs import EXT_APP_GOOGLE_DRIVE_CLIENT_ID
-from onyx.configs.app_configs import EXT_APP_GOOGLE_DRIVE_CLIENT_SECRET
-from onyx.db.enums import EndpointPolicy
-from onyx.db.enums import ExternalAppType
-from onyx.external_apps.providers.actions import EndpointSpec
-from onyx.external_apps.providers.actions import ExternalAppAction
-from onyx.external_apps.providers.actions import RestRoute
+from onyx.configs.app_configs import (
+    EXT_APP_GOOGLE_DRIVE_CLIENT_ID,
+    EXT_APP_GOOGLE_DRIVE_CLIENT_SECRET,
+)
+from onyx.db.enums import EndpointPolicy, ExternalAppType
+from onyx.external_apps.providers.actions import (
+    EndpointSpec,
+    ExternalAppAction,
+    RestRoute,
+)
 from onyx.external_apps.providers.base import OnyxManagedExtApp
 from onyx.external_apps.providers.google_base import GoogleOAuthProvider
 
@@ -135,10 +138,6 @@ class GoogleDriveProvider(GoogleOAuthProvider, OnyxManagedExtApp):
             # The Docs API lives on its own host.
             "https://docs\\.googleapis\\.com/.*",
         ],
-        description=(
-            "Search, read, create, and edit files and Google Docs in your "
-            "Google Drive inside Onyx Craft."
-        ),
         google_api_name="Google Drive API and Google Docs API",
         endpoint_catalog=_ENDPOINTS,
     )

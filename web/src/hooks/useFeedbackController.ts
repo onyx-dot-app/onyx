@@ -5,7 +5,7 @@ import { useChatSessionStore } from "@/app/app/stores/useChatSessionStore";
 import { FeedbackType } from "@/app/app/interfaces";
 import { handleChatFeedback, removeChatFeedback } from "@/app/app/services/lib";
 import { getMessageByMessageId } from "@/app/app/services/messageTree";
-import { toast } from "@/hooks/useToast";
+import { toast } from "@opal/layouts";
 
 /**
  * Hook for managing chat message feedback (like/dislike)

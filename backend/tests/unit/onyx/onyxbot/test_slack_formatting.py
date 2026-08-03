@@ -1,8 +1,10 @@
-from onyx.onyxbot.slack.formatting import _convert_slack_links_to_markdown
-from onyx.onyxbot.slack.formatting import _normalize_link_destinations
-from onyx.onyxbot.slack.formatting import _sanitize_html
-from onyx.onyxbot.slack.formatting import _transform_outside_code_blocks
-from onyx.onyxbot.slack.formatting import format_slack_message
+from onyx.onyxbot.slack.formatting import (
+    _convert_slack_links_to_markdown,
+    _normalize_link_destinations,
+    _sanitize_html,
+    _transform_outside_code_blocks,
+    format_slack_message,
+)
 from onyx.onyxbot.slack.utils import remove_slack_text_interactions
 from onyx.utils.text_processing import decode_escapes
 

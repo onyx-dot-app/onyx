@@ -4,12 +4,14 @@ from fastapi import FastAPI
 from fastapi.dependencies.models import Dependant
 from starlette.routing import BaseRoute
 
-from onyx.auth.users import current_chat_accessible_user
-from onyx.auth.users import current_curator_or_admin_user
-from onyx.auth.users import current_limited_user
-from onyx.auth.users import current_user
-from onyx.auth.users import current_user_from_websocket
-from onyx.auth.users import current_user_with_expired_token
+from onyx.auth.users import (
+    current_chat_accessible_user,
+    current_curator_or_admin_user,
+    current_limited_user,
+    current_user,
+    current_user_from_websocket,
+    current_user_with_expired_token,
+)
 from onyx.configs.app_configs import APP_API_PREFIX
 from onyx.utils.variable_functionality import fetch_ee_implementation_or_noop
 

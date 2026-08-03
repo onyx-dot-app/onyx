@@ -1,18 +1,20 @@
 """Unit tests for EE Slack perm sync on Enterprise Grid."""
 
-from typing import Any
-from typing import cast
-from unittest.mock import MagicMock
-from unittest.mock import patch
+from typing import Any, cast
+from unittest.mock import MagicMock, patch
 
 from ee.onyx.external_permissions.slack.channel_access import (
     get_channel_access as ee_get_channel_access,
 )
-from ee.onyx.external_permissions.slack.doc_sync import _fetch_channel_permissions
-from ee.onyx.external_permissions.slack.doc_sync import _fetch_workspace_permissions
-from ee.onyx.external_permissions.slack.doc_sync import _get_slack_document_access
-from ee.onyx.external_permissions.slack.utils import fetch_team_user_emails
-from ee.onyx.external_permissions.slack.utils import fetch_user_id_to_email_map
+from ee.onyx.external_permissions.slack.doc_sync import (
+    _fetch_channel_permissions,
+    _fetch_workspace_permissions,
+    _get_slack_document_access,
+)
+from ee.onyx.external_permissions.slack.utils import (
+    fetch_team_user_emails,
+    fetch_user_id_to_email_map,
+)
 from onyx.access.models import ExternalAccess
 from onyx.connectors.models import SlimDocument
 from onyx.connectors.slack.models import ChannelType

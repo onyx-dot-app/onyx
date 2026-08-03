@@ -1,17 +1,12 @@
 import time
 from collections.abc import Sequence
-from dataclasses import dataclass
-from dataclasses import field
-from dataclasses import replace
+from dataclasses import dataclass, field, replace
 from urllib.parse import urlparse
 
 from onyx.connectors.google_drive.connector import GoogleDriveConnector
-from onyx.connectors.models import Document
-from onyx.connectors.models import HierarchyNode
-from onyx.connectors.models import TextSection
+from onyx.connectors.models import Document, HierarchyNode, TextSection
 from onyx.db.enums import HierarchyNodeType
-from tests.daily.connectors.utils import ConnectorOutput
-from tests.daily.connectors.utils import load_all_from_connector
+from tests.daily.connectors.utils import ConnectorOutput, load_all_from_connector
 
 ALL_FILES = list(range(0, 60))
 SHARED_DRIVE_FILES = list(range(20, 25))

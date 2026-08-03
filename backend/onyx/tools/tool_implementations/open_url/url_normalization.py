@@ -9,8 +9,7 @@ Usage:
     # Returns: "https://docs.google.com/document/d/123"
 """
 
-from urllib.parse import urlparse
-from urllib.parse import urlunparse
+from urllib.parse import urlparse, urlunparse
 
 from onyx.configs.constants import DocumentSource
 from onyx.connectors.factory import identify_connector_class

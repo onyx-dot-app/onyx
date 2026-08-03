@@ -22,8 +22,7 @@ from uuid import uuid4
 import pytest
 from redis import Redis
 
-from onyx.redis.redis_pool import get_raw_redis_client
-from onyx.redis.redis_pool import redis_pool
+from onyx.redis.redis_pool import get_raw_redis_client, redis_pool
 from onyx.redis.tenant_redis_client import TenantRedisClient
 
 

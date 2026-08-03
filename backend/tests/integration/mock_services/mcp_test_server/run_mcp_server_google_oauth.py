@@ -25,8 +25,7 @@ import uvicorn
 from fastapi import FastAPI
 from fastapi.responses import PlainTextResponse
 from fastmcp import FastMCP
-from fastmcp.server.auth import AccessToken
-from fastmcp.server.auth import TokenVerifier
+from fastmcp.server.auth import AccessToken, TokenVerifier
 from fastmcp.server.dependencies import get_access_token
 
 # Google's tokeninfo endpoint for validating access tokens

@@ -1,19 +1,23 @@
 import pytest
 
-from ee.onyx.server.scim.models import ScimEmail
-from ee.onyx.server.scim.models import ScimGroupMember
-from ee.onyx.server.scim.models import ScimGroupResource
-from ee.onyx.server.scim.models import ScimMeta
-from ee.onyx.server.scim.models import ScimName
-from ee.onyx.server.scim.models import ScimPatchOperation
-from ee.onyx.server.scim.models import ScimPatchOperationType
-from ee.onyx.server.scim.models import ScimPatchRequest
-from ee.onyx.server.scim.models import ScimPatchResourceValue
-from ee.onyx.server.scim.models import ScimPatchValue
-from ee.onyx.server.scim.models import ScimUserResource
-from ee.onyx.server.scim.patch import apply_group_patch
-from ee.onyx.server.scim.patch import apply_user_patch
-from ee.onyx.server.scim.patch import ScimPatchError
+from ee.onyx.server.scim.models import (
+    ScimEmail,
+    ScimGroupMember,
+    ScimGroupResource,
+    ScimMeta,
+    ScimName,
+    ScimPatchOperation,
+    ScimPatchOperationType,
+    ScimPatchRequest,
+    ScimPatchResourceValue,
+    ScimPatchValue,
+    ScimUserResource,
+)
+from ee.onyx.server.scim.patch import (
+    ScimPatchError,
+    apply_group_patch,
+    apply_user_patch,
+)
 from ee.onyx.server.scim.providers.entra import EntraProvider
 from ee.onyx.server.scim.providers.okta import OktaProvider
 
@@ -225,7 +229,7 @@ class TestApplyUserPatch:
         """Entra ID sends ``"Replace"`` instead of ``"replace"``."""
         user = _make_user()
         op = ScimPatchOperation(
-            op="Replace",  # ty: ignore[invalid-argument-type]
+            op="Replace",
             path="active",
             value=False,
         )
@@ -236,7 +240,7 @@ class TestApplyUserPatch:
         """Entra ID sends ``"Add"`` instead of ``"add"``."""
         user = _make_user()
         op = ScimPatchOperation(
-            op="Add",  # ty: ignore[invalid-argument-type]
+            op="Add",
             path="externalId",
             value="ext-999",
         )

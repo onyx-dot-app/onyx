@@ -1,20 +1,14 @@
 import json
-from abc import ABC
-from abc import abstractmethod
+from abc import ABC, abstractmethod
 from enum import Enum
 from io import StringIO
-from typing import List
-from typing import Optional
-from typing import TypeAlias
+from typing import List, Optional, TypeAlias
 
 from pydantic import BaseModel
 
 from onyx.configs.constants import FileOrigin
-from onyx.connectors.models import DocExtractionContext
-from onyx.connectors.models import DocIndexingContext
-from onyx.connectors.models import Document
-from onyx.file_store.file_store import FileStore
-from onyx.file_store.file_store import get_default_file_store
+from onyx.connectors.models import DocExtractionContext, DocIndexingContext, Document
+from onyx.file_store.file_store import FileStore, get_default_file_store
 from onyx.utils.logger import setup_logger
 
 logger = setup_logger()

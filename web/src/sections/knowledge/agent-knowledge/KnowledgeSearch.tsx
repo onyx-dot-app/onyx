@@ -126,7 +126,7 @@ export function KnowledgeSearchSidebar({
         onClick={() => onSourceFilterClick(null)}
         rightChildren={
           totalCount > 0 ? (
-            <Text mainUiAction className="text-action-link-05">
+            <Text mainUiAction className="text-action-selection-05">
               {totalCount}
             </Text>
           ) : undefined
@@ -148,7 +148,7 @@ export function KnowledgeSearchSidebar({
               onClick={() => onSourceFilterClick(cs.source)}
               rightChildren={
                 count > 0 ? (
-                  <Text mainUiAction className="text-action-link-05">
+                  <Text mainUiAction className="text-action-selection-05">
                     {count}
                   </Text>
                 ) : undefined

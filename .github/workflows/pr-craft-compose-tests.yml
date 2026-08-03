@@ -19,8 +19,8 @@ on:
       - "backend/onyx/server/features/build/sandbox/labels.py"
       - "backend/onyx/server/features/build/sandbox/util/opencode_config.py"
       - "backend/tests/unit/sandbox_proxy/**"
-      - "backend/tests/unit/onyx/server/features/build/sandbox/test_docker_manager_config.py"
-      - "backend/tests/unit/onyx/server/features/build/sandbox/test_opencode_config.py"
+      - "backend/tests/unit/onyx/server/features/craft/sandbox/test_docker_manager_config.py"
+      - "backend/tests/unit/onyx/server/features/craft/sandbox/test_opencode_config.py"
       - "backend/tests/external_dependency_unit/sandbox_proxy/**"
       - "deployment/docker_compose/docker-compose.yml"
       - "deployment/docker_compose/docker-compose.craft.yml"
@@ -105,8 +105,8 @@ jobs:
             -xvs \
             --durations=8 \
             backend/tests/unit/sandbox_proxy/ \
-            backend/tests/unit/onyx/server/features/build/sandbox/test_docker_manager_config.py \
-            backend/tests/unit/onyx/server/features/build/sandbox/test_opencode_config.py
+            backend/tests/unit/onyx/server/features/craft/sandbox/test_docker_manager_config.py \
+            backend/tests/unit/onyx/server/features/craft/sandbox/test_opencode_config.py
 
       - name: Run DockerEventsLookup external-dep tests
         shell: script -q -e -c "bash --noprofile --norc -eo pipefail {0}"

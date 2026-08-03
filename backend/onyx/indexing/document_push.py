@@ -25,17 +25,16 @@ Push failures never fail the indexing batch: failures are logged and swallowed.
 
 from functools import lru_cache
 
-from pydantic import BaseModel
-from pydantic import Field
+from pydantic import BaseModel, Field
 
-from onyx.configs.app_configs import DOCUMENT_PUSH_API_KEY
-from onyx.configs.app_configs import DOCUMENT_PUSH_ENDPOINT_URL
-from onyx.configs.app_configs import DOCUMENT_PUSH_TIMEOUT_SECONDS
-from onyx.utils.external_endpoint import ExternalEndpointConfig
-from onyx.utils.external_endpoint import post_json_to_endpoint
+from onyx.configs.app_configs import (
+    DOCUMENT_PUSH_API_KEY,
+    DOCUMENT_PUSH_ENDPOINT_URL,
+    DOCUMENT_PUSH_TIMEOUT_SECONDS,
+)
+from onyx.utils.external_endpoint import ExternalEndpointConfig, post_json_to_endpoint
 from onyx.utils.logger import setup_logger
-from onyx.utils.url import SSRFException
-from onyx.utils.url import validate_outbound_http_url
+from onyx.utils.url import SSRFException, validate_outbound_http_url
 
 logger = setup_logger()
 

@@ -1,20 +1,23 @@
 import httpx
 from sqlalchemy.orm import Session
 
-from onyx.configs.app_configs import DISABLE_VECTOR_DB
-from onyx.configs.app_configs import ENABLE_OPENSEARCH_INDEXING_FOR_ONYX
-from onyx.configs.app_configs import ONYX_DISABLE_VESPA
+from onyx.configs.app_configs import (
+    DISABLE_VECTOR_DB,
+    ENABLE_OPENSEARCH_INDEXING_FOR_ONYX,
+    ONYX_DISABLE_VESPA,
+)
 from onyx.db.models import SearchSettings
 from onyx.db.opensearch_migration import get_opensearch_retrieval_state
 from onyx.document_index.disabled import DisabledDocumentIndex
-from onyx.document_index.interfaces_new import DocumentIndex
-from onyx.document_index.interfaces_new import TenantState
+from onyx.document_index.interfaces_new import DocumentIndex, TenantState
 from onyx.document_index.opensearch.opensearch_document_index import (
     OpenSearchDocumentIndex,
+    OpenSearchIndexPair,
 )
-from onyx.document_index.opensearch.opensearch_document_index import OpenSearchIndexPair
-from onyx.document_index.vespa.vespa_document_index import VespaDocumentIndex
-from onyx.document_index.vespa.vespa_document_index import VespaIndexPair
+from onyx.document_index.vespa.vespa_document_index import (
+    VespaDocumentIndex,
+    VespaIndexPair,
+)
 from onyx.indexing.models import IndexingSetting
 from shared_configs.configs import MULTI_TENANT
 from shared_configs.contextvars import get_current_tenant_id

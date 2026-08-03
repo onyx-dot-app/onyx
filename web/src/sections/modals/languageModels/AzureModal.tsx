@@ -3,11 +3,10 @@
 import { useSWRConfig } from "swr";
 import { useFormikContext } from "formik";
 import InputTypeInField from "@/refresh-components/form/InputTypeInField";
-import { InputDivider, InputPadder, InputVertical } from "@opal/layouts";
+import { InputDivider, InputPadder, InputVertical, toast } from "@opal/layouts";
 import {
   LLMProviderFormProps,
   LLMProviderName,
-  LLMProviderView,
 } from "@/lib/languageModels/types";
 import * as Yup from "yup";
 import {
@@ -25,10 +24,10 @@ import {
   ModalWrapper,
 } from "@/sections/modals/languageModels/shared";
 import {
+  buildTargetUri,
   isValidAzureTargetUri,
   parseAzureTargetUri,
 } from "@/lib/azureTargetUri";
-import { toast } from "@/hooks/useToast";
 import { refreshLlmProviderCaches } from "@/lib/languageModels/cache";
 
 interface AzureModalValues extends BaseLLMFormValues {
@@ -64,16 +63,6 @@ function AzureModelSelection() {
       }}
     />
   );
-}
-
-function buildTargetUri(existingLlmProvider?: LLMProviderView): string {
-  if (!existingLlmProvider?.api_base || !existingLlmProvider?.api_version) {
-    return "";
-  }
-
-  const deploymentName =
-    existingLlmProvider.deployment_name || "your-deployment";
-  return `${existingLlmProvider.api_base}/openai/deployments/${deploymentName}/chat/completions?api-version=${existingLlmProvider.api_version}`;
 }
 
 const processValues = (values: AzureModalValues): AzureModalValues => {

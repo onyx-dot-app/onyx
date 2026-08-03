@@ -13,12 +13,10 @@ start values), blockquotes, fenced code blocks, GFM tables, hyperlinks
 dropped rather than shown as literal markup.
 """
 
-from dataclasses import dataclass
-from dataclasses import replace
+from dataclasses import dataclass, replace
 from html import unescape
 from io import BytesIO
-from typing import Any
-from typing import cast
+from typing import Any, cast
 
 import mistune
 from docx import Document
@@ -29,13 +27,9 @@ from docx.opc.constants import RELATIONSHIP_TYPE
 from docx.opc.package import OpcPackage
 from docx.opc.packuri import PackURI
 from docx.opc.part import XmlPart
-from docx.oxml import OxmlElement
-from docx.oxml import parse_xml
+from docx.oxml import OxmlElement, parse_xml
 from docx.oxml.ns import qn
-from docx.shared import Inches
-from docx.shared import Pt
-from docx.shared import RGBColor
-from docx.shared import Twips
+from docx.shared import Inches, Pt, RGBColor, Twips
 from docx.styles.style import ParagraphStyle
 from docx.table import _Cell
 from docx.text.paragraph import Paragraph
@@ -262,7 +256,7 @@ class _Footnotes:
             PackURI(_FOOTNOTES_PARTNAME),
             _FOOTNOTES_CONTENT_TYPE,
             self._element,
-            package,
+            package,  # ty: ignore[invalid-argument-type]
         )
         document.part.relate_to(self._part, _FOOTNOTES_REL_TYPE)
         self._parent = _PartParent(self._part)
@@ -293,7 +287,7 @@ class _Footnotes:
             p_style.set(qn("w:val"), _STYLE_ID_FOOTNOTE_TEXT)
             p_pr.append(p_style)
             p_element.append(p_pr)
-            paragraph = Paragraph(p_element, self._parent)
+            paragraph = Paragraph(p_element, self._parent)  # ty: ignore[invalid-argument-type]
             if position == 0:
                 p_element.append(_reference_run("w:footnoteRef", None))
                 paragraph.add_run(" ")

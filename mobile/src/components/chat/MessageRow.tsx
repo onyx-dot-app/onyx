@@ -1,13 +1,28 @@
-// Memoized on packetCount (not array identity): a row re-renders only when its own packets grow, so
-// streaming one message doesn't re-render the list.
-import { memo } from "react";
+// Memoized on packet count, not array identity: a row re-renders only when its own packets grow.
+import { Fragment, memo, useMemo, useState } from "react";
 import { View } from "react-native";
 
+import { selectSources } from "@/chat/citations";
 import { Message } from "@/chat/interfaces";
+import { MinimalAgent } from "@/chat/agents";
+import { getErrorTitle } from "@/chat/errorHelpers";
 import { fileDescriptorToDisplayFile } from "@/chat/fileDescriptors";
+import { openSource } from "@/chat/openSource";
+import { AgentTimeline } from "@/components/chat/AgentTimeline";
+import {
+  CitedSourcesBar,
+  CitedSourcesSheet,
+} from "@/components/chat/CitedSources";
 import { FileCard } from "@/components/chat/FileCard";
+import { RendererComponent } from "@/components/chat/renderers/RendererComponent";
+import type { FullChatState } from "@/components/chat/renderers/registry";
+import { Icon } from "@/components/ui/icon";
 import { Text } from "@/components/ui/text";
+import SvgAlertCircle from "@/icons/alert-circle";
 import { usePacketDisplay } from "@/hooks/usePacketDisplay";
+
+// The renderer's onComplete drives the timeline pacing gate (9b.7); nothing consumes it in PR4.
+const NOOP = (): void => {};
 
 function UserMessage({ node }: { node: Message }) {
   const files = node.files.map(fileDescriptorToDisplayFile);
@@ -21,8 +36,10 @@ function UserMessage({ node }: { node: Message }) {
         </View>
       ) : null}
       {node.message.length > 0 ? (
-        <View className="max-w-[85%] rounded-16 bg-background-tint-02 px-16 py-12">
-          <Text font="main-content-body" color="text-05">
+        // Web HumanMessage bubble: squared bottom-right corner.
+        <View className="max-w-[85%] rounded-t-16 rounded-bl-16 bg-background-tint-02 px-12 py-8">
+          {/* 14px body: deliberate reduction from web's 16px, which reads oversized on a phone. */}
+          <Text font="main-ui-body" color="text-05">
             {node.message}
           </Text>
         </View>
@@ -31,38 +48,115 @@ function UserMessage({ node }: { node: Message }) {
   );
 }
 
-function ErrorMessage({ message }: { message: string }) {
+// Web ErrorBanner. No regenerate action yet.
+function ErrorMessage({ node }: { node: Message }) {
   return (
     <View className="py-6">
-      <Text font="main-content-body" color="status-error-05">
-        {message || "Something went wrong. Please try again."}
-      </Text>
+      <View className="flex-row gap-8 rounded-12 border border-status-error-05 bg-status-error-01 px-12 py-12">
+        <Icon
+          as={SvgAlertCircle}
+          size={16}
+          className="mt-2 text-status-error-05"
+        />
+        <View className="flex-1 gap-4">
+          <Text font="main-ui-action" color="status-error-05">
+            {getErrorTitle(node.errorCode)}
+          </Text>
+          <Text font="main-ui-body" color="status-error-05">
+            {node.message || "An error occurred. Please try again."}
+          </Text>
+        </View>
+      </View>
     </View>
   );
 }
 
-function AssistantMessage({ node }: { node: Message }) {
-  const { renderer, packets, isComplete } = usePacketDisplay(node);
-  const Renderer = renderer?.Component;
+function AssistantMessage({
+  node,
+  agent,
+}: {
+  node: Message;
+  agent: MinimalAgent | null;
+}) {
+  const { packets, processed, hasRenderer } = usePacketDisplay(node);
+  const [sourcesOpen, setSourcesOpen] = useState(false);
+  const hasContent = hasRenderer && packets.length > 0;
 
+  // Only after the answer completes, to avoid mid-stream layout shift.
+  const sources = useMemo(
+    () => (processed.isComplete ? selectSources(processed) : null),
+    [processed],
+  );
+
+  // Context a renderer may read. This identity churns each flush, but RendererComponent's memo keys on
+  // agent.id, not this object, so that's harmless.
+  const chatState = useMemo<FullChatState>(
+    () => ({
+      agent,
+      citations: processed.citationMap,
+      documentMap: processed.documentMap,
+      openSource,
+    }),
+    [agent, processed.citationMap, processed.documentMap],
+  );
+
+  // Web AgentMessage: the timeline (above) owns the loader; answer and sources sit below.
   return (
-    <View className="py-6">
-      {Renderer && packets.length > 0 ? (
-        <Renderer packets={packets} isComplete={isComplete} />
-      ) : (
-        // no content yet — thinking placeholder
-        <Text font="main-content-muted" color="text-03">
-          …
-        </Text>
-      )}
+    <View className="gap-12 py-6">
+      <AgentTimeline
+        agent={agent}
+        isLoading={!hasContent && !processed.isComplete}
+      />
+      {hasContent ? (
+        // px-12 aligns the answer under the avatar rail (web's px-3).
+        <View className="px-12">
+          <RendererComponent
+            packets={packets}
+            chatState={chatState}
+            messageNodeId={node.nodeId}
+            onComplete={NOOP}
+            animate={!processed.isComplete}
+            stopPacketSeen={processed.stopPacketSeen}
+            stopReason={processed.stopReason}
+          >
+            {(results) => (
+              <>
+                {results.map((result, index) => (
+                  <Fragment key={index}>{result.content}</Fragment>
+                ))}
+              </>
+            )}
+          </RendererComponent>
+        </View>
+      ) : null}
+      {sources && sources.hasSources ? (
+        <View className="px-12">
+          <CitedSourcesBar
+            iconDocs={sources.iconDocs}
+            count={sources.count}
+            onPress={() => setSourcesOpen(true)}
+          />
+          <CitedSourcesSheet
+            visible={sourcesOpen}
+            onClose={() => setSourcesOpen(false)}
+            sources={sources}
+          />
+        </View>
+      ) : null}
     </View>
   );
 }
 
-function MessageRowComponent({ node }: { node: Message }) {
+function MessageRowComponent({
+  node,
+  agent,
+}: {
+  node: Message;
+  agent: MinimalAgent | null;
+}) {
   if (node.type === "user") return <UserMessage node={node} />;
-  if (node.type === "error") return <ErrorMessage message={node.message} />;
-  return <AssistantMessage node={node} />;
+  if (node.type === "error") return <ErrorMessage node={node} />;
+  return <AssistantMessage node={node} agent={agent} />;
 }
 
 export const MessageRow = memo(
@@ -72,7 +166,8 @@ export const MessageRow = memo(
     prev.node.type === next.node.type &&
     prev.node.message === next.node.message &&
     prev.node.messageId === next.node.messageId &&
+    prev.node.errorCode === next.node.errorCode &&
     prev.node.packets.length === next.node.packets.length &&
-    // user rows render attachment chips from node.files; re-render if that array is replaced
-    prev.node.files === next.node.files,
+    prev.node.files === next.node.files &&
+    prev.agent === next.agent,
 );

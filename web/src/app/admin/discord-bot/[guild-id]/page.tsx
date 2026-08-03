@@ -3,11 +3,10 @@
 import { use, useState, useEffect, useCallback, useMemo } from "react";
 import { cn } from "@opal/utils";
 import SvgSimpleLoader from "@opal/icons/simple-loader";
-import { PageLoader } from "@/refresh-components/PageLoader";
+import { PageLoader } from "@opal/layouts";
 import { ErrorCallout } from "@/components/ErrorCallout";
-import { toast } from "@/hooks/useToast";
 import { Section } from "@/layouts/general-layouts";
-import { ContentAction } from "@opal/layouts";
+import { ContentAction, toast } from "@opal/layouts";
 import { SettingsLayouts } from "@opal/layouts";
 import Text from "@/refresh-components/texts/Text";
 import Card from "@/refresh-components/cards/Card";

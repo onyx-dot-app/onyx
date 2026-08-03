@@ -12,12 +12,16 @@ import time
 from sqlalchemy.orm import Session
 
 from onyx.db.enums import ExternalAppType
-from onyx.db.external_app import get_external_app_user_credential
-from onyx.db.external_app import upsert_external_app_user_credential
+from onyx.db.external_app import (
+    get_external_app_user_credential,
+    upsert_external_app_user_credential,
+)
 from onyx.db.models import ExternalApp
-from tests.external_dependency_unit.craft.db_helpers import make_external_app
-from tests.external_dependency_unit.craft.db_helpers import make_skill
-from tests.external_dependency_unit.craft.db_helpers import make_user
+from tests.external_dependency_unit.craft.db_helpers import (
+    make_external_app,
+    make_skill,
+    make_user,
+)
 
 _BEARER = {"Authorization": "Bearer {access_token}"}
 

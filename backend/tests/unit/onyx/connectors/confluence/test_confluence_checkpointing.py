@@ -1,29 +1,32 @@
 import time
-from collections.abc import Callable
-from collections.abc import Generator
-from datetime import datetime
-from datetime import timezone
+from collections.abc import Callable, Generator
+from datetime import datetime, timezone
 from typing import Any
-from unittest.mock import MagicMock
-from unittest.mock import patch
+from unittest.mock import MagicMock, patch
 
 import pytest
 from requests.exceptions import HTTPError
 
 from onyx.configs.constants import DocumentSource
-from onyx.connectors.confluence.connector import ConfluenceCheckpoint
-from onyx.connectors.confluence.connector import ConfluenceConnector
+from onyx.connectors.confluence.connector import (
+    ConfluenceCheckpoint,
+    ConfluenceConnector,
+)
 from onyx.connectors.confluence.onyx_confluence import OnyxConfluence
-from onyx.connectors.exceptions import CredentialExpiredError
-from onyx.connectors.exceptions import InsufficientPermissionsError
-from onyx.connectors.exceptions import UnexpectedValidationError
-from onyx.connectors.models import ConnectorFailure
-from onyx.connectors.models import Document
-from onyx.connectors.models import DocumentFailure
-from onyx.connectors.models import HierarchyNode
-from onyx.connectors.models import SlimDocument
-from tests.unit.onyx.connectors.utils import load_everything_from_checkpoint_connector
+from onyx.connectors.exceptions import (
+    CredentialExpiredError,
+    InsufficientPermissionsError,
+    UnexpectedValidationError,
+)
+from onyx.connectors.models import (
+    ConnectorFailure,
+    Document,
+    DocumentFailure,
+    HierarchyNode,
+    SlimDocument,
+)
 from tests.unit.onyx.connectors.utils import (
+    load_everything_from_checkpoint_connector,
     load_everything_from_checkpoint_connector_from_checkpoint,
 )
 
@@ -152,8 +155,8 @@ def test_load_from_checkpoint_happy_path(
     assert confluence_client is not None, "bad test setup"
 
     # Mock space retrieval for hierarchy nodes (called at start of first batch)
-    confluence_client.retrieve_confluence_spaces = (  # ty: ignore[invalid-assignment]
-        MagicMock(return_value=iter([{"key": "TEST", "name": "Test Space"}]))
+    confluence_client.retrieve_confluence_spaces = MagicMock(
+        return_value=iter([{"key": "TEST", "name": "Test Space"}])
     )
 
     get_mock = MagicMock()
@@ -223,8 +226,8 @@ def test_load_from_checkpoint_with_page_processing_error(
     assert confluence_client is not None, "bad test setup"
 
     # Mock space retrieval for hierarchy nodes (called at start of first batch)
-    confluence_client.retrieve_confluence_spaces = (  # ty: ignore[invalid-assignment]
-        MagicMock(return_value=iter([{"key": "TEST", "name": "Test Space"}]))
+    confluence_client.retrieve_confluence_spaces = MagicMock(
+        return_value=iter([{"key": "TEST", "name": "Test Space"}])
     )
 
     get_mock = MagicMock()
@@ -318,8 +321,8 @@ def test_retrieve_all_slim_docs_perm_sync(
     assert confluence_client is not None, "bad test setup"
 
     # Mock space retrieval for hierarchy nodes
-    confluence_client.retrieve_confluence_spaces = (  # ty: ignore[invalid-assignment]
-        MagicMock(return_value=iter([{"key": "TEST", "name": "Test Space"}]))
+    confluence_client.retrieve_confluence_spaces = MagicMock(
+        return_value=iter([{"key": "TEST", "name": "Test Space"}])
     )
 
     get_mock = MagicMock()
@@ -443,8 +446,8 @@ def test_checkpoint_progress(
     assert confluence_client is not None, "bad test setup"
 
     # Mock space retrieval for hierarchy nodes (called at start of first batch)
-    confluence_client.retrieve_confluence_spaces = (  # ty: ignore[invalid-assignment]
-        MagicMock(return_value=iter([{"key": "TEST", "name": "Test Space"}]))
+    confluence_client.retrieve_confluence_spaces = MagicMock(
+        return_value=iter([{"key": "TEST", "name": "Test Space"}])
     )
 
     get_mock = MagicMock()

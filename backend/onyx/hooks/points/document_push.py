@@ -1,8 +1,6 @@
-from onyx.db.enums import HookFailStrategy
-from onyx.db.enums import HookPoint
+from onyx.db.enums import HookFailStrategy, HookPoint
 from onyx.hooks.points.base import HookPointSpec
-from onyx.indexing.document_push import DocumentPushPayload
-from onyx.indexing.document_push import DocumentPushResponse
+from onyx.indexing.document_push import DocumentPushPayload, DocumentPushResponse
 
 __all__ = ["DocumentPushPayload", "DocumentPushResponse", "DocumentPushSpec"]
 

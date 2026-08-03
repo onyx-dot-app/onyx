@@ -13,13 +13,10 @@ Output:
 import json
 import sys
 
-from sqlalchemy import func
-from sqlalchemy import select
+from sqlalchemy import func, select
 
-from onyx.db.engine.sql_engine import get_session_with_tenant
-from onyx.db.engine.sql_engine import SqlEngine
-from onyx.db.models import ConnectorCredentialPair
-from onyx.db.models import Document
+from onyx.db.engine.sql_engine import SqlEngine, get_session_with_tenant
+from onyx.db.models import ConnectorCredentialPair, Document
 
 
 def check_documents_deleted(tenant_id: str) -> dict:

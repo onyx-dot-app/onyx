@@ -10,13 +10,12 @@ import {
   SvgLoader,
   SvgRevert,
 } from "@opal/icons";
-import Modal, { BasicModalFooter } from "@/refresh-components/Modal";
+import { BasicModalFooter, Modal } from "@opal/components";
 import InputTypeInField from "@/refresh-components/form/InputTypeInField";
 import InputSelect from "@/refresh-components/inputs/InputSelect";
 import PasswordInputTypeInField from "@/refresh-components/form/PasswordInputTypeInField";
 import { Section } from "@/layouts/general-layouts";
-import { Content, ContentAction, InputVertical } from "@opal/layouts";
-import { toast } from "@/hooks/useToast";
+import { Content, ContentAction, InputVertical, toast } from "@opal/layouts";
 import {
   createHook,
   updateHook,

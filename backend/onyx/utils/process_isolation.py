@@ -11,8 +11,7 @@ import signal
 import subprocess
 import sys
 from collections.abc import Callable
-from typing import Any
-from typing import TypeVar
+from typing import Any, TypeVar
 
 T = TypeVar("T")
 

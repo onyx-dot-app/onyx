@@ -31,7 +31,7 @@ import {
 import { UNNAMED_CHAT } from "@/lib/constants";
 import { useRouter } from "next/navigation";
 import MoveCustomAgentChatModal from "@/sections/modals/MoveCustomAgentChatModal";
-import ConfirmationModalLayout from "@/refresh-components/layouts/ConfirmationModalLayout";
+import { ConfirmationModalLayout } from "@opal/layouts";
 import FrostedDiv from "@/refresh-components/FrostedDiv";
 import {
   Button,
@@ -360,7 +360,7 @@ function Header() {
         isMobile) &&
         !appFocus.isSharedChat() && (
           <RootLayout.Header>
-            <div className="w-full h-full flex flex-row flex-wrap justify-center items-center p-2 sm:px-4">
+            <div className="w-full h-full flex flex-row flex-wrap justify-center items-start p-2 sm:px-4">
               {/*
           Left:
           - (mobile) sidebar toggle
@@ -371,6 +371,7 @@ function Header() {
                   <Button
                     prominence="internal"
                     icon={SvgSidebar}
+                    aria-label="Open Sidebar"
                     onClick={() => setFolded(false)}
                   />
                 )}
@@ -468,14 +469,18 @@ function Header() {
                     >
                       Share
                     </Button>
-                    <Button
-                      icon={fullWidthChat ? SvgFitWidth : SvgFullWidth}
-                      prominence="tertiary"
-                      onClick={toggleFullWidthChat}
-                      tooltip={fullWidthChat ? "Fit width" : "Full width"}
-                      aria-label="Toggle full width chat"
-                      aria-pressed={fullWidthChat}
-                    />
+                    {/* Below md the reading-width cap never applies (chat is
+                        always full width), so the toggle has nothing to do. */}
+                    <span className="hidden md:flex">
+                      <Button
+                        icon={fullWidthChat ? SvgFitWidth : SvgFullWidth}
+                        prominence="tertiary"
+                        onClick={toggleFullWidthChat}
+                        tooltip={fullWidthChat ? "Fit width" : "Full width"}
+                        aria-label="Toggle full width chat"
+                        aria-pressed={fullWidthChat}
+                      />
+                    </span>
                     <SimplePopover
                       trigger={
                         <Button

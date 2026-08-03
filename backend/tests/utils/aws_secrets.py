@@ -35,14 +35,11 @@ AWS SSO Authentication:
 import logging
 import os
 from collections.abc import Sequence
-from typing import cast
-from typing import overload
+from typing import cast, overload
 
 from dotenv import dotenv_values
 
-from tests.utils.secret_names import AnySecret
-from tests.utils.secret_names import DeploySecret
-from tests.utils.secret_names import TestSecret
+from tests.utils.secret_names import AnySecret, DeploySecret, TestSecret
 
 logger = logging.getLogger(__name__)
 

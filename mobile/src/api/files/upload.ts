@@ -28,52 +28,20 @@ export function buildFileKey(asset: NormalizedAsset): string {
   return `${asset.size ?? ""}|${namePrefix}`;
 }
 
-// Native multipart uploader: streams from disk (no FormData memory spike) and
-// reports byte progress. Bypasses apiFetch, so the bearer is attached manually;
-// it resolves for non-2xx, so status is checked. `projectId` null → an unlinked
-// user file (per-message attachment); the backend's project_id Form default is None.
-export async function uploadUserFile(
-  asset: NormalizedAsset,
-  projectId: number | null,
-  tempId: string,
-  onProgress?: (ratio: number) => void,
-): Promise<CategorizedFiles> {
-  const token = await getToken();
-  const url = `${getBaseUrl()}/user/projects/file/upload`;
-
-  const parameters: Record<string, string> = {
-    temp_id_map: JSON.stringify({ [buildFileKey(asset)]: tempId }),
-  };
-  if (projectId != null) parameters.project_id = String(projectId);
-
-  const result = await new File(asset.uri).upload(url, {
-    httpMethod: "POST",
-    uploadType: UploadType.MULTIPART,
-    fieldName: "files",
-    mimeType: asset.mimeType,
-    parameters,
-    headers: token ? { Authorization: `Bearer ${token}` } : undefined,
-    onProgress: ({ bytesSent, totalBytes }) => {
-      if (totalBytes > 0) onProgress?.(bytesSent / totalBytes);
-    },
-  });
-
-  if (result.status < 200 || result.status >= 300) {
-    throw new ApiError({
-      status: result.status,
-      detail: "Failed to upload file.",
-      body: result.body,
-    });
+// The uploader resolves for non-2xx, so the status is checked here; a 2xx body that
+// isn't the expected JSON shape is an error too.
+function parseUploadResponse(status: number, body: string): CategorizedFiles {
+  if (status < 200 || status >= 300) {
+    throw new ApiError({ status, detail: "Failed to upload file.", body });
   }
-
   let parsed: unknown;
   try {
-    parsed = JSON.parse(result.body);
+    parsed = JSON.parse(body);
   } catch {
     throw new ApiError({
-      status: result.status,
+      status,
       detail: "Upload succeeded but the response wasn't JSON.",
-      body: result.body,
+      body,
     });
   }
   if (
@@ -82,11 +50,52 @@ export async function uploadUserFile(
     !Array.isArray((parsed as CategorizedFiles).user_files) ||
     !Array.isArray((parsed as CategorizedFiles).rejected_files)
   ) {
-    throw new ApiError({
-      status: result.status,
-      detail: "Unexpected upload response.",
-      body: result.body,
-    });
+    throw new ApiError({ status, detail: "Unexpected upload response.", body });
   }
   return parsed as CategorizedFiles;
+}
+
+// A started, cancelable upload. `cancel()` aborts the in-flight request; the epoch guard (not
+// cancellation) is what guarantees a late result can't land.
+export interface StartedUpload {
+  result: Promise<CategorizedFiles>;
+  cancel: () => void;
+}
+
+// Native multipart uploader (streams from disk). Bypasses apiFetch (bearer attached
+// manually). `projectId` null → an unlinked per-message file.
+export function startUpload(
+  asset: NormalizedAsset,
+  projectId: number | null,
+  tempId: string,
+  onProgress?: (ratio: number) => void,
+): StartedUpload {
+  const controller = new AbortController();
+
+  const result = (async () => {
+    const token = await getToken();
+    const url = `${getBaseUrl()}/user/projects/file/upload`;
+
+    const parameters: Record<string, string> = {
+      temp_id_map: JSON.stringify({ [buildFileKey(asset)]: tempId }),
+    };
+    if (projectId != null) parameters.project_id = String(projectId);
+
+    const raw = await new File(asset.uri).upload(url, {
+      httpMethod: "POST",
+      uploadType: UploadType.MULTIPART,
+      fieldName: "files",
+      mimeType: asset.mimeType,
+      parameters,
+      headers: token ? { Authorization: `Bearer ${token}` } : undefined,
+      signal: controller.signal,
+      onProgress: ({ bytesSent, totalBytes }) => {
+        if (totalBytes > 0) onProgress?.(bytesSent / totalBytes);
+      },
+    });
+
+    return parseUploadResponse(raw.status, raw.body);
+  })();
+
+  return { result, cancel: () => controller.abort() };
 }

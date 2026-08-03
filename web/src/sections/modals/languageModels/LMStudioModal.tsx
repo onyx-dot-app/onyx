@@ -2,7 +2,7 @@
 
 import { useSWRConfig } from "swr";
 import { useFormikContext } from "formik";
-import { InputDivider } from "@opal/layouts";
+import { InputDivider, toast } from "@opal/layouts";
 import { markdown } from "@opal/utils";
 import {
   LLMProviderFormProps,
@@ -27,7 +27,6 @@ import {
   ModalWrapper,
 } from "@/sections/modals/languageModels/shared";
 import { fetchModels } from "@/lib/languageModels/svc";
-import { toast } from "@/hooks/useToast";
 import { refreshLlmProviderCaches } from "@/lib/languageModels/cache";
 import { useSettings } from "@/lib/settings/hooks";
 

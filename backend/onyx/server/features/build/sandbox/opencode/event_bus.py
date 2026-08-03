@@ -11,15 +11,13 @@ from __future__ import annotations
 import json
 import threading
 from collections.abc import Callable
-from dataclasses import dataclass
-from dataclasses import field
-from queue import Empty
-from queue import Full
-from queue import Queue
+from dataclasses import dataclass, field
+from queue import Empty, Full, Queue
 from typing import Any
 
 import httpx
 
+from onyx.server.features.build.timeouts import CONNECT_TIMEOUT_SECONDS
 from onyx.utils.logger import setup_logger
 
 logger = setup_logger()
@@ -55,7 +53,7 @@ class PodEventBus:
         auth: httpx.Auth | None,
         *,
         directory: str | None = None,
-        connect_timeout: float = 10.0,
+        connect_timeout: float = CONNECT_TIMEOUT_SECONDS,
         event_read_timeout: float | None = None,
         reload_auth: Callable[[], httpx.Auth | None] | None = None,
     ) -> None:

@@ -82,6 +82,16 @@ export { userEvent };
 // Override render with our custom render
 export { customRender as render };
 
+export function deferred<T>() {
+  let resolve!: (value: T) => void;
+  let reject!: (reason: unknown) => void;
+  const promise = new Promise<T>((resolvePromise, rejectPromise) => {
+    resolve = resolvePromise;
+    reject = rejectPromise;
+  });
+  return { promise, resolve, reject };
+}
+
 /**
  * Override jsdom's document visibility (always "visible" by default) so tests
  * can exercise hidden-tab behavior. Dispatch a "visibilitychange" event after

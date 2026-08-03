@@ -10,9 +10,11 @@ import time
 
 import pytest
 
-from onyx.utils.process_isolation import IsolatedProcessCrashed
-from onyx.utils.process_isolation import IsolatedProcessTimeout
-from onyx.utils.process_isolation import run_in_isolated_process
+from onyx.utils.process_isolation import (
+    IsolatedProcessCrashed,
+    IsolatedProcessTimeout,
+    run_in_isolated_process,
+)
 
 
 def test_returns_value() -> None:

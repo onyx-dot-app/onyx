@@ -17,31 +17,36 @@ test that needs ``applicable=True`` uses the ``enable_ee`` fixture from
 the root ``backend/tests/conftest.py``.
 """
 
-from datetime import datetime
-from datetime import timezone
+from datetime import datetime, timezone
 
 import pytest
 from sqlalchemy.orm import Session
 
 from onyx.configs.constants import DocumentSource
 from onyx.connectors.models import InputType
-from onyx.db.enums import AccessType
-from onyx.db.enums import ConnectorCredentialPairStatus
-from onyx.db.enums import PermissionSyncStatus
-from onyx.db.models import Connector
-from onyx.db.models import ConnectorCredentialPair
-from onyx.db.models import Credential
-from onyx.db.models import User
-from onyx.db.models import UserRole
-from onyx.db.permission_sync_attempt import create_doc_permission_sync_attempt
-from onyx.db.permission_sync_attempt import create_external_group_sync_attempt
+from onyx.db.enums import (
+    AccessType,
+    ConnectorCredentialPairStatus,
+    PermissionSyncStatus,
+)
+from onyx.db.models import (
+    Connector,
+    ConnectorCredentialPair,
+    Credential,
+    User,
+    UserRole,
+)
 from onyx.db.permission_sync_attempt import (
+    create_doc_permission_sync_attempt,
+    create_external_group_sync_attempt,
     get_relevant_external_group_sync_attempts_for_cc_pair,
 )
 from onyx.error_handling.error_codes import OnyxErrorCode
 from onyx.error_handling.exceptions import OnyxError
-from onyx.server.documents.cc_pair import get_cc_pair_external_group_sync_attempts
-from onyx.server.documents.cc_pair import get_cc_pair_permission_sync_attempts
+from onyx.server.documents.cc_pair import (
+    get_cc_pair_external_group_sync_attempts,
+    get_cc_pair_permission_sync_attempts,
+)
 from tests.external_dependency_unit.conftest import create_test_user
 
 # Every applicable=True path here depends on the EE-only ``sync_params``

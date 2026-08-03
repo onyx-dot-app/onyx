@@ -58,10 +58,12 @@ from tests.integration.common_utils.managers.document import DocumentManager
 from tests.integration.common_utils.managers.document_set import DocumentSetManager
 from tests.integration.common_utils.managers.pat import PATManager
 from tests.integration.common_utils.managers.persona import PersonaManager
-from tests.integration.common_utils.test_models import DATestAPIKey
-from tests.integration.common_utils.test_models import DATestLLMProvider
-from tests.integration.common_utils.test_models import DATestPersona
-from tests.integration.common_utils.test_models import DATestUser
+from tests.integration.common_utils.test_models import (
+    DATestAPIKey,
+    DATestLLMProvider,
+    DATestPersona,
+    DATestUser,
+)
 from tests.integration.tests.cli.conftest import MOCK_LLM_TOKEN
 
 _CLI_BINARY = os.environ.get("ONYX_CLI_BINARY")

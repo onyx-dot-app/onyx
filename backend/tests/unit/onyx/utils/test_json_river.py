@@ -4,8 +4,7 @@ import json
 
 import pytest
 
-from onyx.utils.jsonriver import JsonValue
-from onyx.utils.jsonriver import Parser
+from onyx.utils.jsonriver import JsonValue, Parser
 
 
 def _all_deltas(chunks: list[str]) -> list[JsonValue]:

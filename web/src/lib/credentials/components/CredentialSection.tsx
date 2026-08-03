@@ -10,14 +10,14 @@ import {
   updateCredential,
   updateCredentialWithPrivateKey,
 } from "@/lib/credential";
-import { toast } from "@/hooks/useToast";
+import { toast } from "@opal/layouts";
 import { CCPairFullInfo } from "@/app/admin/connector/[ccPairId]/types";
 import { Card, Text } from "@opal/components";
 import {
   buildCCPairInfoUrl,
   buildSimilarCredentialInfoURL,
 } from "@/app/admin/connector/[ccPairId]/lib";
-import Modal from "@/refresh-components/Modal";
+import { Modal } from "@opal/components";
 import { getSourceDisplayName } from "@/lib/sources";
 import {
   ConfluenceCredentialJson,

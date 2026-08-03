@@ -8,25 +8,26 @@ Unit tests for lazy loading connector factory to validate:
 
 import importlib
 from types import SimpleNamespace
-from unittest.mock import MagicMock
-from unittest.mock import Mock
-from unittest.mock import patch
+from unittest.mock import MagicMock, Mock, patch
 
 import pytest
 
 from onyx.configs.constants import DocumentSource
-from onyx.connectors.exceptions import ConnectorValidationError
-from onyx.connectors.exceptions import UnexpectedValidationError
-from onyx.connectors.factory import _connector_cache
-from onyx.connectors.factory import _load_connector_class
-from onyx.connectors.factory import ConnectorMissingException
-from onyx.connectors.factory import identify_connector_class
-from onyx.connectors.factory import instantiate_connector
-from onyx.connectors.factory import validate_ccpair_for_user
+from onyx.connectors.exceptions import (
+    ConnectorValidationError,
+    UnexpectedValidationError,
+)
+from onyx.connectors.factory import (
+    ConnectorMissingException,
+    _connector_cache,
+    _load_connector_class,
+    identify_connector_class,
+    instantiate_connector,
+    validate_ccpair_for_user,
+)
 from onyx.connectors.interfaces import BaseConnector
 from onyx.connectors.models import InputType
-from onyx.connectors.registry import CONNECTOR_CLASS_MAP
-from onyx.connectors.registry import ConnectorMapping
+from onyx.connectors.registry import CONNECTOR_CLASS_MAP, ConnectorMapping
 from onyx.db.enums import AccessType
 
 

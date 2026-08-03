@@ -7,7 +7,7 @@ import { SidebarTab, Text } from "@opal/components";
 import { SvgSliders } from "@opal/icons";
 import InputSelect from "@/refresh-components/inputs/InputSelect";
 import { useUser } from "@/providers/UserProvider";
-import { useAuthType } from "@/lib/hooks";
+import { useIsMultiTenant } from "@/lib/auth/hooks";
 import { Section } from "@/layouts/general-layouts";
 
 interface LayoutProps {
@@ -23,10 +23,10 @@ export default function Layout({ children }: LayoutProps) {
   const pathname = usePathname();
   const router = useRouter();
   const { user } = useUser();
-  const authType = useAuthType();
+  const isMultiTenant = useIsMultiTenant();
 
   const showPasswordSection = Boolean(user?.password_configured);
-  const showTokensSection = authType !== null;
+  const showTokensSection = isMultiTenant !== null;
   const showAccountsAccessTab = showPasswordSection || showTokensSection;
 
   const tabs: SettingsTab[] = [
@@ -36,6 +36,7 @@ export default function Layout({ children }: LayoutProps) {
       ? [{ href: "/app/settings/accounts-access", label: "Accounts & Access" }]
       : []),
     { href: "/app/settings/connectors", label: "Connectors" },
+    { href: "/app/settings/usage", label: "Usage" },
   ];
 
   // Derive the trigger label from the pathname directly. InputSelect normally
@@ -54,12 +55,12 @@ export default function Layout({ children }: LayoutProps) {
           justifyContent="start"
           alignItems="stretch"
           gap={1.5}
-          className="md:flex-row md:items-start"
+          className="sm:flex-row sm:items-start"
         >
           {/* Narrow screens: dropdown navigation above the tab content */}
           <div
             data-testid="settings-tab-navigation-dropdown"
-            className="md:hidden"
+            className="sm:hidden"
           >
             <InputSelect
               value={pathname}
@@ -87,7 +88,7 @@ export default function Layout({ children }: LayoutProps) {
           {/* Wide screens: left tab navigation */}
           <div
             data-testid="settings-left-tab-navigation"
-            className="hidden md:flex flex-col px-2 min-w-50"
+            className="hidden sm:flex flex-col px-2 min-w-50"
           >
             {tabs.map((tab) => (
               <SidebarTab

@@ -7,8 +7,10 @@ from logging.handlers import RotatingFileHandler
 
 import psutil
 
-from onyx.configs.app_configs import INDEXING_WORKER_MEMORY_LIMIT_MB
-from onyx.configs.app_configs import INDEXING_WORKER_TRACEMALLOC
+from onyx.configs.app_configs import (
+    INDEXING_WORKER_MEMORY_LIMIT_MB,
+    INDEXING_WORKER_TRACEMALLOC,
+)
 from onyx.utils.logger import setup_logger
 from onyx.utils.platform_utils import is_running_in_container
 

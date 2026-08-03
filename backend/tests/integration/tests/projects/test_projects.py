@@ -7,8 +7,7 @@ from onyx.db.models import UserFile
 from onyx.server.features.projects.models import UserProjectSnapshot
 from tests.integration.common_utils.managers.project import ProjectManager
 from tests.integration.common_utils.reset import reset_all
-from tests.integration.common_utils.test_models import DATestLLMProvider
-from tests.integration.common_utils.test_models import DATestUser
+from tests.integration.common_utils.test_models import DATestLLMProvider, DATestUser
 
 
 @pytest.fixture(scope="module", autouse=True)

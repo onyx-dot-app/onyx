@@ -4,10 +4,12 @@ from urllib.parse import unquote
 
 from posthog import Posthog
 
-from ee.onyx.configs.app_configs import MARKETING_POSTHOG_API_KEY
-from ee.onyx.configs.app_configs import POSTHOG_API_KEY
-from ee.onyx.configs.app_configs import POSTHOG_DEBUG_LOGS_ENABLED
-from ee.onyx.configs.app_configs import POSTHOG_HOST
+from ee.onyx.configs.app_configs import (
+    MARKETING_POSTHOG_API_KEY,
+    POSTHOG_API_KEY,
+    POSTHOG_DEBUG_LOGS_ENABLED,
+    POSTHOG_HOST,
+)
 from onyx.utils.logger import setup_logger
 from shared_configs.configs import MULTI_TENANT
 
@@ -73,7 +75,7 @@ def capture_and_sync_with_alternate_posthog(
             cloud_props.pop("onyx_cloud_user_id", None)
 
             posthog.identify(
-                distinct_id=cloud_user_id,  # ty: ignore[possibly-unresolved-reference]
+                distinct_id=cloud_user_id,
                 properties=cloud_props,
             )
     except Exception as e:
@@ -105,7 +107,7 @@ def get_anon_id_from_request(request: Any) -> str | None:
     if (cookie_value := request.cookies.get(cookie_name)) and (
         parsed := parse_posthog_cookie(cookie_value)
     ):
-        return parsed.get("distinct_id")  # ty: ignore[possibly-unresolved-reference]
+        return parsed.get("distinct_id")
 
     return None
 

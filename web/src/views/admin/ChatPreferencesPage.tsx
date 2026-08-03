@@ -1,19 +1,26 @@
 "use client";
 
 import { markdown } from "@opal/utils";
-import React, { useCallback, useEffect, useRef, useState } from "react";
+import React, {
+  useCallback,
+  useEffect,
+  useMemo,
+  useRef,
+  useState,
+} from "react";
 import { useRouter } from "next/navigation";
 import { Formik, Form } from "formik";
 import useSWR, { mutate } from "swr";
 import { SWR_KEYS } from "@/lib/swr-keys";
 import { errorHandlingFetcher } from "@/lib/fetcher";
-import { SettingsLayouts } from "@opal/layouts";
+import { SettingsLayouts, toast } from "@opal/layouts";
 import { Section } from "@/layouts/general-layouts";
 import SimpleCollapsible from "@/refresh-components/SimpleCollapsible";
 import InputTextAreaField from "@/refresh-components/form/InputTextAreaField";
-import { InputTypeIn } from "@opal/components";
-import InputTextArea from "@/refresh-components/inputs/InputTextArea";
+import { InputTextArea, InputTypeIn } from "@opal/components";
 import InputSelect from "@/refresh-components/inputs/InputSelect";
+import ModelSelector from "@/sections/model-selector/ModelSelector";
+import { useAdminLLMProviders } from "@/lib/languageModels/hooks";
 import {
   SvgAddLines,
   SvgActions,
@@ -37,7 +44,6 @@ import { useSettings } from "@/lib/settings/hooks";
 import useCCPairs from "@/hooks/useCCPairs";
 import { getSourceMetadata } from "@/lib/sources";
 import { QueryHistoryType, Settings, toSettings } from "@/lib/settings/types";
-import { toast } from "@/hooks/useToast";
 import { useAvailableTools } from "@/hooks/useAvailableTools";
 import {
   SEARCH_TOOL_ID,
@@ -56,7 +62,7 @@ import {
   MessageCard,
   Tooltip,
 } from "@opal/components";
-import Modal from "@/refresh-components/Modal";
+import { Modal } from "@opal/components";
 import GenericConfirmModal from "@/sections/modals/GenericConfirmModal";
 import { Switch } from "@opal/components";
 import { useMcpServersForAgentEditor } from "@/lib/agents/hooks";
@@ -651,6 +657,86 @@ export default function ChatPreferencesPage() {
   const businessTier = useTierAtLeast(Tier.BUSINESS);
   const enterpriseTier = useTierAtLeast(Tier.ENTERPRISE);
 
+  // Dedicated chat-naming model. Auto-naming reads this designation via
+  // fetch_default_chat_naming_model; when unset it uses the session's model.
+  const {
+    llmProviders,
+    defaultChatNaming,
+    refetch: refetchLlmProviders,
+  } = useAdminLLMProviders();
+
+  // Resolve defaultChatNaming (id + name based) to a model_configuration_id
+  // for ModelSelector.
+  const chatNamingModelConfigId = useMemo(() => {
+    if (!defaultChatNaming || !llmProviders) return null;
+    for (const p of llmProviders) {
+      if (p.id !== defaultChatNaming.provider_id) continue;
+      const mc = p.model_configurations.find(
+        (m) => m.name === defaultChatNaming.model_name
+      );
+      if (mc?.id != null) return mc.id;
+    }
+    return null;
+  }, [llmProviders, defaultChatNaming]);
+
+  const handleChatNamingModelChange = useCallback(
+    async ({
+      modelName,
+      providerName,
+    }: {
+      modelName: string;
+      providerName: string | null;
+    }) => {
+      const provider = llmProviders?.find((p) => p.name === providerName);
+      if (!provider) {
+        toast.error("Could not resolve provider");
+        return;
+      }
+      try {
+        const response = await fetch("/api/admin/llm/default-chat-naming", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            provider_id: provider.id,
+            model_name: modelName,
+          }),
+        });
+        if (!response.ok) {
+          throw new Error(
+            (await response.json()).detail ??
+              "Failed to update chat naming model"
+          );
+        }
+        await refetchLlmProviders();
+        toast.success("Chat naming model updated");
+      } catch (error) {
+        toast.error(
+          error instanceof Error ? error.message : "An unknown error occurred"
+        );
+      }
+    },
+    [llmProviders, refetchLlmProviders]
+  );
+
+  const handleClearChatNamingModel = useCallback(async () => {
+    try {
+      const response = await fetch("/api/admin/llm/default-chat-naming", {
+        method: "DELETE",
+      });
+      if (!response.ok) {
+        throw new Error(
+          (await response.json()).detail ?? "Failed to reset chat naming model"
+        );
+      }
+      await refetchLlmProviders();
+      toast.success("Chat naming reset to the session's model");
+    } catch (error) {
+      toast.error(
+        error instanceof Error ? error.message : "An unknown error occurred"
+      );
+    }
+  }, [refetchLlmProviders]);
+
   // Local state for text fields (save-on-blur)
   const [companyName, setCompanyName] = useState(s.company_name ?? "");
   const [companyDescription, setCompanyDescription] = useState(
@@ -874,6 +960,18 @@ export default function ChatPreferencesPage() {
                 </InputHorizontal>
               </Disabled>
               <InputHorizontal
+                title="Auto-Detect Search Filters"
+                description="Automatically apply source and time filters inferred from the search query."
+                withLabel
+              >
+                <Switch
+                  checked={s.auto_detect_search_filters ?? true}
+                  onCheckedChange={(checked) => {
+                    void saveSettings({ auto_detect_search_filters: checked });
+                  }}
+                />
+              </InputHorizontal>
+              <InputHorizontal
                 title="Multi-Model Generation"
                 tag={{ title: "beta", color: "blue" }}
                 description="Allow multiple models to generate responses in parallel in chat."
@@ -916,13 +1014,39 @@ export default function ChatPreferencesPage() {
                 withLabel
               >
                 <Switch
-                  checked={s.temperature_override_enabled ?? false}
+                  checked={s.temperature_override_enabled ?? true}
                   onCheckedChange={(checked) => {
                     void saveSettings({
                       temperature_override_enabled: checked,
                     });
                   }}
                 />
+              </InputHorizontal>
+              <InputHorizontal
+                title="Chat Naming Model"
+                description="Model used to auto-name chat sessions. Defaults to each session's own model — pin a small, fast model here if your main model can't serve concurrent requests."
+                withLabel
+              >
+                <div className="flex items-center gap-2">
+                  {chatNamingModelConfigId !== null && (
+                    <Button
+                      prominence="tertiary"
+                      size="sm"
+                      onClick={() => void handleClearChatNamingModel()}
+                    >
+                      Reset
+                    </Button>
+                  )}
+                  <ModelSelector
+                    value={chatNamingModelConfigId}
+                    onChange={(opt) =>
+                      void handleChatNamingModelChange({
+                        modelName: opt.modelName,
+                        providerName: opt.name,
+                      })
+                    }
+                  />
+                </div>
               </InputHorizontal>
             </Section>
           </Card>

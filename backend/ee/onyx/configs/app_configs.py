@@ -60,6 +60,20 @@ CANVAS_PERMISSION_GROUP_SYNC_FREQUENCY = int(
 
 
 #####
+# Box
+#####
+# Aligned with SharePoint (the closest analog: enterprise file storage with
+# folder hierarchy + collaborations): doc sync every 30 minutes, group sync
+# every 5 minutes.
+BOX_PERMISSION_DOC_SYNC_FREQUENCY = int(
+    os.environ.get("BOX_PERMISSION_DOC_SYNC_FREQUENCY") or 30 * 60
+)
+BOX_PERMISSION_GROUP_SYNC_FREQUENCY = int(
+    os.environ.get("BOX_PERMISSION_GROUP_SYNC_FREQUENCY") or 5 * 60
+)
+
+
+#####
 # Google Drive
 #####
 GOOGLE_DRIVE_PERMISSION_GROUP_SYNC_FREQUENCY = int(

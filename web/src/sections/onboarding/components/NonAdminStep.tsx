@@ -5,13 +5,12 @@ import Text from "@/refresh-components/texts/Text";
 import { InputTypeIn } from "@opal/components";
 import { updateUserPersonalization } from "@/lib/users/svc";
 import { useUser } from "@/providers/UserProvider";
-import { toast } from "@/hooks/useToast";
 import IconButton from "@/refresh-components/buttons/IconButton";
 import { Button } from "@opal/components";
 import InputAvatar from "@/refresh-components/inputs/InputAvatar";
 import { cn } from "@opal/utils";
 import { SvgCheckCircle, SvgEdit, SvgUser, SvgX } from "@opal/icons";
-import { ContentAction, InputHorizontal } from "@opal/layouts";
+import { ContentAction, InputHorizontal, toast } from "@opal/layouts";
 import { Hoverable } from "@opal/core";
 
 export default function NonAdminStep() {

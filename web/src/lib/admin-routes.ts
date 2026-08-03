@@ -20,6 +20,7 @@ import {
   SvgMcp,
   SvgOnyxOctagon,
   SvgPaintBrush,
+  SvgPlug,
   SvgProgressBars,
   SvgSearchMenu,
   SvgShield,
@@ -27,6 +28,7 @@ import {
   SvgThumbsUp,
   SvgUploadCloud,
   SvgUser,
+  SvgUserCheck,
   SvgUserKey,
   SvgUserSync,
   SvgUsers,
@@ -156,11 +158,23 @@ export const ADMIN_ROUTES = {
     title: "Code Interpreter",
     sidebarLabel: "Code Interpreter",
   },
-  CRAFT: {
-    path: "/admin/configuration/craft",
+  CRAFT_ACCESS: {
+    path: "/admin/craft/access",
+    icon: SvgUserCheck,
+    title: "Access",
+    sidebarLabel: "Access",
+  },
+  CRAFT_APPS: {
+    path: "/admin/craft/apps",
+    icon: SvgPlug,
+    title: "Apps",
+    sidebarLabel: "Apps",
+  },
+  CRAFT_INSTRUCTIONS: {
+    path: "/admin/craft/instructions",
     icon: SvgDevKit,
-    title: "Craft",
-    sidebarLabel: "Craft",
+    title: "Instructions",
+    sidebarLabel: "Instructions",
   },
   INDEX_SETTINGS: {
     path: "/admin/configuration/index-settings",
@@ -216,6 +230,12 @@ export const ADMIN_ROUTES = {
     title: "Custom Analytics",
     sidebarLabel: "Custom Analytics",
   },
+  EXPORT_LOGS: {
+    path: "/admin/export-logs",
+    icon: SvgDownload,
+    title: "Export Logs",
+    sidebarLabel: "Export Logs",
+  },
   THEME: {
     path: "/admin/theme",
     icon: SvgPaintBrush,
@@ -240,11 +260,11 @@ export const ADMIN_ROUTES = {
     title: "SCIM",
     sidebarLabel: "SCIM",
   },
-  DEBUG: {
-    path: "/admin/debug",
-    icon: SvgDownload,
-    title: "Debug Logs",
-    sidebarLabel: "Debug Logs",
+  OAUTH_TEST: {
+    path: "/admin/oauth-test",
+    icon: SvgUserKey,
+    title: "OAuth Test",
+    sidebarLabel: "OAuth Test",
   },
   SECURITY_HARDENING: {
     path: "/admin/security",

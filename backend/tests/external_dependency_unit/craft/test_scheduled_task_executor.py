@@ -21,8 +21,7 @@ import datetime
 import threading
 from collections.abc import Callable
 from typing import Any
-from unittest.mock import patch
-from unittest.mock import PropertyMock
+from unittest.mock import PropertyMock, patch
 from uuid import UUID
 
 import pytest
@@ -30,23 +29,22 @@ from sqlalchemy.orm import Session
 
 from onyx.background.celery.tasks.scheduled_tasks.tasks import (
     cleanup_stuck_scheduled_runs,
-)
-from onyx.background.celery.tasks.scheduled_tasks.tasks import (
     dispatch_due_scheduled_tasks,
 )
-from onyx.db.enums import SandboxStatus
-from onyx.db.enums import ScheduledTaskErrorClass
-from onyx.db.enums import ScheduledTaskRunStatus
-from onyx.db.enums import ScheduledTaskStatus
-from onyx.db.enums import ScheduledTaskTriggerSource
-from onyx.db.models import Sandbox
-from onyx.db.models import ScheduledTask
-from onyx.db.models import ScheduledTaskRun
-from onyx.db.models import User
-from onyx.server.features.build.sandbox.event_schema import Error
-from onyx.server.features.build.sandbox.event_schema import PromptResponse
-from onyx.server.features.build.sandbox.event_schema import TURN_ERROR_CODE_TIMEOUT
-from onyx.server.features.build.sandbox.event_schema import TURN_ERROR_CODE_TRANSPORT
+from onyx.db.enums import (
+    SandboxStatus,
+    ScheduledTaskErrorClass,
+    ScheduledTaskRunStatus,
+    ScheduledTaskStatus,
+    ScheduledTaskTriggerSource,
+)
+from onyx.db.models import Sandbox, ScheduledTask, ScheduledTaskRun, User
+from onyx.server.features.build.sandbox.event_schema import (
+    TURN_ERROR_CODE_TIMEOUT,
+    TURN_ERROR_CODE_TRANSPORT,
+    Error,
+    PromptResponse,
+)
 from onyx.server.features.build.scheduled_tasks.executor import run_scheduled_task_logic
 from onyx.server.features.build.session.manager import SessionManager
 from shared_configs.configs import POSTGRES_DEFAULT_SCHEMA_STANDARD_VALUE
@@ -142,7 +140,7 @@ def test_dispatch_uses_skip_locked_to_avoid_dupes(
     # ``self.app`` is a property on the Celery-generated Task subclass;
     # we patch the property to return a fake whose ``send_task`` is a
     # no-op so the dispatcher never touches a broker.
-    task_instance = dispatch_due_scheduled_tasks.run.__self__  # type: ignore[attr-defined]
+    task_instance = dispatch_due_scheduled_tasks.run.__self__
 
     class _FakeApp:
         def send_task(
@@ -159,7 +157,7 @@ def test_dispatch_uses_skip_locked_to_avoid_dupes(
         try:
             barrier.wait(timeout=5)
             results[idx] = dispatch_due_scheduled_tasks.run(
-                tenant_id=POSTGRES_DEFAULT_SCHEMA_STANDARD_VALUE
+                tenant_id=POSTGRES_DEFAULT_SCHEMA_STANDARD_VALUE  # ty: ignore[invalid-argument-type]
             )
         finally:
             CURRENT_TENANT_ID_CONTEXTVAR.reset(token)
@@ -237,7 +235,7 @@ def test_cleanup_stuck_runs_marks_queued_over_threshold_failed(
     db_session.commit()
 
     marked = cleanup_stuck_scheduled_runs.run(
-        tenant_id=POSTGRES_DEFAULT_SCHEMA_STANDARD_VALUE
+        tenant_id=POSTGRES_DEFAULT_SCHEMA_STANDARD_VALUE  # ty: ignore[invalid-argument-type]
     )
     assert marked >= 1
 
@@ -255,8 +253,8 @@ def test_cleanup_stuck_runs_marks_running_over_threshold_failed(
 ) -> None:
     """A RUNNING run older than the running threshold → ``cleanup_stuck_scheduled_runs`` marks it FAILED.
 
-    Production threshold is ``DEFAULT_EXECUTOR_BUDGET_SECONDS + 15 min`` (i.e.
-    45 min). Backdating ``started_at`` by 50 min puts the run past that.
+    Production threshold is ``TURN_BUDGET_SECONDS + TURN_RECLAIM_SLACK_SECONDS``
+    (i.e. 45 min). Backdating ``started_at`` by 50 min puts the run past that.
     """
     user = make_user(db_session)
     task = ScheduledTask(
@@ -284,7 +282,7 @@ def test_cleanup_stuck_runs_marks_running_over_threshold_failed(
     db_session.commit()
 
     marked = cleanup_stuck_scheduled_runs.run(
-        tenant_id=POSTGRES_DEFAULT_SCHEMA_STANDARD_VALUE
+        tenant_id=POSTGRES_DEFAULT_SCHEMA_STANDARD_VALUE  # ty: ignore[invalid-argument-type]
     )
     assert marked >= 1
 
@@ -306,8 +304,8 @@ def test_timeout_error_event_marks_run_failed_with_timeout_class(
     """Regression for ENG-4234: terminal timeout Error → FAILED/timeout."""
     # Bypass skill-payload: encrypted ExternalApp creds break local MIT decryption.
     monkeypatch.setattr(
-        "onyx.server.features.build.session.manager.build_user_skills_payload",
-        lambda *_: ("", "", {}),
+        "onyx.server.features.build.session.sandbox_lifecycle.build_user_skills_payload",
+        lambda *_: ("", {}),
     )
 
     sandbox(user=test_user, status=SandboxStatus.RUNNING)
@@ -315,6 +313,7 @@ def test_timeout_error_event_marks_run_failed_with_timeout_class(
 
     stub_sandbox_manager.health_check_returns = True
     stub_sandbox_manager.setup_session_workspace_silent = True
+    stub_sandbox_manager.write_sandbox_file_silent = True
     stub_sandbox_manager.write_files_to_sandbox_silent = True
     stub_sandbox_manager.send_message_events = [
         Error.model_validate(
@@ -342,8 +341,8 @@ def test_prompt_response_marks_run_succeeded(
     """Happy-path regression: clean PromptResponse → SUCCEEDED, not FAILED."""
     # Bypass skill-payload: encrypted ExternalApp creds break local MIT decryption.
     monkeypatch.setattr(
-        "onyx.server.features.build.session.manager.build_user_skills_payload",
-        lambda *_: ("", "", {}),
+        "onyx.server.features.build.session.sandbox_lifecycle.build_user_skills_payload",
+        lambda *_: ("", {}),
     )
 
     sandbox(user=test_user, status=SandboxStatus.RUNNING)
@@ -351,6 +350,7 @@ def test_prompt_response_marks_run_succeeded(
 
     stub_sandbox_manager.health_check_returns = True
     stub_sandbox_manager.setup_session_workspace_silent = True
+    stub_sandbox_manager.write_sandbox_file_silent = True
     stub_sandbox_manager.write_files_to_sandbox_silent = True
     stub_sandbox_manager.send_message_events = [
         PromptResponse.model_validate({"stopReason": "end_turn"}),
@@ -365,6 +365,45 @@ def test_prompt_response_marks_run_succeeded(
     assert refreshed.error_class is None
     assert stub_sandbox_manager.last_prompt_slot is not None
     assert stub_sandbox_manager.last_prompt_slot.extend_calls >= 1
+
+
+def test_scheduled_run_threads_budget_as_turn_timeout(
+    db_session: Session,
+    test_user: User,
+    sandbox: Any,  # noqa: ARG001
+    session_manager_with_stub: SessionManager,  # noqa: ARG001
+    stub_sandbox_manager: StubSandboxManager,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """budget_seconds must thread through as the serve client's per-turn
+    timeout so the generic 15-min prompt timeout can't undercut the run budget."""
+    # Bypass skill-payload: encrypted ExternalApp creds break local MIT decryption.
+    monkeypatch.setattr(
+        "onyx.server.features.build.session.sandbox_lifecycle.build_user_skills_payload",
+        lambda *_: ("", {}),
+    )
+
+    sandbox(user=test_user, status=SandboxStatus.RUNNING)
+    _, run = _seed_task_and_queued_run(db_session, test_user)
+
+    stub_sandbox_manager.health_check_returns = True
+    stub_sandbox_manager.setup_session_workspace_silent = True
+    stub_sandbox_manager.write_sandbox_file_silent = True
+    stub_sandbox_manager.write_files_to_sandbox_silent = True
+    stub_sandbox_manager.send_message_events = [
+        PromptResponse.model_validate({"stopReason": "end_turn"}),
+    ]
+
+    run_scheduled_task_logic(run.id, budget_seconds=1234)
+
+    send_message_payload = stub_sandbox_manager.last_send_message_payload
+    assert send_message_payload is not None
+    assert send_message_payload["turn_timeout_seconds"] == 1234.0
+
+    db_session.expire_all()
+    refreshed = db_session.get(ScheduledTaskRun, run.id)
+    assert refreshed is not None
+    assert refreshed.status == ScheduledTaskRunStatus.SUCCEEDED
 
 
 def test_cancelled_prompt_response_marks_run_failed(
@@ -382,8 +421,8 @@ def test_cancelled_prompt_response_marks_run_failed(
     """
     # Bypass skill-payload: encrypted ExternalApp creds break local MIT decryption.
     monkeypatch.setattr(
-        "onyx.server.features.build.session.manager.build_user_skills_payload",
-        lambda *_: ("", "", {}),
+        "onyx.server.features.build.session.sandbox_lifecycle.build_user_skills_payload",
+        lambda *_: ("", {}),
     )
 
     sandbox(user=test_user, status=SandboxStatus.RUNNING)
@@ -391,6 +430,7 @@ def test_cancelled_prompt_response_marks_run_failed(
 
     stub_sandbox_manager.health_check_returns = True
     stub_sandbox_manager.setup_session_workspace_silent = True
+    stub_sandbox_manager.write_sandbox_file_silent = True
     stub_sandbox_manager.write_files_to_sandbox_silent = True
     stub_sandbox_manager.send_message_events = [
         PromptResponse.model_validate({"stopReason": "cancelled"}),
@@ -416,8 +456,8 @@ def test_transport_error_event_marks_run_failed_with_agent_exception_class(
     """Non-timeout terminal Error → FAILED with error_class=agent_exception."""
     # Bypass skill-payload: encrypted ExternalApp creds break local MIT decryption.
     monkeypatch.setattr(
-        "onyx.server.features.build.session.manager.build_user_skills_payload",
-        lambda *_: ("", "", {}),
+        "onyx.server.features.build.session.sandbox_lifecycle.build_user_skills_payload",
+        lambda *_: ("", {}),
     )
 
     sandbox(user=test_user, status=SandboxStatus.RUNNING)
@@ -425,6 +465,7 @@ def test_transport_error_event_marks_run_failed_with_agent_exception_class(
 
     stub_sandbox_manager.health_check_returns = True
     stub_sandbox_manager.setup_session_workspace_silent = True
+    stub_sandbox_manager.write_sandbox_file_silent = True
     stub_sandbox_manager.write_files_to_sandbox_silent = True
     stub_sandbox_manager.send_message_events = [
         Error.model_validate(
@@ -452,8 +493,8 @@ def test_stream_without_prompt_response_marks_run_failed(
     """Stream ending with no PromptResponse (and no Error) → FAILED, not SUCCEEDED."""
     # Bypass skill-payload: encrypted ExternalApp creds break local MIT decryption.
     monkeypatch.setattr(
-        "onyx.server.features.build.session.manager.build_user_skills_payload",
-        lambda *_: ("", "", {}),
+        "onyx.server.features.build.session.sandbox_lifecycle.build_user_skills_payload",
+        lambda *_: ("", {}),
     )
 
     sandbox(user=test_user, status=SandboxStatus.RUNNING)
@@ -461,6 +502,7 @@ def test_stream_without_prompt_response_marks_run_failed(
 
     stub_sandbox_manager.health_check_returns = True
     stub_sandbox_manager.setup_session_workspace_silent = True
+    stub_sandbox_manager.write_sandbox_file_silent = True
     stub_sandbox_manager.write_files_to_sandbox_silent = True
     stub_sandbox_manager.send_message_events = []
 
@@ -485,7 +527,7 @@ def test_run_fails_when_wake_fails(
     backend is bound so SessionManager construction can't raise and satisfy the
     assertion via the same broad handler without exercising the timeout path."""
     monkeypatch.setattr(
-        "onyx.server.features.build.scheduled_tasks.executor.PROVISIONING_WAIT_SECONDS",
+        "onyx.server.features.build.scheduled_tasks.executor.PROVISION_WAIT_SECONDS",
         0,
     )
 
