@@ -623,15 +623,11 @@ func TestWriteMultiSearchJSON_OverLimitTruncatesPerQuery(t *testing.T) {
 			tr.ShownResults, len(big.Results))
 	}
 	// The cap is uniform: every truncated entry keeps the same result count.
+	// (That the survivors are the relevance-ordered prefix is pinned
+	// byte-for-byte by the oracle test below.)
 	if big2.Truncation.ShownResults != tr.ShownResults || len(big2.Results) != len(big.Results) {
 		t.Errorf("caps differ: %d vs %d results, want uniform",
 			len(big.Results), len(big2.Results))
-	}
-	// Survivors must be the relevance-ordered prefix, not an arbitrary subset.
-	for i, r := range big.Results {
-		if want := fmt.Sprintf("Doc %d", i); r.Title != want {
-			t.Errorf("Results[%d].Title = %q, want %q", i, r.Title, want)
-		}
 	}
 
 	// The combined envelope must actually respect the byte bound.
