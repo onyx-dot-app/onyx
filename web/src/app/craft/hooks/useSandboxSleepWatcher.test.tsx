@@ -2,7 +2,7 @@
  * @jest-environment jsdom
  */
 import React from "react";
-import { renderHook, waitFor } from "@testing-library/react";
+import { act, renderHook, waitFor } from "@testing-library/react";
 import { SWRConfig } from "swr";
 import { useSandboxSleepWatcher } from "@/app/craft/hooks/useSandboxSleepWatcher";
 import { useBuildSessionStore } from "@/app/craft/hooks/useBuildSessionStore";
@@ -121,6 +121,34 @@ describe("useSandboxSleepWatcher", () => {
     await waitFor(() => {
       expect(loadSession).toHaveBeenCalledWith(SESSION_ID, { force: true });
     });
+  });
+
+  it("does not let a late poll overwrite workspace restoration", async () => {
+    seedSession(runningSandbox({ status: "provisioning" }));
+    let finishPoll: (value: { status: "running" }) => void = () => {};
+    mockedApi.fetchSandboxStatus.mockReturnValue(
+      new Promise((resolve) => {
+        finishPoll = resolve;
+      })
+    );
+
+    renderHook(() => useSandboxSleepWatcher(), { wrapper });
+
+    await waitFor(() => {
+      expect(mockedApi.fetchSandboxStatus).toHaveBeenCalledTimes(1);
+    });
+    act(() => {
+      useBuildSessionStore.getState().updateSessionData(SESSION_ID, {
+        sandbox: runningSandbox({ status: "restoring" }),
+      });
+      finishPoll({ status: "running" });
+    });
+
+    await waitFor(() => {
+      const session = useBuildSessionStore.getState().sessions.get(SESSION_ID);
+      expect(session?.sandbox?.status).toBe("restoring");
+    });
+    expect(loadSession).not.toHaveBeenCalled();
   });
 
   it("stops polling once the sandbox is asleep", async () => {

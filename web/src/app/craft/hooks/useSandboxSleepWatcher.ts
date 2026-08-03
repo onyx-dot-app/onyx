@@ -55,6 +55,9 @@ export function useSandboxSleepWatcher(): void {
           return;
         }
 
+        // loadSession owns the frontend-only restoring state until it has
+        // reconciled the workspace and preview readiness.
+        if (sandbox.status === "restoring") return;
         if (sandbox.status === data.status) return;
         updateSessionData(sessionId, {
           sandbox: { ...sandbox, status: data.status },
