@@ -175,7 +175,6 @@ def test_bootstrap_script_is_valid_bash() -> None:
 
 
 def test_bootstrap_script_embeds_port_write_and_env_exports() -> None:
-    # These come from main's embedded build_nextjs_start_script.
     script = build_webapp_bootstrap_script(_SESSION_PATH, 3010)
 
     assert f"echo 3010 > {_SESSION_PATH}/.nextjs-port" in script
@@ -198,8 +197,6 @@ def test_bootstrap_script_short_circuits_on_live_pid() -> None:
 
 
 def test_webapp_script_write_snippet_removes_before_writing() -> None:
-    # chmod 444 blocks in-place overwrite, so a rewrite (restore) must unlink
-    # both copies before writing the new ones.
     snippet = build_webapp_script_write_snippet(_SESSION_PATH, 3010)
 
     assert (

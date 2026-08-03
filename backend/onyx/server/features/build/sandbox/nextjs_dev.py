@@ -117,20 +117,9 @@ fi
 
 def build_webapp_bootstrap_script(session_path: str, nextjs_port: int) -> str:
     """Builds the self-contained, agent-facing script written to
-    ``sessions/$session_id/start-webapp.sh`` at session setup time.
-
-    This is the whole lazy-provisioning interface: the agent runs it directly
-    (``bash start-webapp.sh`` from the session root) and it must stay
-    self-contained, no CLI wrapper, no backend round-trip. Its output is
-    plain-English status/next-step guidance because an LLM agent is the only
-    reader.
-
-    Args:
-        session_path: Path to the session directory (should be shell-safe).
-        nextjs_port: Port number for the NextJS dev server.
-
-    Returns:
-        Shell script string to write to ``start-webapp.sh``.
+    ``sessions/$session_id/start-webapp.sh``. It must stay self-contained (no
+    CLI wrapper, no backend round-trip); its output is plain-English guidance
+    because an LLM agent is the only reader.
     """
     start_script = build_nextjs_start_script(
         session_path, nextjs_port, check_node_modules=True
@@ -217,13 +206,6 @@ def build_webapp_script_write_snippet(session_path: str, nextjs_port: int) -> st
     Called from session setup and from restore (with the re-allocated port).
     Pinned name/signature: both sandbox managers' restore paths call this
     directly from ``onyx.server.features.build.sandbox.nextjs_dev``.
-
-    Args:
-        session_path: Path to the session directory (should be shell-safe).
-        nextjs_port: Port number for the NextJS dev server.
-
-    Returns:
-        Shell snippet string to embed in a larger script.
     """
     script = build_webapp_bootstrap_script(session_path, nextjs_port)
     escaped_script = script.replace("'", "'\\''")

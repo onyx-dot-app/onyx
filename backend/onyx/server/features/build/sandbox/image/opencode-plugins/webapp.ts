@@ -1,4 +1,3 @@
-// Manages this session's Next.js dev server (started via start-webapp.sh).
 // Failures are returned as observations, never thrown; a thrown tool error
 // would abort the agent's turn instead of letting it recover.
 //
@@ -108,7 +107,7 @@ async function pidAlive(dir: string): Promise<number | null> {
   const pid = parseInt((await readFile(pidPath, "utf8")).trim(), 10);
   if (!Number.isFinite(pid)) return null;
   try {
-    process.kill(pid, 0); // signal 0: existence check only, no actual kill
+    process.kill(pid, 0);
     return pid;
   } catch {
     return null;
@@ -187,7 +186,6 @@ function runScript(
   abort: AbortSignal
 ): Promise<{ exitCode: number; output: string }> {
   return new Promise((resolve) => {
-    // 2>&1 in the shell keeps stdout/stderr interleaved in print order.
     const child = spawn("bash", ["-c", `bash ${shQuote(scriptPath)} 2>&1`], {
       cwd: dir,
       signal: abort,
@@ -296,9 +294,7 @@ export const Webapp: Plugin = async () => {
             if (pid !== null) {
               try {
                 process.kill(pid);
-              } catch {
-                // already dead: exactly the state restart wants
-              }
+              } catch {}
               await new Promise((r) => setTimeout(r, 2000));
             }
           }

@@ -29,9 +29,8 @@ class SnapshotError(RuntimeError):
 
 _SNAPSHOT_ROOTS = frozenset({"outputs", "attachments"})
 _SNAPSHOT_GENERATED_DIR_NAMES = frozenset({"node_modules", ".next"})
-# Runtime scratch written by build_nextjs_start_script (port/pid of the dev
-# server). Excluded so a restore can't reintroduce a stale port/pid that
-# would mislead the webapp tool's liveness check when auto-start is skipped.
+# Excluded so a restore can't reintroduce a stale port/pid that would mislead
+# the webapp tool's liveness check when auto-start is skipped.
 _SNAPSHOT_GENERATED_FILE_NAMES = frozenset({".nextjs-port", "nextjs.pid"})
 MAX_SNAPSHOT_ARCHIVE_BYTES = 100 * 1024 * 1024
 MAX_SNAPSHOT_UNCOMPRESSED_BYTES = 500 * 1024 * 1024
