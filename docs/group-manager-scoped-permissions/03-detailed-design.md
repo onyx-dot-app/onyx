@@ -431,9 +431,9 @@ backend/
     db/feedback.py                     ← (no change — admin-only, not in bundle; §11.7)
     db/credentials.py                  ← (no change — documented no-op)
     server/features/skill/api.py       ← MOD: re-point off curator dep; allow_scope by verb (§11.2)
-    server/features/tool/api.py        ← MOD: allow_scope=True; agent-mediated GATE 2 replaces owner-or-admin (§11.1)
-    server/features/mcp/api.py         ← MOD: allow_scope=True; agent-mediated GATE 2 replaces owner-or-admin (§11.1)
-    db/tools.py                        ← MOD: agent-mediated action scope (Tool→Persona__Tool→groups, §11.1)
+    server/features/tool/api.py        ← MOD: allow_scope=True (reach+create); manage stays owner-or-admin — D8 dropped agent-mediated GATE 2 (§11.1)
+    server/features/mcp/api.py         ← MOD: allow_scope=True (reach+create); manage stays owner-or-admin — D8 dropped agent-mediated GATE 2 (§11.1)
+    db/tools.py                        ← MOD: owner-or-admin manage gates (D8); agent-mediated scope kept only for view (§11.1)
     server/.../{document_set,connector,cc_pair,persona}/api.py  ← MOD: allow_scope=True deps
     server/.../permissions api         ← MOD: /users/me/permissions adds is_manager
   ee/onyx/
@@ -503,6 +503,13 @@ its connector/indexing peers). This is a merge-integration break, not a §8 feat
 everything. Add an `import onyx.main` smoke test to CI so a deleted auth dep fails fast.
 
 ### 11.1 Actions (D4 — `MANAGE_ACTIONS` in the bundle; scoped via agents at GATE 2)
+> **⚠️ SUPERSEDED by D8 (2026-08-03) for the _management_ verbs.** The agent-mediated GATE 2 below
+> (edit/toggle/OAuth-auth resolving an action's groups through its referencing agents) was **built, then
+> dropped** — it caused most of the review's P1/P2 findings. Manage is now plain **owner-or-admin**
+> (`can_manage_own_tool` / `_ensure_mcp_server_owner_or_admin`), mirrored 1:1 by the UI projection; the
+> *view* path keeps agent-mediated scope. GATE 1 reach + create (allow_scope=True) and DELETE-admin-only
+> (D6) are unchanged. Read the rest of this section as historical design, not the current gate.
+
 - **`MANAGE_ACTIONS` stays in `SCOPED_MANAGER_PERMISSIONS`** (§2.1). Bundle membership is what GATE 1
   (`has_permission` → SCOPED, admitted when `allow_scope=True`) checks — drop it and a scoped manager 403s at
   the route on every action endpoint. "Agent-mediated" is GATE 2's scope resolution, not a reason to omit it.

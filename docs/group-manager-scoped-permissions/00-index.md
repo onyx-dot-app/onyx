@@ -28,3 +28,12 @@ everything **except delete** · **D7 attaching an agent to a group is controlled
 chat-runtime, and document/Vespa ACL are untouched, and refuted the backfill data-loss concern. Full
 case-by-case coverage + the boot-bug prerequisite are in **[03 §11](03-detailed-design.md)** — the
 authoritative implementation checklist.
+
+**Decision locked 2026-08-03:** **D8 action + MCP-server _management_ (edit / toggle / OAuth-auth) is
+owner-or-admin, NOT agent-mediated.** D4 still holds for GATE 1 reach + create (a scoped manager reaches
+the action/MCP routes and may create), but the agent-mediated GATE 2 that once let a manager edit any
+action whose referencing agents were all in their managed groups was **dropped** — it was the source of
+most of the review's P1/P2 findings, and the simpler owner-or-creator gate (`can_manage_own_tool` /
+`_ensure_mcp_server_owner_or_admin`, mirrored 1:1 by the UI projection) is the intended final design. Delete
+stays global-only (D6). This **supersedes** the "agent-mediated GATE 2 replaces owner-or-admin" language
+still in [03 §11](03-detailed-design.md), [05](05-pr-roadmap.md), and [07](07-ui-capability-model-design.md).

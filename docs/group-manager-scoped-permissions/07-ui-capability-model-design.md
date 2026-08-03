@@ -426,6 +426,12 @@ def can_view_persona_stats(user, persona, db_session) -> bool:
     return user_can_view_assistant_stats(db_session, user, persona.id)   # O-class
 ```
 
+> **⚠️ SUPERSEDED by D8 (2026-08-03).** Custom-tool and MCP edit are now **owner-or-admin only** — the
+> agent-mediated `scoped` term was dropped. The shipped projection matches: `tool_permissions` /
+> `mcp_server_permissions` (`permission_projection.py`) take a single `can_manage` bool sourced from
+> `can_manage_own_tool` / `can_manage_mcp_server` (owner-or-admin), so the tables below that reference
+> `agent_mediated_scope_allows` / `get_action_agent_scope` describe the old model. Everything else here still applies.
+
 **Custom tool edit — reclassify M → admin ∨ creator ∨ scoped** (`tool/api.py:84`). Stamping only the scoped term hides Edit from a plain **creator** on their own action (`tool.user_id == user.id`, `:100`). `_assert_action_within_managed_scope` (`:62`) just wraps `agent_mediated_scope_allows` — extract its bool, then extract the full disjunction:
 
 ```python

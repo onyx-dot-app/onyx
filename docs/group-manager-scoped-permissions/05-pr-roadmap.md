@@ -160,8 +160,8 @@ highest-value resource types, exercised by the escalation integration suite (man
   | `backend/ee/onyx/db/persona.py` | modified | `update_persona_access` EE gate (lockstep signature) |
   | `backend/onyx/db/skill.py` | modified | scoped admin-list path + `replace_skill_grants` GATE 2 + is_public toggle gate (§11.2) |
   | `backend/onyx/server/features/skill/api.py` | modified | re-point off curator dep; `allow_scope=True` by verb (DELETE stays admin-only) |
-  | `backend/onyx/server/features/{tool,mcp}/api.py` | modified | `allow_scope=True`; agent-mediated GATE 2 replaces owner-or-admin (§11.1) |
-  | `backend/onyx/db/tools.py` | modified | agent-mediated action scope (Tool→Persona__Tool→groups) |
+  | `backend/onyx/server/features/{tool,mcp}/api.py` | modified | `allow_scope=True` (reach + create); manage (edit/toggle/auth) stays **owner-or-admin** — agent-mediated GATE 2 dropped per **D8** |
+  | `backend/onyx/db/tools.py` | modified | `can_manage_own_tool` / `can_manage_mcp_server` owner-or-admin gates (D8); agent-mediated scope kept only for *view* |
   | `backend/ee/onyx/db/token_limit.py` | modified | managed-scope on group token-limit writes |
   | `backend/onyx/server/.../persona api` | modified | `ADD_AGENTS, allow_scope=True` deps |
   | `backend/tests/integration/.../test_group_manager_agents.py` | new | agent + skill + action escalation + ADD_AGENTS-owner no-regression + PAT narrowing |

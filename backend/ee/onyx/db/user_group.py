@@ -499,6 +499,8 @@ def add_users_to_user_group(
     if db_user_group is None:
         raise ValueError(f"UserGroup with id '{user_group_id}' not found")
 
+    assert_manages_group(user, db_session, group_id=user_group_id)
+
     missing_users = [
         user_id for user_id in user_ids if fetch_user_by_id(db_session, user_id) is None
     ]
