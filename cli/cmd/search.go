@@ -251,10 +251,9 @@ func truncateSearchOutput(
 // large ones lose their lowest-relevance tail first. Capped entries carry
 // truncation metadata pointing at the combined full response on disk. Fit is
 // measured on the real envelope; it exceeds limit only when even the k=0
-// render does (valid JSON always wins over the byte bound). Size is not
-// perfectly monotone in k — capping an entry adds metadata bytes — so the
-// binary search may miss the optimum by a hair, but never returns an
-// unmeasured render.
+// render does (truncation metadata and clamped per-query error strings alone
+// exceed the budget) — valid JSON and one entry per query beat the byte
+// bound.
 func truncateMultiSearchOutput(
 	full multiSearchOutput, limit int, totalBytes int, fullPath string,
 ) (multiSearchOutput, error) {
@@ -286,14 +285,21 @@ func truncateMultiSearchOutput(
 		return out, data, err
 	}
 
-	fit, _, err := largestFit(maxResults, limit, func(k int) ([]byte, error) {
-		_, data, err := render(k)
-		return data, err
-	})
-	if err != nil {
-		return multiSearchOutput{}, err
+	// Rendered size is not monotone in k — an entry sheds its truncation
+	// metadata once k reaches its result count — so binary search would skip
+	// fitting candidates. Scan k from the top instead: maxResults is small
+	// (LLM-selected results), so the extra marshals are negligible next to
+	// one search round trip.
+	for k := maxResults; k > 0; k-- {
+		out, data, err := render(k)
+		if err != nil {
+			return multiSearchOutput{}, err
+		}
+		if len(data) <= limit {
+			return out, nil
+		}
 	}
-	out, _, err := render(fit)
+	out, _, err := render(0)
 	return out, err
 }
 

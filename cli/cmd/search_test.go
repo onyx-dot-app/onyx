@@ -659,6 +659,99 @@ func TestWriteMultiSearchJSON_OverLimitTruncatesPerQuery(t *testing.T) {
 	}
 }
 
+func TestTruncateMultiSearchOutput_LargestFittingCapDespiteNonMonotoneSizes(t *testing.T) {
+	// Rendered size is not monotone in the uniform cap k: an entry sheds its
+	// ~300-byte truncation metadata once k reaches its result count, so with
+	// small results a mid-range k can render smaller than both k-1 and k=0.
+	// A binary search over k skips such dips — returning a smaller k, or an
+	// over-limit k=0 envelope even though a fitting k exists. Pin the
+	// contract with an oracle: for every limit that any k-envelope fits,
+	// the reducer must return exactly the largest fitting k's envelope.
+	mini := func(n int) []searchOutputResult {
+		results := make([]searchOutputResult, n)
+		for i := range results {
+			results[i] = searchOutputResult{Title: "d", SourceType: "s"}
+		}
+		return results
+	}
+	output := multiSearchOutput{Searches: []multiSearchEntry{
+		{Query: "a", Results: mini(1)},
+		{Query: "b", Results: mini(1)},
+		{Query: "c", Results: mini(2)},
+		{Query: "d", Results: mini(5)},
+	}}
+	const maxK = 5
+	fullData, err := json.MarshalIndent(output, "", "  ")
+	if err != nil {
+		t.Fatalf("marshal failed: %v", err)
+	}
+	fullPath := "/tmp/" + strings.Repeat("x", 120) + "/onyx-search-full.json"
+
+	// Oracle: the documented envelope for a given uniform cap k.
+	capAt := func(k int) multiSearchOutput {
+		out := multiSearchOutput{}
+		for _, entry := range output.Searches {
+			if entry.Error != "" || len(entry.Results) <= k {
+				out.Searches = append(out.Searches, entry)
+				continue
+			}
+			out.Searches = append(out.Searches, multiSearchEntry{
+				Query:   entry.Query,
+				Results: entry.Results[:k],
+				Truncation: &searchTruncation{
+					Truncated:        true,
+					TotalResults:     len(entry.Results),
+					ShownResults:     k,
+					TotalBytes:       len(fullData),
+					FullResponsePath: fullPath,
+					Hint:             truncationHint,
+				},
+			})
+		}
+		return out
+	}
+	sizes := make([]int, maxK+1)
+	minSize := len(fullData)
+	for k := 0; k <= maxK; k++ {
+		data, err := json.MarshalIndent(capAt(k), "", "  ")
+		if err != nil {
+			t.Fatalf("oracle marshal failed: %v", err)
+		}
+		sizes[k] = len(data)
+		minSize = min(minSize, sizes[k])
+	}
+	// The scenario only exercises the dip when some mid k renders smaller
+	// than k=0; guard so fixture drift can't silently weaken the test.
+	if minSize >= sizes[0] {
+		t.Fatalf("fixture no longer non-monotone: sizes=%v", sizes)
+	}
+
+	for limit := minSize; limit <= len(fullData); limit++ {
+		wantK := -1
+		for k := maxK; k >= 0; k-- {
+			if sizes[k] <= limit {
+				wantK = k
+				break
+			}
+		}
+		reduced, err := truncateMultiSearchOutput(output, limit, len(fullData), fullPath)
+		if err != nil {
+			t.Fatalf("truncateMultiSearchOutput failed at limit %d: %v", limit, err)
+		}
+		data, err := json.MarshalIndent(reduced, "", "  ")
+		if err != nil {
+			t.Fatalf("marshal failed at limit %d: %v", limit, err)
+		}
+		if len(data) > limit {
+			t.Fatalf("limit %d: envelope is %d bytes though k=%d fits", limit, len(data), wantK)
+		}
+		if len(data) != sizes[wantK] {
+			t.Fatalf("limit %d: envelope is %d bytes, want largest fitting cap k=%d (%d bytes)",
+				limit, len(data), wantK, sizes[wantK])
+		}
+	}
+}
+
 func TestClampError(t *testing.T) {
 	if got := clampError(errors.New("nope")); got != "nope" {
 		t.Errorf("short error = %q, want unchanged", got)
