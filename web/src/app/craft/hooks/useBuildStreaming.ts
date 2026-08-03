@@ -7,7 +7,6 @@ import {
   Artifact,
   ArtifactType,
   BuildMessageAttachment,
-  SessionErrorCode,
 } from "@/app/craft/types/streamingTypes";
 
 import {
@@ -18,7 +17,6 @@ import {
   processSSEStream,
   fetchSession,
   fetchScheduledRunEventStream,
-  RateLimitError,
 } from "@/app/craft/services/apiServices";
 import type { BuildLlmSelection } from "@/app/craft/onboarding/constants";
 import { SWR_KEYS } from "@/lib/swr-keys";
@@ -996,16 +994,6 @@ export function useBuildStreaming() {
       } catch (err) {
         if ((err as Error).name === "AbortError") {
           updateSessionData(sessionId, { isInterrupting: false });
-        } else if (err instanceof RateLimitError) {
-          console.warn("[Streaming] Rate limit exceeded");
-          updateSessionData(sessionId, {
-            status: "active",
-            error: SessionErrorCode.RATE_LIMIT_EXCEEDED,
-            isInterrupting: false,
-            activeTurnId: null,
-            activeTurnIndex: null,
-            activeTurnLocalOwner: false,
-          });
         } else {
           console.error("[Streaming] Stream error:", err);
           updateSessionData(sessionId, {

@@ -19,7 +19,6 @@ jest.mock("swr", () => ({
 }));
 
 jest.mock("@/app/craft/services/apiServices", () => ({
-  RateLimitError: class RateLimitError extends Error {},
   createTurn: jest.fn(),
   fetchActiveTurn: jest.fn(),
   fetchArtifacts: jest.fn(),

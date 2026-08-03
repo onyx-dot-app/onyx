@@ -4,7 +4,6 @@ import {
   ApiMessageResponse,
   ApiInteractiveTurnResponse,
   ApiArtifactResponse,
-  ApiUsageLimitsResponse,
   ApiWebappInfoResponse,
   ApiSandboxStatusResponse,
   SessionHistoryItem,
@@ -12,7 +11,6 @@ import {
   BuildMessageAttachment,
   BuildMessage,
   StreamPacket,
-  UsageLimits,
   DirectoryListing,
   SharingScope,
   ApiSessionSkillsState,
@@ -25,12 +23,6 @@ import {
 import { BUILD_API_BASE } from "@/app/craft/v1/constants";
 import { CRAFT_GATEWAY_PROVIDER } from "@/app/craft/onboarding/constants";
 import type { BuildLlmSelection } from "@/app/craft/onboarding/constants";
-
-// =============================================================================
-// API Configuration
-// =============================================================================
-
-export const USAGE_LIMITS_ENDPOINT = `${BUILD_API_BASE}/limit`;
 
 // =============================================================================
 // SSE Stream Processing
@@ -379,20 +371,6 @@ export async function fetchMessages(
   }));
 }
 
-/**
- * Custom error class for rate limit (429) errors.
- * Used to distinguish rate limit errors from other API errors
- * so the UI can show an upsell modal instead of a generic error.
- */
-export class RateLimitError extends Error {
-  public readonly statusCode: number = 429;
-
-  constructor() {
-    super("Rate limit exceeded");
-    this.name = "RateLimitError";
-  }
-}
-
 export async function createTurn(
   sessionId: string,
   content: string,
@@ -427,9 +405,6 @@ export async function createTurn(
   );
 
   if (!res.ok) {
-    if (res.status === 429) {
-      throw new RateLimitError();
-    }
     throw new Error(await errorDetail(res, "Failed to create turn"));
   }
 
@@ -674,36 +649,6 @@ export async function fetchFileContent(
 
   const content = await res.text();
   return { content, mimeType, isImage: false };
-}
-
-// =============================================================================
-// Usage Limits API
-// =============================================================================
-
-/** Transform API response to frontend types */
-function transformUsageLimitsResponse(
-  data: ApiUsageLimitsResponse
-): UsageLimits {
-  return {
-    isLimited: data.is_limited,
-    limitType: data.limit_type,
-    messagesUsed: data.messages_used,
-    limit: data.limit,
-    resetTimestamp: data.reset_timestamp
-      ? new Date(data.reset_timestamp)
-      : null,
-  };
-}
-
-export async function fetchUsageLimits(): Promise<UsageLimits> {
-  const res = await fetch(USAGE_LIMITS_ENDPOINT);
-
-  if (!res.ok) {
-    throw new Error(`Failed to fetch usage limits: ${res.status}`);
-  }
-
-  const data: ApiUsageLimitsResponse = await res.json();
-  return transformUsageLimitsResponse(data);
 }
 
 // =============================================================================

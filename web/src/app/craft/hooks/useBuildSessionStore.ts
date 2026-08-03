@@ -726,7 +726,6 @@ interface BuildSessionStore {
   // Actions - Current Session Shortcuts
   appendMessageToCurrent: (message: BuildMessage) => void;
   addArtifactToCurrent: (artifact: Artifact) => void;
-  setCurrentError: (error: string | null) => void;
   toggleCurrentOutputPanel: () => void;
 
   // Actions - Session-specific operations (for streaming - immune to currentSessionId changes)
@@ -1104,13 +1103,6 @@ export const useBuildSessionStore = create<BuildSessionStore>()((set, get) => ({
       newSessions.set(currentSessionId, updatedSession);
       return { sessions: newSessions };
     });
-  },
-
-  setCurrentError: (error: string | null) => {
-    const { currentSessionId, updateSessionData } = get();
-    if (currentSessionId) {
-      updateSessionData(currentSessionId, { error });
-    }
   },
 
   toggleCurrentOutputPanel: () => {

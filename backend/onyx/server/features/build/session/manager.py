@@ -55,7 +55,6 @@ from onyx.server.features.build.db.sandbox import (
     get_snapshots_for_session,
     update_sandbox_heartbeat,
 )
-from onyx.server.features.build.rate_limit import get_user_rate_limit_status
 from onyx.server.features.build.sandbox.factory import get_sandbox_manager
 from onyx.server.features.build.sandbox.models import (
     CraftLLMProviderConfig,
@@ -76,7 +75,6 @@ from onyx.server.features.build.sandbox.util.opencode_config import (
 )
 from onyx.server.features.build.session import streaming as _streaming
 from onyx.server.features.build.session.errors import (
-    RateLimitError,
     StaleProvisioningAttemptError,
     UploadLimitExceededError,
 )
@@ -102,7 +100,6 @@ from onyx.server.features.build.timeouts import (
 from onyx.server.metrics.craft_sandbox import SandboxReadyOutcome
 from onyx.utils.logger import setup_logger
 from onyx.utils.threadpool_concurrency import start_thread_with_context
-from shared_configs.configs import MULTI_TENANT
 from shared_configs.contextvars import get_current_tenant_id
 
 logger = setup_logger()
@@ -162,39 +159,6 @@ class SessionManager:
         """
         self._db_session = db_session
         self._sandbox_manager = get_sandbox_manager()
-
-    # =========================================================================
-    # Rate Limiting
-    # =========================================================================
-
-    def check_rate_limit(self, user: User) -> None:
-        """
-        Check build mode rate limits for a user.
-
-        Args:
-            user: The user to check rate limits for
-
-        Raises:
-            RateLimitError: If rate limit is exceeded
-        """
-        # Skip rate limiting for self-hosted deployments
-        if not MULTI_TENANT:
-            return
-
-        rate_limit_status = get_user_rate_limit_status(user, self._db_session)
-        if rate_limit_status.is_limited:
-            raise RateLimitError(
-                message=(
-                    f"Rate limit exceeded. You have used "
-                    f"{rate_limit_status.messages_used}/{rate_limit_status.limit} messages. "
-                    f"Limit resets at {rate_limit_status.reset_timestamp}."
-                    if rate_limit_status.reset_timestamp
-                    else "This is a lifetime limit."
-                ),
-                messages_used=rate_limit_status.messages_used,
-                limit=rate_limit_status.limit,
-                reset_timestamp=rate_limit_status.reset_timestamp,
-            )
 
     # =========================================================================
     # LLM Configuration
