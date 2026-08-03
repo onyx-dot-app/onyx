@@ -47,7 +47,7 @@ from onyx.llm.models import (
 from onyx.llm.multi_llm import LLMRateLimitError, LLMTimeoutError
 from onyx.llm.prompt_cache.processor import process_with_prompt_cache
 from onyx.llm.tracing_wrap import _finalize_tool_calls, _merge_tool_call_delta
-from onyx.server.features.build.craft_gateway import is_gateway_request
+from onyx.server.features.build.craft_gateway import gateway_request_flow
 from onyx.server.gateway.configs import GATEWAY_PATH_PREFIX
 from onyx.server.gateway.model_catalog import build_gateway_model_catalog
 from onyx.server.gateway.models import (
@@ -126,13 +126,6 @@ logger = setup_logger()
 
 router = APIRouter(prefix=GATEWAY_PATH_PREFIX)
 
-# Callers never supply the flow; the endpoint picks it and this mapping
-# enforces the matching credential.
-_FLOW_ACCESS_CHECKS: dict[LLMFlow, Callable[[Request, User], bool]] = {
-    LLMFlow.CRAFT_LLM_GENERATION: is_gateway_request,
-}
-
-
 _MESSAGES_ADAPTER: TypeAdapter[list[ChatCompletionMessage]] = TypeAdapter(
     list[ChatCompletionMessage]
 )
@@ -143,8 +136,8 @@ def _gateway_trace(flow: LLMFlow, model: str) -> Trace:
 
 
 def _authorize_gateway_request(http_request: Request, user: User) -> LLMFlow:
-    flow = LLMFlow.CRAFT_LLM_GENERATION
-    if not _FLOW_ACCESS_CHECKS[flow](http_request, user):
+    flow = gateway_request_flow(http_request, user)
+    if flow is None:
         raise OnyxError(
             OnyxErrorCode.INSUFFICIENT_PERMISSIONS,
             "This credential is not authorized to use the Onyx LLM gateway.",
