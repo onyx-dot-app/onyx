@@ -12,7 +12,7 @@ import {
 import { Text } from "@opal/components";
 import type { SandboxRuntimeStatus } from "@/app/craft/types/streamingTypes";
 
-type SandboxDisplayStatus = SandboxRuntimeStatus | "ready" | "loading";
+export type SandboxDisplayStatus = SandboxRuntimeStatus | "ready" | "loading";
 
 interface SandboxStatusConfig {
   color: string;
@@ -62,6 +62,43 @@ const STATUS_CONFIG = {
     label: "Finding sandbox...",
   },
 } as const satisfies Record<SandboxDisplayStatus, SandboxStatusConfig>;
+
+interface SandboxStatusIndicatorViewProps {
+  status: SandboxDisplayStatus;
+}
+
+export function SandboxStatusIndicatorView({
+  status,
+}: SandboxStatusIndicatorViewProps) {
+  const { color, pulse, label } = STATUS_CONFIG[status];
+
+  return (
+    <motion.div layout transition={{ duration: 0.3, ease: "easeInOut" }}>
+      <div className="flex items-center gap-2 p-2 overflow-hidden rounded-12 border border-border-01 bg-background-neutral-00">
+        <div
+          className={cn(
+            "w-2 h-2 rounded-full shrink-0",
+            color,
+            pulse && "animate-pulse"
+          )}
+        />
+        <AnimatePresence mode="wait">
+          <motion.span
+            key={status}
+            initial={{ opacity: 0, y: 5 }}
+            animate={{ opacity: 1, y: 0 }}
+            exit={{ opacity: 0, y: -5 }}
+            transition={{ duration: 0.2 }}
+          >
+            <Text font="main-ui-body" color="text-05" nowrap>
+              {label}
+            </Text>
+          </motion.span>
+        </AnimatePresence>
+      </div>
+    </motion.div>
+  );
+}
 
 /**
  * Derives the current sandbox status from session state or pre-provisioning state.
@@ -121,32 +158,6 @@ export default function SandboxStatusIndicator() {
     isReady,
     isFailed
   );
-  const { color, pulse, label } = STATUS_CONFIG[status];
 
-  return (
-    <motion.div layout transition={{ duration: 0.3, ease: "easeInOut" }}>
-      <div className="flex items-center gap-2 p-2 overflow-hidden rounded-12 border border-border-01 bg-background-neutral-00">
-        <div
-          className={cn(
-            "w-2 h-2 rounded-full shrink-0",
-            color,
-            pulse && "animate-pulse"
-          )}
-        />
-        <AnimatePresence mode="wait">
-          <motion.span
-            key={status}
-            initial={{ opacity: 0, y: 5 }}
-            animate={{ opacity: 1, y: 0 }}
-            exit={{ opacity: 0, y: -5 }}
-            transition={{ duration: 0.2 }}
-          >
-            <Text font="main-ui-body" color="text-05" nowrap>
-              {label}
-            </Text>
-          </motion.span>
-        </AnimatePresence>
-      </div>
-    </motion.div>
-  );
+  return <SandboxStatusIndicatorView status={status} />;
 }
