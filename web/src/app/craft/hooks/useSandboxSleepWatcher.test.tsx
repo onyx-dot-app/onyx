@@ -46,11 +46,15 @@ function seedSession(sandbox: ApiSandboxResponse): void {
 }
 
 describe("useSandboxSleepWatcher", () => {
+  let loadSession: jest.Mock;
+
   beforeEach(() => {
     jest.clearAllMocks();
+    loadSession = jest.fn().mockResolvedValue(undefined);
     useBuildSessionStore.setState({
       sessions: new Map(),
       currentSessionId: null,
+      loadSession,
     } as never);
   });
 
@@ -82,7 +86,7 @@ describe("useSandboxSleepWatcher", () => {
     });
   });
 
-  it("never polls when the sandbox is not running", async () => {
+  it("never polls when the sandbox is not active or provisioning", async () => {
     seedSession(runningSandbox({ status: "sleeping" }));
 
     renderHook(() => useSandboxSleepWatcher(), { wrapper });
@@ -90,6 +94,33 @@ describe("useSandboxSleepWatcher", () => {
     await new Promise((resolve) => setTimeout(resolve, 0));
 
     expect(mockedApi.fetchSandboxStatus).not.toHaveBeenCalled();
+  });
+
+  it("keeps polling while the sandbox is provisioning", async () => {
+    seedSession(runningSandbox({ status: "provisioning" }));
+    mockedApi.fetchSandboxStatus.mockResolvedValue({
+      status: "provisioning",
+    });
+
+    renderHook(() => useSandboxSleepWatcher(), { wrapper });
+
+    await waitFor(() => {
+      expect(mockedApi.fetchSandboxStatus).toHaveBeenCalledTimes(1);
+    });
+    expect(loadSession).not.toHaveBeenCalled();
+  });
+
+  it("reconciles the session workspace when provisioning finishes", async () => {
+    seedSession(runningSandbox({ status: "provisioning" }));
+    mockedApi.fetchSandboxStatus.mockResolvedValue({
+      status: "running",
+    });
+
+    renderHook(() => useSandboxSleepWatcher(), { wrapper });
+
+    await waitFor(() => {
+      expect(loadSession).toHaveBeenCalledWith(SESSION_ID, { force: true });
+    });
   });
 
   it("stops polling once the sandbox is asleep", async () => {

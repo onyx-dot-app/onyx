@@ -1,3 +1,4 @@
+import { useRef } from "react";
 import useSWR from "swr";
 import {
   useSessionId,
@@ -8,6 +9,7 @@ import { fetchSandboxStatus } from "@/app/craft/services/apiServices";
 import { ApiSandboxStatusResponse } from "@/app/craft/types/streamingTypes";
 
 export const SANDBOX_STATUS_POLL_INTERVAL_MS = 30_000;
+export const SANDBOX_PROVISIONING_POLL_INTERVAL_MS = 2_000;
 
 export function useSandboxSleepWatcher(): void {
   const sessionId = useSessionId();
@@ -15,16 +17,21 @@ export function useSandboxSleepWatcher(): void {
   const updateSessionData = useBuildSessionStore(
     (state) => state.updateSessionData
   );
+  const loadSession = useBuildSessionStore((state) => state.loadSession);
   const status = session?.sandbox?.status ?? null;
+  const reconcilingSessionIdRef = useRef<string | null>(null);
+  const shouldPoll = status === "running" || status === "provisioning";
 
   useSWR<ApiSandboxStatusResponse, unknown, [string, string] | null>(
-    sessionId && status === "running" ? ["sandbox-status", sessionId] : null,
+    sessionId && shouldPoll ? ["sandbox-status", sessionId] : null,
     ([, id]) => fetchSandboxStatus(id),
     {
-      refreshInterval: SANDBOX_STATUS_POLL_INTERVAL_MS,
+      refreshInterval:
+        status === "provisioning"
+          ? SANDBOX_PROVISIONING_POLL_INTERVAL_MS
+          : SANDBOX_STATUS_POLL_INTERVAL_MS,
       onSuccess: (data) => {
-        if (!sessionId) return;
-        if (data.status !== "sleeping" && data.status !== "terminated") return;
+        if (!sessionId || data.status === null) return;
         // Use onSuccess (not a useEffect over `data`) — SWR can serve a stale
         // cached "sleeping"/"terminated" result right when a key re-activates
         // (e.g. after a wake flips status back to running), and an effect
@@ -32,11 +39,26 @@ export function useSandboxSleepWatcher(): void {
         const sandbox = useBuildSessionStore
           .getState()
           .sessions.get(sessionId)?.sandbox;
-        if (sandbox && sandbox.status === "running") {
-          updateSessionData(sessionId, {
-            sandbox: { ...sandbox, status: data.status },
+        if (!sandbox) return;
+
+        if (sandbox.status === "provisioning" && data.status === "running") {
+          // A running sandbox does not prove this session's workspace exists.
+          // Re-run the workspace-aware load so it restores the session when
+          // another request was responsible for provisioning the sandbox.
+          if (reconcilingSessionIdRef.current === sessionId) return;
+          reconcilingSessionIdRef.current = sessionId;
+          void loadSession(sessionId, { force: true }).finally(() => {
+            if (reconcilingSessionIdRef.current === sessionId) {
+              reconcilingSessionIdRef.current = null;
+            }
           });
+          return;
         }
+
+        if (sandbox.status === data.status) return;
+        updateSessionData(sessionId, {
+          sandbox: { ...sandbox, status: data.status },
+        });
       },
     }
   );
