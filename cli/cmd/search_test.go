@@ -582,6 +582,7 @@ func TestWriteMultiSearchJSON_OverLimitTruncatesPerQuery(t *testing.T) {
 	ios := &iostreams.IOStreams{Out: &out, ErrOut: &errOut}
 	output := multiSearchOutput{Searches: []multiSearchEntry{
 		{Query: "big query", Results: makeSearchResults(20, 500)},
+		{Query: "second big query", Results: makeSearchResults(12, 500)},
 		{Query: "small query", Results: makeSearchResults(1, 50)},
 		{Query: "broken query", Error: "search failed: timeout"},
 	}}
@@ -603,23 +604,28 @@ func TestWriteMultiSearchJSON_OverLimitTruncatesPerQuery(t *testing.T) {
 	if err := json.Unmarshal(out.Bytes(), &parsed); err != nil {
 		t.Fatalf("stdout is not valid JSON: %v\n%s", err, out.String())
 	}
-	if len(parsed.Searches) != 3 {
-		t.Fatalf("Searches length = %d, want all 3 entries", len(parsed.Searches))
+	if len(parsed.Searches) != 4 {
+		t.Fatalf("Searches length = %d, want all 4 entries", len(parsed.Searches))
 	}
 
-	// The oversized entry is reduced and carries truncation metadata.
-	big := parsed.Searches[0]
+	// Both oversized entries are reduced and carry truncation metadata.
+	big, big2 := parsed.Searches[0], parsed.Searches[1]
 	tr := big.Truncation
-	if tr == nil {
-		t.Fatal("expected truncation metadata on the oversized entry")
+	if tr == nil || big2.Truncation == nil {
+		t.Fatal("expected truncation metadata on both oversized entries")
 	}
 	t.Cleanup(func() { _ = os.Remove(tr.FullResponsePath) })
-	if tr.TotalResults != 20 {
-		t.Errorf("TotalResults = %d, want 20", tr.TotalResults)
+	if tr.TotalResults != 20 || big2.Truncation.TotalResults != 12 {
+		t.Errorf("TotalResults = %d/%d, want 20/12", tr.TotalResults, big2.Truncation.TotalResults)
 	}
-	if tr.ShownResults != len(big.Results) || tr.ShownResults >= 20 {
+	if tr.ShownResults != len(big.Results) || tr.ShownResults >= 12 {
 		t.Errorf("ShownResults = %d with %d results, want a reduced prefix",
 			tr.ShownResults, len(big.Results))
+	}
+	// The cap is uniform: every truncated entry keeps the same result count.
+	if big2.Truncation.ShownResults != tr.ShownResults || len(big2.Results) != len(big.Results) {
+		t.Errorf("caps differ: %d vs %d results, want uniform",
+			len(big.Results), len(big2.Results))
 	}
 	// Survivors must be the relevance-ordered prefix, not an arbitrary subset.
 	for i, r := range big.Results {
@@ -634,11 +640,11 @@ func TestWriteMultiSearchJSON_OverLimitTruncatesPerQuery(t *testing.T) {
 	}
 
 	// Entries under the uniform result cap pass through untouched.
-	small := parsed.Searches[1]
+	small := parsed.Searches[2]
 	if small.Truncation != nil || len(small.Results) != 1 {
 		t.Errorf("small entry: truncation=%v results=%d, want untouched", small.Truncation, len(small.Results))
 	}
-	broken := parsed.Searches[2]
+	broken := parsed.Searches[3]
 	if broken.Error == "" || broken.Truncation != nil {
 		t.Errorf("failed entry: error=%q truncation=%v, want error preserved", broken.Error, broken.Truncation)
 	}
