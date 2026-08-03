@@ -78,6 +78,7 @@ export enum Permission {
   MANAGE_ACTIONS = "manage:actions",
   READ_QUERY_HISTORY = "read:query_history",
   MANAGE_USER_GROUPS = "manage:user_groups",
+  MANAGE_SKILLS = "manage:skills",
   CREATE_USER_API_KEYS = "create:user_api_keys",
   MANAGE_SERVICE_ACCOUNT_API_KEYS = "manage:service_account_api_keys",
   MANAGE_BOTS = "manage:bots",
@@ -130,6 +131,11 @@ export interface User {
   personalization?: UserPersonalization;
   effective_permissions?: string[];
   is_admin?: boolean;
+  // True if the user manages any group (drives manager nav visibility).
+  is_group_manager?: boolean;
+  // effective tokens plus the scoped manager bundle; source for coarse admin-reach
+  // checks (nav, page access). Server-computed so the client never re-derives policy.
+  admin_capabilities?: string[];
 }
 
 export interface TenantInfo {
@@ -298,6 +304,8 @@ export interface ConnectorIndexingStatusLite {
   last_status: ValidStatuses | null;
   last_success: string | null;
   is_editable: boolean;
+  // per-action affordance map for the requesting user (mirrors the write-side gate)
+  permissions: Record<string, boolean>;
   docs_indexed: number;
   in_repeated_error_state: boolean;
   latest_index_attempt_docs_indexed: number | null;
@@ -444,6 +452,8 @@ export interface DocumentSetSummary {
   is_public: boolean;
   users: string[];
   groups: number[];
+  // per-action affordance map for the requesting user (mirrors the write-side gate)
+  permissions: Record<string, boolean>;
   federated_connector_summaries: FederatedConnectorSummary[];
 }
 
@@ -532,6 +542,8 @@ export interface UserGroup {
   id: number;
   name: string;
   users: User[];
+  // ids of members who manage this group (drives the Make/Revoke Manager toggle)
+  manager_ids: string[];
   curator_ids: string[];
   cc_pairs: CCPairDescriptor<any, any>[];
   document_sets: DocumentSetSummary[];
@@ -539,6 +551,8 @@ export interface UserGroup {
   is_up_to_date: boolean;
   is_up_for_deletion: boolean;
   is_default: boolean;
+  // Server-stamped affordance map; fail-closed (absent = denied).
+  permissions?: Record<string, boolean>;
 }
 
 export enum ValidSources {

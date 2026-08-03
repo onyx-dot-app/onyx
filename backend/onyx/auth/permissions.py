@@ -30,8 +30,10 @@ logger = setup_logger()
 ALL_PERMISSIONS: frozenset[str] = frozenset(p.value for p in Permission)
 
 # Implication map: granted permission -> set of permissions it implies.
+# NOTE: ADD_AGENTS does NOT imply READ_AGENTS — creating your own agents must not grant
+# see-all-agents visibility. READ_AGENTS (browse every agent) comes only from the
+# MANAGE_* admin bundles below.
 IMPLIED_PERMISSIONS: dict[str, set[str]] = {
-    Permission.ADD_AGENTS.value: {Permission.READ_AGENTS.value},
     Permission.MANAGE_AGENTS.value: {
         Permission.ADD_AGENTS.value,
         Permission.READ_AGENTS.value,

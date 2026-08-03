@@ -228,7 +228,7 @@ async function saveTokenLimits(
     const limit = validLimits[i]!;
     const existingLimit = existing[i]!;
     const updateRes = await fetch(
-      `/api/admin/token-rate-limits/rate-limit/${existingLimit.token_id}`,
+      `/api/admin/token-rate-limits/user-group/${groupId}/rate-limit/${existingLimit.token_id}`,
       {
         method: "PUT",
         headers: { "Content-Type": "application/json" },
@@ -270,7 +270,7 @@ async function saveTokenLimits(
   for (let i = toUpdate; i < existing.length; i++) {
     const existingLimit = existing[i]!;
     const deleteRes = await fetch(
-      `/api/admin/token-rate-limits/rate-limit/${existingLimit.token_id}`,
+      `/api/admin/token-rate-limits/user-group/${groupId}/rate-limit/${existingLimit.token_id}`,
       { method: "DELETE" }
     );
     if (!deleteRes.ok) {
@@ -302,6 +302,24 @@ async function saveGroupPermissions(
   }
 }
 
+async function setGroupManager(
+  groupId: number,
+  userId: string,
+  isManager: boolean
+): Promise<void> {
+  const res = await fetch(`${USER_GROUP_URL}/${groupId}/manager`, {
+    method: "PUT",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ user_id: userId, is_manager: isManager }),
+  });
+  if (!res.ok) {
+    const detail = await res.json().catch(() => null);
+    throw new Error(
+      detail?.detail ?? `Failed to update group manager: ${res.statusText}`
+    );
+  }
+}
+
 export {
   renameGroup,
   createGroup,
@@ -311,4 +329,5 @@ export {
   updateDocSetGroupSharing,
   saveTokenLimits,
   saveGroupPermissions,
+  setGroupManager,
 };
