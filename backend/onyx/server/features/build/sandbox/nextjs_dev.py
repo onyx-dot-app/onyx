@@ -136,8 +136,7 @@ PORT={nextjs_port}
     flock -x 9
 
     # PIDs recycle in a pod full of short-lived tool processes, so a bare
-    # kill -0 could match an unrelated live process; verify identity via cwd
-    # like the embedded start script does.
+    # kill -0 could match an unrelated live process.
     NEXTJS_PID=""
     if [ -f "$SESSION_PATH/nextjs.pid" ]; then
         NEXTJS_PID="$(cat "$SESSION_PATH/nextjs.pid")"
