@@ -4,12 +4,18 @@ from __future__ import annotations
 
 import json
 import re
+import subprocess
+import tempfile
 from pathlib import Path
 from unittest.mock import MagicMock, patch
 from uuid import UUID
 
 from onyx.server.features.build.sandbox import nextjs_dev
-from onyx.server.features.build.sandbox.nextjs_dev import build_nextjs_start_script
+from onyx.server.features.build.sandbox.nextjs_dev import (
+    build_nextjs_start_script,
+    build_webapp_bootstrap_script,
+    build_webapp_script_write_snippet,
+)
 from onyx.server.features.build.session.manager import SessionManager
 
 _SESSION_PATH = "/workspace/sessions/0d9ed7f2-8757-4d09-9812-bd7e4a45e232"
@@ -153,3 +159,53 @@ def test_nextjs_ready_probe_targets_base_path_dev_asset() -> None:
         f"http://sandbox-x:3010/api/build/sessions/{session_id}/webapp"
         "/_next/static/onyx-ready-probe.js"
     )
+
+
+def _assert_valid_bash(script: str) -> None:
+    with tempfile.NamedTemporaryFile("w", suffix=".sh") as f:
+        f.write(script)
+        f.flush()
+        result = subprocess.run(["bash", "-n", f.name], capture_output=True, text=True)
+    assert result.returncode == 0, result.stderr
+
+
+def test_bootstrap_script_is_valid_bash() -> None:
+    script = build_webapp_bootstrap_script(_SESSION_PATH, 3010)
+    _assert_valid_bash(script)
+
+
+def test_bootstrap_script_embeds_port_write_and_env_exports() -> None:
+    # These come from main's embedded build_nextjs_start_script.
+    script = build_webapp_bootstrap_script(_SESSION_PATH, 3010)
+
+    assert f"echo 3010 > {_SESSION_PATH}/.nextjs-port" in script
+    assert "export ONYX_WEBAPP_PORT=3010" in script
+    assert (
+        'export ONYX_WEBAPP_BASE_PATH="/api/build/sessions/'
+        f'$(basename {_SESSION_PATH})/webapp"' in script
+    )
+
+
+def test_bootstrap_script_short_circuits_on_live_pid() -> None:
+    script = build_webapp_bootstrap_script(_SESSION_PATH, 3010)
+
+    assert (
+        'if [ -f "$SESSION_PATH/nextjs.pid" ] '
+        '&& kill -0 "$(cat "$SESSION_PATH/nextjs.pid")" 2>/dev/null; then' in script
+    )
+    assert "already running" in script
+    assert "exit 2" in script
+
+
+def test_webapp_script_write_snippet_removes_before_writing() -> None:
+    # chmod 444 blocks in-place overwrite, so a rewrite (restore) must unlink
+    # both copies before writing the new ones.
+    snippet = build_webapp_script_write_snippet(_SESSION_PATH, 3010)
+
+    assert (
+        f"rm -f {_SESSION_PATH}/start-webapp.sh "
+        f"{_SESSION_PATH}/.webapp/start-webapp.sh" in snippet
+    )
+    remove_index = snippet.index("rm -f")
+    write_index = snippet.index("printf")
+    assert remove_index < write_index
