@@ -157,13 +157,13 @@ def aggregate_capability_verdict(
 ) -> CapabilityVerdict:
     """Rolls the per-check results of one capability up into a single verdict.
 
-    Pure function. Required checks gate the verdict: a required failure is
-    FAILED, and a required indeterminate is INDETERMINATE, since the
-    capability's core is unverified and no PASSED claim can be made.
-    Non-required outcomes only downgrade: failures to PASSED_WITH_WARNINGS
-    (definite, stable, actionable), indeterminates to INDETERMINATE when no
-    warning outranks them (transient, self-resolves on re-run). An empty result
-    list aggregates to SKIPPED.
+    Pure function, evaluated in strict precedence order. Required checks gate
+    the verdict: a required FAILED is FAILED, and a required INDETERMINATE or
+    SKIPPED leaves the capability's core unverified, so no pass-ish claim may be
+    made. Non-required failures and indeterminates only downgrade to
+    PASSED_WITH_WARNINGS (partial capability); non-required skips do not
+    downgrade at all. An empty result list aggregates to SKIPPED: a capability
+    is never PASSED on the basis of having checked nothing.
     """
     if not applicable:
         return CapabilityVerdict.NOT_APPLICABLE
@@ -177,10 +177,17 @@ def aggregate_capability_verdict(
         for result in results
     ):
         return CapabilityVerdict.INDETERMINATE
-    if any(result.status == CapabilityCheckStatus.FAILED for result in results):
+    if any(
+        result.status == CapabilityCheckStatus.SKIPPED and result.required
+        for result in results
+    ):
+        return CapabilityVerdict.SKIPPED
+    if any(
+        result.status
+        in (CapabilityCheckStatus.FAILED, CapabilityCheckStatus.INDETERMINATE)
+        for result in results
+    ):
         return CapabilityVerdict.PASSED_WITH_WARNINGS
-    if any(result.status == CapabilityCheckStatus.INDETERMINATE for result in results):
-        return CapabilityVerdict.INDETERMINATE
     if all(result.status == CapabilityCheckStatus.SKIPPED for result in results):
         return CapabilityVerdict.SKIPPED
     return CapabilityVerdict.PASSED
