@@ -136,10 +136,6 @@ def _gateway_trace(flow: LLMFlow, model: str) -> Trace:
 
 
 def _gateway_flow(http_request: Request) -> LLMFlow:
-    """Callers never supply the flow; it is derived from the credential that
-    authorized the request. Craft sandbox tokens are Craft traffic; a directly
-    granted use:llm_gateway PAT is external gateway traffic (Claude Code,
-    codex, ...), which tracing and usage metering must attribute separately."""
     token_scopes: list[Permission] | None = getattr(
         http_request.state, "token_scopes", None
     )
