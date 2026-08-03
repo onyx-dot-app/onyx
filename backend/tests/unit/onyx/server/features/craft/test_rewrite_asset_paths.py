@@ -45,6 +45,19 @@ class TestNextjsProxyMountContract:
         assert "assetPrefix" in config_source
         assert re.search(r"\bbasePath\s*[:=]", config_source)
 
+    def test_template_cwd_fallback_pins_session_base_path(self) -> None:
+        """When ONYX_WEBAPP_BASE_PATH is unset (hand-started server), the
+        template derives the per-session base path from the session id in the
+        cwd. Pinned so the naive path can't silently serve without the base path
+        the preview proxy expects."""
+        config_source = NEXT_TEMPLATE_CONFIG.read_text()
+
+        assert (
+            "process.cwd().match(/\\/sessions\\/([^/]+)\\/outputs\\/web\\/?$/)"
+            in config_source
+        )
+        assert "`/api/build/sessions/${match[1]}/webapp`" in config_source
+
     def test_sandbox_start_script_exports_next_base_path(self) -> None:
         source = NEXTJS_DEV_SCRIPT.read_text()
 

@@ -85,12 +85,18 @@ if grep -q "WEBAPP_ASSET_PREFIX" next.config.ts 2>/dev/null; then
 {template_next_config}
 EOF
 fi
+# The template's `dev` script resolves ONYX_WEBAPP_PORT itself; a second -p
+# would collide with its own. But a `dev` script without the marker (legacy
+# scaffold, or rewritten by the agent) ignores the env var and would bind
+# 3000, so pass the port explicitly for those.
+PORT_FLAG=""
+if ! grep -q "ONYX_WEBAPP_PORT" package.json 2>/dev/null; then
+    PORT_FLAG="-p {nextjs_port}"
+fi
 echo "Starting Next.js dev server on port {nextjs_port}..."
-# No -p here: the template's `dev` script resolves ONYX_WEBAPP_PORT itself,
-# and a second -p would collide with its own.
 # 9>&-: the server must not inherit the lock fd, or it would hold the
 # check-and-spawn lock for its entire lifetime.
-nohup bun run dev -- -H 0.0.0.0 > {session_path}/nextjs.log 2>&1 9>&- &
+nohup bun run dev -- -H 0.0.0.0 $PORT_FLAG > {session_path}/nextjs.log 2>&1 9>&- &
 NEXTJS_PID=$!
 echo "Next.js server started with PID $NEXTJS_PID"
 echo $NEXTJS_PID > {session_path}/nextjs.pid
