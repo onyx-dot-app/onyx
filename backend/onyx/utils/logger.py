@@ -119,7 +119,7 @@ def cap_third_party_log_levels(
     for logger_name in THIRD_PARTY_CAPPED_LOGGER_NAMES:
         third_party_logger = logging.getLogger(logger_name)
         if allow_debug:
-            third_party_logger.setLevel(level)
+            third_party_logger.setLevel(max(level, third_party_logger.level))
         else:
             third_party_logger.setLevel(
                 max(logging.INFO, level, third_party_logger.level)
