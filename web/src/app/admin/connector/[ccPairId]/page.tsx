@@ -546,7 +546,7 @@ function Main({ ccPairId }: { ccPairId: number }) {
                     </span>
                   </DropdownMenuItemWithTooltip>
                 )}
-                {!isDeleting && (
+                {!isDeleting && can(ccPair, "delete") && (
                   <DropdownMenuItemWithTooltip
                     onClick={() => {
                       setShowDeleteConnectorConfirmModal(true);
