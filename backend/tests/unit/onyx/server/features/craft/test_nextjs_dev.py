@@ -16,6 +16,9 @@ from onyx.server.features.build.sandbox.nextjs_dev import (
     build_webapp_bootstrap_script,
     build_webapp_script_write_snippet,
 )
+from onyx.server.features.build.sandbox.session_workspace import (
+    build_session_workspace_setup_script,
+)
 from onyx.server.features.build.session.manager import SessionManager
 
 _SESSION_PATH = "/workspace/sessions/0d9ed7f2-8757-4d09-9812-bd7e4a45e232"
@@ -196,6 +199,48 @@ def test_bootstrap_script_reuses_live_server_via_embedded_guard() -> None:
     assert "already running" in script
     # Exactly one liveness guard: the embedded start script's.
     assert script.count("kill -0") == 1
+
+
+def test_setup_script_writes_start_webapp_script_and_chmod_444() -> None:
+    script = build_session_workspace_setup_script(
+        session_path=_SESSION_PATH,
+        agents_md="# Agent",
+        session_opencode_config_json='{"model": "x"}',
+        nextjs_port=3010,
+    )
+
+    assert f"> {_SESSION_PATH}/start-webapp.sh" in script
+    assert f"chmod 444 {_SESSION_PATH}/start-webapp.sh" in script
+    # No eager scaffold/install at setup time: the old eager invocations (bare
+    # session path, unquoted) are gone. What's left mentioning bun/outputs is
+    # inert text inside the printf'd start-webapp.sh payload, which addresses
+    # the session dir via the $SESSION_PATH shell variable instead.
+    assert f"cd {_SESSION_PATH}/outputs/web &&" not in script
+    assert (
+        f"cp -r /workspace/templates/outputs/* {_SESSION_PATH}/outputs/" not in script
+    )
+
+
+def test_setup_script_headless_writes_no_start_webapp_script() -> None:
+    script = build_session_workspace_setup_script(
+        session_path=_SESSION_PATH,
+        agents_md="# Agent",
+        session_opencode_config_json='{"model": "x"}',
+        nextjs_port=None,
+    )
+
+    assert "start-webapp.sh" not in script
+    assert "chmod 444" not in script
+
+
+def test_setup_script_is_valid_bash() -> None:
+    script = build_session_workspace_setup_script(
+        session_path=_SESSION_PATH,
+        agents_md="# Agent",
+        session_opencode_config_json='{"model": "x"}',
+        nextjs_port=3010,
+    )
+    _assert_valid_bash(script)
 
 
 def test_webapp_script_write_snippet_removes_before_writing() -> None:

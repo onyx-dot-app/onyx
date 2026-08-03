@@ -117,7 +117,7 @@ from onyx.server.features.build.sandbox.models import (
 )
 from onyx.server.features.build.sandbox.nextjs_dev import (
     allowed_dev_origins,
-    build_nextjs_start_script,
+    build_webapp_script_write_snippet,
 )
 from onyx.server.features.build.sandbox.serve_transport import ServeConnectionInfo
 from onyx.server.features.build.sandbox.session_workspace import (
@@ -176,6 +176,8 @@ _OPENCODE_SESSION_TAG_PLUGIN_PATH = "/workspace/opencode-plugins/session-proxy-t
 _OPENCODE_CONNECT_APP_PLUGIN_PATH = "/workspace/opencode-plugins/connect-app.ts"
 # Soft turn-budget wrap-up steer (reads the per-turn deadline stamp).
 _OPENCODE_TURN_BUDGET_PLUGIN_PATH = "/workspace/opencode-plugins/turn-budget.ts"
+# Surfaces the `webapp` tool (start/status/logs/restart); always on.
+_OPENCODE_WEBAPP_PLUGIN_PATH = "/workspace/opencode-plugins/webapp.ts"
 
 
 _PROXY_RESOLVE_RETRY_ATTEMPTS = 5
@@ -439,8 +441,6 @@ class KubernetesSandboxManager(SandboxManager):
         connectable_apps_section: str,
         provider: str | None = None,
         model_name: str | None = None,
-        nextjs_port: int | None = None,
-        session_id: UUID | None = None,
         disabled_tools: list[str] | None = None,
         user_name: str | None = None,
     ) -> str:
@@ -450,8 +450,6 @@ class KubernetesSandboxManager(SandboxManager):
             connectable_apps_section=connectable_apps_section,
             provider=provider,
             model_name=model_name,
-            nextjs_port=nextjs_port,
-            session_id=session_id,
             disabled_tools=disabled_tools,
             user_name=user_name,
             organization_instructions=load_settings().craft_instructions,
@@ -1110,6 +1108,7 @@ class KubernetesSandboxManager(SandboxManager):
                     plugins=[
                         _OPENCODE_CONNECT_APP_PLUGIN_PATH,
                         _OPENCODE_TURN_BUDGET_PLUGIN_PATH,
+                        _OPENCODE_WEBAPP_PLUGIN_PATH,
                         _OPENCODE_SESSION_TAG_PLUGIN_PATH,
                     ],
                 )
@@ -1404,8 +1403,6 @@ class KubernetesSandboxManager(SandboxManager):
             connectable_apps_section=connectable_apps_section,
             provider=llm_config.provider,
             model_name=llm_config.model_name,
-            nextjs_port=nextjs_port,
-            session_id=session_id,
             disabled_tools=OPENCODE_DISABLED_TOOLS,
             user_name=user_name,
         )
@@ -1795,15 +1792,18 @@ echo "Session cleanup complete"
         1. Read the snapshot from Onyx FileStore in the api-server
         2. Stream it to the sidecar, which extracts it in the session workspace
         3. Regenerate configuration files (AGENTS.md, opencode.json)
-        4. Start the NextJS dev server (skipped when ``nextjs_port`` is None,
-           e.g. for headless scheduled-task fires that don't attach a preview).
+        4. Rewrite ``start-webapp.sh`` with the re-allocated port (skipped
+           when ``nextjs_port`` is None, e.g. headless scheduled-task fires)
+           and auto-start the dev server in the background, but only if the
+           restored snapshot actually contains a webapp
+           (``outputs/web/package.json``).
 
         Args:
             sandbox_id: The sandbox ID
             session_id: The session ID to restore
             snapshot_storage_path: FileStore file id for the snapshot archive
             nextjs_port: Port number for the NextJS dev server, or None to
-                skip starting it.
+                skip rewriting/starting it.
             llm_config: LLM provider configuration for opencode.json
 
         Raises:
@@ -1845,15 +1845,30 @@ echo "Session cleanup complete"
             )
 
             if nextjs_port is not None:
-                start_script = build_nextjs_start_script(
-                    safe_session_path, nextjs_port, check_node_modules=True
+                # Ports change across sleep/wake, so the two script copies
+                # are always rewritten. Auto-start only if the restored
+                # snapshot actually contains a webapp, and background it so
+                # wake isn't blocked on a cold bun install (node_modules is
+                # excluded from snapshots).
+                write_snippet = build_webapp_script_write_snippet(
+                    safe_session_path, nextjs_port
                 )
+                restore_webapp_script = f"""
+set -e
+{write_snippet}
+if [ -f {safe_session_path}/outputs/web/package.json ]; then
+    nohup bash {safe_session_path}/start-webapp.sh > {safe_session_path}/webapp-bootstrap.log 2>&1 &
+    echo "ONYX_WEBAPP_AUTOSTART"
+else
+    echo "ONYX_WEBAPP_ABSENT"
+fi
+"""
                 k8s_stream(
                     self._stream_core_api.connect_get_namespaced_pod_exec,
                     name=pod_name,
                     namespace=self._namespace,
                     container=_SANDBOX_CONTAINER_NAME,
-                    command=["/bin/sh", "-c", start_script],
+                    command=["/bin/sh", "-c", restore_webapp_script],
                     stderr=True,
                     stdin=False,
                     stdout=True,
@@ -1877,14 +1892,16 @@ echo "Session cleanup complete"
         mcp_servers: Sequence[CraftMCPServerConfig] = (),
     ) -> None:
         """Rewrite generated session configuration and managed symlinks."""
+        # nextjs_port stays in the signature to match the abstract contract
+        # (base.py) shared with restore_snapshot's own webapp-script rewrite;
+        # AGENTS.md no longer embeds it.
+        _ = nextjs_port
         pod_name = self._get_pod_name(str(sandbox_id))
         session_path = shlex.quote(f"/workspace/sessions/{session_id}")
         agent_instructions = self._load_agent_instructions(
             connectable_apps_section=connectable_apps_section,
             provider=agent_provider,
             model_name=agent_model,
-            nextjs_port=nextjs_port,
-            session_id=session_id,
             disabled_tools=OPENCODE_DISABLED_TOOLS,
             user_name=user_name,
         )

@@ -246,7 +246,6 @@ def test_build_agents_md_renders_instructions(
     agents_md = mgr._build_agents_md(
         agent_provider=llm_config.provider,
         agent_model=llm_config.model_name,
-        nextjs_port=None,
         connectable_apps_section="",
     )
     assert isinstance(agents_md, str)
