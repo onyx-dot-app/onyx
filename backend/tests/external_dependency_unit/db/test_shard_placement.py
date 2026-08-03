@@ -5,13 +5,16 @@ created — so these assert on which database the schema physically lands in, no
 what a helper returned.
 """
 
+import asyncio
 from collections.abc import Generator
 from typing import Any
 from uuid import uuid4
 
 import pytest
+from scripts.tenant_cleanup.on_pod_scripts.cleanup_tenant_schema import (
+    drop_data_plane_schema,
+)
 from sqlalchemy import text
-from sqlalchemy.engine import Engine
 from sqlalchemy.exc import OperationalError, ProgrammingError
 
 from ee.onyx.server.tenants.schema_management import create_schema_if_not_exists
@@ -27,33 +30,17 @@ from onyx.db.engine.shard_routing import (
     invalidate_shard_cache,
 )
 from onyx.db.engine.shard_version import reset_shard_map_version_poller
-from onyx.db.engine.sql_engine import SYNC_DB_API, SqlEngine, build_connection_string
+from onyx.db.engine.sql_engine import SqlEngine
 from onyx.db.models import PublicBase, TenantShard, UserTenantMapping
 from onyx.db.tenant_shard import clear_tenant_placement, record_tenant_placement
+from tests.external_dependency_unit.db.shard_test_utils import (
+    DEFAULT_SHARD,
+    create_schema,
+    drop_schema,
+    schema_exists,
+)
 
-DEFAULT_SHARD = "default"
 SECOND_SHARD = "shard-test-b"
-
-
-def _admin_engine() -> Engine:
-    """Engine on the `postgres` maintenance DB, for CREATE/DROP DATABASE."""
-    from sqlalchemy import create_engine
-
-    return create_engine(
-        build_connection_string(db_api=SYNC_DB_API, db="postgres"),
-        isolation_level="AUTOCOMMIT",
-    )
-
-
-def _schema_exists(engine: Engine, tenant_id: str) -> bool:
-    with engine.connect() as conn:
-        return (
-            conn.execute(
-                text("SELECT 1 FROM pg_namespace WHERE nspname = :n"),
-                {"n": tenant_id},
-            ).first()
-            is not None
-        )
 
 
 def _mapped_shard(tenant_id: str) -> str | None:
@@ -63,33 +50,6 @@ def _mapped_shard(tenant_id: str) -> str | None:
             {"t": tenant_id},
         ).first()
     return None if row is None else str(row[0])
-
-
-def _drop_schema(engine: Engine, tenant_id: str) -> None:
-    with engine.connect() as conn:
-        conn.execute(text(f'DROP SCHEMA IF EXISTS "{tenant_id}" CASCADE'))
-        conn.commit()
-
-
-@pytest.fixture(scope="module")
-def second_database() -> Generator[str, None, None]:
-    db_name = f"onyx_place_test_{uuid4().hex[:8]}"
-    admin = _admin_engine()
-    with admin.connect() as conn:
-        conn.execute(text(f'CREATE DATABASE "{db_name}"'))
-    try:
-        yield db_name
-    finally:
-        with admin.connect() as conn:
-            conn.execute(
-                text(
-                    "SELECT pg_terminate_backend(pid) FROM pg_stat_activity "
-                    "WHERE datname = :db AND pid <> pg_backend_pid()"
-                ),
-                {"db": db_name},
-            )
-            conn.execute(text(f'DROP DATABASE IF EXISTS "{db_name}"'))
-        admin.dispose()
 
 
 @pytest.fixture(scope="function")
@@ -129,8 +89,8 @@ def placement_on_second_shard(
     yield {"second_db": second_database, "created": created}
 
     for tenant_id in created:
-        _drop_schema(get_engine_for_shard(DEFAULT_SHARD), tenant_id)
-        _drop_schema(get_engine_for_shard(SECOND_SHARD), tenant_id)
+        drop_schema(get_engine_for_shard(DEFAULT_SHARD), tenant_id)
+        drop_schema(get_engine_for_shard(SECOND_SHARD), tenant_id)
         clear_tenant_placement(tenant_id)
     shard_registry.reset_shard_specs()
     invalidate_shard_cache()
@@ -183,11 +143,11 @@ def test_recorded_placement_puts_the_schema_on_the_target_shard(
     create_schema_if_not_exists(placed)
     create_schema_if_not_exists(unplaced)
 
-    assert _schema_exists(get_engine_for_shard(SECOND_SHARD), placed)
-    assert not _schema_exists(get_engine_for_shard(DEFAULT_SHARD), placed)
+    assert schema_exists(get_engine_for_shard(SECOND_SHARD), placed)
+    assert not schema_exists(get_engine_for_shard(DEFAULT_SHARD), placed)
 
-    assert _schema_exists(get_engine_for_shard(DEFAULT_SHARD), unplaced)
-    assert not _schema_exists(get_engine_for_shard(SECOND_SHARD), unplaced)
+    assert schema_exists(get_engine_for_shard(DEFAULT_SHARD), unplaced)
+    assert not schema_exists(get_engine_for_shard(SECOND_SHARD), unplaced)
 
 
 def test_default_placement_writes_no_mapping_row(
@@ -228,8 +188,8 @@ def test_placement_overrides_a_stale_cached_resolution(
     record_tenant_placement(tenant_id, SECOND_SHARD)
     create_schema_if_not_exists(tenant_id)
 
-    assert _schema_exists(get_engine_for_shard(SECOND_SHARD), tenant_id)
-    assert not _schema_exists(get_engine_for_shard(DEFAULT_SHARD), tenant_id)
+    assert schema_exists(get_engine_for_shard(SECOND_SHARD), tenant_id)
+    assert not schema_exists(get_engine_for_shard(DEFAULT_SHARD), tenant_id)
 
 
 def test_cleanup_drops_the_schema_from_the_tenants_own_shard(
@@ -237,21 +197,17 @@ def test_cleanup_drops_the_schema_from_the_tenants_own_shard(
 ) -> None:
     """The script previously dropped against the catalog database, which for a sharded
     tenant reports `not_found` and silently leaves the schema in place."""
-    from scripts.tenant_cleanup.on_pod_scripts.cleanup_tenant_schema import (
-        drop_data_plane_schema,
-    )
-
     tenant_id = f"tenant_{uuid4()}"
     placement_on_second_shard["created"].append(tenant_id)
 
     record_tenant_placement(tenant_id, SECOND_SHARD)
     create_schema_if_not_exists(tenant_id)
-    assert _schema_exists(get_engine_for_shard(SECOND_SHARD), tenant_id)
+    assert schema_exists(get_engine_for_shard(SECOND_SHARD), tenant_id)
 
     result = drop_data_plane_schema(tenant_id)
 
     assert result["status"] == "success"
-    assert not _schema_exists(get_engine_for_shard(SECOND_SHARD), tenant_id)
+    assert not schema_exists(get_engine_for_shard(SECOND_SHARD), tenant_id)
     assert _mapped_shard(tenant_id) is None
 
 
@@ -291,10 +247,6 @@ def test_cleanup_sweeps_every_shard_not_just_the_mapped_one(
 ) -> None:
     """Cleanup deletes the mapping, so trusting it would strand a copy on the shard the
     mapping did not name — and a tenant mid-migration exists on two shards at once."""
-    from scripts.tenant_cleanup.on_pod_scripts.cleanup_tenant_schema import (
-        drop_data_plane_schema,
-    )
-
     tenant_id = f"tenant_{uuid4()}"
     placement_on_second_shard["created"].append(tenant_id)
 
@@ -308,9 +260,53 @@ def test_cleanup_sweeps_every_shard_not_just_the_mapped_one(
     result = drop_data_plane_schema(tenant_id)
 
     assert result["status"] == "success"
-    assert not _schema_exists(get_engine_for_shard(SECOND_SHARD), tenant_id)
-    assert not _schema_exists(get_engine_for_shard(DEFAULT_SHARD), tenant_id)
+    assert not schema_exists(get_engine_for_shard(SECOND_SHARD), tenant_id)
+    assert not schema_exists(get_engine_for_shard(DEFAULT_SHARD), tenant_id)
     assert _mapped_shard(tenant_id) is None
+
+
+def test_cleanup_rejects_a_malformed_tenant_id_before_touching_any_database(
+    placement_on_second_shard: dict[str, Any],
+) -> None:
+    """A schema name cannot be bound as a parameter, so it is interpolated into DDL.
+    The argument comes from a human on the command line, and the drop now sweeps every
+    configured shard rather than one.
+
+    Reaching the DDL also requires a schema of that exact name to exist, so this is
+    defence in depth rather than an open hole — but the guard is what makes that true
+    by design instead of by accident of statement ordering.
+    """
+    canary = f"tenant_{uuid4()}"
+    placement_on_second_shard["created"].append(canary)
+    create_schema(get_engine_for_shard(DEFAULT_SHARD), canary)
+
+    result = drop_data_plane_schema(f'x" CASCADE; DROP SCHEMA "{canary}')
+
+    assert result["status"] == "error"
+    assert "Invalid tenant_id" in result["message"]
+    assert schema_exists(get_engine_for_shard(DEFAULT_SHARD), canary)
+
+
+def test_rollback_keeps_the_mapping_when_the_schema_drop_fails(
+    placement_on_second_shard: dict[str, Any],
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """The mapping is the only route to the schema. Clearing it after a failed drop
+    strands the schema on a shard nothing can resolve."""
+    import ee.onyx.server.tenants.provisioning as provisioning
+
+    tenant_id = f"tenant_{uuid4()}"
+    placement_on_second_shard["created"].append(tenant_id)
+    record_tenant_placement(tenant_id, SECOND_SHARD)
+    create_schema_if_not_exists(tenant_id)
+
+    def _boom(_tenant_id: str) -> None:
+        raise RuntimeError("shard unreachable")
+
+    monkeypatch.setattr(provisioning, "drop_schema", _boom)
+    asyncio.run(provisioning.rollback_tenant_provisioning(tenant_id))
+
+    assert _mapped_shard(tenant_id) == SECOND_SHARD
 
 
 def test_cleanup_clears_catalog_rows_when_the_schema_is_already_gone(
@@ -318,10 +314,6 @@ def test_cleanup_clears_catalog_rows_when_the_schema_is_already_gone(
 ) -> None:
     """Otherwise a retry after a partial run repeats `not_found` forever and the tenant
     stays in shared catalog state indefinitely."""
-    from scripts.tenant_cleanup.on_pod_scripts.cleanup_tenant_schema import (
-        drop_data_plane_schema,
-    )
-
     tenant_id = f"tenant_{uuid4()}"
     placement_on_second_shard["created"].append(tenant_id)
 

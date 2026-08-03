@@ -14,12 +14,21 @@ from sqlalchemy import text
 
 from onyx.db.engine.shard_registry import get_engine_for_shard, get_shard_specs
 from onyx.db.engine.sql_engine import SqlEngine, get_session_with_shared_schema
+from onyx.db.engine.tenant_utils import validate_tenant_id
 from onyx.db.tenant_shard import clear_tenant_placement
 
 
 def drop_data_plane_schema(tenant_id: str) -> dict[str, str]:
     """Drop the PostgreSQL schema for the given tenant."""
     print(f"Dropping data plane schema for tenant: {tenant_id}", file=sys.stderr)
+
+    # A schema name cannot be bound as a parameter, so it is interpolated into DDL
+    # below. Validate before touching any database: this argument arrives from a
+    # human on the command line, and the drop now runs against every shard.
+    if not validate_tenant_id(tenant_id):
+        message = f"Invalid tenant_id format: {tenant_id}"
+        print(message, file=sys.stderr)
+        return {"status": "error", "message": message}
 
     SqlEngine.init_engine(pool_size=5, max_overflow=2)
 

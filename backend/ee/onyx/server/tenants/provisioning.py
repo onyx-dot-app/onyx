@@ -269,8 +269,10 @@ async def rollback_tenant_provisioning(tenant_id: str) -> None:
     rollback_errors = []
 
     # 1. Try to drop the tenant's schema
+    schema_dropped = False
     try:
         drop_schema(tenant_id)
+        schema_dropped = True
         logger.info("Successfully dropped schema for tenant %s", tenant_id)
     except Exception as e:
         error_msg = f"Failed to drop schema for tenant {tenant_id}: {str(e)}"
@@ -322,14 +324,25 @@ async def rollback_tenant_provisioning(tenant_id: str) -> None:
         logger.error(error_msg)
         rollback_errors.append(error_msg)
 
-    # 4. Drop the shard mapping. Last, so the steps above still route correctly.
-    try:
-        clear_tenant_placement(tenant_id)
-        logger.info("Successfully cleared shard mapping for tenant %s", tenant_id)
-    except Exception as e:
-        error_msg = f"Failed to clear shard mapping for tenant {tenant_id}: {str(e)}"
-        logger.error(error_msg)
-        rollback_errors.append(error_msg)
+    # 4. Drop the shard mapping — last, and only if the schema is actually gone.
+    # The mapping is the only route to that schema, so clearing it after a failed
+    # drop strands it on a shard nothing can resolve.
+    if schema_dropped:
+        try:
+            clear_tenant_placement(tenant_id)
+            logger.info("Successfully cleared shard mapping for tenant %s", tenant_id)
+        except Exception as e:
+            error_msg = (
+                f"Failed to clear shard mapping for tenant {tenant_id}: {str(e)}"
+            )
+            logger.error(error_msg)
+            rollback_errors.append(error_msg)
+    else:
+        logger.warning(
+            "Keeping shard mapping for tenant %s: its schema was not dropped, and the "
+            "mapping is what a retry needs to find it",
+            tenant_id,
+        )
 
     # Log summary of rollback operation
     if rollback_errors:
