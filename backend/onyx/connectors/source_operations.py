@@ -16,6 +16,7 @@ fire requests outside any wrapper, and returning plain data is what makes the
 gateway boundary real.
 """
 
+import inspect
 from abc import ABC
 from collections.abc import Callable, Collection, Mapping
 from enum import Enum
@@ -81,7 +82,10 @@ def source_operation(
     Raises at decoration (import) time for malformed metadata, so a bad
     classification can never register.
     """
-    if not capabilities:
+    # Snapshot before validating so a caller-held collection mutated after this
+    # factory returns cannot bypass the checks below.
+    capability_set = frozenset(capabilities)
+    if not capability_set:
         raise ValueError("A source operation must serve at least one capability.")
     variant_list = list(variants)
     if len(set(variant_list)) != len(variant_list):
@@ -99,7 +103,7 @@ def source_operation(
                 # The cast is safe for anything that ultimately registers: the
                 # class-level scan rejects everything but plain functions.
                 name=cast(FunctionType, func).__name__,
-                capabilities=frozenset(capabilities),
+                capabilities=capability_set,
                 variants=tuple(variant_list),
                 consumes=consumes,
                 untested=untested,
@@ -176,6 +180,17 @@ class SourceOperations(ABC):
                     f"{cls.__name__}.{name}: public staticmethod/classmethod/"
                     "property is not allowed on a gateway; make it private or "
                     "expose it as a stamped instance method."
+                )
+            # Other descriptors (``cached_property``, custom ``__get__``) are
+            # not callable, so they would otherwise pass as data attributes --
+            # yet they execute on attribute access, the exact lazy-call hazard
+            # the gateway exists to contain. Plain functions also carry
+            # ``__get__`` (method binding), hence the exclusion.
+            if not inspect.isfunction(member) and hasattr(member, "__get__"):
+                raise TypeError(
+                    f"{cls.__name__}.{name}: public descriptor is not allowed "
+                    "on a gateway; make it private or expose it as a stamped "
+                    "instance method."
                 )
             if not callable(member):
                 continue

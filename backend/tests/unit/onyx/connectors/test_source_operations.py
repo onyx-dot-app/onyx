@@ -1,3 +1,5 @@
+from functools import cached_property
+
 import pytest
 
 from onyx.configs.constants import DocumentSource
@@ -189,6 +191,24 @@ def test_public_property_is_rejected() -> None:
 
 
 @pytest.mark.usefixtures("isolated_registry")
+def test_public_non_callable_descriptor_is_rejected() -> None:
+    """
+    Verifies descriptors like ``cached_property`` cannot pass as data
+    attributes: they execute on attribute access, the lazy-call hazard the
+    gateway exists to contain.
+    """
+    # Under test and postcondition.
+    with pytest.raises(TypeError, match="public descriptor"):
+
+        class _CachedPropertyOperations(SourceOperations):
+            source = DocumentSource.SLACK
+
+            @cached_property
+            def team_id(self) -> str:
+                return ""
+
+
+@pytest.mark.usefixtures("isolated_registry")
 def test_public_classmethod_is_rejected() -> None:
     """Verifies classmethods cannot bypass classification either."""
     # Under test and postcondition.
@@ -247,6 +267,33 @@ def test_decorator_rejects_empty_capabilities() -> None:
     # Under test and postcondition.
     with pytest.raises(ValueError, match="at least one capability"):
         source_operation(capabilities=set(), consumes=OperationConsumes.CREDENTIAL)
+
+
+@pytest.mark.usefixtures("isolated_registry")
+def test_decorator_snapshots_capabilities_at_factory_time() -> None:
+    """
+    Verifies the capability set is snapped and validated atomically: mutating
+    the caller's collection after the factory call changes nothing.
+    """
+    # Precondition.
+    capabilities = {CredentialCapability.INDEXING}
+    decorator = source_operation(
+        capabilities=capabilities, consumes=OperationConsumes.CREDENTIAL
+    )
+    capabilities.clear()
+
+    # Under test.
+    class _SnapshotOperations(SourceOperations):
+        source = DocumentSource.SLACK
+
+        @decorator
+        def probe(self) -> None:
+            return None
+
+    # Postcondition.
+    assert _SnapshotOperations.operation_specs()["probe"].capabilities == {
+        CredentialCapability.INDEXING
+    }
 
 
 def test_decorator_rejects_blank_untested_reason() -> None:
