@@ -4,10 +4,15 @@ Shared by the Docker and Kubernetes sandbox managers so the dev-server
 environment (base path, allowed dev origins) stays identical across backends.
 """
 
+from pathlib import Path
 from urllib.parse import urlparse
 
 from onyx.configs.app_configs import WEB_DOMAIN
 from onyx.server.features.build.sandbox.base import BUN_CACHE_DIR
+
+_TEMPLATE_NEXT_CONFIG = (
+    Path(__file__).parent / "image" / "templates" / "outputs" / "web" / "next.config.ts"
+)
 
 
 def allowed_dev_origins() -> str:
@@ -35,6 +40,11 @@ def build_nextjs_start_script(
     Returns:
         Shell script string to start the NextJS server.
     """
+    # Legacy sessions (scaffolded with a WEBAPP_ASSET_PREFIX placeholder config)
+    # get rewritten to the current template. Read it rather than duplicate it, so
+    # the two can't drift.
+    template_next_config = _TEMPLATE_NEXT_CONFIG.read_text().strip()
+
     install_check = ""
     if check_node_modules:
         install_check = f"""
@@ -47,6 +57,10 @@ fi
 
     return f"""
 set -e
+# Naive-path fallback: the session's dedicated port, read by the template's
+# `dev` script (`next dev -p $(cat ../../.nextjs-port ...)`) so a `bun run dev`
+# the agent runs by hand still binds the port the preview proxy routes to.
+echo {nextjs_port} > {session_path}/.nextjs-port
 # Replay safety: a live server already attached to this session keeps its
 # port; spawning a second one would fail to bind and leave a zombie. The
 # check-and-spawn is serialized under its own flock so two replays (e.g. a
@@ -66,36 +80,21 @@ if [ -n "$NEXTJS_PID" ] && kill -0 "$NEXTJS_PID" 2>/dev/null && \
 else
 cd {session_path}/outputs/web
 {install_check}
+export ONYX_WEBAPP_PORT={nextjs_port}
 export ONYX_WEBAPP_BASE_PATH="/api/build/sessions/$(basename {session_path})/webapp"
 export ONYX_WEBAPP_ALLOWED_DEV_ORIGINS="{allowed_dev_origins()}"
 if grep -q "WEBAPP_ASSET_PREFIX" next.config.ts 2>/dev/null; then
     cat > next.config.ts <<'EOF'
-import type {{ NextConfig }} from "next";
-
-const webappBasePath = process.env.ONYX_WEBAPP_BASE_PATH || undefined;
-const allowedDevOrigins = (process.env.ONYX_WEBAPP_ALLOWED_DEV_ORIGINS || "")
-  .split(",")
-  .map((origin) => origin.trim())
-  .filter(Boolean);
-
-const nextConfig: NextConfig = {{}};
-
-if (webappBasePath) {{
-  nextConfig.basePath = webappBasePath;
-  nextConfig.assetPrefix = webappBasePath;
-}}
-
-if (allowedDevOrigins.length > 0) {{
-  nextConfig.allowedDevOrigins = allowedDevOrigins;
-}}
-
-export default nextConfig;
+{template_next_config}
 EOF
 fi
 echo "Starting Next.js dev server on port {nextjs_port}..."
+# Port comes from ONYX_WEBAPP_PORT (exported above), resolved by the template's
+# `dev` script — a single source of truth shared with the agent's naive path,
+# and no duplicate -p flag.
 # 9>&-: the server must not inherit the lock fd, or it would hold the
 # check-and-spawn lock for its entire lifetime.
-nohup bun run dev -- -H 0.0.0.0 -p {nextjs_port} > {session_path}/nextjs.log 2>&1 9>&- &
+nohup bun run dev -- -H 0.0.0.0 > {session_path}/nextjs.log 2>&1 9>&- &
 NEXTJS_PID=$!
 echo "Next.js server started with PID $NEXTJS_PID"
 echo $NEXTJS_PID > {session_path}/nextjs.pid

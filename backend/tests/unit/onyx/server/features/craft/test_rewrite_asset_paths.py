@@ -23,6 +23,10 @@ NEXT_TEMPLATE_CONFIG = (
     / "sandbox/image/templates/outputs/web/next.config.ts"
 )
 NEXTJS_DEV_SCRIPT = Path(api.__file__).resolve().parents[0] / "sandbox/nextjs_dev.py"
+SANDBOX_WEB_NEXT_CONFIG = (
+    Path(api.__file__).resolve().parents[0]
+    / "sandbox/image/templates/outputs/web/next.config.ts"
+)
 WEB_NEXT_CONFIG = find_ancestor_containing("web/next.config.js") / "web/next.config.js"
 
 
@@ -50,8 +54,11 @@ class TestNextjsProxyMountContract:
         ) in source
         assert "export WEBAPP_ASSET_PREFIX" not in source
         assert 'grep -q "WEBAPP_ASSET_PREFIX" next.config.ts' in source
-        assert "nextConfig.basePath = webappBasePath" in source
-        assert "nextConfig.assetPrefix = webappBasePath" in source
+        # The legacy rewrite now injects the scaffold template verbatim, so the
+        # basePath/assetPrefix contract is pinned on the template itself.
+        template = SANDBOX_WEB_NEXT_CONFIG.read_text()
+        assert "nextConfig.basePath = webappBasePath" in template
+        assert "nextConfig.assetPrefix = webappBasePath" in template
 
     def test_web_dev_rewrites_hmr_websocket_to_backend(self) -> None:
         """Local Next dev cannot proxy websocket upgrades via /api/[...path]."""

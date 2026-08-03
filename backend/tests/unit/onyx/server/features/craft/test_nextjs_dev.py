@@ -31,7 +31,25 @@ def test_start_script_exports_allowed_dev_origins() -> None:
         'export ONYX_WEBAPP_BASE_PATH="/api/build/sessions/'
         f'$(basename {_SESSION_PATH})/webapp"' in script
     )
-    assert "-p 3010" in script
+
+
+def test_start_script_port_is_env_driven_not_a_dup_flag() -> None:
+    """The managed launch passes the port via ONYX_WEBAPP_PORT (resolved by the
+    template's `dev` script), not a `-p` flag — so it never collides with the
+    dev script's own `-p` and stays the single source of truth."""
+    script = build_nextjs_start_script(_SESSION_PATH, 3010)
+
+    assert "export ONYX_WEBAPP_PORT=3010" in script
+    assert "-p 3010" not in script
+    assert "bun run dev -- -H 0.0.0.0 >" in script
+
+
+def test_start_script_writes_naive_path_port_file() -> None:
+    """A hand-started `bun run dev` reads this file, so the preview proxy still
+    finds the server on the port it routes to."""
+    script = build_nextjs_start_script(_SESSION_PATH, 3010)
+
+    assert f"echo 3010 > {_SESSION_PATH}/.nextjs-port" in script
 
 
 def test_start_script_allowed_dev_origins_is_hostname_only() -> None:
