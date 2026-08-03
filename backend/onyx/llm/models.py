@@ -17,8 +17,6 @@ class ToolChoiceOptions(str, Enum):
 
 
 class NamedToolChoice(BaseModel):
-    """Force the model to call one specific tool by name."""
-
     model_config = ConfigDict(frozen=True)
 
     name: str

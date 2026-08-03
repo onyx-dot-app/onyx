@@ -280,7 +280,6 @@ def _parse_tool_choice(raw: Any) -> ToolChoice | None:
         if isinstance(name, str) and name:
             return NamedToolChoice(name=name)
         raise OnyxError(OnyxErrorCode.INVALID_INPUT, "tool_choice names no function.")
-    # Any other shape has no known mapping; refuse rather than guess.
     raise OnyxError(
         OnyxErrorCode.INVALID_INPUT,
         f"Unsupported tool_choice {raw!r}.",
