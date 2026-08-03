@@ -44,6 +44,7 @@ from onyx.db.models import (
     UserGroup,
 )
 from onyx.db.search_settings import get_active_search_settings_list
+from onyx.db.telemetry_snapshot import build_deployment_snapshot
 from onyx.redis.redis_pool import (
     get_redis_client,
     get_shared_redis_client,
@@ -1193,3 +1194,58 @@ def emit_version_telemetry(*, tenant_id: str) -> None:
     if not delivered:
         # release the slot so the next hourly tick retries
         redis_std.delete(_VERSION_TELEMETRY_EMITTED_KEY)
+
+
+"""Deployment snapshot telemetry"""
+
+_DEPLOYMENT_SNAPSHOT_EMITTED_KEY = "monitoring_deployment_snapshot_emitted"
+_DEPLOYMENT_SNAPSHOT_TTL_SECONDS = 24 * 60 * 60
+
+
+@shared_task(
+    name=OnyxCeleryTask.EMIT_DEPLOYMENT_SNAPSHOT_TELEMETRY,
+    ignore_result=True,
+    soft_time_limit=_MONITORING_SOFT_TIME_LIMIT,
+    time_limit=_MONITORING_TIME_LIMIT,
+    queue=OnyxCeleryQueues.MONITORING,
+)
+def emit_deployment_snapshot_telemetry(*, tenant_id: str) -> None:
+    """Daily report of onboarding + usage state: users, connectors and their
+    indexing/permission-sync health, query volume, and feedback.
+
+    Runs for both self-hosted deployments and cloud tenants. Scheduled hourly
+    (beat schedule state doesn't survive restarts, so a daily interval could
+    never fire); the 1-day-TTL Redis marker enforces the daily cadence.
+    """
+    if DISABLE_TELEMETRY:
+        return
+
+    CURRENT_TENANT_ID_CONTEXTVAR.set(tenant_id)
+
+    redis_std = get_redis_client(tenant_id=tenant_id)
+    # atomically claim the daily slot so overlapping runs can't double-report
+    if not redis_std.set(
+        _DEPLOYMENT_SNAPSHOT_EMITTED_KEY,
+        "1",
+        nx=True,
+        ex=_DEPLOYMENT_SNAPSHOT_TTL_SECONDS,
+    ):
+        return
+
+    try:
+        with get_session_with_current_tenant() as db_session:
+            snapshot = build_deployment_snapshot(db_session)
+
+        delivered = optional_telemetry(
+            record_type=RecordType.DEPLOYMENT_SNAPSHOT,
+            data=snapshot.model_dump(mode="json"),
+            tenant_id=tenant_id,
+            blocking=True,
+        )
+    except Exception:
+        task_logger.exception("Failed to build deployment snapshot telemetry")
+        delivered = False
+
+    if not delivered:
+        # release the slot so the next hourly tick retries
+        redis_std.delete(_DEPLOYMENT_SNAPSHOT_EMITTED_KEY)

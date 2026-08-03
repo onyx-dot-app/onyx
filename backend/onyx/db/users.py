@@ -184,7 +184,7 @@ def get_all_users(
     return db_session.scalars(stmt).unique().all()
 
 
-def _get_accepted_user_where_clause(
+def get_accepted_user_where_clause(
     email_filter_string: str | None = None,
     roles_filter: list[UserRole] = [],
     include_external: bool = False,
@@ -245,7 +245,7 @@ def get_all_accepted_users(
     Uses the same filtering as the paginated endpoint but without
     search, role, or active filters."""
     stmt = select(User)
-    where_clause = _get_accepted_user_where_clause(
+    where_clause = get_accepted_user_where_clause(
         include_external=include_external,
     )
     stmt = stmt.where(*where_clause).order_by(User.email)
@@ -263,7 +263,7 @@ def get_page_of_filtered_users(
 ) -> Sequence[User]:
     users_stmt = select(User)
 
-    where_clause = _get_accepted_user_where_clause(
+    where_clause = get_accepted_user_where_clause(
         email_filter_string=email_filter_string,
         roles_filter=roles_filter,
         include_external=include_external,
@@ -284,7 +284,7 @@ def get_total_filtered_users_count(
     roles_filter: list[UserRole] = [],
     include_external: bool = False,
 ) -> int:
-    where_clause = _get_accepted_user_where_clause(
+    where_clause = get_accepted_user_where_clause(
         email_filter_string=email_filter_string,
         roles_filter=roles_filter,
         include_external=include_external,
@@ -305,7 +305,7 @@ def get_user_counts_by_role_and_status(
     Excludes API key users, anonymous users, and no-auth placeholder users.
     Uses a single query with conditional aggregation.
     """
-    base_where = _get_accepted_user_where_clause()
+    base_where = get_accepted_user_where_clause()
     role_col = User.__table__.c.role
     is_active_col = User.__table__.c.is_active
 
