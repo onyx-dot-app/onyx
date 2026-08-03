@@ -17,21 +17,14 @@ parent_dir = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 sys.path.append(parent_dir)
 
 from ee.onyx.db.license import upsert_license  # noqa: E402
-from ee.onyx.utils.license import verify_license_signature  # noqa: E402
+from ee.onyx.utils.license import (  # noqa: E402
+    normalize_license_file,
+    verify_license_signature,
+)
 from onyx.db.engine.sql_engine import (  # noqa: E402
     SqlEngine,
     get_session_with_current_tenant,
 )
-
-_PEM_BEGIN = "-----BEGIN ONYX LICENSE-----"
-_PEM_END = "-----END ONYX LICENSE-----"
-
-
-def _strip_pem_delimiters(content: str) -> str:
-    content = content.strip()
-    if content.startswith(_PEM_BEGIN) and content.endswith(_PEM_END):
-        return "\n".join(content.split("\n")[1:-1]).strip()
-    return content
 
 
 def main() -> None:
@@ -40,7 +33,7 @@ def main() -> None:
         print("ONYX_DEV_LICENSE empty: skipping license seed")
         return
 
-    license_data = _strip_pem_delimiters(blob)
+    license_data = normalize_license_file(blob)
     verify_license_signature(license_data)
 
     SqlEngine.init_engine(pool_size=1, max_overflow=0)
