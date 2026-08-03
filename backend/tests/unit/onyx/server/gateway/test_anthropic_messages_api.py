@@ -298,7 +298,6 @@ def test_anthropic_reasoning_effort_output_config_alone_is_honored() -> None:
     [
         ("stop", False, "end_turn"),
         ("length", False, "max_tokens"),
-        # Truncation dominates even when tool calls were accumulated.
         ("length", True, "max_tokens"),
         ("tool_calls", True, "tool_use"),
         ("stop", True, "tool_use"),
