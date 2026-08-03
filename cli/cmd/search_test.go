@@ -429,7 +429,24 @@ func TestWriteSearchJSON_TempSaveFailureEmitsFullResponse(t *testing.T) {
 	}
 }
 
-func TestBuildTruncatedSearchOutput_SingleOversizedResult(t *testing.T) {
+// renderTruncated runs truncateSearchOutput and marshals the envelope the
+// way writeSearchJSON does, so size assertions match real stdout bytes.
+func renderTruncated(
+	t *testing.T, output searchOutput, limit, totalBytes int, fullPath string,
+) []byte {
+	t.Helper()
+	truncated, err := truncateSearchOutput(output, limit, totalBytes, fullPath)
+	if err != nil {
+		t.Fatalf("truncateSearchOutput failed: %v", err)
+	}
+	data, err := json.MarshalIndent(truncated, "", "  ")
+	if err != nil {
+		t.Fatalf("marshal failed: %v", err)
+	}
+	return data
+}
+
+func TestTruncateSearchOutput_SingleOversizedResult(t *testing.T) {
 	// Multibyte runes verify the trim lands on a rune boundary.
 	content := strings.Repeat("héllo→wörld ", 500)
 	output := searchOutput{Results: []searchOutputResult{{
@@ -439,10 +456,7 @@ func TestBuildTruncatedSearchOutput_SingleOversizedResult(t *testing.T) {
 	}}}
 
 	limit := 2000
-	data, err := buildTruncatedSearchOutput(output, limit, 99999, "/tmp/full.json")
-	if err != nil {
-		t.Fatalf("buildTruncatedSearchOutput failed: %v", err)
-	}
+	data := renderTruncated(t, output, limit, 99999, "/tmp/full.json")
 	if len(data) > limit {
 		t.Fatalf("envelope is %d bytes, want <= %d", len(data), limit)
 	}
@@ -469,7 +483,7 @@ func TestBuildTruncatedSearchOutput_SingleOversizedResult(t *testing.T) {
 	}
 }
 
-func TestBuildTruncatedSearchOutput_OversizedTitleFallsBackToZeroResults(t *testing.T) {
+func TestTruncateSearchOutput_OversizedTitleFallsBackToZeroResults(t *testing.T) {
 	// Content trimming can't help when the overflow lives in an untrimmed
 	// field: even the empty-content render exceeds the limit, so the builder
 	// must fall back to the zero-results envelope (which fits).
@@ -480,10 +494,7 @@ func TestBuildTruncatedSearchOutput_OversizedTitleFallsBackToZeroResults(t *test
 	}}}
 
 	limit := 1000
-	data, err := buildTruncatedSearchOutput(output, limit, 99999, "/tmp/full.json")
-	if err != nil {
-		t.Fatalf("buildTruncatedSearchOutput failed: %v", err)
-	}
+	data := renderTruncated(t, output, limit, 99999, "/tmp/full.json")
 	if len(data) > limit {
 		t.Fatalf("envelope is %d bytes, want <= %d", len(data), limit)
 	}
@@ -506,15 +517,12 @@ func TestBuildTruncatedSearchOutput_OversizedTitleFallsBackToZeroResults(t *test
 	}
 }
 
-func TestBuildTruncatedSearchOutput_TinyLimitStillValidJSON(t *testing.T) {
+func TestTruncateSearchOutput_TinyLimitStillValidJSON(t *testing.T) {
 	output := searchOutput{Results: makeSearchResults(3, 200)}
 
 	// Limit smaller than the metadata itself: envelope may exceed the limit
 	// but must remain valid JSON.
-	data, err := buildTruncatedSearchOutput(output, 50, 1234, "/tmp/full.json")
-	if err != nil {
-		t.Fatalf("buildTruncatedSearchOutput failed: %v", err)
-	}
+	data := renderTruncated(t, output, 50, 1234, "/tmp/full.json")
 	var parsed searchOutput
 	if err := json.Unmarshal(data, &parsed); err != nil {
 		t.Fatalf("envelope is not valid JSON: %v", err)
@@ -527,5 +535,148 @@ func TestBuildTruncatedSearchOutput_TinyLimitStillValidJSON(t *testing.T) {
 	}
 	if parsed.Truncation.TotalResults != 3 {
 		t.Errorf("TotalResults = %d, want 3", parsed.Truncation.TotalResults)
+	}
+}
+
+func TestWriteMultiSearchJSON_UnderLimit(t *testing.T) {
+	var out, errOut bytes.Buffer
+	ios := &iostreams.IOStreams{Out: &out, ErrOut: &errOut}
+	output := multiSearchOutput{Searches: []multiSearchEntry{
+		{Query: "first query", Results: makeSearchResults(2, 100)},
+		{Query: "second query", Error: "search failed: server unreachable"},
+	}}
+
+	if err := writeMultiSearchJSON(ios, output, 50000); err != nil {
+		t.Fatalf("writeMultiSearchJSON failed: %v", err)
+	}
+
+	var parsed multiSearchOutput
+	if err := json.Unmarshal(out.Bytes(), &parsed); err != nil {
+		t.Fatalf("stdout is not valid JSON: %v", err)
+	}
+	if len(parsed.Searches) != 2 {
+		t.Fatalf("Searches length = %d, want 2", len(parsed.Searches))
+	}
+	// Entries must keep argument order.
+	if parsed.Searches[0].Query != "first query" || parsed.Searches[1].Query != "second query" {
+		t.Errorf("queries out of order: %q, %q", parsed.Searches[0].Query, parsed.Searches[1].Query)
+	}
+	if parsed.Searches[0].Error != "" || len(parsed.Searches[0].Results) != 2 {
+		t.Errorf("success entry: error=%q results=%d, want no error and 2 results",
+			parsed.Searches[0].Error, len(parsed.Searches[0].Results))
+	}
+	if parsed.Searches[1].Error == "" || parsed.Searches[1].Results != nil {
+		t.Errorf("failed entry: error=%q results=%v, want error and null results",
+			parsed.Searches[1].Error, parsed.Searches[1].Results)
+	}
+	if parsed.Searches[0].Truncation != nil {
+		t.Error("under-limit output should not carry truncation metadata")
+	}
+	if errOut.Len() != 0 {
+		t.Fatalf("expected empty stderr, got %q", errOut.String())
+	}
+}
+
+func TestWriteMultiSearchJSON_OverLimitTruncatesPerQuery(t *testing.T) {
+	var out, errOut bytes.Buffer
+	ios := &iostreams.IOStreams{Out: &out, ErrOut: &errOut}
+	output := multiSearchOutput{Searches: []multiSearchEntry{
+		{Query: "big query", Results: makeSearchResults(20, 500)},
+		{Query: "small query", Results: makeSearchResults(1, 50)},
+		{Query: "broken query", Error: "search failed: timeout"},
+	}}
+
+	fullData, err := json.MarshalIndent(output, "", "  ")
+	if err != nil {
+		t.Fatalf("marshal failed: %v", err)
+	}
+	limit := 6000
+	if len(fullData) <= limit {
+		t.Fatalf("test setup: payload (%d bytes) must exceed limit %d", len(fullData), limit)
+	}
+
+	if err := writeMultiSearchJSON(ios, output, limit); err != nil {
+		t.Fatalf("writeMultiSearchJSON failed: %v", err)
+	}
+
+	var parsed multiSearchOutput
+	if err := json.Unmarshal(out.Bytes(), &parsed); err != nil {
+		t.Fatalf("stdout is not valid JSON: %v\n%s", err, out.String())
+	}
+	if len(parsed.Searches) != 3 {
+		t.Fatalf("Searches length = %d, want all 3 entries", len(parsed.Searches))
+	}
+
+	// The oversized entry is reduced and carries truncation metadata.
+	big := parsed.Searches[0]
+	tr := big.Truncation
+	if tr == nil {
+		t.Fatal("expected truncation metadata on the oversized entry")
+	}
+	t.Cleanup(func() { _ = os.Remove(tr.FullResponsePath) })
+	if tr.TotalResults != 20 {
+		t.Errorf("TotalResults = %d, want 20", tr.TotalResults)
+	}
+	if tr.ShownResults != len(big.Results) || tr.ShownResults >= 20 {
+		t.Errorf("ShownResults = %d with %d results, want a reduced prefix",
+			tr.ShownResults, len(big.Results))
+	}
+	// Survivors must be the relevance-ordered prefix, not an arbitrary subset.
+	for i, r := range big.Results {
+		if want := fmt.Sprintf("Doc %d", i); r.Title != want {
+			t.Errorf("Results[%d].Title = %q, want %q", i, r.Title, want)
+		}
+	}
+
+	// The combined envelope must actually respect the byte bound.
+	if out.Len() > limit+1 { // +1 for trailing newline
+		t.Errorf("stdout is %d bytes, want <= %d", out.Len(), limit+1)
+	}
+
+	// Entries under the uniform result cap pass through untouched.
+	small := parsed.Searches[1]
+	if small.Truncation != nil || len(small.Results) != 1 {
+		t.Errorf("small entry: truncation=%v results=%d, want untouched", small.Truncation, len(small.Results))
+	}
+	broken := parsed.Searches[2]
+	if broken.Error == "" || broken.Truncation != nil {
+		t.Errorf("failed entry: error=%q truncation=%v, want error preserved", broken.Error, broken.Truncation)
+	}
+
+	// Metadata must describe the combined full payload on disk.
+	if tr.TotalBytes != len(fullData) {
+		t.Errorf("TotalBytes = %d, want %d", tr.TotalBytes, len(fullData))
+	}
+	saved, err := os.ReadFile(tr.FullResponsePath)
+	if err != nil {
+		t.Fatalf("failed to read full response file: %v", err)
+	}
+	if !bytes.Equal(saved, fullData) {
+		t.Error("full response file does not match the full payload")
+	}
+	if !strings.Contains(errOut.String(), "response truncated") {
+		t.Errorf("stderr should mention truncation, got %q", errOut.String())
+	}
+}
+
+func TestClampError(t *testing.T) {
+	if got := clampError(errors.New("nope")); got != "nope" {
+		t.Errorf("short error = %q, want unchanged", got)
+	}
+
+	// Multibyte runes verify the cut lands on a rune boundary.
+	long := errors.New(strings.Repeat("héllo→wörld ", 500))
+	got := clampError(long)
+	if len(got) > maxInlineErrorBytes+len(" … (truncated)") {
+		t.Errorf("clamped length = %d, want <= %d", len(got), maxInlineErrorBytes+len(" … (truncated)"))
+	}
+	if !utf8.ValidString(got) {
+		t.Error("clamped message is not valid UTF-8")
+	}
+	if !strings.HasSuffix(got, " … (truncated)") {
+		t.Errorf("clamped message should note truncation, got suffix %q", got[len(got)-30:])
+	}
+	if !strings.HasPrefix(long.Error(), strings.TrimSuffix(got, " … (truncated)")) {
+		t.Error("clamped message is not a prefix of the original")
 	}
 }

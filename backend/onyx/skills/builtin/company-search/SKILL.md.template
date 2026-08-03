@@ -17,17 +17,28 @@ assume it exists.
 
 ## Usage
 
-    onyx-cli search "<query>"
+    onyx-cli search "<query>" ["<query>" ...]
+
+Each query is a full search pass that takes tens of seconds. Queries passed
+in one invocation run concurrently, so batch your independent questions into
+a single call — reach for separate sequential calls only when a query depends
+on an earlier result. Keep scripted post-processing (Python, heredoc parsers)
+out of the shell call that runs searches — write output to files and parse in
+a separate command, so a hung parse can't hit the shell timeout and discard
+the completed searches with it.
 
 | Flag | Description | Example |
 |------|-------------|---------|
 | `--source` | Filter by source type (comma-separated) | `--source slack,google_drive` |
 | `--days` | Only return results from the last N days | `--days 30` |
+| `--no-query-expansion` | Skip LLM query rewriting — faster, but only safe when the query is already precise (exact names, titles, quoted phrases) | `--no-query-expansion "DataCamp POC Call"` |
 
 ## Output
 
-Stdout is JSON with a top-level `results` array. Each result has `title`,
-`url`, `source_type`, `content`, and `updated_at`. Results contain only
-documents the LLM judged relevant, ordered by relevance; `content` is the
-full chunk text of each. Cite results by title and URL when referencing
-them in your response.
+Stdout is JSON. A single query returns a top-level `results` array; multiple
+queries return a `searches` array of `{query, results}` entries in argument
+order (a failed query carries an `error` field instead of results). Each
+result has `title`, `url`, `source_type`, `content`, and `updated_at`.
+Results contain only documents the LLM judged relevant, ordered by relevance;
+`content` is the full chunk text of each. Cite results by title and URL when
+referencing them in your response.

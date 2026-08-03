@@ -60,11 +60,16 @@ Exit code 0 on success. Non-zero with a descriptive error on failure (see exit c
 onyx-cli search "What is our deployment process?"
 ```
 
-Returns ranked, cited documents from the Onyx knowledge base as JSON. Default output is a lean shape: `{"results": [{title, url, source_type, content, updated_at}, ...]}`. Results contain only documents the LLM judged relevant, ordered by relevance; `content` is the full chunk text of each. Use `--raw` for the full API response (adds per-result `citation_id`).
+Returns ranked, cited documents from the Onyx knowledge base as JSON. Default output is a lean shape: `{"results": [{title, url, source_type, content, updated_at}, ...]}`. Results contain only documents the LLM judged relevant, ordered by relevance; `content` is the full chunk text of each. Use `--raw` for the full API response — printed bare for one query (adds per-result `citation_id`), and as `{"searches": [{query, response}, ...]}` for several.
 
-Stdout is always valid JSON. If the response exceeds `--max-output` bytes (default 50000 for non-TTY), lowest-ranked results are dropped and a `truncation` object is added: `{truncated, total_results, shown_results, total_bytes, content_truncated, full_response_path, hint}`. The complete response is saved to `full_response_path`; read that file for the dropped results.
+Each query is a full search pass that takes tens of seconds. Multiple queries passed in one invocation run concurrently — batch independent questions into a single call instead of running them sequentially. Multi-query output is `{"searches": [{query, results}, ...]}` in argument order; a failed query carries an `error` field instead of `results`, and the command exits non-zero only when every query fails. Keep scripted post-processing (custom scripts, heredoc parsers) out of the shell call that runs searches — write output to files and parse in a separate command, so a hung parse can't hit your shell timeout and discard the completed searches with it.
+
+Stdout is always valid JSON. If the response exceeds `--max-output` bytes (default 50000 for non-TTY), lowest-ranked results are dropped and a `truncation` object is added: `{truncated, total_results, shown_results, total_bytes, content_truncated, full_response_path, hint}`. The complete response — shaped like the printed output (`results` for one query, `searches` for several) — is saved to `full_response_path`; read that file for the dropped results. With multiple queries, per-query result counts are capped uniformly until the combined output fits, so small result sets pass through whole.
 
 ```bash
+# Batch independent questions (concurrent)
+onyx-cli search "Q3 roadmap" "hiring plan" "incident postmortem template"
+
 # Filter by source
 onyx-cli search --source slack,google_drive "auth migration status"
 
@@ -87,7 +92,7 @@ onyx-cli search --no-query-expansion "exact error message text"
 | `--days`                | int    | Only return results from the last N days                         |
 | `--agent-id`            | int    | Agent ID for scoped search (inherits filters, document sets)     |
 | `--raw`                 | bool   | Output full API response (adds per-result citation_id) |
-| `--no-query-expansion`  | bool   | Skip LLM query expansion (faster, less comprehensive)           |
+| `--no-query-expansion`  | bool   | Skip LLM query expansion — faster, but only safe when the query is already precise (exact names, titles, quoted phrases) |
 | `--max-output`          | int    | Max bytes to print before truncating (0 to disable, default 50000 for non-TTY, ignored with --raw) |
 
 ### Ask a question
