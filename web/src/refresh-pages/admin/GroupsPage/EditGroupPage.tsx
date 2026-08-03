@@ -248,9 +248,9 @@ function EditGroupPage({ groupId }: EditGroupPageProps) {
           const isManager = managerIds.has(userId);
           const isPersisted = persistedMemberIds.has(userId);
           const isPending = pendingManagerIds.has(userId);
-          // Block self-revoke: dropping your own manager row loses your access mid-edit,
-          // leaving a stale editable page; an admin or another manager can do it instead.
-          const isSelfRevoke =
+          // Your own manager row: block revoke and member-remove — either drops your own
+          // access mid-edit (a manager must stay a member), leaving a stale editable page.
+          const isOwnManagerRow =
             isManager && currentUserId != null && userId === currentUserId;
           return (
             <div className="flex items-center gap-1">
@@ -258,12 +258,12 @@ function EditGroupPage({ groupId }: EditGroupPageProps) {
                 icon={isPending ? SvgSimpleLoader : SvgShield}
                 tertiary
                 transient={isManager}
-                disabled={!isPersisted || isPending || isSelfRevoke}
+                disabled={!isPersisted || isPending || isOwnManagerRow}
                 aria-label={isManager ? "Revoke manager" : "Make manager"}
                 tooltip={
                   !isPersisted
                     ? "Save the group before assigning a manager"
-                    : isSelfRevoke
+                    : isOwnManagerRow
                       ? "You can't revoke your own manager access"
                       : isManager
                         ? "Revoke manager"
@@ -277,6 +277,13 @@ function EditGroupPage({ groupId }: EditGroupPageProps) {
               <IconButton
                 icon={SvgMinusCircle}
                 tertiary
+                disabled={isOwnManagerRow}
+                aria-label="Remove member"
+                tooltip={
+                  isOwnManagerRow
+                    ? "You can't remove yourself while managing this group"
+                    : undefined
+                }
                 onClick={(e) => {
                   e.stopPropagation();
                   handleRemoveMember(userId);
@@ -312,9 +319,19 @@ function EditGroupPage({ groupId }: EditGroupPageProps) {
   const handleSelectionChange = useCallback(
     (ids: string[]) => {
       if (!initialized) return;
-      setSelectedUserIds([...ids, ...hiddenMemberIds]);
+      const next = [...ids, ...hiddenMemberIds];
+      // A manager must stay a member; keep yourself selected so unchecking can't drop your
+      // own access on Save.
+      if (
+        currentUserId != null &&
+        managerIds.has(currentUserId) &&
+        !next.includes(currentUserId)
+      ) {
+        next.push(currentUserId);
+      }
+      setSelectedUserIds(next);
     },
-    [initialized, hiddenMemberIds]
+    [initialized, hiddenMemberIds, currentUserId, managerIds]
   );
 
   async function handleSave() {
