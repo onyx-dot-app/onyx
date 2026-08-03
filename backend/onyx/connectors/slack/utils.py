@@ -19,18 +19,25 @@ basic_retry_wrapper = retry_builder(tries=7)
 # number of messages we request per page when fetching paginated slack messages
 _SLACK_LIMIT = 900
 
-# An @ that starts a token, i.e. a mention rather than part of an email or URL
+# Skips an @ preceded by a word character, where a zero-width space would
+# split an address rather than defang a mention
 _MENTION_AT_PATTERN = re.compile(r"(?<!\w)@")
 
-# Regions where an @ must survive defanging: link tokens and code
-_NON_INTERACTIVE_SLACK_TEXT_PATTERN = re.compile(
+# Regions needing special handling: only a link destination and code are exempt
+# from defanging, a link label is not
+_DEFANG_EXEMPT_REGION_PATTERN = re.compile(
     r"<(?P<url>(?:https?://|mailto:)[^|<>]+)(?:\|(?P<label>[^<>]*))?>"
     r"|(?P<code>```[\s\S]*?```|`[^`\n]*`)"
 )
-# replace_special_catchall handles the labelled form. This also catches <!subteam^ID>
+# Optional label group, so the labelled form resolves to its label not the raw ID
 _SUBTEAM_MENTION_PATTERN = re.compile(
     r"<!subteam\^(?P<id>[^<>|]+)(?:\|(?P<label>[^<>]*))?>"
 )
+
+
+def _defang_mentions(text: str) -> str:
+    return _MENTION_AT_PATTERN.sub("@​", text)
+
 
 # used to serialize access to the retry TTL
 ONYX_SLACK_LOCK_TTL = 1800  # how long the lock is allowed to idle before it expires
@@ -344,16 +351,10 @@ class SlackTextCleaner:
         @ survives.
         """
 
-        def defang(text: str) -> str:
-            # Only an @ starting a token is a mention. One preceded by a word
-            # character belongs to an email or URL userinfo, where the
-            # zero-width space would split the address.
-            return _MENTION_AT_PATTERN.sub("@\u200b", text)
-
         result: list[str] = []
         cursor = 0
-        for match in _NON_INTERACTIVE_SLACK_TEXT_PATTERN.finditer(message):
-            result.append(defang(message[cursor : match.start()]))
+        for match in _DEFANG_EXEMPT_REGION_PATTERN.finditer(message):
+            result.append(_defang_mentions(message[cursor : match.start()]))
             url = match.group("url")
             label = match.group("label")
             if url is None or label is None:
@@ -361,7 +362,7 @@ class SlackTextCleaner:
             elif url.startswith("mailto:") and label == url.removeprefix("mailto:"):
                 result.append(match.group(0))
             else:
-                result.append(f"<{url}|{defang(label)}>")
+                result.append(f"<{url}|{_defang_mentions(label)}>")
             cursor = match.end()
-        result.append(defang(message[cursor:]))
+        result.append(_defang_mentions(message[cursor:]))
         return "".join(result)

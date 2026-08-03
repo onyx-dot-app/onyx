@@ -35,7 +35,11 @@ from onyx.onyxbot.slack.constants import (
     LIKE_BLOCK_ACTION_ID,
     SHOW_EVERYONE_ACTION_ID,
 )
-from onyx.onyxbot.slack.formatting import format_slack_link_url, format_slack_message
+from onyx.onyxbot.slack.formatting import (
+    escape_slack_specials,
+    format_slack_link_url,
+    format_slack_message,
+)
 from onyx.onyxbot.slack.icons import source_to_github_img_link
 from onyx.onyxbot.slack.models import (
     ActionValuesEphemeralMessage,
@@ -274,7 +278,9 @@ def _build_sources_blocks(
 
         owner_str = f"By {d.primary_owners[0]}" if d.primary_owners else None
         days_ago_str = _format_doc_updated_at(d.updated_at)
-        final_metadata_str = _clean_markdown_link_text(
+        # Sits outside the link, so it needs escaping rather than a markdown
+        # pass that would reinterpret punctuation in an owner's name
+        final_metadata_str = escape_slack_specials(
             " | ".join(
                 ([owner_str] if owner_str else [])
                 + ([days_ago_str] if days_ago_str else [])

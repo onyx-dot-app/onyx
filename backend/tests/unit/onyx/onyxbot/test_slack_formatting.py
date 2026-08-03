@@ -1,5 +1,5 @@
 from onyx.connectors.slack.utils import (
-    _NON_INTERACTIVE_SLACK_TEXT_PATTERN,
+    _DEFANG_EXEMPT_REGION_PATTERN,
     _SUBTEAM_MENTION_PATTERN,
 )
 from onyx.onyxbot.slack.blocks import _clean_markdown_link_text
@@ -84,7 +84,7 @@ def test_slack_token_patterns_stop_at_nested_openers() -> None:
 
     assert _SLACK_LINK_PATTERN.fullmatch(nested_link) is None
     assert _RENDERED_SLACK_LINK_PATTERN.fullmatch(nested_link) is None
-    assert _NON_INTERACTIVE_SLACK_TEXT_PATTERN.fullmatch(nested_link) is None
+    assert _DEFANG_EXEMPT_REGION_PATTERN.fullmatch(nested_link) is None
     assert _SUBTEAM_MENTION_PATTERN.fullmatch(nested_subteam) is None
 
 
@@ -297,6 +297,13 @@ def test_ordered_list_resumes_numbering_after_a_fenced_block() -> None:
     message = "1. one\n2. two:\n\n```\ncode\n```\n\n3. three"
 
     assert message == format_slack_message(message)
+
+
+def test_blockquoted_list_is_not_treated_as_nested() -> None:
+    # mistune counts every block container in attrs["depth"], so only list
+    # ancestry may indent
+    assert ">1. alpha\n>2. beta" == format_slack_message("> 1. alpha\n> 2. beta")
+    assert ">• a\n>• b" == format_slack_message("> - a\n> - b")
 
 
 def test_nested_list_opens_an_indented_line_of_its_own() -> None:

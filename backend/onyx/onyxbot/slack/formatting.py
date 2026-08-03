@@ -1,14 +1,16 @@
 import re
 from collections.abc import Callable
-from typing import TYPE_CHECKING, Any
+from typing import Any
 
-from mistune import HTMLRenderer, create_markdown
-
-if TYPE_CHECKING:
-    from mistune.core import InlineState
-    from mistune.inline_parser import InlineParser
-    from mistune.markdown import Markdown
-    from mistune.plugins import PluginRef
+from mistune import (
+    BlockState,
+    HTMLRenderer,
+    InlineParser,
+    InlineState,
+    Markdown,
+    PluginRef,
+    create_markdown,
+)
 
 # Tags that should be replaced with a newline (line-break and block-level elements)
 _HTML_NEWLINE_TAG_PATTERN = re.compile(
@@ -29,8 +31,8 @@ _CODE_PATTERN = re.compile(r"```[\s\S]*?```|`[^`\n]*`")
 _MARKDOWN_LINK_PATTERN = re.compile(r"\[(?:[^\[\]]|\[[^\]]*\])*\]\(")
 
 # Slack-style <url|text> links that LLMs sometimes emit directly. Mistune parses
-# <mailto:a@b.com|label> as one autolink and percent-encodes the pipe, so mailto
-# has to be recognised here rather than left to the parser.
+# <scheme:...|label> as one autolink and percent-encodes the pipe, so these are
+# rewritten before the parser sees them.
 _SLACK_LINK_PATTERN = re.compile(r"<((?:https?://|mailto:)[^|<>]+)\|([^<>]+)>")
 # Same shape against already-rendered output, where the label may be absent
 _RENDERED_SLACK_LINK_PATTERN = re.compile(
@@ -54,14 +56,15 @@ _URL_TRAILING_PUNCTUATION = ".,:;\"'*_~"
 _SLACK_SPECIALS: dict[str, str] = {"&": "&amp;", "<": "&lt;", ">": "&gt;"}
 
 
-def _escape_slack_specials(text: str) -> str:
+def escape_slack_specials(text: str) -> str:
+    """Make text safe to drop into mrkdwn without rendering it as markup."""
     for special, replacement in _SLACK_SPECIALS.items():
         text = text.replace(special, replacement)
     return text
 
 
 def format_slack_link_url(url: str) -> str:
-    return _escape_slack_specials(url.replace("|", "%7C"))
+    return escape_slack_specials(url.replace("|", "%7C"))
 
 
 def _escape_markdown_link_destination(url: str) -> str:
@@ -89,7 +92,7 @@ def _sanitize_html(text: str) -> str:
 def _transform_outside_code_blocks(
     message: str, transform: Callable[[str], str]
 ) -> str:
-    """Apply *transform* only where markdown does not keep the text literal."""
+    """Apply *transform* outside code spans and fenced blocks."""
     parts = _CODE_PATTERN.split(message)
     code_blocks = _CODE_PATTERN.findall(message)
 
@@ -173,15 +176,14 @@ def _convert_slack_links_to_markdown(message: str) -> str:
 
 
 def _append_autolink(
-    inline: "InlineParser",
-    state: "InlineState",
+    inline: InlineParser,
+    state: InlineState,
     label: str,
     url: str,
     end_pos: int,
 ) -> int:
-    # in_link is load-bearing beyond nesting: SlackRenderer.link compares the
-    # label to the href before flattening, so a nested autolink would defeat
-    # the redundant-label collapse.
+    # link() compares label to href before flattening, so a nested autolink
+    # would defeat the redundant-label collapse
     if state.in_link or state.in_image:
         inline.process_text(label, state)
     else:
@@ -210,9 +212,7 @@ def _trim_url_trailing_punctuation(url: str) -> str:
     return url
 
 
-def _parse_url_link(
-    inline: "InlineParser", m: re.Match[str], state: "InlineState"
-) -> int:
+def _parse_url_link(inline: InlineParser, m: re.Match[str], state: InlineState) -> int:
     url = _trim_url_trailing_punctuation(m.group(0))
     return _append_autolink(
         inline,
@@ -224,7 +224,7 @@ def _parse_url_link(
 
 
 def _parse_email_link(
-    inline: "InlineParser", m: re.Match[str], state: "InlineState"
+    inline: InlineParser, m: re.Match[str], state: InlineState
 ) -> int:
     email = m.group(0)
     if _email_match_starts_inside_local_part(m, state):
@@ -239,9 +239,7 @@ def _parse_email_link(
     )
 
 
-def _email_match_starts_inside_local_part(
-    m: re.Match[str], state: "InlineState"
-) -> bool:
+def _email_match_starts_inside_local_part(m: re.Match[str], state: InlineState) -> bool:
     """True when the match is a truncated local part rather than a whole address.
 
     A preceding local-part character normally means the regex started mid-address.
@@ -269,12 +267,11 @@ def _email_match_starts_inside_local_part(
     )
 
 
-def _slack_autolink(md: "Markdown") -> None:
+def _slack_autolink(md: Markdown) -> None:
     """Mistune plugin turning bare URLs and emails into link tokens.
 
-    Inline registration only buys code-span and fenced-block skipping. Link and
-    image labels still reach these rules, so nesting is prevented by the
-    in_link/in_image guard in _append_autolink.
+    Link and image labels still reach these rules, so nesting is prevented by
+    the in_link/in_image guard in _append_autolink.
     """
     md.inline.register("slack_url_link", _URL_LINK_PATTERN, _parse_url_link)
     md.inline.register("slack_email_link", _EMAIL_LINK_PATTERN, _parse_email_link)
@@ -293,7 +290,7 @@ def format_slack_message(message: str | None, render_links: bool = True) -> str:
     normalized_message = _transform_outside_code_blocks(
         message, _normalize_link_destinations
     )
-    plugins: list["PluginRef"] = ["strikethrough", "table"]
+    plugins: list[PluginRef] = ["strikethrough", "table"]
     if render_links:
         plugins.append(_slack_autolink)
     md = create_markdown(
@@ -317,9 +314,21 @@ class SlackRenderer(HTMLRenderer):
         self._render_links = render_links
         self._table_headers: list[str] = []
         self._current_row_cells: list[str] = []
+        self._list_depth = 0
+
+    def render_token(self, token: dict[str, Any], state: BlockState) -> str:
+        # attrs["depth"] counts every block container, so a list inside a
+        # blockquote reports depth 1. Only list ancestry may indent.
+        if token["type"] != "list":
+            return super().render_token(token, state)
+        self._list_depth += 1
+        try:
+            return super().render_token(token, state)
+        finally:
+            self._list_depth -= 1
 
     def escape_special(self, text: str) -> str:
-        return _escape_slack_specials(text)
+        return escape_slack_specials(text)
 
     def heading(self, text: str, level: int, **attrs: Any) -> str:  # noqa: ARG002
         return f"*{text}*\n\n"
@@ -334,10 +343,10 @@ class SlackRenderer(HTMLRenderer):
         return f"~{text}~"
 
     def list(self, text: str, ordered: bool, **attrs: Any) -> str:
-        depth = attrs.get("depth", 0)
-        # A fenced block or blank line closes a list, so the remaining items
-        # arrive as a fresh list carrying the number they have to resume from
-        number = attrs.get("start", 1)
+        depth: int = self._list_depth - 1
+        # An interrupting block splits a list, so the tail arrives as a fresh
+        # list carrying the number it has to resume from
+        number: int = attrs.get("start", 1)
         lines = text.split("\n")
         for i, line in enumerate(lines):
             if not line.startswith("li: "):
