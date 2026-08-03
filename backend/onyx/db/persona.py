@@ -348,11 +348,11 @@ def _assert_persona_update_within_managed_scope(
     """GATE 2 for a scoped group manager on the create/update path. Global holders
     (admins, global MANAGE_AGENTS) and non-managers are untouched. For a GROUP-scoped
     agent, a manager relying on SCOPED authority may neither publish it (is_public)
-    nor use groups outside those they manage; a personal (no-group) agent follows the
-    normal owner path, like any ADD_AGENTS user. Current groups + privacy are re-read
-    from the DB, not trusted from the request. This complements the group-share gate
-    in ``update_persona_access``, which does not fire when an update leaves groups
-    unchanged (e.g. a bare is_public flip)."""
+    nor use groups outside those they manage; a private no-group agent follows the
+    normal owner path, but publishing is still rejected. Current groups + privacy are
+    re-read from the DB, not trusted from the request. Complements the group-share gate
+    in ``update_persona_access``, which stays silent when groups are unchanged (e.g. a
+    bare is_public flip)."""
     if has_permission(user, Permission.MANAGE_AGENTS) is not PermissionAuthority.SCOPED:
         return
     current_group_ids: list[int] = []
@@ -368,9 +368,14 @@ def _assert_persona_update_within_managed_scope(
     requested_is_public = (
         request.is_public if request.is_public is not None else current_is_public
     )
-    # No group on either side: a personal (no-group) agent, not a group-scoped
-    # resource — nothing for the managed-group gate to authorize.
-    if not current_group_ids and not requested_group_ids:
+    # No-group + private personal agent: nothing to gate. A publish request instead
+    # falls through and is rejected below — a scoped manager can't take an agent org-wide.
+    if (
+        not current_group_ids
+        and not requested_group_ids
+        and not current_is_public
+        and not requested_is_public
+    ):
         return
     assert_within_scope(
         user,
