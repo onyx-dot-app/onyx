@@ -10,7 +10,7 @@ import importlib
 import sys
 from collections.abc import Collection, Sequence
 from pathlib import Path
-from unittest.mock import MagicMock
+from unittest.mock import MagicMock, create_autospec
 
 from pydantic import BaseModel, ConfigDict
 
@@ -69,11 +69,13 @@ def compute_uncovered_units(
     A unit is covered when a check of the unit's capability invoked the
     operation (with ``variant=`` naming the unit's variant, for variant-bearing
     operations). ``untested``-annotated operations are exempt. Checks run
-    against mock data and may raise; their calls are recorded regardless.
+    against mock data and may raise; their valid calls still count. The spy is
+    autospecced, so a call whose shape the real operation would reject raises
+    and records nothing -- a broken call cannot certify coverage.
     """
     exercised: set[tuple[str, str | None, CredentialCapability]] = set()
     for check in checks:
-        spy = MagicMock(spec=gateway_class)
+        spy = create_autospec(gateway_class, instance=True)
         context = CapabilityCheckContext(
             source=gateway_class.source,
             credential_json={},

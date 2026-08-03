@@ -202,6 +202,17 @@ class SourceOperations(ABC):
                 "fence knows what to guard; declare an explicit empty tuple "
                 "for a genuinely SDK-less connector."
             )
+        # Shape matters, not just presence: a plain string is a Collection of
+        # single characters to the fence, which would then match nothing and
+        # silently pass.
+        sdk_modules = vars(cls)["sdk_modules"]
+        if not isinstance(sdk_modules, tuple) or any(
+            not isinstance(module, str) or not module for module in sdk_modules
+        ):
+            raise TypeError(
+                f"{cls.__name__}.sdk_modules must be a tuple of non-empty "
+                "module roots; use () for a genuinely SDK-less connector."
+            )
 
         specs: dict[str, SourceOperationSpec] = {}
         unstamped: list[str] = []

@@ -141,6 +141,31 @@ def test_missing_sdk_modules_declaration_fails_at_import() -> None:
 
 
 @pytest.mark.usefixtures("isolated_registry")
+def test_non_tuple_sdk_modules_fails_at_import() -> None:
+    """
+    Verifies a plain-string ``sdk_modules`` is rejected: as a collection of
+    single characters it would silently unfence the gateway.
+    """
+    # Under test and postcondition.
+    with pytest.raises(TypeError, match="tuple of non-empty"):
+
+        class _StringSdkOperations(SourceOperations):
+            source = DocumentSource.GITHUB
+            sdk_modules = "github"  # type: ignore[assignment]
+
+
+@pytest.mark.usefixtures("isolated_registry")
+def test_blank_sdk_module_root_fails_at_import() -> None:
+    """Verifies empty module roots cannot slip into the fence."""
+    # Under test and postcondition.
+    with pytest.raises(TypeError, match="tuple of non-empty"):
+
+        class _BlankSdkOperations(SourceOperations):
+            source = DocumentSource.GITHUB
+            sdk_modules = ("github", "")
+
+
+@pytest.mark.usefixtures("isolated_registry")
 def test_duplicate_source_registration_fails() -> None:
     """Verifies the one-gateway-per-source rule."""
 
@@ -220,6 +245,7 @@ def test_public_non_callable_descriptor_is_rejected() -> None:
 
         class _CachedPropertyOperations(SourceOperations):
             source = DocumentSource.SLACK
+            sdk_modules = ()
 
             @cached_property
             def team_id(self) -> str:
@@ -306,6 +332,7 @@ def test_decorator_snapshots_capabilities_at_factory_time() -> None:
     # Under test.
     class _SnapshotOperations(SourceOperations):
         source = DocumentSource.SLACK
+        sdk_modules = ()
 
         @decorator
         def probe(self) -> None:

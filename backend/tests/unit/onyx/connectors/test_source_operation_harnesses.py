@@ -200,6 +200,42 @@ def test_raising_check_still_counts_its_calls(
     assert compute_uncovered_units(gateway_class, checks) == []
 
 
+def test_mis_shaped_calls_do_not_count_as_coverage(
+    gateway_class: type[SourceOperations],
+) -> None:
+    """
+    Verifies the spy enforces real operation signatures: a call the real
+    gateway would reject records nothing and cannot certify coverage.
+    """
+
+    # Precondition.
+    # ``fetch_history`` takes no arguments beyond ``self``; the indexing check
+    # calls it with one, which the autospecced spy rejects unrecorded.
+    def mis_shaped_script(operations: Any) -> None:
+        operations.list_channels(variant="public")
+        operations.list_channels(variant="private")
+        operations.fetch_history("argument_the_operation_does_not_take")
+
+    checks = [
+        _ScriptedCheck(
+            CredentialCapability.INDEXING, "indexing_check", mis_shaped_script
+        ),
+        _ScriptedCheck(
+            CredentialCapability.DOC_PERMISSION_SYNC,
+            "perm_sync_check",
+            lambda operations: operations.fetch_history(),
+        ),
+    ]
+
+    # Under test.
+    uncovered = compute_uncovered_units(gateway_class, checks)
+
+    # Postcondition.
+    assert [(unit.operation, unit.capability) for unit in uncovered] == [
+        ("fetch_history", CredentialCapability.INDEXING)
+    ]
+
+
 @pytest.mark.usefixtures("enable_ee")
 def test_coverage_pipeline_sees_ee_perm_sync_checks(
     gateway_class: type[SourceOperations],
