@@ -289,7 +289,7 @@ const DocumentSetTable = ({
                     )}
                   </TableCell>
                   <TableCell>
-                    {isEditable ? (
+                    {can(documentSet, "delete") ? (
                       <DeleteButton
                         onClick={async () => {
                           const response = await deleteDocumentSet(
