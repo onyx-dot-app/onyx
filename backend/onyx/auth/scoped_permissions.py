@@ -12,7 +12,7 @@ from sqlalchemy.orm import Session
 
 from onyx.auth.permissions import has_global_permission
 from onyx.auth.permissions import has_permission
-from onyx.auth.permissions import SCOPED_MANAGER_PERMISSIONS
+from onyx.auth.permissions import SCOPED_MANAGER_PERMISSIONS_EXPANDED
 from onyx.db.enums import Permission
 from onyx.db.enums import PermissionAuthority
 from onyx.db.models import User
@@ -27,8 +27,14 @@ def get_scoped_groups(
     """Imperative form for the write-side gate. Empty when ``permission`` is
     given but not scopable, so a non-bundle token never resolves a scope. When
     ``permission`` is ``None``, skips the bundle check and returns all groups the
-    user manages (scope introspection)."""
-    if permission is not None and permission not in SCOPED_MANAGER_PERMISSIONS:
+    user manages (scope introspection).
+
+    Gate on the *expanded* bundle to match has_permission: an implied read a
+    manager resolves SCOPED for must resolve a scope here, not an empty set."""
+    if (
+        permission is not None
+        and permission.value not in SCOPED_MANAGER_PERMISSIONS_EXPANDED
+    ):
         return set()
     return fetch_managed_group_ids(user, db_session)
 
