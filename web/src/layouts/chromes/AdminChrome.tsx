@@ -19,15 +19,27 @@ import LiteModeIndexingNotice from "@/sections/admin/LiteModeIndexingNotice";
 
 export interface AdminChromeProps {
   children: React.ReactNode;
+  // Server-fetched seed (AdminSSChrome) used until /api/me loads client-side.
+  initialAdminCapabilities: string[];
 }
 
-export default function AdminChrome({ children }: AdminChromeProps) {
+export default function AdminChrome({
+  children,
+  initialAdminCapabilities,
+}: AdminChromeProps) {
   const { setFolded } = useSidebarState();
   const { isMobile } = useScreenSize();
   const pathname = usePathname();
   const settings = useSettingsContext();
   const router = useRouter();
-  const { adminCapabilities } = useUser();
+  const { adminCapabilities: liveAdminCapabilities } = useUser();
+
+  // Prefer the live value so mid-session changes reflect without a reload; an empty client
+  // set means still-loading (every admin here has capabilities), so use the server seed then.
+  const adminCapabilities =
+    liveAdminCapabilities.length > 0
+      ? liveAdminCapabilities
+      : initialAdminCapabilities;
 
   // Match-only per-page gate: if this page is a known admin route the user lacks the
   // permission for (a group manager landing on a full-admin page), send them to their
