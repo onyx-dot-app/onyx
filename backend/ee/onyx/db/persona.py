@@ -47,8 +47,9 @@ def _apply_persona_group_share_diff(
     desired_shares: dict[int, PersonaSharePermission],
     db_session: Session,
 ) -> None:
-    """Reconcile persona__user_group rows to ``desired_shares`` — delete
-    missing, update changed levels in place, insert new rows."""
+    """Reconcile persona__user_group rows to ``desired_shares`` — delete missing, update
+    changed levels in place, insert new rows. Callers must hold the agent's row lock: this
+    re-reads the rows the scope gate ran on."""
     existing_rows = (
         db_session.query(Persona__UserGroup)
         .filter(Persona__UserGroup.persona_id == persona_id)
@@ -83,8 +84,9 @@ def _assert_group_share_within_scope(
     """GATE 2: *changing* an agent's group shares is a MANAGE_AGENTS action. Global
     holders bypass; a scoped manager may only add/remove groups they manage on a PRIVATE
     agent; anyone else may leave the shares alone but not alter them. Shares are re-read
-    in-txn, never the caller's, so a reassignment can't escape scope. Both the pre-call
-    and current is_public must be private — sharing a public agent in would capture it."""
+    in-txn, never the caller's, so a reassignment can't escape scope — and under the
+    caller's row lock, so the write reconciles this same snapshot. Both the pre-call and
+    current is_public must be private — sharing a public agent in would capture it."""
     current_shares = {
         row.user_group_id: row.permission
         for row in db_session.query(Persona__UserGroup)
@@ -137,10 +139,17 @@ def update_persona_access(
 
     NOTE: Callers are responsible for committing."""
     needs_sync = False
-    # Snapshot privacy before is_public is applied below, so the group-share gate
-    # anchors on the ORIGINAL state — a public->private convert + group-share in one
-    # call must not read the already-mutated (private) value and slip through.
-    persona = db_session.query(Persona).filter(Persona.id == persona_id).first()
+    # Lock the agent: the group-share gate and _apply_persona_group_share_diff each read the
+    # shares, and under READ COMMITTED a save landing between them would be reconciled by a
+    # decision that never saw it — deleting a share to a group the caller can't manage.
+    # Read is_public before it's overwritten below, so the gate anchors on the ORIGINAL state:
+    # a public->private convert plus a group-share in one call must not slip through.
+    persona = (
+        db_session.query(Persona)
+        .filter(Persona.id == persona_id)
+        .with_for_update()
+        .first()
+    )
     original_is_public = persona.is_public if persona is not None else False
 
     if is_public is not None or public_permission is not None:
