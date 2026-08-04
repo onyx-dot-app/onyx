@@ -634,12 +634,18 @@ def get_persona(
         is_editable = is_persona_editable_by_user(db_session, persona.id, user)
         snapshot.permissions = persona_permissions(
             can_edit=can_edit_persona(
-                user, persona, db_session, is_editable=is_editable
+                user,
+                persona,
+                db_session,
+                is_editable=is_editable,
+                user_group_ids=user_group_ids,
             ),
             # share tracks the share guard (get_editable), broader than edit's scope gate
             can_share=is_editable,
             can_view_stats=can_view_persona_stats(user, persona),
-            can_delete=can_delete_persona(user, persona, db_session),
+            can_delete=can_delete_persona(
+                user, persona, db_session, user_group_ids=user_group_ids
+            ),
             # delete/publish also gate on ADD_AGENTS (GATE 1); edit/share don't
             holds_add_agents=has_permission(user, Permission.ADD_AGENTS)
             is not PermissionAuthority.NONE,
