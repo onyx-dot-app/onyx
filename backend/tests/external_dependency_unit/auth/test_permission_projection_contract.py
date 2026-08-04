@@ -751,6 +751,10 @@ def test_mcp_projection_matches_gates(db_session: Session) -> None:
     owner.effective_permissions = []
 
     admin = create_test_user(db_session, "proj-mcp-admin", is_admin=True)
+    # The only actor the two sides can disagree about: FULL_ADMIN implies every permission,
+    # but not the reverse, so a MANAGE_ACTIONS holder isn't covered by a FULL_ADMIN check.
+    actions_admin = create_test_user(db_session, "proj-mcp-actions")
+    actions_admin.effective_permissions = [Permission.MANAGE_ACTIONS.value]
     db_session.commit()
 
     server = _make_mcp_server(db_session, owner_email=owner.email)
@@ -758,7 +762,7 @@ def test_mcp_projection_matches_gates(db_session: Session) -> None:
     persona = _make_persona(db_session, owner=owner, is_public=False, groups=[managed])
     _link_persona_tool(db_session, persona, tool)
 
-    for actor in (in_scope, owner, admin):
+    for actor in (in_scope, owner, admin, actions_admin):
         manage_enforced = not _guard_raises(
             _ensure_mcp_server_owner_or_admin, server, actor
         )
