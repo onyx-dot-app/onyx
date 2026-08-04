@@ -59,6 +59,7 @@ jobs:
       pull-requests: read
     outputs:
       integration: ${{ steps.filter.outputs.integration || 'true' }}
+      gateway: ${{ steps.filter.outputs.gateway || 'true' }}
     steps:
       - name: Checkout code
         if: github.event_name == 'pull_request' || github.event_name == 'merge_group'
@@ -82,6 +83,8 @@ jobs:
               - '.github/actions/setup-test-license/**'
               - '.github/actions/install-deps-and-generate-openapi-client/**'
               - '.github/actions/login-ecr-pullthrough-cache/**'
+            gateway:
+              - 'backend/onyx/server/gateway/**'
 
   discover-test-dirs:
     # NOTE: Github-hosted runners have about 20s faster queue times and are preferred here.
@@ -100,10 +103,15 @@ jobs:
 
       - name: Discover test directories
         id: set-matrix
+        env:
+          GATEWAY_CHANGED: ${{ needs.changes.outputs.gateway }}
         run: |
           # Find all leaf-level directories in both test directories.
           # ``craft`` excluded: needs sandbox infra this lane doesn't set up;
-          tests_dirs=$(find backend/tests/integration/tests -mindepth 1 -maxdepth 1 -type d ! -name "__pycache__" ! -name "mcp" ! -name "no_vectordb" ! -name "migrations" ! -name "craft" -exec basename {} \; | sort)
+          tests_dirs=$(find backend/tests/integration/tests -mindepth 1 -maxdepth 1 -type d ! -name "__pycache__" ! -name "mcp" ! -name "no_vectordb" ! -name "migrations" ! -name "craft" ! -name "gateway_clients" -exec basename {} \; | sort)
+          if [[ "$GATEWAY_CHANGED" == "true" ]]; then
+            tests_dirs="$tests_dirs gateway_clients"
+          fi
           connector_dirs=$(find backend/tests/integration/connector_job_tests -mindepth 1 -maxdepth 1 -type d ! -name "__pycache__" -exec basename {} \; | sort)
 
           # Create JSON array with directory info
