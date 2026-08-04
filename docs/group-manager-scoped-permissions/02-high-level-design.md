@@ -8,8 +8,10 @@
 > `assert_within_scope` / `assert_global`. Names below are updated to match; see 03 §2 for signatures.
 
 > **Revised by the 2026-06-29 regression review.** Bundle/coverage decisions here are updated by
-> **D4** (`manage:actions` stays in the bundle, scoped via agents at GATE 2), **D5** (skills = a 7th scoped resource under a
-> new `manage:skills` token), **D6** (managers do everything **except delete**) and **D7** (attaching an agent
+> **D4** (`manage:actions` stays in the bundle — GATE 1 reach + create; its agent-mediated GATE 2 was later
+> dropped, see **D8**), **D5** (skills = a 7th scoped resource under a
+> new `manage:skills` token), **D6** (managers do everything **except delete a resource that merely sits in a
+> managed group** — deleting something they *created* is ownership, see **D9**) and **D7** (attaching an agent
 > to a group is controlled by `manage:agents`). The authoritative, complete case list lives in
 > [03 §11](03-detailed-design.md). Also a hard prerequisite: the broken `current_curator_or_admin_user`
 > import (03 §11.0) must be fixed or the API server won't boot.
@@ -35,10 +37,15 @@ resolution (never cached, never stale), and a **two-gate** enforcement model who
                                 │
             is_manager=TRUE  ⇒  apply SCOPED_MANAGER_PERMISSIONS (in code)
                                 │   {manage:connectors, manage:document_sets,
-                                ▼    manage:agents, add:agents, manage:user_groups}
-                          but ONLY to    (+ manage:skills + manage:actions; actions
-                          Engineering's   scoped via their agents at GATE 2 — see 03 §11)
+                                ▼    manage:agents, add:agents, manage:user_groups,
+                          but ONLY to     manage:skills, manage:actions}
+                          Engineering's
                           resources — resolved LIVE
+
+   EXCEPT manage:actions — a custom action or MCP server belongs to no group, so there is
+   nothing to scope it by. The bundle grants GATE 1 reach + create only; managing an
+   existing one is plain owner-or-admin (D8). Agent-derived scope survives solely for
+   *viewing* an MCP server connected to a managed group. See 03 §11.1.
 ```
 
 Two things never live in the database as data:
@@ -72,7 +79,7 @@ Every manager action passes **two** independent checks. The first lets them *rea
   │   only if the resource ends up:                                            │
   │     • in ≥1 managed group,                                                 │
   │     • with NO group outside the managed set (current ∪ new ⊆ managed),     │
-  │     • PRIVATE (never PUBLIC / SYNC).                                        │
+  │     • non-PUBLIC (PRIVATE or SYNC; never PUBLIC).                           │
   │   Admin override (admin token) skips this entirely.                        │
   └──────────────────────────────────────────────────────────────────────────┘
         │
@@ -162,7 +169,7 @@ The gate therefore loads the resource's **current** groups in the same transacti
 - Alice opens the Connectors page → sees only Engineering's connectors (filter re-keyed on managed groups).
 - She creates a connector into Engineering, PRIVATE → GATE 2: `{Engineering} ⊆ {Engineering}` ✓, PRIVATE ✓ →
   created.
-- She tries to set it PUBLIC → GATE 2 rejects (managers are PRIVATE-only).
+- She tries to set it PUBLIC → GATE 2 rejects (managers can't make anything PUBLIC; PRIVATE or SYNC only).
 - She tries `PUT /connector/<Finance id> {groups:[Engineering]}` → GATE 2 re-reads current `{Finance}`,
   `{Finance,Engineering} ⊄ {Engineering}` ✗ → 403.
 - She adds Bob to Engineering → allowed. She tries to add Bob to Marketing → 403.

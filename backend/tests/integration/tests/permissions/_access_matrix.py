@@ -20,10 +20,11 @@ the gate.
 
 from typing import Any
 
+import httpx
 import pytest
-import requests
 
 from tests.integration.common_utils.constants import API_SERVER_URL
+from tests.integration.common_utils.http_client import client
 
 # (method, path, json body or None)
 Endpoint = tuple[str, str, dict[str, Any] | None]
@@ -49,13 +50,16 @@ def call_endpoint(
     body: dict[str, Any] | None,
     headers: dict[str, str] | None,
     cookies: Any = None,
-) -> requests.Response:
+) -> httpx.Response:
+    # Go through the shared client, not `requests` — it resolves to the in-process
+    # TestClient locally and a real httpx.Client in the docker e2e. Raw requests only
+    # ever reaches a live server on :8080, so it can't run in-process.
     kwargs: dict[str, Any] = {"headers": headers or {}, "timeout": 30}
     if cookies is not None:
         kwargs["cookies"] = cookies
     if body is not None:
         kwargs["json"] = body
-    return requests.request(method, f"{API_SERVER_URL}{path}", **kwargs)
+    return client.request(method, f"{API_SERVER_URL}{path}", **kwargs)
 
 
 def resolve_credentials(
@@ -89,7 +93,7 @@ def resolve_credentials(
 _LIMITED_USER_DETAIL = "Access denied. User has limited permissions."
 
 
-def _is_gate_denial(resp: requests.Response) -> bool:
+def _is_gate_denial(resp: httpx.Response) -> bool:
     """True iff the 403 came from an auth-layer gate, not the handler.
 
     Two auth-layer shapes exist:
@@ -119,7 +123,7 @@ def _is_gate_denial(resp: requests.Response) -> bool:
 
 
 def assert_response(
-    resp: requests.Response,
+    resp: httpx.Response,
     method: str,
     path: str,
     user_kind: str,
@@ -142,7 +146,7 @@ def assert_response(
         )
     elif expected == "anon_denied":
         assert resp.status_code in (401, 403), (
-            f"Anonymous should be denied on {method} {path}, " f"got {resp.status_code}"
+            f"Anonymous should be denied on {method} {path}, got {resp.status_code}"
         )
     else:
         raise ValueError(f"Unknown expected value: {expected}")

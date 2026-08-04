@@ -487,3 +487,18 @@ export function isVectorDbRequiredRoute(pathname: string): boolean {
     pathname.startsWith(prefix)
   );
 }
+
+/**
+ * The admin route whose path is the longest prefix of `pathname`, or undefined if none
+ * matches. Detail sub-pages covered by no entry return undefined, so the per-page gate
+ * leaves them alone rather than default-denying.
+ */
+export function matchAdminRoute(pathname: string): AdminRouteEntry | undefined {
+  let match: AdminRouteEntry | undefined;
+  for (const route of Object.values(ADMIN_ROUTES) as AdminRouteEntry[]) {
+    if (pathname === route.path || pathname.startsWith(route.path + "/")) {
+      if (!match || route.path.length > match.path.length) match = route;
+    }
+  }
+  return match;
+}

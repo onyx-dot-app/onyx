@@ -2,12 +2,20 @@ from uuid import UUID
 
 from sqlalchemy.orm import Session
 
+from onyx.auth.permissions import has_permission
+from onyx.auth.scoped_permissions import assert_within_scope
+from onyx.db.enums import Permission
+from onyx.db.enums import PermissionAuthority
 from onyx.db.enums import PersonaSharePermission
 from onyx.db.models import Persona
 from onyx.db.models import Persona__UserGroup
+from onyx.db.models import User
 from onyx.db.persona import apply_persona_user_share_diff
+from onyx.db.persona import can_delete_persona
 from onyx.db.persona import mark_persona_user_files_for_sync
 from onyx.db.persona import resolve_desired_user_shares
+from onyx.error_handling.error_codes import OnyxErrorCode
+from onyx.error_handling.exceptions import OnyxError
 
 
 def _resolve_desired_group_shares(
@@ -65,10 +73,58 @@ def _apply_persona_group_share_diff(
             )
 
 
+def _assert_group_share_within_scope(
+    acting_user: User,
+    persona_id: int,
+    desired_group_shares: dict[int, PersonaSharePermission],
+    db_session: Session,
+    original_is_public: bool,
+) -> None:
+    """GATE 2: *changing* an agent's group shares is a MANAGE_AGENTS action. Global
+    holders bypass; a scoped manager may only add/remove groups they manage on a PRIVATE
+    agent; anyone else may leave the shares alone but not alter them. Shares are re-read
+    in-txn, never the caller's, so a reassignment can't escape scope. Both the pre-call
+    and current is_public must be private — sharing a public agent in would capture it."""
+    current_shares = {
+        row.user_group_id: row.permission
+        for row in db_session.query(Persona__UserGroup)
+        .filter(Persona__UserGroup.persona_id == persona_id)
+        .all()
+    }
+    # No group either side: a personal agent, nothing to authorize. Keeps groups=[]
+    # creates open to an ADD_AGENTS-only user.
+    if not current_shares and not desired_group_shares:
+        return
+    persona = db_session.query(Persona).filter(Persona.id == persona_id).first()
+    if persona is None:
+        raise OnyxError(
+            OnyxErrorCode.PERSONA_NOT_FOUND, f"Persona {persona_id} does not exist"
+        )
+    # Unchanged shares aren't a mutation either — the editor round-trips current groups on
+    # every save, so otherwise a plain owner couldn't edit an agent someone else
+    # group-shared. Levels count, not just ids. Exempt when there's no scoped authority to
+    # abuse, or when the actor owns the agent — publishing is can_delete_persona's call (D9).
+    if current_shares == desired_group_shares and (
+        has_permission(acting_user, Permission.MANAGE_AGENTS)
+        is not PermissionAuthority.SCOPED
+        or can_delete_persona(acting_user, persona, db_session)
+    ):
+        return
+    assert_within_scope(
+        acting_user,
+        db_session,
+        permission=Permission.MANAGE_AGENTS,
+        current_group_ids=list(current_shares),
+        requested_group_ids=list(desired_group_shares),
+        is_non_public=not original_is_public and not persona.is_public,
+    )
+
+
 def update_persona_access(
     persona_id: int,
     creator_user_id: UUID | None,
     db_session: Session,
+    acting_user: User,
     is_public: bool | None = None,
     user_ids: list[UUID] | None = None,
     group_ids: list[int] | None = None,
@@ -81,9 +137,14 @@ def update_persona_access(
 
     NOTE: Callers are responsible for committing."""
     needs_sync = False
+    # Snapshot privacy before is_public is applied below, so the group-share gate
+    # anchors on the ORIGINAL state — a public->private convert + group-share in one
+    # call must not read the already-mutated (private) value and slip through.
+    persona = db_session.query(Persona).filter(Persona.id == persona_id).first()
+    original_is_public = persona.is_public if persona is not None else False
+
     if is_public is not None or public_permission is not None:
         needs_sync = True
-        persona = db_session.query(Persona).filter(Persona.id == persona_id).first()
         if persona:
             if is_public is not None:
                 persona.is_public = is_public
@@ -106,6 +167,13 @@ def update_persona_access(
     )
     if desired_group_shares is not None:
         needs_sync = True
+        _assert_group_share_within_scope(
+            acting_user,
+            persona_id,
+            desired_group_shares,
+            db_session,
+            original_is_public,
+        )
         _apply_persona_group_share_diff(persona_id, desired_group_shares, db_session)
 
     # When sharing changes, user file ACLs need to be updated in the vector DB

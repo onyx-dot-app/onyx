@@ -100,8 +100,9 @@ export async function requireAdminAuth(): Promise<AuthCheckResult> {
 
   const { user, authTypeMetadata } = authResult;
 
-  // Check if user has any admin permission
-  if (user && !hasAnyAdminPermission(user.effective_permissions ?? [])) {
+  // Admit anyone who can reach any admin area — a group manager qualifies via the
+  // scoped bundle in admin_capabilities. Per-page and backend gates scope from here.
+  if (user && !hasAnyAdminPermission(user.admin_capabilities ?? [])) {
     return {
       user,
       authTypeMetadata,

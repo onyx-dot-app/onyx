@@ -29,6 +29,7 @@ from onyx.auth.invited_users import remove_user_from_invited_users
 from onyx.auth.invited_users import write_invited_users
 from onyx.auth.permissions import get_effective_permissions
 from onyx.auth.permissions import require_permission
+from onyx.auth.scoped_permissions import get_scoped_groups
 from onyx.auth.users import anonymous_user_enabled
 from onyx.auth.users import enforce_seat_limit_locked
 from onyx.auth.users import optional_user
@@ -104,6 +105,7 @@ from onyx.server.manage.models import TenantSnapshot
 from onyx.server.manage.models import ThemePreferenceRequest
 from onyx.server.manage.models import UserByEmail
 from onyx.server.manage.models import UserInfo
+from onyx.server.manage.models import UserPermissionsResponse
 from onyx.server.manage.models import UserPreferences
 from onyx.server.manage.models import UserSpecificAssistantPreference
 from onyx.server.manage.models import UserSpecificAssistantPreferences
@@ -863,8 +865,13 @@ def _get_token_created_at(
 @router.get("/me/permissions", tags=PUBLIC_API_TAGS)
 def get_current_user_permissions(
     user: User = Depends(require_permission(Permission.BASIC_ACCESS)),
-) -> list[str]:
-    return sorted(p.value for p in get_effective_permissions(user))
+    db_session: Session = Depends(get_session),
+) -> UserPermissionsResponse:
+    return UserPermissionsResponse(
+        permissions=sorted(p.value for p in get_effective_permissions(user)),
+        is_manager=user.is_group_manager,
+        managed_group_ids=sorted(get_scoped_groups(user, db_session)),
+    )
 
 
 @router.get("/me", tags=PUBLIC_API_TAGS, dependencies=[Depends(scope_exempt)])

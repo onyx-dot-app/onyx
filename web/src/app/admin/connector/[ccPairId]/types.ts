@@ -7,6 +7,7 @@ import {
   AccessType,
 } from "@/lib/types";
 import { UUID } from "crypto";
+import type { PermissionsOf } from "@/lib/permissions/resource-actions";
 
 export enum ConnectorCredentialPairStatus {
   SCHEDULED = "SCHEDULED",
@@ -51,6 +52,8 @@ export interface CCPairFullInfo {
   latest_deletion_attempt: DeletionAttemptSnapshot | null;
   access_type: AccessType;
   is_editable_for_current_user: boolean;
+  // per-action affordance map for the requesting user (mirrors the write-side gate)
+  permissions: PermissionsOf<"CCPair">;
   deletion_failure_message: string | null;
   indexing: boolean;
   creator: UUID | null;

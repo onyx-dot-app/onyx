@@ -45,9 +45,13 @@ PRIVATE and strictly within their managed groups — enforced authoritatively at
 - **Regression-review additions (2026-06-29) — see [03 §11](03-detailed-design.md) for the full checklist:**
   - **PREREQUISITE (boot bug, §11.0):** `current_curator_or_admin_user` is gone but still imported by
     `skill/api.py:16` + `targeted_reindex.py:22` → the API server won't boot. Fix first (Step 0).
-  - **D4 actions (§11.1):** keep `MANAGE_ACTIONS` **in the bundle** (GATE 1 reach); switch the tool/MCP admin
-    endpoints to `allow_scope=True`; GATE 2 scopes via the agents that reference the action
-    (`Tool → Persona__Tool → Persona__UserGroup` ⊆ managed), replacing the owner-or-admin per-resource check.
+  - **D4 actions (§11.1), superseded in part by D8:** keep `MANAGE_ACTIONS` **in the bundle** (GATE 1 reach);
+    switch the tool/MCP admin endpoints to `allow_scope=True`. The agent-mediated GATE 2 was built and then
+    **dropped** — managing an action/server is plain **owner-or-admin** (`can_manage_tool` /
+    `can_manage_mcp_server`), delete included (D9). An MCP-discovered tool has no `user_id`, so
+    `can_manage_tool` routes it to its **server's** owner; global `MANAGE_ACTIONS` is full-admin-equivalent
+    here and is not narrowed to `FULL_ADMIN`. Agent-derived scope survives only for *viewing* an MCP server
+    connected to a managed group.
   - **D5 skills (§11.2):** add a **dedicated `MANAGE_SKILLS` permission** (groups UI + bundle; no migration).
     Skills do NOT mirror personas — add a NEW scoped admin-list path (don't touch the runtime visibility
     filter), GATE 2 on `replace_skill_grants` (the `/grants` seam), re-point `skill/api.py` by verb to
@@ -56,7 +60,9 @@ PRIVATE and strictly within their managed groups — enforced authoritatively at
     `MANAGE_AGENTS` (admin/global bypass; scoped managers ⊆ managed; `ADD_AGENTS`-only can't group-share).
     Today's route is `ADD_AGENTS` + editable-fetch, so PR4 adds the `MANAGE_AGENTS` requirement on the
     group-share write (a small intended tightening).
-  - **D6 delete (§11.3):** managers do everything *except delete* — all DELETE endpoints stay admin-only.
+  - **D6 delete (§11.3), narrowed by D9:** managers do everything *except delete a resource that merely sits
+    in a managed group* (connector/cc_pair, doc set, admin skill). Deleting something they **created** —
+    action, MCP server, agent — is ownership, not scope, and stays owner-or-admin.
   - **Persona GATE 2 (§11.5):** `update_persona_access` lacks the actor `User`+`permission`; thread the
     acting user into it from all 3 callers (create / share / `/agents`) and gate the shared chokepoint.
   - **cc_pair re-attach (§11.6):** `update_user_group` rewrites group↔cc_pair from client `cc_pair_ids` —

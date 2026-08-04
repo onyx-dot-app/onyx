@@ -22,6 +22,7 @@ import { useModal } from "@/refresh-components/contexts/ModalContext";
 import { useUser } from "@/providers/UserProvider";
 import { hasPermission } from "@/lib/permissions";
 import { Permission } from "@/lib/types";
+import { can } from "@/lib/permissions/resource-actions";
 import { Formik, useFormikContext } from "formik";
 import { useAgent, useLabels } from "@/lib/agents/hooks";
 import {
@@ -68,7 +69,7 @@ function ShareAgentFormContent({ agentId }: ShareAgentFormContentProps) {
   const { data: groupsData } = useShareableGroups();
   const userDirectoryRestricted =
     usersError instanceof FetchError && usersError.status === 403;
-  const { user: currentUser, isAdmin, permissions } = useUser();
+  const { user: currentUser, permissions, adminCapabilities } = useUser();
   const { agent: fullAgent } = useAgent(agentId ?? null);
   const shareAgentModal = useModal();
   const { labels: allLabels, createLabel } = useLabels();
@@ -76,8 +77,17 @@ function ShareAgentFormContent({ agentId }: ShareAgentFormContentProps) {
 
   const acceptedUsers = usersData ?? [];
   const groups = groupsData ?? [];
-  const canUpdateFeaturedStatus = hasPermission(
-    permissions,
+  // Publish is owner-or-admin per agent, so use the server's answer, not a role check.
+  // A new agent has nothing stamped: publish stays open (its creator owns it), but feature
+  // needs global MANAGE_AGENTS — the create path rejects is_featured without it.
+  const isNewAgent = agentId == null;
+  const canPublish = isNewAgent || can(fullAgent, "publish");
+  const canUpdateFeaturedStatus = isNewAgent
+    ? hasPermission(permissions, Permission.MANAGE_AGENTS)
+    : can(fullAgent, "feature");
+
+  const canGroupShare = hasPermission(
+    adminCapabilities,
     Permission.MANAGE_AGENTS
   );
 
@@ -92,13 +102,21 @@ function ShareAgentFormContent({ agentId }: ShareAgentFormContentProps) {
             label: user.email,
           }));
 
-    const groupOptions = groups.map((group) => ({
-      value: `group-${group.id}`,
-      label: group.name,
-    }));
+    const groupOptions = canGroupShare
+      ? groups.map((group) => ({
+          value: `group-${group.id}`,
+          label: group.name,
+        }))
+      : [];
 
     return [...userOptions, ...groupOptions];
-  }, [acceptedUsers, groups, currentUser?.id, userDirectoryRestricted]);
+  }, [
+    acceptedUsers,
+    groups,
+    currentUser?.id,
+    userDirectoryRestricted,
+    canGroupShare,
+  ]);
 
   const comboBoxDisabled =
     userDirectoryRestricted && comboBoxOptions.length === 0;
@@ -334,13 +352,15 @@ function ShareAgentFormContent({ agentId }: ShareAgentFormContentProps) {
 
             <Tabs.Content value={YOUR_ORGANIZATION_TAB}>
               <Section gap={1} alignItems="stretch" padding={0.5}>
-                <InputHorizontal
-                  title="Publish This Agent"
-                  description="Make this agent available to everyone in your organization."
-                  withLabel
-                >
-                  <SwitchField name="isPublic" />
-                </InputHorizontal>
+                {canPublish && (
+                  <InputHorizontal
+                    title="Publish This Agent"
+                    description="Make this agent available to everyone in your organization."
+                    withLabel
+                  >
+                    <SwitchField name="isPublic" />
+                  </InputHorizontal>
+                )}
 
                 {canUpdateFeaturedStatus && (
                   <>

@@ -5,6 +5,8 @@ scope clause. The authorization policy that consumes these (bundle guard + the
 GATE 2 write gate) lives in ``onyx/auth/scoped_permissions.py``.
 """
 
+from typing import TypeVar
+
 from sqlalchemy import and_
 from sqlalchemy import ColumnElement
 from sqlalchemy import Select
@@ -14,6 +16,10 @@ from sqlalchemy.orm import Session
 
 from onyx.db.models import User
 from onyx.db.models import User__UserGroup
+
+# Resource PK type — int for connectors/doc-sets, UUID for skills. The clause is
+# key-type agnostic; the TypeVar just ties the resource + junction cols together.
+_ResourceId = TypeVar("_ResourceId")
 
 
 def scoped_group_ids_subquery(user: User) -> Select:
@@ -32,16 +38,16 @@ def fetch_managed_group_ids(user: User, db_session: Session) -> set[int]:
 
 def within_managed_scope_clause(
     *,
-    resource_id_col: InstrumentedAttribute[int],
-    junction_resource_col: InstrumentedAttribute[int],
+    resource_id_col: InstrumentedAttribute[_ResourceId],
+    junction_resource_col: InstrumentedAttribute[_ResourceId],
     junction_group_col: InstrumentedAttribute[int],
-    is_private: ColumnElement[bool],
+    non_public_clause: ColumnElement[bool],
     managed_subq: Select,
 ) -> ColumnElement[bool]:
     """Read-side mirror of GATE 2: editable-by-manager iff every group is managed,
-    in ≥1 group, and private. ``is_private`` is the caller's privateness predicate —
-    resources encode it differently (``DocumentSet.is_public.is_(False)`` vs
-    ``ConnectorCredentialPair.access_type == AccessType.PRIVATE``). ``managed_subq``
+    in ≥1 group, and non-public. ``non_public_clause`` is the caller's non-public
+    predicate — resources encode it differently (``DocumentSet.is_public.is_(False)``
+    vs ``ConnectorCredentialPair.access_type != AccessType.PUBLIC``). ``managed_subq``
     yields no rows for a non-manager, so the clause fails closed."""
     belongs_to_managed = (
         select(junction_resource_col)
@@ -59,4 +65,4 @@ def within_managed_scope_clause(
         )
         .exists()
     )
-    return and_(is_private, belongs_to_managed, ~belongs_to_unmanaged)
+    return and_(non_public_clause, belongs_to_managed, ~belongs_to_unmanaged)
