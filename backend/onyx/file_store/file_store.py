@@ -49,6 +49,16 @@ if TYPE_CHECKING:
 logger = setup_logger()
 
 
+def content_byte_size(file_content: object) -> int | None:
+    """Stored size in bytes of save_file content. str content is uploaded
+    UTF-8 encoded by every backend, so its size is the encoded length."""
+    if isinstance(file_content, (bytes, bytearray)):
+        return len(file_content)
+    if isinstance(file_content, str):
+        return len(file_content.encode("utf-8"))
+    return None
+
+
 class S3PutKwargs(TypedDict):
     ChecksumSHA256: NotRequired[str]
 
@@ -392,9 +402,7 @@ class S3BackedFileStore(FileStore):
                 object_key=s3_key,
                 db_session=db_session,
                 file_metadata=file_metadata,
-                file_size=(
-                    len(file_content) if isinstance(file_content, bytes) else None
-                ),
+                file_size=content_byte_size(file_content),
             )
             db_session.commit()
 

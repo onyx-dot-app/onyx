@@ -1,4 +1,4 @@
-from sqlalchemy import String, and_, cast, select
+from sqlalchemy import String, and_, case, cast, select, update
 from sqlalchemy.dialects.postgresql import insert
 from sqlalchemy.orm import Session
 
@@ -64,6 +64,21 @@ def get_filerecords_by_file_ids(
         return []
     return list(
         db_session.scalars(select(FileRecord).where(FileRecord.file_id.in_(file_ids)))
+    )
+
+
+def update_filerecord_file_sizes(
+    file_sizes: dict[str, int],
+    db_session: Session,
+) -> None:
+    """Persist lazily-discovered sizes for records written before the
+    file_size column existed. Caller commits."""
+    if not file_sizes:
+        return
+    db_session.execute(
+        update(FileRecord)
+        .where(FileRecord.file_id.in_(file_sizes.keys()))
+        .values(file_size=case(file_sizes, value=FileRecord.file_id))
     )
 
 

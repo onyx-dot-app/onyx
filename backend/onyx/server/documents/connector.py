@@ -85,7 +85,10 @@ from onyx.db.enums import (
     ProcessingMode,
 )
 from onyx.db.federated import fetch_all_federated_connectors_parallel
-from onyx.db.file_record import get_filerecords_by_file_ids
+from onyx.db.file_record import (
+    get_filerecords_by_file_ids,
+    update_filerecord_file_sizes,
+)
 from onyx.db.index_attempt import (
     get_index_attempts_for_cc_pair,
     get_latest_index_attempts_by_status,
@@ -472,20 +475,58 @@ def list_connector_files(
             exc_info=True,
         )
 
+    # Lazily backfill sizes for records written before file_size existed:
+    # bounded-concurrency object-store lookups, persisted so each legacy file
+    # pays this cost at most once.
+    backfilled_sizes: dict[str, int] = {}
+    missing_size_ids = [
+        file_id
+        for file_id in file_locations
+        if (record := records_by_id.get(file_id)) is not None
+        and record.file_size is None
+    ]
+    if missing_size_ids:
+        file_store = get_default_file_store()
+        looked_up_sizes = run_functions_tuples_in_parallel(
+            [(file_store.get_file_size, (file_id,)) for file_id in missing_size_ids],
+            allow_failures=True,
+            max_workers=16,
+        )
+        backfilled_sizes = {
+            file_id: size
+            for file_id, size in zip(missing_size_ids, looked_up_sizes)
+            if isinstance(size, int)
+        }
+        if backfilled_sizes:
+            try:
+                update_filerecord_file_sizes(backfilled_sizes, db_session)
+                db_session.commit()
+            except Exception:
+                db_session.rollback()
+                logger.warning(
+                    "Failed to persist backfilled file sizes for connector %s",
+                    connector_id,
+                    exc_info=True,
+                )
+
     files = []
     for file_id, file_name in zip(file_locations, file_names):
         record = records_by_id.get(file_id)
+        file_size = None
+        upload_date = None
+        if record:
+            file_size = (
+                record.file_size
+                if record.file_size is not None
+                else backfilled_sizes.get(file_id)
+            )
+            upload_date = record.created_at.isoformat() if record.created_at else None
         files.append(
             ConnectorFileInfo(
                 file_id=file_id,
                 file_name=file_name,
-                # None for records written before sizes were persisted
-                file_size=record.file_size if record else None,
-                upload_date=(
-                    record.created_at.isoformat()
-                    if record and record.created_at
-                    else None
-                ),
+                file_size=file_size,
+                upload_date=upload_date,
             )
         )
 

@@ -25,7 +25,7 @@ from onyx.db.file_record import (
     upsert_filerecord,
 )
 from onyx.db.models import FileRecord
-from onyx.file_store.file_store import FileStore
+from onyx.file_store.file_store import FileStore, content_byte_size
 from onyx.file_store.s3_key_utils import generate_s3_key
 from onyx.utils.file import FileWithMimeType
 from onyx.utils.logger import setup_logger
@@ -199,9 +199,7 @@ class GCSBackedFileStore(FileStore):
                     object_key=object_key,
                     db_session=db_session,
                     file_metadata=file_metadata,
-                    file_size=(
-                        len(file_content) if isinstance(file_content, bytes) else None
-                    ),
+                    file_size=content_byte_size(file_content),
                 )
                 db_session.commit()
         except Exception:
