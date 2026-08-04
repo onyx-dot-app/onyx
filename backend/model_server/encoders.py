@@ -57,7 +57,7 @@ def get_embedding_model(
         logger.notice("Loading %s", model_name)
         model = SentenceTransformer(
             model_name_or_path=model_name,
-            trust_remote_code=True,
+            trust_remote_code=False,
         )
         model.max_seq_length = max_context_length
         _prewarm_rope(model, max_context_length)
