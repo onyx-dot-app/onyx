@@ -1,6 +1,5 @@
 import csv
 import io
-import re
 from datetime import datetime, timedelta, timezone
 from typing import cast
 from uuid import UUID
@@ -402,32 +401,35 @@ def list_all_users(
     _: User = Depends(current_curator_or_admin_user),
     db_session: Session = Depends(get_session),
 ) -> AllUsersResponse:
-    users = [
-        user
-        for user in get_all_users(db_session, email_filter_string=q)
-        if (include_api_keys or not is_api_key_email_address(user.email))
-    ]
+    users = get_all_users(
+        db_session,
+        email_filter_string=q,
+        include_api_key_users=include_api_keys,
+    )
 
-    slack_users = [user for user in users if user.account_type == AccountType.BOT]
-    accepted_users = [user for user in users if user.account_type != AccountType.BOT]
-
-    accepted_emails = {user.email for user in accepted_users}
-    slack_users_emails = {user.email for user in slack_users}
-    invited_emails = get_invited_users()
+    slack_users: list[User] = []
+    accepted_users: list[User] = []
+    for user in users:
+        if user.account_type == AccountType.BOT:
+            slack_users.append(user)
+        else:
+            accepted_users.append(user)
 
     # Filter out users who are already active (either accepted or slack users)
-    all_active_emails = accepted_emails | slack_users_emails
+    all_active_emails = {user.email for user in users}
     invited_emails = [
-        email for email in invited_emails if email not in all_active_emails
+        email for email in get_invited_users() if email not in all_active_emails
     ]
 
     if q:
-        invited_emails = [
-            email for email in invited_emails if re.search(r"{}".format(q), email, re.I)
-        ]
+        # Plain case-insensitive substring match (mirrors the ilike used for
+        # accepted users). Never compile q as a regex: it is attacker-controlled
+        # and a crafted pattern can cause catastrophic backtracking (ReDoS).
+        q_lower = q.lower()
+        invited_emails = [email for email in invited_emails if q_lower in email.lower()]
 
-    accepted_count = len(accepted_emails)
-    slack_users_count = len(slack_users_emails)
+    accepted_count = len(accepted_users)
+    slack_users_count = len(slack_users)
     invited_count = len(invited_emails)
 
     # If any of q, accepted_page, or invited_page is None, return all users
@@ -445,17 +447,27 @@ def list_all_users(
             slack_users_pages=1,
         )
 
-    # Otherwise, return paginated results
+    # Otherwise, return paginated results. Slice before building snapshots so
+    # only the requested page is serialized.
     return AllUsersResponse(
-        accepted=[FullUserSnapshot.from_user_model(user) for user in accepted_users][
-            accepted_page * USERS_PAGE_SIZE : (accepted_page + 1) * USERS_PAGE_SIZE
+        accepted=[
+            FullUserSnapshot.from_user_model(user)
+            for user in accepted_users[
+                accepted_page * USERS_PAGE_SIZE : (accepted_page + 1) * USERS_PAGE_SIZE
+            ]
         ],
-        slack_users=[FullUserSnapshot.from_user_model(user) for user in slack_users][
-            slack_users_page * USERS_PAGE_SIZE : (slack_users_page + 1)
-            * USERS_PAGE_SIZE
+        slack_users=[
+            FullUserSnapshot.from_user_model(user)
+            for user in slack_users[
+                slack_users_page * USERS_PAGE_SIZE : (slack_users_page + 1)
+                * USERS_PAGE_SIZE
+            ]
         ],
-        invited=[InvitedUserSnapshot(email=email) for email in invited_emails][
-            invited_page * USERS_PAGE_SIZE : (invited_page + 1) * USERS_PAGE_SIZE
+        invited=[
+            InvitedUserSnapshot(email=email)
+            for email in invited_emails[
+                invited_page * USERS_PAGE_SIZE : (invited_page + 1) * USERS_PAGE_SIZE
+            ]
         ],
         accepted_pages=(accepted_count + USERS_PAGE_SIZE - 1) // USERS_PAGE_SIZE,
         invited_pages=(invited_count + USERS_PAGE_SIZE - 1) // USERS_PAGE_SIZE,
@@ -576,7 +588,7 @@ def bulk_invite_users(
     if MULTI_TENANT:
         try:
             fetch_ee_implementation_or_noop(
-                "onyx.server.tenants.provisioning", "add_users_to_tenant", None
+                "onyx.db.user_tenant_mapping", "add_users_to_tenant", None
             )(new_invited_emails, tenant_id)
         except OnyxError:
             # Seat-limit / billing declines from the cloud check must reach
@@ -641,7 +653,7 @@ def bulk_invite_users(
             try:
                 write_invited_users(initial_invited_users)  # Reset to original state
                 fetch_ee_implementation_or_noop(
-                    "onyx.server.tenants.user_mapping", "remove_users_from_tenant", None
+                    "onyx.db.user_tenant_mapping", "remove_users_from_tenant", None
                 )(new_invited_emails, tenant_id)
             finally:
                 # Release the counter reservation regardless of whether the KV /
@@ -698,7 +710,7 @@ def remove_invited_user(
         )
     if MULTI_TENANT:
         fetch_ee_implementation_or_noop(
-            "onyx.server.tenants.user_mapping", "remove_users_from_tenant", None
+            "onyx.db.user_tenant_mapping", "remove_users_from_tenant", None
         )([user_email.user_email], tenant_id)
     number_of_invited_users = remove_user_from_invited_users(user_email.user_email)
 
@@ -787,7 +799,7 @@ async def delete_user(
     try:
         tenant_id = get_current_tenant_id()
         fetch_ee_implementation_or_noop(
-            "onyx.server.tenants.user_mapping", "remove_users_from_tenant", None
+            "onyx.db.user_tenant_mapping", "remove_users_from_tenant", None
         )([user_email.user_email], tenant_id)
         delete_user_from_db(user_to_delete, db_session)
         logger.info("Deleted user %s", user_to_delete.email)
@@ -1048,20 +1060,20 @@ def verify_user_logged_in(
         team_name = tenant_id
     else:
         team_name = fetch_ee_implementation_or_noop(
-            "onyx.server.tenants.user_mapping", "get_tenant_id_for_email", None
+            "onyx.db.user_tenant_mapping", "get_tenant_id_for_email", None
         )(user.email)
 
         if MULTI_TENANT:
             if team_name != tenant_id:
                 user_count = fetch_ee_implementation_or_noop(
-                    "onyx.server.tenants.user_mapping", "get_tenant_count", None
+                    "onyx.db.user_tenant_mapping", "get_tenant_count", None
                 )(team_name)
                 new_tenant = TenantSnapshot(
                     tenant_id=team_name, number_of_users=user_count
                 )
 
             tenant_invitation = fetch_ee_implementation_or_noop(
-                "onyx.server.tenants.user_mapping", "get_tenant_invitation", None
+                "onyx.db.user_tenant_mapping", "get_tenant_invitation", None
             )(user.email)
 
     super_users_list = cast(

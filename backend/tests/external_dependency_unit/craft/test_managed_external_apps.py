@@ -21,11 +21,12 @@ from sqlalchemy.orm import Session
 import onyx.server.features.build.external_apps.api as api
 from onyx.db.enums import ExternalAppType, GatedAppKind
 from onyx.db.external_app import (
+    associate_built_in_skill__no_commit,
     create_external_app,
     get_built_in_external_app,
 )
 from onyx.db.gated_app import get_action_policies
-from onyx.db.models import Skill, User
+from onyx.db.models import ExternalApp, Skill, User
 from onyx.error_handling.error_codes import OnyxErrorCode
 from onyx.error_handling.exceptions import OnyxError
 from onyx.external_apps.providers.registry import (
@@ -49,7 +50,9 @@ def _noop(*_args: object, **_kwargs: object) -> None:
 
 
 def _cleanup(db_session: Session) -> None:
-    # Deleting the built-in skill cascades to its external_app + credential rows.
+    db_session.execute(
+        delete(ExternalApp).where(ExternalApp.app_type.in_(_MANAGED_APP_TYPES))
+    )
     db_session.execute(delete(Skill).where(Skill.name.in_(_BUILT_IN_SLUGS)))
     db_session.commit()
 
@@ -71,18 +74,16 @@ def _seed_built_in(
     """Directly seed a built-in external app, standing in for the
     migration that seeds these per tenant, so the cloud-guard tests have a
     managed app to act on."""
-    create_external_app(
+    app = create_external_app(
         db_session=db_session,
         name=app_type.value.title(),
-        bundle_file_id="",
-        bundle_sha256="",
         app_type=app_type,
         upstream_url_patterns=list(_GMAIL_PATTERNS),
         auth_template={"Authorization": "Bearer {access_token}"},
         organization_credentials=credentials,
-        is_public=True,
         action_policies=None,
     )
+    associate_built_in_skill__no_commit(db_session, app)
     db_session.commit()
 
 

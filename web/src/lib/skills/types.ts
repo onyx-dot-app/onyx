@@ -21,6 +21,13 @@ export interface SkillGroupShare {
   permission: SkillSharePermission;
 }
 
+export interface SkillExternalAppDependency {
+  external_app_id: number;
+  name: string;
+  enabled: boolean;
+  ready: boolean;
+}
+
 export interface Skill {
   source: SkillSource;
   id: string;
@@ -48,6 +55,7 @@ export interface Skill {
   group_shares: SkillGroupShare[];
   public_permission: SkillSharePermission | null;
   user_permission: SkillAccessLevel | null;
+  external_app: SkillExternalAppDependency | null;
 }
 
 export type BuiltinSkill = Skill & {
@@ -71,6 +79,7 @@ export interface SkillPreview {
   description: string;
   author_email: string | null;
   instructions_markdown: string;
+  external_app: SkillExternalAppDependency | null;
 }
 
 export type SkillEditableDetail = CustomSkill & {
@@ -88,4 +97,34 @@ export interface SkillBundleContents {
   description: string;
   instructions_markdown: string;
   files: SkillBundleFile[];
+}
+
+export interface GitHubSkillPreview {
+  path: string;
+  name: string;
+  description: string | null;
+  unavailable_reason: string | null;
+}
+
+export interface GitHubSkillsPreview {
+  repository: string;
+  revision: string;
+  subpath: string | null;
+  skills: GitHubSkillPreview[];
+}
+
+export interface GitHubImportedSkill {
+  skill: CustomSkill;
+  disabled_reason: string | null;
+}
+
+export interface GitHubSkillNotImported {
+  path: string;
+  name: string;
+  reason: string;
+}
+
+export interface GitHubSkillsImportResult {
+  imported: GitHubImportedSkill[];
+  not_imported: GitHubSkillNotImported[];
 }

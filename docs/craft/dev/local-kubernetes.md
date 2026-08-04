@@ -371,7 +371,7 @@ For Craft development, the required vars (already in the template) are:
 ENABLE_CRAFT=true
 SANDBOX_BACKEND=kubernetes
 SANDBOX_CONTAINER_IMAGE=onyxdotapp/sandbox:dev
-SANDBOX_API_SERVER_URL=http://onyx-api-service.onyx.svc.cluster.local:8080
+ONYX_SERVER_URL=http://onyx-api-service.onyx.svc.cluster.local:8080
 ONYX_SANDBOX_PUSH_PRIVATE_KEY=AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA=
 ```
 

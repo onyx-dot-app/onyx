@@ -18,7 +18,7 @@ from onyx.utils.logger import setup_logger
 logger = setup_logger()
 
 
-@shared_task(
+@shared_task(  # ty: ignore[invalid-argument-type]
     name=OnyxCeleryTask.EVAL_RUN_TASK,
     ignore_result=True,
     soft_time_limit=JOB_TIMEOUT,
@@ -41,7 +41,7 @@ def eval_run_task(
         raise
 
 
-@shared_task(
+@shared_task(  # ty: ignore[invalid-argument-type]
     name=OnyxCeleryTask.SCHEDULED_EVAL_TASK,
     ignore_result=True,
     soft_time_limit=JOB_TIMEOUT * 5,  # Allow more time for multiple datasets

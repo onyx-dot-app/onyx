@@ -3,6 +3,12 @@ import type {
   ExternalAppUserResponse,
 } from "@/app/craft/v1/apps/registry";
 import type { BuiltinSkill, CustomSkill } from "@/lib/skills/types";
+import {
+  MCPAuthenticationPerformer,
+  MCPAuthenticationType,
+  MCPServerStatus,
+  type MCPServer,
+} from "@/lib/tools/interfaces";
 
 export function builtinFixture(over: Partial<BuiltinSkill> = {}): BuiltinSkill {
   return {
@@ -26,6 +32,7 @@ export function builtinFixture(over: Partial<BuiltinSkill> = {}): BuiltinSkill {
     group_shares: [],
     public_permission: null,
     user_permission: "VIEWER",
+    external_app: null,
     ...over,
   };
 }
@@ -52,6 +59,7 @@ export function customFixture(over: Partial<CustomSkill> = {}): CustomSkill {
     group_shares: [],
     public_permission: "VIEWER",
     user_permission: "VIEWER",
+    external_app: null,
     ...over,
   };
 }
@@ -68,6 +76,28 @@ export function appFixture(
     credential_values: over.authenticated === false ? {} : { token: "***" },
     authenticated: true,
     supports_oauth: false,
+    ...over,
+  };
+}
+
+export function mcpServerFixture(
+  over: Partial<MCPServer> & { id: number }
+): MCPServer {
+  return {
+    name: `MCP ${over.id}`,
+    description: "An MCP server",
+    server_url: `https://mcp-${over.id}.example.com/mcp`,
+    owner: "admin@example.com",
+    auth_type: MCPAuthenticationType.API_TOKEN,
+    auth_performer: MCPAuthenticationPerformer.PER_USER,
+    is_authenticated: true,
+    craft_connected: true,
+    status: MCPServerStatus.CONNECTED,
+    is_public: true,
+    groups: [],
+    users: [],
+    available_in_craft: true,
+    tool_count: 2,
     ...over,
   };
 }

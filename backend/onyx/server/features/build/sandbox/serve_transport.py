@@ -28,8 +28,8 @@ from onyx.server.features.build.configs import (
     OPENCODE_PROMPT_INACTIVITY_TIMEOUT_SECONDS,
     OPENCODE_SERVE_EVENT_READ_TIMEOUT,
     OPENCODE_SERVER_USERNAME,
-    PROMPT_SLOT_KEEP_ALIVE_MAX_SECONDS,
     PROMPT_SLOT_LEASE_SECONDS,
+    SSE_KEEPALIVE_INTERVAL,
 )
 from onyx.server.features.build.db.sandbox import get_sandbox_by_id
 from onyx.server.features.build.sandbox.event_schema import (
@@ -37,6 +37,7 @@ from onyx.server.features.build.sandbox.event_schema import (
     AgentThoughtChunk,
     PromptResponse,
 )
+from onyx.server.features.build.sandbox.models import PromptAttachment
 from onyx.server.features.build.sandbox.opencode.event_bus import (
     BUS_CLOSED_SENTINEL,
     PodEventBus,
@@ -47,6 +48,15 @@ from onyx.server.features.build.sandbox.opencode.serve_client import (
     translate_opencode_event,
 )
 from onyx.server.features.build.sandbox.sse import SSEKeepalive
+from onyx.server.features.build.timeouts import (
+    POLL_INTERVAL_SECONDS,
+    PROMPT_SLOT_FAST_FAIL_ACQUIRE_SECONDS,
+    PROMPT_SLOT_KEEP_ALIVE_MAX_SECONDS,
+)
+from onyx.server.metrics.craft_sandbox import (
+    SandboxProvisionPhase,
+    time_provision_phase,
+)
 from onyx.utils.logger import setup_logger
 
 logger = setup_logger()
@@ -55,16 +65,6 @@ SandboxEvent = Any
 
 # Tags serve-transport logs with the api_server replica handling the prompt.
 _API_SERVER_HOSTNAME = os.environ.get("HOSTNAME", "unknown")
-
-# opencode-serve boot lags backend Ready by ~1–3s warm, up to ~15s cold.
-OPENCODE_SERVE_READY_TIMEOUT_SECONDS = 30
-OPENCODE_SERVE_READY_POLL_INTERVAL_SECONDS = 0.25
-
-# How long a new turn waits for the previous turn's slot before giving up.
-PROMPT_SLOT_FAST_FAIL_ACQUIRE_SECONDS = 10.0
-
-# Must exceed the lease so a reclaimed turn can wait out a dead holder's slot.
-PROMPT_SLOT_WAIT_OUT_ORPHAN_SECONDS = PROMPT_SLOT_LEASE_SECONDS + 10.0
 
 # Live attach streams are UI-facing. Coalesce adjacent text deltas just long
 # enough to avoid one React update per tiny opencode token burst, while keeping
@@ -338,10 +338,11 @@ class _ServeMixin:
                 return children
         return []
 
+    @time_provision_phase(SandboxProvisionPhase.OPENCODE_SERVE_WAIT)
     def _wait_for_opencode_serve_ready(
         self,
         sandbox_id: UUID,
-        timeout: float = OPENCODE_SERVE_READY_TIMEOUT_SECONDS,
+        timeout: float,
     ) -> bool:
         """Block until opencode-serve answers ``GET /doc`` with 200 (opencode
         binds :4096 a few seconds after the pod is Ready). Probes the Service
@@ -406,7 +407,7 @@ class _ServeMixin:
                         last_err = f"health_check returned status={status} for {url}"
                     except Exception as e:
                         last_err = f"{url}: {type(e).__name__}: {e}"
-                time.sleep(OPENCODE_SERVE_READY_POLL_INTERVAL_SECONDS)
+                time.sleep(POLL_INTERVAL_SECONDS)
         finally:
             for _, client in clients:
                 client.close()
@@ -559,6 +560,7 @@ class _ServeMixin:
         agent_provider: str | None,
         agent_model: str | None,
         *,
+        attachments: list[PromptAttachment] | None = None,
         on_opencode_session_resolved: Callable[[str], None] | None = None,
         should_interrupt: Callable[[], bool] | None = None,
         should_abort_on_teardown: Callable[[], bool] | None = None,
@@ -611,6 +613,7 @@ class _ServeMixin:
                     directory=session_path,
                     model_provider=agent_provider,
                     model_id=agent_model,
+                    attachments=attachments,
                     timeout=OPENCODE_PROMPT_INACTIVITY_TIMEOUT_SECONDS,
                     absolute_timeout=turn_timeout_seconds,
                     should_interrupt=should_interrupt,
@@ -800,7 +803,7 @@ class _ServeMixin:
         opencode_session_id: str,
         *,
         directory: str,
-        keepalive_seconds: float = 15.0,
+        keepalive_seconds: float = SSE_KEEPALIVE_INTERVAL,
     ) -> Generator[SandboxEvent, None, None]:
         """Stream translated sandbox events for an opencode session. Caller closes
         via ``GeneratorExit``. ``directory`` is required: opencode-serve scopes

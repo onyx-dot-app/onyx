@@ -6,7 +6,7 @@ from datetime import datetime, timedelta, timezone
 from unittest.mock import patch
 
 import pytest
-from cryptography.hazmat.primitives import hashes
+from cryptography.hazmat.primitives import hashes, serialization
 from cryptography.hazmat.primitives.asymmetric import padding, rsa
 
 from ee.onyx.server.license.models import LicensePayload, PlanType
@@ -69,8 +69,7 @@ class TestVerifyLicenseSignature:
 
         license_data = create_signed_license(private_key, payload)
 
-        # Patch the _get_public_key function to return our test key
-        with patch("ee.onyx.utils.license._get_public_key", return_value=public_key):
+        with patch("ee.onyx.utils.license._get_public_keys", return_value=[public_key]):
             result = verify_license_signature(license_data)
 
         assert result.tenant_id == "tenant_123"
@@ -93,10 +92,9 @@ class TestVerifyLicenseSignature:
 
         license_data = create_signed_license(private_key, payload)
 
-        # Patch _get_public_key to return a different key (signature won't match)
         with patch(
-            "ee.onyx.utils.license._get_public_key",
-            return_value=different_public_key,
+            "ee.onyx.utils.license._get_public_keys",
+            return_value=[different_public_key],
         ):
             with pytest.raises(ValueError, match="Invalid license signature"):
                 verify_license_signature(license_data)
@@ -136,8 +134,7 @@ class TestVerifyLicenseSignature:
 
         encoded_license = base64.b64encode(json.dumps(license_data).encode()).decode()
 
-        # Patch _get_public_key to return our test key
-        with patch("ee.onyx.utils.license._get_public_key", return_value=public_key):
+        with patch("ee.onyx.utils.license._get_public_keys", return_value=[public_key]):
             with pytest.raises(ValueError, match="Invalid license signature"):
                 verify_license_signature(encoded_license)
 
@@ -243,3 +240,67 @@ class TestIsLicenseValid:
         )
 
         assert is_license_valid(payload) is False
+
+
+class TestKeyRotationTrustSet:
+    """Rotation signs new licenses with a new key while every license already
+    in the field is still verifiable. Trusting only one key would fail the whole
+    fleet at once, and a reclaim cannot recover because the rejected license is
+    also the credential it authenticates with."""
+
+    def _license(self, private_key: rsa.RSAPrivateKey) -> str:
+        return create_signed_license(
+            private_key,
+            LicensePayload(
+                version="1.0",
+                tenant_id="tenant_123",
+                organization_name="Test Org",
+                issued_at=datetime.now(timezone.utc),
+                expires_at=datetime.now(timezone.utc) + timedelta(days=30),
+                seats=50,
+                plan_type=PlanType.MONTHLY,
+            ),
+        )
+
+    def test_a_license_signed_by_either_trusted_key_verifies(self) -> None:
+        old_private, old_public = generate_test_key_pair()
+        new_private, new_public = generate_test_key_pair()
+
+        with patch(
+            "ee.onyx.utils.license._get_public_keys",
+            return_value=[new_public, old_public],
+        ):
+            assert verify_license_signature(self._license(old_private)).seats == 50
+            assert verify_license_signature(self._license(new_private)).seats == 50
+
+    def test_a_key_outside_the_trust_set_is_still_refused(self) -> None:
+        """Widening to a set must not widen to anything signed."""
+        _, trusted_public = generate_test_key_pair()
+        untrusted_private, _ = generate_test_key_pair()
+
+        with patch(
+            "ee.onyx.utils.license._get_public_keys", return_value=[trusted_public]
+        ):
+            with pytest.raises(ValueError, match="Invalid license signature"):
+                verify_license_signature(self._license(untrusted_private))
+
+    def test_concatenated_pem_blocks_parse_in_order(self) -> None:
+        """Rotation is deployed by appending the new key to the existing PEM."""
+        from ee.onyx.utils.license import _load_public_keys
+
+        _, first = generate_test_key_pair()
+        _, second = generate_test_key_pair()
+        combined = "".join(
+            key.public_bytes(
+                encoding=serialization.Encoding.PEM,
+                format=serialization.PublicFormat.SubjectPublicKeyInfo,
+            ).decode()
+            for key in (first, second)
+        )
+
+        parsed = _load_public_keys(combined)
+
+        assert [k.public_numbers() for k in parsed] == [
+            first.public_numbers(),
+            second.public_numbers(),
+        ]

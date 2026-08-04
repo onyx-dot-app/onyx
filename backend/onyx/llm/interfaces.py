@@ -80,6 +80,7 @@ class LLM(abc.ABC):
         max_tokens: int | None = None,
         reasoning_effort: ReasoningEffort = ReasoningEffort.AUTO,
         user_identity: LLMUserIdentity | None = None,
+        total_timeout_override: float | None = None,
     ) -> "ModelResponse":
         raise NotImplementedError
 

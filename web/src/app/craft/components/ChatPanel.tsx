@@ -22,7 +22,10 @@ import {
 import { useBuildStreaming } from "@/app/craft/hooks/useBuildStreaming";
 import { useUsageLimits } from "@/app/craft/hooks/useUsageLimits";
 import { useWakeOnIntent } from "@/app/craft/hooks/useWakeOnIntent";
-import { SessionErrorCode } from "@/app/craft/types/streamingTypes";
+import {
+  BuildMessageAttachment,
+  SessionErrorCode,
+} from "@/app/craft/types/streamingTypes";
 import {
   BuildFile,
   UploadFileStatus,
@@ -41,7 +44,10 @@ import { useLLMProviders } from "@/lib/languageModels/hooks";
 import {
   BuildLlmSelection,
   hasSupportedCraftProvider,
+  resolveSessionLlmSelection,
 } from "@/app/craft/onboarding/constants";
+import { getPreferredLlmSelection } from "@/app/craft/utils/llmPreferences";
+import { useUser } from "@/providers/UserProvider";
 import ScheduledRunBanner, {
   useScheduledRunContext,
 } from "@/app/craft/components/ScheduledRunBanner";
@@ -65,6 +71,20 @@ import { motion, AnimatePresence, useReducedMotion } from "motion/react";
 interface BuildChatPanelProps {
   /** Session ID from URL - used to prevent welcome flash while loading */
   existingSessionId?: string | null;
+}
+
+function toMessageAttachments(files: BuildFile[]): BuildMessageAttachment[] {
+  return files.flatMap((file) =>
+    file.status === UploadFileStatus.COMPLETED && file.path
+      ? [
+          {
+            name: file.name,
+            path: file.path,
+            mimeType: file.file_type,
+          },
+        ]
+      : []
+  );
 }
 
 /**
@@ -95,6 +115,7 @@ export default function BuildChatPanel({
   const hasSession = useHasSession();
   const isRunning = useIsRunning();
   const displayIsRunning = isRunning || scheduledRunInFlight;
+  const hasInterruptibleTurn = session?.status === "running";
   const wasInterrupted = useWasInterrupted();
   const { setLeftSidebarFolded, leftSidebarFolded, videoBackgroundEnabled } =
     useBuildContext();
@@ -107,23 +128,29 @@ export default function BuildChatPanel({
   // exists (the model picker stays enabled so admins can connect from it).
   const hasProvider = hasSupportedCraftProvider(llmProviders);
   // Picker shows the session's stored model unless the user picks another.
-  // The pick is keyed by session so it can't leak across sessions.
-  const sessionModel = useMemo<BuildLlmSelection | null>(() => {
-    if (!session?.agentProvider || !session?.agentModel) return null;
-    const match = llmProviders?.find(
-      (p) => p.provider === session.agentProvider
-    );
-    return {
-      provider: session.agentProvider,
-      providerName: match?.name ?? session.agentProvider,
-      modelName: session.agentModel,
-    };
-  }, [session?.agentProvider, session?.agentModel, llmProviders]);
+  // The pick is keyed by session so it can't leak across sessions; only when
+  // neither exists does the user's persisted preference (or the recommended
+  // default) apply.
+  const sessionModel = useMemo<BuildLlmSelection | null>(
+    () =>
+      resolveSessionLlmSelection(
+        session?.agentProvider,
+        session?.agentModel,
+        llmProviders
+      ),
+    [session?.agentProvider, session?.agentModel, llmProviders]
+  );
   const [modelBySession, setModelBySession] = useState<
     Record<string, BuildLlmSelection>
   >({});
-  const selectedModel =
-    (sessionId ? modelBySession[sessionId] : undefined) ?? sessionModel;
+  const { user } = useUser();
+  const selectedModel = useMemo(
+    () =>
+      (sessionId ? modelBySession[sessionId] : undefined) ??
+      sessionModel ??
+      getPreferredLlmSelection(user?.id, llmProviders),
+    [sessionId, modelBySession, sessionModel, user?.id, llmProviders]
+  );
 
   const contextUsage = useMemo(() => {
     const usage = session?.contextUsage;
@@ -131,7 +158,7 @@ export default function BuildChatPanel({
     let limit: number | null = null;
     if (selectedModel) {
       const provider = llmProviders?.find(
-        (p) => p.provider === selectedModel.provider
+        (candidate) => candidate.id === selectedModel.providerId
       );
       const config = provider?.model_configurations.find(
         (m) => m.name === selectedModel.modelName
@@ -425,10 +452,10 @@ export default function BuildChatPanel({
     setShowScrollButton(false);
   }, [sessionId]);
 
-  const handleSubmit = useCallback(
+  const sendMessage = useCallback(
     async (
       message: string,
-      files: BuildFile[],
+      attachments: BuildMessageAttachment[],
       modelOverride?: BuildLlmSelection | null
     ) => {
       if (limits?.isLimited) {
@@ -444,9 +471,6 @@ export default function BuildChatPanel({
       track(AnalyticsEvent.SENT_CRAFT_MESSAGE);
 
       const chosen = modelOverride ?? selectedModel;
-      const model = chosen
-        ? { provider: chosen.provider, modelName: chosen.modelName }
-        : null;
 
       if (hasSession && sessionId) {
         // Existing session flow
@@ -462,9 +486,10 @@ export default function BuildChatPanel({
           type: "user",
           content: message,
           timestamp: new Date(),
+          attachments,
         });
         // Stream the response
-        await streamMessage(sessionId, message, model);
+        await streamMessage(sessionId, message, chosen, attachments);
         refreshLimits();
       } else {
         // New session flow - ALWAYS use pre-provisioned session
@@ -481,20 +506,6 @@ export default function BuildChatPanel({
         // The backend session already exists (created during pre-provisioning).
         // Files were already uploaded immediately when attached to the pre-provisioned session.
         // Here we initialize the LOCAL Zustand store entry with the right state.
-        const userMessage = {
-          id: `msg-${Date.now()}`,
-          type: "user" as const,
-          content: message,
-          timestamp: new Date(),
-        };
-        // Initialize local state (NOT an API call - backend session already exists)
-        // - status: "running" disables input immediately
-        // - isLoaded: false allows loadSession to fetch sandbox info while preserving messages
-        createSession(newSessionId, {
-          messages: [userMessage],
-          status: "running",
-        });
-
         // Handle files that weren't successfully uploaded yet
         // This handles edge cases where:
         // 1. File is still uploading when user sends message - wait for it
@@ -526,6 +537,20 @@ export default function BuildChatPanel({
         }
 
         // Note: PENDING files are auto-uploaded by the context when session becomes available
+        const userMessage = {
+          id: `msg-${Date.now()}`,
+          type: "user" as const,
+          content: message,
+          timestamp: new Date(),
+          attachments,
+        };
+        // Initialize local state (NOT an API call - backend session already exists)
+        // - status: "running" disables input immediately
+        // - isLoaded: false allows loadSession to fetch sandbox info while preserving messages
+        createSession(newSessionId, {
+          messages: [userMessage],
+          status: "running",
+        });
 
         // Navigate to URL - session controller will set currentSessionId
         router.push(
@@ -538,7 +563,7 @@ export default function BuildChatPanel({
         setTimeout(() => nameBuildSession(newSessionId), 1000);
 
         // Stream the response (uses session ID directly, not currentSessionId)
-        await streamMessage(newSessionId, message, model);
+        await streamMessage(newSessionId, message, chosen, attachments);
         refreshLimits();
       }
     },
@@ -560,13 +585,24 @@ export default function BuildChatPanel({
     ]
   );
 
+  const handleSubmit = useCallback(
+    (
+      message: string,
+      files: BuildFile[],
+      modelOverride?: BuildLlmSelection | null
+    ) => sendMessage(message, toMessageAttachments(files), modelOverride),
+    [sendMessage]
+  );
+
   const handleInterrupt = useCallback(() => {
     if (sessionId) void interruptStreaming(sessionId);
   }, [sessionId, interruptStreaming]);
 
   const handleQueueMessage = useCallback(
-    (text: string) => {
-      if (sessionId) enqueueMessage(sessionId, text);
+    (text: string, files: BuildFile[]) => {
+      if (sessionId) {
+        enqueueMessage(sessionId, text, toMessageAttachments(files));
+      }
     },
     [sessionId, enqueueMessage]
   );
@@ -605,7 +641,7 @@ export default function BuildChatPanel({
       const next = queuedMessages[0];
       if (next) {
         removeQueuedMessage(sessionId, 0);
-        void handleSubmit(next.text, []);
+        void sendMessage(next.text, next.attachments);
       }
     }
   }, [
@@ -615,7 +651,7 @@ export default function BuildChatPanel({
     sessionError,
     isLimited,
     queuedMessages,
-    handleSubmit,
+    sendMessage,
     removeQueuedMessage,
   ]);
 
@@ -650,6 +686,7 @@ export default function BuildChatPanel({
                 {isMobile && leftSidebarFolded && (
                   <OpalButton
                     icon={SvgSidebar}
+                    aria-label="Open Sidebar"
                     onClick={() => setLeftSidebarFolded(false)}
                     prominence="tertiary"
                     size="sm"
@@ -717,6 +754,8 @@ export default function BuildChatPanel({
                     />
                   ) : (
                     <BuildMessageList
+                      sessionId={sessionId ?? existingSessionId ?? null}
+                      attachmentRefreshKey={session?.webappNeedsRefresh}
                       messages={session?.messages ?? []}
                       streamItems={session?.streamItems ?? []}
                       isStreaming={displayIsRunning}
@@ -811,7 +850,9 @@ export default function BuildChatPanel({
                     isRunning={displayIsRunning}
                     isInterrupting={isInterrupting}
                     onInterrupt={
-                      scheduledRunInFlight ? undefined : handleInterrupt
+                      hasInterruptibleTurn && !scheduledRunInFlight
+                        ? handleInterrupt
+                        : undefined
                     }
                     disabled={
                       isViewingSubagent || scheduledRunInFlight || !hasProvider

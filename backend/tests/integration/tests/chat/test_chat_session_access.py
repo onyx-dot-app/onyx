@@ -61,10 +61,10 @@ def _is_user_already_exists_detail(detail: object) -> bool:
             or "register_user_already_exists" in normalized
         )
     if isinstance(detail, dict):
-        code = detail.get("code")  # ty: ignore[invalid-argument-type]
+        code = detail.get("code")
         if isinstance(code, str) and code.lower() == "register_user_already_exists":
             return True
-        message = detail.get("message")  # ty: ignore[invalid-argument-type]
+        message = detail.get("message")
         if isinstance(message, str) and "already exists" in message.lower():
             return True
     return False

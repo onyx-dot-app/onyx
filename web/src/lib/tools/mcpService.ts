@@ -13,6 +13,7 @@ import {
   MCPAuthenticationPerformer,
   MCPOAuthProviderMode,
   MCPTransportType,
+  MCPAuthTemplate,
 } from "@/lib/tools/interfaces";
 import { parseErrorDetail } from "@/lib/fetcher";
 
@@ -190,6 +191,7 @@ export async function upsertMCPServer(serverData: {
   auth_type: MCPAuthenticationType;
   auth_performer: MCPAuthenticationPerformer;
   api_token?: string;
+  api_token_changed?: boolean;
   oauth_client_id?: string;
   oauth_client_secret?: string;
   oauth_provider_mode?: MCPOAuthProviderMode;
@@ -202,7 +204,7 @@ export async function upsertMCPServer(serverData: {
   // overwrite stored values with masked placeholders on resubmit.
   oauth_client_id_changed?: boolean;
   oauth_client_secret_changed?: boolean;
-  auth_template?: any;
+  auth_template?: MCPAuthTemplate;
   admin_credentials?: Record<string, string>;
   // Per-key analogue of `oauth_client_*_changed` for `admin_credentials`.
   admin_credentials_changed?: Record<string, boolean>;

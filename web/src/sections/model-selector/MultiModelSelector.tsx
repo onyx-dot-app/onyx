@@ -18,7 +18,11 @@ import {
   llmOptionKey,
 } from "@/lib/languageModels/options";
 import { useCurrentAgentLLMProviders } from "@/lib/languageModels/hooks";
-import ModelSelectorContent from "@/sections/model-selector/ModelSelectorContent";
+import ModelSelectorContent, {
+  ReasoningManager,
+  TemperatureManager,
+  useModelDetailManagers,
+} from "@/sections/model-selector/ModelSelectorContent";
 
 export const MAX_MODELS = 3;
 
@@ -36,6 +40,9 @@ export interface MultiModelSelectorProps {
   onAdd: (model: SelectedModel) => void;
   onRemove: (index: number) => void;
   onReplace: (index: number, model: SelectedModel) => void;
+  /** See ModelSelectorProps. Powers the per-model detail pane. */
+  temperatureManager?: TemperatureManager;
+  reasoningManager?: ReasoningManager;
 }
 
 export default function MultiModelSelector({
@@ -43,6 +50,8 @@ export default function MultiModelSelector({
   onAdd,
   onRemove,
   onReplace,
+  temperatureManager,
+  reasoningManager,
 }: MultiModelSelectorProps) {
   const [open, setOpen] = useState(false);
   const [replacingIndex, setReplacingIndex] = useState<number | null>(null);
@@ -50,6 +59,11 @@ export default function MultiModelSelector({
 
   const settings = useSettings();
   const multiModelAllowed = settings.multi_model_chat_enabled ?? true;
+
+  const modelDetail = useModelDetailManagers(
+    temperatureManager,
+    reasoningManager
+  );
 
   // Mirror the data source used by `ModelSelectorContent` so the selector is
   // disabled precisely when the popover would render "No models found".
@@ -62,14 +76,11 @@ export default function MultiModelSelector({
   const isMultiModel = selectedModels.length > 1;
   const atMax = selectedModels.length >= MAX_MODELS || !multiModelAllowed;
 
-  // Single tooltip for the whole selector. The disabled reason takes
-  // precedence; otherwise it labels the add affordance. When at max there is
-  // no add action, so the tooltip is omitted.
+  // Container-level tooltip carries only the disabled reason. The add button
+  // labels itself, so an enabled row shows no tooltip outside the button.
   const selectorTooltip = noModelsToSelect
     ? "No models currently configured"
-    : atMax
-      ? undefined
-      : "Add Model";
+    : undefined;
 
   const selectedKeys = useMemo(
     () => new Set(selectedModels.map(llmOptionKey)),
@@ -149,11 +160,8 @@ export default function MultiModelSelector({
 
   return (
     <Popover open={open} onOpenChange={handleOpenChange}>
-      {/*
-        When disabled, pointer events are blocked on the children (so the add
-        button / pills are inert) while the container itself stays hoverable, so
-        the Tooltip can still surface its message even in the disabled state.
-      */}
+      {/* Disabled state blocks pointer events on children only, so the
+          container stays hoverable and this Tooltip can surface the reason. */}
       <Tooltip tooltip={selectorTooltip} side="top">
         <div
           data-testid="model-selector"
@@ -169,6 +177,7 @@ export default function MultiModelSelector({
               prominence="tertiary"
               icon={SvgPlusCircle}
               size="sm"
+              tooltip="Add Model"
               onClick={(e: React.MouseEvent) => {
                 if (noModelsToSelect) return;
                 anchorRef.current = e.currentTarget as HTMLElement;
@@ -253,6 +262,7 @@ export default function MultiModelSelector({
             onSelect={handleSelect}
             isSelected={isSelected}
             isDisabled={isDisabled}
+            modelDetail={modelDetail}
           />
         </Popover.Content>
       )}

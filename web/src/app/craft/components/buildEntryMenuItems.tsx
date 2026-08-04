@@ -6,9 +6,16 @@ import {
   SvgPlug,
   SvgSparkle,
 } from "@opal/icons";
-import { getAppTypeLogo } from "@/app/craft/v1/apps/registry";
-import type { PickerEntry, PickerSections } from "@/lib/skills/picker";
-import type { PlusMenuItem } from "@/sections/input/PlusMenuButton";
+import {
+  pickerEntryKey,
+  type PickerEntry,
+  type PickerSections,
+} from "@/lib/skills/picker";
+import { pickerEntryIcon } from "@/lib/skills/pickerIcons";
+import type {
+  PlusMenuFlyoutItem,
+  PlusMenuItem,
+} from "@/sections/input/PlusMenuButton";
 
 interface LibraryFile {
   id: string;
@@ -73,27 +80,10 @@ export function buildEntryMenuItems(
       key: "apps",
       icon: SvgPlug,
       label: "Apps",
-      flyoutItems:
-        sections.apps.length > 0
-          ? sections.apps.map((app) => ({
-              key: String(app.externalAppId),
-              icon: getAppTypeLogo(app.appType),
-              label: app.name,
-              rightContent: app.authenticated ? undefined : (
-                <Text font="secondary-body" color="text-03">
-                  Connect
-                </Text>
-              ),
-              onSelect: () => onSelectEntry(app),
-            }))
-          : [
-              {
-                key: "apps-empty",
-                icon: SvgPlug,
-                label: "Connect an app",
-                onSelect: onBrowseApps,
-              },
-            ],
+      flyoutItems: buildAppFlyoutItems(sections, {
+        onSelectEntry,
+        onBrowseApps,
+      }),
     },
   ];
 
@@ -121,4 +111,48 @@ export function buildEntryMenuItems(
   }
 
   return items;
+}
+
+interface AppFlyoutHandlers {
+  onSelectEntry: (entry: PickerEntry) => void;
+  onBrowseApps: () => void;
+}
+
+/** Apps and craft-enabled MCP servers share this flyout — the agent reaches
+ * both the same way from the user's point of view. MCP rows are labelled so the
+ * two never read as one kind of thing. */
+function buildAppFlyoutItems(
+  sections: PickerSections,
+  { onSelectEntry, onBrowseApps }: AppFlyoutHandlers
+): PlusMenuFlyoutItem[] {
+  const connectHint = (authenticated: boolean) =>
+    authenticated ? undefined : (
+      <Text font="secondary-body" color="text-03">
+        Connect
+      </Text>
+    );
+
+  const items: PlusMenuFlyoutItem[] = [
+    ...sections.apps,
+    ...sections.mcpServers,
+  ].map((entry) => ({
+    key: pickerEntryKey(entry),
+    icon: pickerEntryIcon(entry),
+    label: entry.name,
+    // Only MCP rows are labelled; apps are the default kind on this page.
+    description: entry.kind === "mcp" ? "MCP server" : undefined,
+    rightContent: connectHint(entry.authenticated),
+    onSelect: () => onSelectEntry(entry),
+  }));
+
+  return items.length > 0
+    ? items
+    : [
+        {
+          key: "apps-empty",
+          icon: SvgPlug,
+          label: "Connect an app",
+          onSelect: onBrowseApps,
+        },
+      ];
 }

@@ -1,5 +1,9 @@
 "use client";
 
+import { useState } from "react";
+import { useRouter } from "next/navigation";
+import isEqual from "lodash/isEqual";
+import { Divider } from "@opal/components";
 import ActionPolicyEditorModal, {
   EditorField,
 } from "@/app/craft/v1/apps/admin/ActionPolicyEditorModal";
@@ -12,6 +16,20 @@ import {
   createBuiltInExternalApp,
   updateExternalApp,
 } from "@/app/craft/services/externalAppsService";
+import AssociatedSkillsEditor from "@/app/craft/v1/apps/admin/AssociatedSkillsEditor";
+import ExternalAppSkillsStepModal from "@/app/craft/v1/apps/admin/ExternalAppSkillsStepModal";
+import { CreateSkillModalContent } from "@/sections/modals/skills/CreateSkillModal";
+import useSkillUploadModal from "@/sections/modals/skills/useSkillUploadModal";
+import { UnsavedChangesModalContent } from "@/sections/modals/UnsavedChangesModal";
+import {
+  stageSkillCreationDraft,
+  type SkillCreationDraft,
+} from "@/lib/skills/creationDraft";
+import {
+  skillEditorUrlForApp,
+  skillEditUrlForApp,
+} from "@/app/craft/v1/apps/admin/skillAssociationNavigation";
+import { useSyncedAssociatedSkillIds } from "@/lib/externalApps/hooks";
 
 // Field key for the instance name; prefixed so it can never collide with a
 // descriptor-declared credential key.
@@ -33,6 +51,22 @@ export default function ConfigureProviderModal({
   descriptor,
   existingApp,
 }: ConfigureProviderModalProps) {
+  const router = useRouter();
+  const upload = useSkillUploadModal();
+  const [createdApp, setCreatedApp] = useState<ExternalAppAdminResponse | null>(
+    null
+  );
+  const [selectedSkillIds, setSelectedSkillIds] =
+    useSyncedAssociatedSkillIds(existingApp);
+  const existingAssociationDirty =
+    existingApp !== null &&
+    !isEqual(
+      new Set(selectedSkillIds),
+      new Set(existingApp.associated_skills.map((skill) => skill.id))
+    );
+  const associationPatch = existingAssociationDirty
+    ? { associated_skill_ids: selectedSkillIds }
+    : {};
   // Managed built-ins (cloud): Onyx owns creds/config, so the modal only edits
   // policies — cred fields are hidden and the backend ignores them anyway.
   const managed = existingApp?.is_onyx_managed ?? false;
@@ -84,7 +118,10 @@ export default function ConfigureProviderModal({
   ) {
     if (managed && existingApp) {
       // Managed: only policies are persisted; a partial PATCH leaves the rest.
-      await updateExternalApp(existingApp.id, { action_policies: policies });
+      await updateExternalApp(existingApp.id, {
+        action_policies: policies,
+        ...associationPatch,
+      });
     } else {
       const credentialValues = Object.fromEntries(
         descriptor.required_org_credential_fields.map((field) => [
@@ -106,21 +143,80 @@ export default function ConfigureProviderModal({
             ...existingApp.organization_credentials,
             ...credentialValues,
           },
+          ...associationPatch,
         });
       } else {
-        await createBuiltInExternalApp({
+        const created = await createBuiltInExternalApp({
           ...shared,
           app_type: descriptor.app_type,
           organization_credentials: credentialValues,
         });
+        setCreatedApp(created);
       }
     }
     onSaved();
   }
 
+  function navigateToSkillEditor(draftId?: string) {
+    if (!existingApp) return;
+    router.push(skillEditorUrlForApp(existingApp, draftId));
+  }
+
+  function navigateToExistingSkill(skillId: string) {
+    if (!existingApp) return;
+    router.push(skillEditUrlForApp(skillId, existingApp));
+  }
+
+  function validateUploadedSkill(draft: SkillCreationDraft): string | null {
+    return existingApp?.associated_skills.some(
+      (skill) => skill.name === draft.contents.name
+    )
+      ? `App “${existingApp.name}” already has an associated skill named “${draft.contents.name}”. Upload a skill with a different name.`
+      : null;
+  }
+
+  if (createdApp) {
+    return (
+      <ExternalAppSkillsStepModal
+        app={createdApp}
+        onClose={onClose}
+        onSaved={onSaved}
+      />
+    );
+  }
+
   return (
     <ActionPolicyEditorModal
-      onClose={onClose}
+      alternateContent={
+        upload.isOpen && existingApp
+          ? ({ requestLeave, hidden }) => (
+              <>
+                <CreateSkillModalContent
+                  hidden={hidden || upload.confirmationOpen}
+                  onRequestClose={upload.requestDismiss}
+                  onBusyChange={upload.setBusy}
+                  onDirtyChange={upload.setDirty}
+                  preserveDraftOnContinue
+                  validateDraft={validateUploadedSkill}
+                  onContinue={(draft) => {
+                    requestLeave(() =>
+                      navigateToSkillEditor(stageSkillCreationDraft(draft))
+                    );
+                  }}
+                />
+                {upload.confirmationOpen && (
+                  <UnsavedChangesModalContent
+                    onCancel={upload.cancelDiscard}
+                    onDiscard={upload.discardAndClose}
+                  />
+                )}
+              </>
+            )
+          : undefined
+      }
+      alternateContentConfirmationOpen={upload.confirmationOpen}
+      isAdditionalContentDirty={existingAssociationDirty}
+      onClose={upload.isOpen ? upload.requestDismiss : onClose}
       title={
         existingApp ? `Edit ${existingApp.name}` : `Add ${descriptor.name}`
       }
@@ -131,7 +227,7 @@ export default function ConfigureProviderModal({
       }
       note={
         managed
-          ? "This app is provided by Onyx — credentials are managed for you. Choose what the agent may do below. Users connect this app on the Apps page to make its skill available."
+          ? "This app is provided by Onyx — credentials are managed for you. Choose what the agent may do below. Users connect it from the Apps page."
           : undefined
       }
       fields={fields}
@@ -145,7 +241,31 @@ export default function ConfigureProviderModal({
       initialPolicies={initialPolicies}
       emptyPoliciesMessage="This provider has no actions to configure."
       saveLabel={existingApp ? "Save" : "Add"}
+      autoFocusFirstField={existingApp === null}
+      allowPristineSave={existingApp === null}
       onSave={save}
+      closeAfterSave={existingApp !== null}
+      bodyAfterPolicies={
+        existingApp
+          ? (requestLeave) => (
+              <>
+                <Divider />
+                <AssociatedSkillsEditor
+                  app={existingApp}
+                  selectedSkillIds={selectedSkillIds}
+                  onChange={setSelectedSkillIds}
+                  onOpenSkill={(skillId) =>
+                    requestLeave(() => navigateToExistingSkill(skillId))
+                  }
+                  onCreateSkill={() =>
+                    requestLeave(() => navigateToSkillEditor())
+                  }
+                  onUploadSkill={upload.open}
+                />
+              </>
+            )
+          : undefined
+      }
     />
   );
 }

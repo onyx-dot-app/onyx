@@ -974,3 +974,67 @@ class TestEmptyAnswerRecovery:
             p.obj.content for p in packets if isinstance(p.obj, AgentResponseDelta)
         )
         assert emitted == ""
+
+
+class TestFinishReasonPropagation:
+    """The terminal finish_reason must survive into LlmStepResult so run_llm_loop
+    can classify a model refusal (e.g. Anthropic stop_reason="refusal", which
+    LiteLLM normalizes to "content_filter") instead of raising a generic
+    EmptyLLMResponseError."""
+
+    @staticmethod
+    def _run_stream(chunks: list[tuple[str | None, str | None]]) -> Any:
+        from unittest.mock import MagicMock
+
+        from onyx.chat.llm_step import run_llm_step_pkt_generator
+        from onyx.llm.model_response import Delta, ModelResponseStream, StreamingChoice
+
+        llm = MagicMock()
+        llm.config = LLMConfig(
+            model_provider=LlmProviderNames.ANTHROPIC.value,
+            model_name="claude-fable-5",
+            temperature=0.0,
+            max_input_tokens=100_000,
+        )
+
+        def _gen(*_args: Any, **_kwargs: Any) -> Any:
+            for content, finish_reason in chunks:
+                yield ModelResponseStream(
+                    id="chunk",
+                    created="0",
+                    choice=StreamingChoice(
+                        finish_reason=finish_reason,
+                        delta=Delta(content=content),
+                    ),
+                )
+
+        llm.stream = _gen
+
+        gen = run_llm_step_pkt_generator(
+            history=[],
+            tool_definitions=[],
+            tool_choice=ToolChoiceOptions.AUTO,
+            llm=llm,
+            placement=Placement(turn_index=0),
+            state_container=None,
+            citation_processor=None,
+        )
+        while True:
+            try:
+                next(gen)
+            except StopIteration as stop:
+                llm_step_result, _ = stop.value
+                return llm_step_result
+
+    def test_refusal_stream_preserves_terminal_finish_reason(self) -> None:
+        """The exact shape from the bug report: HTTP 200, a terminal
+        content_filter finish reason, and zero content/tool calls."""
+        result = self._run_stream([(None, None), (None, "content_filter")])
+        assert result.finish_reason == "content_filter"
+        assert result.answer is None
+        assert result.tool_calls is None
+
+    def test_normal_stream_records_terminal_stop(self) -> None:
+        result = self._run_stream([("Hello", None), (" world", "stop")])
+        assert result.finish_reason == "stop"
+        assert result.answer == "Hello world"

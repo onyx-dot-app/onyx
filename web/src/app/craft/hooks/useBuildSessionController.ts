@@ -4,6 +4,7 @@ import { useEffect, useRef, useCallback } from "react";
 import { useRouter } from "next/navigation";
 import { useBuildSessionStore } from "@/app/craft/hooks/useBuildSessionStore";
 import { usePreProvisionPolling } from "@/app/craft/hooks/usePreProvisionPolling";
+import { useSandboxStatusReconciler } from "@/app/craft/hooks/useSandboxStatusReconciler";
 import { CRAFT_SEARCH_PARAM_NAMES } from "@/app/craft/services/searchParams";
 import { CRAFT_PATH } from "@/app/craft/v1/constants";
 import { hasSupportedCraftProvider } from "@/app/craft/onboarding/constants";
@@ -36,12 +37,12 @@ export function useBuildSessionController({
   existingSessionId,
 }: UseBuildSessionControllerProps) {
   const router = useRouter();
+  useSandboxStatusReconciler();
 
-  // Pre-provisioning gates only on having a supported Craft provider
-  // (anthropic/openai/openrouter). When one exists we start provisioning
+  // Pre-provisioning gates only on having a visible configured model. When one
+  // exists we start provisioning
   // immediately — even while the onboarding intro is still open — so the user
-  // exits onboarding to a ready sandbox. An unsupported-only setup can't craft,
-  // so we don't spin trying to provision against it.
+  // exits onboarding to a ready sandbox.
   const { llmProviders } = useLLMProviders();
   const hasAnyProvider = hasSupportedCraftProvider(llmProviders);
 

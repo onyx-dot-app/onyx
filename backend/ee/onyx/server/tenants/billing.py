@@ -177,12 +177,12 @@ def register_tenant_users(
     if idempotency_key is None:
         return stripe.Subscription.modify(
             stripe_subscription_id,
-            items=items,
+            items=items,  # ty: ignore[invalid-argument-type]
             metadata=metadata,
         )
     return stripe.Subscription.modify(
         stripe_subscription_id,
-        items=items,
+        items=items,  # ty: ignore[invalid-argument-type]
         metadata=metadata,
         idempotency_key=idempotency_key,
     )
@@ -263,7 +263,7 @@ def enforce_cloud_seat_limit(
 
     # Local import avoids circular import with user_mapping (which calls
     # back into this module from add_users_to_tenant).
-    from ee.onyx.server.tenants.user_mapping import get_tenant_count
+    from ee.onyx.db.user_tenant_mapping import get_tenant_count
 
     if db_session is not None:
         acquire_seat_lock(db_session, tenant)

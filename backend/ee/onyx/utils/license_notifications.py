@@ -3,7 +3,7 @@
 Drives email + in-app notification side effects. Idempotency is enforced
 through the existing `notification` unique index
 `(user_id, notif_type, COALESCE(additional_data, '{}'::jsonb))`. Pre-existing
-admins for a given (stage, expires_at[, sent_date]) tuple are skipped — only
+admins for a given (stage, expires_at[, sent_date]) tuple are skipped, and only
 freshly-notified admins receive an email.
 """
 
@@ -32,13 +32,59 @@ from shared_configs.configs import MULTI_TENANT
 logger = setup_logger()
 
 
+def _build_trial_copy(
+    stage: ExpiryWarningStage, expires_str: str, grace_days_remaining: int
+) -> tuple[str, str, str]:
+    """Trial-end wording for the same stages, since a trial reaching its end
+    is a subscription starting rather than access being lost."""
+    if stage == ExpiryWarningStage.GRACE:
+        return (
+            f"Onyx trial ended. {grace_days_remaining} grace days remaining",
+            f"Your trial ended on {expires_str} and billing has not started. "
+            f"You have {grace_days_remaining} day(s) of access remaining. Check "
+            "your payment method in Plans & Billing to keep Onyx running.",
+            f"Onyx trial ended. {grace_days_remaining} grace days remaining",
+        )
+    when = (
+        "within 24 hours" if stage == ExpiryWarningStage.T_1D else f"on {expires_str}"
+    )
+    return (
+        f"Onyx trial ends {expires_str}",
+        f"Your trial ends {when} and billing begins then. Visit Plans & "
+        "Billing to change your plan or cancel.",
+        f"Your Onyx trial ends {expires_str}",
+    )
+
+
 def _build_copy(
     stage: ExpiryWarningStage,
     expires_at: datetime,
     grace_days_remaining: int,
+    renewal_error: str | None = None,
+    is_trial: bool = False,
 ) -> tuple[str, str, str]:
     """Returns (banner_title, banner_description, email_subject)."""
+    if stage == ExpiryWarningStage.NONE:
+        raise ValueError(f"Unsupported stage for notification copy: {stage}")
     expires_str = expires_at.strftime("%Y-%m-%d")
+    if renewal_error and is_trial:
+        return (
+            "Onyx could not start your subscription",
+            f"Your trial ended on {expires_str} and billing could not start: "
+            f"{renewal_error} You have {grace_days_remaining} day(s) of grace "
+            "access remaining.",
+            "Action required: Onyx could not start your subscription",
+        )
+    if renewal_error:
+        return (
+            "Onyx could not renew your license",
+            f"Your license expired on {expires_str} and the automatic renewal "
+            f"failed: {renewal_error} You have {grace_days_remaining} day(s) of "
+            "grace access remaining.",
+            "Action required: Onyx license renewal failed",
+        )
+    if is_trial:
+        return _build_trial_copy(stage, expires_str, grace_days_remaining)
     if stage == ExpiryWarningStage.T_30D:
         return (
             f"Onyx license expires {expires_str}",
@@ -62,11 +108,11 @@ def _build_copy(
         )
     if stage == ExpiryWarningStage.GRACE:
         return (
-            f"Onyx license expired — {grace_days_remaining} grace days remaining",
+            f"Onyx license expired. {grace_days_remaining} grace days remaining",
             f"Your license expired on {expires_str}. You have "
             f"{grace_days_remaining} day(s) of grace access remaining before "
             "the instance is gated. Renew now.",
-            f"Onyx license expired — {grace_days_remaining} grace days remaining",
+            f"Onyx license expired. {grace_days_remaining} grace days remaining",
         )
     raise ValueError(f"Unsupported stage for notification copy: {stage}")
 
@@ -76,7 +122,7 @@ def _send_email_for_stage(
 ) -> None:
     if not EMAIL_CONFIGURED:
         logger.warning(
-            "Email not configured — skipping license expiry email to %s", user_email
+            "Email not configured, skipping license expiry email to %s", user_email
         )
         return
     html_body = build_html_email(
@@ -95,11 +141,16 @@ def _build_additional_data(
     stage: ExpiryWarningStage,
     expires_at: datetime,
     today: date,
+    renewal_failed: bool = False,
 ) -> dict[str, Any]:
     data: dict[str, Any] = {
         "stage": stage.value,
         "expires_at": expires_at.isoformat(),
     }
+    if renewal_failed:
+        # Its own dedup key, so a failure notice does not collapse into that
+        # day's ordinary grace reminder and get silently dropped.
+        data["renewal_failed"] = True
     if stage == ExpiryWarningStage.GRACE:
         # Grace period sends one notification per UTC date so admins are
         # reminded daily until they renew.
@@ -111,8 +162,18 @@ def notify_admins_for_stage(
     db_session: Session,
     stage: ExpiryWarningStage,
     expires_at: datetime,
+    renewal_error: str | None = None,
+    is_trial: bool = False,
 ) -> None:
-    """Create in-app notifications + send emails for admins not already notified."""
+    """Create in-app notifications + send emails for admins not already notified.
+
+    renewal_error replaces the copy with why the automatic renewal failed, so an
+    admin is told to fix billing rather than to renew something Onyx already
+    tried to renew for them.
+
+    is_trial reframes the same stages around a trial ending, so a customer two
+    weeks into a trial is not told their access is about to be cut off.
+    """
     if stage == ExpiryWarningStage.NONE:
         return
 
@@ -122,9 +183,13 @@ def notify_admins_for_stage(
         logger.warning("No active admins found to notify for license stage %s", stage)
         return
 
-    additional_data = _build_additional_data(stage, expires_at, today)
+    additional_data = _build_additional_data(
+        stage, expires_at, today, renewal_failed=bool(renewal_error)
+    )
     grace_days = get_grace_days_remaining(expires_at)
-    title, description, email_subject = _build_copy(stage, expires_at, grace_days)
+    title, description, email_subject = _build_copy(
+        stage, expires_at, grace_days, renewal_error, is_trial
+    )
 
     inserted_admin_ids = batch_create_notifications(
         user_ids=[a.id for a in admins],
@@ -176,14 +241,18 @@ def ensure_license_expiry_notification_for_user(
         logger.exception("Failed to verify license during on-read notification ensure")
         return
 
-    stage = get_expiry_warning_stage(payload.expires_at)
+    stage = get_expiry_warning_stage(
+        payload.expires_at, payload.ends_with_trial, payload.self_renewing
+    )
     if stage == ExpiryWarningStage.NONE:
         return
 
     today = datetime.now(timezone.utc).date()
     additional_data = _build_additional_data(stage, payload.expires_at, today)
     grace_days = get_grace_days_remaining(payload.expires_at)
-    title, description, _ = _build_copy(stage, payload.expires_at, grace_days)
+    title, description, _ = _build_copy(
+        stage, payload.expires_at, grace_days, is_trial=payload.ends_with_trial
+    )
 
     batch_create_notifications(
         user_ids=[user.id],

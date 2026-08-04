@@ -1,4 +1,4 @@
-import type { Meta, StoryObj } from "@storybook/react";
+import type { Meta, StoryObj } from "@storybook/react-vite";
 import InputAvatar from "./InputAvatar";
 import * as AvatarPrimitive from "@radix-ui/react-avatar";
 

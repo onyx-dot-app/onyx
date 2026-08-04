@@ -15,10 +15,12 @@ from uuid import uuid4
 import pytest
 from litellm.exceptions import ContextWindowExceededError
 
+from onyx.chat.llm_loop import EmptyLLMResponseError
 from onyx.chat.models import StreamingError
 from onyx.configs.constants import MessageType
 from onyx.db.chat import set_preferred_response
 from onyx.db.models import ChatMessage
+from onyx.llm.interfaces import ToolChoiceOptions
 from onyx.llm.override_models import LLMOverride
 from onyx.server.query_and_chat.models import SendMessageRequest
 from onyx.server.query_and_chat.placement import Placement
@@ -29,6 +31,9 @@ from onyx.server.query_and_chat.streaming_models import (
     ReasoningStart,
 )
 from onyx.utils.variable_functionality import global_version
+
+MODEL_REFUSAL_ERROR_CODE = "MODEL_REFUSAL"
+CONTENT_FILTER_FINISH_REASON = "content_filter"
 
 
 @pytest.fixture(autouse=True)
@@ -465,6 +470,38 @@ class TestRunModels:
         assert len(errors) == 1
         assert errors[0].error_code == "CONTEXT_TOO_LONG"
         assert errors[0].is_retryable is False
+
+    def test_model_refusal_preserves_error_classification(self) -> None:
+        refusal_message = "The selected model declined to respond."
+        refusal = EmptyLLMResponseError(
+            provider="anthropic",
+            model="claude-fable-5",
+            tool_choice=ToolChoiceOptions.AUTO,
+            client_error_msg=refusal_message,
+            error_code=MODEL_REFUSAL_ERROR_CODE,
+            is_retryable=False,
+            finish_reason=CONTENT_FILTER_FINISH_REASON,
+        )
+
+        with (
+            patch("onyx.chat.process_message.run_llm_loop", side_effect=refusal),
+            patch("onyx.chat.process_message.run_deep_research_llm_loop"),
+            patch("onyx.chat.process_message.construct_tools", return_value={}),
+            patch("onyx.chat.process_message.llm_loop_completion_handle"),
+            patch(
+                "onyx.chat.process_message.get_llm_token_counter",
+                return_value=lambda _: 0,
+            ),
+        ):
+            packets = _run_models_collect(_make_setup(n_models=1))
+
+        errors = [packet for packet in packets if isinstance(packet, StreamingError)]
+        assert len(errors) == 1
+        assert errors[0].error == refusal_message
+        assert errors[0].error_code == MODEL_REFUSAL_ERROR_CODE
+        assert errors[0].is_retryable is False
+        assert errors[0].details is not None
+        assert errors[0].details["finish_reason"] == CONTENT_FILTER_FINISH_REASON
 
     def test_one_model_error_does_not_stop_other_models(self) -> None:
         """A failing model yields StreamingError; the surviving model's packets still arrive."""

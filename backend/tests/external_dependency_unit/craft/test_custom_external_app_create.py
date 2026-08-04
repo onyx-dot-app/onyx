@@ -1,325 +1,285 @@
 from __future__ import annotations
 
-import io
-import json
-import zipfile
-from uuid import uuid4
+from uuid import UUID, uuid4
 
 import pytest
-from fastapi import UploadFile
 from sqlalchemy import delete, select
 from sqlalchemy.orm import Session
 
-from onyx.db.enums import ExternalAppType
+from onyx.db.enums import ExternalAppType, SkillSharePermission
+from onyx.db.external_app import (
+    associate_built_in_skill__no_commit,
+    create_external_app,
+    upsert_external_app_user_credential,
+)
 from onyx.db.models import ExternalApp, ExternalApp__Skill, Skill, User
 from onyx.error_handling.error_codes import OnyxErrorCode
 from onyx.error_handling.exceptions import OnyxError
+from onyx.external_apps.credentials import resolve_injection_headers
+from onyx.sandbox_proxy.request_evaluator import resolve_app_for_url
 from onyx.server.features.build.external_apps.api import (
     create_built_in_external_app,
     create_custom_external_app,
-    replace_custom_app_bundle,
     update_external_app_admin,
 )
 from onyx.server.features.build.external_apps.models import (
     CreateBuiltInExternalAppRequest,
+    CreateCustomExternalAppRequest,
     ExternalAppAdminResponse,
     UpdateExternalAppRequest,
 )
+from onyx.skills.built_in import EXTERNAL_APP_BUILT_IN_SKILL_IDS
 from onyx.utils.encryption import is_masked_credential
 
 _AUTH_TEMPLATE = {"Authorization": "Bearer {api_key}"}
 _UPSTREAM = ["https://api.example.com/*"]
 
 
-def _noop(*_args: object, **_kwargs: object) -> None:
-    return None
-
-
-def _bundle_zip(
-    *,
-    skill_name: str,
-    with_skill_md: bool = True,
-    marker: str = "v1",
-) -> bytes:
-    buf = io.BytesIO()
-    with zipfile.ZipFile(buf, "w") as zf:
-        if with_skill_md:
-            zf.writestr(
-                "SKILL.md",
-                f"---\nname: {skill_name}\ndescription: Bundle description\n"
-                "---\n\nDo things.\n",
-            )
-        zf.writestr("helper.py", f"print('{marker}')\n")
-    return buf.getvalue()
-
-
-def _upload(
-    filename: str, *, with_skill_md: bool = True, marker: str = "v1"
-) -> UploadFile:
-    skill_name = filename.removesuffix(".zip")
-    return UploadFile(
-        file=io.BytesIO(
-            _bundle_zip(
-                skill_name=skill_name,
-                with_skill_md=with_skill_md,
-                marker=marker,
-            )
-        ),
-        filename=filename,
-    )
-
-
 def _create(
     db_session: Session,
     test_user: User,
-    skill_name: str,
     *,
-    auth_template: str = json.dumps(_AUTH_TEMPLATE),
-    organization_credentials: str = json.dumps({"api_key": "sk-test"}),
+    name: str = "My Custom App",
+    auth_template: dict[str, str] | None = None,
+    organization_credentials: dict[str, str] | None = None,
 ) -> ExternalAppAdminResponse:
-    """Create a custom app with a valid default bundle."""
     return create_custom_external_app(
-        name="My Form Name",
-        upstream_url_patterns=json.dumps(_UPSTREAM),
-        auth_template=auth_template,
-        organization_credentials=organization_credentials,
-        bundle=_upload(f"{skill_name}.zip"),
+        request=CreateCustomExternalAppRequest(
+            name=name,
+            upstream_url_patterns=_UPSTREAM,
+            auth_template=_AUTH_TEMPLATE if auth_template is None else auth_template,
+            organization_credentials=(
+                {"api_key": "sk-test"}
+                if organization_credentials is None
+                else organization_credentials
+            ),
+        ),
         _=test_user,
         db_session=db_session,
     )
 
 
-@pytest.fixture(autouse=True, scope="module")
-def _ensure_bundle_store(initialize_file_store: None) -> None:  # noqa: ARG001
-    """Create the bundle blob store before any test runs (create/edit save the
-    uploaded bundle via ``ingest_skill_bundle``)."""
+def _delete_app(db_session: Session, app_id: int) -> None:
+    db_session.execute(delete(ExternalApp).where(ExternalApp.id == app_id))
+    db_session.commit()
 
 
-def test_create_persists_skill_and_app(
+def _skill_ids(db_session: Session) -> set[UUID]:
+    return set(db_session.scalars(select(Skill.id)))
+
+
+def test_create_persists_gateway_without_creating_skill_content(
     db_session: Session,
     test_user: User,
-    monkeypatch: pytest.MonkeyPatch,
 ) -> None:
-    monkeypatch.setattr(
-        "onyx.server.features.build.external_apps.api.push_skill_to_affected_sandboxes",
-        _noop,
-    )
-    skill_name = f"custom-test-{uuid4().hex[:8]}"
+    skills_before = _skill_ids(db_session)
 
-    resp = _create(db_session, test_user, skill_name)
+    response = _create(db_session, test_user)
 
-    # The form name is app display metadata; the bundle frontmatter supplies the
-    # linked skill's canonical name and description.
-    assert resp.app_type == ExternalAppType.CUSTOM
-    assert resp.name == "My Form Name"
-    assert resp.upstream_url_patterns == _UPSTREAM
-
-    skill = db_session.scalar(select(Skill).where(Skill.name == skill_name))
-    assert skill is not None
-    assert skill.built_in_skill_id is None
-    assert skill.bundle_file_id  # bundle was stored
-    assert skill.name == skill_name
-    assert skill.description == "Bundle description"
-
-    app = db_session.scalar(
-        select(ExternalApp)
-        .join(
-            ExternalApp__Skill,
-            ExternalApp__Skill.external_app_id == ExternalApp.id,
+    assert response.app_type == ExternalAppType.CUSTOM
+    assert response.name == "My Custom App"
+    assert response.upstream_url_patterns == _UPSTREAM
+    assert response.associated_skills == []
+    assert _skill_ids(db_session) == skills_before
+    assert (
+        db_session.scalar(
+            select(ExternalApp__Skill).where(
+                ExternalApp__Skill.external_app_id == response.id
+            )
         )
-        .where(ExternalApp__Skill.skill_id == skill.id)
+        is None
     )
+
+    app = db_session.get(ExternalApp, response.id)
     assert app is not None
-    assert app.name == "My Form Name"
     assert app.auth_template == _AUTH_TEMPLATE
-    # organization_credentials is encrypted at rest -> decrypt to compare.
     assert app.organization_credentials.get_value(apply_mask=False) == {
         "api_key": "sk-test"
     }
-
-    db_session.execute(delete(Skill).where(Skill.name == skill_name))
-    db_session.commit()
+    _delete_app(db_session, response.id)
 
 
-def test_custom_app_glob_matches_deep_path(
+def test_zero_skill_app_can_match_and_inject_user_credentials(
     db_session: Session,
     test_user: User,
-    monkeypatch: pytest.MonkeyPatch,
 ) -> None:
-    """Custom apps store their URL patterns as authored globs; the matcher
-    translates them to regexes that cover deep paths (the Discord 401
-    regression — ``/api/*`` must match ``/api/v10/...``)."""
-    from onyx.sandbox_proxy.request_evaluator import resolve_app_for_url
-
-    monkeypatch.setattr(
-        "onyx.server.features.build.external_apps.api.push_skill_to_affected_sandboxes",
-        _noop,
+    response = _create(
+        db_session,
+        test_user,
+        organization_credentials={},
     )
-    skill_name = f"custom-test-{uuid4().hex[:8]}"
-
-    resp = _create(db_session, test_user, skill_name)
-    # The glob is stored and round-tripped verbatim — no regex stored at rest.
-    assert resp.upstream_url_patterns == _UPSTREAM
-
-    app = db_session.scalar(select(ExternalApp).where(ExternalApp.id == resp.id))
+    app = db_session.get(ExternalApp, response.id)
     assert app is not None
-    assert list(app.upstream_url_patterns) == _UPSTREAM
-    # The matcher translates the glob, resolving a realistic deep path here.
-    assert resolve_app_for_url("https://api.example.com/v10/users/@me", [app]) is app
-    assert resolve_app_for_url("https://other.example.com/x", [app]) is None
+    assert app.associated_skills == []
 
-    db_session.execute(delete(Skill).where(Skill.name == skill_name))
+    matched = resolve_app_for_url(
+        "https://api.example.com/v10/users/@me",
+        [app],
+    )
+    assert matched is app
+    assert resolve_injection_headers(db_session, app.id, test_user.id) == {}
+
+    upsert_external_app_user_credential(
+        db_session,
+        external_app_id=app.id,
+        user_id=test_user.id,
+        user_credentials={"api_key": "user-secret"},
+    )
+    assert resolve_injection_headers(db_session, app.id, test_user.id) == {
+        "Authorization": "Bearer user-secret"
+    }
+    _delete_app(db_session, response.id)
+
+
+def test_built_in_provisioning_reuses_an_orphaned_system_skill(
+    db_session: Session,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    built_in_skill_id = f"test-provider-{uuid4().hex[:8]}"
+    monkeypatch.setitem(
+        EXTERNAL_APP_BUILT_IN_SKILL_IDS,
+        ExternalAppType.CUSTOM,
+        built_in_skill_id,
+    )
+
+    first_app = create_external_app(
+        db_session=db_session,
+        name="First provider",
+        app_type=ExternalAppType.CUSTOM,
+        upstream_url_patterns=_UPSTREAM,
+        auth_template={},
+        organization_credentials={},
+    )
+    first_skill = associate_built_in_skill__no_commit(db_session, first_app)
+    db_session.commit()
+
+    first_skill_id = first_skill.id
+    db_session.delete(first_app)
+    db_session.commit()
+    orphaned_skill = db_session.get(Skill, first_skill_id)
+    assert orphaned_skill is not None
+    orphaned_skill.public_permission = None
+    db_session.commit()
+
+    second_app = create_external_app(
+        db_session=db_session,
+        name="Recreated provider",
+        app_type=ExternalAppType.CUSTOM,
+        upstream_url_patterns=_UPSTREAM,
+        auth_template={},
+        organization_credentials={},
+    )
+    second_skill = associate_built_in_skill__no_commit(db_session, second_app)
+    db_session.commit()
+
+    assert second_skill.id == first_skill_id
+    assert second_skill.public_permission == SkillSharePermission.VIEWER
+    assert second_app.associated_skills == [second_skill]
+    assert (
+        len(
+            list(
+                db_session.scalars(
+                    select(Skill).where(Skill.built_in_skill_id == built_in_skill_id)
+                )
+            )
+        )
+        == 1
+    )
+
+    _delete_app(db_session, second_app.id)
+    db_session.execute(delete(Skill).where(Skill.id == first_skill_id))
     db_session.commit()
 
 
-def test_create_rejects_wildcard_host_glob(
+def test_create_rejects_wildcard_host_without_persisting_resources(
     db_session: Session,
     test_user: User,
-    monkeypatch: pytest.MonkeyPatch,
 ) -> None:
-    monkeypatch.setattr(
-        "onyx.server.features.build.external_apps.api.push_skill_to_affected_sandboxes",
-        _noop,
-    )
-    skill_name = f"custom-test-{uuid4().hex[:8]}"
+    app_ids_before = set(db_session.scalars(select(ExternalApp.id)))
+    skill_ids_before = _skill_ids(db_session)
 
-    with pytest.raises(OnyxError):
+    with pytest.raises(OnyxError) as exc:
         create_custom_external_app(
-            name="Wildcard Host",
-            upstream_url_patterns=json.dumps(["https://*.example.com/*"]),
-            auth_template=json.dumps(_AUTH_TEMPLATE),
-            organization_credentials=json.dumps({"api_key": "sk-test"}),
-            bundle=_upload(f"{skill_name}.zip"),
+            request=CreateCustomExternalAppRequest(
+                name="Wildcard Host",
+                upstream_url_patterns=["https://*.example.com/*"],
+                auth_template=_AUTH_TEMPLATE,
+                organization_credentials={},
+            ),
             _=test_user,
             db_session=db_session,
         )
-    # Rejected before persistence — no skill row created.
-    assert db_session.scalar(select(Skill).where(Skill.name == skill_name)) is None
+
+    assert exc.value.error_code == OnyxErrorCode.INVALID_INPUT
+    assert set(db_session.scalars(select(ExternalApp.id))) == app_ids_before
+    assert _skill_ids(db_session) == skill_ids_before
 
 
-def test_create_with_no_credentials(
+def test_create_allows_allowlist_only_app(
     db_session: Session,
     test_user: User,
-    monkeypatch: pytest.MonkeyPatch,
 ) -> None:
-    monkeypatch.setattr(
-        "onyx.server.features.build.external_apps.api.push_skill_to_affected_sandboxes",
-        _noop,
-    )
-    skill_name = f"custom-test-{uuid4().hex[:8]}"
-
-    resp = _create(
+    response = _create(
         db_session,
         test_user,
-        skill_name,
-        auth_template=json.dumps({}),
-        organization_credentials=json.dumps({}),
+        auth_template={},
+        organization_credentials={},
     )
 
-    assert resp.auth_template == {}
-    assert resp.organization_credentials == {}
-    assert db_session.scalar(select(Skill).where(Skill.name == skill_name)) is not None
-
-    db_session.execute(delete(Skill).where(Skill.name == skill_name))
-    db_session.commit()
+    assert response.auth_template == {}
+    assert response.organization_credentials == {}
+    assert response.associated_skills == []
+    _delete_app(db_session, response.id)
 
 
-def test_edit_updates_config_and_replaces_bundle(
+def test_edit_changes_only_gateway_configuration(
     db_session: Session,
     test_user: User,
-    monkeypatch: pytest.MonkeyPatch,
 ) -> None:
-    monkeypatch.setattr(
-        "onyx.server.features.build.external_apps.api.push_skill_to_affected_sandboxes",
-        _noop,
-    )
-    skill_name = f"custom-test-{uuid4().hex[:8]}"
-
-    created = _create(db_session, test_user, skill_name)
-    skill = db_session.scalar(select(Skill).where(Skill.name == skill_name))
-    assert skill is not None
-    original_bundle_id = skill.bundle_file_id
+    created = _create(db_session, test_user)
+    skills_before = _skill_ids(db_session)
 
     edited = update_external_app_admin(
         external_app_id=created.id,
         request=UpdateExternalAppRequest(
             name="Renamed App",
             upstream_url_patterns=["https://api.example.com/v2/*"],
-            auth_template=_AUTH_TEMPLATE,
-            organization_credentials={},
+            auth_template={"X-API-Key": "{token}"},
+            organization_credentials={"token": "updated-secret"},
         ),
         _=test_user,
         db_session=db_session,
     )
 
-    assert edited.id == created.id
     assert edited.name == "Renamed App"
     assert edited.upstream_url_patterns == ["https://api.example.com/v2/*"]
-    assert edited.organization_credentials == {}
-
-    db_session.refresh(skill)
-    assert skill.description == "Bundle description"
-
-    rebundled = replace_custom_app_bundle(
-        external_app_id=created.id,
-        bundle=_upload(f"{skill_name}.zip", marker="v2"),
-        _=test_user,
-        db_session=db_session,
-    )
-    # Bundle swap preserves the fields set by the PATCH above.
-    assert rebundled.name == "Renamed App"
-
-    db_session.expire_all()
-    skill = db_session.scalar(select(Skill).where(Skill.name == skill_name))
-    assert skill is not None
-    # The skill name is stable across app edits and bundle swaps, but the blob
-    # changed.
-    assert skill.name == skill_name
-    app = db_session.scalar(select(ExternalApp).where(ExternalApp.id == created.id))
+    assert edited.associated_skills == []
+    assert _skill_ids(db_session) == skills_before
+    app = db_session.get(ExternalApp, created.id)
     assert app is not None
-    assert app.name == "Renamed App"
-    assert skill.bundle_file_id
-    assert skill.bundle_file_id != original_bundle_id
-
-    db_session.execute(delete(Skill).where(Skill.name == skill_name))
-    db_session.commit()
+    assert app.organization_credentials.get_value(apply_mask=False) == {
+        "token": "updated-secret"
+    }
+    _delete_app(db_session, created.id)
 
 
 def test_admin_response_masks_secret_and_edit_preserves_it(
     db_session: Session,
     test_user: User,
-    monkeypatch: pytest.MonkeyPatch,
 ) -> None:
-    """Org credential secrets are masked in the admin response, and re-saving the
-    masked placeholder (an edit that doesn't touch the secret) preserves the real
-    stored value rather than overwriting it with the mask."""
-    monkeypatch.setattr(
-        "onyx.server.features.build.external_apps.api.push_skill_to_affected_sandboxes",
-        _noop,
-    )
-    skill_name = f"custom-test-{uuid4().hex[:8]}"
     raw_secret = "super-secret-client-value-1234567890"
-
     created = _create(
         db_session,
         test_user,
-        skill_name,
-        organization_credentials=json.dumps({"api_key": raw_secret}),
+        organization_credentials={"api_key": raw_secret},
     )
-
-    # The response must not echo the raw secret back to the client.
     returned = created.organization_credentials["api_key"]
     assert returned != raw_secret
     assert is_masked_credential(returned)
 
-    # Edit, echoing the masked value back (the form was populated from the
-    # masked response and the admin didn't change it).
     edited = update_external_app_admin(
         external_app_id=created.id,
         request=UpdateExternalAppRequest(
-            name="My Form Name",
-            upstream_url_patterns=_UPSTREAM,
-            auth_template=_AUTH_TEMPLATE,
             organization_credentials={"api_key": returned},
         ),
         _=test_user,
@@ -328,155 +288,71 @@ def test_admin_response_masks_secret_and_edit_preserves_it(
     assert is_masked_credential(edited.organization_credentials["api_key"])
 
     db_session.expire_all()
-    app = db_session.scalar(select(ExternalApp).where(ExternalApp.id == created.id))
+    app = db_session.get(ExternalApp, created.id)
     assert app is not None
-    # The stored secret is unchanged — the mask never overwrote it.
     assert app.organization_credentials.get_value(apply_mask=False) == {
         "api_key": raw_secret
     }
-
-    db_session.execute(delete(Skill).where(Skill.name == skill_name))
-    db_session.commit()
+    _delete_app(db_session, created.id)
 
 
-def test_create_rejects_bundle_without_skill_md(
+@pytest.mark.parametrize(
+    ("create_request", "expected_detail"),
+    [
+        (
+            CreateCustomExternalAppRequest(
+                name=" ",
+                upstream_url_patterns=_UPSTREAM,
+                auth_template={},
+                organization_credentials={},
+            ),
+            "name is required",
+        ),
+        (
+            CreateCustomExternalAppRequest(
+                name="No URLs",
+                upstream_url_patterns=[],
+                auth_template={},
+                organization_credentials={},
+            ),
+            "At least one upstream URL pattern",
+        ),
+        (
+            CreateCustomExternalAppRequest(
+                name="Bad Header",
+                upstream_url_patterns=_UPSTREAM,
+                auth_template={"Authorization": ""},
+                organization_credentials={},
+            ),
+            "must be a non-empty string",
+        ),
+    ],
+)
+def test_create_rejects_invalid_gateway_configuration(
     db_session: Session,
     test_user: User,
-    monkeypatch: pytest.MonkeyPatch,
+    create_request: CreateCustomExternalAppRequest,
+    expected_detail: str,
 ) -> None:
-    monkeypatch.setattr(
-        "onyx.server.features.build.external_apps.api.push_skill_to_affected_sandboxes",
-        _noop,
-    )
-    skill_name = f"custom-test-{uuid4().hex[:8]}"
-
-    with pytest.raises(OnyxError):
-        create_custom_external_app(
-            name="No Skill",
-            upstream_url_patterns=json.dumps(_UPSTREAM),
-            auth_template=json.dumps(_AUTH_TEMPLATE),
-            organization_credentials=json.dumps({}),
-            bundle=_upload(f"{skill_name}.zip", with_skill_md=False),
-            _=test_user,
-            db_session=db_session,
-        )
-
-    assert db_session.scalar(select(Skill).where(Skill.name == skill_name)) is None
-
-
-def test_create_requires_bundle(
-    db_session: Session,
-    test_user: User,
-    monkeypatch: pytest.MonkeyPatch,
-) -> None:
-    monkeypatch.setattr(
-        "onyx.server.features.build.external_apps.api.push_skill_to_affected_sandboxes",
-        _noop,
-    )
-    with pytest.raises(OnyxError):
-        create_custom_external_app(
-            name="No Bundle",
-            upstream_url_patterns=json.dumps(_UPSTREAM),
-            auth_template=json.dumps(_AUTH_TEMPLATE),
-            organization_credentials=json.dumps({}),
-            bundle=None,
-            _=test_user,
-            db_session=db_session,
-        )
-
-
-def test_create_rejects_bundle_over_skill_upload_size_limit(
-    db_session: Session,
-    test_user: User,
-    monkeypatch: pytest.MonkeyPatch,
-) -> None:
-    monkeypatch.setattr(
-        "onyx.server.features.build.external_apps.api.push_skill_to_affected_sandboxes",
-        _noop,
-    )
-    monkeypatch.setattr("onyx.skills.bundle.DEFAULT_TOTAL_MAX_BYTES", 1)
-    skill_name = f"custom-test-{uuid4().hex[:8]}"
+    app_ids_before = set(db_session.scalars(select(ExternalApp.id)))
 
     with pytest.raises(OnyxError) as exc:
         create_custom_external_app(
-            name="Too Large",
-            upstream_url_patterns=json.dumps(_UPSTREAM),
-            auth_template=json.dumps(_AUTH_TEMPLATE),
-            organization_credentials=json.dumps({}),
-            bundle=_upload(f"{skill_name}.zip"),
+            request=create_request,
             _=test_user,
             db_session=db_session,
         )
 
-    assert exc.value.error_code == OnyxErrorCode.PAYLOAD_TOO_LARGE
-    assert db_session.scalar(select(Skill).where(Skill.name == skill_name)) is None
+    assert exc.value.error_code == OnyxErrorCode.INVALID_INPUT
+    assert expected_detail in exc.value.detail
+    assert set(db_session.scalars(select(ExternalApp.id))) == app_ids_before
 
 
-def test_replace_rejects_bundle_over_skill_upload_size_limit(
+def test_built_in_endpoint_rejects_custom_app_type(
     db_session: Session,
     test_user: User,
-    monkeypatch: pytest.MonkeyPatch,
 ) -> None:
-    monkeypatch.setattr(
-        "onyx.server.features.build.external_apps.api.push_skill_to_affected_sandboxes",
-        _noop,
-    )
-    skill_name = f"custom-test-{uuid4().hex[:8]}"
-    created = _create(db_session, test_user, skill_name)
-
-    monkeypatch.setattr("onyx.skills.bundle.DEFAULT_TOTAL_MAX_BYTES", 1)
-
     with pytest.raises(OnyxError) as exc:
-        replace_custom_app_bundle(
-            external_app_id=created.id,
-            bundle=_upload(f"{skill_name}.zip", marker="v2"),
-            _=test_user,
-            db_session=db_session,
-        )
-
-    assert exc.value.error_code == OnyxErrorCode.PAYLOAD_TOO_LARGE
-
-    db_session.execute(delete(Skill).where(Skill.name == skill_name))
-    db_session.commit()
-
-
-def test_create_cleans_up_blob_on_failure(
-    db_session: Session,
-    test_user: User,
-    monkeypatch: pytest.MonkeyPatch,
-) -> None:
-    monkeypatch.setattr(
-        "onyx.server.features.build.external_apps.api.push_skill_to_affected_sandboxes",
-        _noop,
-    )
-
-    def _boom(*_args: object, **_kwargs: object) -> ExternalApp:
-        raise OnyxError(OnyxErrorCode.INVALID_INPUT, "forced failure")
-
-    monkeypatch.setattr(
-        "onyx.server.features.build.external_apps.api.create_external_app",
-        _boom,
-    )
-
-    deleted: list[str] = []
-    monkeypatch.setattr(
-        "onyx.skills.ingest.delete_bundle_blob",
-        lambda _fs, file_id: deleted.append(file_id),
-    )
-
-    skill_name = f"custom-test-{uuid4().hex[:8]}"
-    with pytest.raises(OnyxError):
-        _create(db_session, test_user, skill_name)
-
-    # The bundle was stored during ingest, so the post-failure cleanup must run.
-    assert len(deleted) == 1
-
-
-def test_json_admin_apps_rejects_custom(
-    db_session: Session,
-    test_user: User,
-) -> None:
-    with pytest.raises(OnyxError):
         create_built_in_external_app(
             request=CreateBuiltInExternalAppRequest(
                 name="Nope",
@@ -488,3 +364,5 @@ def test_json_admin_apps_rejects_custom(
             _=test_user,
             db_session=db_session,
         )
+
+    assert exc.value.error_code == OnyxErrorCode.INVALID_INPUT

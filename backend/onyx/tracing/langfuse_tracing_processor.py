@@ -245,14 +245,14 @@ class LangfuseTracingProcessor(TracingProcessor):
                     model_parameters=self._get_model_parameters(data),
                 )
             elif isinstance(data, FunctionSpanData):
-                langfuse_span = client.start_observation(  # ty: ignore[no-matching-overload]
+                langfuse_span = client.start_observation(
                     trace_context=trace_context,
                     name=data.name,
                     as_type="tool",
                     metadata=trace_metadata,
                 )
             elif isinstance(data, AgentSpanData):
-                langfuse_span = client.start_observation(  # ty: ignore[no-matching-overload]
+                langfuse_span = client.start_observation(
                     trace_context=trace_context,
                     name=data.name,
                     as_type="agent",
@@ -264,7 +264,7 @@ class LangfuseTracingProcessor(TracingProcessor):
                     },
                 )
             else:
-                langfuse_span = client.start_observation(  # ty: ignore[no-matching-overload]
+                langfuse_span = client.start_observation(
                     trace_context=trace_context,
                     name=data.type if hasattr(data, "type") else "unknown",
                     as_type="span",

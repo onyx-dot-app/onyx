@@ -17,6 +17,8 @@ export interface MemberRow extends UserRow {
 export interface TokenRateLimitDisplay {
   token_id: number;
   enabled: boolean;
-  token_budget: number;
+  // null for a cost-only limit (matches the backend's nullable column).
+  token_budget: number | null;
   period_hours: number;
+  cost_budget_cents: number | null;
 }

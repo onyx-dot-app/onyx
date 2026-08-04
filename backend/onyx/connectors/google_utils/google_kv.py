@@ -105,11 +105,7 @@ def _load_handshake_state(credential_id: int) -> dict[str, Any]:
             OnyxErrorCode.INVALID_INPUT,
             "No Google authorization flow is in progress. Restart the authorization.",
         )
-    issued_at_raw = (
-        payload.get("issued_at")  # ty: ignore[invalid-argument-type]
-        if isinstance(payload, dict)
-        else None
-    )
+    issued_at_raw = payload.get("issued_at") if isinstance(payload, dict) else None
     issued_at = (
         datetime.fromisoformat(issued_at_raw)
         if isinstance(issued_at_raw, str)

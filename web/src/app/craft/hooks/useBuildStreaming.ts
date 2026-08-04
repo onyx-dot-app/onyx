@@ -6,6 +6,7 @@ import { useSWRConfig } from "swr";
 import {
   Artifact,
   ArtifactType,
+  BuildMessageAttachment,
   SessionErrorCode,
 } from "@/app/craft/types/streamingTypes";
 
@@ -19,6 +20,7 @@ import {
   fetchScheduledRunEventStream,
   RateLimitError,
 } from "@/app/craft/services/apiServices";
+import type { BuildLlmSelection } from "@/app/craft/onboarding/constants";
 import { SWR_KEYS } from "@/lib/swr-keys";
 
 import {
@@ -647,8 +649,8 @@ export function useBuildStreaming() {
             if (isWebapp) {
               fetchSession(sessionId)
                 .then((sessionData) => {
-                  if (sessionData.sandbox?.nextjs_port) {
-                    const webappUrl = `http://localhost:${sessionData.sandbox.nextjs_port}`;
+                  if (sessionData.nextjs_port) {
+                    const webappUrl = `http://localhost:${sessionData.nextjs_port}`;
                     updateSessionData(sessionId, { webappUrl });
                   }
                 })
@@ -951,7 +953,8 @@ export function useBuildStreaming() {
     async (
       sessionId: string,
       content: string,
-      model?: { provider: string; modelName: string } | null
+      model?: BuildLlmSelection | null,
+      attachments: BuildMessageAttachment[] = []
     ): Promise<void> => {
       const currentState = useBuildSessionStore.getState();
       const existingSession = currentState.sessions.get(sessionId);
@@ -980,7 +983,8 @@ export function useBuildStreaming() {
           content,
           crypto.randomUUID(),
           controller.signal,
-          model
+          model,
+          attachments
         );
         updateSessionData(sessionId, {
           activeTurnId: turn.turn_id,

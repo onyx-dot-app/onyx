@@ -6,6 +6,7 @@ import { getBaseUrl } from "@/api/config";
 import { getToken } from "@/api/auth/tokenStore";
 import { createNdjsonBuffer } from "@/chat/ndjson";
 import { FileDescriptor } from "@/chat/interfaces";
+import { InternalSearchFilters } from "@/chat/sources";
 import {
   MessageResponseIDInfo,
   Packet,
@@ -22,6 +23,18 @@ export interface SendMessageBody {
   file_descriptors: FileDescriptor[];
   deep_research: boolean;
   origin: string;
+  // Toolbar-driven; omitted/null = backend defaults (allow all tools, force none, no source filter).
+  allowed_tool_ids?: number[] | null;
+  forced_tool_id?: number | null;
+  internal_search_filters?: InternalSearchFilters | null;
+}
+
+// The toolbar-resolved send options threaded through submit(); mapped onto SendMessageBody.
+export interface ChatToolOptions {
+  deepResearch: boolean;
+  allowedToolIds: number[] | null;
+  forcedToolId: number | null;
+  internalSearchFilters: InternalSearchFilters | null;
 }
 
 // status lets the resume caller stay silent on the expected "nothing to resume" (404).

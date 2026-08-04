@@ -95,11 +95,30 @@ def _setup_prometheus_collectors(sender: Any) -> bool:
         return False
 
 
+def _setup_shard_capacity_collector() -> None:
+    """Register the shard capacity collector.
+
+    Isolated from the indexing-pipeline registration on purpose: that one gates
+    `start_metrics_server`, so letting a failure here fall into its handler would take
+    every metric off this worker rather than just this collector's.
+    """
+    try:
+        from prometheus_client.registry import REGISTRY
+
+        from onyx.server.metrics.shard_capacity import ShardCapacityCollector
+
+        REGISTRY.register(ShardCapacityCollector())
+        logger.info("Prometheus shard capacity collector registered")
+    except Exception:
+        logger.exception("Failed to register the Prometheus shard capacity collector")
+
+
 @worker_ready.connect
 def on_worker_ready(sender: Any, **kwargs: Any) -> None:
     if _prometheus_collectors_ok:
         from onyx.server.metrics.metrics_server import start_metrics_server
 
+        _setup_shard_capacity_collector()
         start_metrics_server("monitoring")
     else:
         logger.warning(

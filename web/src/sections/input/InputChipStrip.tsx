@@ -18,7 +18,7 @@ import {
   type BuildFile,
   UploadFileStatus,
 } from "@/app/craft/contexts/UploadFilesContext";
-import { getAppTypeLogo } from "@/app/craft/v1/apps/registry";
+import { pickerEntryIcon } from "@/lib/skills/pickerIcons";
 import { pickerEntryKey, type PickerEntry } from "@/lib/skills/picker";
 
 interface InputChipProps {
@@ -131,8 +131,7 @@ interface EntryChipProps {
 }
 
 function EntryChip({ entry, onRemove, onClick }: EntryChipProps) {
-  const Logo = entry.kind === "app" ? getAppTypeLogo(entry.appType) : null;
-  const Icon = Logo ?? SvgSparkle;
+  const Icon = pickerEntryIcon(entry);
 
   return (
     <InputChip

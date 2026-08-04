@@ -508,13 +508,13 @@ def _convert_file_to_document(
     path: str,
     content_text: str,
     repo_external_access: ExternalAccess | None,
+    branch: str,
 ) -> Document:
     repo_full_name = repo.full_name
     parts = repo_full_name.split("/", 1)
     owner_name = parts[0] if parts else ""
     repo_name = parts[1] if len(parts) > 1 else repo_full_name
 
-    branch = repo.default_branch
     html_url = f"{repo.html_url}/blob/{branch}/{path}"
     _, extension = os.path.splitext(path)
 
@@ -568,6 +568,9 @@ class GithubConnectorCheckpoint(ConnectorCheckpoint):
     # Resolved + filtered file paths for the current repo's FILES stage.
     # Populated once when the stage begins, then paginated via curr_page.
     file_paths: list[str] | None = None
+    # Branch file_paths was listed from; a resumed checkpoint whose branch no
+    # longer matches (connector edited, default branch changed) is re-listed.
+    file_paths_branch: str | None = None
 
     # Used for the fallback cursor-based pagination strategy
     num_retrieved: int
@@ -575,13 +578,14 @@ class GithubConnectorCheckpoint(ConnectorCheckpoint):
 
     def reset(self) -> None:
         """
-        Resets curr_page, num_retrieved, cursor_url, and file_paths to their
-        initial values (0, 0, None, None)
+        Resets curr_page, num_retrieved, cursor_url, file_paths, and
+        file_paths_branch to their initial values (0, 0, None, None, None)
         """
         self.curr_page = 0
         self.num_retrieved = 0
         self.cursor_url = None
         self.file_paths = None
+        self.file_paths_branch = None
 
 
 def make_cursor_url_callback(
@@ -610,6 +614,7 @@ class GithubConnector(
         include_prs: bool = True,
         include_issues: bool = False,
         include_files: bool = False,
+        branch: str | None = None,
     ) -> None:
         self.repo_owner = repo_owner
         self.repositories = repositories
@@ -617,6 +622,8 @@ class GithubConnector(
         self.include_prs = include_prs
         self.include_issues = include_issues
         self.include_files = include_files
+        # Branch to index files from; None means each repo's default branch.
+        self.branch = (branch or "").strip() or None
         self.github_client: Github | None = None
 
     def load_credentials(self, credentials: dict[str, Any]) -> dict[str, Any] | None:
@@ -732,10 +739,13 @@ class GithubConnector(
             state=self.state_filter, sort="updated", direction="desc"
         )
 
+    def _resolve_branch(self, repo: Repository.Repository) -> str:
+        return self.branch or repo.default_branch
+
     def _list_indexable_files(
         self, repo: Repository.Repository, attempt_num: int = 0
     ) -> tuple[list[str], bool]:
-        """Resolve the repo's default-branch tree and return indexable file paths.
+        """Resolve the configured (or default) branch tree and return indexable file paths.
 
         Returns (sorted paths, truncated) where `truncated` is True when GitHub
         capped the recursive tree (>100k entries or >7MB), meaning some files
@@ -748,7 +758,7 @@ class GithubConnector(
             )
         assert self.github_client is not None  # for type-checking
         try:
-            git_tree = repo.get_git_tree(repo.default_branch, recursive=True)
+            git_tree = repo.get_git_tree(self._resolve_branch(repo), recursive=True)
             truncated = bool(git_tree.raw_data.get("truncated"))
             if truncated:
                 logger.error(
@@ -768,6 +778,13 @@ class GithubConnector(
             sleep_after_rate_limit_exception(self.github_client)
             return self._list_indexable_files(repo, attempt_num + 1)
         except GithubException as e:
+            if e.status == 404 and self.branch:
+                raise ConnectorValidationError(
+                    f"Branch '{self.branch}' not found in repository "
+                    f"{repo.full_name}. Leave the branch setting blank to use "
+                    f"the repository's default branch."
+                ) from e
+
             error_message = (
                 e.data.get("message") if isinstance(e.data, dict) else e.message
             )
@@ -793,7 +810,7 @@ class GithubConnector(
             )
         assert self.github_client is not None  # for type-checking
         try:
-            content = repo.get_contents(path, ref=repo.default_branch)
+            content = repo.get_contents(path, ref=self._resolve_branch(repo))
             if isinstance(content, list):
                 raise ValueError(f"Expected a file at {path}, got a directory")
             if content.decoded_content is None:
@@ -821,18 +838,39 @@ class GithubConnector(
         truncation as a failure. Returns True if more file batches remain (the
         caller should return the checkpoint to resume), False once drained.
         """
+        branch = self._resolve_branch(repo)
+        branch_changed = (
+            checkpoint.file_paths is not None and checkpoint.file_paths_branch != branch
+        )
+        if branch_changed:
+            # The cached listing came from a different branch (resumed
+            # checkpoint after a connector edit or default-branch change) —
+            # discard it so paths and content come from the same branch.
+            checkpoint.file_paths = None
+            checkpoint.file_paths_branch = None
+            checkpoint.curr_page = 0
+
         if checkpoint.file_paths is None:
             pushed_at = (
                 repo.pushed_at.replace(tzinfo=timezone.utc) if repo.pushed_at else None
             )
-            if start is not None and pushed_at is not None and pushed_at < start:
+            # After a branch change the new branch was never indexed, so the
+            # pushed_at freshness gate must not skip the re-listing.
+            if (
+                not branch_changed
+                and start is not None
+                and pushed_at is not None
+                and pushed_at < start
+            ):
                 # Nothing changed in this repo since the last poll — skip.
                 logger.info("Skipping files for repo %s (pushed_at < start)", repo.name)
                 checkpoint.file_paths = []
+                checkpoint.file_paths_branch = branch
             else:
                 logger.info("Listing files for repo: %s", repo.name)
                 paths, truncated = self._list_indexable_files(repo)
                 checkpoint.file_paths = paths
+                checkpoint.file_paths_branch = branch
                 logger.info(
                     "Found %s indexable files for repo: %s", len(paths), repo.name
                 )
@@ -856,7 +894,7 @@ class GithubConnector(
         checkpoint.curr_page += 1
 
         for path in batch:
-            html_url = f"{repo.html_url}/blob/{repo.default_branch}/{path}"
+            html_url = f"{repo.html_url}/blob/{branch}/{path}"
             if is_slim:
                 yield Document(
                     id=html_url,
@@ -880,7 +918,7 @@ class GithubConnector(
                     )
                     continue
                 yield _convert_file_to_document(
-                    repo, path, content_text, repo_external_access
+                    repo, path, content_text, repo_external_access, branch
                 )
             except Exception as e:
                 error_msg = f"Error converting file {path} to document: {e}"
@@ -1321,6 +1359,16 @@ class GithubConnector(
                         f"{self.repo_owner}/{self.repositories}"
                     )
                     test_repo.get_contents("")
+                    if self.branch:
+                        try:
+                            test_repo.get_branch(self.branch)
+                        except GithubException as e:
+                            if e.status == 404:
+                                raise ConnectorValidationError(
+                                    f"Branch '{self.branch}' not found in repository "
+                                    f"{self.repo_owner}/{self.repositories}."
+                                )
+                            raise
             else:
                 # Try to get organization first
                 try:

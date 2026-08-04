@@ -19,6 +19,7 @@ from onyx.db.engine.sql_engine import get_session
 from onyx.db.enums import LLMModelFlowType, Permission
 from onyx.db.llm import (
     can_user_access_llm_provider,
+    fetch_default_chat_naming_model,
     fetch_default_llm_model,
     fetch_default_vision_model,
     fetch_existing_llm_provider_by_id,
@@ -29,8 +30,10 @@ from onyx.db.llm import (
     fetch_user_group_ids,
     remove_llm_provider,
     sync_model_configurations,
+    update_default_chat_naming_provider,
     update_default_provider,
     update_default_vision_provider,
+    update_no_default_chat_naming_provider,
     upsert_llm_provider,
     validate_persona_ids_exist,
 )
@@ -38,6 +41,7 @@ from onyx.db.models import Persona, User
 from onyx.db.persona import user_can_access_persona
 from onyx.error_handling.error_codes import OnyxErrorCode
 from onyx.error_handling.exceptions import OnyxError
+from onyx.llm.api_surfaces import SURFACE_SELECTION_CONFIG_KEYS
 from onyx.llm.constants import (
     PROVIDER_DISPLAY_NAMES,
     WELL_KNOWN_PROVIDER_NAMES,
@@ -101,6 +105,8 @@ from onyx.server.manage.llm.models import (
     OpenRouterFinalModelResponse,
     OpenRouterModelDetails,
     OpenRouterModelsRequest,
+    PortkeyFinalModelResponse,
+    PortkeyModelsRequest,
     SyncModelEntry,
     TestLLMRequest,
     VisionProviderResponse,
@@ -315,10 +321,21 @@ def _validate_llm_provider_change(
     normalized_existing_api_base = existing_api_base or None
     normalized_new_api_base = new_api_base or None
 
+    # Surface-mode keys only pick a path on the same api_base and cannot
+    # redirect the stored key, so they must not force key re-entry.
+    def _without_surface_keys(config: dict[str, str] | None) -> dict[str, str]:
+        return {
+            k: v
+            for k, v in (config or {}).items()
+            if k not in SURFACE_SELECTION_CONFIG_KEYS
+        }
+
     api_base_changed = normalized_new_api_base != normalized_existing_api_base
-    custom_config_changed = (
-        new_custom_config and new_custom_config != existing_custom_config
-    )
+    # Gate on the raw config (empty submissions are never persisted); compare
+    # stripped dicts so dropping stored non-surface entries is still rejected.
+    custom_config_changed = bool(new_custom_config) and _without_surface_keys(
+        new_custom_config
+    ) != _without_surface_keys(existing_custom_config)
 
     if api_base_changed or custom_config_changed:
         raise OnyxError(
@@ -539,6 +556,9 @@ def list_llm_providers(
         default_vision=DefaultModel.from_model_config(
             fetch_default_vision_model(db_session)
         ),
+        default_chat_naming=DefaultModel.from_model_config(
+            fetch_default_chat_naming_model(db_session)
+        ),
     )
 
 
@@ -744,6 +764,31 @@ def set_provider_as_default_vision(
     invalidate_provider_listing_cache()
 
 
+@admin_router.post("/default-chat-naming")
+def set_provider_as_default_chat_naming(
+    default_model: DefaultModel,
+    _: User = Depends(require_permission(Permission.FULL_ADMIN_PANEL_ACCESS)),
+    db_session: Session = Depends(get_session),
+) -> None:
+    update_default_chat_naming_provider(
+        provider_id=default_model.provider_id,
+        chat_naming_model=default_model.model_name,
+        db_session=db_session,
+    )
+    invalidate_provider_listing_cache()
+
+
+@admin_router.delete("/default-chat-naming")
+def clear_default_chat_naming(
+    _: User = Depends(require_permission(Permission.FULL_ADMIN_PANEL_ACCESS)),
+    db_session: Session = Depends(get_session),
+) -> None:
+    """Clear the dedicated naming model; auto-naming falls back to the
+    session's model."""
+    update_no_default_chat_naming_provider(db_session=db_session)
+    invalidate_provider_listing_cache()
+
+
 @admin_router.get("/auto-config")
 def get_auto_config(
     _: User = Depends(require_permission(Permission.FULL_ADMIN_PANEL_ACCESS)),
@@ -864,6 +909,9 @@ def list_llm_provider_basics(
         ),
         default_vision=DefaultModel.from_model_config(
             fetch_default_vision_model(db_session)
+        ),
+        default_chat_naming=DefaultModel.from_model_config(
+            fetch_default_chat_naming_model(db_session)
         ),
     )
     cache_provider_listing(
@@ -2145,3 +2193,109 @@ def _get_openai_compatible_server_response(
         source_name="OpenAI-Compatible",
         api_key=api_key,
     )
+
+
+def _get_portkey_models_response(api_base: str, api_key: str | None = None) -> dict:
+    """Fetch models from a Portkey gateway's /v1/models endpoint.
+
+    Portkey exposes the same OpenAI-shaped /v1/models listing regardless of the
+    selected inference surface (Chat Completions, Responses, or Messages), so the
+    base may arrive as either `https://api.portkey.ai/v1` or `https://api.portkey.ai`.
+    """
+    cleaned_api_base = api_base.strip().rstrip("/")
+    if cleaned_api_base.endswith("/v1"):
+        url = f"{cleaned_api_base}/models"
+    else:
+        url = f"{cleaned_api_base}/v1/models"
+
+    return _get_openai_compatible_models_response(
+        url=url,
+        source_name="Portkey",
+        api_key=api_key,
+    )
+
+
+@admin_router.post("/portkey/available-models")
+def get_portkey_available_models(
+    request: PortkeyModelsRequest,
+    _: User = Depends(require_permission(Permission.FULL_ADMIN_PANEL_ACCESS)),
+    db_session: Session = Depends(get_session),
+) -> list[PortkeyFinalModelResponse]:
+    """Fetch available models from a Portkey gateway's /v1/models endpoint."""
+    api_key = _resolve_api_key(
+        request.api_key, request.provider_id, request.api_base, db_session
+    )
+
+    response_json = _get_portkey_models_response(
+        api_base=request.api_base, api_key=api_key
+    )
+
+    models = response_json.get("data", [])
+    if not isinstance(models, list) or len(models) == 0:
+        raise OnyxError(
+            OnyxErrorCode.VALIDATION_ERROR,
+            "No models found from your Portkey gateway",
+        )
+
+    results: list[PortkeyFinalModelResponse] = []
+    for model in models:
+        try:
+            model_id = model.get("id", "")
+            model_name = model.get("name", model_id)
+
+            if not model_id:
+                continue
+
+            # Skip embedding models
+            if is_embedding_model(model_id):
+                continue
+
+            results.append(
+                PortkeyFinalModelResponse(
+                    name=model_id,
+                    display_name=model_name,
+                    max_input_tokens=model.get("context_length"),
+                    supports_image_input=litellm_thinks_model_supports_image_input(
+                        model_id, LlmProviderNames.PORTKEY
+                    ),
+                    # Reasoning support from the LiteLLM cost map, with the
+                    # substring heuristic covering models LiteLLM doesn't know
+                    supports_reasoning=model_is_reasoning_model(
+                        model_id, LlmProviderNames.PORTKEY
+                    )
+                    or is_reasoning_model(model_id, model_name),
+                )
+            )
+        except Exception as e:
+            logger.warning(
+                "Failed to parse Portkey model entry",
+                extra={"error": str(e), "item": str(model)[:1000]},
+            )
+
+    if not results:
+        raise OnyxError(
+            OnyxErrorCode.VALIDATION_ERROR,
+            "No compatible models found from your Portkey gateway",
+        )
+
+    sorted_results = sorted(results, key=lambda m: m.name.lower())
+
+    # Sync new models to DB if provider_id is specified
+    if request.provider_id is not None:
+        _sync_fetched_models(
+            db_session=db_session,
+            provider_id=request.provider_id,
+            models=[
+                SyncModelEntry(
+                    name=r.name,
+                    display_name=r.display_name,
+                    max_input_tokens=r.max_input_tokens,
+                    supports_image_input=r.supports_image_input,
+                    supports_reasoning=r.supports_reasoning,
+                )
+                for r in sorted_results
+            ],
+            source_label="Portkey",
+        )
+
+    return sorted_results

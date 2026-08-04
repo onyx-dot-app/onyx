@@ -69,6 +69,11 @@ class UpdateChatSessionTemperatureRequest(BaseModel):
     temperature_override: float
 
 
+class UpdateChatSessionReasoningRequest(BaseModel):
+    chat_session_id: UUID
+    reasoning_effort_override: str | None = None
+
+
 class ChatSessionCreationRequest(BaseModel):
     # If not specified, use Onyx default persona
     persona_id: int = 0
@@ -187,6 +192,7 @@ class ChatSessionDetails(BaseModel):
     shared_status: ChatSessionSharedStatus
     current_alternate_model: str | None = None
     current_temperature_override: float | None = None
+    current_reasoning_effort_override: str | None = None
 
     @classmethod
     def from_model(cls, model: ChatSession) -> "ChatSessionDetails":
@@ -199,6 +205,7 @@ class ChatSessionDetails(BaseModel):
             shared_status=model.shared_status,
             current_alternate_model=model.current_alternate_model,
             current_temperature_override=model.temperature_override,
+            current_reasoning_effort_override=model.reasoning_effort_override,
         )
 
 
@@ -260,6 +267,7 @@ class ChatSessionDetailResponse(BaseModel):
     shared_status: ChatSessionSharedStatus
     current_alternate_model: str | None
     current_temperature_override: float | None
+    current_reasoning_effort_override: str | None
     deleted: bool = False
     owner_name: str | None = None
     packets: list[list[Packet]]
@@ -285,6 +293,7 @@ class ChatSessionSummary(BaseModel):
     shared_status: ChatSessionSharedStatus
     current_alternate_model: str | None = None
     current_temperature_override: float | None = None
+    current_reasoning_effort_override: str | None = None
 
 
 class ChatSessionGroup(BaseModel):

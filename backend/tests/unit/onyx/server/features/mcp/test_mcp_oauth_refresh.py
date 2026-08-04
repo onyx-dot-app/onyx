@@ -12,14 +12,14 @@ from collections.abc import Iterator
 from contextlib import contextmanager
 from types import SimpleNamespace
 from typing import Any, cast
-from urllib.parse import parse_qs
+from urllib.parse import parse_qs, urlencode
 
 import httpx
 import pytest
 
 import onyx.server.features.mcp.oauth as mcp_oauth
 from onyx.cache.interface import CacheLockAcquisitionError
-from onyx.db.enums import MCPOAuthProviderMode
+from onyx.db.enums import MCPOAuthProviderMode, MCPTransport
 from onyx.db.models import MCPServer as DbMCPServer
 from onyx.server.features.mcp.models import MCPOAuthKeys
 from onyx.server.features.mcp.oauth import refresh_mcp_oauth_token_if_expired
@@ -35,8 +35,10 @@ def _server_stub() -> DbMCPServer:
     return cast(
         DbMCPServer,
         SimpleNamespace(
+            id=1,
             name="gitlab",
             server_url="https://mcp.gitlab.example.com",
+            transport=MCPTransport.SSE,
             oauth_provider_mode=MCPOAuthProviderMode.AUTO_DISCOVERY,
             oauth_authorization_endpoint=None,
             oauth_token_endpoint=None,
@@ -132,6 +134,22 @@ def _token_response(**overrides: Any) -> httpx.Response:
     return httpx.Response(200, json=payload)
 
 
+def _form_token_response(
+    *,
+    content_type: str | None = "application/x-www-form-urlencoded; charset=utf-8",
+    **overrides: Any,
+) -> httpx.Response:
+    payload: dict[str, Any] = {
+        "access_token": "NEW",
+        "token_type": "bearer",
+        "expires_in": 7200,
+        "refresh_token": "REFRESH_2",
+    }
+    payload.update(overrides)
+    headers = {} if content_type is None else {"content-type": content_type}
+    return httpx.Response(200, content=urlencode(payload).encode(), headers=headers)
+
+
 def test_refreshes_expired_token_with_client_secret_post(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
@@ -177,6 +195,60 @@ def test_refreshes_expired_token_with_client_secret_post(
     assert persisted[MCPOAuthKeys.TOKENS.value]["refresh_token"] == "REFRESH_2"
     assert persisted["headers"]["Authorization"] == "Bearer NEW"
     assert persisted[MCPOAuthKeys.TOKEN_EXPIRES_AT.value] > time.time()
+
+
+@pytest.mark.parametrize(
+    "content_type",
+    ["application/x-www-form-urlencoded; charset=utf-8", None, "application/json"],
+)
+def test_refreshes_form_encoded_token_response_with_rotated_refresh_token(
+    monkeypatch: pytest.MonkeyPatch,
+    caplog: pytest.LogCaptureFixture,
+    content_type: str | None,
+) -> None:
+    config_data: dict[str, Any] = {
+        "headers": {"Authorization": "Bearer OLD"},
+        MCPOAuthKeys.TOKENS.value: {
+            "access_token": "OLD",
+            "token_type": "Bearer",
+            "expires_in": 7200,
+            "refresh_token": "REFRESH_1",
+        },
+        MCPOAuthKeys.TOKEN_EXPIRES_AT.value: time.time() - 60,
+        MCPOAuthKeys.CLIENT_INFO.value: {
+            "client_id": "cid",
+            "client_secret": "csecret",
+            "redirect_uris": [_REDIRECT_URI],
+            "token_endpoint_auth_method": "client_secret_post",
+        },
+        MCPOAuthKeys.METADATA.value: {
+            "issuer": "https://gitlab.example.com",
+            "authorization_endpoint": "https://gitlab.example.com/oauth/authorize",
+            "token_endpoint": _TOKEN_ENDPOINT,
+        },
+    }
+    captured = _install_mocks(
+        monkeypatch,
+        config_data,
+        response=_form_token_response(content_type=content_type),
+    )
+
+    header = refresh_mcp_oauth_token_if_expired(_server_stub(), 42, "user-1")
+
+    assert header == "Bearer NEW"
+    persisted = captured["updated_config_data"]
+    assert persisted[MCPOAuthKeys.TOKENS.value]["access_token"] == "NEW"
+    assert persisted[MCPOAuthKeys.TOKENS.value]["refresh_token"] == "REFRESH_2"
+    assert persisted["headers"]["Authorization"] == "Bearer NEW"
+    assert persisted[MCPOAuthKeys.TOKEN_EXPIRES_AT.value] > time.time()
+    assert any(
+        record.getMessage() == "mcp_oauth.refresh.succeeded"
+        for record in caplog.records
+    )
+    assert any(
+        record.getMessage() == "mcp_oauth.refresh.persisted"
+        for record in caplog.records
+    )
 
 
 def test_refresh_uses_basic_auth_for_client_secret_basic(
@@ -367,6 +439,65 @@ def test_refresh_failure_is_non_fatal_to_caller(
 
     with pytest.raises(RuntimeError):
         refresh_mcp_oauth_token_if_expired(_server_stub(), 42, "user-1")
+
+
+def test_form_encoded_refresh_error_is_logged_without_secrets(
+    monkeypatch: pytest.MonkeyPatch,
+    caplog: pytest.LogCaptureFixture,
+) -> None:
+    config_data: dict[str, Any] = {
+        "headers": {"Authorization": "Bearer OLD"},
+        MCPOAuthKeys.TOKENS.value: {
+            "access_token": "OLD_ACCESS_TOKEN",
+            "token_type": "Bearer",
+            "expires_in": 3600,
+            "refresh_token": "ROTATING_REFRESH_TOKEN",
+        },
+        MCPOAuthKeys.TOKEN_EXPIRES_AT.value: time.time() - 60,
+        MCPOAuthKeys.CLIENT_INFO.value: {
+            "client_id": "cid",
+            "client_secret": "csecret",
+            "redirect_uris": [_REDIRECT_URI],
+            "token_endpoint_auth_method": "client_secret_post",
+        },
+        MCPOAuthKeys.METADATA.value: {
+            "issuer": "https://github.example.com",
+            "authorization_endpoint": "https://github.example.com/oauth/authorize",
+            "token_endpoint": "https://github.example.com/oauth/token",
+        },
+    }
+    response = httpx.Response(
+        400,
+        content=b"error=bad_refresh_token&error_description=refresh+token+expired",
+        headers={"content-type": "application/x-www-form-urlencoded"},
+    )
+    _install_mocks(monkeypatch, config_data, response=response)
+
+    with pytest.raises(RuntimeError):
+        refresh_mcp_oauth_token_if_expired(_server_stub(), 42, "user-1")
+
+    failed_record = next(
+        record
+        for record in caplog.records
+        if record.getMessage() == "mcp_oauth.refresh.failed"
+    )
+    started_record = next(
+        record
+        for record in caplog.records
+        if record.getMessage() == "mcp_oauth.refresh.started"
+    )
+    assert getattr(failed_record, "oauth_error") == "bad_refresh_token"
+    assert (
+        getattr(failed_record, "response_content_type")
+        == "application/x-www-form-urlencoded"
+    )
+    assert getattr(failed_record, "response_body_format") == "form"
+    assert getattr(failed_record, "refresh_attempt_id") == getattr(
+        started_record, "refresh_attempt_id"
+    )
+    assert "OLD_ACCESS_TOKEN" not in caplog.text
+    assert "ROTATING_REFRESH_TOKEN" not in caplog.text
+    assert "csecret" not in caplog.text
 
 
 @pytest.mark.parametrize(

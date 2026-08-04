@@ -2,8 +2,12 @@
 
 import { useEffect, useState } from "react";
 import { Modal } from "@opal/components";
-import { Button, MessageCard, Text } from "@opal/components";
-import PasswordInputTypeIn from "@/refresh-components/inputs/PasswordInputTypeIn";
+import {
+  Button,
+  MessageCard,
+  PasswordInputTypeIn,
+  Text,
+} from "@opal/components";
 import type { IconFunctionComponent } from "@opal/types";
 
 interface UserCredentialsModalProps {

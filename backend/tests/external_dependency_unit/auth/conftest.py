@@ -12,6 +12,7 @@ def null_pool_async_engine(
     # Pooled asyncpg connections bind to the creating loop; NullPool keeps the
     # engine usable across pytest-asyncio's per-test loops.
     monkeypatch.setattr(async_sql_engine, "POSTGRES_USE_NULL_POOL", True)
-    async_sql_engine._ASYNC_ENGINE = None
+    # Engines are cached per shard; clearing the cache forces a NullPool rebuild.
+    async_sql_engine._ASYNC_ENGINES = {}
     yield
-    async_sql_engine._ASYNC_ENGINE = None
+    async_sql_engine._ASYNC_ENGINES = {}

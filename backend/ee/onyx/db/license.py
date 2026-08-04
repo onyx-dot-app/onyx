@@ -2,15 +2,18 @@
 
 import hashlib
 import struct
-from datetime import datetime
+from collections.abc import Generator
+from contextlib import contextmanager
+from datetime import datetime, timezone
 from typing import NamedTuple
 
 from sqlalchemy import func, select, text
 from sqlalchemy.orm import Session
 
-from ee.onyx.server.license.models import LicenseMetadata, LicensePayload, LicenseSource
+from ee.onyx.server.license.models import LicenseMetadata, LicensePayload
 from onyx.auth.schemas import UserRole
 from onyx.cache.factory import get_cache_backend
+from onyx.cache.interface import CacheLock
 from onyx.configs.constants import ANONYMOUS_USER_EMAIL
 from onyx.db.enums import AccountType
 from onyx.db.models import License, User
@@ -23,15 +26,38 @@ logger = setup_logger()
 LICENSE_METADATA_KEY = "license:metadata"
 LICENSE_CACHE_TTL_SECONDS = 86400  # 24 hours
 
+# Serializes the row-read-compare-write in publish_license_metadata. The lease
+# must outlive the row re-read, the seat count, and the cache write it guards.
+_LICENSE_CACHE_LOCK_KEY = "license:metadata:write"
+_LICENSE_CACHE_LOCK_TIMEOUT_SEC = 30
+
 # Namespaced + tenant-hashed so unrelated tenants don't block each other
 # and the lock id can't collide with other advisory locks in the codebase.
 _SEAT_LOCK_NAMESPACE = "onyx_seat_lock"
+_LICENSE_STORE_LOCK_NAMESPACE = "onyx_license_store_lock"
+
+
+def _advisory_lock_id(namespace: str, tenant_id: str) -> int:
+    digest = hashlib.sha256(f"{namespace}:{tenant_id}".encode()).digest()
+    # pg_advisory_xact_lock takes a signed 8-byte int.
+    return struct.unpack("q", digest[:8])[0]
 
 
 def seat_lock_id_for_tenant(tenant_id: str) -> int:
-    digest = hashlib.sha256(f"{_SEAT_LOCK_NAMESPACE}:{tenant_id}".encode()).digest()
-    # pg_advisory_xact_lock takes a signed 8-byte int.
-    return struct.unpack("q", digest[:8])[0]
+    return _advisory_lock_id(_SEAT_LOCK_NAMESPACE, tenant_id)
+
+
+def acquire_license_store_lock(db_session: Session) -> None:
+    """Serialize read-compare-write on the license row.
+
+    Callers must read the stored blob and write its replacement inside this
+    lock, or a slower response overwrites a newer license. Released on the
+    caller's commit or rollback.
+    """
+    _acquire_advisory_lock(
+        db_session,
+        _advisory_lock_id(_LICENSE_STORE_LOCK_NAMESPACE, get_current_tenant_id()),
+    )
 
 
 def acquire_seat_lock(db_session: Session, tenant_id: str | None = None) -> None:
@@ -40,7 +66,12 @@ def acquire_seat_lock(db_session: Session, tenant_id: str | None = None) -> None
     Caller must run the seat check AND the seat-consuming write in the
     same transaction.
     """
-    lock_id = seat_lock_id_for_tenant(tenant_id or get_current_tenant_id())
+    _acquire_advisory_lock(
+        db_session, seat_lock_id_for_tenant(tenant_id or get_current_tenant_id())
+    )
+
+
+def _acquire_advisory_lock(db_session: Session, lock_id: int) -> None:
     # Bounded wait: a double-acquisition bug or wedged holder should fail
     # fast with lock_not_available, not hang until the idle-in-transaction
     # reaper kills the session (observed as 10-minute invite freezes).
@@ -79,9 +110,14 @@ def get_license(db_session: Session) -> License | None:
     return db_session.execute(select(License)).scalars().first()
 
 
-def upsert_license(db_session: Session, license_data: str) -> License:
+def upsert_license(
+    db_session: Session, license_data: str, commit: bool = True
+) -> License:
     """
     Insert or update the license (singleton pattern).
+
+    commit=False flushes without committing, so the caller can keep the
+    transaction, and its advisory locks, open across later work.
 
     Args:
         db_session: Database session
@@ -90,21 +126,22 @@ def upsert_license(db_session: Session, license_data: str) -> License:
     Returns:
         The created or updated License object
     """
-    existing = get_license(db_session)
+    license_row = get_license(db_session)
 
-    if existing:
-        existing.license_data = license_data
-        db_session.commit()
-        db_session.refresh(existing)
+    if license_row:
+        license_row.license_data = license_data
         logger.info("License updated")
-        return existing
+    else:
+        license_row = License(license_data=license_data)
+        db_session.add(license_row)
+        logger.info("License created")
 
-    new_license = License(license_data=license_data)
-    db_session.add(new_license)
-    db_session.commit()
-    db_session.refresh(new_license)
-    logger.info("License created")
-    return new_license
+    if commit:
+        db_session.commit()
+        db_session.refresh(license_row)
+    else:
+        db_session.flush()
+    return license_row
 
 
 def delete_license(db_session: Session) -> bool:
@@ -117,12 +154,25 @@ def delete_license(db_session: Session) -> bool:
     Returns:
         True if deleted, False if no license existed
     """
+    # Serialized with verify_and_store_license, so an in-flight reclaim that
+    # started before the delete cannot re-insert the row afterward.
+    acquire_license_store_lock(db_session)
+    db_session.expire_all()
     existing = get_license(db_session)
     if existing:
         db_session.delete(existing)
         db_session.commit()
+        # Under the cache lock: a store that committed just before this delete
+        # publishes under the same lock and re-reads the row there, so its
+        # entry either lands before this invalidate or is never written.
+        try:
+            with _license_cache_lock(None, wait=True):
+                invalidate_license_cache()
+        except Exception as e:
+            logger.warning("License deleted but cache invalidation failed: %s", e)
         logger.info("License deleted")
         return True
+    db_session.rollback()
     return False
 
 
@@ -156,7 +206,7 @@ def get_used_seats(tenant_id: str | None = None) -> int:
     Per-user predicate ``user_counts_toward_seats`` mirrors this filter.
     """
     if MULTI_TENANT:
-        from ee.onyx.server.tenants.user_mapping import get_tenant_count
+        from ee.onyx.db.user_tenant_mapping import get_tenant_count
 
         return get_tenant_count(tenant_id or get_current_tenant_id())
     else:
@@ -222,45 +272,31 @@ def invalidate_license_cache(tenant_id: str | None = None) -> None:
     logger.info("License cache invalidated")
 
 
-def update_license_cache(
+def build_license_metadata(
     payload: LicensePayload,
-    source: LicenseSource | None = None,
     grace_period_end: datetime | None = None,
     tenant_id: str | None = None,
-) -> LicenseMetadata:
-    """
-    Update the cache with license metadata.
-
-    We cache all license statuses (ACTIVE, GRACE_PERIOD, GATED_ACCESS) because:
-    1. Frontend needs status to show appropriate UI/banners
-    2. Caching avoids repeated DB + crypto verification on every request
-    3. Status enforcement happens at the feature level, not here
-
-    Args:
-        payload: Verified license payload
-        source: How the license was obtained
-        grace_period_end: Optional grace period end time
-        tenant_id: Tenant ID (for multi-tenant deployments)
-
-    Returns:
-        The cached LicenseMetadata
-    """
+) -> tuple[LicenseMetadata, int]:
+    """Metadata for *payload* plus the TTL that keeps its write-time status
+    from outliving the boundary that would change it."""
     from ee.onyx.utils.license import get_license_status
     from ee.onyx.utils.license_expiry import (
         get_expiry_warning_stage,
         get_grace_period_end,
     )
 
-    tenant = tenant_id or get_current_tenant_id()
-    cache = get_cache_backend(tenant_id=tenant_id)
-
-    used_seats = get_used_seats(tenant)
+    used_seats = get_used_seats(tenant_id)
     # Default the grace window to 14 days past expires_at so the license-
     # enforcement middleware returns GRACE_PERIOD (not GATED_ACCESS) during
     # that window — matching the banner copy and daily admin emails.
     effective_grace_end = grace_period_end or get_grace_period_end(payload.expires_at)
-    status = get_license_status(payload, effective_grace_end)
-    warning_stage = get_expiry_warning_stage(payload.expires_at)
+    # One clock sample for status and TTL, or a boundary crossing between the
+    # two reads caches the old status for the full default TTL.
+    now = datetime.now(timezone.utc)
+    status = get_license_status(payload, effective_grace_end, now=now)
+    warning_stage = get_expiry_warning_stage(
+        payload.expires_at, payload.ends_with_trial, payload.self_renewing
+    )
 
     metadata = LicenseMetadata(
         tenant_id=payload.tenant_id,
@@ -273,21 +309,120 @@ def update_license_cache(
         grace_period_end=effective_grace_end,
         status=status,
         expiry_warning_stage=warning_stage,
-        source=source,
+        source=payload.source,
         stripe_subscription_id=payload.stripe_subscription_id,
         customer_tier=payload.customer_tier,
+        trial_end=payload.trial_end,
     )
 
+    ttl = LICENSE_CACHE_TTL_SECONDS
+    for boundary in (payload.expires_at, effective_grace_end):
+        if boundary > now:
+            ttl = min(ttl, max(60, int((boundary - now).total_seconds()) + 1))
+    return metadata, ttl
+
+
+def update_license_cache(
+    payload: LicensePayload,
+    grace_period_end: datetime | None = None,
+    tenant_id: str | None = None,
+) -> LicenseMetadata:
+    """Cache metadata for *payload*, expiring at its next status boundary.
+
+    All statuses are cached (ACTIVE, GRACE_PERIOD, GATED_ACCESS): the frontend
+    renders banners from them, and enforcement happens at the feature level.
+    """
+    metadata, ttl = build_license_metadata(payload, grace_period_end, tenant_id)
+    cache = get_cache_backend(tenant_id=tenant_id)
     cache.set(
         LICENSE_METADATA_KEY,
         metadata.model_dump_json(),
-        ex=LICENSE_CACHE_TTL_SECONDS,
+        ex=ttl,
     )
 
     logger.info(
-        "License cache updated: %s seats, status=%s", metadata.seats, status.value
+        "License cache updated: %s seats, status=%s",
+        metadata.seats,
+        metadata.status.value,
     )
     return metadata
+
+
+def publish_license_metadata(
+    db_session: Session,
+    tenant_id: str | None = None,
+    wait_for_lock: bool = True,
+) -> LicenseMetadata | None:
+    """Rebuild the cache from the license row, or None (uncached) without one.
+
+    Writers commit under the store lock but publish after releasing it, so two
+    of them can commit in one order and publish in the other. Deriving the
+    entry from the row re-read under the cache write lock makes every publish
+    converge on current row state: a slow publisher advertises its overtaker's
+    license, and one that outlived a delete writes nothing.
+
+    Raises ValueError when the stored blob does not verify.
+
+    wait_for_lock=False is for callers that cannot afford to wait on a
+    contended lock. Without the lock the result is served to the caller but
+    never written to the cache.
+    """
+    # Deferred import: ee.onyx.utils.license imports this module.
+    from ee.onyx.utils.license import verify_license_signature
+
+    with _license_cache_lock(tenant_id, wait_for_lock) as lock:
+        db_session.expire_all()
+        license_row = get_license(db_session)
+        if license_row is None:
+            invalidate_license_cache(tenant_id)
+            return None
+        payload = verify_license_signature(license_row.license_data)
+        if lock is None:
+            # An unserialized write can overwrite a newer entry or resurrect
+            # one a delete just removed, so serve the caller without caching.
+            metadata, _ = build_license_metadata(payload, tenant_id=tenant_id)
+            return metadata
+        metadata = update_license_cache(payload, tenant_id=tenant_id)
+        if not lock.owned():
+            # The lease expired mid-publish, so this write raced whatever
+            # took the lock over. A dropped entry rebuilds on the next read.
+            # A wrong one serves entitlements for its whole TTL.
+            logger.warning("License cache lease lost mid-publish, dropping entry")
+            invalidate_license_cache(tenant_id)
+        return metadata
+
+
+@contextmanager
+def _license_cache_lock(
+    tenant_id: str | None, wait: bool
+) -> Generator[CacheLock | None]:
+    """Serialize the guarded block, yielding the held lock or None.
+
+    Acquisition is best-effort and bounded: the Postgres backend holds this on
+    a second connection, and a caller on the event loop cannot wait. The block
+    always runs, and reads the yielded lock to decide what it may write.
+    """
+    lock: CacheLock | None = None
+    try:
+        candidate = get_cache_backend(tenant_id=tenant_id).lock(
+            _LICENSE_CACHE_LOCK_KEY, timeout=_LICENSE_CACHE_LOCK_TIMEOUT_SEC
+        )
+        if candidate.acquire(
+            blocking=wait,
+            blocking_timeout=_LICENSE_CACHE_LOCK_TIMEOUT_SEC if wait else None,
+        ):
+            lock = candidate
+        else:
+            logger.warning("License cache lock contended, serving uncached")
+    except Exception as e:
+        logger.warning("License cache lock errored (%s), serving uncached", e)
+
+    try:
+        yield lock
+    finally:
+        # Releasing a lease that already expired raises.
+        if lock is not None and lock.owned():
+            lock.release()
 
 
 def refresh_license_cache(
@@ -304,25 +439,11 @@ def refresh_license_cache(
     Returns:
         LicenseMetadata if license exists, None otherwise
     """
-    from ee.onyx.utils.license import verify_license_signature
-
-    license_record = get_license(db_session)
-    if not license_record:
-        invalidate_license_cache(tenant_id)
-        return None
-
     try:
-        payload = verify_license_signature(license_record.license_data)
-        # Derive source from payload: manual licenses lack stripe_customer_id
-        source: LicenseSource = (
-            LicenseSource.AUTO_FETCH
-            if payload.stripe_customer_id
-            else LicenseSource.MANUAL_UPLOAD
-        )
-        return update_license_cache(
-            payload,
-            source=source,
-            tenant_id=tenant_id,
+        # Never waits: this must be callable from an event loop, and the
+        # Postgres lock's acquisition poll sleeps.
+        return publish_license_metadata(
+            db_session, tenant_id=tenant_id, wait_for_lock=False
         )
     except ValueError as e:
         logger.error("Failed to verify license during cache refresh: %s", e)

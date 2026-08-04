@@ -510,7 +510,7 @@ const BuildOutputPanel = memo(({ isOpen }: BuildOutputPanelProps) => {
                           "shrink-0 p-0.5 rounded-sm hover:bg-background-tint-03 transition-colors",
                           isActive
                             ? "opacity-100"
-                            : "opacity-0 group-hover:opacity-100"
+                            : "opacity-0 group-hover:opacity-100 no-hover:opacity-100"
                         )}
                         aria-label={`Close ${tab.fileName}`}
                       >

@@ -36,8 +36,10 @@ Only use native PowerPoint charts (pptxgenjs `addChart` or python-pptx) when the
 
 ```python
 import sys
+
 sys.path.insert(0, ".opencode/skills/pptx/scripts")
 import matplotlib
+
 matplotlib.use("Agg")
 import matplotlib.pyplot as plt
 from chart import deck_style, save_for_slide

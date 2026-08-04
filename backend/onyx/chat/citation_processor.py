@@ -317,8 +317,10 @@ class DynamicCitationProcessor:
                 if len(parts) > 1 and len(parts[1]) > 0:
                     piece_that_comes_after = parts[1][0]
                     if piece_that_comes_after == "\n" and in_code_block(self.llm_out):
-                        self.curr_segment = self.curr_segment.replace(
-                            "```", "```plaintext"
+                        # Label only this first bare fence; other fences in the
+                        # buffered segment must stay untouched.
+                        self.curr_segment = (
+                            parts[0] + "```plaintext" + "```".join(parts[1:])
                         )
 
         # Look for citations in current segment
