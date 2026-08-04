@@ -380,8 +380,8 @@ def test_decorator_rejects_blank_variant_names() -> None:
 @pytest.mark.usefixtures("isolated_registry")
 def test_variant_bearing_operation_requires_a_declared_variant() -> None:
     """
-    Verifies calls to a variant-bearing operation must classify themselves
-    with ``variant=`` so coverage attribution reflects real call sites.
+    Verifies calls to a variant-bearing operation must classify themselves with
+    ``variant=`` so coverage attribution reflects real call sites.
     """
 
     # Precondition.

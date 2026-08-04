@@ -31,11 +31,11 @@ from onyx.connectors.source_operations import (
 def import_all_source_operation_gateways() -> None:
     """Imports every connector's gateway module so registration fires.
 
-    Asserts every discovered module defines a registered gateway, so
-    discovery rot (a rename, a glob mismatch) surfaces as a loud collection
-    error instead of vacuously skipped harnesses. Deliberately does NOT
-    assume the directory name matches ``source.value`` (``google_site/`` vs
-    ``google_sites``, ``blob/`` serving several sources already violate it).
+    Asserts every discovered module defines a registered gateway, so discovery
+    rot (a rename, a glob mismatch) surfaces as a loud collection error instead
+    of vacuously skipped harnesses. Deliberately does NOT assume the directory
+    name matches ``source.value`` (``google_site/`` vs ``google_sites``,
+    ``blob/`` serving several sources already violate it).
     """
     connectors_dir = Path(onyx.connectors.__file__).parent
     for path in sorted(connectors_dir.glob("*/source_operations.py")):
@@ -147,9 +147,9 @@ def find_import_fence_violations(
 ) -> list[FenceViolation]:
     """Finds imports of fenced SDK modules outside the gateway's own file.
 
-    The exemption is the exact gateway file: another file that merely shares
-    the ``source_operations.py`` basename (in the EE tree, or nested) is
-    scanned like any other.
+    The exemption is the exact gateway file: another file that merely shares the
+    ``source_operations.py`` basename (in the EE tree, or nested) is scanned
+    like any other.
     """
     roots = set(sdk_modules)
     allowed = allowed_file.resolve()

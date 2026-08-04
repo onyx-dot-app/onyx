@@ -1,10 +1,9 @@
 """Auto-discovering coverage harness for source operations.
 
-For every registered gateway, every (operation, variant) unit must be
-exercised, per capability tag, by a capability check of that capability --
-unless the operation carries an ``untested`` reason. A per-connector session
-that registers a gateway is picked up here automatically; it cannot forget to
-wire the test.
+For every registered gateway, every (operation, variant) unit must be exercised,
+per capability tag, by a capability check of that capability -- unless the
+operation carries an ``untested`` reason. A per-connector session that registers
+a gateway is picked up here automatically; it cannot forget to wire the test.
 """
 
 import pytest

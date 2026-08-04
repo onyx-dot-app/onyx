@@ -56,12 +56,11 @@ class SourceOperationSpec(BaseModel):
     name: str
     capabilities: frozenset[CredentialCapability]
     # Named forms of the operation where a parameter changes the required
-    # permission (e.g. Slack ``conversations.list`` public vs private).
-    # Coverage is counted per (operation, variant); empty means the operation
-    # itself is the single coverage unit. A variant-bearing operation must be
-    # invoked with a ``variant="<name>"`` keyword -- the method may branch on
-    # it or ignore it, but the call site must classify itself; the base class
-    # enforces this at runtime and the coverage harness attributes calls by it.
+    # permission (e.g. Slack ``conversations.list`` public vs private). Coverage
+    # is counted per (operation, variant); empty means the operation itself is
+    # the single coverage unit. A variant-bearing operation must be invoked with
+    # a ``variant="<name>"`` keyword -- the method may branch on it or ignore
+    # it, but the call site must classify itself.
     variants: tuple[str, ...] = ()
     consumes: OperationConsumes
     # Exempts the operation (all variants) from the check-coverage requirement.
@@ -153,9 +152,9 @@ class SourceOperations(ABC):
       per source.
     - Declare ``sdk_modules``; an explicit empty tuple marks an SDK-less
       connector.
-    - Every public method must be classified with ``@source_operation``.
-      Helpers (including any staticmethod/classmethod/property) stay private;
-      data models live at module level.
+    - Every public method must be classified with ``@source_operation``. Helpers
+      (including any staticmethod/classmethod/property) stay private; data
+      models live at module level.
 
     The gateway owns client construction from the credential plus optional
     connector config; operations return plain data, never live SDK objects.
@@ -164,11 +163,10 @@ class SourceOperations(ABC):
     source: ClassVar[DocumentSource]
 
     # The SDK module roots this gateway wraps (e.g. ``("slack_sdk",)``). The
-    # import-fence test asserts these are imported only from the gateway's
-    # own file within the connector's OSS and EE perm-sync directories. Every
+    # import-fence test asserts these are imported only from the gateway's own
+    # file within the connector's OSS and EE perm-sync directories. Every
     # gateway must declare this explicitly; an empty tuple marks a genuinely
-    # SDK-less connector as a conspicuous, reviewable decision rather than an
-    # accidentally unfenced one.
+    # SDK-less connector.
     sdk_modules: ClassVar[tuple[str, ...]]
 
     _operation_specs: ClassVar[Mapping[str, SourceOperationSpec]] = MappingProxyType({})
@@ -202,9 +200,8 @@ class SourceOperations(ABC):
                 "fence knows what to guard; declare an explicit empty tuple "
                 "for a genuinely SDK-less connector."
             )
-        # Shape matters, not just presence: a plain string is a Collection of
-        # single characters to the fence, which would then match nothing and
-        # silently pass.
+        # Shape matters: a plain string is a Collection of single characters to
+        # the fence, which would then match nothing and silently pass.
         sdk_modules = vars(cls)["sdk_modules"]
         if not isinstance(sdk_modules, tuple) or any(
             not isinstance(module, str) or not module for module in sdk_modules
@@ -264,7 +261,7 @@ class SourceOperations(ABC):
         # Variant-bearing operations must self-classify at every call site;
         # wrapping here makes production calls carry the same ``variant=``
         # attribution the coverage harness counts, so coverage claims stay
-        # honest. (Auto-wrap precedent: ``LLM.__init_subclass__``.)
+        # honest.
         for name, spec in specs.items():
             if spec.variants:
                 setattr(cls, name, _enforce_variant_kwarg(vars(cls)[name], spec))

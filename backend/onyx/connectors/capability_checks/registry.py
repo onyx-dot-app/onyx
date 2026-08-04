@@ -46,7 +46,7 @@ def get_capability_checks(source: DocumentSource) -> list[CapabilityCheck]:
     not exist.
 
     Ratchet: named checks require a registered source-operations gateway --
-    participation in the checks system IS the drift guarantee. Unmigrated
+    participation in the checks system is an anti-drift guarantee. Unmigrated
     sources keep the fallback path.
     """
     checks = list(_INDEXING_CHECKS_BY_SOURCE.get(source, []))

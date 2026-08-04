@@ -2,9 +2,8 @@
 
 For every registered gateway declaring ``sdk_modules``, the source SDK may be
 imported only from the gateway's own file within the connector's OSS directory
-and its EE perm-sync directory. Every existing wrapper precedent in the
-codebase has bypasses; the fence is what keeps the gateway boundary from
-decaying the same way.
+and its EE perm-sync directory. This is what keeps the gateway boundary from
+decaying over time.
 """
 
 import pytest

@@ -144,7 +144,7 @@ def test_registered_checks_clobber_only_their_capability(
     Verifies named checks clobber the fallback per capability, not per source.
     """
     # Precondition.
-    # Nothing is registered at framework stage, so register a gateway and a
+    # Nothing is registered at the framework layer, so register a gateway and a
     # named doc-sync check the way a per-connector session would (the ratchet
     # requires the gateway).
     monkeypatch.setattr(source_operations_module, "_SOURCE_OPERATIONS_BY_SOURCE", {})

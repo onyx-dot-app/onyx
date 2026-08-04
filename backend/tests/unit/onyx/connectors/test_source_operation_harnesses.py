@@ -204,8 +204,8 @@ def test_mis_shaped_calls_do_not_count_as_coverage(
     gateway_class: type[SourceOperations],
 ) -> None:
     """
-    Verifies the spy enforces real operation signatures: a call the real
-    gateway would reject records nothing and cannot certify coverage.
+    Verifies the spy enforces real operation signatures: a call the real gateway
+    would reject records nothing and cannot certify coverage.
     """
 
     # Precondition.

@@ -48,7 +48,7 @@ def test_unregistered_source_gets_connector_settings_fallback() -> None:
 def test_registered_source_gets_no_fallback(monkeypatch: pytest.MonkeyPatch) -> None:
     """Verifies that registered named checks clobber the INDEXING fallback."""
     # Precondition.
-    # Nothing is registered at framework stage, so register a gateway and a
+    # Nothing is registered at the framework layer, so register a gateway and a
     # named check the way a per-connector session would (the ratchet requires
     # the gateway).
     monkeypatch.setattr(source_operations_module, "_SOURCE_OPERATIONS_BY_SOURCE", {})

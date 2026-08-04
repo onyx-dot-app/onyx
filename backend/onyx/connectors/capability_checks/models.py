@@ -56,9 +56,9 @@ class CapabilityCheckContext(BaseModel):
     a supplied config; the runner surfaces it on instance-requiring checks
     instead of skipping them.
 
-    ``source_operations`` is the gateway migrated checks compose; it is None
-    for sources without one. ``connector`` serves the fallback path only:
-    migrated checks need no connector instance.
+    ``source_operations`` is the gateway migrated checks compose; it is None for
+    sources without one. ``connector`` serves the fallback path only: migrated
+    checks need no connector instance.
     """
 
     # ``BaseConnector`` and ``SourceOperations`` are not pydantic types;
