@@ -58,15 +58,21 @@ export default function Sidebar() {
     >
       <div className="relative mx-2 flex flex-col">
         {settingSteps.map((step, index) => {
+          // The form numbers steps absolutely (0 = Credential, 1 = Connector,
+          // 2 = Advanced) and clamps `formStep` to >= 1 when there's no
+          // credential step. Since we omit the Credential row in that case,
+          // shift the row index up to recover the form's step numbering.
+          const stepValue = index + (noCredential ? 1 : 0);
+
           const allowed =
             (step == "Connector" && allowCreate) ||
             (step == "Advanced (optional)" && allowAdvanced) ||
-            index <= formStep;
+            stepValue <= formStep;
 
           const selected: SelectionType =
-            formStep === index
+            formStep === stepValue
               ? "current"
-              : formStep < index
+              : formStep < stepValue
                 ? "future"
                 : "done";
 
@@ -76,7 +82,7 @@ export default function Sidebar() {
                 <div
                   className={cn(
                     "absolute left-2 w-0.5",
-                    index <= formStep
+                    stepValue <= formStep
                       ? "bg-action-selection-05"
                       : "bg-background-tint-04"
                   )}
@@ -94,7 +100,7 @@ export default function Sidebar() {
                 style={{ height: STEP_ROW_PX }}
                 onClick={() => {
                   if (allowed) {
-                    setFormStep(index - (noCredential ? 1 : 0));
+                    setFormStep(stepValue);
                   }
                 }}
               >
