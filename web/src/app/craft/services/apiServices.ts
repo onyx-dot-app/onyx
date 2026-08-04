@@ -4,7 +4,6 @@ import {
   ApiMessageResponse,
   ApiInteractiveTurnResponse,
   ApiArtifactResponse,
-  ApiUsageLimitsResponse,
   ApiWebappInfoResponse,
   ApiSandboxStatusResponse,
   SessionHistoryItem,
@@ -12,7 +11,6 @@ import {
   BuildMessageAttachment,
   BuildMessage,
   StreamPacket,
-  UsageLimits,
   DirectoryListing,
   SharingScope,
   ApiSessionSkillsState,
@@ -22,15 +20,13 @@ import {
   ApprovalSubmitDecision,
   ApprovalView,
 } from "@/app/craft/types/approvals";
+import {
+  RATE_LIMITED_ERROR_CODE,
+  RateLimitDetails,
+} from "@/app/app/interfaces";
 import { BUILD_API_BASE } from "@/app/craft/v1/constants";
 import { CRAFT_GATEWAY_PROVIDER } from "@/app/craft/onboarding/constants";
 import type { BuildLlmSelection } from "@/app/craft/onboarding/constants";
-
-// =============================================================================
-// API Configuration
-// =============================================================================
-
-export const USAGE_LIMITS_ENDPOINT = `${BUILD_API_BASE}/limit`;
 
 // =============================================================================
 // SSE Stream Processing
@@ -379,17 +375,27 @@ export async function fetchMessages(
   }));
 }
 
-/**
- * Custom error class for rate limit (429) errors.
- * Used to distinguish rate limit errors from other API errors
- * so the UI can show an upsell modal instead of a generic error.
- */
-export class RateLimitError extends Error {
-  public readonly statusCode: number = 429;
+// 429 JSON body emitted by the backend usage rate-limiter (token/cost budgets).
+interface RateLimited429Body {
+  error_code?: string;
+  detail?: string;
+  scope?: string;
+  reset_at?: string;
+  retry_after_seconds?: number;
+}
 
-  constructor() {
-    super("Rate limit exceeded");
-    this.name = "RateLimitError";
+/**
+ * Thrown when the backend's usage rate-limiter (org/user token + cost
+ * budgets) rejects a turn with a structured 429. Carries the reset details
+ * so the UI can render the same rate-limit banner as chat.
+ */
+export class RateLimitedError extends Error {
+  public readonly details: RateLimitDetails;
+
+  constructor(message: string, details: RateLimitDetails) {
+    super(message);
+    this.name = "RateLimitedError";
+    this.details = details;
   }
 }
 
@@ -428,7 +434,20 @@ export async function createTurn(
 
   if (!res.ok) {
     if (res.status === 429) {
-      throw new RateLimitError();
+      const body: RateLimited429Body | null = await res
+        .json()
+        .catch(() => null);
+      if (body?.error_code === RATE_LIMITED_ERROR_CODE) {
+        throw new RateLimitedError(
+          body.detail || "You've reached your usage limit.",
+          {
+            scope: body.scope,
+            reset_at: body.reset_at,
+            retry_after_seconds: body.retry_after_seconds,
+          }
+        );
+      }
+      throw new Error(body?.detail || `Failed to create turn: ${res.status}`);
     }
     throw new Error(await errorDetail(res, "Failed to create turn"));
   }
@@ -674,36 +693,6 @@ export async function fetchFileContent(
 
   const content = await res.text();
   return { content, mimeType, isImage: false };
-}
-
-// =============================================================================
-// Usage Limits API
-// =============================================================================
-
-/** Transform API response to frontend types */
-function transformUsageLimitsResponse(
-  data: ApiUsageLimitsResponse
-): UsageLimits {
-  return {
-    isLimited: data.is_limited,
-    limitType: data.limit_type,
-    messagesUsed: data.messages_used,
-    limit: data.limit,
-    resetTimestamp: data.reset_timestamp
-      ? new Date(data.reset_timestamp)
-      : null,
-  };
-}
-
-export async function fetchUsageLimits(): Promise<UsageLimits> {
-  const res = await fetch(USAGE_LIMITS_ENDPOINT);
-
-  if (!res.ok) {
-    throw new Error(`Failed to fetch usage limits: ${res.status}`);
-  }
-
-  const data: ApiUsageLimitsResponse = await res.json();
-  return transformUsageLimitsResponse(data);
 }
 
 // =============================================================================

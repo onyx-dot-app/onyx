@@ -37,6 +37,7 @@ from onyx.db.engine.shard_registry import (
     get_catalog_engine,
     get_default_shard_name,
     get_engine_for_shard,
+    get_new_tenant_shard_name,
     get_shard_specs,
     is_sharded,
 )
@@ -152,7 +153,7 @@ def reset_shard_overrides() -> None:
         _OVERRIDES = None
 
 
-def _is_undefined_table(exc: BaseException) -> bool:
+def is_undefined_table(exc: BaseException) -> bool:
     """True only for 'public.tenant_shard does not exist'.
 
     Separating this from other failures is what makes the default-shard fallback safe:
@@ -185,7 +186,7 @@ def _lookup_shard_in_catalog(tenant_id: str) -> str | None:
                 {"tenant_id": tenant_id},
             ).first()
     except Exception as e:
-        if _is_undefined_table(e):
+        if is_undefined_table(e):
             # Deployment has not run the catalog migration yet; nothing is mapped.
             return None
         logger.exception("tenant_shard lookup failed for %s", tenant_id)
@@ -233,6 +234,22 @@ def get_shard_for_tenant(tenant_id: str) -> str:
         )
 
     _ShardCache.put(tenant_id, shard_name, generation)
+    return shard_name
+
+
+def get_shard_for_new_tenant() -> str:
+    """Shard a tenant being created right now should be placed on.
+
+    A configuration decision, not a lookup: unlike `get_shard_for_tenant`, there is no
+    catalog row to consult yet. Raises rather than defaulting on an unknown shard —
+    silently placing a tenant elsewhere is what this is meant to prevent.
+    """
+    shard_name = get_new_tenant_shard_name()
+    if shard_name not in get_shard_specs():
+        raise ShardConfigurationError(
+            f"ONYX_DB_NEW_TENANT_SHARD='{shard_name}' is not a configured shard "
+            f"(known: {sorted(get_shard_specs())})"
+        )
     return shard_name
 
 

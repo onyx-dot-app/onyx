@@ -182,6 +182,10 @@ OPENCODE_PROMPT_INACTIVITY_TIMEOUT_SECONDS = float(
     )
 )
 
+# Per-turn deadline stamp for the turn-budget plugin; name is an internal
+# contract with turn-budget.ts.
+TURN_BUDGET_FILE_NAME = ".onyx-turn-budget.json"
+
 # Prompt-slot lock lease; renewed on every sandbox event/keepalive, so a dead
 # holder strands the slot for at most this long.
 PROMPT_SLOT_LEASE_SECONDS = float(os.environ.get("PROMPT_SLOT_LEASE_SECONDS", "120.0"))
@@ -213,15 +217,6 @@ OPENCODE_SERVE_REQUEST_TIMEOUT = float(
 OPENCODE_SERVE_EVENT_READ_TIMEOUT = float(
     os.environ.get("OPENCODE_SERVE_EVENT_READ_TIMEOUT", "60.0")
 )
-
-# ==============================================================================
-# Rate limiting
-# ==============================================================================
-
-# Messages per week. Free users always get 5 messages total (not configurable).
-# Per-user overrides are managed via the PostHog feature flag
-# "craft-has-usage-limits".
-CRAFT_PAID_USER_RATE_LIMIT = int(os.environ.get("CRAFT_PAID_USER_RATE_LIMIT", "25"))
 
 # ==============================================================================
 # User Library (user-uploaded raw files: xlsx, pptx, docx, etc.)

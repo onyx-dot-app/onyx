@@ -65,7 +65,7 @@ jobs:
 
       - uses: actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e # zizmor: ignore[cache-poisoning]
         with:
-          go-version: "1.26.4"
+          go-version: "1.26.5"
           cache: false
 
       # ldflags follow the contract of hatch_build.py: `main.version` carries
@@ -380,7 +380,7 @@ jobs:
 
       - uses: actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e # zizmor: ignore[cache-poisoning]
         with:
-          go-version: "1.26.4"
+          go-version: "1.26.5"
           cache: false
 
       - name: Install govulncheck

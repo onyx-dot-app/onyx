@@ -466,3 +466,14 @@ export interface StreamingError {
   is_retryable?: boolean;
   details?: Record<string, unknown> | null;
 }
+
+// A user stop aborts the reader before the backend's own `stop` packet can arrive, so without this
+// the turn keeps looking like it is streaming — live timer included — until a reload, where the
+// backend replays an OverallStop.
+export function buildUserCancelledStopPacket(packets: Packet[]): Packet {
+  const lastPacket = packets[packets.length - 1];
+  return {
+    placement: { turn_index: lastPacket?.placement.turn_index ?? 0 },
+    obj: { type: PacketType.STOP, stop_reason: StopReason.USER_CANCELLED },
+  };
+}

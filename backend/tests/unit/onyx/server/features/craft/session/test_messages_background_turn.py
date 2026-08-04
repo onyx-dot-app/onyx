@@ -136,7 +136,6 @@ def test_send_message_starts_background_turn(
     monkeypatch.setattr(messages_api, "get_cache_backend", lambda: cache)
     _patch_skill_state(monkeypatch)
     monkeypatch.setattr(messages_api, "get_build_session", get_session_stub)
-    monkeypatch.setattr(messages_api, "check_build_rate_limits", lambda **_: None)
     monkeypatch.setattr(messages_api, "check_token_rate_limits", lambda *_: None)
     monkeypatch.setattr(messages_api, "SessionManager", lambda _: session_manager)
     monkeypatch.setattr(
@@ -219,7 +218,6 @@ def test_send_message_preserves_legacy_provider_selection(
     monkeypatch.setattr(messages_api, "get_cache_backend", lambda: cache)
     _patch_skill_state(monkeypatch)
     monkeypatch.setattr(messages_api, "get_build_session", lambda *_: session)
-    monkeypatch.setattr(messages_api, "check_build_rate_limits", lambda **_: None)
     monkeypatch.setattr(messages_api, "check_token_rate_limits", lambda *_: None)
     monkeypatch.setattr(messages_api, "create_message", _create_message_noop)
     monkeypatch.setattr(messages_api, "start_interactive_turn_runner", MagicMock())
@@ -252,7 +250,6 @@ def test_send_message_prefers_provider_id_over_legacy_provider(
     monkeypatch.setattr(messages_api, "get_cache_backend", lambda: cache)
     _patch_skill_state(monkeypatch)
     monkeypatch.setattr(messages_api, "get_build_session", lambda *_: session)
-    monkeypatch.setattr(messages_api, "check_build_rate_limits", lambda **_: None)
     monkeypatch.setattr(messages_api, "check_token_rate_limits", lambda *_: None)
     monkeypatch.setattr(messages_api, "create_message", _create_message_noop)
     monkeypatch.setattr(messages_api, "start_interactive_turn_runner", MagicMock())
@@ -288,7 +285,6 @@ def test_send_message_rejects_second_active_turn(
     monkeypatch.setattr(messages_api, "get_cache_backend", lambda: cache)
     _patch_skill_state(monkeypatch)
     monkeypatch.setattr(messages_api, "get_build_session", get_session_stub)
-    monkeypatch.setattr(messages_api, "check_build_rate_limits", lambda **_: None)
     monkeypatch.setattr(messages_api, "check_token_rate_limits", lambda *_: None)
     monkeypatch.setattr(messages_api, "create_message", _create_message_noop)
     monkeypatch.setattr(messages_api, "start_interactive_turn_runner", MagicMock())
@@ -323,7 +319,6 @@ def test_send_message_reloads_stale_skills(
     _patch_skill_state(monkeypatch, stale=True)
     monkeypatch.setattr(messages_api, "get_build_session", lambda *_: session)
     monkeypatch.setattr(messages_api, "SessionManager", lambda _: session_manager)
-    monkeypatch.setattr(messages_api, "check_build_rate_limits", lambda **_: None)
     monkeypatch.setattr(messages_api, "check_token_rate_limits", lambda *_: None)
     monkeypatch.setattr(messages_api, "create_message", _create_message_noop)
     monkeypatch.setattr(messages_api, "start_interactive_turn_runner", MagicMock())
@@ -348,7 +343,7 @@ def test_send_message_is_idempotent_for_same_client_request(
     session = SimpleNamespace(id=session_id)
     persisted: list[tuple[int, str]] = []
     start_runner = MagicMock()
-    rate_limit_check = MagicMock()
+    token_rate_limit_check = MagicMock()
 
     def get_session_stub(*_: object, **__: object) -> SimpleNamespace:
         return session
@@ -365,8 +360,7 @@ def test_send_message_is_idempotent_for_same_client_request(
     monkeypatch.setattr(messages_api, "get_cache_backend", lambda: cache)
     _patch_skill_state(monkeypatch)
     monkeypatch.setattr(messages_api, "get_build_session", get_session_stub)
-    monkeypatch.setattr(messages_api, "check_build_rate_limits", rate_limit_check)
-    monkeypatch.setattr(messages_api, "check_token_rate_limits", lambda *_: None)
+    monkeypatch.setattr(messages_api, "check_token_rate_limits", token_rate_limit_check)
     monkeypatch.setattr(
         messages_api,
         "create_message",
@@ -394,7 +388,7 @@ def test_send_message_is_idempotent_for_same_client_request(
     assert same.turn_id == first.turn_id
     assert persisted == [(0, "hello")]
     start_runner.assert_called_once()
-    rate_limit_check.assert_called_once()
+    token_rate_limit_check.assert_called_once()
 
 
 def test_send_message_leaves_turn_active_if_runner_cannot_start(
@@ -414,7 +408,6 @@ def test_send_message_leaves_turn_active_if_runner_cannot_start(
     monkeypatch.setattr(messages_api, "get_cache_backend", lambda: cache)
     _patch_skill_state(monkeypatch)
     monkeypatch.setattr(messages_api, "get_build_session", get_session_stub)
-    monkeypatch.setattr(messages_api, "check_build_rate_limits", lambda **_: None)
     monkeypatch.setattr(messages_api, "check_token_rate_limits", lambda *_: None)
     monkeypatch.setattr(messages_api, "create_message", _create_message_noop)
     monkeypatch.setattr(
@@ -454,7 +447,6 @@ def test_send_message_blocked_when_over_token_budget(
     monkeypatch.setattr(messages_api, "get_cache_backend", lambda: cache)
     _patch_skill_state(monkeypatch)
     monkeypatch.setattr(messages_api, "get_build_session", lambda *_, **__: session)
-    monkeypatch.setattr(messages_api, "check_build_rate_limits", lambda **_: None)
     monkeypatch.setattr(messages_api, "check_token_rate_limits", lambda *_: None)
     monkeypatch.setattr(messages_api, "create_message", _create_message_noop)
     monkeypatch.setattr(messages_api, "start_interactive_turn_runner", start_runner)

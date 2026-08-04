@@ -30,6 +30,17 @@ CONTEXT_CHUNKS_BELOW = int(os.environ.get("CONTEXT_CHUNKS_BELOW") or 1)
 LLM_SOCKET_READ_TIMEOUT = int(
     os.environ.get("LLM_SOCKET_READ_TIMEOUT") or "60"
 )  # 60 seconds
+# Total per-call timeout for image summarization. Unlike LLM_SOCKET_READ_TIMEOUT
+# (per-packet gap), this bounds the whole call so a keepalive-only stream can't
+# wedge a docprocessing thread. A generous backstop against hangs.
+IMAGE_SUMMARIZATION_TIMEOUT = int(
+    os.environ.get("IMAGE_SUMMARIZATION_TIMEOUT") or "300"
+)  # 300 seconds (5 min)
+# Same backstop for contextual-RAG doc/chunk summaries. These are short,
+# non-reasoning calls, so this is generous headroom.
+CONTEXTUAL_RAG_LLM_TIMEOUT = int(
+    os.environ.get("CONTEXTUAL_RAG_LLM_TIMEOUT") or "180"
+)  # 180 seconds
 # Max silent gap before the chat stream emits a keepalive packet; must stay below
 # the smallest proxy idle timeout in front (ALBs default to 60s).
 CHAT_HEARTBEAT_INTERVAL_S = int(os.environ.get("CHAT_HEARTBEAT_INTERVAL_S") or "15")

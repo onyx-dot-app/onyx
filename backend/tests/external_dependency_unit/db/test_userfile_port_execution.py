@@ -195,7 +195,7 @@ def test_run_port_attempt_user_scope_survival_filter(
     captured: dict[str, set[str]] = {}
     mock_copier = MagicMock()
 
-    def _copy(ids: list[str], *, surviving_doc_ids=None, **_):  # type: ignore[no-untyped-def]
+    def _copy(ids: list[str], *, surviving_doc_ids=None, **_):
         captured["surviving"] = surviving_doc_ids() if surviving_doc_ids else set()
         return len(ids), False
 

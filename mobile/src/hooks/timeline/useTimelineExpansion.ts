@@ -35,8 +35,7 @@ export function useTimelineExpansion(
   }, [stopPacketSeen, hasDisplayContent]);
 
   // Keep the active parallel tab valid. Adjusting state during render (not an effect) avoids
-  // react-hooks/set-state-in-effect and converges in one pass. Dormant in 9b (parallel turns are
-  // linearized); kept for the parallel-tab phase.
+  // react-hooks/set-state-in-effect and converges in one pass.
   const validTabKeys = useMemo(
     () =>
       lastTurnGroup?.isParallel && lastTurnGroup.steps.length > 0

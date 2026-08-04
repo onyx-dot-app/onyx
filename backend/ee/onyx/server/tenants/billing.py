@@ -177,12 +177,12 @@ def register_tenant_users(
     if idempotency_key is None:
         return stripe.Subscription.modify(
             stripe_subscription_id,
-            items=items,
+            items=items,  # ty: ignore[invalid-argument-type]
             metadata=metadata,
         )
     return stripe.Subscription.modify(
         stripe_subscription_id,
-        items=items,
+        items=items,  # ty: ignore[invalid-argument-type]
         metadata=metadata,
         idempotency_key=idempotency_key,
     )

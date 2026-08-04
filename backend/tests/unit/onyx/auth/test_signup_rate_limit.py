@@ -39,7 +39,7 @@ def _fake_pipeline_redis(incr_return: int) -> MagicMock:
     pipeline.execute = AsyncMock(return_value=[incr_return, 1])
     redis = MagicMock()
     redis.pipeline = MagicMock(return_value=pipeline)
-    redis._pipeline = pipeline  # type: ignore[attr-defined]
+    redis._pipeline = pipeline
     return redis
 
 

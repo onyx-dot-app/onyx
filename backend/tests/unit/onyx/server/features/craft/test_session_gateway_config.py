@@ -349,7 +349,7 @@ def test_manager_prefers_provider_recommended_default_in_provider_order() -> Non
         name="Alpha provider",
     )
     manager = SessionManager.__new__(SessionManager)
-    manager._db_session = cast(Session, MagicMock(spec=Session))  # type: ignore[attr-defined]
+    manager._db_session = cast(Session, MagicMock(spec=Session))
     user = cast(User, MagicMock(spec=User))
 
     with (
@@ -366,7 +366,7 @@ def test_manager_prefers_provider_recommended_default_in_provider_order() -> Non
     # default (bedrock-pro) wins over the alphabetically-first visible model.
     assert config.provider == "onyx"
     assert config.model_name == "7/bedrock-pro"
-    fetch_providers.assert_called_once_with(manager._db_session, user)  # type: ignore[attr-defined]
+    fetch_providers.assert_called_once_with(manager._db_session, user)
 
 
 def _gateway_config() -> CraftLLMProviderConfig:
@@ -407,9 +407,9 @@ def _reconcile_manager(
     manager = SessionManager.__new__(SessionManager)
     sandbox_manager = MagicMock()
     build_llm_configs = MagicMock(return_value=config)
-    manager._db_session = cast(Session, MagicMock(spec=Session))  # type: ignore[attr-defined]
-    manager._sandbox_manager = sandbox_manager  # type: ignore[attr-defined]
-    manager.build_llm_configs = build_llm_configs  # type: ignore[method-assign]
+    manager._db_session = cast(Session, MagicMock(spec=Session))
+    manager._sandbox_manager = sandbox_manager
+    manager.build_llm_configs = build_llm_configs
     return manager, sandbox_manager, build_llm_configs
 
 

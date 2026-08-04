@@ -14,6 +14,7 @@ import {
 } from "@/chat/contracts/documents";
 import {
   GroupedPacket,
+  ProcessedMessageState,
   createInitialState,
   processPackets,
 } from "@/chat/messageProcessor";
@@ -25,6 +26,9 @@ import {
 } from "@/chat/timeline/transformers";
 
 export interface UsePacketProcessorResult {
+  // The raw reducer output, exposed because `selectSources` and the full-text reader want the whole
+  // state; deriving it in a second hook would reduce every packet twice per flush.
+  processed: ProcessedMessageState;
   toolGroups: GroupedPacket[];
   displayGroups: GroupedPacket[];
   toolTurnGroups: TurnGroup[];
@@ -108,6 +112,7 @@ export function usePacketProcessor(
   }, []);
 
   return {
+    processed: state,
     toolGroups: state.toolGroups,
     displayGroups,
     toolTurnGroups,

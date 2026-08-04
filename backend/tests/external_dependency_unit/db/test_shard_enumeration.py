@@ -21,17 +21,19 @@ from onyx.configs.app_configs import POSTGRES_DB
 from onyx.db.engine import shard_registry, tenant_utils
 from onyx.db.engine.shard_registry import get_engine_for_shard
 from onyx.db.engine.sql_engine import (
-    SYNC_DB_API,
     SqlEngine,
-    build_connection_string,
 )
 from onyx.db.engine.tenant_utils import (
     get_all_tenant_ids,
     get_schemas_needing_migration,
     get_tenant_ids_by_shard,
 )
+from tests.external_dependency_unit.db.shard_test_utils import (
+    DEFAULT_SHARD,
+    create_schema,
+    drop_schema,
+)
 
-DEFAULT_SHARD = "default"
 SECOND_SHARD = "shard-enum-b"
 
 
@@ -41,28 +43,6 @@ class _CapturedAlembicURL(Exception):
     def __init__(self, url: str) -> None:
         super().__init__(url)
         self.url = url
-
-
-def _admin_engine() -> Engine:
-    """Engine on the `postgres` maintenance DB, for CREATE/DROP DATABASE."""
-    from sqlalchemy import create_engine
-
-    return create_engine(
-        build_connection_string(db_api=SYNC_DB_API, db="postgres"),
-        isolation_level="AUTOCOMMIT",
-    )
-
-
-def _create_schema(engine: Engine, schema: str) -> None:
-    with engine.connect() as conn:
-        conn.execute(text(f'CREATE SCHEMA IF NOT EXISTS "{schema}"'))
-        conn.commit()
-
-
-def _drop_schema(engine: Engine, schema: str) -> None:
-    with engine.connect() as conn:
-        conn.execute(text(f'DROP SCHEMA IF EXISTS "{schema}" CASCADE'))
-        conn.commit()
 
 
 def _stamp_alembic_version(engine: Engine, schema: str, revision: str) -> None:
@@ -80,28 +60,6 @@ def _stamp_alembic_version(engine: Engine, schema: str, revision: str) -> None:
             {"rev": revision},
         )
         conn.commit()
-
-
-@pytest.fixture(scope="module")
-def second_database() -> Generator[str, None, None]:
-    """Create a throwaway second database for the duration of the module."""
-    db_name = f"onyx_enum_test_{uuid4().hex[:8]}"
-    admin = _admin_engine()
-    with admin.connect() as conn:
-        conn.execute(text(f'CREATE DATABASE "{db_name}"'))
-    try:
-        yield db_name
-    finally:
-        with admin.connect() as conn:
-            conn.execute(
-                text(
-                    "SELECT pg_terminate_backend(pid) FROM pg_stat_activity "
-                    "WHERE datname = :db AND pid <> pg_backend_pid()"
-                ),
-                {"db": db_name},
-            )
-            conn.execute(text(f'DROP DATABASE IF EXISTS "{db_name}"'))
-        admin.dispose()
 
 
 @pytest.fixture(scope="function")
@@ -128,13 +86,13 @@ def two_shards(
     tenant_a = f"tenant_{uuid4()}"
     tenant_b = f"tenant_{uuid4()}"
 
-    _create_schema(get_engine_for_shard(DEFAULT_SHARD), tenant_a)
-    _create_schema(get_engine_for_shard(SECOND_SHARD), tenant_b)
+    create_schema(get_engine_for_shard(DEFAULT_SHARD), tenant_a)
+    create_schema(get_engine_for_shard(SECOND_SHARD), tenant_b)
 
     yield {"tenant_a": tenant_a, "tenant_b": tenant_b, "second_db": second_database}
 
-    _drop_schema(get_engine_for_shard(DEFAULT_SHARD), tenant_a)
-    _drop_schema(get_engine_for_shard(SECOND_SHARD), tenant_b)
+    drop_schema(get_engine_for_shard(DEFAULT_SHARD), tenant_a)
+    drop_schema(get_engine_for_shard(SECOND_SHARD), tenant_b)
     shard_registry.reset_shard_specs()
 
 
@@ -150,11 +108,11 @@ def one_shard(monkeypatch: pytest.MonkeyPatch) -> Generator[str, None, None]:
     shard_registry.reset_shard_specs()
 
     tenant_id = f"tenant_{uuid4()}"
-    _create_schema(get_engine_for_shard(DEFAULT_SHARD), tenant_id)
+    create_schema(get_engine_for_shard(DEFAULT_SHARD), tenant_id)
 
     yield tenant_id
 
-    _drop_schema(get_engine_for_shard(DEFAULT_SHARD), tenant_id)
+    drop_schema(get_engine_for_shard(DEFAULT_SHARD), tenant_id)
     shard_registry.reset_shard_specs()
 
 
@@ -187,7 +145,7 @@ def test_tenant_present_on_two_shards_is_enumerated_once(
     every periodic task for that tenant.
     """
     tenant_a = two_shards["tenant_a"]
-    _create_schema(get_engine_for_shard(SECOND_SHARD), tenant_a)
+    create_schema(get_engine_for_shard(SECOND_SHARD), tenant_a)
     try:
         by_shard = get_tenant_ids_by_shard()
         assert tenant_a in by_shard[DEFAULT_SHARD]
@@ -195,13 +153,13 @@ def test_tenant_present_on_two_shards_is_enumerated_once(
 
         assert get_all_tenant_ids().count(tenant_a) == 1
     finally:
-        _drop_schema(get_engine_for_shard(SECOND_SHARD), tenant_a)
+        drop_schema(get_engine_for_shard(SECOND_SHARD), tenant_a)
 
 
 def test_non_tenant_schemas_are_excluded(two_shards: dict[str, Any]) -> None:
     """Only schemas matching the tenant pattern count, on every shard."""
     engine = get_engine_for_shard(SECOND_SHARD)
-    _create_schema(engine, "definitely_not_a_tenant")
+    create_schema(engine, "definitely_not_a_tenant")
     try:
         all_tenants = get_all_tenant_ids()
         assert "definitely_not_a_tenant" not in all_tenants
@@ -210,7 +168,7 @@ def test_non_tenant_schemas_are_excluded(two_shards: dict[str, Any]) -> None:
         assert two_shards["tenant_b"] in all_tenants
         assert "definitely_not_a_tenant" not in get_tenant_ids_by_shard()[SECOND_SHARD]
     finally:
-        _drop_schema(engine, "definitely_not_a_tenant")
+        drop_schema(engine, "definitely_not_a_tenant")
 
 
 def test_single_shard_enumeration_is_unchanged(one_shard: str) -> None:
