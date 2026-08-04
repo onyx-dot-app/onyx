@@ -18,7 +18,6 @@ import {
   updateAgentSharedStatus,
   updateAgentFeaturedStatus,
 } from "@/lib/agents/svc";
-import { useUser } from "@/providers/UserProvider";
 import {
   SvgActions,
   SvgBarChart,
@@ -50,7 +49,6 @@ export default function AgentCard({ agent }: AgentCardProps) {
     () => pinnedAgents.some((pinnedAgent) => pinnedAgent.id === agent.id),
     [agent.id, pinnedAgents]
   );
-  const { isAdmin } = useUser();
   const businessTier = useTierAtLeast(Tier.BUSINESS);
   const shareAgentModal = useCreateModal();
   const agentViewerModal = useCreateModal();

@@ -752,8 +752,13 @@ function Main({ ccPairId }: { ccPairId: number }) {
                       pruneFreq={pruneFreq}
                       indexingStart={indexingStart}
                       refreshFreq={refreshFreq}
-                      onRefreshEdit={handleRefreshEdit}
-                      onPruningEdit={handlePruningEdit}
+                      // No handler => no pencil, matching the rest of this page's edits.
+                      onRefreshEdit={
+                        can(ccPair, "edit") ? handleRefreshEdit : undefined
+                      }
+                      onPruningEdit={
+                        can(ccPair, "edit") ? handlePruningEdit : undefined
+                      }
                     />
                   </div>
                 </Card>
