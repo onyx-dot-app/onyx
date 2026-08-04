@@ -24,7 +24,7 @@ from onyx.llm.api_surfaces import (
     resolve_api_surface,
 )
 from onyx.llm.constants import MODEL_PREFIX_TO_VENDOR, LlmProviderNames
-from onyx.llm.cost import compute_cost_cents_from_usage
+from onyx.llm.cost import compute_cost_cents
 from onyx.llm.custom_config_mapping import (
     UI_ONLY_CONFIG_KEYS,
     map_custom_config_to_model_kwargs,
@@ -624,7 +624,7 @@ class LitellmLLM(LLM):
 
         try:
             with get_session_with_current_tenant() as db_session:
-                input_cents, output_cents = compute_cost_cents_from_usage(
+                input_cents, output_cents = compute_cost_cents(
                     model=self._model_version,
                     provider=provider,
                     prompt_tokens=usage.prompt_tokens,

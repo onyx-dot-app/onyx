@@ -73,9 +73,7 @@ def processor(
         recorded_calls.append(kwargs)
 
     monkeypatch.setattr(proc_mod, "get_session_with_tenant", _fake_session)
-    monkeypatch.setattr(
-        proc_mod, "compute_cost_cents_from_usage", lambda *_a, **_k: (1.0, 2.0)
-    )
+    monkeypatch.setattr(proc_mod, "compute_cost_cents", lambda *_a, **_k: (1.0, 2.0))
     monkeypatch.setattr(proc_mod, "record_user_usage", _capture_record)
 
     p = UserUsageTracingProcessor(flush_interval_seconds=0.05)
@@ -317,7 +315,7 @@ def test_passes_cache_inclusive_usage_to_shared_pricing(
     def _capture_record(db_session: Any, **kwargs: Any) -> None:  # noqa: ARG001
         recorded_calls.append(kwargs)
 
-    monkeypatch.setattr(proc_mod, "compute_cost_cents_from_usage", _capture_cost)
+    monkeypatch.setattr(proc_mod, "compute_cost_cents", _capture_cost)
     monkeypatch.setattr(proc_mod, "record_user_usage", _capture_record)
 
     p = UserUsageTracingProcessor(flush_interval_seconds=0.05)

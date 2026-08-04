@@ -15,7 +15,7 @@ from sqlalchemy.orm import Session
 from onyx.db.engine.sql_engine import get_session_with_tenant
 from onyx.db.enums import IncognitoRecordMode
 from onyx.db.user_usage import USER_USAGE_BUCKET_SECONDS, record_user_usage
-from onyx.llm.cost import compute_cost_cents_from_usage
+from onyx.llm.cost import compute_cost_cents
 from onyx.tracing.flows import IMAGE_FLOWS
 from onyx.tracing.framework.processor_interface import TracingProcessor
 from onyx.tracing.framework.span_data import GenerationSpanData
@@ -249,7 +249,7 @@ class UserUsageTracingProcessor(TracingProcessor):
 
     @staticmethod
     def _write_record(db_session: Session, record: _UsageRecord) -> None:
-        input_cost, output_cost = compute_cost_cents_from_usage(
+        input_cost, output_cost = compute_cost_cents(
             model=record.model,
             provider=record.provider,
             prompt_tokens=record.input_tokens,

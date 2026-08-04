@@ -91,7 +91,7 @@ class LangfuseTracingProcessor(TracingProcessor):
     def _calculate_cost(self, data: GenerationSpanData) -> Optional[float]:
         """Calculate LLM cost for this generation span (USD for Langfuse)."""
         try:
-            from onyx.llm.cost import compute_cost_cents_from_usage
+            from onyx.llm.cost import compute_cost_cents
 
             usage = data.usage or {}
             input_tokens = int(
@@ -110,7 +110,7 @@ class LangfuseTracingProcessor(TracingProcessor):
             ):
                 return None
 
-            input_cents, output_cents = compute_cost_cents_from_usage(
+            input_cents, output_cents = compute_cost_cents(
                 model=data.model,
                 provider=provider,
                 prompt_tokens=input_tokens,
