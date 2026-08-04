@@ -41,6 +41,7 @@ from onyx.llm.models import (
     SystemMessage,
     TextContentPart,
     ToolCall,
+    ToolChoice,
     ToolChoiceOptions,
     UserMessage,
 )
@@ -693,6 +694,16 @@ class _InvokeLLM(_ConfigOnlyLLM):
         return self._response
 
 
+class _RecordingInvokeLLM(_InvokeLLM):
+    def __init__(self, response: ModelResponse) -> None:
+        super().__init__(response)
+        self.received_tool_choice: ToolChoice | None = None
+
+    def invoke(self, *args: object, **kwargs: object) -> ModelResponse:
+        self.received_tool_choice = cast("ToolChoice | None", kwargs.get("tool_choice"))
+        return super().invoke(*args, **kwargs)
+
+
 def _handle_completion_call(request: ChatCompletionRequest) -> Any:
     provider = _provider(1, "openai", [_model("test")])
     return gateway_api.handle_chat_completion(
@@ -884,6 +895,28 @@ def test_require_named_tool(
         assert exc_info.value.error_code is OnyxErrorCode.INVALID_INPUT
     else:
         gateway_api._require_named_tool(tool_choice, tools)
+
+
+def test_handle_chat_completion_rejects_named_tool_choice_for_unknown_tool() -> None:
+    request = ChatCompletionRequest(
+        model="1/test",
+        messages=[{"role": "user", "content": "hi"}],
+        tools=[{"type": "function", "function": {"name": "bash", "parameters": {}}}],
+        tool_choice={"type": "function", "function": {"name": "other"}},
+    )
+    response = ModelResponse(
+        id="chatcmpl-1",
+        created="1784577999",
+        choice=Choice(finish_reason="stop", message=Message(content="ok")),
+    )
+
+    with patch.object(
+        gateway_api, "llm_from_provider", return_value=_InvokeLLM(response)
+    ):
+        with pytest.raises(OnyxError) as exc_info:
+            _handle_completion_call(request)
+
+    assert exc_info.value.error_code is OnyxErrorCode.INVALID_INPUT
 
 
 def test_gateway_route_exposes_standard_auth_dependency() -> None:
@@ -1306,6 +1339,51 @@ def test_handle_responses_request_non_streaming_returns_completed_response() -> 
     assert payload["output"][0]["type"] == "message"
     assert payload["output"][0]["content"][0]["text"] == "hello there"
     assert payload["usage"]["input_tokens"] == 120
+
+
+def test_handle_responses_request_forwards_named_tool_choice() -> None:
+    """The Responses request must survive the litellm tools transform plus
+    _require_named_tool and reach the LLM as a NamedToolChoice."""
+    request = ResponsesRequest(
+        model="1/test",
+        input="hi",
+        tools=[{"type": "function", "name": "bash", "parameters": {}}],
+        tool_choice={"type": "function", "name": "bash"},
+    )
+    response = ModelResponse(
+        id="chatcmpl-1",
+        created="1784577999",
+        choice=Choice(finish_reason="stop", message=Message(content="ok")),
+        usage=_wire_usage(),
+    )
+    fake_llm = _RecordingInvokeLLM(response)
+
+    with patch.object(gateway_api, "llm_from_provider", return_value=fake_llm):
+        _handle_responses_call(request)
+
+    assert fake_llm.received_tool_choice == NamedToolChoice(name="bash")
+
+
+def test_handle_responses_request_rejects_named_tool_choice_for_unknown_tool() -> None:
+    request = ResponsesRequest(
+        model="1/test",
+        input="hi",
+        tools=[{"type": "function", "name": "bash", "parameters": {}}],
+        tool_choice={"type": "function", "name": "other"},
+    )
+    response = ModelResponse(
+        id="chatcmpl-1",
+        created="1784577999",
+        choice=Choice(finish_reason="stop", message=Message(content="ok")),
+    )
+
+    with patch.object(
+        gateway_api, "llm_from_provider", return_value=_InvokeLLM(response)
+    ):
+        with pytest.raises(OnyxError) as exc_info:
+            _handle_responses_call(request)
+
+    assert exc_info.value.error_code is OnyxErrorCode.INVALID_INPUT
 
 
 _TEXT_CHUNKS = [

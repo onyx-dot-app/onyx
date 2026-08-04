@@ -676,8 +676,10 @@ class LitellmLLM(LLM):
         # enforces the forced tool. Matched by model name rather than
         # `is_reasoning` because the litellm/local registry lags behind new
         # Qwen releases (e.g. qwen3.7-plus).
-        # A NamedToolChoice is deliberately NOT downgraded here: the caller
-        # explicitly forced one specific tool and accepts the reasoning skip.
+        # A NamedToolChoice is deliberately NOT downgraded: legacy Claude
+        # thinking is skipped below instead, and Qwen thinking models may still
+        # reject the forced tool upstream (a loud 400 beats silently ignoring
+        # the caller's forced tool).
         if (is_claude_model or is_qwen_model) and (
             tool_choice == ToolChoiceOptions.REQUIRED
         ):
@@ -749,7 +751,14 @@ class LitellmLLM(LLM):
                     budget_tokens: int | None = ANTHROPIC_REASONING_EFFORT_BUDGET.get(
                         reasoning_effort
                     )
-                    if budget_tokens is not None and not has_tool_call_history:
+                    # thinking.type=enabled is rejected alongside a forced
+                    # tool_choice (only adaptive thinking supports forced
+                    # tool use), so skip thinking for a NamedToolChoice.
+                    if (
+                        budget_tokens is not None
+                        and not has_tool_call_history
+                        and not isinstance(tool_choice, NamedToolChoice)
+                    ):
                         if max_tokens is not None:
                             # Anthropic has a weird rule where max token has to be at least as much as budget tokens if set
                             # and the minimum budget tokens is 1024
