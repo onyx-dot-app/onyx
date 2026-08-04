@@ -69,7 +69,7 @@ function ShareAgentFormContent({ agentId }: ShareAgentFormContentProps) {
   const { data: groupsData } = useShareableGroups();
   const userDirectoryRestricted =
     usersError instanceof FetchError && usersError.status === 403;
-  const { user: currentUser, permissions } = useUser();
+  const { user: currentUser, permissions, adminCapabilities } = useUser();
   const { agent: fullAgent } = useAgent(agentId ?? null);
   const shareAgentModal = useModal();
   const { labels: allLabels, createLabel } = useLabels();
@@ -86,6 +86,11 @@ function ShareAgentFormContent({ agentId }: ShareAgentFormContentProps) {
     ? hasPermission(permissions, Permission.MANAGE_AGENTS)
     : can(fullAgent, "feature");
 
+  const canGroupShare = hasPermission(
+    adminCapabilities,
+    Permission.MANAGE_AGENTS
+  );
+
   // Create options for InputComboBox from all accepted users and groups
   const comboBoxOptions = useMemo(() => {
     const userOptions = userDirectoryRestricted
@@ -97,13 +102,21 @@ function ShareAgentFormContent({ agentId }: ShareAgentFormContentProps) {
             label: user.email,
           }));
 
-    const groupOptions = groups.map((group) => ({
-      value: `group-${group.id}`,
-      label: group.name,
-    }));
+    const groupOptions = canGroupShare
+      ? groups.map((group) => ({
+          value: `group-${group.id}`,
+          label: group.name,
+        }))
+      : [];
 
     return [...userOptions, ...groupOptions];
-  }, [acceptedUsers, groups, currentUser?.id, userDirectoryRestricted]);
+  }, [
+    acceptedUsers,
+    groups,
+    currentUser?.id,
+    userDirectoryRestricted,
+    canGroupShare,
+  ]);
 
   const comboBoxDisabled =
     userDirectoryRestricted && comboBoxOptions.length === 0;
