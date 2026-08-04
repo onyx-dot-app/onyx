@@ -142,6 +142,7 @@ describe("useComposerToolsState", () => {
   });
 
   it("holds the pill through the agent-unknown window after a send", () => {
+    const sendAgent = agent([searchTool]);
     const { result, rerender } = renderHook(
       (props: Parameters<typeof useComposerToolsState>[0]) =>
         useComposerToolsState(props),
@@ -149,7 +150,7 @@ describe("useComposerToolsState", () => {
         wrapper,
         initialProps: {
           chatSessionId: null,
-          agent: agent([searchTool]),
+          agent: sendAgent,
           isProjectWorkflow: false,
           projectId: null,
         },
@@ -158,7 +159,7 @@ describe("useComposerToolsState", () => {
     act(() => result.current.toggleDeepResearch());
 
     // Re-gating here would withdraw the control the user just used and drop it from the request.
-    act(() => result.current.notePendingSend());
+    act(() => result.current.notePendingSend(sendAgent));
     rerender({
       chatSessionId: "session-1",
       agent: null,
@@ -250,6 +251,7 @@ describe("useComposerToolsState", () => {
   });
 
   it("keeps the menu rows while the agent is momentarily unknown", async () => {
+    const sendAgent = agent([searchTool, imageTool]);
     const { result, rerender } = renderHook(
       (props: Parameters<typeof useComposerToolsState>[0]) =>
         useComposerToolsState(props),
@@ -257,7 +259,7 @@ describe("useComposerToolsState", () => {
         wrapper,
         initialProps: {
           chatSessionId: null,
-          agent: agent([searchTool, imageTool]),
+          agent: sendAgent,
           isProjectWorkflow: false,
           projectId: null,
         },
@@ -265,7 +267,7 @@ describe("useComposerToolsState", () => {
     );
     expect(result.current.actionTools).toHaveLength(2);
 
-    act(() => result.current.notePendingSend());
+    act(() => result.current.notePendingSend(sendAgent));
     rerender({
       chatSessionId: "session-1",
       agent: null,
@@ -278,6 +280,7 @@ describe("useComposerToolsState", () => {
 
   it("keeps the disabled set while the agent is momentarily unknown", async () => {
     apiFetchMock.mockResolvedValue({ "0": { disabled_tool_ids: [2] } });
+    const sendAgent = agent([searchTool, imageTool]);
     const { result, rerender } = renderHook(
       (props: Parameters<typeof useComposerToolsState>[0]) =>
         useComposerToolsState(props),
@@ -285,7 +288,7 @@ describe("useComposerToolsState", () => {
         wrapper,
         initialProps: {
           chatSessionId: null,
-          agent: agent([searchTool, imageTool]),
+          agent: sendAgent,
           isProjectWorkflow: false,
           projectId: null,
         },
@@ -293,7 +296,7 @@ describe("useComposerToolsState", () => {
     );
     await waitFor(() => expect(result.current.disabledToolIds).toEqual([2]));
 
-    act(() => result.current.notePendingSend());
+    act(() => result.current.notePendingSend(sendAgent));
     rerender({
       chatSessionId: "session-1",
       agent: null,
@@ -304,7 +307,9 @@ describe("useComposerToolsState", () => {
     expect(result.current.resolveToolOptions().allowedToolIds).toEqual([1]);
   });
 
-  it("does not carry the composer's agent into an existing chat opened from the landing", async () => {
+  it("records the agent the send used, not one picked while the create was in flight", async () => {
+    const sentWith = agent([searchTool, imageTool]);
+    const switchedTo: MinimalAgent = { ...agent([searchTool]), id: 12 };
     const { result, rerender } = renderHook(
       (props: Parameters<typeof useComposerToolsState>[0]) =>
         useComposerToolsState(props),
@@ -312,7 +317,42 @@ describe("useComposerToolsState", () => {
         wrapper,
         initialProps: {
           chatSessionId: null,
-          agent: agent([searchTool, imageTool]),
+          agent: sentWith,
+          isProjectWorkflow: false,
+          projectId: null,
+        },
+      },
+    );
+
+    // The send goes out, then the user taps a different agent before the session comes back.
+    act(() => result.current.notePendingSend(sentWith));
+    rerender({
+      chatSessionId: null,
+      agent: switchedTo,
+      isProjectWorkflow: false,
+      projectId: null,
+    });
+
+    // The session lands. It runs on the agent that created it, not the newer selection.
+    rerender({
+      chatSessionId: "session-1",
+      agent: null,
+      isProjectWorkflow: false,
+      projectId: null,
+    });
+    expect(result.current.actionTools.map((tool) => tool.id)).toEqual([1, 2]);
+  });
+
+  it("does not carry the composer's agent into an existing chat opened from the landing", async () => {
+    const sendAgent = agent([searchTool, imageTool]);
+    const { result, rerender } = renderHook(
+      (props: Parameters<typeof useComposerToolsState>[0]) =>
+        useComposerToolsState(props),
+      {
+        wrapper,
+        initialProps: {
+          chatSessionId: null,
+          agent: sendAgent,
           isProjectWorkflow: false,
           projectId: null,
         },
@@ -371,6 +411,7 @@ describe("useComposerToolsState", () => {
 
   it("still sends the force and the allowlist while the agent is momentarily unknown", async () => {
     apiFetchMock.mockResolvedValue({ "0": { disabled_tool_ids: [2] } });
+    const sendAgent = agent([searchTool, imageTool, fileReaderTool]);
     const { result, rerender } = renderHook(
       (props: Parameters<typeof useComposerToolsState>[0]) =>
         useComposerToolsState(props),
@@ -378,7 +419,7 @@ describe("useComposerToolsState", () => {
         wrapper,
         initialProps: {
           chatSessionId: null,
-          agent: agent([searchTool, imageTool, fileReaderTool]),
+          agent: sendAgent,
           isProjectWorkflow: false,
           projectId: null,
         },
@@ -388,7 +429,7 @@ describe("useComposerToolsState", () => {
     act(() => result.current.toggleForcedTool(1));
 
     // The send created the session, but it hasn't reached the sessions list yet.
-    act(() => result.current.notePendingSend());
+    act(() => result.current.notePendingSend(sendAgent));
     rerender({
       chatSessionId: "session-1",
       agent: null,

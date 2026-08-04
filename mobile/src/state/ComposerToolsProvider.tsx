@@ -35,9 +35,9 @@ export interface ComposerTools {
   toggleForcedTool: (toolId: number) => void;
   disabledToolIds: number[];
   toggleToolEnabled: (toolId: number) => void;
-  // Call right before a send that will create the session. Without it the provider cannot tell
-  // that transition apart from simply opening an existing chat.
-  notePendingSend: () => void;
+  // Report the agent a send used, once that send is known to have created the session. Carries
+  // the agent rather than a flag because the selection can change while the create is in flight.
+  notePendingSend: (agentForSend: MinimalAgent | null) => void;
   // Read at send time, never during render.
   resolveToolOptions: () => ChatToolOptions;
 }
@@ -80,12 +80,15 @@ export function useComposerToolsState({
    *
    * The hold is stamped with the conversation it belongs to and is only honoured back in that
    * same conversation, so it can never describe a chat it was not captured in. It carries over to
-   * a new session only when the host told us a send was creating one — opening an existing chat
-   * from the landing looks identical otherwise. Adjusted during render, not in an effect, so the
-   * hold is right on the first render that loses the agent; compared by id so a caller that
-   * rebuilds the object each render can't loop.
+   * a new session only when the host reports the send that created it, and then takes that send's
+   * agent — picking a different agent while the create was in flight must not rewrite what the
+   * finished session runs on. Adjusted during render, not in an effect, so the hold is right on
+   * the first render that loses the agent; compared by id so a caller that rebuilds the object
+   * each render can't loop.
    */
-  const [pendingSend, setPendingSend] = useState(false);
+  const [pendingSend, setPendingSend] = useState<{
+    agent: MinimalAgent | null;
+  } | null>(null);
   const [held, setHeld] = useState<{
     agent: MinimalAgent | null;
     sessionId: string | null;
@@ -95,15 +98,14 @@ export function useComposerToolsState({
     (held.agent?.id !== agent.id || held.sessionId !== chatSessionId)
   ) {
     setHeld({ agent, sessionId: chatSessionId });
-    if (pendingSend) setPendingSend(false);
   } else if (
     !agent &&
     pendingSend &&
     held.sessionId === null &&
     chatSessionId !== null
   ) {
-    setHeld({ agent: held.agent, sessionId: chatSessionId });
-    setPendingSend(false);
+    setHeld({ agent: pendingSend.agent, sessionId: chatSessionId });
+    setPendingSend(null);
   }
   const effectiveAgent =
     agent ?? (held.sessionId === chatSessionId ? held.agent : null);
@@ -148,7 +150,11 @@ export function useComposerToolsState({
     ],
   );
 
-  const notePendingSend = useCallback(() => setPendingSend(true), []);
+  const notePendingSend = useCallback(
+    (agentForSend: MinimalAgent | null) =>
+      setPendingSend({ agent: agentForSend }),
+    [],
+  );
 
   return useMemo(
     () => ({
