@@ -40,6 +40,7 @@ from onyx.llm.models import (
 )
 from onyx.llm.multi_llm import LLMRateLimitError, LLMTimeoutError
 from onyx.server.gateway import api as gateway_api
+from onyx.server.gateway import stream_bridge
 from onyx.server.gateway.api import _MESSAGES_ADAPTER
 from onyx.server.gateway.models import (
     AnthropicCountTokensRequest,
@@ -542,7 +543,7 @@ def _anthropic_stream_events(
 ) -> list[dict[str, Any]]:
     with patch.object(gateway_api, "llm_generation_span", return_value=nullcontext()):
         frames = list(
-            gateway_api._run_bridged_stream(
+            stream_bridge._run_bridged_stream(
                 gateway_api._anthropic_stream_worker,
                 {
                     "llm": llm,
@@ -782,6 +783,9 @@ def test_anthropic_messages_endpoint_threads_authorized_flow_to_handler() -> Non
             gateway_api,
             "resolve_gateway_model",
             return_value=(provider, model_config),
+        ),
+        patch.object(
+            gateway_api, "is_anthropic_passthrough_eligible", return_value=False
         ),
         patch.object(gateway_api, "handle_anthropic_messages") as handle,
     ):

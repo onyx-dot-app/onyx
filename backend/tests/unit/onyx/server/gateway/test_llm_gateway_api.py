@@ -51,6 +51,7 @@ from onyx.server.auth_check import check_router_auth
 from onyx.server.features.build import craft_gateway
 from onyx.server.features.build.craft_gateway import gateway_request_flow
 from onyx.server.gateway import api as gateway_api
+from onyx.server.gateway import stream_bridge
 from onyx.server.gateway.api import _MESSAGES_ADAPTER
 from onyx.server.gateway.configs import GATEWAY_PATH_PREFIX
 from onyx.server.gateway.models import (
@@ -263,7 +264,7 @@ class _RaisingCloseLLM(_ConfigOnlyLLM):
 
 
 def _gateway_stream(llm: LLM):
-    return gateway_api._run_bridged_stream(
+    return stream_bridge._run_bridged_stream(
         gateway_api._stream_worker,
         {
             "llm": llm,
@@ -617,7 +618,7 @@ def _reasoning_stream_llm() -> _ChunkStreamLLM:
 def test_stream_records_accumulated_reasoning_on_span() -> None:
     with (
         patch.object(gateway_api, "llm_generation_span"),
-        patch.object(gateway_api, "record_llm_span_output") as record,
+        patch.object(stream_bridge, "record_llm_span_output") as record,
     ):
         frames = list(_gateway_stream(_reasoning_stream_llm()))
 
@@ -1439,7 +1440,7 @@ def _responses_stream_events(
         gateway_api, "llm_generation_span", return_value=nullcontext(span)
     ):
         frames = list(
-            gateway_api._run_bridged_stream(
+            stream_bridge._run_bridged_stream(
                 gateway_api._responses_stream_worker,
                 {
                     "llm": llm,
@@ -1721,7 +1722,7 @@ def test_responses_stream_validates_against_openai_sdk_models() -> None:
 def test_responses_stream_disconnect_closes_upstream_and_omits_completed() -> None:
     closed = threading.Event()
     with patch.object(gateway_api, "llm_generation_span", return_value=nullcontext()):
-        stream = gateway_api._run_bridged_stream(
+        stream = stream_bridge._run_bridged_stream(
             gateway_api._responses_stream_worker,
             {
                 "llm": _StreamingLLM(closed),
@@ -1749,7 +1750,7 @@ def test_responses_stream_records_output_usage_and_reasoning_on_span() -> None:
     silently, because the worker skips all span recording."""
     span = MagicMock()
 
-    with patch.object(gateway_api, "record_llm_span_output") as record:
+    with patch.object(stream_bridge, "record_llm_span_output") as record:
         _responses_stream_events(
             _reasoning_stream_llm(), span=span, response_id="resp_span"
         )
@@ -1759,7 +1760,7 @@ def test_responses_stream_records_output_usage_and_reasoning_on_span() -> None:
     assert record.call_args.kwargs["reasoning"] == "thinking hard"
     assert record.call_args.kwargs["output"] == "done"
 
-    with patch.object(gateway_api, "record_llm_span_output") as record:
+    with patch.object(stream_bridge, "record_llm_span_output") as record:
         _responses_stream_events(
             _ChunkStreamLLM(_TEXT_CHUNKS), span=span, response_id="resp_usage"
         )
