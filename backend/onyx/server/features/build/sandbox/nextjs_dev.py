@@ -15,6 +15,9 @@ _TEMPLATE_NEXT_CONFIG = (
     Path(__file__).parent / "image" / "templates" / "outputs" / "web" / "next.config.ts"
 )
 
+# Canonical scaffold marker shared by bootstrap, restore, and API detection.
+WEBAPP_PACKAGE_JSON_PATH = "outputs/web/package.json"
+
 
 def webapp_base_path(session_id: UUID | str) -> str:
     """Base path a session's Next.js dev server serves under.
@@ -135,7 +138,7 @@ PORT={nextjs_port}
 
     flock -x 9
 
-    if [ ! -f "$SESSION_PATH/outputs/web/package.json" ]; then
+    if [ ! -f "$SESSION_PATH/{WEBAPP_PACKAGE_JSON_PATH}" ]; then
         echo "Copying outputs template"
         if [ -d /workspace/templates/outputs ]; then
             cp -r /workspace/templates/outputs/* "$SESSION_PATH/outputs/"
@@ -210,7 +213,7 @@ def build_webapp_restore_script(session_path: str, nextjs_port: int) -> str:
     return f"""
 set -e
 {write_snippet}
-if [ -f {session_path}/outputs/web/package.json ]; then
+if [ -f {session_path}/{WEBAPP_PACKAGE_JSON_PATH} ]; then
     nohup bash {session_path}/start-webapp.sh > {session_path}/webapp-bootstrap.log 2>&1 &
     echo "{WEBAPP_AUTOSTART_SENTINEL}"
 else
