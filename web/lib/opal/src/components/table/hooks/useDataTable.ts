@@ -456,17 +456,21 @@ export default function useDataTable<TData extends RowData>(
     return next;
   };
 
-  // Clear replaces the whole selection (reset semantics), so it must also drop ids outside
-  // the loaded rows — build up from empty rather than subtracting, or a selection made on
-  // another page survives the clear.
-  const clearSelection = () => {
+  // Deselecting *everything* replaces the selection rather than subtracting from it: build
+  // up from empty so ids the table never loaded (selected on another server-side page) go
+  // too. Only loaded rows can be tested for protection — see the server-side TODO below.
+  const deselectAllKeepingProtected = (): RowSelectionState => {
     const stillProtected: RowSelectionState = {};
     for (const row of table.getCoreRowModel().flatRows) {
       if (!row.getCanSelect() && rowSelection[row.id]) {
         stillProtected[row.id] = true;
       }
     }
-    table.setRowSelection(stillProtected);
+    return stillProtected;
+  };
+
+  const clearSelection = () => {
+    table.setRowSelection(deselectAllKeepingProtected());
   };
 
   const toggleAllPageRowsSelected = (selected: boolean) => {
@@ -477,18 +481,16 @@ export default function useDataTable<TData extends RowData>(
     table.setRowSelection(deselectKeepingProtected(table.getRowModel().rows));
   };
 
-  // TODO (@raunakab): In server-side mode, these only operate on the loaded
-  // page data, not all rows across all pages. TanStack can't select rows it
-  // doesn't have. Fixing this requires a server-side callback (e.g.
-  // `onSelectAll`) and a `totalItems`-aware selection model.
+  // TODO (@raunakab): In server-side mode, selecting all only covers the loaded
+  // page — TanStack can't select rows it doesn't have. Fixing that requires a
+  // server-side callback (e.g. `onSelectAll`) and a `totalItems`-aware selection
+  // model. Deselecting all is exact: dropping ids needs no row data.
   const toggleAllRowsSelected = (selected: boolean) => {
     if (selected) {
       table.toggleAllRowsSelected(true);
       return;
     }
-    table.setRowSelection(
-      deselectKeepingProtected(table.getCoreRowModel().flatRows)
-    );
+    table.setRowSelection(deselectAllKeepingProtected());
   };
 
   const isAllRowsSelected = table.getIsAllRowsSelected();
