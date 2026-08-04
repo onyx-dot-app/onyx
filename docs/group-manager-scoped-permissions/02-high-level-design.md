@@ -10,7 +10,8 @@
 > **Revised by the 2026-06-29 regression review.** Bundle/coverage decisions here are updated by
 > **D4** (`manage:actions` stays in the bundle — GATE 1 reach + create; its agent-mediated GATE 2 was later
 > dropped, see **D8**), **D5** (skills = a 7th scoped resource under a
-> new `manage:skills` token), **D6** (managers do everything **except delete**) and **D7** (attaching an agent
+> new `manage:skills` token), **D6** (managers do everything **except delete a resource that merely sits in a
+> managed group** — deleting something they *created* is ownership, see **D9**) and **D7** (attaching an agent
 > to a group is controlled by `manage:agents`). The authoritative, complete case list lives in
 > [03 §11](03-detailed-design.md). Also a hard prerequisite: the broken `current_curator_or_admin_user`
 > import (03 §11.0) must be fixed or the API server won't boot.
@@ -36,10 +37,15 @@ resolution (never cached, never stale), and a **two-gate** enforcement model who
                                 │
             is_manager=TRUE  ⇒  apply SCOPED_MANAGER_PERMISSIONS (in code)
                                 │   {manage:connectors, manage:document_sets,
-                                ▼    manage:agents, add:agents, manage:user_groups}
-                          but ONLY to    (+ manage:skills + manage:actions; actions
-                          Engineering's   scoped via their agents at GATE 2 — see 03 §11)
+                                ▼    manage:agents, add:agents, manage:user_groups,
+                          but ONLY to     manage:skills, manage:actions}
+                          Engineering's
                           resources — resolved LIVE
+
+   EXCEPT manage:actions — a custom action or MCP server belongs to no group, so there is
+   nothing to scope it by. The bundle grants GATE 1 reach + create only; managing an
+   existing one is plain owner-or-admin (D8). Agent-derived scope survives solely for
+   *viewing* an MCP server connected to a managed group. See 03 §11.1.
 ```
 
 Two things never live in the database as data:
