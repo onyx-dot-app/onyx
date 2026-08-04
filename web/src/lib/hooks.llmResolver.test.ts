@@ -2,7 +2,7 @@ import {
   getDefaultLlmDescriptor,
   getValidLlmDescriptorForProviders,
 } from "@/lib/hooks";
-import { structureValue } from "@/lib/languageModels/utils";
+import { parseLlmDescriptor, structureValue } from "@/lib/languageModels/utils";
 import { LLMProviderDescriptor } from "@/lib/languageModels/types";
 import { makeProvider } from "@tests/setup/llmProviderTestUtils";
 
@@ -239,5 +239,65 @@ describe("LLM resolver helpers", () => {
       provider: "openai",
       modelName: "gpt-first",
     });
+  });
+});
+
+describe("duplicate provider display names", () => {
+  const mc = (id: number, name: string, is_visible: boolean) => ({
+    id,
+    name,
+    is_visible,
+    max_input_tokens: null,
+    supports_image_input: false,
+    supports_reasoning: false,
+    effectiveDisplayName: "",
+  });
+
+  const sameNameProviders: LLMProviderDescriptor[] = [
+    makeProvider({
+      id: 22,
+      name: "Gateway Dual",
+      provider: "bifrost",
+      model_configurations: [mc(101, "gateway/gpt-model", false)],
+    }),
+    makeProvider({
+      id: 24,
+      name: "Gateway Dual",
+      provider: "bifrost",
+      model_configurations: [mc(202, "gateway/gpt-model", true)],
+    }),
+  ];
+
+  test("model configuration id resolves the exact row despite the shared name", () => {
+    const descriptor = getValidLlmDescriptorForProviders(
+      structureValue("Gateway Dual", "bifrost", "gateway/gpt-model", 202),
+      sameNameProviders
+    );
+
+    expect(descriptor.modelConfigurationId).toBe(202);
+    expect(descriptor.modelName).toBe("gateway/gpt-model");
+  });
+
+  test("structureValue round-trips the model configuration id", () => {
+    const parsed = parseLlmDescriptor(
+      structureValue("Gateway Dual", "bifrost", "gateway/gpt-model", 202)
+    );
+    expect(parsed.modelConfigurationId).toBe(202);
+    expect(parsed.modelName).toBe("gateway/gpt-model");
+
+    const legacy = parseLlmDescriptor(
+      structureValue("Gateway Dual", "bifrost", "gateway/gpt-model")
+    );
+    expect(legacy.modelConfigurationId).toBeUndefined();
+  });
+
+  test("legacy three-segment values still resolve by name", () => {
+    const descriptor = getValidLlmDescriptorForProviders(
+      structureValue("Gateway Dual", "bifrost", "gateway/gpt-model"),
+      sameNameProviders
+    );
+
+    expect(descriptor.name).toBe("Gateway Dual");
+    expect(descriptor.modelName).toBe("gateway/gpt-model");
   });
 });

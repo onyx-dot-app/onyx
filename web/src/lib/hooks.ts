@@ -399,6 +399,8 @@ export interface LlmDescriptor {
   name: string;
   provider: string;
   modelName: string;
+  // Provider display names are not unique; only the id routes unambiguously.
+  modelConfigurationId?: number | null;
 }
 
 export interface LlmManager {
@@ -512,6 +514,24 @@ export function getValidLlmDescriptorForProviders(
 
   if (modelName) {
     const model = parseLlmDescriptor(modelName);
+
+    // An id resolves exactly even when providers share a display name.
+    if (model.modelConfigurationId != null) {
+      for (const provider of llmProviders) {
+        const mc = provider.model_configurations.find(
+          (config) => config.id === model.modelConfigurationId
+        );
+        if (mc) {
+          return {
+            name: provider.name ?? "",
+            provider: provider.provider,
+            modelName: mc.name,
+            modelConfigurationId: mc.id,
+          };
+        }
+      }
+    }
+
     // If we have no parsed modelName, try to find the provider by the raw modelName string
     if (!(model.modelName && model.modelName.length > 0)) {
       const provider = llmProviders.find((p) =>

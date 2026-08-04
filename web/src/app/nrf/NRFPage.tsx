@@ -124,6 +124,7 @@ export default function NRFPage({ isSidePanel = false }: NRFPageProps) {
           name: model.name,
           provider: model.provider,
           modelName: model.modelName,
+          modelConfigurationId: model.modelConfigurationId,
         });
       }
     }

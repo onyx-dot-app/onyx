@@ -456,6 +456,7 @@ export default function AppPage({ firstMessage }: ChatPageProps) {
           name: model.name,
           provider: model.provider,
           modelName: model.modelName,
+          modelConfigurationId: model.modelConfigurationId,
         });
       }
     }

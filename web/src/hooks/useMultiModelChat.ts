@@ -227,6 +227,7 @@ export default function useMultiModelChat(
       model_provider: m.name,
       model_version: m.modelName,
       display_name: m.displayName,
+      model_configuration_id: m.modelConfigurationId ?? undefined,
     }));
   }, [effectiveSelectedModels]);
 

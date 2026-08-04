@@ -136,6 +136,7 @@ export interface LLMOverride {
   model_version: string;
   temperature?: number;
   display_name?: string;
+  model_configuration_id?: number | null;
 }
 
 export interface SendMessageParams {
@@ -152,6 +153,7 @@ export interface SendMessageParams {
   // LLM override parameters
   modelProvider?: string;
   modelVersion?: string;
+  modelConfigurationId?: number | null;
   temperature?: number;
   // Multi-model: send multiple LLM overrides for parallel generation
   llmOverrides?: LLMOverride[];
@@ -174,6 +176,7 @@ export async function* sendMessage({
   forcedToolId,
   modelProvider,
   modelVersion,
+  modelConfigurationId,
   temperature,
   llmOverrides,
   origin,
@@ -195,6 +198,7 @@ export async function* sendMessage({
             temperature,
             model_provider: modelProvider,
             model_version: modelVersion,
+            model_configuration_id: modelConfigurationId ?? null,
           }
         : null,
     // Multi-model: list of LLM overrides for parallel generation

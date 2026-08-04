@@ -74,13 +74,17 @@ export function getProviderOverrideForAgent(
 export const structureValue = (
   name: string,
   provider: string,
-  modelName: string
+  modelName: string,
+  modelConfigurationId?: number | null
 ) => {
-  return `${name}__${provider}__${modelName}`;
+  const base = `${name}__${provider}__${modelName}`;
+  return modelConfigurationId != null
+    ? `${base}__${modelConfigurationId}`
+    : base;
 };
 
 export const parseLlmDescriptor = (value: string): LlmDescriptor => {
-  const [displayName, provider, modelName] = value.split("__");
+  const [displayName, provider, modelName, idPart] = value.split("__");
   if (displayName === undefined) {
     return { name: "Unknown", provider: "", modelName: "" };
   }
@@ -89,6 +93,10 @@ export const parseLlmDescriptor = (value: string): LlmDescriptor => {
     name: displayName,
     provider: provider ?? "",
     modelName: modelName ?? "",
+    modelConfigurationId:
+      idPart !== undefined && /^\d+$/.test(idPart)
+        ? parseInt(idPart, 10)
+        : undefined,
   };
 };
 
