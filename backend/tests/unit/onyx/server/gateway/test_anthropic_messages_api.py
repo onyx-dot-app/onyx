@@ -3,7 +3,7 @@ from __future__ import annotations
 import json
 import threading
 from contextlib import nullcontext
-from typing import Any
+from typing import Any, cast
 from unittest.mock import MagicMock, patch
 
 import pytest
@@ -28,10 +28,12 @@ from onyx.llm.model_response import (
 )
 from onyx.llm.models import (
     AssistantMessage,
+    NamedToolChoice,
     ReasoningEffort,
     RedactedThinkingBlock,
     SystemMessage,
     ThinkingBlock,
+    ToolChoice,
     ToolChoiceOptions,
     ToolMessage,
     UserMessage,
@@ -226,9 +228,15 @@ def test_anthropic_tool_choice(
     assert gateway_api._anthropic_tool_choice(raw) is expected
 
 
+def test_anthropic_tool_choice_maps_named_tool() -> None:
+    assert gateway_api._anthropic_tool_choice(
+        {"type": "tool", "name": "Bash"}
+    ) == NamedToolChoice(name="Bash")
+
+
 @pytest.mark.parametrize(
     "raw",
-    [{"type": "tool", "name": "Bash"}, {"type": "bogus"}],
+    [{"type": "tool"}, {"type": "tool", "name": ""}, {"type": "bogus"}],
 )
 def test_anthropic_tool_choice_refuses_unsupported(raw: dict[str, Any]) -> None:
     with pytest.raises(OnyxError) as exc_info:
@@ -375,6 +383,40 @@ def _anthropic_request(**overrides: Any) -> AnthropicMessagesRequest:
     }
     defaults.update(overrides)
     return AnthropicMessagesRequest(**defaults)
+
+
+class _RecordingInvokeLLM(_InvokeLLM):
+    def __init__(self, response: ModelResponse) -> None:
+        super().__init__(response)
+        self.received_tool_choice: ToolChoice | None = None
+
+    def invoke(self, *args: object, **kwargs: object) -> ModelResponse:
+        self.received_tool_choice = cast("ToolChoice | None", kwargs.get("tool_choice"))
+        return super().invoke(*args, **kwargs)
+
+
+def test_handle_anthropic_messages_forwards_named_tool_choice() -> None:
+    response = ModelResponse(
+        id="msg-1",
+        created="1784577999",
+        choice=Choice(finish_reason="stop", message=Message(content="ok")),
+    )
+    fake_llm = _RecordingInvokeLLM(response)
+    request = _anthropic_request(
+        tools=[
+            {
+                "name": "get_weather",
+                "description": "Get the current weather",
+                "input_schema": {"type": "object", "properties": {}},
+            }
+        ],
+        tool_choice={"type": "tool", "name": "get_weather"},
+    )
+
+    with patch.object(gateway_api, "llm_from_provider", return_value=fake_llm):
+        _handle_anthropic_call(request)
+
+    assert fake_llm.received_tool_choice == NamedToolChoice(name="get_weather")
 
 
 def test_handle_anthropic_messages_happy_path_serializes_response() -> None:

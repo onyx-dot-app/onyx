@@ -19,6 +19,7 @@ from onyx.llm.models import (
     AssistantMessage,
     FunctionCall,
     LanguageModelInput,
+    NamedToolChoice,
     ReasoningEffort,
     ToolCall,
     ToolChoiceOptions,
@@ -2378,6 +2379,93 @@ def test_required_tool_choice_preserved_for_other_models(
 
         kwargs = mock_completion.call_args.kwargs
         assert kwargs["tool_choice"] == ToolChoiceOptions.REQUIRED
+
+
+def test_named_tool_choice_serialized_for_litellm(
+    default_multi_llm: LitellmLLM,
+) -> None:
+    with patch("litellm.completion") as mock_completion:
+        mock_completion.return_value = []
+
+        messages: LanguageModelInput = [UserMessage(content="Weather in NYC?")]
+        list(
+            default_multi_llm.stream(
+                messages,
+                tools=_TOOL_CHOICE_DOWNGRADE_TOOLS,
+                tool_choice=NamedToolChoice(name="get_weather"),
+            )
+        )
+
+        kwargs = mock_completion.call_args.kwargs
+        assert kwargs["tool_choice"] == {
+            "type": "function",
+            "function": {"name": "get_weather"},
+        }
+
+
+def test_named_tool_choice_not_downgraded_for_claude_model() -> None:
+    """Unlike REQUIRED, a NamedToolChoice must pass through unchanged even for
+    models that downgrade tool_choice=required."""
+    llm = LitellmLLM(
+        api_key="test_key",
+        timeout=30,
+        model_provider=LlmProviderNames.ANTHROPIC,
+        model_name="claude-sonnet-5",
+        max_input_tokens=32000,
+    )
+
+    with patch("litellm.completion") as mock_completion:
+        mock_completion.return_value = []
+
+        messages: LanguageModelInput = [UserMessage(content="Weather in NYC?")]
+        list(
+            llm.stream(
+                messages,
+                tools=_TOOL_CHOICE_DOWNGRADE_TOOLS,
+                tool_choice=NamedToolChoice(name="get_weather"),
+            )
+        )
+
+        kwargs = mock_completion.call_args.kwargs
+        assert kwargs["tool_choice"] == {
+            "type": "function",
+            "function": {"name": "get_weather"},
+        }
+
+
+def test_named_tool_choice_skips_legacy_claude_thinking() -> None:
+    """Anthropic rejects thinking.type=enabled combined with a forced tool, so
+    a NamedToolChoice must suppress the legacy budget_tokens thinking param."""
+    llm = LitellmLLM(
+        api_key="test_key",
+        timeout=30,
+        model_provider=LlmProviderNames.ANTHROPIC,
+        model_name="claude-sonnet-4-5",
+        max_input_tokens=32000,
+    )
+
+    with (
+        patch("litellm.completion") as mock_completion,
+        patch("onyx.llm.multi_llm.model_is_reasoning_model", return_value=True),
+    ):
+        mock_completion.return_value = []
+
+        messages: LanguageModelInput = [UserMessage(content="Weather in NYC?")]
+        list(
+            llm.stream(
+                messages,
+                tools=_TOOL_CHOICE_DOWNGRADE_TOOLS,
+                tool_choice=NamedToolChoice(name="get_weather"),
+                reasoning_effort=ReasoningEffort.HIGH,
+            )
+        )
+
+        kwargs = mock_completion.call_args.kwargs
+        assert "thinking" not in kwargs
+        assert kwargs["tool_choice"] == {
+            "type": "function",
+            "function": {"name": "get_weather"},
+        }
 
 
 def test_bifrost_normalizes_api_base_in_model_kwargs() -> None:

@@ -36,11 +36,13 @@ from onyx.llm.models import (
     AnyThinkingBlock,
     AssistantMessage,
     ChatCompletionMessage,
+    NamedToolChoice,
     ReasoningEffort,
     RedactedThinkingBlock,
     TextContentPart,
     ThinkingBlock,
     ToolCall,
+    ToolChoice,
     ToolChoiceOptions,
     UserMessage,
 )
@@ -258,7 +260,7 @@ def _prepare_messages(
     return processed_messages
 
 
-def _parse_tool_choice(raw: Any) -> ToolChoiceOptions | None:
+def _parse_tool_choice(raw: Any) -> ToolChoice | None:
     if raw is None:
         return None
     if isinstance(raw, str):
@@ -270,11 +272,17 @@ def _parse_tool_choice(raw: Any) -> ToolChoiceOptions | None:
                 f"Unsupported tool_choice {raw!r}; expected one of "
                 f"{', '.join(option.value for option in ToolChoiceOptions)}.",
             ) from e
-    # Silently downgrading to auto would let the model ignore a tool the caller
-    # required, so refuse instead of guessing.
+    if isinstance(raw, dict) and raw.get("type") == "function":
+        # Chat Completions: {"type": "function", "function": {"name": X}}.
+        # Responses API: {"type": "function", "name": X}.
+        function = raw.get("function")
+        name = function.get("name") if isinstance(function, dict) else raw.get("name")
+        if isinstance(name, str) and name:
+            return NamedToolChoice(name=name)
+        raise OnyxError(OnyxErrorCode.INVALID_INPUT, "tool_choice names no function.")
     raise OnyxError(
         OnyxErrorCode.INVALID_INPUT,
-        "Named-function tool_choice is not supported by the Onyx gateway.",
+        f"Unsupported tool_choice {raw!r}.",
     )
 
 
@@ -401,7 +409,7 @@ def _stream_worker(
     flow: LLMFlow,
     messages: list[ChatCompletionMessage],
     tools: list[dict[str, Any]] | None,
-    tool_choice: ToolChoiceOptions | None,
+    tool_choice: ToolChoice | None,
     structured_response_format: dict[str, Any] | None,
     max_tokens: int | None,
     reasoning_effort: ReasoningEffort,
@@ -512,6 +520,7 @@ def handle_chat_completion(
     )
     messages = _prepare_messages(llm, request.messages)
     tool_choice = _parse_tool_choice(request.tool_choice)
+    _require_named_tool(tool_choice, request.tools)
     reasoning_effort = _parse_reasoning_effort(request.reasoning_effort)
     max_tokens = request.max_completion_tokens or request.max_tokens
 
@@ -682,7 +691,7 @@ def _responses_stream_worker(
     flow: LLMFlow,
     messages: list[ChatCompletionMessage],
     tools: list[dict[str, Any]] | None,
-    tool_choice: ToolChoiceOptions | None,
+    tool_choice: ToolChoice | None,
     max_tokens: int | None,
     reasoning_effort: ReasoningEffort,
     model: str,
@@ -885,6 +894,7 @@ def handle_responses_request(
     messages = _prepare_messages(llm, raw_messages)
     tools = _responses_tools(request)
     tool_choice = _parse_tool_choice(request.tool_choice)
+    _require_named_tool(tool_choice, tools)
     reasoning_effort = _parse_reasoning_effort(
         request.reasoning.get("effort") if request.reasoning else None
     )
@@ -1078,7 +1088,7 @@ def _anthropic_tools(
     return tools
 
 
-def _anthropic_tool_choice(raw: dict[str, Any] | None) -> ToolChoiceOptions | None:
+def _anthropic_tool_choice(raw: dict[str, Any] | None) -> ToolChoice | None:
     if raw is None:
         return None
     choice_type = raw.get("type")
@@ -1089,17 +1099,34 @@ def _anthropic_tool_choice(raw: dict[str, Any] | None) -> ToolChoiceOptions | No
     if choice_type == "none":
         return ToolChoiceOptions.NONE
     if choice_type == "tool":
-        # Silently downgrading to auto would let the model ignore a tool the
-        # caller required, so refuse instead of guessing.
-        raise OnyxError(
-            OnyxErrorCode.INVALID_INPUT,
-            "Named-function tool_choice is not supported by the Onyx gateway.",
-        )
+        name = raw.get("name")
+        if isinstance(name, str) and name:
+            return NamedToolChoice(name=name)
+        raise OnyxError(OnyxErrorCode.INVALID_INPUT, "tool_choice names no function.")
     raise OnyxError(
         OnyxErrorCode.INVALID_INPUT,
         f"Unsupported tool_choice type {choice_type!r}; expected one of "
-        "auto, any, none.",
+        "auto, any, none, tool.",
     )
+
+
+def _require_named_tool(
+    tool_choice: ToolChoice | None, tools: list[dict[str, Any]] | None
+) -> None:
+    """A named tool_choice referencing an absent tool would fail opaquely
+    upstream; refuse it with a clear error instead."""
+    if not isinstance(tool_choice, NamedToolChoice):
+        return
+    tool_names = {
+        function.get("name")
+        for tool in tools or []
+        if isinstance(function := tool.get("function"), dict)
+    }
+    if tool_choice.name not in tool_names:
+        raise OnyxError(
+            OnyxErrorCode.INVALID_INPUT,
+            f"tool_choice names unknown tool {tool_choice.name!r}.",
+        )
 
 
 def _anthropic_reasoning_effort(
@@ -1199,7 +1226,7 @@ def _anthropic_stream_worker(
     flow: LLMFlow,
     messages: list[ChatCompletionMessage],
     tools: list[dict[str, Any]] | None,
-    tool_choice: ToolChoiceOptions | None,
+    tool_choice: ToolChoice | None,
     max_tokens: int,
     reasoning_effort: ReasoningEffort,
     model: str,
@@ -1418,6 +1445,7 @@ def handle_anthropic_messages(
     messages = _prepare_messages(llm, raw_messages)
     tools = _anthropic_tools(request.tools)
     tool_choice = _anthropic_tool_choice(request.tool_choice)
+    _require_named_tool(tool_choice, tools)
     reasoning_effort = _anthropic_reasoning_effort(
         request.thinking, request.output_config
     )

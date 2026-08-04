@@ -17,7 +17,7 @@ from onyx.llm.interfaces import (
     LLMConfig,
     LLMUserIdentity,
     ReasoningEffort,
-    ToolChoiceOptions,
+    ToolChoice,
 )
 from onyx.llm.model_response import (
     ChatCompletionDeltaToolCall,
@@ -302,7 +302,7 @@ class MockLLM(LLM, MockLLMController):
         self,
         prompt: LanguageModelInput,
         tools: list[dict] | None = None,
-        tool_choice: ToolChoiceOptions | None = None,
+        tool_choice: ToolChoice | None = None,
         structured_response_format: dict | None = None,
         timeout_override: int | None = None,
         max_tokens: int | None = None,
@@ -316,7 +316,7 @@ class MockLLM(LLM, MockLLMController):
         self,
         prompt: LanguageModelInput,  # noqa: ARG002
         tools: list[dict] | None = None,  # noqa: ARG002
-        tool_choice: ToolChoiceOptions | None = None,  # noqa: ARG002
+        tool_choice: ToolChoice | None = None,  # noqa: ARG002
         structured_response_format: dict | None = None,  # noqa: ARG002
         timeout_override: int | None = None,  # noqa: ARG002
         max_tokens: int | None = None,  # noqa: ARG002

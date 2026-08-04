@@ -1,7 +1,7 @@
 from enum import Enum
 from typing import Literal
 
-from pydantic import BaseModel
+from pydantic import BaseModel, ConfigDict
 
 
 class LLMErrorInfo(BaseModel):
@@ -14,6 +14,15 @@ class ToolChoiceOptions(str, Enum):
     REQUIRED = "required"
     AUTO = "auto"
     NONE = "none"
+
+
+class NamedToolChoice(BaseModel):
+    model_config = ConfigDict(frozen=True)
+
+    name: str
+
+
+ToolChoice = ToolChoiceOptions | NamedToolChoice
 
 
 class ReasoningEffort(str, Enum):
