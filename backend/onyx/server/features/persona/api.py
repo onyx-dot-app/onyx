@@ -522,6 +522,7 @@ def delete_persona(
             db_session=db_session,
         )
     except ValueError as e:
+        logger.exception("Failed to delete persona")
         # A non-owner failed the ownership check; its ValueError would 400 via the global
         # handler, so surface the real authorization failure as a 403.
         raise OnyxError(
