@@ -440,6 +440,7 @@ class KubernetesSandboxManager(SandboxManager):
         provider: str | None = None,
         model_name: str | None = None,
         nextjs_port: int | None = None,
+        session_id: UUID | None = None,
         disabled_tools: list[str] | None = None,
         user_name: str | None = None,
     ) -> str:
@@ -450,6 +451,7 @@ class KubernetesSandboxManager(SandboxManager):
             provider=provider,
             model_name=model_name,
             nextjs_port=nextjs_port,
+            session_id=session_id,
             disabled_tools=disabled_tools,
             user_name=user_name,
             organization_instructions=load_settings().craft_instructions,
@@ -1403,6 +1405,7 @@ class KubernetesSandboxManager(SandboxManager):
             provider=llm_config.provider,
             model_name=llm_config.model_name,
             nextjs_port=nextjs_port,
+            session_id=session_id,
             disabled_tools=OPENCODE_DISABLED_TOOLS,
             user_name=user_name,
         )
@@ -1881,6 +1884,7 @@ echo "Session cleanup complete"
             provider=agent_provider,
             model_name=agent_model,
             nextjs_port=nextjs_port,
+            session_id=session_id,
             disabled_tools=OPENCODE_DISABLED_TOOLS,
             user_name=user_name,
         )

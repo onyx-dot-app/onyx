@@ -6,7 +6,8 @@
     "dev": "next dev -p ${ONYX_WEBAPP_PORT:-$(cat ../../.nextjs-port 2>/dev/null || echo 3000)}",
     "build": "next build",
     "start": "next start",
-    "lint": "oxlint"
+    "lint": "oxlint",
+    "typecheck": "tsc --noEmit"
   },
   "dependencies": {
     "@base-ui/react": "^1.6.0",

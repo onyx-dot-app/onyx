@@ -21,6 +21,15 @@ const nextConfig: NextConfig = {};
 if (webappBasePath) {
   nextConfig.basePath = webappBasePath;
   nextConfig.assetPrefix = webappBasePath;
+  // Point naive probes of "/" (which otherwise 404) at the real app.
+  nextConfig.redirects = async () => [
+    {
+      source: "/",
+      destination: webappBasePath,
+      basePath: false,
+      permanent: false,
+    },
+  ];
 }
 
 if (allowedDevOrigins.length > 0) {
