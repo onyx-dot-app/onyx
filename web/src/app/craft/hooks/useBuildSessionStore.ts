@@ -180,6 +180,17 @@ function convertMessagesToStreamItems(messages: BuildMessage[]): StreamItem[] {
         });
         break;
 
+      case "error":
+        // Persisted terminal-failure rows (e.g. turn hard-cap).
+        if (packet.message) {
+          items.push({
+            type: "error",
+            id: message.id || genId("error"),
+            content: packet.message,
+          });
+        }
+        break;
+
       default:
         break;
     }
@@ -440,6 +451,20 @@ function buildSubagentsFromMessages(
   return subagents;
 }
 
+/** Persisted turn-failure rows are only relevant while they're the latest
+ * thing in the transcript — once any later activity exists, a stale
+ * "turn stopped" banner mid-history is just noise. */
+function stripSupersededErrors(messages: BuildMessage[]): BuildMessage[] {
+  const isErrorRow = (message: BuildMessage) =>
+    message.type === "assistant" && message.message_metadata?.type === "error";
+  const lastActivityIdx = messages.findLastIndex(
+    (message) => !isErrorRow(message)
+  );
+  return messages.filter(
+    (message, idx) => idx > lastActivityIdx || !isErrorRow(message)
+  );
+}
+
 /**
  * Consolidate raw backend messages into proper conversation turns.
  *
@@ -453,6 +478,7 @@ function buildSubagentsFromMessages(
 function consolidateMessagesIntoTurns(
   rawMessages: BuildMessage[]
 ): BuildMessage[] {
+  rawMessages = stripSupersededErrors(rawMessages);
   const consolidated: BuildMessage[] = [];
   let currentAgentPackets: BuildMessage[] = [];
 

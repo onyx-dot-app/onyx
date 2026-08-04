@@ -182,6 +182,10 @@ OPENCODE_PROMPT_INACTIVITY_TIMEOUT_SECONDS = float(
     )
 )
 
+# Per-turn deadline stamp for the turn-budget plugin; name is an internal
+# contract with turn-budget.ts.
+TURN_BUDGET_FILE_NAME = ".onyx-turn-budget.json"
+
 # Prompt-slot lock lease; renewed on every sandbox event/keepalive, so a dead
 # holder strands the slot for at most this long.
 PROMPT_SLOT_LEASE_SECONDS = float(os.environ.get("PROMPT_SLOT_LEASE_SECONDS", "120.0"))

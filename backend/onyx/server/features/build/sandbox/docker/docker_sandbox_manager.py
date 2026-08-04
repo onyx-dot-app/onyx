@@ -199,6 +199,8 @@ _OPENCODE_SESSION_TAG_PLUGIN_PATH = "/workspace/opencode-plugins/session-proxy-t
 # Surfaces the no-op `connect_app` tool; always on. Its "ask" permission is what
 # the api-server intercepts to drive the connect-app OAuth flow.
 _OPENCODE_CONNECT_APP_PLUGIN_PATH = "/workspace/opencode-plugins/connect-app.ts"
+# Soft turn-budget wrap-up steer (reads the per-turn deadline stamp).
+_OPENCODE_TURN_BUDGET_PLUGIN_PATH = "/workspace/opencode-plugins/turn-budget.ts"
 _MUTABLE_SANDBOX_IMAGE_TAGS = {"latest", "beta", "edge"}
 
 # In-container opencode-history archive builder: reuses the sandbox_daemon
@@ -841,7 +843,10 @@ class DockerSandboxManager(SandboxManager):
             opencode_password = secrets.token_urlsafe(32)
             # connect_app is always loaded; the egress-tagging plugin only when
             # the proxy is wired up (else it no-ops — no HTTP(S)_PROXY to re-tag).
-            plugins = [_OPENCODE_CONNECT_APP_PLUGIN_PATH]
+            plugins = [
+                _OPENCODE_CONNECT_APP_PLUGIN_PATH,
+                _OPENCODE_TURN_BUDGET_PLUGIN_PATH,
+            ]
             if SANDBOX_PROXY_HOST:
                 plugins.append(_OPENCODE_SESSION_TAG_PLUGIN_PATH)
             container_onyx_pat = (

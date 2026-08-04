@@ -24,6 +24,7 @@ from sqlalchemy.orm import Session as DBSession
 
 from onyx.cache.factory import get_cache_backend
 from onyx.configs.app_configs import WEB_DOMAIN
+from onyx.configs.constants import MessageType
 from onyx.db.enums import BuildSessionStatus, SandboxStatus, SessionOrigin
 from onyx.db.external_app import get_connectable_apps_for_user
 from onyx.db.llm import fetch_all_accessible_llm_providers
@@ -39,6 +40,7 @@ from onyx.server.features.build.configs import (
 )
 from onyx.server.features.build.db.build_session import (
     create_build_session__no_commit,
+    create_message,
     delete_build_session__no_commit,
     finalize_session_initialization__no_commit,
     get_build_session,
@@ -1130,6 +1132,44 @@ class SessionManager:
         routing_meta: dict[str, Any] | None = None,
     ) -> None:
         _streaming.finalize_persist(self._db_session, session_id, state, routing_meta)
+
+    def persist_turn_error(
+        self,
+        session_id: UUID,
+        turn_index: int,
+        message: str,
+    ) -> None:
+        """User-visible error row so a failed turn still explains itself
+        after reload (the live SSE error dies with the stream)."""
+        create_message(
+            session_id=session_id,
+            message_type=MessageType.ASSISTANT,
+            turn_index=turn_index,
+            message_metadata={
+                "type": "error",
+                "message": message,
+                "timestamp": datetime.now(tz=timezone.utc).isoformat(),
+            },
+            db_session=self._db_session,
+        )
+
+    def stamp_turn_deadline(
+        self,
+        sandbox_id: UUID,
+        session_id: UUID,
+        *,
+        soft_budget_seconds: int,
+        hard_cap_seconds: int,
+    ) -> None:
+        self._sandbox_manager.stamp_turn_deadline(
+            sandbox_id,
+            session_id,
+            soft_budget_seconds=soft_budget_seconds,
+            hard_cap_seconds=hard_cap_seconds,
+        )
+
+    def clear_turn_deadline(self, sandbox_id: UUID, session_id: UUID) -> None:
+        self._sandbox_manager.clear_turn_deadline(sandbox_id, session_id)
 
     # =========================================================================
     # Artifact Operations
