@@ -101,7 +101,9 @@ def _resolve_provider_and_model(
     configured model config is missing; the caller falls back to the default.
     """
     # Provider display names are not unique, so an explicit model
-    # configuration id beats name-based resolution.
+    # configuration id beats name-based resolution. A stale id (deleted
+    # configuration) falls back to the default LLM — never to a name lookup,
+    # which could silently pick a different same-named provider.
     if model_configuration_override_id is not None:
         mc = fetch_model_configuration_by_id(
             db_session, model_configuration_override_id
@@ -110,9 +112,10 @@ def _resolve_provider_and_model(
             return mc.llm_provider, mc.name
         logger.warning(
             "llm_override.model_configuration_id=%s not found; falling back to"
-            " name-based resolution.",
+            " the default LLM.",
             model_configuration_override_id,
         )
+        return None
 
     if provider_name_override:
         provider_model = fetch_existing_llm_provider(provider_name_override, db_session)

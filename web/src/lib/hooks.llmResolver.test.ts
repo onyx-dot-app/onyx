@@ -291,6 +291,20 @@ describe("duplicate provider display names", () => {
     expect(legacy.modelConfigurationId).toBeUndefined();
   });
 
+  test("model names containing __ keep both the full name and the id", () => {
+    const parsed = parseLlmDescriptor(
+      structureValue("Gateway Dual", "bifrost", "org__model__v2", 7)
+    );
+    expect(parsed.modelName).toBe("org__model__v2");
+    expect(parsed.modelConfigurationId).toBe(7);
+
+    const legacy = parseLlmDescriptor(
+      structureValue("Gateway Dual", "bifrost", "org__model__v2")
+    );
+    expect(legacy.modelName).toBe("org__model__v2");
+    expect(legacy.modelConfigurationId).toBeUndefined();
+  });
+
   test("legacy three-segment values still resolve by name", () => {
     const descriptor = getValidLlmDescriptorForProviders(
       structureValue("Gateway Dual", "bifrost", "gateway/gpt-model"),

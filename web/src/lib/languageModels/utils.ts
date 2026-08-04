@@ -87,19 +87,24 @@ export const structureValue = (
 };
 
 export const parseLlmDescriptor = (value: string): LlmDescriptor => {
-  const [displayName, provider, modelName, idPart] = value.split("__");
+  const parts = value.split("__");
+  const displayName = parts[0];
   if (displayName === undefined) {
     return { name: "Unknown", provider: "", modelName: "" };
   }
 
+  // The id is always the marked last segment; everything between the provider
+  // and it belongs to the model name, which may itself contain "__".
+  const last = parts[parts.length - 1];
+  const hasId =
+    parts.length >= 4 && last !== undefined && /^mc:\d+$/.test(last);
+  const modelName = parts.slice(2, hasId ? -1 : undefined).join("__");
+
   return {
     name: displayName,
-    provider: provider ?? "",
-    modelName: modelName ?? "",
-    modelConfigurationId:
-      idPart !== undefined && /^mc:\d+$/.test(idPart)
-        ? parseInt(idPart.slice(3), 10)
-        : undefined,
+    provider: parts[1] ?? "",
+    modelName,
+    modelConfigurationId: hasId ? parseInt(last!.slice(3), 10) : undefined,
   };
 };
 
