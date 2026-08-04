@@ -89,7 +89,7 @@ def test_text_delta_yields_agent_message_chunk() -> None:
     )
     assert len(out) == 1
     assert isinstance(out[0], AgentMessageChunk)
-    assert out[0].content.text == "hello"  # type: ignore[union-attr]
+    assert out[0].content.text == "hello"
     assert s.local_text == {"p1": "hello"}
 
 
@@ -292,7 +292,7 @@ def test_multi_assistant_message_turn_accepts_both() -> None:
     )
     assert len(out) == 1
     assert isinstance(out[0], AgentMessageChunk)
-    assert out[0].content.text == "Yuhong"  # type: ignore[union-attr]
+    assert out[0].content.text == "Yuhong"
 
 
 def test_step_part_delta_ignored() -> None:
@@ -699,7 +699,7 @@ def test_message_part_updated_text_with_more_text_fills_gap() -> None:
     )
     assert len(out) == 1
     assert isinstance(out[0], AgentMessageChunk)
-    assert out[0].content.text == "world!"  # type: ignore[union-attr]
+    assert out[0].content.text == "world!"
     assert s.local_text["p1"] == "Hello, world!"
 
 
@@ -844,7 +844,7 @@ def test_tool_subsequent_updates_emit_progress() -> None:
     assert out[0].raw_input == {"command": "ls"}
     assert out[0].raw_output is not None
     # Wrapped: {"output": "file1\nfile2\n"}
-    assert out[0].raw_output.get("output") == "file1\nfile2\n"  # type: ignore[union-attr]
+    assert out[0].raw_output.get("output") == "file1\nfile2\n"
 
 
 def test_tool_kind_mapping() -> None:
@@ -956,9 +956,9 @@ def test_edit_tool_propagates_through_translation() -> None:
     assert out[0].content is not None
     diff_block = out[0].content[0]
     # Pydantic deserialized into FileEditToolCallContent — check its fields
-    assert diff_block.type == "diff"  # type: ignore[union-attr]
-    assert diff_block.path == "/a.txt"  # type: ignore[union-attr]
-    assert diff_block.new_text == "y"  # type: ignore[union-attr]
+    assert diff_block.type == "diff"
+    assert diff_block.path == "/a.txt"
+    assert diff_block.new_text == "y"
 
 
 # ───────────────────────── status mapping ─────────────────────────
@@ -1411,7 +1411,7 @@ def test_child_text_delta_forwarded_and_tagged() -> None:
 
     assert len(out) == 1
     assert isinstance(out[0], AgentMessageChunk)
-    assert out[0].content.text == "child response"  # type: ignore[union-attr]
+    assert out[0].content.text == "child response"
     meta = out[0].field_meta
     assert meta is not None
     assert meta["sessionId"] == CHILD
@@ -1450,7 +1450,7 @@ def test_child_reasoning_part_forwarded_and_tagged() -> None:
 
     assert len(out) == 1
     assert isinstance(out[0], AgentThoughtChunk)
-    assert out[0].content.text == "child thinking"  # type: ignore[union-attr]
+    assert out[0].content.text == "child thinking"
     meta = out[0].field_meta
     assert meta is not None
     assert meta["sessionId"] == CHILD
@@ -1487,7 +1487,7 @@ def test_child_reasoning_delta_forwarded_and_tagged() -> None:
 
     assert len(out) == 1
     assert isinstance(out[0], AgentThoughtChunk)
-    assert out[0].content.text == "child thinking"  # type: ignore[union-attr]
+    assert out[0].content.text == "child thinking"
     meta = out[0].field_meta
     assert meta is not None
     assert meta["sessionId"] == CHILD
@@ -1574,7 +1574,7 @@ def test_child_part_type_does_not_collide_with_parent_part_id() -> None:
 
     assert len(parent_out) == 1
     assert isinstance(parent_out[0], AgentMessageChunk)
-    assert parent_out[0].content.text == "parent visible text"  # type: ignore[union-attr]
+    assert parent_out[0].content.text == "parent visible text"
 
 
 def test_child_tool_event_dropped_when_not_descendant() -> None:
@@ -1698,8 +1698,8 @@ def test_bash_completed_with_nonzero_exit_maps_to_failed() -> None:
     assert isinstance(out[0], ToolCallProgress)
     assert out[0].status == "failed"
     assert out[0].raw_output is not None
-    assert out[0].raw_output.get("output") == "permission denied"  # type: ignore[union-attr]
-    assert out[0].raw_output.get("metadata") == {"exit": 1}  # type: ignore[union-attr]
+    assert out[0].raw_output.get("output") == "permission denied"
+    assert out[0].raw_output.get("metadata") == {"exit": 1}
 
 
 def test_bash_first_sighting_completed_with_nonzero_exit_dual_emits_failed() -> None:
@@ -1764,7 +1764,7 @@ def test_tool_error_state_maps_to_failed_with_error_output() -> None:
     assert isinstance(out[0], ToolCallProgress)
     assert out[0].status == "failed"
     assert out[0].raw_output is not None
-    assert out[0].raw_output.get("output") == "sudo: a password is required"  # type: ignore[union-attr]
+    assert out[0].raw_output.get("output") == "sudo: a password is required"
 
 
 def _msg_updated(

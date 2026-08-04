@@ -208,14 +208,20 @@ be a single DOM element. Interactive primitives and buttons manage their own dis
 
 A standardized way to provide "opacity-100 on hover" behavior. Instead of manually wiring
 `opacity-0 group-hover:opacity-100` with Tailwind, use `Hoverable` for consistent, coordinated
-hover-to-reveal patterns.
+hover-to-reveal patterns. It is entirely CSS-driven (no React state), and on devices whose
+primary input cannot hover (touch), items are always shown in their revealed state so actions
+stay reachable on mobile.
 
-- **`Hoverable.Root`** — Wraps a hover group. Tracks mouse enter/leave and broadcasts hover
-  state to descendants via a per-group React context.
+- **`Hoverable.Root`** — Wraps a hover group. Renders a container with a `data-hover-group`
+  attribute; CSS `:hover`/`:focus-within` on it reveals descendant items.
 - **`Hoverable.Item`** — Marks an element that should appear on hover. Supports two modes:
-  - **Group mode** (`group` prop provided): visibility driven by a matching `Hoverable.Root`
-    ancestor. Throws if no matching Root is found.
+  - **Group mode** (`group` prop provided): visibility driven by CSS `:hover` on the
+    `Hoverable.Root` ancestor.
   - **Local mode** (`group` omitted): uses CSS `:hover` on the item itself.
+
+For hover-reveal styling that cannot go through `Hoverable`, pair the hover utilities with the
+`no-hover:` variant (defined in opal's `_reference.css`, matching `@media (hover: none)`) so the
+element stays visible on touch devices, e.g. `opacity-0 group-hover:opacity-100 no-hover:opacity-100`.
 
 ```typescript
 import { Hoverable } from "@opal/core";

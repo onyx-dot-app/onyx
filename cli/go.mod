@@ -1,6 +1,6 @@
 module github.com/onyx-dot-app/onyx/cli
 
-go 1.26.4
+go 1.26.5
 
 require (
 	charm.land/bubbles/v2 v2.1.0
@@ -16,7 +16,7 @@ require (
 	github.com/yuin/goldmark v1.8.2
 	golang.org/x/sys v0.46.0
 	golang.org/x/term v0.44.0
-	golang.org/x/text v0.38.0
+	golang.org/x/text v0.39.0
 	golang.org/x/time v0.15.0
 )
 

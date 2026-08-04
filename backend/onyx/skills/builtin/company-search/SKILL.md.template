@@ -17,17 +17,28 @@ assume it exists.
 
 ## Usage
 
-    onyx-cli search "<query>"
+    onyx-cli search "<query>" ["<query>" ...]
+
+Each query is a full search pass that takes tens of seconds. Queries passed
+in one invocation (up to 3) run concurrently, so batch independent questions
+into a single call; go sequential only when a query depends on an earlier
+answer. Write search output to files and parse it in a separate shell call —
+a parsing script (e.g. a Python heredoc) chained after a search can hang,
+hit the shell timeout, and throw away the completed searches.
 
 | Flag | Description | Example |
 |------|-------------|---------|
 | `--source` | Filter by source type (comma-separated) | `--source slack,google_drive` |
 | `--days` | Only return results from the last N days | `--days 30` |
+| `--no-query-expansion` | Skip LLM query rewriting — faster, but only safe when the query is already precise (exact names, titles, quoted phrases) | `--no-query-expansion "DataCamp POC Call"` |
 
 ## Output
 
-Stdout is JSON with a top-level `results` array. Each result has `title`,
-`url`, `source_type`, `content`, and `updated_at`. Results contain only
-documents the LLM judged relevant, ordered by relevance; `content` is the
-full chunk text of each. Cite results by title and URL when referencing
+Stdout is JSON. A single query returns a top-level `results` array; multiple
+queries return a `searches` array of `{query, results}` entries in argument
+order. A failed query has an `error` field and null `results`; partial
+failures still exit 0, so check per-query `error` fields. Each result has
+`title`, `url`, `source_type`, `content`, and `updated_at`. Results contain
+only documents the LLM judged relevant, ordered by relevance; `content` is
+the full chunk text of each. Cite results by title and URL when referencing
 them in your response.

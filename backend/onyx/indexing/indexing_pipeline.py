@@ -16,6 +16,7 @@ from onyx.configs.app_configs import (
     USE_CHUNK_SUMMARY,
     USE_DOCUMENT_SUMMARY,
 )
+from onyx.configs.chat_configs import CONTEXTUAL_RAG_LLM_TIMEOUT
 from onyx.configs.llm_configs import get_image_extraction_and_analysis_enabled
 from onyx.connectors.cross_connector_utils.miscellaneous_utils import (
     get_experts_stores_representations,
@@ -888,6 +889,7 @@ def add_document_summaries(
             prompt_msg,
             max_tokens=MAX_CONTEXT_TOKENS,
             reasoning_effort=CONTEXTUAL_RAG_REASONING_EFFORT,
+            total_timeout_override=CONTEXTUAL_RAG_LLM_TIMEOUT,
         )
         record_llm_response(span_generation, response)
     doc_summary = llm_response_to_string(response)
@@ -941,6 +943,7 @@ def add_chunk_summaries(
                 fallback_prompt,
                 max_tokens=MAX_CONTEXT_TOKENS,
                 reasoning_effort=CONTEXTUAL_RAG_REASONING_EFFORT,
+                total_timeout_override=CONTEXTUAL_RAG_LLM_TIMEOUT,
             )
             record_llm_response(span_generation, response)
         doc_info = llm_response_to_string(response)
@@ -970,6 +973,7 @@ def add_chunk_summaries(
                     processed_prompt,
                     max_tokens=MAX_CONTEXT_TOKENS,
                     reasoning_effort=CONTEXTUAL_RAG_REASONING_EFFORT,
+                    total_timeout_override=CONTEXTUAL_RAG_LLM_TIMEOUT,
                 )
                 record_llm_response(span_generation, response)
             chunk.chunk_context = llm_response_to_string(response)

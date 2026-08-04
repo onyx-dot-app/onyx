@@ -124,9 +124,9 @@ def _make_manager() -> KubernetesSandboxManager:
     ]
     core_api.read_namespaced_pod.return_value = pod_obj
 
-    mgr._core_api = core_api  # type: ignore[attr-defined]
-    mgr._namespace = "sandbox-test"  # type: ignore[attr-defined]
-    mgr._sidecar_client = SidecarClient(host=_service_host(mgr))  # type: ignore[attr-defined]
+    mgr._core_api = core_api
+    mgr._namespace = "sandbox-test"
+    mgr._sidecar_client = SidecarClient(host=_service_host(mgr))
     return mgr
 
 
@@ -656,7 +656,7 @@ def test_push_connect_error_is_retriable() -> None:
 def test_create_opencode_history_snapshot_204_preserves_stable_snapshot() -> None:
     mgr = _make_manager()
     snapshot_manager = MagicMock()
-    mgr._snapshot_manager = snapshot_manager  # type: ignore[attr-defined]
+    mgr._snapshot_manager = snapshot_manager
     resp = _resp(204)
 
     with patch(_HTTPX_CLIENT_PATH, _mock_httpx_stream_client(resp)):
@@ -688,7 +688,7 @@ def test_restore_opencode_history_posts_archive_to_sidecar(
         write_stream.write(archive_body)
 
     snapshot_manager.restore_snapshot_to_stream.side_effect = restore_to_stream
-    mgr._snapshot_manager = snapshot_manager  # type: ignore[attr-defined]
+    mgr._snapshot_manager = snapshot_manager
 
     def fake_post_archive(
         *,
@@ -731,7 +731,7 @@ def test_restore_opencode_history_marks_sidecar_ready_when_no_snapshot(
 
     snapshot_manager = MagicMock()
     snapshot_manager.has_opencode_history_snapshot.return_value = False
-    mgr._snapshot_manager = snapshot_manager  # type: ignore[attr-defined]
+    mgr._snapshot_manager = snapshot_manager
 
     def fake_mark_restored(
         *,

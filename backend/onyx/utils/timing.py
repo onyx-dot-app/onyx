@@ -47,7 +47,7 @@ def log_function_time(
             result = func(*args, **kwargs)
             elapsed_time = time.monotonic() - start_time
             elapsed_time_str = f"{elapsed_time:.3f}"
-            log_name = func_name or func.__name__
+            log_name = func_name or func.__name__  # ty: ignore[unresolved-attribute]
             args_str = ""
             if include_args:
                 args_str = f" args={args} kwargs={kwargs}"
@@ -98,7 +98,7 @@ def log_generator_function_time(
                 return (yield from func(*args, **kwargs))
             finally:
                 elapsed_time_str = f"{time.monotonic() - start_time:.3f}"
-                log_name = func_name or func.__name__
+                log_name = func_name or func.__name__  # ty: ignore[unresolved-attribute]
                 logger.info("%s took %s seconds", log_name, elapsed_time_str)
                 if not print_only:
                     optional_telemetry(

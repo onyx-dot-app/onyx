@@ -33,6 +33,11 @@ export interface Message {
   packets: Packet[];
   // Backend StreamingError.error_code on an errored turn; titles the error box.
   errorCode?: string | null;
+  // Epoch ms the stream started, for the timeline's elapsed timer. Only set while streaming; a
+  // hydrated turn has none and falls back to `processingDurationSeconds`.
+  streamingStartedAt?: number;
+  // Backend `processing_duration_seconds`; becomes the header's "Thought for Xs".
+  processingDurationSeconds?: number | null;
 }
 
 // Subset of a loaded session-snapshot row (GET get-chat-session).
@@ -45,6 +50,7 @@ export interface BackendMessage {
   files: FileDescriptor[];
   time_sent: string;
   error: string | null;
+  processing_duration_seconds?: number | null;
 }
 
 // `packets` is indexed by assistant-message ordinal.

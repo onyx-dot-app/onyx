@@ -7,10 +7,7 @@ import { cn } from "@opal/utils";
 import { ActionStatus } from "@/lib/tools/interfaces";
 import type { IconProps } from "@opal/types";
 import { SvgServer } from "@opal/icons";
-import {
-  ActionCardProvider,
-  ActionCardContextValue,
-} from "@/sections/actions/ActionCardContext";
+import { Hoverable } from "@opal/core";
 
 export interface ActionCardProps {
   // Core content
@@ -77,7 +74,6 @@ export default function ActionCard({
   const [internalExpanded, setInternalExpanded] = useState(initialExpanded);
 
   const hasInitializedExpansion = useRef(false);
-  const [isHovered, setIsHovered] = useState(false);
 
   // Determine if we're in controlled mode
   const isControlled = controlledIsExpanded !== undefined;
@@ -102,23 +98,19 @@ export default function ActionCard({
       ? "bg-background-neutral-02"
       : "";
 
-  const contextValue: ActionCardContextValue = { isHovered };
-
   return (
-    <ActionCardProvider value={contextValue}>
+    <Hoverable.Root group="action-card">
       <div
         className={cn(
           "w-full",
           backgroundColor,
           "border border-border-01 rounded-16",
           "transition-shadow duration-200",
-          isHovered && "shadow-box-00",
+          "hover:shadow-box-00",
           className
         )}
         role="article"
         aria-label={ariaLabel || `${title} action card`}
-        onMouseEnter={() => setIsHovered(true)}
-        onMouseLeave={() => setIsHovered(false)}
       >
         <div className="flex flex-col w-full">
           {/* Header Section */}
@@ -153,6 +145,6 @@ export default function ActionCard({
           </div>
         )}
       </div>
-    </ActionCardProvider>
+    </Hoverable.Root>
   );
 }

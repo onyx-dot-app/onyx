@@ -8,19 +8,16 @@ from sqlalchemy.orm import Session
 from sqlalchemy.sql.elements import ColumnElement
 
 from onyx.configs.constants import DocumentSource
+from onyx.db.connector_credential_pair import build_user_cc_pair_access_filter
 from onyx.db.enums import (
-    AccessType,
     ConnectorCredentialPairStatus,
     HierarchyNodeType,
 )
 from onyx.db.hierarchy import HIERARCHY_NODE_SEARCH_LIMIT, escape_like_pattern
 from onyx.db.models import (
     ConnectorCredentialPair,
-    Credential,
     HierarchyNode,
     HierarchyNodeByConnectorCredentialPair,
-    User__UserGroup,
-    UserGroup__ConnectorCredentialPair,
 )
 
 
@@ -28,8 +25,6 @@ def _build_connector_access_filter(user_id: UUID) -> ColumnElement[bool]:
     """Grant the connector-level access applied to indexed documents."""
     node_cc_pair = HierarchyNodeByConnectorCredentialPair
     cc_pair = ConnectorCredentialPair
-    group_cc_pair = UserGroup__ConnectorCredentialPair
-    user_group = User__UserGroup
 
     stmt = (
         select(1)
@@ -41,34 +36,10 @@ def _build_connector_access_filter(user_id: UUID) -> ColumnElement[bool]:
                 cc_pair.credential_id == node_cc_pair.credential_id,
             ),
         )
-        .join(Credential, Credential.id == cc_pair.credential_id)
-        .outerjoin(
-            group_cc_pair,
-            and_(
-                group_cc_pair.cc_pair_id == cc_pair.id,
-                group_cc_pair.is_current.is_(True),
-            ),
-        )
-        .outerjoin(
-            user_group,
-            and_(
-                user_group.user_group_id == group_cc_pair.user_group_id,
-                user_group.user_id == user_id,
-            ),
-        )
         .where(
             node_cc_pair.hierarchy_node_id == HierarchyNode.id,
             cc_pair.status != ConnectorCredentialPairStatus.DELETING,
-            or_(
-                cc_pair.access_type == AccessType.PUBLIC,
-                and_(
-                    cc_pair.access_type != AccessType.SYNC,
-                    or_(
-                        Credential.user_id == user_id,
-                        user_group.user_id == user_id,
-                    ),
-                ),
-            ),
+            build_user_cc_pair_access_filter(user_id),
         )
     )
     return stmt.exists()

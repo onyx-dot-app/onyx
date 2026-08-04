@@ -4,7 +4,6 @@ import { create } from "zustand";
 import { DELETE_SUCCESS_DISPLAY_DURATION_MS } from "@/app/craft/constants";
 
 import {
-  ApiSandboxResponse,
   ApiSessionResponse,
   Artifact,
   ArtifactType,
@@ -14,6 +13,7 @@ import {
   SessionHistoryItem,
   SessionOrigin,
   SessionStatus,
+  SandboxRuntimeState,
 } from "@/app/craft/types/streamingTypes";
 
 import {
@@ -178,6 +178,17 @@ function convertMessagesToStreamItems(messages: BuildMessage[]): StreamItem[] {
           id: message.id || genId("compaction"),
           summary: packet.summary,
         });
+        break;
+
+      case "error":
+        // Persisted terminal-failure rows (e.g. turn hard-cap).
+        if (packet.message) {
+          items.push({
+            type: "error",
+            id: message.id || genId("error"),
+            content: packet.message,
+          });
+        }
         break;
 
       default:
@@ -440,6 +451,20 @@ function buildSubagentsFromMessages(
   return subagents;
 }
 
+/** Persisted turn-failure rows are only relevant while they're the latest
+ * thing in the transcript — once any later activity exists, a stale
+ * "turn stopped" banner mid-history is just noise. */
+function stripSupersededErrors(messages: BuildMessage[]): BuildMessage[] {
+  const isErrorRow = (message: BuildMessage) =>
+    message.type === "assistant" && message.message_metadata?.type === "error";
+  const lastActivityIdx = messages.findLastIndex(
+    (message) => !isErrorRow(message)
+  );
+  return messages.filter(
+    (message, idx) => idx > lastActivityIdx || !isErrorRow(message)
+  );
+}
+
 /**
  * Consolidate raw backend messages into proper conversation turns.
  *
@@ -453,6 +478,7 @@ function buildSubagentsFromMessages(
 function consolidateMessagesIntoTurns(
   rawMessages: BuildMessage[]
 ): BuildMessage[] {
+  rawMessages = stripSupersededErrors(rawMessages);
   const consolidated: BuildMessage[] = [];
   let currentAgentPackets: BuildMessage[] = [];
 
@@ -648,8 +674,8 @@ export interface BuildSessionData {
   turnGeneration: number;
   error: string | null;
   webappUrl: string | null;
-  /** Sandbox info from backend */
-  sandbox: ApiSandboxResponse | null;
+  /** Backend sandbox state plus transient client-owned lifecycle states. */
+  sandbox: SandboxRuntimeState | null;
   /** Model this session runs on (from the row); seeds the composer picker. */
   agentProvider: string | null;
   agentModel: string | null;
@@ -726,7 +752,6 @@ interface BuildSessionStore {
   // Actions - Current Session Shortcuts
   appendMessageToCurrent: (message: BuildMessage) => void;
   addArtifactToCurrent: (artifact: Artifact) => void;
-  setCurrentError: (error: string | null) => void;
   toggleCurrentOutputPanel: () => void;
 
   // Actions - Session-specific operations (for streaming - immune to currentSessionId changes)
@@ -1104,13 +1129,6 @@ export const useBuildSessionStore = create<BuildSessionStore>()((set, get) => ({
       newSessions.set(currentSessionId, updatedSession);
       return { sessions: newSessions };
     });
-  },
-
-  setCurrentError: (error: string | null) => {
-    const { currentSessionId, updateSessionData } = get();
-    if (currentSessionId) {
-      updateSessionData(currentSessionId, { error });
-    }
   },
 
   toggleCurrentOutputPanel: () => {
@@ -1544,8 +1562,8 @@ export const useBuildSessionStore = create<BuildSessionStore>()((set, get) => ({
       const hasWebapp = artifacts.some(
         (a) => a.type === "nextjs_app" || a.type === "web_app"
       );
-      if (hasWebapp && sessionData.sandbox?.nextjs_port) {
-        webappUrl = `http://localhost:${sessionData.sandbox.nextjs_port}`;
+      if (hasWebapp && sessionData.nextjs_port) {
+        webappUrl = `http://localhost:${sessionData.nextjs_port}`;
       }
 
       const resolvedActiveTurnId =

@@ -10,8 +10,7 @@ import {
   SvgTrash,
   SvgUnplug,
 } from "@opal/icons";
-import { useActionCardContext } from "@/sections/actions/ActionCardContext";
-import { cn } from "@opal/utils";
+import { Hoverable } from "@opal/core";
 
 interface ActionsProps {
   status: ActionStatus;
@@ -39,7 +38,6 @@ const Actions = React.memo(
     isToolsExpanded,
     onToggleTools,
   }: ActionsProps) => {
-    const { isHovered: isParentHovered } = useActionCardContext();
     const showViewToolsButton =
       (status === ActionStatus.CONNECTED ||
         status === ActionStatus.FETCHING ||
@@ -53,14 +51,7 @@ const Actions = React.memo(
         <div className="flex flex-col gap-1 items-end">
           <div className="flex items-center">
             {onDisconnect && (
-              <div
-                className={cn(
-                  "inline-flex transition-all duration-200 ease-out",
-                  isParentHovered
-                    ? "opacity-100 translate-x-0 pointer-events-auto"
-                    : "opacity-0 translate-x-2 pointer-events-none"
-                )}
-              >
+              <Hoverable.Item group="action-card" variant="appear-on-hover">
                 <Button
                   icon={SvgUnplug}
                   tooltip="Disconnect Server"
@@ -68,7 +59,7 @@ const Actions = React.memo(
                   onClick={onDisconnect}
                   aria-label={`Disconnect ${serverName} server`}
                 />
-              </div>
+              </Hoverable.Item>
             )}
             {onManage && (
               <Button
@@ -110,33 +101,28 @@ const Actions = React.memo(
               Authenticate
             </Button>
           )}
-          <div
-            className={cn(
-              "flex gap-1 items-center transition-opacity duration-200 ease-out",
-              isParentHovered
-                ? "opacity-100 pointer-events-auto"
-                : "opacity-0 pointer-events-none"
-            )}
-          >
-            {onDelete && (
-              <Button
-                icon={SvgTrash}
-                tooltip="Delete Server"
-                prominence="tertiary"
-                onClick={onDelete}
-                aria-label={`Delete ${serverName} server`}
-              />
-            )}
-            {onManage && (
-              <Button
-                icon={SvgSettings}
-                tooltip="Manage Server"
-                prominence="tertiary"
-                onClick={onManage}
-                aria-label={`Manage ${serverName} server`}
-              />
-            )}
-          </div>
+          <Hoverable.Item group="action-card" variant="appear-on-hover">
+            <div className="flex gap-1 items-center">
+              {onDelete && (
+                <Button
+                  icon={SvgTrash}
+                  tooltip="Delete Server"
+                  prominence="tertiary"
+                  onClick={onDelete}
+                  aria-label={`Delete ${serverName} server`}
+                />
+              )}
+              {onManage && (
+                <Button
+                  icon={SvgSettings}
+                  tooltip="Manage Server"
+                  prominence="tertiary"
+                  onClick={onManage}
+                  aria-label={`Manage ${serverName} server`}
+                />
+              )}
+            </div>
+          </Hoverable.Item>
         </div>
       );
     }

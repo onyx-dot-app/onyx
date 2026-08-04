@@ -50,6 +50,7 @@ export interface LicenseStatus {
   status: ApplicationStatus | null;
   expiry_warning_stage: ExpiryWarningStage;
   source: LicenseSource | null;
+  trial_end: string | null;
 }
 
 // ----------------------------------------------------------------------------

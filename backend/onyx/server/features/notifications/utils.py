@@ -37,9 +37,7 @@ def ensure_system_announcement_notification(user: User, db_session: Session) -> 
         db_session=db_session,
         title=banner.title,
         description=banner.content,
-        # Empty dict, not None: create_notification stores None as JSONB null,
-        # which the COALESCE(additional_data, '{}') dedup won't match, so every
-        # read would re-insert and hit the unique index.
+        # The stable empty object is this announcement's deduplication key.
         additional_data={},
         refresh_existing=False,
     )

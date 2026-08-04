@@ -54,8 +54,8 @@ def _make_client(
     )
     # Shrink the retry delay to 0 in tests — we're not testing the sleep,
     # we're testing the retry count.
-    client._COLD_POD_RETRIES = retries  # type: ignore[misc]
-    client._COLD_POD_BASE_DELAY = base_delay  # type: ignore[misc]
+    client._COLD_POD_RETRIES = retries
+    client._COLD_POD_BASE_DELAY = base_delay
     return client
 
 

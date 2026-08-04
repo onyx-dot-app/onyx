@@ -48,6 +48,10 @@ function WindowCostSection({ windowCostCents, rows }: WindowCostSectionProps) {
     0
   );
   const hasCache = rows.some((row) => row.cache_read_tokens > 0);
+  const sortedRows = useMemo(
+    () => [...rows].sort((a, b) => b.cost_cents - a.cost_cents),
+    [rows]
+  );
 
   return (
     <Section gap={0.75} justifyContent="start">
@@ -68,7 +72,7 @@ function WindowCostSection({ windowCostCents, rows }: WindowCostSectionProps) {
         />
       ) : (
         <Card>
-          {rows.map((row, index) => (
+          {sortedRows.map((row, index) => (
             <div key={`${row.day}-${row.model}`}>
               {index > 0 && <Divider />}
               <Section gap={0.5} alignItems="start" justifyContent="start">

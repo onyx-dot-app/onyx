@@ -1,14 +1,13 @@
-"""Pins `ResolvedMCPCredentials.build_headers()`: the credential-header
-precedence and the denylist filter on stored headers. Stored credentials must
-never source a denylisted header (e.g. Host) — every consumer (chat's MCPTool,
-the sandbox-proxy resolver) relies on this helper applying that filter."""
+"""Header composition across templates, stored values, and generated auth."""
 
 import json
 
 import pytest
 
+from onyx.db.enums import MCPAuthenticationType
 from onyx.db.mcp import ResolvedMCPCredentials
 from onyx.db.models import MCPConnectionConfig
+from onyx.server.features.mcp.models import MCPAuthTemplate
 from onyx.utils.sensitive import SensitiveValue
 
 
@@ -49,3 +48,106 @@ def test_build_headers_empty_without_credentials() -> None:
     creds = ResolvedMCPCredentials(connection_config=None, user_oauth_token=None)
 
     assert creds.build_headers() == {}
+
+
+def test_pt_oauth_merges_template_headers_and_overrides_authorization() -> None:
+    config = MCPConnectionConfig(
+        config={
+            "headers": {"authorization": "Basic stale"},
+            "header_substitutions": {"gateway_key": "gateway-secret"},
+        }
+    )
+    creds = ResolvedMCPCredentials(
+        connection_config=config,
+        user_oauth_token="login-token",
+        auth_type=MCPAuthenticationType.PT_OAUTH,
+        auth_template=MCPAuthTemplate(
+            headers={
+                "X-Gateway-Key": "{gateway_key}",
+                "X-User": "{user_email}",
+            }
+        ),
+        user_email="alice@example.com",
+    )
+
+    assert creds.build_headers() == {
+        "X-Gateway-Key": "gateway-secret",
+        "X-User": "alice@example.com",
+        "Authorization": "Bearer login-token",
+    }
+    assert creds.is_authenticated()
+
+
+def test_oauth_merges_template_headers_with_token_auth() -> None:
+    config = MCPConnectionConfig(
+        config={
+            "headers": {},
+            "header_substitutions": {"gateway_key": "gateway-secret"},
+            "tokens": {"token_type": "Bearer", "access_token": "oauth-token"},
+        }
+    )
+    creds = ResolvedMCPCredentials(
+        connection_config=config,
+        user_oauth_token=None,
+        auth_type=MCPAuthenticationType.OAUTH,
+        auth_template=MCPAuthTemplate(headers={"X-Gateway-Key": "{gateway_key}"}),
+        user_email="alice@example.com",
+    )
+
+    assert creds.build_headers() == {
+        "X-Gateway-Key": "gateway-secret",
+        "Authorization": "Bearer oauth-token",
+    }
+    assert creds.is_authenticated()
+
+
+def test_no_auth_template_requires_user_substitutions() -> None:
+    template = MCPAuthTemplate(headers={"X-Gateway-Key": "{gateway_key}"})
+    disconnected = ResolvedMCPCredentials(
+        connection_config=None,
+        user_oauth_token=None,
+        auth_type=MCPAuthenticationType.NONE,
+        auth_template=template,
+        user_email="alice@example.com",
+    )
+    connected = disconnected.model_copy(
+        update={
+            "connection_config": MCPConnectionConfig(
+                config={
+                    "headers": {},
+                    "header_substitutions": {"gateway_key": "gateway-secret"},
+                }
+            )
+        }
+    )
+
+    assert not disconnected.is_authenticated()
+    assert connected.is_authenticated()
+    assert connected.build_headers() == {"X-Gateway-Key": "gateway-secret"}
+
+
+def test_api_token_template_without_placeholders_needs_no_user_config() -> None:
+    creds = ResolvedMCPCredentials(
+        connection_config=None,
+        user_oauth_token=None,
+        auth_type=MCPAuthenticationType.API_TOKEN,
+        auth_template=MCPAuthTemplate(headers={"X-Gateway-Key": "shared-key"}),
+        user_email="alice@example.com",
+    )
+
+    assert creds.is_authenticated()
+    assert creds.build_headers() == {"X-Gateway-Key": "shared-key"}
+
+
+def test_fresh_template_rendering_overrides_persisted_auto_substitution() -> None:
+    creds = ResolvedMCPCredentials(
+        connection_config=MCPConnectionConfig(
+            config={"headers": {"X-User": "admin@example.com"}}
+        ),
+        user_oauth_token=None,
+        auth_type=MCPAuthenticationType.API_TOKEN,
+        auth_template=MCPAuthTemplate(headers={"X-User": "{user_email}"}),
+        user_email="alice@example.com",
+    )
+
+    assert creds.build_headers() == {"X-User": "alice@example.com"}
