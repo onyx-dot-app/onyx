@@ -4,7 +4,7 @@ import json
 
 import pytest
 
-from onyx.db.enums import MCPAuthenticationPerformer, MCPAuthenticationType
+from onyx.db.enums import MCPAuthenticationType
 from onyx.db.mcp import ResolvedMCPCredentials
 from onyx.db.models import MCPConnectionConfig
 from onyx.server.features.mcp.models import MCPAuthTemplate
@@ -61,7 +61,6 @@ def test_pt_oauth_merges_template_headers_and_overrides_authorization() -> None:
         connection_config=config,
         user_oauth_token="login-token",
         auth_type=MCPAuthenticationType.PT_OAUTH,
-        auth_performer=MCPAuthenticationPerformer.PER_USER,
         auth_template=MCPAuthTemplate(
             headers={
                 "X-Gateway-Key": "{gateway_key}",
@@ -91,7 +90,6 @@ def test_oauth_merges_template_headers_with_token_auth() -> None:
         connection_config=config,
         user_oauth_token=None,
         auth_type=MCPAuthenticationType.OAUTH,
-        auth_performer=MCPAuthenticationPerformer.PER_USER,
         auth_template=MCPAuthTemplate(headers={"X-Gateway-Key": "{gateway_key}"}),
         user_email="alice@example.com",
     )
@@ -109,7 +107,6 @@ def test_no_auth_template_requires_user_substitutions() -> None:
         connection_config=None,
         user_oauth_token=None,
         auth_type=MCPAuthenticationType.NONE,
-        auth_performer=MCPAuthenticationPerformer.ADMIN,
         auth_template=template,
         user_email="alice@example.com",
     )
@@ -134,7 +131,6 @@ def test_api_token_template_without_placeholders_needs_no_user_config() -> None:
         connection_config=None,
         user_oauth_token=None,
         auth_type=MCPAuthenticationType.API_TOKEN,
-        auth_performer=MCPAuthenticationPerformer.PER_USER,
         auth_template=MCPAuthTemplate(headers={"X-Gateway-Key": "shared-key"}),
         user_email="alice@example.com",
     )
@@ -150,7 +146,6 @@ def test_fresh_template_rendering_overrides_persisted_auto_substitution() -> Non
         ),
         user_oauth_token=None,
         auth_type=MCPAuthenticationType.API_TOKEN,
-        auth_performer=MCPAuthenticationPerformer.ADMIN,
         auth_template=MCPAuthTemplate(headers={"X-User": "{user_email}"}),
         user_email="alice@example.com",
     )

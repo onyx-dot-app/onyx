@@ -450,7 +450,6 @@ class ResolvedMCPCredentials(BaseModel):
     connection_config: MCPConnectionConfig | None
     user_oauth_token: str | None
     auth_type: MCPAuthenticationType | None = None
-    auth_performer: MCPAuthenticationPerformer | None = None
     auth_template: MCPAuthTemplate | None = None
     user_email: str = ""
 
@@ -555,7 +554,6 @@ def resolve_mcp_credentials(
                 user.oauth_accounts[0].access_token if user.oauth_accounts else None
             ),
             auth_type=mcp_server.auth_type,
-            auth_performer=mcp_server.auth_performer,
             auth_template=auth_template,
             user_email=user.email,
         )
@@ -572,7 +570,6 @@ def resolve_mcp_credentials(
             connection_config=connection_config,
             user_oauth_token=None,
             auth_type=mcp_server.auth_type,
-            auth_performer=mcp_server.auth_performer,
             auth_template=auth_template,
             user_email=user.email,
         )
@@ -581,7 +578,6 @@ def resolve_mcp_credentials(
         connection_config=user_connection_config,
         user_oauth_token=None,
         auth_type=mcp_server.auth_type,
-        auth_performer=mcp_server.auth_performer,
         auth_template=auth_template,
         user_email=user.email,
     )

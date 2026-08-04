@@ -369,14 +369,12 @@ def _resolve_auth_template(
     existing_headers = existing_template.headers if existing_template else {}
     for name, request_value in request_template.headers.items():
         existing_value = existing_headers.get(name)
-        preserve_existing = (
+        if (
             not changed_headers.get(name, False)
             and existing_value is not None
             and (request_value == existing_value or is_masked_credential(request_value))
-        )
-        if preserve_existing:
-            assert existing_value is not None
-            headers[name] = existing_headers[name]
+        ):
+            headers[name] = existing_value
             continue
         reject_masked_credentials({name: request_value})
         headers[name] = request_value
@@ -1712,7 +1710,11 @@ def _list_mcp_tools_by_id(
     auth = None
     if mcp_server.auth_type == MCPAuthenticationType.OAUTH:
         connection_config = credentials.connection_config
-        assert connection_config
+        if connection_config is None:
+            raise OnyxError(
+                OnyxErrorCode.INTERNAL_ERROR,
+                "OAuth MCP credentials are missing their connection config.",
+            )
         auth = make_oauth_provider(
             mcp_server,
             user_id,

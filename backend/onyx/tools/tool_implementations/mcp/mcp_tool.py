@@ -161,7 +161,6 @@ class MCPTool(Tool[None]):
                 connection_config=self.connection_config,
                 user_oauth_token=self._user_oauth_token,
                 auth_type=self.mcp_server.auth_type,
-                auth_performer=self.mcp_server.auth_performer,
                 user_email=self.user_email,
             )
             headers = merge_mcp_headers(
