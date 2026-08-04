@@ -94,7 +94,7 @@ jobs:
       pull-requests: read
     outputs:
       playwright: ${{ steps.filter.outputs.playwright || 'true' }}
-      airgap: ${{ steps.filter.outputs.airgap || 'false' }}
+      airgap: ${{ steps.filter.outputs.airgap || 'true' }}
       # Whether this change touches MCP-OAuth-relevant code. Drives whether a
       # same-repo PR validates the OAuth spec against the real Okta org instead of
       # the mock IdP. Defaults to 'false' on events where the filter doesn't run.
