@@ -735,7 +735,9 @@ export function useLlmManager(
     if (
       prev.name === resolved.name &&
       prev.provider === resolved.provider &&
-      prev.modelName === resolved.modelName
+      prev.modelName === resolved.modelName &&
+      (prev.modelConfigurationId ?? null) ===
+        (resolved.modelConfigurationId ?? null)
     ) {
       return prev;
     }

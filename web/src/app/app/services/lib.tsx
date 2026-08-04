@@ -193,7 +193,7 @@ export async function* sendMessage({
     allowed_tool_ids: enabledToolIds,
     forced_tool_id: forcedToolId ?? null,
     llm_override:
-      temperature || modelVersion
+      temperature || modelVersion || modelConfigurationId != null
         ? {
             temperature,
             model_provider: modelProvider,

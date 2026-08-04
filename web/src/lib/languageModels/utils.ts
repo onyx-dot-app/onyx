@@ -63,6 +63,7 @@ export function getProviderOverrideForAgent(
           name: provider.name ?? "",
           provider: provider.provider,
           modelName: mc.name,
+          modelConfigurationId: mc.id,
         };
       }
     }
@@ -78,8 +79,10 @@ export const structureValue = (
   modelConfigurationId?: number | null
 ) => {
   const base = `${name}__${provider}__${modelName}`;
+  // "mc:" marks the segment as an id so legacy model names that happen to
+  // contain "__<digits>" can never be misread as one.
   return modelConfigurationId != null
-    ? `${base}__${modelConfigurationId}`
+    ? `${base}__mc:${modelConfigurationId}`
     : base;
 };
 
@@ -94,8 +97,8 @@ export const parseLlmDescriptor = (value: string): LlmDescriptor => {
     provider: provider ?? "",
     modelName: modelName ?? "",
     modelConfigurationId:
-      idPart !== undefined && /^\d+$/.test(idPart)
-        ? parseInt(idPart, 10)
+      idPart !== undefined && /^mc:\d+$/.test(idPart)
+        ? parseInt(idPart.slice(3), 10)
         : undefined,
   };
 };
