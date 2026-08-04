@@ -1,6 +1,8 @@
 import json
 import os
 
+from shared_configs.configs import DEFAULT_DOCUMENT_ENCODER_MODEL
+
 #####
 # Embedding/Reranking Model Configs
 #####
@@ -12,7 +14,6 @@ import os
 # The useable models configured as below must be SentenceTransformer compatible
 # NOTE: DO NOT CHANGE SET THESE UNLESS YOU KNOW WHAT YOU ARE DOING
 # IDEALLY, YOU SHOULD CHANGE EMBEDDING MODELS VIA THE UI
-DEFAULT_DOCUMENT_ENCODER_MODEL = "nomic-ai/nomic-embed-text-v1"
 DOCUMENT_ENCODER_MODEL = (
     os.environ.get("DOCUMENT_ENCODER_MODEL") or DEFAULT_DOCUMENT_ENCODER_MODEL
 )

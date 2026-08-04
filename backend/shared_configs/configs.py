@@ -35,6 +35,7 @@ INDEXING_MODEL_SERVER_PORT = int(
 CONNECTOR_CLASSIFIER_MODEL_REPO = "Danswer/filter-extraction-model"
 CONNECTOR_CLASSIFIER_MODEL_TAG = "1.0.0"
 INTENT_MODEL_VERSION = "onyx-dot-app/hybrid-intent-token-classifier"
+DEFAULT_DOCUMENT_ENCODER_MODEL = "nomic-ai/nomic-embed-text-v1"
 # INTENT_MODEL_TAG = "v1.0.3"
 INTENT_MODEL_TAG: str | None = None
 # Bi-Encoder, other details
