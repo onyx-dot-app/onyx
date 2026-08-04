@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import json
+import re
 from pathlib import Path
 from unittest.mock import MagicMock, patch
 from uuid import UUID
@@ -29,6 +30,7 @@ _TEMPLATE_PACKAGE_JSON = (
     / "web"
     / "package.json"
 )
+_TEMPLATE_AGENTS_MD = _TEMPLATE_PACKAGE_JSON.parent / "AGENTS.md"
 
 
 def test_start_script_exports_allowed_dev_origins() -> None:
@@ -78,14 +80,19 @@ def test_template_dev_script_wires_port_to_managed_env_and_port_file() -> None:
     ) / ".nextjs-port"
 
 
-def test_template_scripts_match_documented_tool_contract() -> None:
-    """The template AGENTS.md documents `bun run lint` (oxlint) and
-    `bun run typecheck`; both scripts must exist, or agents fall back to
-    guessed commands (eslint, bare tsc) that fail in the sandbox."""
-    scripts = json.loads(_TEMPLATE_PACKAGE_JSON.read_text())["scripts"]
+def test_template_agents_md_documents_only_real_scripts() -> None:
+    """The template AGENTS.md and package.json are the two halves of the
+    sandbox tool contract. A documented `bun run <script>` that doesn't exist
+    sends agents into guess-and-fail loops (the doc once said "Run ESLint"
+    while the template shipped oxlint and no typecheck script)."""
+    scripts = set(json.loads(_TEMPLATE_PACKAGE_JSON.read_text())["scripts"])
+    documented = set(
+        re.findall(r"bun run ([A-Za-z0-9:_-]+)", _TEMPLATE_AGENTS_MD.read_text())
+    )
 
-    assert scripts["lint"] == "oxlint"
-    assert scripts["typecheck"] == "tsc --noEmit"
+    assert documented <= scripts
+    # The verify workflow's commands must stay documented, not just valid.
+    assert {"dev", "lint", "typecheck"} <= documented
 
 
 def test_start_script_passes_port_flag_when_dev_script_ignores_env() -> None:

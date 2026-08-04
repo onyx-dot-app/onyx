@@ -5,7 +5,7 @@ This file provides guidance to AI agents when working on the web application wit
 ## Important Notes
 
 - **The development server is already running** at a dynamically allocated port. Do NOT run `bun run dev` yourself.
-- **The app serves under a session-scoped base path** (`/api/build/sessions/<session-id>/webapp`), not at `/`. Fetching `http://localhost:<port>/` returns 404 even when the app is perfectly healthy. The exact preview URL is in the session root `AGENTS.md` (one level up from `outputs/`).
+- **The app serves under a session-scoped base path** (`/api/build/sessions/<session-id>/webapp`), not at `/`. Paths outside the base path 404 even when the app is healthy (`/` itself redirects to it). The exact preview URL is in the session root `AGENTS.md` (one level up from `outputs/`).
 - **We do NOT use a `src` directory** - all code lives directly in the root folders (`app/`, `components/`, `lib/`, etc.)
 - If the app needs pre-computation (data processing, API calls, etc.), create a bash or python script called `prepare.sh`/`prepare.py` at the root of this directory
 - **CRITICAL: Create small, modular components** - Do NOT write everything in `page.tsx`. Break your UI into small, reusable components in the `components/` directory. Each component should have a single responsibility and be in its own file.
@@ -47,8 +47,7 @@ bun run typecheck  # Type-check with tsc --noEmit
 bun add <pkg>      # Add a new dependency (updates package.json AND bun.lock)
 ```
 
-These are the ONLY lint/type-check commands. ESLint is **not** installed —
-`eslint` / `npx eslint` / `bunx eslint` all fail here; use `bun run lint`.
+ESLint is **not** installed — never run `eslint`/`bunx eslint`; use `bun run lint`.
 
 ## Adding dependencies — read this before installing anything
 
