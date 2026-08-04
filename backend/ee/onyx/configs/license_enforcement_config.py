@@ -69,6 +69,7 @@ PATH_PREFIX_MIN_TIER: dict[str, Tier] = {
     "/admin/usage-report": Tier.BUSINESS,
     "/analytics/admin": Tier.BUSINESS,  # query/user/onyxbot/persona analytics
     "/admin/api-key": Tier.BUSINESS,  # service-account keys (no user-bound variant)
+    "/gateway": Tier.BUSINESS,  # external LLM gateway API
     "/admin/enterprise-settings": Tier.BUSINESS,  # admin writes; public /enterprise-settings stays open
     "/manage/admin/user-group": Tier.BUSINESS,  # groups + RBAC (Curator roles, group-scoped access)
     # ----- ENTERPRISE -----
