@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import json
 from pathlib import Path
 from unittest.mock import MagicMock, patch
 from uuid import UUID
@@ -20,6 +21,14 @@ _TEMPLATE_NEXT_CONFIG = (
     / "web"
     / "next.config.ts"
 )
+_TEMPLATE_PACKAGE_JSON = (
+    Path(nextjs_dev.__file__).parent
+    / "image"
+    / "templates"
+    / "outputs"
+    / "web"
+    / "package.json"
+)
 
 
 def test_start_script_exports_allowed_dev_origins() -> None:
@@ -31,7 +40,52 @@ def test_start_script_exports_allowed_dev_origins() -> None:
         'export ONYX_WEBAPP_BASE_PATH="/api/build/sessions/'
         f'$(basename {_SESSION_PATH})/webapp"' in script
     )
-    assert "-p 3010" in script
+
+
+def test_start_script_port_is_env_driven_not_a_dup_flag() -> None:
+    """A `-p` flag would collide with the template `dev` script's own `-p`;
+    the port must flow via ONYX_WEBAPP_PORT."""
+    script = build_nextjs_start_script(_SESSION_PATH, 3010)
+
+    assert "export ONYX_WEBAPP_PORT=3010" in script
+    assert "bun run dev -- -H 0.0.0.0 $PORT_FLAG >" in script
+
+
+def test_start_script_writes_naive_path_port_file() -> None:
+    """A hand-started `bun run dev` reads this file, so the preview proxy still
+    finds the server on the port it routes to."""
+    script = build_nextjs_start_script(_SESSION_PATH, 3010)
+
+    assert f"echo 3010 > {_SESSION_PATH}/.nextjs-port" in script
+
+
+def test_template_dev_script_wires_port_to_managed_env_and_port_file() -> None:
+    """The template `dev` script is the port contract's consumer side: the
+    managed launch flows the port via ONYX_WEBAPP_PORT, and a hand-started
+    `bun run dev` falls back to the `.nextjs-port` file the start script writes
+    (`../../` from the web dir is the session root)."""
+    dev_script = json.loads(_TEMPLATE_PACKAGE_JSON.read_text())["scripts"]["dev"]
+
+    assert dev_script.startswith("next dev -p ")
+    assert (
+        "${ONYX_WEBAPP_PORT:-$(cat ../../.nextjs-port 2>/dev/null || echo 3000)}"
+        in dev_script
+    )
+
+    web_dir = Path(_SESSION_PATH) / "outputs" / "web"
+    assert (web_dir / "../../.nextjs-port").resolve() == Path(
+        _SESSION_PATH
+    ) / ".nextjs-port"
+
+
+def test_start_script_passes_port_flag_when_dev_script_ignores_env() -> None:
+    """A `dev` script without the ONYX_WEBAPP_PORT marker (legacy scaffold, or
+    rewritten by the agent) ignores the env var and would bind 3000; the
+    managed launch must pass -p explicitly for those."""
+    script = build_nextjs_start_script(_SESSION_PATH, 3010)
+
+    assert 'if ! grep -q "ONYX_WEBAPP_PORT" package.json 2>/dev/null; then' in script
+    assert 'PORT_FLAG="-p 3010"' in script
 
 
 def test_start_script_allowed_dev_origins_is_hostname_only() -> None:

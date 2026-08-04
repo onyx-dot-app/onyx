@@ -86,8 +86,8 @@ def _invoke_generator(
         ),
     ):
         cloud_tasks.cloud_beat_task_generator.run(
-            task_name="test_task",
-            work_gated=work_gated,
+            task_name="test_task",  # ty: ignore[invalid-argument-type]
+            work_gated=work_gated,  # ty: ignore[invalid-argument-type]
         )
     return mock_app
 

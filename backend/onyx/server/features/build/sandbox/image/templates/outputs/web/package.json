@@ -3,7 +3,7 @@
   "version": "0.1.0",
   "private": true,
   "scripts": {
-    "dev": "next dev",
+    "dev": "next dev -p ${ONYX_WEBAPP_PORT:-$(cat ../../.nextjs-port 2>/dev/null || echo 3000)}",
     "build": "next build",
     "start": "next start",
     "lint": "oxlint"

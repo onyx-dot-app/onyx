@@ -1,7 +1,7 @@
 from enum import Enum
 from typing import Literal
 
-from pydantic import BaseModel
+from pydantic import BaseModel, ConfigDict
 
 
 class LLMErrorInfo(BaseModel):
@@ -14,6 +14,15 @@ class ToolChoiceOptions(str, Enum):
     REQUIRED = "required"
     AUTO = "auto"
     NONE = "none"
+
+
+class NamedToolChoice(BaseModel):
+    model_config = ConfigDict(frozen=True)
+
+    name: str
+
+
+ToolChoice = ToolChoiceOptions | NamedToolChoice
 
 
 class ReasoningEffort(str, Enum):
@@ -112,6 +121,22 @@ class ImageContentPart(BaseModel):
 ContentPart = TextContentPart | ImageContentPart
 
 
+# The signature is minted by the provider and must be round-tripped unmodified
+# for replay to be accepted.
+class ThinkingBlock(BaseModel):
+    type: Literal["thinking"] = "thinking"
+    thinking: str = ""
+    signature: str | None = None
+
+
+class RedactedThinkingBlock(BaseModel):
+    type: Literal["redacted_thinking"] = "redacted_thinking"
+    data: str
+
+
+AnyThinkingBlock = ThinkingBlock | RedactedThinkingBlock
+
+
 # Tool call structures
 class FunctionCall(BaseModel):
     name: str
@@ -147,6 +172,7 @@ class AssistantMessage(CacheableMessage):
     role: Literal["assistant"] = "assistant"
     content: str | None = None
     tool_calls: list[ToolCall] | None = None
+    thinking_blocks: list[AnyThinkingBlock] | None = None
 
 
 class ToolMessage(CacheableMessage):

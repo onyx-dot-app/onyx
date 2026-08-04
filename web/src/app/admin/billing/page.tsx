@@ -3,7 +3,7 @@
 import { useEffect, useState } from "react";
 import { useSearchParams, useRouter } from "next/navigation";
 import { mutate } from "swr";
-import { SettingsLayouts } from "@opal/layouts";
+import { SettingsLayouts, toast } from "@opal/layouts";
 import { Section } from "@/layouts/general-layouts";
 import Text from "@/refresh-components/texts/Text";
 import { SvgArrowUpCircle, SvgWallet } from "@opal/icons";
@@ -317,6 +317,32 @@ export default function BillingPage() {
     ]);
   };
 
+  // An expired instance still works through grace, so the renewal it is waiting
+  // on is fetched on arrival rather than left for the admin to click Sync.
+  // Fires once per mount. The endpoint's cooldown absorbs reload loops.
+  const [graceSyncAttempted, setGraceSyncAttempted] = useState(false);
+  const [isGraceSyncing, setIsGraceSyncing] = useState(false);
+
+  useEffect(() => {
+    if (
+      !isSelfHosted ||
+      graceSyncAttempted ||
+      licenseData?.expiry_warning_stage !== "grace"
+    ) {
+      return;
+    }
+    setGraceSyncAttempted(true);
+    setIsGraceSyncing(true);
+    claimLicense(undefined)
+      .then(() => handleRefresh())
+      .catch((error: unknown) =>
+        toast.error(
+          error instanceof Error ? error.message : "License sync failed"
+        )
+      )
+      .finally(() => setIsGraceSyncing(false));
+  }, [isSelfHosted, graceSyncAttempted, licenseData?.expiry_warning_stage]); // eslint-disable-line react-hooks/exhaustive-deps
+
   // Hide license activation card when Stripe connection is restored (only if auto-opened)
   useEffect(() => {
     if (
@@ -440,6 +466,7 @@ export default function BillingPage() {
           isAirGapped={isAirGapped}
           isManualLicenseOnly={isManualLicenseOnly}
           hasStripeError={hasStripeError}
+          isGraceSyncing={isGraceSyncing}
           licenseCard={
             isManualLicenseOnly ? (
               <LicenseActivationCard

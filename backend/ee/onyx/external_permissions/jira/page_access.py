@@ -52,7 +52,7 @@ def _get_role_id(holder: Holder) -> str | None:
 # depending on Jira version and endpoint.
 def _get_obj_value(obj: object, field: str) -> object | None:
     if isinstance(obj, dict):
-        return obj.get(field)  # ty: ignore[invalid-argument-type]
+        return obj.get(field)
     return getattr(obj, field, None)
 
 

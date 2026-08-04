@@ -103,7 +103,7 @@ def _build_test_client(
     login_response.headers["location"] = "/app"
     login_response.set_cookie("testsession", "session-token")
     login_mock = AsyncMock(return_value=login_response)
-    backend.login = login_mock  # ty: ignore[invalid-assignment]
+    backend.login = login_mock
 
     user = MagicMock()
     user.is_active = True

@@ -79,7 +79,7 @@ def read_counter(
     counter = _ReadCounter()
     real_read_file = file_store_module.S3BackedFileStore.read_file
 
-    def _counting_read_file(self, file_id, mode=None, use_tempfile=False):  # type: ignore[no-untyped-def]
+    def _counting_read_file(self, file_id, mode=None, use_tempfile=False):
         # Plaintext-cache reads use the ``plaintext_{file_id}`` naming
         # convention (see onyx.file_store.utils.plaintext_file_name_for_id).
         # These are by-design cheap and are not the OOM-relevant load — skip
@@ -407,7 +407,7 @@ class TestLoadAllChatFilesLazy:
 
         captured: dict[str, int] = {}
 
-        def _spy(funcs, **kwargs):  # type: ignore[no-untyped-def]
+        def _spy(funcs, **kwargs):
             captured["max_workers"] = kwargs.get("max_workers", -1)
             return [None] * len(funcs)
 

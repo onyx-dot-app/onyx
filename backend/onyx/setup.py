@@ -66,7 +66,11 @@ from onyx.server.manage.llm.models import (
     LLMProviderUpsertRequest,
     ModelConfigurationUpsertRequest,
 )
-from onyx.server.settings.store import load_settings, store_settings
+from onyx.server.settings.store import (
+    load_settings,
+    settings_write_lock,
+    store_settings,
+)
 from onyx.utils.gpu_utils import gpu_status_request
 from onyx.utils.logger import setup_logger
 from shared_configs.configs import (
@@ -315,10 +319,12 @@ def update_default_multipass_indexing(db_session: Session) -> None:
         )
         update_current_search_settings(db_session, updated_settings)
 
-        # Update settings with GPU availability
-        settings = load_settings()
-        settings.gpu_enabled = gpu_available
-        store_settings(settings)
+        # Shares the settings write lock so a concurrent writer cannot merge
+        # onto a stale snapshot.
+        with settings_write_lock():
+            settings = load_settings()
+            settings.gpu_enabled = gpu_available
+            store_settings(settings)
         logger.notice("Updated settings with GPU availability: %s", gpu_available)
 
     else:

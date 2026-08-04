@@ -399,6 +399,8 @@ export interface LlmDescriptor {
   name: string;
   provider: string;
   modelName: string;
+  // Provider display names are not unique; only the id routes unambiguously.
+  modelConfigurationId?: number | null;
 }
 
 export interface LlmManager {
@@ -479,6 +481,9 @@ export function getDefaultLlmDescriptor(
         name: provider.name ?? "",
         provider: provider.provider,
         modelName: defaultText.model_name,
+        modelConfigurationId: provider.model_configurations.find(
+          (m) => m.name === defaultText.model_name
+        )?.id,
       };
     }
   }
@@ -493,6 +498,7 @@ export function getDefaultLlmDescriptor(
     return {
       name: firstLlmProvider.name ?? "",
       provider: firstLlmProvider.provider,
+      modelConfigurationId: firstModel?.id,
       modelName: firstModel?.name ?? "",
     };
   }
@@ -512,6 +518,24 @@ export function getValidLlmDescriptorForProviders(
 
   if (modelName) {
     const model = parseLlmDescriptor(modelName);
+
+    // An id resolves exactly even when providers share a display name.
+    if (model.modelConfigurationId != null) {
+      for (const provider of llmProviders) {
+        const mc = provider.model_configurations.find(
+          (config) => config.id === model.modelConfigurationId
+        );
+        if (mc) {
+          return {
+            name: provider.name ?? "",
+            provider: provider.provider,
+            modelName: mc.name,
+            modelConfigurationId: mc.id,
+          };
+        }
+      }
+    }
+
     // If we have no parsed modelName, try to find the provider by the raw modelName string
     if (!(model.modelName && model.modelName.length > 0)) {
       const provider = llmProviders.find((p) =>
@@ -524,6 +548,9 @@ export function getValidLlmDescriptorForProviders(
           modelName: modelName,
           name: provider.name ?? "",
           provider: provider.provider,
+          modelConfigurationId: provider.model_configurations.find(
+            (mc) => mc.name === modelName
+          )?.id,
         };
       }
     }
@@ -547,6 +574,9 @@ export function getValidLlmDescriptorForProviders(
           ...model,
           name: matchingProvider.name ?? "",
           provider: matchingProvider.provider,
+          modelConfigurationId: matchingProvider.model_configurations.find(
+            (mc) => mc.name === model.modelName
+          )?.id,
         };
       }
       // Provider info was present but not found - fall through to default
@@ -563,6 +593,9 @@ export function getValidLlmDescriptorForProviders(
           ...model,
           provider: provider.provider,
           name: provider.name ?? "",
+          modelConfigurationId: provider.model_configurations.find(
+            (mc) => mc.name === model.modelName
+          )?.id,
         };
       }
     }
@@ -715,7 +748,9 @@ export function useLlmManager(
     if (
       prev.name === resolved.name &&
       prev.provider === resolved.provider &&
-      prev.modelName === resolved.modelName
+      prev.modelName === resolved.modelName &&
+      (prev.modelConfigurationId ?? null) ===
+        (resolved.modelConfigurationId ?? null)
     ) {
       return prev;
     }

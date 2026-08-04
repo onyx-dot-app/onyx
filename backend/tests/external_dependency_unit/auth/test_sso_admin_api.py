@@ -1,5 +1,6 @@
-"""Guard SSO admin CRUD: secret masking, masked-placeholder round-trips,
-partial-config merges, and duplicate or missing provider handling.
+"""Guard the SSO admin API contract: secrets never persist masked, config
+merges stay partial, conflicting or missing providers are reported, and the
+routes are single-tenant only.
 
 The API must never persist masked secrets as real config values.
 """
@@ -543,3 +544,19 @@ def test_second_enabled_provider_requires_business_tier(
             gated_reenable.status_code
             == OnyxErrorCode.FEATURE_NOT_AVAILABLE.status_code
         )
+
+
+@patch("onyx.server.manage.sso.api.MULTI_TENANT", True)
+def test_multi_tenant_deployments_are_rejected(client: TestClient) -> None:
+    """The gate sits on the router, so no handler below it is reachable."""
+    for response in (
+        client.get("/admin/sso/provider"),
+        client.post(
+            "/admin/sso/provider",
+            json=_build_oidc_request(_new_provider_name(), "secret"),
+        ),
+        client.patch("/admin/sso/provider/1", json={"display_name": "Blocked"}),
+        client.post("/admin/sso/provider/1/enabled", json={"enabled": True}),
+    ):
+        assert response.status_code == OnyxErrorCode.SINGLE_TENANT_ONLY.status_code
+        assert response.json()["error_code"] == OnyxErrorCode.SINGLE_TENANT_ONLY.code
