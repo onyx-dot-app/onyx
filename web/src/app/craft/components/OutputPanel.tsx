@@ -29,6 +29,8 @@ import { SvgGlobe, SvgHardDrive, SvgFiles, SvgX, SvgLoader } from "@opal/icons";
 import { IconProps } from "@opal/types";
 import CraftingLoader from "@/app/craft/components/CraftingLoader";
 import {
+  getWebappState,
+  isWebappPreviewEnabled,
   NO_WEBAPP_LABEL,
   type WebappState,
 } from "@/app/craft/components/output-panel/interfaces";
@@ -222,18 +224,21 @@ const BuildOutputPanel = memo(({ isOpen }: BuildOutputPanelProps) => {
 
   // Fetch webapp info from dedicated endpoint
   // Only fetch for real sessions when panel is fully open
-  const shouldFetchWebapp =
-    isFullyOpen &&
+  const canQueryWebapp = Boolean(
     session?.id &&
     !session.id.startsWith("temp-") &&
-    session.status !== "creating";
+    session.status !== "creating"
+  );
+  const shouldFetchWebapp = isFullyOpen && canQueryWebapp;
 
   // Poll every 2s while NextJS is starting up (capped at 30s), then stop
   const shouldPoll =
     !isWebappReady && pollingDeadline !== null && Date.now() < pollingDeadline;
 
   const { data: webappInfo, mutate } = useSWR(
-    shouldFetchWebapp ? SWR_KEYS.buildSessionWebappInfo(session.id) : null,
+    shouldFetchWebapp && session
+      ? SWR_KEYS.buildSessionWebappInfo(session.id)
+      : null,
     () => (session?.id ? fetchWebappInfo(session.id) : null),
     {
       refreshInterval: shouldPoll ? 2000 : 0,
@@ -286,17 +291,14 @@ const BuildOutputPanel = memo(({ isOpen }: BuildOutputPanelProps) => {
 
   const iframeUrl = webappHasBeenReady ? displayUrl : null;
 
-  const webappState: WebappState = webappHasBeenReady
-    ? "ready"
-    : !webappInfo
-      ? "unknown"
-      : webappInfo.has_webapp
-        ? "starting"
-        : "none";
+  const webappState: WebappState = getWebappState(
+    webappHasBeenReady,
+    webappInfo?.has_webapp
+  );
 
-  // Only a confirmed "none" disables Preview; "unknown" would flash the Files
-  // tab while webapp-info loads.
-  const previewEnabled = !session || webappState !== "none";
+  // Existing sessions stay on Preview while webapp-info loads. Provisioning
+  // sessions cannot be queried yet, so they start on Files instead.
+  const previewEnabled = isWebappPreviewEnabled(webappState, canQueryWebapp);
 
   // Redirect away from the Preview tab while it's disabled without
   // mutating the user's stored tab preference.
