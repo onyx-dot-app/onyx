@@ -367,8 +367,13 @@ def _resolve_auth_template(
 ) -> MCPAuthTemplate:
     headers: dict[str, str] = {}
     existing_headers = existing_template.headers if existing_template else {}
+    # Case-insensitive: a casing-only rename must reuse the stored value, not
+    # reject its masked read-back as a new (masked) entry.
+    existing_by_lower = {
+        name.lower(): value for name, value in existing_headers.items()
+    }
     for name, request_value in request_template.headers.items():
-        existing_value = existing_headers.get(name)
+        existing_value = existing_by_lower.get(name.lower())
         if (
             not changed_headers.get(name, False)
             and existing_value is not None
@@ -403,12 +408,22 @@ def _build_shared_api_token_config_data(
     template = auth_template or _default_shared_api_token_template()
     substitutions = {**(header_substitutions or {}), "api_key": api_token}
     return MCPConnectionData(
-        headers=template.render(substitutions, user_email=user_email),
+        headers=_render_template_or_400(template, substitutions, user_email),
         header_template=template.headers,
         api_token=api_token,
         header_substitutions=header_substitutions or {},
         required_fields=template.required_fields,
     )
+
+
+def _render_template_or_400(
+    template: MCPAuthTemplate, substitutions: dict[str, str], user_email: str
+) -> dict[str, str]:
+    """Missing substitutions are a client error, not a 500."""
+    try:
+        return template.render(substitutions, user_email=user_email)
+    except ValueError as error:
+        raise OnyxError(OnyxErrorCode.INVALID_INPUT, str(error))
 
 
 def _build_oauth_admin_config_data(
@@ -543,7 +558,7 @@ def _upsert_user_template_config(
     existing = get_user_connection_config(mcp_server.id, user_email, db_session)
     existing_data = extract_connection_data(existing, apply_mask=False)
     config_data = MCPConnectionData(
-        headers=template.render(substitutions, user_email=user_email),
+        headers=_render_template_or_400(template, substitutions, user_email),
         header_substitutions=substitutions,
     )
     for oauth_key in MCPOAuthKeys:

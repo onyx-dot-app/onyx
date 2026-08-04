@@ -35,6 +35,7 @@ from onyx.server.features.mcp.models import (
     MCPConnectionData,
     MCPOAuthKeys,
     merge_mcp_headers,
+    sanitize_mcp_header_names,
 )
 from onyx.utils.logger import setup_logger
 from onyx.utils.sensitive import SensitiveValue
@@ -438,6 +439,11 @@ def get_mcp_auth_template(mcp_server: MCPServer) -> MCPAuthTemplate | None:
     ):
         headers = data.get("headers")
     if headers is None:
+        return None
+    # Stored templates predate write-time name validation; sanitize so one
+    # legacy header can't fail every resolve for its server.
+    headers = sanitize_mcp_header_names(headers)
+    if not headers:
         return None
     return MCPAuthTemplate(headers=headers)
 

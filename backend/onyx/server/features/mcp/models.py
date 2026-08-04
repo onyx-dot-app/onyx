@@ -64,6 +64,26 @@ DENYLISTED_MCP_HEADERS = {
 }
 
 
+def sanitize_mcp_header_names(headers: dict[str, str]) -> dict[str, str]:
+    """Drop names `MCPAuthTemplate` validation would reject (invalid or
+    denylisted; last casing wins a duplicate). For stored rows that predate
+    write-time validation — one legacy header must not fail the whole read."""
+    sanitized: dict[str, str] = {}
+    names_by_lower: dict[str, str] = {}
+    for name, value in headers.items():
+        lowered = name.lower()
+        if (
+            _HTTP_FIELD_NAME_RE.fullmatch(name) is None
+            or lowered in DENYLISTED_MCP_HEADERS
+        ):
+            continue
+        if previous_name := names_by_lower.get(lowered):
+            sanitized.pop(previous_name, None)
+        sanitized[name] = value
+        names_by_lower[lowered] = name
+    return sanitized
+
+
 def merge_mcp_headers(*sources: dict[str, str]) -> dict[str, str]:
     """Merge HTTP headers case-insensitively; later sources win."""
     merged: dict[str, str] = {}
