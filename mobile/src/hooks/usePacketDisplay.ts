@@ -1,6 +1,4 @@
-// Derives a node's processed message state (citations, documents, completion) and whether any renderer
-// matches its packets. Reprocesses on each stream flush (packet-array identity changes); cheap at chat
-// scale.
+// Reprocesses on each stream flush (the packet array's identity changes); cheap at chat scale.
 import { useMemo } from "react";
 
 import { Message } from "@/chat/interfaces";
@@ -10,13 +8,13 @@ import {
   processPackets,
 } from "@/chat/messageProcessor";
 import { Packet } from "@/chat/streamingModels";
-import { findRenderer } from "@/components/chat/renderers/registry";
 
 export interface PacketDisplay {
   packets: Packet[];
   processed: ProcessedMessageState;
-  // Drives the answer-vs-loader gate in MessageRow.
-  hasRenderer: boolean;
+  // Drives the answer-vs-loader gate in MessageRow. Keyed on display groups, not on "some renderer
+  // matches": a reasoning or tool group matches one too, but belongs above the answer, not in it.
+  hasDisplayContent: boolean;
 }
 
 export function usePacketDisplay(node: Message): PacketDisplay {
@@ -24,10 +22,10 @@ export function usePacketDisplay(node: Message): PacketDisplay {
     () => processPackets(createInitialState(node.nodeId), node.packets),
     [node.nodeId, node.packets],
   );
-  const hasRenderer = useMemo(
-    () => findRenderer(node.packets) != null,
-    [node.packets],
-  );
 
-  return { packets: node.packets, processed, hasRenderer };
+  return {
+    packets: node.packets,
+    processed,
+    hasDisplayContent: processed.potentialDisplayGroups.length > 0,
+  };
 }
