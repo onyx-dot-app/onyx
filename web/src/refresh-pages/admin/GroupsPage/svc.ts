@@ -4,6 +4,18 @@ import { SWR_KEYS } from "@/lib/swr-keys";
 
 const USER_GROUP_URL = SWR_KEYS.adminUserGroups;
 
+// Prefer the server's `detail`, else the status. Logs an unparseable body: without it a
+// proxy's HTML 502 is indistinguishable from a clean API error at the call site.
+async function responseError(res: Response, action: string): Promise<Error> {
+  try {
+    const detail = (await res.json())?.detail;
+    if (detail) return new Error(detail);
+  } catch (err) {
+    console.error(`${action}: unparseable error body`, res.status, err);
+  }
+  return new Error(`${action}: ${res.statusText}`);
+}
+
 async function renameGroup(groupId: number, newName: string): Promise<void> {
   const res = await fetch(`${USER_GROUP_URL}/rename`, {
     method: "PATCH",
@@ -11,10 +23,7 @@ async function renameGroup(groupId: number, newName: string): Promise<void> {
     body: JSON.stringify({ id: groupId, name: newName }),
   });
   if (!res.ok) {
-    const detail = await res.json().catch(() => null);
-    throw new Error(
-      detail?.detail ?? `Failed to rename group: ${res.statusText}`
-    );
+    throw await responseError(res, "Failed to rename group");
   }
 }
 
@@ -33,10 +42,7 @@ async function createGroup(
     }),
   });
   if (!res.ok) {
-    const detail = await res.json().catch(() => null);
-    throw new Error(
-      detail?.detail ?? `Failed to create group: ${res.statusText}`
-    );
+    throw await responseError(res, "Failed to create group");
   }
   const group = await res.json();
   return group.id;
@@ -56,10 +62,7 @@ async function updateGroup(
     }),
   });
   if (!res.ok) {
-    const detail = await res.json().catch(() => null);
-    throw new Error(
-      detail?.detail ?? `Failed to update group: ${res.statusText}`
-    );
+    throw await responseError(res, "Failed to update group");
   }
 }
 
@@ -68,10 +71,7 @@ async function deleteGroup(groupId: number): Promise<void> {
     method: "DELETE",
   });
   if (!res.ok) {
-    const detail = await res.json().catch(() => null);
-    throw new Error(
-      detail?.detail ?? `Failed to delete group: ${res.statusText}`
-    );
+    throw await responseError(res, "Failed to delete group");
   }
 }
 
@@ -98,10 +98,7 @@ async function updateAgentGroupSharing(
     body: JSON.stringify({ added_agent_ids, removed_agent_ids }),
   });
   if (!res.ok) {
-    const detail = await res.json().catch(() => null);
-    throw new Error(
-      detail?.detail ?? `Failed to update agent sharing: ${res.statusText}`
-    );
+    throw await responseError(res, "Failed to update agent sharing");
   }
 }
 
@@ -295,10 +292,7 @@ async function saveGroupPermissions(
     body: JSON.stringify({ permissions: Array.from(enabledPermissions) }),
   });
   if (!res.ok) {
-    const detail = await res.json().catch(() => null);
-    throw new Error(
-      detail?.detail ?? `Failed to update permissions: ${res.statusText}`
-    );
+    throw await responseError(res, "Failed to update permissions");
   }
 }
 
@@ -313,10 +307,7 @@ async function setGroupManager(
     body: JSON.stringify({ user_id: userId, is_manager: isManager }),
   });
   if (!res.ok) {
-    const detail = await res.json().catch(() => null);
-    throw new Error(
-      detail?.detail ?? `Failed to update group manager: ${res.statusText}`
-    );
+    throw await responseError(res, "Failed to update group manager");
   }
 }
 
