@@ -3,11 +3,10 @@ import queue
 import threading
 import time
 import uuid
-from collections.abc import Callable, Iterator
-from contextlib import closing, contextmanager
+from contextlib import closing
 from functools import partial
 from itertools import count
-from typing import TYPE_CHECKING, Any, Protocol, cast, runtime_checkable
+from typing import TYPE_CHECKING, Any, cast
 
 from fastapi import APIRouter, Depends, Request, Response
 from fastapi.responses import JSONResponse, StreamingResponse
@@ -26,12 +25,7 @@ from onyx.error_handling.error_codes import OnyxErrorCode
 from onyx.error_handling.exceptions import OnyxError
 from onyx.llm.factory import llm_from_provider
 from onyx.llm.interfaces import LLM
-from onyx.llm.model_response import (
-    ChatCompletionDeltaToolCall,
-    ChatCompletionMessageToolCall,
-    ModelResponseStream,
-    Usage,
-)
+from onyx.llm.model_response import ChatCompletionMessageToolCall
 from onyx.llm.models import (
     AnyThinkingBlock,
     AssistantMessage,
@@ -48,8 +42,14 @@ from onyx.llm.models import (
 )
 from onyx.llm.multi_llm import LLMRateLimitError, LLMTimeoutError
 from onyx.llm.prompt_cache.processor import process_with_prompt_cache
-from onyx.llm.tracing_wrap import _finalize_tool_calls, _merge_tool_call_delta
+from onyx.llm.tracing_wrap import _finalize_tool_calls
 from onyx.server.features.build.craft_gateway import gateway_request_flow
+from onyx.server.gateway.anthropic_passthrough import (
+    AnthropicPassthroughUnavailable,
+    handle_anthropic_count_tokens_passthrough,
+    handle_anthropic_passthrough,
+    is_anthropic_passthrough_eligible,
+)
 from onyx.server.gateway.configs import GATEWAY_PATH_PREFIX
 from onyx.server.gateway.model_catalog import build_gateway_model_catalog
 from onyx.server.gateway.models import (
@@ -98,20 +98,20 @@ from onyx.server.gateway.models import (
     ResponsesOutputTextPart,
     ResponsesRequest,
 )
+from onyx.server.gateway.stream_bridge import (
+    _RATE_LIMIT_ERROR,
+    _put_stream_item,
+    _sse_response,
+    _stream_worker_guard,
+    _StreamAccumulator,
+)
 from onyx.server.manage.llm.models import LLMProviderView, ModelConfigurationView
 from onyx.server.query_and_chat.token_limit import check_token_rate_limits
 from onyx.tracing.flows import LLMFlow
 from onyx.tracing.framework.create import trace
-from onyx.tracing.framework.span_data import GenerationSpanData
-from onyx.tracing.framework.spans import Span
 from onyx.tracing.framework.traces import Trace
-from onyx.tracing.llm_utils import (
-    llm_generation_span,
-    record_llm_response,
-    record_llm_span_output,
-)
+from onyx.tracing.llm_utils import llm_generation_span, record_llm_response
 from onyx.utils.logger import setup_logger
-from onyx.utils.threadpool_concurrency import start_thread_with_context
 
 if TYPE_CHECKING:
     from litellm.types.llms.anthropic import (
@@ -286,30 +286,6 @@ def _parse_tool_choice(raw: Any) -> ToolChoice | None:
     )
 
 
-_STREAM_END = object()
-
-
-@runtime_checkable
-class _ClosableStream(Protocol):
-    """LLM.stream is declared Iterator, which carries no close(); every real
-    implementation is a generator, and an abandoned one must be closed so the
-    provider connection is released."""
-
-    def close(self) -> None: ...
-
-
-def _put_stream_item(
-    out: "queue.Queue[Any]", item: Any, cancelled: threading.Event
-) -> bool:
-    while not cancelled.is_set():
-        try:
-            out.put(item, timeout=0.1)
-            return True
-        except queue.Full:
-            continue
-    return False
-
-
 def _emit_stream_error(
     out: "queue.Queue[Any]",
     cancelled: threading.Event,
@@ -320,88 +296,6 @@ def _emit_stream_error(
     error_payload = {"error": {"message": message, "type": error_type}}
     _put_stream_item(out, f"data: {json.dumps(error_payload)}\n\n", cancelled)
     _put_stream_item(out, "data: [DONE]\n\n", cancelled)
-
-
-class _StreamAccumulator:
-    def __init__(self) -> None:
-        self.content: list[str] = []
-        self.reasoning: list[str] = []
-        self.usage: Usage | None = None
-        self.tool_call_buffer: dict[int, ChatCompletionDeltaToolCall] = {}
-        self.upstream: Iterator[ModelResponseStream] | None = None
-
-    def observe(self, chunk: ModelResponseStream) -> None:
-        if chunk.usage:
-            self.usage = chunk.usage
-        if chunk.choice.delta.content:
-            self.content.append(chunk.choice.delta.content)
-        if chunk.choice.delta.reasoning_content:
-            self.reasoning.append(chunk.choice.delta.reasoning_content)
-        for delta_tc in chunk.choice.delta.tool_calls:
-            _merge_tool_call_delta(self.tool_call_buffer, delta_tc)
-
-    @property
-    def text(self) -> str:
-        return "".join(self.content)
-
-
-_RATE_LIMIT_ERROR = (
-    "The selected model is temporarily rate limited.",
-    "rate_limit_error",
-)
-_TIMEOUT_ERROR = ("The selected model did not respond in time.", "timeout_error")
-_UPSTREAM_ERROR = ("The upstream LLM request failed.", "upstream_error")
-
-
-@contextmanager
-def _stream_worker_guard(
-    span: Span[GenerationSpanData] | None,
-    model: str,
-    state: _StreamAccumulator,
-    *,
-    label: str,
-    emit_error: Callable[..., None],
-    out: "queue.Queue[Any]",
-    cancelled: threading.Event,
-) -> Iterator[None]:
-    """The HTTP status is already sent by the time a worker runs, so upstream
-    failures surface in-band as a protocol error frame rather than raising."""
-    try:
-        yield
-    except Exception as exc:
-        if isinstance(exc, LLMRateLimitError):
-            message, error_type = _RATE_LIMIT_ERROR
-        elif isinstance(exc, LLMTimeoutError):
-            message, error_type = _TIMEOUT_ERROR
-        else:
-            message, error_type = _UPSTREAM_ERROR
-        if span is not None:
-            span.set_error({"message": f"{type(exc).__name__}: {exc}", "data": None})
-        logger.exception(
-            "LLM gateway %s failed (%s) for model %s", label, error_type, model
-        )
-        emit_error(message=message, error_type=error_type)
-    finally:
-        try:
-            if isinstance(state.upstream, _ClosableStream):
-                state.upstream.close()
-        except Exception:
-            logger.exception("LLM gateway %s cleanup failed for model %s", label, model)
-        try:
-            if span is not None:
-                record_llm_span_output(
-                    span,
-                    output=state.text or None,
-                    usage=state.usage,
-                    reasoning="".join(state.reasoning) or None,
-                    tool_calls=_finalize_tool_calls(state.tool_call_buffer),
-                )
-        except Exception:
-            logger.exception(
-                "LLM gateway %s span cleanup failed for model %s", label, model
-            )
-        finally:
-            _put_stream_item(out, _STREAM_END, cancelled)
 
 
 def _stream_worker(
@@ -459,52 +353,6 @@ def _stream_worker(
                     break
             else:
                 _put_stream_item(out, "data: [DONE]\n\n", cancelled)
-
-
-def _run_bridged_stream(
-    worker: Callable[..., None], worker_kwargs: dict[str, Any]
-) -> Iterator[str]:
-    """Bridge a stream worker through a queue so the whole consumption —
-    including the generation span's ContextVar enter/exit — happens on ONE
-    thread. Yielding directly from a sync generator breaks under Starlette,
-    which resumes the generator on varying threadpool threads (ContextVar
-    tokens can't be reset across contexts)."""
-    out: "queue.Queue[Any]" = queue.Queue(maxsize=256)
-    cancelled = threading.Event()
-    worker_thread = start_thread_with_context(
-        worker,
-        name="llm-gateway-stream",
-        daemon=True,
-        kwargs={**worker_kwargs, "out": out, "cancelled": cancelled},
-    )
-    try:
-        while True:
-            if worker_thread.is_alive():
-                try:
-                    item = out.get(timeout=0.5)
-                except queue.Empty:
-                    continue
-            else:
-                # Worker died before signalling: drain, or the stream truncates.
-                try:
-                    item = out.get_nowait()
-                except queue.Empty:
-                    return
-            if item is _STREAM_END:
-                return
-            yield item
-    finally:
-        cancelled.set()
-
-
-def _sse_response(
-    worker: Callable[..., None], worker_kwargs: dict[str, Any]
-) -> StreamingResponse:
-    return StreamingResponse(
-        _run_bridged_stream(worker, worker_kwargs),
-        media_type="text/event-stream",
-        headers={"Cache-Control": "no-cache", "X-Accel-Buffering": "no"},
-    )
 
 
 def handle_chat_completion(
@@ -1606,6 +1454,15 @@ def gateway_anthropic_messages(
     check_token_rate_limits(user)
     with closing(db_session):
         provider, model_config = resolve_gateway_model(db_session, user, request.model)
+    if is_anthropic_passthrough_eligible(provider):
+        return handle_anthropic_passthrough(
+            request=request,
+            provider=provider,
+            model_config=model_config,
+            flow=flow,
+            http_request=http_request,
+            user=user,
+        )
     result = handle_anthropic_messages(
         request=request,
         provider=provider,
@@ -1629,7 +1486,22 @@ def gateway_anthropic_count_tokens(
     # No token rate limit check: nothing is generated by this endpoint.
     _authorize_gateway_request(http_request, user)
     with closing(db_session):
-        _provider, model_config = resolve_gateway_model(db_session, user, request.model)
+        provider, model_config = resolve_gateway_model(db_session, user, request.model)
+    if is_anthropic_passthrough_eligible(provider):
+        try:
+            return handle_anthropic_count_tokens_passthrough(
+                request=request,
+                provider=provider,
+                model_config=model_config,
+                http_request=http_request,
+                user=user,
+            )
+        except AnthropicPassthroughUnavailable:
+            logger.warning(
+                "Anthropic passthrough count_tokens unavailable for model %s; "
+                "falling back to the local estimate",
+                request.model,
+            )
     raw_messages = _anthropic_messages_to_raw_messages(request.messages, request.system)
     tools = _anthropic_tools(request.tools)
     from onyx.llm.litellm_singleton import litellm
