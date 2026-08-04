@@ -36,7 +36,6 @@ from onyx.db.engine.iam_auth import provide_iam_token
 from onyx.db.engine.pg_ssl import pg_ssl_psycopg2_connect_args
 from onyx.db.engine.shard_registry import (
     ShardRegistry,
-    divide_pool_budget,
     get_catalog_engine,
 )
 from onyx.db.engine.shard_routing import get_engine_for_tenant
@@ -278,13 +277,10 @@ class SqlEngine:
                 if "max_overflow" in final_engine_kwargs:
                     del final_engine_kwargs["max_overflow"]
             else:
-                # Split the connection budget across shards rather than letting each
-                # shard add a full pool. With one shard the divisor is 1, i.e. sizing
-                # is unchanged from single-database deployments.
-                (
-                    final_engine_kwargs["pool_size"],
-                    final_engine_kwargs["max_overflow"],
-                ) = divide_pool_budget(pool_size, max_overflow)
+                # The default shard keeps the configured budget in full. Extra shards
+                # get their own against their own database — see pool_budget_for_shard.
+                final_engine_kwargs["pool_size"] = pool_size
+                final_engine_kwargs["max_overflow"] = max_overflow
                 final_engine_kwargs["pool_pre_ping"] = POSTGRES_POOL_PRE_PING
                 final_engine_kwargs["pool_recycle"] = POSTGRES_POOL_RECYCLE
 

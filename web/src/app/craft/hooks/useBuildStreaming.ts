@@ -649,8 +649,8 @@ export function useBuildStreaming() {
             if (isWebapp) {
               fetchSession(sessionId)
                 .then((sessionData) => {
-                  if (sessionData.sandbox?.nextjs_port) {
-                    const webappUrl = `http://localhost:${sessionData.sandbox.nextjs_port}`;
+                  if (sessionData.nextjs_port) {
+                    const webappUrl = `http://localhost:${sessionData.nextjs_port}`;
                     updateSessionData(sessionId, { webappUrl });
                   }
                 })

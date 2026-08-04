@@ -115,7 +115,10 @@ from onyx.server.features.build.sandbox.models import (
     SandboxProvisionContentionError,
     SnapshotResult,
 )
-from onyx.server.features.build.sandbox.nextjs_dev import build_nextjs_start_script
+from onyx.server.features.build.sandbox.nextjs_dev import (
+    allowed_dev_origins,
+    build_nextjs_start_script,
+)
 from onyx.server.features.build.sandbox.serve_transport import ServeConnectionInfo
 from onyx.server.features.build.sandbox.session_workspace import (
     SESSIONS_ROOT,
@@ -529,6 +532,12 @@ class KubernetesSandboxManager(SandboxManager):
                         key=self._OPENCODE_CONFIG_SECRET_KEY,
                     )
                 ),
+            ),
+            # In the pod env so a dev server the agent starts by hand inherits
+            # the allowlist the managed start path also sets.
+            client.V1EnvVar(
+                name="ONYX_WEBAPP_ALLOWED_DEV_ORIGINS",
+                value=allowed_dev_origins(),
             ),
         ]
 

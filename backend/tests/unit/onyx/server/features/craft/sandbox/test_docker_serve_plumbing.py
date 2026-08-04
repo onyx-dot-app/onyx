@@ -432,6 +432,7 @@ def test_provision_generates_fresh_password_and_injects_into_container_env(
         "ONYX_API_PREFIX",
         OPENCODE_SERVER_PASSWORD,
         "OPENCODE_CONFIG_CONTENT",
+        "ONYX_WEBAPP_ALLOWED_DEV_ORIGINS",
     }
     assert run_calls[0]["ports"] == {
         dev_mode_serve.OPENCODE_SERVE_CONTAINER_PORT: (

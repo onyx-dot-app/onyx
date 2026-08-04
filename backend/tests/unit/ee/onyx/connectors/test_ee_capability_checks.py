@@ -48,20 +48,65 @@ def test_censoring_only_source_has_no_perm_sync_capabilities() -> None:
     assert get_applicable_perm_sync_capabilities(DocumentSource.SALESFORCE) == set()
 
 
-def test_fallback_synthesis_respects_applicability() -> None:
+def test_probeless_sync_source_gets_no_fallback() -> None:
     """
-    Verifies only applicable capabilities get a fallback (Slack has no group
-    sync by design, so only the doc-sync fallback is synthesized).
+    Verifies the no-trivial-pass rule: Slack and Gmail are sync-capable, but
+    their legacy ``validate_perm_sync`` dispatch is a no-op, so no fallback is
+    synthesized and no verdict can pass on the basis of a no-op probe.
     """
+    # Under test and postcondition.
+    assert get_perm_sync_capability_checks(DocumentSource.SLACK) == []
+    assert get_perm_sync_capability_checks(DocumentSource.GMAIL) == []
+
+
+def test_fallback_synthesis_respects_applicability(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """
+    Verifies a probe-bearing source only gets fallbacks for its applicable
+    capabilities.
+    """
+    # Precondition.
+    # Every probe-bearing source supports both sync capabilities today, so pin
+    # applicability to doc sync only.
+    monkeypatch.setattr(
+        ee_capability_checks,
+        "get_applicable_perm_sync_capabilities",
+        lambda _source: {CredentialCapability.DOC_PERMISSION_SYNC},
+    )
+
     # Under test.
-    checks = get_perm_sync_capability_checks(DocumentSource.SLACK)
+    checks = get_perm_sync_capability_checks(DocumentSource.GOOGLE_DRIVE)
 
     # Postcondition.
     assert [check.capability for check in checks] == [
         CredentialCapability.DOC_PERMISSION_SYNC
     ]
     assert checks[0].is_fallback is True
-    assert checks[0].check_id == "slack_perm_sync"
+    assert checks[0].check_id == "google_drive_perm_sync"
+
+
+def test_named_checks_ignore_the_probe_allowlist(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """
+    Verifies the allowlist gates only fallback synthesis: a probe-less source
+    with registered named checks still returns them.
+    """
+    # Precondition.
+    named_check = _NamedCheck(
+        capability=CredentialCapability.DOC_PERMISSION_SYNC,
+        check_id="slack_named_check",
+        display_name="Named check",
+    )
+    monkeypatch.setitem(
+        ee_capability_checks._DOC_PERMISSION_SYNC_CHECKS_BY_SOURCE,
+        DocumentSource.SLACK,
+        [named_check],
+    )
+
+    # Under test and postcondition.
+    assert get_perm_sync_capability_checks(DocumentSource.SLACK) == [named_check]
 
 
 def test_unregistered_sync_source_gets_shared_fallback_checks() -> None:

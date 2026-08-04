@@ -88,6 +88,7 @@ class _FakeLLM(LLM):
         max_tokens: int | None = None,
         reasoning_effort: ReasoningEffort = ReasoningEffort.AUTO,
         user_identity: LLMUserIdentity | None = None,
+        total_timeout_override: float | None = None,
     ) -> ModelResponse:
         self._invoke_calls += 1
         self._last_prompt = prompt
@@ -329,6 +330,7 @@ class _ExplodingLLM(LLM):
         max_tokens: int | None = None,
         reasoning_effort: ReasoningEffort = ReasoningEffort.AUTO,
         user_identity: LLMUserIdentity | None = None,
+        total_timeout_override: float | None = None,
     ) -> ModelResponse:
         raise RuntimeError("invoke-boom")
 
@@ -490,6 +492,7 @@ class _ToolStreamLLM(LLM):
         max_tokens: int | None = None,
         reasoning_effort: ReasoningEffort = ReasoningEffort.AUTO,
         user_identity: LLMUserIdentity | None = None,
+        total_timeout_override: float | None = None,
     ) -> ModelResponse:
         return _TEST_MODEL_RESPONSE
 
@@ -569,6 +572,7 @@ class _UsageStreamLLM(LLM):
         max_tokens: int | None = None,
         reasoning_effort: ReasoningEffort = ReasoningEffort.AUTO,
         user_identity: LLMUserIdentity | None = None,
+        total_timeout_override: float | None = None,
     ) -> ModelResponse:
         return _TEST_MODEL_RESPONSE
 

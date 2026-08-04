@@ -18,6 +18,7 @@
     "clsx": "^2.1.1",
     "expo": "~56.0.9",
     "expo-build-properties": "~56.0.17",
+    "expo-clipboard": "~56.0.4",
     "expo-constants": "~56.0.17",
     "expo-crypto": "~56.0.4",
     "expo-dev-client": "~56.0.19",

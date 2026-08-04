@@ -128,7 +128,10 @@ from onyx.server.features.build.sandbox.models import (
     SandboxInfo,
     SnapshotResult,
 )
-from onyx.server.features.build.sandbox.nextjs_dev import build_nextjs_start_script
+from onyx.server.features.build.sandbox.nextjs_dev import (
+    allowed_dev_origins,
+    build_nextjs_start_script,
+)
 from onyx.server.features.build.sandbox.serve_transport import ServeConnectionInfo
 from onyx.server.features.build.sandbox.session_workspace import (
     MANAGED_SKILLS_PATH,
@@ -557,6 +560,9 @@ def build_container_create_kwargs(
         "ONYX_API_PREFIX": "",
         OPENCODE_SERVER_PASSWORD: opencode_password,
         "OPENCODE_CONFIG_CONTENT": opencode_config_json,
+        # In the container env so a dev server the agent starts by hand
+        # inherits the allowlist the managed start path also sets.
+        "ONYX_WEBAPP_ALLOWED_DEV_ORIGINS": allowed_dev_origins(),
     }
 
     security_opts = ["no-new-privileges:true"]

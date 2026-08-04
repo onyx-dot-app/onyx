@@ -1,6 +1,7 @@
 """Tests for license enforcement middleware."""
 
 from collections.abc import Awaitable, Callable
+from datetime import datetime, timedelta, timezone
 from typing import Any
 from unittest.mock import MagicMock, patch
 
@@ -107,6 +108,7 @@ class TestLicenseEnforcementMiddleware:
         mock_get_tenant.return_value = "default"
         mock_metadata = MagicMock()
         mock_metadata.status = ApplicationStatus.GATED_ACCESS
+        mock_metadata.expires_at = datetime.now(timezone.utc) + timedelta(days=30)
         mock_get_metadata.return_value = mock_metadata
 
         middleware, call_next = middleware_harness
@@ -115,6 +117,40 @@ class TestLicenseEnforcementMiddleware:
 
         response = await middleware(mock_request, call_next)
         assert response.status_code == 402
+
+    @pytest.mark.asyncio
+    @patch(
+        "ee.onyx.server.middleware.license_enforcement.LICENSE_ENFORCEMENT_ENABLED",
+        True,
+    )
+    @patch(
+        "ee.onyx.server.middleware.license_enforcement.maybe_schedule_license_reclaim"
+    )
+    @patch("ee.onyx.server.middleware.license_enforcement.get_current_tenant_id")
+    @patch("ee.onyx.server.middleware.license_enforcement.get_cached_license_metadata")
+    async def test_reclaim_is_scheduled_before_gating(
+        self,
+        mock_get_metadata: MagicMock,
+        mock_get_tenant: MagicMock,
+        mock_schedule_reclaim: MagicMock,
+        middleware_harness: MiddlewareHarness,
+    ) -> None:
+        """A gated request still triggers the reclaim so the instance can heal."""
+        mock_get_tenant.return_value = "default"
+        mock_metadata = MagicMock()
+        mock_metadata.status = ApplicationStatus.GATED_ACCESS
+        mock_get_metadata.return_value = mock_metadata
+
+        middleware, call_next = middleware_harness
+        mock_request = MagicMock()
+        mock_request.url.path = "/api/chat"
+
+        response = await middleware(mock_request, call_next)
+
+        assert response.status_code == 402
+        mock_schedule_reclaim.assert_called_once_with(
+            mock_metadata.expires_at, "default"
+        )
 
     @pytest.mark.asyncio
     @patch(
@@ -135,6 +171,7 @@ class TestLicenseEnforcementMiddleware:
         mock_metadata.status = ApplicationStatus.GRACE_PERIOD
         mock_metadata.used_seats = 5
         mock_metadata.seats = 10
+        mock_metadata.expires_at = datetime.now(timezone.utc) + timedelta(days=30)
         mock_get_metadata.return_value = mock_metadata
 
         middleware, call_next = middleware_harness
@@ -237,6 +274,7 @@ class TestLicenseEnforcementMiddleware:
         mock_metadata.status = ApplicationStatus.ACTIVE
         mock_metadata.used_seats = 15
         mock_metadata.seats = 10  # Over limit
+        mock_metadata.expires_at = datetime.now(timezone.utc) + timedelta(days=30)
         mock_get_metadata.return_value = mock_metadata
 
         middleware, call_next = middleware_harness

@@ -9,9 +9,10 @@ from onyx.db.enums import Permission
 from onyx.db.models import User
 from onyx.server.features.build import craft_gateway
 from onyx.server.features.build.craft_gateway import (
+    gateway_request_flow,
     is_craft_gateway_request,
-    is_gateway_request,
 )
+from onyx.tracing.flows import LLMFlow
 
 
 def _request(token_scopes: list[Permission] | None) -> Request:
@@ -50,25 +51,31 @@ def test_gateway_rejects_craft_sandbox_scope_when_craft_disabled() -> None:
 
 def test_general_gateway_rejects_no_token_scopes() -> None:
     user = cast(User, MagicMock(spec=User))
-    assert not is_gateway_request(_request(None), user)
+    assert gateway_request_flow(_request(None), user) is None
 
 
 def test_general_gateway_rejects_scope_without_gateway_grant() -> None:
     user = cast(User, MagicMock(spec=User))
-    assert not is_gateway_request(_request([Permission.READ_SEARCH]), user)
+    assert gateway_request_flow(_request([Permission.READ_SEARCH]), user) is None
 
 
 def test_general_gateway_accepts_plain_gateway_scope_without_craft() -> None:
     user = cast(User, MagicMock(spec=User))
     with patch.object(craft_gateway, "is_craft_enabled_for_user", return_value=False):
-        assert is_gateway_request(
-            _request([Permission.READ_SEARCH, Permission.USE_LLM_GATEWAY]), user
+        assert (
+            gateway_request_flow(
+                _request([Permission.READ_SEARCH, Permission.USE_LLM_GATEWAY]), user
+            )
+            is LLMFlow.LLM_GATEWAY
         )
 
 
 def test_general_gateway_defers_craft_sandbox_scope_to_craft_policy() -> None:
     user = cast(User, MagicMock(spec=User))
     with patch.object(craft_gateway, "is_craft_enabled_for_user", return_value=True):
-        assert is_gateway_request(_request([Permission.CRAFT_SANDBOX]), user)
+        assert (
+            gateway_request_flow(_request([Permission.CRAFT_SANDBOX]), user)
+            is LLMFlow.CRAFT_LLM_GENERATION
+        )
     with patch.object(craft_gateway, "is_craft_enabled_for_user", return_value=False):
-        assert not is_gateway_request(_request([Permission.CRAFT_SANDBOX]), user)
+        assert gateway_request_flow(_request([Permission.CRAFT_SANDBOX]), user) is None

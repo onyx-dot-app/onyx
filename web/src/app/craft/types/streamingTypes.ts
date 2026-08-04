@@ -154,24 +154,23 @@ export interface SessionHistoryItem {
 // API Response Types
 // =============================================================================
 
+export type ApiSandboxStatus =
+  | "provisioning"
+  | "running"
+  | "sleeping"
+  | "terminated"
+  | "failed";
+
 export interface ApiSandboxResponse {
   id: string;
-  status:
-    | "provisioning"
-    | "running"
-    | "idle"
-    | "sleeping"
-    | "terminated"
-    | "failed"
-    | "restoring"; // Frontend-only: set during snapshot restore
+  status: ApiSandboxStatus;
   container_id: string | null;
   created_at: string;
   last_heartbeat: string | null;
-  nextjs_port: number | null;
 }
 
 export interface ApiSandboxStatusResponse {
-  status: Exclude<ApiSandboxResponse["status"], "restoring"> | null;
+  status: ApiSandboxStatus | null;
 }
 
 export interface ApiSessionResponse {
@@ -181,6 +180,7 @@ export interface ApiSessionResponse {
   status: "initializing" | "active" | "idle" | "failed";
   created_at: string;
   last_activity_at: string;
+  nextjs_port: number | null;
   sandbox: ApiSandboxResponse | null;
   artifacts: ApiArtifactResponse[];
   sharing_scope: SharingScope;
@@ -252,6 +252,19 @@ export interface FileSystemEntry {
 export interface DirectoryListing {
   path: string;
   entries: FileSystemEntry[];
+}
+
+// =============================================================================
+// Client Runtime Types
+// =============================================================================
+
+export type SandboxRuntimeStatus = ApiSandboxStatus | "restoring";
+
+export interface SandboxRuntimeState extends Omit<
+  ApiSandboxResponse,
+  "status"
+> {
+  status: SandboxRuntimeStatus;
 }
 
 // =============================================================================
