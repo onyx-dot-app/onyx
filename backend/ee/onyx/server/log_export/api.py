@@ -15,6 +15,7 @@ from ee.onyx.server.log_export.collection import (
 from ee.onyx.server.log_export.models import (
     LogExportManifest,
     LogExportStartResponse,
+    LogExportState,
     LogExportStatusResponse,
 )
 from ee.onyx.server.log_export.storage import (
@@ -184,13 +185,30 @@ WORKER_COLLECT_QUEUES: dict[str, str] = {
     "monitoring": OnyxCeleryQueues.MONITORING,
 }
 
-# Serializes export starts. A successful start holds it for the collection
-# window: there is no server-side completion event (readiness is derived lazily
-# on poll), so expiry at the deadline is the release. A failed start releases it
-# immediately.
+# Serializes export starts. A successful start holds it until the status
+# endpoint first observes that export ready, or failing that (nobody polls, or
+# the poll lands on another replica) until the TTL expires at the collection
+# deadline. A failed start releases it immediately.
 _ASYNC_EXPORT_LOCK = _ExpiringLock(
     ttl_seconds=LOG_EXPORT_COLLECTION_DEADLINE.total_seconds()
 )
+
+# The export currently holding the lock, as an ``(export_id, token)`` pair.
+# Never cleared, only overwritten by the next start: releasing a stale token is
+# a no-op, so a leftover pair is harmless.
+_ACTIVE_EXPORT: tuple[str, int] | None = None
+
+
+def _release_export_slot_if_active(export_id: str) -> None:
+    """Frees the export slot early once the given export is observed ready.
+
+    Best-effort: only the process that started the export holds the pair, so a
+    poll served by another replica falls back to the lock's TTL expiry.
+    """
+    active = _ACTIVE_EXPORT
+    if active is None or active[0] != export_id:
+        return
+    _ASYNC_EXPORT_LOCK.release(active[1])
 
 
 @router.post("/admin/log-export")
@@ -218,11 +236,14 @@ def start_log_export(
             "A log export is already in progress. Try again once it completes.",
         )
 
+    global _ACTIVE_EXPORT
+
     started = False
     try:
         now = datetime.now(tz=timezone.utc)
         export_id = uuid4().hex
         deadline = now + LOG_EXPORT_COLLECTION_DEADLINE
+        _ACTIVE_EXPORT = (export_id, token)
 
         # Fan out before the inline collection below so workers get the full
         # window before ``expires=`` discards their tasks, and their collection
@@ -293,10 +314,14 @@ def get_log_export_status(
     if snapshot is None:
         raise OnyxError(OnyxErrorCode.NOT_FOUND, "Log export not found.")
 
+    state = derive_export_state(snapshot, now=datetime.now(tz=timezone.utc))
+    if state is LogExportState.READY:
+        _release_export_slot_if_active(export_id)
+
     reported = {receipt.worker_name for receipt in snapshot.receipts}
     return LogExportStatusResponse(
         export_id=export_id,
-        state=derive_export_state(snapshot, now=datetime.now(tz=timezone.utc)),
+        state=state,
         created_at=snapshot.manifest.created_at,
         deadline=snapshot.manifest.deadline,
         receipts=snapshot.receipts,

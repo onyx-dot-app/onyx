@@ -21,6 +21,14 @@ logger = setup_logger()
 SUPERVISORD_LOG_DIRECTORY = Path("/var/log")
 
 
+# TODO(andrei): Kubernetes coverage is partial by design as of now. A celery
+# queue delivers each collect task to exactly ONE consumer, so with HPA-scaled
+# workers (replicas > 1) only one pod per worker type is sampled, and nothing
+# marks the unsampled replicas; stdout-only / read-only-root pods report
+# ``no_logs_found``. The plan in the future is a ``pods/log`` API collector
+# (optional namespace-scoped RBAC: ``pods`` get/list + ``pods/log`` get) that
+# covers every replica, stdout-only pods, and crashed containers via
+# ``previous=True``.
 @shared_task(
     name=OnyxCeleryTask.EXPORT_LOGS_COLLECT_TASK,
     ignore_result=True,

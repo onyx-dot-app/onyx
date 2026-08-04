@@ -14,6 +14,7 @@ from ee.onyx.server.log_export import api as log_export_api
 from ee.onyx.server.log_export.api import (
     API_SERVER_WORKER_NAME,
     _ExpiringLock,
+    get_log_export_status,
     start_log_export,
 )
 from ee.onyx.server.log_export.models import LogExportState
@@ -40,6 +41,9 @@ def _fresh_lock(monkeypatch: pytest.MonkeyPatch) -> None:
         "_ASYNC_EXPORT_LOCK",
         _ExpiringLock(ttl_seconds=LOG_EXPORT_COLLECTION_DEADLINE.total_seconds()),
     )
+    # Token numbering restarts with each fresh lock, so a pair leaked by an
+    # earlier test could otherwise release this test's hold.
+    monkeypatch.setattr(log_export_api, "_ACTIVE_EXPORT", None)
 
 
 @pytest.fixture(autouse=True)
@@ -88,6 +92,26 @@ def test_failed_start_releases_lock() -> None:
     # Postcondition.
     # A retry is not rate-limited by the failed attempt.
     assert not log_export_api._ASYNC_EXPORT_LOCK.held()
+
+
+def test_ready_status_poll_frees_the_export_slot() -> None:
+    # Precondition.
+    # A degraded start awaiting only the api_server, whose inline receipt
+    # already exists, so the first status poll observes ready.
+    with patch(f"{_API_MODULE}.client_app") as celery_client:
+        celery_client.send_task.side_effect = OSError("no broker")
+        response = start_log_export(user=_admin_user())
+    assert log_export_api._ASYNC_EXPORT_LOCK.held()
+
+    # Under test.
+    status = get_log_export_status(response.export_id)
+
+    # Postcondition.
+    # The slot is free and a new export can start at once.
+    assert status.state is LogExportState.READY
+    assert not log_export_api._ASYNC_EXPORT_LOCK.held()
+    with patch(f"{_API_MODULE}.client_app"):
+        start_log_export(user=_admin_user())
 
 
 def test_successful_start_holds_lock_for_collection_window() -> None:

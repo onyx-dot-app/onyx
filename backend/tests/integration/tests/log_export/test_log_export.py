@@ -87,8 +87,10 @@ class TestLogExport:
             assert time.monotonic() < poll_deadline, "Export never became ready."
             time.sleep(2)
 
-        # The api_server collects inline at POST time, so its receipt always
-        # exists; worker receipts depend on the environment.
+        # Every fanned-out worker must have reported: reaching ``ready`` via the
+        # deadline with workers still pending means fan-out is broken (bad queue
+        # map, lost task registration, dead broker).
+        assert body["pending_worker_names"] == []
         reported = {receipt["worker_name"] for receipt in body["receipts"]}
         assert "api_server" in reported
 
