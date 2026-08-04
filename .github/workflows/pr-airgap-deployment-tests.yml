@@ -1,0 +1,163 @@
+name: Airgapped Deployment Tests
+
+on:
+  pull_request:
+    branches: [main]
+    paths:
+      - "backend/Dockerfile"
+      - "backend/Dockerfile.model_server"
+      - "backend/requirements/**"
+      - "backend/tests/deployment/airgap/**"
+      - "deployment/docker_compose/docker-compose.airgap-test.yml"
+      - "deployment/docker_compose/docker-compose.airgap-tls-test.yml"
+      - "pyproject.toml"
+      - "uv.lock"
+      - ".github/workflows/pr-airgap-deployment-tests.yml"
+      - ".github/actions/build-backend-image/**"
+      - ".github/actions/build-model-server-image/**"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  build-backend-image:
+    runs-on:
+      [
+        runs-on,
+        runner=2cpu-linux-arm64,
+        "run-id=${{ github.run_id }}-airgap-backend",
+        "extras=ecr-cache",
+      ]
+    timeout-minutes: 10
+    environment: ci-protected
+    steps:
+      - uses: runs-on/action@4e5f72399b6b17f2e79c511c1b38a315a64d22dc
+      - uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0
+        with:
+          persist-credentials: false
+      - uses: ./.github/actions/build-backend-image
+        with:
+          runs-on-ecr-cache: ${{ env.RUNS_ON_ECR_CACHE }}
+          ref-name: ${{ github.ref_name }}
+          pr-number: ${{ github.event.pull_request.number }}
+          github-sha: ${{ github.event.pull_request.head.sha || github.sha }}
+          run-id: ${{ github.run_id }}
+          ecr-registry: ${{ vars.ECR_REGISTRY }}
+
+  build-model-server-image:
+    runs-on:
+      [
+        runs-on,
+        runner=1cpu-linux-arm64,
+        "run-id=${{ github.run_id }}-airgap-model-server",
+        "extras=ecr-cache",
+      ]
+    timeout-minutes: 10
+    environment: ci-protected
+    steps:
+      - uses: runs-on/action@4e5f72399b6b17f2e79c511c1b38a315a64d22dc
+      - uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0
+        with:
+          persist-credentials: false
+      - uses: ./.github/actions/build-model-server-image
+        with:
+          runs-on-ecr-cache: ${{ env.RUNS_ON_ECR_CACHE }}
+          ref-name: ${{ github.ref_name }}
+          pr-number: ${{ github.event.pull_request.number }}
+          github-sha: ${{ github.event.pull_request.head.sha || github.sha }}
+          run-id: ${{ github.run_id }}
+          tag-prefix: airgap-model-server
+          ecr-registry: ${{ vars.ECR_REGISTRY }}
+          docker-username: ${{ secrets.DOCKER_USERNAME }}
+          docker-token: ${{ secrets.DOCKER_TOKEN }}
+
+  airgap-health:
+    needs: [build-backend-image, build-model-server-image]
+    runs-on:
+      [
+        runs-on,
+        runner=4cpu-linux-arm64,
+        "run-id=${{ github.run_id }}-airgap-health",
+        "extras=ecr-cache",
+      ]
+    timeout-minutes: 20
+    environment: ci-protected
+    steps:
+      - uses: runs-on/action@4e5f72399b6b17f2e79c511c1b38a315a64d22dc
+      - uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0
+        with:
+          persist-credentials: false
+
+      - name: Set deployment images
+        env:
+          BACKEND_IMAGE: ${{ env.RUNS_ON_ECR_CACHE }}:nightly-llm-it-backend-${{ github.run_id }}
+          MODEL_SERVER_IMAGE: ${{ env.RUNS_ON_ECR_CACHE }}:airgap-model-server-${{ github.run_id }}
+        run: |
+          echo "ONYX_BACKEND_IMAGE=${BACKEND_IMAGE}" >> "${GITHUB_ENV}"
+          echo "ONYX_MODEL_SERVER_IMAGE=${MODEL_SERVER_IMAGE}" >> "${GITHUB_ENV}"
+
+      - name: Pull deployment images
+        working-directory: deployment/docker_compose
+        run: |
+          docker pull "${ONYX_BACKEND_IMAGE}"
+          docker pull "${ONYX_MODEL_SERVER_IMAGE}"
+          docker compose -f docker-compose.yml pull relational_db opensearch cache minio
+
+      - name: Verify deployment without external network
+        working-directory: deployment/docker_compose
+        run: |
+          compose=(
+            docker compose
+            -p onyx-airgap
+            -f docker-compose.yml
+            -f docker-compose.airgap-test.yml
+          )
+          if ! "${compose[@]}" up -d --no-build --wait --wait-timeout 180 api_server; then
+            "${compose[@]}" logs --no-color > "${RUNNER_TEMP}/airgap.log"
+            exit 1
+          fi
+          "${compose[@]}" logs --no-color > "${RUNNER_TEMP}/airgap.log"
+          "${compose[@]}" down -v
+
+      - name: Verify deployment with untrusted Hugging Face TLS
+        working-directory: deployment/docker_compose
+        env:
+          AIRGAP_HF_ENDPOINT: https://tls_failure:4443
+        run: |
+          compose=(
+            docker compose
+            -p onyx-airgap-tls
+            -f docker-compose.yml
+            -f docker-compose.airgap-test.yml
+            -f docker-compose.airgap-tls-test.yml
+          )
+          if ! "${compose[@]}" up -d --no-build --wait --wait-timeout 180 api_server; then
+            "${compose[@]}" logs --no-color > "${RUNNER_TEMP}/airgap-tls.log"
+            exit 1
+          fi
+          "${compose[@]}" logs --no-color > "${RUNNER_TEMP}/airgap-tls.log"
+          "${compose[@]}" down -v
+
+      - name: Stop deployments
+        if: always()
+        working-directory: deployment/docker_compose
+        run: |
+          docker compose -p onyx-airgap \
+            -f docker-compose.yml \
+            -f docker-compose.airgap-test.yml \
+            down -v || true
+          docker compose -p onyx-airgap-tls \
+            -f docker-compose.yml \
+            -f docker-compose.airgap-test.yml \
+            -f docker-compose.airgap-tls-test.yml \
+            down -v || true
+
+      - name: Upload deployment logs
+        if: always()
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a
+        with:
+          name: airgap-deployment-logs
+          path: |
+            ${{ runner.temp }}/airgap.log
+            ${{ runner.temp }}/airgap-tls.log
