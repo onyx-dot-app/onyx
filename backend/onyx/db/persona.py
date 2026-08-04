@@ -345,14 +345,13 @@ def _assert_persona_update_within_managed_scope(
     user: User,
     db_session: Session,
 ) -> None:
-    """GATE 2 for a scoped group manager on the create/update path. Global holders
-    (admins, global MANAGE_AGENTS) and non-managers are untouched. For a GROUP-scoped
-    agent, a manager relying on SCOPED authority may neither publish it (is_public)
-    nor use groups outside those they manage; a private no-group agent follows the
-    normal owner path, but publishing is still rejected. Current groups + privacy are
-    re-read from the DB, not trusted from the request. Complements the group-share gate
-    in ``update_persona_access``, which stays silent when groups are unchanged (e.g. a
-    bare is_public flip)."""
+    """GATE 2 for a scoped group manager on the create/update path. Global holders and
+    non-managers are untouched. A SCOPED manager may only act on a currently-private agent
+    whose groups — current and requested — are ones they manage. Groups and privacy are
+    re-read from the DB, not trusted from the request.
+
+    Publishing is NOT gated here: it's owner-or-admin via ``can_delete_persona`` in
+    ``upsert_persona``, so an owner who happens to manage a group keeps that right."""
     if has_permission(user, Permission.MANAGE_AGENTS) is not PermissionAuthority.SCOPED:
         return
     current_group_ids: list[int] = []
@@ -365,17 +364,8 @@ def _assert_persona_update_within_managed_scope(
     requested_group_ids = (
         list(request.groups) if request.groups is not None else current_group_ids
     )
-    requested_is_public = (
-        request.is_public if request.is_public is not None else current_is_public
-    )
-    # No-group + private personal agent: nothing to gate. A publish request instead
-    # falls through and is rejected below — a scoped manager can't take an agent org-wide.
-    if (
-        not current_group_ids
-        and not requested_group_ids
-        and not current_is_public
-        and not requested_is_public
-    ):
+    # Personal (no-group) agent: not a group-scoped resource, so nothing to authorize.
+    if not current_group_ids and not requested_group_ids:
         return
     assert_within_scope(
         user,
@@ -383,7 +373,9 @@ def _assert_persona_update_within_managed_scope(
         permission=Permission.MANAGE_AGENTS,
         current_group_ids=current_group_ids,
         requested_group_ids=requested_group_ids,
-        is_non_public=not current_is_public and not requested_is_public,
+        # Current state only, matching persona_edit_within_scope: an already-public agent
+        # is in nobody's managed scope; publishing a private one is the owner's call.
+        is_non_public=not current_is_public,
     )
 
 
@@ -494,8 +486,8 @@ def _editable_persona_ids_among(
     return {persona.id for persona in db_session.scalars(stmt).all()}
 
 
-def stamp_minimal_persona_permissions(
-    snapshots: list[MinimalPersonaSnapshot],
+def stamp_persona_permissions(
+    snapshots: Sequence[MinimalPersonaSnapshot | PersonaSnapshot],
     personas: Sequence[Persona],
     user: User,
     db_session: Session,
@@ -810,9 +802,7 @@ def get_minimal_persona_snapshots_for_user(
         )
         for persona in results
     ]
-    stamp_minimal_persona_permissions(
-        snapshots, results, user, db_session, user_group_ids
-    )
+    stamp_persona_permissions(snapshots, results, user, db_session, user_group_ids)
     return snapshots
 
 
@@ -856,7 +846,10 @@ def get_persona_snapshots_for_user(
     )
 
     results = db_session.scalars(stmt).all()
-    return [PersonaSnapshot.from_model(persona) for persona in results]
+    snapshots = [PersonaSnapshot.from_model(persona) for persona in results]
+    user_group_ids = get_user_group_ids_for_user(db_session, user.id)
+    stamp_persona_permissions(snapshots, results, user, db_session, user_group_ids)
+    return snapshots
 
 
 def get_persona_count_for_user(
@@ -973,9 +966,7 @@ def get_minimal_persona_snapshots_paginated(
         )
         for persona in results
     ]
-    stamp_minimal_persona_permissions(
-        snapshots, results, user, db_session, user_group_ids
-    )
+    stamp_persona_permissions(snapshots, results, user, db_session, user_group_ids)
     return snapshots
 
 
@@ -1050,7 +1041,10 @@ def get_persona_snapshots_paginated(
     )
 
     results = db_session.scalars(stmt).all()
-    return [PersonaSnapshot.from_model(persona) for persona in results]
+    snapshots = [PersonaSnapshot.from_model(persona) for persona in results]
+    user_group_ids = get_user_group_ids_for_user(db_session, user.id)
+    stamp_persona_permissions(snapshots, results, user, db_session, user_group_ids)
+    return snapshots
 
 
 def _get_paginated_persona_query(
