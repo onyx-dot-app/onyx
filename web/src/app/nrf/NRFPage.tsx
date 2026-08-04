@@ -118,12 +118,15 @@ export default function NRFPage({ isSidePanel = false }: NRFPageProps) {
       if (
         model.provider !== current.provider ||
         model.modelName !== current.modelName ||
-        model.name !== current.name
+        model.name !== current.name ||
+        (model.modelConfigurationId ?? null) !==
+          (current.modelConfigurationId ?? null)
       ) {
         llmManager.updateCurrentLlm({
           name: model.name,
           provider: model.provider,
           modelName: model.modelName,
+          modelConfigurationId: model.modelConfigurationId,
         });
       }
     }

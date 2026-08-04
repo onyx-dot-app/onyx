@@ -634,9 +634,11 @@ def fetch_all_llm_providers_accessible_in_any_context(
 def fetch_existing_llm_provider(
     name: str, db_session: Session
 ) -> LLMProviderModel | None:
+    # Duplicate names can predate upsert validation; order by id for determinism.
     provider_model = db_session.scalar(
         select(LLMProviderModel)
         .where(LLMProviderModel.name == name)
+        .order_by(LLMProviderModel.id)
         .options(
             selectinload(LLMProviderModel.model_configurations),
             selectinload(LLMProviderModel.groups),

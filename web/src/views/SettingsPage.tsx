@@ -1058,9 +1058,15 @@ function ChatPreferencesSettings() {
                     name: opt.name,
                     provider: opt.provider,
                     modelName: opt.modelName,
+                    modelConfigurationId: opt.modelConfigurationId,
                   });
                   void updateUserDefaultModel(
-                    structureValue(opt.name, opt.provider, opt.modelName)
+                    structureValue(
+                      opt.name,
+                      opt.provider,
+                      opt.modelName,
+                      opt.modelConfigurationId
+                    )
                   );
                 }
               }}
