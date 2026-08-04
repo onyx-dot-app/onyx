@@ -85,6 +85,7 @@ jobs:
               - '.github/actions/login-ecr-pullthrough-cache/**'
             gateway:
               - 'backend/onyx/server/gateway/**'
+              - 'backend/tests/integration/tests/gateway_clients/**'
 
   discover-test-dirs:
     # NOTE: Github-hosted runners have about 20s faster queue times and are preferred here.
