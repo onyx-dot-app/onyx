@@ -36,13 +36,12 @@ export default function AdminChrome({
   const pathname = usePathname();
   const settings = useSettingsContext();
   const router = useRouter();
-  const { user, adminCapabilities: liveAdminCapabilities } = useUser();
+  const { adminCapabilities: liveAdminCapabilities, isUserLoading } = useUser();
 
-  // Seed only until /api/me loads (`user` still null); then use the live set, so a now-empty
-  // set (capabilities revoked) denies instead of falling back to the stale seed.
-  const adminCapabilities = user
-    ? liveAdminCapabilities
-    : initialAdminCapabilities;
+  // Seed only in flight — otherwise logout would leave the page authorized by a stale seed.
+  const adminCapabilities = isUserLoading
+    ? initialAdminCapabilities
+    : liveAdminCapabilities;
 
   // Match-only per-page gate: if this page is a known admin route the user lacks the
   // permission for (a group manager landing on a full-admin page), send them to their
