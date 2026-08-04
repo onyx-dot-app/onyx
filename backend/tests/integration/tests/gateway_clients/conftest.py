@@ -16,6 +16,7 @@ import subprocess
 import tempfile
 from collections.abc import Generator
 from pathlib import Path
+from typing import Never
 from uuid import uuid4
 
 import httpx
@@ -64,7 +65,7 @@ _DEV_ADMIN_EMAIL = "admin_user@example.com"
 _STRICT_ENV = "GATEWAY_CLIENT_TESTS_REQUIRED"
 
 
-def _skip_or_fail(reason: str) -> None:
+def _skip_or_fail(reason: str) -> Never:
     if os.environ.get(_STRICT_ENV):
         pytest.fail(reason)
     pytest.skip(reason)
@@ -106,18 +107,21 @@ def _install_cli(package: str, executable: str) -> Generator[str, None, None]:
 
     with tempfile.TemporaryDirectory(prefix="onyx-gateway-cli-") as tmpdir:
         prefix = Path(tmpdir)
-        result = subprocess.run(
-            [
-                "npm",
-                "install",
-                "--prefix",
-                str(prefix),
-                package,
-            ],
-            capture_output=True,
-            text=True,
-            timeout=180,
-        )
+        try:
+            result = subprocess.run(
+                [
+                    "npm",
+                    "install",
+                    "--prefix",
+                    str(prefix),
+                    package,
+                ],
+                capture_output=True,
+                text=True,
+                timeout=180,
+            )
+        except subprocess.TimeoutExpired:
+            _skip_or_fail(f"npm install of {package} timed out after 180 seconds")
         if result.returncode != 0:
             _skip_or_fail(f"npm install of {package} failed: {result.stderr[-2000:]}")
 
@@ -159,11 +163,24 @@ def gateway_admin(_real_api_server: None) -> DATestUser:  # noqa: ARG001
                 is_active=True,
             )
         )
-    except Exception as e:
+    except Exception as login_error:
+        if not os.environ.get(_STRICT_ENV):
+            pytest.fail(
+                f"Could not log in as {_DEV_ADMIN_EMAIL}; the gateway client "
+                f"suite needs the standard dev admin account to already exist: "
+                f"{login_error}"
+            )
+
+    try:
+        user = UserManager.create(email=_DEV_ADMIN_EMAIL)
+    except Exception as create_error:
         pytest.fail(
-            f"Could not log in as {_DEV_ADMIN_EMAIL}; the gateway client suite "
-            f"needs the standard dev admin account to already exist: {e}"
+            f"Could not create {_DEV_ADMIN_EMAIL} in the fresh CI deployment: "
+            f"{create_error}"
         )
+    if user.role != UserRole.ADMIN:
+        pytest.fail(f"Created {_DEV_ADMIN_EMAIL} with role {user.role}, expected admin")
+    return user
 
 
 @pytest.fixture(scope="module")
