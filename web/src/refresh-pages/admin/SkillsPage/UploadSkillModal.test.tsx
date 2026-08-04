@@ -41,6 +41,24 @@ describe("UploadSkillModal publish default", () => {
     );
   });
 
+  it("switches to public when permissions resolve after the dialog is already open", async () => {
+    // The Upload button isn't permission-gated, so a click can land while /api/me is
+    // still in flight — canPublish then flips true with no `open` transition to catch it.
+    mockUseUser.mockReturnValue({ permissions: [] });
+    const { rerender } = render(
+      <UploadSkillModal open onClose={noop} onUploaded={noop} />
+    );
+
+    mockUseUser.mockReturnValue({ permissions: [Permission.MANAGE_SKILLS] });
+    rerender(<UploadSkillModal open onClose={noop} onUploaded={noop} />);
+
+    await waitFor(() =>
+      expect(
+        screen.getByRole("tab", { name: "Your Organization" })
+      ).toHaveAttribute("data-state", "active")
+    );
+  });
+
   it("opens private for a scoped manager without publish permission", async () => {
     mockUseUser.mockReturnValue({ permissions: [] });
     render(<UploadSkillModal open onClose={noop} onUploaded={noop} />);
