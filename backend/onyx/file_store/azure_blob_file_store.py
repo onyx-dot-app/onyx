@@ -24,7 +24,7 @@ from onyx.db.file_record import (
     upsert_filerecord,
 )
 from onyx.db.models import FileRecord
-from onyx.file_store.file_store import FileStore
+from onyx.file_store.file_store import FileStore, content_byte_size
 from onyx.file_store.s3_key_utils import generate_s3_key
 from onyx.utils.file import FileWithMimeType
 from onyx.utils.logger import setup_logger
@@ -242,19 +242,27 @@ class AzureBlobBackedFileStore(FileStore):
                     object_key=object_key,
                     db_session=db_session,
                     file_metadata=file_metadata,
+                    file_size=content_byte_size(file_content),
                 )
                 db_session.commit()
         except Exception:
-            # Clean up the uploaded blob only when this save was creating a
-            # brand-new file. On an overwrite of an existing file_id the
-            # committed record still references this key after rollback, so
-            # deleting the blob would turn a failed overwrite into data loss.
+            # Clean up the uploaded blob unless a committed record still
+            # references this exact object — on a failed overwrite the record
+            # survives the rollback, so deleting the blob it points at would
+            # turn the failed save into data loss. A record pointing at a
+            # different container/key does not reference this upload, so the
+            # blob is safe (and necessary) to remove.
             try:
                 with get_session_with_current_tenant() as cleanup_session:
                     existing_record = get_filerecord_by_file_id_optional(
                         file_id=file_id, db_session=cleanup_session
                     )
-                if existing_record is None:
+                record_references_upload = (
+                    existing_record is not None
+                    and existing_record.bucket_name == self._container_name
+                    and existing_record.object_key == object_key
+                )
+                if not record_references_upload:
                     blob_client.delete_blob()
             except Exception:
                 logger.warning(
@@ -315,12 +323,21 @@ class AzureBlobBackedFileStore(FileStore):
                     file_id=file_id, db_session=db_session
                 )
 
+            from azure.core.exceptions import ResourceNotFoundError
+
             client = self._get_blob_service_client()
             blob_client = client.get_blob_client(
                 container=file_record.bucket_name, blob=file_record.object_key
             )
-            properties = blob_client.get_blob_properties()
+            try:
+                properties = blob_client.get_blob_properties()
+            except ResourceNotFoundError as e:
+                raise FileNotFoundError(
+                    f"Object for file {file_id} does not exist"
+                ) from e
             return properties.size
+        except FileNotFoundError:
+            raise
         except Exception as e:
             logger.warning("Error getting file size for %s: %s", file_id, e)
             return None
@@ -417,6 +434,7 @@ class AzureBlobBackedFileStore(FileStore):
                     object_key=old_file_record.object_key,
                     db_session=db_session,
                     file_metadata=file_metadata,
+                    file_size=old_file_record.file_size,
                 )
 
                 delete_filerecord_by_file_id(file_id=old_file_id, db_session=db_session)

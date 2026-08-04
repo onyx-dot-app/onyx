@@ -85,6 +85,10 @@ from onyx.db.enums import (
     ProcessingMode,
 )
 from onyx.db.federated import fetch_all_federated_connectors_parallel
+from onyx.db.file_record import (
+    get_filerecords_by_file_ids,
+    update_filerecord_file_sizes,
+)
 from onyx.db.index_attempt import (
     get_index_attempts_for_cc_pair,
     get_latest_index_attempts_by_status,
@@ -94,12 +98,17 @@ from onyx.db.index_attempt import (
 from onyx.db.models import (
     ConnectorCredentialPair,
     FederatedConnector,
+    FileRecord,
     IndexAttempt,
     IndexingStatus,
     User,
     UserRole,
 )
-from onyx.file_store.file_store import FileStore, get_default_file_store
+from onyx.file_store.file_store import (
+    FILE_SIZE_MISSING_SENTINEL,
+    FileStore,
+    get_default_file_store,
+)
 from onyx.redis.redis_pool import get_redis_client
 from onyx.redis.redis_tenant_work_gating import maybe_mark_tenant_active
 from onyx.server.documents.models import (
@@ -453,38 +462,88 @@ def list_connector_files(
         file_locations, file_names
     )
 
-    file_store = get_default_file_store()
-    files = []
+    # Single batched query — per-file record + object-store size lookups made
+    # this endpoint O(N) round-trips and unusably slow for large connectors.
+    # A record-lookup failure degrades to basic entries (id + name) rather
+    # than failing the whole listing, matching the old per-file behavior.
+    records_by_id: dict[str, FileRecord] = {}
+    try:
+        records_by_id = {
+            record.file_id: record
+            for record in get_filerecords_by_file_ids(file_locations, db_session)
+        }
+    except Exception:
+        logger.warning(
+            "Failed to load file records for connector %s; returning basic file info",
+            connector_id,
+            exc_info=True,
+        )
 
+    # Lazily backfill sizes for records written before file_size existed:
+    # bounded-concurrency object-store lookups, persisted so each legacy file
+    # pays this cost at most once.
+    backfilled_sizes: dict[str, int] = {}
+    missing_size_ids = [
+        file_id
+        for file_id in file_locations
+        if (record := records_by_id.get(file_id)) is not None
+        and record.file_size is None
+    ]
+    if missing_size_ids:
+        file_store = get_default_file_store()
+
+        def _lookup_size(lookup_file_id: str) -> int | None:
+            try:
+                return file_store.get_file_size(lookup_file_id)
+            except FileNotFoundError:
+                # Object confirmed gone: persist the sentinel so future
+                # listings stop probing the object store for this file.
+                return FILE_SIZE_MISSING_SENTINEL
+
+        looked_up_sizes = run_functions_tuples_in_parallel(
+            [(_lookup_size, (file_id,)) for file_id in missing_size_ids],
+            allow_failures=True,
+            max_workers=16,
+        )
+        backfilled_sizes = {
+            file_id: size
+            for file_id, size in zip(missing_size_ids, looked_up_sizes)
+            if isinstance(size, int)
+        }
+        if backfilled_sizes:
+            try:
+                update_filerecord_file_sizes(backfilled_sizes, db_session)
+                db_session.commit()
+            except Exception:
+                db_session.rollback()
+                logger.warning(
+                    "Failed to persist backfilled file sizes for connector %s",
+                    connector_id,
+                    exc_info=True,
+                )
+
+    files = []
     for file_id, file_name in zip(file_locations, file_names):
-        try:
-            file_record = file_store.read_file_record(file_id)
-            file_size = None
-            upload_date = None
-            if file_record:
-                file_size = file_store.get_file_size(file_id)
-                upload_date = (
-                    file_record.created_at.isoformat()
-                    if file_record.created_at
-                    else None
-                )
-            files.append(
-                ConnectorFileInfo(
-                    file_id=file_id,
-                    file_name=file_name,
-                    file_size=file_size,
-                    upload_date=upload_date,
-                )
+        record = records_by_id.get(file_id)
+        file_size = None
+        upload_date = None
+        if record:
+            raw_size = (
+                record.file_size
+                if record.file_size is not None
+                else backfilled_sizes.get(file_id)
             )
-        except Exception as e:
-            logger.warning("Error reading file record for %s: %s", file_id, e)
-            # Include file with basic info even if record fetch fails
-            files.append(
-                ConnectorFileInfo(
-                    file_id=file_id,
-                    file_name=file_name,
-                )
+            # The missing-object sentinel (negative) renders as unknown.
+            file_size = raw_size if raw_size is not None and raw_size >= 0 else None
+            upload_date = record.created_at.isoformat() if record.created_at else None
+        files.append(
+            ConnectorFileInfo(
+                file_id=file_id,
+                file_name=file_name,
+                file_size=file_size,
+                upload_date=upload_date,
             )
+        )
 
     return ConnectorFilesResponse(files=files)
 

@@ -244,7 +244,10 @@ class TestPostgresBackedFileStore:
     def test_get_file_size_nonexistent(
         self, pg_file_store: PostgresBackedFileStore
     ) -> None:
-        assert pg_file_store.get_file_size(f"{uuid.uuid4()}") is None
+        # Confirmed-missing content raises so callers can distinguish it from
+        # transient lookup failures (which return None).
+        with pytest.raises(FileNotFoundError):
+            pg_file_store.get_file_size(f"{uuid.uuid4()}")
 
     # ── delete ─────────────────────────────────────────────────────
 
