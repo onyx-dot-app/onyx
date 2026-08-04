@@ -11,6 +11,7 @@ from onyx.db.models import Persona
 from onyx.db.models import Persona__UserGroup
 from onyx.db.models import User
 from onyx.db.persona import apply_persona_user_share_diff
+from onyx.db.persona import can_delete_persona
 from onyx.db.persona import mark_persona_user_files_for_sync
 from onyx.db.persona import resolve_desired_user_shares
 from onyx.error_handling.error_codes import OnyxErrorCode
@@ -82,42 +83,39 @@ def _assert_group_share_within_scope(
     """GATE 2: *changing* an agent's group shares is a MANAGE_AGENTS action. Global
     holders bypass; a scoped manager may only add/remove groups they manage on a PRIVATE
     agent; anyone else may leave the shares alone but not alter them. Shares are re-read
-    in-txn, never trusted from the caller, so a reassignment can't escape scope. Privacy
-    anchors on the original state too (snapshotted before is_public is applied) — a
-    public→private convert in the same call must not slip past."""
+    in-txn, never the caller's, so a reassignment can't escape scope. Both the pre-call
+    and current is_public must be private — sharing a public agent in would capture it."""
     current_shares = {
         row.user_group_id: row.permission
         for row in db_session.query(Persona__UserGroup)
         .filter(Persona__UserGroup.persona_id == persona_id)
         .all()
     }
-    # No group on either side: a personal agent, not a group-share mutation. Keeps
-    # groups=[] creates open to an ADD_AGENTS-only user.
+    # No group either side: a personal agent, nothing to authorize. Keeps groups=[]
+    # creates open to an ADD_AGENTS-only user.
     if not current_shares and not desired_group_shares:
         return
-    # Unchanged shares aren't a mutation either — the editor round-trips current groups
-    # on every save, so otherwise a plain owner couldn't edit an agent someone else
-    # group-shared. Levels count, not just ids. Scoped managers excluded: holding the
-    # share while flipping the agent private is how a public agent gets captured.
-    if (
-        current_shares == desired_group_shares
-        and has_permission(acting_user, Permission.MANAGE_AGENTS)
-        is not PermissionAuthority.SCOPED
-    ):
-        return
-    current_group_ids = list(current_shares)
-    requested_group_ids = list(desired_group_shares)
     persona = db_session.query(Persona).filter(Persona.id == persona_id).first()
     if persona is None:
         raise OnyxError(
             OnyxErrorCode.PERSONA_NOT_FOUND, f"Persona {persona_id} does not exist"
         )
+    # Unchanged shares aren't a mutation either — the editor round-trips current groups on
+    # every save, so otherwise a plain owner couldn't edit an agent someone else
+    # group-shared. Levels count, not just ids. Exempt when there's no scoped authority to
+    # abuse, or when the actor owns the agent — publishing is can_delete_persona's call (D9).
+    if current_shares == desired_group_shares and (
+        has_permission(acting_user, Permission.MANAGE_AGENTS)
+        is not PermissionAuthority.SCOPED
+        or can_delete_persona(acting_user, persona, db_session)
+    ):
+        return
     assert_within_scope(
         acting_user,
         db_session,
         permission=Permission.MANAGE_AGENTS,
-        current_group_ids=current_group_ids,
-        requested_group_ids=requested_group_ids,
+        current_group_ids=list(current_shares),
+        requested_group_ids=list(desired_group_shares),
         is_non_public=not original_is_public and not persona.is_public,
     )
 

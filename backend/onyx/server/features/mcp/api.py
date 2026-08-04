@@ -2717,12 +2717,15 @@ def delete_mcp_server_admin(
     ),
 ) -> dict:
     """Delete an MCP server and cascading related objects (tools, configs)."""
+    # GATE 2 above the try: the broad `except Exception` below would re-wrap its 403 as a
+    # 500, hiding an authorization failure behind a server error.
     try:
-        # Ensure it exists
         server = get_mcp_server_by_id(server_id, db_session)
+    except ValueError:
+        raise HTTPException(status_code=404, detail="MCP server not found")
+    _ensure_mcp_server_owner_or_admin(server, user)
 
-        _ensure_mcp_server_owner_or_admin(server, user)
-
+    try:
         # Log tools that will be deleted for debugging
         tools_to_delete = get_tools_by_mcp_server_id(server_id, db_session)
         logger.info(

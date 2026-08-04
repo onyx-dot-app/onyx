@@ -46,4 +46,6 @@ being a manager never subtracts a right they'd hold as an ordinary user. D6 stil
 aimed — a manager may not delete a connector, document set, or agent that merely sits in a group they
 manage. Pinned by `test_permission_projection_contract.py` ("the creator fully controls the action they
 made"); `assert_within_scope` in `_assert_persona_update_within_managed_scope` therefore does **not**
-gate `is_public`.
+gate `is_public`, and the EE group-share gate exempts an owner whose group set is unchanged. What
+ownership never buys is *widening* — sharing a public agent into a managed group still rejects, because
+that would capture it into scope.

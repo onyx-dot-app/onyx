@@ -25,8 +25,8 @@ from typing import Any
 from typing import NamedTuple
 from uuid import uuid4
 
+import httpx
 import pytest
-import requests
 from sqlalchemy import update
 
 from onyx.db.engine.sql_engine import get_session_with_current_tenant
@@ -90,10 +90,21 @@ def _tool_body() -> dict[str, Any]:
     return {
         "name": f"tool-{uuid4()}",
         "description": "escalation test",
+        # validate_openapi_schema needs info.description, exactly one server URL, and at
+        # least one method — an empty `paths` is rejected.
         "definition": {
             "openapi": "3.0.0",
-            "info": {"title": "t", "version": "1.0.0"},
-            "paths": {},
+            "info": {"title": "t", "description": "t", "version": "1.0.0"},
+            "servers": [{"url": "https://example.com"}],
+            "paths": {
+                "/ping": {
+                    "get": {
+                        "summary": "ping",
+                        "operationId": "ping",
+                        "responses": {"200": {"description": "ok"}},
+                    }
+                }
+            },
         },
         "custom_headers": [],
         "passthrough_auth": False,
@@ -149,7 +160,7 @@ def _assert_manager(
     path: str,
     expected: str,
     body: dict[str, Any] | None = None,
-) -> requests.Response:
+) -> httpx.Response:
     """Call ``path`` as the scoped manager and assert the permission gate's verdict."""
     resp = call_endpoint(method, path, body, env.manager.headers, env.manager.cookies)
     assert_response(resp, method, path, "manager", expected)
@@ -232,25 +243,29 @@ def test_manager_cannot_share_agent_to_unmanaged_group(env: _ScopedEnv) -> None:
     )
 
 
-def test_manager_cannot_publish_agent(env: _ScopedEnv) -> None:
-    # Publishing (is_public) via the update path is outside a manager's scope even
-    # when groups are unchanged — the group-share gate alone would miss it.
+def test_manager_publishes_own_agent(env: _ScopedEnv) -> None:
+    # D9: publishing follows ownership — being a manager must not subtract a right an
+    # ordinary owner holds.
     agent = PersonaManager.create(
         user_performing_action=env.manager,
         is_public=False,
         groups=[env.managed_group.id],
     )
-    _assert_manager(
+    resp = _assert_manager(
         env,
         "PATCH",
         f"/persona/{agent.id}",
-        "denied",
+        "allowed",
         _persona_upsert_body(is_public=True, groups=[env.managed_group.id]),
     )
+    # upsert_persona drops an unauthorized is_public silently, so 200 proves nothing.
+    assert resp.status_code == 200, resp.text
+    assert resp.json()["is_public"] is True
 
 
-def test_manager_cannot_capture_public_agent_via_share(env: _ScopedEnv) -> None:
-    # Manager owns a private agent in their group; an admin publishes it org-wide.
+def test_manager_unpublishes_own_agent(env: _ScopedEnv) -> None:
+    # The direction the group-share gate used to block: the manager pulls their own
+    # published agent back to private, keeping the group share. Ownership authorizes it (D9).
     agent = PersonaManager.create(
         user_performing_action=env.manager,
         is_public=False,
@@ -264,14 +279,32 @@ def test_manager_cannot_capture_public_agent_via_share(env: _ScopedEnv) -> None:
         env.admin.cookies,
     )
     assert publish.status_code == 200, publish.text
-    # The manager must not pull the now-public agent back to private AND keep the
-    # group share in one call — the gate anchors on the original (public) state.
+    _assert_manager(
+        env,
+        "PATCH",
+        f"/persona/{agent.id}/share",
+        "allowed",
+        {"is_public": False, "group_ids": [env.managed_group.id]},
+    )
+    read_back = call_endpoint(
+        "GET", f"/persona/{agent.id}", None, env.admin.headers, env.admin.cookies
+    )
+    assert read_back.status_code == 200, read_back.text
+    assert read_back.json()["is_public"] is False
+
+
+def test_manager_cannot_capture_public_agent_via_share(env: _ScopedEnv) -> None:
+    # A PUBLIC agent sits in nobody's managed scope, so sharing it into a managed group
+    # captures it — rejected even for the owner. Ownership buys publishing (D9), not scope.
+    agent = PersonaManager.create(
+        user_performing_action=env.manager, is_public=True, groups=[]
+    )
     _assert_manager(
         env,
         "PATCH",
         f"/persona/{agent.id}/share",
         "denied",
-        {"is_public": False, "group_ids": [env.managed_group.id]},
+        {"group_ids": [env.managed_group.id]},
     )
 
 
