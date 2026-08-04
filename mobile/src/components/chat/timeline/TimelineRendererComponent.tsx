@@ -26,7 +26,10 @@ export interface TimelineRendererComponentProps {
   children: (result: TimelineRendererResult[]) => ReactElement;
 }
 
-// Re-render only on meaningful changes (chatState is memoized upstream).
+// Omits `children` and `chatState` by design (faithful to web): both take a fresh identity on every
+// parent render, so comparing them would re-render on every stream tick and defeat the streaming perf
+// isolation. Caller contract (wired in 9b.7): pass a stable (useCallback) `children` whose captured
+// state is also surfaced through a compared prop below — otherwise that state can render stale.
 function arePropsEqual(
   prev: TimelineRendererComponentProps,
   next: TimelineRendererComponentProps,
