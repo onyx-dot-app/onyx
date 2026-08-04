@@ -12,6 +12,7 @@ celery_app.autodiscover_tasks(
             "ee.onyx.background.celery.tasks.usage_reporting",
             "ee.onyx.background.celery.tasks.license_notifications",
             "ee.onyx.background.celery.tasks.license_reclaim",
+            "ee.onyx.background.celery.tasks.log_export",
         ]
     )
 )
