@@ -5,7 +5,7 @@ This file provides guidance to AI agents when working on the web application wit
 ## Important Notes
 
 - **The development server is already running** at a dynamically allocated port. Do NOT run `bun run dev` yourself.
-- **The app serves under a session-scoped base path, not `/`** — use the preview URL from the session root `AGENTS.md`; other paths 404 even when the app is healthy.
+- **The app serves under a session-scoped base path, not `/`** — use the preview URL from the session root `AGENTS.md`; other paths 404 or redirect even when the app is healthy.
 - **We do NOT use a `src` directory** - all code lives directly in the root folders (`app/`, `components/`, `lib/`, etc.)
 - If the app needs pre-computation (data processing, API calls, etc.), create a bash or python script called `prepare.sh`/`prepare.py` at the root of this directory
 - **CRITICAL: Create small, modular components** - Do NOT write everything in `page.tsx`. Break your UI into small, reusable components in the `components/` directory. Each component should have a single responsibility and be in its own file.
