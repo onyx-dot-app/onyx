@@ -89,7 +89,7 @@ def is_anthropic_passthrough_eligible(provider: LLMProviderView) -> bool:
 
 def _append_api_path(provider: LLMProviderView, suffix: str) -> str:
     parsed = urlsplit(provider.api_base or "https://api.anthropic.com")
-    path = parsed.path.rstrip("/") + suffix
+    path = parsed.path.rstrip("/").removesuffix("/v1") + suffix
     return urlunsplit(parsed._replace(path=path))
 
 

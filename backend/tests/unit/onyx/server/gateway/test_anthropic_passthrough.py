@@ -64,6 +64,11 @@ def test_passthrough_urls_append_paths_before_query_credentials() -> None:
         "https://proxy.example/anthropic/v1/messages/count_tokens?api-key=secret"
     )
 
+    provider.api_base = "https://proxy.example/anthropic/v1?api-key=secret"
+    assert _messages_url(provider) == (
+        "https://proxy.example/anthropic/v1/messages?api-key=secret"
+    )
+
 
 def _fake_httpx_module(client_factory: Any) -> MagicMock:
     """A stand-in for the ``httpx`` module reference held by
