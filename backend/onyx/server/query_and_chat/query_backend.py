@@ -87,7 +87,7 @@ def get_tags(
     sources: list[DocumentSource] | None = None,
     allow_prefix: bool = True,  # This is currently the only option
     limit: int = 50,
-    _: User = Depends(require_permission(Permission.BASIC_ACCESS)),
+    _: User = Depends(require_permission(Permission.READ_SEARCH)),
     db_session: Session = Depends(get_session),
 ) -> TagResponse:
     if not allow_prefix:
