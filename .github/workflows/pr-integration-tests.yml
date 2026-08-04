@@ -24,6 +24,7 @@ permissions:
 env:
   # Test Environment Variables
   OPENAI_API_KEY: ${{ secrets.OPENAI_API_KEY }}
+  ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
   SLACK_BOT_TOKEN: ${{ secrets.SLACK_BOT_TOKEN }}
   SLACK_BOT_TOKEN_TEST_SPACE: ${{ secrets.SLACK_BOT_TOKEN_TEST_SPACE }}
   CONFLUENCE_TEST_SPACE_URL: ${{ vars.CONFLUENCE_TEST_SPACE_URL }}
@@ -59,6 +60,7 @@ jobs:
       pull-requests: read
     outputs:
       integration: ${{ steps.filter.outputs.integration || 'true' }}
+      gateway: ${{ steps.filter.outputs.gateway || 'true' }}
     steps:
       - name: Checkout code
         if: github.event_name == 'pull_request' || github.event_name == 'merge_group'
@@ -82,6 +84,9 @@ jobs:
               - '.github/actions/setup-test-license/**'
               - '.github/actions/install-deps-and-generate-openapi-client/**'
               - '.github/actions/login-ecr-pullthrough-cache/**'
+            gateway:
+              - 'backend/onyx/server/gateway/**'
+              - 'backend/tests/integration/tests/gateway_clients/**'
 
   discover-test-dirs:
     # NOTE: Github-hosted runners have about 20s faster queue times and are preferred here.
@@ -100,10 +105,15 @@ jobs:
 
       - name: Discover test directories
         id: set-matrix
+        env:
+          GATEWAY_CHANGED: ${{ needs.changes.outputs.gateway }}
         run: |
           # Find all leaf-level directories in both test directories.
           # ``craft`` excluded: needs sandbox infra this lane doesn't set up;
-          tests_dirs=$(find backend/tests/integration/tests -mindepth 1 -maxdepth 1 -type d ! -name "__pycache__" ! -name "mcp" ! -name "no_vectordb" ! -name "migrations" ! -name "craft" -exec basename {} \; | sort)
+          tests_dirs=$(find backend/tests/integration/tests -mindepth 1 -maxdepth 1 -type d ! -name "__pycache__" ! -name "mcp" ! -name "no_vectordb" ! -name "migrations" ! -name "craft" ! -name "gateway_clients" -exec basename {} \; | sort)
+          if [[ "$GATEWAY_CHANGED" == "true" ]]; then
+            tests_dirs="$tests_dirs gateway_clients"
+          fi
           connector_dirs=$(find backend/tests/integration/connector_job_tests -mindepth 1 -maxdepth 1 -type d ! -name "__pycache__" -exec basename {} \; | sort)
 
           # Create JSON array with directory info
@@ -352,6 +362,16 @@ jobs:
           command: |
             echo "Running ${{ matrix.edition }} integration tests for ${{ matrix.test-dir.path }}..."
 
+            # gateway_clients drives real CLI subprocesses, which need a real
+            # TCP api_server; run one inside the test container and make every
+            # missing prerequisite a hard failure instead of a skip.
+            GATEWAY_CLIENTS_STRICT=""
+            RUN_CMD="uv run --no-sync pytest -v --tb=short -rs tests/integration/${{ matrix.test-dir.path }}"
+            if [ "${{ matrix.test-dir.path }}" = "tests/gateway_clients" ]; then
+              GATEWAY_CLIENTS_STRICT="true"
+              RUN_CMD="bash tests/integration/tests/gateway_clients/run_with_server.sh"
+            fi
+
             # Mount CLI binary into the container if it exists (CLI tests only)
             CLI_VOLUME=""
             if [ -f "${{ github.workspace }}/onyx-cli-test" ]; then
@@ -382,6 +402,8 @@ jobs:
               -e S3_AWS_ACCESS_KEY_ID=minioadmin \
               -e S3_AWS_SECRET_ACCESS_KEY=minioadmin \
               -e OPENAI_API_KEY=${OPENAI_API_KEY} \
+              -e ANTHROPIC_API_KEY=${ANTHROPIC_API_KEY} \
+              -e GATEWAY_CLIENT_TESTS_REQUIRED=${GATEWAY_CLIENTS_STRICT} \
               -e EXA_API_KEY=${EXA_API_KEY} \
               -e SLACK_BOT_TOKEN=${SLACK_BOT_TOKEN} \
               -e SLACK_BOT_TOKEN_TEST_SPACE=${SLACK_BOT_TOKEN_TEST_SPACE} \
@@ -410,7 +432,7 @@ jobs:
               -e ENABLE_CRAFT=true \
               -e ONYX_DEV_LICENSE \
               ${{ env.RUNS_ON_ECR_CACHE }}:integration-test-devcontainer-${{ github.run_id }} \
-              uv run --no-sync pytest -v --tb=short -rs tests/integration/${{ matrix.test-dir.path }}
+              $RUN_CMD
 
       # ------------------------------------------------------------
       # Always gather logs BEFORE "down". The test-runner container's

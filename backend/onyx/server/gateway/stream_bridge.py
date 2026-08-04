@@ -109,17 +109,28 @@ def _stream_worker_guard(
         else:
             message, error_type = _UPSTREAM_ERROR
         if span is not None:
-            span.set_error({"message": f"{type(exc).__name__}: {exc}", "data": None})
-        logger.exception(
-            "LLM gateway %s failed (%s) for model %s", label, error_type, model
+            span.set_error(
+                {"message": f"{type(exc).__name__}: {error_type}", "data": None}
+            )
+        logger.warning(
+            "LLM gateway %s failed (%s, %s) for model %s",
+            label,
+            error_type,
+            type(exc).__name__,
+            model,
         )
         emit_error(message=message, error_type=error_type)
     finally:
         try:
             if isinstance(state.upstream, _ClosableStream):
                 state.upstream.close()
-        except Exception:
-            logger.exception("LLM gateway %s cleanup failed for model %s", label, model)
+        except Exception as cleanup_error:
+            logger.warning(
+                "LLM gateway %s cleanup failed (%s) for model %s",
+                label,
+                type(cleanup_error).__name__,
+                model,
+            )
         try:
             if span is not None:
                 record_llm_span_output(
@@ -129,9 +140,12 @@ def _stream_worker_guard(
                     reasoning="".join(state.reasoning) or None,
                     tool_calls=_finalize_tool_calls(state.tool_call_buffer),
                 )
-        except Exception:
-            logger.exception(
-                "LLM gateway %s span cleanup failed for model %s", label, model
+        except Exception as span_error:
+            logger.warning(
+                "LLM gateway %s span cleanup failed (%s) for model %s",
+                label,
+                type(span_error).__name__,
+                model,
             )
         finally:
             _put_stream_item(out, _STREAM_END, cancelled)

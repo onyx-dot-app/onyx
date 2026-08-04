@@ -14,6 +14,7 @@ import queue
 import threading
 from contextlib import ExitStack
 from typing import Any
+from urllib.parse import urlsplit, urlunsplit
 
 import httpx
 from fastapi import Request
@@ -86,16 +87,18 @@ def is_anthropic_passthrough_eligible(provider: LLMProviderView) -> bool:
     return ANTHROPIC_GATEWAY_PASSTHROUGH_ENABLED and provider.provider == "anthropic"
 
 
-def _base_url(provider: LLMProviderView) -> str:
-    return (provider.api_base or "https://api.anthropic.com").rstrip("/")
+def _append_api_path(provider: LLMProviderView, suffix: str) -> str:
+    parsed = urlsplit(provider.api_base or "https://api.anthropic.com")
+    path = parsed.path.rstrip("/").removesuffix("/v1") + suffix
+    return urlunsplit(parsed._replace(path=path))
 
 
 def _messages_url(provider: LLMProviderView) -> str:
-    return _base_url(provider) + "/v1/messages"
+    return _append_api_path(provider, "/v1/messages")
 
 
 def _count_tokens_url(provider: LLMProviderView) -> str:
-    return _base_url(provider) + "/v1/messages/count_tokens"
+    return _append_api_path(provider, "/v1/messages/count_tokens")
 
 
 def _timeout() -> httpx.Timeout:
