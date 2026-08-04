@@ -1,6 +1,7 @@
 import { ValidSources } from "@/lib/types";
 import { ToolSnapshot } from "@/lib/tools/interfaces";
 import { DocumentSetSummary, MinimalUserSnapshot } from "@/lib/types";
+import type { PermissionsOf } from "@/lib/permissions/resource-actions";
 
 // ── Domain / application types ────────────────────────────────────────────────
 
@@ -54,7 +55,7 @@ export interface MinimalAgent {
   labels?: AgentLabel[];
   owner: MinimalUserSnapshot | null;
   // per-action affordance map stamped by the list endpoints; empty/absent → fail-closed
-  permissions?: Record<string, boolean>;
+  permissions?: PermissionsOf<"Agent">;
 }
 
 export interface Agent extends MinimalAgent {
@@ -72,7 +73,7 @@ export interface Agent extends MinimalAgent {
 export interface FullAgent extends Agent {
   search_start_date: string | null;
   // per-action affordance map for the requesting user; stamped by GET /persona/{id}
-  permissions: Record<string, boolean>;
+  permissions: PermissionsOf<"Agent">;
 }
 
 // ── Upsert / API parameter types ──────────────────────────────────────────────

@@ -1,3 +1,4 @@
+import type { PermissionsOf } from "@/lib/permissions/resource-actions";
 /**
  * Skills API response shapes — mirrors
  * `backend/onyx/server/features/skill/models.py`.
@@ -44,7 +45,7 @@ export interface CustomSkill {
   updated_at: string | null;
   granted_group_ids: number[];
   // Server-stamped affordance map; fail-closed (absent = denied).
-  permissions?: Record<string, boolean>;
+  permissions?: PermissionsOf<"CustomSkill">;
 }
 
 export interface SkillsList {

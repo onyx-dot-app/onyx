@@ -1,5 +1,6 @@
 import type React from "react";
 import type { IconProps } from "@opal/types";
+import type { PermissionsOf } from "@/lib/permissions/resource-actions";
 
 // Generic action status for UI components
 export enum ActionStatus {
@@ -40,7 +41,7 @@ export interface MCPServer {
   last_refreshed_at?: string;
   tool_count: number;
   // Server-stamped affordance map; fail-closed (absent = denied).
-  permissions?: Record<string, boolean>;
+  permissions?: PermissionsOf<"MCPServer">;
 }
 
 export interface MCPServersResponse {
@@ -67,7 +68,7 @@ export interface MCPTool {
   icon?: React.FunctionComponent<IconProps>;
   isAvailable: boolean;
   isEnabled: boolean;
-  permissions?: Record<string, boolean>;
+  permissions?: PermissionsOf<"Action">;
 }
 
 export interface MethodSpec {
@@ -117,7 +118,7 @@ export interface ToolSnapshot {
   default_enabled: boolean;
 
   // Server-stamped affordance map; fail-closed (absent = denied).
-  permissions?: Record<string, boolean>;
+  permissions?: PermissionsOf<"Action">;
 }
 
 export enum MCPAuthenticationType {

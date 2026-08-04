@@ -2,6 +2,7 @@ import { Agent } from "@/lib/agents/types";
 import { Credential } from "./connectors/credentials";
 import { Connector } from "./connectors/connectors";
 import { ConnectorCredentialPairStatus } from "@/app/admin/connector/[ccPairId]/types";
+import type { PermissionsOf } from "@/lib/permissions/resource-actions";
 
 export interface UserSpecificAgentPreference {
   disabled_tool_ids?: number[];
@@ -305,7 +306,7 @@ export interface ConnectorIndexingStatusLite {
   last_success: string | null;
   is_editable: boolean;
   // per-action affordance map for the requesting user (mirrors the write-side gate)
-  permissions: Record<string, boolean>;
+  permissions: PermissionsOf<"CCPair">;
   docs_indexed: number;
   in_repeated_error_state: boolean;
   latest_index_attempt_docs_indexed: number | null;
@@ -453,7 +454,7 @@ export interface DocumentSetSummary {
   users: string[];
   groups: number[];
   // per-action affordance map for the requesting user (mirrors the write-side gate)
-  permissions: Record<string, boolean>;
+  permissions: PermissionsOf<"DocumentSet">;
   federated_connector_summaries: FederatedConnectorSummary[];
 }
 
@@ -552,7 +553,7 @@ export interface UserGroup {
   is_up_for_deletion: boolean;
   is_default: boolean;
   // Server-stamped affordance map; fail-closed (absent = denied).
-  permissions?: Record<string, boolean>;
+  permissions?: PermissionsOf<"UserGroup">;
 }
 
 export enum ValidSources {
