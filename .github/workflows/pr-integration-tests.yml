@@ -24,6 +24,7 @@ permissions:
 env:
   # Test Environment Variables
   OPENAI_API_KEY: ${{ secrets.OPENAI_API_KEY }}
+  ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
   SLACK_BOT_TOKEN: ${{ secrets.SLACK_BOT_TOKEN }}
   SLACK_BOT_TOKEN_TEST_SPACE: ${{ secrets.SLACK_BOT_TOKEN_TEST_SPACE }}
   CONFLUENCE_TEST_SPACE_URL: ${{ vars.CONFLUENCE_TEST_SPACE_URL }}
@@ -361,6 +362,16 @@ jobs:
           command: |
             echo "Running ${{ matrix.edition }} integration tests for ${{ matrix.test-dir.path }}..."
 
+            # gateway_clients drives real CLI subprocesses, which need a real
+            # TCP api_server; run one inside the test container and make every
+            # missing prerequisite a hard failure instead of a skip.
+            GATEWAY_CLIENTS_STRICT=""
+            RUN_CMD="uv run --no-sync pytest -v --tb=short -rs tests/integration/${{ matrix.test-dir.path }}"
+            if [ "${{ matrix.test-dir.path }}" = "tests/gateway_clients" ]; then
+              GATEWAY_CLIENTS_STRICT="true"
+              RUN_CMD="bash tests/integration/tests/gateway_clients/run_with_server.sh"
+            fi
+
             # Mount CLI binary into the container if it exists (CLI tests only)
             CLI_VOLUME=""
             if [ -f "${{ github.workspace }}/onyx-cli-test" ]; then
@@ -391,6 +402,8 @@ jobs:
               -e S3_AWS_ACCESS_KEY_ID=minioadmin \
               -e S3_AWS_SECRET_ACCESS_KEY=minioadmin \
               -e OPENAI_API_KEY=${OPENAI_API_KEY} \
+              -e ANTHROPIC_API_KEY=${ANTHROPIC_API_KEY} \
+              -e GATEWAY_CLIENT_TESTS_REQUIRED=${GATEWAY_CLIENTS_STRICT} \
               -e EXA_API_KEY=${EXA_API_KEY} \
               -e SLACK_BOT_TOKEN=${SLACK_BOT_TOKEN} \
               -e SLACK_BOT_TOKEN_TEST_SPACE=${SLACK_BOT_TOKEN_TEST_SPACE} \
@@ -419,7 +432,7 @@ jobs:
               -e ENABLE_CRAFT=true \
               -e ONYX_DEV_LICENSE \
               ${{ env.RUNS_ON_ECR_CACHE }}:integration-test-devcontainer-${{ github.run_id }} \
-              uv run --no-sync pytest -v --tb=short -rs tests/integration/${{ matrix.test-dir.path }}
+              $RUN_CMD
 
       # ------------------------------------------------------------
       # Always gather logs BEFORE "down". The test-runner container's

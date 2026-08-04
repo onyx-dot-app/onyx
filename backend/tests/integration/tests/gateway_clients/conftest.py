@@ -56,6 +56,19 @@ CODEX_PACKAGE = "@openai/codex@0.146.0"
 # already-running dev deployment.
 _DEV_ADMIN_EMAIL = "admin_user@example.com"
 
+# Set by the CI integration lane for this directory (see
+# .github/workflows/pr-integration-tests.yml). When truthy, every missing
+# prerequisite fails loudly instead of skipping, so the lane can never go
+# green by silently skipping; locally it stays unset and skips keep dev
+# boxes without npm, a running server, or provider keys usable.
+_STRICT_ENV = "GATEWAY_CLIENT_TESTS_REQUIRED"
+
+
+def _skip_or_fail(reason: str) -> None:
+    if os.environ.get(_STRICT_ENV):
+        pytest.fail(reason)
+    pytest.skip(reason)
+
 
 @pytest.fixture(scope="module", autouse=True)
 def _real_api_server() -> Generator[None, None, None]:
@@ -72,7 +85,7 @@ def _real_api_server() -> Generator[None, None, None]:
         if not isinstance(payload, dict) or payload.get("success") is not True:
             raise ValueError(f"unexpected health response: {payload!r}")
     except (httpx.HTTPError, ValueError) as e:
-        pytest.skip(
+        _skip_or_fail(
             f"No real api_server returned the Onyx health payload at "
             f"{API_SERVER_URL} ({e!r}); gateway client tests require an "
             "out-of-process dev server. See README.md."
@@ -89,7 +102,7 @@ def _real_api_server() -> Generator[None, None, None]:
 def _install_cli(package: str, executable: str) -> Generator[str, None, None]:
     """Install one pinned CLI package into an isolated npm prefix."""
     if shutil.which("npm") is None:
-        pytest.skip(f"npm is not available; cannot install {package}.")
+        _skip_or_fail(f"npm is not available; cannot install {package}.")
 
     with tempfile.TemporaryDirectory(prefix="onyx-gateway-cli-") as tmpdir:
         prefix = Path(tmpdir)
@@ -106,11 +119,13 @@ def _install_cli(package: str, executable: str) -> Generator[str, None, None]:
             timeout=180,
         )
         if result.returncode != 0:
-            pytest.skip(f"npm install of {package} failed: {result.stderr[-2000:]}")
+            _skip_or_fail(f"npm install of {package} failed: {result.stderr[-2000:]}")
 
         path = prefix / "node_modules" / ".bin" / executable
         if not path.exists():
-            pytest.skip(f"{executable} CLI binary not found after installing {package}")
+            _skip_or_fail(
+                f"{executable} CLI binary not found after installing {package}"
+            )
         yield str(path)
 
 
@@ -172,7 +187,7 @@ def anthropic_provider(
 ) -> Generator[DATestLLMProvider, None, None]:
     api_key = test_secrets.get(TestSecret.ANTHROPIC_API_KEY)
     if not api_key:
-        pytest.skip("ANTHROPIC_API_KEY secret is not available")
+        _skip_or_fail("ANTHROPIC_API_KEY secret is not available")
 
     provider = LLMProviderManager.create(
         user_performing_action=gateway_admin,
@@ -196,7 +211,7 @@ def openai_provider(
 ) -> Generator[DATestLLMProvider, None, None]:
     api_key = test_secrets.get(TestSecret.OPENAI_API_KEY)
     if not api_key:
-        pytest.skip("OPENAI_API_KEY secret is not available")
+        _skip_or_fail("OPENAI_API_KEY secret is not available")
 
     provider = LLMProviderManager.create(
         user_performing_action=gateway_admin,

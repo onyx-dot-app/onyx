@@ -21,6 +21,13 @@ Every other suite under `tests/integration` talks to an in-process FastAPI
   `CLAUDE.md`) rather than creating a user or calling `reset_all()` — this
   suite must never wipe a shared, already-running deployment.
 
+Skips vs failures: every missing prerequisite (server, npm, CLI install,
+provider secrets) is a *skip* by default, so local boxes and unrelated lanes
+stay usable. The CI lane for this directory sets
+`GATEWAY_CLIENT_TESTS_REQUIRED=true` (and boots an in-container `api_server`
+via `run_with_server.sh`), which turns all of those into hard failures so the
+lane can never go green by silently skipping.
+
 ## Running locally
 
 ```bash
