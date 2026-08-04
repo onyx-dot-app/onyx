@@ -2382,8 +2382,6 @@ def test_required_tool_choice_preserved_for_other_models(
 def test_named_tool_choice_serialized_for_litellm(
     default_multi_llm: LitellmLLM,
 ) -> None:
-    """A NamedToolChoice must reach litellm as the OpenAI function-call dict,
-    not the pydantic model."""
     with patch("litellm.completion") as mock_completion:
         mock_completion.return_value = []
 

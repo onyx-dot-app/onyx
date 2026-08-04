@@ -386,9 +386,6 @@ def _anthropic_request(**overrides: Any) -> AnthropicMessagesRequest:
 
 
 class _RecordingInvokeLLM(_InvokeLLM):
-    """Like _InvokeLLM, but remembers the tool_choice it was invoked with so a
-    test can assert on what actually reached the LLM layer."""
-
     def __init__(self, response: ModelResponse) -> None:
         super().__init__(response)
         self.received_tool_choice: ToolChoice | None = None
