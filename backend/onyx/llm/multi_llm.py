@@ -752,8 +752,12 @@ class LitellmLLM(LLM):
                         reasoning_effort
                     )
                     # thinking.type=enabled is rejected alongside a forced
-                    # tool_choice (only adaptive thinking supports forced
-                    # tool use), so skip thinking for a NamedToolChoice.
+                    # tool_choice (only adaptive thinking supports forced tool
+                    # use), so skip thinking for a NamedToolChoice. Sending it
+                    # anyway would not fail the request either: the retry
+                    # ladder below strips reasoning kwargs on the provider 400
+                    # and retries, landing in this same state one round trip
+                    # later.
                     if (
                         budget_tokens is not None
                         and not has_tool_call_history
