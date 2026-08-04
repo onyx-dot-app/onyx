@@ -73,6 +73,9 @@ export function UserProvider({ children }: { children: React.ReactNode }) {
   const { user: fetchedUser, mutateUser, userError } = useCurrentUser();
   // undefined = in flight. An error counts as resolved, so a failed load fails closed.
   const isUserLoading = fetchedUser === undefined && userError === undefined;
+  // Permissions read the fetch result, not `upToDateUser`: that copy lands one render late,
+  // so a page gate could see empty permissions after `isUserLoading` went false and redirect.
+  const authUser = fetchedUser ?? null;
   const { authTypeMetadata, isLoading: authTypeMetadataLoading } =
     useAuthTypeMetadata();
   const updatedSettings = useContext(SettingsContext);
@@ -573,16 +576,15 @@ export function UserProvider({ children }: { children: React.ReactNode }) {
         updateUserVoiceSettings,
         toggleAgentPinnedStatus,
         isAdmin: (
-          upToDateUser?.effective_permissions ?? EMPTY_PERMISSIONS
+          authUser?.effective_permissions ?? EMPTY_PERMISSIONS
         ).includes(Permission.FULL_ADMIN_PANEL_ACCESS),
         hasAdminAccess: hasAnyAdminPermission(
-          upToDateUser?.admin_capabilities ?? EMPTY_PERMISSIONS
+          authUser?.admin_capabilities ?? EMPTY_PERMISSIONS
         ),
-        permissions: upToDateUser?.effective_permissions ?? EMPTY_PERMISSIONS,
-        adminCapabilities:
-          upToDateUser?.admin_capabilities ?? EMPTY_PERMISSIONS,
+        permissions: authUser?.effective_permissions ?? EMPTY_PERMISSIONS,
+        adminCapabilities: authUser?.admin_capabilities ?? EMPTY_PERMISSIONS,
         isUserLoading,
-        isCloudSuperuser: upToDateUser?.is_cloud_superuser ?? false,
+        isCloudSuperuser: authUser?.is_cloud_superuser ?? false,
       }}
     >
       {children}
