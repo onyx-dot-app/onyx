@@ -445,9 +445,9 @@ export default function useDataTable<TData extends RowData>(
     setPagination((prev) => ({ ...prev, pageIndex: clamped - 1 }));
   };
 
-  // TanStack's bulk deselect deletes every id regardless of getCanSelect(), so a clear
-  // would drop a selected-but-protected row (e.g. the current manager, kept selected so
-  // Save can't revoke their own access). Keep those — only deselect needs this.
+  // TanStack's bulk deselect deletes every id regardless of getCanSelect(), so it would
+  // drop a selected-but-protected row (e.g. the current manager, kept selected so Save
+  // can't revoke their own access). Scoped to the rows passed in, matching the toggles.
   const deselectKeepingProtected = (rows: Row<TData>[]): RowSelectionState => {
     const next = { ...rowSelection };
     for (const row of rows) {
@@ -456,10 +456,17 @@ export default function useDataTable<TData extends RowData>(
     return next;
   };
 
+  // Clear replaces the whole selection (reset semantics), so it must also drop ids outside
+  // the loaded rows — build up from empty rather than subtracting, or a selection made on
+  // another page survives the clear.
   const clearSelection = () => {
-    table.setRowSelection(
-      deselectKeepingProtected(table.getCoreRowModel().flatRows)
-    );
+    const stillProtected: RowSelectionState = {};
+    for (const row of table.getCoreRowModel().flatRows) {
+      if (!row.getCanSelect() && rowSelection[row.id]) {
+        stillProtected[row.id] = true;
+      }
+    }
+    table.setRowSelection(stillProtected);
   };
 
   const toggleAllPageRowsSelected = (selected: boolean) => {
