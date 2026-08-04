@@ -3,7 +3,7 @@
 import { Fragment } from "react";
 import { useFormContext } from "@/components/context/FormContext";
 import { credentialTemplates } from "@/lib/connectors/credentials";
-import { Text } from "@opal/components";
+import { Content } from "@opal/layouts";
 import { cn } from "@opal/utils";
 import StepSidebar from "@/sections/sidebar/StepSidebarWrapper";
 import { useUser } from "@/providers/UserProvider";
@@ -56,19 +56,26 @@ export default function Sidebar() {
       buttonIcon={SvgSettings}
       buttonHref="/admin/add-connector"
     >
-      <div className="relative mx-2.5 flex flex-col">
+      <div className="relative mx-2 flex flex-col">
         {settingSteps.map((step, index) => {
           const allowed =
             (step == "Connector" && allowCreate) ||
             (step == "Advanced (optional)" && allowAdvanced) ||
             index <= formStep;
 
+          const selected: SelectionType =
+            formStep === index
+              ? "current"
+              : formStep < index
+                ? "future"
+                : "done";
+
           return (
             <Fragment key={index}>
               {index !== 0 && (
                 <div
                   className={cn(
-                    "absolute left-1.5 w-0.5",
+                    "absolute left-2 w-0.5",
                     index <= formStep
                       ? "bg-action-selection-05"
                       : "bg-background-tint-04"
@@ -81,7 +88,7 @@ export default function Sidebar() {
               )}
               <div
                 className={cn(
-                  "flex items-center gap-4",
+                  "flex items-center",
                   allowed ? "cursor-pointer" : "cursor-not-allowed"
                 )}
                 style={{ height: STEP_ROW_PX }}
@@ -91,22 +98,13 @@ export default function Sidebar() {
                   }
                 }}
               >
-                <SelectionIcon
-                  selected={
-                    formStep === index
-                      ? "current"
-                      : formStep < index
-                        ? "future"
-                        : "done"
-                  }
+                <Content
+                  sizePreset="main-ui"
+                  variant="body"
+                  icon={() => <SelectionIcon selected={selected} />}
+                  title={step}
+                  color={selected === "future" ? "muted" : "default"}
                 />
-                <Text
-                  as="p"
-                  font="main-ui-body"
-                  color={index <= formStep ? "text-04" : "text-02"}
-                >
-                  {step}
-                </Text>
               </div>
             </Fragment>
           );
