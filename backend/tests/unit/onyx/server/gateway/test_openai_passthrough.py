@@ -450,7 +450,8 @@ def test_build_upstream_request_forwards_unknown_future_fields() -> None:
 def test_build_upstream_headers_only_authorization_and_content_type() -> None:
     provider = _provider(1, "openai", [_model("gpt-5-mini")])
 
-    headers = _build_upstream_headers(provider)
+    with patch.object(openai_passthrough, "build_llm_extra_headers", return_value={}):
+        headers = _build_upstream_headers(provider)
 
     assert headers == {
         "Authorization": f"Bearer {provider.api_key}",
@@ -739,6 +740,16 @@ def test_handle_openai_passthrough_non_streaming_forwards_200_body_verbatim() ->
     assert payload["id"] == "resp_upstream_abc123"
 
 
+def test_handle_openai_passthrough_non_streaming_sanitizes_malformed_200() -> None:
+    fake_response = httpx.Response(200, content=b"not json")
+
+    with pytest.raises(OnyxError) as exc_info:
+        _non_streaming_run(fake_response)
+
+    assert exc_info.value.error_code is OnyxErrorCode.BAD_GATEWAY
+    assert exc_info.value.detail == _SANITIZED_ERROR
+
+
 def test_handle_openai_passthrough_non_streaming_records_usage() -> None:
     fake_response = httpx.Response(200, json=_UPSTREAM_RESPONSE_BODY)
     mock_span = MagicMock()
@@ -1012,7 +1023,7 @@ def test_passthrough_stream_sanitizes_non_forwardable_statuses(
 
     assert len(frames) == 1
     data = json.loads(frames[0][len("data: ") : -2])
-    assert data["response"]["error"]["type"] == "api_error"
+    assert data["response"]["error"]["code"] == "server_error"
     assert data["response"]["error"]["message"] == _SANITIZED_ERROR
     assert "leaked key xyz" not in "".join(frames)
 
@@ -1027,7 +1038,7 @@ def test_passthrough_stream_forwards_429_type_and_message_verbatim() -> None:
 
     assert len(frames) == 1
     data = json.loads(frames[0][len("data: ") : -2])
-    assert data["response"]["error"]["type"] == "rate_limit_exceeded"
+    assert data["response"]["error"]["code"] == "rate_limit_exceeded"
     assert data["response"]["error"]["message"] == "quota exceeded"
 
 
@@ -1084,6 +1095,10 @@ def test_passthrough_stream_upstream_error_emits_single_error_frame() -> None:
     data = json.loads(frames[0][len("data: ") : -2])
     assert data["type"] == "response.failed"
     assert data["response"]["error"]["message"] == "bad request"
+    assert data["response"]["status"] == "failed"
+    assert data["response"]["model"] == "gpt-5-mini"
+    assert data["response"]["output"] == []
+    assert data["sequence_number"] == 0
 
 
 def test_passthrough_stream_closes_exitstack_resources() -> None:

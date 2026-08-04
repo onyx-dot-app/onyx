@@ -7,6 +7,8 @@ import hashlib
 import json
 import queue
 import threading
+import time
+import uuid
 from contextlib import ExitStack
 from typing import Any
 
@@ -27,7 +29,12 @@ from onyx.server.gateway.configs import (
     OPENAI_PASSTHROUGH_CONNECT_TIMEOUT_SECONDS,
     OPENAI_PASSTHROUGH_READ_TIMEOUT_SECONDS,
 )
-from onyx.server.gateway.models import ResponsesRequest
+from onyx.server.gateway.models import (
+    ResponsesErrorCode,
+    ResponsesFailedEvent,
+    ResponsesObjectPayload,
+    ResponsesRequest,
+)
 from onyx.server.gateway.stream_bridge import (
     _put_stream_item,
     _sse_response,
@@ -328,7 +335,23 @@ def handle_openai_responses_passthrough(
                 )
             return _non_streaming_error_response(response)
 
-        response_body = response.json()
+        try:
+            response_body = response.json()
+            if not isinstance(response_body, dict):
+                raise ValueError("response body is not an object")
+        except ValueError as e:
+            if span is not None:
+                span.set_error(
+                    {
+                        "message": f"malformed upstream response: {type(e).__name__}",
+                        "data": None,
+                    }
+                )
+            logger.warning(
+                "OpenAI passthrough returned a malformed success response for model %s",
+                request.model,
+            )
+            raise OnyxError(OnyxErrorCode.BAD_GATEWAY, _SANITIZED_ERROR) from e
         usage = response_body.get("usage")
         output_items = response_body.get("output") or []
         text = "\n\n".join(
@@ -375,10 +398,26 @@ def _openai_passthrough_stream_worker(
     out: "queue.Queue[Any]",
     cancelled: threading.Event,
 ) -> None:
+    response_id = f"resp_{uuid.uuid4().hex}"
+    created_at = int(time.time())
+
     def emit_error(*, message: str, error_type: str) -> None:
+        code: ResponsesErrorCode = (
+            "rate_limit_exceeded"
+            if error_type in ("rate_limit_error", "rate_limit_exceeded")
+            else "server_error"
+        )
         payload = {
-            "type": "response.failed",
-            "response": {"error": {"message": message, "type": error_type}},
+            **ResponsesFailedEvent.create(
+                ResponsesObjectPayload.failed(
+                    response_id=response_id,
+                    created_at=created_at,
+                    model=model,
+                    message=message,
+                    code=code,
+                )
+            ).to_wire(),
+            "sequence_number": 0,
         }
         _put_stream_item(out, f"data: {json.dumps(payload)}\n\n", cancelled)
 
