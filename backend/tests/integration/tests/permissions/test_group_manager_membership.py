@@ -19,7 +19,6 @@ from typing import Any
 from typing import NamedTuple
 
 import pytest
-from sqlalchemy import update
 
 from onyx.auth.permissions import SCOPED_MANAGER_PERMISSIONS_EXPANDED
 from onyx.db.engine.sql_engine import get_session_with_current_tenant
@@ -59,13 +58,18 @@ class _ScopedEnv(NamedTuple):
 def _promote_to_manager(user_id: str, group_id: int) -> None:
     """Flip is_manager on the (user, group) edge and recompute the cached flag."""
     with get_session_with_current_tenant() as db_session:
-        db_session.execute(
-            update(User__UserGroup)
-            .where(
+        updated = (
+            db_session.query(User__UserGroup)
+            .filter(
                 User__UserGroup.user_id == user_id,
                 User__UserGroup.user_group_id == group_id,
             )
-            .values(is_manager=True)
+            .update({User__UserGroup.is_manager: True})
+        )
+        # A missing edge updates nothing and every test then runs against a plain member —
+        # the denial cases would still pass, for the wrong reason.
+        assert updated == 1, (
+            f"no User__UserGroup edge for user {user_id} in group {group_id}"
         )
         db_session.flush()
         recompute_user_permissions__no_commit(user_id, db_session)
