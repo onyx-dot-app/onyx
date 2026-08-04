@@ -14,8 +14,10 @@ STANDARD by the `account_type` backfill, so no live capability is regressed whil
 
 > **Revised by the 2026-06-29 regression review** — see [03 §11](03-detailed-design.md) for the full case
 > checklist. Net changes to this roadmap: a new **PR0** (boot-fix prerequisite); **PR4** adds **skills** (D5)
-> and **actions** scoping (D4 — `manage:actions` stays in the bundle, scoped via agents at GATE 2);
-> **delete stays admin-only** across all PRs (D6); PR3/PR5 enumerate
+> and **actions** scoping (D4 — `manage:actions` stays in the bundle for GATE 1 reach + create; the
+> agent-mediated GATE 2 was later dropped, see **D8**);
+> **delete stays admin-only** across all PRs (D6, narrowed by **D9** — a creator may delete their own
+> action/MCP server); PR3/PR5 enumerate
 > the previously-missed write endpoints (cc_pair status/name/property/prune, persona `/share`, group rename,
 > `/agents`) and the persona-gate signature fix (§11.5) + cc_pair-reattach fix (§11.6).
 
@@ -106,9 +108,9 @@ highest-value resource types, exercised by the escalation integration suite (man
 - **Feature-flag state:** N/A — nothing calls these yet.
 - **Tests on merge:** unit/external-dependency unit — `assert_within_scope` invariants (⊆ managed,
   non-empty, private, fail-closed, admin/global bypass); `within_managed_scope_clause` selects the right rows.
-- **Drift checkpoint:** confirm the bundle is the 7-token set — includes `manage:actions` (D4, scoped via
-  agents at GATE 2) and the new `manage:skills` (D5); confirm `require_permission`'s token-cap branch is
-  unchanged since `03`.
+- **Drift checkpoint:** confirm the bundle is the 7-token set — includes `manage:actions` (D4 keeps it in the
+  bundle for reach + create; manage itself is owner-or-admin per **D8**) and the new `manage:skills` (D5);
+  confirm `require_permission`'s token-cap branch is unchanged since `03`.
 
 ## PR 3 — Enforce scope on connectors & document sets (walking skeleton)
 - **Goal:** prove the full two-gate model end-to-end on the two highest-value resources.
@@ -148,10 +150,11 @@ highest-value resource types, exercised by the escalation integration suite (man
   `replace_skill_grants`, re-point `skill/api.py` by verb to `MANAGE_SKILLS, allow_scope=True` (§11.2);
   managed-scope enforcement in EE `token_limit.py` group write path; `credentials.py` **and `feedback.py`** left
   unchanged (documented no-ops); **persona/skill delete stays admin-only (D6)**; scoped-PAT tests. **Actions
-  (D4):** `MANAGE_ACTIONS` is in the bundle; switch the tool/MCP admin endpoints to `allow_scope=True` and
-  replace their owner-or-admin per-resource check with GATE 2 deriving the action's groups via its agents
-  (`Tool → Persona__Tool → Persona__UserGroup` ⊆ managed); delete stays admin-only; tool used by no agent →
-  owner/admin only.
+  (D4 + D8):** `MANAGE_ACTIONS` is in the bundle; switch the tool/MCP admin endpoints to `allow_scope=True`
+  so a manager can reach them and create their own. Managing an existing action/server stays
+  **owner-or-admin** (`can_manage_own_tool` / `_ensure_mcp_server_owner_or_admin`) — the agent-mediated GATE 2
+  once planned here was built and then dropped (**D8**); agent-derived scope survives only for *viewing* an
+  MCP server connected to a managed group. A creator may delete what they made (**D9**).
 - **Out of scope:** membership/assignment (PR5); UI (PR6).
 - **Files:**
   | File | New/Modified | This PR's slice |
@@ -160,8 +163,8 @@ highest-value resource types, exercised by the escalation integration suite (man
   | `backend/ee/onyx/db/persona.py` | modified | `update_persona_access` EE gate (lockstep signature) |
   | `backend/onyx/db/skill.py` | modified | scoped admin-list path + `replace_skill_grants` GATE 2 + is_public toggle gate (§11.2) |
   | `backend/onyx/server/features/skill/api.py` | modified | re-point off curator dep; `allow_scope=True` by verb (DELETE stays admin-only) |
-  | `backend/onyx/server/features/{tool,mcp}/api.py` | modified | `allow_scope=True`; agent-mediated GATE 2 replaces owner-or-admin (§11.1) |
-  | `backend/onyx/db/tools.py` | modified | agent-mediated action scope (Tool→Persona__Tool→groups) |
+  | `backend/onyx/server/features/{tool,mcp}/api.py` | modified | `allow_scope=True` (reach + create); manage (edit/toggle/auth) stays **owner-or-admin** — agent-mediated GATE 2 dropped per **D8** |
+  | `backend/onyx/db/tools.py` | modified | `can_manage_own_tool` / `can_manage_mcp_server` owner-or-admin gates (D8); agent-mediated scope kept only for *view* |
   | `backend/ee/onyx/db/token_limit.py` | modified | managed-scope on group token-limit writes |
   | `backend/onyx/server/.../persona api` | modified | `ADD_AGENTS, allow_scope=True` deps |
   | `backend/tests/integration/.../test_group_manager_agents.py` | new | agent + skill + action escalation + ADD_AGENTS-owner no-regression + PAT narrowing |
@@ -171,8 +174,9 @@ highest-value resource types, exercised by the escalation integration suite (man
 - **Feature-flag state:** N/A — lands-together invariant.
 - **Tests on merge:** integration — agent create/share scoped; manager can't widen a PAT's group reach; `add:agents`
   ownership tier still keyed on `Persona.user_id`; credentials remain owner-only for a manager.
-- **Drift checkpoint:** confirm actions-via-agents assumption (no direct tool→group table) still holds; confirm
-  the persona create/update endpoint path + that `manage:agents` is the right scoped token.
+- **Drift checkpoint:** confirm the persona create/update endpoint path + that `manage:agents` is the right
+  scoped token. (The actions-via-agents assumption no longer gates anything — D8 made action/MCP manage
+  owner-or-admin, so there is nothing to derive from the agent join.)
 
 ## PR 5 — Manager assignment & group-membership scoping (backend complete)
 - **Goal:** let admins/in-group managers create managers, and scope membership edits; expose the flag to clients.

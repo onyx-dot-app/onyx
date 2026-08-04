@@ -34,6 +34,11 @@ interface UserContextType {
   isAdmin: boolean;
   hasAdminAccess: boolean;
   permissions: string[];
+  // Coarse admin-reach set: effective tokens plus the scoped manager bundle. Feeds
+  // nav/page gates so a group manager is included; org-wide checks still use isAdmin.
+  adminCapabilities: string[];
+  // True only while /api/me is in flight. `user === null` won't do: it also means signed out.
+  isUserLoading: boolean;
   refreshUser: () => Promise<void>;
   isCloudSuperuser: boolean;
   authTypeMetadata: AuthTypeMetadata;
@@ -65,7 +70,9 @@ interface UserContextType {
 const UserContext = createContext<UserContextType | undefined>(undefined);
 
 export function UserProvider({ children }: { children: React.ReactNode }) {
-  const { user: fetchedUser, mutateUser } = useCurrentUser();
+  const { user: fetchedUser, mutateUser, userError } = useCurrentUser();
+  // undefined = in flight. An error counts as resolved, so a failed load fails closed.
+  const isUserLoading = fetchedUser === undefined && userError === undefined;
   const { authTypeMetadata, isLoading: authTypeMetadataLoading } =
     useAuthTypeMetadata();
   const updatedSettings = useContext(SettingsContext);
@@ -569,9 +576,12 @@ export function UserProvider({ children }: { children: React.ReactNode }) {
           upToDateUser?.effective_permissions ?? EMPTY_PERMISSIONS
         ).includes(Permission.FULL_ADMIN_PANEL_ACCESS),
         hasAdminAccess: hasAnyAdminPermission(
-          upToDateUser?.effective_permissions ?? EMPTY_PERMISSIONS
+          upToDateUser?.admin_capabilities ?? EMPTY_PERMISSIONS
         ),
         permissions: upToDateUser?.effective_permissions ?? EMPTY_PERMISSIONS,
+        adminCapabilities:
+          upToDateUser?.admin_capabilities ?? EMPTY_PERMISSIONS,
+        isUserLoading,
         isCloudSuperuser: upToDateUser?.is_cloud_superuser ?? false,
       }}
     >

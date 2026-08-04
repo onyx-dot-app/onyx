@@ -1,6 +1,7 @@
 from uuid import UUID
 
 from pydantic import BaseModel
+from pydantic import Field
 
 from onyx.auth.permissions import Permission
 from onyx.db.models import UserGroup as UserGroupModel
@@ -17,12 +18,17 @@ class UserGroup(BaseModel):
     id: int
     name: str
     users: list[UserInfo]
+    manager_ids: list[str]
     cc_pairs: list[ConnectorCredentialPairDescriptor]
     document_sets: list[DocumentSet]
     personas: list[PersonaSnapshot]
     is_up_to_date: bool
     is_up_for_deletion: bool
     is_default: bool
+    # Per-action affordance map ({"manage": true, ...}) the client reads to show/hide
+    # controls. Empty default = every action denied (missing key is false), so it fails
+    # closed. Only the list-groups endpoint fills it in; the mutation routes leave it empty.
+    permissions: dict[str, bool] = Field(default_factory=dict)
 
     @classmethod
     def from_model(
@@ -30,10 +36,17 @@ class UserGroup(BaseModel):
         user_group_model: UserGroupModel,
         *,
         mask_credential_prefix: bool,
+        permissions: dict[str, bool] | None = None,
     ) -> "UserGroup":
         return cls(
+            permissions=permissions or {},
             id=user_group_model.id,
             name=user_group_model.name,
+            manager_ids=[
+                str(relationship.user_id)
+                for relationship in user_group_model.user_group_relationships
+                if relationship.is_manager and relationship.user_id is not None
+            ],
             users=[
                 UserInfo(
                     id=str(user.id),
@@ -120,6 +133,11 @@ class UserGroupRename(BaseModel):
 class UpdateGroupAgentsRequest(BaseModel):
     added_agent_ids: list[int]
     removed_agent_ids: list[int]
+
+
+class SetGroupManagerRequest(BaseModel):
+    user_id: UUID
+    is_manager: bool
 
 
 class SetPermissionRequest(BaseModel):

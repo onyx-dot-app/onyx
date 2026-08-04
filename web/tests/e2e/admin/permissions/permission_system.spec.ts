@@ -50,8 +50,8 @@ test("group permissions apply immediately when a user is added to the group", as
       Permission.MANAGE_LLMS,
     ]);
 
-    // This is intentionally not followed by waitForGroupSync. Auth permission
-    // recomputation is expected to complete before add-users returns.
+    // Intentionally no waitForGroupSync: auth permission recomputation
+    // is expected to complete before add-users returns.
     await adminClient.addUsersToGroup(groupId, [user.id]);
 
     await page.context().clearCookies();

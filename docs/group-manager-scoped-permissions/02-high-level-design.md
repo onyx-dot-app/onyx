@@ -8,7 +8,8 @@
 > `assert_within_scope` / `assert_global`. Names below are updated to match; see 03 §2 for signatures.
 
 > **Revised by the 2026-06-29 regression review.** Bundle/coverage decisions here are updated by
-> **D4** (`manage:actions` stays in the bundle, scoped via agents at GATE 2), **D5** (skills = a 7th scoped resource under a
+> **D4** (`manage:actions` stays in the bundle — GATE 1 reach + create; its agent-mediated GATE 2 was later
+> dropped, see **D8**), **D5** (skills = a 7th scoped resource under a
 > new `manage:skills` token), **D6** (managers do everything **except delete**) and **D7** (attaching an agent
 > to a group is controlled by `manage:agents`). The authoritative, complete case list lives in
 > [03 §11](03-detailed-design.md). Also a hard prerequisite: the broken `current_curator_or_admin_user`

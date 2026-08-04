@@ -36,6 +36,8 @@ from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import selectinload
 from sqlalchemy.orm import Session
 
+from onyx.auth.permissions import has_global_permission
+from onyx.db.enums import Permission
 from onyx.db.enums import SandboxStatus
 from onyx.db.external_app import is_user_authenticated_for_app
 from onyx.db.models import ExternalApp
@@ -45,6 +47,8 @@ from onyx.db.models import Skill
 from onyx.db.models import Skill__UserGroup
 from onyx.db.models import User
 from onyx.db.models import User__UserGroup
+from onyx.db.scoped_permissions import scoped_group_ids_subquery
+from onyx.db.scoped_permissions import within_managed_scope_clause
 from onyx.db.utils import is_fk_violation
 from onyx.db.utils import is_unique_violation
 from onyx.db.utils import UNSET
@@ -257,8 +261,24 @@ def fetch_skill_by_id(skill_id: UUID, db_session: Session) -> Skill | None:
     return db_session.scalars(stmt).one_or_none()
 
 
-def list_skills_for_admin(db_session: Session) -> Sequence[Skill]:
+def list_skills_for_admin(db_session: Session, user: User) -> Sequence[Skill]:
+    """Admin skill list. A global MANAGE_SKILLS holder (incl. admins) sees every
+    skill; a scoped group manager sees only PRIVATE skills whose every group they
+    manage. Fail-closed: a non-manager's managed subquery is empty → no rows.
+
+    This is the admin/editable path only — NEVER reuse it for runtime visibility
+    (``_add_user_visibility_filter``), which feeds sandbox injection."""
     stmt = select(Skill).options(selectinload(Skill.author)).order_by(Skill.name)
+    if not has_global_permission(user, Permission.MANAGE_SKILLS):
+        stmt = stmt.where(
+            within_managed_scope_clause(
+                resource_id_col=Skill.id,
+                junction_resource_col=Skill__UserGroup.skill_id,
+                junction_group_col=Skill__UserGroup.user_group_id,
+                non_public_clause=Skill.is_public.is_(False),
+                managed_subq=scoped_group_ids_subquery(user),
+            )
+        )
     return list(db_session.scalars(stmt))
 
 

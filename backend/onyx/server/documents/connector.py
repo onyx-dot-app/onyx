@@ -22,7 +22,9 @@ from pydantic import BaseModel
 from sqlalchemy.orm import Session
 
 from onyx.auth.email_utils import send_email
+from onyx.auth.permission_projection import cc_pair_permissions
 from onyx.auth.permissions import get_effective_permissions
+from onyx.auth.permissions import has_global_permission
 from onyx.auth.permissions import require_permission
 from onyx.auth.scoped_permissions import assert_within_scope
 from onyx.auth.users import current_chat_accessible_user
@@ -1093,7 +1095,9 @@ def get_connector_status(
 @router.post("/admin/connector/indexing-status", tags=PUBLIC_API_TAGS)
 def get_connector_indexing_status(
     request: IndexingStatusRequest,
-    user: User = Depends(require_permission(Permission.MANAGE_CONNECTORS)),
+    user: User = Depends(
+        require_permission(Permission.MANAGE_CONNECTORS, allow_scope=True)
+    ),
     db_session: Session = Depends(get_session),
 ) -> list[ConnectorIndexingStatusLiteResponse]:
     tenant_id = get_current_tenant_id()
@@ -1114,6 +1118,8 @@ def get_connector_indexing_status(
 
         with open(MOCK_CONNECTOR_FILE_PATH, "r") as f:
             raw_data = json.load(f)
+            for status in raw_data:
+                status.setdefault("permissions", {})  # fail-closed for mock rows
             connector_indexing_statuses = [
                 ConnectorIndexingStatusLite(**status) for status in raw_data
             ]
@@ -1205,6 +1211,14 @@ def get_connector_indexing_status(
         list[IndexAttempt], latest_successful_index_attempts
     )
 
+    # A scoped manager is always a member of the groups they manage, so their editable (managed)
+    # pairs also match the non-editable member query above; drop the overlap so each renders once
+    # (as editable, taking precedence over the read-only row).
+    editable_ids = {cc_pair.id for cc_pair in editable_cc_pairs}
+    non_editable_cc_pairs = [
+        cc_pair for cc_pair in non_editable_cc_pairs if cc_pair.id not in editable_ids
+    ]
+
     document_count_info = get_document_counts_for_all_cc_pairs(db_session)
 
     # Create lookup dictionaries for efficient access
@@ -1225,6 +1239,8 @@ def get_connector_indexing_status(
     cc_pair_to_latest_successful_index_attempt = _attempt_lookup(
         latest_successful_index_attempts
     )
+
+    is_connectors_admin = has_global_permission(user, Permission.MANAGE_CONNECTORS)
 
     def build_connector_indexing_status(
         cc_pair: ConnectorCredentialPair,
@@ -1255,6 +1271,7 @@ def get_connector_indexing_status(
             ),
             is_editable,
             doc_count,
+            is_connectors_admin=is_connectors_admin,
         )
 
     # Process editable cc_pairs
@@ -1271,16 +1288,18 @@ def get_connector_indexing_status(
         if status:
             non_editable_statuses.append(status)
 
-    # Process federated connectors
+    # Admins only — a federated connector has no group linkage to scope by, and its detail
+    # route is global, so a scoped manager would just 403 on click.
     federated_statuses: list[FederatedConnectorStatus] = []
-    for federated_connector in federated_connectors:
-        federated_status = FederatedConnectorStatus(
-            id=federated_connector.id,
-            source=federated_connector.source,
-            name=f"{federated_connector.source.replace('_', ' ').title()}",
-        )
-
-        federated_statuses.append(federated_status)
+    if is_connectors_admin:
+        for federated_connector in federated_connectors:
+            federated_statuses.append(
+                FederatedConnectorStatus(
+                    id=federated_connector.id,
+                    source=federated_connector.source,
+                    name=f"{federated_connector.source.replace('_', ' ').title()}",
+                )
+            )
 
     source_to_summary: dict[DocumentSource, SourceSummary] = {}
 
@@ -1418,6 +1437,8 @@ def _get_connector_indexing_status_lite(
     last_successful_index_time: datetime | None,
     is_editable: bool,
     document_cnt: int,
+    *,
+    is_connectors_admin: bool,
 ) -> ConnectorIndexingStatusLite | None:
     # TODO remove this to enable ingestion API
     if cc_pair.name == "DefaultCCPair":
@@ -1441,6 +1462,9 @@ def _get_connector_indexing_status_lite(
         access_type=cc_pair.access_type,
         cc_pair_status=cc_pair.status,
         is_editable=is_editable,
+        permissions=cc_pair_permissions(
+            is_editable=is_editable, is_connectors_admin=is_connectors_admin
+        ),
         in_progress=in_progress,
         in_repeated_error_state=cc_pair.in_repeated_error_state,
         last_finished_status=(

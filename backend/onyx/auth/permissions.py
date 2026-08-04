@@ -30,8 +30,10 @@ logger = setup_logger()
 ALL_PERMISSIONS: frozenset[str] = frozenset(p.value for p in Permission)
 
 # Implication map: granted permission -> set of permissions it implies.
+# NOTE: ADD_AGENTS does NOT imply READ_AGENTS — creating your own agents must not grant
+# see-all-agents visibility. READ_AGENTS (browse every agent) comes only from the
+# MANAGE_* admin bundles below.
 IMPLIED_PERMISSIONS: dict[str, set[str]] = {
-    Permission.ADD_AGENTS.value: {Permission.READ_AGENTS.value},
     Permission.MANAGE_AGENTS.value: {
         Permission.ADD_AGENTS.value,
         Permission.READ_AGENTS.value,
@@ -105,7 +107,7 @@ SCOPED_MANAGER_PERMISSIONS: frozenset[Permission] = frozenset(
         Permission.ADD_AGENTS,
         Permission.MANAGE_USER_GROUPS,
         Permission.MANAGE_ACTIONS,  # scoped via its agents at GATE 2
-        Permission.MANAGE_SKILLS,  # not yet enforced (no registry)
+        Permission.MANAGE_SKILLS,  # scoped via Skill__UserGroup at GATE 2
     }
 )
 
@@ -203,6 +205,13 @@ PERMISSION_REGISTRY: list[PermissionRegistryEntry] = [
         permissions=[Permission.MANAGE_AGENTS],
         group=2,
     ),
+    PermissionRegistryEntry(
+        id="manage_skills",
+        display_name="Manage Skills",
+        description="Add and update skills that agents can use.",
+        permissions=[Permission.MANAGE_SKILLS],
+        group=2,
+    ),
     # Group 3 — Monitoring & Tokens
     PermissionRegistryEntry(
         id="view_agent_analytics",
@@ -248,6 +257,16 @@ def resolve_effective_permissions(granted: set[str]) -> set[str]:
     return effective
 
 
+# The bundle plus everything it implies. A scoped manager holds the bundle's
+# write tokens AND their implied reads (e.g. MANAGE_USER_GROUPS ⇒ READ_USER_GROUPS)
+# — scoped to their managed groups. has_permission classifies against this so a
+# manager resolves SCOPED for those reads; every READ + allow_scope endpoint must
+# still apply its own GATE 2 scope filter (they'd otherwise return all rows).
+SCOPED_MANAGER_PERMISSIONS_EXPANDED: frozenset[str] = frozenset(
+    resolve_effective_permissions({p.value for p in SCOPED_MANAGER_PERMISSIONS})
+)
+
+
 def get_effective_permissions(user: User) -> set[Permission]:
     """Read granted permissions from the column and expand implied permissions."""
     granted = set(parse_permission_values(user.effective_permissions))
@@ -275,7 +294,10 @@ def has_permission(user: User, permission: Permission) -> PermissionAuthority:
     """
     if permission in get_effective_permissions(user):
         return PermissionAuthority.GLOBAL
-    if permission in SCOPED_MANAGER_PERMISSIONS and user.is_group_manager:
+    if (
+        user.is_group_manager
+        and permission.value in SCOPED_MANAGER_PERMISSIONS_EXPANDED
+    ):
         return PermissionAuthority.SCOPED
     return PermissionAuthority.NONE
 
