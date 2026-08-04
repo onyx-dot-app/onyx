@@ -269,8 +269,11 @@ describe("duplicate provider display names", () => {
   ];
 
   test("model configuration id resolves the exact row despite the shared name", () => {
+    // The stored model segment is stale on purpose: only the id branch
+    // re-derives the row's true model name, so this fails if the id path
+    // regresses to name-based resolution.
     const descriptor = getValidLlmDescriptorForProviders(
-      structureValue("Gateway Dual", "bifrost", "gateway/gpt-model", 202),
+      structureValue("Gateway Dual", "bifrost", "gateway/renamed-model", 202),
       sameNameProviders
     );
 
