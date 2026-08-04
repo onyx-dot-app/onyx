@@ -15,6 +15,12 @@ from typing import Any
 import httpx
 from fastapi.responses import JSONResponse, StreamingResponse
 
+from ee.onyx.server.gateway.stream_bridge import (
+    _put_stream_item,
+    _sse_response,
+    _stream_worker_guard,
+    _StreamAccumulator,
+)
 from onyx.db.models import User
 from onyx.error_handling.error_codes import OnyxErrorCode
 from onyx.error_handling.exceptions import OnyxError
@@ -34,12 +40,6 @@ from onyx.server.gateway.models import (
     ResponsesFailedEvent,
     ResponsesObjectPayload,
     ResponsesRequest,
-)
-from onyx.server.gateway.stream_bridge import (
-    _put_stream_item,
-    _sse_response,
-    _stream_worker_guard,
-    _StreamAccumulator,
 )
 from onyx.server.manage.llm.models import LLMProviderView, ModelConfigurationView
 from onyx.tracing.flows import LLMFlow

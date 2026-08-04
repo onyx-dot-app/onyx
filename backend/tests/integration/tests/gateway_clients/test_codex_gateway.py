@@ -1,5 +1,5 @@
 """Integration tests for the Codex CLI against the gateway's Responses API
-passthrough (onyx.server.gateway.openai_passthrough).
+passthrough (ee.onyx.server.gateway.openai_passthrough).
 
 Test Suite:
 1. test_basic_codex_turn - `codex exec` answers correctly through the gateway

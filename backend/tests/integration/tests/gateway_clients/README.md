@@ -1,7 +1,7 @@
 # Gateway Client Integration Tests
 
-Exercises the Onyx AI gateway's Anthropic (`onyx/server/gateway/anthropic_passthrough.py`)
-and OpenAI (`onyx/server/gateway/openai_passthrough.py`) passthrough endpoints with
+Exercises the Onyx AI gateway's Anthropic (`ee/onyx/server/gateway/anthropic_passthrough.py`)
+and OpenAI (`ee/onyx/server/gateway/openai_passthrough.py`) passthrough endpoints with
 REAL coding-agent CLIs: `@anthropic-ai/claude-code` and `@openai/codex`.
 
 ## Why this directory is different

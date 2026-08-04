@@ -1,8 +1,7 @@
-"""Shared SSE-over-thread streaming primitives for the LLM gateway.
+"""Shared SSE-over-thread streaming primitives for the EE LLM gateway.
 
-Moved verbatim out of ``onyx.server.gateway.api`` so both the translation
-path (api.py) and the Anthropic native passthrough path
-(anthropic_passthrough.py) can share them without a circular import.
+The translation and native passthrough paths share these helpers to avoid a
+circular import.
 """
 
 import queue

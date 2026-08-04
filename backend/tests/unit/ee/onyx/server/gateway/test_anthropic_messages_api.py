@@ -11,6 +11,9 @@ from fastapi import Request
 from fastapi.responses import StreamingResponse
 from sqlalchemy.orm import Session
 
+from ee.onyx.server.gateway import api as gateway_api
+from ee.onyx.server.gateway import stream_bridge
+from ee.onyx.server.gateway.api import _MESSAGES_ADAPTER
 from onyx.error_handling.error_codes import OnyxErrorCode
 from onyx.error_handling.exceptions import OnyxError
 from onyx.llm.interfaces import LLM
@@ -39,16 +42,13 @@ from onyx.llm.models import (
     UserMessage,
 )
 from onyx.llm.multi_llm import LLMRateLimitError, LLMTimeoutError
-from onyx.server.gateway import api as gateway_api
-from onyx.server.gateway import stream_bridge
-from onyx.server.gateway.api import _MESSAGES_ADAPTER
 from onyx.server.gateway.models import (
     AnthropicCountTokensRequest,
     AnthropicMessageResponse,
     AnthropicMessagesRequest,
 )
 from onyx.tracing.flows import LLMFlow
-from tests.unit.onyx.server.gateway.test_llm_gateway_api import (
+from tests.unit.ee.onyx.server.gateway.test_llm_gateway_api import (
     _ChunkStreamLLM,
     _InvokeLLM,
     _model,
