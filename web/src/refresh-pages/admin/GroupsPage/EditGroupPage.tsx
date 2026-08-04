@@ -555,11 +555,6 @@ function EditGroupPage({ groupId }: EditGroupPageProps) {
                     pageSize={PAGE_SIZE}
                     searchTerm={searchTerm}
                     selectionBehavior="multi-select"
-                    // Can't deselect yourself while you manage this group (would drop your
-                    // access on Save).
-                    canSelectRow={(row) =>
-                      !isOwnManagerRow(row.id ?? row.email)
-                    }
                     initialRowSelection={currentRowSelection}
                     onSelectionChange={handleSelectionChange}
                     footer={{}}

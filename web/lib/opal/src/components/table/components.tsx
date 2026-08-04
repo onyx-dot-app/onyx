@@ -47,8 +47,6 @@ type SelectionBehavior = "no-select" | "single-select" | "multi-select";
 export type DataTableProps<TData> = BaseDataTableProps<TData> & {
   /** Row selection behavior. @default "no-select" */
   selectionBehavior?: SelectionBehavior;
-  /** Per-row predicate; false pins the checkbox: disabled, stuck at its initial selection. */
-  canSelectRow?: (row: TData) => boolean;
 };
 
 // ---------------------------------------------------------------------------
@@ -154,7 +152,6 @@ export function Table<TData>(props: DataTableProps<TData>) {
     size = "lg",
     variant = "cards",
     selectionBehavior = "no-select",
-    canSelectRow,
     onSelectionChange,
     onRowClick,
     searchTerm,
@@ -229,9 +226,6 @@ export function Table<TData>(props: DataTableProps<TData>) {
     initialRowSelection,
     initialViewSelected,
     getRowId,
-    enableRowSelection: canSelectRow
-      ? (row) => canSelectRow(row.original)
-      : undefined,
     onSelectionChange,
     searchTerm,
     serverSide: serverSide
@@ -526,7 +520,7 @@ export function Table<TData>(props: DataTableProps<TData>) {
                       }
                       if (onRowClick) {
                         onRowClick(row.original);
-                      } else if (isSelectable && row.getCanSelect()) {
+                      } else if (isSelectable) {
                         if (!isMultiSelect) {
                           // single-select: clear all, then select this row
                           table.toggleAllRowsSelected(false);
@@ -556,7 +550,6 @@ export function Table<TData>(props: DataTableProps<TData>) {
                               background={qDef.background}
                               iconSize={qDef.iconSize}
                               selectable={showQualifierCheckbox}
-                              disabled={!row.getCanSelect()}
                               selected={
                                 showQualifierCheckbox && row.getIsSelected()
                               }
