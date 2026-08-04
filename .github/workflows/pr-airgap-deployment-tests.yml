@@ -19,7 +19,7 @@ on:
       - "backend/onyx/setup.py"
       - "backend/requirements/**"
       - "backend/shared_configs/**"
-      - "backend/tests/deployment/airgap/**"
+      - "backend/tests/airgap/**"
       - "deployment/docker_compose/docker-compose.yml"
       - "deployment/docker_compose/docker-compose.airgap-test.yml"
       - "deployment/docker_compose/docker-compose.airgap-tls-test.yml"
