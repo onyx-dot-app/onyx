@@ -212,6 +212,14 @@ function EditGroupPage({ groupId }: EditGroupPageProps) {
     () => new Set()
   );
 
+  const isOwnManagerRow = useCallback(
+    (userId: string) =>
+      currentUserId != null &&
+      userId === currentUserId &&
+      (managerIds.has(userId) || pendingManagerIds.has(userId)),
+    [currentUserId, managerIds, pendingManagerIds]
+  );
+
   // Hits its endpoint immediately (member add/remove defers to Save), then revalidates.
   const handleToggleManager = useCallback(
     async (userId: string, makeManager: boolean) => {
@@ -248,22 +256,19 @@ function EditGroupPage({ groupId }: EditGroupPageProps) {
           const isManager = managerIds.has(userId);
           const isPersisted = persistedMemberIds.has(userId);
           const isPending = pendingManagerIds.has(userId);
-          // Your own manager row: block revoke and member-remove — either drops your own
-          // access mid-edit (a manager must stay a member), leaving a stale editable page.
-          const isOwnManagerRow =
-            isManager && currentUserId != null && userId === currentUserId;
+          const isOwnManager = isOwnManagerRow(userId);
           return (
             <div className="flex items-center gap-1">
               <IconButton
                 icon={isPending ? SvgSimpleLoader : SvgShield}
                 tertiary
                 transient={isManager}
-                disabled={!isPersisted || isPending || isOwnManagerRow}
+                disabled={!isPersisted || isPending || isOwnManager}
                 aria-label={isManager ? "Revoke manager" : "Make manager"}
                 tooltip={
                   !isPersisted
                     ? "Save the group before assigning a manager"
-                    : isOwnManagerRow
+                    : isOwnManager
                       ? "You can't revoke your own manager access"
                       : isManager
                         ? "Revoke manager"
@@ -277,10 +282,10 @@ function EditGroupPage({ groupId }: EditGroupPageProps) {
               <IconButton
                 icon={SvgMinusCircle}
                 tertiary
-                disabled={isOwnManagerRow}
+                disabled={isOwnManager}
                 aria-label="Remove member"
                 tooltip={
-                  isOwnManagerRow
+                  isOwnManager
                     ? "You can't remove yourself while managing this group"
                     : undefined
                 }
@@ -297,11 +302,11 @@ function EditGroupPage({ groupId }: EditGroupPageProps) {
     [
       handleRemoveMember,
       handleToggleManager,
+      isOwnManagerRow,
       managerIds,
       persistedMemberIds,
       pendingManagerIds,
       canManage,
-      currentUserId,
     ]
   );
 
@@ -552,14 +557,9 @@ function EditGroupPage({ groupId }: EditGroupPageProps) {
                     selectionBehavior="multi-select"
                     // Can't deselect yourself while you manage this group (would drop your
                     // access on Save).
-                    canSelectRow={(row) => {
-                      const uid = row.id ?? row.email;
-                      return !(
-                        currentUserId != null &&
-                        uid === currentUserId &&
-                        managerIds.has(uid)
-                      );
-                    }}
+                    canSelectRow={(row) =>
+                      !isOwnManagerRow(row.id ?? row.email)
+                    }
                     initialRowSelection={currentRowSelection}
                     onSelectionChange={handleSelectionChange}
                     footer={{}}
