@@ -200,12 +200,23 @@ class MCPTool(Tool[None]):
 
             if requires_auth and not has_auth_config:
                 # Authentication required but not configured
-                auth_error_msg = (
-                    f"The {self._name} tool from {self.mcp_server.name} requires authentication "
-                    f"but no credentials have been provided. Tell the user to use the MCP dropdown in the "
-                    f"chat bar to authenticate with the {self.mcp_server.name} server before "
-                    f"using this tool."
-                )
+                if not self.user_email:
+                    auth_error_msg = (
+                        f"The {self._name} tool from {self.mcp_server.name} requires authentication, "
+                        f"but no credentials were found for this bot request. Slack/Discord bots and API "
+                        f"integrations do not support individual per-user or OAuth authentication. "
+                        f"Please ask your administrator to configure 'Shared Key' authentication for "
+                        f"this MCP server."
+                    )
+                else:
+                    auth_error_msg = (
+                        f"The {self._name} tool from {self.mcp_server.name} requires authentication "
+                        f"but no credentials have been provided. Tell the user to use the MCP dropdown in the "
+                        f"chat bar to authenticate with the {self.mcp_server.name} server before "
+                        f"using this tool."
+                    )
+
+                # EVERYTHING BELOW HERE REMAINS UNTOUCHED:
                 logger.warning(
                     "Authentication required for MCP tool '%s' but no credentials found",
                     self._name,
