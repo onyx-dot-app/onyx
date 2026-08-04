@@ -139,13 +139,18 @@ function ChatSurfaceContent({ focus }: { focus: ChatFocus }) {
   // (consumeAttachments), a send clears both.
   const sendWithAttachments = (message?: string) => {
     if (draft.hasBlockingFiles) return;
-    // Lets the tool state distinguish "this send is creating the session" from simply opening an
-    // existing chat — the two look identical from a null → non-null session id alone.
-    if (sessionId == null) composerTools.notePendingSend();
+    const clearDraft =
+      message == null ? draft.consume : draft.consumeAttachments;
     submit(
       message ?? draft.text,
       draft.descriptors,
-      message == null ? draft.consume : draft.consumeAttachments,
+      () => {
+        // `onAccepted` runs only once the session exists — a failed create throws before it — and
+        // everything from here to the route change is synchronous. That makes it the one moment
+        // we can say "this send created the session", which a null → non-null id alone cannot.
+        if (sessionId == null) composerTools.notePendingSend();
+        clearDraft();
+      },
       composerTools.resolveToolOptions(),
     );
   };
