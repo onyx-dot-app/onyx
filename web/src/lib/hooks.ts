@@ -481,6 +481,9 @@ export function getDefaultLlmDescriptor(
         name: provider.name ?? "",
         provider: provider.provider,
         modelName: defaultText.model_name,
+        modelConfigurationId: provider.model_configurations.find(
+          (m) => m.name === defaultText.model_name
+        )?.id,
       };
     }
   }
@@ -495,6 +498,7 @@ export function getDefaultLlmDescriptor(
     return {
       name: firstLlmProvider.name ?? "",
       provider: firstLlmProvider.provider,
+      modelConfigurationId: firstModel?.id,
       modelName: firstModel?.name ?? "",
     };
   }
@@ -544,6 +548,9 @@ export function getValidLlmDescriptorForProviders(
           modelName: modelName,
           name: provider.name ?? "",
           provider: provider.provider,
+          modelConfigurationId: provider.model_configurations.find(
+            (mc) => mc.name === modelName
+          )?.id,
         };
       }
     }
@@ -567,6 +574,9 @@ export function getValidLlmDescriptorForProviders(
           ...model,
           name: matchingProvider.name ?? "",
           provider: matchingProvider.provider,
+          modelConfigurationId: matchingProvider.model_configurations.find(
+            (mc) => mc.name === model.modelName
+          )?.id,
         };
       }
       // Provider info was present but not found - fall through to default
@@ -583,6 +593,9 @@ export function getValidLlmDescriptorForProviders(
           ...model,
           provider: provider.provider,
           name: provider.name ?? "",
+          modelConfigurationId: provider.model_configurations.find(
+            (mc) => mc.name === model.modelName
+          )?.id,
         };
       }
     }
