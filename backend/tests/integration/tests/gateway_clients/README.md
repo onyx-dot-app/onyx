@@ -11,9 +11,9 @@ Every other suite under `tests/integration` talks to an in-process FastAPI
 *subprocess*, which needs a real TCP listener. `conftest.py`'s
 `_real_api_server` fixture therefore:
 
-- Skips the whole module if nothing answers `GET {API_SERVER_URL}/health`
-  (default `http://127.0.0.1:8080`) — you need a real, out-of-process dev
-  `api_server` running, not just Postgres/Redis/etc.
+- Skips the whole module unless `GET {API_SERVER_URL}/health` returns the Onyx
+  health payload (default `http://127.0.0.1:8080`) — you need a real,
+  out-of-process dev `api_server` running, not just Postgres/Redis/etc.
 - Swaps the shared `tests.integration.common_utils.http_client` client for a
   raw `httpx.Client` for the module's duration, so the existing Manager
   helpers (PAT, LLM provider) hit that real server too.
@@ -33,8 +33,8 @@ Requirements:
   serves a different checkout). The server must run THIS branch's code, since
   the suite exercises both passthrough modules. An in-process TestClient is
   not enough: the CLI subprocesses need a real TCP socket.
-- `node`/`npm` on `PATH` — the suite installs pinned `claude`/`codex` CLI
-  versions into a throwaway npm prefix per module run.
+- `node`/`npm` on `PATH` — each suite installs its pinned `claude` or `codex`
+  CLI version into an independent throwaway npm prefix per module run.
 - `ANTHROPIC_API_KEY` / `OPENAI_API_KEY` resolvable via
   `tests/utils/aws_secrets.py` (env var, `.vscode/.env`, or AWS Secrets
   Manager). Tests declare these with `@pytest.mark.secrets(...)` and skip
@@ -68,5 +68,5 @@ tiers per repo convention. Never `gpt-4o-mini`.
 ## Cost / runtime
 
 Each test makes 1-3 cheap-tier LLM calls. Expect well under $0.01 total and
-roughly 1-2 minutes of wall time (dominated by the `npm install` in
-`npm_prefix`, which is cached per module run, and CLI subprocess startup).
+roughly 1-2 minutes of wall time (dominated by the client-specific `npm install`,
+which is cached per module run, and CLI subprocess startup).

@@ -47,6 +47,8 @@ from tests.utils.secret_names import TestSecret
 CLI_TIMEOUT_SECONDS = 120
 ANTHROPIC_MODEL_NAME = "claude-haiku-4-5"
 OPENAI_MODEL_NAME = "gpt-5-mini"
+CLAUDE_CODE_PACKAGE = "@anthropic-ai/claude-code@2.1.221"
+CODEX_PACKAGE = "@openai/codex@0.146.0"
 
 # The dev admin account created by the playwright global setup / first-user
 # registration (see the project CLAUDE.md). Reused here rather than
@@ -59,17 +61,21 @@ _DEV_ADMIN_EMAIL = "admin_user@example.com"
 def _real_api_server() -> Generator[None, None, None]:
     """Point the shared http_client at a real, out-of-process api_server.
 
-    Skips the whole module if nothing answers at API_SERVER_URL: a CLI
-    subprocess needs an actual TCP socket to connect to, which the rest of
-    tests/integration does not provide.
+    Skips the whole module unless API_SERVER_URL returns the Onyx health
+    payload: a CLI subprocess needs an actual TCP socket to connect to, which
+    the rest of tests/integration does not provide.
     """
     try:
         response = httpx.get(f"{API_SERVER_URL}/health", timeout=5)
         response.raise_for_status()
-    except httpx.HTTPError as e:
+        payload = response.json()
+        if not isinstance(payload, dict) or payload.get("success") is not True:
+            raise ValueError(f"unexpected health response: {payload!r}")
+    except (httpx.HTTPError, ValueError) as e:
         pytest.skip(
-            f"No real api_server reachable at {API_SERVER_URL} ({e!r}); gateway "
-            "client tests require an out-of-process dev server. See README.md."
+            f"No real api_server returned the Onyx health payload at "
+            f"{API_SERVER_URL} ({e!r}); gateway client tests require an "
+            "out-of-process dev server. See README.md."
         )
 
     previous = http_client._test_client
@@ -80,11 +86,10 @@ def _real_api_server() -> Generator[None, None, None]:
         http_client.set_test_client(previous)
 
 
-@pytest.fixture(scope="module")
-def npm_prefix() -> Generator[Path, None, None]:
-    """Install pinned CLI versions into a throwaway npm prefix."""
+def _install_cli(package: str, executable: str) -> Generator[str, None, None]:
+    """Install one pinned CLI package into an isolated npm prefix."""
     if shutil.which("npm") is None:
-        pytest.skip("npm is not available; cannot install the gateway client CLIs.")
+        pytest.skip(f"npm is not available; cannot install {package}.")
 
     with tempfile.TemporaryDirectory(prefix="onyx-gateway-cli-") as tmpdir:
         prefix = Path(tmpdir)
@@ -94,34 +99,29 @@ def npm_prefix() -> Generator[Path, None, None]:
                 "install",
                 "--prefix",
                 str(prefix),
-                "@anthropic-ai/claude-code",
-                "@openai/codex",
+                package,
             ],
             capture_output=True,
             text=True,
             timeout=180,
         )
         if result.returncode != 0:
-            pytest.skip(
-                f"npm install of gateway client CLIs failed: {result.stderr[-2000:]}"
-            )
-        yield prefix
+            pytest.skip(f"npm install of {package} failed: {result.stderr[-2000:]}")
+
+        path = prefix / "node_modules" / ".bin" / executable
+        if not path.exists():
+            pytest.skip(f"{executable} CLI binary not found after installing {package}")
+        yield str(path)
 
 
 @pytest.fixture(scope="module")
-def claude_bin(npm_prefix: Path) -> str:
-    path = npm_prefix / "node_modules" / ".bin" / "claude"
-    if not path.exists():
-        pytest.skip("claude CLI binary not found after npm install")
-    return str(path)
+def claude_bin() -> Generator[str, None, None]:
+    yield from _install_cli(CLAUDE_CODE_PACKAGE, "claude")
 
 
 @pytest.fixture(scope="module")
-def codex_bin(npm_prefix: Path) -> str:
-    path = npm_prefix / "node_modules" / ".bin" / "codex"
-    if not path.exists():
-        pytest.skip("codex CLI binary not found after npm install")
-    return str(path)
+def codex_bin() -> Generator[str, None, None]:
+    yield from _install_cli(CODEX_PACKAGE, "codex")
 
 
 @pytest.fixture(scope="module")
