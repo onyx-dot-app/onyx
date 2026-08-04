@@ -129,8 +129,15 @@ jobs:
             -f docker-compose.yml
             -f docker-compose.airgap-test.yml
           )
+          api_server_is_healthy() {
+            local container_id
+            container_id="$("${compose[@]}" ps -q api_server)"
+            [[ -n "${container_id}" ]] &&
+              [[ "$(docker inspect --format '{{.State.Health.Status}}' "${container_id}")" == "healthy" ]]
+          }
           if ! "${compose[@]}" up -d --no-build --wait --wait-timeout 180 \
-            api_server inference_model_server minio; then
+            api_server inference_model_server minio ||
+            ! api_server_is_healthy; then
             "${compose[@]}" logs --no-color > "${RUNNER_TEMP}/airgap.log"
             exit 1
           fi
@@ -150,8 +157,15 @@ jobs:
             -f docker-compose.airgap-test.yml
             -f docker-compose.airgap-tls-test.yml
           )
+          api_server_is_healthy() {
+            local container_id
+            container_id="$("${compose[@]}" ps -q api_server)"
+            [[ -n "${container_id}" ]] &&
+              [[ "$(docker inspect --format '{{.State.Health.Status}}' "${container_id}")" == "healthy" ]]
+          }
           if ! "${compose[@]}" up -d --no-build --wait --wait-timeout 180 \
-            api_server inference_model_server minio; then
+            api_server inference_model_server minio ||
+            ! api_server_is_healthy; then
             "${compose[@]}" logs --no-color > "${RUNNER_TEMP}/airgap-tls.log"
             exit 1
           fi
