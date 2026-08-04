@@ -84,7 +84,13 @@ export function useAgentPreferences(): UseAgentPreferences {
       });
 
       try {
-        await enqueueWrite(() => patchAgentPreferences(agentId, next));
+        await enqueueWrite(async () => {
+          // The queue defers this, and apiFetch resolves the base URL and bearer token only when
+          // it finally runs — so a write queued before a logout or instance switch would land on
+          // whoever is signed in by then. Drop it instead.
+          if (useSession.getState().serverUrl !== serverUrl) return;
+          await patchAgentPreferences(agentId, next);
+        });
       } catch (error) {
         console.error("Failed to save agent preferences", error);
         queryClient.setQueryData(key, previous);

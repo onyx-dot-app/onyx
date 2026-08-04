@@ -48,6 +48,7 @@ function renderMenu(overrides: Partial<ComposerTools> = {}) {
     toggleForcedTool: jest.fn(),
     disabledToolIds: [],
     toggleToolEnabled: jest.fn(),
+    notePendingSend: jest.fn(),
     resolveToolOptions: () => ({
       deepResearch: false,
       allowedToolIds: null,

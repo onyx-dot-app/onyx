@@ -35,6 +35,9 @@ export interface ComposerTools {
   toggleForcedTool: (toolId: number) => void;
   disabledToolIds: number[];
   toggleToolEnabled: (toolId: number) => void;
+  // Call right before a send that will create the session. Without it the provider cannot tell
+  // that transition apart from simply opening an existing chat.
+  notePendingSend: () => void;
   // Read at send time, never during render.
   resolveToolOptions: () => ChatToolOptions;
 }
@@ -76,11 +79,13 @@ export function useComposerToolsState({
    * and the send re-allows tools the user switched off.
    *
    * The hold is stamped with the conversation it belongs to and is only honoured back in that
-   * same conversation, so it can never describe a chat it was not captured in. The one promotion
-   * is null → new session: that transition is the send itself. Adjusted during render, not in an
-   * effect, so the hold is right on the first render that loses the agent; compared by id so a
-   * caller that rebuilds the object each render can't loop.
+   * same conversation, so it can never describe a chat it was not captured in. It carries over to
+   * a new session only when the host told us a send was creating one — opening an existing chat
+   * from the landing looks identical otherwise. Adjusted during render, not in an effect, so the
+   * hold is right on the first render that loses the agent; compared by id so a caller that
+   * rebuilds the object each render can't loop.
    */
+  const [pendingSend, setPendingSend] = useState(false);
   const [held, setHeld] = useState<{
     agent: MinimalAgent | null;
     sessionId: string | null;
@@ -90,8 +95,15 @@ export function useComposerToolsState({
     (held.agent?.id !== agent.id || held.sessionId !== chatSessionId)
   ) {
     setHeld({ agent, sessionId: chatSessionId });
-  } else if (!agent && held.sessionId === null && chatSessionId !== null) {
+    if (pendingSend) setPendingSend(false);
+  } else if (
+    !agent &&
+    pendingSend &&
+    held.sessionId === null &&
+    chatSessionId !== null
+  ) {
     setHeld({ agent: held.agent, sessionId: chatSessionId });
+    setPendingSend(false);
   }
   const effectiveAgent =
     agent ?? (held.sessionId === chatSessionId ? held.agent : null);
@@ -136,6 +148,8 @@ export function useComposerToolsState({
     ],
   );
 
+  const notePendingSend = useCallback(() => setPendingSend(true), []);
+
   return useMemo(
     () => ({
       showDeepResearch,
@@ -146,6 +160,7 @@ export function useComposerToolsState({
       toggleForcedTool,
       disabledToolIds,
       toggleToolEnabled,
+      notePendingSend,
       // Gated on `showDeepResearch` so a hidden control can never send `true` — e.g. the admin
       // disabled deep research while a toggle was left on.
       resolveToolOptions: () => {
@@ -180,6 +195,7 @@ export function useComposerToolsState({
       toggleForcedTool,
       disabledToolIds,
       toggleToolEnabled,
+      notePendingSend,
     ],
   );
 }

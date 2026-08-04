@@ -10,10 +10,15 @@ import type { AgentPreferences } from "@/api/chat/agentPreferences";
 import { useAgentPreferences } from "@/hooks/useAgentPreferences";
 
 jest.mock("@/api/client");
-jest.mock("@/state/session", () => ({
-  useSession: (selector: (s: { serverUrl: string | null }) => unknown) =>
-    selector({ serverUrl: "https://example.test" }),
-}));
+// The hook reads the live session identity when a queued write finally runs, so the mock needs a
+// `getState` a test can move underneath it.
+let mockServerUrl: string | null = "https://example.test";
+jest.mock("@/state/session", () => {
+  const useSession = (selector: (s: { serverUrl: string | null }) => unknown) =>
+    selector({ serverUrl: mockServerUrl });
+  useSession.getState = () => ({ serverUrl: mockServerUrl });
+  return { useSession };
+});
 jest.mock("@/hooks/useToast", () => ({ toast: { error: jest.fn() } }));
 
 const apiFetchMock = apiFetch as unknown as Mock<
@@ -81,6 +86,7 @@ function renderPreferences() {
 describe("useAgentPreferences", () => {
   beforeEach(() => {
     apiFetchMock.mockReset();
+    mockServerUrl = SERVER_URL;
   });
 
   it("reads disabled ids by agent, indexing the string keys the wire sends", async () => {
@@ -250,6 +256,32 @@ describe("useAgentPreferences", () => {
     await settle();
 
     expect(server.disabledFor(5)).toEqual([1, 2]);
+  });
+
+  it("drops a write when the session it was made under is gone", async () => {
+    // apiFetch resolves the base URL and bearer token when the write finally runs, so a write
+    // still pending across a logout would otherwise land on whoever signs in next.
+    const server = fakeServer(
+      { "5": { disabled_tool_ids: [] } },
+      { patchInFlight: true },
+    );
+
+    const { result, settle } = renderPreferences();
+    await waitFor(() => expect(apiFetchMock).toHaveBeenCalled());
+
+    await act(async () => {
+      await result.current.toggleDisabledTool(5, 1);
+    });
+    await settle();
+    expect(server.disabledFor(5)).toEqual([1]);
+
+    await act(async () => {
+      const pending = result.current.toggleDisabledTool(5, 2);
+      mockServerUrl = "https://other.test";
+      await pending;
+    });
+
+    expect(server.disabledFor(5)).toEqual([1]);
   });
 
   it("composes consecutive toggles instead of racing on a stale array", async () => {

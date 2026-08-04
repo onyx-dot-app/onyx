@@ -139,6 +139,9 @@ function ChatSurfaceContent({ focus }: { focus: ChatFocus }) {
   // (consumeAttachments), a send clears both.
   const sendWithAttachments = (message?: string) => {
     if (draft.hasBlockingFiles) return;
+    // Lets the tool state distinguish "this send is creating the session" from simply opening an
+    // existing chat — the two look identical from a null → non-null session id alone.
+    if (sessionId == null) composerTools.notePendingSend();
     submit(
       message ?? draft.text,
       draft.descriptors,

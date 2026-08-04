@@ -158,6 +158,7 @@ describe("useComposerToolsState", () => {
     act(() => result.current.toggleDeepResearch());
 
     // Re-gating here would withdraw the control the user just used and drop it from the request.
+    act(() => result.current.notePendingSend());
     rerender({
       chatSessionId: "session-1",
       agent: null,
@@ -264,6 +265,7 @@ describe("useComposerToolsState", () => {
     );
     expect(result.current.actionTools).toHaveLength(2);
 
+    act(() => result.current.notePendingSend());
     rerender({
       chatSessionId: "session-1",
       agent: null,
@@ -291,6 +293,7 @@ describe("useComposerToolsState", () => {
     );
     await waitFor(() => expect(result.current.disabledToolIds).toEqual([2]));
 
+    act(() => result.current.notePendingSend());
     rerender({
       chatSessionId: "session-1",
       agent: null,
@@ -299,6 +302,35 @@ describe("useComposerToolsState", () => {
     });
     expect(result.current.disabledToolIds).toEqual([2]);
     expect(result.current.resolveToolOptions().allowedToolIds).toEqual([1]);
+  });
+
+  it("does not carry the composer's agent into an existing chat opened from the landing", async () => {
+    const { result, rerender } = renderHook(
+      (props: Parameters<typeof useComposerToolsState>[0]) =>
+        useComposerToolsState(props),
+      {
+        wrapper,
+        initialProps: {
+          chatSessionId: null,
+          agent: agent([searchTool, imageTool]),
+          isProjectWorkflow: false,
+          projectId: null,
+        },
+      },
+    );
+    expect(result.current.actionTools).toHaveLength(2);
+
+    // No notePendingSend: the user tapped an existing chat rather than sending. The landing's
+    // agent says nothing about that conversation.
+    rerender({
+      chatSessionId: "session-9",
+      agent: null,
+      isProjectWorkflow: false,
+      projectId: null,
+    });
+
+    expect(result.current.actionTools).toEqual([]);
+    expect(result.current.resolveToolOptions().forcedToolId).toBeNull();
   });
 
   it("refuses to describe a different conversation with the previous one's agent", async () => {
@@ -356,6 +388,7 @@ describe("useComposerToolsState", () => {
     act(() => result.current.toggleForcedTool(1));
 
     // The send created the session, but it hasn't reached the sessions list yet.
+    act(() => result.current.notePendingSend());
     rerender({
       chatSessionId: "session-1",
       agent: null,
