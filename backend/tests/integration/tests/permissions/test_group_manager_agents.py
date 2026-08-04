@@ -485,6 +485,21 @@ def test_manager_cannot_link_unowned_oauth_config(env: _ScopedEnv) -> None:
     )
 
 
+def test_manager_edits_own_action_keeping_shared_oauth_config(env: _ScopedEnv) -> None:
+    # An admin can link a second action to the manager's config, which makes it shared. The
+    # manager must still be able to edit their own action while re-sending the same id.
+    oauth_config_id = _create_oauth_config(env.manager)
+    tool_id = _create_custom_tool(env.manager, oauth_config_id)
+    _create_custom_tool(env.admin, oauth_config_id)
+    _assert_manager(
+        env,
+        "PUT",
+        f"/admin/tool/custom/{tool_id}",
+        "allowed",
+        _tool_body(oauth_config_id),
+    )
+
+
 def test_manager_cannot_repoint_own_action_at_unowned_oauth_config(
     env: _ScopedEnv,
 ) -> None:

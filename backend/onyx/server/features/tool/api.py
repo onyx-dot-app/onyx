@@ -79,11 +79,16 @@ def _get_manageable_custom_tool(tool_id: int, db_session: Session, user: User) -
 
 
 def _assert_can_link_oauth_config(
-    oauth_config_id: int | None, db_session: Session, user: User
+    oauth_config_id: int | None,
+    db_session: Session,
+    user: User,
+    current_oauth_config_id: int | None = None,
 ) -> None:
     """GATE 2 for the OAuth config an action points at — the route's own gate only covers
-    the action itself."""
-    if oauth_config_id is None:
+    the action itself. Authorizes the *change*: re-sending the config the action already
+    uses is no new link, so an admin sharing one across creators can't lock them out of
+    ordinary edits (the editor round-trips the id on every save)."""
+    if oauth_config_id is None or oauth_config_id == current_oauth_config_id:
         return
     if not can_link_oauth_config(user, oauth_config_id, db_session):
         raise OnyxError(
@@ -131,7 +136,12 @@ def update_custom_tool(
     if tool_data.definition:
         _validate_tool_definition(tool_data.definition)
     _validate_auth_settings(tool_data)
-    _assert_can_link_oauth_config(tool_data.oauth_config_id, db_session, user)
+    _assert_can_link_oauth_config(
+        tool_data.oauth_config_id,
+        db_session,
+        user,
+        current_oauth_config_id=existing_tool.oauth_config_id,
+    )
     updated_tool = update_tool(
         tool_id=tool_id,
         name=tool_data.name,
