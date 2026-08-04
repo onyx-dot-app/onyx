@@ -381,9 +381,17 @@ jobs:
             [[ -n "${container_id}" ]] &&
               [[ "$(docker inspect --format '{{.State.Health.Status}}' "${container_id}")" == "healthy" ]]
           }
+          default_model_embeddings_are_finite() {
+            local container_id
+            container_id="$("${compose[@]}" ps -q api_server)"
+            [[ -n "${container_id}" ]] &&
+              docker exec -i "${container_id}" python - \
+                < ../../backend/tests/airgap/test_default_model_server_embeddings_are_finite.py
+          }
           if ! "${compose[@]}" up -d --no-build --wait --wait-timeout 180 \
             api_server inference_model_server minio ||
-            ! api_server_is_healthy; then
+            ! api_server_is_healthy ||
+            ! default_model_embeddings_are_finite; then
             "${compose[@]}" logs --no-color > "${RUNNER_TEMP}/airgap.log"
             exit 1
           fi
