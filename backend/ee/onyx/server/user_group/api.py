@@ -28,6 +28,7 @@ from ee.onyx.server.user_group.models import UserGroupUpdate
 from onyx.auth.permission_projection import user_group_permissions
 from onyx.auth.permissions import get_effective_permissions
 from onyx.auth.permissions import has_global_permission
+from onyx.auth.permissions import has_permission
 from onyx.auth.permissions import NON_TOGGLEABLE_PERMISSIONS
 from onyx.auth.permissions import PERMISSION_REGISTRY
 from onyx.auth.permissions import PermissionRegistryEntry
@@ -39,6 +40,7 @@ from onyx.configs.app_configs import DISABLE_VECTOR_DB
 from onyx.configs.constants import PUBLIC_API_TAGS
 from onyx.db.engine.sql_engine import get_session
 from onyx.db.enums import Permission
+from onyx.db.enums import PermissionAuthority
 from onyx.db.models import User
 from onyx.db.persona import fetch_persona_by_id_for_user
 from onyx.error_handling.error_codes import OnyxErrorCode
@@ -59,13 +61,15 @@ def list_user_groups(
     ),
     db_session: Session = Depends(get_session),
 ) -> list[UserGroup]:
-    # GATE 2 (read): a global READ_USER_GROUPS holder (admin, or any MANAGE_* that
-    # implies it) sees every group; a scoped manager sees only the groups they
-    # manage. The group list has no built-in membership filter, so restrict it here
-    # or a manager would see the whole org.
-    # Resolve scope + global authority once so per-group stamping is pure set math (no query).
-    managed_group_ids = get_scoped_groups(
-        user, db_session, Permission.MANAGE_USER_GROUPS
+    # GATE 2 (read): the group list has no membership filter, so a scoped manager must be
+    # restricted here or they'd see the whole org. Only their set is consulted — a global
+    # holder short-circuits in manages_group — but fall back to an empty set, never None,
+    # or manages_group re-queries once per group.
+    managed_group_ids = (
+        get_scoped_groups(user, db_session, Permission.MANAGE_USER_GROUPS)
+        if has_permission(user, Permission.MANAGE_USER_GROUPS)
+        is PermissionAuthority.SCOPED
+        else set[int]()
     )
     is_user_groups_admin = has_global_permission(user, Permission.MANAGE_USER_GROUPS)
     is_full_admin = has_global_permission(user, Permission.FULL_ADMIN_PANEL_ACCESS)

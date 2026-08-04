@@ -4,8 +4,8 @@ import { SWR_KEYS } from "@/lib/swr-keys";
 
 const USER_GROUP_URL = SWR_KEYS.adminUserGroups;
 
-// Prefer the server's `detail`, else the status. Logs an unparseable body: without it a
-// proxy's HTML 502 is indistinguishable from a clean API error at the call site.
+// Logs an unparseable body — without it a proxy's HTML 502 is indistinguishable from a
+// clean API error at the call site.
 async function responseError(res: Response, action: string): Promise<Error> {
   try {
     const detail = (await res.json())?.detail;

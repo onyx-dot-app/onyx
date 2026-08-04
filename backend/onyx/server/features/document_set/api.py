@@ -5,6 +5,7 @@ from sqlalchemy.orm import Session
 
 from onyx.auth.permission_projection import document_set_permissions
 from onyx.auth.permissions import has_global_permission
+from onyx.auth.permissions import has_permission
 from onyx.auth.permissions import require_permission
 from onyx.auth.scoped_permissions import assert_within_scope
 from onyx.auth.scoped_permissions import get_scoped_groups
@@ -23,6 +24,7 @@ from onyx.db.document_set import mark_document_set_as_to_be_deleted
 from onyx.db.document_set import update_document_set
 from onyx.db.engine.sql_engine import get_session
 from onyx.db.enums import Permission
+from onyx.db.enums import PermissionAuthority
 from onyx.db.models import User
 from onyx.error_handling.error_codes import OnyxErrorCode
 from onyx.error_handling.exceptions import OnyxError
@@ -169,11 +171,14 @@ def list_document_sets_for_user(
     document_sets = fetch_all_document_sets_for_user(
         db_session=db_session, user=user, get_editable=get_editable
     )
-    # Stamp editability from the shared within_scope decision on each row's
-    # already-loaded groups, with the managed-group set resolved once — no second
-    # document-set query, and no client-side double-fetch.
-    managed_group_ids = get_scoped_groups(
-        user, db_session, Permission.MANAGE_DOCUMENT_SETS
+    # Stamp editability per row from its already-loaded groups — no second query, no
+    # client-side double-fetch. Only a SCOPED caller reads the managed set (within_scope
+    # short-circuits for GLOBAL/NONE), so skip fetching it otherwise.
+    managed_group_ids = (
+        get_scoped_groups(user, db_session, Permission.MANAGE_DOCUMENT_SETS)
+        if has_permission(user, Permission.MANAGE_DOCUMENT_SETS)
+        is PermissionAuthority.SCOPED
+        else None
     )
     is_document_sets_admin = has_global_permission(
         user, Permission.MANAGE_DOCUMENT_SETS

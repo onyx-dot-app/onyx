@@ -13,6 +13,7 @@ from sqlalchemy.orm import Session
 
 from onyx.auth.permission_projection import custom_skill_permissions
 from onyx.auth.permissions import has_global_permission
+from onyx.auth.permissions import has_permission
 from onyx.auth.permissions import Permission
 from onyx.auth.permissions import require_permission
 from onyx.auth.scoped_permissions import assert_within_scope
@@ -20,6 +21,7 @@ from onyx.auth.scoped_permissions import get_scoped_groups
 from onyx.auth.scoped_permissions import within_scope
 from onyx.configs.app_configs import MAX_PERSONAL_SKILLS_PER_USER
 from onyx.db.engine.sql_engine import get_session
+from onyx.db.enums import PermissionAuthority
 from onyx.db.models import Skill
 from onyx.db.models import User
 from onyx.db.skill import affected_user_ids_for_skill
@@ -89,14 +91,16 @@ def _split_rows(
     builtins: list[BuiltinSkillResponse] = []
     customs: list[CustomSkillResponse] = []
 
-    # Resolve the manager's scope once so per-skill stamping issues no extra query.
-    managed_skill_groups: set[int] = set()
+    # Resolved once so per-skill stamping issues no query. Only a SCOPED caller reads it
+    # (within_scope short-circuits for GLOBAL/NONE), so skip fetching it otherwise.
+    managed_skill_groups: set[int] | None = None
     is_skills_full_admin = False
     is_skills_admin = False
     if user is not None:
-        managed_skill_groups = get_scoped_groups(
-            user, db_session, Permission.MANAGE_SKILLS
-        )
+        if has_permission(user, Permission.MANAGE_SKILLS) is PermissionAuthority.SCOPED:
+            managed_skill_groups = get_scoped_groups(
+                user, db_session, Permission.MANAGE_SKILLS
+            )
         is_skills_full_admin = has_global_permission(
             user, Permission.FULL_ADMIN_PANEL_ACCESS
         )
