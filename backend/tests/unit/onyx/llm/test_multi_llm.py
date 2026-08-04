@@ -23,6 +23,7 @@ from onyx.llm.models import (
     ReasoningEffort,
     ToolCall,
     ToolChoiceOptions,
+    ToolMessage,
     UserMessage,
 )
 from onyx.llm.multi_llm import (
@@ -2896,6 +2897,79 @@ def test_ui_only_keys_never_injected_or_warned(
             llm.invoke([UserMessage(content="Hi")])
         assert env_during_call["BEDROCK_AUTH_METHOD"] is None
         mock_warn.assert_not_called()
+
+
+def _openai_compatible_llm(
+    model_name: str, deployment_name: str | None = None
+) -> LitellmLLM:
+    return LitellmLLM(
+        api_key="test_key",
+        timeout=30,
+        model_provider=LlmProviderNames.OPENAI,
+        model_name=model_name,
+        deployment_name=deployment_name,
+        api_base="http://vllm.internal:8000/v1",
+        max_input_tokens=32000,
+    )
+
+
+def _tool_cycle_prompt() -> LanguageModelInput:
+    return [
+        UserMessage(content="What's the weather in Paris?"),
+        AssistantMessage(
+            role="assistant",
+            content=None,
+            tool_calls=[
+                ToolCall(
+                    type="function",
+                    id="call_1",
+                    function=FunctionCall(name="get_weather", arguments="{}"),
+                )
+            ],
+        ),
+        ToolMessage(content="Sunny, 21C", tool_call_id="call_1"),
+        UserMessage(content="Remember to cite your sources."),
+    ]
+
+
+def _completion_message_roles(llm: LitellmLLM) -> list[str]:
+    with (
+        patch("litellm.completion") as mock_completion,
+        patch("onyx.llm.multi_llm.is_true_openai_model", return_value=False),
+    ):
+        mock_completion.return_value = []
+        list(llm.stream(_tool_cycle_prompt()))
+        return [m["role"] for m in mock_completion.call_args.kwargs["messages"]]
+
+
+@pytest.mark.parametrize(
+    "model_name",
+    ["mistralai/Mistral-Small-3.2-24B-Instruct", "Codestral-2501", "pixtral-large"],
+)
+def test_tool_user_bridge_for_mistral_family_behind_openai_compatible(
+    model_name: str,
+) -> None:
+    """Mistral-family models served behind OpenAI-compatible endpoints (e.g.
+    vLLM) reject user-after-tool ordering; the bridge must fire on the model
+    name alone (#12503)."""
+    roles = _completion_message_roles(_openai_compatible_llm(model_name))
+    tool_idx = roles.index("tool")
+    assert roles[tool_idx + 1 :] == ["assistant", "user"]
+
+
+def test_tool_user_bridge_checks_model_name_despite_deployment_alias() -> None:
+    """A non-Mistral deployment alias must not shadow a Mistral model name."""
+    roles = _completion_message_roles(
+        _openai_compatible_llm("mistral-small-2506", deployment_name="prod-chat")
+    )
+    tool_idx = roles.index("tool")
+    assert roles[tool_idx + 1 :] == ["assistant", "user"]
+
+
+def test_tool_user_bridge_not_inserted_for_other_models() -> None:
+    roles = _completion_message_roles(_openai_compatible_llm("glm-4.7"))
+    tool_idx = roles.index("tool")
+    assert roles[tool_idx + 1 :] == ["user"]
 
 
 class _PingStream:

@@ -23,7 +23,7 @@ from onyx.llm.api_surfaces import (
     LlmApiSurface,
     resolve_api_surface,
 )
-from onyx.llm.constants import LlmProviderNames
+from onyx.llm.constants import MODEL_PREFIX_TO_VENDOR, LlmProviderNames
 from onyx.llm.cost import compute_cost_cents
 from onyx.llm.custom_config_mapping import (
     UI_ONLY_CONFIG_KEYS,
@@ -298,6 +298,24 @@ def _fix_tool_user_message_ordering(
             result.append({"role": "assistant", "content": "Noted. Continuing."})
         result.append(msg)
     return result
+
+
+_MISTRAL_FAMILY_MARKERS: frozenset[str] = frozenset(
+    prefix for prefix, vendor in MODEL_PREFIX_TO_VENDOR.items() if vendor == "mistral"
+)
+
+
+def _is_mistral_family_name(identity_names: list[str]) -> bool:
+    """Whether any model/deployment identity name looks like a Mistral-family
+    model (mistral, mixtral, codestral, ...). The provider name alone is not
+    enough: Mistral models are frequently served behind Azure or
+    OpenAI-compatible endpoints (e.g. vLLM), where only the configured names
+    carry the signal."""
+    return any(
+        marker in name.lower()
+        for name in identity_names
+        for marker in _MISTRAL_FAMILY_MARKERS
+    )
 
 
 def _messages_contain_tool_content(messages: list[dict[str, Any]]) -> bool:
@@ -910,12 +928,15 @@ class LitellmLLM(LLM):
             # Some models (e.g. Mistral) reject a user message
             # immediately after a tool message. Insert a synthetic
             # assistant bridge message to satisfy the ordering
-            # constraint. Check both the provider and the deployment/
-            # model name to catch Mistral hosted on Azure.
-            model_or_deployment = (
-                self._deployment_name or self._model_version or ""
-            ).lower()
-            is_mistral_model = is_mistral or "mistral" in model_or_deployment
+            # constraint. Check the provider, the LiteLLM routing
+            # override, and every identity name (deployment alias and
+            # model name) to catch Mistral served behind Azure or
+            # OpenAI-compatible endpoints (e.g. vLLM).
+            is_mistral_model = (
+                is_mistral
+                or self._custom_llm_provider == LlmProviderNames.MISTRAL
+                or _is_mistral_family_name(model_identity_names)
+            )
             if is_mistral_model:
                 messages = _fix_tool_user_message_ordering(messages)
 
