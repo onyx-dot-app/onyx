@@ -221,7 +221,7 @@ def assert_within_scope(
     permission: Permission,                 # the manage:* token this write needs
     current_group_ids: Collection[int],     # re-read from DB, in this txn
     requested_group_ids: Collection[int],   # client-supplied target groups
-    is_private: bool,                        # non-PUBLIC: access_type!=PUBLIC (cc_pair) / not is_public (doc set)
+    is_non_public: bool,                     # access_type!=PUBLIC (cc_pair) / not is_public (doc set)
 ) -> None:
     authority = has_permission(user, permission)
     if authority is PermissionAuthority.GLOBAL:
@@ -229,7 +229,7 @@ def assert_within_scope(
     if authority is PermissionAuthority.SCOPED:
         managed = get_scoped_groups(user, db_session, permission)
         final = set(current_group_ids) | set(requested_group_ids)
-        if managed and final and final.issubset(managed) and is_private:
+        if managed and final and final.issubset(managed) and is_non_public:
             return
     raise OnyxError(
         OnyxErrorCode.INSUFFICIENT_PERMISSIONS,
@@ -242,7 +242,7 @@ def assert_global(user: User, *, permission: Permission) -> None:   # delete / a
 ```
 
 `assert_within_scope` invariants: `final ⊆ managed` (closes capture-by-reassign), `final` non-empty (stays in
-≥1 group — covers detach), `is_private` (non-PUBLIC: PRIVATE or SYNC), **fail-closed** (empty `managed` ⇒ reject).
+≥1 group — covers detach), `is_non_public` (PRIVATE or SYNC), **fail-closed** (empty `managed` ⇒ reject).
 `assert_global` (D6, **rule A**) keeps delete/admin-only ops admin-only even though they share a bundle token
 with scoped create/update: the route admits the manager (SCOPED ≠ NONE), the handler's `assert_global` rejects
 them.
@@ -315,10 +315,10 @@ and private — exactly `within_managed_scope_clause` (new helper in `scoped_per
 ```python
 def within_managed_scope_clause(
     resource_id_col, junction_resource_col, junction_group_col,
-    is_private: ColumnElement[bool],         # a predicate, NOT a bool column — cc_pair passes
-    managed_subq: Select,                    #   access_type == AccessType.PRIVATE; doc-set/persona is_public.is_(False)
+    non_public_clause: ColumnElement[bool],  # a predicate, NOT a bool column — cc_pair passes
+    managed_subq: Select,                    #   access_type != AccessType.PUBLIC; doc-set/persona is_public.is_(False)
 ) -> ColumnElement[bool]:
-    # NOT EXISTS(group not in managed)  AND  EXISTS(group in managed)  AND  is_private
+    # NOT EXISTS(group not in managed)  AND  EXISTS(group in managed)  AND  non_public_clause
 ```
 
 | File | Existing editable fallback | Integration |
@@ -550,7 +550,7 @@ corrections (verified 2026-06-29):
 - **Write side = GATE 2 on the GRANTS seam, not create/update.** `create_skill__no_commit` takes no group_ids
   and `patch_skill` only toggles is_public/enabled; the only group↔skill writer is `replace_skill_grants`
   (`skill.py:430`, reached via PUT `/admin/skills/custom/{id}/grants`, body `GrantsReplace.group_ids`). Put
-  GATE 2 there (current grants via `get_group_ids_for_skill` ∪ requested ⊆ managed, `is_private = not
+  GATE 2 there (current grants via `get_group_ids_for_skill` ∪ requested ⊆ managed, `is_non_public = not
   skill.is_public`, re-read in-txn). Also gate the `is_public` toggle in `patch_custom_skill` so a manager
   can't publish a private skill out of scope.
 - **Endpoint re-point BY VERB.** list/get/create/update/share → `require_permission(MANAGE_SKILLS,
