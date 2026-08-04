@@ -9,7 +9,10 @@ from onyx.db.enums import MCPAuthenticationType, MCPTransport
 from onyx.db.mcp import ResolvedMCPCredentials
 from onyx.db.models import MCPConnectionConfig, MCPServer
 from onyx.server.features.mcp.client import call_mcp_tool
-from onyx.server.features.mcp.models import DENYLISTED_MCP_HEADERS
+from onyx.server.features.mcp.models import (
+    DENYLISTED_MCP_HEADERS,
+    merge_mcp_headers,
+)
 from onyx.server.features.mcp.oauth import (
     UNUSED_RETURN_PATH,
     make_oauth_provider,
@@ -79,6 +82,7 @@ class MCPTool(Tool[None]):
         user_id: str = "",
         user_oauth_token: str | None = None,
         additional_headers: dict[str, str] | None = None,
+        resolved_credentials: ResolvedMCPCredentials | None = None,
     ) -> None:
         super().__init__(emitter=emitter)
 
@@ -89,6 +93,7 @@ class MCPTool(Tool[None]):
         self._user_id = user_id
         self._user_oauth_token = user_oauth_token
         self._additional_headers = additional_headers or {}
+        self._resolved_credentials = resolved_credentials
 
         self._mcp_tool_name = tool_name
         self._name = tool_name  # NOTE: this may change in _disambiguate_mcp_tool_names
@@ -147,64 +152,35 @@ class MCPTool(Tool[None]):
         _server = self.mcp_server.name
         outcome = MCPToolCallStatus.ERROR
         try:
-            # Build headers with proper precedence:
-            # 1. Start with additional headers from API request (filled in first, excluding denylisted)
-            # 2. Override with connection config headers (from DB) - these take precedence
-            # 3. Override Authorization header with OAuth token if present
-            headers: dict[str, str] = {}
-
-            # Priority 1: Additional headers from API request (filled in first)
-            # Filter out denylisted headers to prevent security issues (e.g., Host Header Injection)
-            if self._additional_headers:
-                filtered_headers = {
-                    k: v
-                    for k, v in self._additional_headers.items()
-                    if k.lower() not in DENYLISTED_MCP_HEADERS
-                }
-                if filtered_headers:
-                    headers.update(filtered_headers)
-                # Log if any denylisted headers were provided (for security monitoring)
-                denylisted_provided = [
-                    k
-                    for k in self._additional_headers.keys()
-                    if k.lower() in DENYLISTED_MCP_HEADERS
-                ]
-                if denylisted_provided:
-                    logger.warning(
-                        "MCP tool '%s' received denylisted headers that were filtered: %s",
-                        self._name,
-                        denylisted_provided,
-                    )
-
-            # Priority 2 + 3: stored connection-config headers, then the
-            # PT_OAuth login token — both override request headers.
-            headers.update(
-                ResolvedMCPCredentials(
-                    connection_config=self.connection_config,
-                    user_oauth_token=self._user_oauth_token,
-                ).build_headers()
+            request_headers = {
+                name: value
+                for name, value in self._additional_headers.items()
+                if name.lower() not in DENYLISTED_MCP_HEADERS
+            }
+            if denylisted := sorted(
+                set(self._additional_headers) - set(request_headers)
+            ):
+                logger.warning(
+                    "MCP tool '%s' received denylisted headers that were filtered: %s",
+                    self._name,
+                    denylisted,
+                )
+            credentials = self._resolved_credentials or ResolvedMCPCredentials(
+                connection_config=self.connection_config,
+                user_oauth_token=self._user_oauth_token,
+                auth_type=self.mcp_server.auth_type,
+                user_email=self.user_email,
+            )
+            headers = merge_mcp_headers(
+                request_headers,
+                credentials.build_headers(),
             )
 
-            # Check if this is an authentication issue before making the call
-            is_passthrough_oauth = (
-                self.mcp_server.auth_type == MCPAuthenticationType.PT_OAUTH
-            )
-            requires_auth = (
-                self.mcp_server.auth_type != MCPAuthenticationType.NONE
-                and self.mcp_server.auth_type is not None
-            )
-            has_auth_config = (
-                (self.connection_config is not None and bool(headers))
-                or bool(self._additional_headers)
-            ) or (is_passthrough_oauth and self._user_oauth_token is not None)
-
-            if requires_auth and not has_auth_config:
-                # Authentication required but not configured
+            if not credentials.is_authenticated() and not self._additional_headers:
                 auth_error_msg = (
-                    f"The {self._name} tool from {self.mcp_server.name} requires authentication "
-                    f"but no credentials have been provided. Tell the user to use the MCP dropdown in the "
-                    f"chat bar to authenticate with the {self.mcp_server.name} server before "
-                    f"using this tool."
+                    f"The {self._name} tool from {self.mcp_server.name} requires "
+                    "connection values. Tell the user to connect to the server "
+                    "from the MCP dropdown before using this tool."
                 )
                 logger.warning(
                     "Authentication required for MCP tool '%s' but no credentials found",
