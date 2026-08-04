@@ -2,9 +2,8 @@
 // on each resource's `permissions` map. A backend coverage test guards that the server
 // never stamps a key absent here, so this stays in sync without a codegen pipeline.
 
-// `A` is the resource's own action union, inferred back out of `permissions` at the call
-// site so `can()` rejects another resource's action. Constrained to real action literals,
-// so an untagged `Record<string, boolean>` is rejected rather than silently unchecked.
+// `A` is the resource's own action union, which `can()` infers back out of `permissions`
+// at the call site to reject another resource's action.
 export interface WithPermissions<
   A extends AnyResourceAction = AnyResourceAction,
 > {
@@ -48,9 +47,16 @@ export type PermissionsOf<R extends ResourceName> = Partial<
 
 // Fail-closed: a missing resource or unstamped key reads as false, so a control the
 // server hasn't authorized (or a new action an older client predates) never renders.
-export function can<A extends AnyResourceAction>(
-  resource: WithPermissions<A> | null | undefined,
-  action: A
+//
+// `A` comes from the resource's map, so another resource's action doesn't type-check.
+// The `never` branch covers what that misses: every key of `Partial<Record<A, boolean>>`
+// is optional, so an index-signature map satisfies it while naming no resource at all.
+export function can<
+  A extends AnyResourceAction,
+  P extends Partial<Record<A, boolean>>,
+>(
+  resource: (WithPermissions<A> & { permissions?: P }) | null | undefined,
+  action: string extends keyof P ? never : A
 ): boolean {
   return resource?.permissions?.[action] ?? false;
 }
