@@ -632,6 +632,12 @@ def _drive_agent(
             logger.exception("Scheduled run %s failed", run_id)
             return False
         finally:
+            # Clear the deadline stamp on owned exits so a later turn on this
+            # session can't inherit a stale scheduled-run deadline if its own
+            # stamp write fails; skip when the slot was lost (another holder
+            # may own it and have stamped). Best-effort.
+            if not slot.lost:
+                session_manager.clear_turn_deadline(sandbox_id, session_id)
             # Release the prompt slot on every exit path (clean completion,
             # approval gate, budget exceeded, exception). Matches the
             # interactive path's finally in _stream_cli_agent_response.
