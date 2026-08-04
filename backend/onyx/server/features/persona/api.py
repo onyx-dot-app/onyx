@@ -219,9 +219,18 @@ def patch_agents_display_priorities(
         raise HTTPException(status_code=403, detail=str(e))
 
 
+def _admin_list_get_editable(user: User, get_editable: bool) -> bool:
+    """GATE 2 (read) for the admin agent lists: pin a scoped manager to the editable set.
+    The non-editable branch of ``_add_user_filters`` has no scope restriction, so without
+    this they'd see every listed agent in the org. Global holders keep what they asked for."""
+    if has_permission(user, Permission.READ_AGENTS) is PermissionAuthority.SCOPED:
+        return True
+    return get_editable
+
+
 @admin_router.get("", tags=PUBLIC_API_TAGS)
 def list_personas_admin(
-    user: User = Depends(require_permission(Permission.READ_AGENTS)),
+    user: User = Depends(require_permission(Permission.READ_AGENTS, allow_scope=True)),
     db_session: Session = Depends(get_session),
     include_deleted: bool = False,
     get_editable: bool = Query(False, description="If true, return editable personas"),
@@ -229,7 +238,7 @@ def list_personas_admin(
     return get_persona_snapshots_for_user(
         user=user,
         db_session=db_session,
-        get_editable=get_editable,
+        get_editable=_admin_list_get_editable(user, get_editable),
         include_deleted=include_deleted,
     )
 
@@ -238,7 +247,7 @@ def list_personas_admin(
 def get_agents_admin_paginated(
     page_num: int = Query(0, ge=0, description="Page number (0-indexed)."),
     page_size: int = Query(10, ge=1, le=1000, description="Items per page."),
-    user: User = Depends(require_permission(Permission.READ_AGENTS)),
+    user: User = Depends(require_permission(Permission.READ_AGENTS, allow_scope=True)),
     db_session: Session = Depends(get_session),
     include_deleted: bool = Query(
         False, description="If true, includes deleted personas."
@@ -255,12 +264,14 @@ def get_agents_admin_paginated(
     Returns items for the requested page plus total count.
     Agents are ordered by display_priority (ASC, nulls last) then by ID (ASC).
     """
+    # Resolve once — the page and its total must use the same filter.
+    scoped_get_editable = _admin_list_get_editable(user, get_editable)
     agents = get_persona_snapshots_paginated(
         user=user,
         db_session=db_session,
         page_num=page_num,
         page_size=page_size,
-        get_editable=get_editable,
+        get_editable=scoped_get_editable,
         include_default=include_default,
         include_deleted=include_deleted,
     )
@@ -268,7 +279,7 @@ def get_agents_admin_paginated(
     total_count = get_persona_count_for_user(
         user=user,
         db_session=db_session,
-        get_editable=get_editable,
+        get_editable=scoped_get_editable,
         include_default=include_default,
         include_deleted=include_deleted,
     )
