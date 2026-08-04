@@ -285,7 +285,7 @@ def test_manager_publishes_own_agent(env: _ScopedEnv) -> None:
 
 def test_manager_unpublishes_own_agent(env: _ScopedEnv) -> None:
     # The direction the group-share gate used to block: the manager pulls their own
-    # published agent back to private, keeping the group share. Ownership authorizes it (D9).
+    # published agent back to private, keeping the group share. Ownership authorizes it.
     agent = PersonaManager.create(
         user_performing_action=env.manager,
         is_public=False,
@@ -315,7 +315,7 @@ def test_manager_unpublishes_own_agent(env: _ScopedEnv) -> None:
 
 def test_manager_cannot_capture_public_agent_via_share(env: _ScopedEnv) -> None:
     # A PUBLIC agent sits in nobody's managed scope, so sharing it into a managed group
-    # captures it — rejected even for the owner. Ownership buys publishing (D9), not scope.
+    # captures it — rejected even for the owner. Ownership buys publishing, not scope.
     agent = PersonaManager.create(
         user_performing_action=env.manager, is_public=True, groups=[]
     )
@@ -374,7 +374,7 @@ def test_add_agents_user_creates_personal_agent_with_empty_groups(
 def test_add_agents_owner_saves_agent_group_shared_by_admin(env: _ScopedEnv) -> None:
     # The editor round-trips current groups on every save, so an unchanged set must not
     # read as a mutation — else an ADD_AGENTS-only owner loses edit access to their own
-    # agent once an admin group-shares it. Altering the set still needs MANAGE_AGENTS (D7).
+    # agent once an admin group-shares it. Altering the set still needs MANAGE_AGENTS.
     member = _add_agents_only_user(env, "add_agents_owner")
     agent = PersonaManager.create(
         user_performing_action=member, is_public=False, groups=[]

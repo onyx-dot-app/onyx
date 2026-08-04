@@ -354,18 +354,31 @@ def _assert_persona_update_within_managed_scope(
     ``upsert_persona``, so an owner who happens to manage a group keeps that right."""
     if has_permission(user, Permission.MANAGE_AGENTS) is not PermissionAuthority.SCOPED:
         return
+    persona = (
+        db_session.query(Persona).filter(Persona.id == persona_id).first()
+        if persona_id is not None
+        else None
+    )
     current_group_ids: list[int] = []
     current_is_public = False
-    if persona_id is not None:
-        persona = db_session.query(Persona).filter(Persona.id == persona_id).first()
-        if persona is not None:
-            current_group_ids = [group.id for group in persona.groups]
-            current_is_public = persona.is_public
+    if persona is not None:
+        current_group_ids = [group.id for group in persona.groups]
+        current_is_public = persona.is_public
     requested_group_ids = (
         list(request.groups) if request.groups is not None else current_group_ids
     )
     # Personal (no-group) agent: not a group-scoped resource, so nothing to authorize.
     if not current_group_ids and not requested_group_ids:
+        return
+    # Managing a group never subtracts a right the actor holds as owner, so an edit that
+    # leaves the groups alone is theirs — the editor round-trips them on every save.
+    # Requesting a different set still hits the gate below, and the EE group-share gate
+    # re-checks the diff at the per-group levels this request can't carry.
+    if (
+        persona is not None
+        and set(requested_group_ids) == set(current_group_ids)
+        and can_delete_persona(user, persona, db_session)
+    ):
         return
     assert_within_scope(
         user,
@@ -385,14 +398,18 @@ def persona_edit_within_scope(
     *,
     group_ids: list[int],
     is_public: bool,
+    is_owner: bool = False,
     managed_group_ids: set[int] | None = None,
 ) -> bool:
     """Read-mode of ``_assert_persona_update_within_managed_scope`` (requested := current).
-    Non-SCOPED holders and personal (no-group) agents pass; a scoped manager passes only
-    when within_scope holds. Pinned to that guard by the contract test."""
+    Non-SCOPED holders, personal (no-group) agents, and the owner pass — read-mode never
+    changes the groups, which is the guard's owner exemption. Otherwise a scoped manager
+    passes only when within_scope holds. Pinned to that guard by the contract test."""
     if has_permission(user, Permission.MANAGE_AGENTS) is not PermissionAuthority.SCOPED:
         return True
     if not group_ids:
+        return True
+    if is_owner:
         return True
     return within_scope(
         user,
@@ -412,11 +429,12 @@ def can_edit_persona(
     *,
     is_editable: bool,
     managed_group_ids: set[int] | None = None,
+    user_group_ids: set[int] | None = None,
 ) -> bool:
     """The get_editable filter is a superset (owner ∪ EDITOR-share ∪ managed-scope), so a
     scoped manager EDITOR-shared on an out-of-scope grouped agent qualifies there but is
     ANDed out by the managed-scope gate — matching the write path. ``is_editable`` is that
-    filter's result."""
+    filter's result; ``user_group_ids`` preloads the owner check's group lookup."""
     if not is_editable:
         return False
     return persona_edit_within_scope(
@@ -424,6 +442,9 @@ def can_edit_persona(
         db_session,
         group_ids=[group.id for group in persona.groups],
         is_public=persona.is_public,
+        is_owner=can_delete_persona(
+            user, persona, db_session, user_group_ids=user_group_ids
+        ),
         managed_group_ids=managed_group_ids,
     )
 
@@ -522,6 +543,7 @@ def stamp_persona_permissions(
                 db_session,
                 is_editable=is_editable,
                 managed_group_ids=managed_group_ids,
+                user_group_ids=user_group_ids,
             ),
             # share tracks the share guard (get_editable), broader than edit's scope gate
             can_share=is_editable,

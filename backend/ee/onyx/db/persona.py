@@ -105,7 +105,7 @@ def _assert_group_share_within_scope(
     # Unchanged shares aren't a mutation either — the editor round-trips current groups on
     # every save, so otherwise a plain owner couldn't edit an agent someone else
     # group-shared. Levels count, not just ids. Exempt when there's no scoped authority to
-    # abuse, or when the actor owns the agent — publishing is can_delete_persona's call (D9).
+    # abuse, or when the actor owns the agent — publishing is can_delete_persona's call.
     if current_shares == desired_group_shares and (
         has_permission(acting_user, Permission.MANAGE_AGENTS)
         is not PermissionAuthority.SCOPED

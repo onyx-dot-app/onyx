@@ -311,21 +311,24 @@ def test_persona_projection_matches_gates(db_session: Session) -> None:
     persona = _make_persona(db_session, owner=owner, is_public=False, groups=[managed])
     group_ids = [group.id for group in persona.groups]
 
-    def edit_guard_raises(actor: User) -> bool:
+    def edit_guard_raises(
+        actor: User, target: Persona | None = None, groups: list[int] | None = None
+    ) -> bool:
+        target = target or persona
         request = PersonaUpsertRequest(
-            name=persona.name,
-            description=persona.description or "",
+            name=target.name,
+            description=target.description or "",
             system_prompt="",
             task_prompt="",
             datetime_aware=False,
             document_set_ids=[],
             tool_ids=[],
-            groups=group_ids,
-            is_public=persona.is_public,
+            groups=groups if groups is not None else [g.id for g in target.groups],
+            is_public=target.is_public,
         )
         return _guard_raises(
             _assert_persona_update_within_managed_scope,
-            persona.id,
+            target.id,
             request,
             actor,
             db_session,
@@ -334,7 +337,11 @@ def test_persona_projection_matches_gates(db_session: Session) -> None:
     for actor in (in_scope, out_scope, owner, admin):
         # read bool == the real write guard's managed-scope decision
         assert persona_edit_within_scope(
-            actor, db_session, group_ids=group_ids, is_public=persona.is_public
+            actor,
+            db_session,
+            group_ids=group_ids,
+            is_public=persona.is_public,
+            is_owner=can_delete_persona(actor, persona, db_session),
         ) == (not edit_guard_raises(actor)), actor.email
         # view_stats == the real owner-or-admin stats gate
         assert can_view_persona_stats(actor, persona) == user_can_view_assistant_stats(
@@ -349,6 +356,25 @@ def test_persona_projection_matches_gates(db_session: Session) -> None:
         assert can_delete_persona(actor, persona, db_session) == delete_allowed, (
             actor.email
         )
+
+    # A scoped manager who owns the agent keeps the edit right they'd hold as a plain owner,
+    # even though the agent's group is outside their scope — and the read bool agrees.
+    owned_out_of_scope = _make_persona(
+        db_session, owner=out_scope, is_public=False, groups=[managed]
+    )
+    owned_group_ids = [group.id for group in owned_out_of_scope.groups]
+    assert not edit_guard_raises(out_scope, owned_out_of_scope)
+    assert persona_edit_within_scope(
+        out_scope,
+        db_session,
+        group_ids=owned_group_ids,
+        is_public=owned_out_of_scope.is_public,
+        is_owner=can_delete_persona(out_scope, owned_out_of_scope, db_session),
+    )
+    # The exemption covers leaving the groups alone, not widening them.
+    assert edit_guard_raises(
+        out_scope, owned_out_of_scope, owned_group_ids + [unmanaged.id]
+    )
 
     # concrete: an in-scope manager can edit/share but not view_stats/delete/feature/reorder
     in_scope_editable = is_persona_editable_by_user(db_session, persona.id, in_scope)
