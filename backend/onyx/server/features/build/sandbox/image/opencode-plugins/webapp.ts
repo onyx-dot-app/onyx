@@ -72,8 +72,6 @@ async function pidAlive(dir: string): Promise<number | null> {
   }
 }
 
-// fetch() doesn't honor HTTP_PROXY/HTTPS_PROXY, which is exactly what we want
-// here: this is a loopback probe and must bypass the egress proxy.
 async function probeRunning(port: number): Promise<boolean> {
   try {
     await fetch(`http://127.0.0.1:${port}/`, {
@@ -83,10 +81,6 @@ async function probeRunning(port: number): Promise<boolean> {
   } catch {
     return false;
   }
-}
-
-async function scaffolded(dir: string): Promise<boolean> {
-  return pathExists(`${dir}/${APP_DIR_REL}/package.json`);
 }
 
 async function tailLog(dir: string, n: number): Promise<string | null> {
@@ -113,7 +107,7 @@ async function buildObservation(
   const pid = await pidAlive(dir);
   const running = pid !== null && port !== null && (await probeRunning(port));
   const state: Observation["state"] = running ? "running" : "not_running";
-  const isScaffolded = await scaffolded(dir);
+  const isScaffolded = await pathExists(`${dir}/${APP_DIR_REL}/package.json`);
 
   const lines = [
     `state: ${state}`,
@@ -134,17 +128,14 @@ async function buildObservation(
   return { state, port, text: lines.join("\n") };
 }
 
-function shQuote(s: string): string {
-  return `'${s.replace(/'/g, `'\\''`)}'`;
-}
-
 function runScript(
   dir: string,
   scriptPath: string,
   abort: AbortSignal
 ): Promise<{ exitCode: number; output: string }> {
   return new Promise((resolve) => {
-    const child = spawn("bash", ["-c", `bash ${shQuote(scriptPath)} 2>&1`], {
+    const quotedPath = `'${scriptPath.replace(/'/g, `'\\''`)}'`;
+    const child = spawn("bash", ["-c", `bash ${quotedPath} 2>&1`], {
       cwd: dir,
       signal: abort,
     });
