@@ -44,6 +44,24 @@ def _can_fetch(
         return False
 
 
+def test_deleted_persona_is_not_fetchable_by_its_owner(db_session: Session) -> None:
+    # Every caller mutates the agent, so a soft-deleted one must not come back — otherwise
+    # it can still be rostered into a group or re-shared while invisible everywhere else.
+    owner = create_test_user(db_session, "deleted-owner")
+    persona = create_test_persona(db_session, owner)
+    persona.deleted = True
+    db_session.commit()
+
+    assert not _can_fetch(db_session, persona.id, owner, editable=True)
+    # upsert_persona's name-reuse path still needs it.
+    assert fetch_persona_by_id_for_user(
+        db_session=db_session,
+        persona_id=persona.id,
+        user=owner,
+        include_deleted=True,
+    )
+
+
 def test_owner_has_edit_access(db_session: Session) -> None:
     owner = create_test_user(db_session, "owner")
     persona = create_test_persona(db_session, owner)

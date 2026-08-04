@@ -165,9 +165,19 @@ def _add_user_filters(
 
 
 def fetch_persona_by_id_for_user(
-    db_session: Session, persona_id: int, user: User, get_editable: bool = True
+    db_session: Session,
+    persona_id: int,
+    user: User,
+    get_editable: bool = True,
+    include_deleted: bool = False,
 ) -> Persona:
+    """Load an agent the user may act on. Soft-deleted rows are excluded by default —
+    every caller mutates the agent, and a deleted one shouldn't be reachable. The one
+    opt-in is ``upsert_persona`` *creating* over a deleted same-name row, which it
+    recycles; editing by id never opts in."""
     stmt = select(Persona).where(Persona.id == persona_id).distinct()
+    if not include_deleted:
+        stmt = stmt.where(Persona.deleted.is_(False))
     stmt = _add_user_filters(stmt=stmt, user=user, get_editable=get_editable)
     persona = db_session.scalars(stmt).one_or_none()
     if not persona:
@@ -1333,6 +1343,10 @@ def upsert_persona(
     whether or not the assistant is a built-in / default assistant
     """
 
+    # Only a create that lands on a deleted same-name row recycles it; editing by id must
+    # not reach a deleted agent.
+    recycling_deleted = False
+
     if persona_id is not None:
         existing_persona = db_session.query(Persona).filter_by(id=persona_id).first()
     else:
@@ -1346,6 +1360,7 @@ def upsert_persona(
             raise ValueError(
                 f"Assistant with name '{name}' already exists. Please rename your assistant."
             )
+        recycling_deleted = existing_persona is not None
 
     if existing_persona and user:
         # this checks if the user has permission to edit the persona
@@ -1356,6 +1371,7 @@ def upsert_persona(
             persona_id=existing_persona.id,
             user=user,
             get_editable=True,
+            include_deleted=recycling_deleted,
         )
 
     # Fetch and attach tools by IDs
