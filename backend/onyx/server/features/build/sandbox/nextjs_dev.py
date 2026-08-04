@@ -135,18 +135,6 @@ PORT={nextjs_port}
 
     flock -x 9
 
-    # PIDs recycle in a pod full of short-lived tool processes, so a bare
-    # kill -0 could match an unrelated live process.
-    NEXTJS_PID=""
-    if [ -f "$SESSION_PATH/nextjs.pid" ]; then
-        NEXTJS_PID="$(cat "$SESSION_PATH/nextjs.pid")"
-    fi
-    if [ -n "$NEXTJS_PID" ] && kill -0 "$NEXTJS_PID" 2>/dev/null && \\
-       [ "$(readlink /proc/$NEXTJS_PID/cwd 2>/dev/null)" = "$SESSION_PATH/outputs/web" ]; then
-        echo "webapp already running on port $PORT (logs: nextjs.log)"
-        exit 2
-    fi
-
     if [ ! -f "$SESSION_PATH/outputs/web/package.json" ]; then
         echo "Copying outputs template"
         if [ -d /workspace/templates/outputs ]; then
@@ -180,11 +168,7 @@ PORT={nextjs_port}
     # and can't hold it open for its lifetime; no extra fd-closing needed here.
     {start_script}
 ) 9>"$SESSION_PATH/.webapp.lock"
-BOOTSTRAP_EXIT=$?
-
-if [ "$BOOTSTRAP_EXIT" -eq 2 ]; then
-    exit 0
-elif [ "$BOOTSTRAP_EXIT" -ne 0 ]; then
+if [ "$?" -ne 0 ]; then
     exit 1
 fi
 
@@ -207,8 +191,7 @@ exit 1
 
 def build_webapp_script_write_snippet(session_path: str, nextjs_port: int) -> str:
     """Builds a shell snippet (no shebang, no ``set -e``) that writes the
-    tamper-hardened bootstrap script to both its canonical and visible
-    locations, ``chmod 444`` on each.
+    ``chmod 444`` bootstrap script to the session root.
 
     Called from session setup and from restore (with the re-allocated port).
     Pinned name/signature: both sandbox managers' restore paths call this
@@ -218,11 +201,9 @@ def build_webapp_script_write_snippet(session_path: str, nextjs_port: int) -> st
     escaped_script = script.replace("'", "'\\''")
 
     return f"""
-mkdir -p {session_path}/.webapp
 # chmod 444 blocks in-place overwrite, so a rewrite (e.g. on restore) must
-# unlink both copies before writing the new ones.
-rm -f {session_path}/start-webapp.sh {session_path}/.webapp/start-webapp.sh
-printf '%s' '{escaped_script}' > {session_path}/.webapp/start-webapp.sh
+# unlink before writing.
+rm -f {session_path}/start-webapp.sh
 printf '%s' '{escaped_script}' > {session_path}/start-webapp.sh
-chmod 444 {session_path}/.webapp/start-webapp.sh {session_path}/start-webapp.sh
+chmod 444 {session_path}/start-webapp.sh
 """

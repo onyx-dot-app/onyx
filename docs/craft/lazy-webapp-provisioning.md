@@ -81,10 +81,12 @@ create conflicts and drift.
   longer breaks the preview. The tool's job is reconcile-to-running, readiness
   waiting, log tailing, restart, and structured observations — not to be the sole
   path to a working preview.
-- **Tamper hardening.** Canonical `.webapp/start-webapp.sh` + a visible
-  `start-webapp.sh` copy, both `chmod 444`. The tool executes the canonical copy
-  and restores the visible one (unlink-then-write, since 444 blocks in-place
-  overwrite).
+- **Tamper hardening (simplified 2026-08).** A single `start-webapp.sh` at the
+  session root, `chmod 444` (rewrites unlink-then-write, since 444 blocks
+  in-place overwrite). No canonical/visible pair and no tool-side restore: if
+  the agent deletes it, the tool reports unavailable and setup/restore
+  regenerates it. Liveness is guarded once, inside the embedded start script
+  (pid + cwd identity); the bootstrap wrapper does not duplicate the check.
 - **Restore auto-starts only when a webapp exists**, keyed on
   `outputs/web/package.json` in the restored snapshot. Self-heals legacy sessions
   and skips sessions that never built a webapp — no migration needed.
@@ -111,15 +113,14 @@ create conflicts and drift.
    (pid-alive short-circuit), scaffolds `outputs/web` + bun-cache + install on
    first run, waits ~90s for readiness, emits plain-English recovery guidance.
 2. **Lazy setup** (`session_workspace.py`): replace the eager
-   `build_nextjs_start_script` interpolation with writing the two `start-webapp.sh`
-   copies (canonical `.webapp/` + visible), `chmod 444`. No dev server started at
-   setup. Headless (`nextjs_port is None`) path unchanged.
+   `build_nextjs_start_script` interpolation with writing `start-webapp.sh` at the
+   session root, `chmod 444`. No dev server started at setup. Headless (`nextjs_port is None`) path unchanged.
 3. **Tool registration** (both managers): add
    `_OPENCODE_WEBAPP_PLUGIN_PATH = "/workspace/opencode-plugins/webapp.ts"` and
    include it in the base-config plugins list (k8s unconditional block; docker
    list). Ship `webapp.ts` in the image.
-4. **Restore conditional-start** (both managers' `restore_snapshot`): rewrite the
-   two script copies with the re-allocated port, then auto-start via
+4. **Restore conditional-start** (both managers' `restore_snapshot`): rewrite
+   `start-webapp.sh` with the re-allocated port, then auto-start via
    `start-webapp.sh` only if `outputs/web/package.json` exists (sentinel-guarded
    exec). Background the auto-start so wake stays fast (see edge below).
 5. **Frontend gating** (`OutputPanel.tsx` + `PreviewTab.tsx`): drive tab
@@ -142,10 +143,10 @@ create conflicts and drift.
 
 - **Unit** (`nextjs_dev`): `build_webapp_bootstrap_script` renders a valid script
   (`bash -n`), embeds the `.nextjs-port` write + env exports, and short-circuits
-  on a live pid. The setup script writes both `chmod 444` copies and does **not**
-  start a dev server.
-- **Integration (kind, primary backbone):** assert the lazy pre-state (both
-  `start-webapp.sh` copies present, mode 444, identical; no running dev server; no
+  on a live pid (via the single embedded guard). The setup script writes the
+  `chmod 444` script and does **not** start a dev server.
+- **Integration (kind, primary backbone):** assert the lazy pre-state
+  (`start-webapp.sh` present, mode 444; no running dev server; no
   `node_modules`); run the tool (and `bash start-webapp.sh`) and assert it
   scaffolds + installs + serves on the managed port through the proxy; restore a
   snapshot **with** a webapp auto-starts, restore **without** one does not

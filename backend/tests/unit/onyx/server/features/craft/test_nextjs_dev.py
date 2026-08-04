@@ -185,25 +185,24 @@ def test_bootstrap_script_embeds_port_write_and_env_exports() -> None:
     )
 
 
-def test_bootstrap_script_short_circuits_on_live_pid() -> None:
+def test_bootstrap_script_reuses_live_server_via_embedded_guard() -> None:
     script = build_webapp_bootstrap_script(_SESSION_PATH, 3010)
 
     assert 'kill -0 "$NEXTJS_PID" 2>/dev/null' in script
     assert (
-        '[ "$(readlink /proc/$NEXTJS_PID/cwd 2>/dev/null)" '
-        '= "$SESSION_PATH/outputs/web" ]' in script
+        f'[ "$(readlink /proc/$NEXTJS_PID/cwd 2>/dev/null)" '
+        f'= "{_SESSION_PATH}/outputs/web" ]' in script
     )
     assert "already running" in script
-    assert "exit 2" in script
+    # Exactly one liveness guard: the embedded start script's.
+    assert script.count("kill -0") == 1
 
 
 def test_webapp_script_write_snippet_removes_before_writing() -> None:
     snippet = build_webapp_script_write_snippet(_SESSION_PATH, 3010)
 
-    assert (
-        f"rm -f {_SESSION_PATH}/start-webapp.sh "
-        f"{_SESSION_PATH}/.webapp/start-webapp.sh" in snippet
-    )
+    assert f"rm -f {_SESSION_PATH}/start-webapp.sh" in snippet
+    assert f"chmod 444 {_SESSION_PATH}/start-webapp.sh" in snippet
     remove_index = snippet.index("rm -f")
     write_index = snippet.index("printf")
     assert remove_index < write_index

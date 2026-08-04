@@ -10,7 +10,7 @@ import type { Plugin } from "@opencode-ai/plugin";
 import type { tool as ToolFactory } from "@opencode-ai/plugin/tool";
 import { spawn } from "node:child_process";
 import { constants as fsConstants } from "node:fs";
-import { access, chmod, readFile, unlink, writeFile } from "node:fs/promises";
+import { access, readFile } from "node:fs/promises";
 
 const SDK_TOOL_PATHS = [
   "/home/sandbox/.opencode/node_modules/@opencode-ai/plugin/dist/tool.js",
@@ -28,8 +28,7 @@ async function loadToolFactory(): Promise<typeof ToolFactory> {
   throw new Error("could not resolve the @opencode-ai/plugin tool helper");
 }
 
-const CANONICAL_REL = ".webapp/start-webapp.sh";
-const VISIBLE_REL = "start-webapp.sh";
+const SCRIPT_REL = "start-webapp.sh";
 const PID_REL = "nextjs.pid";
 const LOG_REL = "nextjs.log";
 const APP_DIR_REL = "outputs/web";
@@ -41,12 +40,6 @@ const START_TIMEOUT_MS = 150_000;
 const MAX_OUTPUT_BYTES = 8 * 1024;
 const PROBE_TIMEOUT_MS = 2000;
 
-interface ResolvedScript {
-  path: string;
-  restored: boolean;
-  restoreError?: string;
-}
-
 async function pathExists(path: string): Promise<boolean> {
   try {
     await access(path, fsConstants.F_OK);
@@ -56,44 +49,9 @@ async function pathExists(path: string): Promise<boolean> {
   }
 }
 
-// The visible-copy-only fallback exists for legacy sessions that predate the
-// canonical copy; don't remove it as dead code.
-async function resolveScript(dir: string): Promise<ResolvedScript | null> {
-  const canonicalPath = `${dir}/${CANONICAL_REL}`;
-  const visiblePath = `${dir}/${VISIBLE_REL}`;
-
-  if (!(await pathExists(canonicalPath))) {
-    if (await pathExists(visiblePath)) {
-      return { path: visiblePath, restored: false };
-    }
-    return null;
-  }
-
-  const canonicalText = await readFile(canonicalPath, "utf8");
-  const visibleText = (await pathExists(visiblePath))
-    ? await readFile(visiblePath, "utf8")
-    : null;
-
-  if (visibleText === canonicalText) {
-    return { path: canonicalPath, restored: false };
-  }
-
-  try {
-    // The visible copy is chmod 444: overwriting in place EACCESes, but
-    // unlink only needs directory write permission.
-    await unlink(visiblePath).catch(() => {});
-    await writeFile(visiblePath, canonicalText, "utf8");
-    await chmod(visiblePath, 0o444);
-    return { path: canonicalPath, restored: true };
-  } catch (e) {
-    return {
-      path: canonicalPath,
-      restored: false,
-      restoreError:
-        "could not restore start-webapp.sh (continuing with the protected " +
-        `copy): ${e instanceof Error ? e.message : String(e)}`,
-    };
-  }
+async function resolveScript(dir: string): Promise<string | null> {
+  const scriptPath = `${dir}/${SCRIPT_REL}`;
+  return (await pathExists(scriptPath)) ? scriptPath : null;
 }
 
 function parsePort(scriptText: string): number | null {
@@ -147,10 +105,10 @@ interface Observation {
 
 async function buildObservation(
   dir: string,
-  script: ResolvedScript,
+  scriptPath: string,
   logLines: number
 ): Promise<Observation> {
-  const scriptText = await readFile(script.path, "utf8");
+  const scriptText = await readFile(scriptPath, "utf8");
   const port = parsePort(scriptText);
   const pid = await pidAlive(dir);
   const running = pid !== null && port !== null && (await probeRunning(port));
@@ -260,33 +218,28 @@ export const Webapp: Plugin = async () => {
           };
           context.metadata({ title: titles[args.action] });
 
-          const script = await resolveScript(dir);
-          if (!script) {
+          const scriptPath = await resolveScript(dir);
+          if (!scriptPath) {
             return UNAVAILABLE_OBSERVATION;
           }
-          const restoredNote = script.restoreError
-            ? `${script.restoreError}\n\n`
-            : script.restored
-              ? "restored start-webapp.sh (visible copy was missing or modified)\n\n"
-              : "";
 
           if (args.action === "status") {
-            const obs = await buildObservation(dir, script, DEFAULT_ACTION_LOG_LINES);
+            const obs = await buildObservation(dir, scriptPath, DEFAULT_ACTION_LOG_LINES);
             const headline =
               obs.state === "running"
                 ? `web app is running on port ${obs.port} and the preview updates live (hot reload)`
                 : "web app is not running; call webapp start";
-            return `${restoredNote}${headline}\n\n${obs.text}`;
+            return `${headline}\n\n${obs.text}`;
           }
 
           if (args.action === "logs") {
             const n = Math.min(args.lines ?? DEFAULT_LOGS_LINES, MAX_LOG_LINES);
-            const obs = await buildObservation(dir, script, n);
+            const obs = await buildObservation(dir, scriptPath, n);
             const headline =
               obs.state === "running"
                 ? `web app is running on port ${obs.port}`
                 : "web app is not running";
-            return `${restoredNote}${headline}\n\n${obs.text}`;
+            return `${headline}\n\n${obs.text}`;
           }
 
           if (args.action === "restart") {
@@ -299,8 +252,8 @@ export const Webapp: Plugin = async () => {
             }
           }
 
-          const { exitCode, output } = await runScript(dir, script.path, context.abort);
-          const obs = await buildObservation(dir, script, DEFAULT_ACTION_LOG_LINES);
+          const { exitCode, output } = await runScript(dir, scriptPath, context.abort);
+          const obs = await buildObservation(dir, scriptPath, DEFAULT_ACTION_LOG_LINES);
 
           // The port is the proxy's routing contract (DB-allocated):
           // port_conflict must never auto-heal onto another port; a moved
@@ -308,7 +261,7 @@ export const Webapp: Plugin = async () => {
           let headline: string;
           let errorKind: string | null = null;
           if (exitCode === 0) {
-            headline = output.includes("already running on port")
+            headline = output.includes("already running")
               ? "webapp was already running"
               : "webapp started successfully";
           } else if (
@@ -337,7 +290,7 @@ export const Webapp: Plugin = async () => {
 
           const errorKindLine = errorKind ? `error_kind: ${errorKind}\n` : "";
           return (
-            `${restoredNote}${headline}\n\n` +
+            `${headline}\n\n` +
             `--- script output ---\n${output}\n\n${errorKindLine}${obs.text}`
           );
         },
