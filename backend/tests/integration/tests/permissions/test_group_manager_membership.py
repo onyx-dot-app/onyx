@@ -85,6 +85,12 @@ def env(reset: None, admin_user: DATestUser) -> _ScopedEnv:  # noqa: ARG001
     other_group = UserGroupManager.create(
         name="unmanaged", user_ids=[outsider.id], user_performing_action=admin_user
     )
+    # Group creation kicks off a sync, and every edit route 409s/404s while one is in
+    # flight — before GATE 2 runs, so an escalation test would "pass" without reaching it.
+    UserGroupManager.wait_for_sync(
+        user_performing_action=admin_user,
+        user_groups_to_check=[managed_group, other_group],
+    )
     _promote_to_manager(manager.id, managed_group.id)
     return _ScopedEnv(admin_user, manager, member, outsider, managed_group, other_group)
 
@@ -107,6 +113,29 @@ def _me_permissions(user: DATestUser) -> dict[str, Any]:
 
 def _patch_group_body(user_ids: list[str], cc_pair_ids: list[int]) -> dict[str, Any]:
     return {"user_ids": user_ids, "cc_pair_ids": cc_pair_ids}
+
+
+def _current_cc_pair_ids(group_id: int) -> set[int]:
+    """The group's live cc_pair junctions, read from the DB. A 403 only proves what came
+    back; this proves the rejected write left no rows behind."""
+    with get_session_with_current_tenant() as db_session:
+        return {
+            row.cc_pair_id
+            for row in db_session.query(UserGroup__ConnectorCredentialPair).filter(
+                UserGroup__ConnectorCredentialPair.user_group_id == group_id,
+                UserGroup__ConnectorCredentialPair.is_current.is_(True),
+            )
+        }
+
+
+def _settled_cc_pair_ids(env: "_ScopedEnv") -> set[int]:
+    """Wait out the sync a cc_pair create kicks off, then snapshot — same reason the
+    ``env`` fixture waits."""
+    UserGroupManager.wait_for_sync(
+        user_performing_action=env.admin,
+        user_groups_to_check=[env.managed_group, env.other_group],
+    )
+    return _current_cc_pair_ids(env.managed_group.id)
 
 
 def _insert_stale_cc_pair_junction(group_id: int, cc_pair_id: int) -> None:
@@ -269,6 +298,7 @@ def test_manager_cannot_attach_public_cc_pair(env: _ScopedEnv) -> None:
     public_cc_pair = CCPairManager.create_from_scratch(
         user_performing_action=env.admin, access_type=AccessType.PUBLIC, groups=[]
     )
+    before = _settled_cc_pair_ids(env)
     path = f"/manage/admin/user-group/{env.managed_group.id}"
     resp = call_endpoint(
         "PATCH",
@@ -278,6 +308,8 @@ def test_manager_cannot_attach_public_cc_pair(env: _ScopedEnv) -> None:
         env.manager.cookies,
     )
     assert_response(resp, "PATCH", path, "manager", "denied")
+    assert _current_cc_pair_ids(env.managed_group.id) == before
+    assert public_cc_pair.id not in before
 
 
 def test_manager_cannot_attach_unmanaged_cc_pair(env: _ScopedEnv) -> None:
@@ -287,6 +319,7 @@ def test_manager_cannot_attach_unmanaged_cc_pair(env: _ScopedEnv) -> None:
         access_type=AccessType.PRIVATE,
         groups=[env.other_group.id],
     )
+    before = _settled_cc_pair_ids(env)
     path = f"/manage/admin/user-group/{env.managed_group.id}"
     resp = call_endpoint(
         "PATCH",
@@ -296,6 +329,8 @@ def test_manager_cannot_attach_unmanaged_cc_pair(env: _ScopedEnv) -> None:
         env.manager.cookies,
     )
     assert_response(resp, "PATCH", path, "manager", "denied")
+    assert _current_cc_pair_ids(env.managed_group.id) == before
+    assert unmanaged_cc_pair.id not in before
 
 
 def test_manager_cannot_reattach_removed_public_cc_pair(env: _ScopedEnv) -> None:
@@ -305,6 +340,7 @@ def test_manager_cannot_reattach_removed_public_cc_pair(env: _ScopedEnv) -> None
     public_cc_pair = CCPairManager.create_from_scratch(
         user_performing_action=env.admin, access_type=AccessType.PUBLIC, groups=[]
     )
+    before = _settled_cc_pair_ids(env)
     _insert_stale_cc_pair_junction(env.managed_group.id, public_cc_pair.id)
     path = f"/manage/admin/user-group/{env.managed_group.id}"
     resp = call_endpoint(
@@ -315,6 +351,9 @@ def test_manager_cannot_reattach_removed_public_cc_pair(env: _ScopedEnv) -> None
         env.manager.cookies,
     )
     assert_response(resp, "PATCH", path, "manager", "denied")
+    # The stale row must stay stale — revival is the escalation this test guards.
+    assert _current_cc_pair_ids(env.managed_group.id) == before
+    assert public_cc_pair.id not in before
 
 
 def test_manager_attaches_groupless_private_cc_pair(env: _ScopedEnv) -> None:
@@ -323,6 +362,7 @@ def test_manager_attaches_groupless_private_cc_pair(env: _ScopedEnv) -> None:
     groupless_cc_pair = CCPairManager.create_from_scratch(
         user_performing_action=env.admin, access_type=AccessType.PRIVATE, groups=[]
     )
+    _settled_cc_pair_ids(env)
     path = f"/manage/admin/user-group/{env.managed_group.id}"
     resp = call_endpoint(
         "PATCH",
@@ -332,6 +372,7 @@ def test_manager_attaches_groupless_private_cc_pair(env: _ScopedEnv) -> None:
         env.manager.cookies,
     )
     assert resp.status_code == 200, resp.text
+    assert groupless_cc_pair.id in _current_cc_pair_ids(env.managed_group.id)
 
 
 def test_manager_group_list_only_managed(env: _ScopedEnv) -> None:
