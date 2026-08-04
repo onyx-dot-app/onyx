@@ -16,6 +16,7 @@ fire requests outside any wrapper, and returning plain data is what makes the
 gateway boundary real.
 """
 
+import functools
 import inspect
 from abc import ABC
 from collections.abc import Callable, Collection, Mapping
@@ -26,7 +27,7 @@ from typing import Any, ClassVar, TypeVar, cast
 from pydantic import BaseModel, ConfigDict
 
 from onyx.configs.constants import DocumentSource
-from onyx.connectors.capability_checks.models import CredentialCapability
+from onyx.connectors.capabilities import CredentialCapability
 
 _SPEC_ATTR = "__source_operation_spec__"
 
@@ -57,7 +58,9 @@ class SourceOperationSpec(BaseModel):
     # Named forms of the operation where a parameter changes the required
     # permission (e.g. Slack ``conversations.list`` public vs private). Coverage
     # is counted per (operation, variant); empty means the operation itself is
-    # the single coverage unit.
+    # the single coverage unit. A variant-bearing operation must be invoked with
+    # a ``variant="<name>"`` keyword -- the method may branch on it or ignore
+    # it, but the call site must classify itself.
     variants: tuple[str, ...] = ()
     consumes: OperationConsumes
     # Exempts the operation (all variants) from the check-coverage requirement.
@@ -114,6 +117,24 @@ def source_operation(
     return stamp
 
 
+def _enforce_variant_kwarg(
+    func: Callable[..., Any], spec: SourceOperationSpec
+) -> Callable[..., Any]:
+    """Wraps a variant-bearing operation to require a declared ``variant=``."""
+
+    @functools.wraps(func)
+    def wrapped(self: "SourceOperations", *args: Any, **kwargs: Any) -> Any:
+        variant = kwargs.get("variant")
+        if variant not in spec.variants:
+            raise TypeError(
+                f"{spec.name} declares variants {spec.variants}; call it "
+                f"with variant= one of those, got {variant!r}."
+            )
+        return func(self, *args, **kwargs)
+
+    return wrapped
+
+
 # Internal: use ``monkeypatch.setattr(module, "_SOURCE_OPERATIONS_BY_SOURCE",
 # {})`` to isolate in tests.
 _SOURCE_OPERATIONS_BY_SOURCE: dict[DocumentSource, type["SourceOperations"]] = {}
@@ -129,6 +150,8 @@ class SourceOperations(ABC):
       helpers.
     - Set ``source`` to the ``DocumentSource`` the gateway serves; one gateway
       per source.
+    - Declare ``sdk_modules``; an explicit empty tuple marks an SDK-less
+      connector.
     - Every public method must be classified with ``@source_operation``. Helpers
       (including any staticmethod/classmethod/property) stay private; data
       models live at module level.
@@ -138,6 +161,13 @@ class SourceOperations(ABC):
     """
 
     source: ClassVar[DocumentSource]
+
+    # The SDK module roots this gateway wraps (e.g. ``("slack_sdk",)``). The
+    # import-fence test asserts these are imported only from the gateway's own
+    # file within the connector's OSS and EE perm-sync directories. Every
+    # gateway must declare this explicitly; an empty tuple marks a genuinely
+    # SDK-less connector.
+    sdk_modules: ClassVar[tuple[str, ...]]
 
     _operation_specs: ClassVar[Mapping[str, SourceOperationSpec]] = MappingProxyType({})
 
@@ -163,6 +193,22 @@ class SourceOperations(ABC):
             raise TypeError(
                 f"{cls.__name__} cannot register {source.value}: already "
                 f"registered by {registered.__name__}. One gateway per source."
+            )
+        if "sdk_modules" not in vars(cls):
+            raise TypeError(
+                f"{cls.__name__} must declare ``sdk_modules`` so the import "
+                "fence knows what to guard; declare an explicit empty tuple "
+                "for a genuinely SDK-less connector."
+            )
+        # Shape matters: a plain string is a Collection of single characters to
+        # the fence, which would then match nothing and silently pass.
+        sdk_modules = vars(cls)["sdk_modules"]
+        if not isinstance(sdk_modules, tuple) or any(
+            not isinstance(module, str) or not module for module in sdk_modules
+        ):
+            raise TypeError(
+                f"{cls.__name__}.sdk_modules must be a tuple of non-empty "
+                "module roots; use () for a genuinely SDK-less connector."
             )
 
         specs: dict[str, SourceOperationSpec] = {}
@@ -211,6 +257,14 @@ class SourceOperations(ABC):
                 f"{unstamped}. Stamp them with @source_operation or make "
                 "them private."
             )
+
+        # Variant-bearing operations must self-classify at every call site;
+        # wrapping here makes production calls carry the same ``variant=``
+        # attribution the coverage harness counts, so coverage claims stay
+        # honest.
+        for name, spec in specs.items():
+            if spec.variants:
+                setattr(cls, name, _enforce_variant_kwarg(vars(cls)[name], spec))
 
         cls._operation_specs = MappingProxyType(specs)
         _SOURCE_OPERATIONS_BY_SOURCE[source] = cls

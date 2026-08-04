@@ -27,6 +27,7 @@ def test_gateway_registers_and_collects_specs() -> None:
     # Precondition and under test (registration fires at class creation).
     class _SlackOperations(SourceOperations):
         source = DocumentSource.SLACK
+        sdk_modules = ()
 
         @source_operation(
             capabilities={CredentialCapability.INDEXING},
@@ -66,6 +67,7 @@ def test_unstamped_public_method_fails_at_import() -> None:
 
         class _LeakyOperations(SourceOperations):
             source = DocumentSource.SLACK
+            sdk_modules = ()
 
             def fetch_page(self) -> None:
                 return None
@@ -119,6 +121,7 @@ def test_gateway_inheritance_is_rejected() -> None:
     # Precondition.
     class _SlackOperations(SourceOperations):
         source = DocumentSource.SLACK
+        sdk_modules = ()
 
     # Under test and postcondition.
     with pytest.raises(TypeError, match="directly and nothing else"):
@@ -128,18 +131,55 @@ def test_gateway_inheritance_is_rejected() -> None:
 
 
 @pytest.mark.usefixtures("isolated_registry")
+def test_missing_sdk_modules_declaration_fails_at_import() -> None:
+    """Verifies the import fence cannot be skipped by omission."""
+    # Under test and postcondition.
+    with pytest.raises(TypeError, match="must declare ``sdk_modules``"):
+
+        class _UndeclaredOperations(SourceOperations):
+            source = DocumentSource.GITHUB
+
+
+@pytest.mark.usefixtures("isolated_registry")
+def test_non_tuple_sdk_modules_fails_at_import() -> None:
+    """
+    Verifies a plain-string ``sdk_modules`` is rejected: as a collection of
+    single characters it would silently unfence the gateway.
+    """
+    # Under test and postcondition.
+    with pytest.raises(TypeError, match="tuple of non-empty"):
+
+        class _StringSdkOperations(SourceOperations):
+            source = DocumentSource.GITHUB
+            sdk_modules = "github"  # type: ignore[assignment]
+
+
+@pytest.mark.usefixtures("isolated_registry")
+def test_blank_sdk_module_root_fails_at_import() -> None:
+    """Verifies empty module roots cannot slip into the fence."""
+    # Under test and postcondition.
+    with pytest.raises(TypeError, match="tuple of non-empty"):
+
+        class _BlankSdkOperations(SourceOperations):
+            source = DocumentSource.GITHUB
+            sdk_modules = ("github", "")
+
+
+@pytest.mark.usefixtures("isolated_registry")
 def test_duplicate_source_registration_fails() -> None:
     """Verifies the one-gateway-per-source rule."""
 
     # Precondition.
     class _FirstOperations(SourceOperations):
         source = DocumentSource.SLACK
+        sdk_modules = ()
 
     # Under test and postcondition.
     with pytest.raises(TypeError, match="already registered by _FirstOperations"):
 
         class _SecondOperations(SourceOperations):
             source = DocumentSource.SLACK
+            sdk_modules = ()
 
 
 @pytest.mark.usefixtures("isolated_registry")
@@ -149,6 +189,7 @@ def test_private_helpers_and_data_attrs_are_allowed() -> None:
     # Under test.
     class _TidyOperations(SourceOperations):
         source = DocumentSource.SLACK
+        sdk_modules = ()
         docs_link = "https://docs.onyx.app/connectors/slack"
 
         def _build_client(self) -> None:
@@ -170,6 +211,7 @@ def test_public_staticmethod_is_rejected() -> None:
 
         class _StaticOperations(SourceOperations):
             source = DocumentSource.SLACK
+            sdk_modules = ()
 
             @staticmethod
             def build_client() -> None:
@@ -184,6 +226,7 @@ def test_public_property_is_rejected() -> None:
 
         class _PropertyOperations(SourceOperations):
             source = DocumentSource.SLACK
+            sdk_modules = ()
 
             @property
             def team_id(self) -> str:
@@ -202,6 +245,7 @@ def test_public_non_callable_descriptor_is_rejected() -> None:
 
         class _CachedPropertyOperations(SourceOperations):
             source = DocumentSource.SLACK
+            sdk_modules = ()
 
             @cached_property
             def team_id(self) -> str:
@@ -216,6 +260,7 @@ def test_public_classmethod_is_rejected() -> None:
 
         class _ClassmethodOperations(SourceOperations):
             source = DocumentSource.SLACK
+            sdk_modules = ()
 
             @classmethod
             def build_client(cls) -> None:
@@ -230,6 +275,7 @@ def test_public_nested_class_is_rejected() -> None:
 
         class _NestedModelOperations(SourceOperations):
             source = DocumentSource.SLACK
+            sdk_modules = ()
 
             class Channel:
                 pass
@@ -253,6 +299,7 @@ def test_aliased_operation_assignment_is_rejected() -> None:
 
         class _AliasedOperations(SourceOperations):
             source = DocumentSource.SLACK
+            sdk_modules = ()
             list_a = stamped
 
 
@@ -285,6 +332,7 @@ def test_decorator_snapshots_capabilities_at_factory_time() -> None:
     # Under test.
     class _SnapshotOperations(SourceOperations):
         source = DocumentSource.SLACK
+        sdk_modules = ()
 
         @decorator
         def probe(self) -> None:
@@ -327,3 +375,58 @@ def test_decorator_rejects_blank_variant_names() -> None:
             consumes=OperationConsumes.CREDENTIAL,
             variants=("public", ""),
         )
+
+
+@pytest.mark.usefixtures("isolated_registry")
+def test_variant_bearing_operation_requires_a_declared_variant() -> None:
+    """
+    Verifies calls to a variant-bearing operation must classify themselves with
+    ``variant=`` so coverage attribution reflects real call sites.
+    """
+
+    # Precondition.
+    class _VariantOperations(SourceOperations):
+        source = DocumentSource.SLACK
+        sdk_modules = ()
+
+        @source_operation(
+            capabilities={CredentialCapability.INDEXING},
+            consumes=OperationConsumes.CREDENTIAL,
+            variants=("public", "private"),
+        )
+        def list_channels(self, *, variant: str | None = None) -> str | None:
+            return variant
+
+    gateway = _VariantOperations()
+
+    # Under test and postcondition.
+    assert gateway.list_channels(variant="public") == "public"
+    with pytest.raises(TypeError, match="declares variants"):
+        gateway.list_channels(variant="bogus")
+    with pytest.raises(TypeError, match="declares variants"):
+        gateway.list_channels()
+    # The wrap preserves the stamped spec.
+    assert _VariantOperations.operation_specs()["list_channels"].variants == (
+        "public",
+        "private",
+    )
+
+
+@pytest.mark.usefixtures("isolated_registry")
+def test_variantless_operation_is_not_wrapped() -> None:
+    """Verifies operations without variants keep their bare call shape."""
+
+    # Precondition.
+    class _PlainOperations(SourceOperations):
+        source = DocumentSource.SLACK
+        sdk_modules = ()
+
+        @source_operation(
+            capabilities={CredentialCapability.INDEXING},
+            consumes=OperationConsumes.CREDENTIAL,
+        )
+        def fetch_history(self) -> str:
+            return "history"
+
+    # Under test and postcondition.
+    assert _PlainOperations().fetch_history() == "history"
