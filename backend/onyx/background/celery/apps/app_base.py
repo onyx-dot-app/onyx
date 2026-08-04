@@ -57,6 +57,7 @@ from onyx.utils.logger import (
     ColoredFormatter,
     LoggerContextVars,
     PlainFormatter,
+    cap_third_party_log_levels,
     get_json_formatter,
     get_log_level_from_str,
     setup_logger,
@@ -576,6 +577,11 @@ def on_setup_logging(
         root_logger.addHandler(root_file_handler)
 
     root_logger.setLevel(effective_loglevel)
+
+    # Third-party loggers inherit the root logger's level, so a DEBUG root
+    # would otherwise turn their firehoses on; re-cap them against the level
+    # this worker actually runs at.
+    cap_third_party_log_levels(effective_loglevel)
 
     # Emit the diagnostic after the root logger is configured so it goes through
     # the fresh handler at the level we just chose. (Before this point Python's
