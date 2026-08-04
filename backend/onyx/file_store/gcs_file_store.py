@@ -278,11 +278,20 @@ class GCSBackedFileStore(FileStore):
                     file_id=file_id, db_session=db_session
                 )
 
+            from google.api_core.exceptions import NotFound
+
             client = self._get_gcs_client()
             bucket = client.bucket(file_record.bucket_name)
             blob = bucket.blob(file_record.object_key)
-            blob.reload()
+            try:
+                blob.reload()
+            except NotFound as e:
+                raise FileNotFoundError(
+                    f"Object for file {file_id} does not exist"
+                ) from e
             return blob.size
+        except FileNotFoundError:
+            raise
         except Exception as e:
             logger.warning("Error getting file size for %s: %s", file_id, e)
             return None

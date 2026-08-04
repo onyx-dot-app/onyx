@@ -78,6 +78,9 @@ def update_filerecord_file_sizes(
     db_session.execute(
         update(FileRecord)
         .where(FileRecord.file_id.in_(file_sizes.keys()))
+        # Only fill still-empty sizes: a concurrent overwrite may have
+        # persisted a fresh size after this listing's lookup started.
+        .where(FileRecord.file_size.is_(None))
         .values(file_size=case(file_sizes, value=FileRecord.file_id))
     )
 

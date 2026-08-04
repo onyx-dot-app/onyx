@@ -49,6 +49,12 @@ if TYPE_CHECKING:
 logger = setup_logger()
 
 
+# Persisted in file_record.file_size when the backing object is confirmed
+# missing, so listings stop re-probing the object store for it. Rendered as
+# "unknown" (None) in API responses.
+FILE_SIZE_MISSING_SENTINEL = -1
+
+
 def content_byte_size(file_content: object) -> int | None:
     """Stored size in bytes of save_file content. str content is uploaded
     UTF-8 encoded by every backend, so its size is the encoded length."""
@@ -471,6 +477,17 @@ class S3BackedFileStore(FileStore):
                 Bucket=file_record.bucket_name, Key=file_record.object_key
             )
             return response.get("ContentLength")
+        except ClientError as e:
+            if e.response.get("Error", {}).get("Code") in (
+                "404",
+                "NotFound",
+                "NoSuchKey",
+            ):
+                raise FileNotFoundError(
+                    f"Object for file {file_id} does not exist"
+                ) from e
+            logger.warning("Error getting file size for %s: %s", file_id, e)
+            return None
         except Exception as e:
             logger.warning("Error getting file size for %s: %s", file_id, e)
             return None

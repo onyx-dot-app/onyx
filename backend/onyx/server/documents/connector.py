@@ -104,7 +104,11 @@ from onyx.db.models import (
     User,
     UserRole,
 )
-from onyx.file_store.file_store import FileStore, get_default_file_store
+from onyx.file_store.file_store import (
+    FILE_SIZE_MISSING_SENTINEL,
+    FileStore,
+    get_default_file_store,
+)
 from onyx.redis.redis_pool import get_redis_client
 from onyx.redis.redis_tenant_work_gating import maybe_mark_tenant_active
 from onyx.server.documents.models import (
@@ -487,8 +491,17 @@ def list_connector_files(
     ]
     if missing_size_ids:
         file_store = get_default_file_store()
+
+        def _lookup_size(lookup_file_id: str) -> int | None:
+            try:
+                return file_store.get_file_size(lookup_file_id)
+            except FileNotFoundError:
+                # Object confirmed gone: persist the sentinel so future
+                # listings stop probing the object store for this file.
+                return FILE_SIZE_MISSING_SENTINEL
+
         looked_up_sizes = run_functions_tuples_in_parallel(
-            [(file_store.get_file_size, (file_id,)) for file_id in missing_size_ids],
+            [(_lookup_size, (file_id,)) for file_id in missing_size_ids],
             allow_failures=True,
             max_workers=16,
         )
@@ -515,11 +528,13 @@ def list_connector_files(
         file_size = None
         upload_date = None
         if record:
-            file_size = (
+            raw_size = (
                 record.file_size
                 if record.file_size is not None
                 else backfilled_sizes.get(file_id)
             )
+            # The missing-object sentinel (negative) renders as unknown.
+            file_size = raw_size if raw_size is not None and raw_size >= 0 else None
             upload_date = record.created_at.isoformat() if record.created_at else None
         files.append(
             ConnectorFileInfo(

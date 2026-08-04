@@ -323,12 +323,21 @@ class AzureBlobBackedFileStore(FileStore):
                     file_id=file_id, db_session=db_session
                 )
 
+            from azure.core.exceptions import ResourceNotFoundError
+
             client = self._get_blob_service_client()
             blob_client = client.get_blob_client(
                 container=file_record.bucket_name, blob=file_record.object_key
             )
-            properties = blob_client.get_blob_properties()
+            try:
+                properties = blob_client.get_blob_properties()
+            except ResourceNotFoundError as e:
+                raise FileNotFoundError(
+                    f"Object for file {file_id} does not exist"
+                ) from e
             return properties.size
+        except FileNotFoundError:
+            raise
         except Exception as e:
             logger.warning("Error getting file size for %s: %s", file_id, e)
             return None

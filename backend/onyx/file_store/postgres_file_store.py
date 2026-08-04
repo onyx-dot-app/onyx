@@ -26,6 +26,7 @@ from onyx.db.file_content import (
     upsert_file_content,
 )
 from onyx.db.file_record import (
+    FileRecordNotFoundError,
     delete_filerecord_by_file_id,
     get_filerecord_by_file_id,
     get_filerecord_by_file_id_optional,
@@ -225,6 +226,8 @@ class PostgresBackedFileStore(FileStore):
                     file_id=file_id, db_session=session
                 )
                 return record.file_size
+        except FileRecordNotFoundError as e:
+            raise FileNotFoundError(f"Content for file {file_id} does not exist") from e
         except Exception as e:
             logger.warning("Error getting file size for %s: %s", file_id, e)
             return None
