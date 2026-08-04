@@ -215,15 +215,6 @@ OPENCODE_SERVE_EVENT_READ_TIMEOUT = float(
 )
 
 # ==============================================================================
-# Rate limiting
-# ==============================================================================
-
-# Messages per week. Free users always get 5 messages total (not configurable).
-# Per-user overrides are managed via the PostHog feature flag
-# "craft-has-usage-limits".
-CRAFT_PAID_USER_RATE_LIMIT = int(os.environ.get("CRAFT_PAID_USER_RATE_LIMIT", "25"))
-
-# ==============================================================================
 # User Library (user-uploaded raw files: xlsx, pptx, docx, etc.)
 # ==============================================================================
 
