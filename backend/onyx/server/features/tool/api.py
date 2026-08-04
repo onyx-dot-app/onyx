@@ -13,6 +13,7 @@ from onyx.db.engine.sql_engine import get_session
 from onyx.db.enums import Permission
 from onyx.db.models import Tool
 from onyx.db.models import User
+from onyx.db.oauth_config import get_oauth_config
 from onyx.db.tools import can_link_oauth_config
 from onyx.db.tools import can_manage_tool
 from onyx.db.tools import create_tool__no_commit
@@ -90,6 +91,13 @@ def _assert_can_link_oauth_config(
     ordinary edits (the editor round-trips the id on every save)."""
     if oauth_config_id is None or oauth_config_id == current_oauth_config_id:
         return
+    # Before asking who references it, establish it exists: an unknown id has no referencing
+    # actions, so the gate would pass it through to the FK and surface as a 500.
+    if get_oauth_config(oauth_config_id, db_session) is None:
+        raise OnyxError(
+            OnyxErrorCode.NOT_FOUND,
+            f"OAuth config with id {oauth_config_id} not found",
+        )
     if not can_link_oauth_config(user, oauth_config_id, db_session):
         raise OnyxError(
             OnyxErrorCode.INSUFFICIENT_PERMISSIONS,

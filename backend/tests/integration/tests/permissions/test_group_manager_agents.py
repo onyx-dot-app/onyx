@@ -485,6 +485,20 @@ def test_manager_cannot_link_unowned_oauth_config(env: _ScopedEnv) -> None:
     )
 
 
+def test_unknown_oauth_config_is_rejected_not_a_500(env: _ScopedEnv) -> None:
+    # An unknown id has no referencing actions, so the link gate would wave it through to
+    # the foreign key. Applies to the admin too — the global branch skips the reference read.
+    for actor in (env.manager, env.admin):
+        resp = call_endpoint(
+            "POST",
+            "/admin/tool/custom",
+            _tool_body(2_000_000_000),
+            actor.headers,
+            actor.cookies,
+        )
+        assert resp.status_code == 404, resp.text
+
+
 def test_manager_edits_own_action_keeping_shared_oauth_config(env: _ScopedEnv) -> None:
     # An admin can link a second action to the manager's config, which makes it shared. The
     # manager must still be able to edit their own action while re-sending the same id.
