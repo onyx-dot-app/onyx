@@ -2,8 +2,10 @@ from uuid import UUID
 
 from sqlalchemy.orm import Session
 
+from onyx.auth.permissions import has_permission
 from onyx.auth.scoped_permissions import assert_within_scope
 from onyx.db.enums import Permission
+from onyx.db.enums import PermissionAuthority
 from onyx.db.enums import PersonaSharePermission
 from onyx.db.models import Persona
 from onyx.db.models import Persona__UserGroup
@@ -77,25 +79,34 @@ def _assert_group_share_within_scope(
     db_session: Session,
     original_is_public: bool,
 ) -> None:
-    """GATE 2: sharing an agent to a group is a MANAGE_AGENTS action. Admins
-    and global MANAGE_AGENTS holders bypass; a scoped manager may only add/remove
-    groups they manage on a PRIVATE agent; an ADD_AGENTS-only user (no MANAGE_AGENTS
-    authority) is rejected. Current groups are re-read in-txn, not trusted from the
-    caller, so a reassignment can't escape scope. Privacy anchors on BOTH the
-    original state (snapshotted by the caller before is_public is applied) and the
-    requested one — a public→private conversion in the same call must not slip past."""
-    current_group_ids = [
-        row.user_group_id
+    """GATE 2: *changing* an agent's group shares is a MANAGE_AGENTS action. Global
+    holders bypass; a scoped manager may only add/remove groups they manage on a PRIVATE
+    agent; anyone else may leave the shares alone but not alter them. Shares are re-read
+    in-txn, never trusted from the caller, so a reassignment can't escape scope. Privacy
+    anchors on the original state too (snapshotted before is_public is applied) — a
+    public→private convert in the same call must not slip past."""
+    current_shares = {
+        row.user_group_id: row.permission
         for row in db_session.query(Persona__UserGroup)
         .filter(Persona__UserGroup.persona_id == persona_id)
         .all()
-    ]
-    requested_group_ids = list(desired_group_shares.keys())
-    # No group on either side: a personal (no-group) create/save or a no-op clear,
-    # not a group-share mutation — nothing to authorize, so an ADD_AGENTS-only user
-    # can still create personal agents (e.g. when the client sends groups=[]).
-    if not current_group_ids and not requested_group_ids:
+    }
+    # No group on either side: a personal agent, not a group-share mutation. Keeps
+    # groups=[] creates open to an ADD_AGENTS-only user.
+    if not current_shares and not desired_group_shares:
         return
+    # Unchanged shares aren't a mutation either — the editor round-trips current groups
+    # on every save, so otherwise a plain owner couldn't edit an agent someone else
+    # group-shared. Levels count, not just ids. Scoped managers excluded: holding the
+    # share while flipping the agent private is how a public agent gets captured.
+    if (
+        current_shares == desired_group_shares
+        and has_permission(acting_user, Permission.MANAGE_AGENTS)
+        is not PermissionAuthority.SCOPED
+    ):
+        return
+    current_group_ids = list(current_shares)
+    requested_group_ids = list(desired_group_shares)
     persona = db_session.query(Persona).filter(Persona.id == persona_id).first()
     if persona is None:
         raise OnyxError(

@@ -17,8 +17,7 @@ manager-creation helper exists yet). Allowed actions go through Manager classes
 (which assert real success); denied actions go through the shared ``_access_matrix``
 helpers, which verify the 403 is a genuine permission-gate denial.
 
-Not yet covered (need a live run to verify): the ADD_AGENTS-only user's inability
-to group-share, and PAT scope narrowing.
+Not yet covered (needs a live run to verify): PAT scope narrowing.
 """
 
 import os
@@ -288,20 +287,26 @@ def test_manager_creates_personal_agent(env: _ScopedEnv) -> None:
     )
 
 
-def test_add_agents_user_creates_personal_agent_with_empty_groups(
-    env: _ScopedEnv,
-) -> None:
-    # An ADD_AGENTS-only user (no MANAGE_AGENTS authority) must still create a
-    # personal agent when the client sends groups=[] (no group share).
-    member = UserManager.create(name="add_agents_only")
+def _add_agents_only_user(env: _ScopedEnv, name: str) -> DATestUser:
+    """A user whose only admin permission is ADD_AGENTS — no MANAGE_AGENTS authority."""
+    member = UserManager.create(name=name)
     grant_group = UserGroupManager.create(
-        name="add-agents", user_ids=[member.id], user_performing_action=env.admin
+        name=f"{name}-group", user_ids=[member.id], user_performing_action=env.admin
     )
     UserGroupManager.set_permissions(
         user_group=grant_group,
         permissions=[Permission.ADD_AGENTS.value],
         user_performing_action=env.admin,
     ).raise_for_status()
+    return member
+
+
+def test_add_agents_user_creates_personal_agent_with_empty_groups(
+    env: _ScopedEnv,
+) -> None:
+    # An ADD_AGENTS-only user (no MANAGE_AGENTS authority) must still create a
+    # personal agent when the client sends groups=[] (no group share).
+    member = _add_agents_only_user(env, "add_agents_only")
     path = "/persona"
     resp = call_endpoint(
         "POST",
@@ -311,6 +316,45 @@ def test_add_agents_user_creates_personal_agent_with_empty_groups(
         member.cookies,
     )
     assert_response(resp, "POST", path, "member", "allowed")
+
+
+def test_add_agents_owner_saves_agent_group_shared_by_admin(env: _ScopedEnv) -> None:
+    # The editor round-trips current groups on every save, so an unchanged set must not
+    # read as a mutation — else an ADD_AGENTS-only owner loses edit access to their own
+    # agent once an admin group-shares it. Altering the set still needs MANAGE_AGENTS (D7).
+    member = _add_agents_only_user(env, "add_agents_owner")
+    agent = PersonaManager.create(
+        user_performing_action=member, is_public=False, groups=[]
+    )
+    share = call_endpoint(
+        "PATCH",
+        f"/persona/{agent.id}/share",
+        {"group_ids": [env.other_group.id]},
+        env.admin.headers,
+        env.admin.cookies,
+    )
+    assert share.status_code == 200, share.text
+
+    path = f"/persona/{agent.id}"
+    unchanged = call_endpoint(
+        "PATCH",
+        path,
+        _persona_upsert_body(is_public=False, groups=[env.other_group.id]),
+        member.headers,
+        member.cookies,
+    )
+    assert_response(unchanged, "PATCH", path, "member", "allowed")
+
+    widened = call_endpoint(
+        "PATCH",
+        path,
+        _persona_upsert_body(
+            is_public=False, groups=[env.other_group.id, env.managed_group.id]
+        ),
+        member.headers,
+        member.cookies,
+    )
+    assert_response(widened, "PATCH", path, "member", "denied")
 
 
 def test_manager_rosters_agent_shared_to_managed_group(env: _ScopedEnv) -> None:
