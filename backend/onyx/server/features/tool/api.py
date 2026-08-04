@@ -13,7 +13,7 @@ from onyx.db.engine.sql_engine import get_session
 from onyx.db.enums import Permission
 from onyx.db.models import Tool
 from onyx.db.models import User
-from onyx.db.tools import can_manage_own_tool
+from onyx.db.tools import can_manage_tool
 from onyx.db.tools import create_tool__no_commit
 from onyx.db.tools import delete_tool__no_commit
 from onyx.db.tools import get_tool_by_id
@@ -68,10 +68,11 @@ def _get_manageable_custom_tool(tool_id: int, db_session: Session, user: User) -
             status_code=400,
             detail="Built-in tools cannot be modified through this endpoint.",
         )
-    if not can_manage_own_tool(user, tool):
+    if not can_manage_tool(user, tool):
         raise OnyxError(
             OnyxErrorCode.INSUFFICIENT_PERMISSIONS,
-            "You can only manage actions that you created.",
+            "You can only manage actions you created, or ones belonging to an "
+            "MCP server you own.",
         )
     return tool
 
@@ -182,11 +183,11 @@ def update_tools_status(
     for tool_id in update_data.tool_ids:
         tool = tools_by_id.get(tool_id)
         if tool:
-            # owner-or-admin, checked per tool
-            if not can_manage_own_tool(user, tool):
+            if not can_manage_tool(user, tool):
                 raise OnyxError(
                     OnyxErrorCode.INSUFFICIENT_PERMISSIONS,
-                    "You can only enable or disable actions that you created.",
+                    "You can only enable or disable actions you created, or ones "
+                    "belonging to an MCP server you own.",
                 )
             tool.enabled = update_data.enabled
             updated_tools.append(tool_id)
@@ -243,9 +244,7 @@ def list_openapi_tools(
         openapi_tools.append(
             ToolSnapshot.from_model(
                 tool,
-                permissions=tool_permissions(
-                    can_manage=can_manage_own_tool(user, tool)
-                ),
+                permissions=tool_permissions(can_manage=can_manage_tool(user, tool)),
             )
         )
 

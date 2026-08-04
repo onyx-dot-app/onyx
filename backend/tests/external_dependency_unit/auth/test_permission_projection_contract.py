@@ -81,7 +81,7 @@ from onyx.db.persona import persona_edit_within_scope
 from onyx.db.skill import get_group_ids_for_skill
 from onyx.db.token_limit import insert_global_token_rate_limit
 from onyx.db.tools import can_manage_mcp_server
-from onyx.db.tools import can_manage_own_tool
+from onyx.db.tools import can_manage_tool
 from onyx.error_handling.exceptions import OnyxError
 from onyx.server.features.mcp.api import _ensure_mcp_server_owner_or_admin
 from onyx.server.features.mcp.api import _ensure_mcp_server_viewable
@@ -685,7 +685,7 @@ def test_tool_projection_matches_gates(db_session: Session) -> None:
         manage_enforced = not _guard_raises(
             _get_manageable_custom_tool, tool.id, db_session, actor
         )
-        can_manage = can_manage_own_tool(actor, tool)
+        can_manage = can_manage_tool(actor, tool)
         assert can_manage == manage_enforced, actor.email
         assert tool_permissions(can_manage=can_manage) == {
             "edit": manage_enforced,
@@ -695,14 +695,14 @@ def test_tool_projection_matches_gates(db_session: Session) -> None:
         }
 
     # a manager of the action's connected group can't manage it (only creator/admin can)
-    assert tool_permissions(can_manage=can_manage_own_tool(in_scope, tool)) == {
+    assert tool_permissions(can_manage=can_manage_tool(in_scope, tool)) == {
         "edit": False,
         "delete": False,
         "toggle": False,
         "authenticate": False,
     }
     # the creator fully controls the action they made
-    assert tool_permissions(can_manage=can_manage_own_tool(creator, tool)) == {
+    assert tool_permissions(can_manage=can_manage_tool(creator, tool)) == {
         "edit": True,
         "delete": True,
         "toggle": True,

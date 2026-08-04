@@ -10,7 +10,6 @@ from sqlalchemy import or_
 from sqlalchemy import select
 from sqlalchemy.orm import Session
 
-from onyx.auth.permissions import get_effective_permissions
 from onyx.auth.permissions import has_permission
 from onyx.db.constants import UNSET
 from onyx.db.constants import UnsetType
@@ -117,15 +116,24 @@ def can_manage_own_tool(user: User, tool: Tool) -> bool:
 
 
 def can_manage_mcp_server(user: User, server: MCPServer) -> bool:
-    """Owner-or-admin gate for every action on an MCP server (edit, delete, connect, status),
-    matching the routes' ``allow_scope`` guard ∧ FULL_ADMIN-or-owner: a full admin manages any
-    server, a scoped manager only one they own (by email). No MANAGE_ACTIONS authority never
-    passes."""
-    if has_permission(user, Permission.MANAGE_ACTIONS) is PermissionAuthority.NONE:
-        return False
-    if Permission.FULL_ADMIN_PANEL_ACCESS in get_effective_permissions(user):
+    """Owner-or-admin gate for every action on an MCP server (edit, delete, connect, status).
+    Global MANAGE_ACTIONS manages any server — that permission is full-admin-equivalent for
+    actions, so it isn't narrowed to FULL_ADMIN; a scoped manager only one they own."""
+    authority = has_permission(user, Permission.MANAGE_ACTIONS)
+    if authority is PermissionAuthority.GLOBAL:
         return True
-    return server.owner == user.email
+    if authority is PermissionAuthority.SCOPED:
+        return server.owner == user.email
+    return False
+
+
+def can_manage_tool(user: User, tool: Tool) -> bool:
+    """The gate for every per-tool action (edit, delete, toggle, OAuth config). An MCP tool
+    is created with ``user_id=None``, so its ownership lives on the server — without routing
+    there, a server's owner could delete it but not disable one of its tools."""
+    if tool.mcp_server is not None:
+        return can_manage_mcp_server(user, tool.mcp_server)
+    return can_manage_own_tool(user, tool)
 
 
 def get_mcp_server_ids_connected_to_groups(
