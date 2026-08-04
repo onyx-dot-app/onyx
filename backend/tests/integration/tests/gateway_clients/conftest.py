@@ -93,11 +93,16 @@ def _real_api_server() -> Generator[None, None, None]:
         )
 
     previous = http_client._test_client
-    http_client.set_test_client(httpx.Client(timeout=60))
+    real_client = httpx.Client(
+        transport=http_client.RetryingTransport(),
+        timeout=httpx.Timeout(60.0, connect=10.0),
+    )
+    http_client.set_test_client(real_client)
     try:
         yield
     finally:
         http_client.set_test_client(previous)
+        real_client.close()
 
 
 def _install_cli(package: str, executable: str) -> Generator[str, None, None]:

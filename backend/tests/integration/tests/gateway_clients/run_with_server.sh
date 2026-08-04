@@ -22,6 +22,14 @@ cleanup() {
   wait "$server_pid" 2> /dev/null || true
 }
 
+trap 'exit 130' INT
+trap 'exit 143' TERM
+
+if curl -fsS "${api_server_url}/health" > /dev/null 2>&1; then
+  echo "A server is already responding at ${api_server_url}; refusing to run against stale code"
+  exit 1
+fi
+
 if ! uv run --no-sync alembic upgrade head; then
   echo "Failed to migrate the gateway client test database"
   exit 1
@@ -41,6 +49,11 @@ for _ in $(seq 90); do
     exit 1
   fi
   if curl -fsS "${api_server_url}/health" > /dev/null 2>&1; then
+    if ! kill -0 "$server_pid" 2> /dev/null; then
+      echo "api_server exited while another server answered at ${api_server_url}/health"
+      print_server_log_tail
+      exit 1
+    fi
     ready="true"
     break
   fi
