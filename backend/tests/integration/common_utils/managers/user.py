@@ -153,7 +153,7 @@ class UserManager:
             headers=user.headers,
         )
         response.raise_for_status()
-        return response.json()
+        return response.json()["permissions"]
 
     @staticmethod
     def is_admin(user_to_verify: DATestUser) -> bool:

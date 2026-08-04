@@ -30,11 +30,8 @@ import { errorHandlingFetcher } from "@/lib/fetcher";
 import { SWR_KEYS } from "@/lib/swr-keys";
 import type { PermissionRegistryEntry } from "@/refresh-pages/admin/GroupsPage/interfaces";
 
-// ---------------------------------------------------------------------------
-// Icon mapping — the only permission metadata maintained in the frontend.
-// The `id` keys must match the backend PERMISSION_REGISTRY entries.
-// ---------------------------------------------------------------------------
-
+// Icon mapping — the only permission metadata kept in the frontend.
+// `id` keys must match the backend PERMISSION_REGISTRY entries.
 const ICON_MAP: Record<string, IconFunctionComponent> = {
   manage_llms: SvgCpu,
   manage_connectors_and_document_sets: SvgFiles,
@@ -48,10 +45,6 @@ const ICON_MAP: Record<string, IconFunctionComponent> = {
   view_query_history: SvgHistory,
   create_user_access_token: SvgKey,
 };
-
-// ---------------------------------------------------------------------------
-// Component
-// ---------------------------------------------------------------------------
 
 interface GroupPermissionsSectionProps {
   enabledPermissions: Set<string>;

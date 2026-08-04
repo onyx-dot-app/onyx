@@ -33,8 +33,12 @@ from onyx.auth.oauth_token_manager import build_oauth_authorization_url
 from onyx.auth.oauth_token_manager import exchange_oauth_code_for_token
 from onyx.auth.oauth_token_manager import OAuthFlowParams
 from onyx.auth.oauth_token_manager import validate_oauth_endpoint_url
+from onyx.auth.permission_projection import mcp_server_permissions
+from onyx.auth.permission_projection import tool_permissions
 from onyx.auth.permissions import get_effective_permissions
+from onyx.auth.permissions import has_permission
 from onyx.auth.permissions import require_permission
+from onyx.auth.scoped_permissions import get_scoped_groups
 from onyx.configs.app_configs import WEB_DOMAIN
 from onyx.db.engine.sql_engine import get_session
 from onyx.db.engine.sql_engine import get_session_with_current_tenant
@@ -44,6 +48,7 @@ from onyx.db.enums import MCPOAuthProviderMode
 from onyx.db.enums import MCPServerStatus
 from onyx.db.enums import MCPTransport
 from onyx.db.enums import Permission
+from onyx.db.enums import PermissionAuthority
 from onyx.db.mcp import create_connection_config
 from onyx.db.mcp import create_mcp_server__no_commit
 from onyx.db.mcp import delete_all_user_connection_configs_for_server_no_commit
@@ -63,8 +68,11 @@ from onyx.db.models import MCPConnectionConfig
 from onyx.db.models import MCPServer as DbMCPServer
 from onyx.db.models import Tool
 from onyx.db.models import User
+from onyx.db.tools import can_manage_mcp_server
+from onyx.db.tools import can_manage_tool
 from onyx.db.tools import create_tool__no_commit
 from onyx.db.tools import delete_tool__no_commit
+from onyx.db.tools import get_mcp_server_ids_connected_to_groups
 from onyx.db.tools import get_tools_by_mcp_server_id
 from onyx.error_handling.error_codes import OnyxErrorCode
 from onyx.error_handling.exceptions import OnyxError
@@ -737,7 +745,9 @@ class MCPOauthState(BaseModel):
 async def connect_admin_oauth(
     request: MCPUserOAuthConnectRequest,
     db: Session = Depends(get_session),
-    user: User = Depends(require_permission(Permission.MANAGE_ACTIONS)),
+    user: User = Depends(
+        require_permission(Permission.MANAGE_ACTIONS, allow_scope=True)
+    ),
 ) -> MCPUserOAuthConnectResponse:
     """Connect OAuth flow for admin MCP server authentication"""
     return await _connect_oauth(request, db, is_admin=True, user=user)
@@ -1352,21 +1362,43 @@ class ServerToolsResponse(BaseModel):
 
 
 def _ensure_mcp_server_owner_or_admin(server: DbMCPServer, user: User) -> None:
-    logger.info(
-        "Ensuring MCP server owner or admin: %s %s server.owner=%s",
+    """GATE 2 for every MCP server mutation. Delegates to the predicate the projection
+    stamps, so the UI can't offer a control this rejects. A FULL_ADMIN check here would
+    be stricter than the read gate below, which counts global MANAGE_ACTIONS."""
+    if can_manage_mcp_server(user, server):
+        return
+    logger.warning(
+        "Denied MCP server management: user=%s server=%s owner=%s",
+        user.email,
         server.name,
-        user,
         server.owner,
     )
-    if Permission.FULL_ADMIN_PANEL_ACCESS in get_effective_permissions(user):
-        return
+    raise OnyxError(
+        OnyxErrorCode.INSUFFICIENT_PERMISSIONS,
+        "Only the server owner can modify MCP servers they have created.",
+    )
 
-    logger.info("User email: %s server.owner=%s", user.email, server.owner)
-    if server.owner != user.email:
-        raise OnyxError(
-            OnyxErrorCode.INSUFFICIENT_PERMISSIONS,
-            "Only the server owner can modify MCP servers they have created.",
-        )
+
+def _ensure_mcp_server_viewable(
+    server: DbMCPServer, user: User, db_session: Session
+) -> None:
+    """Read gate for a single MCP server: a global MANAGE_ACTIONS holder (incl. admins) views
+    any; an owner views their own; a scoped manager views a server connected to their groups
+    via an agent. Managers may view connected servers without managing them; managing is
+    owner-or-admin (``_ensure_mcp_server_owner_or_admin``)."""
+    authority = has_permission(user, Permission.MANAGE_ACTIONS)
+    if authority is PermissionAuthority.GLOBAL:
+        return
+    if server.owner == user.email:
+        return
+    if authority is PermissionAuthority.SCOPED:
+        managed = get_scoped_groups(user, db_session, Permission.MANAGE_ACTIONS)
+        if server.id in get_mcp_server_ids_connected_to_groups(managed, db_session):
+            return
+    raise OnyxError(
+        OnyxErrorCode.INSUFFICIENT_PERMISSIONS,
+        "You can only view MCP servers you own or that are connected to your groups.",
+    )
 
 
 def _db_mcp_server_to_api_mcp_server(
@@ -1374,6 +1406,7 @@ def _db_mcp_server_to_api_mcp_server(
     db: Session,
     request_user: User | None,
     include_auth_config: bool = False,
+    permissions: dict[str, bool] | None = None,
 ) -> MCPServer:
     """Convert database MCP server to API model"""
 
@@ -1547,6 +1580,7 @@ def _db_mcp_server_to_api_mcp_server(
         auth_template=auth_template,
         user_credentials=user_credentials,
         admin_credentials=admin_credentials,
+        permissions=permissions or {},
     )
 
 
@@ -1639,7 +1673,9 @@ def _get_connection_config(
 def admin_list_mcp_tools_by_id(
     server_id: int,
     db: Session = Depends(get_session),
-    user: User = Depends(require_permission(Permission.MANAGE_ACTIONS)),
+    user: User = Depends(
+        require_permission(Permission.MANAGE_ACTIONS, allow_scope=True)
+    ),
 ) -> MCPToolListResponse:
     return _list_mcp_tools_by_id(server_id, db, True, user)
 
@@ -1654,7 +1690,9 @@ def get_mcp_server_tools_snapshots(
     server_id: int,
     source: ToolSnapshotSource = ToolSnapshotSource.DB,
     db: Session = Depends(get_session),
-    user: User = Depends(require_permission(Permission.MANAGE_ACTIONS)),
+    user: User = Depends(
+        require_permission(Permission.MANAGE_ACTIONS, allow_scope=True)
+    ),
 ) -> list[ToolSnapshot]:
     """
     Get tools for an MCP server as ToolSnapshot objects.
@@ -1672,9 +1710,8 @@ def get_mcp_server_tools_snapshots(
     except ValueError:
         raise HTTPException(status_code=404, detail="MCP server not found")
 
-    _ensure_mcp_server_owner_or_admin(mcp_server, user)
-
     if source == ToolSnapshotSource.MCP:
+        _ensure_mcp_server_owner_or_admin(mcp_server, user)
         try:
             # Discover tools from MCP server and sync to DB
             _list_mcp_tools_by_id(server_id, db, True, user)
@@ -1701,10 +1738,18 @@ def get_mcp_server_tools_snapshots(
 
             logger.error("Failed to discover tools for MCP server: %s", e)
             raise HTTPException(status_code=500, detail="Failed to discover tools")
+    else:
+        _ensure_mcp_server_viewable(mcp_server, user, db)
 
-    # Fetch and return tools from database
+    # Same predicate the status route enforces, so the UI can't offer a toggle that 403s.
     mcp_tools = get_tools_by_mcp_server_id(server_id, db, order_by_id=True)
-    return [ToolSnapshot.from_model(tool) for tool in mcp_tools]
+    return [
+        ToolSnapshot.from_model(
+            tool,
+            permissions=tool_permissions(can_manage=can_manage_tool(user, tool)),
+        )
+        for tool in mcp_tools
+    ]
 
 
 @router.get("/server/{server_id}/tools")
@@ -2254,7 +2299,9 @@ def _sync_tools_for_server(
 def get_mcp_server_detail(
     server_id: int,
     db_session: Session = Depends(get_session),
-    user: User = Depends(require_permission(Permission.MANAGE_ACTIONS)),
+    user: User = Depends(
+        require_permission(Permission.MANAGE_ACTIONS, allow_scope=True)
+    ),
 ) -> MCPServer:
     """Return details for one MCP server if user has access"""
     try:
@@ -2262,34 +2309,52 @@ def get_mcp_server_detail(
     except ValueError:
         raise HTTPException(status_code=404, detail="MCP server not found")
 
-    _ensure_mcp_server_owner_or_admin(server, user)
-
+    # Read gate: owner, admin, or a manager of a group the server is connected to.
+    _ensure_mcp_server_viewable(server, user, db_session)
     # TODO: user permissions per mcp server not yet implemented, for now
     # permissions are based on access to assistants
     # # Quick permission check – admin or user has access
     # if user and server not in user.accessible_mcp_servers and not user.is_superuser:
     #     raise HTTPException(status_code=403, detail="Forbidden")
-
     return _db_mcp_server_to_api_mcp_server(
         server,
         db_session,
         include_auth_config=True,
         request_user=user,
+        permissions=mcp_server_permissions(
+            can_manage=can_manage_mcp_server(user, server),
+        ),
     )
 
 
 @admin_router.get("/tools")
 def get_all_mcp_tools(
     db: Session = Depends(get_session),
-    user: User = Depends(require_permission(Permission.MANAGE_ACTIONS)),  # noqa: ARG001
+    user: User = Depends(
+        require_permission(Permission.MANAGE_ACTIONS, allow_scope=True)
+    ),
 ) -> list:
     """Get all tools associated with MCP servers, including both enabled and disabled tools"""
     from sqlalchemy import select
 
-    from onyx.db.models import Tool
-
     # Query MCP tools ordered by ID to maintain consistent ordering
     stmt = select(Tool).where(Tool.mcp_server_id.is_not(None)).order_by(Tool.id)
+
+    # Scope-match the /servers list: a scoped manager only sees tools on servers they own or
+    # that a group they manage is connected to; a global holder sees every server's tools.
+    if (
+        has_permission(user, Permission.MANAGE_ACTIONS)
+        is not PermissionAuthority.GLOBAL
+    ):
+        connected = get_mcp_server_ids_connected_to_groups(
+            get_scoped_groups(user, db, Permission.MANAGE_ACTIONS), db
+        )
+        visible_server_ids = {
+            server.id
+            for server in get_all_mcp_servers(db)
+            if server.owner == user.email or server.id in connected
+        }
+        stmt = stmt.where(Tool.mcp_server_id.in_(visible_server_ids))
 
     mcp_tools = db.scalars(stmt).all()
 
@@ -2302,7 +2367,9 @@ def update_mcp_server_status(
     server_id: int,
     status: MCPServerStatus,
     db: Session = Depends(get_session),
-    user: User = Depends(require_permission(Permission.MANAGE_ACTIONS)),
+    user: User = Depends(
+        require_permission(Permission.MANAGE_ACTIONS, allow_scope=True)
+    ),
 ) -> dict[str, str]:
     """Update the status of an MCP server"""
     logger.info("Updating MCP server %s status to %s", server_id, status)
@@ -2328,7 +2395,9 @@ def update_mcp_server_status(
 @admin_router.get("/servers", response_model=MCPServersResponse)
 def get_mcp_servers_for_admin(
     db: Session = Depends(get_session),
-    user: User = Depends(require_permission(Permission.MANAGE_ACTIONS)),
+    user: User = Depends(
+        require_permission(Permission.MANAGE_ACTIONS, allow_scope=True)
+    ),
 ) -> MCPServersResponse:
     """Get all MCP servers for admin display"""
 
@@ -2337,10 +2406,34 @@ def get_mcp_servers_for_admin(
     try:
         db_mcp_servers = get_all_mcp_servers(db)
 
-        # Convert to API model format
+        # A global MANAGE_ACTIONS holder (incl. admins) sees every server; a scoped manager
+        # sees only those they own or that are connected to a group they manage (one query for
+        # the connected set). Managing is owner-or-admin either way (can_manage_mcp_server).
+        if (
+            has_permission(user, Permission.MANAGE_ACTIONS)
+            is PermissionAuthority.GLOBAL
+        ):
+            visible_servers = db_mcp_servers
+        else:
+            connected = get_mcp_server_ids_connected_to_groups(
+                get_scoped_groups(user, db, Permission.MANAGE_ACTIONS), db
+            )
+            visible_servers = [
+                server
+                for server in db_mcp_servers
+                if server.owner == user.email or server.id in connected
+            ]
+
         mcp_servers = [
-            _db_mcp_server_to_api_mcp_server(db_server, db, request_user=user)
-            for db_server in db_mcp_servers
+            _db_mcp_server_to_api_mcp_server(
+                db_server,
+                db,
+                request_user=user,
+                permissions=mcp_server_permissions(
+                    can_manage=can_manage_mcp_server(user, db_server),
+                ),
+            )
+            for db_server in visible_servers
         ]
 
         return MCPServersResponse(mcp_servers=mcp_servers)
@@ -2354,7 +2447,9 @@ def get_mcp_servers_for_admin(
 def get_mcp_server_db_tools(
     server_id: int,
     db: Session = Depends(get_session),
-    user: User = Depends(require_permission(Permission.MANAGE_ACTIONS)),
+    user: User = Depends(
+        require_permission(Permission.MANAGE_ACTIONS, allow_scope=True)
+    ),
 ) -> ServerToolsResponse:
     """Get existing database tools created for an MCP server"""
     logger.info("Getting database tools for MCP server: %s", server_id)
@@ -2399,7 +2494,9 @@ def get_mcp_server_db_tools(
 def upsert_mcp_server(
     request: MCPToolCreateRequest,
     db_session: Session = Depends(get_session),
-    user: User = Depends(require_permission(Permission.MANAGE_ACTIONS)),
+    user: User = Depends(
+        require_permission(Permission.MANAGE_ACTIONS, allow_scope=True)
+    ),
 ) -> MCPServerCreateResponse:
     """Create or update an MCP server (no tools yet)"""
 
@@ -2455,6 +2552,11 @@ def upsert_mcp_server(
     except HTTPException:
         # Re-raise HTTP exceptions as-is
         raise
+    except OnyxError:
+        # Preserve authorization/validation errors (e.g. the scope gate's
+        # INSUFFICIENT_PERMISSIONS) so they surface as their real status rather
+        # than a masked 500.
+        raise
     except Exception as e:
         logger.exception("Failed to create/update MCP tool")
         raise HTTPException(
@@ -2466,7 +2568,9 @@ def upsert_mcp_server(
 def update_mcp_server_with_tools(
     request: MCPToolUpdateRequest,
     db_session: Session = Depends(get_session),
-    user: User = Depends(require_permission(Permission.MANAGE_ACTIONS)),
+    user: User = Depends(
+        require_permission(Permission.MANAGE_ACTIONS, allow_scope=True)
+    ),
 ) -> MCPServerUpdateResponse:
     """Update an MCP server and associated tools"""
 
@@ -2518,7 +2622,9 @@ def update_mcp_server_with_tools(
 def create_mcp_server_simple(
     request: MCPServerSimpleCreateRequest,
     db_session: Session = Depends(get_session),
-    user: User = Depends(require_permission(Permission.MANAGE_ACTIONS)),
+    user: User = Depends(
+        require_permission(Permission.MANAGE_ACTIONS, allow_scope=True)
+    ),
 ) -> MCPServer:
     """Create MCP server with minimal information - auth to be configured later"""
 
@@ -2565,7 +2671,9 @@ def update_mcp_server_simple(
     server_id: int,
     request: MCPServerSimpleUpdateRequest,
     db_session: Session = Depends(get_session),
-    user: User = Depends(require_permission(Permission.MANAGE_ACTIONS)),
+    user: User = Depends(
+        require_permission(Permission.MANAGE_ACTIONS, allow_scope=True)
+    ),
 ) -> MCPServer:
     """Update MCP server basic information (name, description, URL)"""
     try:
@@ -2588,9 +2696,13 @@ def update_mcp_server_simple(
 
     db_session.commit()
 
-    # Return the updated server in API format
     return _db_mcp_server_to_api_mcp_server(
-        updated_server, db_session, request_user=user
+        updated_server,
+        db_session,
+        request_user=user,
+        permissions=mcp_server_permissions(
+            can_manage=can_manage_mcp_server(user, updated_server),
+        ),
     )
 
 
@@ -2598,15 +2710,20 @@ def update_mcp_server_simple(
 def delete_mcp_server_admin(
     server_id: int,
     db_session: Session = Depends(get_session),
-    user: User = Depends(require_permission(Permission.MANAGE_ACTIONS)),
+    user: User = Depends(
+        require_permission(Permission.MANAGE_ACTIONS, allow_scope=True)
+    ),
 ) -> dict:
     """Delete an MCP server and cascading related objects (tools, configs)."""
+    # GATE 2 above the try: the broad `except Exception` below would re-wrap its 403 as a
+    # 500, hiding an authorization failure behind a server error.
     try:
-        # Ensure it exists
         server = get_mcp_server_by_id(server_id, db_session)
+    except ValueError:
+        raise HTTPException(status_code=404, detail="MCP server not found")
+    _ensure_mcp_server_owner_or_admin(server, user)
 
-        _ensure_mcp_server_owner_or_admin(server, user)
-
+    try:
         # Log tools that will be deleted for debugging
         tools_to_delete = get_tools_by_mcp_server_id(server_id, db_session)
         logger.info(

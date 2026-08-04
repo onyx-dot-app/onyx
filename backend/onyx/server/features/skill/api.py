@@ -11,10 +11,17 @@ from fastapi import UploadFile
 from pydantic import Field
 from sqlalchemy.orm import Session
 
+from onyx.auth.permission_projection import custom_skill_permissions
+from onyx.auth.permissions import has_global_permission
+from onyx.auth.permissions import has_permission
 from onyx.auth.permissions import Permission
 from onyx.auth.permissions import require_permission
+from onyx.auth.scoped_permissions import assert_within_scope
+from onyx.auth.scoped_permissions import get_scoped_groups
+from onyx.auth.scoped_permissions import within_scope
 from onyx.configs.app_configs import MAX_PERSONAL_SKILLS_PER_USER
 from onyx.db.engine.sql_engine import get_session
+from onyx.db.enums import PermissionAuthority
 from onyx.db.models import Skill
 from onyx.db.models import User
 from onyx.db.skill import affected_user_ids_for_skill
@@ -69,6 +76,7 @@ def _split_rows(
     db_session: Session,
     *,
     include_grants: bool,
+    user: User | None = None,
 ) -> tuple[list[BuiltinSkillResponse], list[CustomSkillResponse]]:
     """Partition a flat row list into built-in + custom responses.
 
@@ -76,9 +84,27 @@ def _split_rows(
     in code without cleaning up the seeded row) is logged and dropped —
     we don't surface a half-broken built-in to admins. ``include_grants``
     only applies to custom skills; built-ins are not group-shareable.
+
+    When ``user`` is given (the admin listing), each custom skill is stamped with
+    its per-action affordance map, resolved once from the manager's scope.
     """
     builtins: list[BuiltinSkillResponse] = []
     customs: list[CustomSkillResponse] = []
+
+    # Resolved once so per-skill stamping issues no query. Only a SCOPED caller reads it
+    # (within_scope short-circuits for GLOBAL/NONE), so skip fetching it otherwise.
+    managed_skill_groups: set[int] | None = None
+    is_skills_full_admin = False
+    is_skills_admin = False
+    if user is not None:
+        if has_permission(user, Permission.MANAGE_SKILLS) is PermissionAuthority.SCOPED:
+            managed_skill_groups = get_scoped_groups(
+                user, db_session, Permission.MANAGE_SKILLS
+            )
+        is_skills_full_admin = has_global_permission(
+            user, Permission.FULL_ADMIN_PANEL_ACCESS
+        )
+        is_skills_admin = has_global_permission(user, Permission.MANAGE_SKILLS)
 
     # User paths withhold group ids but still need grant existence so a
     # grants-shared skill isn't reported as personal.
@@ -102,7 +128,27 @@ def _split_rows(
             )
         elif include_grants:
             group_ids = get_group_ids_for_skill(skill.id, db_session)
-            customs.append(CustomSkillResponse.from_model(skill, group_ids=group_ids))
+            skill_perms: dict[str, bool] | None = None
+            if user is not None:
+                # Read-affordance mirroring the patch guard: within_scope on the skill's own groups.
+                skill_perms = custom_skill_permissions(
+                    can_edit=within_scope(
+                        user,
+                        db_session,
+                        permission=Permission.MANAGE_SKILLS,
+                        current_group_ids=group_ids,
+                        requested_group_ids=group_ids,
+                        is_non_public=not skill.is_public,
+                        managed_group_ids=managed_skill_groups,
+                    ),
+                    is_full_admin=is_skills_full_admin,
+                    is_skills_admin=is_skills_admin,
+                )
+            customs.append(
+                CustomSkillResponse.from_model(
+                    skill, group_ids=group_ids, permissions=skill_perms
+                )
+            )
         else:
             customs.append(
                 CustomSkillResponse.from_model(
@@ -169,11 +215,13 @@ def _ensure_owned_personal(skill: Skill, user: User, db_session: Session) -> Non
 
 @admin_router.get("")
 def list_skills_admin(
-    _: User = Depends(require_permission(Permission.FULL_ADMIN_PANEL_ACCESS)),
+    user: User = Depends(
+        require_permission(Permission.MANAGE_SKILLS, allow_scope=True)
+    ),
     db_session: Session = Depends(get_session),
 ) -> SkillsList:
-    rows = list(list_skills_for_admin(db_session=db_session))
-    builtins, customs = _split_rows(rows, db_session, include_grants=True)
+    rows = list(list_skills_for_admin(db_session=db_session, user=user))
+    builtins, customs = _split_rows(rows, db_session, include_grants=True, user=user)
     return SkillsList(builtins=builtins, customs=customs)
 
 
@@ -182,10 +230,22 @@ def create_custom_skill(
     is_public: bool = Form(False),
     group_ids: str = Form("[]"),
     bundle: UploadFile = File(...),
-    user: User = Depends(require_permission(Permission.FULL_ADMIN_PANEL_ACCESS)),
+    user: User = Depends(
+        require_permission(Permission.MANAGE_SKILLS, allow_scope=True)
+    ),
     db_session: Session = Depends(get_session),
 ) -> CustomSkillResponse:
     parsed_group_ids = _parse_group_ids(group_ids)
+    # GATE 2: a scoped manager may only create a PRIVATE skill in groups they
+    # manage (admins bypass). No skill exists yet, so current groups are empty.
+    assert_within_scope(
+        user,
+        db_session,
+        permission=Permission.MANAGE_SKILLS,
+        current_group_ids=[],
+        requested_group_ids=parsed_group_ids,
+        is_non_public=not is_public,
+    )
     _reject_reserved_slug(bundle)
 
     file_store = get_default_file_store()
@@ -219,7 +279,9 @@ def create_custom_skill(
 def patch_custom_skill(
     skill_id: UUID,
     patch_req: SkillPatchRequest,
-    _: User = Depends(require_permission(Permission.FULL_ADMIN_PANEL_ACCESS)),
+    user: User = Depends(
+        require_permission(Permission.MANAGE_SKILLS, allow_scope=True)
+    ),
     db_session: Session = Depends(get_session),
 ) -> CustomSkillResponse:
     """Toggle ``enabled``/``is_public`` on a custom skill. Built-in
@@ -230,6 +292,22 @@ def patch_custom_skill(
     if skill is None:
         raise OnyxError(OnyxErrorCode.NOT_FOUND, "Skill not found")
     _ensure_custom(skill)
+
+    # GATE 2: a scoped manager may only patch a skill within managed scope and
+    # never publish it out of scope (admins bypass). Groups are unchanged, so
+    # anchor is_non_public on both current and requested privacy.
+    requested_is_public = (
+        skill.is_public if patch_req.is_public is None else patch_req.is_public
+    )
+    skill_group_ids = get_group_ids_for_skill(skill_id, db_session)
+    assert_within_scope(
+        user,
+        db_session,
+        permission=Permission.MANAGE_SKILLS,
+        current_group_ids=skill_group_ids,
+        requested_group_ids=skill_group_ids,
+        is_non_public=not skill.is_public and not requested_is_public,
+    )
 
     # SQLAlchemy identity map mutates in place; snapshot before patch.
     old_is_public = skill.is_public
@@ -255,13 +333,27 @@ def patch_custom_skill(
 def replace_custom_skill_bundle(
     skill_id: UUID,
     bundle: UploadFile = File(...),
-    _: User = Depends(require_permission(Permission.FULL_ADMIN_PANEL_ACCESS)),
+    user: User = Depends(
+        require_permission(Permission.MANAGE_SKILLS, allow_scope=True)
+    ),
     db_session: Session = Depends(get_session),
 ) -> CustomSkillResponse:
     skill = fetch_skill_by_id(skill_id, db_session)
     if skill is None:
         raise OnyxError(OnyxErrorCode.NOT_FOUND, "Skill not found")
     _ensure_custom(skill)
+
+    # GATE 2: content-only edit; scope a manager to their own PRIVATE skills
+    # (groups unchanged; admins bypass).
+    skill_group_ids = get_group_ids_for_skill(skill_id, db_session)
+    assert_within_scope(
+        user,
+        db_session,
+        permission=Permission.MANAGE_SKILLS,
+        current_group_ids=skill_group_ids,
+        requested_group_ids=skill_group_ids,
+        is_non_public=not skill.is_public,
+    )
 
     file_store = get_default_file_store()
     ingested = ingest_skill_bundle(
@@ -293,13 +385,26 @@ def replace_custom_skill_bundle(
 def replace_custom_skill_grants(
     skill_id: UUID,
     body: GrantsReplace,
-    _: User = Depends(require_permission(Permission.FULL_ADMIN_PANEL_ACCESS)),
+    user: User = Depends(
+        require_permission(Permission.MANAGE_SKILLS, allow_scope=True)
+    ),
     db_session: Session = Depends(get_session),
 ) -> CustomSkillResponse:
     skill = fetch_skill_by_id(skill_id, db_session)
     if skill is None:
         raise OnyxError(OnyxErrorCode.NOT_FOUND, "Skill not found")
     _ensure_custom(skill)
+
+    # GATE 2: current ∪ requested groups ⊆ managed + PRIVATE (admins bypass) —
+    # blocks granting to unmanaged groups and capture-by-reassignment.
+    assert_within_scope(
+        user,
+        db_session,
+        permission=Permission.MANAGE_SKILLS,
+        current_group_ids=get_group_ids_for_skill(skill_id, db_session),
+        requested_group_ids=body.group_ids,
+        is_non_public=not skill.is_public,
+    )
 
     before_affected = affected_user_ids_for_skill(skill, db_session)
 

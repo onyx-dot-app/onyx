@@ -6,13 +6,16 @@ from fastapi import HTTPException
 from pydantic import BaseModel
 from sqlalchemy.orm import Session
 
-from onyx.auth.permissions import get_effective_permissions
+from onyx.auth.permission_projection import tool_permissions
 from onyx.auth.permissions import require_permission
 from onyx.configs.constants import PUBLIC_API_TAGS
 from onyx.db.engine.sql_engine import get_session
 from onyx.db.enums import Permission
 from onyx.db.models import Tool
 from onyx.db.models import User
+from onyx.db.oauth_config import get_oauth_config
+from onyx.db.tools import can_link_oauth_config
+from onyx.db.tools import can_manage_tool
 from onyx.db.tools import create_tool__no_commit
 from onyx.db.tools import delete_tool__no_commit
 from onyx.db.tools import get_tool_by_id
@@ -55,40 +58,64 @@ def _validate_auth_settings(tool_data: CustomToolCreate | CustomToolUpdate) -> N
                 )
 
 
-def _get_editable_custom_tool(tool_id: int, db_session: Session, user: User) -> Tool:
-    """Fetch a custom tool and ensure the caller has permission to edit it."""
+def _get_manageable_custom_tool(tool_id: int, db_session: Session, user: User) -> Tool:
+    """Fetch a custom tool and assert the caller may manage it (owner or admin) — the gate for
+    every action on it: edit, delete, toggle, and OAuth config."""
     try:
         tool = get_tool_by_id(tool_id, db_session)
     except ValueError as e:
         raise HTTPException(status_code=404, detail=str(e))
-
     if tool.in_code_tool_id is not None:
         raise HTTPException(
             status_code=400,
             detail="Built-in tools cannot be modified through this endpoint.",
         )
-
-    # Admins can always make changes; non-admins must own the tool.
-    if Permission.FULL_ADMIN_PANEL_ACCESS in get_effective_permissions(user):
-        return tool
-
-    if tool.user_id is None or tool.user_id != user.id:
+    if not can_manage_tool(user, tool):
         raise OnyxError(
             OnyxErrorCode.INSUFFICIENT_PERMISSIONS,
-            "You can only modify actions that you created.",
+            "You can only manage actions you created, or ones belonging to an "
+            "MCP server you own.",
         )
-
     return tool
+
+
+def _assert_can_link_oauth_config(
+    oauth_config_id: int | None,
+    db_session: Session,
+    user: User,
+    current_oauth_config_id: int | None = None,
+) -> None:
+    """GATE 2 for the OAuth config an action points at — the route's own gate only covers
+    the action itself. Authorizes the *change*: re-sending the config the action already
+    uses is no new link, so an admin sharing one across creators can't lock them out of
+    ordinary edits (the editor round-trips the id on every save)."""
+    if oauth_config_id is None or oauth_config_id == current_oauth_config_id:
+        return
+    # Before asking who references it, establish it exists: an unknown id has no referencing
+    # actions, so the gate would pass it through to the FK and surface as a 500.
+    if get_oauth_config(oauth_config_id, db_session) is None:
+        raise OnyxError(
+            OnyxErrorCode.NOT_FOUND,
+            f"OAuth config with id {oauth_config_id} not found",
+        )
+    if not can_link_oauth_config(user, oauth_config_id, db_session):
+        raise OnyxError(
+            OnyxErrorCode.INSUFFICIENT_PERMISSIONS,
+            "You can only use OAuth configurations that no other creator's action uses.",
+        )
 
 
 @admin_router.post("/custom", tags=PUBLIC_API_TAGS)
 def create_custom_tool(
     tool_data: CustomToolCreate,
     db_session: Session = Depends(get_session),
-    user: User = Depends(require_permission(Permission.MANAGE_ACTIONS)),
+    user: User = Depends(
+        require_permission(Permission.MANAGE_ACTIONS, allow_scope=True)
+    ),
 ) -> ToolSnapshot:
     _validate_tool_definition(tool_data.definition)
     _validate_auth_settings(tool_data)
+    _assert_can_link_oauth_config(tool_data.oauth_config_id, db_session, user)
     tool = create_tool__no_commit(
         name=tool_data.name,
         description=tool_data.description,
@@ -109,12 +136,20 @@ def update_custom_tool(
     tool_id: int,
     tool_data: CustomToolUpdate,
     db_session: Session = Depends(get_session),
-    user: User = Depends(require_permission(Permission.MANAGE_ACTIONS)),
+    user: User = Depends(
+        require_permission(Permission.MANAGE_ACTIONS, allow_scope=True)
+    ),
 ) -> ToolSnapshot:
-    existing_tool = _get_editable_custom_tool(tool_id, db_session, user)
+    existing_tool = _get_manageable_custom_tool(tool_id, db_session, user)
     if tool_data.definition:
         _validate_tool_definition(tool_data.definition)
     _validate_auth_settings(tool_data)
+    _assert_can_link_oauth_config(
+        tool_data.oauth_config_id,
+        db_session,
+        user,
+        current_oauth_config_id=existing_tool.oauth_config_id,
+    )
     updated_tool = update_tool(
         tool_id=tool_id,
         name=tool_data.name,
@@ -133,9 +168,11 @@ def update_custom_tool(
 def delete_custom_tool(
     tool_id: int,
     db_session: Session = Depends(get_session),
-    user: User = Depends(require_permission(Permission.MANAGE_ACTIONS)),
+    user: User = Depends(
+        require_permission(Permission.MANAGE_ACTIONS, allow_scope=True)
+    ),
 ) -> None:
-    _ = _get_editable_custom_tool(tool_id, db_session, user)
+    _ = _get_manageable_custom_tool(tool_id, db_session, user)
     try:
         delete_tool__no_commit(tool_id, db_session)
     except ValueError as e:
@@ -160,7 +197,9 @@ class ToolStatusUpdateResponse(BaseModel):
 def update_tools_status(
     update_data: ToolStatusUpdateRequest,
     db_session: Session = Depends(get_session),
-    user: User = Depends(require_permission(Permission.MANAGE_ACTIONS)),  # noqa: ARG001
+    user: User = Depends(
+        require_permission(Permission.MANAGE_ACTIONS, allow_scope=True)
+    ),
 ) -> ToolStatusUpdateResponse:
     """Enable or disable one or more tools.
 
@@ -179,6 +218,12 @@ def update_tools_status(
     for tool_id in update_data.tool_ids:
         tool = tools_by_id.get(tool_id)
         if tool:
+            if not can_manage_tool(user, tool):
+                raise OnyxError(
+                    OnyxErrorCode.INSUFFICIENT_PERMISSIONS,
+                    "You can only enable or disable actions you created, or ones "
+                    "belonging to an MCP server you own.",
+                )
             tool.enabled = update_data.enabled
             updated_tools.append(tool_id)
         else:
@@ -208,7 +253,7 @@ class ValidateToolResponse(BaseModel):
 @admin_router.post("/custom/validate", tags=PUBLIC_API_TAGS)
 def validate_tool(
     tool_data: ValidateToolRequest,
-    _: User = Depends(require_permission(Permission.MANAGE_ACTIONS)),
+    _: User = Depends(require_permission(Permission.MANAGE_ACTIONS, allow_scope=True)),
 ) -> ValidateToolResponse:
     _validate_tool_definition(tool_data.definition)
     method_specs = openapi_to_method_specs(tool_data.definition)
@@ -221,16 +266,22 @@ def validate_tool(
 @router.get("/openapi", tags=PUBLIC_API_TAGS)
 def list_openapi_tools(
     db_session: Session = Depends(get_session),
-    _: User = Depends(require_permission(Permission.BASIC_ACCESS)),
+    user: User = Depends(require_permission(Permission.BASIC_ACCESS)),
 ) -> list[ToolSnapshot]:
     tools = get_tools(db_session, only_openapi=True)
 
+    # Every action affordance is owner-or-admin, decided per tool with no query.
     openapi_tools: list[ToolSnapshot] = []
     for tool in tools:
         if not should_expose_tool_to_fe(tool):
             continue
 
-        openapi_tools.append(ToolSnapshot.from_model(tool))
+        openapi_tools.append(
+            ToolSnapshot.from_model(
+                tool,
+                permissions=tool_permissions(can_manage=can_manage_tool(user, tool)),
+            )
+        )
 
     return openapi_tools
 

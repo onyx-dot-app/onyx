@@ -68,6 +68,23 @@ def user_is_admin(user: User) -> bool:
     )
 
 
+def get_active_admin_users(db_session: Session) -> list[User]:
+    """Active human admins — API-key dummies and system placeholders excluded. Admin is
+    the FULL_ADMIN_PANEL_ACCESS permission now, not a role. Keep in step with
+    ``_add_live_user_count_where_clause(only_admin_users=True)`` in ``db/auth.py``, which
+    can't be reused here: auth -> api_key -> users is an import cycle."""
+    email_col: KeyedColumnElement[Any] = User.__table__.c.email
+    is_active_col: KeyedColumnElement[Any] = User.__table__.c.is_active
+    stmt = select(User).where(
+        is_active_col.is_(True),
+        User.effective_permissions.contains([Permission.FULL_ADMIN_PANEL_ACCESS.value]),
+        expression.not_(email_col.endswith(DANSWER_API_KEY_DUMMY_EMAIL_DOMAIN)),
+        email_col != ANONYMOUS_USER_EMAIL,
+        email_col != NO_AUTH_PLACEHOLDER_USER_EMAIL,
+    )
+    return list(db_session.execute(stmt).unique().scalars().all())
+
+
 def get_all_users(
     db_session: Session,
     email_filter_string: str | None = None,
