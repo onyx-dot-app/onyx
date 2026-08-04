@@ -15,4 +15,6 @@ export const QUERY_KEYS = {
     ["project", serverUrl, projectId] as const,
   userRecentFiles: (serverUrl: string | null) =>
     ["recent-files", serverUrl] as const,
+  agentPreferences: (serverUrl: string | null) =>
+    ["agent-preferences", serverUrl] as const,
 };

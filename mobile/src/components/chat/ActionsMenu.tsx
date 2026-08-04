@@ -1,0 +1,58 @@
+// The composer's actions menu — force a tool, enable/disable a tool. RN port of
+// web/src/refresh-components/popovers/ActionsPopover/index.tsx. Named for the menu, not its
+// container: the container is deliberately swappable (see components/ui/sheet.tsx).
+import { useState } from "react";
+import { ScrollView } from "react-native";
+
+import { ActionLineItem } from "@/components/chat/ActionLineItem";
+import { Button } from "@/components/ui/button";
+import { Sheet } from "@/components/ui/sheet";
+import { useComposerTools } from "@/state/ComposerToolsProvider";
+import SvgSliders from "@/icons/sliders";
+
+// An agent rarely has more than a handful of tools; this only bites on the outliers.
+const MAX_LIST_HEIGHT = 420;
+
+export function ActionsMenu() {
+  const {
+    actionTools,
+    forcedToolId,
+    toggleForcedTool,
+    disabledToolIds,
+    toggleToolEnabled,
+  } = useComposerTools();
+  const [open, setOpen] = useState(false);
+
+  if (actionTools.length === 0) return null;
+
+  return (
+    <>
+      <Button
+        prominence="tertiary"
+        icon={SvgSliders}
+        accessibilityLabel="Manage Actions"
+        onPress={() => setOpen(true)}
+      />
+
+      <Sheet visible={open} onClose={() => setOpen(false)} title="Actions">
+        <ScrollView
+          style={{ maxHeight: MAX_LIST_HEIGHT }}
+          keyboardShouldPersistTaps="handled"
+          contentContainerClassName="pb-8"
+        >
+          {actionTools.map((tool) => (
+            <ActionLineItem
+              key={tool.id}
+              tool={tool}
+              isForced={forcedToolId === tool.id}
+              isDisabled={disabledToolIds.includes(tool.id)}
+              onForceToggle={() => toggleForcedTool(tool.id)}
+              onToggleEnabled={() => toggleToolEnabled(tool.id)}
+              onClose={() => setOpen(false)}
+            />
+          ))}
+        </ScrollView>
+      </Sheet>
+    </>
+  );
+}
