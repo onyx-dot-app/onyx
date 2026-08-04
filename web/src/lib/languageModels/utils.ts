@@ -63,6 +63,7 @@ export function getProviderOverrideForAgent(
           name: provider.name ?? "",
           provider: provider.provider,
           modelName: mc.name,
+          modelConfigurationId: mc.id,
         };
       }
     }
@@ -74,21 +75,36 @@ export function getProviderOverrideForAgent(
 export const structureValue = (
   name: string,
   provider: string,
-  modelName: string
+  modelName: string,
+  modelConfigurationId?: number | null
 ) => {
-  return `${name}__${provider}__${modelName}`;
+  const base = `${name}__${provider}__${modelName}`;
+  // "mc:" marks the segment as an id so legacy model names that happen to
+  // contain "__<digits>" can never be misread as one.
+  return modelConfigurationId != null
+    ? `${base}__mc:${modelConfigurationId}`
+    : base;
 };
 
 export const parseLlmDescriptor = (value: string): LlmDescriptor => {
-  const [displayName, provider, modelName] = value.split("__");
+  const parts = value.split("__");
+  const displayName = parts[0];
   if (displayName === undefined) {
     return { name: "Unknown", provider: "", modelName: "" };
   }
 
+  // The id is always the marked last segment; everything between the provider
+  // and it belongs to the model name, which may itself contain "__".
+  const last = parts[parts.length - 1];
+  const hasId =
+    parts.length >= 4 && last !== undefined && /^mc:\d+$/.test(last);
+  const modelName = parts.slice(2, hasId ? -1 : undefined).join("__");
+
   return {
     name: displayName,
-    provider: provider ?? "",
-    modelName: modelName ?? "",
+    provider: parts[1] ?? "",
+    modelName,
+    modelConfigurationId: hasId ? parseInt(last!.slice(3), 10) : undefined,
   };
 };
 
