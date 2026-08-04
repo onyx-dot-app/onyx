@@ -40,7 +40,6 @@ from onyx.error_handling.exceptions import OnyxError
 from onyx.file_store.constants import STANDARD_CHUNK_SIZE
 from onyx.utils.logger import setup_logger
 from shared_configs.configs import MULTI_TENANT
-from shared_configs.contextvars import get_current_tenant_id
 
 logger = setup_logger()
 
@@ -186,9 +185,9 @@ WORKER_COLLECT_QUEUES: dict[str, str] = {
 }
 
 # Serializes export starts. A successful start holds it for the collection
-# window: there is no server-side completion event (readiness is derived
-# lazily on poll), so expiry at the deadline is the release. A failed start
-# releases it immediately.
+# window: there is no server-side completion event (readiness is derived lazily
+# on poll), so expiry at the deadline is the release. A failed start releases it
+# immediately.
 _ASYNC_EXPORT_LOCK = _ExpiringLock(
     ttl_seconds=LOG_EXPORT_COLLECTION_DEADLINE.total_seconds()
 )
@@ -198,10 +197,13 @@ _ASYNC_EXPORT_LOCK = _ExpiringLock(
 def start_log_export(
     user: User = Depends(require_permission(Permission.FULL_ADMIN_PANEL_ACCESS)),
 ) -> LogExportStartResponse:
-    """Starts an export: fans out one collector task per worker type, collects
-    the api_server's logs inline, and returns the export ID to poll. Fan-out
-    failures (e.g. deployments with no broker or workers, like the onyx-lite
-    overlay) degrade the export to the api_server's logs instead of failing.
+    """
+    Starts an export: fans out one collector task per worker type, collects the
+    api_server's logs inline, and returns the export ID to poll.
+
+    Fan-out failures (e.g. deployments with no broker or workers, like the
+    onyx-lite overlay) degrade the export to just the api_server's logs instead
+    of failing.
     """
     if MULTI_TENANT:
         raise OnyxError(
@@ -226,8 +228,8 @@ def start_log_export(
         # window before ``expires=`` discards their tasks, and their collection
         # overlaps the api_server's.
         enqueued_worker_names: list[str] = []
-        try:
-            for worker_name, queue in WORKER_COLLECT_QUEUES.items():
+        for worker_name, queue in WORKER_COLLECT_QUEUES.items():
+            try:
                 client_app.send_task(
                     OnyxCeleryTask.EXPORT_LOGS_COLLECT_TASK,
                     priority=OnyxCeleryPriority.HIGHEST,
@@ -236,20 +238,21 @@ def start_log_export(
                     kwargs={
                         "export_id": export_id,
                         "worker_name": worker_name,
-                        "tenant_id": get_current_tenant_id(),
                     },
                 )
-                enqueued_worker_names.append(worker_name)
-        except Exception as e:
-            # All sends share one broker, so the first failure means the rest
-            # would fail too. Only the workers already enqueued are awaited.
-            logger.warning(
-                "Log export fan-out failed after %d of %d workers; continuing "
-                "without the rest: %s",
-                len(enqueued_worker_names),
-                len(WORKER_COLLECT_QUEUES),
-                e,
-            )
+            except Exception as e:
+                # All sends share one broker, so the first failure means the
+                # rest would fail too. Only the workers already enqueued are
+                # awaited.
+                logger.warning(
+                    "Log export fan-out failed while enqueueing %s; continuing "
+                    "with %s: %s",
+                    worker_name,
+                    enqueued_worker_names,
+                    e,
+                )
+                break
+            enqueued_worker_names.append(worker_name)
 
         manifest = LogExportManifest(
             export_id=export_id,
@@ -272,8 +275,8 @@ def start_log_export(
         started = True
         return LogExportStartResponse(export_id=export_id)
     finally:
-        # A failed start must not hold the export slot for the rest of the
-        # TTL; any exit before success (including BaseException) releases.
+        # A failed start must not hold the export slot for the rest of the TTL;
+        # any exit before success (including BaseException) releases.
         if not started:
             _ASYNC_EXPORT_LOCK.release(token)
 

@@ -43,8 +43,8 @@ LOG_EXPORT_FILE_ID_PREFIX = "log_export/"
 LOG_EXPORT_RETENTION = timedelta(hours=12)
 
 # How long an export waits for worker receipts before reporting ``READY``
-# regardless; also the ``expires=`` of the fanned-out collector tasks, so a
-# task a dead worker never picked up is discarded instead of running late.
+# regardless; also the ``expires=`` of the fanned-out collector tasks, so a task
+# a dead worker never picked up is discarded instead of running late.
 LOG_EXPORT_COLLECTION_DEADLINE = timedelta(seconds=90)
 
 ZIP_FILE_TYPE = "application/zip"
@@ -89,8 +89,8 @@ def read_export_snapshot(export_id: str) -> LogExportSnapshot | None:
     """Reads the manifest, receipts, and piece IDs stored for an export.
 
     Returns:
-        The export's current contents, or None when no manifest exists under
-        its prefix (i.e. the export was never started or has been cleaned up).
+        The export's current contents, or None when no manifest exists under its
+        prefix (i.e. the export was never started or has been cleaned up).
     """
     file_store = get_default_file_store()
     prefix = export_file_id_prefix(export_id)
@@ -164,8 +164,8 @@ def build_export_bundle(snapshot: LogExportSnapshot) -> BuiltLogZip:
 
     The bundle contains a ``README.txt``, a ``manifest.json`` enriched with
     receipt outcomes, and every stored ``piece_{hostname}.zip``. Pieces are
-    copied in without recompression (they are already DEFLATE zips), streamed
-    in chunks so large pieces never fully load into memory.
+    copied in without recompression (they are already DEFLATE zips), streamed in
+    chunks so large pieces never fully load into memory.
 
     Returns:
         The bundle per ``BuiltLogZip``; ``log_file_count`` is the number of

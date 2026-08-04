@@ -57,7 +57,7 @@ class TestLogExport:
         assert response.status_code == 403
 
     def test_async_export_flow(self, admin_user: DATestUser) -> None:
-        # Under test: start an export.
+        # Start an export.
         response = client.post(
             f"{API_SERVER_URL}/admin/log-export",
             headers=admin_user.headers,
@@ -92,7 +92,7 @@ class TestLogExport:
         reported = {receipt["worker_name"] for receipt in body["receipts"]}
         assert "api_server" in reported
 
-        # Postcondition: the downloaded bundle parses and describes itself.
+        # The downloaded bundle parses and describes itself.
         download = client.get(
             f"{API_SERVER_URL}/admin/log-export/{export_id}/download",
             headers=admin_user.headers,

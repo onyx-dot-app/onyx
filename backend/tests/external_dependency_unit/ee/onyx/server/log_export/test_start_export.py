@@ -1,7 +1,7 @@
 """External dependency unit tests for the async log-export start endpoint.
 
-Runs against the real (Postgres/MinIO-backed) file store; celery sends and
-log directories are patched.
+Runs against the real (Postgres/MinIO-backed) file store; celery sends and log
+directories are patched.
 """
 
 from datetime import datetime, timezone
@@ -57,15 +57,17 @@ def _admin_user() -> MagicMock:
 
 
 def test_fanout_failure_degrades_to_api_server_only() -> None:
-    # Precondition: no broker is reachable, as in the onyx-lite overlay.
+    # Precondition.
+    # No broker is reachable, as in the onyx-lite overlay.
     with patch(f"{_API_MODULE}.client_app") as celery_client:
         celery_client.send_task.side_effect = OSError("no broker")
 
         # Under test.
         response = start_log_export(user=_admin_user())
 
-    # Postcondition: the manifest awaits only the api_server, whose inline
-    # receipt already exists, so the export is ready without any deadline wait.
+    # Postcondition.
+    # The manifest awaits only the api_server, whose inline receipt already
+    # exists, so the export is ready without any deadline wait.
     snapshot = read_export_snapshot(response.export_id)
     assert snapshot is not None
     assert snapshot.manifest.worker_names == [API_SERVER_WORKER_NAME]
@@ -83,7 +85,8 @@ def test_failed_start_releases_lock() -> None:
         with pytest.raises(OSError):
             start_log_export(user=_admin_user())
 
-    # Postcondition: a retry is not rate-limited by the failed attempt.
+    # Postcondition.
+    # A retry is not rate-limited by the failed attempt.
     assert not log_export_api._ASYNC_EXPORT_LOCK.held()
 
 

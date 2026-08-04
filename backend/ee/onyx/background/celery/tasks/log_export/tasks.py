@@ -30,7 +30,6 @@ def export_logs_collect_task(
     *,
     export_id: str,
     worker_name: str,
-    tenant_id: str,  # noqa: ARG001  # Consumed by ``TenantAwareTask``.
 ) -> None:
     """Collects this container's log files into the file store."""
     shallow_log_directories = (
@@ -59,7 +58,7 @@ def export_logs_collect_task(
 )
 def export_logs_cleanup_task(
     *,
-    tenant_id: str,  # noqa: ARG001  # Consumed by ``TenantAwareTask``.
+    tenant_id: str,  # noqa: ARG001  # Injected into every beat task by ``DynamicTenantScheduler``.
 ) -> None:
     """Deletes log-export artifacts past their retention window."""
     delete_expired_log_exports()

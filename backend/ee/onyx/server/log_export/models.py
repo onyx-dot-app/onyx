@@ -52,7 +52,9 @@ class LogExportManifest(BaseModel):
 
 
 class LogExportSnapshot(BaseModel):
-    """Everything stored under one export's prefix at a point in time."""
+    """
+    Everything stored under one export's file store prefix at a point in time.
+    """
 
     manifest: LogExportManifest
     receipts: list[LogExportReceipt]
