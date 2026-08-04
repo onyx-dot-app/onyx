@@ -9,3 +9,11 @@ ANTHROPIC_GATEWAY_PASSTHROUGH_ENABLED = (
 )
 ANTHROPIC_PASSTHROUGH_CONNECT_TIMEOUT_SECONDS = 10
 ANTHROPIC_PASSTHROUGH_READ_TIMEOUT_SECONDS = 600
+
+# Kill switch, default ON: set to "false" to send true-OpenAI models back
+# through the translation path (losing hosted tools / encrypted reasoning).
+OPENAI_GATEWAY_PASSTHROUGH_ENABLED = (
+    os.environ.get("OPENAI_GATEWAY_PASSTHROUGH_ENABLED", "").lower() != "false"
+)
+OPENAI_PASSTHROUGH_CONNECT_TIMEOUT_SECONDS = 10
+OPENAI_PASSTHROUGH_READ_TIMEOUT_SECONDS = 600
