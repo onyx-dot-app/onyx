@@ -56,10 +56,40 @@ var (
 		DestRel:   "deployment/docker-compose.craft.yml",
 		Mode:      0644,
 	}
+	// DevOverlay publishes the service ports (API, Postgres, Redis,
+	// OpenSearch, model server, MinIO, code interpreter) on the host. Stacked
+	// on Compose like LiteOverlay, but flag-only (--dev): it takes the
+	// deployment's internals out from behind nginx.
+	DevOverlay = File{
+		EmbedPath: "embedded/docker_compose/docker-compose.dev.yml",
+		RepoPath:  "deployment/docker_compose/docker-compose.dev.yml",
+		DestRel:   "deployment/docker-compose.dev.yml",
+		Mode:      0644,
+	}
+	// ProdCompose is the standalone production compose file: run on its own
+	// (not stacked on Compose), it is the complete prod stack with TLS.
+	ProdCompose = File{
+		EmbedPath: "embedded/docker_compose/docker-compose.prod.yml",
+		RepoPath:  "deployment/docker_compose/docker-compose.prod.yml",
+		DestRel:   "deployment/docker-compose.prod.yml",
+		Mode:      0644,
+	}
 	EnvTemplate = File{
 		EmbedPath: "embedded/docker_compose/env.template",
 		RepoPath:  "deployment/docker_compose/env.template",
 		DestRel:   "deployment/env.template",
+		Mode:      0644,
+	}
+	EnvProdTemplate = File{
+		EmbedPath: "embedded/docker_compose/env.prod.template",
+		RepoPath:  "deployment/docker_compose/env.prod.template",
+		DestRel:   "deployment/env.prod.template",
+		Mode:      0644,
+	}
+	EnvNginxTemplate = File{
+		EmbedPath: "embedded/docker_compose/env.nginx.template",
+		RepoPath:  "deployment/docker_compose/env.nginx.template",
+		DestRel:   "deployment/env.nginx.template",
 		Mode:      0644,
 	}
 	Readme = File{
@@ -72,6 +102,12 @@ var (
 		EmbedPath: "embedded/data/nginx/app.conf.template",
 		RepoPath:  "deployment/data/nginx/app.conf.template",
 		DestRel:   "data/nginx/app.conf.template",
+		Mode:      0644,
+	}
+	NginxAppConfProd = File{
+		EmbedPath: "embedded/data/nginx/app.conf.template.prod",
+		RepoPath:  "deployment/data/nginx/app.conf.template.prod",
+		DestRel:   "data/nginx/app.conf.template.prod",
 		Mode:      0644,
 	}
 	NginxRunScript = File{
@@ -87,8 +123,13 @@ var All = []File{
 	Compose,
 	LiteOverlay,
 	CraftOverlay,
+	DevOverlay,
+	ProdCompose,
 	EnvTemplate,
+	EnvProdTemplate,
+	EnvNginxTemplate,
 	Readme,
 	NginxAppConf,
+	NginxAppConfProd,
 	NginxRunScript,
 }

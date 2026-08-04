@@ -4,9 +4,10 @@ from __future__ import annotations
 
 from uuid import UUID, uuid4
 
+from onyx.configs.constants import OnyxRedisLocks
 from onyx.db.enums import SharingScope
 from onyx.redis.redis_pool import get_redis_client
-from onyx.server.features.build.session.api import RESTORE_LOCK_TIMEOUT_SECONDS
+from onyx.server.features.build.timeouts import SESSION_FLOW_LOCK_LEASE_SECONDS
 from shared_configs.configs import POSTGRES_DEFAULT_SCHEMA_STANDARD_VALUE
 from tests.integration.common_utils.constants import API_SERVER_URL
 from tests.integration.common_utils.http_client import client
@@ -35,6 +36,33 @@ def test_create_session_returns_200_with_session_and_sandbox_shape(
     body = response.json()
     assert body["user_id"] == owner.id
     assert body["sandbox"] is not None
+
+
+def test_create_session_preserves_requested_name(admin_user: DATestUser) -> None:
+    requested_name = f"Named Craft session {uuid4().hex[:8]}"
+
+    session = BuildSessionManager.create(admin_user, name=requested_name)
+
+    assert session.name == requested_name
+
+
+def test_create_session_names_reused_pre_provisioned_session(
+    admin_user: DATestUser,
+) -> None:
+    initial_session = BuildSessionManager.create(admin_user)
+    requested_name = f"Named pre-provisioned session {uuid4().hex[:8]}"
+
+    response = client.post(
+        f"{API_SERVER_URL}/build/sessions",
+        json={"name": requested_name, "headless": True},
+        headers=admin_user.headers,
+        cookies=admin_user.cookies,
+    )
+
+    assert response.status_code == 200
+    renamed_session = response.json()
+    assert renamed_session["id"] == initial_session.id
+    assert renamed_session["name"] == requested_name
 
 
 def test_set_sharing_scope_changes_webapp_visibility(
@@ -75,11 +103,13 @@ def test_restore_session_returns_409_when_lock_held(
     body = BuildSessionManager.create(admin_user)
     session_id = body.id
     assert body.sandbox is not None
-    sandbox_id = body.sandbox.id
+    assert body.user_id is not None
 
     redis_client = get_redis_client(tenant_id=POSTGRES_DEFAULT_SCHEMA_STANDARD_VALUE)
+    # Restore shares the per-user session-flow lock with create and the reaper.
     lock = redis_client.lock(
-        f"sandbox_restore:{sandbox_id}", timeout=RESTORE_LOCK_TIMEOUT_SECONDS
+        f"{OnyxRedisLocks.SESSION_CREATE_LOCK_PREFIX}:{body.user_id}",
+        timeout=SESSION_FLOW_LOCK_LEASE_SECONDS,
     )
     assert lock.acquire(blocking=False)
     try:

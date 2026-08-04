@@ -14,12 +14,14 @@ Architecture Note (User-Shared Sandbox Model):
 - terminate() destroys the entire sandbox (all sessions)
 """
 
+import json
 import time
 from abc import ABC, abstractmethod
 from collections.abc import Callable, Generator, Sequence
 from concurrent.futures import ThreadPoolExecutor
 from uuid import UUID
 
+from onyx.server.features.build.configs import TURN_BUDGET_FILE_NAME
 from onyx.server.features.build.sandbox.event_schema import (
     AgentMessageChunk,
     AgentPlanUpdate,
@@ -45,6 +47,10 @@ from onyx.server.features.build.sandbox.models import (
 )
 from onyx.server.features.build.sandbox.serve_transport import _ServeMixin
 from onyx.server.features.build.sandbox.sse import SSEKeepalive
+from onyx.server.features.build.timeouts import (
+    BULK_TRANSFER_TIMEOUT_SECONDS,
+    TURN_FINAL_NOTICE_MARGIN_SECONDS,
+)
 from onyx.utils.logger import setup_logger
 
 logger = setup_logger()
@@ -118,9 +124,11 @@ class SandboxManager(_ServeMixin, ABC):
         sandbox_id: UUID,
         user_id: UUID,
         tenant_id: str,
-        onyx_pat: str | None = None,
+        onyx_pat: str | None,
+        provisioning_attempt_number: int,
     ) -> SandboxInfo:
-        """Provision a new sandbox for a user.
+        """Provision a new sandbox for a user. Returns only once the sandbox
+        is RUNNING; every failure raises.
 
         Craft MCP servers and the gateway provider catalog are NOT registered
         here — they live in the per-session ``opencode.json`` (see
@@ -138,6 +146,11 @@ class SandboxManager(_ServeMixin, ABC):
             user_id: User identifier who owns this sandbox
             tenant_id: Tenant identifier for multi-tenant isolation
             onyx_pat: Raw PAT token to inject as ONYX_PAT env var in the sandbox
+            provisioning_attempt_number: This attempt's number; stamped onto
+                backend resources at creation so operators can attribute
+                orphans (never read programmatically — the attempt-number
+                condition on DB status writes is what blocks stale
+                attempts).
 
         Returns:
             SandboxInfo with the provisioned sandbox details
@@ -291,7 +304,7 @@ class SandboxManager(_ServeMixin, ABC):
         self,
         sandbox_id: UUID,
         tenant_id: str,
-        timeout_seconds: float = 300.0,
+        timeout_seconds: float = BULK_TRANSFER_TIMEOUT_SECONDS,
     ) -> bool:
         """Snapshot sandbox-global opencode history if this backend supports it.
 
@@ -345,11 +358,12 @@ class SandboxManager(_ServeMixin, ABC):
         ...
 
     @abstractmethod
-    def health_check(self, sandbox_id: UUID, timeout: float = 60.0) -> bool:
+    def health_check(self, sandbox_id: UUID, timeout: float) -> bool:
         """Check if the sandbox is healthy.
 
         Args:
             sandbox_id: The sandbox ID to check
+            timeout: Probe timeout, chosen by the caller for its path.
 
         Returns:
             True if sandbox is healthy, False otherwise
@@ -528,6 +542,59 @@ class SandboxManager(_ServeMixin, ABC):
             ValueError: If path is invalid
         """
         ...
+
+    def stamp_turn_deadline(
+        self,
+        sandbox_id: UUID,
+        session_id: UUID,
+        *,
+        soft_budget_seconds: int,
+        hard_cap_seconds: int,
+    ) -> None:
+        """Write the per-turn deadline stamp turn-budget.ts reads. Best-effort;
+        written at turn start, never restamped by continuations. ``stale_after``
+        self-invalidates the stamp past the hard cap so a failed next-turn
+        write leaves the plugin inert instead of nagging a fresh turn."""
+        now_ms = int(time.time() * 1000)
+        soft_ms = now_ms + soft_budget_seconds * 1000
+        hard_ms = now_ms + hard_cap_seconds * 1000
+        try:
+            self.write_sandbox_file(
+                sandbox_id,
+                f"sessions/{session_id}/{TURN_BUDGET_FILE_NAME}",
+                json.dumps(
+                    {
+                        "soft_deadline_epoch_ms": soft_ms,
+                        "final_deadline_epoch_ms": max(
+                            soft_ms, hard_ms - TURN_FINAL_NOTICE_MARGIN_SECONDS * 1000
+                        ),
+                        "stale_after_epoch_ms": hard_ms,
+                    }
+                ),
+            )
+        except Exception:
+            logger.warning(
+                "Failed to stamp turn deadline for session %s",
+                session_id,
+                exc_info=True,
+            )
+
+    def clear_turn_deadline(self, sandbox_id: UUID, session_id: UUID) -> None:
+        """Invalidate the stamp at normal turn end so a failed next-turn
+        restamp can't inherit it. Call only while holding the prompt slot — a
+        successor's fresh stamp must not be clobbered. Best-effort."""
+        try:
+            self.write_sandbox_file(
+                sandbox_id,
+                f"sessions/{session_id}/{TURN_BUDGET_FILE_NAME}",
+                "{}",
+            )
+        except Exception:
+            logger.warning(
+                "Failed to clear turn deadline for session %s",
+                session_id,
+                exc_info=True,
+            )
 
     @abstractmethod
     def get_upload_stats(

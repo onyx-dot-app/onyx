@@ -35,8 +35,8 @@ All other `<button>` attributes (except `style`, `className`, and `onChange`) ar
 | State | Track color | Thumb color |
 |-------|-------------|-------------|
 | Off | `background-tint-03` | `background-neutral-light-00` |
-| On | `action-link-05` | `background-neutral-light-00` |
+| On | `action-selection-05` | `background-neutral-light-00` |
 | Disabled off | `background-neutral-04` | `background-neutral-03` |
-| Disabled on | `action-link-03` | `background-neutral-03` |
+| Disabled on | `action-selection-03` | `background-neutral-03` |
 
 Hover darkens the track by one step; focus adds a border ring.

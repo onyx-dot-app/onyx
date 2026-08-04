@@ -79,7 +79,10 @@ function PrivacyOption({
         color="interactive"
         rightChildren={
           selected ? (
-            <SvgCheck size={16} className="shrink-0 stroke-action-link-05" />
+            <SvgCheck
+              size={16}
+              className="shrink-0 stroke-action-selection-05"
+            />
           ) : undefined
         }
       />

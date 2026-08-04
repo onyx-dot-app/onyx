@@ -23,7 +23,7 @@ const SvgNotificationBubble = ({
         xmlns="http://www.w3.org/2000/svg"
         {...props}
       >
-        <circle cx={3} cy={3} r={3} fill="var(--action-link-05)" />
+        <circle cx={3} cy={3} r={3} fill="var(--action-selection-05)" />
       </svg>
     );
   }
@@ -40,7 +40,7 @@ const SvgNotificationBubble = ({
       <div
         className="flex items-center justify-center rounded-full px-1"
         style={{
-          backgroundColor: "var(--action-link-05)",
+          backgroundColor: "var(--action-selection-05)",
           minWidth: 16,
           height: 16,
         }}

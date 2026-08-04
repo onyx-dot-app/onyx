@@ -79,6 +79,17 @@ DISABLE_USER_KNOWLEDGE = os.environ.get("DISABLE_USER_KNOWLEDGE", "").lower() ==
 # are disabled but core chat, tools, user file uploads, and Projects still work.
 DISABLE_VECTOR_DB = os.environ.get("DISABLE_VECTOR_DB", "").lower() == "true"
 
+# TEMPORARY (will be removed soon): operator-forced Search-UI scope (self-hosted only) —
+# comma-separated document set NAMES. When set, the Onyx Search UI is restricted to those sets
+# (AND'd on top of any persona/user scope; ACL still enforced) — chat/other flows are unaffected,
+# and it is disabled under MULTI_TENANT. Empty = no restriction. Names match the index directly; a
+# name that doesn't exist matches nothing (fail-closed) and is logged. Read at import — restart to change.
+FORCED_DOCUMENT_SET_NAMES: list[str] = [
+    name.strip()
+    for name in os.environ.get("FORCED_DOCUMENT_SET_NAMES", "").split(",")
+    if name.strip()
+]
+
 # Which backend to use for caching, locks, and ephemeral state.
 # "redis" (default) or "postgres" (only valid when DISABLE_VECTOR_DB=true).
 CACHE_BACKEND = CacheBackendType(
@@ -621,6 +632,42 @@ ONYX_DB_DEFAULT_SHARD = os.environ.get("ONYX_DB_DEFAULT_SHARD") or "default"
 # Shard that holds the shared `public` catalog tables (user_tenant_mapping etc.)
 # and the tenant -> shard map itself. Must be resolvable without a lookup.
 ONYX_DB_CATALOG_SHARD = os.environ.get("ONYX_DB_CATALOG_SHARD") or ONYX_DB_DEFAULT_SHARD
+# Shard that newly created tenants are placed on. Existing tenants are unaffected;
+# flipping this changes where the *next* tenant's schema is built. The pre-provisioned
+# pool drains oldest-first, so a flip ramps in gradually rather than all at once.
+ONYX_DB_NEW_TENANT_SHARD = (
+    os.environ.get("ONYX_DB_NEW_TENANT_SHARD") or ONYX_DB_DEFAULT_SHARD
+)
+# Connection pool for shards other than the default one. Unset means each shard gets
+# the same budget as the default, which is correct because a connection limit belongs
+# to a database rather than to the fleet. Set these lower while a new shard is still
+# filling up.
+ONYX_DB_SHARD_POOL_SIZE = (
+    int(os.environ["ONYX_DB_SHARD_POOL_SIZE"])
+    if os.environ.get("ONYX_DB_SHARD_POOL_SIZE")
+    else None
+)
+ONYX_DB_SHARD_POOL_OVERFLOW = (
+    int(os.environ["ONYX_DB_SHARD_POOL_OVERFLOW"])
+    if os.environ.get("ONYX_DB_SHARD_POOL_OVERFLOW")
+    else None
+)
+
+# Checked here so a bad value stops the process rather than surfacing on the first
+# request routed to a shard, whose engine is built lazily.
+if ONYX_DB_SHARD_POOL_SIZE is not None and ONYX_DB_SHARD_POOL_SIZE < 1:
+    # SQLAlchemy reads pool_size=0 as "no size limit", so a 0 here would uncap the
+    # shard rather than constrain it — the opposite of why this setting exists.
+    raise ValueError(
+        f"ONYX_DB_SHARD_POOL_SIZE must be at least 1, got {ONYX_DB_SHARD_POOL_SIZE}"
+    )
+if ONYX_DB_SHARD_POOL_OVERFLOW is not None and ONYX_DB_SHARD_POOL_OVERFLOW < 0:
+    # 0 is meaningful (no overflow past pool_size); negative means unlimited.
+    raise ValueError(
+        f"ONYX_DB_SHARD_POOL_OVERFLOW must be zero or greater, got "
+        f"{ONYX_DB_SHARD_POOL_OVERFLOW}"
+    )
+
 # Operator escape hatch: JSON object of tenant_id -> shard name, consulted
 # before the catalog table. Intended for incident response, not routine use.
 ONYX_DB_SHARD_OVERRIDES_JSON = os.environ.get("ONYX_DB_SHARD_OVERRIDES", "").strip()
@@ -1038,6 +1085,31 @@ MAX_CONCURRENT_USER_FILE_PORT_ATTEMPTS = max(
 # _MAX_TRACKED_FAILED_RETRIES (db/port_attempt.py) sizes its streak history to cover it.
 MAX_CONSECUTIVE_PORT_FAILURES_BEFORE_PAUSE = max(
     1, _non_negative_int_env("MAX_CONSECUTIVE_PORT_FAILURES_BEFORE_PAUSE", 5)
+)
+
+# Old-index reclamation (post-reindex deletion of the now-PAST index).
+# Master switch: when False the reclaim beat task no-ops entirely. Ships dark
+# (default off); flip True to go live. Instant kill switch if anything goes wrong.
+OLD_INDEX_RECLAIM_ENABLED = (
+    os.environ.get("OLD_INDEX_RECLAIM_ENABLED", "").lower() == "true"
+)
+# Soak before deleting a PAST index, anchored to when it stopped being read.
+# 0 = delete immediately once the soak gate is reached.
+OLD_INDEX_RETENTION_HOURS = _non_negative_int_env("OLD_INDEX_RETENTION_HOURS", 24)
+# Bounds the blast radius of a runaway task.
+OLD_INDEX_RECLAIM_MAX_PER_RUN = max(
+    1, _non_negative_int_env("OLD_INDEX_RECLAIM_MAX_PER_RUN", 5)
+)
+# Consecutive failures on one reclaim before it is parked as BLOCKED and alerted.
+OLD_INDEX_RECLAIM_MAX_ATTEMPTS = max(
+    1, _non_negative_int_env("OLD_INDEX_RECLAIM_MAX_ATTEMPTS", 5)
+)
+# Max docs a single reclaim delete_by_query removes before returning, so one call
+# can't run past the OpenSearch client HTTP timeout (60s) on a huge tenant. The reclaim
+# loop re-runs until the tenant's slice is empty. Conservative default leaves margin on
+# a slow / loaded cluster (the fleet-reindex case); tune up for fast clusters.
+OLD_INDEX_RECLAIM_DELETE_BATCH_SIZE = max(
+    1, _non_negative_int_env("OLD_INDEX_RECLAIM_DELETE_BATCH_SIZE", 10_000)
 )
 
 _CELERY_WORKER_DOCFETCHING_CONCURRENCY_DEFAULT = 1

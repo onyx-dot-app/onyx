@@ -168,7 +168,7 @@ def test_gateway_model_capabilities_reach_opencode_catalog() -> None:
     }
     assert vision_model["attachment"] is True
     assert vision_model["reasoning"] is True
-    assert vision_model["options"] == {"reasoningEffort": "high"}
+    assert "options" not in vision_model
 
     text_model = opencode_models["3/claude-text-only"]
     assert text_model["modalities"] == {
@@ -275,7 +275,7 @@ def test_gateway_config_preserves_explicit_context_override() -> None:
     }
 
 
-def test_unknown_model_renders_explicit_fallback_with_input_budget() -> None:
+def test_unknown_model_omits_unverified_token_limits() -> None:
     provider = _provider(
         7,
         "custom",
@@ -290,13 +290,8 @@ def test_unknown_model_renders_explicit_fallback_with_input_budget() -> None:
 
     assert gateway_config is not None
     opencode_config = build_provider_opencode_config(gateway_config)
-    assert opencode_config["provider"]["onyx"]["models"]["7/unknown-model"][
-        "limit"
-    ] == {
-        "context": 32_000,
-        "input": 32_000,
-        "output": 32_000,
-    }
+    model_config = opencode_config["provider"]["onyx"]["models"]["7/unknown-model"]
+    assert "limit" not in model_config
 
 
 def test_small_input_override_does_not_reduce_provider_output() -> None:
@@ -354,7 +349,7 @@ def test_manager_prefers_provider_recommended_default_in_provider_order() -> Non
         name="Alpha provider",
     )
     manager = SessionManager.__new__(SessionManager)
-    manager._db_session = cast(Session, MagicMock(spec=Session))  # type: ignore[attr-defined]
+    manager._db_session = cast(Session, MagicMock(spec=Session))
     user = cast(User, MagicMock(spec=User))
 
     with (
@@ -371,7 +366,7 @@ def test_manager_prefers_provider_recommended_default_in_provider_order() -> Non
     # default (bedrock-pro) wins over the alphabetically-first visible model.
     assert config.provider == "onyx"
     assert config.model_name == "7/bedrock-pro"
-    fetch_providers.assert_called_once_with(manager._db_session, user)  # type: ignore[attr-defined]
+    fetch_providers.assert_called_once_with(manager._db_session, user)
 
 
 def _gateway_config() -> CraftLLMProviderConfig:
@@ -412,9 +407,9 @@ def _reconcile_manager(
     manager = SessionManager.__new__(SessionManager)
     sandbox_manager = MagicMock()
     build_llm_configs = MagicMock(return_value=config)
-    manager._db_session = cast(Session, MagicMock(spec=Session))  # type: ignore[attr-defined]
-    manager._sandbox_manager = sandbox_manager  # type: ignore[attr-defined]
-    manager.build_llm_configs = build_llm_configs  # type: ignore[method-assign]
+    manager._db_session = cast(Session, MagicMock(spec=Session))
+    manager._sandbox_manager = sandbox_manager
+    manager.build_llm_configs = build_llm_configs
     return manager, sandbox_manager, build_llm_configs
 
 

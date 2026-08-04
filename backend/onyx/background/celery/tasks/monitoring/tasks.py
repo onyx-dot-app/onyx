@@ -33,7 +33,10 @@ from onyx.db.engine.sql_engine import (
     get_session_with_current_tenant,
     get_session_with_shared_schema,
 )
-from onyx.db.engine.tenant_utils import get_all_tenant_ids, validate_tenant_id
+from onyx.db.engine.tenant_utils import (
+    get_all_tenant_ids,
+    validate_tenant_id,
+)
 from onyx.db.engine.time_utils import get_db_current_time
 from onyx.db.enums import IndexingStatus, SyncStatus, SyncType
 from onyx.db.models import (
@@ -686,7 +689,7 @@ def build_job_id(
         return f"sync_record:{primary_id}"
 
 
-@shared_task(
+@shared_task(  # ty: ignore[invalid-argument-type]
     name=OnyxCeleryTask.MONITOR_BACKGROUND_PROCESSES,
     ignore_result=True,
     soft_time_limit=_MONITORING_SOFT_TIME_LIMIT,
@@ -908,7 +911,7 @@ def cloud_check_alembic() -> bool | None:
     return True
 
 
-@shared_task(
+@shared_task(  # ty: ignore[invalid-argument-type]
     name=OnyxCeleryTask.CLOUD_MONITOR_CELERY_QUEUES, ignore_result=True, bind=True
 )
 def cloud_monitor_celery_queues(
@@ -917,7 +920,7 @@ def cloud_monitor_celery_queues(
     return monitor_celery_queues_helper(self)
 
 
-@shared_task(name=OnyxCeleryTask.MONITOR_CELERY_QUEUES, ignore_result=True, bind=True)
+@shared_task(name=OnyxCeleryTask.MONITOR_CELERY_QUEUES, ignore_result=True, bind=True)  # ty: ignore[invalid-argument-type]
 def monitor_celery_queues(self: Task, *, tenant_id: str) -> None:  # noqa: ARG001
     return monitor_celery_queues_helper(self)
 
@@ -1025,7 +1028,7 @@ def _get_cmdline_for_process(process: psutil.Process) -> str | None:
         return None
 
 
-@shared_task(
+@shared_task(  # ty: ignore[invalid-argument-type]
     name=OnyxCeleryTask.MONITOR_PROCESS_MEMORY,
     ignore_result=True,
     soft_time_limit=_MONITORING_SOFT_TIME_LIMIT,
@@ -1108,7 +1111,7 @@ def monitor_process_memory(self: Task, *, tenant_id: str) -> None:  # noqa: ARG0
         task_logger.exception("Error in monitor_process_memory task")
 
 
-@shared_task(
+@shared_task(  # ty: ignore[invalid-argument-type]
     name=OnyxCeleryTask.CLOUD_MONITOR_CELERY_PIDBOX, ignore_result=True, bind=True
 )
 def cloud_monitor_celery_pidbox(

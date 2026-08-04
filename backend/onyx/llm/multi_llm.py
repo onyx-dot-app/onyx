@@ -35,7 +35,7 @@ from onyx.llm.interfaces import (
     LLMConfig,
     LLMUserIdentity,
     ReasoningEffort,
-    ToolChoiceOptions,
+    ToolChoice,
 )
 from onyx.llm.model_capabilities import (
     is_true_openai_model,
@@ -47,6 +47,8 @@ from onyx.llm.models import (
     ANTHROPIC_ADAPTIVE_REASONING_EFFORT,
     ANTHROPIC_REASONING_EFFORT_BUDGET,
     OPENAI_REASONING_EFFORT,
+    NamedToolChoice,
+    ToolChoiceOptions,
 )
 from onyx.llm.request_context import get_llm_mock_response
 from onyx.llm.utils import build_litellm_passthrough_kwargs
@@ -142,6 +144,28 @@ class LLMRateLimitError(Exception):
     """
 
 
+def _consume_stream_with_timeout(stream: Any, total_timeout: float | None) -> list[Any]:
+    """Drain a litellm stream, capping total wall-clock time when set.
+
+    The socket read timeout only bounds the gap between packets, so keepalive
+    pings defeat it; this caps the whole call. On breach we raise — never close,
+    since litellm 1.93.0 exposes only async ``aclose`` — which frees the thread;
+    GC releases the connection.
+    """
+    if total_timeout is None:
+        return list(stream)
+
+    deadline = time.monotonic() + total_timeout
+    chunks: list[Any] = []
+    for chunk in stream:
+        chunks.append(chunk)
+        if time.monotonic() > deadline:
+            raise LLMTimeoutError(
+                f"LLM streaming call exceeded total timeout of {total_timeout}s"
+            )
+    return chunks
+
+
 def _prompt_to_dicts(prompt: LanguageModelInput) -> list[dict[str, Any]]:
     """Convert Pydantic message models to dictionaries for LiteLLM.
 
@@ -169,6 +193,25 @@ def _normalize_content(raw: Any) -> str:
             for block in raw
         )
     return str(raw)
+
+
+# Providers not in this set forward the unknown `thinking_blocks` key verbatim,
+# so strip it for them.
+_THINKING_BLOCK_PROVIDERS = {
+    LlmProviderNames.ANTHROPIC,
+    LlmProviderNames.BEDROCK,
+    LlmProviderNames.BEDROCK_CONVERSE,
+    LlmProviderNames.VERTEX_AI,
+}
+
+
+def _strip_thinking_blocks_from_messages(
+    messages: list[dict[str, Any]],
+) -> list[dict[str, Any]]:
+    return [
+        {key: value for key, value in msg.items() if key != "thinking_blocks"}
+        for msg in messages
+    ]
 
 
 def _strip_tool_content_from_messages(
@@ -420,9 +463,7 @@ class LitellmLLM(LLM):
         # request can run indefinitely as long as data keeps arriving within this
         # window. If the LLM pauses for longer than this timeout between chunks,
         # a ReadTimeout is raised.
-        self._timeout = timeout
-        if timeout is None:
-            self._timeout = LLM_SOCKET_READ_TIMEOUT
+        self._timeout = timeout if timeout is not None else LLM_SOCKET_READ_TIMEOUT
 
         self._temperature = GEN_AI_TEMPERATURE if temperature is None else temperature
 
@@ -570,7 +611,7 @@ class LitellmLLM(LLM):
         self,
         prompt: LanguageModelInput,
         tools: list[dict] | None,
-        tool_choice: ToolChoiceOptions | None,
+        tool_choice: ToolChoice | None,
         stream: bool,
         parallel_tool_calls: bool,
         reasoning_effort: ReasoningEffort = ReasoningEffort.AUTO,
@@ -673,6 +714,10 @@ class LitellmLLM(LLM):
         # enforces the forced tool. Matched by model name rather than
         # `is_reasoning` because the litellm/local registry lags behind new
         # Qwen releases (e.g. qwen3.7-plus).
+        # A NamedToolChoice is deliberately NOT downgraded: legacy Claude
+        # thinking is skipped below instead, and Qwen thinking models may still
+        # reject the forced tool upstream (a loud 400 beats silently ignoring
+        # the caller's forced tool).
         if (is_claude_model or is_qwen_model) and (
             tool_choice == ToolChoiceOptions.REQUIRED
         ):
@@ -744,7 +789,14 @@ class LitellmLLM(LLM):
                     budget_tokens: int | None = ANTHROPIC_REASONING_EFFORT_BUDGET.get(
                         reasoning_effort
                     )
-                    if budget_tokens is not None and not has_tool_call_history:
+                    # thinking.type=enabled is rejected alongside a forced
+                    # tool_choice (only adaptive thinking supports forced tool
+                    # use), so skip thinking for a NamedToolChoice.
+                    if (
+                        budget_tokens is not None
+                        and not has_tool_call_history
+                        and not isinstance(tool_choice, NamedToolChoice)
+                    ):
                         if max_tokens is not None:
                             # Anthropic has a weird rule where max token has to be at least as much as budget tokens if set
                             # and the minimum budget tokens is 1024
@@ -853,6 +905,15 @@ class LitellmLLM(LLM):
 
             messages = _prompt_to_dicts(prompt)
 
+            if not (
+                is_claude_model
+                and (
+                    self._model_provider in _THINKING_BLOCK_PROVIDERS
+                    or self._api_surface is LlmApiSurface.ANTHROPIC_MESSAGES
+                )
+            ):
+                messages = _strip_thinking_blocks_from_messages(messages)
+
             # Bedrock's Converse API requires toolConfig when messages
             # contain toolUse/toolResult content blocks. When no tools are
             # provided for this request but the history contains tool
@@ -882,7 +943,13 @@ class LitellmLLM(LLM):
             # Only pass tool_choice when tools are present — some providers (e.g. Fireworks)
             # reject requests where tool_choice is explicitly null.
             if tools and tool_choice is not None:
-                optional_kwargs["tool_choice"] = tool_choice
+                if isinstance(tool_choice, NamedToolChoice):
+                    optional_kwargs["tool_choice"] = {
+                        "type": "function",
+                        "function": {"name": tool_choice.name},
+                    }
+                else:
+                    optional_kwargs["tool_choice"] = tool_choice
 
             if not _env_injection_enabled() and self._env_only_custom_config:
                 _warn_dropped_env_only_keys(
@@ -907,7 +974,9 @@ class LitellmLLM(LLM):
                         api_version=api_version,
                         custom_llm_provider=self._custom_llm_provider or None,
                         messages=messages,
-                        tools=tools,
+                        # None (omitted) rather than [] — some OpenAI-compatible
+                        # servers reject requests with an empty tools array.
+                        tools=tools or None,
                         stream=stream,
                         timeout=timeout_override or self._timeout,
                         max_tokens=max_tokens,
@@ -994,12 +1063,13 @@ class LitellmLLM(LLM):
         self,
         prompt: LanguageModelInput,
         tools: list[dict] | None = None,
-        tool_choice: ToolChoiceOptions | None = None,
+        tool_choice: ToolChoice | None = None,
         structured_response_format: dict | None = None,
         timeout_override: int | None = None,
         max_tokens: int | None = None,
         reasoning_effort: ReasoningEffort = ReasoningEffort.AUTO,
         user_identity: LLMUserIdentity | None = None,
+        total_timeout_override: float | None = None,
     ) -> ModelResponse:
         from litellm import HTTPHandler
         from litellm import ModelResponse as LiteLLMModelResponse
@@ -1041,9 +1111,17 @@ class LitellmLLM(LLM):
         # This note may not be entirely accurate as there is a lot of complexity in the LiteLLM codebase around this
         # and not every model path was traced thoroughly. It is also possible that in future versions of LiteLLM
         # they will realize that their OpenAI handling is not threadsafe. Hope they will just fix it.
+        # Cap the per-read timeout at the total budget. The deadline is only
+        # checked between chunks, so without this a single blocking read could
+        # overshoot a total shorter than the socket read timeout. No-op when the
+        # total exceeds it (our defaults do).
+        read_timeout = timeout_override or self._timeout
+        if total_timeout_override is not None:
+            read_timeout = min(read_timeout, max(1, int(total_timeout_override)))
+
         client = None
         if self._uses_isolated_client():
-            client = HTTPHandler(timeout=timeout_override or self._timeout)
+            client = HTTPHandler(timeout=read_timeout)
 
         try:
             # When env-only custom_config keys are injected (self-hosted
@@ -1063,7 +1141,7 @@ class LitellmLLM(LLM):
                     tool_choice=tool_choice,
                     stream=True,
                     structured_response_format=structured_response_format,
-                    timeout_override=timeout_override,
+                    timeout_override=read_timeout,
                     max_tokens=max_tokens,
                     parallel_tool_calls=True,
                     reasoning_effort=reasoning_effort,
@@ -1071,7 +1149,9 @@ class LitellmLLM(LLM):
                     client=client,
                 ),
             )
-            chunks = list(stream_response)
+            chunks = _consume_stream_with_timeout(
+                stream_response, total_timeout_override
+            )
             response = cast(
                 LiteLLMModelResponse,
                 stream_chunk_builder(chunks),
@@ -1092,7 +1172,7 @@ class LitellmLLM(LLM):
         self,
         prompt: LanguageModelInput,
         tools: list[dict] | None = None,
-        tool_choice: ToolChoiceOptions | None = None,
+        tool_choice: ToolChoice | None = None,
         structured_response_format: dict | None = None,
         timeout_override: int | None = None,
         max_tokens: int | None = None,

@@ -43,6 +43,7 @@ from onyx.db.models import (
     UserGroup,
     UserRole,
 )
+from onyx.db.users import reconcile_user_email__no_commit
 from onyx.utils.logger import setup_logger
 
 logger = setup_logger()
@@ -250,9 +251,14 @@ class ScimDAL(DAL):
         role: UserRole | None = None,
         account_type: AccountType | None = None,
     ) -> None:
-        """Update user attributes. Only sets fields that are provided."""
+        """Update user attributes. Only sets fields that are provided.
+
+        A rename runs the same reconciliation a login-driven one does, so the
+        replaced address keeps reaching documents whose indexed ACLs still name
+        it and every other row keyed by the address moves with it.
+        """
         if email is not None:
-            user.email = email
+            reconcile_user_email__no_commit(user.id, email, self._session)
         if is_active is not None:
             user.is_active = is_active
         if personal_name is not None:

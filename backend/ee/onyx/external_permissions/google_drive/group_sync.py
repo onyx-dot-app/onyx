@@ -52,8 +52,14 @@ def _get_all_folders(
     TODO: tweak things so we can fetch deltas.
     """
     MAX_FAILED_PERCENTAGE = 0.5
+    # Skips are counted and logged in aggregate: per-folder lines here produce
+    # millions of records on large domains (every folder is revisited for every
+    # enumerated user).
+    SKIP_LOG_INTERVAL = 1000
 
     seen_folder_ids: set[str] = set()
+    skipped_already_seen = 0
+    skipped_no_permissions = 0
 
     def _get_all_folders_for_user(
         google_drive_connector: GoogleDriveConnector,
@@ -61,6 +67,8 @@ def _get_all_folders(
         user_email: str,
     ) -> Generator[FolderInfo, None, None]:
         """Helper to get folders for a specific user + update shared seen_folder_ids"""
+        nonlocal skipped_already_seen, skipped_no_permissions
+
         drive_service = get_drive_service(
             google_drive_connector.creds,
             user_email,
@@ -71,7 +79,11 @@ def _get_all_folders(
         ):
             folder_id = folder["id"]
             if folder_id in seen_folder_ids:
-                logger.debug("Folder %s has already been seen. Skipping.", folder_id)
+                skipped_already_seen += 1
+                if skipped_already_seen % SKIP_LOG_INTERVAL == 0:
+                    logger.debug(
+                        "Skipped %d already-seen folders so far.", skipped_already_seen
+                    )
                 continue
 
             seen_folder_ids.add(folder_id)
@@ -100,7 +112,12 @@ def _get_all_folders(
             ]
 
             if not permissions and skip_folders_without_permissions:
-                logger.debug("Folder %s has no permissions. Skipping.", folder_id)
+                skipped_no_permissions += 1
+                if skipped_no_permissions % SKIP_LOG_INTERVAL == 0:
+                    logger.debug(
+                        "Skipped %d folders without permissions so far.",
+                        skipped_no_permissions,
+                    )
                 continue
 
             yield FolderInfo(
@@ -130,6 +147,14 @@ def _get_all_folders(
 
             if failed_count > MAX_FAILED_PERCENTAGE * len(user_emails):
                 raise RuntimeError("Too many failed folder fetches during group sync")
+
+    if skipped_no_permissions or skipped_already_seen:
+        logger.info(
+            "Folder scan complete: skipped %d folders without permissions "
+            "and %d already-seen folders.",
+            skipped_no_permissions,
+            skipped_already_seen,
+        )
 
 
 def _drive_folder_to_onyx_group(

@@ -17,7 +17,7 @@ permissions:
   contents: read # needed to checkout the repo on private repos (no-op on public)
 
 env:
-  GO_VERSION: "1.26.4"
+  GO_VERSION: "1.26.5"
 
 jobs:
   detect-modules:
@@ -53,5 +53,5 @@ jobs:
       - run: git diff --exit-code go.mod go.sum
         working-directory: ${{ matrix.modules }}
 
-      - run: go test ./...
+      - run: go test -race ./...
         working-directory: ${{ matrix.modules }}

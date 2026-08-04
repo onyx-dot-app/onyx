@@ -165,7 +165,7 @@ export default function AssociatedSkillsEditor({
                           selected={selectedIds.has(skill.id)}
                           rightChildren={
                             selectedIds.has(skill.id) ? (
-                              <SvgCheck className="size-4 stroke-action-link-05" />
+                              <SvgCheck className="size-4 stroke-action-selection-05" />
                             ) : undefined
                           }
                           aria-label={`Associate ${skill.name}`}

@@ -4,14 +4,9 @@ listing endpoints (`GET /api/mcp/servers`,
 
 The shared admin connection config row is cross-user state — it's the
 OAuth `client_info` registry used by every user of a given MCP server.
-Per-user state (access tokens, resolved `Authorization` headers) lives
-only on the per-user row. The `auth_template` field on the API model
-exists exclusively to support per-user API_TOKEN servers, where the
-admin defines a header template with placeholders (e.g.
-`Bearer {API_KEY}`) and the user fills the placeholders in their own
-credential modal. OAuth per-user servers use the OAuth handshake URL
-and never consume an `auth_template`, so the field must remain `None`
-for them regardless of caller role or the contents of the shared row.
+Per-user state (tokens and rendered headers) lives only on the per-user
+row. Basic users receive required placeholder names but never the
+admin-authored header template values.
 """
 
 from typing import Any
@@ -195,11 +190,7 @@ class TestPerUserAuthTemplateInvariants:
             for v in api_server.admin_credentials.values()
         )
 
-    def test_api_token_per_user_server_returns_placeholder_template(self) -> None:
-        """The legitimate `auth_template` use case: per-user API_TOKEN
-        servers must keep returning the placeholder header template so
-        the user-side credential modal knows which fields to prompt for.
-        """
+    def test_api_token_per_user_server_returns_placeholder_names(self) -> None:
         db_server = _make_db_server(
             auth_type=MCPAuthenticationType.API_TOKEN,
             auth_performer=MCPAuthenticationPerformer.PER_USER,
@@ -219,7 +210,29 @@ class TestPerUserAuthTemplateInvariants:
             )
 
         assert api_server.auth_template is not None
-        assert api_server.auth_template.headers == {
-            "Authorization": "Bearer {API_KEY}",
-        }
+        assert api_server.auth_template.headers == {}
         assert api_server.auth_template.required_fields == ["API_KEY"]
+
+    def test_api_token_per_user_admin_detail_does_not_extract_shared_key(
+        self,
+    ) -> None:
+        db_server = _make_db_server(
+            auth_type=MCPAuthenticationType.API_TOKEN,
+            auth_performer=MCPAuthenticationPerformer.PER_USER,
+            admin_config=_api_token_template_admin_config(),
+        )
+        owner = _make_user(email="owner@example.com", role=UserRole.ADMIN)
+
+        with patch(
+            "onyx.server.features.mcp.api.get_user_connection_config",
+            return_value=None,
+        ):
+            api_server = _db_mcp_server_to_api_mcp_server(
+                db_server,
+                MagicMock(),
+                request_user=owner,
+                include_auth_config=True,
+            )
+
+        assert api_server.admin_credentials is None
+        assert api_server.auth_template is not None

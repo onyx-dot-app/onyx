@@ -32,7 +32,7 @@
 
 .rich-input-tile-selected,
 .rich-input-tile-in-selection {
-  box-shadow: inset 0 0 0 1.5px var(--action-link-02);
+  box-shadow: inset 0 0 0 1.5px var(--action-selection-02);
 }
 
 .rich-input-tile-icon {

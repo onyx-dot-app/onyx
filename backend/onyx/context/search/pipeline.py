@@ -3,6 +3,7 @@ from datetime import datetime
 
 from sqlalchemy.orm import Session
 
+from onyx.context.search.forced_document_set import get_forced_document_set_names
 from onyx.context.search.models import (
     BaseFilters,
     ChunkIndexRequest,
@@ -50,6 +51,10 @@ def _build_index_filters(
     hierarchy_node_ids: list[int] | None = None,
     # Pre-fetched ACL filters (skips DB query when provided)
     acl_filters: list[str] | None = None,
+    # Search UI only: apply the operator-forced document-set scope
+    # (FORCED_DOCUMENT_SET_NAMES) as a hard AND restriction. Left False for chat and
+    # every other caller, so they are unaffected.
+    force_configured_document_set_scope: bool = False,
 ) -> IndexFilters:
     base_filters = user_provided_filters or BaseFilters()
 
@@ -111,6 +116,13 @@ def _build_index_filters(
             raise ValueError("Either db_session or acl_filters must be provided")
         user_acl_filters = build_access_filters_for_user(user, db_session)
 
+    # Enforced downstream as an AND clause in _get_search_filters (Search UI only).
+    forced_document_set = (
+        get_forced_document_set_names(db_session)
+        if force_configured_document_set_scope
+        else None
+    )
+
     final_filters = IndexFilters(
         project_id_filter=project_id_filter,
         persona_id_filter=persona_id_filter,
@@ -124,6 +136,7 @@ def _build_index_filters(
         # Assistant knowledge filters
         attached_document_ids=attached_document_ids,
         hierarchy_node_ids=hierarchy_node_ids,
+        forced_document_set=forced_document_set,
     )
 
     return final_filters
@@ -267,6 +280,9 @@ def search_pipeline(
     acl_filters: list[str] | None = None,
     embedding_model: EmbeddingModel | None = None,
     prefetched_federated_retrieval_infos: list[FederatedRetrievalInfo] | None = None,
+    # Search UI only: apply the operator-forced document-set scope
+    # (FORCED_DOCUMENT_SET_NAMES). Chat and other callers leave this False.
+    force_configured_document_set_scope: bool = False,
 ) -> list[InferenceChunk]:
     persona_document_sets: list[str] | None = (
         persona_search_info.document_set_names if persona_search_info else None
@@ -295,6 +311,7 @@ def search_pipeline(
         attached_document_ids=attached_document_ids,
         hierarchy_node_ids=hierarchy_node_ids,
         acl_filters=acl_filters,
+        force_configured_document_set_scope=force_configured_document_set_scope,
     )
 
     query_keywords = strip_stopwords(chunk_search_request.query)

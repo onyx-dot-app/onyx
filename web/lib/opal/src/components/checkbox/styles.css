@@ -55,12 +55,12 @@
 
 .opal-checkbox-surface[data-state="checked"],
 .opal-checkbox-surface[data-state="indeterminate"] {
-  @apply bg-action-link-05;
+  @apply bg-action-selection-05;
 }
 
 .opal-checkbox-surface[data-state="checked"]:hover:not([data-disabled]),
 .opal-checkbox-surface[data-state="indeterminate"]:hover:not([data-disabled]) {
-  @apply bg-action-link-04;
+  @apply bg-action-selection-04;
 }
 
 .opal-checkbox-surface[data-state="checked"]:focus-visible:not([data-disabled]),

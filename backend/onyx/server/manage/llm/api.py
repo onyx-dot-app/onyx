@@ -19,6 +19,7 @@ from onyx.db.engine.sql_engine import get_session
 from onyx.db.enums import LLMModelFlowType, Permission
 from onyx.db.llm import (
     can_user_access_llm_provider,
+    fetch_default_chat_naming_model,
     fetch_default_llm_model,
     fetch_default_vision_model,
     fetch_existing_llm_provider_by_id,
@@ -29,8 +30,10 @@ from onyx.db.llm import (
     fetch_user_group_ids,
     remove_llm_provider,
     sync_model_configurations,
+    update_default_chat_naming_provider,
     update_default_provider,
     update_default_vision_provider,
+    update_no_default_chat_naming_provider,
     upsert_llm_provider,
     validate_persona_ids_exist,
 )
@@ -38,6 +41,7 @@ from onyx.db.models import Persona, User
 from onyx.db.persona import user_can_access_persona
 from onyx.error_handling.error_codes import OnyxErrorCode
 from onyx.error_handling.exceptions import OnyxError
+from onyx.llm.api_surfaces import SURFACE_SELECTION_CONFIG_KEYS
 from onyx.llm.constants import (
     PROVIDER_DISPLAY_NAMES,
     WELL_KNOWN_PROVIDER_NAMES,
@@ -317,10 +321,21 @@ def _validate_llm_provider_change(
     normalized_existing_api_base = existing_api_base or None
     normalized_new_api_base = new_api_base or None
 
+    # Surface-mode keys only pick a path on the same api_base and cannot
+    # redirect the stored key, so they must not force key re-entry.
+    def _without_surface_keys(config: dict[str, str] | None) -> dict[str, str]:
+        return {
+            k: v
+            for k, v in (config or {}).items()
+            if k not in SURFACE_SELECTION_CONFIG_KEYS
+        }
+
     api_base_changed = normalized_new_api_base != normalized_existing_api_base
-    custom_config_changed = (
-        new_custom_config and new_custom_config != existing_custom_config
-    )
+    # Gate on the raw config (empty submissions are never persisted); compare
+    # stripped dicts so dropping stored non-surface entries is still rejected.
+    custom_config_changed = bool(new_custom_config) and _without_surface_keys(
+        new_custom_config
+    ) != _without_surface_keys(existing_custom_config)
 
     if api_base_changed or custom_config_changed:
         raise OnyxError(
@@ -541,6 +556,9 @@ def list_llm_providers(
         default_vision=DefaultModel.from_model_config(
             fetch_default_vision_model(db_session)
         ),
+        default_chat_naming=DefaultModel.from_model_config(
+            fetch_default_chat_naming_model(db_session)
+        ),
     )
 
 
@@ -746,6 +764,31 @@ def set_provider_as_default_vision(
     invalidate_provider_listing_cache()
 
 
+@admin_router.post("/default-chat-naming")
+def set_provider_as_default_chat_naming(
+    default_model: DefaultModel,
+    _: User = Depends(require_permission(Permission.FULL_ADMIN_PANEL_ACCESS)),
+    db_session: Session = Depends(get_session),
+) -> None:
+    update_default_chat_naming_provider(
+        provider_id=default_model.provider_id,
+        chat_naming_model=default_model.model_name,
+        db_session=db_session,
+    )
+    invalidate_provider_listing_cache()
+
+
+@admin_router.delete("/default-chat-naming")
+def clear_default_chat_naming(
+    _: User = Depends(require_permission(Permission.FULL_ADMIN_PANEL_ACCESS)),
+    db_session: Session = Depends(get_session),
+) -> None:
+    """Clear the dedicated naming model; auto-naming falls back to the
+    session's model."""
+    update_no_default_chat_naming_provider(db_session=db_session)
+    invalidate_provider_listing_cache()
+
+
 @admin_router.get("/auto-config")
 def get_auto_config(
     _: User = Depends(require_permission(Permission.FULL_ADMIN_PANEL_ACCESS)),
@@ -866,6 +909,9 @@ def list_llm_provider_basics(
         ),
         default_vision=DefaultModel.from_model_config(
             fetch_default_vision_model(db_session)
+        ),
+        default_chat_naming=DefaultModel.from_model_config(
+            fetch_default_chat_naming_model(db_session)
         ),
     )
     cache_provider_listing(

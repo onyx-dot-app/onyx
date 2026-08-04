@@ -85,9 +85,7 @@ def _with_userinfo(
     json_raises: bool = False,
 ) -> None:
     fake = _FakeAsyncClient(_FakeResponse(payload, status_code, json_raises))
-    client.get_httpx_client = MagicMock(  # ty: ignore[invalid-assignment]
-        return_value=fake
-    )
+    client.get_httpx_client = MagicMock(return_value=fake)
 
 
 @pytest.mark.asyncio

@@ -941,7 +941,7 @@ export default function AppPage({ firstMessage }: ChatPageProps) {
                       "relative w-full flex flex-col",
                       onboardingVisible && "min-h-0",
                       !fullWidthActive &&
-                        "max-w-(--app-page-main-content-width)"
+                        "md:max-w-(--app-page-main-content-width)"
                     )}
                   >
                     {/* Scroll to bottom button - positioned absolutely above AppInputBar */}

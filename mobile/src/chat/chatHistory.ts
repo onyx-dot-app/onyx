@@ -33,6 +33,9 @@ export function processRawChatHistory(
       childrenNodeIds: [],
       latestChildNodeId: messageInfo.latest_child_message,
       packets: packetsForMessage || [],
+      // A hydrated turn has no start time to measure from, so without this every reopened turn's
+      // header reads "Thought for some time".
+      processingDurationSeconds: messageInfo.processing_duration_seconds,
     };
 
     messages.set(messageInfo.message_id, message);

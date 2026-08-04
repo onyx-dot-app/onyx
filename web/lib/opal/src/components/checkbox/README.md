@@ -34,7 +34,7 @@ defined in `styles.css`:
 | State | Background | Border |
 |---|---|---|
 | Unchecked | `background-neutral-00` | `border-02` (hover: `border-03`) |
-| Checked / Indeterminate | `action-link-05` (hover: `action-link-04`) | — |
+| Checked / Indeterminate | `action-selection-05` (hover: `action-selection-04`) | — |
 | Disabled unchecked | `background-neutral-03` | `border-02` |
 | Disabled checked | `background-neutral-04` | — |
 

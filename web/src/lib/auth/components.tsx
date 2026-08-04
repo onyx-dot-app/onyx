@@ -476,9 +476,9 @@ export function EmailPasswordForm({
             {user?.is_anonymous_user && (
               <Link
                 href="/app"
-                className="text-xs text-action-link-05 cursor-pointer text-center w-full font-medium mx-auto"
+                className="text-xs text-action-selection-05 cursor-pointer text-center w-full font-medium mx-auto"
               >
-                <span className="hover:border-b hover:border-dotted hover:border-action-link-05">
+                <span className="hover:border-b hover:border-dotted hover:border-action-selection-05">
                   or continue as guest
                 </span>
               </Link>

@@ -7,6 +7,7 @@ from onyx.db.enums import (
 )
 from onyx.server.features.mcp.api import (
     _build_shared_api_token_config_data,
+    _resolve_auth_template,
     _resolve_shared_api_token,
     _resolve_shared_api_token_template,
 )
@@ -15,6 +16,7 @@ from onyx.server.features.mcp.models import (
     MCPConnectionData,
     MCPToolCreateRequest,
 )
+from onyx.utils.encryption import mask_string
 
 
 def _shared_request(
@@ -41,6 +43,7 @@ def test_shared_api_token_template_renders_and_persists_template() -> None:
     config_data = _build_shared_api_token_config_data(
         api_token="shared-secret",
         auth_template=template,
+        header_substitutions=None,
         user_email="admin@example.com",
     )
 
@@ -57,20 +60,31 @@ def test_shared_api_token_template_defaults_to_bearer() -> None:
     config_data = _build_shared_api_token_config_data(
         api_token="shared-secret",
         auth_template=request.auth_template,
+        header_substitutions=None,
         user_email="admin@example.com",
     )
 
     assert config_data["headers"] == {"Authorization": "Bearer shared-secret"}
 
 
-def test_shared_api_token_template_rejects_non_api_key_placeholders() -> None:
-    with pytest.raises(ValueError, match=r"only support the \{api_key\}"):
-        _shared_request(
-            MCPAuthTemplate(
-                headers={"Authorization": "Apikey {user_email}"},
-                required_fields=[],
-            )
-        )
+def test_shared_api_token_template_supports_additional_placeholders() -> None:
+    template = MCPAuthTemplate(
+        headers={
+            "Authorization": "Apikey {api_key}",
+            "X-Gateway-Key": "{gateway_key}",
+        },
+    )
+    config_data = _build_shared_api_token_config_data(
+        api_token="shared-secret",
+        auth_template=template,
+        header_substitutions={"gateway_key": "gateway-secret"},
+        user_email="admin@example.com",
+    )
+
+    assert config_data["headers"] == {
+        "Authorization": "Apikey shared-secret",
+        "X-Gateway-Key": "gateway-secret",
+    }
 
 
 @pytest.mark.parametrize(
@@ -85,7 +99,7 @@ def test_shared_api_token_template_rejects_non_api_key_placeholders() -> None:
 def test_shared_api_token_template_rejects_invalid_header_name(
     header_name: str,
 ) -> None:
-    with pytest.raises(ValueError, match="invalid header name"):
+    with pytest.raises(ValueError, match="Invalid MCP header name"):
         _shared_request(
             MCPAuthTemplate(
                 headers={header_name: "{api_key}"},
@@ -165,3 +179,20 @@ def test_shared_api_token_template_update_preserves_omitted_template() -> None:
 
     assert template is not None
     assert template.headers == {"X-API-Key": "{api_key}"}
+
+
+def test_unchanged_masked_literal_template_value_is_preserved() -> None:
+    existing = MCPAuthTemplate(headers={"X-Gateway-Key": "literal-secret"})
+    request = MCPAuthTemplate(headers={"X-Gateway-Key": mask_string("literal-secret")})
+
+    resolved = _resolve_auth_template(request, {}, existing)
+
+    assert resolved.headers == {"X-Gateway-Key": "literal-secret"}
+
+
+def test_changed_masked_literal_template_value_is_rejected() -> None:
+    existing = MCPAuthTemplate(headers={"X-Gateway-Key": "literal-secret"})
+    request = MCPAuthTemplate(headers={"X-Gateway-Key": mask_string("literal-secret")})
+
+    with pytest.raises(ValueError, match="masked"):
+        _resolve_auth_template(request, {"X-Gateway-Key": True}, existing)

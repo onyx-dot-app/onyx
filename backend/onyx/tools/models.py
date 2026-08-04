@@ -215,7 +215,7 @@ class ChatFile(BaseModel):
         install_lazy_content_loader(inst, loader)
         return inst
 
-    def __getattribute__(self, name: str):  # type: ignore[no-untyped-def]
+    def __getattribute__(self, name: str):
         if name == "content":
             maybe_materialize_lazy_content(self)
         return object.__getattribute__(self, name)

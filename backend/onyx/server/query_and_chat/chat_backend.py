@@ -62,7 +62,8 @@ from onyx.db.chat_search import search_chat_sessions
 from onyx.db.engine.sql_engine import get_session, get_session_with_current_tenant
 from onyx.db.enums import Permission
 from onyx.db.feedback import create_chat_message_feedback, remove_chat_message_feedback
-from onyx.db.models import ChatSessionSharedStatus, Persona, User
+from onyx.db.llm import fetch_default_chat_naming_model
+from onyx.db.models import ChatMessage, ChatSessionSharedStatus, Persona, User
 from onyx.db.persona import get_persona_by_id
 from onyx.db.usage import UsageType, increment_usage
 from onyx.db.user_file import get_file_id_by_user_file_id
@@ -70,13 +71,17 @@ from onyx.error_handling.error_codes import OnyxErrorCode
 from onyx.error_handling.exceptions import OnyxError
 from onyx.file_store.file_store import get_default_file_store
 from onyx.llm.constants import LlmProviderNames
-from onyx.llm.factory import get_default_llm, get_llm_for_persona, get_llm_token_counter
+from onyx.llm.factory import get_llm_for_persona, get_llm_token_counter
 from onyx.llm.models import (
     USER_SELECTABLE_REASONING_EFFORTS,
     ReasoningEffort,
     parse_user_selectable_reasoning_effort,
 )
-from onyx.secondary_llm_flows.chat_session_naming import generate_chat_session_name
+from onyx.llm.override_models import LLMOverride
+from onyx.secondary_llm_flows.chat_session_naming import (
+    generate_chat_session_name,
+    get_fallback_chat_session_name,
+)
 from onyx.server.api_key_usage import check_api_key_usage
 from onyx.server.middleware.rate_limiting import get_feedback_rate_limiters
 from onyx.server.query_and_chat.chat_utils import (
@@ -454,16 +459,65 @@ def create_new_chat_session(
     return CreateChatSessionID(chat_session_id=new_chat_session.id)
 
 
+def _generate_or_fallback_chat_session_name(
+    chat_history: list[ChatMessage],
+    request: Request,
+    user: User,
+    chat_session_id: UUID,
+    persona: Persona | None,
+    llm_override: LLMOverride | None,
+) -> str:
+    user_id = user.id
+    fallback_name = get_fallback_chat_session_name(chat_history)
+    max_tokens_for_naming = 3000
+
+    try:
+        check_token_rate_limits(user)
+        llm = get_llm_for_persona(
+            persona=persona,
+            user=user,
+            llm_override=llm_override,
+            additional_headers=extract_headers(
+                request.headers, LITELLM_PASS_THROUGH_HEADERS
+            ),
+        )
+        with get_session_with_current_tenant() as db_session:
+            check_llm_cost_limit_for_provider(
+                db_session=db_session,
+                tenant_id=get_current_tenant_id(),
+                llm_provider_api_key=llm.config.api_key,
+            )
+
+        token_counter = get_llm_token_counter(llm)
+        simple_chat_history = convert_chat_history_basic(
+            chat_history=chat_history,
+            token_counter=token_counter,
+            max_individual_message_tokens=max_tokens_for_naming,
+            max_total_tokens=max_tokens_for_naming,
+        )
+        with ensure_trace(
+            "chat_session_naming",
+            group_id=str(chat_session_id),
+            metadata=ChatTraceMetadata(
+                chat_session_id=str(chat_session_id),
+                user_id=str(user_id) if user_id else None,
+            ).model_dump(),
+        ):
+            return generate_chat_session_name(
+                chat_history=simple_chat_history,
+                llm=llm,
+            )
+    except Exception as error:
+        logger.warning("Failed to generate chat session name: %s", error)
+        return fallback_name
+
+
 @router.put("/rename-chat-session")
 def rename_chat_session(
     rename_req: ChatRenameRequest,
     request: Request,
     user: User = Depends(require_permission(Permission.BASIC_ACCESS)),
 ) -> RenameChatSessionResponse:
-    # 3000 tokens is more than enough for a pair of messages which is enough to provide the required context for generating a
-    # good name for the chat session. It's also small enough to fit on even the worst context window LLMs.
-    max_tokens_for_naming = 3000
-
     name = rename_req.name
     chat_session_id = rename_req.chat_session_id
     user_id = user.id
@@ -478,48 +532,38 @@ def rename_chat_session(
             )
         return RenameChatSessionResponse(new_name=name)
 
-    # Auto-naming calls an LLM, so apply the same per-user budget gate as
-    # send-message. Manual renames return above and stay free.
-    check_token_rate_limits(user)
-
-    llm = get_default_llm(
-        additional_headers=extract_headers(
-            request.headers, LITELLM_PASS_THROUGH_HEADERS
-        )
-    )
-
-    # Read-phase short session: usage check + history fetch. Closed before the
-    # LLM call so the underlying pool connection is fully released for the
-    # 2-10s generation window. (db_session.close() alone is insufficient in
-    # multi-tenant mode where the session is bound to an explicit Connection
-    # held by get_session_with_tenant's outer with-block.)
+    # Close the read session before the LLM's multi-second generation window.
     with get_session_with_current_tenant() as db_session:
-        check_llm_cost_limit_for_provider(
+        chat_session = get_chat_session_by_id(
+            chat_session_id=chat_session_id,
+            user_id=user_id,
             db_session=db_session,
-            tenant_id=get_current_tenant_id(),
-            llm_provider_api_key=llm.config.api_key,
+            eager_load_persona=True,
         )
         full_history = create_chat_history_chain(
-            chat_session_id=chat_session_id, db_session=db_session
+            chat_session_id=chat_session_id,
+            db_session=db_session,
         )
-
-    token_counter = get_llm_token_counter(llm)
-    simple_chat_history = convert_chat_history_basic(
+        # Admin-designated dedicated naming model (so a single-stream local
+        # session model isn't blocked by naming calls) takes priority over the
+        # session's model.
+        naming_model = fetch_default_chat_naming_model(db_session)
+        naming_override = (
+            LLMOverride(
+                model_provider=naming_model.llm_provider.name,
+                model_version=naming_model.name,
+            )
+            if naming_model is not None
+            else chat_session.llm_override
+        )
+    new_name = _generate_or_fallback_chat_session_name(
         chat_history=full_history,
-        token_counter=token_counter,
-        max_individual_message_tokens=max_tokens_for_naming,
-        max_total_tokens=max_tokens_for_naming,
+        request=request,
+        user=user,
+        chat_session_id=chat_session_id,
+        persona=chat_session.persona,
+        llm_override=naming_override,
     )
-
-    with ensure_trace(
-        "chat_session_naming",
-        group_id=str(chat_session_id),
-        metadata=ChatTraceMetadata(
-            chat_session_id=str(chat_session_id),
-            user_id=str(user_id) if user_id else None,
-        ).model_dump(),
-    ):
-        new_name = generate_chat_session_name(chat_history=simple_chat_history, llm=llm)
 
     with get_session_with_current_tenant() as db_session:
         update_chat_session(

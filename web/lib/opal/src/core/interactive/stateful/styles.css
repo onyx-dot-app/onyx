@@ -61,8 +61,8 @@
    --------------------------------------------------------------------------- */
 .interactive[data-interactive-variant="select-heavy"][data-interactive-state="filled"] {
   @apply bg-transparent;
-  --interactive-foreground: var(--action-link-05);
-  --interactive-foreground-icon: var(--action-link-05);
+  --interactive-foreground: var(--action-selection-05);
+  --interactive-foreground-icon: var(--action-selection-05);
 }
 .interactive[data-interactive-variant="select-heavy"][data-interactive-state="filled"]:hover:not(
   [data-disabled]
@@ -90,9 +90,9 @@
    Select-Heavy — Selected
    --------------------------------------------------------------------------- */
 .interactive[data-interactive-variant="select-heavy"][data-interactive-state="selected"] {
-  @apply bg-[var(--action-link-01)];
-  --interactive-foreground: var(--action-link-05);
-  --interactive-foreground-icon: var(--action-link-05);
+  @apply bg-[var(--action-selection-01)];
+  --interactive-foreground: var(--action-selection-05);
+  --interactive-foreground-icon: var(--action-selection-05);
 }
 .interactive[data-interactive-variant="select-heavy"][data-interactive-state="selected"]:hover:not(
   [data-disabled]
@@ -112,8 +112,8 @@
 }
 .interactive[data-interactive-variant="select-heavy"][data-interactive-state="selected"][data-disabled] {
   @apply bg-transparent;
-  --interactive-foreground: var(--action-link-03);
-  --interactive-foreground-icon: var(--action-link-03);
+  --interactive-foreground: var(--action-selection-03);
+  --interactive-foreground-icon: var(--action-selection-03);
 }
 
 /* ===========================================================================
@@ -192,9 +192,9 @@
    Select-Card — Selected
    --------------------------------------------------------------------------- */
 .interactive[data-interactive-variant="select-card"][data-interactive-state="selected"] {
-  @apply bg-[var(--action-link-01)];
-  --interactive-foreground: var(--action-link-05);
-  --interactive-foreground-icon: var(--action-link-05);
+  @apply bg-[var(--action-selection-01)];
+  --interactive-foreground: var(--action-selection-05);
+  --interactive-foreground-icon: var(--action-selection-05);
 }
 .interactive[data-interactive-variant="select-card"][data-interactive-state="selected"]:hover:not(
   [data-disabled]
@@ -214,8 +214,8 @@
 }
 .interactive[data-interactive-variant="select-card"][data-interactive-state="selected"][data-disabled] {
   @apply bg-transparent;
-  --interactive-foreground: var(--action-link-03);
-  --interactive-foreground-icon: var(--action-link-03);
+  --interactive-foreground: var(--action-selection-03);
+  --interactive-foreground-icon: var(--action-selection-03);
 }
 
 /* ===========================================================================
@@ -260,8 +260,8 @@
    --------------------------------------------------------------------------- */
 .interactive[data-interactive-variant="select-light"][data-interactive-state="filled"] {
   @apply bg-transparent;
-  --interactive-foreground: var(--action-link-05);
-  --interactive-foreground-icon: var(--action-link-05);
+  --interactive-foreground: var(--action-selection-05);
+  --interactive-foreground-icon: var(--action-selection-05);
 }
 .interactive[data-interactive-variant="select-light"][data-interactive-state="filled"]:hover:not(
   [data-disabled]
@@ -290,8 +290,8 @@
    --------------------------------------------------------------------------- */
 .interactive[data-interactive-variant="select-light"][data-interactive-state="selected"] {
   @apply bg-transparent;
-  --interactive-foreground: var(--action-link-05);
-  --interactive-foreground-icon: var(--action-link-05);
+  --interactive-foreground: var(--action-selection-05);
+  --interactive-foreground-icon: var(--action-selection-05);
 }
 .interactive[data-interactive-variant="select-light"][data-interactive-state="selected"]:hover:not(
   [data-disabled]
@@ -311,8 +311,8 @@
 }
 .interactive[data-interactive-variant="select-light"][data-interactive-state="selected"][data-disabled] {
   @apply bg-transparent;
-  --interactive-foreground: var(--action-link-03);
-  --interactive-foreground-icon: var(--action-link-03);
+  --interactive-foreground: var(--action-selection-03);
+  --interactive-foreground-icon: var(--action-selection-03);
 }
 
 /* ===========================================================================
@@ -392,8 +392,8 @@
    --------------------------------------------------------------------------- */
 .interactive[data-interactive-variant="select-tinted"][data-interactive-state="filled"] {
   @apply bg-background-tint-01;
-  --interactive-foreground: var(--action-link-05);
-  --interactive-foreground-icon: var(--action-link-05);
+  --interactive-foreground: var(--action-selection-05);
+  --interactive-foreground-icon: var(--action-selection-05);
 }
 .interactive[data-interactive-variant="select-tinted"][data-interactive-state="filled"]:hover:not(
   [data-disabled]
@@ -421,9 +421,9 @@
    Select-Tinted — Selected
    --------------------------------------------------------------------------- */
 .interactive[data-interactive-variant="select-tinted"][data-interactive-state="selected"] {
-  @apply bg-[var(--action-link-01)];
-  --interactive-foreground: var(--action-link-05);
-  --interactive-foreground-icon: var(--action-link-05);
+  @apply bg-[var(--action-selection-01)];
+  --interactive-foreground: var(--action-selection-05);
+  --interactive-foreground-icon: var(--action-selection-05);
 }
 .interactive[data-interactive-variant="select-tinted"][data-interactive-state="selected"]:hover:not(
   [data-disabled]
@@ -443,8 +443,8 @@
 }
 .interactive[data-interactive-variant="select-tinted"][data-interactive-state="selected"][data-disabled] {
   @apply bg-transparent;
-  --interactive-foreground: var(--action-link-03);
-  --interactive-foreground-icon: var(--action-link-03);
+  --interactive-foreground: var(--action-selection-03);
+  --interactive-foreground-icon: var(--action-selection-03);
 }
 
 /* ===========================================================================

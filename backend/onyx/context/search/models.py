@@ -146,6 +146,11 @@ class IndexFilters(BaseFilters, UserFileFilters, AssistantKnowledgeFilters):
     # DocumentAccess::to_acl.
     access_control_list: list[str] | None
     tenant_id: str | None = None
+    # Operator-forced document-set scope (NAMES, not IDs). When set, retrieval is
+    # restricted to these sets via a standalone AND clause — distinct from
+    # `document_set` (a user/persona OR-scope). Set only on the Search UI path
+    # (from FORCED_DOCUMENT_SET_NAMES); None = no restriction.
+    forced_document_set: list[str] | None = None
 
 
 class BasicChunkRequest(BaseModel):

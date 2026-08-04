@@ -103,15 +103,30 @@ def _pkce_enabled(config: dict[str, Any]) -> bool:
     return bool(config.get("pkce_enabled")) or OIDC_PKCE_ENABLED
 
 
+def _drop_unadvertised_offline_access(client: BaseOAuth2[Any]) -> None:
+    """Some IdPs (e.g. Amazon Cognito) fail the entire authorize request on
+    scopes they don't support, so the auto-added offline_access scope only
+    survives when the discovery doc advertises it. A discovery doc without
+    scopes_supported keeps the scope, since support can't be ruled out."""
+    discovery = getattr(client, "openid_configuration", None) or {}
+    supported = discovery.get("scopes_supported")
+    if supported is None or "offline_access" in supported:
+        return
+    client.base_scopes = [
+        scope for scope in (client.base_scopes or []) if scope != "offline_access"
+    ]
+
+
 def _build_client(provider: SSOProvider, config: dict[str, Any]) -> BaseOAuth2[Any]:
     if provider.provider_type is SSOProviderType.OIDC:
         # Scope overrides let providers request extra API scopes (e.g. MS Graph
         # User.Read for claims capture): the row's scopes win, then the env
         # override while it exists. offline_access secures refresh tokens.
         scopes = list(config.get("scopes") or OIDC_SCOPE_OVERRIDE or BASE_SCOPES)
-        if "offline_access" not in scopes:
+        offline_access_auto_added = "offline_access" not in scopes
+        if offline_access_auto_added:
             scopes.append("offline_access")
-        return VerifiedEmailOpenID(
+        client = VerifiedEmailOpenID(
             config["client_id"],
             config["client_secret"],
             config["openid_config_url"],
@@ -119,6 +134,10 @@ def _build_client(provider: SSOProvider, config: dict[str, Any]) -> BaseOAuth2[A
             base_scopes=scopes,
             require_verified_email=config.get("require_verified_email", False),
         )
+        # Explicitly configured offline_access is always respected as-is.
+        if offline_access_auto_added:
+            _drop_unadvertised_offline_access(client)
+        return client
     if provider.provider_type is SSOProviderType.GOOGLE_OAUTH:
         return GoogleOAuth2(
             config["client_id"],

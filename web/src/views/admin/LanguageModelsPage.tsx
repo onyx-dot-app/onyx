@@ -31,6 +31,7 @@ import { LLMProviderName, LLMProviderView } from "@/lib/languageModels/types";
 import { Section } from "@/layouts/general-layouts";
 import { markdown } from "@opal/utils";
 import { usePHFeatureFlag, PHFeatureFlag } from "@/lib/analytics/hooks";
+import CostOverridesPanel from "@/views/admin/CostOverridesPanel";
 
 const route = ADMIN_ROUTES.LLM_MODELS;
 
@@ -471,7 +472,7 @@ export default function LanguageModelsPage() {
 
         {/* ── Add Provider groups (always visible) ── */}
         <Disabled disabled={isConfigurationDisabled}>
-          <div className="flex flex-col gap-8">
+          <div className="@container/providercards flex flex-col gap-8">
             {PROVIDER_GROUPS.map((group) => (
               <GeneralLayouts.Section
                 key={group.title}
@@ -493,7 +494,7 @@ export default function LanguageModelsPage() {
                   </Text>
                 )}
 
-                <div className="grid grid-cols-2 gap-2">
+                <div className="grid grid-cols-1 @xl/providercards:grid-cols-2 gap-2">
                   {group.providerNames.map((name) => (
                     <NewProviderCard
                       key={name}
@@ -509,6 +510,11 @@ export default function LanguageModelsPage() {
             ))}
           </div>
         </Disabled>
+
+        <Divider paddingParallel="fit" paddingPerpendicular="fit" />
+
+        {/* ── Cost Overrides — negotiated per-model rates for usage costing ── */}
+        <CostOverridesPanel />
       </SettingsLayouts.Body>
     </SettingsLayouts.Root>
   );

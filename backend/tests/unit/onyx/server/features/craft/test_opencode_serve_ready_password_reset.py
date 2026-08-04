@@ -112,6 +112,7 @@ def test_reuse_existing_pod_clears_stale_tombstone() -> None:
             user_id=uuid4(),
             tenant_id="public",
             onyx_pat="pat-test",
+            provisioning_attempt_number=1,
         )
 
     assert info.sandbox_id == sandbox_id

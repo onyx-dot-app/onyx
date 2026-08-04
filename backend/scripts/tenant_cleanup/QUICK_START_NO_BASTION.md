@@ -108,7 +108,8 @@ kubectl get po | grep celery-worker-user-file-processing | grep Running
 
 - `tenant_data_YYYYMMDD_HHMMSS.json` - Raw per-tenant data. **Contains real user chat message
   text** (`last_query_text`); keep it out of the repo and off shared storage.
-- `gated_tenants_no_query_3mo_YYYYMMDD_HHMMSS.csv` - List of tenants to clean
+- `gated_tenants_no_query_3mo_YYYYMMDD_HHMMSS.csv` - List of tenants with no recent chat or
+  Craft activity to clean (the filename is retained for compatibility)
 - `cleaned_tenants.csv` - Successfully cleaned tenants with timestamps. Appended across runs, and
   the only record of what was deleted - needed for any later search-index sweep.
 

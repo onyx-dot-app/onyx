@@ -138,6 +138,78 @@ def test_build_client_oidc_uses_provider_name(monkeypatch: pytest.MonkeyPatch) -
     assert client.name == "okta"
 
 
+def _openid_stub_with_discovery(scopes_supported: list[str] | None) -> Any:
+    class _FakeOpenID:
+        def __init__(
+            self,
+            _client_id: str,
+            _client_secret: str,
+            _config_url: str,
+            *,
+            name: str,
+            base_scopes: list[str] | None = None,
+            **_kwargs: Any,
+        ) -> None:
+            self.name = name
+            self.base_scopes = list(base_scopes or [])
+            self.openid_configuration: dict[str, Any] = (
+                {}
+                if scopes_supported is None
+                else {"scopes_supported": scopes_supported}
+            )
+
+    return _FakeOpenID
+
+
+def test_offline_access_dropped_when_idp_does_not_advertise_it(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    # Amazon Cognito advertises scopes_supported without offline_access and
+    # rejects the whole authorize request when it is included.
+    monkeypatch.setattr(
+        oidc_multi,
+        "VerifiedEmailOpenID",
+        _openid_stub_with_discovery(["openid", "email", "profile"]),
+    )
+    client = oidc_multi._build_client(_provider(), dict(_OIDC_CONFIG))
+    assert "offline_access" not in (client.base_scopes or [])
+
+
+def test_offline_access_kept_when_idp_advertises_it(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    monkeypatch.setattr(
+        oidc_multi,
+        "VerifiedEmailOpenID",
+        _openid_stub_with_discovery(["openid", "email", "offline_access"]),
+    )
+    client = oidc_multi._build_client(_provider(), dict(_OIDC_CONFIG))
+    assert "offline_access" in (client.base_scopes or [])
+
+
+def test_offline_access_kept_when_discovery_has_no_scopes_supported(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    monkeypatch.setattr(
+        oidc_multi, "VerifiedEmailOpenID", _openid_stub_with_discovery(None)
+    )
+    client = oidc_multi._build_client(_provider(), dict(_OIDC_CONFIG))
+    assert "offline_access" in (client.base_scopes or [])
+
+
+def test_explicitly_configured_offline_access_is_never_dropped(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    monkeypatch.setattr(
+        oidc_multi,
+        "VerifiedEmailOpenID",
+        _openid_stub_with_discovery(["openid", "email"]),
+    )
+    config = {**_OIDC_CONFIG, "scopes": ["openid", "email", "offline_access"]}
+    client = oidc_multi._build_client(_provider(), config)
+    assert "offline_access" in (client.base_scopes or [])
+
+
 @pytest.mark.asyncio
 async def test_client_cache_hits_and_rebuilds_on_config_change(
     monkeypatch: pytest.MonkeyPatch,

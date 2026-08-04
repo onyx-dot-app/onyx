@@ -8,13 +8,13 @@ from uuid import uuid4
 
 from onyx.server.features.build.configs import (
     OPENCODE_PROMPT_INACTIVITY_TIMEOUT_SECONDS,
-    PROMPT_SLOT_KEEP_ALIVE_MAX_SECONDS,
 )
 from onyx.server.features.build.sandbox.event_schema import PromptResponse
 from onyx.server.features.build.sandbox.kubernetes.kubernetes_sandbox_manager import (
     KubernetesSandboxManager,
 )
 from onyx.server.features.build.sandbox.models import PromptAttachment
+from onyx.server.features.build.timeouts import PROMPT_SLOT_KEEP_ALIVE_MAX_SECONDS
 
 
 class _FakeServeClient:
@@ -59,7 +59,7 @@ def _manager_with(client: _FakeServeClient) -> KubernetesSandboxManager:
     def build_client(*_: Any, **__: Any) -> _FakeServeClient:
         return client
 
-    manager._build_serve_client = build_client  # type: ignore[method-assign]
+    manager._build_serve_client = build_client  # ty: ignore[invalid-assignment]
     return manager
 
 
