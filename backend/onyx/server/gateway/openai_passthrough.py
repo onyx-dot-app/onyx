@@ -7,6 +7,8 @@ import hashlib
 import json
 import queue
 import threading
+import time
+import uuid
 from contextlib import ExitStack
 from typing import Any
 
@@ -27,7 +29,12 @@ from onyx.server.gateway.configs import (
     OPENAI_PASSTHROUGH_CONNECT_TIMEOUT_SECONDS,
     OPENAI_PASSTHROUGH_READ_TIMEOUT_SECONDS,
 )
-from onyx.server.gateway.models import ResponsesRequest
+from onyx.server.gateway.models import (
+    ResponsesErrorCode,
+    ResponsesFailedEvent,
+    ResponsesObjectPayload,
+    ResponsesRequest,
+)
 from onyx.server.gateway.stream_bridge import (
     _put_stream_item,
     _sse_response,
@@ -328,7 +335,23 @@ def handle_openai_responses_passthrough(
                 )
             return _non_streaming_error_response(response)
 
-        response_body = response.json()
+        try:
+            response_body = response.json()
+            if not isinstance(response_body, dict):
+                raise ValueError("response body is not an object")
+        except ValueError as e:
+            if span is not None:
+                span.set_error(
+                    {
+                        "message": f"malformed upstream response: {type(e).__name__}",
+                        "data": None,
+                    }
+                )
+            logger.warning(
+                "OpenAI passthrough returned a malformed success response for model %s",
+                request.model,
+            )
+            raise OnyxError(OnyxErrorCode.BAD_GATEWAY, _SANITIZED_ERROR) from e
         usage = response_body.get("usage")
         output_items = response_body.get("output") or []
         text = "\n\n".join(
@@ -375,10 +398,27 @@ def _openai_passthrough_stream_worker(
     out: "queue.Queue[Any]",
     cancelled: threading.Event,
 ) -> None:
+    response_id = f"resp_{uuid.uuid4().hex}"
+    response_created_at = int(time.time())
+    next_sequence_number = 0
+
     def emit_error(*, message: str, error_type: str) -> None:
+        code: ResponsesErrorCode = (
+            "rate_limit_exceeded"
+            if error_type in ("rate_limit_error", "rate_limit_exceeded")
+            else "server_error"
+        )
         payload = {
-            "type": "response.failed",
-            "response": {"error": {"message": message, "type": error_type}},
+            **ResponsesFailedEvent.create(
+                ResponsesObjectPayload.failed(
+                    response_id=response_id,
+                    created_at=response_created_at,
+                    model=model,
+                    message=message,
+                    code=code,
+                )
+            ).to_wire(),
+            "sequence_number": next_sequence_number,
         }
         _put_stream_item(out, f"data: {json.dumps(payload)}\n\n", cancelled)
 
@@ -439,6 +479,9 @@ def _openai_passthrough_stream_worker(
                 return
 
             frame_lines: list[str] = []
+            frame_response_id: str | None = None
+            frame_created_at: int | None = None
+            frame_next_sequence: int | None = None
             for line in response.iter_lines():
                 if cancelled.is_set():
                     break
@@ -448,6 +491,15 @@ def _openai_passthrough_stream_worker(
                         frame_lines = []
                         if not _put_stream_item(out, frame_text + "\n\n", cancelled):
                             break
+                        if frame_response_id is not None:
+                            response_id = frame_response_id
+                        if frame_created_at is not None:
+                            response_created_at = frame_created_at
+                        if frame_next_sequence is not None:
+                            next_sequence_number = frame_next_sequence
+                        frame_response_id = None
+                        frame_created_at = None
+                        frame_next_sequence = None
                     continue
                 frame_lines.append(line)
                 if not line.startswith("data: "):
@@ -462,6 +514,17 @@ def _openai_passthrough_stream_worker(
                     )
                     continue
                 event_type = event.get("type")
+                event_response = event.get("response")
+                if isinstance(event_response, dict):
+                    upstream_response_id = event_response.get("id")
+                    if isinstance(upstream_response_id, str):
+                        frame_response_id = upstream_response_id
+                    upstream_created_at = event_response.get("created_at")
+                    if isinstance(upstream_created_at, int):
+                        frame_created_at = upstream_created_at
+                upstream_sequence = event.get("sequence_number")
+                if isinstance(upstream_sequence, int):
+                    frame_next_sequence = upstream_sequence + 1
                 if event_type == "response.output_text.delta":
                     delta_text = event.get("delta")
                     if isinstance(delta_text, str):
@@ -488,7 +551,13 @@ def _openai_passthrough_stream_worker(
                         if error and span is not None:
                             span.set_error({"message": str(error), "data": None})
             if frame_lines and not cancelled.is_set():
-                _put_stream_item(out, "\n".join(frame_lines) + "\n\n", cancelled)
+                if _put_stream_item(out, "\n".join(frame_lines) + "\n\n", cancelled):
+                    if frame_response_id is not None:
+                        response_id = frame_response_id
+                    if frame_created_at is not None:
+                        response_created_at = frame_created_at
+                    if frame_next_sequence is not None:
+                        next_sequence_number = frame_next_sequence
             # Managed-key cost accounting normally happens inside
             # LLM.invoke/stream, which this path bypasses.
             if state.usage is not None and isinstance(llm, LitellmLLM):

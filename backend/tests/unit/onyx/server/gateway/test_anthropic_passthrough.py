@@ -20,6 +20,8 @@ from onyx.server.gateway.anthropic_passthrough import (
     AnthropicPassthroughUnavailable,
     _build_upstream_headers,
     _build_upstream_request,
+    _count_tokens_url,
+    _messages_url,
     _non_streaming_error_response,
     _streaming_error_event,
     _usage_from_anthropic_wire,
@@ -48,6 +50,23 @@ def _anthropic_llm() -> _ConfigOnlyLLM:
             temperature=0,
             max_input_tokens=1_000,
         )
+    )
+
+
+def test_passthrough_urls_append_paths_before_query_credentials() -> None:
+    provider = _provider(1, "anthropic", [_model("claude-sonnet-4-6")])
+    provider.api_base = "https://proxy.example/anthropic?api-key=secret"
+
+    assert _messages_url(provider) == (
+        "https://proxy.example/anthropic/v1/messages?api-key=secret"
+    )
+    assert _count_tokens_url(provider) == (
+        "https://proxy.example/anthropic/v1/messages/count_tokens?api-key=secret"
+    )
+
+    provider.api_base = "https://proxy.example/anthropic/v1?api-key=secret"
+    assert _messages_url(provider) == (
+        "https://proxy.example/anthropic/v1/messages?api-key=secret"
     )
 
 

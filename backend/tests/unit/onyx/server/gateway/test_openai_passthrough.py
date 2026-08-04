@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import hashlib
 import json
+from collections.abc import Iterator
 from contextlib import contextmanager, nullcontext
 from typing import Any
 from unittest.mock import MagicMock, patch
@@ -450,7 +451,8 @@ def test_build_upstream_request_forwards_unknown_future_fields() -> None:
 def test_build_upstream_headers_only_authorization_and_content_type() -> None:
     provider = _provider(1, "openai", [_model("gpt-5-mini")])
 
-    headers = _build_upstream_headers(provider)
+    with patch.object(openai_passthrough, "build_llm_extra_headers", return_value={}):
+        headers = _build_upstream_headers(provider)
 
     assert headers == {
         "Authorization": f"Bearer {provider.api_key}",
@@ -739,6 +741,16 @@ def test_handle_openai_passthrough_non_streaming_forwards_200_body_verbatim() ->
     assert payload["id"] == "resp_upstream_abc123"
 
 
+def test_handle_openai_passthrough_non_streaming_sanitizes_malformed_200() -> None:
+    fake_response = httpx.Response(200, content=b"not json")
+
+    with pytest.raises(OnyxError) as exc_info:
+        _non_streaming_run(fake_response)
+
+    assert exc_info.value.error_code is OnyxErrorCode.BAD_GATEWAY
+    assert exc_info.value.detail == _SANITIZED_ERROR
+
+
 def test_handle_openai_passthrough_non_streaming_records_usage() -> None:
     fake_response = httpx.Response(200, json=_UPSTREAM_RESPONSE_BODY)
     mock_span = MagicMock()
@@ -807,15 +819,22 @@ def _expected_sse_text(events: list[dict[str, Any]]) -> str:
 
 class _FakeStreamResponse:
     def __init__(
-        self, status_code: int, lines: list[str], content: bytes = b""
+        self,
+        status_code: int,
+        lines: list[str],
+        content: bytes = b"",
+        stream_error: Exception | None = None,
     ) -> None:
         self.status_code = status_code
         self._lines = lines
         self.content = content
+        self.stream_error = stream_error
         self.closed = False
 
-    def iter_lines(self) -> list[str]:
-        return self._lines
+    def iter_lines(self) -> Iterator[str]:
+        yield from self._lines
+        if self.stream_error is not None:
+            raise self.stream_error
 
     def read(self) -> None:
         pass
@@ -1012,7 +1031,7 @@ def test_passthrough_stream_sanitizes_non_forwardable_statuses(
 
     assert len(frames) == 1
     data = json.loads(frames[0][len("data: ") : -2])
-    assert data["response"]["error"]["type"] == "api_error"
+    assert data["response"]["error"]["code"] == "server_error"
     assert data["response"]["error"]["message"] == _SANITIZED_ERROR
     assert "leaked key xyz" not in "".join(frames)
 
@@ -1027,7 +1046,7 @@ def test_passthrough_stream_forwards_429_type_and_message_verbatim() -> None:
 
     assert len(frames) == 1
     data = json.loads(frames[0][len("data: ") : -2])
-    assert data["response"]["error"]["type"] == "rate_limit_exceeded"
+    assert data["response"]["error"]["code"] == "rate_limit_exceeded"
     assert data["response"]["error"]["message"] == "quota exceeded"
 
 
@@ -1084,6 +1103,34 @@ def test_passthrough_stream_upstream_error_emits_single_error_frame() -> None:
     data = json.loads(frames[0][len("data: ") : -2])
     assert data["type"] == "response.failed"
     assert data["response"]["error"]["message"] == "bad request"
+    assert data["response"]["status"] == "failed"
+    assert data["response"]["model"] == "gpt-5-mini"
+    assert data["response"]["output"] == []
+    assert data["sequence_number"] == 0
+
+
+def test_passthrough_stream_transport_error_continues_response_identity() -> None:
+    created_event = {
+        "type": "response.created",
+        "sequence_number": 7,
+        "response": {
+            "id": "resp_upstream",
+            "created_at": 123,
+        },
+    }
+    response = _FakeStreamResponse(
+        200,
+        _sse_lines([created_event]),
+        stream_error=httpx.ReadError("stream failed"),
+    )
+
+    frames, _ = _run_passthrough_stream(response)
+
+    assert json.loads(frames[0][len("data: ") : -2]) == created_event
+    failure = json.loads(frames[1][len("data: ") : -2])
+    assert failure["response"]["id"] == "resp_upstream"
+    assert failure["response"]["created_at"] == 123
+    assert failure["sequence_number"] == 8
 
 
 def test_passthrough_stream_closes_exitstack_resources() -> None:
