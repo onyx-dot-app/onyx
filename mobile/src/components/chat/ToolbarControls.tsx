@@ -32,7 +32,7 @@ export function ToolbarControls() {
   // `SelectButton`'s `self-start` would top-align the 28px pill against the 36px paperclip;
   // hugging it here keeps the row centered.
   return (
-    <View className="flex-row items-center gap-8">
+    <View className="min-w-0 shrink flex-row items-center gap-8">
       <ActionsMenu />
 
       {showDeepResearch ? (

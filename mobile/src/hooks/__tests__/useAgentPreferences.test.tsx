@@ -26,8 +26,12 @@ const SERVER_URL = "https://example.test";
 // and mask the very races these tests exist to catch.
 function fakeServer(
   initial: AgentPreferences,
-  { patchInFlight = false }: { patchInFlight?: boolean } = {},
+  {
+    patchInFlight = false,
+    patchDelaysMs = [],
+  }: { patchInFlight?: boolean; patchDelaysMs?: number[] } = {},
 ) {
+  let patchCount = 0;
   let stored: AgentPreferences = initial;
   apiFetchMock.mockImplementation(async (path, init) => {
     if (init?.method === "PATCH") {
@@ -36,8 +40,14 @@ function fakeServer(
         disabled_tool_ids: number[];
       };
       // Committing a tick late lets a second toggle start before the first lands — the only way
-      // to observe the concurrent path the UI actually takes.
-      if (patchInFlight) await new Promise((resolve) => setTimeout(resolve, 0));
+      // to observe the concurrent path the UI actually takes. `patchDelaysMs` additionally lets a
+      // test make an earlier request finish last.
+      const delay = patchDelaysMs[patchCount++];
+      if (delay !== undefined) {
+        await new Promise((resolve) => setTimeout(resolve, delay));
+      } else if (patchInFlight) {
+        await new Promise((resolve) => setTimeout(resolve, 0));
+      }
       stored = { ...stored, [agentId]: { disabled_tool_ids } };
       return undefined;
     }
@@ -204,6 +214,28 @@ describe("useAgentPreferences", () => {
     const server = fakeServer(
       { "5": { disabled_tool_ids: [] } },
       { patchInFlight: true },
+    );
+
+    const { result, settle } = renderPreferences();
+    await waitFor(() => expect(apiFetchMock).toHaveBeenCalled());
+
+    await act(async () => {
+      await Promise.all([
+        result.current.toggleDisabledTool(5, 1),
+        result.current.toggleDisabledTool(5, 2),
+      ]);
+    });
+    await settle();
+
+    expect(server.disabledFor(5)).toEqual([1, 2]);
+  });
+
+  it("keeps both toggles when the first PATCH lands after the second", async () => {
+    // Whole-record writes are last-write-wins on the server, so an out-of-order completion would
+    // silently undo the second toggle unless the writes are serialized.
+    const server = fakeServer(
+      { "5": { disabled_tool_ids: [] } },
+      { patchDelaysMs: [40, 0] },
     );
 
     const { result, settle } = renderPreferences();

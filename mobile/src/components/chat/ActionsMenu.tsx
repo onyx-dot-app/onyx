@@ -2,7 +2,7 @@
 // web/src/refresh-components/popovers/ActionsPopover/index.tsx. Named for the menu, not its
 // container: the container is deliberately swappable (see components/ui/sheet.tsx).
 import { useState } from "react";
-import { ScrollView } from "react-native";
+import { Keyboard, ScrollView } from "react-native";
 
 import { ActionLineItem } from "@/components/chat/ActionLineItem";
 import { Button } from "@/components/ui/button";
@@ -31,7 +31,12 @@ export function ActionsMenu() {
         prominence="tertiary"
         icon={SvgSliders}
         accessibilityLabel="Manage Actions"
-        onPress={() => setOpen(true)}
+        onPress={() => {
+          // The sheet slides up from the same edge the keyboard occupies; leaving it raised
+          // covers the bottom of the list.
+          Keyboard.dismiss();
+          setOpen(true);
+        }}
       />
 
       <Sheet visible={open} onClose={() => setOpen(false)} title="Actions">

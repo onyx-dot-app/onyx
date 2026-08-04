@@ -12,6 +12,19 @@ import { useSession } from "@/state/session";
 
 const EMPTY_PREFERENCES: AgentPreferences = {};
 
+// The PATCH replaces the whole record, so two in-flight writes are last-write-wins on the server
+// regardless of how carefully we compose them here — an earlier request completing second would
+// undo the later toggle. Chaining keeps one write in flight at a time. Module-scoped because the
+// record is per-user, not per-hook-instance.
+let writeQueue: Promise<unknown> = Promise.resolve();
+
+function enqueueWrite<T>(write: () => Promise<T>): Promise<T> {
+  const next = writeQueue.then(write, write);
+  // Keep the chain alive after a rejection so one failure can't wedge every later toggle.
+  writeQueue = next.catch(() => undefined);
+  return next;
+}
+
 export interface UseAgentPreferences {
   preferences: AgentPreferences;
   disabledToolIdsFor: (agentId: number) => number[];
@@ -49,7 +62,8 @@ export function useAgentPreferences(): UseAgentPreferences {
             queryKey: key,
             queryFn: ({ signal }) => getAgentPreferences(signal),
           });
-        } catch {
+        } catch (error) {
+          console.error("Failed to load agent preferences", error);
           toast.error("Couldn't update this action.");
           return;
         }
@@ -70,8 +84,9 @@ export function useAgentPreferences(): UseAgentPreferences {
       });
 
       try {
-        await patchAgentPreferences(agentId, next);
-      } catch {
+        await enqueueWrite(() => patchAgentPreferences(agentId, next));
+      } catch (error) {
+        console.error("Failed to save agent preferences", error);
         queryClient.setQueryData(key, previous);
         toast.error("Couldn't update this action.");
       } finally {

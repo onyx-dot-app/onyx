@@ -71,16 +71,30 @@ export function useComposerToolsState({
   const { disabledToolIdsFor, toggleDisabledTool } = useAgentPreferences();
 
   /*
-   * `agent` goes null after a send until the session lands in the sessions list, and stays null
-   * for a project chat's whole life (that list is fetched with only_non_project_chats=true). Only
-   * our knowledge lapses, not the agent, so hold the last one — otherwise the menu vanishes and
-   * the send re-allows tools the user switched off. Adjusted during render, not in an effect, so
-   * the hold is right on the first render that loses the agent; compared by id so a caller that
-   * rebuilds the object each render can't loop.
+   * `agent` goes null for a beat after a send, before the new session reaches the sessions list.
+   * Only our knowledge lapses, not the agent, so hold the last one — otherwise the menu vanishes
+   * and the send re-allows tools the user switched off.
+   *
+   * The hold is stamped with the conversation it belongs to and is only honoured back in that
+   * same conversation, so it can never describe a chat it was not captured in. The one promotion
+   * is null → new session: that transition is the send itself. Adjusted during render, not in an
+   * effect, so the hold is right on the first render that loses the agent; compared by id so a
+   * caller that rebuilds the object each render can't loop.
    */
-  const [heldAgent, setHeldAgent] = useState<MinimalAgent | null>(agent);
-  if (agent && heldAgent?.id !== agent.id) setHeldAgent(agent);
-  const effectiveAgent = agent ?? heldAgent;
+  const [held, setHeld] = useState<{
+    agent: MinimalAgent | null;
+    sessionId: string | null;
+  }>({ agent, sessionId: chatSessionId });
+  if (
+    agent &&
+    (held.agent?.id !== agent.id || held.sessionId !== chatSessionId)
+  ) {
+    setHeld({ agent, sessionId: chatSessionId });
+  } else if (!agent && held.sessionId === null && chatSessionId !== null) {
+    setHeld({ agent: held.agent, sessionId: chatSessionId });
+  }
+  const effectiveAgent =
+    agent ?? (held.sessionId === chatSessionId ? held.agent : null);
   const effectiveAgentId = effectiveAgent?.id;
 
   // No agent has ever resolved → leave the pill as the user set it rather than withdrawing a

@@ -86,10 +86,11 @@ function agent(tools: ToolSnapshot[]): MinimalAgent {
   };
 }
 
+// One client per test, created outside the wrapper: building it inside would hand every render a
+// fresh cache and drop what a rerender is meant to observe. gcTime 0 keeps no timers behind.
+let client: QueryClient;
+
 function wrapper({ children }: { children: React.ReactNode }) {
-  const client = new QueryClient({
-    defaultOptions: { queries: { retry: false } },
-  });
   return <QueryClientProvider client={client}>{children}</QueryClientProvider>;
 }
 
@@ -114,6 +115,9 @@ describe("useComposerToolsState", () => {
     mockDeepResearchAdminEnabled = true;
     apiFetchMock.mockReset();
     apiFetchMock.mockResolvedValue({});
+    client = new QueryClient({
+      defaultOptions: { queries: { retry: false, gcTime: 0 } },
+    });
   });
 
   it("shows deep research when the admin allows it and the agent can search", () => {
@@ -295,6 +299,42 @@ describe("useComposerToolsState", () => {
     });
     expect(result.current.disabledToolIds).toEqual([2]);
     expect(result.current.resolveToolOptions().allowedToolIds).toEqual([1]);
+  });
+
+  it("refuses to describe a different conversation with the previous one's agent", async () => {
+    apiFetchMock.mockResolvedValue({ "0": { disabled_tool_ids: [2] } });
+    const { result, rerender } = renderHook(
+      (props: Parameters<typeof useComposerToolsState>[0]) =>
+        useComposerToolsState(props),
+      {
+        wrapper,
+        initialProps: {
+          chatSessionId: "session-1",
+          agent: agent([searchTool, imageTool]),
+          isProjectWorkflow: false,
+          projectId: null,
+        },
+      },
+    );
+    await waitFor(() => expect(result.current.actionTools).toHaveLength(2));
+    act(() => result.current.toggleForcedTool(2));
+
+    // A different chat whose agent hasn't resolved yet: the held agent describes session-1, so
+    // using it here would send another agent's tool ids against this conversation's persona.
+    rerender({
+      chatSessionId: "session-2",
+      agent: null,
+      isProjectWorkflow: false,
+      projectId: null,
+    });
+
+    expect(result.current.actionTools).toEqual([]);
+    expect(result.current.resolveToolOptions()).toEqual({
+      deepResearch: false,
+      allowedToolIds: null,
+      forcedToolId: null,
+      internalSearchFilters: null,
+    });
   });
 
   it("still sends the force and the allowlist while the agent is momentarily unknown", async () => {

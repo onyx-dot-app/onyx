@@ -79,8 +79,11 @@ describe("ActionsMenu", () => {
     renderMenu();
     fireEvent.press(screen.getByLabelText("Manage Actions"));
 
-    expect(screen.getByText("Search")).toBeTruthy();
-    expect(screen.getByText("Generate Image")).toBeTruthy();
+    // An ordered exact match, so a duplicated or reordered row fails here.
+    const labels = screen
+      .getAllByText(/^(Search|Generate Image)$/)
+      .map((node) => node.props.children);
+    expect(labels).toEqual(["Search", "Generate Image"]);
   });
 
   it("forces the tapped tool and closes", () => {

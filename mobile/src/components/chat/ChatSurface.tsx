@@ -102,13 +102,14 @@ function ChatSurfaceContent({ focus }: { focus: ChatFocus }) {
   // persistent composer.
   const draft = useComposerDraft(`${sessionId ?? "new"}:${projectId ?? ""}`);
 
-  // null while the agent isn't knowable: until the new session reaches the sessions list (or is
-  // hydrated), `liveAgent` falls back to the default agent, which would look like an agent switch
-  // and re-gate the toolbar mid-conversation.
+  // null while the agent isn't knowable: until the session's persona is known (from the list or
+  // from hydration), `liveAgent` falls back to the default agent, which would look like an agent
+  // switch and re-gate the toolbar mid-conversation. `persona_id` is nullable, so a session row
+  // alone is not proof of knowledge.
+  const conversationPersonaKnown =
+    session?.persona_id != null || conversationPersonaId != null;
   const conversationAgent =
-    sessionId == null || session || conversationPersonaId != null
-      ? liveAgent
-      : null;
+    sessionId == null || conversationPersonaKnown ? liveAgent : null;
   // Project chats are always created with the default persona (see `personaId` above), so the tool
   // controls must describe that persona — not whichever agent the sidebar happens to have selected.
   // Otherwise the menu lists another agent's tools and a forced id from it kills the turn
