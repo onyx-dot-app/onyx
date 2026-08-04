@@ -8,12 +8,14 @@ from ee.onyx.connectors.capability_checks import (
     get_perm_sync_capability_checks,
 )
 from onyx.configs.constants import DocumentSource
+from onyx.connectors import source_operations as source_operations_module
 from onyx.connectors.capability_checks.models import (
     CapabilityCheck,
     CapabilityCheckContext,
     CredentialCapability,
 )
 from onyx.connectors.interfaces import BaseConnector
+from onyx.connectors.source_operations import SourceOperations
 
 
 class _NamedCheck(CapabilityCheck):
@@ -94,6 +96,13 @@ def test_named_checks_ignore_the_probe_allowlist(
     with registered named checks still returns them.
     """
     # Precondition.
+    # The ratchet requires a gateway wherever named checks register.
+    monkeypatch.setattr(source_operations_module, "_SOURCE_OPERATIONS_BY_SOURCE", {})
+
+    class _SlackOperations(SourceOperations):
+        source = DocumentSource.SLACK
+        sdk_modules = ()
+
     named_check = _NamedCheck(
         capability=CredentialCapability.DOC_PERMISSION_SYNC,
         check_id="slack_named_check",
@@ -135,8 +144,15 @@ def test_registered_checks_clobber_only_their_capability(
     Verifies named checks clobber the fallback per capability, not per source.
     """
     # Precondition.
-    # Nothing is registered at framework stage, so register a named doc-sync
-    # check the way a per-connector session would.
+    # Nothing is registered at the framework layer, so register a gateway and a
+    # named doc-sync check the way a per-connector session would (the ratchet
+    # requires the gateway).
+    monkeypatch.setattr(source_operations_module, "_SOURCE_OPERATIONS_BY_SOURCE", {})
+
+    class _GoogleDriveOperations(SourceOperations):
+        source = DocumentSource.GOOGLE_DRIVE
+        sdk_modules = ()
+
     named_check = _NamedCheck(
         capability=CredentialCapability.DOC_PERMISSION_SYNC,
         check_id="google_drive_named_check",

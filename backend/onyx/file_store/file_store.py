@@ -49,6 +49,22 @@ if TYPE_CHECKING:
 logger = setup_logger()
 
 
+# Persisted in file_record.file_size when the backing object is confirmed
+# missing, so listings stop re-probing the object store for it. Rendered as
+# "unknown" (None) in API responses.
+FILE_SIZE_MISSING_SENTINEL = -1
+
+
+def content_byte_size(file_content: object) -> int | None:
+    """Stored size in bytes of save_file content. str content is uploaded
+    UTF-8 encoded by every backend, so its size is the encoded length."""
+    if isinstance(file_content, (bytes, bytearray)):
+        return len(file_content)
+    if isinstance(file_content, str):
+        return len(file_content.encode("utf-8"))
+    return None
+
+
 class S3PutKwargs(TypedDict):
     ChecksumSHA256: NotRequired[str]
 
@@ -392,6 +408,7 @@ class S3BackedFileStore(FileStore):
                 object_key=s3_key,
                 db_session=db_session,
                 file_metadata=file_metadata,
+                file_size=content_byte_size(file_content),
             )
             db_session.commit()
 
@@ -460,6 +477,17 @@ class S3BackedFileStore(FileStore):
                 Bucket=file_record.bucket_name, Key=file_record.object_key
             )
             return response.get("ContentLength")
+        except ClientError as e:
+            if e.response.get("Error", {}).get("Code") in (
+                "404",
+                "NotFound",
+                "NoSuchKey",
+            ):
+                raise FileNotFoundError(
+                    f"Object for file {file_id} does not exist"
+                ) from e
+            logger.warning("Error getting file size for %s: %s", file_id, e)
+            return None
         except Exception as e:
             logger.warning("Error getting file size for %s: %s", file_id, e)
             return None
@@ -549,6 +577,7 @@ class S3BackedFileStore(FileStore):
                     object_key=old_file_record.object_key,
                     db_session=db_session,
                     file_metadata=file_metadata,
+                    file_size=old_file_record.file_size,
                 )
 
                 delete_filerecord_by_file_id(file_id=old_file_id, db_session=db_session)
