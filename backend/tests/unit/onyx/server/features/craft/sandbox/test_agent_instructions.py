@@ -1,5 +1,6 @@
 import re
 from pathlib import Path
+from uuid import UUID
 
 import pytest
 
@@ -45,6 +46,7 @@ def test_generate_agent_instructions_populates_real_template_without_skills_sect
         provider="openai",
         model_name="gpt-5-mini",
         nextjs_port=3210,
+        session_id=UUID("0d9ed7f2-8757-4d09-9812-bd7e4a45e232"),
         disabled_tools=["web-search", "shell"],
         user_name="TEST_USER",
     )
@@ -55,6 +57,21 @@ def test_generate_agent_instructions_populates_real_template_without_skills_sect
     assert "web-search, shell" in content
     assert "## Skills" not in content
     assert "{{AVAILABLE_SKILLS_SECTION}}" not in content
+    assert _unresolved_placeholders(content) == set()
+
+
+def test_generate_agent_instructions_renders_webapp_preview_url() -> None:
+    """The agent must be told the exact preview URL — a base-path'd dev server
+    404s on every path outside the base path, so port alone is not enough."""
+    session_id = UUID("0d9ed7f2-8757-4d09-9812-bd7e4a45e232")
+    content = agent_instructions.generate_agent_instructions(
+        template_path=_template_path(),
+        connectable_apps_section="",
+        nextjs_port=3210,
+        session_id=session_id,
+    )
+
+    assert f"http://localhost:3210/api/build/sessions/{session_id}/webapp" in content
     assert _unresolved_placeholders(content) == set()
 
 

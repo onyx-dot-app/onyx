@@ -1056,6 +1056,7 @@ class DockerSandboxManager(SandboxManager):
         agent_model: str | None,
         nextjs_port: int | None,
         connectable_apps_section: str,
+        session_id: UUID | None = None,
         user_name: str | None = None,
     ) -> str:
         """Raw (unescaped) AGENTS.md content."""
@@ -1065,6 +1066,7 @@ class DockerSandboxManager(SandboxManager):
             provider=agent_provider,
             model_name=agent_model,
             nextjs_port=nextjs_port,
+            session_id=session_id,
             disabled_tools=OPENCODE_DISABLED_TOOLS,
             user_name=user_name,
             organization_instructions=load_settings().craft_instructions,
@@ -1087,6 +1089,7 @@ class DockerSandboxManager(SandboxManager):
             agent_model=llm_config.model_name,
             nextjs_port=nextjs_port,
             connectable_apps_section=connectable_apps_section,
+            session_id=session_id,
             user_name=user_name,
         )
         session_opencode_config = json.dumps(
@@ -1509,6 +1512,7 @@ fi
             agent_model=agent_model,
             nextjs_port=nextjs_port,
             connectable_apps_section=connectable_apps_section,
+            session_id=session_id,
             user_name=user_name,
         )
         session_opencode_config = (

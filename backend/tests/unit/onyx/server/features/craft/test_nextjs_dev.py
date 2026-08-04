@@ -78,6 +78,16 @@ def test_template_dev_script_wires_port_to_managed_env_and_port_file() -> None:
     ) / ".nextjs-port"
 
 
+def test_template_scripts_match_documented_tool_contract() -> None:
+    """The template AGENTS.md documents `bun run lint` (oxlint) and
+    `bun run typecheck`; both scripts must exist, or agents fall back to
+    guessed commands (eslint, bare tsc) that fail in the sandbox."""
+    scripts = json.loads(_TEMPLATE_PACKAGE_JSON.read_text())["scripts"]
+
+    assert scripts["lint"] == "oxlint"
+    assert scripts["typecheck"] == "tsc --noEmit"
+
+
 def test_start_script_passes_port_flag_when_dev_script_ignores_env() -> None:
     """A `dev` script without the ONYX_WEBAPP_PORT marker (legacy scaffold, or
     rewritten by the agent) ignores the env var and would bind 3000; the

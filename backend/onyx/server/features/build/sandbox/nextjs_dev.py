@@ -6,6 +6,7 @@ environment (base path, allowed dev origins) stays identical across backends.
 
 from pathlib import Path
 from urllib.parse import urlparse
+from uuid import UUID
 
 from onyx.configs.app_configs import WEB_DOMAIN
 from onyx.server.features.build.sandbox.base import BUN_CACHE_DIR
@@ -13,6 +14,15 @@ from onyx.server.features.build.sandbox.base import BUN_CACHE_DIR
 _TEMPLATE_NEXT_CONFIG = (
     Path(__file__).parent / "image" / "templates" / "outputs" / "web" / "next.config.ts"
 )
+
+
+def webapp_base_path(session_id: UUID | str) -> str:
+    """Base path a session's Next.js dev server serves under.
+
+    Mirrored by the start script below, the template next.config.ts cwd
+    fallback, and the preview proxy's upstream path.
+    """
+    return f"/api/build/sessions/{session_id}/webapp"
 
 
 def allowed_dev_origins() -> str:
