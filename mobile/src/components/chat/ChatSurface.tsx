@@ -22,6 +22,10 @@ import { useChatController } from "@/hooks/useChatController";
 import { useChatSessionController } from "@/hooks/useChatSessionController";
 import { useLiveAgent } from "@/hooks/useLiveAgent";
 import { useComposerDraft } from "@/hooks/useComposerDraft";
+import {
+  ComposerToolsProvider,
+  useComposerToolsState,
+} from "@/state/ComposerToolsProvider";
 
 const TRANSITION_MS = 150;
 
@@ -81,6 +85,16 @@ function ChatSurfaceContent({ focus }: { focus: ChatFocus }) {
   // persistent composer.
   const draft = useComposerDraft(`${sessionId ?? "new"}:${projectId ?? ""}`);
 
+  // null while the agent isn't knowable: until the new session reaches the sessions list,
+  // `liveAgent` falls back to the default agent, which would look like an agent switch and re-gate
+  // the toolbar mid-conversation.
+  const conversationAgent = sessionId == null || session ? liveAgent : null;
+  const composerTools = useComposerToolsState({
+    chatSessionId: sessionId,
+    agent: conversationAgent,
+    isProjectWorkflow: isProject,
+  });
+
   const { data: details, isLoading } = useProjectDetails(projectId);
   const { agents } = useAgents();
   const chats = details?.project?.chat_sessions ?? [];
@@ -101,6 +115,7 @@ function ChatSurfaceContent({ focus }: { focus: ChatFocus }) {
       message ?? draft.text,
       draft.descriptors,
       message == null ? draft.consume : draft.consumeAttachments,
+      composerTools.resolveToolOptions(),
     );
   };
 
@@ -143,51 +158,53 @@ function ChatSurfaceContent({ focus }: { focus: ChatFocus }) {
   ) : undefined;
 
   return (
-    <ChatScreen title={title} input={composer} below={below}>
-      {isProject ? (
-        <Animated.View
-          key="project-context"
-          entering={FadeIn.duration(TRANSITION_MS)}
-          exiting={FadeOut.duration(TRANSITION_MS)}
-          className="max-h-[50%]"
-        >
-          <ScrollView keyboardShouldPersistTaps="handled">
-            <View className="gap-24 px-24 pb-8 pt-8">
-              <ProjectContextPanel
-                projectId={projectId}
-                details={details}
-                isLoading={isLoading}
-              />
-            </View>
-          </ScrollView>
-        </Animated.View>
-      ) : messages.length === 0 && !isHydrating ? (
-        <Animated.View
-          key="empty"
-          entering={FadeIn.duration(TRANSITION_MS)}
-          exiting={FadeOut.duration(TRANSITION_MS)}
-          className="flex-1"
-        >
-          <ChatEmptyState
-            agent={liveAgent}
-            isDefaultAgent={isDefaultAgent}
-            onStarterSelect={sendWithAttachments}
-          />
-        </Animated.View>
-      ) : (
-        <Animated.View
-          key="messages"
-          entering={FadeIn.duration(TRANSITION_MS)}
-          exiting={FadeOut.duration(TRANSITION_MS)}
-          className="flex-1"
-        >
-          <MessageList
-            key={sessionId ?? "new"}
-            messages={messages}
-            agent={liveAgent}
-          />
-        </Animated.View>
-      )}
-    </ChatScreen>
+    <ComposerToolsProvider value={composerTools}>
+      <ChatScreen title={title} input={composer} below={below}>
+        {isProject ? (
+          <Animated.View
+            key="project-context"
+            entering={FadeIn.duration(TRANSITION_MS)}
+            exiting={FadeOut.duration(TRANSITION_MS)}
+            className="max-h-[50%]"
+          >
+            <ScrollView keyboardShouldPersistTaps="handled">
+              <View className="gap-24 px-24 pb-8 pt-8">
+                <ProjectContextPanel
+                  projectId={projectId}
+                  details={details}
+                  isLoading={isLoading}
+                />
+              </View>
+            </ScrollView>
+          </Animated.View>
+        ) : messages.length === 0 && !isHydrating ? (
+          <Animated.View
+            key="empty"
+            entering={FadeIn.duration(TRANSITION_MS)}
+            exiting={FadeOut.duration(TRANSITION_MS)}
+            className="flex-1"
+          >
+            <ChatEmptyState
+              agent={liveAgent}
+              isDefaultAgent={isDefaultAgent}
+              onStarterSelect={sendWithAttachments}
+            />
+          </Animated.View>
+        ) : (
+          <Animated.View
+            key="messages"
+            entering={FadeIn.duration(TRANSITION_MS)}
+            exiting={FadeOut.duration(TRANSITION_MS)}
+            className="flex-1"
+          >
+            <MessageList
+              key={sessionId ?? "new"}
+              messages={messages}
+              agent={liveAgent}
+            />
+          </Animated.View>
+        )}
+      </ChatScreen>
+    </ComposerToolsProvider>
   );
 }

@@ -6,6 +6,7 @@ import { textPresets } from "@onyx-ai/shared/native";
 import { useRecentFiles } from "@/hooks/useRecentFiles";
 import { FileCard } from "@/components/chat/FileCard";
 import { FilePickerSheet } from "@/components/chat/FilePickerSheet";
+import { ToolbarControls } from "@/components/chat/ToolbarControls";
 import { Button } from "@/components/ui/button";
 import { Text } from "@/components/ui/text";
 import { FieldTextInput as ComposerInput } from "@/components/ui/text-input";
@@ -124,6 +125,7 @@ export function InputBar({
               accessibilityLabel="Attach files"
               onPress={() => setPickerOpen(true)}
             />
+            <ToolbarControls />
           </View>
 
           <View className="flex-row items-center gap-4">
