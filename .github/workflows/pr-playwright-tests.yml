@@ -353,6 +353,11 @@ jobs:
           echo "ONYX_BACKEND_IMAGE=${BACKEND_IMAGE}" >> "${GITHUB_ENV}"
           echo "ONYX_MODEL_SERVER_IMAGE=${MODEL_SERVER_IMAGE}" >> "${GITHUB_ENV}"
 
+      - name: Log in to ECR pull-through cache
+        uses: ./.github/actions/login-ecr-pullthrough-cache
+        with:
+          ecr-registry: ${{ vars.ECR_REGISTRY }}
+
       - name: Pull deployment images
         working-directory: deployment/docker_compose
         run: |
@@ -1191,14 +1196,22 @@ jobs:
     runs-on: ubuntu-slim
     timeout-minutes: 5
     needs:
-      [changes, playwright-tests, playwright-tests-lite, playwright-tests-oauth-okta]
+      [
+        changes,
+        airgap-health,
+        playwright-tests,
+        playwright-tests-lite,
+        playwright-tests-oauth-okta,
+      ]
     if: ${{ always() }}
     steps:
       - name: Check job status
         env:
           EVENT_NAME: ${{ github.event_name }}
           CHANGES_RESULT: ${{ needs.changes.result }}
+          RUN_AIRGAP: ${{ needs.changes.outputs.airgap }}
           RUN_TESTS: ${{ needs.changes.outputs.playwright }}
+          AIRGAP_RESULT: ${{ needs.airgap-health.result }}
           TESTS_RESULT: ${{ needs.playwright-tests.result }}
           LITE_RESULT: ${{ needs.playwright-tests-lite.result }}
           OKTA_RESULT: ${{ needs.playwright-tests-oauth-okta.result }}
@@ -1209,6 +1222,10 @@ jobs:
           # would incorrectly pass the required check.
           if [ "${CHANGES_RESULT}" != "success" ]; then
             echo "changes job did not succeed (result: ${CHANGES_RESULT})"
+            exit 1
+          fi
+          if [ "${RUN_AIRGAP}" = "true" ] && [ "${AIRGAP_RESULT}" != "success" ]; then
+            echo "Airgap deployment result: ${AIRGAP_RESULT}"
             exit 1
           fi
           if [ "${RUN_TESTS}" != "true" ]; then
