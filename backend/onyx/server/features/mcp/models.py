@@ -343,7 +343,7 @@ class MCPToolCreateRequest(BaseModel):
                 raise ValueError(
                     "auth_template is required when auth_performer is 'per_user'"
                 )
-            if self.auth_template.required_fields and self.admin_credentials is None:
+            if self.auth_template.required_fields and not self.admin_credentials:
                 raise ValueError(
                     "admin_credentials is required when auth_performer is 'per_user'"
                 )

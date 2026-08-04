@@ -157,6 +157,14 @@ class MCPTool(Tool[None]):
                 for name, value in self._additional_headers.items()
                 if name.lower() not in DENYLISTED_MCP_HEADERS
             }
+            if denylisted := sorted(
+                set(self._additional_headers) - set(request_headers)
+            ):
+                logger.warning(
+                    "MCP tool '%s' received denylisted headers that were filtered: %s",
+                    self._name,
+                    denylisted,
+                )
             credentials = self._resolved_credentials or ResolvedMCPCredentials(
                 connection_config=self.connection_config,
                 user_oauth_token=self._user_oauth_token,

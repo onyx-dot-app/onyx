@@ -214,6 +214,13 @@ export default function MCPAuthenticationModal({
       };
     }
 
+    // Only shared API-token servers return their header substitutions in
+    // `admin_credentials`. For every other auth type that field carries OAuth
+    // client credentials, which must not be replayed as per-user substitutions.
+    const sharedApiToken =
+      fullServer.auth_type === MCPAuthenticationType.API_TOKEN &&
+      fullServer.auth_performer === MCPAuthenticationPerformer.ADMIN;
+
     return {
       transport: fullServer.server_url
         ? getTransportFromUrl(fullServer.server_url)
@@ -249,7 +256,9 @@ export default function MCPAuthenticationModal({
       // User Credentials (substitutions)
       user_credentials:
         (fullServer.user_credentials as Record<string, string>) ||
-        (fullServer.admin_credentials as Record<string, string>) ||
+        (sharedApiToken
+          ? (fullServer.admin_credentials as Record<string, string>)
+          : undefined) ||
         {},
     };
   }, [fullServer, mcpServer?.server_url]);
