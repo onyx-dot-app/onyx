@@ -2,6 +2,14 @@
 
 Status: design (v2, revised after adversarial pressure test) · Task: group-manager-scoped-permissions · Supersedes: 06-frontend-affordance-followups.md · Layer: UI/read-projection + a small behavior-preserving backend refactor (PR1-5 enforcement behavior unchanged)
 
+> **⚠️ Read with D8/D9 ([00-index](00-index.md)) in hand.** Every mention below of **agent-mediated** tool/MCP
+> scope — `agent_mediated_scope_allows`, `get_action_agent_scope`, `get_mcp_server_agent_scope`, and the
+> `M|O` classification of action/MCP **edit** — describes a model that was built and then **dropped**.
+> Action and MCP-server management is now plain **owner-or-admin** (`can_manage_own_tool` /
+> `_ensure_mcp_server_owner_or_admin`), and the shipped projection matches: `tool_permissions` /
+> `mcp_server_permissions` take a single `can_manage` bool. Agent-derived scope survives only for *viewing*
+> an MCP server connected to a managed group. Everything else in this document still applies.
+
 ## Changelog vs v1
 
 1. **Shared decision helper (by-construction) — D1.** The projection stamps each tag by calling the *same* `can_<action>` boolean the write guard (`assert_*`) calls, so `project == enforce` holds by construction, not by discipline (§2.3, §3.1a).

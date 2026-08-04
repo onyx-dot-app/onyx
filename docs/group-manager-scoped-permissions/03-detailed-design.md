@@ -122,17 +122,17 @@ SCOPED_MANAGER_PERMISSIONS: frozenset[Permission] = frozenset({
     Permission.ADD_AGENTS,
     Permission.MANAGE_USER_GROUPS,   # membership + resource sharing of the managed group only
     Permission.MANAGE_SKILLS,        # NEW dedicated token (D5) — also grantable globally in the groups UI
-    Permission.MANAGE_ACTIONS,       # tools/MCP — reach via GATE 1; scoped via agents at GATE 2 (D4)
+    Permission.MANAGE_ACTIONS,       # tools/MCP — GATE 1 reach + create only (D4); manage is owner-or-admin (D8)
 })
 ```
 Code-defined, never written to `permission_grant`, never merged into `effective_permissions` (which stays
 global-only). Lives in `permissions.py` (not `scoped_permissions.py`) so `has_permission` can read it to
 classify SCOPED authority without an import cycle.
 
-> **`MANAGE_ACTIONS` is in the bundle (D4), scoped via agents.** GATE 1 would 403 a scoped manager on every
-> action endpoint otherwise. The route gate lets the manager *reach* the tool/MCP endpoints; GATE 2 derives an
-> action's groups from the agents that reference it (`Tool → Persona__Tool → Persona__UserGroup`) and requires
-> them ⊆ managed. See §11.1.
+> **`MANAGE_ACTIONS` is in the bundle (D4).** GATE 1 would 403 a scoped manager on every
+> action endpoint otherwise. The route gate lets the manager *reach* the tool/MCP endpoints and create their
+> own; managing an existing action or server is owner-or-admin — the agent-mediated GATE 2 once planned here
+> was built and then dropped (**D8**). See §11.1.
 
 ### 2.2 `has_permission` — the single 3-state classifier
 
@@ -491,8 +491,8 @@ junction-only · completeness, 18 agents) confirmed the core design is sound —
 runtime untouched, purely junction-based, and the feared backfill data-loss does **not** occur — but found
 that §1–10 under-specify several manager-reachable paths. **This section is the authoritative coverage
 checklist; implement every row.** New decisions locked with the owner: **D4 actions = `manage:actions` in the
-bundle, scoped via agents at GATE 2** · **D5 skills = in scope (7th resource)** · **D6 managers may do
-everything EXCEPT delete**.
+bundle** (its agent-mediated GATE 2 later dropped — **D8**) · **D5 skills = in scope (7th resource)** ·
+**D6 managers may do everything EXCEPT delete** (narrowed by **D9**: a creator may delete what they made).
 
 ### 11.0 PREREQUISITE — independent boot bug (fix before/with PR1)
 `current_curator_or_admin_user` was removed from `onyx/auth/users.py` by §1–7 but is still imported by
@@ -502,7 +502,7 @@ dead dep: skills → see §11.2; `targeted_reindex.py:80/163` → `require_permi
 its connector/indexing peers). This is a merge-integration break, not a §8 feature change, but it blocks
 everything. Add an `import onyx.main` smoke test to CI so a deleted auth dep fails fast.
 
-### 11.1 Actions (D4 — `MANAGE_ACTIONS` in the bundle; scoped via agents at GATE 2)
+### 11.1 Actions (D4 — `MANAGE_ACTIONS` in the bundle; manage is owner-or-admin per D8)
 > **⚠️ SUPERSEDED by D8 (2026-08-03) for the _management_ verbs.** The agent-mediated GATE 2 below
 > (edit/toggle/OAuth-auth resolving an action's groups through its referencing agents) was **built, then
 > dropped** — it caused most of the review's P1/P2 findings. Manage is now plain **owner-or-admin**
