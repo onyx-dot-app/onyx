@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import hashlib
 import json
+from collections.abc import Iterator
 from contextlib import contextmanager, nullcontext
 from typing import Any
 from unittest.mock import MagicMock, patch
@@ -818,15 +819,22 @@ def _expected_sse_text(events: list[dict[str, Any]]) -> str:
 
 class _FakeStreamResponse:
     def __init__(
-        self, status_code: int, lines: list[str], content: bytes = b""
+        self,
+        status_code: int,
+        lines: list[str],
+        content: bytes = b"",
+        stream_error: Exception | None = None,
     ) -> None:
         self.status_code = status_code
         self._lines = lines
         self.content = content
+        self.stream_error = stream_error
         self.closed = False
 
-    def iter_lines(self) -> list[str]:
-        return self._lines
+    def iter_lines(self) -> Iterator[str]:
+        yield from self._lines
+        if self.stream_error is not None:
+            raise self.stream_error
 
     def read(self) -> None:
         pass
@@ -1099,6 +1107,30 @@ def test_passthrough_stream_upstream_error_emits_single_error_frame() -> None:
     assert data["response"]["model"] == "gpt-5-mini"
     assert data["response"]["output"] == []
     assert data["sequence_number"] == 0
+
+
+def test_passthrough_stream_transport_error_continues_response_identity() -> None:
+    created_event = {
+        "type": "response.created",
+        "sequence_number": 7,
+        "response": {
+            "id": "resp_upstream",
+            "created_at": 123,
+        },
+    }
+    response = _FakeStreamResponse(
+        200,
+        _sse_lines([created_event]),
+        stream_error=httpx.ReadError("stream failed"),
+    )
+
+    frames, _ = _run_passthrough_stream(response)
+
+    assert json.loads(frames[0][len("data: ") : -2]) == created_event
+    failure = json.loads(frames[1][len("data: ") : -2])
+    assert failure["response"]["id"] == "resp_upstream"
+    assert failure["response"]["created_at"] == 123
+    assert failure["sequence_number"] == 8
 
 
 def test_passthrough_stream_closes_exitstack_resources() -> None:

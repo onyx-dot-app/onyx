@@ -399,7 +399,8 @@ def _openai_passthrough_stream_worker(
     cancelled: threading.Event,
 ) -> None:
     response_id = f"resp_{uuid.uuid4().hex}"
-    created_at = int(time.time())
+    response_created_at = int(time.time())
+    next_sequence_number = 0
 
     def emit_error(*, message: str, error_type: str) -> None:
         code: ResponsesErrorCode = (
@@ -411,13 +412,13 @@ def _openai_passthrough_stream_worker(
             **ResponsesFailedEvent.create(
                 ResponsesObjectPayload.failed(
                     response_id=response_id,
-                    created_at=created_at,
+                    created_at=response_created_at,
                     model=model,
                     message=message,
                     code=code,
                 )
             ).to_wire(),
-            "sequence_number": 0,
+            "sequence_number": next_sequence_number,
         }
         _put_stream_item(out, f"data: {json.dumps(payload)}\n\n", cancelled)
 
@@ -478,6 +479,9 @@ def _openai_passthrough_stream_worker(
                 return
 
             frame_lines: list[str] = []
+            frame_response_id: str | None = None
+            frame_created_at: int | None = None
+            frame_next_sequence: int | None = None
             for line in response.iter_lines():
                 if cancelled.is_set():
                     break
@@ -487,6 +491,15 @@ def _openai_passthrough_stream_worker(
                         frame_lines = []
                         if not _put_stream_item(out, frame_text + "\n\n", cancelled):
                             break
+                        if frame_response_id is not None:
+                            response_id = frame_response_id
+                        if frame_created_at is not None:
+                            response_created_at = frame_created_at
+                        if frame_next_sequence is not None:
+                            next_sequence_number = frame_next_sequence
+                        frame_response_id = None
+                        frame_created_at = None
+                        frame_next_sequence = None
                     continue
                 frame_lines.append(line)
                 if not line.startswith("data: "):
@@ -501,6 +514,17 @@ def _openai_passthrough_stream_worker(
                     )
                     continue
                 event_type = event.get("type")
+                event_response = event.get("response")
+                if isinstance(event_response, dict):
+                    upstream_response_id = event_response.get("id")
+                    if isinstance(upstream_response_id, str):
+                        frame_response_id = upstream_response_id
+                    upstream_created_at = event_response.get("created_at")
+                    if isinstance(upstream_created_at, int):
+                        frame_created_at = upstream_created_at
+                upstream_sequence = event.get("sequence_number")
+                if isinstance(upstream_sequence, int):
+                    frame_next_sequence = upstream_sequence + 1
                 if event_type == "response.output_text.delta":
                     delta_text = event.get("delta")
                     if isinstance(delta_text, str):
@@ -527,7 +551,13 @@ def _openai_passthrough_stream_worker(
                         if error and span is not None:
                             span.set_error({"message": str(error), "data": None})
             if frame_lines and not cancelled.is_set():
-                _put_stream_item(out, "\n".join(frame_lines) + "\n\n", cancelled)
+                if _put_stream_item(out, "\n".join(frame_lines) + "\n\n", cancelled):
+                    if frame_response_id is not None:
+                        response_id = frame_response_id
+                    if frame_created_at is not None:
+                        response_created_at = frame_created_at
+                    if frame_next_sequence is not None:
+                        next_sequence_number = frame_next_sequence
             # Managed-key cost accounting normally happens inside
             # LLM.invoke/stream, which this path bypasses.
             if state.usage is not None and isinstance(llm, LitellmLLM):
