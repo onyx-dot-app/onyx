@@ -600,11 +600,12 @@ controlled by **`MANAGE_AGENTS`** — not `ADD_AGENTS`, not bare membership. So 
 - else (`ADD_AGENTS`-only) → reject the group-share. Such a user can still create/edit a private, **no-group**
   personal agent — they just can't attach it to a group.
 
-**The gate authorizes the *diff*, not the state.** An unchanged group set is not a group-share, so it is
-exempt for a non-SCOPED actor (the editor round-trips the current groups on every save — without this a
-plain owner couldn't edit an agent someone else group-shared) and for an **owner**, who sets their own
-agent's privacy per **D9**. Compare share *levels* too, not just group ids. A scoped manager who isn't the
-owner is still checked on an unchanged set: holding the share while flipping a public agent private is a
+**The gate authorizes the *diff*, not the state.** Unchanged group shares are not a group-share mutation,
+so they're exempt for a non-SCOPED actor (the editor round-trips the current groups on every save — without
+this a plain owner couldn't edit an agent someone else group-shared) and for an **owner**, who sets their
+own agent's privacy per **D9**. "Unchanged" compares the whole `{group_id: permission}` map — re-leveling
+a group from VIEWER to EDITOR is a change and gets no exemption. A scoped manager who isn't the owner is
+still checked even when nothing changed: holding the share while flipping a public agent private is a
 capture. So is the reverse — sharing a public agent *into* a managed group — which no ownership exempts.
 
 > **Current-code nuance to enforce (PR4):** today the persona create/`/share` route gates on `ADD_AGENTS`

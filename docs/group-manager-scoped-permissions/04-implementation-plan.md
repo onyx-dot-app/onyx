@@ -47,9 +47,11 @@ PRIVATE and strictly within their managed groups — enforced authoritatively at
     `skill/api.py:16` + `targeted_reindex.py:22` → the API server won't boot. Fix first (Step 0).
   - **D4 actions (§11.1), superseded in part by D8:** keep `MANAGE_ACTIONS` **in the bundle** (GATE 1 reach);
     switch the tool/MCP admin endpoints to `allow_scope=True`. The agent-mediated GATE 2 was built and then
-    **dropped** — managing an action/server is plain **owner-or-admin** (`can_manage_own_tool` /
-    `_ensure_mcp_server_owner_or_admin`), delete included (D9). Agent-derived scope survives only for *viewing*
-    an MCP server connected to a managed group.
+    **dropped** — managing an action/server is plain **owner-or-admin** (`can_manage_tool` /
+    `can_manage_mcp_server`), delete included (D9). An MCP-discovered tool has no `user_id`, so
+    `can_manage_tool` routes it to its **server's** owner; global `MANAGE_ACTIONS` is full-admin-equivalent
+    here and is not narrowed to `FULL_ADMIN`. Agent-derived scope survives only for *viewing* an MCP server
+    connected to a managed group.
   - **D5 skills (§11.2):** add a **dedicated `MANAGE_SKILLS` permission** (groups UI + bundle; no migration).
     Skills do NOT mirror personas — add a NEW scoped admin-list path (don't touch the runtime visibility
     filter), GATE 2 on `replace_skill_grants` (the `/grants` seam), re-point `skill/api.py` by verb to
