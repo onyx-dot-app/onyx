@@ -507,15 +507,16 @@ everything. Add an `import onyx.main` smoke test to CI so a deleted auth dep fai
 > (edit/toggle/OAuth-auth resolving an action's groups through its referencing agents) was **built, then
 > dropped** — it caused most of the review's P1/P2 findings. Manage is now plain **owner-or-admin**
 > (`can_manage_own_tool` / `_ensure_mcp_server_owner_or_admin`), mirrored 1:1 by the UI projection; the
-> *view* path keeps agent-mediated scope. GATE 1 reach + create (allow_scope=True) and DELETE-admin-only
-> (D6) are unchanged. Read the rest of this section as historical design, not the current gate.
+> *view* path keeps agent-mediated scope. GATE 1 reach + create (allow_scope=True) is unchanged; **delete
+> now follows the same owner-or-admin gate (D9), not admin-only.** Read the rest of this section as
+> historical design, not the current gate.
 
 - **`MANAGE_ACTIONS` stays in `SCOPED_MANAGER_PERMISSIONS`** (§2.1). Bundle membership is what GATE 1
   (`has_permission` → SCOPED, admitted when `allow_scope=True`) checks — drop it and a scoped manager 403s at
   the route on every action endpoint. "Agent-mediated" is GATE 2's scope resolution, not a reason to omit it.
 - **Reaching the endpoints (GATE 1):** switch the standalone tool/MCP admin endpoints (`tool/api.py`
   POST/PUT/DELETE, `mcp/api.py`) to `require_permission(MANAGE_ACTIONS, allow_scope=True)` so managers can reach
-  them. (Delete stays admin-only per D6.)
+  them, including DELETE — a creator may delete what they made (D9).
 - **Scope check (GATE 2):** actions have no direct group; derive an action's groups from the agents that
   reference it — `Tool → Persona__Tool → Persona__UserGroup` — and require them ⊆ managed (+ PRIVATE). This
   **replaces** the current owner-or-admin per-resource check (`_get_editable_custom_tool` /
@@ -558,11 +559,17 @@ corrections (verified 2026-06-29):
   re-point on `FULL_ADMIN_PANEL_ACCESS` to unbreak boot; PR4 adds `MANAGE_SKILLS` + `allow_scope` + the GATE 2
   and admin-list together, then narrows the deps.)
 
-### 11.3 Manager power = everything EXCEPT delete (D6)
+### 11.3 Manager power = everything EXCEPT deleting a managed-group resource (D6, narrowed by D9)
 Managers may create / edit / attach / detach / pause / rename / share within managed groups (non-PUBLIC only —
-PRIVATE or SYNC; GATE 2). **DELETE is admin-only for every resource.** These stay on the plain global dep (no `allow_scope`):
-connector/cc_pair delete (`administrative.py:141`), document-set delete (`document_set/api.py:93`), persona
-delete, skill delete; plus group create (D2) + group delete + `set_group_permissions` (admin-only).
+PRIVATE or SYNC; GATE 2). **Delete is admin-only for a resource that merely sits in a managed group.** These
+stay on the plain global dep (no `allow_scope`): connector/cc_pair delete (`administrative.py:141`),
+document-set delete (`document_set/api.py:93`), admin skill delete (`skill/api.py:425`); plus group create
+(D2) + group delete + `set_group_permissions` (admin-only).
+
+**D9 carve-out:** deleting something the manager *created* is ownership, not scope, so it follows the same
+owner-or-admin gate as every other owner: custom actions / MCP servers (`can_manage_own_tool`,
+`_ensure_mcp_server_owner_or_admin`), personas (`can_delete_persona`), personal skills
+(`_ensure_owned_personal`). Being a manager never subtracts a right an ordinary user holds.
 
 ### 11.4 Complete write-path enumeration (supersedes/extends the §4 table — gate EVERY row)
 All `allow_scope=True` + GATE 2 EXCEPT where marked admin-only (D6/D2):
@@ -577,7 +584,7 @@ All `allow_scope=True` + GATE 2 EXCEPT where marked admin-only (D6/D2):
 | doc-set **DELETE** `:93` | — | **admin-only (D6)** |
 | persona create `persona/api.py:310` · update `:181` · **share `:443`** | `update_persona_access` (§11.5) | allow_scope=True; **GATE 2 keyed on `MANAGE_AGENTS` (D7)** — admin/global bypass; scoped managers ⊆ managed; ADD_AGENTS-only can't group-share |
 | skill create/update `skill/api.py:186/...` | skill write fn (§11.2) | allow_scope=True; GATE 2 on `replace_skill_grants` |
-| tool/MCP create/update `tool/api.py` · `mcp/api.py` | GATE 2 via agents (`Tool → Persona__Tool → Persona__UserGroup` ⊆ managed); replaces owner-or-admin check (§11.1) | allow_scope=True; **DELETE admin-only (D6)** |
+| tool/MCP create/update/**delete** `tool/api.py` · `mcp/api.py` | owner-or-admin per resource (`can_manage_own_tool` / `_ensure_mcp_server_owner_or_admin`) — the agent-mediated GATE 2 was dropped (**D8**) | allow_scope=True on every verb; **delete included (D9)** |
 | group update/members `user_group/api.py:194/215` · **rename `:164`** | `update_user_group` / `add_users_to_user_group` | allow_scope=True; GATE 2 = group ∈ managed; **cc_pair_ids per §11.6** |
 | group `/agents` persona attach `user_group/api.py:256` | `update_persona_access` | allow_scope=True; **manager-scope GATE 2 = target group ∈ managed** (the roster surface) |
 | group create `:144` · delete · permissions `:115` | — | **admin-only (D2)** |
@@ -654,9 +661,11 @@ either 403s on the Groups page (feature unusable) or sees every org group (leak)
   `db/permissions.py` (recompute) — these are the artifacts implementers slice from.
 - **§11.0 tokens:** `targeted_reindex.py:80/163` → `require_permission(MANAGE_CONNECTORS)` (matches connector
   peers; independent of the skills token). Skills token per §11.2.
-- **D6 delete invariant:** deletes stay admin-only **only** because their route gate keeps `allow_scope=False`
-  — the re-keyed editable filter would otherwise authorize a manager. Never add `allow_scope=True` to a DELETE
-  route; add an escalation test asserting each DELETE 403s a scoped-only manager. (Persona delete is already
-  owner/owner-group gated via `get_persona_by_id`, not `_add_user_filters`, so PR4 doesn't open it.)
+- **D6 delete invariant:** a managed-group resource stays undeletable **only** because its route gate keeps
+  `allow_scope=False` — the re-keyed editable filter would otherwise authorize a manager. Never add
+  `allow_scope=True` to a DELETE route whose only authorization is that filter (connector/cc_pair, doc set,
+  admin skill); add an escalation test asserting each 403s a scoped-only manager. Routes with a per-resource
+  ownership gate are the D9 exception: action/MCP/persona delete run `allow_scope=True` and authorize on
+  owner-or-admin instead, so the filter never decides.
 - Stale prose to fix: "6 filters" → 4 re-keyed + skill (`00:14`, `01:52/64`, `02` ASCII); `§2.6` call →
   `([user_id], db_session)`; `§3` feedback row → NO CHANGE.

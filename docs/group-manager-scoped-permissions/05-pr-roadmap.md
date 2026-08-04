@@ -149,7 +149,8 @@ highest-value resource types, exercised by the escalation integration suite (man
   bundle; no migration), a NEW scoped admin-list path (do NOT touch the runtime visibility filter), GATE 2 on
   `replace_skill_grants`, re-point `skill/api.py` by verb to `MANAGE_SKILLS, allow_scope=True` (§11.2);
   managed-scope enforcement in EE `token_limit.py` group write path; `credentials.py` **and `feedback.py`** left
-  unchanged (documented no-ops); **persona/skill delete stays admin-only (D6)**; scoped-PAT tests. **Actions
+  unchanged (documented no-ops); **admin skill delete stays admin-only (D6); persona delete is owner-or-admin
+  (D9)**; scoped-PAT tests. **Actions
   (D4 + D8):** `MANAGE_ACTIONS` is in the bundle; switch the tool/MCP admin endpoints to `allow_scope=True`
   so a manager can reach them and create their own. Managing an existing action/server stays
   **owner-or-admin** (`can_manage_own_tool` / `_ensure_mcp_server_owner_or_admin`) — the agent-mediated GATE 2
