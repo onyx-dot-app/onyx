@@ -98,6 +98,10 @@ from onyx.server.gateway.models import (
     ResponsesOutputTextPart,
     ResponsesRequest,
 )
+from onyx.server.gateway.openai_passthrough import (
+    handle_openai_responses_passthrough,
+    is_openai_passthrough_eligible,
+)
 from onyx.server.gateway.stream_bridge import (
     _RATE_LIMIT_ERROR,
     _put_stream_item,
@@ -1432,6 +1436,14 @@ def gateway_responses(
     check_token_rate_limits(user)
     with closing(db_session):
         provider, model_config = resolve_gateway_model(db_session, user, request.model)
+    if is_openai_passthrough_eligible(provider, model_config):
+        return handle_openai_responses_passthrough(
+            request=request,
+            provider=provider,
+            model_config=model_config,
+            flow=flow,
+            user=user,
+        )
     result = handle_responses_request(
         request=request,
         provider=provider,
