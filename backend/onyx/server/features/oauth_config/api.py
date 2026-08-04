@@ -124,8 +124,9 @@ def get_oauth_config_endpoint(
     """Retrieve a single OAuth configuration (owner or admin)."""
     oauth_config = get_oauth_config(oauth_config_id, db_session)
     if not oauth_config:
-        raise HTTPException(
-            status_code=404, detail=f"OAuth config with id {oauth_config_id} not found"
+        raise OnyxError(
+            OnyxErrorCode.NOT_FOUND,
+            f"OAuth config with id {oauth_config_id} not found",
         )
     _assert_can_manage_oauth_config(oauth_config, user, db_session)
     return _oauth_config_to_snapshot(oauth_config, db_session)
@@ -143,8 +144,9 @@ def update_oauth_config_endpoint(
     """Update an OAuth configuration (owner or admin)."""
     existing_config = get_oauth_config(oauth_config_id, db_session)
     if not existing_config:
-        raise HTTPException(
-            status_code=404, detail=f"OAuth config with id {oauth_config_id} not found"
+        raise OnyxError(
+            OnyxErrorCode.NOT_FOUND,
+            f"OAuth config with id {oauth_config_id} not found",
         )
     _assert_can_manage_oauth_config(existing_config, user, db_session)
     try:
@@ -177,8 +179,9 @@ def delete_oauth_config_endpoint(
     """Delete an OAuth configuration (owner or admin)."""
     existing_config = get_oauth_config(oauth_config_id, db_session)
     if not existing_config:
-        raise HTTPException(
-            status_code=404, detail=f"OAuth config with id {oauth_config_id} not found"
+        raise OnyxError(
+            OnyxErrorCode.NOT_FOUND,
+            f"OAuth config with id {oauth_config_id} not found",
         )
     _assert_can_manage_oauth_config(existing_config, user, db_session)
     try:
