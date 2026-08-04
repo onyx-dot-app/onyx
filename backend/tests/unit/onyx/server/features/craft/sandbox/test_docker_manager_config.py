@@ -505,6 +505,7 @@ def test_container_kwargs_env_is_a_minimal_allowlist(
         "ONYX_API_PREFIX",
         "OPENCODE_SERVER_PASSWORD",
         "OPENCODE_CONFIG_CONTENT",
+        "ONYX_WEBAPP_ALLOWED_DEV_ORIGINS",
     }
 
 
@@ -772,6 +773,7 @@ def test_proxy_kwargs_env_is_a_locked_allowlist(
         "ONYX_API_PREFIX",
         "OPENCODE_SERVER_PASSWORD",
         "OPENCODE_CONFIG_CONTENT",
+        "ONYX_WEBAPP_ALLOWED_DEV_ORIGINS",
         # firewall-init.sh contract
         "SANDBOX_PROXY_HOST",
         "SANDBOX_PROXY_PORT",

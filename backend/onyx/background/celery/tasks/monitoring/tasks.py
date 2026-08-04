@@ -33,7 +33,10 @@ from onyx.db.engine.sql_engine import (
     get_session_with_current_tenant,
     get_session_with_shared_schema,
 )
-from onyx.db.engine.tenant_utils import get_all_tenant_ids, validate_tenant_id
+from onyx.db.engine.tenant_utils import (
+    get_all_tenant_ids,
+    validate_tenant_id,
+)
 from onyx.db.engine.time_utils import get_db_current_time
 from onyx.db.enums import IndexingStatus, SyncStatus, SyncType
 from onyx.db.models import (

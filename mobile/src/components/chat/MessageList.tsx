@@ -49,8 +49,14 @@ export function MessageList({ messages, agent }: MessageListProps) {
     contentSignature: contentSignature(messages),
   });
 
+  // `key` is load-bearing. FlashList pools its ViewHolder React keys and re-hands them to different
+  // items, so an unkeyed row inherits a scrolled-away turn's state — timeline expansion, active
+  // branch tab, open sources sheet. `keyExtractor` doesn't help: it supplies the stable id, not the
+  // React key.
   const renderItem = useCallback(
-    ({ item }: { item: Message }) => <MessageRow node={item} agent={agent} />,
+    ({ item }: { item: Message }) => (
+      <MessageRow key={item.nodeId} node={item} agent={agent} />
+    ),
     [agent],
   );
 

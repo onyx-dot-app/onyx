@@ -55,7 +55,7 @@ from onyx.server.features.build.scheduled_tasks.executor import (
 )
 from onyx.server.features.build.timeouts import (
     QUEUE_RESIDENCY_SECONDS,
-    TURN_BUDGET_SECONDS,
+    SCHEDULED_RUN_HARD_CAP_SECONDS,
     TURN_RECLAIM_SLACK_SECONDS,
 )
 from onyx.server.features.build.utils import is_craft_enabled_for_user
@@ -71,12 +71,12 @@ DISPATCH_BATCH_SIZE = 50
 
 # Celery expiry and the stuck-QUEUED sweep are one policy: a run that sat
 # queued past the residency limit is dropped unexecuted and its row reclaimed
-# by the same threshold. A RUNNING row is stuck only past budget + slack, so a
-# well-behaved run that hits its own budget always marks itself FAILED first.
+# by the same threshold. A RUNNING row is stuck only past the hard cap + slack,
+# so a well-behaved run that hits its own cap always marks itself FAILED first.
 RUN_EXPIRES_SECONDS = QUEUE_RESIDENCY_SECONDS
 STUCK_QUEUED_OLDER_THAN = timedelta(seconds=QUEUE_RESIDENCY_SECONDS)
 STUCK_RUNNING_OLDER_THAN = timedelta(
-    seconds=TURN_BUDGET_SECONDS + TURN_RECLAIM_SLACK_SECONDS
+    seconds=SCHEDULED_RUN_HARD_CAP_SECONDS + TURN_RECLAIM_SLACK_SECONDS
 )
 
 

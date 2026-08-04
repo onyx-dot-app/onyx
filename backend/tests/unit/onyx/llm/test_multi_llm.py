@@ -19,6 +19,7 @@ from onyx.llm.models import (
     AssistantMessage,
     FunctionCall,
     LanguageModelInput,
+    NamedToolChoice,
     ReasoningEffort,
     ToolCall,
     ToolChoiceOptions,
@@ -26,6 +27,8 @@ from onyx.llm.models import (
 )
 from onyx.llm.multi_llm import (
     LitellmLLM,
+    LLMTimeoutError,
+    _consume_stream_with_timeout,
     _parse_anthropic_model_version,
     temporary_env_and_lock,
 )
@@ -2378,6 +2381,93 @@ def test_required_tool_choice_preserved_for_other_models(
         assert kwargs["tool_choice"] == ToolChoiceOptions.REQUIRED
 
 
+def test_named_tool_choice_serialized_for_litellm(
+    default_multi_llm: LitellmLLM,
+) -> None:
+    with patch("litellm.completion") as mock_completion:
+        mock_completion.return_value = []
+
+        messages: LanguageModelInput = [UserMessage(content="Weather in NYC?")]
+        list(
+            default_multi_llm.stream(
+                messages,
+                tools=_TOOL_CHOICE_DOWNGRADE_TOOLS,
+                tool_choice=NamedToolChoice(name="get_weather"),
+            )
+        )
+
+        kwargs = mock_completion.call_args.kwargs
+        assert kwargs["tool_choice"] == {
+            "type": "function",
+            "function": {"name": "get_weather"},
+        }
+
+
+def test_named_tool_choice_not_downgraded_for_claude_model() -> None:
+    """Unlike REQUIRED, a NamedToolChoice must pass through unchanged even for
+    models that downgrade tool_choice=required."""
+    llm = LitellmLLM(
+        api_key="test_key",
+        timeout=30,
+        model_provider=LlmProviderNames.ANTHROPIC,
+        model_name="claude-sonnet-5",
+        max_input_tokens=32000,
+    )
+
+    with patch("litellm.completion") as mock_completion:
+        mock_completion.return_value = []
+
+        messages: LanguageModelInput = [UserMessage(content="Weather in NYC?")]
+        list(
+            llm.stream(
+                messages,
+                tools=_TOOL_CHOICE_DOWNGRADE_TOOLS,
+                tool_choice=NamedToolChoice(name="get_weather"),
+            )
+        )
+
+        kwargs = mock_completion.call_args.kwargs
+        assert kwargs["tool_choice"] == {
+            "type": "function",
+            "function": {"name": "get_weather"},
+        }
+
+
+def test_named_tool_choice_skips_legacy_claude_thinking() -> None:
+    """Anthropic rejects thinking.type=enabled combined with a forced tool, so
+    a NamedToolChoice must suppress the legacy budget_tokens thinking param."""
+    llm = LitellmLLM(
+        api_key="test_key",
+        timeout=30,
+        model_provider=LlmProviderNames.ANTHROPIC,
+        model_name="claude-sonnet-4-5",
+        max_input_tokens=32000,
+    )
+
+    with (
+        patch("litellm.completion") as mock_completion,
+        patch("onyx.llm.multi_llm.model_is_reasoning_model", return_value=True),
+    ):
+        mock_completion.return_value = []
+
+        messages: LanguageModelInput = [UserMessage(content="Weather in NYC?")]
+        list(
+            llm.stream(
+                messages,
+                tools=_TOOL_CHOICE_DOWNGRADE_TOOLS,
+                tool_choice=NamedToolChoice(name="get_weather"),
+                reasoning_effort=ReasoningEffort.HIGH,
+            )
+        )
+
+        kwargs = mock_completion.call_args.kwargs
+        assert "thinking" not in kwargs
+        assert kwargs["tool_choice"] == {
+            "type": "function",
+            "function": {"name": "get_weather"},
+        }
+
+
 def test_bifrost_normalizes_api_base_in_model_kwargs() -> None:
     llm = LitellmLLM(
         api_key="test_key",
@@ -2806,3 +2896,80 @@ def test_ui_only_keys_never_injected_or_warned(
             llm.invoke([UserMessage(content="Hi")])
         assert env_during_call["BEDROCK_AUTH_METHOD"] is None
         mock_warn.assert_not_called()
+
+
+class _PingStream:
+    """A stream that emits an empty keepalive 'ping' forever, like a stalled LLM call."""
+
+    def __iter__(self) -> "_PingStream":
+        return self
+
+    def __next__(self) -> object:
+        time.sleep(0.005)  # a packet keeps arriving, resetting any per-read timeout
+        return object()
+
+
+def test_consume_stream_no_timeout_returns_all_chunks() -> None:
+    assert _consume_stream_with_timeout(iter([1, 2, 3]), total_timeout=None) == [
+        1,
+        2,
+        3,
+    ]
+
+
+def test_consume_stream_completes_within_budget() -> None:
+    assert _consume_stream_with_timeout(iter([1, 2, 3]), total_timeout=5) == [1, 2, 3]
+
+
+def test_consume_stream_ping_flood_trips_total_timeout() -> None:
+    start = time.monotonic()
+
+    with pytest.raises(LLMTimeoutError):
+        _consume_stream_with_timeout(_PingStream(), total_timeout=0.05)
+
+    # unwound promptly via the raise, not blocked on the ping flood
+    assert time.monotonic() - start < 2.0
+
+
+@pytest.mark.parametrize(
+    "total_timeout_override, expected_read_timeout",
+    [
+        (30, 30),  # total below the socket read timeout -> read timeout capped at it
+        (300, 60),  # total above it -> read timeout unchanged
+        (None, 60),  # no total -> read timeout unchanged
+    ],
+)
+def test_invoke_caps_read_timeout_at_total_budget(
+    total_timeout_override: int | None, expected_read_timeout: int
+) -> None:
+    # The deadline is only checked between chunks, so the per-read timeout must be
+    # capped at the total or a blocking read could overshoot a sub-read-timeout budget.
+    llm = LitellmLLM(
+        api_key="test_key",
+        timeout=60,
+        model_provider=LlmProviderNames.LITELLM_PROXY,
+        model_name="claude-haiku-4-5",
+        max_input_tokens=get_max_input_tokens(
+            model_provider=LlmProviderNames.LITELLM_PROXY,
+            model_name="claude-haiku-4-5",
+        ),
+    )
+    chunk = litellm.ModelResponse(
+        id="chatcmpl-1",
+        choices=[
+            litellm.Choices(
+                delta=_create_delta(role="assistant", content="hi"),
+                finish_reason="stop",
+                index=0,
+            )
+        ],
+        model="claude-haiku-4-5",
+    )
+
+    with patch("litellm.completion") as mock_completion:
+        mock_completion.return_value = [chunk]
+        llm.invoke(
+            [UserMessage(content="Hi")],
+            total_timeout_override=total_timeout_override,
+        )
+        assert mock_completion.call_args.kwargs["timeout"] == expected_read_timeout

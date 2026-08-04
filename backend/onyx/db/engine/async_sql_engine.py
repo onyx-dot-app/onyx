@@ -19,10 +19,10 @@ from onyx.db.engine.iam_auth import make_provide_iam_token_async
 from onyx.db.engine.pg_ssl import create_pg_ssl_context
 from onyx.db.engine.shard_registry import (
     ShardSpec,
-    divide_pool_budget,
     get_default_shard_name,
     get_shard_spec,
     is_sharded,
+    pool_budget_for_shard,
     shard_app_name,
 )
 from onyx.db.engine.shard_routing import get_shard_for_tenant
@@ -76,8 +76,11 @@ def _build_async_engine(spec: ShardSpec) -> AsyncEngine:
     if POSTGRES_USE_NULL_POOL:
         engine_kwargs["poolclass"] = pool.NullPool
     else:
-        engine_kwargs["pool_size"], engine_kwargs["max_overflow"] = divide_pool_budget(
-            POSTGRES_API_SERVER_POOL_SIZE, POSTGRES_API_SERVER_POOL_OVERFLOW
+        (
+            engine_kwargs["pool_size"],
+            engine_kwargs["max_overflow"],
+        ) = pool_budget_for_shard(
+            spec.name, POSTGRES_API_SERVER_POOL_SIZE, POSTGRES_API_SERVER_POOL_OVERFLOW
         )
 
     engine = create_async_engine(connection_string, **engine_kwargs)

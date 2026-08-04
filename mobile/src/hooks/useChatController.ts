@@ -31,7 +31,11 @@ import {
   SYSTEM_NODE_ID,
   upsertMessages,
 } from "@/chat/messageTree";
-import { Packet } from "@/chat/streamingModels";
+import {
+  Packet,
+  PacketType,
+  buildUserCancelledStopPacket,
+} from "@/chat/streamingModels";
 import { useChatSessionStore } from "@/state/chatSessionStore";
 import { useSession } from "@/state/session";
 
@@ -59,6 +63,16 @@ async function nameNewSession(
   }
 }
 
+function appendUserCancelledStop(sessionId: string, nodeId: number): void {
+  const store = useChatSessionStore.getState();
+  const node = store.sessions.get(sessionId)?.messageTree.get(nodeId);
+  if (!node || node.type !== "assistant") return;
+  if (node.packets.some((p) => p.obj.type === PacketType.STOP)) return;
+  store.patchNode(sessionId, nodeId, {
+    packets: [...node.packets, buildUserCancelledStopPacket(node.packets)],
+  });
+}
+
 async function runChatStream(
   sessionId: string,
   userNodeId: number,
@@ -72,6 +86,12 @@ async function runChatStream(
   let flushTimer: ReturnType<typeof setTimeout> | null = null;
   let sawStreaming = false;
   let hadError = false;
+
+  // Anchors the timeline's elapsed timer. Stamped here, not at node creation, so it measures the
+  // stream rather than the session-create round trip that can precede it.
+  store
+    .getState()
+    .patchNode(sessionId, agentNodeId, { streamingStartedAt: Date.now() });
 
   function flush() {
     if (pending.length === 0) return;
@@ -156,6 +176,9 @@ async function runChatStream(
   } finally {
     if (flushTimer) clearTimeout(flushTimer);
     flush();
+    if (signal.aborted && !hadError) {
+      appendUserCancelledStop(sessionId, agentNodeId);
+    }
     store.getState().updateChatState(sessionId, "input");
     store.getState().setAbortController(sessionId, null);
     // name a new session once it streamed output; skip stop/abort and thrown transport failures

@@ -1534,6 +1534,8 @@ configMap:
   # Gen AI Settings
   GEN_AI_MAX_TOKENS: ""
   LLM_SOCKET_READ_TIMEOUT: "60"
+  IMAGE_SUMMARIZATION_TIMEOUT: "300"
+  CONTEXTUAL_RAG_LLM_TIMEOUT: "180"
   MAX_CHUNKS_FED_TO_CHAT: ""
   # Usage / cost accounting
   # Records priced generation spans into the per-user usage ledger (default on).
