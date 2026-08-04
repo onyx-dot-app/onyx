@@ -136,6 +136,28 @@ def can_manage_tool(user: User, tool: Tool) -> bool:
     return can_manage_own_tool(user, tool)
 
 
+def can_link_oauth_config(
+    user: User, oauth_config_id: int, db_session: Session
+) -> bool:
+    """Whether an action may point at this OAuth config. A global actions-admin links any; a
+    scoped manager only one no other creator's action already uses — the config holds shared
+    client credentials, and ``_assert_can_manage_oauth_config`` derives ownership from exactly
+    these referencing actions, so linking in would grant both."""
+    authority = has_permission(user, Permission.MANAGE_ACTIONS)
+    if authority is PermissionAuthority.GLOBAL:
+        return True
+    if authority is not PermissionAuthority.SCOPED:
+        return False
+    # Vacuously true when nothing references it yet — an unreferenced config has no owner,
+    # and this is the create-config-then-link flow.
+    return all(
+        owner_id == user.id
+        for owner_id in db_session.scalars(
+            select(Tool.user_id).where(Tool.oauth_config_id == oauth_config_id)
+        )
+    )
+
+
 def get_mcp_server_ids_connected_to_groups(
     group_ids: Collection[int], db_session: Session
 ) -> set[int]:

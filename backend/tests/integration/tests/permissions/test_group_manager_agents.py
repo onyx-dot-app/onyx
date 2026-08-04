@@ -86,7 +86,7 @@ def env(reset: None, admin_user: DATestUser) -> _ScopedEnv:  # noqa: ARG001
     return _ScopedEnv(admin_user, manager, managed_group, other_group)
 
 
-def _tool_body() -> dict[str, Any]:
+def _tool_body(oauth_config_id: int | None = None) -> dict[str, Any]:
     return {
         "name": f"tool-{uuid4()}",
         "description": "escalation test",
@@ -108,14 +108,34 @@ def _tool_body() -> dict[str, Any]:
         },
         "custom_headers": [],
         "passthrough_auth": False,
-        "oauth_config_id": None,
+        "oauth_config_id": oauth_config_id,
     }
 
 
-def _create_custom_tool(user: DATestUser) -> int:
+def _create_custom_tool(user: DATestUser, oauth_config_id: int | None = None) -> int:
     """Create a custom action as ``user`` (must succeed); returns its id."""
     resp = call_endpoint(
-        "POST", "/admin/tool/custom", _tool_body(), user.headers, user.cookies
+        "POST",
+        "/admin/tool/custom",
+        _tool_body(oauth_config_id),
+        user.headers,
+        user.cookies,
+    )
+    assert resp.status_code == 200, resp.text
+    return int(resp.json()["id"])
+
+
+def _create_oauth_config(user: DATestUser) -> int:
+    """Create an OAuth config as ``user`` (must succeed); returns its id."""
+    body = {
+        "name": f"oauth-{uuid4()}",
+        "authorization_url": "https://example.com/authorize",
+        "token_url": "https://example.com/token",
+        "client_id": "client-id",
+        "client_secret": "client-secret",
+    }
+    resp = call_endpoint(
+        "POST", "/admin/oauth-config/create", body, user.headers, user.cookies
     )
     assert resp.status_code == 200, resp.text
     return int(resp.json()["id"])
@@ -443,6 +463,38 @@ def test_manager_cannot_edit_unowned_action(env: _ScopedEnv) -> None:
 def test_manager_cannot_delete_unowned_action(env: _ScopedEnv) -> None:
     tool_id = _create_custom_tool(env.admin)
     _assert_manager(env, "DELETE", f"/admin/tool/custom/{tool_id}", "denied")
+
+
+def test_manager_links_own_oauth_config(env: _ScopedEnv) -> None:
+    # Nothing else references it, so it's theirs to take.
+    oauth_config_id = _create_oauth_config(env.manager)
+    _create_custom_tool(env.manager, oauth_config_id)
+
+
+def test_manager_cannot_link_unowned_oauth_config(env: _ScopedEnv) -> None:
+    # Linking in would authenticate as the admin's OAuth app, using credentials the manager
+    # never sees.
+    oauth_config_id = _create_oauth_config(env.admin)
+    _create_custom_tool(env.admin, oauth_config_id)
+    _assert_manager(
+        env, "POST", "/admin/tool/custom", "denied", _tool_body(oauth_config_id)
+    )
+
+
+def test_manager_cannot_repoint_own_action_at_unowned_oauth_config(
+    env: _ScopedEnv,
+) -> None:
+    # Owning the action doesn't extend to the credentials it points at.
+    oauth_config_id = _create_oauth_config(env.admin)
+    _create_custom_tool(env.admin, oauth_config_id)
+    tool_id = _create_custom_tool(env.manager)
+    _assert_manager(
+        env,
+        "PUT",
+        f"/admin/tool/custom/{tool_id}",
+        "denied",
+        _tool_body(oauth_config_id),
+    )
 
 
 # MCP servers: owner-or-admin gating (not group-scoped like skills/agents).

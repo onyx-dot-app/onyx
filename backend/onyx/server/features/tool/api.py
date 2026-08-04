@@ -13,6 +13,7 @@ from onyx.db.engine.sql_engine import get_session
 from onyx.db.enums import Permission
 from onyx.db.models import Tool
 from onyx.db.models import User
+from onyx.db.tools import can_link_oauth_config
 from onyx.db.tools import can_manage_tool
 from onyx.db.tools import create_tool__no_commit
 from onyx.db.tools import delete_tool__no_commit
@@ -77,6 +78,20 @@ def _get_manageable_custom_tool(tool_id: int, db_session: Session, user: User) -
     return tool
 
 
+def _assert_can_link_oauth_config(
+    oauth_config_id: int | None, db_session: Session, user: User
+) -> None:
+    """GATE 2 for the OAuth config an action points at — the route's own gate only covers
+    the action itself."""
+    if oauth_config_id is None:
+        return
+    if not can_link_oauth_config(user, oauth_config_id, db_session):
+        raise OnyxError(
+            OnyxErrorCode.INSUFFICIENT_PERMISSIONS,
+            "You can only use OAuth configurations that no other creator's action uses.",
+        )
+
+
 @admin_router.post("/custom", tags=PUBLIC_API_TAGS)
 def create_custom_tool(
     tool_data: CustomToolCreate,
@@ -87,6 +102,7 @@ def create_custom_tool(
 ) -> ToolSnapshot:
     _validate_tool_definition(tool_data.definition)
     _validate_auth_settings(tool_data)
+    _assert_can_link_oauth_config(tool_data.oauth_config_id, db_session, user)
     tool = create_tool__no_commit(
         name=tool_data.name,
         description=tool_data.description,
@@ -115,6 +131,7 @@ def update_custom_tool(
     if tool_data.definition:
         _validate_tool_definition(tool_data.definition)
     _validate_auth_settings(tool_data)
+    _assert_can_link_oauth_config(tool_data.oauth_config_id, db_session, user)
     updated_tool = update_tool(
         tool_id=tool_id,
         name=tool_data.name,
