@@ -38,8 +38,11 @@ from onyx.db.models import User
 from onyx.error_handling.error_codes import OnyxErrorCode
 from onyx.error_handling.exceptions import OnyxError
 from onyx.file_store.constants import STANDARD_CHUNK_SIZE
+from onyx.utils.logger import setup_logger
 from shared_configs.configs import MULTI_TENANT
 from shared_configs.contextvars import get_current_tenant_id
+
+logger = setup_logger()
 
 router = APIRouter()
 
@@ -182,9 +185,10 @@ WORKER_COLLECT_QUEUES: dict[str, str] = {
     "monitoring": OnyxCeleryQueues.MONITORING,
 }
 
-# Serializes export starts. Acquired for the collection window and never
-# explicitly released: there is no server-side completion event (readiness is
-# derived lazily on poll), so expiry at the deadline is the release.
+# Serializes export starts. A successful start holds it for the collection
+# window: there is no server-side completion event (readiness is derived
+# lazily on poll), so expiry at the deadline is the release. A failed start
+# releases it immediately.
 _ASYNC_EXPORT_LOCK = _ExpiringLock(
     ttl_seconds=LOG_EXPORT_COLLECTION_DEADLINE.total_seconds()
 )
@@ -194,53 +198,84 @@ _ASYNC_EXPORT_LOCK = _ExpiringLock(
 def start_log_export(
     user: User = Depends(require_permission(Permission.FULL_ADMIN_PANEL_ACCESS)),
 ) -> LogExportStartResponse:
-    """Starts an export: collects api_server logs inline, fans out one
-    collector task per worker type, and returns the export ID to poll."""
+    """Starts an export: fans out one collector task per worker type, collects
+    the api_server's logs inline, and returns the export ID to poll. Fan-out
+    failures (e.g. deployments with no broker or workers, like the onyx-lite
+    overlay) degrade the export to the api_server's logs instead of failing.
+    """
     if MULTI_TENANT:
         raise OnyxError(
             OnyxErrorCode.SINGLE_TENANT_ONLY,
             "Log export is only available on self-hosted deployments.",
         )
 
-    if _ASYNC_EXPORT_LOCK.try_acquire() is None:
+    token = _ASYNC_EXPORT_LOCK.try_acquire()
+    if token is None:
         raise OnyxError(
             OnyxErrorCode.RATE_LIMITED,
             "A log export is already in progress. Try again once it completes.",
         )
 
-    now = datetime.now(tz=timezone.utc)
-    manifest = LogExportManifest(
-        export_id=uuid4().hex,
-        created_at=now,
-        deadline=now + LOG_EXPORT_COLLECTION_DEADLINE,
-        requester_email=user.email,
-        onyx_version=__version__,
-        worker_names=[API_SERVER_WORKER_NAME, *WORKER_COLLECT_QUEUES],
-    )
-    save_manifest(manifest)
+    started = False
+    try:
+        now = datetime.now(tz=timezone.utc)
+        export_id = uuid4().hex
+        deadline = now + LOG_EXPORT_COLLECTION_DEADLINE
 
-    # No celery worker runs in the api_server container, so its logs are
-    # collected inline.
-    collect_logs_into_file_store(
-        export_id=manifest.export_id,
-        worker_name=API_SERVER_WORKER_NAME,
-        log_directories=get_default_log_directories(),
-    )
+        # Fan out before the inline collection below so workers get the full
+        # window before ``expires=`` discards their tasks, and their collection
+        # overlaps the api_server's.
+        enqueued_worker_names: list[str] = []
+        try:
+            for worker_name, queue in WORKER_COLLECT_QUEUES.items():
+                client_app.send_task(
+                    OnyxCeleryTask.EXPORT_LOGS_COLLECT_TASK,
+                    priority=OnyxCeleryPriority.HIGHEST,
+                    queue=queue,
+                    expires=deadline,
+                    kwargs={
+                        "export_id": export_id,
+                        "worker_name": worker_name,
+                        "tenant_id": get_current_tenant_id(),
+                    },
+                )
+                enqueued_worker_names.append(worker_name)
+        except Exception as e:
+            # All sends share one broker, so the first failure means the rest
+            # would fail too. Only the workers already enqueued are awaited.
+            logger.warning(
+                "Log export fan-out failed after %d of %d workers; continuing "
+                "without the rest: %s",
+                len(enqueued_worker_names),
+                len(WORKER_COLLECT_QUEUES),
+                e,
+            )
 
-    for worker_name, queue in WORKER_COLLECT_QUEUES.items():
-        client_app.send_task(
-            OnyxCeleryTask.EXPORT_LOGS_COLLECT_TASK,
-            priority=OnyxCeleryPriority.HIGHEST,
-            queue=queue,
-            expires=manifest.deadline,
-            kwargs={
-                "export_id": manifest.export_id,
-                "worker_name": worker_name,
-                "tenant_id": get_current_tenant_id(),
-            },
+        manifest = LogExportManifest(
+            export_id=export_id,
+            created_at=now,
+            deadline=deadline,
+            requester_email=user.email,
+            onyx_version=__version__,
+            worker_names=[API_SERVER_WORKER_NAME, *enqueued_worker_names],
+        )
+        save_manifest(manifest)
+
+        # No celery worker runs in the api_server container, so its logs are
+        # collected inline.
+        collect_logs_into_file_store(
+            export_id=export_id,
+            worker_name=API_SERVER_WORKER_NAME,
+            log_directories=get_default_log_directories(),
         )
 
-    return LogExportStartResponse(export_id=manifest.export_id)
+        started = True
+        return LogExportStartResponse(export_id=export_id)
+    finally:
+        # A failed start must not hold the export slot for the rest of the
+        # TTL; any exit before success (including BaseException) releases.
+        if not started:
+            _ASYNC_EXPORT_LOCK.release(token)
 
 
 # Declared after the sync ``/admin/log-export/download`` route above so that
