@@ -35,5 +35,15 @@ the action/MCP routes and may create), but the agent-mediated GATE 2 that once l
 action whose referencing agents were all in their managed groups was **dropped** — it was the source of
 most of the review's P1/P2 findings, and the simpler owner-or-creator gate (`can_manage_own_tool` /
 `_ensure_mcp_server_owner_or_admin`, mirrored 1:1 by the UI projection) is the intended final design. Delete
-stays global-only (D6). This **supersedes** the "agent-mediated GATE 2 replaces owner-or-admin" language
+follows D9 below. This **supersedes** the "agent-mediated GATE 2 replaces owner-or-admin" language
 still in [03 §11](03-detailed-design.md), [05](05-pr-roadmap.md), and [07](07-ui-capability-model-design.md).
+
+**Decision locked 2026-08-04:** **D9 delete/publish follow ownership — D6's "except delete" scopes
+managed-group resources, not ones the manager created.** A scoped manager may delete a custom action or
+MCP server *they created*, and publish an agent *they own*, exactly as any other owner may: the gate is
+owner-or-admin (`can_manage_own_tool`, `_ensure_mcp_server_owner_or_admin`, `can_delete_persona`), and
+being a manager never subtracts a right they'd hold as an ordinary user. D6 still holds where it was
+aimed — a manager may not delete a connector, document set, or agent that merely sits in a group they
+manage. Pinned by `test_permission_projection_contract.py` ("the creator fully controls the action they
+made"); `assert_within_scope` in `_assert_persona_update_within_managed_scope` therefore does **not**
+gate `is_public`.

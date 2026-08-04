@@ -1288,16 +1288,18 @@ def get_connector_indexing_status(
         if status:
             non_editable_statuses.append(status)
 
-    # Process federated connectors
+    # Admins only — a federated connector has no group linkage to scope by, and its detail
+    # route is global, so a scoped manager would just 403 on click.
     federated_statuses: list[FederatedConnectorStatus] = []
-    for federated_connector in federated_connectors:
-        federated_status = FederatedConnectorStatus(
-            id=federated_connector.id,
-            source=federated_connector.source,
-            name=f"{federated_connector.source.replace('_', ' ').title()}",
-        )
-
-        federated_statuses.append(federated_status)
+    if is_connectors_admin:
+        for federated_connector in federated_connectors:
+            federated_statuses.append(
+                FederatedConnectorStatus(
+                    id=federated_connector.id,
+                    source=federated_connector.source,
+                    name=f"{federated_connector.source.replace('_', ' ').title()}",
+                )
+            )
 
     source_to_summary: dict[DocumentSource, SourceSummary] = {}
 
