@@ -139,13 +139,14 @@ def update_persona_access(
 
     NOTE: Callers are responsible for committing."""
     needs_sync = False
-    # Lock the agent: the group-share gate and _apply_persona_group_share_diff each read the
-    # shares, and under READ COMMITTED a save landing between them would be reconciled by a
-    # decision that never saw it — deleting a share to a group the caller can't manage.
-    # Read is_public before it's overwritten below, so the gate anchors on the ORIGINAL state:
-    # a public->private convert plus a group-share in one call must not slip through.
+    # Lock the agent so the gate and _apply_persona_group_share_diff can't be split by a
+    # concurrent save; populate_existing refreshes the caller's already-loaded row, which
+    # would otherwise serve pre-lock is_public out of the identity map.
+    # Read is_public before it's overwritten below, so the gate anchors on the ORIGINAL
+    # state: a public->private convert plus a group-share in one call must not slip through.
     persona = (
         db_session.query(Persona)
+        .populate_existing()
         .filter(Persona.id == persona_id)
         .with_for_update()
         .first()
