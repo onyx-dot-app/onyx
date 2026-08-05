@@ -1,6 +1,6 @@
 """Shared fixtures and utilities for billing tests."""
 
-from datetime import datetime, timezone
+from datetime import datetime, timedelta, timezone
 from unittest.mock import AsyncMock, MagicMock
 
 import pytest
@@ -24,6 +24,7 @@ def make_license_payload(
     tenant_id: str = "tenant_123",
     seats: int = 10,
     expired: bool = False,
+    expired_days_ago: int = 1,
 ) -> LicensePayload:
     """Create a LicensePayload for testing.
 
@@ -34,7 +35,7 @@ def make_license_payload(
     """
     now = datetime.now(timezone.utc)
     expires_at = (
-        datetime(2020, 1, 1, tzinfo=timezone.utc)
+        now - timedelta(days=expired_days_ago)
         if expired
         else datetime(2030, 1, 1, tzinfo=timezone.utc)
     )
