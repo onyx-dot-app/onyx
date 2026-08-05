@@ -9,7 +9,7 @@ from urllib.parse import urlparse
 from uuid import UUID
 
 from onyx.configs.app_configs import WEB_DOMAIN
-from onyx.server.features.build.sandbox.base import BUN_CACHE_DIR
+from onyx.server.features.build.sandbox.base import BUN_CACHE_DIR, BUN_IMAGE_CACHE_DIR
 
 _TEMPLATE_NEXT_CONFIG = (
     Path(__file__).parent / "image" / "templates" / "outputs" / "web" / "next.config.ts"
@@ -112,4 +112,98 @@ echo "Next.js server started with PID $NEXTJS_PID"
 echo $NEXTJS_PID > {session_path}/nextjs.pid
 fi
 ) 9>{session_path}.nextjs.lock
+"""
+
+
+def build_webapp_bootstrap_script(session_path: str, nextjs_port: int) -> str:
+    """Builds the self-contained, agent-facing script written to
+    ``sessions/$session_id/start-webapp.sh``. It must stay self-contained (no
+    CLI wrapper, no backend round-trip); its output is plain-English guidance
+    because an LLM agent is the only reader.
+    """
+    start_script = build_nextjs_start_script(
+        session_path, nextjs_port, check_node_modules=True
+    )
+
+    return f"""#!/bin/bash
+SESSION_PATH={session_path}
+PORT={nextjs_port}
+
+(
+    set -e
+    trap 'echo "bootstrap failed - read the error above, fix, and re-run bash start-webapp.sh" >&2' ERR
+
+    flock -x 9
+
+    if [ ! -f "$SESSION_PATH/outputs/web/package.json" ]; then
+        echo "Copying outputs template"
+        if [ -d /workspace/templates/outputs ]; then
+            cp -r /workspace/templates/outputs/* "$SESSION_PATH/outputs/"
+            # flock+sentinel: serialize concurrent bun-cache bootstraps;
+            # .ready guards against a partial cp from a previous interrupted run.
+            (
+                flock -x 8
+                if [ ! -f {BUN_CACHE_DIR}/.ready ]; then
+                    echo "Bootstrapping bun cache on workspace volume..."
+                    rm -rf {BUN_CACHE_DIR}
+                    cp -r {BUN_IMAGE_CACHE_DIR} {BUN_CACHE_DIR} \\
+                        || {{ echo "ERROR: bun cache bootstrap failed" >&2; exit 1; }}
+                    touch {BUN_CACHE_DIR}/.ready
+                fi
+            ) 8>{BUN_CACHE_DIR}.lock
+            echo "Installing dependencies with bun..."
+            (cd "$SESSION_PATH/outputs/web" && \\
+                BUN_INSTALL_CACHE_DIR={BUN_CACHE_DIR} \\
+                bun install --frozen-lockfile --backend=hardlink)
+        else
+            echo "Warning: outputs template not found at /workspace/templates/outputs"
+            mkdir -p "$SESSION_PATH/outputs/web"
+        fi
+    fi
+
+    # The embedded start script opens its own fd-9 subshell on
+    # {session_path}.nextjs.lock, which shadows this outer fd 9 for anything
+    # spawned inside it (including the nohup'd dev server, which already
+    # closes 9>&- itself). So the dev server never sees this .webapp.lock fd
+    # and can't hold it open for its lifetime; no extra fd-closing needed here.
+    {start_script}
+) 9>"$SESSION_PATH/.webapp.lock"
+if [ "$?" -ne 0 ]; then
+    exit 1
+fi
+
+echo "Waiting for the dev server to become ready..."
+DEADLINE=$((SECONDS + 90))
+while [ "$SECONDS" -lt "$DEADLINE" ]; do
+    if curl -s -o /dev/null --noproxy '*' --max-time 2 "http://127.0.0.1:$PORT/"; then
+        echo "web app dev server running on port $PORT - app dir: outputs/web, logs: nextjs.log. It hot-reloads on file changes and never needs 'bun run dev' run by hand."
+        exit 0
+    fi
+    sleep 1
+done
+
+echo "server did not become ready - check nextjs.log; if it crashed, fix the error and re-run bash start-webapp.sh" >&2
+echo "--- last 30 lines of nextjs.log ---" >&2
+tail -n 30 "$SESSION_PATH/nextjs.log" 2>/dev/null >&2 || true
+exit 1
+"""
+
+
+def build_webapp_script_write_snippet(session_path: str, nextjs_port: int) -> str:
+    """Builds a shell snippet (no shebang, no ``set -e``) that writes the
+    ``chmod 444`` bootstrap script to the session root.
+
+    Called from session setup and from restore (with the re-allocated port).
+    Pinned name/signature: both sandbox managers' restore paths call this
+    directly from ``onyx.server.features.build.sandbox.nextjs_dev``.
+    """
+    script = build_webapp_bootstrap_script(session_path, nextjs_port)
+    escaped_script = script.replace("'", "'\\''")
+
+    return f"""
+# chmod 444 blocks in-place overwrite, so a rewrite (e.g. on restore) must
+# unlink before writing.
+rm -f {session_path}/start-webapp.sh
+printf '%s' '{escaped_script}' > {session_path}/start-webapp.sh
+chmod 444 {session_path}/start-webapp.sh
 """
