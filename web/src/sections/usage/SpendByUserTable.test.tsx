@@ -1,5 +1,5 @@
 import { fireEvent, render, screen } from "@tests/setup/test-utils";
-import SpendByUserTable from "./SpendByUserTable";
+import SpendByUserTable from "@/sections/usage/SpendByUserTable";
 
 test("opens a user from the keyboard", () => {
   const onSelectUser = jest.fn();
