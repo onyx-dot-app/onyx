@@ -215,8 +215,14 @@ export const ADMIN_ROUTES = {
   USAGE: {
     path: "/admin/performance/usage",
     icon: SvgActivity,
-    title: "Usage Statistics",
-    sidebarLabel: "Usage Statistics",
+    title: "Usage",
+    sidebarLabel: "Usage",
+  },
+  WORKSPACE_ANALYTICS: {
+    path: "/admin/performance/analytics",
+    icon: SvgBarChart,
+    title: "Analytics",
+    sidebarLabel: "Analytics",
   },
   QUERY_HISTORY: {
     path: "/admin/performance/query-history",

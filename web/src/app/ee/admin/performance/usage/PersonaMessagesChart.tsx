@@ -22,9 +22,13 @@ import { Agent } from "@/lib/agents/types";
 
 export function PersonaMessagesChart({
   availablePersonas,
+  agentsError,
+  agentsLoading,
   timeRange,
 }: {
   availablePersonas: Agent[];
+  agentsError?: unknown;
+  agentsLoading?: boolean;
   timeRange: DateRangePickerValue;
 }) {
   const [selectedPersonaId, setSelectedPersonaId] = useState<
@@ -45,8 +49,26 @@ export function PersonaMessagesChart({
     error: personaUniqueUsersError,
   } = usePersonaUniqueUsers(selectedPersonaId, timeRange);
 
-  const isLoading = isPersonaMessagesLoading || isPersonaUniqueUsersLoading;
-  const hasError = personaMessagesError || personaUniqueUsersError;
+  const isLoading =
+    agentsLoading || isPersonaMessagesLoading || isPersonaUniqueUsersLoading;
+  const hasError =
+    agentsError || personaMessagesError || personaUniqueUsersError;
+
+  // The fallback card is generic; keep the underlying failure diagnosable.
+  useEffect(() => {
+    if (agentsError) {
+      console.error("Failed to fetch admin agents:", agentsError);
+    }
+    if (personaMessagesError) {
+      console.error("Failed to fetch agent messages:", personaMessagesError);
+    }
+    if (personaUniqueUsersError) {
+      console.error(
+        "Failed to fetch agent unique users:",
+        personaUniqueUsersError
+      );
+    }
+  }, [agentsError, personaMessagesError, personaUniqueUsersError]);
 
   const filteredPersonaList = useMemo(() => {
     if (!availablePersonas) return [];
@@ -110,7 +132,7 @@ export function PersonaMessagesChart({
           ...personaMessagesData.map((entry) => new Date(entry.date).getTime())
         )
       );
-    const dateRange = getDatesList(initialDate);
+    const dateRange = getDatesList(initialDate, timeRange.to);
 
     // Create maps for messages and unique users data
     const messagesMap = new Map(
@@ -133,6 +155,7 @@ export function PersonaMessagesChart({
     personaMessagesData,
     personaUniqueUsersData,
     timeRange.from,
+    timeRange.to,
     selectedPersonaId,
   ]);
 

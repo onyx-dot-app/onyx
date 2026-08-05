@@ -37,7 +37,7 @@ export function FeedbackChart({
     );
   } else {
     const initialDate = timeRange.from || new Date(queryAnalyticsData[0].date);
-    const dateRange = getDatesList(initialDate);
+    const dateRange = getDatesList(initialDate, timeRange.to);
 
     const dateToQueryAnalytics = new Map(
       queryAnalyticsData.map((queryAnalyticsEntry) => [
