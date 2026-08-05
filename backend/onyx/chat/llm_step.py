@@ -43,7 +43,11 @@ from onyx.llm.models import (
 )
 from onyx.llm.prompt_cache.processor import process_with_prompt_cache
 from onyx.llm.utils import model_needs_formatting_reenabled, model_supports_image_input
-from onyx.prompts.chat_prompts import CODE_BLOCK_MARKDOWN, IMAGE_DROP_REMINDER
+from onyx.prompts.chat_prompts import (
+    CODE_BLOCK_MARKDOWN,
+    IMAGE_DROP_REMINDER,
+    NON_VISION_IMAGE_MARKER,
+)
 from onyx.prompts.constants import SYSTEM_REMINDER_TAG_CLOSE, SYSTEM_REMINDER_TAG_OPEN
 from onyx.server.query_and_chat.placement import Placement
 from onyx.server.query_and_chat.streaming_models import (
@@ -940,10 +944,8 @@ def translate_history_to_llm_format(
                         content_parts.append(
                             TextContentPart(
                                 type="text",
-                                text=(
-                                    f"[attached image — file_id: {img_file.file_id} — "
-                                    "not shown: the current model does not support "
-                                    "image input]"
+                                text=NON_VISION_IMAGE_MARKER.format(
+                                    file_id=img_file.file_id
                                 ),
                             )
                         )

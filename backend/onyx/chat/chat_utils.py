@@ -776,6 +776,7 @@ def convert_chat_history(
                     token_count=chat_message.token_count + image_token_count,
                     message_type=MessageType.USER,
                     image_files=image_files if image_files else None,
+                    image_token_count=image_token_count,
                 )
             )
 
