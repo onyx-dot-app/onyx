@@ -1,454 +1,415 @@
 "use client";
 
-import { format } from "date-fns";
-import { errorHandlingFetcher } from "@/lib/fetcher";
-
-import { FiDownload } from "react-icons/fi";
-import {
-  Table,
-  TableBody,
-  TableCell,
-  TableHead,
-  TableHeader,
-  TableRow,
-} from "@/components/ui/table";
-import { Text } from "@opal/components";
-import Title from "@/components/ui/title";
-import { Spacer } from "@opal/components";
-import Button from "@/refresh-components/buttons/Button";
-import { Button as OpalButton } from "@opal/components";
+import React, { useEffect, useRef, useState } from "react";
+import { format, startOfDay, subDays } from "date-fns";
 import useSWR from "swr";
-import { SWR_KEYS } from "@/lib/swr-keys";
-import React, { useState } from "react";
-import { UsageReport } from "./types";
-import SvgSimpleLoader from "@opal/icons/simple-loader";
-import Link from "next/link";
+import {
+  Button,
+  Calendar,
+  LineItemButton,
+  MessageCard,
+  Pagination,
+  Popover,
+  Text,
+} from "@opal/components";
+import { ContentAction, PageLoader, toast } from "@opal/layouts";
+import {
+  SvgCalendar,
+  SvgDownload,
+  SvgDownloadCloud,
+  SvgSimpleLoader,
+  SvgSpreadsheetFile,
+  SvgX,
+} from "@opal/icons";
 import { humanReadableFormat, humanReadableFormatWithTime } from "@opal/time";
-import { ErrorCallout } from "@/components/ErrorCallout";
-import { PageSelector } from "@/components/PageSelector";
-import { Divider } from "@opal/components";
-import { DateRangePickerValue } from "../../../../../components/dateRangeSelectors/AdminDateRangeSelector";
-import { Popover } from "@opal/components";
-import Calendar from "@/refresh-components/Calendar";
-import { cn } from "@opal/utils";
-import { Spinner } from "@/components/Spinner";
-import { SvgCalendar, SvgDownloadCloud } from "@opal/icons";
+import { errorHandlingFetcher } from "@/lib/fetcher";
+import { SWR_KEYS } from "@/lib/swr-keys";
+import { UsageReport } from "./types";
 
-function GenerateReportInput({
-  onReportGenerated,
-  isWaitingForReport,
-}: {
-  onReportGenerated: () => void;
-  isWaitingForReport: boolean;
-}) {
-  const [dateRange, setDateRange] = useState<DateRangePickerValue | undefined>(
-    undefined
-  );
-  const [isLoading, setIsLoading] = useState(false);
+interface ReportPeriod {
+  label: string;
+  range?: { from: Date; to: Date };
+}
 
-  const [errorOccurred, setErrorOccurred] = useState<Error | null>(null);
+const PRESET_DAYS: { label: string; days: number }[] = [
+  { label: "Today", days: 1 },
+  { label: "Last 7 days", days: 7 },
+  { label: "Last 30 days", days: 30 },
+  { label: "Last 3 months", days: 90 },
+];
 
-  const requestReport = async () => {
-    setIsLoading(true);
-    setErrorOccurred(null);
-    try {
-      let period_from: string | null = null;
-      let period_to: string | null = null;
+function presetPeriod(label: string, days: number): ReportPeriod {
+  const to = startOfDay(new Date());
+  return { label, range: { from: subDays(to, days - 1), to } };
+}
 
-      if (dateRange?.selectValue != "allTime" && dateRange?.from) {
-        period_from = dateRange?.from?.toISOString();
-        period_to = dateRange?.to?.toISOString() ?? new Date().toISOString();
-      }
+const PAGE_SIZE = 8;
+const POLL_INTERVAL_MS = 3_000;
+const SLOW_REPORT_AFTER_MS = 20_000;
+const REPORT_TIMEOUT_MS = 5 * 60_000;
 
-      const res = await fetch("/api/admin/usage-report", {
-        method: "POST",
-        credentials: "include",
-        headers: {
-          "Content-Type": "application/json",
-        },
-        body: JSON.stringify({
-          period_from: period_from,
-          period_to: period_to,
-        }),
-      });
+function periodLabel(report: UsageReport): string {
+  return report.period_from
+    ? `${humanReadableFormat(report.period_from)} – ${humanReadableFormat(
+        report.period_to!
+      )}`
+    : "All time";
+}
 
-      if (!res.ok) {
-        throw Error(`Received an error: ${res.statusText}`);
-      }
+interface PendingReportRowProps {
+  rangeLabel: string;
+  slow: boolean;
+}
 
-      // Trigger refresh of the reports list
-      onReportGenerated();
-    } catch (e) {
-      setErrorOccurred(e as Error);
-    } finally {
-      setIsLoading(false);
-    }
-  };
-
-  const today = new Date();
-
-  const lastWeek = new Date();
-  lastWeek.setDate(today.getDate() - 7);
-
-  const lastMonth = new Date();
-  lastMonth.setMonth(today.getMonth() - 1);
-
-  const lastYear = new Date();
-  lastYear.setFullYear(today.getFullYear() - 1);
-
+function PendingReportRow({ rangeLabel, slow }: PendingReportRowProps) {
   return (
-    <div className="mb-8">
-      <Title className="mb-2">Generate Usage Reports</Title>
-      <Text as="p">Generate usage statistics for users in the workspace.</Text>
-      <Spacer rem={2} />
-      <div className="grid gap-2 mb-3">
-        <Popover>
-          <Popover.Trigger asChild>
-            {/* TODO(@raunakab): migrate to opal Button once className/iconClassName is resolved */}
-            <Button
-              secondary
-              className={cn(
-                "w-[300px] justify-start text-left font-normal",
-                !dateRange && "text-muted-foreground"
-              )}
-              leftIcon={SvgCalendar}
-            >
-              {dateRange?.from ? (
-                dateRange.to ? (
-                  <>
-                    {format(dateRange.from, "LLL dd, y")} -{" "}
-                    {format(dateRange.to, "LLL dd, y")}
-                  </>
-                ) : (
-                  format(dateRange.from, "LLL dd, y")
-                )
-              ) : (
-                <span>Pick a date range</span>
-              )}
-            </Button>
-          </Popover.Trigger>
-          <Popover.Content align="start">
-            <Calendar
-              initialFocus
-              mode="range"
-              defaultMonth={dateRange?.from}
-              selected={dateRange}
-              onSelect={(range) =>
-                range?.from &&
-                setDateRange({
-                  from: range.from,
-                  to: range.to ?? range.from,
-                  selectValue: "custom",
-                })
-              }
-              numberOfMonths={2}
-              disabled={(date) => date > new Date()}
-            />
-            <div className="border-t p-3">
-              <OpalButton
-                prominence="tertiary"
-                width="full"
-                onClick={() => {
-                  setDateRange({
-                    from: lastWeek,
-                    to: new Date(),
-                    selectValue: "lastWeek",
-                  });
-                }}
-              >
-                Last 7 days
-              </OpalButton>
-              <OpalButton
-                prominence="tertiary"
-                width="full"
-                onClick={() => {
-                  setDateRange({
-                    from: lastMonth,
-                    to: new Date(),
-                    selectValue: "lastMonth",
-                  });
-                }}
-              >
-                Last 30 days
-              </OpalButton>
-              <OpalButton
-                prominence="tertiary"
-                width="full"
-                onClick={() => {
-                  setDateRange({
-                    from: lastYear,
-                    to: new Date(),
-                    selectValue: "lastYear",
-                  });
-                }}
-              >
-                Last year
-              </OpalButton>
-              <OpalButton
-                prominence="tertiary"
-                width="full"
-                onClick={() => {
-                  setDateRange({
-                    from: new Date(1970, 0, 1),
-                    to: new Date(),
-                    selectValue: "allTime",
-                  });
-                }}
-              >
-                All time
-              </OpalButton>
-            </div>
-          </Popover.Content>
-        </Popover>
-      </div>
-      <OpalButton
-        disabled={isLoading || isWaitingForReport}
-        color={"blue"}
-        icon={SvgDownloadCloud}
-        onClick={() => requestReport()}
-      >
-        {isWaitingForReport ? "Generating..." : "Generate Report"}
-      </OpalButton>
-      <p className="mt-1 text-xs">
-        {isWaitingForReport
-          ? "A report is currently being generated. Please wait..."
-          : 'Report generation runs in the background. Check the "Previous Reports" section below to download when ready.'}
-      </p>
-      {errorOccurred && (
-        <ErrorCallout
-          errorTitle="Something went wrong."
-          errorMsg={errorOccurred?.toString()}
-        />
-      )}
+    <div
+      className="rounded-12 border border-border-01 bg-background-tint-01 motion-safe:animate-pulse"
+      data-testid="pending-report-row"
+    >
+      <ContentAction
+        sizePreset="main-ui"
+        variant="section"
+        icon={SvgSpreadsheetFile}
+        title="Preparing report…"
+        description={
+          slow
+            ? "Still working. You can leave this page; the report will appear here."
+            : `${rangeLabel} · usually ready in under a minute`
+        }
+        padding="md"
+        center
+        rightChildren={
+          <SvgSimpleLoader
+            size={16}
+            className="shrink-0 animate-spin stroke-text-03 motion-reduce:animate-none"
+          />
+        }
+      />
     </div>
   );
 }
 
-const USAGE_REPORT_URL = SWR_KEYS.usageReport;
+interface ReportRowProps {
+  report: UsageReport;
+  justArrived: boolean;
+}
 
-function UsageReportsTable({
-  refreshTrigger,
-  isWaitingForReport,
-  onNewReportDetected,
-}: {
-  refreshTrigger: number;
-  isWaitingForReport: boolean;
-  onNewReportDetected: () => void;
-}) {
-  const [page, setPage] = useState(1);
-  const NUM_IN_PAGE = 10;
-  const [previousReportCount, setPreviousReportCount] = useState<number | null>(
-    null
-  );
-
-  const {
-    data: usageReportsMetadata,
-    error: usageReportsError,
-    isLoading: usageReportsIsLoading,
-    mutate,
-  } = useSWR<UsageReport[]>(USAGE_REPORT_URL, errorHandlingFetcher, {
-    refreshInterval: isWaitingForReport ? 3000 : 0, // Poll every 3 seconds when waiting
-  });
-
-  // Refresh when refreshTrigger changes
-  React.useEffect(() => {
-    if (refreshTrigger > 0) {
-      mutate();
-    }
-  }, [refreshTrigger, mutate]);
-
-  // Detect when a new report appears
-  React.useEffect(() => {
-    if (usageReportsMetadata && previousReportCount !== null) {
-      if (usageReportsMetadata.length > previousReportCount) {
-        onNewReportDetected();
+function ReportRow({ report, justArrived }: ReportRowProps) {
+  return (
+    <div
+      className={
+        justArrived
+          ? "rounded-12 border border-border-01 bg-background-neutral-00 motion-safe:animate-in motion-safe:fade-in motion-safe:slide-in-from-top-2 motion-safe:duration-500"
+          : "rounded-12 border border-border-01 bg-background-neutral-00"
       }
-    }
-    if (usageReportsMetadata) {
-      setPreviousReportCount(usageReportsMetadata.length);
-    }
-  }, [usageReportsMetadata, previousReportCount, onNewReportDetected]);
+    >
+      <ContentAction
+        sizePreset="main-ui"
+        variant="section"
+        icon={SvgSpreadsheetFile}
+        title={periodLabel(report)}
+        description={`Generated by ${report.requestor ?? "system"} · ${humanReadableFormatWithTime(report.time_created)}`}
+        padding="md"
+        center
+        rightChildren={
+          <Button
+            prominence="tertiary"
+            icon={SvgDownload}
+            tooltip="Download CSV"
+            aria-label={`Download report for ${periodLabel(report)}`}
+            href={`/api/admin/usage-report/${report.report_name}`}
+          />
+        }
+      />
+    </div>
+  );
+}
 
-  const paginatedReports = usageReportsMetadata
-    ? usageReportsMetadata
-        .slice(0)
-        .reverse()
-        .slice(NUM_IN_PAGE * (page - 1), NUM_IN_PAGE * page)
-    : [];
+interface GenerateReportMenuProps {
+  disabled: boolean;
+  pending: boolean;
+  onGenerate: (period: ReportPeriod) => void;
+}
 
-  const totalPages = usageReportsMetadata
-    ? Math.ceil(usageReportsMetadata.length / NUM_IN_PAGE)
-    : 0;
+function GenerateReportMenu({
+  disabled,
+  pending,
+  onGenerate,
+}: GenerateReportMenuProps) {
+  const [open, setOpen] = useState(false);
+  const [view, setView] = useState<"presets" | "calendar">("presets");
+  const [pendingStart, setPendingStart] = useState<Date | undefined>(undefined);
+  const [draftRange, setDraftRange] = useState<
+    { from: Date; to?: Date } | undefined
+  >(undefined);
+
+  function reset() {
+    setView("presets");
+    setPendingStart(undefined);
+    setDraftRange(undefined);
+  }
 
   return (
-    <div>
-      <Title className="mb-2 mt-6 mx-auto"> Previous Reports </Title>
-      {usageReportsIsLoading && !isWaitingForReport ? (
-        <div className="flex justify-center w-full">
-          <SvgSimpleLoader className="h-6 w-6" />
-        </div>
-      ) : usageReportsError ? (
-        <ErrorCallout
-          errorTitle="Something went wrong."
-          errorMsg={(usageReportsError as Error).toString()}
-        />
-      ) : (
-        <>
-          <Table>
-            <TableHeader>
-              <TableRow>
-                <TableHead>Report</TableHead>
-                <TableHead>Period</TableHead>
-                <TableHead>Generated By</TableHead>
-                <TableHead>Time Generated</TableHead>
-                <TableHead>Download</TableHead>
-              </TableRow>
-            </TableHeader>
-
-            <TableBody>
-              {paginatedReports.map((r) => (
-                <TableRow key={r.report_name}>
-                  <TableCell>
-                    {r.report_name.split("_")[1]?.substring(0, 8) ||
-                      r.report_name.substring(0, 8)}
-                  </TableCell>
-                  <TableCell>
-                    {r.period_from
-                      ? `${humanReadableFormat(
-                          r.period_from
-                        )} - ${humanReadableFormat(r.period_to!)}`
-                      : "All time"}
-                  </TableCell>
-                  <TableCell>{r.requestor ?? "Auto generated"}</TableCell>
-                  <TableCell>
-                    {humanReadableFormatWithTime(r.time_created)}
-                  </TableCell>
-                  <TableCell>
-                    <Link
-                      href={`/api/admin/usage-report/${r.report_name}`}
-                      className="flex justify-center"
-                    >
-                      <FiDownload color="primary" />
-                    </Link>
-                  </TableCell>
-                </TableRow>
-              ))}
-            </TableBody>
-          </Table>
-          <div className="mt-3 flex">
-            <div className="mx-auto">
-              <PageSelector
-                totalPages={totalPages}
-                currentPage={page}
-                onPageChange={(newPage) => {
-                  setPage(newPage);
-                  window.scrollTo({
-                    top: 0,
-                    left: 0,
-                    behavior: "smooth",
-                  });
-                }}
-              />
-            </div>
+    <Popover
+      open={open}
+      onOpenChange={(nextOpen) => {
+        setOpen(nextOpen);
+        if (!nextOpen) reset();
+      }}
+    >
+      <Popover.Trigger asChild>
+        <Button icon={SvgDownloadCloud} disabled={disabled}>
+          {pending ? "Generating…" : "Generate report"}
+        </Button>
+      </Popover.Trigger>
+      <Popover.Content
+        align="end"
+        side="bottom"
+        width={view === "presets" ? "lg" : "fit"}
+      >
+        {view === "presets" ? (
+          <Popover.Menu>
+            {[
+              ...PRESET_DAYS.map((preset) => (
+                <Popover.Close asChild key={preset.label}>
+                  <LineItemButton
+                    title={preset.label}
+                    onClick={() =>
+                      onGenerate(presetPeriod(preset.label, preset.days))
+                    }
+                    rounding="md"
+                    selectVariant="select-heavy"
+                    sizePreset="main-ui"
+                    state="empty"
+                    variant="section"
+                    width="full"
+                  />
+                </Popover.Close>
+              )),
+              <Popover.Close asChild key="all-time">
+                <LineItemButton
+                  title="All time"
+                  onClick={() => onGenerate({ label: "All time" })}
+                  rounding="md"
+                  selectVariant="select-heavy"
+                  sizePreset="main-ui"
+                  state="empty"
+                  variant="section"
+                  width="full"
+                />
+              </Popover.Close>,
+              null,
+              <LineItemButton
+                key="custom"
+                icon={SvgCalendar}
+                title="Custom period…"
+                onClick={() => setView("calendar")}
+                rounding="md"
+                selectVariant="select-heavy"
+                sizePreset="main-ui"
+                state="empty"
+                variant="section"
+                width="full"
+              />,
+            ]}
+          </Popover.Menu>
+        ) : (
+          <div className="flex flex-col gap-1 p-2">
+            <Text font="secondary-body" color="text-03">
+              {pendingStart
+                ? "Pick the end of the period"
+                : "Pick the start of the period"}
+            </Text>
+            <Calendar
+              mode="range"
+              selected={draftRange}
+              onDayClick={(day) => {
+                if (!pendingStart) {
+                  setDraftRange({ from: day });
+                  setPendingStart(day);
+                  return;
+                }
+                const from = day < pendingStart ? day : pendingStart;
+                const to = day < pendingStart ? pendingStart : day;
+                onGenerate({
+                  label: `${format(from, "MMM d, y")} – ${format(to, "MMM d, y")}`,
+                  range: { from, to },
+                });
+                setOpen(false);
+                reset();
+              }}
+              numberOfMonths={1}
+              disabled={(date) => date > new Date()}
+            />
           </div>
-        </>
-      )}
-    </div>
+        )}
+      </Popover.Content>
+    </Popover>
   );
 }
 
 export default function UsageReports() {
-  const [refreshTrigger, setRefreshTrigger] = useState(0);
-  const [isWaitingForReport, setIsWaitingForReport] = useState(false);
-  const [timeoutMessage, setTimeoutMessage] = useState<string | null>(null);
-  const timeoutRef = React.useRef<NodeJS.Timeout | null>(null);
+  const [page, setPage] = useState(1);
+  const [requesting, setRequesting] = useState(false);
+  const [pendingSince, setPendingSince] = useState<number | null>(null);
+  const [pendingLabel, setPendingLabel] = useState<string>("");
+  const [pendingSlow, setPendingSlow] = useState(false);
+  const [arrivedReportName, setArrivedReportName] = useState<string | null>(
+    null
+  );
+  const [pendingReportId, setPendingReportId] = useState<string | null>(null);
+  const slowTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const reportTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
-  const handleReportGenerated = () => {
-    setRefreshTrigger((prev) => prev + 1);
-    setIsWaitingForReport(true);
-    setTimeoutMessage(null);
+  const pending = pendingSince !== null;
+  const {
+    data: reports,
+    error: listError,
+    isLoading: listLoading,
+    mutate,
+  } = useSWR<UsageReport[]>(SWR_KEYS.usageReport, errorHandlingFetcher, {
+    refreshInterval: pending ? POLL_INTERVAL_MS : 0,
+  });
 
-    // Clear any existing timeout
-    if (timeoutRef.current) {
-      clearTimeout(timeoutRef.current);
-    }
-
-    // Set a 15 second timeout
-    timeoutRef.current = setTimeout(() => {
-      setIsWaitingForReport(false);
-      setTimeoutMessage(
-        "Report generation is taking longer than expected. The report will continue generating in the background. Please check back in a few minutes."
-      );
-      timeoutRef.current = null;
-    }, 15000);
-  };
-
-  const handleNewReportDetected = () => {
-    setIsWaitingForReport(false);
-    setTimeoutMessage(null);
-    // Clear the timeout if report completed before timeout
-    if (timeoutRef.current) {
-      clearTimeout(timeoutRef.current);
-      timeoutRef.current = null;
-    }
-  };
-
-  // Cleanup on unmount
-  React.useEffect(() => {
-    return () => {
-      if (timeoutRef.current) {
-        clearTimeout(timeoutRef.current);
+  useEffect(() => {
+    if (!reports || !pendingReportId) return;
+    const completed = reports.find((report) =>
+      report.report_name.includes(pendingReportId)
+    );
+    if (completed && pending) {
+      setPendingSince(null);
+      setPendingReportId(null);
+      setPendingSlow(false);
+      setArrivedReportName(completed.report_name);
+      setPage(1);
+      toast.success("Usage report ready.");
+      if (slowTimerRef.current) {
+        clearTimeout(slowTimerRef.current);
+        slowTimerRef.current = null;
       }
+      if (reportTimeoutRef.current) {
+        clearTimeout(reportTimeoutRef.current);
+        reportTimeoutRef.current = null;
+      }
+    }
+  }, [reports, pending, pendingReportId]);
+
+  useEffect(() => {
+    return () => {
+      if (slowTimerRef.current) clearTimeout(slowTimerRef.current);
+      if (reportTimeoutRef.current) clearTimeout(reportTimeoutRef.current);
     };
   }, []);
 
+  async function requestReport(period: ReportPeriod): Promise<void> {
+    setRequesting(true);
+    try {
+      const reportId = crypto.randomUUID();
+      const res = await fetch("/api/admin/usage-report", {
+        method: "POST",
+        credentials: "include",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          period_from: period.range ? period.range.from.toISOString() : null,
+          period_to: period.range ? period.range.to.toISOString() : null,
+          report_id: reportId,
+        }),
+      });
+      if (!res.ok) {
+        throw Error(`Received an error: ${res.statusText}`);
+      }
+      setPendingSince(Date.now());
+      setPendingReportId(reportId);
+      setPendingLabel(period.label);
+      setPendingSlow(false);
+      setArrivedReportName(null);
+      slowTimerRef.current = setTimeout(
+        () => setPendingSlow(true),
+        SLOW_REPORT_AFTER_MS
+      );
+      reportTimeoutRef.current = setTimeout(() => {
+        setPendingSince(null);
+        setPendingReportId(null);
+        setPendingSlow(false);
+        toast.error(
+          "Report generation is taking too long. Try again or check back later."
+        );
+        reportTimeoutRef.current = null;
+      }, REPORT_TIMEOUT_MS);
+      await mutate();
+    } catch (error) {
+      const message = error instanceof Error ? error.message : "unknown error";
+      toast.error(`Failed to start report generation: ${message}`);
+    } finally {
+      setRequesting(false);
+    }
+  }
+
+  const orderedReports = reports ? [...reports].reverse() : [];
+  const totalPages = Math.max(1, Math.ceil(orderedReports.length / PAGE_SIZE));
+  const pageReports = orderedReports.slice(
+    PAGE_SIZE * (page - 1),
+    PAGE_SIZE * page
+  );
+
   return (
-    <>
-      {isWaitingForReport && <Spinner />}
-      <>
-        <GenerateReportInput
-          onReportGenerated={handleReportGenerated}
-          isWaitingForReport={isWaitingForReport}
+    <div className="flex flex-col gap-4">
+      <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
+        <div className="flex flex-col gap-0.5">
+          <Text font="heading-h3">Usage reports</Text>
+          <Text font="secondary-body" color="text-03">
+            Export per-user usage as a CSV. Reports build in the background and
+            stay available here.
+          </Text>
+        </div>
+        <GenerateReportMenu
+          disabled={requesting || pending || listLoading || Boolean(listError)}
+          pending={pending}
+          onGenerate={(period) => void requestReport(period)}
         />
-        {timeoutMessage && (
-          <div className="mb-4 p-4 bg-status-warning-00 border border-status-warning-02 rounded-regular">
-            <div className="flex items-start gap-2">
-              <div className="text-status-warning-05 mt-0.5">
-                <svg
-                  className="w-5 h-5"
-                  fill="none"
-                  stroke="currentColor"
-                  viewBox="0 0 24 24"
-                >
-                  <path
-                    strokeLinecap="round"
-                    strokeLinejoin="round"
-                    strokeWidth={2}
-                    d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z"
-                  />
-                </svg>
-              </div>
-              <div className="flex-1">
-                <div className="text-status-warning-05">
-                  <Text as="p" font="main-ui-action">
-                    Report Generation In Progress
-                  </Text>
-                </div>
-                <Spacer rem={0.25} />
-                <div className="text-status-warning-05">
-                  <Text as="p">{timeoutMessage}</Text>
-                </div>
-              </div>
+      </div>
+
+      {listLoading ? (
+        <PageLoader />
+      ) : listError ? (
+        <MessageCard
+          variant="error"
+          icon={SvgX}
+          title="Failed to load usage reports."
+        />
+      ) : (
+        <div className="flex flex-col gap-2">
+          {pending && page === 1 && (
+            <PendingReportRow rangeLabel={pendingLabel} slow={pendingSlow} />
+          )}
+          {orderedReports.length === 0 && !pending ? (
+            <div className="rounded-12 border border-dashed border-border-02 p-4">
+              <Text font="secondary-body" color="text-03" as="p">
+                No reports yet. Pick a period and generate your first one.
+              </Text>
             </div>
-          </div>
-        )}
-        <Divider />
-        <UsageReportsTable
-          refreshTrigger={refreshTrigger}
-          isWaitingForReport={isWaitingForReport}
-          onNewReportDetected={handleNewReportDetected}
-        />
-      </>
-    </>
+          ) : (
+            pageReports.map((report) => (
+              <ReportRow
+                key={report.report_name}
+                report={report}
+                justArrived={report.report_name === arrivedReportName}
+              />
+            ))
+          )}
+          {totalPages > 1 && (
+            <div className="flex justify-end pt-1">
+              <Pagination
+                variant="simple"
+                currentPage={page}
+                totalPages={totalPages}
+                onChange={setPage}
+              />
+            </div>
+          )}
+        </div>
+      )}
+    </div>
   );
 }

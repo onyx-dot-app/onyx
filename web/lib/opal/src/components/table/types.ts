@@ -38,12 +38,15 @@ export type OnyxColumnKind = "qualifier" | "data" | "display" | "actions";
 // Column definitions (discriminated union on `kind`)
 // ---------------------------------------------------------------------------
 
+export type ColumnAlignment = "left" | "center" | "right";
+
 interface OnyxColumnBase<TData> {
   kind: OnyxColumnKind;
   /** Stable column identifier (mirrors the TanStack column ID). */
   id: string;
   def: ColumnDef<TData, any>;
   width: ColumnWidth | ((size: TableSize) => ColumnWidth);
+  alignment?: ColumnAlignment;
 }
 
 /** Qualifier column — leading avatar/icon/checkbox column. */
@@ -162,6 +165,7 @@ export interface DataTableProps<TData> {
   onSelectionChange?: (selectedIds: string[]) => void;
   /** Called when a row is clicked (replaces the default selection toggle). */
   onRowClick?: (row: TData) => void;
+  getRowLabel?: (row: TData) => string;
   /** Search term for global text filtering. When provided, rows are filtered
    *  to those containing the term in any accessor column value (case-insensitive). */
   searchTerm?: string;

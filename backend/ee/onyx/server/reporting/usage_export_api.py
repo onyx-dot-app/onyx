@@ -1,5 +1,6 @@
 from collections.abc import Generator
 from datetime import datetime
+from uuid import UUID
 
 from fastapi import APIRouter, Depends, HTTPException, Response
 from fastapi.responses import StreamingResponse
@@ -26,6 +27,7 @@ router = APIRouter()
 class GenerateUsageReportParams(BaseModel):
     period_from: str | None = None
     period_to: str | None = None
+    report_id: UUID | None = None
 
 
 @router.post("/admin/usage-report", status_code=204)
@@ -49,6 +51,7 @@ def generate_report(
             "user_id": str(user.id) if user else None,
             "period_from": params.period_from,
             "period_to": params.period_to,
+            "report_id": str(params.report_id) if params.report_id else None,
         },
     )
 

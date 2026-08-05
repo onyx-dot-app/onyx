@@ -91,7 +91,10 @@
    neighbor-facing side. Week edges stay flush and rounded. */
 .opal-calendar-cell--range-start::before,
 .opal-calendar-cell--range-middle::before,
-.opal-calendar-cell--range-end::before {
+.opal-calendar-cell--range-end::before,
+.opal-calendar-cell--range-preview-start::before,
+.opal-calendar-cell--range-preview-middle::before,
+.opal-calendar-cell--range-preview-end::before {
   content: "";
   position: absolute;
   top: 0;
@@ -103,7 +106,10 @@
 
 .opal-calendar-cell--range-start::before,
 .opal-calendar-cell--range-middle:first-child::before,
-.opal-calendar-cell--range-end:first-child::before {
+.opal-calendar-cell--range-end:first-child::before,
+.opal-calendar-cell--range-preview-start::before,
+.opal-calendar-cell--range-preview-middle:first-child::before,
+.opal-calendar-cell--range-preview-end:first-child::before {
   left: 0;
   border-top-left-radius: var(--radius-08);
   border-bottom-left-radius: var(--radius-08);
@@ -111,7 +117,10 @@
 
 .opal-calendar-cell--range-end::before,
 .opal-calendar-cell--range-middle:last-child::before,
-.opal-calendar-cell--range-start:last-child::before {
+.opal-calendar-cell--range-start:last-child::before,
+.opal-calendar-cell--range-preview-end::before,
+.opal-calendar-cell--range-preview-middle:last-child::before,
+.opal-calendar-cell--range-preview-start:last-child::before {
   right: 0;
   border-top-right-radius: var(--radius-08);
   border-bottom-right-radius: var(--radius-08);
