@@ -119,10 +119,10 @@ class UserUsageByDay(BaseModel):
 
 
 class UsageExportRow(BaseModel):
-    """Tenant-wide usage row by email, model, and UTC day."""
-
     email: str
     model: str
+    flow: str
+    provider: str
     day: str  # YYYY-MM-DD
     input_tokens: int
     output_tokens: int
@@ -216,7 +216,6 @@ def get_usage_export(
     end: datetime,
     model: str | None = None,
 ) -> list[UsageExportRow]:
-    """Tenant-wide usage by email, model, and UTC day."""
     utc_day = func.date(func.timezone("UTC", UserUsage.window_start))
     # Deleted users/API keys leave user_id NULL but keep their spend. An inner
     # join would hide that spend here while the tenant-wide totals still count
@@ -226,6 +225,8 @@ def get_usage_export(
         select(
             email_label,
             UserUsage.model,
+            UserUsage.flow,
+            UserUsage.provider,
             utc_day.label("day"),
             func.sum(UserUsage.input_tokens),
             func.sum(UserUsage.output_tokens),
@@ -239,7 +240,9 @@ def get_usage_export(
             UserUsage.window_start >= start,
             UserUsage.window_start < end,
         )
-        .group_by(email_label, UserUsage.model, utc_day)
+        .group_by(
+            email_label, UserUsage.model, UserUsage.flow, UserUsage.provider, utc_day
+        )
         .order_by(email_label, utc_day, UserUsage.model)
     )
     if model is not None:
@@ -251,13 +254,15 @@ def get_usage_export(
         UsageExportRow(
             email=str(email),
             model=mdl,
+            flow=flow,
+            provider=provider,
             day=str(day),
             input_tokens=int(in_tok or 0),
             output_tokens=int(out_tok or 0),
             cache_read_tokens=int(cache_tok or 0),
             cost_cents=float(cost or 0.0),
         )
-        for email, mdl, day, in_tok, out_tok, cache_tok, cost in rows
+        for email, mdl, flow, provider, day, in_tok, out_tok, cache_tok, cost in rows
     ]
 
 

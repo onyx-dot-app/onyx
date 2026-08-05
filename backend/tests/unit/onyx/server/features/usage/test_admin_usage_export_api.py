@@ -148,6 +148,8 @@ class TestGetUsageExportHelper:
             UsageExportRow(
                 email="alice@example.com",
                 model="model-a",
+                flow="CHAT",
+                provider="openai",
                 day="2026-06-01",
                 input_tokens=100,
                 output_tokens=50,
@@ -157,6 +159,8 @@ class TestGetUsageExportHelper:
             UsageExportRow(
                 email="alice@example.com",
                 model="model-b",
+                flow="CHAT",
+                provider="openai",
                 day="2026-06-01",
                 input_tokens=200,
                 output_tokens=60,
@@ -166,6 +170,8 @@ class TestGetUsageExportHelper:
             UsageExportRow(
                 email="alice@example.com",
                 model="model-a",
+                flow="CHAT",
+                provider="openai",
                 day="2026-06-08",
                 input_tokens=300,
                 output_tokens=70,
@@ -175,6 +181,8 @@ class TestGetUsageExportHelper:
             UsageExportRow(
                 email="bob@example.com",
                 model="model-a",
+                flow="CHAT",
+                provider="anthropic",
                 day="2026-06-08",
                 input_tokens=400,
                 output_tokens=80,
