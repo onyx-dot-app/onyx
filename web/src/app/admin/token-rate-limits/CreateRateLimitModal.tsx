@@ -437,7 +437,10 @@ export default function CreateRateLimitModal({
               .when("token_budget", {
                 is: (value: string | undefined) =>
                   value === undefined || value === "",
-                then: (schema) => schema.required("Enter a cost budget"),
+                then: (schema) =>
+                  schema.required(
+                    "Enter a cost budget, a token budget, or both"
+                  ),
                 otherwise: (schema) => schema.notRequired(),
               }),
             token_budget: Yup.number()
@@ -579,13 +582,13 @@ export default function CreateRateLimitModal({
                     <InputVertical
                       withLabel="cost_budget_dollars"
                       title="Cost budget"
-                      description="Maximum spend per reset period"
+                      description="Maximum spend per reset period. Set a cost budget, a token budget, or both."
                     >
                       <InputTypeInField
                         name="cost_budget_dollars"
                         inputMode="decimal"
                         prefixText="$"
-                        placeholder="0.00"
+                        placeholder="No cost limit"
                         rightChildren={
                           <div className="pr-1">
                             <Text
@@ -603,8 +606,7 @@ export default function CreateRateLimitModal({
                     <InputVertical
                       withLabel="token_budget"
                       title="Token budget"
-                      suffix="optional"
-                      description="Also stop usage at a token count"
+                      description="Maximum tokens per reset period"
                     >
                       <TokenBudgetField />
                     </InputVertical>

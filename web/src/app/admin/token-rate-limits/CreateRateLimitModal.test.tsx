@@ -25,7 +25,9 @@ test("requires a cost budget when no token budget is set", async () => {
 
   fireEvent.click(screen.getByRole("button", { name: "Create limit" }));
 
-  expect(await screen.findByText("Enter a cost budget")).toBeInTheDocument();
+  expect(
+    await screen.findByText("Enter a cost budget, a token budget, or both")
+  ).toBeInTheDocument();
   expect(onSubmit).not.toHaveBeenCalled();
 });
 
