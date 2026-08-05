@@ -37,32 +37,18 @@ interface RateLimitFormValues {
   user_group_id: number | undefined;
 }
 
+// Cards are title-only so the three scopes fit one row; the meaning of the
+// selected scope is carried by the caption beneath them.
 interface ScopeOptionConfig {
   value: Scope;
   icon: IconFunctionComponent;
   title: string;
-  description: string;
 }
 
 const SCOPE_OPTIONS: ScopeOptionConfig[] = [
-  {
-    value: Scope.GLOBAL,
-    icon: SvgGlobe,
-    title: "Workspace",
-    description: "Everyone shares one budget",
-  },
-  {
-    value: Scope.USER,
-    icon: SvgUser,
-    title: "Per user",
-    description: "Every user gets their own budget",
-  },
-  {
-    value: Scope.USER_GROUP,
-    icon: SvgUsers,
-    title: "User group",
-    description: "Group members share one budget",
-  },
+  { value: Scope.GLOBAL, icon: SvgGlobe, title: "Workspace" },
+  { value: Scope.USER, icon: SvgUser, title: "Per user" },
+  { value: Scope.USER_GROUP, icon: SvgUsers, title: "User group" },
 ];
 
 interface ScopeOptionProps extends React.HTMLAttributes<HTMLElement> {
