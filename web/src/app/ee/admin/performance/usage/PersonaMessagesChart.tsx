@@ -54,6 +54,22 @@ export function PersonaMessagesChart({
   const hasError =
     agentsError || personaMessagesError || personaUniqueUsersError;
 
+  // The fallback card is generic; keep the underlying failure diagnosable.
+  useEffect(() => {
+    if (agentsError) {
+      console.error("Failed to fetch admin agents:", agentsError);
+    }
+    if (personaMessagesError) {
+      console.error("Failed to fetch agent messages:", personaMessagesError);
+    }
+    if (personaUniqueUsersError) {
+      console.error(
+        "Failed to fetch agent unique users:",
+        personaUniqueUsersError
+      );
+    }
+  }, [agentsError, personaMessagesError, personaUniqueUsersError]);
+
   const filteredPersonaList = useMemo(() => {
     if (!availablePersonas) return [];
     return availablePersonas.filter((persona) =>
