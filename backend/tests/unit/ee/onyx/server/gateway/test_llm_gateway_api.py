@@ -14,6 +14,9 @@ from fastapi.responses import StreamingResponse
 from fastapi.routing import APIRoute
 from sqlalchemy.orm import Session
 
+from ee.onyx.server.gateway import api as gateway_api
+from ee.onyx.server.gateway import stream_bridge
+from ee.onyx.server.gateway.api import _MESSAGES_ADAPTER
 from onyx.db.enums import Permission
 from onyx.db.models import User
 from onyx.error_handling.error_codes import OnyxErrorCode
@@ -50,9 +53,6 @@ from onyx.llm.multi_llm import LLMRateLimitError, LLMTimeoutError
 from onyx.server.auth_check import check_router_auth
 from onyx.server.features.build import craft_gateway
 from onyx.server.features.build.craft_gateway import gateway_request_flow
-from onyx.server.gateway import api as gateway_api
-from onyx.server.gateway import stream_bridge
-from onyx.server.gateway.api import _MESSAGES_ADAPTER
 from onyx.server.gateway.configs import GATEWAY_PATH_PREFIX
 from onyx.server.gateway.models import (
     ChatCompletionRequest,

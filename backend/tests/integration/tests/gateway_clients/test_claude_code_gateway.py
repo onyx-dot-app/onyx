@@ -1,5 +1,5 @@
 """Integration tests for the Claude Code CLI against the gateway's
-Anthropic Messages API passthrough (onyx.server.gateway.anthropic_passthrough).
+Anthropic Messages API passthrough (ee.onyx.server.gateway.anthropic_passthrough).
 
 Test Suite:
 1. test_basic_turn_answers_correctly - `claude -p` answers correctly through the gateway

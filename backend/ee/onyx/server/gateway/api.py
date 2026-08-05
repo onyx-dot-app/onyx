@@ -13,6 +13,23 @@ from fastapi.responses import JSONResponse, StreamingResponse
 from pydantic import TypeAdapter, ValidationError
 from sqlalchemy.orm import Session
 
+from ee.onyx.server.gateway.anthropic_passthrough import (
+    AnthropicPassthroughUnavailable,
+    handle_anthropic_count_tokens_passthrough,
+    handle_anthropic_passthrough,
+    is_anthropic_passthrough_eligible,
+)
+from ee.onyx.server.gateway.openai_passthrough import (
+    handle_openai_responses_passthrough,
+    is_openai_passthrough_eligible,
+)
+from ee.onyx.server.gateway.stream_bridge import (
+    _RATE_LIMIT_ERROR,
+    _put_stream_item,
+    _sse_response,
+    _stream_worker_guard,
+    _StreamAccumulator,
+)
 from onyx.auth.permissions import require_permission
 from onyx.db.engine.sql_engine import get_session
 from onyx.db.enums import Permission
@@ -44,12 +61,6 @@ from onyx.llm.multi_llm import LLMRateLimitError, LLMTimeoutError
 from onyx.llm.prompt_cache.processor import process_with_prompt_cache
 from onyx.llm.tracing_wrap import _finalize_tool_calls
 from onyx.server.features.build.craft_gateway import gateway_request_flow
-from onyx.server.gateway.anthropic_passthrough import (
-    AnthropicPassthroughUnavailable,
-    handle_anthropic_count_tokens_passthrough,
-    handle_anthropic_passthrough,
-    is_anthropic_passthrough_eligible,
-)
 from onyx.server.gateway.configs import GATEWAY_PATH_PREFIX
 from onyx.server.gateway.model_catalog import build_gateway_model_catalog
 from onyx.server.gateway.models import (
@@ -97,17 +108,6 @@ from onyx.server.gateway.models import (
     ResponsesOutputTextDoneEvent,
     ResponsesOutputTextPart,
     ResponsesRequest,
-)
-from onyx.server.gateway.openai_passthrough import (
-    handle_openai_responses_passthrough,
-    is_openai_passthrough_eligible,
-)
-from onyx.server.gateway.stream_bridge import (
-    _RATE_LIMIT_ERROR,
-    _put_stream_item,
-    _sse_response,
-    _stream_worker_guard,
-    _StreamAccumulator,
 )
 from onyx.server.manage.llm.models import LLMProviderView, ModelConfigurationView
 from onyx.server.query_and_chat.token_limit import check_token_rate_limits
