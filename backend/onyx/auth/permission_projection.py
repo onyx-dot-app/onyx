@@ -8,8 +8,7 @@ its own guard as the security boundary. Fail-closed — a key absent from the ma
 as ``False`` on the client.
 """
 
-from typing import cast
-from typing import TypedDict
+from typing import TypedDict, cast
 
 # Each resource's affordance keys are a TypedDict, so a typo or a missing key in the builder
 # below is a type error rather than a silent False on the wire. The ``*_ACTIONS`` vocabulary is

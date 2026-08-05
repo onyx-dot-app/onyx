@@ -4,6 +4,11 @@ import { LLMProviderDescriptor } from "@/lib/languageModels/types";
 import { getModelIcon, getProvider } from "@/lib/languageModels";
 import { AGGREGATOR_PROVIDERS } from "@/lib/languageModels/svc";
 
+export type ModelOptionProvider = Pick<
+  LLMProviderDescriptor,
+  "id" | "name" | "provider" | "model_configurations"
+>;
+
 // ---------------------------------------------------------------------------
 // Types
 // ---------------------------------------------------------------------------
@@ -48,18 +53,38 @@ export const GLOBAL_DEFAULT_LLM_OPTION: LLMOption = {
 };
 
 // ---------------------------------------------------------------------------
+// llmOptionKey
+// ---------------------------------------------------------------------------
+
+/**
+ * Stable identity key for a selectable model. Prefers the unique model
+ * configuration id; the provider + model name fallback can collide when two
+ * providers expose a model with the same name, so it is only used for
+ * options that were never persisted (no id).
+ */
+export function llmOptionKey(option: {
+  provider: string;
+  modelName: string;
+  modelConfigurationId?: number | null;
+}): string {
+  return option.modelConfigurationId != null
+    ? `mc:${option.modelConfigurationId}`
+    : `${option.provider}:${option.modelName}`;
+}
+
+// ---------------------------------------------------------------------------
 // buildLlmOptions
 // ---------------------------------------------------------------------------
 
 /**
  * Flattens an array of provider descriptors into a deduplicated list of
- * selectable model options. Hidden models are excluded unless their name
- * matches `currentModelName` (so an already-selected hidden model still
- * appears in the list).
+ * selectable model options. Hidden models require an existing selection or
+ * an explicit admin opt-in.
  */
 export function buildLlmOptions(
-  llmProviders: LLMProviderDescriptor[] | undefined,
-  currentModelName?: string
+  llmProviders: ModelOptionProvider[] | undefined,
+  currentModelName?: string,
+  includeHiddenModels = false
 ): LLMOption[] {
   if (!llmProviders) return [];
 
@@ -68,7 +93,10 @@ export function buildLlmOptions(
 
   llmProviders.forEach((llmProvider) => {
     llmProvider.model_configurations
-      .filter((mc) => mc.is_visible || mc.name === currentModelName)
+      .filter(
+        (mc) =>
+          includeHiddenModels || mc.is_visible || mc.name === currentModelName
+      )
       .forEach((mc) => {
         const key =
           mc.id != null ? `id:${mc.id}` : `${llmProvider.provider}:${mc.name}`;
@@ -94,6 +122,26 @@ export function buildLlmOptions(
   });
 
   return options;
+}
+
+// ---------------------------------------------------------------------------
+// buildModelProviderLookup
+// ---------------------------------------------------------------------------
+
+/**
+ * Model identifier → provider slug map for icon resolution. Indexes by both
+ * raw model name ("gpt-4.1") and display name ("GPT-4.1") so it resolves for
+ * both live streaming and history reload, where only one of the two is known.
+ */
+export function buildModelProviderLookup(
+  llmProviders: LLMProviderDescriptor[] | undefined
+): Map<string, string> {
+  const map = new Map<string, string>();
+  for (const opt of buildLlmOptions(llmProviders)) {
+    map.set(opt.modelName, opt.provider);
+    map.set(opt.displayName, opt.provider);
+  }
+  return map;
 }
 
 // ---------------------------------------------------------------------------
@@ -124,9 +172,8 @@ export function groupLlmOptions(
     if (!groups.has(groupKey)) {
       let displayName: string;
       if (isAggregator && option.vendor) {
-        const vendorDisplayName =
-          option.vendor.charAt(0).toUpperCase() + option.vendor.slice(1);
-        displayName = `${option.providerDisplayName}/${vendorDisplayName}`;
+        // vendor arrives display-cased from the backend (e.g. "OpenAI", "xAI")
+        displayName = `${option.providerDisplayName}/${option.vendor}`;
       } else {
         displayName = option.providerDisplayName;
       }

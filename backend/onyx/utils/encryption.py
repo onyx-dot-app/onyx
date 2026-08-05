@@ -1,10 +1,8 @@
 from typing import Any
-from urllib.parse import urlparse
-from urllib.parse import urlunparse
+from urllib.parse import urlparse, urlunparse
 
 from onyx.configs.app_configs import ENCRYPTION_KEY_SECRET
-from onyx.configs.constants import MASK_CREDENTIAL_CHAR
-from onyx.configs.constants import MASK_CREDENTIAL_LONG_RE
+from onyx.configs.constants import MASK_CREDENTIAL_CHAR, MASK_CREDENTIAL_LONG_RE
 from onyx.connectors.google_utils.shared_constants import (
     DB_CREDENTIALS_AUTHENTICATION_METHOD,
 )
@@ -153,19 +151,21 @@ MASK_CREDENTIALS_WHITELIST = {
     "wiki_base",
     "cloud_name",
     "cloud_id",
+    # OAuth scope lists are public identifiers, not secrets, and masked list
+    # items cannot round-trip through a chip editor.
+    "scopes",
 }
 
 
 def mask_credential_dict(credential_dict: dict[str, Any]) -> dict[str, Any]:
     masked_creds: dict[str, Any] = {}
     for key, val in credential_dict.items():
-        if isinstance(val, str):
-            # we want to pass the authentication_method field through so the frontend
-            # can disambiguate credentials created by different methods
-            if key in MASK_CREDENTIALS_WHITELIST:
-                masked_creds[key] = val
-            else:
-                masked_creds[key] = mask_string(val)
+        # Whitelisted keys pass through whole (e.g. authentication_method so
+        # the frontend can disambiguate credential kinds) whatever their type.
+        if key in MASK_CREDENTIALS_WHITELIST:
+            masked_creds[key] = val
+        elif isinstance(val, str):
+            masked_creds[key] = mask_string(val)
         elif isinstance(val, dict):
             masked_creds[key] = mask_credential_dict(val)
         elif isinstance(val, list):
@@ -194,6 +194,61 @@ def _mask_list(items: list[Any]) -> list[Any]:
         else:
             masked.append("*****")
     return masked
+
+
+def _restore_masked_value(incoming: Any, stored: Any, masked_stored: Any) -> Any:
+    if (
+        isinstance(incoming, dict)
+        and isinstance(stored, dict)
+        and isinstance(masked_stored, dict)
+    ):
+        restored = dict(incoming)
+        for key, value in incoming.items():
+            if key not in stored or key not in masked_stored:
+                continue
+            restored[key] = _restore_masked_value(
+                value, stored[key], masked_stored[key]
+            )
+        return restored
+
+    if (
+        isinstance(incoming, list)
+        and isinstance(stored, list)
+        and isinstance(masked_stored, list)
+    ):
+        restored_list = list(incoming)
+        for index, value in enumerate(incoming):
+            if index >= len(stored) or index >= len(masked_stored):
+                continue
+            restored_list[index] = _restore_masked_value(
+                value,
+                stored[index],
+                masked_stored[index],
+            )
+        return restored_list
+
+    if incoming == masked_stored:
+        return stored
+
+    return incoming
+
+
+def restore_masked_credentials(
+    incoming: dict[str, Any], stored: dict[str, Any]
+) -> dict[str, Any]:
+    """Inverse of ``mask_credential_dict`` for edit round-trips: any incoming
+    value that equals the masked form of the stored value is replaced with the
+    stored value, recursing through nested dicts and lists. Values the caller
+    changed pass through untouched.
+    """
+    restored = _restore_masked_value(
+        incoming,
+        stored,
+        mask_credential_dict(stored),
+    )
+    if not isinstance(restored, dict):
+        return incoming
+    return restored
 
 
 def encrypt_string_to_bytes(intput_str: str, key: str | None = None) -> bytes:

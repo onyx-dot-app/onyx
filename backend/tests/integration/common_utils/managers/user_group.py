@@ -4,11 +4,9 @@ from uuid import uuid4
 import httpx
 
 from ee.onyx.server.user_group.models import UserGroup
-from tests.integration.common_utils.constants import API_SERVER_URL
-from tests.integration.common_utils.constants import MAX_DELAY
+from tests.integration.common_utils.constants import API_SERVER_URL, MAX_DELAY
 from tests.integration.common_utils.http_client import client
-from tests.integration.common_utils.test_models import DATestUser
-from tests.integration.common_utils.test_models import DATestUserGroup
+from tests.integration.common_utils.test_models import DATestUser, DATestUserGroup
 
 
 class UserGroupManager:
@@ -112,6 +110,21 @@ class UserGroupManager:
         response = client.put(
             f"{API_SERVER_URL}/manage/admin/user-group/{user_group.id}/permissions",
             json={"permissions": permissions},
+            headers=user_performing_action.headers,
+        )
+        return response
+
+    @staticmethod
+    def set_manager(
+        user_group: DATestUserGroup,
+        user: DATestUser,
+        is_manager: bool,
+        user_performing_action: DATestUser,
+    ) -> httpx.Response:
+        """(De)assign a group manager. The target must already be a member."""
+        response = client.put(
+            f"{API_SERVER_URL}/manage/admin/user-group/{user_group.id}/manager",
+            json={"user_id": user.id, "is_manager": is_manager},
             headers=user_performing_action.headers,
         )
         return response

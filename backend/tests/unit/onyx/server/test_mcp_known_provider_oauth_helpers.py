@@ -2,32 +2,31 @@ import asyncio
 import time
 from contextlib import contextmanager
 from types import SimpleNamespace
-from typing import cast
-from typing import Iterator
-from urllib.parse import parse_qs
-from urllib.parse import urlparse
+from typing import Iterator, cast
+from urllib.parse import parse_qs, urlparse
 
 import httpx
 import pytest
 from mcp.client.auth import OAuthClientProvider
-from mcp.shared.auth import OAuthClientInformationFull
-from mcp.shared.auth import OAuthMetadata
-from mcp.shared.auth import OAuthToken
-from pydantic import AnyHttpUrl
-from pydantic import AnyUrl
+from mcp.shared.auth import OAuthClientInformationFull, OAuthMetadata, OAuthToken
+from pydantic import AnyHttpUrl, AnyUrl
 
-import onyx.server.features.mcp.api as mcp_api
-from onyx.auth.oauth_token_manager import build_oauth_authorization_url
-from onyx.auth.oauth_token_manager import exchange_oauth_code_for_token
-from onyx.db.enums import MCPOAuthProviderMode
+import onyx.server.features.mcp.oauth as mcp_oauth
+from onyx.auth.oauth_token_manager import (
+    build_oauth_authorization_url,
+    exchange_oauth_code_for_token,
+)
+from onyx.db.enums import MCPOAuthProviderMode, MCPTransport
 from onyx.db.models import MCPServer as DbMCPServer
 from onyx.error_handling.exceptions import OnyxError
-from onyx.server.features.mcp.api import _absolute_token_expiry
-from onyx.server.features.mcp.api import _known_provider_oauth_metadata
 from onyx.server.features.mcp.api import _mcp_known_provider_flow_params
-from onyx.server.features.mcp.api import _token_dict_with_preserved_refresh
-from onyx.server.features.mcp.api import make_oauth_provider
 from onyx.server.features.mcp.models import MCPOAuthKeys
+from onyx.server.features.mcp.oauth import (
+    _absolute_token_expiry,
+    _known_provider_oauth_metadata,
+    _token_dict_with_preserved_refresh,
+    make_oauth_provider,
+)
 
 
 def _make_mcp_server_stub(
@@ -49,6 +48,7 @@ def _make_mcp_server_stub(
             server_url="https://mcp.example.com/mcp",
             name="Example MCP",
             id=1,
+            transport=MCPTransport.STREAMABLE_HTTP,
         ),
     )
 
@@ -229,7 +229,7 @@ def test_absolute_token_expiry_from_expires_in() -> None:
     assert expiry is not None
     # The expiry is `now + expires_in` pulled back by the refresh buffer so we
     # refresh slightly early; bound the assertion the same way.
-    buffer = mcp_api.TOKEN_EXPIRY_BUFFER_SECONDS
+    buffer = mcp_oauth.TOKEN_EXPIRY_BUFFER_SECONDS
     assert before + 3600 - buffer <= expiry <= time.time() + 3600 - buffer
 
 
@@ -259,13 +259,15 @@ def _patch_config_read(
     def _fake_session() -> Iterator[object]:
         yield object()
 
-    monkeypatch.setattr(mcp_api, "get_session_with_current_tenant", _fake_session)
+    monkeypatch.setattr(mcp_oauth, "get_session_with_current_tenant", _fake_session)
     monkeypatch.setattr(
-        mcp_api.OnyxTokenStorage,
+        mcp_oauth.OnyxTokenStorage,
         "_ensure_connection_config",
         lambda _self, _db: SimpleNamespace(id=1),
     )
-    monkeypatch.setattr(mcp_api, "extract_connection_data", lambda _config: config_data)
+    monkeypatch.setattr(
+        mcp_oauth, "extract_connection_data", lambda _config: config_data
+    )
 
 
 def test_make_oauth_provider_sets_known_provider_metadata_and_binds_storage() -> None:
@@ -277,7 +279,7 @@ def test_make_oauth_provider_sets_known_provider_metadata_and_binds_storage() ->
         == "https://accounts.example.com/oauth/token"
     )
     # Storage is wired to hydrate expiry from the config read it already does.
-    storage = cast(mcp_api.OnyxTokenStorage, provider.context.storage)
+    storage = cast(mcp_oauth.OnyxTokenStorage, provider.context.storage)
     assert storage._oauth_context is provider.context
 
 
@@ -285,6 +287,11 @@ def test_make_oauth_provider_auto_discovery_leaves_metadata_unset() -> None:
     provider = _build_provider(MCPOAuthProviderMode.AUTO_DISCOVERY)
     assert provider.context.oauth_metadata is None
     assert provider.context.token_expiry_time is None
+
+
+def test_make_oauth_provider_auto_discovery_requests_public_pkce_client() -> None:
+    provider = _build_provider(MCPOAuthProviderMode.AUTO_DISCOVERY)
+    assert provider.context.client_metadata.token_endpoint_auth_method == "none"
 
 
 def test_get_tokens_hydrates_expiry_and_invalidates_expired_token(
@@ -338,7 +345,7 @@ def _patch_config_store(
     returns it, so mutations land in place; the update is a no-op)."""
     _patch_config_read(monkeypatch, config_data)
     monkeypatch.setattr(
-        mcp_api, "update_connection_config", lambda *_args, **_kwargs: None
+        mcp_oauth, "update_connection_config", lambda *_args, **_kwargs: None
     )
 
 
@@ -448,6 +455,7 @@ async def _drive_refresh(
 
 def test_proactive_refresh_targets_configured_endpoint_and_persists(
     monkeypatch: pytest.MonkeyPatch,
+    caplog: pytest.LogCaptureFixture,
 ) -> None:
     provider = _build_provider(MCPOAuthProviderMode.KNOWN_PROVIDER)
     config_data = _seed_refreshable_config(expires_at=time.time() - 60)
@@ -478,6 +486,31 @@ def test_proactive_refresh_targets_configured_endpoint_and_persists(
     assert persisted_tokens["access_token"] == "access-new"
     assert persisted_tokens["refresh_token"] == "refresh-new"
     assert cast(float, config_data[MCPOAuthKeys.TOKEN_EXPIRES_AT.value]) > time.time()
+    storage = cast(mcp_oauth.OnyxTokenStorage, provider.context.storage)
+    assert storage.refresh_attempt_id is None
+
+    started_record = next(
+        record
+        for record in caplog.records
+        if record.getMessage() == "mcp_oauth.refresh.started"
+    )
+    persisted_record = next(
+        record
+        for record in caplog.records
+        if record.getMessage() == "mcp_oauth.refresh.persisted"
+    )
+    assert getattr(persisted_record, "refresh_attempt_id") == getattr(
+        started_record, "refresh_attempt_id"
+    )
+
+    caplog.clear()
+    asyncio.run(
+        storage.set_tokens(OAuthToken(access_token="reauth", token_type="Bearer"))
+    )
+    assert not any(
+        record.getMessage() == "mcp_oauth.refresh.persisted"
+        for record in caplog.records
+    )
 
 
 def test_proactive_refresh_preserves_refresh_token_when_response_omits_it(
@@ -506,8 +539,14 @@ def test_proactive_refresh_preserves_refresh_token_when_response_omits_it(
     assert persisted_tokens["refresh_token"] == "refresh-old"
 
 
-def test_proactive_refresh_failure_clears_tokens(
+@pytest.mark.parametrize(
+    ("refresh_status", "refresh_body"),
+    [(400, {"error": "invalid_grant"}), (200, {})],
+)
+def test_proactive_refresh_failure_clears_tokens_and_attempt_id(
     monkeypatch: pytest.MonkeyPatch,
+    refresh_status: int,
+    refresh_body: dict[str, object],
 ) -> None:
     provider = _build_provider(MCPOAuthProviderMode.KNOWN_PROVIDER)
     config_data = _seed_refreshable_config(expires_at=time.time() - 60)
@@ -516,12 +555,12 @@ def test_proactive_refresh_failure_clears_tokens(
     refresh_request, authed_request = asyncio.run(
         _drive_refresh(
             provider,
-            refresh_status=400,
-            refresh_body={"error": "invalid_grant"},
+            refresh_status=refresh_status,
+            refresh_body=refresh_body,
         )
     )
 
-    # A rejected refresh clears the in-memory token so the SDK falls through to
+    # A failed refresh clears the in-memory token so the SDK falls through to
     # re-auth (which surfaces as "please reconnect" at the tool layer) rather
     # than retrying a dead access token.
     assert str(refresh_request.url) == "https://accounts.example.com/oauth/token"
@@ -530,3 +569,5 @@ def test_proactive_refresh_failure_clears_tokens(
         "SDK no longer yields original request on refresh failure"
     )
     assert authed_request.headers.get("Authorization") is None
+    storage = cast(mcp_oauth.OnyxTokenStorage, provider.context.storage)
+    assert storage.refresh_attempt_id is None

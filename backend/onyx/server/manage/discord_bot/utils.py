@@ -1,8 +1,7 @@
 """Discord registration key generation and parsing."""
 
 import secrets
-from urllib.parse import quote
-from urllib.parse import unquote
+from urllib.parse import quote, unquote
 
 from onyx.utils.logger import setup_logger
 

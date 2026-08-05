@@ -3,19 +3,20 @@
 import os
 import re
 import time
-from unittest.mock import MagicMock
-from unittest.mock import patch
+from unittest.mock import MagicMock, patch
 
 import pytest
 
 from onyx.configs.constants import DocumentSource
 from onyx.connectors.confluence.connector import ConfluenceConnector
 from onyx.connectors.credentials_provider import OnyxStaticCredentialsProvider
-from onyx.connectors.models import ConnectorFailure
-from onyx.connectors.models import Document
-from onyx.connectors.models import DocumentFailure
-from onyx.connectors.models import EntityFailure
-from onyx.connectors.models import HierarchyNode
+from onyx.connectors.models import (
+    ConnectorFailure,
+    Document,
+    DocumentFailure,
+    EntityFailure,
+    HierarchyNode,
+)
 from tests.daily.connectors.utils import load_all_from_connector
 from tests.utils.secret_names import TestSecret
 

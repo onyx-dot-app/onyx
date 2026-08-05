@@ -7,33 +7,38 @@ is uploaded with is_auto_mode=True.
 
 from collections.abc import Generator
 from datetime import datetime
-from unittest.mock import MagicMock
-from unittest.mock import patch
+from unittest.mock import MagicMock, patch
 from uuid import uuid4
 
 import pytest
 from sqlalchemy.orm import Session
 
 from onyx.db.enums import LLMModelFlowType
-from onyx.db.llm import fetch_auto_mode_providers
-from onyx.db.llm import fetch_default_llm_model
-from onyx.db.llm import fetch_existing_llm_provider
-from onyx.db.llm import fetch_existing_llm_providers
-from onyx.db.llm import fetch_llm_provider_view
-from onyx.db.llm import remove_llm_provider
-from onyx.db.llm import sync_auto_mode_models
-from onyx.db.llm import update_default_provider
+from onyx.db.llm import (
+    fetch_auto_mode_providers,
+    fetch_default_llm_model,
+    fetch_existing_llm_provider,
+    fetch_existing_llm_providers,
+    fetch_llm_provider_view,
+    remove_llm_provider,
+    sync_auto_mode_models,
+    update_default_provider,
+)
 from onyx.llm.constants import LlmProviderNames
 from onyx.llm.interfaces import LLM
-from onyx.llm.well_known_providers.auto_update_models import LLMProviderRecommendation
-from onyx.llm.well_known_providers.auto_update_models import LLMRecommendations
+from onyx.llm.well_known_providers.auto_update_models import (
+    LLMProviderRecommendation,
+    LLMRecommendations,
+)
 from onyx.llm.well_known_providers.models import SimpleKnownModel
 from onyx.server.manage.llm.api import put_llm_provider
 from onyx.server.manage.llm.api import (
     test_default_provider as run_test_default_provider,
 )
-from onyx.server.manage.llm.models import LLMProviderUpsertRequest
-from onyx.server.manage.llm.models import ModelConfigurationUpsertRequest
+from onyx.server.manage.llm.models import (
+    LLMProviderUpsertRequest,
+    ModelConfigurationUpsertRequest,
+)
 
 
 def _create_mock_admin() -> MagicMock:
@@ -138,7 +143,7 @@ class TestAutoModeSyncFeature:
                         model_configurations=[],  # No model configs provided
                     ),
                     is_creation=True,
-                    _=_create_mock_admin(),
+                    user=_create_mock_admin(),
                     db_session=db_session,
                 )
 
@@ -235,7 +240,7 @@ class TestAutoModeSyncFeature:
                         model_configurations=[],
                     ),
                     is_creation=True,
-                    _=_create_mock_admin(),
+                    user=_create_mock_admin(),
                     db_session=db_session,
                 )
 
@@ -313,7 +318,7 @@ class TestAutoModeSyncFeature:
                     model_configurations=initial_models,
                 ),
                 is_creation=True,
-                _=_create_mock_admin(),
+                user=_create_mock_admin(),
                 db_session=db_session,
             )
 
@@ -345,7 +350,7 @@ class TestAutoModeSyncFeature:
                         model_configurations=[],  # Auto mode will sync from config
                     ),
                     is_creation=False,  # This is an update
-                    _=_create_mock_admin(),
+                    user=_create_mock_admin(),
                     db_session=db_session,
                 )
 
@@ -429,7 +434,7 @@ class TestAutoModeSyncFeature:
                         ],
                     ),
                     is_creation=True,
-                    _=_create_mock_admin(),
+                    user=_create_mock_admin(),
                     db_session=db_session,
                 )
 
@@ -531,7 +536,7 @@ class TestAutoModeSyncFeature:
                         model_configurations=[],
                     ),
                     is_creation=True,
-                    _=_create_mock_admin(),
+                    user=_create_mock_admin(),
                     db_session=db_session,
                 )
 
@@ -558,7 +563,7 @@ class TestAutoModeSyncFeature:
                         model_configurations=[],
                     ),
                     is_creation=True,
-                    _=_create_mock_admin(),
+                    user=_create_mock_admin(),
                     db_session=db_session,
                 )
 
@@ -638,7 +643,7 @@ class TestAutoModeMissingFlows:
                     model_configurations=[],
                 ),
                 is_creation=True,
-                _=_create_mock_admin(),
+                user=_create_mock_admin(),
                 db_session=db_session,
             )
 
@@ -733,7 +738,7 @@ class TestAutoModeTransitionsAndResync:
                     model_configurations=initial_models,
                 ),
                 is_creation=True,
-                _=_create_mock_admin(),
+                user=_create_mock_admin(),
                 db_session=db_session,
             )
 
@@ -765,7 +770,7 @@ class TestAutoModeTransitionsAndResync:
                         model_configurations=[],
                     ),
                     is_creation=False,
-                    _=_create_mock_admin(),
+                    user=_create_mock_admin(),
                     db_session=db_session,
                 )
 
@@ -825,7 +830,7 @@ class TestAutoModeTransitionsAndResync:
                         model_configurations=[],
                     ),
                     is_creation=True,
-                    _=_create_mock_admin(),
+                    user=_create_mock_admin(),
                     db_session=db_session,
                 )
 
@@ -856,7 +861,7 @@ class TestAutoModeTransitionsAndResync:
                     ],
                 ),
                 is_creation=False,
-                _=_create_mock_admin(),
+                user=_create_mock_admin(),
                 db_session=db_session,
             )
 
@@ -923,7 +928,7 @@ class TestAutoModeTransitionsAndResync:
                         model_configurations=[],
                     ),
                     is_creation=True,
-                    _=_create_mock_admin(),
+                    user=_create_mock_admin(),
                     db_session=db_session,
                 )
 
@@ -992,7 +997,7 @@ class TestAutoModeTransitionsAndResync:
                         model_configurations=[],
                     ),
                     is_creation=True,
-                    _=_create_mock_admin(),
+                    user=_create_mock_admin(),
                     db_session=db_session,
                 )
 
@@ -1088,7 +1093,7 @@ class TestAutoModeTransitionsAndResync:
                         model_configurations=[],
                     ),
                     is_creation=True,
-                    _=_create_mock_admin(),
+                    user=_create_mock_admin(),
                     db_session=db_session,
                 )
 
@@ -1189,7 +1194,7 @@ class TestAutoModeTransitionsAndResync:
                         model_configurations=[],
                     ),
                     is_creation=True,
-                    _=_create_mock_admin(),
+                    user=_create_mock_admin(),
                     db_session=db_session,
                 )
 
@@ -1274,7 +1279,7 @@ class TestAutoModeTransitionsAndResync:
                         model_configurations=[],
                     ),
                     is_creation=True,
-                    _=_create_mock_admin(),
+                    user=_create_mock_admin(),
                     db_session=db_session,
                 )
 

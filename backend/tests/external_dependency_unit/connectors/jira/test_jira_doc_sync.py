@@ -8,13 +8,9 @@ from ee.onyx.external_permissions.jira.doc_sync import jira_doc_sync
 from onyx.access.models import DocExternalAccess
 from onyx.configs.constants import DocumentSource
 from onyx.connectors.models import InputType
-from onyx.db.enums import AccessType
-from onyx.db.enums import ConnectorCredentialPairStatus
-from onyx.db.models import Connector
-from onyx.db.models import ConnectorCredentialPair
-from onyx.db.models import Credential
-from onyx.db.utils import DocumentRow
-from onyx.db.utils import SortOrder
+from onyx.db.enums import AccessType, ConnectorCredentialPairStatus
+from onyx.db.models import Connector, ConnectorCredentialPair, Credential
+from onyx.db.utils import DocumentRow, SortOrder
 
 # In order to get these tests to run, use the credentials from Bitwarden.
 # Search up "ENV vars for local and Github tests", and find the Jira relevant key-value pairs.

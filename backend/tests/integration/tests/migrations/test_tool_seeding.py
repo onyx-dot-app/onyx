@@ -2,8 +2,7 @@ from pydantic import BaseModel
 from sqlalchemy import text
 
 from onyx.db.engine.sql_engine import get_session_with_current_tenant
-from tests.integration.common_utils.reset import downgrade_postgres
-from tests.integration.common_utils.reset import upgrade_postgres
+from tests.integration.common_utils.reset import downgrade_postgres, upgrade_postgres
 
 
 class ToolSeedingExpectedResult(BaseModel):
@@ -40,7 +39,7 @@ EXPECTED_TOOLS = {
         user_id=None,
     ),
     "PythonTool": ToolSeedingExpectedResult(
-        name="python",
+        name="run_python",
         display_name="Code Interpreter",
         in_code_tool_id="PythonTool",
         user_id=None,

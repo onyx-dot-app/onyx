@@ -1,37 +1,26 @@
 """Database operations for Build Mode sessions."""
 
-from datetime import datetime
-from datetime import timezone
-from typing import Any
+from datetime import datetime, timezone
+from typing import Any, Literal
 from uuid import UUID
 
-from sqlalchemy import desc
-from sqlalchemy import exists
-from sqlalchemy import select
+from sqlalchemy import column, desc, exists, select, update, values
+from sqlalchemy.dialects.postgresql import UUID as PGUUID
+from sqlalchemy.exc import IntegrityError
 from sqlalchemy.ext.asyncio import AsyncSession
-from sqlalchemy.orm import selectinload
 from sqlalchemy.orm import Session
 
-from onyx.auth.permissions import has_global_permission
 from onyx.configs.constants import MessageType
-from onyx.db.enums import BuildSessionStatus
-from onyx.db.enums import Permission
-from onyx.db.enums import SandboxStatus
-from onyx.db.enums import SessionOrigin
-from onyx.db.enums import SharingScope
-from onyx.db.llm import can_user_access_llm_provider
-from onyx.db.llm import fetch_user_group_ids
-from onyx.db.models import Artifact
-from onyx.db.models import BuildMessage
-from onyx.db.models import BuildSession
-from onyx.db.models import LLMProvider as LLMProviderModel
-from onyx.db.models import Sandbox
-from onyx.db.models import User
-from onyx.server.features.build.configs import BUILD_MODE_ALLOWED_PROVIDER_TYPES
-from onyx.server.features.build.configs import SANDBOX_NEXTJS_PORT_END
-from onyx.server.features.build.configs import SANDBOX_NEXTJS_PORT_START
-from onyx.server.manage.llm.models import LLMProviderView
+from onyx.db.enums import BuildSessionStatus, SessionOrigin, SharingScope
+from onyx.db.models import Artifact, BuildMessage, BuildSession, Sandbox
+from onyx.error_handling.error_codes import OnyxErrorCode
+from onyx.error_handling.exceptions import OnyxError
+from onyx.server.features.build.configs import (
+    SANDBOX_NEXTJS_PORT_END,
+    SANDBOX_NEXTJS_PORT_START,
+)
 from onyx.utils.logger import setup_logger
+from onyx.utils.postgres_sanitization import sanitize_json_like
 
 logger = setup_logger()
 
@@ -46,13 +35,16 @@ def create_build_session__no_commit(
 ) -> BuildSession:
     """``flush()`` only — caller commits.
 
+    Sessions are born ``INITIALIZING``; only the reconcile that builds their
+    workspace and OpenCode session finalizes them to ``ACTIVE``.
+
     ``agent_provider`` / ``agent_model`` are nullable for legacy rows;
     the send-message path then falls back to opencode's startup default.
     """
     session = BuildSession(
         user_id=user_id,
         name=name,
-        status=BuildSessionStatus.ACTIVE,
+        status=BuildSessionStatus.INITIALIZING,
         origin=origin,
         agent_provider=agent_provider,
         agent_model=agent_model,
@@ -75,14 +67,61 @@ def get_build_session(
     db_session: Session,
 ) -> BuildSession | None:
     """Get a build session by ID, ensuring it belongs to the user."""
-    return (
-        db_session.query(BuildSession)
-        .filter(
-            BuildSession.id == session_id,
-            BuildSession.user_id == user_id,
-        )
-        .one_or_none()
+    stmt = select(BuildSession).where(
+        BuildSession.id == session_id,
+        BuildSession.user_id == user_id,
     )
+    return db_session.scalar(stmt)
+
+
+def get_orphan_build_session_ids(
+    session_ids: list[UUID],
+    user_id: UUID,
+    db_session: Session,
+) -> set[UUID]:
+    """Return input session IDs without a matching row owned by the user."""
+    if not session_ids:
+        return set()
+
+    workspace_ids = (
+        values(
+            column("session_id", PGUUID(as_uuid=True)),
+            name="workspace_ids",
+        )
+        .data([(session_id,) for session_id in session_ids])
+        .cte()
+    )
+    stmt = (
+        select(workspace_ids.c.session_id)
+        .outerjoin(
+            BuildSession,
+            (BuildSession.id == workspace_ids.c.session_id)
+            & (BuildSession.user_id == user_id),
+        )
+        .where(BuildSession.id.is_(None))
+    )
+    return set(db_session.scalars(stmt).all())
+
+
+def session_runtime_stale(session: BuildSession, sandbox: Sandbox | None) -> bool:
+    """Whether a live runtime predates the sandbox's managed content — either the
+    skill/app payload (``skills_hash``) or the craft MCP set (``mcp_config_hash``).
+    Both trigger the same reload (rewrite session config + dispose instance)."""
+    if not (
+        session.status == BuildSessionStatus.ACTIVE
+        and session.origin == SessionOrigin.INTERACTIVE
+        and session.opencode_session_id is not None
+        and sandbox is not None
+    ):
+        return False
+    skills_changed = (
+        sandbox.skills_hash is not None and session.skills_hash != sandbox.skills_hash
+    )
+    mcp_changed = (
+        sandbox.mcp_config_hash is not None
+        and session.mcp_config_hash != sandbox.mcp_config_hash
+    )
+    return skills_changed or mcp_changed
 
 
 async def get_webapp_access_async(
@@ -124,8 +163,8 @@ def get_user_build_sessions(
     """Get a user's interactive build sessions that have at least one message.
 
     Sessions created by non-interactive callers (e.g. the scheduled-tasks
-    executor) are intentionally excluded from this listing so they don't
-    leak into the Craft sidebar. The covering composite index
+    executor or the Slack bot) are intentionally excluded from this listing
+    so they don't leak into the Craft sidebar. The covering composite index
     ``ix_build_session_user_origin_created`` is built for this exact query
     shape: ``(user_id, origin, created_at DESC)``.
     """
@@ -152,6 +191,8 @@ def get_empty_session_for_user(
     """Get an empty (pre-provisioned) session for the user if one exists.
 
     Returns a session with no messages, or None if all sessions have messages.
+    Only considers INTERACTIVE sessions — non-interactive origins (e.g. Slack)
+    skip port allocation and must not be handed to the Craft UI.
     """
     has_messages = exists().where(BuildMessage.session_id == BuildSession.id)
 
@@ -159,10 +200,51 @@ def get_empty_session_for_user(
         db_session.query(BuildSession)
         .filter(
             BuildSession.user_id == user_id,
+            BuildSession.origin == SessionOrigin.INTERACTIVE,
             ~has_messages,
         )
         .first()
     )
+
+
+def mark_session_initializing__no_commit(
+    db_session: Session,
+    session: BuildSession,
+) -> None:
+    """Return a reserved/repairable empty session to ``INITIALIZING`` so its
+    workspace can be (re)built under the committed session ID."""
+    session.status = BuildSessionStatus.INITIALIZING
+    db_session.flush()
+
+
+def finalize_session_initialization__no_commit(
+    db_session: Session,
+    session_id: UUID,
+    to_status: Literal[BuildSessionStatus.ACTIVE, BuildSessionStatus.FAILED],
+    opencode_session_id: str | None = None,
+    skills_hash: str | None = None,
+    mcp_config_hash: str | None = None,
+) -> bool:
+    """Compare-and-set ``INITIALIZING`` → ``ACTIVE``/``FAILED``. Returns False
+    when the session already left ``INITIALIZING`` (e.g. a concurrent repair
+    finished first), in which case the caller's runtime state must not be
+    recorded."""
+    values_map: dict[str, object] = {"status": to_status}
+    if opencode_session_id is not None:
+        values_map["opencode_session_id"] = opencode_session_id
+    if skills_hash is not None:
+        values_map["skills_hash"] = skills_hash
+    if mcp_config_hash is not None:
+        values_map["mcp_config_hash"] = mcp_config_hash
+    result = db_session.execute(
+        update(BuildSession)
+        .where(
+            BuildSession.id == session_id,
+            BuildSession.status == BuildSessionStatus.INITIALIZING,
+        )
+        .values(**values_map)
+    )
+    return result.rowcount == 1  # ty: ignore[unresolved-attribute]
 
 
 def update_session_activity(
@@ -178,37 +260,6 @@ def update_session_activity(
     if session:
         session.last_activity_at = datetime.now(tz=timezone.utc)
         db_session.commit()
-
-
-def update_session_status(
-    session_id: UUID,
-    status: BuildSessionStatus,
-    db_session: Session,
-) -> None:
-    """Update the status of a build session."""
-    session = (
-        db_session.query(BuildSession)
-        .filter(BuildSession.id == session_id)
-        .one_or_none()
-    )
-    if session:
-        session.status = status
-        db_session.commit()
-        logger.info("Updated build session %s status to %s", session_id, status)
-
-
-def update_session_agent_selection(
-    session_id: UUID,
-    agent_provider: str,
-    agent_model: str,
-    db_session: Session,
-) -> None:
-    """Persist the agent provider/model on the session row so a composer
-    model override sticks across reloads."""
-    session = db_session.query(BuildSession).filter(BuildSession.id == session_id).one()
-    session.agent_provider = agent_provider
-    session.agent_model = agent_model
-    db_session.commit()
 
 
 def set_build_session_sharing_scope(
@@ -254,23 +305,6 @@ def delete_build_session__no_commit(
 # Sandbox operations
 # NOTE: Most sandbox operations have moved to sandbox.py
 # These remain here for convenience in session-related workflows
-
-
-def update_sandbox_status(
-    sandbox_id: UUID,
-    status: SandboxStatus,
-    db_session: Session,
-    container_id: str | None = None,
-) -> None:
-    """Update the status of a sandbox."""
-    sandbox = db_session.query(Sandbox).filter(Sandbox.id == sandbox_id).one_or_none()
-    if sandbox:
-        sandbox.status = status
-        if container_id is not None:
-            sandbox.container_id = container_id
-        sandbox.last_heartbeat = datetime.now(tz=timezone.utc)
-        db_session.commit()
-        logger.info("Updated sandbox %s status to %s", sandbox_id, status)
 
 
 def update_sandbox_heartbeat(
@@ -359,11 +393,12 @@ def create_message(
         message_metadata: Required structured data (the raw sandbox event packet JSON)
         db_session: Database session
     """
+    sanitized_metadata = sanitize_json_like(message_metadata)
     message = BuildMessage(
         session_id=session_id,
         turn_index=turn_index,
         type=message_type,
-        message_metadata=message_metadata,
+        message_metadata=sanitized_metadata,
     )
     db_session.add(message)
     db_session.commit()
@@ -375,7 +410,7 @@ def create_message(
         message.id,
         session_id,
         turn_index,
-        message_metadata.get("type"),
+        sanitized_metadata.get("type"),
     )
     return message
 
@@ -415,12 +450,15 @@ def update_message(
     if message is None:
         return None
 
-    message.message_metadata = message_metadata
+    sanitized_metadata = sanitize_json_like(message_metadata)
+    message.message_metadata = sanitized_metadata
     db_session.commit()
     db_session.refresh(message)
 
     logger.info(
-        "Updated message %s metadata type=%s", message_id, message_metadata.get("type")
+        "Updated message %s metadata type=%s",
+        message_id,
+        sanitized_metadata.get("type"),
     )
     return message
 
@@ -465,7 +503,8 @@ def upsert_agent_plan(
     )
 
     if existing_plan:
-        existing_plan.message_metadata = plan_metadata
+        sanitized_metadata = sanitize_json_like(plan_metadata)
+        existing_plan.message_metadata = sanitized_metadata
         db_session.commit()
         db_session.refresh(existing_plan)
         logger.info(
@@ -534,38 +573,47 @@ def _is_port_available(port: int) -> bool:
     return True
 
 
-def allocate_nextjs_port(db_session: Session) -> int:
-    """Allocate an available port for a new session.
+def reserve_nextjs_port__no_commit(
+    db_session: Session,
+    build_session: BuildSession,
+) -> int:
+    """Reserve an available port on the session row.
 
-    Finds the first available port in the configured range by checking
-    both database allocations and system-level port availability.
-
-    Args:
-        db_session: Database session for querying allocated ports
-
-    Returns:
-        An available port number
+    Ports only need to be unique within one user's sandbox, so both the scan
+    and the partial unique index on ``(user_id, nextjs_port)`` are per-user:
+    each candidate is flushed inside a savepoint, and a collision with a
+    concurrent reservation rolls back just that attempt and moves to the next
+    port. The OS bind probe additionally filters ports in use outside the
+    database (relevant for the local/Docker backend).
 
     Raises:
-        RuntimeError: If no ports are available in the configured range
+        OnyxError: If no ports are available in the configured range
     """
-    from onyx.db.models import BuildSession
-
-    # Get all currently allocated ports from active sessions
-    allocated_ports = set(
-        db_session.query(BuildSession.nextjs_port)
-        .filter(BuildSession.nextjs_port.isnot(None))
+    allocated_ports = {
+        port
+        for (port,) in db_session.query(BuildSession.nextjs_port)
+        .filter(
+            BuildSession.user_id == build_session.user_id,
+            BuildSession.nextjs_port.isnot(None),
+        )
         .all()
-    )
-    allocated_ports = {port[0] for port in allocated_ports if port[0] is not None}
+        if port is not None
+    }
 
-    # Find first port that's not in DB and not currently bound
     for port in range(SANDBOX_NEXTJS_PORT_START, SANDBOX_NEXTJS_PORT_END):
-        if port not in allocated_ports and _is_port_available(port):
-            return port
+        if port in allocated_ports or not _is_port_available(port):
+            continue
+        try:
+            with db_session.begin_nested():
+                build_session.nextjs_port = port
+                db_session.flush()
+        except IntegrityError:
+            continue
+        return port
 
-    raise RuntimeError(
-        f"No available ports in range [{SANDBOX_NEXTJS_PORT_START}, {SANDBOX_NEXTJS_PORT_END})"
+    raise OnyxError(
+        OnyxErrorCode.SERVICE_UNAVAILABLE,
+        f"No available ports in range [{SANDBOX_NEXTJS_PORT_START}, {SANDBOX_NEXTJS_PORT_END})",
     )
 
 
@@ -588,7 +636,11 @@ def mark_user_sessions_idle__no_commit(db_session: Session, user_id: UUID) -> in
             BuildSession.user_id == user_id,
             BuildSession.status == BuildSessionStatus.ACTIVE,
         )
-        .update({BuildSession.status: BuildSessionStatus.IDLE})
+        .update(
+            {
+                BuildSession.status: BuildSessionStatus.IDLE,
+            }
+        )
     )
     db_session.flush()
     logger.info("Marked %s sessions as IDLE for user %s", result, user_id)
@@ -618,31 +670,3 @@ def clear_nextjs_ports_for_user(db_session: Session, user_id: UUID) -> int:
     db_session.flush()
     logger.info("Cleared %s nextjs_port allocations for user %s", result, user_id)
     return result
-
-
-def fetch_all_supported_build_llm_providers(
-    db_session: Session, user: User
-) -> list[LLMProviderView]:
-    """Every provider of a Craft-supported type (anthropic, openai, openrouter)
-    that the ``user`` can access. Respects is_public / group restrictions so a
-    user never gets a sandbox keyed with a provider they can't use."""
-    provider_models = db_session.scalars(
-        select(LLMProviderModel)
-        .where(LLMProviderModel.provider.in_(BUILD_MODE_ALLOWED_PROVIDER_TYPES))
-        .options(
-            selectinload(LLMProviderModel.model_configurations),
-            selectinload(LLMProviderModel.groups),
-            selectinload(LLMProviderModel.personas),
-        )
-    )
-    user_group_ids = fetch_user_group_ids(db_session, user)
-    can_manage_llms = has_global_permission(user, Permission.MANAGE_LLMS)
-    # persona=None: Craft has no persona context, so a provider restricted to
-    # specific personas is intentionally excluded even when otherwise public.
-    return [
-        LLMProviderView.from_model(p)
-        for p in provider_models
-        if can_user_access_llm_provider(
-            p, user_group_ids, persona=None, can_manage_llms=can_manage_llms
-        )
-    ]

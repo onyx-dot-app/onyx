@@ -2,11 +2,10 @@
 
 import React, { useCallback, useEffect, useRef, useState } from "react";
 import { usePathname } from "next/navigation";
-import { useSettingsContext } from "@/providers/SettingsProvider";
+import { useSettings } from "@/lib/settings/hooks";
 import { SidebarLayouts, useSidebarState } from "@opal/layouts";
 import { useCustomAnalyticsEnabled } from "@/lib/hooks/useCustomAnalyticsEnabled";
 import { useUser } from "@/providers/UserProvider";
-import { Tier } from "@/interfaces/settings";
 import { Divider, InputTypeIn, SidebarTab } from "@opal/components";
 import { SvgSearch, SvgX } from "@opal/icons";
 import {
@@ -15,6 +14,7 @@ import {
   hasActiveSubscription,
 } from "@/lib/billing";
 import { NEXT_PUBLIC_CLOUD_ENABLED } from "@/lib/constants";
+import { Tier } from "@/lib/settings/types";
 import useFilter from "@/hooks/useFilter";
 import AccountPopover from "@/sections/sidebar/AccountPopover";
 import { markdown } from "@opal/utils";
@@ -24,7 +24,7 @@ import {
   type FeatureFlags,
   type SidebarItemEntry,
 } from "@/lib/admin-sidebar-utils";
-import { renderAppLogo } from "@/sections/sidebar/SidebarWrapper";
+import { renderSidebarLogo } from "@/lib/sidebar/utils";
 import { useShowLogoWhenFolded } from "@/lib/sidebar/hooks";
 
 export default function AdminSidebar() {
@@ -42,8 +42,8 @@ export default function AdminSidebar() {
   const pathname = usePathname();
   const { customAnalyticsEnabled } = useCustomAnalyticsEnabled();
   const { adminCapabilities } = useUser();
-  const settings = useSettingsContext();
-  const tier = settings?.settings.tier;
+  const settings = useSettings();
+  const tier = settings?.tier;
   const { data: billingData, isLoading: billingLoading } =
     useBillingInformation();
   const { data: licenseData, isLoading: licenseLoading } = useLicense();
@@ -56,17 +56,20 @@ export default function AdminSidebar() {
           licenseData?.has_license
         );
 
+  // Tier is not folded in here: ENTERPRISE is declared as the route's `requiredTier`, so
+  // a lower tier renders the entry disabled with an upsell rather than hiding it.
   const flags: FeatureFlags = {
-    vectorDbEnabled: settings?.settings.vector_db_enabled !== false,
+    vectorDbEnabled: settings?.vectorDbEnabled !== false,
     enableCloud: NEXT_PUBLIC_CLOUD_ENABLED,
     tier,
     customAnalyticsEnabled,
     hasSubscription: hasSubscriptionOrLicense,
-    hooksEnabled: settings?.settings.hooks_enabled ?? false,
-    opensearchEnabled: settings?.settings.opensearch_indexing_enabled ?? false,
+    hooksEnabled: settings?.hooks_enabled ?? false,
+    opensearchEnabled: settings?.opensearch_indexing_enabled ?? false,
     queryHistoryEnabled:
-      settings?.settings.query_history_type !== "disabled" &&
-      !settings?.settings.hide_query_history_from_admin_panel,
+      settings?.query_history_type !== "disabled" &&
+      !settings?.hide_query_history_from_admin_panel,
+    craftAvailable: settings?.onyx_craft_available ?? false,
   };
 
   const allItems = buildItems(adminCapabilities, flags, settings);
@@ -83,7 +86,7 @@ export default function AdminSidebar() {
   return (
     <SidebarLayouts.Root>
       <SidebarLayouts.Header
-        logo={renderAppLogo}
+        renderAppLogo={renderSidebarLogo}
         showLogoWhenFolded={showLogoWhenFolded}
       >
         {folded ? (
@@ -161,7 +164,7 @@ export default function AdminSidebar() {
         {!folded && <Divider paddingPerpendicular="sm" />}
         <SidebarTab
           icon={SvgX}
-          href="/app"
+          href={pathname?.startsWith("/admin/craft") ? "/craft/v1" : "/app"}
           variant="sidebar-light"
           folded={folded}
         >

@@ -1,6 +1,5 @@
 import os
-from typing import Any
-from typing import List
+from typing import Any, List
 from urllib.parse import urlparse
 
 # Used for logging
@@ -36,6 +35,7 @@ INDEXING_MODEL_SERVER_PORT = int(
 CONNECTOR_CLASSIFIER_MODEL_REPO = "Danswer/filter-extraction-model"
 CONNECTOR_CLASSIFIER_MODEL_TAG = "1.0.0"
 INTENT_MODEL_VERSION = "onyx-dot-app/hybrid-intent-token-classifier"
+DEFAULT_DOCUMENT_ENCODER_MODEL = "nomic-ai/nomic-embed-text-v1"
 # INTENT_MODEL_TAG = "v1.0.3"
 INTENT_MODEL_TAG: str | None = None
 # Bi-Encoder, other details
@@ -72,8 +72,16 @@ LOG_FILE_NAME = os.environ.get("LOG_FILE_NAME") or "onyx"
 
 # Enable generating persistent log files for local dev environments
 DEV_LOGGING_ENABLED = os.environ.get("DEV_LOGGING_ENABLED", "").lower() == "true"
+# File logging is on by default. Set LOG_TO_FILE=false to disable it for a given
+# pod/process — it then logs to stdout only (e.g. read-only-root containers where
+# /var/log/onyx isn't writable).
+LOG_TO_FILE = os.environ.get("LOG_TO_FILE", "true").lower() != "false"
 # notset, debug, info, notice, warning, error, or critical
 LOG_LEVEL = os.environ.get("LOG_LEVEL") or "info"
+# Chatty third-party libraries (LiteLLM, httpcore, botocore, ...) are capped at
+# INFO even when LOG_LEVEL=debug — LiteLLM alone emits several DEBUG records per
+# streamed token. Set LOG_THIRD_PARTY_DEBUG=true to let them log at LOG_LEVEL.
+LOG_THIRD_PARTY_DEBUG = os.environ.get("LOG_THIRD_PARTY_DEBUG", "").lower() == "true"
 
 # Log output format: "plain" (human-readable text, default) or "json" (structured
 # single-line JSON, suitable for container log aggregators). When "json", context
@@ -86,6 +94,16 @@ JSON_LOGGING = LOG_FORMAT == "json"
 # NOTE: does not apply for Google VertexAI, since the python client doesn't
 # allow us to specify a custom timeout
 API_BASED_EMBEDDING_TIMEOUT = int(os.environ.get("API_BASED_EMBEDDING_TIMEOUT", "600"))
+
+# Timeouts for requests to the self-hosted model server (embedding / rerank /
+# intent). The connect timeout fails fast on an unreachable server; the read
+# timeout bounds silent hangs — without one, a model-server pod restarting
+# mid-request leaves the calling worker thread blocked forever inside
+# requests.post (observed wedging every docprocessing thread for hours during
+# an upgrade). Reads are generous because CPU embedding of large batches can
+# legitimately take minutes.
+MODEL_SERVER_CONNECT_TIMEOUT = int(os.environ.get("MODEL_SERVER_CONNECT_TIMEOUT", "30"))
+MODEL_SERVER_READ_TIMEOUT = int(os.environ.get("MODEL_SERVER_READ_TIMEOUT", "600"))
 
 # Local batch size for VertexAI embedding models currently calibrated for item size of 512 tokens
 # NOTE: increasing this value may lead to API errors due to token limit exhaustion per call.
@@ -129,6 +147,8 @@ PRESERVED_SEARCH_FIELDS = [
     "normalize",
     "passage_prefix",
     "query_prefix",
+    # Immutable per settings id; server-controlled, never set via update.
+    "use_port_flow",
 ]
 
 
@@ -213,9 +233,6 @@ IGNORED_SYNCING_TENANT_LIST = (
     if IGNORED_SYNCING_TENANT_IDS
     else None
 )
-
-ENVIRONMENT = os.environ.get("ENVIRONMENT") or "not_explicitly_set"
-
 
 #####
 # Usage Limits Configuration (meant for cloud, off by default for self-hosted)

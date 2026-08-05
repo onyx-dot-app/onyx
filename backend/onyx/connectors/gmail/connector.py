@@ -1,9 +1,6 @@
 from base64 import urlsafe_b64decode
-from collections.abc import Callable
-from collections.abc import Iterator
-from typing import Any
-from typing import cast
-from typing import Dict
+from collections.abc import Callable, Iterator
+from typing import Any, Dict, cast
 
 from google.oauth2.credentials import Credentials as OAuthCredentials
 from google.oauth2.service_account import Credentials as ServiceAccountCredentials
@@ -14,36 +11,42 @@ from onyx.configs.app_configs import INDEX_BATCH_SIZE
 from onyx.configs.constants import DocumentSource
 from onyx.connectors.cross_connector_utils.miscellaneous_utils import time_str_to_utc
 from onyx.connectors.google_utils.google_auth import get_google_creds
-from onyx.connectors.google_utils.google_utils import execute_paginated_retrieval
 from onyx.connectors.google_utils.google_utils import (
+    PAGE_TOKEN_KEY,
+    execute_paginated_retrieval,
     execute_paginated_retrieval_with_max_pages,
+    execute_single_retrieval,
 )
-from onyx.connectors.google_utils.google_utils import execute_single_retrieval
-from onyx.connectors.google_utils.google_utils import PAGE_TOKEN_KEY
-from onyx.connectors.google_utils.resources import get_admin_service
-from onyx.connectors.google_utils.resources import get_gmail_service
-from onyx.connectors.google_utils.resources import GmailService
+from onyx.connectors.google_utils.resources import (
+    GmailService,
+    get_admin_service,
+    get_gmail_service,
+)
 from onyx.connectors.google_utils.shared_constants import (
     DB_CREDENTIALS_PRIMARY_ADMIN_KEY,
+    MISSING_SCOPES_ERROR_STR,
+    ONYX_SCOPE_INSTRUCTIONS,
+    SLIM_BATCH_SIZE,
+    USER_FIELDS,
 )
-from onyx.connectors.google_utils.shared_constants import MISSING_SCOPES_ERROR_STR
-from onyx.connectors.google_utils.shared_constants import ONYX_SCOPE_INSTRUCTIONS
-from onyx.connectors.google_utils.shared_constants import SLIM_BATCH_SIZE
-from onyx.connectors.google_utils.shared_constants import USER_FIELDS
-from onyx.connectors.interfaces import CheckpointedConnectorWithPermSync
-from onyx.connectors.interfaces import CheckpointOutput
-from onyx.connectors.interfaces import ConnectorFailure
-from onyx.connectors.interfaces import GenerateSlimDocumentOutput
-from onyx.connectors.interfaces import SecondsSinceUnixEpoch
-from onyx.connectors.interfaces import SlimConnectorWithPermSync
-from onyx.connectors.models import BasicExpertInfo
-from onyx.connectors.models import ConnectorCheckpoint
-from onyx.connectors.models import Document
-from onyx.connectors.models import DocumentFailure
-from onyx.connectors.models import HierarchyNode
-from onyx.connectors.models import ImageSection
-from onyx.connectors.models import SlimDocument
-from onyx.connectors.models import TextSection
+from onyx.connectors.interfaces import (
+    CheckpointedConnectorWithPermSync,
+    CheckpointOutput,
+    ConnectorFailure,
+    GenerateSlimDocumentOutput,
+    SecondsSinceUnixEpoch,
+    SlimConnectorWithPermSync,
+)
+from onyx.connectors.models import (
+    BasicExpertInfo,
+    ConnectorCheckpoint,
+    Document,
+    DocumentFailure,
+    HierarchyNode,
+    ImageSection,
+    SlimDocument,
+    TextSection,
+)
 from onyx.indexing.indexing_heartbeat import IndexingHeartbeatInterface
 from onyx.utils.logger import setup_logger
 from onyx.utils.retry_wrapper import retry_builder
@@ -224,6 +227,7 @@ def thread_to_document(
 
     sections = []
     semantic_identifier = ""
+    created_at = None
     updated_at = None
     from_emails: dict[str, str | None] = {}
     other_emails: dict[str, str | None] = {}
@@ -249,6 +253,22 @@ def thread_to_document(
 
         if message_metadata.get("updated_at"):
             updated_at = message_metadata.get("updated_at")
+            # Messages arrive oldest-first, so the first Date header is the
+            # thread's creation time.
+            if not created_at:
+                created_at = message_metadata.get("updated_at")
+
+    created_at_datetime = None
+    if created_at:
+        try:
+            created_at_datetime = time_str_to_utc(created_at)
+        except (ValueError, OverflowError) as e:
+            logger.warning(
+                "Skipping unparseable Gmail Date header on thread %s: %r (%s)",
+                full_thread.get("id"),
+                created_at,
+                e,
+            )
 
     updated_at_datetime = None
     if updated_at:
@@ -286,6 +306,7 @@ def thread_to_document(
         # This is used to perform permission sync
         primary_owners=primary_owners,
         secondary_owners=secondary_owners,
+        doc_created_at=created_at_datetime,
         doc_updated_at=updated_at_datetime,
         # Not adding emails to metadata because it's already in the sections
         metadata={},
@@ -334,6 +355,9 @@ def _slim_thread_from_id(
     user_email: str,
     gmail_service: GmailService,  # noqa: ARG001
 ) -> SlimDocument:
+    # doc_created_at is left None: the Gmail thread list returns only IDs, and
+    # fetching the Date header would cost an extra API call per thread. Going-
+    # forward creation time is set on the full indexing path (thread_to_document).
     return SlimDocument(
         id=thread_id,
         external_access=ExternalAccess(

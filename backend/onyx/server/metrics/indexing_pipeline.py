@@ -24,9 +24,11 @@ from prometheus_client.core import GaugeMetricFamily
 from prometheus_client.registry import Collector
 from redis import Redis
 
-from onyx.background.celery.celery_redis import celery_get_broker_client
-from onyx.background.celery.celery_redis import celery_get_queue_length
-from onyx.background.celery.celery_redis import celery_get_unacked_task_ids
+from onyx.background.celery.celery_redis import (
+    celery_get_broker_client,
+    celery_get_queue_length,
+    celery_get_unacked_task_ids,
+)
 from onyx.configs.constants import OnyxCeleryQueues
 from onyx.utils.logger import setup_logger
 

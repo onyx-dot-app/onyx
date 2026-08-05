@@ -1,17 +1,16 @@
 import os
 
 import pytest
-from sqlalchemy import select
-from sqlalchemy import update
+from sqlalchemy import select, update
 
 from onyx.db.engine.sql_engine import get_session_with_current_tenant
 from onyx.db.enums import Permission
-from onyx.db.models import PermissionGrant
-from onyx.db.models import User
-from onyx.db.models import User__UserGroup
+from onyx.db.models import PermissionGrant, User, User__UserGroup
 from onyx.db.models import UserGroup as UserGroupModel
-from onyx.db.permissions import recompute_permissions_for_group__no_commit
-from onyx.db.permissions import recompute_user_permissions__no_commit
+from onyx.db.permissions import (
+    recompute_permissions_for_group__no_commit,
+    recompute_user_permissions__no_commit,
+)
 from tests.integration.common_utils.managers.user import UserManager
 from tests.integration.common_utils.managers.user_group import UserGroupManager
 from tests.integration.common_utils.test_models import DATestUser

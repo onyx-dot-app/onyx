@@ -28,6 +28,7 @@ import { InlineFilePreview } from "@/app/craft/components/output-panel/FilePrevi
 interface FilesTabProps {
   sessionId: string | null;
   onFileClick?: (path: string, fileName: string) => void;
+  onRefreshingChange?: (isRefreshing: boolean) => void;
   /** True when showing pre-provisioned sandbox (read-only, no file clicks) */
   isPreProvisioned?: boolean;
   /** True when sandbox is still being provisioned */
@@ -37,6 +38,7 @@ interface FilesTabProps {
 export default function FilesTab({
   sessionId,
   onFileClick,
+  onRefreshingChange,
   isPreProvisioned = false,
   isProvisioning = false,
 }: FilesTabProps) {
@@ -44,6 +46,12 @@ export default function FilesTab({
   const filesTabState = useFilesTabState();
   const updateFilesTabState = useBuildSessionStore(
     (state) => state.updateFilesTabState
+  );
+  const mergeFilesTabDirectoryCache = useBuildSessionStore(
+    (state) => state.mergeFilesTabDirectoryCache
+  );
+  const retainFilesTabDirectoryCache = useBuildSessionStore(
+    (state) => state.retainFilesTabDirectoryCache
   );
 
   // Local state for pre-provisioned mode (no persistence needed)
@@ -72,15 +80,18 @@ export default function FilesTab({
     () =>
       isPreProvisioned
         ? localDirectoryCache
-        : (new Map(Object.entries(filesTabState.directoryCache)) as Map<
-            string,
-            FileSystemEntry[]
-          >),
+        : new Map(Object.entries(filesTabState.directoryCache)),
     [isPreProvisioned, localDirectoryCache, filesTabState.directoryCache]
   );
 
   // Scroll container ref for position tracking
   const scrollContainerRef = useRef<HTMLDivElement>(null);
+  const isMountedRef = useRef(true);
+  const handledRefreshGenerationRef = useRef(
+    filesTabState.lastRefreshGeneration ?? 0
+  );
+  const refreshInFlightRef = useRef(false);
+  const refreshQueuedRef = useRef(false);
 
   // Fetch root directory
   const {
@@ -95,65 +106,124 @@ export default function FilesTab({
       dedupingInterval: 2000,
     }
   );
+  const mutateRootRef = useRef(mutate);
+  useEffect(() => {
+    mutateRootRef.current = mutate;
+  }, [mutate]);
+
+  useEffect(() => {
+    isMountedRef.current = true;
+    return () => {
+      isMountedRef.current = false;
+      refreshQueuedRef.current = false;
+      onRefreshingChange?.(false);
+    };
+  }, [onRefreshingChange]);
 
   // Refresh files list when outputs/ directory changes
   const filesNeedsRefresh = useFilesNeedsRefresh();
 
-  // Snapshot of currently expanded paths — avoids putting both local and store
-  // versions in the dependency array (only one is used per mode).
-  const currentExpandedPaths = isPreProvisioned
-    ? Array.from(localExpandedPaths)
-    : filesTabState.expandedPaths;
-
+  const expandedPathsRef = useRef<string[]>([]);
   useEffect(() => {
-    if (filesNeedsRefresh > 0 && sessionId && mutate) {
-      // Clear directory cache to ensure all directories are refreshed
+    expandedPathsRef.current = isPreProvisioned
+      ? Array.from(localExpandedPaths)
+      : filesTabState.expandedPaths;
+  }, [isPreProvisioned, localExpandedPaths, filesTabState.expandedPaths]);
+
+  const performFilesRefresh = useCallback(async () => {
+    if (!sessionId) return;
+
+    const refreshSessionId = sessionId;
+    const expandedPathsToRefresh = [...expandedPathsRef.current];
+    const retainedPaths = new Set(["", ...expandedPathsToRefresh]);
+
+    // Retain visible listings during revalidation. Hidden listings are removed
+    // so a collapsed directory fetches fresh contents when it is reopened.
+    if (isPreProvisioned) {
+      setLocalDirectoryCache(
+        (prev) =>
+          new Map(Array.from(prev).filter(([path]) => retainedPaths.has(path)))
+      );
+    } else {
+      retainFilesTabDirectoryCache(refreshSessionId, retainedPaths);
+    }
+
+    // The sandbox filesystem transport stalls when multiple listings are in
+    // flight. Refresh serially while applying each result as it arrives.
+    await mutateRootRef.current().catch(() => undefined);
+    for (const path of expandedPathsToRefresh) {
+      const listing = await fetchDirectoryListing(refreshSessionId, path).catch(
+        () => null
+      );
+      if (!listing || !isMountedRef.current) continue;
+
       if (isPreProvisioned) {
-        setLocalDirectoryCache(new Map());
+        setLocalDirectoryCache((prev) => {
+          const next = new Map(prev);
+          next.set(path, listing.entries);
+          return next;
+        });
       } else {
-        updateFilesTabState(sessionId, { directoryCache: {} });
-      }
-      // Refresh root directory listing
-      mutate();
-
-      // Re-fetch all currently expanded subdirectories so they don't get
-      // stuck on "Loading..." after the cache was cleared
-      if (currentExpandedPaths.length > 0) {
-        Promise.allSettled(
-          currentExpandedPaths.map((p) => fetchDirectoryListing(sessionId, p))
-        ).then((settled) => {
-          // Collect only the successful fetches into a path → entries map
-          const fetched = new Map<string, FileSystemEntry[]>();
-          settled.forEach((r, i) => {
-            const p = currentExpandedPaths[i];
-            if (p && r.status === "fulfilled" && r.value) {
-              fetched.set(p, r.value.entries);
-            }
-          });
-
-          if (isPreProvisioned) {
-            setLocalDirectoryCache((prev) => {
-              const next = new Map(prev);
-              fetched.forEach((entries, p) => next.set(p, entries));
-              return next;
-            });
-          } else {
-            const obj: Record<string, FileSystemEntry[]> = {};
-            fetched.forEach((entries, p) => {
-              obj[p] = entries;
-            });
-            updateFilesTabState(sessionId, { directoryCache: obj });
-          }
+        mergeFilesTabDirectoryCache(refreshSessionId, {
+          [path]: listing.entries,
         });
       }
     }
-    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [
+    sessionId,
+    isPreProvisioned,
+    mergeFilesTabDirectoryCache,
+    retainFilesTabDirectoryCache,
+  ]);
+
+  const runRefreshQueue = useCallback(async () => {
+    if (refreshInFlightRef.current) {
+      refreshQueuedRef.current = true;
+      return;
+    }
+
+    refreshInFlightRef.current = true;
+    onRefreshingChange?.(true);
+    try {
+      do {
+        refreshQueuedRef.current = false;
+        await performFilesRefresh();
+      } while (refreshQueuedRef.current && isMountedRef.current);
+      if (isMountedRef.current && !isPreProvisioned && sessionId) {
+        updateFilesTabState(sessionId, {
+          lastRefreshGeneration: handledRefreshGenerationRef.current,
+        });
+      }
+    } finally {
+      refreshInFlightRef.current = false;
+      if (isMountedRef.current) {
+        onRefreshingChange?.(false);
+      }
+    }
+  }, [
+    performFilesRefresh,
+    isPreProvisioned,
+    sessionId,
+    updateFilesTabState,
+    onRefreshingChange,
+  ]);
+
+  useEffect(() => {
+    if (!sessionId || filesNeedsRefresh <= 0) return;
+
+    handledRefreshGenerationRef.current = Math.max(
+      handledRefreshGenerationRef.current,
+      filesTabState.lastRefreshGeneration ?? 0
+    );
+    if (filesNeedsRefresh <= handledRefreshGenerationRef.current) return;
+
+    handledRefreshGenerationRef.current = filesNeedsRefresh;
+    void runRefreshQueue();
   }, [
     filesNeedsRefresh,
     sessionId,
-    mutate,
-    isPreProvisioned,
-    updateFilesTabState,
+    filesTabState.lastRefreshGeneration,
+    runRefreshQueue,
   ]);
 
   // Update cache when root listing changes
@@ -166,14 +236,10 @@ export default function FilesTab({
           return newCache;
         });
       } else {
-        const newCache = {
-          ...filesTabState.directoryCache,
-          "": rootListing.entries,
-        };
-        updateFilesTabState(sessionId, { directoryCache: newCache });
+        mergeFilesTabDirectoryCache(sessionId, { "": rootListing.entries });
       }
     }
-  }, [rootListing, sessionId, isPreProvisioned]);
+  }, [rootListing, sessionId, isPreProvisioned, mergeFilesTabDirectoryCache]);
 
   const toggleFolder = useCallback(
     async (path: string) => {
@@ -212,15 +278,9 @@ export default function FilesTab({
           if (!directoryCache.has(path)) {
             const listing = await fetchDirectoryListing(sessionId, path);
             if (listing) {
-              const newCache = {
-                ...filesTabState.directoryCache,
+              mergeFilesTabDirectoryCache(sessionId, {
                 [path]: listing.entries,
-              };
-              updateFilesTabState(sessionId, {
-                expandedPaths: Array.from(newExpanded),
-                directoryCache: newCache,
               });
-              return;
             }
           }
           updateFilesTabState(sessionId, {
@@ -236,8 +296,8 @@ export default function FilesTab({
       localDirectoryCache,
       expandedPaths,
       directoryCache,
-      filesTabState.directoryCache,
       updateFilesTabState,
+      mergeFilesTabDirectoryCache,
     ]
   );
 

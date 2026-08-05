@@ -1,21 +1,16 @@
 import os
-from unittest.mock import MagicMock
-from unittest.mock import patch
-from urllib.parse import parse_qs
-from urllib.parse import unquote
-from urllib.parse import urlparse
+from unittest.mock import MagicMock, patch
+from urllib.parse import parse_qs, unquote, urlparse
 
 import pytest
 
 from onyx.configs.constants import BlobType
 from onyx.connectors.blob.connector import BlobStorageConnector
 from onyx.connectors.cross_connector_utils.tabular_section_utils import is_tabular_file
-from onyx.connectors.models import Document
-from onyx.connectors.models import HierarchyNode
-from onyx.connectors.models import TabularSection
-from onyx.connectors.models import TextSection
+from onyx.connectors.models import Document, HierarchyNode, TabularSection, TextSection
 from onyx.file_processing.extract_file_text import get_file_ext
 from onyx.file_processing.file_types import OnyxFileExtensions
+from tests.daily.connectors.utils import set_test_staging_callback
 from tests.utils.secret_names import TestSecret
 
 pytestmark = pytest.mark.secrets(
@@ -120,6 +115,7 @@ def test_blob_s3_connector(
     This is intentional in order to allow searching by just the title even if we can't
     index the file content.
     """
+    staged_csvs = set_test_staging_callback(blob_connector)
     all_docs: list[Document] = []
     document_batches = blob_connector.load_from_state()
     for doc_batch in document_batches:
@@ -135,7 +131,8 @@ def test_blob_s3_connector(
 
         if is_tabular_file(doc.semantic_identifier):
             assert isinstance(section, TabularSection)
-            assert len(section.text) > 0
+            assert section.csv_file_id
+            assert len(staged_csvs[section.csv_file_id]) > 0
             continue
 
         assert isinstance(section, TextSection)

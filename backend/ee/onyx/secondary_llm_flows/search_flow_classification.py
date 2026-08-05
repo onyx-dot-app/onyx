@@ -1,10 +1,10 @@
-from ee.onyx.prompts.search_flow_classification import CHAT_CLASS
-from ee.onyx.prompts.search_flow_classification import SEARCH_CHAT_PROMPT
-from ee.onyx.prompts.search_flow_classification import SEARCH_CLASS
+from ee.onyx.prompts.search_flow_classification import (
+    CHAT_CLASS,
+    SEARCH_CHAT_PROMPT,
+    SEARCH_CLASS,
+)
 from onyx.llm.interfaces import LLM
-from onyx.llm.models import LanguageModelInput
-from onyx.llm.models import ReasoningEffort
-from onyx.llm.models import UserMessage
+from onyx.llm.models import LanguageModelInput, ReasoningEffort, UserMessage
 from onyx.llm.utils import llm_response_to_string
 from onyx.utils.logger import setup_logger
 from onyx.utils.timing import log_function_time

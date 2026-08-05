@@ -1,4 +1,4 @@
-import { Settings } from "@/interfaces/settings";
+import { Settings } from "@/lib/settings/types";
 
 async function parseErrorDetail(
   res: Response,
@@ -14,7 +14,7 @@ async function parseErrorDetail(
 
 export async function updateAdminSettings(settings: Settings): Promise<void> {
   const res = await fetch("/api/admin/settings", {
-    method: "PUT",
+    method: "PATCH",
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify(settings),
   });

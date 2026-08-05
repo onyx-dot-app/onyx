@@ -1,13 +1,14 @@
 from collections.abc import Callable
-from typing import Any
-from typing import IO
+from typing import IO, Any
 
 from sqlalchemy.orm import Session
 
 from onyx.configs.constants import FileOrigin
-from onyx.db.file_record import get_staged_file_ids_by_index_attempt_id
-from onyx.db.file_record import get_staged_file_ids_for_cc_pair_excluding_attempt
-from onyx.db.file_record import update_filerecord_origin
+from onyx.db.file_record import (
+    get_staged_file_ids_by_index_attempt_id,
+    get_staged_file_ids_for_cc_pair_excluding_attempt,
+    update_filerecord_origin,
+)
 from onyx.file_store.file_store import get_default_file_store
 from onyx.utils.logger import setup_logger
 
@@ -66,6 +67,22 @@ def build_raw_file_callback(
         )
 
     return _callback
+
+
+def build_tracking_raw_file_callback(
+    *, metadata: dict[str, Any]
+) -> tuple[RawFileCallback, list[str]]:
+    """Staging callback for connector runs that have no index attempt for the
+    standard staging reapers to key on. Returns the callback plus the list of ids
+    it stages, so the caller can reap them once it has read them."""
+    staged_ids: list[str] = []
+
+    def _callback(content: IO[bytes], content_type: str) -> str:
+        file_id = stage_raw_file(content, content_type, metadata=metadata)
+        staged_ids.append(file_id)
+        return file_id
+
+    return _callback, staged_ids
 
 
 def delete_files_best_effort(

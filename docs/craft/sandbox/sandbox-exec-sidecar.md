@@ -75,8 +75,8 @@ retained only for in-sandbox-container process control.
   `write_files_to_sandbox` do today.
 - **Sidecar requires no new privilege** — it already mounts both volumes RW.
 - **Image build:** the residual exec uses a baked script (below), so the sandbox
-  image (`image/Dockerfile`) changes — coordinate the `SANDBOX_CONTAINER_IMAGE`
-  bump, and note the daemon endpoints also ship in that image.
+  image (`image/Dockerfile`) changes — coordinate the matching app/sandbox
+  image tag, and note the daemon endpoints also ship in that image.
 
 ## Implementation Strategy
 

@@ -52,6 +52,19 @@ DEFAULT_NUM_HYBRID_SUBQUERY_CANDIDATES = int(
 EF_SEARCH = DEFAULT_NUM_HYBRID_SUBQUERY_CANDIDATES
 
 
+class OpenSearchAuthMethod(str, Enum):
+    """Authentication method for connecting to OpenSearch.
+
+    BASIC uses HTTP basic auth (username/password); the only option for
+    self-hosted / docker-compose OpenSearch. IAM uses AWS SigV4 request signing
+    and is only valid against an AWS managed domain whose fine-grained access
+    control master is an IAM ARN.
+    """
+
+    BASIC = "basic"
+    IAM = "iam"
+
+
 class OpenSearchSearchType(str, Enum):
     """Search type label used for Prometheus metrics."""
 

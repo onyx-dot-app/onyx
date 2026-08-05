@@ -12,7 +12,7 @@ import { SvgEditBig, SvgMaximize2 } from "@opal/icons";
 import { cn } from "@opal/utils";
 import { Button } from "@opal/components";
 import MemoriesModal from "@/refresh-components/modals/MemoriesModal";
-import { useCreateModal } from "@/refresh-components/contexts/ModalContext";
+import { useCreateModal } from "@opal/components";
 
 /**
  * MemoryToolRenderer - Renders memory tool execution steps

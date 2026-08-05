@@ -23,6 +23,17 @@ class CacheBackendType(str, Enum):
     POSTGRES = "postgres"
 
 
+class CacheLockLostError(Exception):
+    """The lock's lease expired (or was taken over) while we thought we held
+    it — mutual exclusion is already gone, unlike CACHE_TRANSIENT_ERRORS."""
+
+
+class CacheLockAcquisitionError(Exception):
+    """A shared cache lock could not be acquired within the allotted wait — a
+    concurrent holder still owns it. Distinct from CacheLockLostError, which is
+    about losing a lock already held."""
+
+
 class CacheLock(abc.ABC):
     """Abstract distributed lock returned by CacheBackend.lock()."""
 
@@ -36,6 +47,11 @@ class CacheLock(abc.ABC):
 
     @abc.abstractmethod
     def release(self) -> None:
+        raise NotImplementedError
+
+    @abc.abstractmethod
+    def extend(self, ttl_seconds: float) -> None:
+        """Reset the lock's expiry to *ttl_seconds* from now. Only valid while owned."""
         raise NotImplementedError
 
     @abc.abstractmethod

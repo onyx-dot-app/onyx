@@ -13,11 +13,7 @@ import { useRouter } from "next/navigation";
 import type { Route } from "next";
 import { can } from "@/lib/permissions/resource-actions";
 import { useTierAtLeast } from "@/hooks/useTierAtLeast";
-import { Tier } from "@/interfaces/settings";
-import {
-  updateAgentSharedStatus,
-  updateAgentFeaturedStatus,
-} from "@/lib/agents/svc";
+import { Tier } from "@/lib/settings/types";
 import {
   SvgActions,
   SvgBarChart,
@@ -28,10 +24,9 @@ import {
   SvgShare,
   SvgUser,
 } from "@opal/icons";
-import { useCreateModal } from "@/refresh-components/contexts/ModalContext";
+import { useCreateModal } from "@opal/components";
 import ShareAgentModal from "@/sections/modals/ShareAgentModal";
 import AgentViewerModal from "@/sections/modals/AgentViewerModal";
-import { toast } from "@/hooks/useToast";
 import { CardItemLayout } from "@/layouts/general-layouts";
 import { Content } from "@opal/layouts";
 import { Interactive } from "@opal/core";
@@ -52,10 +47,9 @@ export default function AgentCard({ agent }: AgentCardProps) {
   const businessTier = useTierAtLeast(Tier.BUSINESS);
   const shareAgentModal = useCreateModal();
   const agentViewerModal = useCreateModal();
-  const { agent: fullAgent, refresh: refreshAgent } = useAgent(agent.id);
   // Affordances read the map the list endpoint stamped on `agent`, so icons render with
   // the card instead of popping in after the per-card fullAgent fetch resolves.
-  const canUpdateFeaturedStatus = can(agent, "feature");
+  const { agent: fullAgent } = useAgent(agent.id);
 
   // Start chat and auto-pin unpinned agents to the sidebar
   const handleStartChat = useCallback(() => {
@@ -65,58 +59,11 @@ export default function AgentCard({ agent }: AgentCardProps) {
     route({ agentId: agent.id });
   }, [pinned, togglePinnedAgent, agent, route]);
 
-  const handleShare = useCallback(
-    async (
-      userIds: string[],
-      groupIds: number[],
-      isPublic: boolean,
-      isFeatured: boolean,
-      labelIds: number[]
-    ) => {
-      const shareError = await updateAgentSharedStatus(
-        agent.id,
-        userIds,
-        groupIds,
-        isPublic,
-        businessTier,
-        labelIds
-      );
-
-      if (shareError) {
-        toast.error(`Failed to share agent: ${shareError}`);
-        return;
-      }
-
-      if (canUpdateFeaturedStatus) {
-        const featuredError = await updateAgentFeaturedStatus(
-          agent.id,
-          isFeatured
-        );
-        if (featuredError) {
-          toast.error(`Failed to update featured status: ${featuredError}`);
-          refreshAgent();
-          return;
-        }
-      }
-
-      refreshAgent();
-      shareAgentModal.toggle(false);
-    },
-    [agent.id, canUpdateFeaturedStatus, businessTier, refreshAgent]
-  );
-
   return (
     <>
       <shareAgentModal.Provider>
-        <ShareAgentModal
-          agentId={agent.id}
-          userIds={fullAgent?.users?.map((u) => u.id) ?? []}
-          groupIds={fullAgent?.groups ?? []}
-          isPublic={fullAgent?.is_public ?? false}
-          isFeatured={fullAgent?.is_featured ?? false}
-          labelIds={fullAgent?.labels?.map((l) => l.id) ?? []}
-          onShare={handleShare}
-        />
+        {/* Saved agents persist sharing inside the dialog itself */}
+        <ShareAgentModal agentId={agent.id} />
       </shareAgentModal.Provider>
 
       <agentViewerModal.Provider>
@@ -131,7 +78,7 @@ export default function AgentCard({ agent }: AgentCardProps) {
           padding={0}
           gap={0}
           height="full"
-          className="radial-00 hover:shadow-00"
+          className="radial-00 hover:shadow-box-00"
         >
           <div className="flex self-stretch h-24">
             <CardItemLayout

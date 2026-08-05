@@ -6,13 +6,14 @@ from uuid import UUID
 from sqlalchemy import select
 from sqlalchemy.orm import Session
 
-from onyx.auth.schemas import UserRole
-from onyx.db.enums import PersonaAccessLevel
-from onyx.db.enums import PersonaSharePermission
-from onyx.db.enums import PersonaSharingStatus
-from onyx.db.models import Persona
-from onyx.db.models import User
-from onyx.db.models import User__UserGroup
+from onyx.auth.permissions import has_global_permission
+from onyx.db.enums import (
+    Permission,
+    PersonaAccessLevel,
+    PersonaSharePermission,
+    PersonaSharingStatus,
+)
+from onyx.db.models import Persona, User, User__UserGroup
 
 
 def get_user_group_ids_for_user(db_session: Session, user_id: UUID) -> set[int]:
@@ -50,7 +51,7 @@ def get_persona_access_level(
         persona.owner_group_id is not None and persona.owner_group_id in user_group_ids
     ):
         return PersonaAccessLevel.OWNER
-    if user.role == UserRole.ADMIN:
+    if has_global_permission(user, Permission.MANAGE_AGENTS):
         return PersonaAccessLevel.EDITOR
 
     has_viewer_access = False

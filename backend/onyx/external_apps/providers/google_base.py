@@ -4,11 +4,13 @@ from onyx.db.enums import ExternalAppType
 from onyx.error_handling.error_codes import OnyxErrorCode
 from onyx.error_handling.exceptions import OnyxError
 from onyx.external_apps.providers.actions import EndpointSpec
-from onyx.external_apps.providers.base import AdminDescriptorSpec
-from onyx.external_apps.providers.base import OAuthExternalAppProvider
-from onyx.external_apps.providers.base import OAuthFlowSpec
-from onyx.external_apps.providers.base import OAuthProviderSpec
-from onyx.external_apps.providers.base import OrgCredentialField
+from onyx.external_apps.providers.base import (
+    AdminDescriptorSpec,
+    OAuthExternalAppProvider,
+    OAuthFlowSpec,
+    OAuthProviderSpec,
+    OrgCredentialField,
+)
 
 # Google's OAuth 2.0 endpoints are shared across all Google APIs.
 _AUTHORIZE_URL = "https://accounts.google.com/o/oauth2/v2/auth"
@@ -65,7 +67,6 @@ class GoogleOAuthProvider(OAuthExternalAppProvider, abstract=True):
         app_name: str,
         scope: str,
         upstream_url_patterns: list[str],
-        description: str,
         google_api_name: str,
         endpoint_catalog: list[EndpointSpec],
     ) -> OAuthProviderSpec:
@@ -86,7 +87,6 @@ class GoogleOAuthProvider(OAuthExternalAppProvider, abstract=True):
                 },
             ),
             descriptor=AdminDescriptorSpec(
-                description=description,
                 upstream_url_patterns=upstream_url_patterns,
                 auth_template={"Authorization": "Bearer {access_token}"},
                 required_org_credential_fields=list(_CLIENT_CREDENTIAL_FIELDS),

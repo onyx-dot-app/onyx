@@ -6,20 +6,21 @@ from uuid import uuid4
 import httpx
 import pytest
 
-from onyx.configs.constants import ANONYMOUS_USER_EMAIL
-from onyx.configs.constants import ANONYMOUS_USER_UUID
-from onyx.configs.constants import FASTAPI_USERS_AUTH_COOKIE_NAME
+from onyx.configs.constants import (
+    ANONYMOUS_USER_EMAIL,
+    ANONYMOUS_USER_UUID,
+    FASTAPI_USERS_AUTH_COOKIE_NAME,
+)
 from onyx.db.engine.sql_engine import get_session_with_current_tenant
-from onyx.db.enums import AccountType
-from onyx.db.enums import Permission
-from onyx.db.users import add_slack_user_if_not_exists
-from onyx.db.users import batch_add_ext_perm_user_if_not_exists
+from onyx.db.enums import AccountType, Permission
+from onyx.db.users import (
+    add_slack_user_if_not_exists,
+    batch_add_ext_perm_user_if_not_exists,
+)
 from onyx.server.documents.models import PaginatedReturn
 from onyx.server.manage.models import UserInfo
-from onyx.server.models import FullUserSnapshot
-from onyx.server.models import InvitedUserSnapshot
-from tests.integration.common_utils.constants import API_SERVER_URL
-from tests.integration.common_utils.constants import GENERAL_HEADERS
+from onyx.server.models import FullUserSnapshot, InvitedUserSnapshot
+from tests.integration.common_utils.constants import API_SERVER_URL, GENERAL_HEADERS
 from tests.integration.common_utils.http_client import client
 from tests.integration.common_utils.test_models import DATestUser
 

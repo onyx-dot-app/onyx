@@ -4,17 +4,17 @@ These tests mock the database layer (sessions, raw connections, large objects)
 so they run without any external services.
 """
 
-from io import BytesIO
-from io import StringIO
+from io import BytesIO, StringIO
 from typing import Any
-from unittest.mock import MagicMock
-from unittest.mock import patch
+from unittest.mock import MagicMock, patch
 
 import pytest
 
 from onyx.configs.constants import FileOrigin
-from onyx.file_store.postgres_file_store import POSTGRES_BUCKET_SENTINEL
-from onyx.file_store.postgres_file_store import PostgresBackedFileStore
+from onyx.file_store.postgres_file_store import (
+    POSTGRES_BUCKET_SENTINEL,
+    PostgresBackedFileStore,
+)
 
 
 @pytest.fixture

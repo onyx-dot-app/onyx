@@ -10,18 +10,12 @@ same path used by the Slack bot handler) because they never have a web
 login flow.
 """
 
-from datetime import datetime
-from datetime import timedelta
-from datetime import timezone
+from datetime import datetime, timedelta, timezone
 
 import redis
 
-from ee.onyx.server.license.models import LicenseMetadata
-from ee.onyx.server.license.models import LicenseSource
-from ee.onyx.server.license.models import PlanType
-from onyx.configs.app_configs import REDIS_DB_NUMBER
-from onyx.configs.app_configs import REDIS_HOST
-from onyx.configs.app_configs import REDIS_PORT
+from ee.onyx.server.license.models import LicenseMetadata, LicenseSource, PlanType
+from onyx.configs.app_configs import REDIS_DB_NUMBER, REDIS_HOST, REDIS_PORT
 from onyx.db.engine.sql_engine import get_session_with_current_tenant
 from onyx.db.users import add_slack_user_if_not_exists
 from onyx.server.settings.models import ApplicationStatus

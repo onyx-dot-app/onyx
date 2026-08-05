@@ -1,6 +1,4 @@
-import React from "react";
-import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
-import { CircleAlert, Info } from "lucide-react";
+import { MessageCard, Text } from "@opal/components";
 import { BillingInformation, BillingStatus } from "@/lib/billing/interfaces";
 import { useIsTrialingEnterprise } from "@/hooks/useIsTrialingEnterprise";
 
@@ -47,31 +45,25 @@ export function BillingAlerts({
     );
   }
 
-  const variant = isExpired || noPaymentMethod ? "destructive" : "default";
-
   if (messages.length === 0) return null;
 
+  const isDestructive = isExpired || noPaymentMethod;
+
   return (
-    <Alert variant={variant}>
-      <AlertTitle className="flex items-center space-x-2">
-        {variant === "destructive" ? (
-          <CircleAlert className="h-4 w-4" />
-        ) : (
-          <Info className="h-4 w-4" />
-        )}
-        <span>
-          {variant === "destructive"
-            ? "Important Subscription Notice"
-            : "Subscription Notice"}
-        </span>
-      </AlertTitle>
-      <AlertDescription>
-        <ul className="list-disc list-inside space-y-1 mt-2">
+    <MessageCard
+      variant={isDestructive ? "error" : "info"}
+      title={
+        isDestructive ? "Important Subscription Notice" : "Subscription Notice"
+      }
+      bottomChildren={
+        <ul className="list-disc list-inside space-y-1 px-2 pb-2">
           {messages.map((msg, idx) => (
-            <li key={idx}>{msg}</li>
+            <Text key={idx} as="li" font="main-ui-body" color="text-03">
+              {msg}
+            </Text>
           ))}
         </ul>
-      </AlertDescription>
-    </Alert>
+      }
+    />
   );
 }

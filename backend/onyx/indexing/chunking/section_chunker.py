@@ -1,14 +1,11 @@
-from abc import ABC
-from abc import abstractmethod
+from abc import ABC, abstractmethod
 from collections.abc import Sequence
 from typing import cast
 
 from chonkie import SentenceChunker
-from pydantic import BaseModel
-from pydantic import Field
+from pydantic import BaseModel, Field
 
-from onyx.connectors.models import IndexingDocument
-from onyx.connectors.models import Section
+from onyx.connectors.models import IndexingDocument, Section
 from onyx.indexing.models import DocAwareChunk
 
 

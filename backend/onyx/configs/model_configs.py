@@ -1,6 +1,8 @@
 import json
 import os
 
+from shared_configs.configs import DEFAULT_DOCUMENT_ENCODER_MODEL
+
 #####
 # Embedding/Reranking Model Configs
 #####
@@ -12,7 +14,6 @@ import os
 # The useable models configured as below must be SentenceTransformer compatible
 # NOTE: DO NOT CHANGE SET THESE UNLESS YOU KNOW WHAT YOU ARE DOING
 # IDEALLY, YOU SHOULD CHANGE EMBEDDING MODELS VIA THE UI
-DEFAULT_DOCUMENT_ENCODER_MODEL = "nomic-ai/nomic-embed-text-v1"
 DOCUMENT_ENCODER_MODEL = (
     os.environ.get("DOCUMENT_ENCODER_MODEL") or DEFAULT_DOCUMENT_ENCODER_MODEL
 )
@@ -69,6 +70,19 @@ GEN_AI_NUM_RESERVED_OUTPUT_TOKENS = int(
 GEN_AI_MODEL_FALLBACK_MAX_TOKENS = int(
     os.environ.get("GEN_AI_MODEL_FALLBACK_MAX_TOKENS") or 32000
 )
+
+# Fraction of max_input_tokens to hold back when fitting history: headroom for
+# tiktoken undercounting the provider's tokenizer and overflowing the context.
+GEN_AI_INPUT_TOKEN_SAFETY_MARGIN = float(
+    os.environ.get("GEN_AI_INPUT_TOKEN_SAFETY_MARGIN") or 0.05
+)
+# Must be in [0, 1): >= 1 zeroes available_tokens; negative inflates the budget
+# past the real limit.
+if not 0.0 <= GEN_AI_INPUT_TOKEN_SAFETY_MARGIN < 1.0:
+    raise ValueError(
+        "GEN_AI_INPUT_TOKEN_SAFETY_MARGIN must be in [0, 1), got "
+        f"{GEN_AI_INPUT_TOKEN_SAFETY_MARGIN}"
+    )
 
 # This is used when computing how much context space is available for documents
 # ahead of time in order to let the user know if they can "select" more documents

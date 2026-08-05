@@ -1,7 +1,8 @@
 @reference "#reference.css";
 
 /* ==========================================================================
-   Opal inputs — shared wrapper styles.
+   Opal inputs — shared wrapper chrome plus the segmented-field styles used
+   by InputDatePicker and InputTime.
 
    Consumed by every input component (InputTypeIn, etc.) via @import.
    Component-specific inner styles live in each component's own styles.css.
@@ -59,4 +60,56 @@
 
 .opal-input[data-variant="readOnly"] {
   @apply bg-transparent border rounded-08;
+}
+
+/* ---------------------------------------------------------------------------
+   Segmented fields (Figma Input/Date, Input/Time)
+
+   Chromeless numeric segments inside the .opal-input chrome. The box around
+   them is the field, separators render as Text between segments, and the
+   trailing action slot holds 24px internal buttons.
+   --------------------------------------------------------------------------- */
+
+.opal-input-segmented {
+  @apply gap-1;
+}
+
+.opal-input-segmented-root {
+  @apply relative w-full;
+  min-width: var(--block-width-form-input-min);
+}
+
+.opal-input-segmented-content {
+  @apply flex min-h-6 flex-1 items-center p-0.5;
+}
+
+.opal-input-segmented-actions {
+  @apply flex h-6 items-center justify-end;
+}
+
+.opal-input-segment {
+  @apply border-0 bg-transparent p-0 text-center font-main-ui-mono text-text-04 outline-hidden;
+  /* ch is the "0" advance, but DM Mono digit ink is a hair wider, so an exact
+     Nch box clips the last digit. The +4px fits the ink for any digits. */
+  width: calc(2ch + 4px);
+}
+
+.opal-input-segment[data-wide] {
+  width: calc(4ch + 4px);
+}
+
+.opal-input-segment::placeholder {
+  color: var(--text-02);
+}
+
+.opal-input-segment:first-child {
+  @apply pl-0.5;
+}
+
+.opal-input[data-variant="disabled"] .opal-input-segment {
+  @apply cursor-not-allowed text-text-01;
+}
+
+.opal-input[data-variant="disabled"] .opal-input-segment::placeholder {
+  color: var(--text-01);
 }

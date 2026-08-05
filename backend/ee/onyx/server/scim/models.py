@@ -11,10 +11,7 @@ from dataclasses import dataclass
 from datetime import datetime
 from enum import Enum
 
-from pydantic import BaseModel
-from pydantic import ConfigDict
-from pydantic import Field
-from pydantic import field_validator
+from pydantic import BaseModel, ConfigDict, Field, field_validator
 
 # ---------------------------------------------------------------------------
 # SCIM Schema URIs (RFC 7643 §8)

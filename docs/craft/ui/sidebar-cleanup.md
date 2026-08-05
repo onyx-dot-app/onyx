@@ -2,8 +2,8 @@
 
 > **Stacked on `craft-input-bar` (#11634).** This branch builds on the composer
 > redesign in that PR — `BaseInputBar`, `CraftInputBar`, `PlusMenuButton`,
-> `InputChipStrip` (see `docs/craft/input-bar-redesign.md`). The Library and
-> model-picker work below extends those components rather than rebuilding them.
+> `InputChipStrip`. The Library and model-picker work below extends those
+> components rather than rebuilding them.
 
 ## Issues to Address
 

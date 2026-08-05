@@ -4,9 +4,11 @@ import pytest
 
 from onyx.connectors.slack.connector import SlackConnector
 from onyx.db.enums import HierarchyNodeType
-from tests.daily.connectors.utils import load_all_from_connector
-from tests.daily.connectors.utils import to_sections
-from tests.daily.connectors.utils import to_text_sections
+from tests.daily.connectors.utils import (
+    load_all_from_connector,
+    to_sections,
+    to_text_sections,
+)
 from tests.utils.secret_names import TestSecret
 
 pytestmark = pytest.mark.secrets(TestSecret.SLACK_BOT_TOKEN)

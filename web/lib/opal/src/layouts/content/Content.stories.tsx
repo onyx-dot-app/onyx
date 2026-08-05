@@ -1,4 +1,4 @@
-import type { Meta, StoryObj } from "@storybook/react";
+import type { Meta, StoryObj } from "@storybook/react-vite";
 import { Content } from "@opal/layouts";
 import { SvgSettings, SvgStar, SvgRefreshCw } from "@opal/icons";
 

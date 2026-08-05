@@ -10,14 +10,12 @@ rely on the content hash instead.
 
 from __future__ import annotations
 
-from unittest.mock import MagicMock
-from unittest.mock import patch
+from unittest.mock import MagicMock, patch
 
 import pytest
 
 from onyx.connectors.models import Document
-from onyx.connectors.web.connector import WEB_CONNECTOR_VALID_SETTINGS
-from onyx.connectors.web.connector import WebConnector
+from onyx.connectors.web.connector import WEB_CONNECTOR_VALID_SETTINGS, WebConnector
 from onyx.file_processing.html_utils import ParsedHTML
 
 
@@ -43,8 +41,8 @@ def _make_page_mock() -> MagicMock:
     response = MagicMock()
     response.status = 200
     # The server DOES send Last-Modified — the connector must still ignore it.
-    response.header_value.side_effect = (
-        lambda h: LAST_MODIFIED if h == "Last-Modified" else None
+    response.header_value.side_effect = lambda h: (
+        LAST_MODIFIED if h == "Last-Modified" else None
     )
     page.goto.return_value = response
     page.content.return_value = "<html><body><p>static</p></body></html>"

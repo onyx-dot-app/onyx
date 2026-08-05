@@ -18,22 +18,19 @@ import http.client
 import socket
 import threading
 import time
-from collections.abc import Callable
-from collections.abc import Iterator
-from http.server import BaseHTTPRequestHandler
-from http.server import ThreadingHTTPServer
+from collections.abc import Callable, Iterator
+from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
 from typing import Any
-from uuid import UUID
-from uuid import uuid4
+from uuid import UUID, uuid4
 
 import pytest
 from mitmproxy import http as mitm_http
 from mitmproxy.options import Options
 from mitmproxy.tools.dump import DumpMaster
 
-from onyx.sandbox_proxy.addons.gate import _IdentityResolver
-from onyx.sandbox_proxy.addons.gate import GateAddon
+from onyx.sandbox_proxy.addons import gate
+from onyx.sandbox_proxy.addons.gate import GateAddon, _IdentityResolver
 from onyx.sandbox_proxy.credential_injection import CredentialInjectionDispatcher
 from onyx.sandbox_proxy.identity import ResolvedSandbox
 from onyx.sandbox_proxy.request_evaluator import RequestEvaluator
@@ -158,6 +155,14 @@ def upstream() -> Iterator[int]:
     finally:
         server.shutdown()
         server.server_close()
+
+
+@pytest.fixture(autouse=True)
+def _allow_loopback_egress(monkeypatch: pytest.MonkeyPatch) -> None:
+    """These tests route through 127.0.0.1 (loopback = internal), which the egress
+    guard correctly blocks in production. They exercise response streaming, not the
+    egress boundary, so bypass the guard here."""
+    monkeypatch.setattr(gate, "destination_is_blocked", lambda _host, _port: False)
 
 
 def _start_proxy(

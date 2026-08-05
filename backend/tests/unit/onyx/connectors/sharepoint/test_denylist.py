@@ -2,12 +2,14 @@ from __future__ import annotations
 
 import pytest
 
-from onyx.connectors.sharepoint.connector import _build_item_relative_path
-from onyx.connectors.sharepoint.connector import _is_path_excluded
-from onyx.connectors.sharepoint.connector import _is_site_excluded
-from onyx.connectors.sharepoint.connector import DriveItemData
-from onyx.connectors.sharepoint.connector import SharepointConnector
-from onyx.connectors.sharepoint.connector import SiteDescriptor
+from onyx.connectors.sharepoint.connector import (
+    DriveItemData,
+    SharepointConnector,
+    SiteDescriptor,
+    _build_item_relative_path,
+    _is_path_excluded,
+    _is_site_excluded,
+)
 
 
 class TestIsSiteExcluded:

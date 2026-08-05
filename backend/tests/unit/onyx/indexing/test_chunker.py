@@ -3,11 +3,9 @@ from unittest.mock import Mock
 
 import pytest
 
-from onyx.configs.app_configs import USE_CHUNK_SUMMARY
-from onyx.configs.app_configs import USE_DOCUMENT_SUMMARY
+from onyx.configs.app_configs import USE_CHUNK_SUMMARY, USE_DOCUMENT_SUMMARY
 from onyx.configs.constants import DocumentSource
-from onyx.connectors.models import Document
-from onyx.connectors.models import TextSection
+from onyx.connectors.models import Document, TextSection
 from onyx.indexing.chunker import Chunker
 from onyx.indexing.embedder import DefaultIndexingEmbedder
 from onyx.indexing.indexing_pipeline import process_image_sections

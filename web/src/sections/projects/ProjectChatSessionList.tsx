@@ -5,7 +5,7 @@ import { deleteChatSession } from "@/app/app/services/lib";
 import {
   moveChatSession as moveChatSessionService,
   removeChatSessionFromProject as removeChatSessionFromProjectService,
-} from "@/app/app/projects/projectsService";
+} from "@/lib/projects/svc";
 import { useProjectsContext } from "@/providers/ProjectsContext";
 import { ChatSession } from "@/app/app/interfaces";
 import AgentAvatar from "@/refresh-components/avatars/AgentAvatar";
@@ -33,7 +33,7 @@ import { timeAgo } from "@opal/time";
 import type { IconFunctionComponent } from "@opal/types";
 import { noProp } from "@/lib/utils";
 import MoveCustomAgentChatModal from "@/sections/modals/MoveCustomAgentChatModal";
-import ConfirmationModalLayout from "@/refresh-components/layouts/ConfirmationModalLayout";
+import { ConfirmationModalLayout } from "@opal/layouts";
 import { PopoverSearchInput } from "@/sections/sidebar/ChatButton";
 
 const LS_HIDE_MOVE_CUSTOM_AGENT_MODAL_KEY = "onyx:hideMoveCustomAgentModal";

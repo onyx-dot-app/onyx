@@ -3,35 +3,31 @@ import random
 import socket
 import time
 from enum import Enum
-from typing import Any
-from typing import cast
-from urllib.parse import urljoin
-from urllib.parse import urlparse
+from typing import Any, cast
+from urllib.parse import urljoin, urlparse
 
 import requests
 from bs4 import BeautifulSoup
-from playwright.sync_api import BrowserContext
-from playwright.sync_api import Playwright
-from playwright.sync_api import TimeoutError
+from playwright.sync_api import BrowserContext, Playwright, TimeoutError
 from typing_extensions import override
 from urllib3.exceptions import MaxRetryError
 
-from onyx.configs.app_configs import INDEX_BATCH_SIZE
-from onyx.configs.app_configs import REQUEST_TIMEOUT_SECONDS
+from onyx.configs.app_configs import INDEX_BATCH_SIZE, REQUEST_TIMEOUT_SECONDS
 from onyx.configs.constants import DocumentSource
-from onyx.connectors.exceptions import ConnectorValidationError
-from onyx.connectors.exceptions import CredentialExpiredError
-from onyx.connectors.exceptions import InsufficientPermissionsError
-from onyx.connectors.exceptions import UnexpectedValidationError
-from onyx.connectors.interfaces import GenerateDocumentsOutput
-from onyx.connectors.interfaces import GenerateSlimDocumentOutput
-from onyx.connectors.interfaces import LoadConnector
-from onyx.connectors.interfaces import SecondsSinceUnixEpoch
-from onyx.connectors.interfaces import SlimConnector
-from onyx.connectors.models import Document
-from onyx.connectors.models import HierarchyNode
-from onyx.connectors.models import SlimDocument
-from onyx.connectors.models import TextSection
+from onyx.connectors.exceptions import (
+    ConnectorValidationError,
+    CredentialExpiredError,
+    InsufficientPermissionsError,
+    UnexpectedValidationError,
+)
+from onyx.connectors.interfaces import (
+    GenerateDocumentsOutput,
+    GenerateSlimDocumentOutput,
+    LoadConnector,
+    SecondsSinceUnixEpoch,
+    SlimConnector,
+)
+from onyx.connectors.models import Document, HierarchyNode, SlimDocument, TextSection
 from onyx.file_processing.html_utils import web_html_cleanup
 from onyx.indexing.indexing_heartbeat import IndexingHeartbeatInterface
 from onyx.server.security.models import web_connector_ssrf_enforced
@@ -40,12 +36,13 @@ from onyx.utils.logger import setup_logger
 
 # Re-exported for backwards compatibility with existing tests/callers that
 # patch these names on `onyx.connectors.web.connector`.
-from onyx.utils.playwright_fetch import DEFAULT_HEADERS
-from onyx.utils.playwright_fetch import DEFAULT_USER_AGENT  # noqa: F401
-from onyx.utils.playwright_fetch import start_playwright
+from onyx.utils.playwright_fetch import (
+    DEFAULT_HEADERS,
+    DEFAULT_USER_AGENT,  # noqa: F401
+    start_playwright,
+)
 from onyx.utils.sitemap import list_pages_for_site
-from onyx.utils.web_content import extract_pdf_text
-from onyx.utils.web_content import is_pdf_resource
+from onyx.utils.web_content import extract_pdf_text, is_pdf_resource
 from shared_configs.configs import MULTI_TENANT
 
 logger = setup_logger()

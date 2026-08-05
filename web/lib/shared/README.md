@@ -9,7 +9,8 @@ It holds four things, none of which depend on any UI framework:
 | `@onyx-ai/shared/tokens.css` | Design tokens as **CSS custom properties** (exact Opal names: `--text-05`, `--radius-12`, …), with `:root` (primitives + light) and `.dark` (dark overrides) — for web/Opal. |
 | `@onyx-ai/shared/typography.css` | Typography **presets** as Tailwind `@utility font-*` blocks (`font-heading-h1`, `font-main-ui-body`, …) — for web/Opal. |
 | `@onyx-ai/shared/nativewind-theme` | A NativeWind/Tailwind `theme.extend` fragment (semantic colors as `var(--name)`; radius/spacing as px numbers) — for mobile's `tailwind.config.js`. |
-| `@onyx-ai/shared/native` | `{ varsLight, varsDark, textPresets }` — resolved light/dark CSS-variable maps for the mobile NativeWind `vars()` provider (the RN analog of web's `.dark` class), plus the typography presets as RN style objects. |
+| `@onyx-ai/shared/nativewind-typography` | A `.font-*` → RN-text-style map registered as NativeWind utilities (via a tailwindcss `plugin` in mobile's `tailwind.config.js`) — the RN counterpart of web's `typography.css` `@utility font-*` blocks, so mobile can use `font-heading-h1` like web. |
+| `@onyx-ai/shared/native` | `{ varsLight, varsDark, textPresets }` — resolved light/dark CSS-variable maps for the mobile NativeWind `vars()` provider (the RN analog of web's `.dark` class), plus the typography presets as RN style objects. **RN-only runtime** — shared cross-platform types live in `/contracts` (e.g. `TextFont`, `TextColor`), not here. |
 | `@onyx-ai/shared/utils` | Pure TypeScript utilities (no DOM / Node / React). |
 | `@onyx-ai/shared/contracts` | Cross-platform component API contracts (React-free, generic over the platform's icon/node type). |
 | `@onyx-ai/shared/types` | Common DTOs and enums. |
@@ -27,8 +28,11 @@ When extending it:
   `react-native` / `next` dependency or peer dependency.
 - **Do not** reference `window`, `document`, `process`, `Buffer`, etc. — these
   are compile errors here, by design.
-- Component contracts must stay generic over platform types (e.g.
-  `ButtonContract<TIcon>`) rather than importing a UI framework's types.
+- A contract that needs no platform value stays plain (e.g. `InteractiveContract`
+  in `contracts/interactive.ts`); one that carries a platform value (an icon, a
+  node) must stay generic over it — a type parameter the consumer supplies (web →
+  a React component, mobile → an RN component) — rather than importing a UI
+  framework's type.
 
 ## Tokens
 
@@ -48,13 +52,15 @@ dark mode flips at runtime exactly as before. The build (Style Dictionary)
 regenerates every platform output:
 
 ```bash
-bun run build:tokens   # tokens/*.json -> tokens.css + typography.css + nativewind-theme.cjs + native.js (+ .d.ts)
+bun run build:tokens   # tokens/*.json -> tokens.css + typography.css + nativewind-theme.cjs + nativewind-typography.cjs + native.js (+ .d.ts)
 ```
 
 Typography presets live in `tokens/typography-presets.json` (each preset bundles
 font-family, size, weight, line-height, letter-spacing). The build emits them as web
-`@utility font-*` blocks (`typography.css`) **and** as resolved RN style objects
-(`textPresets` in `native.js`) — one source, both platforms.
+`@utility font-*` blocks (`typography.css`), as mobile `.font-*` NativeWind utilities
+(`nativewind-typography.cjs`), **and** as resolved RN style objects (`textPresets` in
+`native.js`) — one source, every platform. The preset names are also the `TextFont`
+union in `src/contracts/typography.ts` (a neutral, both-platform type).
 
 ### No-regression gate
 

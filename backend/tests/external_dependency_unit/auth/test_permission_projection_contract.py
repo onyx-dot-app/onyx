@@ -16,75 +16,87 @@ from sqlalchemy.orm import Session
 
 from ee.onyx.db.analytics import user_can_view_assistant_stats
 from ee.onyx.db.token_limit import insert_user_group_token_rate_limit
-from ee.onyx.server.token_rate_limits.api import _authorize_group_token_rate_limit_write
-from ee.onyx.server.token_rate_limits.api import get_group_token_limit_settings
-from ee.onyx.server.user_group.api import delete_user_group
-from ee.onyx.server.user_group.api import set_user_group_permissions
-from onyx.auth.permission_projection import CC_PAIR_ACTIONS
-from onyx.auth.permission_projection import cc_pair_permissions
-from onyx.auth.permission_projection import CUSTOM_SKILL_ACTIONS
-from onyx.auth.permission_projection import custom_skill_permissions
-from onyx.auth.permission_projection import DOCUMENT_SET_ACTIONS
-from onyx.auth.permission_projection import document_set_permissions
-from onyx.auth.permission_projection import MCP_SERVER_ACTIONS
-from onyx.auth.permission_projection import mcp_server_permissions
-from onyx.auth.permission_projection import PERSONA_ACTIONS
-from onyx.auth.permission_projection import persona_permissions
-from onyx.auth.permission_projection import TOOL_ACTIONS
-from onyx.auth.permission_projection import tool_permissions
-from onyx.auth.permission_projection import USER_GROUP_ACTIONS
-from onyx.auth.permission_projection import user_group_permissions
-from onyx.auth.permissions import has_global_permission
-from onyx.auth.permissions import has_permission
-from onyx.auth.scoped_permissions import assert_manages_group
-from onyx.auth.scoped_permissions import assert_within_scope
-from onyx.auth.scoped_permissions import manages_group
-from onyx.auth.scoped_permissions import within_scope
+from ee.onyx.server.token_rate_limits.api import (
+    _authorize_group_token_rate_limit_write,
+    get_group_token_limit_settings,
+)
+from ee.onyx.server.user_group.api import delete_user_group, set_user_group_permissions
+from onyx.auth.permission_projection import (
+    CC_PAIR_ACTIONS,
+    CUSTOM_SKILL_ACTIONS,
+    DOCUMENT_SET_ACTIONS,
+    MCP_SERVER_ACTIONS,
+    PERSONA_ACTIONS,
+    TOOL_ACTIONS,
+    USER_GROUP_ACTIONS,
+    cc_pair_permissions,
+    custom_skill_permissions,
+    document_set_permissions,
+    mcp_server_permissions,
+    persona_permissions,
+    tool_permissions,
+    user_group_permissions,
+)
+from onyx.auth.permissions import has_global_permission, has_permission
+from onyx.auth.scoped_permissions import (
+    assert_manages_group,
+    assert_within_scope,
+    manages_group,
+    within_scope,
+)
 from onyx.configs.constants import DocumentSource
 from onyx.connectors.models import InputType
 from onyx.db.connector_credential_pair import (
     get_connector_credential_pair_from_id_for_user,
 )
 from onyx.db.document_set import fetch_all_document_sets_for_user
-from onyx.db.enums import AccessType
-from onyx.db.enums import ConnectorCredentialPairStatus
-from onyx.db.enums import MCPServerStatus
-from onyx.db.enums import Permission
-from onyx.db.enums import PermissionAuthority
-from onyx.db.enums import PersonaSharePermission
-from onyx.db.models import Connector
-from onyx.db.models import ConnectorCredentialPair
-from onyx.db.models import Credential
-from onyx.db.models import DocumentSet
-from onyx.db.models import DocumentSet__UserGroup
-from onyx.db.models import MCPServer
-from onyx.db.models import Persona
-from onyx.db.models import Persona__Tool
-from onyx.db.models import Persona__User
-from onyx.db.models import Persona__UserGroup
-from onyx.db.models import Skill
-from onyx.db.models import Skill__UserGroup
-from onyx.db.models import TokenRateLimit__UserGroup
-from onyx.db.models import Tool
-from onyx.db.models import User
-from onyx.db.models import User__UserGroup
-from onyx.db.models import UserGroup
-from onyx.db.models import UserGroup__ConnectorCredentialPair
-from onyx.db.persona import _assert_persona_update_within_managed_scope
-from onyx.db.persona import can_delete_persona
-from onyx.db.persona import can_edit_persona
-from onyx.db.persona import can_view_persona_stats
-from onyx.db.persona import fetch_persona_by_id_for_user
-from onyx.db.persona import get_persona_by_id
-from onyx.db.persona import is_persona_editable_by_user
-from onyx.db.persona import persona_edit_within_scope
+from onyx.db.enums import (
+    AccessType,
+    ConnectorCredentialPairStatus,
+    MCPServerStatus,
+    Permission,
+    PermissionAuthority,
+    PersonaSharePermission,
+    SkillSharePermission,
+)
+from onyx.db.models import (
+    Connector,
+    ConnectorCredentialPair,
+    Credential,
+    DocumentSet,
+    DocumentSet__UserGroup,
+    MCPServer,
+    Persona,
+    Persona__Tool,
+    Persona__User,
+    Persona__UserGroup,
+    Skill,
+    Skill__UserGroup,
+    TokenRateLimit__UserGroup,
+    Tool,
+    User,
+    User__UserGroup,
+    UserGroup,
+    UserGroup__ConnectorCredentialPair,
+)
+from onyx.db.persona import (
+    _assert_persona_update_within_managed_scope,
+    can_delete_persona,
+    can_edit_persona,
+    can_view_persona_stats,
+    fetch_persona_by_id_for_user,
+    get_persona_by_id,
+    is_persona_editable_by_user,
+    persona_edit_within_scope,
+)
 from onyx.db.skill import get_group_ids_for_skill
 from onyx.db.token_limit import insert_global_token_rate_limit
-from onyx.db.tools import can_manage_mcp_server
-from onyx.db.tools import can_manage_tool
+from onyx.db.tools import can_manage_mcp_server, can_manage_tool
 from onyx.error_handling.exceptions import OnyxError
-from onyx.server.features.mcp.api import _ensure_mcp_server_owner_or_admin
-from onyx.server.features.mcp.api import _ensure_mcp_server_viewable
+from onyx.server.features.mcp.api import (
+    _ensure_mcp_server_owner_or_admin,
+    _ensure_mcp_server_viewable,
+)
 from onyx.server.features.persona.api import delete_persona
 from onyx.server.features.persona.models import PersonaUpsertRequest
 from onyx.server.features.tool.api import _get_manageable_custom_tool
@@ -666,13 +678,12 @@ def _make_skill(
 ) -> Skill:
     skill = Skill(
         id=uuid4(),
-        slug=f"proj-skill-{uuid4().hex[:12]}",
-        name="contract skill",
+        name=f"contract skill {uuid4().hex[:8]}",
         description="contract",
         # custom skills need a bundle source (ck_skill_definition_source)
         bundle_file_id=f"proj-bundle-{uuid4().hex}",
         bundle_sha256="0" * 64,
-        is_public=is_public,
+        public_permission=SkillSharePermission.VIEWER if is_public else None,
     )
     db_session.add(skill)
     db_session.flush()
@@ -815,7 +826,7 @@ def test_skill_projection_matches_gates(db_session: Session) -> None:
             permission=Permission.MANAGE_SKILLS,
             current_group_ids=group_ids,
             requested_group_ids=group_ids,
-            is_non_public=not skill.is_public,
+            is_non_public=skill.public_permission is None,
         )
         # publish drives the same guard with the requested public state
         publish_enforced = not _guard_raises(
@@ -833,7 +844,7 @@ def test_skill_projection_matches_gates(db_session: Session) -> None:
             permission=Permission.MANAGE_SKILLS,
             current_group_ids=group_ids,
             requested_group_ids=group_ids,
-            is_non_public=not skill.is_public,
+            is_non_public=skill.public_permission is None,
         )
         assert can_edit == edit_enforced, actor.email
         is_full_admin = has_global_permission(actor, Permission.FULL_ADMIN_PANEL_ACCESS)
@@ -856,7 +867,7 @@ def test_skill_projection_matches_gates(db_session: Session) -> None:
             permission=Permission.MANAGE_SKILLS,
             current_group_ids=group_ids,
             requested_group_ids=group_ids,
-            is_non_public=not skill.is_public,
+            is_non_public=skill.public_permission is None,
         ),
         is_full_admin=has_global_permission(
             in_scope, Permission.FULL_ADMIN_PANEL_ACCESS

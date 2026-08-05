@@ -1,9 +1,6 @@
 import io
 import mimetypes
-from typing import cast
-from typing import IO
-from typing import List
-from typing import Tuple
+from typing import IO, List, Tuple, cast
 
 from onyx.file_store.models import FileDescriptor
 from onyx.server.documents.models import FileUploadResponse

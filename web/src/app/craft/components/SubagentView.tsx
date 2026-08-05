@@ -78,6 +78,7 @@ export default function SubagentView({ subagentSessionId }: SubagentViewProps) {
 
   return (
     <BuildMessageList
+      sessionId={null}
       messages={messages}
       streamItems={activeStreamItems}
       isStreaming={subagent.status === "running"}

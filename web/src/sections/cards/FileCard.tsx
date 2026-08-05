@@ -1,8 +1,8 @@
 "use client";
 
 import { useMemo, useState } from "react";
-import type { ProjectFile } from "@/app/app/projects/projectsService";
-import { UserFileStatus } from "@/app/app/projects/projectsService";
+import type { ProjectFile } from "@/lib/projects/types";
+import { UserFileStatus } from "@/lib/projects/types";
 import { isImageFile } from "@/lib/utils";
 import { cn } from "@opal/utils";
 import { SvgFileText, SvgX, SvgSimpleLoader } from "@opal/icons";

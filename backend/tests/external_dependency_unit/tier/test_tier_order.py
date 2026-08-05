@@ -5,8 +5,7 @@ import pytest
 from ee.onyx.configs.license_enforcement_config import PATH_PREFIX_MIN_TIER
 from ee.onyx.server.middleware.tier_gate import _required_tier
 from onyx.server.settings.models import Tier
-from onyx.server.settings.tier_order import tier_at_least
-from onyx.server.settings.tier_order import TIER_RANK
+from onyx.server.settings.tier_order import TIER_RANK, tier_at_least
 
 
 class TestTierOrdering:

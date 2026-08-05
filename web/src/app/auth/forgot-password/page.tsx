@@ -11,7 +11,7 @@ import { Button } from "@opal/components";
 import { Form, Formik } from "formik";
 import * as Yup from "yup";
 import { TextFormField } from "@/components/Field";
-import { toast } from "@/hooks/useToast";
+import { toast } from "@opal/layouts";
 import { Spinner } from "@/components/Spinner";
 import { redirect } from "next/navigation";
 import { NEXT_PUBLIC_FORGOT_PASSWORD_ENABLED } from "@/lib/constants";

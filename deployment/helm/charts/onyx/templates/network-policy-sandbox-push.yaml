@@ -53,4 +53,23 @@ spec:
         - protocol: TCP
           port: {{ .Values.configMap.SANDBOX_NEXTJS_PORT_START | default 3010 }}
           endPort: {{ sub (int (.Values.configMap.SANDBOX_NEXTJS_PORT_END | default 3100)) 1 }}
+    # The heavy worker consumes the `sandbox` Celery queue (cleanup_idle_sandboxes
+    # → create_snapshot / create_opencode_history_snapshot), which only POSTs to
+    # the in-pod sidecar — it never drives opencode serve or the Next.js dev
+    # servers. Grant it the sidecar port ONLY (least privilege). Without this,
+    # on clusters that ENFORCE NetworkPolicy the heavy worker's snapshot-create
+    # requests are dropped → connect timeout → NO snapshots are created →
+    # reopened sessions restore nothing ("agent starts fresh"). Long-term, move
+    # the `sandbox` queue to a dedicated craft worker and grant that worker here
+    # instead of heavy (see docs/craft/infra/sandbox-worker-network-policy.md).
+    - from:
+        - namespaceSelector:
+            matchLabels:
+              kubernetes.io/metadata.name: {{ $.Release.Namespace }}
+          podSelector:
+            matchLabels:
+              app: celery-worker-heavy
+      ports:
+        - protocol: TCP
+          port: {{ include "onyx.sandboxPushDaemonPort" . }}
 {{- end }}

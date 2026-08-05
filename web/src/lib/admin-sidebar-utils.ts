@@ -8,7 +8,7 @@ import {
 } from "@/lib/admin-routes";
 import { hasPermission } from "@/lib/permissions";
 import { Permission } from "@/lib/types";
-import { CombinedSettings, Tier } from "@/interfaces/settings";
+import { Settings, Tier } from "@/lib/settings/types";
 import { tierAtLeast } from "@/lib/tiers";
 
 export type { FeatureFlags } from "@/lib/admin-routes";
@@ -26,7 +26,7 @@ export interface SidebarItemEntry {
 export function buildItems(
   permissions: string[],
   flags: FeatureFlags,
-  settings: CombinedSettings | null
+  settings: Settings | null
 ): SidebarItemEntry[] {
   const userCanAccess = (perm: string) => hasPermission(permissions, perm);
   const items: SidebarItemEntry[] = [];
@@ -49,7 +49,7 @@ export function buildItems(
 
     // INDEX_SETTINGS surfaces a reindexing-needed error indicator
     if (route.path === ADMIN_ROUTES.INDEX_SETTINGS.path) {
-      item.error = settings?.settings.needs_reindexing;
+      item.error = settings?.needs_reindexing;
     }
 
     items.push(item);

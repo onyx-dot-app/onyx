@@ -1,35 +1,42 @@
-// Auth-token storage.
-//
-// `apiFetch` reads the access token via `getToken()`. The future login flow
-// calls `setToken(token)`; logout calls `setToken(null)`.
-//
-// Tokens are credentials, so they live in the device keychain via
-// expo-secure-store — NOT in MMKV (which is reserved for non-secret cache /
-// persisted UI state). Tests mock the `expo-secure-store` module.
-//
-// SECURITY TODO — must be handled when the login/logout flow lands (these are
-// dormant today only because no token exists, so /api/me always 403s and no
-// user data is ever cached):
-//   1. Logout must `queryClient.clear()` AND purge the persisted snapshot
-//      (`persister.removeClient()` / `queryStorage.clearAll()`) — otherwise the
-//      previous user's cached /api/me PII survives logout for up to 24h.
-//   2. Scope the cached-user query key to the authenticated identity (or bump a
-//      session epoch on login/logout) so user B can never read user A's cache.
-//   3. The query-cache MMKV instance (state/storage.ts) is unencrypted; once
-//      /api/me succeeds, email/role are written to disk in plaintext. Give that
-//      instance an `encryptionKey` (sourced from expo-secure-store), or exclude
-//      PII queries from persistence via `dehydrateOptions.shouldDehydrateQuery`.
+// Tokens live in the keychain (expo-secure-store), never MMKV; scoped by instance
+// URL so a bearer can't cross instances. Keychain survives uninstall, so logout deletes explicitly.
 import * as SecureStore from "expo-secure-store";
 
-// SecureStore keys allow alphanumerics plus ".", "-", "_".
-const ACCESS_TOKEN_KEY = "onyx.auth.access_token";
+import { getBaseUrl } from "@/api/config";
+
+const ACCESS_TOKEN_KEY_PREFIX = "onyx.auth.access_token";
+const SAFE_KEY_CHAR = /^[A-Za-z0-9.-]$/;
+
+// THIS_DEVICE_ONLY keeps the token out of iCloud/backups.
+const TOKEN_KEYCHAIN_OPTIONS: SecureStore.SecureStoreOptions = {
+  keychainAccessible: SecureStore.WHEN_UNLOCKED_THIS_DEVICE_ONLY,
+};
+
+function encodeSecureStoreKeyPart(value: string): string {
+  // SecureStore rejects ":" and "/", so encode unsupported chars deterministically.
+  return Array.from(value)
+    .map((char) =>
+      SAFE_KEY_CHAR.test(char)
+        ? char
+        : `_${(char.codePointAt(0) ?? 0).toString(16)}_`,
+    )
+    .join("");
+}
+
+function getAccessTokenKey(): string {
+  return `${ACCESS_TOKEN_KEY_PREFIX}.${encodeSecureStoreKeyPart(getBaseUrl())}`;
+}
 
 export function getToken(): Promise<string | null> {
-  return SecureStore.getItemAsync(ACCESS_TOKEN_KEY);
+  return SecureStore.getItemAsync(getAccessTokenKey());
 }
 
 export function setToken(token: string | null): Promise<void> {
   return token === null
-    ? SecureStore.deleteItemAsync(ACCESS_TOKEN_KEY)
-    : SecureStore.setItemAsync(ACCESS_TOKEN_KEY, token);
+    ? SecureStore.deleteItemAsync(getAccessTokenKey())
+    : SecureStore.setItemAsync(
+        getAccessTokenKey(),
+        token,
+        TOKEN_KEYCHAIN_OPTIONS,
+      );
 }

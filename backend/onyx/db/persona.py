@@ -4,55 +4,59 @@ from enum import Enum
 from uuid import UUID
 
 from fastapi import HTTPException
-from sqlalchemy import func
-from sqlalchemy import not_
-from sqlalchemy import or_
-from sqlalchemy import Select
-from sqlalchemy import select
-from sqlalchemy import update
-from sqlalchemy.orm import aliased
-from sqlalchemy.orm import selectinload
-from sqlalchemy.orm import Session
+from sqlalchemy import Select, func, not_, or_, select, update
+from sqlalchemy.orm import Session, aliased, selectinload
 
 from onyx.access.hierarchy_access import get_user_external_group_ids
 from onyx.auth.permission_projection import persona_permissions
-from onyx.auth.permissions import has_global_permission
-from onyx.auth.permissions import has_permission
-from onyx.auth.scoped_permissions import assert_within_scope
-from onyx.auth.scoped_permissions import within_scope
-from onyx.configs.constants import DEFAULT_PERSONA_ID
-from onyx.configs.constants import NotificationType
+from onyx.auth.permissions import has_global_permission, has_permission
+from onyx.auth.scoped_permissions import assert_within_scope, within_scope
+from onyx.configs.constants import DEFAULT_PERSONA_ID, NotificationType
 from onyx.db.constants import SLACK_BOT_PERSONA_PREFIX
 from onyx.db.document_access import get_accessible_documents_by_ids
-from onyx.db.enums import Permission
-from onyx.db.enums import PermissionAuthority
-from onyx.db.enums import PersonaSharePermission
-from onyx.db.models import ConnectorCredentialPair
-from onyx.db.models import Document
-from onyx.db.models import DocumentSet
-from onyx.db.models import FederatedConnector__DocumentSet
-from onyx.db.models import HierarchyNode
-from onyx.db.models import Persona
-from onyx.db.models import Persona__User
-from onyx.db.models import Persona__UserGroup
-from onyx.db.models import PersonaLabel
-from onyx.db.models import StarterMessage
-from onyx.db.models import Tool
-from onyx.db.models import User
-from onyx.db.models import User__UserGroup
-from onyx.db.models import UserFile
-from onyx.db.models import UserGroup
+from onyx.db.document_set import filter_document_set_ids_by_user_access
+from onyx.db.enums import (
+    AccountType,
+    Permission,
+    PermissionAuthority,
+    PersonaSharePermission,
+)
+from onyx.db.hierarchy import filter_accessible_hierarchy_node_ids
+from onyx.db.models import (
+    ConnectorCredentialPair,
+    Document,
+    DocumentSet,
+    FederatedConnector__DocumentSet,
+    HierarchyNode,
+    Persona,
+    Persona__User,
+    Persona__UserGroup,
+    PersonaLabel,
+    StarterMessage,
+    Tool,
+    User,
+    User__UserGroup,
+    UserFile,
+    UserGroup,
+)
 from onyx.db.notification import create_notification
-from onyx.db.persona_sharing import get_persona_access_level
-from onyx.db.persona_sharing import get_user_group_ids_for_user
-from onyx.db.scoped_permissions import fetch_managed_group_ids
-from onyx.db.scoped_permissions import scoped_group_ids_subquery
-from onyx.db.scoped_permissions import within_managed_scope_clause
-from onyx.server.features.persona.models import FullPersonaSnapshot
-from onyx.server.features.persona.models import MinimalPersonaSnapshot
-from onyx.server.features.persona.models import PersonaSharedNotificationData
-from onyx.server.features.persona.models import PersonaSnapshot
-from onyx.server.features.persona.models import PersonaUpsertRequest
+from onyx.db.persona_sharing import (
+    get_persona_access_level,
+    get_user_group_ids_for_user,
+    persona_ownership_is_vacant,
+)
+from onyx.db.scoped_permissions import (
+    fetch_managed_group_ids,
+    scoped_group_ids_subquery,
+    within_managed_scope_clause,
+)
+from onyx.server.features.persona.models import (
+    FullPersonaSnapshot,
+    MinimalPersonaSnapshot,
+    PersonaSharedNotificationData,
+    PersonaSnapshot,
+    PersonaUpsertRequest,
+)
 from onyx.server.features.tool.tool_visibility import should_expose_tool_to_fe
 from onyx.utils.logger import setup_logger
 from onyx.utils.variable_functionality import fetch_versioned_implementation
@@ -761,6 +765,187 @@ def update_persona_public_status(
     db_session.commit()
 
 
+def user_can_transfer_persona(
+    persona: Persona, user: User, db_session: Session
+) -> bool:
+    """Only the owner may transfer; admins may transfer vacant personas."""
+    if persona.user_id is not None:
+        if persona.user_id == user.id:
+            return True
+    elif persona.owner_group_id is not None:
+        if persona.owner_group_id in get_user_group_ids_for_user(db_session, user.id):
+            return True
+    return has_global_permission(
+        user, Permission.MANAGE_AGENTS
+    ) and persona_ownership_is_vacant(persona)
+
+
+def _validate_transfer_target_user(target: User) -> None:
+    if not target.is_active:
+        raise ValueError("Ownership can only be transferred to an active user")
+    if target.account_type is not None and target.account_type != AccountType.STANDARD:
+        raise ValueError("Ownership cannot be transferred to bots or service accounts")
+
+
+def _transfer_persona_ownership(
+    persona_id: int,
+    user: User,
+    db_session: Session,
+    new_owner_user_id: UUID | None,
+    new_owner_group_id: int | None,
+) -> None:
+    """Shared MIT/EE transfer core. Demotes the previous owner to an EDITOR
+    share row (upsert) and removes the new owner's share row, all in one
+    transaction."""
+    if (new_owner_user_id is None) == (new_owner_group_id is None):
+        raise ValueError("Exactly one of a user or a group must be the new owner")
+
+    persona = (
+        db_session.query(Persona)
+        .filter(Persona.id == persona_id, Persona.deleted.is_(False))
+        .one_or_none()
+    )
+    if persona is None:
+        raise ValueError("Agent not found")
+    if persona.builtin_persona or persona.name.startswith(SLACK_BOT_PERSONA_PREFIX):
+        raise ValueError("Built-in agents cannot change ownership")
+    if not user_can_transfer_persona(persona, user, db_session):
+        raise PermissionError("Only the owner can transfer ownership of this agent")
+
+    prev_owner_user_id = persona.user_id
+    prev_owner_group_id = persona.owner_group_id
+
+    if new_owner_user_id is not None:
+        target = (
+            db_session.query(User)
+            .filter(User.id == new_owner_user_id)  # ty: ignore[invalid-argument-type]
+            .one_or_none()
+        )
+        if target is None:
+            raise ValueError("New owner not found")
+        _validate_transfer_target_user(target)
+        if target.id == prev_owner_user_id:
+            raise ValueError("This user already owns the agent")
+        persona.user_id = target.id
+        persona.owner_group_id = None
+        # The new owner leaves the share list
+        db_session.query(Persona__User).filter(
+            Persona__User.persona_id == persona_id,
+            Persona__User.user_id == target.id,
+        ).delete(synchronize_session="fetch")
+    else:
+        group = (
+            db_session.query(UserGroup)
+            .filter(UserGroup.id == new_owner_group_id)
+            .one_or_none()
+        )
+        if group is None:
+            raise ValueError("New owner group not found")
+        # A group whose deletion is already in flight would re-orphan the agent
+        # as soon as its sync worker runs.
+        if group.is_up_for_deletion:
+            raise ValueError("New owner group is being deleted")
+        if group.id == prev_owner_group_id:
+            raise ValueError("This group already owns the agent")
+        persona.owner_group_id = group.id
+        persona.user_id = None
+        db_session.query(Persona__UserGroup).filter(
+            Persona__UserGroup.persona_id == persona_id,
+            Persona__UserGroup.user_group_id == group.id,
+        ).delete(synchronize_session="fetch")
+
+    if prev_owner_user_id is not None and prev_owner_user_id != persona.user_id:
+        existing_share = (
+            db_session.query(Persona__User)
+            .filter(
+                Persona__User.persona_id == persona_id,
+                Persona__User.user_id == prev_owner_user_id,
+            )
+            .one_or_none()
+        )
+        if existing_share:
+            existing_share.permission = PersonaSharePermission.EDITOR
+        else:
+            db_session.add(
+                Persona__User(
+                    persona_id=persona_id,
+                    user_id=prev_owner_user_id,
+                    permission=PersonaSharePermission.EDITOR,
+                )
+            )
+    if (
+        prev_owner_group_id is not None
+        and prev_owner_group_id != persona.owner_group_id
+    ):
+        existing_group_share = (
+            db_session.query(Persona__UserGroup)
+            .filter(
+                Persona__UserGroup.persona_id == persona_id,
+                Persona__UserGroup.user_group_id == prev_owner_group_id,
+            )
+            .one_or_none()
+        )
+        if existing_group_share:
+            existing_group_share.permission = PersonaSharePermission.EDITOR
+        else:
+            db_session.add(
+                Persona__UserGroup(
+                    persona_id=persona_id,
+                    user_group_id=prev_owner_group_id,
+                    permission=PersonaSharePermission.EDITOR,
+                )
+            )
+
+    mark_persona_user_files_for_sync(persona_id, db_session)
+    db_session.commit()
+
+
+def transfer_persona_ownership(
+    persona_id: int,
+    user: User,
+    db_session: Session,
+    new_owner_user_id: UUID | None = None,
+    new_owner_group_id: int | None = None,
+) -> None:
+    """Move ownership to a single user. Group targets are EE-only (versioned
+    override in ee.onyx.db.persona)."""
+    if new_owner_group_id is not None:
+        raise NotImplementedError("Onyx MIT does not support group ownership")
+    _transfer_persona_ownership(
+        persona_id=persona_id,
+        user=user,
+        db_session=db_session,
+        new_owner_user_id=new_owner_user_id,
+        new_owner_group_id=None,
+    )
+
+
+def remove_user_from_persona_shares(
+    persona_id: int,
+    user: User,
+    db_session: Session,
+) -> None:
+    """Self-service removal from a persona's share list. Owners can't leave
+    their own agent; not gated on edit access so viewers can leave too."""
+    persona = db_session.query(Persona).filter(Persona.id == persona_id).one_or_none()
+    if persona is None or persona.deleted:
+        raise ValueError("Agent not found")
+    if persona.user_id == user.id:
+        raise ValueError("The owner cannot remove themselves from their own agent")
+    deleted_count = (
+        db_session.query(Persona__User)
+        .filter(
+            Persona__User.persona_id == persona_id,
+            Persona__User.user_id == user.id,
+        )
+        .delete(synchronize_session="fetch")
+    )
+    if not deleted_count:
+        raise ValueError("You are not in this agent's share list")
+    mark_persona_user_files_for_sync(persona_id, db_session)
+    db_session.commit()
+
+
 def _build_persona_filters(
     stmt: Select[tuple[Persona]],
     include_default: bool,
@@ -785,6 +970,14 @@ def _build_persona_filters(
     if not include_deleted:
         stmt = stmt.where(Persona.deleted.is_(False))
     return stmt
+
+
+def _user_may_view_persona_owner_email(user: User, persona: Persona) -> bool:
+    """Owner email is PII — only the persona's owner or an admin may see it."""
+    return (
+        has_global_permission(user, Permission.MANAGE_AGENTS)
+        or persona.user_id == user.id
+    )
 
 
 def get_minimal_persona_snapshots_for_user(
@@ -831,6 +1024,7 @@ def get_minimal_persona_snapshots_for_user(
         MinimalPersonaSnapshot.from_model(
             persona,
             user_permission=get_persona_access_level(persona, user, user_group_ids),
+            include_owner_email=_user_may_view_persona_owner_email(user, persona),
         )
         for persona in results
     ]
@@ -995,6 +1189,7 @@ def get_minimal_persona_snapshots_paginated(
         MinimalPersonaSnapshot.from_model(
             persona,
             user_permission=get_persona_access_level(persona, user, user_group_ids),
+            include_owner_email=_user_may_view_persona_owner_email(user, persona),
         )
         for persona in results
     ]
@@ -1381,6 +1576,32 @@ def upsert_persona(
         if not tools and tool_ids:
             raise ValueError("Tools not found")
 
+        # Existing tools survive access revocation; newly attached tools require access.
+        if user is not None:
+            # local import to avoid circular import (mirrors built_in_tools below)
+            from onyx.db.mcp import user_can_access_mcp_server
+
+            existing_tool_ids = (
+                {tool.id for tool in existing_persona.tools}
+                if existing_persona
+                else set()
+            )
+            checked_servers: set[int] = set()
+            for tool in tools:
+                server_id = tool.mcp_server_id
+                if (
+                    tool.id in existing_tool_ids
+                    or server_id is None
+                    or server_id in checked_servers
+                ):
+                    continue
+                checked_servers.add(server_id)
+                if not user_can_access_mcp_server(user, server_id, db_session):
+                    raise ValueError(
+                        "You do not have access to one or more of the "
+                        "selected MCP servers."
+                    )
+
     # Fetch and attach document_sets by IDs
     document_sets = None
     if document_set_ids is not None:
@@ -1389,8 +1610,28 @@ def upsert_persona(
             .filter(DocumentSet.id.in_(document_set_ids))
             .all()
         )
-        if not document_sets and document_set_ids:
+        if len(document_sets) != len(set(document_set_ids)):
             raise ValueError("document_sets not found")
+
+    # Editors may only ATTACH knowledge they can access themselves; anything
+    # already attached survives an update, but once removed it can't be
+    # re-added by someone without access (ENG-4180).
+    knowledge_guard_applies: bool = user is not None and not has_global_permission(
+        user, Permission.MANAGE_AGENTS
+    )
+    if document_set_ids is not None and knowledge_guard_applies and user is not None:
+        existing_set_ids = (
+            {ds.id for ds in existing_persona.document_sets}
+            if existing_persona
+            else set()
+        )
+        added_set_ids = set(document_set_ids) - existing_set_ids
+        if added_set_ids:
+            accessible_set_ids = filter_document_set_ids_by_user_access(
+                db_session, list(added_set_ids), user
+            )
+            if added_set_ids - accessible_set_ids:
+                raise ValueError("Cannot attach document sets you don't have access to")
 
     # Fetch and attach user_files by IDs
     user_files = None
@@ -1398,8 +1639,22 @@ def upsert_persona(
         user_files = (
             db_session.query(UserFile).filter(UserFile.id.in_(user_file_ids)).all()
         )
-        if not user_files and user_file_ids:
+        if len(user_files) != len(set(user_file_ids)):
             raise ValueError("user_files not found")
+
+        # Editors may only attach files they own (admins bypass)
+        if knowledge_guard_applies and user is not None:
+            existing_file_ids = (
+                {uf.id for uf in existing_persona.user_files}
+                if existing_persona
+                else set()
+            )
+            for user_file in user_files:
+                if (
+                    user_file.id not in existing_file_ids
+                    and user_file.user_id != user.id
+                ):
+                    raise ValueError("Cannot attach files you don't own")
 
     labels = None
     if label_ids is not None:
@@ -1411,14 +1666,34 @@ def upsert_persona(
 
     # Fetch and attach hierarchy_nodes by IDs
     hierarchy_nodes = None
-    if hierarchy_node_ids:
+    if hierarchy_node_ids is not None:
         hierarchy_nodes = (
             db_session.query(HierarchyNode)
             .filter(HierarchyNode.id.in_(hierarchy_node_ids))
             .all()
         )
-        if not hierarchy_nodes and hierarchy_node_ids:
+        if len(hierarchy_nodes) != len(set(hierarchy_node_ids)):
             raise ValueError("hierarchy_nodes not found")
+
+    if hierarchy_node_ids is not None and knowledge_guard_applies and user is not None:
+        existing_node_ids = (
+            {node.id for node in existing_persona.hierarchy_nodes}
+            if existing_persona
+            else set()
+        )
+        added_node_ids = set(hierarchy_node_ids) - existing_node_ids
+        if added_node_ids:
+            accessible_node_ids = filter_accessible_hierarchy_node_ids(
+                db_session,
+                list(added_node_ids),
+                user.email,
+                get_user_external_group_ids(db_session, user),
+                user_id=user.id,
+            )
+            if added_node_ids - accessible_node_ids:
+                raise ValueError(
+                    "Cannot attach hierarchy nodes you don't have access to"
+                )
 
     # Fetch and attach documents by IDs, filtering for access permissions
     attached_documents = None
@@ -1432,6 +1707,7 @@ def upsert_persona(
             document_ids=document_ids,
             user_email=user_email,
             external_group_ids=external_group_ids,
+            user_id=user.id if user else None,
         )
         if not attached_documents and document_ids:
             raise ValueError("documents not found or not accessible")

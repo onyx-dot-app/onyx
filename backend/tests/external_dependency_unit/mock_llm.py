@@ -3,31 +3,30 @@ from __future__ import annotations
 import abc
 import threading
 import time
-from collections.abc import Generator
-from collections.abc import Iterator
+from collections.abc import Generator, Iterator
 from contextlib import contextmanager
 from enum import Enum
-from typing import Any
-from typing import cast
-from typing import Generic
-from typing import Literal
-from typing import TypeVar
+from typing import Any, Generic, Literal, TypeVar, cast
 from unittest.mock import patch
 
 from pydantic import BaseModel
 
-from onyx.llm.interfaces import LanguageModelInput
-from onyx.llm.interfaces import LLM
-from onyx.llm.interfaces import LLMConfig
-from onyx.llm.interfaces import LLMUserIdentity
-from onyx.llm.interfaces import ReasoningEffort
-from onyx.llm.interfaces import ToolChoiceOptions
-from onyx.llm.model_response import ChatCompletionDeltaToolCall
-from onyx.llm.model_response import Delta
-from onyx.llm.model_response import FunctionCall
-from onyx.llm.model_response import ModelResponse
-from onyx.llm.model_response import ModelResponseStream
-from onyx.llm.model_response import StreamingChoice
+from onyx.llm.interfaces import (
+    LLM,
+    LanguageModelInput,
+    LLMConfig,
+    LLMUserIdentity,
+    ReasoningEffort,
+    ToolChoice,
+)
+from onyx.llm.model_response import (
+    ChatCompletionDeltaToolCall,
+    Delta,
+    FunctionCall,
+    ModelResponse,
+    ModelResponseStream,
+    StreamingChoice,
+)
 
 T = TypeVar("T")
 
@@ -303,12 +302,13 @@ class MockLLM(LLM, MockLLMController):
         self,
         prompt: LanguageModelInput,
         tools: list[dict] | None = None,
-        tool_choice: ToolChoiceOptions | None = None,
+        tool_choice: ToolChoice | None = None,
         structured_response_format: dict | None = None,
         timeout_override: int | None = None,
         max_tokens: int | None = None,
         reasoning_effort: ReasoningEffort = ReasoningEffort.AUTO,
         user_identity: LLMUserIdentity | None = None,
+        total_timeout_override: float | None = None,
     ) -> ModelResponse:
         raise NotImplementedError("We only care about streaming atm")
 
@@ -316,7 +316,7 @@ class MockLLM(LLM, MockLLMController):
         self,
         prompt: LanguageModelInput,  # noqa: ARG002
         tools: list[dict] | None = None,  # noqa: ARG002
-        tool_choice: ToolChoiceOptions | None = None,  # noqa: ARG002
+        tool_choice: ToolChoice | None = None,  # noqa: ARG002
         structured_response_format: dict | None = None,  # noqa: ARG002
         timeout_override: int | None = None,  # noqa: ARG002
         max_tokens: int | None = None,  # noqa: ARG002

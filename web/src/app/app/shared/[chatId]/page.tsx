@@ -1,7 +1,7 @@
 import { fetchSS } from "@/lib/utilsSS";
 import { redirect } from "next/navigation";
 import type { Route } from "next";
-import { requireAuth } from "@/lib/auth/requireAuth";
+import { requireAuth } from "@/lib/auth/svcSS";
 import SharedChatDisplay from "@/app/app/shared/[chatId]/SharedChatDisplay";
 import { Agent } from "@/lib/agents/types";
 
@@ -17,6 +17,8 @@ export function constructMiniFiedPersona(name: string, id: number): Agent {
     document_sets: [],
     tools: [],
     owner: null,
+    owner_group: null,
+    user_permission: null,
     starter_messages: null,
     builtin_persona: false,
     is_featured: false,

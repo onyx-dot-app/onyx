@@ -1,12 +1,10 @@
 from typing import Any
 from uuid import UUID
 
-from sqlalchemy import select
-from sqlalchemy import update
+from sqlalchemy import select, update
 from sqlalchemy.orm import Session
 
-from onyx.db.models import User
-from onyx.db.models import VoiceProvider
+from onyx.db.models import User, VoiceProvider
 from onyx.error_handling.error_codes import OnyxErrorCode
 from onyx.error_handling.exceptions import OnyxError
 

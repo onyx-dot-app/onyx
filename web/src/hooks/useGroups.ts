@@ -3,8 +3,7 @@
 import useSWR, { mutate } from "swr";
 import { errorHandlingFetcher } from "@/lib/fetcher";
 import { UserGroup } from "@/lib/types";
-import { useContext } from "react";
-import { SettingsContext } from "@/providers/SettingsProvider";
+import { useSettings } from "@/lib/settings/hooks";
 import { SWR_KEYS } from "@/lib/swr-keys";
 
 /**
@@ -37,12 +36,9 @@ import { SWR_KEYS } from "@/lib/swr-keys";
  * refreshGroups(); // Refresh the group list
  */
 export default function useGroups() {
-  const combinedSettings = useContext(SettingsContext);
-  const settingsLoading = combinedSettings?.settingsLoading ?? false;
+  const settings = useSettings();
   const isPaidEnterpriseFeaturesEnabled =
-    !settingsLoading &&
-    combinedSettings &&
-    combinedSettings.enterpriseSettings !== null;
+    !settings.isLoading && settings.enterprise !== null;
 
   const { data, error, isLoading } = useSWR<UserGroup[]>(
     isPaidEnterpriseFeaturesEnabled ? SWR_KEYS.adminUserGroups : null,
@@ -51,7 +47,7 @@ export default function useGroups() {
 
   const refreshGroups = () => mutate(SWR_KEYS.adminUserGroups);
 
-  if (settingsLoading) {
+  if (settings.isLoading) {
     return {
       data: undefined,
       isLoading: true,

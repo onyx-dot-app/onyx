@@ -24,25 +24,27 @@ See: https://linear.app/onyx-app/issue/ENG-3533/migrate-tenantsbilling-adminbill
 import asyncio
 
 import httpx
-from fastapi import APIRouter
-from fastapi import Depends
-from pydantic import BaseModel
-from pydantic import ValidationError
+from fastapi import APIRouter, Depends
+from pydantic import BaseModel, ValidationError
 from redis.exceptions import RedisError
 from sqlalchemy.orm import Session
 
-from ee.onyx.db.license import get_license
-from ee.onyx.db.license import get_used_seats
-from ee.onyx.server.billing.models import BillingInformationResponse
-from ee.onyx.server.billing.models import CreateCheckoutSessionRequest
-from ee.onyx.server.billing.models import CreateCheckoutSessionResponse
-from ee.onyx.server.billing.models import CreateCustomerPortalSessionRequest
-from ee.onyx.server.billing.models import CreateCustomerPortalSessionResponse
-from ee.onyx.server.billing.models import EndTrialResponse
-from ee.onyx.server.billing.models import SeatUpdateRequest
-from ee.onyx.server.billing.models import SeatUpdateResponse
-from ee.onyx.server.billing.models import StripePublishableKeyResponse
-from ee.onyx.server.billing.models import SubscriptionStatusResponse
+from ee.onyx.db.license import get_license, get_used_seats
+from ee.onyx.server.billing.billing_cache import (
+    invalidate_billing_cache as invalidate_indexing_trial_cache,
+)
+from ee.onyx.server.billing.models import (
+    BillingInformationResponse,
+    CreateCheckoutSessionRequest,
+    CreateCheckoutSessionResponse,
+    CreateCustomerPortalSessionRequest,
+    CreateCustomerPortalSessionResponse,
+    EndTrialResponse,
+    SeatUpdateRequest,
+    SeatUpdateResponse,
+    StripePublishableKeyResponse,
+    SubscriptionStatusResponse,
+)
 from ee.onyx.server.billing.service import (
     create_checkout_session as create_checkout_service,
 )
@@ -54,17 +56,19 @@ from ee.onyx.server.billing.service import (
     get_billing_information as get_billing_service,
 )
 from ee.onyx.server.billing.service import update_seat_count as update_seat_service
+from ee.onyx.utils.license import clear_claim_cooldown
 from onyx.auth.permissions import require_permission
 from onyx.auth.users import User
-from onyx.configs.app_configs import STRIPE_PUBLISHABLE_KEY_OVERRIDE
-from onyx.configs.app_configs import STRIPE_PUBLISHABLE_KEY_URL
-from onyx.configs.app_configs import WEB_DOMAIN
+from onyx.configs.app_configs import (
+    STRIPE_PUBLISHABLE_KEY_OVERRIDE,
+    STRIPE_PUBLISHABLE_KEY_URL,
+    WEB_DOMAIN,
+)
 from onyx.db.engine.sql_engine import get_session
 from onyx.db.enums import Permission
 from onyx.error_handling.error_codes import OnyxErrorCode
 from onyx.error_handling.exceptions import OnyxError
-from onyx.redis.redis_pool import get_redis_client
-from onyx.redis.redis_pool import get_shared_redis_client
+from onyx.redis.redis_pool import get_redis_client, get_shared_redis_client
 from onyx.redis.tenant_redis_client import TenantRedisClient
 from onyx.utils.logger import setup_logger
 from shared_configs.configs import MULTI_TENANT
@@ -206,7 +210,7 @@ async def create_checkout_session(
 
     # Force the next /billing-information read to hit the live service so the
     # post-checkout subscription snapshot isn't delayed by the cache.
-    _invalidate_billing_cache()
+    invalidate_billing_info_cache()
 
     return result
 
@@ -256,15 +260,23 @@ def _billing_cache_client() -> TenantRedisClient | None:
         return None
 
 
-def _invalidate_billing_cache() -> None:
-    """Drop the cached /billing-information entry. Best-effort."""
+def invalidate_billing_info_cache() -> None:
+    """Drop the cached billing entries once the subscription is known to have moved.
+
+    Best-effort. Busts the 5-min admin /billing-information entry, plus (cloud
+    only) the 24h per-tenant trial-status entry the indexing path reads via
+    ``cached_is_tenant_on_trial`` — without this a trial→paid conversion keeps
+    usage limits on stale trial status for up to a full TTL.
+    """
     redis_client = _billing_cache_client()
-    if redis_client is None:
-        return
-    try:
-        redis_client.delete(BILLING_INFO_CACHE_KEY)
-    except RedisError as exc:
-        logger.warning("Billing info cache invalidation failed: %s", exc)
+    if redis_client is not None:
+        try:
+            redis_client.delete(BILLING_INFO_CACHE_KEY)
+        except RedisError as exc:
+            logger.warning("Billing info cache invalidation failed: %s", exc)
+
+    if MULTI_TENANT:
+        invalidate_indexing_trial_cache(get_current_tenant_id())
 
 
 @router.get("/billing-information")
@@ -381,7 +393,10 @@ async def update_seats(
 
     # Bust the billing-info cache so the new seat count is visible on the
     # next /billing-information read.
-    _invalidate_billing_cache()
+    invalidate_billing_info_cache()
+    # The follow-up claim carries this write's reissued license, so it must not
+    # be turned away by a cooldown a sync moments earlier had started.
+    clear_claim_cooldown()
 
     return result
 
@@ -410,7 +425,7 @@ async def end_trial(
 
     # Bust the billing-info cache so the post-trial subscription state is
     # visible on the next /billing-information read.
-    _invalidate_billing_cache()
+    invalidate_billing_info_cache()
 
     return result
 

@@ -1,12 +1,15 @@
-from datetime import datetime
-from datetime import timezone
+from datetime import datetime, timezone
 
 import pytest
 
-from onyx.llm.well_known_providers.auto_update_models import LLMProviderRecommendation
-from onyx.llm.well_known_providers.auto_update_models import LLMRecommendations
-from onyx.llm.well_known_providers.constants import OPENAI_PROVIDER_NAME
-from onyx.llm.well_known_providers.constants import VERTEXAI_PROVIDER_NAME
+from onyx.llm.well_known_providers.auto_update_models import (
+    LLMProviderRecommendation,
+    LLMRecommendations,
+)
+from onyx.llm.well_known_providers.constants import (
+    OPENAI_PROVIDER_NAME,
+    VERTEXAI_PROVIDER_NAME,
+)
 from onyx.llm.well_known_providers.llm_provider_options import (
     model_configurations_for_provider,
 )

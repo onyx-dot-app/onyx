@@ -4,25 +4,26 @@ from collections.abc import Generator
 from github import Github
 from github.Repository import Repository
 
-from ee.onyx.external_permissions.github.utils import fetch_repository_team_slugs
-from ee.onyx.external_permissions.github.utils import form_collaborators_group_id
-from ee.onyx.external_permissions.github.utils import form_organization_group_id
 from ee.onyx.external_permissions.github.utils import (
+    GitHubVisibility,
+    fetch_repository_team_slugs,
+    form_collaborators_group_id,
+    form_organization_group_id,
     form_outside_collaborators_group_id,
+    get_external_access_permission,
+    get_repository_visibility,
 )
-from ee.onyx.external_permissions.github.utils import get_external_access_permission
-from ee.onyx.external_permissions.github.utils import get_repository_visibility
-from ee.onyx.external_permissions.github.utils import GitHubVisibility
-from ee.onyx.external_permissions.perm_sync_types import FetchAllDocumentsFunction
-from ee.onyx.external_permissions.perm_sync_types import FetchAllDocumentsIdsFunction
+from ee.onyx.external_permissions.perm_sync_types import (
+    FetchAllDocumentsFunction,
+    FetchAllDocumentsIdsFunction,
+)
+from ee.onyx.external_permissions.utils import credential_json
 from onyx.access.models import DocExternalAccess
 from onyx.access.utils import build_ext_group_name_for_onyx
 from onyx.configs.constants import DocumentSource
-from onyx.connectors.github.connector import DocMetadata
-from onyx.connectors.github.connector import GithubConnector
+from onyx.connectors.github.connector import DocMetadata, GithubConnector
 from onyx.db.models import ConnectorCredentialPair
-from onyx.db.utils import DocumentRow
-from onyx.db.utils import SortOrder
+from onyx.db.utils import DocumentRow, SortOrder
 from onyx.indexing.indexing_heartbeat import IndexingHeartbeatInterface
 from onyx.utils.logger import setup_logger
 
@@ -50,12 +51,7 @@ def github_doc_sync(
         **cc_pair.connector.connector_specific_config
     )
 
-    credential_json = (
-        cc_pair.credential.credential_json.get_value(apply_mask=False)
-        if cc_pair.credential.credential_json
-        else {}
-    )
-    github_connector.load_credentials(credential_json)
+    github_connector.load_credentials(credential_json(cc_pair))
     logger.info("GitHub connector credentials loaded successfully")
 
     if not github_connector.github_client:

@@ -5,12 +5,14 @@ from urllib.parse import unquote
 
 from fastapi import Request
 
-from onyx.auth.constants import API_KEY_HEADER_ALTERNATIVE_NAME
-from onyx.auth.constants import API_KEY_HEADER_NAME
-from onyx.auth.constants import API_KEY_PREFIX
-from onyx.auth.constants import BEARER_PREFIX
-from onyx.auth.constants import DEPRECATED_API_KEY_PREFIX
-from onyx.auth.constants import PAT_PREFIX
+from onyx.auth.constants import (
+    API_KEY_HEADER_ALTERNATIVE_NAME,
+    API_KEY_HEADER_NAME,
+    API_KEY_PREFIX,
+    BEARER_PREFIX,
+    DEPRECATED_API_KEY_PREFIX,
+    PAT_PREFIX,
+)
 
 
 def get_hashed_bearer_token_from_request(

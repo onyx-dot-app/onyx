@@ -18,6 +18,8 @@ import {
 } from "@opal/components";
 import SvgLock from "@opal/icons/lock";
 import { SvgSimpleLoader } from "@opal/icons";
+import { markdown } from "@opal/utils";
+import { toPlainString } from "@opal/components/text/InlineMarkdown";
 import { Section } from "@/layouts/general-layouts";
 import { listScheduledTaskRuns } from "@/app/craft/v1/tasks/api";
 import { RunStatusBadge } from "@/app/craft/v1/tasks/components/StatusBadge";
@@ -44,6 +46,8 @@ interface RunHistoryTableProps {
 
 const tc = createTableColumns<ScheduledRunSummary>();
 const RUN_HISTORY_REFRESH_INTERVAL_MS = 5000;
+const SUMMARY_TOOLTIP_THRESHOLD_CHARS = 80;
+const SUMMARY_TOOLTIP_MAX_CHARS = 400;
 
 interface NonClickableCellProps {
   reason: string | null;
@@ -64,6 +68,53 @@ function NonClickableCell({ reason, children }: NonClickableCellProps) {
         {children}
       </div>
     </Tooltip>
+  );
+}
+
+function clipAtWordBoundary(text: string): string {
+  const chars = Array.from(text);
+  if (chars.length <= SUMMARY_TOOLTIP_MAX_CHARS) return text;
+  const head = chars.slice(0, SUMMARY_TOOLTIP_MAX_CHARS).join("");
+  const lastSpace = head.lastIndexOf(" ");
+  return `${(lastSpace > 0 ? head.slice(0, lastSpace) : head).trimEnd()}…`;
+}
+
+interface SummaryCellProps {
+  row: ScheduledRunSummary;
+}
+
+function SummaryCell({ row }: SummaryCellProps) {
+  const reason = getNonClickableReason(row);
+  const raw = row.summary ?? row.skip_reason ?? row.error_class;
+  // Heading strip must run before toPlainString collapses newlines.
+  const stripped = raw
+    ? toPlainString(markdown(raw.replace(/^#{1,6}\s+/gm, "")))
+        .replace(/\*\*|~~|`/g, "")
+        .replace(/(?<!\w)__|__(?!\w)/g, "")
+    : null;
+  const plain = stripped?.trim() ? stripped : null;
+
+  const showTooltip =
+    !reason && plain != null && plain.length > SUMMARY_TOOLTIP_THRESHOLD_CHARS;
+  const tooltip = showTooltip ? clipAtWordBoundary(plain) : undefined;
+
+  const text = (
+    // Two 20px lines exactly fill the table's fixed 40px cell; three would clip.
+    <Text font="main-ui-body" color="text-03" maxLines={2}>
+      {plain ?? "—"}
+    </Text>
+  );
+
+  return (
+    <NonClickableCell reason={reason}>
+      {tooltip ? (
+        <Tooltip tooltip={tooltip} side="top" delayDuration={300}>
+          <div className="min-w-0">{text}</div>
+        </Tooltip>
+      ) : (
+        text
+      )}
+    </NonClickableCell>
   );
 }
 
@@ -129,13 +180,7 @@ function buildColumns() {
       id: "summary",
       header: "Summary",
       width: { weight: 38 },
-      cell: (row) => (
-        <NonClickableCell reason={getNonClickableReason(row)}>
-          <Text font="main-ui-body" color="text-03">
-            {row.summary ?? row.skip_reason ?? row.error_class ?? "—"}
-          </Text>
-        </NonClickableCell>
-      ),
+      cell: (row) => <SummaryCell row={row} />,
     }),
     tc.column("trigger_source", {
       header: "Trigger",

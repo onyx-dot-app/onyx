@@ -1,35 +1,28 @@
 from collections.abc import Collection
-from typing import Any
-from typing import cast
-from typing import Type
-from typing import TYPE_CHECKING
+from typing import TYPE_CHECKING, Any, Type, cast
 from uuid import UUID
 
-from sqlalchemy import func
-from sqlalchemy import or_
-from sqlalchemy import select
+from sqlalchemy import func, or_, select
 from sqlalchemy.orm import Session
 
 from onyx.auth.permissions import has_permission
-from onyx.db.constants import UNSET
-from onyx.db.constants import UnsetType
-from onyx.db.enums import MCPServerStatus
-from onyx.db.enums import Permission
-from onyx.db.enums import PermissionAuthority
-from onyx.db.models import MCPServer
-from onyx.db.models import OAuthConfig
-from onyx.db.models import Persona
-from onyx.db.models import Persona__Tool
-from onyx.db.models import Persona__UserGroup
-from onyx.db.models import Tool
-from onyx.db.models import ToolCall
-from onyx.db.models import User
+from onyx.db.constants import UNSET, UnsetType
+from onyx.db.enums import MCPServerStatus, Permission, PermissionAuthority
+from onyx.db.models import (
+    MCPServer,
+    OAuthConfig,
+    Persona,
+    Persona__Tool,
+    Persona__UserGroup,
+    Tool,
+    ToolCall,
+    User,
+)
 from onyx.server.features.tool.models import Header
 from onyx.tools.built_in_tools import BUILT_IN_TOOL_TYPES
 from onyx.utils.headers import HeaderItemDict
 from onyx.utils.logger import setup_logger
-from onyx.utils.postgres_sanitization import sanitize_json_like
-from onyx.utils.postgres_sanitization import sanitize_string
+from onyx.utils.postgres_sanitization import sanitize_json_like, sanitize_string
 
 if TYPE_CHECKING:
     pass

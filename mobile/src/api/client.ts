@@ -1,6 +1,3 @@
-// The single HTTP transport choke point. Every query/mutation goes through
-// `apiFetch`, so base-URL resolution, auth-header injection, JSON
-// (de)serialization, and error normalization all live in one place.
 import { getBaseUrl } from "@/api/config";
 import { getToken } from "@/api/auth/tokenStore";
 import { ApiError } from "@/api/errors";
@@ -8,8 +5,7 @@ import { ApiError } from "@/api/errors";
 export interface ApiFetchInit extends Omit<RequestInit, "body"> {
   // Plain objects are JSON-serialized; pass a string/FormData to send as-is.
   body?: unknown;
-  // Inject `Authorization: Bearer <token>` when a token exists. Default true;
-  // set false for public endpoints.
+  // Set false for public endpoints.
   auth?: boolean;
 }
 
@@ -20,10 +16,9 @@ function isBodyInit(body: unknown): body is BodyInit {
     body instanceof URLSearchParams ||
     body instanceof Blob ||
     body instanceof ArrayBuffer ||
-    // Typed arrays / DataView (Uint8Array, etc.) — without this they'd be
-    // JSON.stringified into `{"0":1,...}` and sent as application/json,
-    // silently corrupting binary uploads. (ReadableStream is intentionally
-    // omitted: RN's fetch doesn't support streamed request bodies.)
+    // Typed arrays/DataView: without this they'd be JSON.stringified into
+    // `{"0":1,...}`, corrupting binary uploads. ReadableStream omitted — RN
+    // fetch can't stream request bodies.
     ArrayBuffer.isView(body)
   );
 }
@@ -46,30 +41,16 @@ async function buildHeaders(
   return headers;
 }
 
-// The Onyx backend returns errors in a few different JSON shapes depending on
-// which handler caught the error (see backend/onyx/main.py +
-// backend/onyx/error_handling). We normalize all of them into ApiError:
-//
-//   OnyxError (global handler):         { error_code: string, detail: string }
-//   HTTPException (4xx/5xx log_http_error): { detail: string }   (detail may be non-string)
-//   RequestValidationError (422):       { status_code, message: string, data: null }
-//   ValueError (400):                   { message: string }
-//   raw FastAPI validation (sub-apps):  { detail: [{ loc, msg, type }, ...] }
-//   non-JSON / empty body:              no parseable body
-//
-// `error_code` (machine code) comes only from OnyxError; the human message
-// lives in `detail` (string) or `message`, or — for raw FastAPI validation —
-// in the joined `msg` fields of the `detail` array.
+// Backend error JSON shape varies by handler; normalize all into ApiError.
+// `error_code` only comes from OnyxError; message lives in `detail`/`message`.
 function extractErrorCode(record: Record<string, unknown>): string | undefined {
   return typeof record.error_code === "string" ? record.error_code : undefined;
 }
 
 function extractDetail(record: Record<string, unknown>): string | undefined {
-  // OnyxError / HTTPException string detail.
   if (typeof record.detail === "string") return record.detail;
-  // Onyx validation (422) / ValueError (400) use `message`.
   if (typeof record.message === "string") return record.message;
-  // Raw FastAPI validation: detail is an array of { loc, msg, type } items.
+  // Raw FastAPI validation: array of { loc, msg, type }.
   if (Array.isArray(record.detail)) {
     const messages = record.detail
       .map((item) =>
@@ -88,7 +69,6 @@ async function toApiError(res: Response): Promise<ApiError> {
   try {
     body = await res.json();
   } catch {
-    // Empty or non-JSON body (e.g. a proxy 502/504, or HTML error page).
     body = undefined;
   }
   const record =
@@ -127,8 +107,7 @@ export async function apiFetch<T>(
     throw await toApiError(res);
   }
 
-  // 204 No Content / empty (or whitespace-only) body — resolve as undefined for
-  // `Promise<void>` callers.
+  // 204 / empty body resolves as undefined for `Promise<void>` callers.
   if (res.status === 204) {
     return undefined as T;
   }
@@ -136,19 +115,17 @@ export async function apiFetch<T>(
   if (text.trim().length === 0) {
     return undefined as T;
   }
-  // Guard the parse the same way the error path does: a 2xx with a non-JSON body
-  // (captive portal / proxy / maintenance HTML) would otherwise throw a raw
-  // SyntaxError that escapes ApiError normalization (and gets needlessly retried).
+  // A 2xx with non-JSON body would throw a raw SyntaxError that escapes ApiError
+  // normalization and gets retried.
   try {
     return JSON.parse(text) as T;
   } catch (parseError) {
-    // Keep the user-facing detail clean, but preserve the original parser error
-    // + raw text on `body` for observability (these would otherwise be lost).
     throw new ApiError({
       status: res.status,
       detail: `Expected a JSON response but received ${
         res.headers.get("content-type") ?? "an unknown content type"
       }.`,
+      // Preserve the parser error + raw text for observability.
       body: {
         responseText: text,
         parseError:

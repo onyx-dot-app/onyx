@@ -13,25 +13,26 @@ Usage:
 """
 
 import csv
+import fcntl
 import json
+import os
 import signal
 import subprocess
 import sys
-from concurrent.futures import as_completed
-from concurrent.futures import ThreadPoolExecutor
-from datetime import datetime
-from datetime import timezone
+from concurrent.futures import ThreadPoolExecutor, as_completed
+from datetime import datetime, timezone
 from pathlib import Path
 from threading import Lock
 
-from scripts.tenant_cleanup.no_bastion_cleanup_utils import confirm_step
-from scripts.tenant_cleanup.no_bastion_cleanup_utils import execute_control_plane_delete
-from scripts.tenant_cleanup.no_bastion_cleanup_utils import find_background_pod
-from scripts.tenant_cleanup.no_bastion_cleanup_utils import find_worker_pod
-from scripts.tenant_cleanup.no_bastion_cleanup_utils import get_tenant_status
-from scripts.tenant_cleanup.no_bastion_cleanup_utils import read_tenant_ids_from_csv
 from scripts.tenant_cleanup.no_bastion_cleanup_utils import (
     TenantNotFoundInControlPlaneError,
+    confirm_step,
+    execute_control_plane_delete,
+    find_background_pod,
+    find_worker_pod,
+    get_tenant_status,
+    read_tenant_ids_from_csv,
+    validate_tenant_id,
 )
 
 # Global lock for thread-safe operations
@@ -346,7 +347,7 @@ def drop_data_plane_schema(pod_name: str, tenant_id: str, context: str) -> None:
 
 def cleanup_control_plane(
     pod_name: str, tenant_id: str, context: str, force: bool = False
-) -> None:
+) -> bool:
     """Clean up control plane data via pod queries.
 
     Args:
@@ -354,10 +355,14 @@ def cleanup_control_plane(
         tenant_id: Tenant ID to process
         context: kubectl context for control plane cluster
         force: Skip confirmations if True
+
+    Returns:
+        True if every delete succeeded, False if any table still holds rows
     """
     print(f"Cleaning up control plane data for tenant: {tenant_id}")
 
     # Delete in order respecting foreign key constraints
+    validate_tenant_id(tenant_id)
     delete_queries = [
         (
             "tenant_notification",
@@ -369,6 +374,7 @@ def cleanup_control_plane(
     ]
 
     try:
+        failed_tables = []
         for table_name, query in delete_queries:
             print(f"  Deleting from {table_name}...")
 
@@ -376,9 +382,19 @@ def cleanup_control_plane(
                 print(f"  Skipping deletion from {table_name}")
                 continue
 
-            execute_control_plane_delete(pod_name, query, context)
+            if not execute_control_plane_delete(pod_name, query, context):
+                failed_tables.append(table_name)
+
+        if failed_tables:
+            print(
+                f"✗ Failed to delete from {', '.join(failed_tables)} for tenant "
+                f"{tenant_id} - control plane rows remain",
+                file=sys.stderr,
+            )
+            return False
 
         print(f"✓ Successfully cleaned up control plane data for tenant: {tenant_id}")
+        return True
 
     except Exception as e:
         print(
@@ -539,15 +555,20 @@ def cleanup_tenant(
         force,
     ):
         try:
-            cleanup_control_plane(
+            if not cleanup_control_plane(
                 control_plane_pod, tenant_id, control_plane_context, force
-            )
+            ):
+                # The schema is already gone at this point, so report the tenant as
+                # failed rather than cleaned - it needs a re-run to drop the leftover
+                # control plane rows.
+                return False
         except Exception as e:
             print(f"✗ Failed at control plane cleanup step: {e}", file=sys.stderr)
             if not force:
                 print("Control plane cleanup failed")
             else:
                 print("[FORCE MODE] Control plane cleanup failed but continuing")
+            return False
     else:
         print("Step 3 skipped by user")
         return False
@@ -593,6 +614,12 @@ def main() -> None:
         )
         print(
             "  --control-plane-context CTX Kubectl context for control plane cluster (required)"
+        )
+        print(
+            "  --data-plane-pod POD        Pin the data plane pod instead of picking one"
+        )
+        print(
+            "  --control-plane-pod POD     Pin the control plane pod instead of picking one"
         )
         sys.exit(1)
 
@@ -653,6 +680,24 @@ def main() -> None:
             control_plane_context = sys.argv[idx + 1]
         except ValueError:
             pass
+
+    # Pinning pods lets several batches run against different pods instead of all
+    # piling onto whichever one the random pick returns.
+    data_plane_pod_override = None
+    control_plane_pod_override = None
+    for flag, target in (
+        ("--data-plane-pod", "data"),
+        ("--control-plane-pod", "control"),
+    ):
+        if flag in sys.argv:
+            idx = sys.argv.index(flag)
+            if idx + 1 >= len(sys.argv):
+                print(f"Error: {flag} requires a pod name", file=sys.stderr)
+                sys.exit(1)
+            if target == "data":
+                data_plane_pod_override = sys.argv[idx + 1]
+            else:
+                control_plane_pod_override = sys.argv[idx + 1]
 
     # Validate required contexts
     if not data_plane_context:
@@ -726,13 +771,21 @@ def main() -> None:
 
     # Find pods in both clusters before processing
     try:
-        print("Finding data plane worker pod...")
-        data_plane_pod = find_worker_pod(data_plane_context)
-        print(f"✓ Using data plane worker pod: {data_plane_pod}")
+        if data_plane_pod_override:
+            data_plane_pod = data_plane_pod_override
+            print(f"✓ Using pinned data plane worker pod: {data_plane_pod}")
+        else:
+            print("Finding data plane worker pod...")
+            data_plane_pod = find_worker_pod(data_plane_context)
+            print(f"✓ Using data plane worker pod: {data_plane_pod}")
 
-        print("Finding control plane pod...")
-        control_plane_pod = find_background_pod(control_plane_context)
-        print(f"✓ Using control plane pod: {control_plane_pod}\n")
+        if control_plane_pod_override:
+            control_plane_pod = control_plane_pod_override
+            print(f"✓ Using pinned control plane pod: {control_plane_pod}\n")
+        else:
+            print("Finding control plane pod...")
+            control_plane_pod = find_background_pod(control_plane_context)
+            print(f"✓ Using control plane pod: {control_plane_pod}\n")
 
         # Copy all scripts to data plane pod once
         setup_scripts_on_pod(data_plane_pod, data_plane_context)
@@ -747,12 +800,22 @@ def main() -> None:
     successful_tenants = []
     skipped_tenants = []
 
-    # Open CSV file for writing successful cleanups in real-time
+    # Append rather than truncate: cleanup runs in batches, and this file is the only
+    # record of what was deleted. Opening it "w" silently erased prior batches.
     csv_output_path = "cleaned_tenants.csv"
-    with open(csv_output_path, "w", newline="") as csv_file:
+    with open(csv_output_path, "a", newline="") as csv_file:
         csv_writer = csv.writer(csv_file)
-        csv_writer.writerow(["tenant_id", "cleaned_at"])
-        csv_file.flush()
+
+        # Emit the header under an exclusive lock, and decide whether one is needed
+        # while holding it. Two runs starting together would otherwise both see an
+        # absent file and each write a header.
+        fcntl.flock(csv_file.fileno(), fcntl.LOCK_EX)
+        try:
+            if os.fstat(csv_file.fileno()).st_size == 0:
+                csv_writer.writerow(["tenant_id", "cleaned_at"])
+                csv_file.flush()
+        finally:
+            fcntl.flock(csv_file.fileno(), fcntl.LOCK_UN)
 
         print(f"Writing successful cleanups to: {csv_output_path}\n")
 

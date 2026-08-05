@@ -1,0 +1,25 @@
+@reference "#reference.css";
+
+/* ---------------------------------------------------------------------------
+   AuthLayouts
+
+   Full-screen centering shell and branded card for authentication pages.
+   --------------------------------------------------------------------------- */
+
+.opal-auth-root {
+  @apply flex min-h-screen items-center justify-center;
+}
+
+.opal-auth-card-outer {
+  @apply w-full flex flex-col gap-6;
+  max-width: var(--auth-container-width);
+}
+
+.opal-auth-card-bottom-prompt {
+  @apply text-center;
+}
+
+.opal-auth-fields {
+  @apply flex flex-col w-full;
+  gap: 0.75rem;
+}

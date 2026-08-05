@@ -1,0 +1,22 @@
+@reference "#reference.css";
+
+/* ---------------------------------------------------------------------------
+   InputTextArea
+
+   Multiline field on the .opal-input chrome. Overrides the wrapper's
+   items-center so the field and the right slot align to the top, and
+   replaces the fixed single-line field height with row-driven auto height
+   plus a fixed min-height floor.
+   --------------------------------------------------------------------------- */
+
+.opal-input-textarea {
+  @apply items-start;
+}
+
+.opal-input-textarea-field {
+  @apply h-auto min-h-12 min-w-0 flex-1;
+}
+
+.opal-input-textarea-right {
+  @apply shrink-0 self-start;
+}

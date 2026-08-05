@@ -6,7 +6,7 @@ import {
   nameChatSession,
   updateLlmOverrideForChatSession,
 } from "@/app/app/services/lib";
-import { getMaxSelectedDocumentTokens } from "@/app/app/projects/projectsService";
+import { getMaxSelectedDocumentTokens } from "@/lib/projects/svc";
 import { DEFAULT_CONTEXT_TOKENS } from "@/lib/constants";
 import { StreamStopInfo } from "@/lib/search/interfaces";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
@@ -52,7 +52,7 @@ import {
   updateCurrentMessageFIFO,
 } from "@/app/app/services/currentMessageFIFO";
 import { buildFilters } from "@/lib/search/utils";
-import { toast } from "@/hooks/useToast";
+import { toast } from "@opal/layouts";
 import {
   ReadonlyURLSearchParams,
   usePathname,
@@ -75,7 +75,7 @@ import { useAgentPreferences } from "@/lib/agents/hooks";
 import { useForcedTools } from "@/lib/hooks/useForcedTools";
 import { ProjectFile, useProjectsContext } from "@/providers/ProjectsContext";
 import { useAppParams } from "@/hooks/appNavigation";
-import { projectFilesToFileDescriptors } from "@/app/app/services/fileUtils";
+import { projectFilesToFileDescriptors } from "@/lib/projects/utils";
 
 const SYSTEM_MESSAGE_ID = -3;
 
@@ -363,6 +363,8 @@ export default function useChatController({
     // The stream will close naturally when the backend sends the STOP packet
     setStreamingStartTime(currentSession, null);
     updateChatStateAction(currentSession, "input");
+    // On stop nothing else flips the queue gate, so release it here or queued follow-ups never auto-send.
+    setLatestMessageRenderComplete(currentSession, true);
   }, [currentMessageHistory, currentMessageTree]);
 
   const onSubmit = useCallback(
@@ -528,7 +530,8 @@ export default function useChatController({
         structureValue(
           finalLLM.name || "",
           finalLLM.provider || "",
-          finalLLM.modelName || ""
+          finalLLM.modelName || "",
+          finalLLM.modelConfigurationId
         )
       );
 
@@ -873,6 +876,12 @@ export default function useChatController({
       let streamSucceeded = false;
 
       try {
+        // Selection-time override writes are best-effort. Await confirmation
+        // so the backend's session-row read during the send sees the current
+        // selections. A failed write surfaces as a chat error and the next
+        // send re-persists.
+        await llmManager.persistOverrides(currChatSessionId);
+
         const lastSuccessfulMessageId = getLastSuccessfulMessageId(
           currentMessageTreeLocal
         );
@@ -929,6 +938,11 @@ export default function useChatController({
               llmManager.currentLlm.modelName ||
               searchParams?.get(SEARCH_PARAM_NAMES.MODEL_VERSION) ||
               undefined,
+          modelConfigurationId: isMultiModel
+            ? undefined
+            : modelOverride
+              ? (modelOverride.modelConfigurationId ?? undefined)
+              : (llmManager.currentLlm.modelConfigurationId ?? undefined),
           temperature: llmManager.temperature || undefined,
           deepResearch,
           enabledToolIds:
@@ -945,6 +959,7 @@ export default function useChatController({
                 model_provider: m.name,
                 model_version: m.modelName,
                 display_name: m.displayName,
+                model_configuration_id: m.modelConfigurationId ?? undefined,
               }))
             : undefined,
         });

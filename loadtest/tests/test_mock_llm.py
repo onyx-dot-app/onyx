@@ -369,3 +369,26 @@ def test_max_tokens_caps_answer_length() -> None:
     chunks = stream_chunks(model="mock-ttft0-itl0-len500", max_tokens=10)
     text = "".join(c["choices"][0]["delta"].get("content") or "" for c in chunks)
     assert len(text.split()) == 10
+
+
+def test_maxctx_rejects_oversized_prompt_with_context_error() -> None:
+    # Prompt over the maxctx limit → 400 context-window error (litellm maps
+    # this to ContextWindowExceededError, mimicking a real provider).
+    big = "word " * 5000  # ~25k chars ≈ ~6k tokens, over maxctx1000
+    response = client.post(
+        "/v1/chat/completions",
+        json={
+            "model": "mock-maxctx1000-ttft0-itl0",
+            "stream": False,
+            "messages": [{"role": "user", "content": big}],
+        },
+    )
+    assert response.status_code == 400
+    err = response.json()["error"]
+    assert err["code"] == "context_length_exceeded"
+    assert "maximum context length" in err["message"]
+
+
+def test_maxctx_allows_small_prompt() -> None:
+    choice = complete(model="mock-maxctx1000-ttft0-itl0-len10")
+    assert choice["finish_reason"] == "stop"

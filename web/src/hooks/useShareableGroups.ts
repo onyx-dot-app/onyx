@@ -1,9 +1,8 @@
 "use client";
 
 import useSWR, { mutate } from "swr";
-import { useContext } from "react";
 import { errorHandlingFetcher } from "@/lib/fetcher";
-import { SettingsContext } from "@/providers/SettingsProvider";
+import { useSettings } from "@/lib/settings/hooks";
 import { SWR_KEYS } from "@/lib/swr-keys";
 
 export interface MinimalUserGroupSnapshot {
@@ -15,12 +14,9 @@ export interface MinimalUserGroupSnapshot {
 // Refactor this hook to live inside of a special `ee` directory.
 
 export default function useShareableGroups() {
-  const combinedSettings = useContext(SettingsContext);
-  const settingsLoading = combinedSettings?.settingsLoading ?? false;
+  const settings = useSettings();
   const isPaidEnterpriseFeaturesEnabled =
-    !settingsLoading &&
-    combinedSettings &&
-    combinedSettings.enterpriseSettings !== null;
+    !settings.isLoading && settings.enterprise !== null;
 
   const { data, error, isLoading } = useSWR<MinimalUserGroupSnapshot[]>(
     isPaidEnterpriseFeaturesEnabled ? SWR_KEYS.shareableGroups : null,
@@ -29,7 +25,7 @@ export default function useShareableGroups() {
 
   const refreshShareableGroups = () => mutate(SWR_KEYS.shareableGroups);
 
-  if (settingsLoading) {
+  if (settings.isLoading) {
     return {
       data: undefined,
       isLoading: true,

@@ -28,33 +28,38 @@ Per CLAUDE.md:
 from __future__ import annotations
 
 import time
-from datetime import datetime
-from datetime import timedelta
-from datetime import timezone
+from datetime import datetime, timedelta, timezone
 from uuid import UUID
 
-from celery import shared_task
-from celery import Task
+from celery import Task, shared_task
 
 from onyx.background.celery.apps.app_base import task_logger
-from onyx.configs.constants import OnyxCeleryPriority
-from onyx.configs.constants import OnyxCeleryQueues
-from onyx.configs.constants import OnyxCeleryTask
+from onyx.configs.constants import OnyxCeleryPriority, OnyxCeleryQueues, OnyxCeleryTask
 from onyx.db.engine.sql_engine import get_session_with_current_tenant
-from onyx.db.enums import ScheduledTaskErrorClass
-from onyx.db.enums import ScheduledTaskRunStatus
-from onyx.db.enums import ScheduledTaskSkipReason
-from onyx.db.enums import ScheduledTaskTriggerSource
-from onyx.db.scheduled_task import advance_next_run_at
-from onyx.db.scheduled_task import claim_due_scheduled_tasks
-from onyx.db.scheduled_task import find_stuck_runs
-from onyx.db.scheduled_task import has_in_flight_run_for_task
-from onyx.db.scheduled_task import insert_run
-from onyx.db.scheduled_task import mark_run_status
-from onyx.server.features.build.scheduled_tasks.executor import (
-    DEFAULT_EXECUTOR_BUDGET_SECONDS,
+from onyx.db.enums import (
+    ScheduledTaskErrorClass,
+    ScheduledTaskRunStatus,
+    ScheduledTaskSkipReason,
+    ScheduledTaskTriggerSource,
 )
-from onyx.server.features.build.scheduled_tasks.executor import run_scheduled_task_logic
+from onyx.db.scheduled_task import (
+    advance_next_run_at,
+    claim_due_scheduled_tasks,
+    find_stuck_runs,
+    has_in_flight_run_for_task,
+    insert_run,
+    mark_run_status,
+)
+from onyx.server.features.build.scheduled_tasks.executor import (
+    run_scheduled_task_logic,
+)
+from onyx.server.features.build.timeouts import (
+    QUEUE_RESIDENCY_SECONDS,
+    SCHEDULED_RUN_HARD_CAP_SECONDS,
+    TURN_RECLAIM_SLACK_SECONDS,
+)
+from onyx.server.features.build.utils import is_craft_enabled_for_user
+from onyx.server.settings.store import load_settings
 
 # --- Tunables -----------------------------------------------------------------
 
@@ -64,25 +69,21 @@ from onyx.server.features.build.scheduled_tasks.executor import run_scheduled_ta
 # concurrent ticks just see "no rows" and exit.
 DISPATCH_BATCH_SIZE = 50
 
-# How long the executor message can sit on the `scheduled_tasks` queue
-# before Celery drops it. After 15 min we'd rather let the next beat tick
-# re-dispatch a new run row than execute a stale one.
-RUN_EXPIRES_SECONDS = 15 * 60
-
-# Stuck-run sweeper thresholds. The QUEUED threshold needs to comfortably
-# exceed the longest plausible queue wait + executor startup. The RUNNING
-# threshold should exceed the executor budget by enough margin that a
-# well-behaved run that hits its own budget gets there first and marks
-# itself FAILED (rather than the sweeper). Budget is 30 min by default;
-# 45 min gives 50% slack.
-STUCK_QUEUED_OLDER_THAN = timedelta(minutes=15)
-STUCK_RUNNING_OLDER_THAN = timedelta(seconds=DEFAULT_EXECUTOR_BUDGET_SECONDS + 15 * 60)
+# Celery expiry and the stuck-QUEUED sweep are one policy: a run that sat
+# queued past the residency limit is dropped unexecuted and its row reclaimed
+# by the same threshold. A RUNNING row is stuck only past the hard cap + slack,
+# so a well-behaved run that hits its own cap always marks itself FAILED first.
+RUN_EXPIRES_SECONDS = QUEUE_RESIDENCY_SECONDS
+STUCK_QUEUED_OLDER_THAN = timedelta(seconds=QUEUE_RESIDENCY_SECONDS)
+STUCK_RUNNING_OLDER_THAN = timedelta(
+    seconds=SCHEDULED_RUN_HARD_CAP_SECONDS + TURN_RECLAIM_SLACK_SECONDS
+)
 
 
 # --- Dispatch ----------------------------------------------------------------
 
 
-@shared_task(
+@shared_task(  # ty: ignore[invalid-argument-type]
     name=OnyxCeleryTask.SCHEDULED_TASKS_DISPATCH_DUE,
     ignore_result=True,
     bind=True,
@@ -116,9 +117,31 @@ def dispatch_due_scheduled_tasks(self: Task, *, tenant_id: str) -> int:
         # if our transaction rolls back for some reason.
         to_enqueue: list[UUID] = []
 
+        # Owners for whom Craft is off — deployment gate, per-user override,
+        # or workspace default — get a visible SKIPPED row instead of a run;
+        # the schedule stays alive and resumes if they are re-enabled.
+        craft_default_enabled = load_settings().craft_default_enabled
+        owners_by_id = {task.user_id: task.user for task in claimed_tasks}
+        craft_disabled_owner_ids = {
+            user_id
+            for user_id, owner in owners_by_id.items()
+            if not is_craft_enabled_for_user(
+                owner, workspace_default=craft_default_enabled
+            )
+        }
+
         for task in claimed_tasks:
             try:
-                if has_in_flight_run_for_task(db_session=db_session, task_id=task.id):
+                if task.user_id in craft_disabled_owner_ids:
+                    insert_run(
+                        db_session=db_session,
+                        task_id=task.id,
+                        trigger_source=ScheduledTaskTriggerSource.SCHEDULED,
+                        status=ScheduledTaskRunStatus.SKIPPED,
+                        skip_reason=ScheduledTaskSkipReason.OWNER_CRAFT_DISABLED,
+                    )
+                    skipped_count += 1
+                elif has_in_flight_run_for_task(db_session=db_session, task_id=task.id):
                     # SKIP_IF_RUNNING: a prior fire is still in flight.
                     # Write a skipped row so the user can see the miss,
                     # then advance next_run_at as if it had fired.
@@ -186,7 +209,7 @@ def dispatch_due_scheduled_tasks(self: Task, *, tenant_id: str) -> int:
 # --- Run executor wrapper ----------------------------------------------------
 
 
-@shared_task(
+@shared_task(  # ty: ignore[invalid-argument-type]
     name=OnyxCeleryTask.SCHEDULED_TASKS_RUN,
     ignore_result=True,
     # acks_late=False so a worker crash doesn't cause Celery to retry the
@@ -221,7 +244,7 @@ def run_scheduled_task(self: Task, *, run_id: str, tenant_id: str) -> None:
 # --- Stuck-run sweeper -------------------------------------------------------
 
 
-@shared_task(
+@shared_task(  # ty: ignore[invalid-argument-type]
     name=OnyxCeleryTask.SCHEDULED_TASKS_CLEANUP_STUCK,
     ignore_result=True,
     bind=True,

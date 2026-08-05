@@ -1,5 +1,5 @@
 import { Permission } from "@/lib/types";
-import { Tier } from "@/interfaces/settings";
+import { Tier } from "@/lib/settings/types";
 import { IconFunctionComponent } from "@opal/types";
 import {
   SvgActions,
@@ -12,6 +12,7 @@ import {
   SvgBubbleText,
   SvgClipboard,
   SvgCpu,
+  SvgDevKit,
   SvgDownload,
   SvgEmpty,
   SvgFileText,
@@ -22,6 +23,7 @@ import {
   SvgMcp,
   SvgOnyxOctagon,
   SvgPaintBrush,
+  SvgPlug,
   SvgProgressBars,
   SvgSearchMenu,
   SvgShield,
@@ -29,6 +31,7 @@ import {
   SvgThumbsUp,
   SvgUploadCloud,
   SvgUser,
+  SvgUserCheck,
   SvgUserKey,
   SvgUserSync,
   SvgUsers,
@@ -47,6 +50,7 @@ export interface FeatureFlags {
   hooksEnabled: boolean;
   opensearchEnabled: boolean;
   queryHistoryEnabled: boolean;
+  craftAvailable: boolean;
 }
 
 /**
@@ -150,6 +154,37 @@ export const ADMIN_ROUTES = {
     section: "",
     requiredTier: null,
     visibleWhen: null,
+  },
+  // ── Craft ─────────────────────────────────────────────────────────
+  CRAFT_ACCESS: {
+    path: "/admin/craft/access",
+    icon: SvgUserCheck,
+    title: "Access",
+    sidebarLabel: "Access",
+    requiredPermission: Permission.FULL_ADMIN_PANEL_ACCESS,
+    section: "Craft",
+    requiredTier: null,
+    visibleWhen: (f: FeatureFlags) => f.craftAvailable,
+  },
+  CRAFT_APPS: {
+    path: "/admin/craft/apps",
+    icon: SvgPlug,
+    title: "Apps",
+    sidebarLabel: "Apps",
+    requiredPermission: Permission.FULL_ADMIN_PANEL_ACCESS,
+    section: "Craft",
+    requiredTier: null,
+    visibleWhen: (f: FeatureFlags) => f.craftAvailable,
+  },
+  CRAFT_INSTRUCTIONS: {
+    path: "/admin/craft/instructions",
+    icon: SvgDevKit,
+    title: "Instructions",
+    sidebarLabel: "Instructions",
+    requiredPermission: Permission.FULL_ADMIN_PANEL_ACCESS,
+    section: "Craft",
+    requiredTier: null,
+    visibleWhen: (f: FeatureFlags) => f.craftAvailable,
   },
   CUSTOM_ANALYTICS: {
     path: "/admin/performance/custom-analytics",
@@ -350,6 +385,17 @@ export const ADMIN_ROUTES = {
     requiredTier: Tier.ENTERPRISE,
     visibleWhen: null,
   },
+  OAUTH_TEST: {
+    path: "/admin/oauth-test",
+    icon: SvgUserKey,
+    title: "OAuth Test",
+    // Deep-link only — main never lists it in the sidebar.
+    sidebarLabel: "",
+    requiredPermission: Permission.FULL_ADMIN_PANEL_ACCESS,
+    section: "",
+    requiredTier: null,
+    visibleWhen: null,
+  },
 
   // ── Organization ──────────────────────────────────────────────────
   BILLING: {
@@ -392,6 +438,18 @@ export const ADMIN_ROUTES = {
     requiredTier: null,
     visibleWhen: null,
   },
+  // SSO provider config is single-tenant only; Business tier gates having *multiple*
+  // providers, inside the page itself, not reaching it.
+  SSO_PROVIDERS: {
+    path: "/admin/sso-providers",
+    icon: SvgUserKey,
+    title: "SSO Providers",
+    sidebarLabel: "SSO Providers",
+    requiredPermission: Permission.FULL_ADMIN_PANEL_ACCESS,
+    section: "Organization",
+    requiredTier: null,
+    visibleWhen: (f: FeatureFlags) => !f.enableCloud,
+  },
 
   // ── Usage ─────────────────────────────────────────────────────────
   USAGE: {
@@ -414,22 +472,34 @@ export const ADMIN_ROUTES = {
     requiredTier: Tier.BUSINESS,
     visibleWhen: (f: FeatureFlags) => f.queryHistoryEnabled,
   },
+  // Tracing config is not supported on multi-tenant cloud.
+  TRACING: {
+    path: "/admin/tracing",
+    icon: SvgBarChart,
+    title: "Tracing",
+    sidebarLabel: "Tracing",
+    requiredPermission: Permission.FULL_ADMIN_PANEL_ACCESS,
+    section: "Usage",
+    requiredTier: null,
+    visibleWhen: (f: FeatureFlags) => !f.enableCloud,
+  },
+  // Log export reads container-local files; not applicable on multi-tenant cloud.
+  EXPORT_LOGS: {
+    path: "/admin/export-logs",
+    icon: SvgDownload,
+    title: "Export Logs",
+    sidebarLabel: "Export Logs",
+    requiredPermission: Permission.FULL_ADMIN_PANEL_ACCESS,
+    section: "Usage",
+    requiredTier: Tier.ENTERPRISE,
+    visibleWhen: (f: FeatureFlags) => !f.enableCloud,
+  },
 
   // ── Other (admin-only) ────────────────────────────────────────────
   STANDARD_ANSWERS: {
     path: "/admin/standard-answer",
     icon: SvgClipboard,
     title: "Standard Answers",
-    sidebarLabel: "",
-    requiredPermission: Permission.FULL_ADMIN_PANEL_ACCESS,
-    section: "",
-    requiredTier: null,
-    visibleWhen: null,
-  },
-  DEBUG: {
-    path: "/admin/debug",
-    icon: SvgDownload,
-    title: "Debug Logs",
     sidebarLabel: "",
     requiredPermission: Permission.FULL_ADMIN_PANEL_ACCESS,
     section: "",

@@ -10,13 +10,14 @@ from typing import Any
 import pytest
 
 from onyx.db.enums import Permission
-from tests.integration.common_utils.test_models import DATestAPIKey
-from tests.integration.common_utils.test_models import DATestUser
-from tests.integration.tests.permissions._access_matrix import assert_response
-from tests.integration.tests.permissions._access_matrix import call_endpoint
-from tests.integration.tests.permissions._access_matrix import Endpoint
-from tests.integration.tests.permissions._access_matrix import resolve_credentials
-from tests.integration.tests.permissions._access_matrix import USER_KINDS
+from tests.integration.common_utils.test_models import DATestAPIKey, DATestUser
+from tests.integration.tests.permissions._access_matrix import (
+    USER_KINDS,
+    Endpoint,
+    assert_response,
+    call_endpoint,
+    resolve_credentials,
+)
 
 pytestmark = pytest.mark.skipif(
     os.environ.get("ENABLE_PAID_ENTERPRISE_EDITION_FEATURES", "").lower() != "true",

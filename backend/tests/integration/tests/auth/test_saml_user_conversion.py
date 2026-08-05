@@ -12,8 +12,7 @@ import os
 import pytest
 
 from onyx.db.engine.sql_engine import get_session_with_current_tenant
-from onyx.db.enums import AccountType
-from onyx.db.enums import Permission
+from onyx.db.enums import AccountType, Permission
 from onyx.db.users import get_user_by_email
 from tests.integration.common_utils.constants import API_SERVER_URL
 from tests.integration.common_utils.http_client import client

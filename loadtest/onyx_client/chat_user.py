@@ -23,12 +23,9 @@ import time
 import uuid
 from typing import Any
 
-from locust import constant
-from locust import HttpUser
-from locust import task
+from locust import HttpUser, constant, task
 
-from onyx_client.env import env_float
-from onyx_client.env import env_int
+from onyx_client.env import env_float, env_int
 from onyx_client.stream_parser import ChatStreamAnalyzer
 
 DEFAULT_MESSAGES = [
@@ -39,6 +36,17 @@ DEFAULT_MESSAGES = [
     "What integrations and connectors are supported?",
     "Summarize how background indexing works.",
 ]
+
+_PAD = "Please consider the full context of the conversation so far in detail. "
+
+
+def _sized_message(question: str, target_chars: int) -> str:
+    """Pad a question with filler up to ~target_chars so histories grow fast
+    enough to cross the summarization threshold (compression testing)."""
+    if target_chars <= len(question):
+        return question
+    filler = _PAD * (target_chars // len(_PAD) + 1)
+    return (question + " " + filler)[:target_chars]
 
 
 class OnyxChatUser(HttpUser):
@@ -55,6 +63,12 @@ class OnyxChatUser(HttpUser):
     # history grows; 1 (default) = a fresh session per turn.
     max_session_turns: int = env_int("ONYX_SESSION_TURNS", 1)
 
+    # Per-message size in chars (ONYX_MSG_CHARS overrides). 0 = the short
+    # default questions. Scenarios that need history to grow fast (compression)
+    # raise this default; larger messages cross the summarization threshold in
+    # fewer turns.
+    default_msg_chars: int = 0
+
     # If set to a milestone name, drop the stream the instant it arrives
     # (client disconnect). Recorded as <prefix>:disconnected, not a failure.
     disconnect_after_milestone: str | None = None
@@ -70,6 +84,13 @@ class OnyxChatUser(HttpUser):
             raise RuntimeError("ONYX_API_KEY env var is required")
         self.client.headers["Authorization"] = f"Bearer {api_key}"
 
+        # When LOCUST_HOST points at an internal Service (to bypass an external
+        # ALB/WAF rate limit for high-rps runs), set ONYX_HOST_HEADER to the
+        # real domain so the in-cluster nginx routes by Host as usual.
+        host_header = os.environ.get("ONYX_HOST_HEADER")
+        if host_header:
+            self.client.headers["Host"] = host_header
+
         provider = os.environ.get("ONYX_LLM_PROVIDER")
         model = self.mock_model or os.environ.get("ONYX_LLM_MODEL")
         self.llm_override: dict[str, Any] | None = None
@@ -78,13 +99,27 @@ class OnyxChatUser(HttpUser):
             if provider:
                 self.llm_override["model_provider"] = provider
 
-        self.messages: list[str] = DEFAULT_MESSAGES
+        msg_chars = env_int("ONYX_MSG_CHARS", self.default_msg_chars)
+        self.messages: list[str] = (
+            [_sized_message(q, msg_chars) for q in DEFAULT_MESSAGES]
+            if msg_chars > 0
+            else DEFAULT_MESSAGES
+        )
         self.turn_index: int = 0
 
         # Multi-turn session state (only used when max_session_turns > 1).
         self._session_id: str | None = None
         self._parent_message_id: int | None = None
         self._session_turn: int = 0
+
+        # File attachments to include on every turn (populated by scenarios
+        # that exercise the file path; empty for plain chat).
+        self.file_descriptors: list[dict[str, Any]] = []
+        self.setup_files()
+
+    def setup_files(self) -> None:
+        """Hook for scenarios to upload files and populate file_descriptors.
+        No-op by default."""
 
     def _create_session(self) -> str | None:
         """Open a session for a multi-turn conversation; None on failure."""
@@ -148,6 +183,8 @@ class OnyxChatUser(HttpUser):
             payload["llm_override"] = self.llm_override
         if self.deep_research:
             payload["deep_research"] = True
+        if self.file_descriptors:
+            payload["file_descriptors"] = self.file_descriptors
         return payload
 
     @task

@@ -1,32 +1,31 @@
 import os
 import uuid
-from datetime import datetime
-from datetime import timezone
+from datetime import datetime, timezone
 
 import httpx
 import pytest
 from sqlalchemy import select
 
 from onyx.configs.constants import DocumentSource
-from onyx.connectors.mock_connector.connector import EXTERNAL_USER_EMAILS
-from onyx.connectors.mock_connector.connector import EXTERNAL_USER_GROUP_IDS
-from onyx.connectors.mock_connector.connector import MockConnectorCheckpoint
-from onyx.connectors.models import Document
-from onyx.connectors.models import InputType
+from onyx.connectors.mock_connector.connector import (
+    EXTERNAL_USER_EMAILS,
+    EXTERNAL_USER_GROUP_IDS,
+    MockConnectorCheckpoint,
+)
+from onyx.connectors.models import Document, InputType
 from onyx.db.document import get_documents_by_ids
 from onyx.db.engine.sql_engine import get_session_with_current_tenant
-from onyx.db.enums import AccessType
-from onyx.db.enums import IndexingStatus
-from onyx.db.enums import PermissionSyncStatus
+from onyx.db.enums import AccessType, IndexingStatus, PermissionSyncStatus
 from onyx.db.models import DocPermissionSyncAttempt
-from tests.integration.common_utils.constants import MOCK_CONNECTOR_SERVER_HOST
-from tests.integration.common_utils.constants import MOCK_CONNECTOR_SERVER_PORT
+from tests.integration.common_utils.constants import (
+    MOCK_CONNECTOR_SERVER_HOST,
+    MOCK_CONNECTOR_SERVER_PORT,
+)
 from tests.integration.common_utils.managers.cc_pair import CCPairManager
 from tests.integration.common_utils.managers.document import DocumentManager
 from tests.integration.common_utils.managers.index_attempt import IndexAttemptManager
 from tests.integration.common_utils.test_document_utils import create_test_document
-from tests.integration.common_utils.test_models import DATestCCPair
-from tests.integration.common_utils.test_models import DATestUser
+from tests.integration.common_utils.test_models import DATestCCPair, DATestUser
 from tests.integration.common_utils.vespa import vespa_fixture
 
 

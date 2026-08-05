@@ -1,40 +1,43 @@
 import json
 from uuid import UUID
 
-from fastapi import APIRouter
-from fastapi import BackgroundTasks
-from fastapi import Depends
-from fastapi import File
-from fastapi import Form
-from fastapi import HTTPException
-from fastapi import Response
-from fastapi import UploadFile
+from fastapi import (
+    APIRouter,
+    BackgroundTasks,
+    Depends,
+    File,
+    Form,
+    HTTPException,
+    Response,
+    UploadFile,
+)
 from pydantic import BaseModel
 from sqlalchemy.orm import Session
 
 from onyx.auth.permissions import require_permission
 from onyx.configs.app_configs import DISABLE_VECTOR_DB
-from onyx.configs.constants import OnyxCeleryPriority
-from onyx.configs.constants import OnyxCeleryQueues
-from onyx.configs.constants import OnyxCeleryTask
-from onyx.configs.constants import PUBLIC_API_TAGS
-from onyx.configs.constants import USER_FILE_PROJECT_SYNC_MAX_QUEUE_DEPTH
+from onyx.configs.constants import (
+    PUBLIC_API_TAGS,
+    USER_FILE_PROJECT_SYNC_MAX_QUEUE_DEPTH,
+    OnyxCeleryPriority,
+    OnyxCeleryQueues,
+    OnyxCeleryTask,
+)
 from onyx.db.engine.sql_engine import get_session
-from onyx.db.enums import Permission
-from onyx.db.enums import UserFileStatus
-from onyx.db.models import ChatSession
-from onyx.db.models import Project__UserFile
-from onyx.db.models import User
-from onyx.db.models import UserFile
-from onyx.db.models import UserProject
+from onyx.db.enums import Permission, UserFileStatus
+from onyx.db.models import ChatSession, Project__UserFile, User, UserFile, UserProject
 from onyx.db.persona import get_personas_by_ids
-from onyx.db.projects import get_project_token_count
-from onyx.db.projects import upload_files_to_user_files_with_indexing
-from onyx.server.features.projects.models import CategorizedFilesSnapshot
-from onyx.server.features.projects.models import ChatSessionRequest
-from onyx.server.features.projects.models import TokenCountResponse
-from onyx.server.features.projects.models import UserFileSnapshot
-from onyx.server.features.projects.models import UserProjectSnapshot
+from onyx.db.projects import (
+    get_project_token_count,
+    upload_files_to_user_files_with_indexing,
+)
+from onyx.server.features.projects.models import (
+    CategorizedFilesSnapshot,
+    ChatSessionRequest,
+    TokenCountResponse,
+    UserFileSnapshot,
+    UserProjectSnapshot,
+)
 from onyx.utils.logger import setup_logger
 from shared_configs.contextvars import get_current_tenant_id
 
@@ -64,8 +67,6 @@ def _trigger_user_file_project_sync(
 
     from onyx.background.celery.tasks.user_file_processing.tasks import (
         enqueue_user_file_project_sync_task,
-    )
-    from onyx.background.celery.tasks.user_file_processing.tasks import (
         get_user_file_project_sync_queue_depth,
     )
     from onyx.background.celery.versioned_apps.client import app as client_app

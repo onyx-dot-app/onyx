@@ -9,7 +9,6 @@ from onyx.server.features.build.db.sandbox import get_sandbox_user_map
 from onyx.server.features.build.db.user_library import list_user_files
 from onyx.server.features.build.sandbox.factory import get_sandbox_manager
 from onyx.server.features.build.sandbox.models import FileSet
-from onyx.server.features.build.sandbox.models import PushResult
 from onyx.utils.logger import setup_logger
 
 logger = setup_logger()
@@ -43,20 +42,6 @@ def build_user_library_fileset(user_id: UUID, db_session: Session) -> FileSet:
             )
 
     return files
-
-
-def hydrate_user_library(
-    sandbox_id: UUID,
-    user_id: UUID,
-    db_session: Session,
-) -> PushResult:
-    """Push all user library files to a single sandbox (cold-start hydration)."""
-    files = build_user_library_fileset(user_id, db_session)
-    return get_sandbox_manager().push_to_sandbox(
-        sandbox_id=sandbox_id,
-        mount_path=USER_LIBRARY_MOUNT_PATH,
-        files=files,
-    )
 
 
 def sync_user_library_to_active_sandboxes(

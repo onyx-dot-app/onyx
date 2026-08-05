@@ -8,13 +8,13 @@ api-server imports the full module path.
 
 from uuid import UUID
 
-from pydantic import BaseModel
-from pydantic import ConfigDict
+from pydantic import BaseModel, ConfigDict
 
 SIDECAR_HEALTH_PATH = "/health"
 SIDECAR_READY_PATH = "/ready"
 SIDECAR_PUSH_PATH = "/push"
 PUSH_DAEMON_PORT = 8731
+SIDECAR_FILESYSTEM_LIST_PATH = "/filesystem/list"
 SIDECAR_SNAPSHOT_CREATE_PATH = "/snapshot/create"
 SIDECAR_SNAPSHOT_RESTORE_PREFIX = "/snapshot/restore"
 SIDECAR_SNAPSHOT_RESTORE_ROUTE = f"{SIDECAR_SNAPSHOT_RESTORE_PREFIX}/{{session_id}}"
@@ -32,6 +32,29 @@ class SnapshotCreateRequest(BaseModel):
     model_config = ConfigDict(extra="forbid")
 
     session_id: UUID
+
+
+class FilesystemListRequest(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    session_id: UUID
+    path: str = ""
+
+
+class SidecarFilesystemEntry(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    name: str
+    path: str
+    is_directory: bool
+    size: int | None = None
+    mime_type: str | None = None
+
+
+class FilesystemListResponse(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    entries: list[SidecarFilesystemEntry]
 
 
 # Restore has no response body — failures raise, success is the 204.

@@ -29,7 +29,7 @@ from onyx.llm.models import SystemMessage, UserMessage
 # Define cacheable prefix (static context) using Pydantic message models
 cacheable_prefix = [
     SystemMessage(role="system", content="You are a helpful assistant."),
-    UserMessage(role="user", content="Context: ...")  # Static context
+    UserMessage(role="user", content="Context: ..."),  # Static context
 ]
 
 # Define suffix (dynamic user input)

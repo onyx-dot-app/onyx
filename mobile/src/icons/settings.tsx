@@ -2,9 +2,7 @@ import Svg, { Path } from "react-native-svg";
 
 import type { IconProps } from "@/icons/types";
 
-// RN variant of web Opal `SvgSettings` (web/lib/opal/src/icons/settings.tsx). The
-// web source wraps the paths in a clipPath bounded to the full 16x16 viewBox (a
-// visual no-op), so it's omitted here.
+// clipPath bounded to the full 16x16 viewBox is a visual no-op, so it's omitted.
 const SvgSettings = ({ size = 16, ...props }: IconProps) => (
   <Svg
     width={size}

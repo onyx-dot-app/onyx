@@ -8,10 +8,13 @@ import tempfile
 import threading
 from pathlib import Path
 
-from sandbox_daemon.snapshot import SESSIONS_ROOT
-from sandbox_daemon.snapshot import SnapshotError
+from sandbox_daemon.snapshot import SESSIONS_ROOT, SnapshotError
 
-OPENCODE_DATA_DIR = Path("/workspace/opencode-data")
+# Opencode's data home. Defaults to the K8s shared-volume mount; the Docker
+# backend execs this module with OPENCODE_DATA_HOME set to its own data home.
+OPENCODE_DATA_DIR = Path(
+    os.environ.get("OPENCODE_DATA_HOME", "/workspace/opencode-data")
+)
 OPENCODE_HISTORY_RESTORED_SENTINEL = Path(
     "/workspace/managed/.onyx/opencode-history-restored"
 )

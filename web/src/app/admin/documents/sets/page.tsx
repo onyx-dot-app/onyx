@@ -1,6 +1,6 @@
 "use client";
 
-import { ThreeDotsLoader } from "@/components/Loading";
+import { PageLoader } from "@opal/layouts";
 import { PageSelector } from "@/components/PageSelector";
 import { SvgInfo, SvgPlusCircle } from "@opal/icons";
 import {
@@ -20,8 +20,7 @@ import { useDocumentSets } from "./hooks";
 import { can } from "@/lib/permissions/resource-actions";
 import { ConnectorTitle } from "@/components/admin/connectors/ConnectorTitle";
 import { deleteDocumentSet } from "./lib";
-import { toast } from "@/hooks/useToast";
-import { SettingsLayouts } from "@opal/layouts";
+import { SettingsLayouts, toast } from "@opal/layouts";
 import { ADMIN_ROUTES } from "@/lib/admin-routes";
 import {
   FiAlertTriangle,
@@ -342,7 +341,7 @@ function Main() {
   if (isDocumentSetsLoading) {
     return (
       <div className="flex justify-center items-center min-h-[400px]">
-        <ThreeDotsLoader />
+        <PageLoader />
       </div>
     );
   }

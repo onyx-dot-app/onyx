@@ -1,18 +1,21 @@
 import json
+import math
 import os
 import urllib.parse
-from datetime import datetime
-from datetime import timezone
+from datetime import datetime, timezone
 from typing import cast
 
 from onyx.auth.schemas import AuthBackend
 from onyx.cache.interface import CacheBackendType
-from onyx.configs.constants import AuthType
 from onyx.configs.constants import QueryHistoryType
+from onyx.document_index.opensearch.constants import OpenSearchAuthMethod
 from onyx.file_processing.enums import HtmlBasedConnectorTransformLinksStrategy
-from onyx.prompts.image_analysis import DEFAULT_IMAGE_SUMMARIZATION_SYSTEM_PROMPT
-from onyx.prompts.image_analysis import DEFAULT_IMAGE_SUMMARIZATION_USER_PROMPT
+from onyx.prompts.image_analysis import (
+    DEFAULT_IMAGE_SUMMARIZATION_SYSTEM_PROMPT,
+    DEFAULT_IMAGE_SUMMARIZATION_USER_PROMPT,
+)
 from onyx.utils.logger import setup_logger
+from shared_configs.configs import MULTI_TENANT
 
 logger = setup_logger()
 
@@ -69,16 +72,23 @@ GENERATIVE_MODEL_ACCESS_CHECK_FREQ = int(
     os.environ.get("GENERATIVE_MODEL_ACCESS_CHECK_FREQ") or 86400
 )  # 1 day
 
-# Per-user cap on self-managed personal skills. Env-overridable so CI can lower
-# it without uploading the full quota of real bundles to exercise the limit.
-MAX_PERSONAL_SKILLS_PER_USER = _non_negative_int_env("MAX_PERSONAL_SKILLS_PER_USER", 50)
-
 # Controls whether users can use User Knowledge (personal documents) in assistants
 DISABLE_USER_KNOWLEDGE = os.environ.get("DISABLE_USER_KNOWLEDGE", "").lower() == "true"
 
 # Disables vector DB (Vespa/OpenSearch) entirely. When True, connectors and RAG search
 # are disabled but core chat, tools, user file uploads, and Projects still work.
 DISABLE_VECTOR_DB = os.environ.get("DISABLE_VECTOR_DB", "").lower() == "true"
+
+# TEMPORARY (will be removed soon): operator-forced Search-UI scope (self-hosted only) —
+# comma-separated document set NAMES. When set, the Onyx Search UI is restricted to those sets
+# (AND'd on top of any persona/user scope; ACL still enforced) — chat/other flows are unaffected,
+# and it is disabled under MULTI_TENANT. Empty = no restriction. Names match the index directly; a
+# name that doesn't exist matches nothing (fail-closed) and is logged. Read at import — restart to change.
+FORCED_DOCUMENT_SET_NAMES: list[str] = [
+    name.strip()
+    for name in os.environ.get("FORCED_DOCUMENT_SET_NAMES", "").split(",")
+    if name.strip()
+]
 
 # Which backend to use for caching, locks, and ephemeral state.
 # "redis" (default) or "postgres" (only valid when DISABLE_VECTOR_DB=true).
@@ -123,18 +133,15 @@ HIDE_QUERY_HISTORY_FROM_ADMIN_PANEL = (
 # fixes it)
 WEB_DOMAIN = os.environ.get("WEB_DOMAIN") or "http://localhost:3000"
 
+# Surfaced to the web app via /api/settings so analytics can be enabled by env
+# var instead of a NEXT_PUBLIC_POSTHOG_KEY build arg. Client-side project key.
+POSTHOG_API_KEY = os.environ.get("POSTHOG_API_KEY")
+POSTHOG_HOST = os.environ.get("POSTHOG_HOST") or "https://us.i.posthog.com"
+
 
 #####
 # Auth Configs
 #####
-# Silently default to basic - warnings/errors logged in verify_auth_setting()
-# which only runs on app startup, not during migrations/scripts
-_auth_type_str = (os.environ.get("AUTH_TYPE") or "").lower()
-if _auth_type_str in [auth_type.value for auth_type in AuthType]:
-    AUTH_TYPE = AuthType(_auth_type_str)
-else:
-    AUTH_TYPE = AuthType.BASIC
-
 PASSWORD_MIN_LENGTH = int(os.getenv("PASSWORD_MIN_LENGTH", 8))
 PASSWORD_MAX_LENGTH = int(os.getenv("PASSWORD_MAX_LENGTH", 64))
 PASSWORD_REQUIRE_UPPERCASE = (
@@ -204,6 +211,12 @@ DISPOSABLE_EMAIL_DOMAINS_URL = os.environ.get(
 # lifetime, so a paired-up cookie + token never outlive each other.
 CAPTCHA_COOKIE_TTL_SECONDS = int(os.environ.get("CAPTCHA_COOKIE_TTL_SECONDS", "120"))
 
+# Redis TTL for cached control-plane billing/trial lookups. 24h default —
+# trial→paid conversions propagate within this window in the worst case,
+# and the admin panel call sites invalidate on write so immediate UI
+# refreshes are not stale. Env-tunable for emergency tightening.
+BILLING_CACHE_TTL_SECONDS = int(os.environ.get("BILLING_CACHE_TTL_SECONDS", "86400"))
+
 # OAuth Login Flow
 # Used for both Google OAuth2 and OIDC flows
 OAUTH_CLIENT_ID = (
@@ -217,9 +230,8 @@ OAUTH_CLIENT_SECRET = (
 # Whether Google OAuth is enabled (requires both client ID and secret)
 OAUTH_ENABLED = bool(OAUTH_CLIENT_ID and OAUTH_CLIENT_SECRET)
 
-# Default scopes requested when signing in with Google (AUTH_TYPE=google_oauth
-# or AUTH_TYPE=cloud, and the BASIC + OAuth fallback path). These are the
-# minimum required to identify the user via OpenID Connect.
+# Default Google sign-in scopes, the minimum required to identify the user
+# via OpenID Connect.
 GOOGLE_LOGIN_BASE_SCOPES = ["openid", "email", "profile"]
 
 # Applicable for Google OAuth login, allows you to override the scopes that
@@ -261,8 +273,89 @@ if _OIDC_SCOPE_OVERRIDE:
 # backwards compatibility for existing OIDC deployments.
 OIDC_PKCE_ENABLED = os.environ.get("OIDC_PKCE_ENABLED", "").lower() == "true"
 
+# Opt-in: capture IdP claims at OAuth login and enrich the chat experience
+# with the user's directory profile (country, department, job title, ...) —
+# an "Organization Profile" block in the system prompt plus `{{user.<key>}}`
+# placeholders in agent prompts. Off by default: it sends directory data to
+# the configured LLM, which deployments must consciously opt into.
+IDP_PROFILE_ENRICHMENT_ENABLED = (
+    os.environ.get("IDP_PROFILE_ENRICHMENT_ENABLED", "").lower() == "true"
+)
+
+
+def parse_idp_claim_map(raw: str | None) -> dict[str, list[str]]:
+    """Parse the IDP_PROFILE_CLAIM_MAP env value, warning on every ignored
+    shape. A silently dropped map is invisible misconfiguration (placeholders
+    just stay empty), so anything not a dict-of-lists gets a log line."""
+    if not raw:
+        return {}
+    try:
+        parsed = json.loads(raw)
+    except json.JSONDecodeError:
+        logger.warning("IDP_PROFILE_CLAIM_MAP is not valid JSON, ignoring it")
+        return {}
+    if not isinstance(parsed, dict):
+        logger.warning(
+            "IDP_PROFILE_CLAIM_MAP must be a JSON object, got %s, ignoring it",
+            type(parsed).__name__,
+        )
+        return {}
+    claim_map: dict[str, list[str]] = {}
+    for key, aliases in parsed.items():
+        if not isinstance(aliases, list):
+            logger.warning(
+                "IDP_PROFILE_CLAIM_MAP entry %r must map to a list of claim "
+                "names, got %s, dropping it",
+                key,
+                type(aliases).__name__,
+            )
+            continue
+        claim_map[str(key)] = [str(alias) for alias in aliases]
+    return claim_map
+
+
+# Optional per-deployment claim-alias overrides for the directory profile,
+# as JSON mapping placeholder key -> ordered claim-name list, e.g.
+# '{"department": ["dept", "division"], "country": ["c"]}'. Configured
+# aliases are checked before the built-in ones.
+IDP_PROFILE_CLAIM_MAP: dict[str, list[str]] = parse_idp_claim_map(
+    os.environ.get("IDP_PROFILE_CLAIM_MAP")
+)
+
 # Applicable for SAML Auth
 SAML_CONF_DIR = os.environ.get("SAML_CONF_DIR") or "/app/onyx/configs/saml_config"
+
+# Native mobile (Expo / React Native) SSO bridge. The app completes OAuth in the
+# system browser (reusing the existing registered IdP callback), then the backend
+# returns a single-use, PKCE-bound one-time code over a custom-scheme deep link —
+# never a token. The app swaps the code for the session token at
+# /auth/mobile/sso/exchange.
+MOBILE_SSO_CODE_PREFIX = "mobile_sso_code:"
+# Lifetime of the one-time code; intentionally short — it only has to survive the
+# system-browser -> app handoff plus the immediate exchange call. A non-positive
+# TTL would make Redis reject the SET, breaking every exchange — fail fast at boot.
+MOBILE_SSO_CODE_TTL_SECONDS = int(os.environ.get("MOBILE_SSO_CODE_TTL_SECONDS") or 60)
+if MOBILE_SSO_CODE_TTL_SECONDS < 1:
+    raise ValueError("MOBILE_SSO_CODE_TTL_SECONDS must be >= 1")
+# Deep-link URIs the SSO completion is allowed to 302 to. Defaults to the app's
+# custom scheme; override (comma-separated) to add Universal/App Links later.
+_DEFAULT_MOBILE_REDIRECT_URIS = frozenset({"onyx://auth/callback"})
+_MOBILE_ALLOWED_REDIRECT_URIS_RAW = os.environ.get("MOBILE_ALLOWED_REDIRECT_URIS", "")
+MOBILE_ALLOWED_REDIRECT_URIS: frozenset[str] = frozenset(
+    uri.strip() for uri in _MOBILE_ALLOWED_REDIRECT_URIS_RAW.split(",") if uri.strip()
+)
+if not MOBILE_ALLOWED_REDIRECT_URIS:
+    # An override that was set but parsed empty (e.g. just commas/whitespace) is a
+    # misconfig — warn rather than silently rejecting every mobile redirect. An
+    # unset value is the normal default, so don't warn there.
+    if _MOBILE_ALLOWED_REDIRECT_URIS_RAW.strip():
+        logger.warning(
+            "MOBILE_ALLOWED_REDIRECT_URIS=%r parsed to an empty set; "
+            "falling back to default %s",
+            _MOBILE_ALLOWED_REDIRECT_URIS_RAW,
+            _DEFAULT_MOBILE_REDIRECT_URIS,
+        )
+    MOBILE_ALLOWED_REDIRECT_URIS = _DEFAULT_MOBILE_REDIRECT_URIS
 
 # JWT Public Key URL for JWT token verification
 JWT_PUBLIC_KEY_URL: str | None = os.getenv("JWT_PUBLIC_KEY_URL", None)
@@ -351,9 +444,76 @@ OPENSEARCH_ADMIN_PASSWORD = os.environ.get(
     "OPENSEARCH_ADMIN_PASSWORD", "StrongPassword123!"
 )
 OPENSEARCH_USE_SSL = os.environ.get("OPENSEARCH_USE_SSL", "true").lower() == "true"
+# Verify the OpenSearch server certificate. Defaults to False to preserve the
+# existing behavior (the bundled OpenSearch ships self-signed certs). Set True —
+# with OPENSEARCH_CA_CERTS for a private CA — to actually authenticate the
+# server instead of merely encrypting the connection.
+OPENSEARCH_VERIFY_CERTS = (
+    os.environ.get("OPENSEARCH_VERIFY_CERTS", "").lower() == "true"
+)
+# CA bundle to verify the server cert against when OPENSEARCH_VERIFY_CERTS=true.
+# Falls back to the system trust store if unset.
+OPENSEARCH_CA_CERTS: str | None = os.environ.get("OPENSEARCH_CA_CERTS") or None
+# Client certificate + key for mutual TLS (OpenSearch authenticating us). Both
+# must be set together.
+OPENSEARCH_CLIENT_CERT: str | None = os.environ.get("OPENSEARCH_CLIENT_CERT") or None
+OPENSEARCH_CLIENT_KEY: str | None = os.environ.get("OPENSEARCH_CLIENT_KEY") or None
+
+# Authentication method for connecting to OpenSearch. "basic" uses
+# OPENSEARCH_ADMIN_USERNAME / OPENSEARCH_ADMIN_PASSWORD (HTTP basic auth); the
+# default and the only option for self-hosted / docker-compose OpenSearch. "iam"
+# uses AWS SigV4 request signing and is only valid against an AWS managed domain
+# whose fine-grained access control master is an IAM ARN. This is independent of
+# USING_AWS_MANAGED_OPENSEARCH: AWS managed domains can use a master user too.
+OPENSEARCH_AUTH_METHOD = OpenSearchAuthMethod(
+    (
+        os.environ.get("OPENSEARCH_AUTH_METHOD") or OpenSearchAuthMethod.BASIC.value
+    ).lower()
+)
+# AWS region of the managed OpenSearch domain. Required when
+# OPENSEARCH_AUTH_METHOD=iam; used to compute the SigV4 signature.
+OPENSEARCH_AWS_REGION: str | None = os.environ.get("OPENSEARCH_AWS_REGION") or None
+# AWS service name for SigV4 signing: "es" for managed OpenSearch domains,
+# "aoss" for OpenSearch Serverless.
+OPENSEARCH_AWS_SERVICE = os.environ.get("OPENSEARCH_AWS_SERVICE") or "es"
+
+if OPENSEARCH_VERIFY_CERTS and not OPENSEARCH_USE_SSL:
+    logger.warning(
+        "OPENSEARCH_VERIFY_CERTS=true has no effect when OPENSEARCH_USE_SSL is "
+        "false (the connection is not encrypted)."
+    )
+if bool(OPENSEARCH_CLIENT_CERT) != bool(OPENSEARCH_CLIENT_KEY):
+    raise ValueError(
+        "OPENSEARCH_CLIENT_CERT and OPENSEARCH_CLIENT_KEY must both be set "
+        "(mutual TLS needs a client certificate and its private key)."
+    )
+for _os_name, _os_path in (
+    ("OPENSEARCH_CA_CERTS", OPENSEARCH_CA_CERTS),
+    ("OPENSEARCH_CLIENT_CERT", OPENSEARCH_CLIENT_CERT),
+    ("OPENSEARCH_CLIENT_KEY", OPENSEARCH_CLIENT_KEY),
+):
+    if _os_path and not os.path.exists(_os_path):
+        raise ValueError(f"{_os_name}={_os_path!r} does not exist.")
+
+if OPENSEARCH_AUTH_METHOD == OpenSearchAuthMethod.IAM and not OPENSEARCH_AWS_REGION:
+    raise ValueError(
+        "OPENSEARCH_AWS_REGION must be set when OPENSEARCH_AUTH_METHOD=iam "
+        "(AWS SigV4 signing needs the domain's region)."
+    )
+
 USING_AWS_MANAGED_OPENSEARCH = (
     os.environ.get("USING_AWS_MANAGED_OPENSEARCH", "").lower() == "true"
 )
+
+if (
+    OPENSEARCH_AUTH_METHOD == OpenSearchAuthMethod.IAM
+    and not USING_AWS_MANAGED_OPENSEARCH
+):
+    raise ValueError(
+        "OPENSEARCH_AUTH_METHOD=iam is only supported for "
+        "AWS-managed instances of OpenSearch."
+    )
+
 # Profiling adds some overhead to OpenSearch operations. This overhead is
 # unknown right now. Defaults to True.
 OPENSEARCH_PROFILING_DISABLED = (
@@ -406,6 +566,9 @@ VERIFY_CREATE_OPENSEARCH_INDEX_ON_INIT_MT = (
 OPENSEARCH_MIGRATION_GET_VESPA_CHUNKS_PAGE_SIZE = int(
     os.environ.get("OPENSEARCH_MIGRATION_GET_VESPA_CHUNKS_PAGE_SIZE") or 500
 )
+# Lifetime of a point-in-time used to scan an index consistently (reindex port).
+# Each search extends the lease; an idle PIT self-expires after this.
+PIT_KEEP_ALIVE: str = os.environ.get("PIT_KEEP_ALIVE") or "5m"
 # If set, will override the default number of shards and replicas for the index.
 OPENSEARCH_INDEX_NUM_SHARDS: int | None = (
     int(os.environ["OPENSEARCH_INDEX_NUM_SHARDS"])
@@ -452,14 +615,90 @@ POSTGRES_HOST = os.environ.get("POSTGRES_HOST") or "127.0.0.1"
 POSTGRES_PORT = os.environ.get("POSTGRES_PORT") or "5432"
 POSTGRES_DB = os.environ.get("POSTGRES_DB") or "postgres"
 AWS_REGION_NAME = os.environ.get("AWS_REGION_NAME") or "us-east-2"
-# Comma-separated replica / multi-host list. If unset, defaults to POSTGRES_HOST
-# only.
-_POSTGRES_HOSTS_STR = os.environ.get("POSTGRES_HOSTS", "").strip()
-POSTGRES_HOSTS: list[str] = (
-    [h.strip() for h in _POSTGRES_HOSTS_STR.split(",") if h.strip()]
-    if _POSTGRES_HOSTS_STR
-    else [POSTGRES_HOST]
+
+# --- Tenant sharding (multi-database) ---------------------------------------
+# Onyx addresses a tenant by schema (`schema_translate_map`). These settings let
+# tenants additionally be spread across separate physical databases ("shards").
+#
+# ONYX_DB_SHARDS is a JSON object of shard name -> connection overrides, e.g.
+#   {"shard-b": {"host": "other.rds.amazonaws.com", "db": "danswer"}}
+# Keys not supplied for a shard fall back to the POSTGRES_* values above.
+#
+# When unset, exactly one shard exists (named by ONYX_DB_DEFAULT_SHARD, built
+# from POSTGRES_*), which is the single-database behavior Onyx has always had.
+ONYX_DB_SHARDS_JSON = os.environ.get("ONYX_DB_SHARDS", "").strip()
+# Shard that hosts tenants with no explicit mapping.
+ONYX_DB_DEFAULT_SHARD = os.environ.get("ONYX_DB_DEFAULT_SHARD") or "default"
+# Shard that holds the shared `public` catalog tables (user_tenant_mapping etc.)
+# and the tenant -> shard map itself. Must be resolvable without a lookup.
+ONYX_DB_CATALOG_SHARD = os.environ.get("ONYX_DB_CATALOG_SHARD") or ONYX_DB_DEFAULT_SHARD
+# Shard that newly created tenants are placed on. Existing tenants are unaffected;
+# flipping this changes where the *next* tenant's schema is built. The pre-provisioned
+# pool drains oldest-first, so a flip ramps in gradually rather than all at once.
+ONYX_DB_NEW_TENANT_SHARD = (
+    os.environ.get("ONYX_DB_NEW_TENANT_SHARD") or ONYX_DB_DEFAULT_SHARD
 )
+# Connection pool for shards other than the default one. Unset means each shard gets
+# the same budget as the default, which is correct because a connection limit belongs
+# to a database rather than to the fleet. Set these lower while a new shard is still
+# filling up.
+ONYX_DB_SHARD_POOL_SIZE = (
+    int(os.environ["ONYX_DB_SHARD_POOL_SIZE"])
+    if os.environ.get("ONYX_DB_SHARD_POOL_SIZE")
+    else None
+)
+ONYX_DB_SHARD_POOL_OVERFLOW = (
+    int(os.environ["ONYX_DB_SHARD_POOL_OVERFLOW"])
+    if os.environ.get("ONYX_DB_SHARD_POOL_OVERFLOW")
+    else None
+)
+
+# Checked here so a bad value stops the process rather than surfacing on the first
+# request routed to a shard, whose engine is built lazily.
+if ONYX_DB_SHARD_POOL_SIZE is not None and ONYX_DB_SHARD_POOL_SIZE < 1:
+    # SQLAlchemy reads pool_size=0 as "no size limit", so a 0 here would uncap the
+    # shard rather than constrain it — the opposite of why this setting exists.
+    raise ValueError(
+        f"ONYX_DB_SHARD_POOL_SIZE must be at least 1, got {ONYX_DB_SHARD_POOL_SIZE}"
+    )
+if ONYX_DB_SHARD_POOL_OVERFLOW is not None and ONYX_DB_SHARD_POOL_OVERFLOW < 0:
+    # 0 is meaningful (no overflow past pool_size); negative means unlimited.
+    raise ValueError(
+        f"ONYX_DB_SHARD_POOL_OVERFLOW must be zero or greater, got "
+        f"{ONYX_DB_SHARD_POOL_OVERFLOW}"
+    )
+
+# Operator escape hatch: JSON object of tenant_id -> shard name, consulted
+# before the catalog table. Intended for incident response, not routine use.
+ONYX_DB_SHARD_OVERRIDES_JSON = os.environ.get("ONYX_DB_SHARD_OVERRIDES", "").strip()
+# How long a resolved tenant -> shard mapping is cached in-process. This is the
+# backstop on staleness when the Redis version channel is unavailable.
+ONYX_DB_SHARD_MAP_TTL_SECONDS = int(
+    os.environ.get("ONYX_DB_SHARD_MAP_TTL_SECONDS") or 60
+)
+# How often a process re-reads the shared shard-map version from Redis. Bounds how
+# quickly a migrator's map flip reaches every process in the common case; the freeze
+# window itself is bounded by the TTL above, since a Redis-partitioned process never
+# sees the flip at all.
+ONYX_DB_SHARD_MAP_VERSION_POLL_SECONDS = float(
+    os.environ.get("ONYX_DB_SHARD_MAP_VERSION_POLL_SECONDS") or 5
+)
+
+if ONYX_DB_SHARD_MAP_TTL_SECONDS <= 0:
+    raise ValueError(
+        f"ONYX_DB_SHARD_MAP_TTL_SECONDS must be positive, got "
+        f"{ONYX_DB_SHARD_MAP_TTL_SECONDS}"
+    )
+if (
+    not math.isfinite(ONYX_DB_SHARD_MAP_VERSION_POLL_SECONDS)
+    or ONYX_DB_SHARD_MAP_VERSION_POLL_SECONDS <= 0
+):
+    # A non-finite interval would stop the poller permanently, silently reducing
+    # flip propagation to the TTL path.
+    raise ValueError(
+        f"ONYX_DB_SHARD_MAP_VERSION_POLL_SECONDS must be a positive finite number, "
+        f"got {ONYX_DB_SHARD_MAP_VERSION_POLL_SECONDS}"
+    )
 
 POSTGRES_API_SERVER_POOL_SIZE = int(
     os.environ.get("POSTGRES_API_SERVER_POOL_SIZE") or 40
@@ -525,6 +764,108 @@ POSTGRES_TCP_KEEPALIVES_COUNT = int(
 # RDS IAM authentication - enables IAM-based authentication for PostgreSQL
 USE_IAM_AUTH = os.getenv("USE_IAM_AUTH", "False").lower() == "true"
 
+# TLS for non-IAM PostgreSQL connections.
+#
+# POSTGRES_SSLMODE follows libpq's vocabulary. Only `verify-ca` / `verify-full`
+# authenticate the server (and require POSTGRES_SSLROOTCERT to verify against);
+# `require` encrypts but does NOT protect against a man-in-the-middle. All of
+# this is ignored when USE_IAM_AUTH is true (IAM enforces its own TLS).
+POSTGRES_SSLMODE: str | None = os.environ.get("POSTGRES_SSLMODE") or None
+# Path to the CA bundle used to verify the server certificate for `verify-ca` /
+# `verify-full`. Required by managed providers (RDS, Cloud SQL, Azure) whose
+# server certs don't chain to a system-trusted CA; point it at the system bundle
+# if the server uses a publicly-trusted certificate.
+POSTGRES_SSLROOTCERT: str | None = os.environ.get("POSTGRES_SSLROOTCERT") or None
+# Client certificate + key for mutual TLS (the server authenticating us). Both
+# must be set together, and are only used when POSTGRES_SSLMODE negotiates SSL
+# (require / verify-ca / verify-full).
+POSTGRES_SSLCERT: str | None = os.environ.get("POSTGRES_SSLCERT") or None
+POSTGRES_SSLKEY: str | None = os.environ.get("POSTGRES_SSLKEY") or None
+POSTGRES_SSLKEY_PASSWORD: str | None = (
+    os.environ.get("POSTGRES_SSLKEY_PASSWORD") or None
+)
+
+_VALID_POSTGRES_SSLMODES = frozenset(
+    {"disable", "allow", "prefer", "require", "verify-ca", "verify-full"}
+)
+_CA_VERIFYING_SSLMODES = frozenset({"verify-ca", "verify-full"})
+# Modes that always negotiate SSL — a client certificate is only reliably
+# presented under one of these.
+_SSL_NEGOTIATING_SSLMODES = frozenset({"require", "verify-ca", "verify-full"})
+_POSTGRES_SSL_FILE_SETTINGS = (
+    ("POSTGRES_SSLROOTCERT", POSTGRES_SSLROOTCERT),
+    ("POSTGRES_SSLCERT", POSTGRES_SSLCERT),
+    ("POSTGRES_SSLKEY", POSTGRES_SSLKEY),
+)
+# True when any non-mode TLS setting (including the key password) is present —
+# all of these are dead config without a POSTGRES_SSLMODE.
+_HAS_POSTGRES_SSL_SECONDARY = any(
+    [POSTGRES_SSLROOTCERT, POSTGRES_SSLCERT, POSTGRES_SSLKEY, POSTGRES_SSLKEY_PASSWORD]
+)
+
+if USE_IAM_AUTH:
+    # IAM auth manages the database TLS connection itself, so the explicit
+    # POSTGRES_SSL* settings are ignored — warn rather than silently drop them.
+    if POSTGRES_SSLMODE or _HAS_POSTGRES_SSL_SECONDARY:
+        logger.warning(
+            "USE_IAM_AUTH is enabled; ignoring POSTGRES_SSLMODE / POSTGRES_SSL* "
+            "(IAM auth manages the database TLS connection)."
+        )
+elif POSTGRES_SSLMODE:
+    if POSTGRES_SSLMODE not in _VALID_POSTGRES_SSLMODES:
+        raise ValueError(
+            f"Invalid POSTGRES_SSLMODE={POSTGRES_SSLMODE!r}. "
+            f"Must be one of: {sorted(_VALID_POSTGRES_SSLMODES)}"
+        )
+    if POSTGRES_SSLMODE in _CA_VERIFYING_SSLMODES and not POSTGRES_SSLROOTCERT:
+        # Without a CA bundle these modes can't verify the server cert: libpq
+        # errors out and asyncpg silently falls back to the system trust store.
+        # Fail loudly so the intended CA-pinned trust model is explicit.
+        raise ValueError(
+            f"POSTGRES_SSLMODE={POSTGRES_SSLMODE!r} verifies the server "
+            "certificate and requires POSTGRES_SSLROOTCERT (path to the CA "
+            "bundle). Set it to your provider's CA, or to the system CA bundle "
+            "if the server uses a publicly-trusted certificate."
+        )
+    if POSTGRES_SSLMODE == "require" and POSTGRES_SSLROOTCERT:
+        logger.warning(
+            "POSTGRES_SSLROOTCERT is set but POSTGRES_SSLMODE=require does not "
+            "verify the server certificate; use verify-ca or verify-full to "
+            "verify against the CA bundle."
+        )
+    # Mutual TLS: client cert + key must be provided together, under a mode that
+    # actually negotiates SSL.
+    if bool(POSTGRES_SSLCERT) != bool(POSTGRES_SSLKEY):
+        raise ValueError(
+            "POSTGRES_SSLCERT and POSTGRES_SSLKEY must both be set (mutual TLS "
+            "needs a client certificate and its private key)."
+        )
+    if POSTGRES_SSLKEY_PASSWORD and not POSTGRES_SSLCERT:
+        raise ValueError(
+            "POSTGRES_SSLKEY_PASSWORD is set without a client certificate; it "
+            "only decrypts POSTGRES_SSLKEY. Set POSTGRES_SSLCERT/POSTGRES_SSLKEY "
+            "or unset the password."
+        )
+    if POSTGRES_SSLCERT and POSTGRES_SSLMODE not in _SSL_NEGOTIATING_SSLMODES:
+        raise ValueError(
+            f"POSTGRES_SSLCERT / POSTGRES_SSLKEY require POSTGRES_SSLMODE to be "
+            f"one of {sorted(_SSL_NEGOTIATING_SSLMODES)} so TLS is negotiated; "
+            f"got {POSTGRES_SSLMODE!r}."
+        )
+    for _name, _path in _POSTGRES_SSL_FILE_SETTINGS:
+        if _path and not os.path.exists(_path):
+            raise ValueError(f"{_name}={_path!r} does not exist.")
+elif _HAS_POSTGRES_SSL_SECONDARY:
+    # CA bundle / client cert / key password without a mode is dead config: SSL
+    # stays off and the connection runs unverified despite the operator supplying
+    # certs. Fail loudly so this can't masquerade as a verified/mutually-
+    # authenticated link.
+    raise ValueError(
+        "POSTGRES_SSLROOTCERT / POSTGRES_SSLCERT / POSTGRES_SSLKEY / "
+        "POSTGRES_SSLKEY_PASSWORD are set but POSTGRES_SSLMODE is not. Set a "
+        "POSTGRES_SSLMODE (e.g. verify-full) so TLS is actually negotiated."
+    )
+
 # Redis IAM authentication - enables IAM-based authentication for Redis ElastiCache
 # Note: This is separate from RDS IAM auth as they use different authentication mechanisms
 USE_REDIS_IAM_AUTH = os.getenv("USE_REDIS_IAM_AUTH", "False").lower() == "true"
@@ -535,6 +876,58 @@ REDIS_PASSWORD = os.environ.get("REDIS_PASSWORD") or ""
 
 # this assumes that other redis settings remain the same as the primary
 REDIS_REPLICA_HOST = os.environ.get("REDIS_REPLICA_HOST") or REDIS_HOST
+
+# Redis Sentinel for high availability. When REDIS_SENTINEL_HOSTS is set, the app
+# (and Celery) connect via Sentinel — which discovers the current master and
+# follows failover — instead of REDIS_HOST/REDIS_PORT directly. Format is a
+# comma-separated list of host:port sentinel nodes. REDIS_PASSWORD still
+# authenticates the master/replica; REDIS_SENTINEL_PASSWORD (optional) is for the
+# sentinel nodes themselves if they require separate auth. TLS (REDIS_SSL +
+# certs) applies to both the sentinel and the data connections.
+_REDIS_SENTINEL_HOSTS_STR = os.environ.get("REDIS_SENTINEL_HOSTS", "").strip()
+
+
+def _parse_sentinel_hosts(raw: str) -> list[tuple[str, int]]:
+    hosts: list[tuple[str, int]] = []
+    for entry in (h.strip() for h in raw.split(",") if h.strip()):
+        host, sep, port = entry.rpartition(":")
+        if not sep or not host or not port.isdigit():
+            raise ValueError(
+                f"Invalid REDIS_SENTINEL_HOSTS entry {entry!r}; expected host:port."
+            )
+        port_num = int(port)
+        if not 1 <= port_num <= 65535:
+            raise ValueError(
+                f"Invalid REDIS_SENTINEL_HOSTS port {port!r}; must be 1-65535."
+            )
+        hosts.append((host, port_num))
+    return hosts
+
+
+REDIS_SENTINEL_HOSTS: list[tuple[str, int]] = _parse_sentinel_hosts(
+    _REDIS_SENTINEL_HOSTS_STR
+)
+REDIS_SENTINEL_MASTER_NAME = os.environ.get(
+    "REDIS_SENTINEL_MASTER_NAME", "mymaster"
+).strip()
+REDIS_SENTINEL_PASSWORD = os.environ.get("REDIS_SENTINEL_PASSWORD") or None
+
+# Fail loudly rather than silently falling back to a direct connection when the
+# operator clearly intended Sentinel.
+if _REDIS_SENTINEL_HOSTS_STR and not REDIS_SENTINEL_HOSTS:
+    raise ValueError(
+        "REDIS_SENTINEL_HOSTS is set but no valid host:port pairs were parsed."
+    )
+if REDIS_SENTINEL_HOSTS and not REDIS_SENTINEL_MASTER_NAME:
+    raise ValueError(
+        "REDIS_SENTINEL_HOSTS is set but REDIS_SENTINEL_MASTER_NAME is empty."
+    )
+if REDIS_SENTINEL_HOSTS and USE_REDIS_IAM_AUTH:
+    raise ValueError(
+        "REDIS_SENTINEL_HOSTS and USE_REDIS_IAM_AUTH cannot be combined: Sentinel "
+        "is for self-managed HA Redis, while IAM auth targets AWS ElastiCache "
+        "(which manages failover itself)."
+    )
 
 REDIS_AUTH_KEY_PREFIX = "fastapi_users_token:"
 
@@ -593,8 +986,39 @@ REDIS_POOL_MAX_CONNECTIONS = int(os.environ.get("REDIS_POOL_MAX_CONNECTIONS", 12
 # should be one of "required", "optional", or "none"
 REDIS_SSL_CERT_REQS = os.getenv("REDIS_SSL_CERT_REQS", "none")
 REDIS_SSL_CA_CERTS = os.getenv("REDIS_SSL_CA_CERTS", None)
+# Client certificate + key for Redis mutual TLS (the server authenticating us).
+# Both must be set together and require REDIS_SSL=true. A managed Redis may hand
+# these out base64-encoded — decode them to files (e.g. a mounted secret) and
+# point these at the paths.
+REDIS_SSL_CERTFILE: str | None = os.getenv("REDIS_SSL_CERTFILE") or None
+REDIS_SSL_KEYFILE: str | None = os.getenv("REDIS_SSL_KEYFILE") or None
+
+if bool(REDIS_SSL_CERTFILE) != bool(REDIS_SSL_KEYFILE):
+    raise ValueError(
+        "REDIS_SSL_CERTFILE and REDIS_SSL_KEYFILE must both be set (mutual TLS "
+        "needs a client certificate and its private key)."
+    )
+if (REDIS_SSL_CERTFILE or REDIS_SSL_KEYFILE) and not REDIS_SSL:
+    raise ValueError(
+        "REDIS_SSL_CERTFILE / REDIS_SSL_KEYFILE require REDIS_SSL=true so a TLS "
+        "connection is negotiated."
+    )
+for _redis_tls_name, _redis_tls_path in (
+    ("REDIS_SSL_CERTFILE", REDIS_SSL_CERTFILE),
+    ("REDIS_SSL_KEYFILE", REDIS_SSL_KEYFILE),
+):
+    if _redis_tls_path and not os.path.exists(_redis_tls_path):
+        raise ValueError(f"{_redis_tls_name}={_redis_tls_path!r} does not exist.")
 
 CELERY_RESULT_EXPIRES = int(os.environ.get("CELERY_RESULT_EXPIRES", 86400))  # seconds
+
+# A failed prune is skipped for this long before the beat re-dispatches it.
+# Floor: the re-dispatch interval (BLOCK_PRUNING = 60s * beat_multiplier, ~8 min
+# in cloud) so a failure can't hot-loop. Ceiling: prune_freq, so it still retries
+# well before the next scheduled prune. 30m is a midpoint with transient slack.
+PRUNE_FAILURE_BACKOFF_SECONDS = int(
+    os.environ.get("PRUNE_FAILURE_BACKOFF_SECONDS") or 30 * 60
+)
 
 # https://docs.celeryq.dev/en/stable/userguide/configuration.html#broker-pool-limit
 # Setting to None may help when there is a proxy in the way closing idle connections
@@ -643,6 +1067,50 @@ except ValueError:
     CELERY_WORKER_DOCPROCESSING_CONCURRENCY = (
         _CELERY_WORKER_DOCPROCESSING_CONCURRENCY_DEFAULT
     )
+
+# Reindex-port runs on the docprocessing worker; cap concurrent port attempts well
+# below its concurrency so a large reindex leaves slots for live indexing.
+# Floor at 1: 0 (or negative) would gate off every new port attempt.
+MAX_CONCURRENT_PORT_ATTEMPTS = max(
+    1, _non_negative_int_env("MAX_CONCURRENT_PORT_ATTEMPTS", 2)
+)
+
+# User-file ports run on the 2-thread user-file worker and a running port can't be
+# preempted, so default 1 leaves a thread for live uploads.
+MAX_CONCURRENT_USER_FILE_PORT_ATTEMPTS = max(
+    1, _non_negative_int_env("MAX_CONCURRENT_USER_FILE_PORT_ATTEMPTS", 1)
+)
+
+# Auto-pause a port unit after this many consecutive same-cursor failures. Any value works:
+# _MAX_TRACKED_FAILED_RETRIES (db/port_attempt.py) sizes its streak history to cover it.
+MAX_CONSECUTIVE_PORT_FAILURES_BEFORE_PAUSE = max(
+    1, _non_negative_int_env("MAX_CONSECUTIVE_PORT_FAILURES_BEFORE_PAUSE", 5)
+)
+
+# Old-index reclamation (post-reindex deletion of the now-PAST index).
+# Master switch: when False the reclaim beat task no-ops entirely. Ships dark
+# (default off); flip True to go live. Instant kill switch if anything goes wrong.
+OLD_INDEX_RECLAIM_ENABLED = (
+    os.environ.get("OLD_INDEX_RECLAIM_ENABLED", "").lower() == "true"
+)
+# Soak before deleting a PAST index, anchored to when it stopped being read.
+# 0 = delete immediately once the soak gate is reached.
+OLD_INDEX_RETENTION_HOURS = _non_negative_int_env("OLD_INDEX_RETENTION_HOURS", 24)
+# Bounds the blast radius of a runaway task.
+OLD_INDEX_RECLAIM_MAX_PER_RUN = max(
+    1, _non_negative_int_env("OLD_INDEX_RECLAIM_MAX_PER_RUN", 5)
+)
+# Consecutive failures on one reclaim before it is parked as BLOCKED and alerted.
+OLD_INDEX_RECLAIM_MAX_ATTEMPTS = max(
+    1, _non_negative_int_env("OLD_INDEX_RECLAIM_MAX_ATTEMPTS", 5)
+)
+# Max docs a single reclaim delete_by_query removes before returning, so one call
+# can't run past the OpenSearch client HTTP timeout (60s) on a huge tenant. The reclaim
+# loop re-runs until the tenant's slice is empty. Conservative default leaves margin on
+# a slow / loaded cluster (the fleet-reindex case); tune up for fast clusters.
+OLD_INDEX_RECLAIM_DELETE_BATCH_SIZE = max(
+    1, _non_negative_int_env("OLD_INDEX_RECLAIM_DELETE_BATCH_SIZE", 10_000)
+)
 
 _CELERY_WORKER_DOCFETCHING_CONCURRENCY_DEFAULT = 1
 try:
@@ -856,6 +1324,13 @@ GOOGLE_DRIVE_CONNECTOR_SIZE_THRESHOLD = int(
     os.environ.get("GOOGLE_DRIVE_CONNECTOR_SIZE_THRESHOLD", 10 * 1024 * 1024)
 )
 
+# Max bytes buffered for the Google Docs advanced (Docs-API structural-JSON)
+# fetch. Native Docs report no `size`, so the fetch can't be checked from
+# metadata; larger Docs are indexed via the basic text export.
+GOOGLE_DRIVE_ADVANCED_PARSE_MAX_BYTES = int(
+    os.environ.get("GOOGLE_DRIVE_ADVANCED_PARSE_MAX_BYTES") or 50 * 1024 * 1024
+)
+
 # Cap the total text retained per file across a connector's extracted sections,
 # bounding worker memory when a source can't be size-checked before fetch —
 # e.g. Google-native files (Docs/Slides/Sheets) report no `size` metadata and
@@ -885,6 +1360,10 @@ SHAREPOINT_EXHAUSTIVE_AD_ENUMERATION = (
 
 BLOB_STORAGE_SIZE_THRESHOLD = int(
     os.environ.get("BLOB_STORAGE_SIZE_THRESHOLD", 20 * 1024 * 1024)
+)
+
+BOX_CONNECTOR_SIZE_THRESHOLD = int(
+    os.environ.get("BOX_CONNECTOR_SIZE_THRESHOLD", 20 * 1024 * 1024)
 )
 
 JIRA_CONNECTOR_LABELS_TO_SKIP = [
@@ -1047,6 +1526,19 @@ INDEXING_WORKER_TRACEMALLOC = (
     os.environ.get("INDEXING_WORKER_TRACEMALLOC", "").lower() == "true"
 )
 
+# When set, every successfully indexed public-connector document is POSTed to
+# this endpoint. Intended for non-EE deployments; EE users should prefer the
+# Document Push hook (admin UI / /admin/hooks API) instead — it adds endpoint
+# validation, execution logs, and reachability tracking. If both are set, this
+# env config takes precedence and the hook does not fire. Not supported in
+# multi-tenant deployments. See onyx/indexing/document_push.py.
+DOCUMENT_PUSH_ENDPOINT_URL = os.environ.get("DOCUMENT_PUSH_ENDPOINT_URL") or None
+# Sent as "Authorization: Bearer <key>" on each push request.
+DOCUMENT_PUSH_API_KEY = os.environ.get("DOCUMENT_PUSH_API_KEY") or None
+DOCUMENT_PUSH_TIMEOUT_SECONDS = float(
+    os.environ.get("DOCUMENT_PUSH_TIMEOUT_SECONDS") or 30
+)
+
 MAX_FILE_SIZE_BYTES = int(
     os.environ.get("MAX_FILE_SIZE_BYTES") or 2 * 1024 * 1024 * 1024
 )  # 2GB in bytes
@@ -1083,6 +1575,12 @@ MAX_XLSX_CELLS_PER_SHEET = max(
     0, int(os.environ.get("MAX_XLSX_CELLS_PER_SHEET") or 10_000_000)
 )
 
+# PDF text extraction runs isolated (a malformed PDF can make PDFium hard-abort
+# or hang); this is the timeout before the subprocess is killed and pypdf runs.
+PDF_TEXT_EXTRACTION_TIMEOUT_SECONDS = float(
+    os.environ.get("PDF_TEXT_EXTRACTION_TIMEOUT_SECONDS") or 120
+)
+
 # Use document summary for contextual rag
 USE_DOCUMENT_SUMMARY = os.environ.get("USE_DOCUMENT_SUMMARY", "true").lower() == "true"
 # Use chunk summary for contextual rag
@@ -1103,6 +1601,20 @@ RECENCY_BIAS_MULTIPLIER = float(os.environ.get("RECENCY_BIAS_MULTIPLIER") or 1.0
 # backend/onyx/document_index/vespa/app_config/schemas/danswer_chunk.sd.jinja.
 RERANK_COUNT = int(os.environ.get("RERANK_COUNT") or 1000)
 
+# Flat per-image cost (cents) when litellm has no price for an image model.
+# Clamped to >= 0 so a misconfigured negative can't credit usage.
+DEFAULT_IMAGE_COST_CENTS = max(
+    0.0, float(os.environ.get("DEFAULT_IMAGE_COST_CENTS") or 4.0)
+)
+
+# Fallback USD/Mtok when litellm can't price (default 0 = free). Clamped >= 0.
+DEFAULT_LLM_INPUT_COST_PER_MTOK = max(
+    0.0, float(os.environ.get("DEFAULT_LLM_INPUT_COST_PER_MTOK") or 0.0)
+)
+DEFAULT_LLM_OUTPUT_COST_PER_MTOK = max(
+    0.0, float(os.environ.get("DEFAULT_LLM_OUTPUT_COST_PER_MTOK") or 0.0)
+)
+
 
 #####
 # Tool Configs
@@ -1118,6 +1630,27 @@ CODE_INTERPRETER_DEFAULT_TIMEOUT_MS = int(
 
 CODE_INTERPRETER_MAX_OUTPUT_LENGTH = int(
     os.environ.get("CODE_INTERPRETER_MAX_OUTPUT_LENGTH") or 50_000
+)
+
+# Backstop on per-execution file staging. Session files accumulate over a chat
+# (generated artifacts get carried forward), and staging each one is a blocking
+# object-store read + upload in the request worker; an unbounded set can block
+# longer than the api-server liveness window. Cap by count and cumulative bytes
+# and drop the overflow (oldest first).
+CODE_INTERPRETER_MAX_STAGED_FILES = int(
+    os.environ.get("CODE_INTERPRETER_MAX_STAGED_FILES") or 25
+)
+
+CODE_INTERPRETER_MAX_STAGED_BYTES = int(
+    os.environ.get("CODE_INTERPRETER_MAX_STAGED_BYTES") or 100 * 1024 * 1024
+)
+
+# Bounds the fan-out of both staging phases — reading files from the object
+# store and uploading cache misses to the sandbox — so neither blocks the
+# request worker serially nor overwhelms a backend with a burst. Each I/O call
+# is individually bounded by its own per-request timeout.
+CODE_INTERPRETER_STAGING_CONCURRENCY = int(
+    os.environ.get("CODE_INTERPRETER_STAGING_CONCURRENCY") or 8
 )
 
 # Per-call MCP read timeout; configurable since some tools (e.g. data-agent
@@ -1166,6 +1699,8 @@ DISABLE_TELEMETRY = os.environ.get("DISABLE_TELEMETRY", "").lower() == "true"
 BRAINTRUST_PROJECT = os.environ.get("BRAINTRUST_PROJECT", "Onyx")
 # Braintrust API key - if provided, Braintrust tracing will be enabled
 BRAINTRUST_API_KEY = os.environ.get("BRAINTRUST_API_KEY") or ""
+# Optional custom Braintrust API URL (self-hosted / non-default deployments)
+BRAINTRUST_API_URL = os.environ.get("BRAINTRUST_API_URL") or ""
 # Maximum concurrency for Braintrust evaluations
 # None means unlimited concurrency, otherwise specify a number
 _braintrust_concurrency = os.environ.get("BRAINTRUST_MAX_CONCURRENCY")
@@ -1197,6 +1732,21 @@ LANGFUSE_SECRET_KEY = os.environ.get("LANGFUSE_SECRET_KEY") or ""
 LANGFUSE_PUBLIC_KEY = os.environ.get("LANGFUSE_PUBLIC_KEY") or ""
 LANGFUSE_HOST = os.environ.get("LANGFUSE_HOST") or ""  # For self-hosted Langfuse
 
+# Per-process cache TTL for the resolved tracing config; bounds how quickly a UI
+# connect/disconnect takes effect (no restart needed).
+TRACING_CONFIG_CACHE_TTL_SECONDS = float(
+    os.environ.get("TRACING_CONFIG_CACHE_TTL_SECONDS") or "30"
+)
+
+#####
+# Per-user usage/cost tracking
+#####
+# Records every priced generation span into the per-user usage ledger. On by
+# default; set to "false" to drop the recording processor entirely.
+USER_USAGE_TRACKING_ENABLED = (
+    os.environ.get("USER_USAGE_TRACKING_ENABLED", "true").lower() != "false"
+)
+
 # Defined custom query/answer conditions to validate the query and the LLM answer.
 # Format: list of strings
 CUSTOM_ANSWER_VALIDITY_CONDITIONS = json.loads(
@@ -1220,6 +1770,11 @@ VESPA_MIGRATION_SERVER_SIDE_REQUEST_TIMEOUT = os.environ.get(
 )
 
 SYSTEM_RECURSION_LIMIT = int(os.environ.get("SYSTEM_RECURSION_LIMIT") or "1000")
+
+# Size of the api-server anyio threadpool that runs sync endpoints, including the
+# streaming chat generator (each long request holds one thread for its duration).
+# 0 keeps the anyio default (40). Set via the api.threadpoolSize Helm value.
+API_SERVER_THREADPOOL_SIZE = int(os.environ.get("ONYX_API_THREADPOOL_SIZE") or "0")
 
 PARSE_WITH_TRAFILATURA = os.environ.get("PARSE_WITH_TRAFILATURA", "").lower() == "true"
 
@@ -1495,6 +2050,24 @@ GCS_SERVICE_ACCOUNT_KEY_PATH = os.environ.get("GCS_SERVICE_ACCOUNT_KEY_PATH") or
 # Service account key as inline JSON string (alternative to file path).
 GCS_SERVICE_ACCOUNT_KEY_JSON = os.environ.get("GCS_SERVICE_ACCOUNT_KEY_JSON") or None
 
+# Azure Blob Storage Configuration
+AZURE_FILE_STORE_CONTAINER_NAME = (
+    os.environ.get("AZURE_FILE_STORE_CONTAINER_NAME") or None
+)
+AZURE_FILE_STORE_PREFIX = os.environ.get("AZURE_FILE_STORE_PREFIX") or "onyx-files"
+AZURE_STORAGE_ACCOUNT_NAME = os.environ.get("AZURE_STORAGE_ACCOUNT_NAME") or None
+# Full blob endpoint URL. When unset, derived from the account name as
+# https://<account>.blob.core.windows.net. Set explicitly for Azurite or
+# sovereign clouds (e.g. *.blob.core.usgovcloudapi.net).
+AZURE_STORAGE_ACCOUNT_URL = os.environ.get("AZURE_STORAGE_ACCOUNT_URL") or None
+# Authentication (priority order): connection string, then account key, then
+# DefaultAzureCredential — supports AKS Workload Identity, managed identity,
+# and local `az login`.
+AZURE_STORAGE_CONNECTION_STRING = (
+    os.environ.get("AZURE_STORAGE_CONNECTION_STRING") or None
+)
+AZURE_STORAGE_ACCOUNT_KEY = os.environ.get("AZURE_STORAGE_ACCOUNT_KEY") or None
+
 # Forcing Vespa Language
 # English: en, German:de, etc. See: https://docs.vespa.ai/en/linguistics.html
 VESPA_LANGUAGE_OVERRIDE = os.environ.get("VESPA_LANGUAGE_OVERRIDE")
@@ -1544,12 +2117,16 @@ EXT_APP_LINEAR_CLIENT_ID = os.environ.get("EXT_APP_LINEAR_CLIENT_ID", "")
 EXT_APP_LINEAR_CLIENT_SECRET = os.environ.get("EXT_APP_LINEAR_CLIENT_SECRET", "")
 EXT_APP_GITHUB_CLIENT_ID = os.environ.get("EXT_APP_GITHUB_CLIENT_ID", "")
 EXT_APP_GITHUB_CLIENT_SECRET = os.environ.get("EXT_APP_GITHUB_CLIENT_SECRET", "")
+EXT_APP_HUBSPOT_CLIENT_ID = os.environ.get("EXT_APP_HUBSPOT_CLIENT_ID", "")
+EXT_APP_HUBSPOT_CLIENT_SECRET = os.environ.get("EXT_APP_HUBSPOT_CLIENT_SECRET", "")
+EXT_APP_NOTION_CLIENT_ID = os.environ.get("EXT_APP_NOTION_CLIENT_ID", "")
+EXT_APP_NOTION_CLIENT_SECRET = os.environ.get("EXT_APP_NOTION_CLIENT_SECRET", "")
 
 INSTANCE_TYPE = (
     "managed"
     if os.environ.get("IS_MANAGED_INSTANCE", "").lower() == "true"
     else "cloud"
-    if AUTH_TYPE == AuthType.CLOUD
+    if MULTI_TENANT
     else "self_hosted"
 )
 

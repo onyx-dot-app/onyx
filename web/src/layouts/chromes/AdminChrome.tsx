@@ -1,12 +1,15 @@
 "use client";
 
+import { createContext, useContext, useState, type ReactNode } from "react";
+import { createPortal } from "react-dom";
 import AdminSidebar from "@/sections/sidebar/AdminSidebar";
 import { usePathname, useRouter } from "next/navigation";
 import type { Route } from "next";
 import { useEffect } from "react";
-import { useSettingsContext } from "@/providers/SettingsProvider";
+import { useSettings } from "@/lib/settings/hooks";
+import { useAdminDocumentTitle } from "@/lib/app/hooks";
 import { useUser } from "@/providers/UserProvider";
-import { ApplicationStatus } from "@/interfaces/settings";
+import { ApplicationStatus } from "@/lib/settings/types";
 import { Button, Text } from "@opal/components";
 import { markdown } from "@opal/utils";
 import useScreenSize from "@/hooks/useScreenSize";
@@ -27,6 +30,22 @@ export interface AdminChromeProps {
   initialAdminCapabilities: string[];
 }
 
+// Lets a page render its own sidebar into the chrome as a sibling of the main
+// content column — i.e. *outside* the scrollable region — so it stays pinned
+// while the page scrolls. The page keeps ownership (and React context) of the
+// sidebar; only the DOM is portaled up next to `RootLayout.App`.
+const AdminCustomSidebarSlotContext = createContext<HTMLElement | null>(null);
+
+export function AdminCustomSidebarPortal({
+  children,
+}: {
+  children: ReactNode;
+}) {
+  const slot = useContext(AdminCustomSidebarSlotContext);
+  if (!slot) return null;
+  return createPortal(children, slot);
+}
+
 export default function AdminChrome({
   children,
   initialAdminCapabilities,
@@ -34,9 +53,13 @@ export default function AdminChrome({
   const { setFolded } = useSidebarState();
   const { isMobile } = useScreenSize();
   const pathname = usePathname();
-  const settings = useSettingsContext();
+  const { vectorDbEnabled, isLoading, application_status } = useSettings();
+  useAdminDocumentTitle();
   const router = useRouter();
   const { adminCapabilities: liveAdminCapabilities, isUserLoading } = useUser();
+
+  const [customSidebarSlot, setCustomSidebarSlot] =
+    useState<HTMLDivElement | null>(null);
 
   // Seed only in flight — otherwise logout would leave the page authorized by a stale seed.
   const adminCapabilities = isUserLoading
@@ -66,11 +89,9 @@ export default function AdminChrome({
   // For those pages, we skip rendering the default `AdminSidebar` and let those individual pages render their own.
   const hasCustomSidebar = pathname.startsWith("/admin/connectors");
 
-  // Lite mode (no vector DB): connector/indexing pages can't run, show a notice.
-  const vectorDbEnabled = settings.settings.vector_db_enabled !== false;
   let content = children;
   if (isVectorDbRequiredRoute(pathname)) {
-    if (settings.settingsLoading) {
+    if (isLoading) {
       content = (
         <Section padding={2}>
           <SvgSimpleLoader className="h-6 w-6" />
@@ -84,39 +105,47 @@ export default function AdminChrome({
   if (denied) return null;
 
   return (
-    <RootLayout.Root>
-      {settings.settings.application_status ===
-        ApplicationStatus.PAYMENT_REMINDER && (
-        <div className="fixed top-2 left-1/2 -translate-x-1/2 bg-status-warning-01 p-4 rounded-lg shadow-lg z-50 max-w-md text-center">
-          <Text font="main-ui-body" color="text-05">
-            {markdown(
-              "**Warning:** Your trial ends in less than 5 days and no payment method has been added."
-            )}
-          </Text>
-          <div className="mt-2">
-            <Button width="full" href="/admin/billing">
-              Update Billing Information
-            </Button>
-          </div>
-        </div>
-      )}
-
-      {!hasCustomSidebar && <AdminSidebar />}
-
-      <RootLayout.App data-main-container>
-        {isMobile && !hasCustomSidebar && (
-          <RootLayout.Header>
-            <div className="h-full flex items-center px-4 py-2">
-              <Button
-                prominence="internal"
-                icon={SvgSidebar}
-                onClick={() => setFolded(false)}
-              />
+    <AdminCustomSidebarSlotContext.Provider value={customSidebarSlot}>
+      <RootLayout.Root>
+        {application_status === ApplicationStatus.PAYMENT_REMINDER && (
+          <div className="fixed top-2 left-1/2 -translate-x-1/2 bg-status-warning-01 p-4 rounded-lg shadow-lg z-50 max-w-md text-center">
+            <Text font="main-ui-body" color="text-05">
+              {markdown(
+                "**Warning:** Your trial ends in less than 5 days and no payment method has been added."
+              )}
+            </Text>
+            <div className="mt-2">
+              <Button width="full" href="/admin/billing">
+                Update Billing Information
+              </Button>
             </div>
-          </RootLayout.Header>
+          </div>
         )}
-        <RootLayout.MainContent>{content}</RootLayout.MainContent>
-      </RootLayout.App>
-    </RootLayout.Root>
+
+        {hasCustomSidebar ? (
+          // `display: contents` so the portaled sidebar column becomes the
+          // direct flex child of `RootLayout.Root`, exactly like `AdminSidebar`.
+          <div ref={setCustomSidebarSlot} className="contents" />
+        ) : (
+          <AdminSidebar />
+        )}
+
+        <RootLayout.App data-main-container>
+          {isMobile && !hasCustomSidebar && (
+            <RootLayout.Header>
+              <div className="h-full flex items-center px-4 py-2">
+                <Button
+                  prominence="internal"
+                  icon={SvgSidebar}
+                  aria-label="Open Sidebar"
+                  onClick={() => setFolded(false)}
+                />
+              </div>
+            </RootLayout.Header>
+          )}
+          <RootLayout.MainContent>{content}</RootLayout.MainContent>
+        </RootLayout.App>
+      </RootLayout.Root>
+    </AdminCustomSidebarSlotContext.Provider>
   );
 }

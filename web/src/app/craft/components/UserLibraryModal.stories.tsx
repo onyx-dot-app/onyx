@@ -1,4 +1,4 @@
-import type { Meta, StoryObj } from "@storybook/react";
+import type { Meta, StoryObj } from "@storybook/react-vite";
 import type { ReactNode } from "react";
 import { SWRConfig } from "swr";
 import UserLibraryModal from "@/app/craft/components/UserLibraryModal";

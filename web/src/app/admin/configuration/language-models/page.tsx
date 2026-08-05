@@ -1,1 +1,1 @@
-export { default } from "@/refresh-pages/admin/LanguageModelsPage";
+export { default } from "@/views/admin/LanguageModelsPage";

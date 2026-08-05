@@ -27,14 +27,16 @@ resource "aws_security_group" "this" {
 }
 
 resource "aws_db_instance" "this" {
-  identifier        = var.identifier
-  db_name           = var.db_name
-  engine            = "postgres"
-  engine_version    = var.engine_version
-  instance_class    = var.instance_type
-  allocated_storage = var.storage_gb
-  username          = var.username
-  password          = var.password
+  identifier            = var.identifier
+  db_name               = var.db_name
+  engine                = "postgres"
+  engine_version        = var.engine_version
+  instance_class        = var.instance_type
+  allocated_storage     = var.storage_gb
+  max_allocated_storage = var.max_storage_gb
+  storage_type          = var.storage_type
+  username              = var.username
+  password              = var.password
 
   # Enable IAM authentication for the RDS instance
   iam_database_authentication_enabled = var.enable_rds_iam_auth

@@ -76,7 +76,6 @@ function Disabled({
   const wrapper = (
     <div
       ref={ref}
-      className="opal-disabled"
       {...rest}
       aria-disabled={disabled || undefined}
       data-opal-disabled={disabled || undefined}

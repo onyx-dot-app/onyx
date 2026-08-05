@@ -3,12 +3,9 @@ from typing import Any
 
 from pydantic import BaseModel
 
-from onyx.deep_research.dr_mock_tools import GENERATE_REPORT_TOOL_NAME
-from onyx.deep_research.dr_mock_tools import THINK_TOOL_NAME
+from onyx.deep_research.dr_mock_tools import GENERATE_REPORT_TOOL_NAME, THINK_TOOL_NAME
 from onyx.deep_research.models import SpecialToolCalls
-from onyx.llm.model_response import ChatCompletionDeltaToolCall
-from onyx.llm.model_response import Delta
-from onyx.llm.model_response import FunctionCall
+from onyx.llm.model_response import ChatCompletionDeltaToolCall, Delta, FunctionCall
 from onyx.tools.models import ToolCallKickoff
 
 # JSON prefixes to detect in think_tool arguments

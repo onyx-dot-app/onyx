@@ -5,8 +5,7 @@ from __future__ import annotations
 import json
 
 from onyx.mcp_server.api import mcp_server
-from onyx.mcp_server.utils import get_accessible_document_sets
-from onyx.mcp_server.utils import require_access_token
+from onyx.mcp_server.utils import get_accessible_document_sets, require_access_token
 from onyx.utils.logger import setup_logger
 
 logger = setup_logger()

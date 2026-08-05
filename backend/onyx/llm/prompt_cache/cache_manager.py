@@ -2,8 +2,7 @@
 
 import hashlib
 import json
-from datetime import datetime
-from datetime import timezone
+from datetime import datetime, timezone
 
 from onyx.configs.model_configs import PROMPT_CACHE_REDIS_TTL_MULTIPLIER
 from onyx.key_value_store.store import PgRedisKVStore
@@ -82,7 +81,7 @@ class CacheManager:
             # Note: PgRedisKVStore doesn't support TTL directly, but Redis will
             # handle expiration. For PostgreSQL persistence, we rely on cleanup
             # based on last_accessed timestamp.
-            self._kv_store.store(cache_key, metadata_dict, encrypt=False)
+            self._kv_store.store(cache_key, metadata_dict)
 
             logger.debug(
                 "Stored cache metadata: provider=%s, model=%s, cache_key=%s..., tenant_id=%s",

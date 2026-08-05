@@ -4,6 +4,7 @@ import type { PluggableList } from "unified";
 import remarkGfm from "remark-gfm";
 import remarkMath from "remark-math";
 import rehypeHighlight from "rehype-highlight";
+import { useHighlightLanguages } from "@/hooks/useHighlightLanguages";
 import rehypeKatex from "rehype-katex";
 import "katex/dist/katex.min.css";
 
@@ -83,7 +84,6 @@ const STREAMING_REMARK_PLUGINS: PluggableList = [
 ];
 const STREAMING_REHYPE_PLUGINS: PluggableList = [rehypeKatex];
 const FULL_REMARK_PLUGINS: PluggableList = STREAMING_REMARK_PLUGINS;
-const FULL_REHYPE_PLUGINS: PluggableList = [rehypeHighlight, rehypeKatex];
 
 export const MessageTextRenderer: MessageRenderer<
   ChatPacket,
@@ -276,6 +276,18 @@ export const MessageTextRenderer: MessageRenderer<
   const streamFullyDisplayed =
     isStreamFinished && displayedContent.length >= content.length;
 
+  // Syntax-highlighting grammars load dynamically, and only once the stream is
+  // fully displayed — keeps the ~170 KB corpus off the critical path. Until
+  // they resolve we fall back to the streaming (katex-only) plugin set.
+  const highlightLanguages = useHighlightLanguages(streamFullyDisplayed);
+  const fullRehypePlugins = useMemo<PluggableList>(
+    () =>
+      highlightLanguages
+        ? [[rehypeHighlight, { languages: highlightLanguages }], rehypeKatex]
+        : STREAMING_REHYPE_PLUGINS,
+    [highlightLanguages]
+  );
+
   // Capture `animate` at mount. `animate = !stopPacketSeen`, which only
   // ever goes true→false during a renderer's lifetime, so its mount-time
   // value distinguishes "actively-streaming renderer" (animate=true) from
@@ -454,7 +466,7 @@ export const MessageTextRenderer: MessageRenderer<
               }
               rehypePlugins={
                 streamFullyDisplayed
-                  ? FULL_REHYPE_PLUGINS
+                  ? fullRehypePlugins
                   : STREAMING_REHYPE_PLUGINS
               }
               urlTransform={transformLinkUri}

@@ -10,11 +10,12 @@ from collections.abc import Collection
 
 from sqlalchemy.orm import Session
 
-from onyx.auth.permissions import has_global_permission
-from onyx.auth.permissions import has_permission
-from onyx.auth.permissions import SCOPED_MANAGER_PERMISSIONS_EXPANDED
-from onyx.db.enums import Permission
-from onyx.db.enums import PermissionAuthority
+from onyx.auth.permissions import (
+    SCOPED_MANAGER_PERMISSIONS_EXPANDED,
+    has_global_permission,
+    has_permission,
+)
+from onyx.db.enums import Permission, PermissionAuthority
 from onyx.db.models import User
 from onyx.db.scoped_permissions import fetch_managed_group_ids
 from onyx.error_handling.error_codes import OnyxErrorCode

@@ -1,38 +1,42 @@
-from fastapi import APIRouter
-from fastapi import Depends
-from fastapi import Query
+from fastapi import APIRouter, Depends, Query
 from sqlalchemy.orm import Session
 
 from onyx.auth.permission_projection import document_set_permissions
-from onyx.auth.permissions import has_global_permission
-from onyx.auth.permissions import has_permission
-from onyx.auth.permissions import require_permission
-from onyx.auth.scoped_permissions import assert_within_scope
-from onyx.auth.scoped_permissions import get_scoped_groups
-from onyx.auth.scoped_permissions import within_scope
+from onyx.auth.permissions import (
+    has_global_permission,
+    has_permission,
+    require_permission,
+)
+from onyx.auth.scoped_permissions import (
+    assert_within_scope,
+    get_scoped_groups,
+    within_scope,
+)
 from onyx.background.celery.versioned_apps.client import app as client_app
 from onyx.configs.app_configs import DISABLE_VECTOR_DB
-from onyx.configs.constants import OnyxCeleryPriority
-from onyx.configs.constants import OnyxCeleryTask
-from onyx.db.document_set import check_document_sets_are_public
+from onyx.configs.constants import OnyxCeleryPriority, OnyxCeleryTask
+from onyx.db.document_set import (
+    check_document_sets_are_public,
+    fetch_all_document_sets_for_user,
+    get_document_set_by_id,
+    get_group_ids_for_document_set,
+    insert_document_set,
+    mark_document_set_as_to_be_deleted,
+    update_document_set,
+)
 from onyx.db.document_set import delete_document_set as db_delete_document_set
-from onyx.db.document_set import fetch_all_document_sets_for_user
-from onyx.db.document_set import get_document_set_by_id
-from onyx.db.document_set import get_group_ids_for_document_set
-from onyx.db.document_set import insert_document_set
-from onyx.db.document_set import mark_document_set_as_to_be_deleted
-from onyx.db.document_set import update_document_set
 from onyx.db.engine.sql_engine import get_session
-from onyx.db.enums import Permission
-from onyx.db.enums import PermissionAuthority
+from onyx.db.enums import Permission, PermissionAuthority
 from onyx.db.models import User
 from onyx.error_handling.error_codes import OnyxErrorCode
 from onyx.error_handling.exceptions import OnyxError
-from onyx.server.features.document_set.models import CheckDocSetPublicRequest
-from onyx.server.features.document_set.models import CheckDocSetPublicResponse
-from onyx.server.features.document_set.models import DocumentSetCreationRequest
-from onyx.server.features.document_set.models import DocumentSetSummary
-from onyx.server.features.document_set.models import DocumentSetUpdateRequest
+from onyx.server.features.document_set.models import (
+    CheckDocSetPublicRequest,
+    CheckDocSetPublicResponse,
+    DocumentSetCreationRequest,
+    DocumentSetSummary,
+    DocumentSetUpdateRequest,
+)
 from shared_configs.contextvars import get_current_tenant_id
 
 router = APIRouter(prefix="/manage")

@@ -1,15 +1,11 @@
 import time
-from collections.abc import Callable
-from collections.abc import Generator
-from datetime import datetime
-from datetime import timezone
+from collections.abc import Callable, Generator
+from datetime import datetime, timezone
 from typing import cast
-from unittest.mock import MagicMock
-from unittest.mock import patch
+from unittest.mock import MagicMock, patch
 
 import pytest
-from github import Github
-from github import RateLimitExceededException
+from github import Github, RateLimitExceededException
 from github.GithubException import GithubException
 from github.Issue import Issue
 from github.PaginatedList import PaginatedList
@@ -18,15 +14,16 @@ from github.RateLimit import RateLimit
 from github.Repository import Repository
 from github.Requester import Requester
 
-from onyx.connectors.exceptions import ConnectorValidationError
-from onyx.connectors.exceptions import CredentialExpiredError
-from onyx.connectors.exceptions import InsufficientPermissionsError
-from onyx.connectors.github.connector import GithubConnector
-from onyx.connectors.github.connector import GithubConnectorStage
+from onyx.connectors.exceptions import (
+    ConnectorValidationError,
+    CredentialExpiredError,
+    InsufficientPermissionsError,
+)
+from onyx.connectors.github.connector import GithubConnector, GithubConnectorStage
 from onyx.connectors.github.models import SerializedRepository
 from onyx.connectors.models import Document
-from tests.unit.onyx.connectors.utils import load_everything_from_checkpoint_connector
 from tests.unit.onyx.connectors.utils import (
+    load_everything_from_checkpoint_connector,
     load_everything_from_checkpoint_connector_from_checkpoint,
 )
 
@@ -453,6 +450,29 @@ def test_validate_connector_settings_errors(
     with pytest.raises(expected_exception) as excinfo:
         github_connector.validate_connector_settings()
     assert expected_message in str(excinfo.value)
+
+
+def test_validate_connector_settings_surfaces_typed_error(
+    build_github_connector: Callable[..., GithubConnector],
+) -> None:
+    """A typed ConnectorValidationError raised mid-validation propagates
+    unchanged, so the connector-setup API surfaces the real reason
+    ("Found no repos...") rather than a generic 500."""
+    github_connector = build_github_connector(repositories="")
+    github_client = cast(Github, github_connector.github_client)
+
+    # No specific repos -> org lookup fails -> fall back to a user that has
+    # zero accessible repos.
+    cast(MagicMock, github_client.get_organization).side_effect = GithubException(
+        status=404, data={}, headers={}
+    )
+    mock_user = MagicMock()
+    mock_user.get_repos.return_value.totalCount = 0
+    cast(MagicMock, github_client.get_user).return_value = mock_user
+
+    with pytest.raises(ConnectorValidationError) as excinfo:
+        github_connector.validate_connector_settings()
+    assert "Found no repos for user" in str(excinfo.value)
 
 
 def test_validate_connector_settings_success(

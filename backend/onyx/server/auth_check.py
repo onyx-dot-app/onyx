@@ -4,11 +4,13 @@ from fastapi import FastAPI
 from fastapi.dependencies.models import Dependant
 from starlette.routing import BaseRoute
 
-from onyx.auth.users import current_chat_accessible_user
-from onyx.auth.users import current_limited_user
-from onyx.auth.users import current_user
-from onyx.auth.users import current_user_from_websocket
-from onyx.auth.users import current_user_with_expired_token
+from onyx.auth.users import (
+    current_chat_accessible_user,
+    current_limited_user,
+    current_user,
+    current_user_from_websocket,
+    current_user_with_expired_token,
+)
 from onyx.configs.app_configs import APP_API_PREFIX
 from onyx.utils.variable_functionality import fetch_ee_implementation_or_noop
 
@@ -53,6 +55,10 @@ PUBLIC_ENDPOINT_SPECS = [
     ("/auth/mobile/login", {"POST"}),
     ("/auth/mobile/refresh", {"POST"}),
     ("/auth/mobile/logout", {"POST"}),
+    # swaps a one-time SSO code (+ PKCE verifier) for the session token; it has
+    # no user dependency by design (the code IS the credential), so it must be
+    # declared public to satisfy the startup public-route assertion.
+    ("/auth/mobile/sso/exchange", {"POST"}),
     ("/users/me", {"GET"}),
     ("/users/me", {"PATCH"}),
     ("/users/{id}", {"GET"}),
@@ -61,13 +67,21 @@ PUBLIC_ENDPOINT_SPECS = [
     # oauth
     ("/auth/oauth/authorize", {"GET"}),
     ("/auth/oauth/callback", {"GET"}),
+    # dedicated mobile google oauth (callback routes to the api_server, not the web app)
+    ("/auth/mobile/oauth/authorize", {"GET"}),
+    ("/auth/mobile/oauth/callback", {"GET"}),
     # oidc
     ("/auth/oidc/authorize", {"GET"}),
     ("/auth/oidc/callback", {"GET"}),
-    # saml
+    # db-backed multi-provider oidc/google (oidc_multi router)
+    ("/auth/oidc/{provider_name}/authorize", {"GET"}),
+    ("/auth/oidc/{provider_name}/callback", {"GET"}),
+    # saml (single router: legacy-compatible + parametric authorize, one
+    # issuer-resolved callback)
     ("/auth/saml/authorize", {"GET"}),
-    ("/auth/saml/callback", {"POST"}),
+    ("/auth/saml/{provider_name}/authorize", {"GET"}),
     ("/auth/saml/callback", {"GET"}),
+    ("/auth/saml/callback", {"POST"}),
     ("/auth/saml/logout", {"POST"}),
     # anonymous user on cloud
     ("/tenants/anonymous-user", {"POST"}),

@@ -31,7 +31,7 @@ import { Tooltip } from "@opal/components";
 import { SourceIcon } from "@/components/SourceIcon";
 import { getSourceDisplayName } from "@/lib/sources";
 import { useTierAtLeast } from "@/hooks/useTierAtLeast";
-import { Tier } from "@/interfaces/settings";
+import { Tier } from "@/lib/settings/types";
 import { ConnectorCredentialPairStatus } from "../../connector/[ccPairId]/types";
 import { PageSelector } from "@/components/PageSelector";
 import { ConnectorStaggeredSkeleton } from "./ConnectorRowSkeleton";

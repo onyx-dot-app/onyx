@@ -1,4 +1,4 @@
-import type { Meta, StoryObj } from "@storybook/react";
+import type { Meta, StoryObj } from "@storybook/react-vite";
 import { Disabled } from "@opal/core";
 import { Card, Button } from "@opal/components";
 

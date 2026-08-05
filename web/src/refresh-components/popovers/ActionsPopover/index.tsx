@@ -32,7 +32,7 @@ import { SourceIcon } from "@/components/SourceIcon";
 import { useAvailableTools } from "@/hooks/useAvailableTools";
 import useCCPairs from "@/hooks/useCCPairs";
 import { useLLMProviders } from "@/lib/languageModels/hooks";
-import { useVectorDbEnabled } from "@/providers/SettingsProvider";
+import { useSettings } from "@/lib/settings/hooks";
 import { InputTypeIn } from "@opal/components";
 import { useToolOAuthStatus } from "@/lib/hooks/useToolOAuthStatus";
 import LineItem from "@/refresh-components/buttons/LineItem";
@@ -271,7 +271,7 @@ export default function ActionsPopover({
   }, [selectedAgent.id, setForcedToolIds]);
 
   const { isAdmin, permissions } = useUser();
-  const vectorDbEnabled = useVectorDbEnabled();
+  const { vectorDbEnabled } = useSettings();
 
   const { tools: availableTools } = useAvailableTools();
   const { ccPairs } = useCCPairs(vectorDbEnabled);
@@ -528,15 +528,15 @@ export default function ActionsPopover({
           }),
         });
 
-        if (response.ok) {
-          const { oauth_url } = await response.json();
-          window.location.href = oauth_url;
-        } else {
-          updateLoadingState(false);
+        if (!response.ok) {
+          throw new Error("Failed to start MCP OAuth");
         }
+        const { oauth_url } = await response.json();
+        window.location.href = oauth_url;
       } catch (error) {
         console.error("Error initiating OAuth:", error);
         updateLoadingState(false);
+        throw error;
       }
     }
   };
@@ -597,23 +597,33 @@ export default function ActionsPopover({
   const handleServerAuthentication = (server: MCPServer) => {
     const authType = server.auth_type;
     const performer = server.auth_performer;
+    const requiresHeaderValues =
+      (server.auth_template?.required_fields.length ?? 0) > 0;
 
+    if (!requiresHeaderValues && authType === MCPAuthenticationType.OAUTH) {
+      void handleMCPAuthenticate(server.id, MCPAuthenticationType.OAUTH).catch(
+        () => undefined
+      );
+      return;
+    }
     if (
-      authType === MCPAuthenticationType.NONE ||
-      performer === MCPAuthenticationPerformer.ADMIN
+      !requiresHeaderValues &&
+      (authType === MCPAuthenticationType.NONE ||
+        performer === MCPAuthenticationPerformer.ADMIN)
     ) {
       return;
     }
-
-    if (authType === MCPAuthenticationType.OAUTH) {
-      handleMCPAuthenticate(server.id, MCPAuthenticationType.OAUTH);
-    } else if (authType === MCPAuthenticationType.API_TOKEN) {
+    if (requiresHeaderValues || authType === MCPAuthenticationType.API_TOKEN) {
       setMcpApiKeyModal({
         isOpen: true,
         serverId: server.id,
         serverName: server.name,
         authTemplate: server.auth_template,
-        onSuccess: () => {
+        onSuccess: async () => {
+          if (authType === MCPAuthenticationType.OAUTH) {
+            await handleMCPAuthenticate(server.id, MCPAuthenticationType.OAUTH);
+            return;
+          }
           // Update the authentication state after successful credential submission
           setMcpServerData((prev) => ({
             ...prev,

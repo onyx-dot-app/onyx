@@ -2,11 +2,7 @@
 
 from datetime import datetime
 
-from pydantic import BaseModel
-from pydantic import computed_field
-from pydantic import ConfigDict
-from pydantic import Field
-from pydantic import field_validator
+from pydantic import BaseModel, ConfigDict, Field, computed_field, field_validator
 
 from onyx.auth.permissions import resolve_effective_permissions
 from onyx.db.enums import Permission
@@ -48,6 +44,12 @@ _ASSIGNABLE_SCOPES: list[PatScopeOption] = [
         group_label="Chat",
         label="Write",
         description="Create sessions and send messages.",
+    ),
+    PatScopeOption(
+        scope=Permission.USE_LLM_GATEWAY,
+        group_label="LLM Gateway",
+        label="Use",
+        description="Call the LLM gateway from external tools.",
     ),
 ]
 

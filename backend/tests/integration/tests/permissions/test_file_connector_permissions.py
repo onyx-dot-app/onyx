@@ -19,16 +19,14 @@ import os
 import httpx
 import pytest
 
-from onyx.db.enums import AccessType
-from onyx.db.enums import Permission
+from onyx.db.enums import AccessType, Permission
 from onyx.server.documents.models import DocumentSource
 from tests.integration.common_utils.constants import API_SERVER_URL
 from tests.integration.common_utils.http_client import client
 from tests.integration.common_utils.managers.cc_pair import CCPairManager
 from tests.integration.common_utils.managers.connector import ConnectorManager
 from tests.integration.common_utils.managers.credential import CredentialManager
-from tests.integration.common_utils.managers.user import DATestUser
-from tests.integration.common_utils.managers.user import UserManager
+from tests.integration.common_utils.managers.user import DATestUser, UserManager
 from tests.integration.common_utils.managers.user_group import UserGroupManager
 
 

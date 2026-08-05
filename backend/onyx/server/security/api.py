@@ -1,9 +1,7 @@
 import json
 from typing import Any
 
-from fastapi import APIRouter
-from fastapi import Depends
-from fastapi import Request
+from fastapi import APIRouter, Depends, Request
 from fastapi.concurrency import run_in_threadpool
 from pydantic import ValidationError
 
@@ -12,17 +10,21 @@ from onyx.db.enums import Permission
 from onyx.db.models import User
 from onyx.error_handling.error_codes import OnyxErrorCode
 from onyx.error_handling.exceptions import OnyxError
-from onyx.server.security.models import OPERATOR_LOCKED_FIELDS
-from onyx.server.security.models import SecuritySettings
-from onyx.server.security.models import SecuritySettingsOverrides
-from onyx.server.security.store import apply_patch
-from onyx.server.security.store import get_security_settings
+from onyx.server.security.models import (
+    OPERATOR_LOCKED_FIELDS,
+    SecuritySettings,
+    SecuritySettingsOverrides,
+)
+from onyx.server.security.store import apply_patch, get_security_settings
 from onyx.utils.logger import setup_logger
 from shared_configs.configs import MULTI_TENANT
 
 logger = setup_logger()
 
 admin_router = APIRouter(prefix="/admin/security")
+
+# Single-tenant only, reject in multi-tenant where it would never enforce.
+_PASSWORD_LOCKDOWN_FIELDS = frozenset({"password_auth_enabled"})
 
 
 def _parse_put_body(raw: bytes) -> tuple[SecuritySettingsOverrides, set[str]]:
@@ -63,6 +65,14 @@ async def put_security_settings_endpoint(
 ) -> SecuritySettings:
     raw = await request.body()
     overrides, present_keys = _parse_put_body(raw)
+
+    lockdown_in_payload = present_keys & _PASSWORD_LOCKDOWN_FIELDS
+    if lockdown_in_payload and MULTI_TENANT:
+        raise OnyxError(
+            OnyxErrorCode.INVALID_INPUT,
+            "Password login controls apply only to password-based deployments: "
+            + ", ".join(sorted(lockdown_in_payload)),
+        )
 
     # Primary boundary for operator-locked fields. The storage layer also
     # strips them; this gives admins a clear 403 instead of a silent no-op.

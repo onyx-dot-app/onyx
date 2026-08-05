@@ -1,6 +1,6 @@
 "use client";
 
-import { ThreeDotsLoader } from "@/components/Loading";
+import SvgSimpleLoader from "@opal/icons/simple-loader";
 import { getDatesList } from "@/app/ee/admin/performance/lib";
 import { useEffect, useState, useMemo } from "react";
 import {
@@ -111,8 +111,8 @@ export function AgentStats({ agentId }: { agentId: number }) {
   let content;
   if (isLoading || !agent) {
     content = (
-      <div className="h-80 flex flex-col">
-        <ThreeDotsLoader />
+      <div className="h-80 flex flex-col items-center justify-center">
+        <SvgSimpleLoader className="h-6 w-6" />
       </div>
     );
   } else if (error) {

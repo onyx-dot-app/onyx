@@ -1,11 +1,15 @@
 # SidebarLayouts
 
-**Import:** `import { SidebarLayouts, SidebarWrapper, useSidebarState, useSidebarFolded } from "@opal/layouts";`
+**Import:** `import { SidebarLayouts, useSidebarState } from "@opal/layouts";`
 
-Namespaced layout primitives for app sidebars. Provides persistent fold state
-with a keyboard shortcut, mobile/medium/desktop responsive positioning, a
-scrollable body with scroll-position persistence, and a structural chrome
-component (`SidebarWrapper`) that can be used standalone.
+Namespaced layout primitives for app sidebars. Provides responsive
+positioning (mobile overlay / medium overlay / desktop column), a
+scrollable body with scroll-position persistence, and a topbar that
+renders a logo + fold toggle.
+
+Fold state is managed by `SidebarStateProvider` (see `@opal/layouts/root`).
+All `SidebarLayouts` primitives and any component that calls
+`useSidebarState()` must be rendered inside a `SidebarStateProvider`.
 
 ## CSS custom properties
 
@@ -18,18 +22,6 @@ The following must be defined by the consuming app:
 
 ## Components
 
-### `SidebarLayouts.StateProvider`
-
-Root state provider. Manages the sidebar fold state and registers the
-`Cmd/Ctrl+E` keyboard shortcut. Must wrap all other `SidebarLayouts`
-primitives and any component that calls `useSidebarState()`.
-
-| Prop | Type | Default | Description |
-|---|---|---|---|
-| `defaultFolded` | `boolean` | `false` | Initial fold state, typically read from a persisted cookie |
-| `onFoldedChange` | `(folded: boolean) => void` | — | Called after every fold state change, e.g. to write back to a cookie |
-| `children` | `ReactNode` | — | |
-
 ### `SidebarLayouts.Root`
 
 Sidebar entry point. Handles three viewport sizes:
@@ -37,25 +29,30 @@ Sidebar entry point. Handles three viewport sizes:
 - **Desktop** — normal flex-row participant; width animates between
   `--sidebar-width-folded` and `--sidebar-width-expanded`.
 - **Medium** (`≤ 1232 px`) — fixed overlay; a spacer div preserves the
-  folded width in the layout flow. Blur-only backdrop closes on click.
+  folded width in the layout flow. Backdrop closes on click.
 - **Mobile** (`≤ 724 px`) — full-height fixed overlay with a tinted and
   blurred backdrop that closes on click.
 
 | Prop | Type | Default | Description |
 |---|---|---|---|
 | `foldable` | `boolean` | `false` | Enable fold/unfold on desktop |
-| `logo` | `(folded: boolean \| undefined) => ReactNode` | — | Logo render function; receives current fold state |
-| `showLogoWhenFolded` | `boolean` | `true` | When `false`, hides the logo and shows only the close button when folded |
-| `children` | `ReactNode` | — | `Header`, `Body`, `Footer` |
+| `children` | `ReactNode` | — | `Header`, `Body`, `Footer`, `Section` |
 
 ### `SidebarLayouts.Header`
 
-Pinned content above the scroll area (e.g. search input, new-session button).
+Topbar (logo + fold button) with optional pinned content below it
+(e.g. a search input or new-session button).
+
+| Prop | Type | Default | Description |
+|---|---|---|---|
+| `renderAppLogo` | `(folded: boolean \| undefined) => IconFunctionComponent` | — | Logo factory; receives the effective fold state (`undefined` when non-foldable) and returns a component rendered at `size={28}` |
+| `showLogoWhenFolded` | `boolean` | `true` | When `false`, hides the logo and shows only the fold button when collapsed |
+| `children` | `ReactNode` | — | Pinned content below the topbar |
 
 ### `SidebarLayouts.Body`
 
-Scrollable content area. Persists scroll position to `sessionStorage` keyed
-by `scrollKey` and restores it on pathname changes.
+Scrollable content area. Persists scroll position to `sessionStorage`
+keyed by `scrollKey` and restores it on pathname changes.
 
 | Prop | Type | Default | Description |
 |---|---|---|---|
@@ -66,25 +63,23 @@ by `scrollKey` and restores it on pathname changes.
 
 Pinned content below the scroll area (e.g. user avatar, account popover).
 
-### `SidebarWrapper`
+### `SidebarLayouts.Section`
 
-The structural chrome used internally by `SidebarLayouts.Root`. Export it
-directly when you need to drive fold state yourself rather than through the
-provider (e.g. `AppSidebar` which reads `useSidebarFolded()` directly).
+Titled group within the scrollable body. Renders a section header with an
+optional hover-revealed action.
 
 | Prop | Type | Default | Description |
 |---|---|---|---|
-| `folded` | `boolean \| undefined` | — | `undefined` = non-foldable (no button shown) |
-| `onFoldClick` | `() => void` | — | Toggle callback; omit for non-foldable |
-| `logo` | `(folded: boolean \| undefined) => ReactNode` | — | Logo render function |
-| `showLogoWhenFolded` | `boolean` | `true` | See `Root` |
-| `children` | `ReactNode` | — | `Header`, `Body`, `Footer` content |
+| `title` | `string \| RichStr` | — | Section heading; omit for an untitled spacer |
+| `action` | `ReactNode` | — | Optional element shown on hover (e.g. a `+` button) |
+| `disabled` | `boolean` | — | Dims the section header to indicate it is unavailable |
+| `children` | `ReactNode` | — | |
 
 ## Hooks
 
 ### `useSidebarState()`
 
-Returns `{ folded, setFolded }`. Must be used within `StateProvider`.
+Returns `{ folded, setFolded }`. Must be used within `SidebarStateProvider`.
 
 ```ts
 import { useSidebarState } from "@opal/layouts";
@@ -92,93 +87,35 @@ import { useSidebarState } from "@opal/layouts";
 const { folded, setFolded } = useSidebarState();
 ```
 
-### `useSidebarFolded()`
-
-Returns the **effective** fold state for content rendering. On mobile this is
-always `false` — the overlay transform handles visibility instead. Use this
-inside `Body` children to conditionally hide content when collapsed.
-
-```ts
-import { useSidebarFolded } from "@opal/layouts";
-
-const folded = useSidebarFolded();
-```
-
 ## Usage
 
-### With `SidebarLayouts.Root` (admin sidebar pattern)
-
 ```tsx
-import { SidebarLayouts, useSidebarFolded } from "@opal/layouts";
+import { SidebarLayouts } from "@opal/layouts";
+import { renderAppLogo } from "@/lib/app/utils";
+import { useShowLogoWhenFolded } from "@/lib/sidebar/hooks";
 
 function MySidebar() {
-  const folded = useSidebarFolded();
+  const showLogoWhenFolded = useShowLogoWhenFolded();
 
   return (
-    <SidebarLayouts.Root
-      logo={(f) => <MyLogo folded={f} />}
-    >
-      <SidebarLayouts.Header>
-        {folded ? <IconButton /> : <SearchInput />}
+    <SidebarLayouts.Root foldable>
+      <SidebarLayouts.Header
+        renderAppLogo={renderAppLogo}
+        showLogoWhenFolded={showLogoWhenFolded}
+      >
+        <SearchInput />
       </SidebarLayouts.Header>
 
       <SidebarLayouts.Body scrollKey="my-sidebar">
-        <NavItems />
+        <SidebarLayouts.Section title="Recent">
+          <NavItems />
+        </SidebarLayouts.Section>
       </SidebarLayouts.Body>
 
       <SidebarLayouts.Footer>
         <UserAvatar />
       </SidebarLayouts.Footer>
     </SidebarLayouts.Root>
-  );
-}
-```
-
-### With `SidebarWrapper` directly (app sidebar pattern)
-
-```tsx
-import { SidebarWrapper, useSidebarFolded, useSidebarState } from "@opal/layouts";
-
-function AppSidebarShell() {
-  const folded = useSidebarFolded();
-  const { setFolded } = useSidebarState();
-
-  return (
-    <SidebarWrapper
-      folded={folded}
-      onFoldClick={() => setFolded((p) => !p)}
-      logo={(f) => <MyLogo folded={f} />}
-    >
-      <SidebarBody />
-    </SidebarWrapper>
-  );
-}
-```
-
-### Persisting fold state
-
-```tsx
-import { SidebarLayouts } from "@opal/layouts";
-import Cookies from "js-cookie";
-
-function AppSidebarStateProvider({ children }: { children: React.ReactNode }) {
-  const [defaultFolded] = useState(() =>
-    typeof window !== "undefined" &&
-    (Cookies.get("sidebarIsToggled") === "true" ||
-      localStorage.getItem("sidebarIsToggled") === "true")
-  );
-
-  return (
-    <SidebarLayouts.StateProvider
-      defaultFolded={defaultFolded}
-      onFoldedChange={(folded) => {
-        const v = String(folded);
-        Cookies.set("sidebarIsToggled", v, { expires: 365 });
-        localStorage.setItem("sidebarIsToggled", v);
-      }}
-    >
-      {children}
-    </SidebarLayouts.StateProvider>
   );
 }
 ```

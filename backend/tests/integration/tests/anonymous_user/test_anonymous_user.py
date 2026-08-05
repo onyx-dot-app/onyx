@@ -2,8 +2,7 @@ from tests.integration.common_utils.constants import API_SERVER_URL
 from tests.integration.common_utils.http_client import client
 from tests.integration.common_utils.managers.settings import SettingsManager
 from tests.integration.common_utils.managers.user import UserManager
-from tests.integration.common_utils.test_models import DATestSettings
-from tests.integration.common_utils.test_models import DATestUser
+from tests.integration.common_utils.test_models import DATestSettings, DATestUser
 
 
 def test_me_endpoint_returns_anonymous_user_when_enabled(
@@ -96,6 +95,51 @@ def test_anonymous_user_denied_persona_when_disabled(
 
     response = client.get(
         f"{API_SERVER_URL}/persona",
+        headers=anon_user.headers,
+    )
+    # 403 is returned - BasicAuthenticationError uses HTTP 403 for all auth failures
+    assert response.status_code == 403
+
+
+def test_anonymous_user_reads_settings_when_enabled(
+    reset: None,  # noqa: ARG001
+) -> None:
+    """Anonymous users must be able to read /settings so admin-controlled
+    preferences (e.g. disable_default_assistant / "Always Start with an Agent")
+    actually take effect for them instead of silently falling back to FE
+    defaults."""
+    admin_user: DATestUser = UserManager.create(name="admin_user")
+
+    SettingsManager.update_settings(
+        DATestSettings(anonymous_user_enabled=True, disable_default_assistant=True),
+        user_performing_action=admin_user,
+    )
+
+    anon_user = UserManager.get_anonymous_user()
+
+    response = client.get(
+        f"{API_SERVER_URL}/settings",
+        headers=anon_user.headers,
+    )
+    assert response.status_code == 200
+    assert response.json()["disable_default_assistant"] is True
+
+
+def test_anonymous_user_denied_settings_when_disabled(
+    reset: None,  # noqa: ARG001
+) -> None:
+    """With anonymous access off, /settings rejects the anonymous user."""
+    admin_user: DATestUser = UserManager.create(name="admin_user")
+
+    SettingsManager.update_settings(
+        DATestSettings(anonymous_user_enabled=False),
+        user_performing_action=admin_user,
+    )
+
+    anon_user = UserManager.get_anonymous_user()
+
+    response = client.get(
+        f"{API_SERVER_URL}/settings",
         headers=anon_user.headers,
     )
     # 403 is returned - BasicAuthenticationError uses HTTP 403 for all auth failures

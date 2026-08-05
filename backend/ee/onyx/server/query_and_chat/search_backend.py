@@ -11,29 +11,30 @@ onyx/server/features/search/api.py (POST /api/search).
 
 from collections.abc import Generator
 
-from fastapi import APIRouter
-from fastapi import Depends
-from fastapi import HTTPException
+from fastapi import APIRouter, Depends, HTTPException
 from fastapi.responses import StreamingResponse
 from sqlalchemy.orm import Session
 
 from ee.onyx.db.search import fetch_search_queries_for_user
-from ee.onyx.search.process_search_query import gather_search_stream
-from ee.onyx.search.process_search_query import stream_search_query
+from ee.onyx.search.process_search_query import (
+    gather_search_stream,
+    stream_search_query,
+)
 from ee.onyx.secondary_llm_flows.search_flow_classification import (
     classify_is_search_flow,
 )
-from ee.onyx.server.query_and_chat.models import SearchFlowClassificationRequest
-from ee.onyx.server.query_and_chat.models import SearchFlowClassificationResponse
-from ee.onyx.server.query_and_chat.models import SearchFullResponse
-from ee.onyx.server.query_and_chat.models import SearchHistoryResponse
-from ee.onyx.server.query_and_chat.models import SearchQueryResponse
-from ee.onyx.server.query_and_chat.models import SendSearchQueryRequest
+from ee.onyx.server.query_and_chat.models import (
+    SearchFlowClassificationRequest,
+    SearchFlowClassificationResponse,
+    SearchFullResponse,
+    SearchHistoryResponse,
+    SearchQueryResponse,
+    SendSearchQueryRequest,
+)
 from ee.onyx.server.query_and_chat.streaming_models import SearchErrorPacket
 from onyx.auth.permissions import require_permission
 from onyx.configs.app_configs import ONYX_SEARCH_UI_USES_OPENSEARCH_KEYWORD_SEARCH
-from onyx.db.engine.sql_engine import get_session
-from onyx.db.engine.sql_engine import get_session_with_current_tenant
+from onyx.db.engine.sql_engine import get_session, get_session_with_current_tenant
 from onyx.db.enums import Permission
 from onyx.db.models import User
 from onyx.llm.factory import get_default_llm
@@ -51,7 +52,7 @@ router = APIRouter(prefix="/search")
 @router.post("/search-flow-classification")
 def search_flow_classification(
     request: SearchFlowClassificationRequest,
-    _: User = Depends(require_permission(Permission.BASIC_ACCESS)),
+    _: User = Depends(require_permission(Permission.READ_SEARCH)),
     db_session: Session = Depends(get_session),
 ) -> SearchFlowClassificationResponse:
     query = request.user_query
@@ -91,7 +92,7 @@ def search_flow_classification(
 )
 def handle_send_search_message(
     request: SendSearchQueryRequest,
-    user: User = Depends(require_permission(Permission.BASIC_ACCESS)),
+    user: User = Depends(require_permission(Permission.READ_SEARCH)),
     db_session: Session = Depends(get_session),
 ) -> StreamingResponse | SearchFullResponse:
     """
@@ -141,7 +142,7 @@ def handle_send_search_message(
 def get_search_history(
     limit: int = 100,
     filter_days: int | None = None,
-    user: User = Depends(require_permission(Permission.BASIC_ACCESS)),
+    user: User = Depends(require_permission(Permission.READ_SEARCH)),
     db_session: Session = Depends(get_session),
 ) -> SearchHistoryResponse:
     """

@@ -25,12 +25,21 @@ OPENCODE_DISABLED_TOOLS: list[str] = [
     t.strip() for t in _disabled_tools_str.split(",") if t.strip()
 ]
 
+
 SANDBOX_IDLE_TIMEOUT_SECONDS = int(
     os.environ.get("SANDBOX_IDLE_TIMEOUT_SECONDS", "3600")
 )
-SANDBOX_MAX_CONCURRENT_PER_ORG = int(
-    os.environ.get("SANDBOX_MAX_CONCURRENT_PER_ORG", "10")
+SANDBOX_APPROVAL_WAIT_TIMEOUT_SECONDS = int(
+    os.environ.get("SANDBOX_APPROVAL_WAIT_TIMEOUT_SECONDS", "180")
 )
+# Margin a client-side wait must add over the approval window so a decision
+# landing at the wire never races the client's own timeout. Shared by the
+# AGENTS.md guidance and the inactivity-backstop default below.
+SANDBOX_APPROVAL_WAIT_MARGIN_SECONDS = 20
+SANDBOX_IDLE_CLEANUP_INTERVAL_SECONDS = int(
+    os.environ.get("SANDBOX_IDLE_CLEANUP_INTERVAL_SECONDS", "60")
+)
+SANDBOX_HEARTBEAT_REFRESH_INTERVAL_SECONDS = 60
 
 SANDBOX_NEXTJS_PORT_START = int(os.environ.get("SANDBOX_NEXTJS_PORT_START", "3010"))
 SANDBOX_NEXTJS_PORT_END = int(os.environ.get("SANDBOX_NEXTJS_PORT_END", "3100"))
@@ -50,29 +59,27 @@ ATTACHMENTS_DIRECTORY = "attachments"
 
 SANDBOX_NAMESPACE = os.environ.get("SANDBOX_NAMESPACE", "onyx-sandboxes")
 
-SANDBOX_CONTAINER_IMAGE = os.environ.get(
-    "SANDBOX_CONTAINER_IMAGE", "onyxdotapp/sandbox:v0.1.52"
+SANDBOX_CONTAINER_IMAGE = (
+    os.environ.get("SANDBOX_CONTAINER_IMAGE", "").strip() or "onyxdotapp/sandbox:latest"
 )
 
-# Set to "Always" in environments that pin a mutable tag (e.g. :dev) so nodes
-# re-pull on every pod start; immutable version pins can use the node cache.
+# Set to "Always" only in internal environments that deliberately pin a mutable
+# tag. Non-dev deployments should use app-aligned immutable tags.
 SANDBOX_IMAGE_PULL_POLICY = os.environ.get("SANDBOX_IMAGE_PULL_POLICY", "IfNotPresent")
 
 SANDBOX_SERVICE_ACCOUNT_NAME = os.environ.get("SANDBOX_SERVICE_ACCOUNT_NAME", "sandbox")
 
 ENABLE_CRAFT = os.environ.get("ENABLE_CRAFT", "false").lower() == "true"
 
+# Gates the built-in `browser` skill. Defaults on to match the sandbox image's
+# build-time ENABLE_BROWSER ARG (also on); a browserless sandbox build must set
+# this false too, else the skill is advertised without its runtime.
+ENABLE_BROWSER = os.environ.get("ENABLE_BROWSER", "true").lower() == "true"
+
 SANDBOX_PUSH_PRIVATE_KEY = os.environ.get("ONYX_SANDBOX_PUSH_PRIVATE_KEY", "")
 
 
-# Provider types Craft supports. The recommended models per type come from the
-# shared recommended-models config (served via /build/recommended-models).
-BUILD_MODE_ALLOWED_PROVIDER_TYPES = ["anthropic", "openai", "openrouter"]
-
-# apiKey sentinel for a supported provider the org hasn't configured. We register
-# every supported provider so a cross-provider override never hits "model not
-# found"; an unconfigured one fails closed instead (proxy 403 / upstream 401).
-BUILD_MODE_NOT_CONFIGURED_API_KEY = "onyx-provider-not-configured"
+ONYX_GATEWAY_PROVIDER_ID = "onyx"
 
 # Dev/debug-only: exposes an SSE endpoint that tails the sandbox pod's
 # opencode-serve container logs. Never enable in prod — the logs include LLM I/O
@@ -82,9 +89,9 @@ ENABLE_OPENCODE_DEBUGGING = (
     os.environ.get("ENABLE_OPENCODE_DEBUGGING", "false").lower() == "true"
 )
 
-# Must be set when SANDBOX_BACKEND=kubernetes (no default — varies per
-# deployment).
-SANDBOX_API_SERVER_URL = os.environ.get("SANDBOX_API_SERVER_URL", "")
+# Complete Onyx API base URL reachable from the sandbox, including any path
+# prefix. Must be set when SANDBOX_BACKEND=kubernetes.
+ONYX_SERVER_URL = os.environ.get("ONYX_SERVER_URL", "")
 
 # ==============================================================================
 # Sandbox egress proxy
@@ -122,6 +129,15 @@ SANDBOX_PROXY_CA_VOLUME_NAME = "sandbox_proxy_ca"
 # never see the raw values.
 SANDBOX_PROXY_INJECTED_PLACEHOLDER = "replaced_by_egress_proxy"
 
+# Header carrying the originating BuildSession id on opencode's in-process MCP
+# client requests. opencode-serve is one process for many sessions and uses the
+# untagged base proxy env, so the shell-env proxy tag can't ride MCP egress;
+# instead the per-session opencode.json stamps this header on each MCP server.
+# The egress proxy reads it to attribute the tool call to a session for approval,
+# then strips it so it never reaches the MCP origin.
+MCP_SESSION_TAG_HEADER = "X-Onyx-Mcp-Session"
+
+
 # ==============================================================================
 # Docker sandbox (SANDBOX_BACKEND=docker, self-hosted docker-compose)
 # ==============================================================================
@@ -150,10 +166,29 @@ SANDBOX_DOCKER_CPU_LIMIT = float(os.environ.get("SANDBOX_DOCKER_CPU_LIMIT", "1.0
 
 SSE_KEEPALIVE_INTERVAL = float(os.environ.get("SSE_KEEPALIVE_INTERVAL", "15.0"))
 
-# Wall-clock budget for one user-message turn against opencode-serve.
-SANDBOX_TURN_TIMEOUT_SECONDS = float(
-    os.environ.get("SANDBOX_TURN_TIMEOUT_SECONDS", "900.0")
+# Maximum time opencode-serve may go without emitting a turn event. Coarse
+# liveness backstop only: it must stay above every in-tool wait so it never
+# pre-empts a healthy long-running tool — opencode's bash tool defaults to
+# 180s, and a proxy-parked approval inside a tool call holds the stream
+# silent for the full approval window, hence the derivation. It exists to
+# catch stalls opencode does not bound itself (LLM-stream hangs, non-bash/MCP
+# tool hangs). The turn budget is the hard ceiling.
+OPENCODE_PROMPT_INACTIVITY_TIMEOUT_SECONDS = float(
+    os.environ.get(
+        "OPENCODE_PROMPT_INACTIVITY_TIMEOUT_SECONDS",
+        str(
+            SANDBOX_APPROVAL_WAIT_TIMEOUT_SECONDS + SANDBOX_APPROVAL_WAIT_MARGIN_SECONDS
+        ),
+    )
 )
+
+# Per-turn deadline stamp for the turn-budget plugin; name is an internal
+# contract with turn-budget.ts.
+TURN_BUDGET_FILE_NAME = ".onyx-turn-budget.json"
+
+# Prompt-slot lock lease; renewed on every sandbox event/keepalive, so a dead
+# holder strands the slot for at most this long.
+PROMPT_SLOT_LEASE_SECONDS = float(os.environ.get("PROMPT_SLOT_LEASE_SECONDS", "120.0"))
 
 # Match against the EXPOSE directive in the sandbox Dockerfile.
 OPENCODE_SERVE_PORT = int(os.environ.get("OPENCODE_SERVE_PORT", "4096"))
@@ -174,20 +209,14 @@ OPENCODE_SERVE_CONNECT_TIMEOUT = float(
 OPENCODE_SERVE_REQUEST_TIMEOUT = float(
     os.environ.get("OPENCODE_SERVE_REQUEST_TIMEOUT", "30.0")
 )
-# Idle timeout for /event SSE. The reader reconnects (with backoff) if the
-# stream is silent for this long.
+# Idle timeout for the raw /event SSE connection to opencode-serve. The
+# reader reconnects (with backoff) if no bytes arrive for this long. Its
+# floor is opencode-serve's own emission cadence on /event — NOT our
+# downstream UI keepalive, which is synthesized after the bus and never
+# reaches this connection.
 OPENCODE_SERVE_EVENT_READ_TIMEOUT = float(
     os.environ.get("OPENCODE_SERVE_EVENT_READ_TIMEOUT", "60.0")
 )
-
-# ==============================================================================
-# Rate limiting
-# ==============================================================================
-
-# Messages per week. Free users always get 5 messages total (not configurable).
-# Per-user overrides are managed via the PostHog feature flag
-# "craft-has-usage-limits".
-CRAFT_PAID_USER_RATE_LIMIT = int(os.environ.get("CRAFT_PAID_USER_RATE_LIMIT", "25"))
 
 # ==============================================================================
 # User Library (user-uploaded raw files: xlsx, pptx, docx, etc.)

@@ -1,11 +1,9 @@
 import unicodedata
 
 from pydantic import BaseModel
-from rapidfuzz import fuzz
-from rapidfuzz import utils
+from rapidfuzz import fuzz, utils
 
-from onyx.utils.text_processing import is_zero_width_char
-from onyx.utils.text_processing import normalize_char
+from onyx.utils.text_processing import is_zero_width_char, normalize_char
 
 
 class SnippetMatchResult(BaseModel):
@@ -171,7 +169,7 @@ def _normalize_text_with_mapping(text: str) -> tuple[str, list[int]]:
         # Check for HTML entities first (greedy match)
         for entity in sorted_entities:
             if text[i : i + len(entity)] == entity:
-                output = html_entities[entity]  # ty: ignore[invalid-argument-type]
+                output = html_entities[entity]
                 step = len(entity)
                 break
 

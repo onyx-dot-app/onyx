@@ -53,6 +53,10 @@ export interface ChatScrollContainerProps {
 
   /** Hide the scrollbar (scroll still works, just invisible) */
   hideScrollbar?: boolean;
+
+  /** Full-width mode: edge-to-edge scroll container instead of the centered
+   *  reading layout (drops the reserved scrollbar gutter). */
+  fullWidth?: boolean;
 }
 
 // Build a CSS mask that fades content opacity at top/bottom edges
@@ -74,6 +78,7 @@ const ChatScrollContainer = React.memo(
         onScrollButtonVisibilityChange,
         sessionId,
         hideScrollbar = false,
+        fullWidth = false,
       }: ChatScrollContainerProps,
       ref: ForwardedRef<ChatScrollContainerHandle>
     ) => {
@@ -358,11 +363,14 @@ const ChatScrollContainer = React.memo(
             data-chat-scroll
             className={cn(
               "flex flex-col flex-1 min-h-0 overflow-y-auto overflow-x-hidden",
-              hideScrollbar ? "no-scrollbar" : "default-scrollbar"
+              hideScrollbar ? "no-scrollbar" : "default-scrollbar",
+              // Full-width (always the case below md) drops the reserved
+              // gutters so content sits flush with the chat edge; centered
+              // mode keeps both-edges to avoid shift.
+              !fullWidth && "md:[scrollbar-gutter:stable_both-edges]"
             )}
             onScroll={handleScroll}
             style={{
-              scrollbarGutter: "stable both-edges",
               // Apply mask to fade content opacity at edges
               maskImage: contentMask,
               WebkitMaskImage: contentMask,
@@ -370,7 +378,10 @@ const ChatScrollContainer = React.memo(
           >
             <div
               ref={contentWrapperRef}
-              className="w-full flex-1 flex flex-col items-center px-4"
+              className={cn(
+                // px-2 sm:px-4 matches the input bar's horizontal padding.
+                "w-full flex-1 flex flex-col items-center px-2 sm:px-4"
+              )}
               data-scroll-ready={isScrollReady}
               style={{
                 visibility: isScrollReady ? "visible" : "hidden",

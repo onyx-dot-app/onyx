@@ -5,11 +5,9 @@ import io
 import logging
 import time
 from collections.abc import Callable
-from typing import ParamSpec
-from typing import TypeVar
+from typing import ParamSpec, TypeVar
 
-from prometheus_client import Counter
-from prometheus_client import Histogram
+from prometheus_client import Counter, Histogram
 
 logger = logging.getLogger(__name__)
 
@@ -71,7 +69,7 @@ def track_image_summarization(
     def wrapper(*args: P.args, **kwargs: P.kwargs) -> R:
         bound = inspect.signature(fn).bind(*args, **kwargs)
         bound.apply_defaults()
-        image_data: bytes | None = bound.arguments.get("image_data")  # type: ignore[assignment]
+        image_data: bytes | None = bound.arguments.get("image_data")
 
         labels: dict[str, str] = {
             "size_bucket": "unknown",

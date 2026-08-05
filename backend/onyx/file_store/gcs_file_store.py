@@ -4,10 +4,7 @@ import json
 import tempfile
 import uuid
 from io import BytesIO
-from typing import Any
-from typing import cast
-from typing import IO
-from typing import TYPE_CHECKING
+from typing import IO, TYPE_CHECKING, Any, cast
 
 import puremagic
 from sqlalchemy.orm import Session
@@ -16,15 +13,19 @@ if TYPE_CHECKING:
     from google.cloud.storage import Client as GCSClient
 
 from onyx.configs.constants import FileOrigin
-from onyx.db.engine.sql_engine import get_session_with_current_tenant
-from onyx.db.engine.sql_engine import get_session_with_current_tenant_if_none
-from onyx.db.file_record import delete_filerecord_by_file_id
-from onyx.db.file_record import get_filerecord_by_file_id
-from onyx.db.file_record import get_filerecord_by_file_id_optional
-from onyx.db.file_record import get_filerecord_by_prefix
-from onyx.db.file_record import upsert_filerecord
+from onyx.db.engine.sql_engine import (
+    get_session_with_current_tenant,
+    get_session_with_current_tenant_if_none,
+)
+from onyx.db.file_record import (
+    delete_filerecord_by_file_id,
+    get_filerecord_by_file_id,
+    get_filerecord_by_file_id_optional,
+    get_filerecord_by_prefix,
+    upsert_filerecord,
+)
 from onyx.db.models import FileRecord
-from onyx.file_store.file_store import FileStore
+from onyx.file_store.file_store import FileStore, content_byte_size
 from onyx.file_store.s3_key_utils import generate_s3_key
 from onyx.utils.file import FileWithMimeType
 from onyx.utils.logger import setup_logger
@@ -124,8 +125,7 @@ class GCSBackedFileStore(FileStore):
 
     def initialize(self) -> None:
         """Initialize the GCS file store by ensuring the bucket exists."""
-        from google.api_core.exceptions import Forbidden
-        from google.api_core.exceptions import NotFound
+        from google.api_core.exceptions import Forbidden, NotFound
 
         client = self._get_gcs_client()
         try:
@@ -199,11 +199,28 @@ class GCSBackedFileStore(FileStore):
                     object_key=object_key,
                     db_session=db_session,
                     file_metadata=file_metadata,
+                    file_size=content_byte_size(file_content),
                 )
                 db_session.commit()
         except Exception:
+            # Clean up the uploaded blob unless a committed record still
+            # references this exact object — on a failed overwrite the record
+            # survives the rollback, so deleting the blob it points at would
+            # turn the failed save into data loss. A record pointing at a
+            # different bucket/key does not reference this upload, so the
+            # blob is safe (and necessary) to remove.
             try:
-                blob.delete()
+                with get_session_with_current_tenant() as cleanup_session:
+                    existing_record = get_filerecord_by_file_id_optional(
+                        file_id=file_id, db_session=cleanup_session
+                    )
+                record_references_upload = (
+                    existing_record is not None
+                    and existing_record.bucket_name == self._bucket_name
+                    and existing_record.object_key == object_key
+                )
+                if not record_references_upload:
+                    blob.delete()
             except Exception:
                 logger.warning(
                     "Failed to clean up orphaned GCS blob %s/%s "
@@ -261,11 +278,20 @@ class GCSBackedFileStore(FileStore):
                     file_id=file_id, db_session=db_session
                 )
 
+            from google.api_core.exceptions import NotFound
+
             client = self._get_gcs_client()
             bucket = client.bucket(file_record.bucket_name)
             blob = bucket.blob(file_record.object_key)
-            blob.reload()
+            try:
+                blob.reload()
+            except NotFound as e:
+                raise FileNotFoundError(
+                    f"Object for file {file_id} does not exist"
+                ) from e
             return blob.size
+        except FileNotFoundError:
+            raise
         except Exception as e:
             logger.warning("Error getting file size for %s: %s", file_id, e)
             return None
@@ -326,49 +352,40 @@ class GCSBackedFileStore(FileStore):
         new_file_id: str,
         db_session: Session | None = None,
     ) -> None:
+        """Rename a file by repointing its DB record at the existing blob.
+
+        The blob is not moved — only file_id changes — and reads resolve via
+        the stored object_key, so they still find it. The blob keeps its
+        original key, so a file_id must not be reused for a new save_file after
+        it has been renamed (the new write would overwrite the renamed blob).
+        """
+        if old_file_id == new_file_id:
+            return
         with get_session_with_current_tenant_if_none(db_session) as db_session:
             try:
                 old_file_record = get_filerecord_by_file_id(
                     file_id=old_file_id, db_session=db_session
                 )
-                new_object_key = self._get_object_key(new_file_id)
-
-                client = self._get_gcs_client()
-                source_bucket = client.bucket(old_file_record.bucket_name)
-                source_blob = source_bucket.blob(old_file_record.object_key)
-                dest_bucket = client.bucket(self._bucket_name)
-
-                source_bucket.copy_blob(source_blob, dest_bucket, new_object_key)
-
                 file_metadata = cast(
                     dict[Any, Any] | None, old_file_record.file_metadata
                 )
 
+                # Reuse the old record's bucket/object_key — the blob stays put.
                 upsert_filerecord(
                     file_id=new_file_id,
                     display_name=old_file_record.display_name,
                     file_origin=old_file_record.file_origin,
                     file_type=old_file_record.file_type,
-                    bucket_name=self._bucket_name,
-                    object_key=new_object_key,
+                    bucket_name=old_file_record.bucket_name,
+                    object_key=old_file_record.object_key,
                     db_session=db_session,
                     file_metadata=file_metadata,
+                    file_size=old_file_record.file_size,
                 )
 
                 delete_filerecord_by_file_id(file_id=old_file_id, db_session=db_session)
 
                 db_session.commit()
-
-                try:
-                    source_blob.delete()
-                except Exception:
-                    logger.warning(
-                        "Failed to delete old GCS blob after changing file ID from "
-                        "%s to %s; blob may be orphaned",
-                        old_file_id,
-                        new_file_id,
-                        exc_info=True,
-                    )
 
             except Exception as e:
                 db_session.rollback()

@@ -1,11 +1,8 @@
 import sys
 import time
 import traceback
-from collections.abc import Generator
-from collections.abc import Iterable
-from datetime import datetime
-from datetime import timedelta
-from datetime import timezone
+from collections.abc import Generator, Iterable
+from datetime import datetime, timedelta, timezone
 from typing import TypeVar
 
 import sentry_sdk
@@ -13,72 +10,94 @@ from celery import Celery
 from sqlalchemy.orm import Session
 
 from onyx.access.access import source_should_fetch_permissions_during_indexing
-from onyx.background.indexing.checkpointing_utils import check_checkpoint_size
-from onyx.background.indexing.checkpointing_utils import get_latest_valid_checkpoint
-from onyx.background.indexing.checkpointing_utils import save_checkpoint
+from onyx.background.indexing.checkpointing_utils import (
+    check_checkpoint_size,
+    get_latest_valid_checkpoint,
+    save_checkpoint,
+)
 from onyx.background.indexing.memory_tracer import MemoryTracer
-from onyx.configs.app_configs import INDEX_BATCH_SIZE
-from onyx.configs.app_configs import INDEXING_SIZE_WARNING_THRESHOLD
-from onyx.configs.app_configs import INDEXING_TRACER_INTERVAL
-from onyx.configs.app_configs import INTEGRATION_TESTS_MODE
-from onyx.configs.app_configs import LEAVE_CONNECTOR_ACTIVE_ON_INITIALIZATION_FAILURE
-from onyx.configs.app_configs import MAX_FILE_SIZE_BYTES
-from onyx.configs.app_configs import PERSISTENT_INDEXING
-from onyx.configs.app_configs import POLL_CONNECTOR_OFFSET
-from onyx.configs.constants import OnyxCeleryPriority
-from onyx.configs.constants import OnyxCeleryQueues
-from onyx.configs.constants import OnyxCeleryTask
+from onyx.configs.app_configs import (
+    INDEX_BATCH_SIZE,
+    INDEXING_SIZE_WARNING_THRESHOLD,
+    INDEXING_TRACER_INTERVAL,
+    INTEGRATION_TESTS_MODE,
+    LEAVE_CONNECTOR_ACTIVE_ON_INITIALIZATION_FAILURE,
+    MAX_FILE_SIZE_BYTES,
+    PERSISTENT_INDEXING,
+    POLL_CONNECTOR_OFFSET,
+)
+from onyx.configs.constants import OnyxCeleryPriority, OnyxCeleryQueues, OnyxCeleryTask
 from onyx.connectors.connector_runner import ConnectorRunner
-from onyx.connectors.exceptions import ConnectorValidationError
-from onyx.connectors.exceptions import UnexpectedValidationError
+from onyx.connectors.exceptions import (
+    ConnectorValidationError,
+    UnexpectedValidationError,
+)
 from onyx.connectors.factory import instantiate_connector
 from onyx.connectors.interfaces import CheckpointedConnector
-from onyx.connectors.models import ConnectorFailure
-from onyx.connectors.models import ConnectorStopSignal
-from onyx.connectors.models import Document
-from onyx.connectors.models import HierarchyNode
-from onyx.connectors.models import TextSection
+from onyx.connectors.models import (
+    ConnectorFailure,
+    ConnectorStopSignal,
+    Document,
+    HierarchyNode,
+    TextSection,
+)
 from onyx.db.connector import mark_ccpair_with_indexing_trigger
-from onyx.db.connector_credential_pair import get_connector_credential_pair_from_id
-from onyx.db.connector_credential_pair import get_last_successful_attempt_poll_range_end
-from onyx.db.connector_credential_pair import update_connector_credential_pair
+from onyx.db.connector_credential_pair import (
+    get_connector_credential_pair_from_id,
+    get_last_successful_attempt_poll_range_end,
+    update_connector_credential_pair,
+)
 from onyx.db.constants import CONNECTOR_VALIDATION_ERROR_MESSAGE_PREFIX
 from onyx.db.engine.sql_engine import get_session_with_current_tenant
-from onyx.db.enums import AccessType
-from onyx.db.enums import ConnectorCredentialPairStatus
-from onyx.db.enums import IndexingStatus
-from onyx.db.enums import IndexModelStatus
-from onyx.db.hierarchy import upsert_hierarchy_node_cc_pair_entries
-from onyx.db.hierarchy import upsert_hierarchy_nodes_batch
-from onyx.db.index_attempt import create_index_attempt_error
-from onyx.db.index_attempt import get_index_attempt
-from onyx.db.index_attempt import get_recent_completed_attempts_for_cc_pair
-from onyx.db.index_attempt import mark_attempt_canceled
-from onyx.db.index_attempt import mark_attempt_failed
-from onyx.db.index_attempt import transition_attempt_to_in_progress
-from onyx.db.index_attempt_metrics import IndexAttemptStage
-from onyx.db.index_attempt_metrics import StageEventBuffer
-from onyx.db.index_attempt_metrics import time_stage
+from onyx.db.enums import (
+    AccessType,
+    ConnectorCredentialPairStatus,
+    IndexingStatus,
+    IndexModelStatus,
+)
+from onyx.db.hierarchy import (
+    upsert_hierarchy_node_cc_pair_entries,
+    upsert_hierarchy_nodes_batch,
+)
+from onyx.db.index_attempt import (
+    create_index_attempt_error,
+    get_index_attempt,
+    get_recent_completed_attempts_for_cc_pair,
+    mark_attempt_canceled,
+    mark_attempt_failed,
+    transition_attempt_to_in_progress,
+)
+from onyx.db.index_attempt_metrics import (
+    IndexAttemptStage,
+    StageEventBuffer,
+    time_stage,
+)
 from onyx.db.indexing_coordination import IndexingCoordination
-from onyx.db.models import Connector
-from onyx.db.models import Credential
-from onyx.db.models import IndexAttempt
-from onyx.file_store.document_batch_storage import DocumentBatchStorage
-from onyx.file_store.document_batch_storage import get_document_batch_storage
-from onyx.file_store.staging import build_raw_file_callback
-from onyx.file_store.staging import RawFileCallback
-from onyx.file_store.staging import reap_prior_attempt_staged_files
+from onyx.db.models import Connector, Credential, IndexAttempt
+from onyx.file_store.document_batch_storage import (
+    DocumentBatchStorage,
+    get_document_batch_storage,
+)
+from onyx.file_store.staging import (
+    RawFileCallback,
+    build_raw_file_callback,
+    reap_prior_attempt_staged_files,
+)
 from onyx.indexing.indexing_heartbeat import IndexingHeartbeatInterface
 from onyx.redis.redis_docprocessing import RedisDocprocessing
-from onyx.redis.redis_hierarchy import cache_hierarchy_nodes_batch
-from onyx.redis.redis_hierarchy import ensure_source_node_exists
-from onyx.redis.redis_hierarchy import get_node_id_from_raw_id
-from onyx.redis.redis_hierarchy import get_source_node_id_from_cache
-from onyx.redis.redis_hierarchy import HierarchyNodeCacheEntry
+from onyx.redis.redis_hierarchy import (
+    HierarchyNodeCacheEntry,
+    cache_hierarchy_nodes_batch,
+    ensure_source_node_exists,
+    get_node_id_from_raw_id,
+    get_source_node_id_from_cache,
+)
 from onyx.redis.redis_pool import get_redis_client
 from onyx.utils.logger import setup_logger
-from onyx.utils.postgres_sanitization import sanitize_document_for_postgres
-from onyx.utils.postgres_sanitization import sanitize_hierarchy_nodes_for_postgres
+from onyx.utils.postgres_sanitization import (
+    sanitize_document_for_postgres,
+    sanitize_hierarchy_nodes_for_postgres,
+)
 from onyx.utils.variable_functionality import global_version
 from shared_configs.configs import MULTI_TENANT
 from shared_configs.contextvars import INDEX_ATTEMPT_INFO_CONTEXTVAR
@@ -474,7 +493,8 @@ def connector_document_extraction(
             and (from_beginning or not has_successful_attempt)
         )
 
-        # Set up time windows for polling
+        # Set up time windows for polling. A port-flow FUTURE's resume cursor comes from its
+        # synthetic seed (get_last_successful_... keeps ignore_synthetic_seed=False by default).
         last_successful_index_poll_range_end = (
             earliest_index_time
             if from_beginning
@@ -506,17 +526,14 @@ def connector_document_extraction(
             None,
         )
 
-        # if the last attempt failed, try and use the same window. This is necessary
-        # to ensure correctness with checkpointing. If we don't do this, things like
-        # new slack channels could be missed (since existing slack channels are
-        # cached as part of the checkpoint).
+        # if the last attempt didn't complete cleanly, reuse the same window. This
+        # is necessary to ensure correctness with checkpointing. If we don't do this,
+        # things like new slack channels could be missed (since existing slack
+        # channels are cached as part of the checkpoint).
         if (
             most_recent_attempt
             and most_recent_attempt.poll_range_end
-            and (
-                most_recent_attempt.status == IndexingStatus.FAILED
-                or most_recent_attempt.status == IndexingStatus.CANCELED
-            )
+            and most_recent_attempt.status.should_reuse_checkpoint()
         ):
             window_end = most_recent_attempt.poll_range_end
         else:
@@ -911,14 +928,12 @@ def connector_document_extraction(
 
         else:
             with get_session_with_current_tenant() as db_session_temp:
-                # don't overwrite attempts that are already failed/canceled for another reason
+                # don't overwrite an attempt already in a terminal state for
+                # another reason (e.g. INTERRUPTED by a worker shutdown)
                 index_attempt = get_index_attempt(db_session_temp, index_attempt_id)
-                if index_attempt and index_attempt.status in [
-                    IndexingStatus.CANCELED,
-                    IndexingStatus.FAILED,
-                ]:
+                if index_attempt and index_attempt.status.is_terminal():
                     logger.info(
-                        "Attempt %s is already failed/canceled, skipping marking as failed.",
+                        "Attempt %s is already terminal, skipping marking as failed.",
                         index_attempt_id,
                     )
                     raise e

@@ -12,6 +12,7 @@ import {
   fetchTurnEventStream,
   interruptMessageStream,
   processSSEStream,
+  RateLimitedError,
 } from "@/app/craft/services/apiServices";
 
 jest.mock("swr", () => ({
@@ -19,7 +20,13 @@ jest.mock("swr", () => ({
 }));
 
 jest.mock("@/app/craft/services/apiServices", () => ({
-  RateLimitError: class RateLimitError extends Error {},
+  RateLimitedError: class RateLimitedError extends Error {
+    details: Record<string, unknown>;
+    constructor(message: string, details: Record<string, unknown>) {
+      super(message);
+      this.details = details;
+    }
+  },
   createTurn: jest.fn(),
   fetchActiveTurn: jest.fn(),
   fetchArtifacts: jest.fn(),
@@ -75,7 +82,7 @@ describe("useBuildStreaming thinking packets", () => {
           raw_output: null,
           status: "pending",
           timestamp: "2026-01-01T00:00:01Z",
-        });
+        } as never);
       });
   });
 
@@ -110,6 +117,141 @@ describe("useBuildStreaming thinking packets", () => {
       type: "tool_call",
       id: "tool-read",
     });
+  });
+
+  it("does not reset the abort controller when a newer turn took ownership mid-stream", async () => {
+    const newerController = new AbortController();
+    jest.mocked(processSSEStream).mockImplementationOnce(async () => {
+      // Simulate a queued message auto-sending mid-stream: the newer turn
+      // installs its own controller while this one is still settling.
+      useBuildSessionStore
+        .getState()
+        .setAbortController(sessionId, newerController);
+    });
+    const { result } = renderHook(() => useBuildStreaming());
+
+    await act(async () => {
+      await result.current.streamMessage(sessionId, "hello");
+    });
+
+    // The completed turn's finally must not clobber the newer turn's controller,
+    // or the newer turn's streamTurnEvents trips the duplicate-watcher guard.
+    expect(
+      useBuildSessionStore.getState().sessions.get(sessionId)?.abortController
+    ).toBe(newerController);
+  });
+
+  it("refreshes files only when an output write completes", async () => {
+    useBuildSessionStore.getState().updateFilesTabState(sessionId, {
+      expandedPaths: ["attachments", "attachments/reports"],
+    });
+    jest
+      .mocked(processSSEStream)
+      .mockImplementationOnce(async (_response, onPacket) => {
+        for (const status of ["pending", "in_progress", "completed"] as const) {
+          onPacket({
+            type: "tool_call_progress",
+            tool_call_id: "write-output",
+            kind: "edit",
+            status,
+            raw_input: { filePath: "outputs/report.txt" },
+            raw_output: null,
+            _meta: { toolName: "write" },
+          } as never);
+        }
+      });
+
+    const { result } = renderHook(() => useBuildStreaming());
+
+    await act(async () => {
+      await result.current.streamMessage(sessionId, "write a report");
+    });
+
+    const session = useBuildSessionStore.getState().sessions.get(sessionId);
+    expect(session?.filesNeedsRefresh).toBe(1);
+    expect(session?.webappNeedsRefresh).toBe(0);
+    expect(session?.filesTabState.expandedPaths).toEqual([
+      "attachments",
+      "attachments/reports",
+    ]);
+  });
+
+  it("refreshes both files and preview for a completed output web write", async () => {
+    jest
+      .mocked(processSSEStream)
+      .mockImplementationOnce(async (_response, onPacket) => {
+        onPacket({
+          type: "tool_call_progress",
+          tool_call_id: "write-web-output",
+          kind: "edit",
+          status: "completed",
+          raw_input: {
+            filePath:
+              "/workspace/sessions/323d7ce1-ea1b-42a8-bc34-ca5d8b4d27a3/outputs/web/app/page.tsx",
+          },
+          raw_output: null,
+          _meta: { toolName: "write" },
+        } as never);
+      });
+
+    const { result } = renderHook(() => useBuildStreaming());
+
+    await act(async () => {
+      await result.current.streamMessage(sessionId, "update the web app");
+    });
+
+    const session = useBuildSessionStore.getState().sessions.get(sessionId);
+    expect(session?.filesNeedsRefresh).toBe(1);
+    expect(session?.webappNeedsRefresh).toBe(1);
+  });
+
+  it("reconciles files when a turn completes", async () => {
+    jest
+      .mocked(processSSEStream)
+      .mockImplementationOnce(async (_response, onPacket) => {
+        onPacket({
+          type: "tool_call_progress",
+          tool_call_id: "mkdir-output",
+          kind: "execute",
+          status: "completed",
+          raw_input: { command: "mkdir -p outputs/report" },
+          raw_output: null,
+          _meta: { toolName: "bash" },
+        } as never);
+        onPacket({ type: "prompt_response" } as never);
+      });
+
+    const { result } = renderHook(() => useBuildStreaming());
+
+    await act(async () => {
+      await result.current.streamMessage(
+        sessionId,
+        "create a report directory"
+      );
+    });
+
+    expect(
+      useBuildSessionStore.getState().sessions.get(sessionId)?.filesNeedsRefresh
+    ).toBe(1);
+  });
+
+  it("does not reconcile files after a text-only turn", async () => {
+    jest
+      .mocked(processSSEStream)
+      .mockImplementationOnce(async (_response, onPacket) => {
+        onPacket({ type: "text_chunk", text: "Done." } as never);
+        onPacket({ type: "prompt_response" } as never);
+      });
+
+    const { result } = renderHook(() => useBuildStreaming());
+
+    await act(async () => {
+      await result.current.streamMessage(sessionId, "explain the project");
+    });
+
+    expect(
+      useBuildSessionStore.getState().sessions.get(sessionId)?.filesNeedsRefresh
+    ).toBe(0);
   });
 
   it("seeds clickable subagent metadata from a task start packet", async () => {
@@ -221,6 +363,36 @@ describe("useBuildStreaming thinking packets", () => {
           status: "in_progress",
           description: "Spawning subagent: Build Space Invaders game",
         }),
+      }),
+    ]);
+  });
+
+  it("appends a connect card stream item from a connect_app_request packet", async () => {
+    jest
+      .mocked(processSSEStream)
+      .mockImplementationOnce(async (_response, onPacket) => {
+        onPacket({
+          type: "connect_app_request",
+          request_id: "req-1",
+          external_app_id: 17,
+          reason: "to schedule events",
+        } as never);
+      });
+
+    const { result } = renderHook(() => useBuildStreaming());
+
+    await act(async () => {
+      await result.current.streamMessage(sessionId, "what's on my calendar?");
+    });
+
+    const session = useBuildSessionStore.getState().sessions.get(sessionId);
+    expect(session?.streamItems).toEqual([
+      expect.objectContaining({
+        type: "connect_app_request",
+        id: "req-1",
+        requestId: "req-1",
+        externalAppId: 17,
+        reason: "to schedule events",
       }),
     ]);
   });
@@ -656,7 +828,7 @@ describe("useBuildStreaming thinking packets", () => {
         onPacket({
           type: "error",
           message: "provider model not found",
-        });
+        } as never);
       });
     const { result } = renderHook(() => useBuildStreaming());
 
@@ -683,6 +855,74 @@ describe("useBuildStreaming thinking packets", () => {
     ]);
   });
 
+  it("surfaces a usage rate-limit 429 as an in-transcript banner item", async () => {
+    jest.mocked(createTurn).mockRejectedValueOnce(
+      new RateLimitedError("You've reached the usage budget.", {
+        scope: "user",
+        reset_at: "2026-01-02T00:00:00Z",
+        retry_after_seconds: 3600,
+      })
+    );
+    const { result } = renderHook(() => useBuildStreaming());
+
+    await act(async () => {
+      await result.current.streamMessage(sessionId, "build the app");
+    });
+
+    // Recoverable once the budget resets: session stays active (not failed),
+    // but `error` stays set so queued messages don't auto-send into the limit.
+    const session = useBuildSessionStore.getState().sessions.get(sessionId);
+    expect(session).toMatchObject({
+      status: "active",
+      error: "You've reached the usage budget.",
+      activeTurnId: null,
+      activeTurnLocalOwner: false,
+    });
+    expect(session?.streamItems).toEqual([
+      expect.objectContaining({
+        type: "error",
+        content: "You've reached the usage budget.",
+        rateLimit: {
+          scope: "user",
+          reset_at: "2026-01-02T00:00:00Z",
+          retry_after_seconds: 3600,
+        },
+      }),
+    ]);
+  });
+
+  it("defers to reconcile when an error packet arrives mid-interrupt", async () => {
+    jest
+      .mocked(processSSEStream)
+      .mockImplementationOnce(async (_response, onPacket) => {
+        onPacket({ type: "error", message: "Aborted" } as never);
+      });
+    useBuildSessionStore.getState().updateSessionData(sessionId, {
+      status: "running",
+      activeTurnId: "turn-interrupted",
+      activeTurnLocalOwner: false,
+      isInterrupting: true,
+    });
+    const { result } = renderHook(() => useBuildStreaming());
+
+    await act(async () => {
+      await result.current.streamTurnEvents(
+        sessionId,
+        "turn-interrupted",
+        new AbortController().signal
+      );
+    });
+
+    // An error mid-interrupt (opencode's abort surfaces as one) must not mark the
+    // session failed — that strands the queued auto-send. Settlement defers to
+    // reconcile, so status/error/streamItems are left untouched.
+    const session = useBuildSessionStore.getState().sessions.get(sessionId);
+    expect(session?.status).toBe("running");
+    expect(session?.error).toBeNull();
+    expect(session?.isInterrupting).toBe(true);
+    expect(session?.streamItems).toEqual([]);
+  });
+
   it("clears stale turn metadata when the backend says the turn is not running", async () => {
     jest.mocked(fetchTurnEventStream).mockResolvedValueOnce(null);
     const { result } = renderHook(() => useBuildStreaming());
@@ -707,7 +947,7 @@ describe("useBuildStreaming thinking packets", () => {
     );
   });
 
-  it("clears interrupt state when an attached stream settles", async () => {
+  it("defers settlement to reconcile when a stream settles mid-interrupt", async () => {
     jest.mocked(processSSEStream).mockResolvedValueOnce(undefined);
     useBuildSessionStore.getState().updateSessionData(sessionId, {
       status: "running",
@@ -725,17 +965,14 @@ describe("useBuildStreaming thinking packets", () => {
       );
     });
 
+    // Settlement is deferred to reconcile, so the stream end leaves state untouched.
     const session = useBuildSessionStore.getState().sessions.get(sessionId);
     expect(session).toMatchObject({
-      status: "active",
-      activeTurnId: null,
-      activeTurnLocalOwner: false,
-      isInterrupting: false,
+      status: "running",
+      activeTurnId: "turn-interrupted-settled",
+      isInterrupting: true,
     });
-    expect(useBuildSessionStore.getState().loadSession).toHaveBeenCalledWith(
-      sessionId,
-      { force: true }
-    );
+    expect(useBuildSessionStore.getState().loadSession).not.toHaveBeenCalled();
   });
 
   it("skips duplicate watchers for a locally owned turn", async () => {
@@ -766,8 +1003,9 @@ describe("useBuildStreaming thinking packets", () => {
     jest.mocked(fetchSession).mockResolvedValue({
       id: sessionId,
       status: "active",
+      nextjs_port: null,
       session_loaded_in_sandbox: true,
-      sandbox: { id: "sandbox-1", status: "running", nextjs_port: null },
+      sandbox: { id: "sandbox-1", status: "running" },
       agent_provider: "openai",
       agent_model: "gpt-5-mini",
     } as never);
@@ -956,7 +1194,53 @@ describe("useBuildStreaming thinking packets", () => {
 
     expect(interruptMessageStream).toHaveBeenCalledWith(sessionId);
     expect(session?.isInterrupting).toBe(true);
+    expect(session?.wasInterrupted).toBe(true);
     expect(toolStatuses).toEqual(["completed", "cancelled"]);
+  });
+
+  it("sets wasInterrupted on interrupt and clears it on the next turn", async () => {
+    useBuildSessionStore.getState().updateSessionData(sessionId, {
+      status: "running",
+      activeTurnId: "turn-x",
+      activeTurnLocalOwner: true,
+    });
+    const { result } = renderHook(() => useBuildStreaming());
+
+    await act(async () => {
+      await result.current.interruptStreaming(sessionId);
+    });
+    expect(
+      useBuildSessionStore.getState().sessions.get(sessionId)?.wasInterrupted
+    ).toBe(true);
+
+    await act(async () => {
+      await result.current.streamMessage(sessionId, "next");
+    });
+    expect(
+      useBuildSessionStore.getState().sessions.get(sessionId)?.wasInterrupted
+    ).toBe(false);
+  });
+
+  it("clears wasInterrupted when the interrupt request fails", async () => {
+    const errorSpy = jest.spyOn(console, "error").mockImplementation(() => {});
+    jest
+      .mocked(interruptMessageStream)
+      .mockRejectedValueOnce(new Error("network down"));
+    useBuildSessionStore.getState().updateSessionData(sessionId, {
+      status: "running",
+      activeTurnId: "turn-x",
+      activeTurnLocalOwner: true,
+    });
+    const { result } = renderHook(() => useBuildStreaming());
+
+    await act(async () => {
+      await result.current.interruptStreaming(sessionId);
+    });
+
+    const session = useBuildSessionStore.getState().sessions.get(sessionId);
+    expect(session?.isInterrupting).toBe(false);
+    expect(session?.wasInterrupted).toBe(false);
+    errorSpy.mockRestore();
   });
 
   it("persists an interrupted in-flight tool call as cancelled on prompt_response", async () => {
@@ -974,7 +1258,7 @@ describe("useBuildStreaming thinking packets", () => {
           raw_output: null,
           status: "pending",
           timestamp: "2026-01-01T00:00:00Z",
-        });
+        } as never);
         useBuildSessionStore.getState().updateSessionData(sessionId, {
           isInterrupting: true,
         });
@@ -986,7 +1270,7 @@ describe("useBuildStreaming thinking packets", () => {
           raw_output: null,
           status: "in_progress",
           timestamp: "2026-01-01T00:00:00.500Z",
-        });
+        } as never);
         onPacket({
           type: "prompt_response",
           timestamp: "2026-01-01T00:00:01Z",
@@ -1008,7 +1292,8 @@ describe("useBuildStreaming thinking packets", () => {
       | undefined;
 
     expect(session?.streamItems).toEqual([]);
-    expect(session?.isInterrupting).toBe(false);
+    // Settlement is deferred to reconcile, so isInterrupting stays set here.
+    expect(session?.isInterrupting).toBe(true);
     expect(metadata?.streamItems).toEqual([
       expect.objectContaining({
         type: "tool_call",
@@ -1064,7 +1349,7 @@ describe("useBuildStreaming thinking packets", () => {
         onPacket({
           type: "error",
           message: "old turn failed",
-        });
+        } as never);
       });
     const { result } = renderHook(() => useBuildStreaming());
 
@@ -1127,8 +1412,86 @@ describe("useBuildStreaming thinking packets", () => {
     });
     expect(useBuildSessionStore.getState().loadSession).toHaveBeenCalledWith(
       sessionId,
-      { force: true }
+      { force: true, preferPersisted: true }
     );
+  });
+
+  it("reloads before flipping to active (avoids the auto-send TOCTOU)", async () => {
+    jest.mocked(interruptMessageStream).mockResolvedValueOnce(undefined);
+    jest.mocked(fetchActiveTurn).mockResolvedValueOnce(null as never);
+    // Capture the session status at the moment loadSession runs. The flip to
+    // "active" triggers the queued auto-send, so the reload must happen while
+    // still "running" — before the flip — or it races the next turn.
+    let statusAtLoad: string | undefined;
+    useBuildSessionStore.setState({
+      loadSession: jest.fn(async () => {
+        statusAtLoad = useBuildSessionStore
+          .getState()
+          .sessions.get(sessionId)?.status;
+      }),
+    } as never);
+    useBuildSessionStore.getState().updateSessionData(sessionId, {
+      status: "running",
+      activeTurnId: "turn-interrupted",
+      activeTurnIndex: 3,
+      activeTurnLocalOwner: true,
+      isInterrupting: false,
+    });
+    const { result } = renderHook(() => useBuildStreaming());
+
+    await act(async () => {
+      await result.current.interruptStreaming(sessionId);
+    });
+    await act(async () => {
+      jest.advanceTimersByTime(1000);
+      await Promise.resolve();
+    });
+
+    expect(statusAtLoad).toBe("running");
+    expect(
+      useBuildSessionStore.getState().sessions.get(sessionId)?.status
+    ).toBe("active");
+  });
+
+  it("bails a stale reconcile once a newer turn supersedes the interrupt", async () => {
+    jest.mocked(interruptMessageStream).mockResolvedValueOnce(undefined);
+    useBuildSessionStore.getState().updateSessionData(sessionId, {
+      status: "running",
+      activeTurnId: "turn-interrupted",
+      activeTurnIndex: 3,
+      activeTurnLocalOwner: true,
+      isInterrupting: false,
+      turnGeneration: 5,
+    });
+    const { result } = renderHook(() => useBuildStreaming());
+
+    await act(async () => {
+      await result.current.interruptStreaming(sessionId);
+    });
+
+    // A queued message auto-sends: a new turn starts and bumps turnGeneration.
+    useBuildSessionStore.getState().updateSessionData(sessionId, {
+      status: "running",
+      activeTurnId: "turn-next",
+      activeTurnLocalOwner: true,
+      isInterrupting: false,
+      turnGeneration: 6,
+    });
+
+    await act(async () => {
+      jest.advanceTimersByTime(1000);
+      await Promise.resolve();
+    });
+
+    // The stale reconcile must not poll or settle — the live turn is untouched.
+    expect(fetchActiveTurn).not.toHaveBeenCalled();
+    expect(useBuildSessionStore.getState().loadSession).not.toHaveBeenCalled();
+    expect(
+      useBuildSessionStore.getState().sessions.get(sessionId)
+    ).toMatchObject({
+      status: "running",
+      activeTurnId: "turn-next",
+    });
   });
 
   it("does not clear local interrupt state while the backend turn is still active", async () => {
@@ -1171,7 +1534,7 @@ describe("useBuildStreaming thinking packets", () => {
     });
   });
 
-  it("clears only interrupt state when interrupted turn reconciliation times out", async () => {
+  it("clears only interrupt state when a timed-out turn is still running", async () => {
     const warnSpy = jest.spyOn(console, "warn").mockImplementation(() => {});
     jest.mocked(interruptMessageStream).mockResolvedValueOnce(undefined);
     const activeTurn = {
@@ -1180,7 +1543,9 @@ describe("useBuildStreaming thinking packets", () => {
       status: "RUNNING",
       turn_index: 3,
     } as never;
-    for (let attempt = 0; attempt < 30; attempt++) {
+    // 30 poll attempts + 1 final post-timeout check, all reporting the turn
+    // still running.
+    for (let attempt = 0; attempt < 31; attempt++) {
       jest.mocked(fetchActiveTurn).mockResolvedValueOnce(activeTurn);
     }
     useBuildSessionStore.getState().updateSessionData(sessionId, {
@@ -1202,7 +1567,7 @@ describe("useBuildStreaming thinking packets", () => {
       });
     }
 
-    expect(fetchActiveTurn).toHaveBeenCalledTimes(30);
+    expect(fetchActiveTurn).toHaveBeenCalledTimes(31);
     expect(
       useBuildSessionStore.getState().sessions.get(sessionId)
     ).toMatchObject({
@@ -1214,6 +1579,55 @@ describe("useBuildStreaming thinking packets", () => {
     expect(useBuildSessionStore.getState().loadSession).not.toHaveBeenCalled();
     expect(warnSpy).toHaveBeenCalledWith(
       "[Streaming] Interrupted turn reconciliation timed out"
+    );
+    warnSpy.mockRestore();
+  });
+
+  it("settles a timed-out turn that the backend reports as gone", async () => {
+    const warnSpy = jest.spyOn(console, "warn").mockImplementation(() => {});
+    jest.mocked(interruptMessageStream).mockResolvedValueOnce(undefined);
+    const activeTurn = {
+      session_id: sessionId,
+      turn_id: "turn-interrupted",
+      status: "RUNNING",
+      turn_index: 3,
+    } as never;
+    // 30 poll attempts report the turn still running, but the final
+    // post-timeout check finds it gone → settle so the UI unblocks.
+    for (let attempt = 0; attempt < 30; attempt++) {
+      jest.mocked(fetchActiveTurn).mockResolvedValueOnce(activeTurn);
+    }
+    jest.mocked(fetchActiveTurn).mockResolvedValueOnce(null as never);
+    useBuildSessionStore.getState().updateSessionData(sessionId, {
+      status: "running",
+      activeTurnId: "turn-interrupted",
+      activeTurnIndex: 3,
+      activeTurnLocalOwner: true,
+      isInterrupting: false,
+    });
+    const { result } = renderHook(() => useBuildStreaming());
+
+    await act(async () => {
+      await result.current.interruptStreaming(sessionId);
+    });
+    for (let attempt = 0; attempt < 31; attempt++) {
+      await act(async () => {
+        jest.advanceTimersByTime(1000);
+        await Promise.resolve();
+      });
+    }
+
+    expect(
+      useBuildSessionStore.getState().sessions.get(sessionId)
+    ).toMatchObject({
+      status: "active",
+      activeTurnId: null,
+      activeTurnLocalOwner: false,
+      isInterrupting: false,
+    });
+    expect(useBuildSessionStore.getState().loadSession).toHaveBeenCalledWith(
+      sessionId,
+      { force: true, preferPersisted: true }
     );
     warnSpy.mockRestore();
   });
@@ -1306,7 +1720,7 @@ describe("useBuildStreaming thinking packets", () => {
     });
     expect(useBuildSessionStore.getState().loadSession).toHaveBeenCalledWith(
       sessionId,
-      { force: true }
+      { force: true, preferPersisted: true }
     );
   });
 

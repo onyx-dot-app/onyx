@@ -1,39 +1,42 @@
 from datetime import datetime
 from enum import Enum
 from typing import TypeVarTuple
+from uuid import UUID
 
 from fastapi import HTTPException
-from sqlalchemy import delete
-from sqlalchemy import desc
-from sqlalchemy import Select
-from sqlalchemy import select
-from sqlalchemy import update
-from sqlalchemy.orm import aliased
-from sqlalchemy.orm import joinedload
-from sqlalchemy.orm import selectinload
-from sqlalchemy.orm import Session
+from pydantic import BaseModel
+from sqlalchemy import Select, and_, delete, desc, func, or_, select, update
+from sqlalchemy.orm import Session, aliased, joinedload, selectinload
+from sqlalchemy.sql.elements import ColumnElement
 
 from onyx.auth.permissions import get_effective_permissions
-from onyx.configs.constants import DocumentSource
+from onyx.configs.constants import DEFAULT_CC_PAIR_ID, DocumentSource
 from onyx.db.connector import fetch_connector_by_id
-from onyx.db.credentials import fetch_credential_by_id
-from onyx.db.credentials import fetch_credential_by_id_for_user
+from onyx.db.credentials import fetch_credential_by_id, fetch_credential_by_id_for_user
 from onyx.db.engine.sql_engine import get_session_with_current_tenant
-from onyx.db.enums import AccessType
-from onyx.db.enums import ConnectorCredentialPairStatus
-from onyx.db.enums import Permission
-from onyx.db.enums import ProcessingMode
-from onyx.db.models import Connector
-from onyx.db.models import ConnectorCredentialPair
-from onyx.db.models import Credential
-from onyx.db.models import IndexAttempt
-from onyx.db.models import IndexingStatus
-from onyx.db.models import SearchSettings
-from onyx.db.models import User
-from onyx.db.models import User__UserGroup
-from onyx.db.models import UserGroup__ConnectorCredentialPair
-from onyx.db.scoped_permissions import scoped_group_ids_subquery
-from onyx.db.scoped_permissions import within_managed_scope_clause
+from onyx.db.enums import (
+    AccessType,
+    ConnectorCredentialPairStatus,
+    IndexingMode,
+    Permission,
+    ProcessingMode,
+    SwitchoverType,
+)
+from onyx.db.models import (
+    Connector,
+    ConnectorCredentialPair,
+    Credential,
+    IndexAttempt,
+    IndexingStatus,
+    SearchSettings,
+    User,
+    User__UserGroup,
+    UserGroup__ConnectorCredentialPair,
+)
+from onyx.db.scoped_permissions import (
+    scoped_group_ids_subquery,
+    within_managed_scope_clause,
+)
 from onyx.server.models import StatusResponse
 from onyx.utils.logger import setup_logger
 from onyx.utils.variable_functionality import fetch_ee_implementation_or_noop
@@ -41,11 +44,133 @@ from onyx.utils.variable_functionality import fetch_ee_implementation_or_noop
 logger = setup_logger()
 
 R = TypeVarTuple("R")
+_CONNECTOR_STATE_QUERY_TIMEOUT = "7s"
+
+
+def build_user_cc_pair_access_filter(user_id: UUID) -> ColumnElement[bool]:
+    """Grant public, credential-owner, or current user-group connector access."""
+    credential_owner = (
+        select(1)
+        .select_from(Credential)
+        .where(
+            Credential.id == ConnectorCredentialPair.credential_id,
+            Credential.user_id == user_id,
+        )
+        .correlate(ConnectorCredentialPair)
+        .exists()
+    )
+    current_group_member = (
+        select(1)
+        .select_from(User__UserGroup)
+        .join(
+            UserGroup__ConnectorCredentialPair,
+            and_(
+                UserGroup__ConnectorCredentialPair.user_group_id
+                == User__UserGroup.user_group_id,
+                UserGroup__ConnectorCredentialPair.cc_pair_id
+                == ConnectorCredentialPair.id,
+                UserGroup__ConnectorCredentialPair.is_current.is_(True),
+            ),
+        )
+        .where(User__UserGroup.user_id == user_id)
+        .correlate(ConnectorCredentialPair)
+        .exists()
+    )
+    return or_(
+        ConnectorCredentialPair.access_type == AccessType.PUBLIC,
+        and_(
+            ConnectorCredentialPair.access_type != AccessType.SYNC,
+            or_(credential_owner, current_group_member),
+        ),
+    )
 
 
 class ConnectorType(str, Enum):
     STANDARD = "standard"
     USER_FILE = "user_file"
+
+
+class ConnectorStateSnapshot(BaseModel):
+    cc_pair_id: int
+    cc_pair_name: str
+    status: ConnectorCredentialPairStatus
+    last_successful_index_time: datetime | None
+    last_pruned: datetime | None
+    last_time_perm_sync: datetime | None
+    last_time_external_group_sync: datetime | None
+    total_docs_indexed: int
+    access_type: AccessType
+    indexing_trigger: IndexingMode | None
+    auto_sync_enabled: bool
+    in_repeated_error_state: bool
+    source: DocumentSource
+    credential_id: int
+
+
+def get_connector_state_snapshots(
+    db_session: Session,
+) -> list[ConnectorStateSnapshot]:
+    db_session.execute(
+        select(
+            func.set_config("statement_timeout", _CONNECTOR_STATE_QUERY_TIMEOUT, True)
+        )
+    )
+    rows = db_session.execute(
+        select(
+            ConnectorCredentialPair.id,
+            ConnectorCredentialPair.name,
+            ConnectorCredentialPair.status,
+            ConnectorCredentialPair.last_successful_index_time,
+            ConnectorCredentialPair.last_pruned,
+            ConnectorCredentialPair.last_time_perm_sync,
+            ConnectorCredentialPair.last_time_external_group_sync,
+            ConnectorCredentialPair.total_docs_indexed,
+            ConnectorCredentialPair.access_type,
+            ConnectorCredentialPair.indexing_trigger,
+            ConnectorCredentialPair.auto_sync_options,
+            ConnectorCredentialPair.in_repeated_error_state,
+            Connector.source,
+            Credential.id,
+        )
+        .join(ConnectorCredentialPair.connector)
+        .join(ConnectorCredentialPair.credential)
+        .where(ConnectorCredentialPair.id != DEFAULT_CC_PAIR_ID)
+    ).all()
+
+    return [
+        ConnectorStateSnapshot(
+            cc_pair_id=cc_pair_id,
+            cc_pair_name=cc_pair_name,
+            status=status,
+            last_successful_index_time=last_successful_index_time,
+            last_pruned=last_pruned,
+            last_time_perm_sync=last_time_perm_sync,
+            last_time_external_group_sync=last_time_external_group_sync,
+            total_docs_indexed=total_docs_indexed or 0,
+            access_type=access_type,
+            indexing_trigger=indexing_trigger,
+            auto_sync_enabled=bool(auto_sync_options),
+            in_repeated_error_state=in_repeated_error_state,
+            source=source,
+            credential_id=credential_id,
+        )
+        for (
+            cc_pair_id,
+            cc_pair_name,
+            status,
+            last_successful_index_time,
+            last_pruned,
+            last_time_perm_sync,
+            last_time_external_group_sync,
+            total_docs_indexed,
+            access_type,
+            indexing_trigger,
+            auto_sync_options,
+            in_repeated_error_state,
+            source,
+            credential_id,
+        ) in rows
+    ]
 
 
 def _add_user_filters(
@@ -312,10 +437,16 @@ def get_last_successful_attempt_poll_range_end(
     search_settings: SearchSettings,
     db_session: Session,
     ignore_targeted_reindex: bool = True,
+    ignore_synthetic_seed: bool = False,
 ) -> float:
     """Used to get the latest `poll_range_end` for a given connector and credential.
 
     This can be used to determine the next "start" time for a new index attempt.
+
+    A reindex-port synthetic seed carries PRESENT's poll cursor and IS a valid resume
+    point, so it is considered by default - the FUTURE's first connector attempt resumes
+    from it instead of refetching full history. This differs from the count/latest helpers,
+    which keep `ignore_synthetic_seed=True` because a seed is not a real indexing run.
 
     Note that the attempts time_started is not necessarily correct - that gets set
     separately and is similar but not exactly the same as the `poll_range_end`.
@@ -334,6 +465,8 @@ def get_last_successful_attempt_poll_range_end(
     )
     if ignore_targeted_reindex:
         query = query.filter(IndexAttempt.targeted_reindex_job_id.is_(None))
+    if ignore_synthetic_seed:
+        query = query.filter(IndexAttempt.is_synthetic_seed.is_(False))
     latest_successful_index_attempt = query.order_by(
         IndexAttempt.poll_range_end.desc()
     ).first()
@@ -677,6 +810,29 @@ def fetch_indexable_standard_connector_credential_pair_ids(
     return list(db_session.scalars(stmt))
 
 
+def compute_wont_port_cc_pair_ids(
+    db_session: Session, switchover_type: SwitchoverType
+) -> list[int]:
+    """cc_pairs whose data will NOT be carried into the new index for this reindex —
+    the complement of the port scope. Derived from the SAME
+    fetch_indexable_standard_connector_credential_pair_ids the reindex/swap use, so a
+    change to what ports is reflected here automatically (no re-encoded status rules).
+    Works out to INVALID always + PAUSED under ACTIVE_ONLY. Excludes DELETING (already
+    being removed) and the default Ingestion cc_pair.
+    """
+    will_port = set(
+        fetch_indexable_standard_connector_credential_pair_ids(
+            db_session,
+            active_cc_pairs_only=(switchover_type == SwitchoverType.ACTIVE_ONLY),
+        )
+    )
+    stmt = select(ConnectorCredentialPair.id).where(
+        ConnectorCredentialPair.id != DEFAULT_CC_PAIR_ID,
+        ConnectorCredentialPair.status != ConnectorCredentialPairStatus.DELETING,
+    )
+    return sorted(cc_id for cc_id in db_session.scalars(stmt) if cc_id not in will_port)
+
+
 def fetch_connector_credential_pair_for_connector(
     db_session: Session,
     connector_id: int,
@@ -691,6 +847,7 @@ def resync_cc_pair(
     cc_pair: ConnectorCredentialPair,
     search_settings_id: int,
     db_session: Session,
+    commit: bool = True,
 ) -> None:
     """
     Updates state stored in the connector_credential_pair table based on the
@@ -740,4 +897,5 @@ def resync_cc_pair(
         last_success.time_started if last_success else None
     )
 
-    db_session.commit()
+    if commit:
+        db_session.commit()

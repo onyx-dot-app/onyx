@@ -6,7 +6,10 @@ import {
   StopReason,
   CustomToolStart,
 } from "@/app/app/services/streamingModels";
-import { constructCurrentSearchState } from "@/app/app/message/messageComponents/timeline/renderers/search/searchStateUtils";
+import {
+  formatSearchHeader,
+  constructCurrentSearchState,
+} from "@/app/app/message/messageComponents/timeline/renderers/search/searchStateUtils";
 
 export interface TimelineHeaderResult {
   headerText: string;
@@ -62,10 +65,13 @@ export function useTimelineHeader(
       let headerText: string;
       if (searchState.hasResults && !searchState.isInternetSearch) {
         headerText = "Reading";
+      } else if (searchState.isInternetSearch) {
+        headerText = "Searching the web";
       } else {
-        headerText = searchState.isInternetSearch
-          ? "Searching the web"
-          : "Searching internal documents";
+        headerText = formatSearchHeader(
+          searchState.sourceFilters,
+          searchState.timeFilter
+        );
       }
       return { headerText, hasPackets, userStopped };
     }

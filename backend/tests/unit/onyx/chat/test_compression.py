@@ -1,26 +1,25 @@
 """Unit tests for chat history compression module."""
 
-from datetime import datetime
-from datetime import timedelta
-from datetime import timezone
-from unittest.mock import MagicMock
-from unittest.mock import patch
+from datetime import datetime, timedelta, timezone
+from unittest.mock import MagicMock, patch
 
-from onyx.chat.compression import _build_llm_messages_for_summarization
-from onyx.chat.compression import find_summary_for_branch
-from onyx.chat.compression import generate_summary
-from onyx.chat.compression import get_compression_params
-from onyx.chat.compression import get_messages_to_summarize
-from onyx.chat.compression import SummaryContent
+from onyx.chat.compression import (
+    SummaryContent,
+    _build_llm_messages_for_summarization,
+    find_summary_for_branch,
+    generate_summary,
+    get_compression_params,
+    get_messages_to_summarize,
+)
 from onyx.configs.constants import MessageType
-from onyx.llm.models import AssistantMessage
-from onyx.llm.models import SystemMessage
-from onyx.llm.models import UserMessage
-from onyx.prompts.compression_prompts import PROGRESSIVE_SUMMARY_SYSTEM_PROMPT_BLOCK
-from onyx.prompts.compression_prompts import PROGRESSIVE_USER_REMINDER
-from onyx.prompts.compression_prompts import SUMMARIZATION_CUTOFF_MARKER
-from onyx.prompts.compression_prompts import SUMMARIZATION_PROMPT
-from onyx.prompts.compression_prompts import USER_REMINDER
+from onyx.llm.models import AssistantMessage, SystemMessage, UserMessage
+from onyx.prompts.compression_prompts import (
+    PROGRESSIVE_SUMMARY_SYSTEM_PROMPT_BLOCK,
+    PROGRESSIVE_USER_REMINDER,
+    SUMMARIZATION_CUTOFF_MARKER,
+    SUMMARIZATION_PROMPT,
+    USER_REMINDER,
+)
 
 # Base time for generating sequential timestamps
 BASE_TIME = datetime(2024, 1, 1, 12, 0, 0, tzinfo=timezone.utc)

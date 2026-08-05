@@ -113,7 +113,10 @@ func fetchUnsigned(s3url *S3URL, destPath string) (err error) {
 // fetchWithAWSCLI attempts to download the file using AWS CLI.
 func fetchWithAWSCLI(s3url string, destPath string) error {
 	cmd := exec.Command("aws", "s3", "cp", s3url, destPath)
-	cmd.Stdout = os.Stdout
+	// Send the CLI's transfer progress ("Completed X/Y ... with N file(s)
+	// remaining") to stderr, not stdout: callers like `ods audit ... --format=sarif`
+	// redirect our stdout into a report file, and stray progress lines corrupt it.
+	cmd.Stdout = os.Stderr
 	cmd.Stderr = os.Stderr
 
 	if err := cmd.Run(); err != nil {

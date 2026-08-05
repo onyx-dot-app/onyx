@@ -34,6 +34,28 @@ export interface AgentLabel {
   name: string;
 }
 
+export type PersonaSharePermission = "EDITOR" | "VIEWER";
+
+export type PersonaAccessLevel = "OWNER" | "EDITOR" | "VIEWER";
+
+export type PersonaSharingStatus = "PRIVATE" | "SHARED" | "PUBLIC";
+
+export interface PersonaUserShare {
+  user: MinimalUserSnapshot;
+  permission: PersonaSharePermission;
+}
+
+export interface PersonaGroupShare {
+  group_id: number;
+  group_name: string;
+  permission: PersonaSharePermission;
+}
+
+export interface PersonaOwnerGroup {
+  id: number;
+  name: string;
+}
+
 export interface MinimalAgent {
   id: number;
   name: string;
@@ -56,6 +78,9 @@ export interface MinimalAgent {
   owner: MinimalUserSnapshot | null;
   // per-action affordance map stamped by the list endpoints; empty/absent → fail-closed
   permissions?: PermissionsOf<"Agent">;
+  owner_group: PersonaOwnerGroup | null;
+  // Requesting user's computed access, set by the list/detail endpoints
+  user_permission: PersonaAccessLevel | null;
 }
 
 export interface Agent extends MinimalAgent {
@@ -74,6 +99,12 @@ export interface FullAgent extends Agent {
   search_start_date: string | null;
   // per-action affordance map for the requesting user; stamped by GET /persona/{id}
   permissions: PermissionsOf<"Agent">;
+  user_shares: PersonaUserShare[];
+  group_shares: PersonaGroupShare[];
+  public_permission: PersonaSharePermission;
+  sharing_status: PersonaSharingStatus;
+  admin_count: number;
+  ownership_vacant: boolean;
 }
 
 // ── Upsert / API parameter types ──────────────────────────────────────────────
@@ -86,11 +117,13 @@ export interface AgentUpsertParameters {
   task_prompt: string;
   datetime_aware: boolean;
   document_set_ids: number[];
-  is_public: boolean;
+  // Sharing fields: omit on update — the share dialog owns sharing for
+  // saved agents and the backend treats absent as "leave unchanged"
+  is_public?: boolean;
   default_model_configuration_id?: number | null;
   starter_messages: AgentStarterMessage[] | null;
   users?: string[];
-  groups: number[];
+  groups?: number[];
   tool_ids: number[];
   remove_image?: boolean;
   search_start_date: Date | null;
@@ -110,11 +143,11 @@ export interface AgentUpsertRequest {
   task_prompt: string;
   datetime_aware: boolean;
   document_set_ids: number[];
-  is_public: boolean;
+  is_public?: boolean;
   default_model_configuration_id: number | null;
   starter_messages: AgentStarterMessage[] | null;
   users?: string[];
-  groups: number[];
+  groups?: number[];
   tool_ids: number[];
   remove_image?: boolean;
   uploaded_image_id: string | null;

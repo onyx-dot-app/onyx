@@ -127,7 +127,7 @@ function Waveform({
   // ─── Speaking variant render ───────────────────────────────────────────────
   if (variant === "speaking") {
     return (
-      <div className="flex items-center gap-0.5 p-1.5 bg-background-tint-00 rounded-16 shadow-01">
+      <div className="flex items-center gap-0.5 p-1.5 bg-background-tint-00 rounded-16 shadow-box-01">
         {/* Waveform container */}
         <div className="flex items-center p-1 bg-background-tint-00 rounded-12 max-w-[144px] min-h-[32px]">
           <div className="flex items-center p-1">

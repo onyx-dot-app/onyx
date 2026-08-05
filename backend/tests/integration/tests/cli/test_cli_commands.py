@@ -35,7 +35,7 @@ Test Suite:
 16. test_experiments - Lists feature flags
 17. test_search_returns_results - Search returns seeded document content
 18. test_search_raw - --raw outputs full SearchResponse as JSON
-19. test_search_truncation - --max-output truncates with temp file path
+19. test_search_truncation - --max-output keeps stdout valid JSON with truncation metadata
 20. test_search_no_query - No query returns exit code 2
 21. test_search_bad_pat - Invalid PAT returns exit code 4
 22. test_search_not_configured - Missing PAT returns exit code 3
@@ -58,10 +58,12 @@ from tests.integration.common_utils.managers.document import DocumentManager
 from tests.integration.common_utils.managers.document_set import DocumentSetManager
 from tests.integration.common_utils.managers.pat import PATManager
 from tests.integration.common_utils.managers.persona import PersonaManager
-from tests.integration.common_utils.test_models import DATestAPIKey
-from tests.integration.common_utils.test_models import DATestLLMProvider
-from tests.integration.common_utils.test_models import DATestPersona
-from tests.integration.common_utils.test_models import DATestUser
+from tests.integration.common_utils.test_models import (
+    DATestAPIKey,
+    DATestLLMProvider,
+    DATestPersona,
+    DATestUser,
+)
 from tests.integration.tests.cli.conftest import MOCK_LLM_TOKEN
 
 _CLI_BINARY = os.environ.get("ONYX_CLI_BINARY")
@@ -418,7 +420,7 @@ def test_search_truncation(
     llm_provider: DATestLLMProvider,  # noqa: ARG001
     api_key: DATestAPIKey,
 ) -> None:
-    """--max-output truncates output and shows temp file path."""
+    """--max-output keeps stdout valid JSON and adds truncation metadata."""
     cc_pair = CCPairManager.create_from_scratch(user_performing_action=admin_user)
     phrase = "cli-search-truncation-unique"
     DocumentManager.seed_doc_with_content(cc_pair, phrase, api_key)
@@ -431,8 +433,15 @@ def test_search_truncation(
     )
 
     assert result.returncode == 0, f"stderr: {result.stderr}"
-    assert "response truncated" in result.stdout
-    assert "Full response:" in result.stdout
+    data = json.loads(result.stdout)
+    truncation = data["truncation"]
+    assert truncation["truncated"] is True
+    assert truncation["shown_results"] == len(data["results"])
+    assert truncation["shown_results"] <= truncation["total_results"]
+    assert truncation["total_bytes"] > 50
+    assert truncation["full_response_path"]
+    # Human-oriented note goes to stderr, never stdout.
+    assert "response truncated" in result.stderr
 
 
 def test_search_no_query(

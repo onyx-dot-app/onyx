@@ -1,12 +1,16 @@
 "use client";
 
-import { useState } from "react";
+import { useMemo, useState } from "react";
 import { humanReadableFormat } from "@opal/time";
 import { BackendChatSession } from "@/app/app/interfaces";
 import { processRawChatHistory } from "@/app/app/services/lib";
 import { getLatestMessageChain } from "@/app/app/services/messageTree";
 import HumanMessage from "@/app/app/message/HumanMessage";
 import AgentMessage from "@/app/app/message/messageComponents/AgentMessage";
+import MultiModelResponseView from "@/app/app/message/MultiModelResponseView";
+import { getMultiModelResponses } from "@/app/app/message/multiModel";
+import { useLLMProviders } from "@/lib/languageModels/hooks";
+import { buildModelProviderLookup } from "@/lib/languageModels/options";
 import OnyxInitializingLoader from "@/components/OnyxInitializingLoader";
 import { Section } from "@/layouts/general-layouts";
 import { IllustrationContent } from "@opal/layouts";
@@ -34,6 +38,14 @@ export default function SharedChatDisplay({
 
   const isMounted = useOnMount();
 
+  // The shared viewer is authenticated, so the user-facing provider list is
+  // available for resolving each model's provider icon, same as the live view.
+  const { llmProviders } = useLLMProviders();
+  const modelProviderLookup = useMemo(
+    () => buildModelProviderLookup(llmProviders),
+    [llmProviders]
+  );
+
   if (!chatSession) {
     return (
       <div className="h-full w-full flex flex-col items-center justify-center">
@@ -51,9 +63,11 @@ export default function SharedChatDisplay({
     );
   }
 
-  const messages = getLatestMessageChain(
-    processRawChatHistory(chatSession.messages, chatSession.packets)
+  const messageTree = processRawChatHistory(
+    chatSession.messages,
+    chatSession.packets
   );
+  const messages = getLatestMessageChain(messageTree);
 
   const firstMessage = messages[0];
 
@@ -102,47 +116,106 @@ export default function SharedChatDisplay({
           </div>
 
           {isMounted ? (
-            <div className="w-[min(50rem,100%)]">
+            <div className="w-full flex flex-col items-center">
               {messages.map((message, i) => {
                 if (message.type === "user") {
-                  return (
-                    <HumanMessage
-                      key={message.messageId}
-                      content={message.message}
-                      files={message.files}
-                      nodeId={message.nodeId}
-                    />
+                  const multiModelResponses = getMultiModelResponses(
+                    message,
+                    messageTree,
+                    modelProviderLookup
                   );
-                } else if (message.type === "assistant") {
                   return (
-                    <AgentMessage
+                    <div
                       key={message.messageId}
-                      rawPackets={message.packets}
-                      chatState={{
-                        agent: persona,
-                        docs: message.documents,
-                        citations: message.citations,
-                        setPresentingDocument: setPresentingDocument,
-                        overriddenModel: message.overridden_model,
-                      }}
-                      nodeId={message.nodeId}
-                      llmManager={null}
-                      otherMessagesCanSwitchTo={undefined}
-                      onMessageSelection={undefined}
-                    />
-                  );
-                } else {
-                  // Error message case
-                  return (
-                    <div key={message.messageId} className="py-5 ml-4 lg:px-5">
-                      <div className="mx-auto w-[90%] max-w-message-max">
-                        <p className="text-status-text-error-05 text-sm my-auto">
-                          {message.message}
-                        </p>
+                      className="w-full flex flex-col items-center"
+                    >
+                      <div className="w-[min(50rem,100%)]">
+                        <HumanMessage
+                          content={message.message}
+                          files={message.files}
+                          nodeId={message.nodeId}
+                        />
                       </div>
+                      {/* Multi-model turns render every response side-by-side,
+                          full width, mirroring the author's comparison. */}
+                      {multiModelResponses && (
+                        <div className="w-full px-4 pt-12">
+                          <MultiModelResponseView
+                            responses={multiModelResponses}
+                            chatState={{
+                              agent: persona,
+                              docs: [],
+                              citations: undefined,
+                              setPresentingDocument,
+                            }}
+                            llmManager={null}
+                            parentMessage={message}
+                            readOnly
+                          />
+                        </div>
+                      )}
                     </div>
                   );
                 }
+
+                // Non-user (assistant or error): skip the single child the
+                // chain surfaced when its parent is a multi-model turn. The
+                // panels already render every response, including failures.
+                const previousMessage = i !== 0 ? messages[i - 1] : null;
+                if (
+                  previousMessage?.type === "user" &&
+                  getMultiModelResponses(
+                    previousMessage,
+                    messageTree,
+                    modelProviderLookup
+                  )
+                ) {
+                  return null;
+                }
+
+                if (message.type === "assistant") {
+                  return (
+                    <div
+                      key={message.messageId}
+                      className="w-[min(50rem,100%)]"
+                    >
+                      <AgentMessage
+                        rawPackets={message.packets}
+                        chatState={{
+                          agent: persona,
+                          docs: message.documents,
+                          citations: message.citations,
+                          setPresentingDocument: setPresentingDocument,
+                          // Shared payload carries the model as `modelDisplayName`,
+                          // not `overridden_model`. Surface it in the read-only footer.
+                          overriddenModel:
+                            message.modelDisplayName ?? undefined,
+                          overriddenModelProvider: message.modelDisplayName
+                            ? modelProviderLookup.get(message.modelDisplayName)
+                            : undefined,
+                        }}
+                        nodeId={message.nodeId}
+                        llmManager={null}
+                        otherMessagesCanSwitchTo={undefined}
+                        onMessageSelection={undefined}
+                      />
+                    </div>
+                  );
+                }
+
+                // Error message case
+                return (
+                  <div
+                    key={message.messageId}
+                    className="py-5 ml-4 lg:px-5 w-[min(50rem,100%)]"
+                  >
+                    <div className="mx-auto w-[90%] max-w-message-max">
+                      <p className="text-status-text-error-05 text-sm my-auto">
+                        {message.message}
+                      </p>
+                    </div>
+                  </div>
+                );
               })}
             </div>
           ) : (

@@ -1,7 +1,6 @@
 from __future__ import annotations
 
-from onyx.cache.interface import CacheBackend
-from onyx.cache.interface import CacheLock
+from onyx.cache.interface import CacheBackend, CacheLock
 
 
 class FakeLock(CacheLock):
@@ -22,6 +21,9 @@ class FakeLock(CacheLock):
 
     def release(self) -> None:
         self._owned = False
+
+    def extend(self, ttl_seconds: float) -> None:
+        pass
 
     def owned(self) -> bool:
         return self._owned

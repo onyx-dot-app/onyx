@@ -11,31 +11,41 @@ from pathlib import Path
 from typing import Any
 
 from onyx.configs.app_configs import INDEX_BATCH_SIZE
-from onyx.connectors.interfaces import GenerateDocumentsOutput
-from onyx.connectors.interfaces import GenerateSlimDocumentOutput
-from onyx.connectors.interfaces import LoadConnector
-from onyx.connectors.interfaces import PollConnector
-from onyx.connectors.interfaces import SecondsSinceUnixEpoch
-from onyx.connectors.interfaces import SlimConnectorWithPermSync
-from onyx.connectors.models import BasicExpertInfo
-from onyx.connectors.models import ConnectorCheckpoint
-from onyx.connectors.models import ConnectorMissingCredentialError
-from onyx.connectors.models import Document
-from onyx.connectors.models import HierarchyNode
-from onyx.connectors.models import SlimDocument
-from onyx.connectors.models import TextSection
-from onyx.connectors.salesforce.doc_conversion import convert_sf_object_to_doc
-from onyx.connectors.salesforce.doc_conversion import convert_sf_query_result_to_doc
-from onyx.connectors.salesforce.doc_conversion import ID_PREFIX
+from onyx.connectors.cross_connector_utils.miscellaneous_utils import time_str_to_utc
+from onyx.connectors.interfaces import (
+    GenerateDocumentsOutput,
+    GenerateSlimDocumentOutput,
+    LoadConnector,
+    PollConnector,
+    SecondsSinceUnixEpoch,
+    SlimConnectorWithPermSync,
+)
+from onyx.connectors.models import (
+    BasicExpertInfo,
+    ConnectorCheckpoint,
+    ConnectorMissingCredentialError,
+    Document,
+    HierarchyNode,
+    SlimDocument,
+    TextSection,
+)
+from onyx.connectors.salesforce.doc_conversion import (
+    ID_PREFIX,
+    convert_sf_object_to_doc,
+    convert_sf_query_result_to_doc,
+)
 from onyx.connectors.salesforce.onyx_salesforce import OnyxSalesforce
 from onyx.connectors.salesforce.salesforce_calls import fetch_all_csvs_in_parallel
 from onyx.connectors.salesforce.sqlite_functions import OnyxSalesforceSQLite
-from onyx.connectors.salesforce.utils import ACCOUNT_OBJECT_TYPE
-from onyx.connectors.salesforce.utils import ID_FIELD
-from onyx.connectors.salesforce.utils import MODIFIED_FIELD
-from onyx.connectors.salesforce.utils import NAME_FIELD
-from onyx.connectors.salesforce.utils import USER_OBJECT_TYPE
-from onyx.connectors.salesforce.utils import validate_sf_identifier
+from onyx.connectors.salesforce.utils import (
+    ACCOUNT_OBJECT_TYPE,
+    CREATED_FIELD,
+    ID_FIELD,
+    MODIFIED_FIELD,
+    NAME_FIELD,
+    USER_OBJECT_TYPE,
+    validate_sf_identifier,
+)
 from onyx.indexing.indexing_heartbeat import IndexingHeartbeatInterface
 from onyx.utils.logger import setup_logger
 
@@ -967,6 +977,10 @@ class SalesforceConnector(LoadConnector, PollConnector, SlimConnectorWithPermSyn
                 # field_set.add(NAME_FIELD) # does not always exist
                 field_set.add(ID_FIELD)
                 field_set.add(MODIFIED_FIELD)
+                # Like NAME_FIELD, CreatedDate isn't on every sobject; only
+                # request it when present so it can't break the whole SOQL query.
+                if CREATED_FIELD in sf_client.get_queryable_fields_by_type(parent_type):
+                    field_set.add(CREATED_FIELD)
 
                 # Use only the specified fields
                 type_to_queryable_fields[parent_type] = field_set
@@ -1160,12 +1174,24 @@ class SalesforceConnector(LoadConnector, PollConnector, SlimConnectorWithPermSyn
             # parent_object_type comes from connector config; SOQL has no
             # parameter binding for table identifiers, so validate it.
             validate_sf_identifier(parent_object_type)
-            query = f"SELECT Id FROM {parent_object_type}"  # noqa: S608
+            # CreatedDate isn't on every sobject; only request it when present so
+            # it can't break the whole SOQL query. Checked once per parent type.
+            has_created_field = (
+                CREATED_FIELD
+                in self.sf_client.get_queryable_fields_by_type(parent_object_type)
+            )
+            select_fields = "Id, CreatedDate" if has_created_field else "Id"
+            query = f"SELECT {select_fields} FROM {parent_object_type}"  # noqa: S608
             query_result = self.sf_client.safe_query_all(query)
             doc_metadata_list.extend(
                 SlimDocument(
                     id=f"{ID_PREFIX}{instance_dict.get('Id', '')}",
                     external_access=None,
+                    doc_created_at=(
+                        time_str_to_utc(instance_dict.get(CREATED_FIELD))
+                        if instance_dict.get(CREATED_FIELD)
+                        else None
+                    ),
                 )
                 for instance_dict in query_result["records"]
             )

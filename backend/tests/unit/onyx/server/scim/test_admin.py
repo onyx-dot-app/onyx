@@ -1,19 +1,19 @@
 """Tests for SCIM admin token management endpoints."""
 
 from datetime import datetime
-from unittest.mock import MagicMock
-from unittest.mock import patch
+from unittest.mock import MagicMock, patch
 from uuid import uuid4
 
 import pytest
 from sqlalchemy.orm import Session
 
 from ee.onyx.db.scim import ScimDAL
-from ee.onyx.server.enterprise_settings.api import create_scim_token
-from ee.onyx.server.enterprise_settings.api import get_active_scim_token
+from ee.onyx.server.enterprise_settings.api import (
+    create_scim_token,
+    get_active_scim_token,
+)
 from ee.onyx.server.scim.models import ScimTokenCreate
-from onyx.db.models import ScimToken
-from onyx.db.models import User
+from onyx.db.models import ScimToken, User
 
 
 @pytest.fixture
@@ -82,7 +82,7 @@ class TestCreateToken:
 
         # Simulate one existing active token that should get revoked
         existing = _make_token(1, "old-token", is_active=True)
-        scim_dal._session.scalars.return_value.all.return_value = (  # type: ignore
+        scim_dal._session.scalars.return_value.all.return_value = (  # ty: ignore[unresolved-attribute]
             [existing]
         )
 

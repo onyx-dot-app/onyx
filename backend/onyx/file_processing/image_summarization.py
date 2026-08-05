@@ -3,21 +3,25 @@ from io import BytesIO
 
 from PIL import Image
 
-from onyx.configs.app_configs import IMAGE_SUMMARIZATION_SYSTEM_PROMPT
-from onyx.configs.app_configs import IMAGE_SUMMARIZATION_USER_PROMPT
+from onyx.configs.app_configs import (
+    IMAGE_SUMMARIZATION_SYSTEM_PROMPT,
+    IMAGE_SUMMARIZATION_USER_PROMPT,
+)
+from onyx.configs.chat_configs import IMAGE_SUMMARIZATION_TIMEOUT
 from onyx.llm.interfaces import LLM
-from onyx.llm.models import ChatCompletionMessage
-from onyx.llm.models import ContentPart
-from onyx.llm.models import ImageContentPart
-from onyx.llm.models import ImageUrlDetail
-from onyx.llm.models import SystemMessage
-from onyx.llm.models import TextContentPart
-from onyx.llm.models import UserMessage
+from onyx.llm.models import (
+    ChatCompletionMessage,
+    ContentPart,
+    ImageContentPart,
+    ImageUrlDetail,
+    SystemMessage,
+    TextContentPart,
+    UserMessage,
+)
 from onyx.llm.utils import llm_response_to_string
 from onyx.server.metrics.image_processing import track_image_summarization
 from onyx.tracing.flows import LLMFlow
-from onyx.tracing.llm_utils import llm_generation_span
-from onyx.tracing.llm_utils import record_llm_response
+from onyx.tracing.llm_utils import llm_generation_span, record_llm_response
 from onyx.utils.b64 import get_image_type_from_bytes
 from onyx.utils.logger import setup_logger
 
@@ -134,7 +138,9 @@ def _summarize_image(
             input_messages=[{"type": "image_summarization_request"}],
         ) as span_generation:
             # Note: We don't include the actual image in the span input to avoid bloating traces
-            response = llm.invoke(messages)
+            response = llm.invoke(
+                messages, total_timeout_override=IMAGE_SUMMARIZATION_TIMEOUT
+            )
             record_llm_response(span_generation, response)
             summary = llm_response_to_string(response)
 

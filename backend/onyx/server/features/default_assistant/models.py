@@ -1,7 +1,6 @@
 """Models for default assistant configuration API."""
 
-from pydantic import BaseModel
-from pydantic import Field
+from pydantic import BaseModel, Field
 
 
 class DefaultAssistantConfiguration(BaseModel):

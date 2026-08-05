@@ -2,31 +2,31 @@ import os
 import tempfile
 import urllib.parse
 from collections.abc import Generator
-from datetime import datetime
-from datetime import timezone
-from typing import Any
-from typing import Dict
-from typing import List
-from typing import Tuple
-from typing import Union
+from datetime import datetime, timezone
+from typing import Any, Dict, List, Tuple, Union
 
 from zulip import Client
 
 from onyx.configs.app_configs import INDEX_BATCH_SIZE
 from onyx.configs.constants import DocumentSource
-from onyx.connectors.interfaces import GenerateDocumentsOutput
-from onyx.connectors.interfaces import LoadConnector
-from onyx.connectors.interfaces import PollConnector
-from onyx.connectors.interfaces import SecondsSinceUnixEpoch
-from onyx.connectors.models import ConnectorMissingCredentialError
-from onyx.connectors.models import Document
-from onyx.connectors.models import HierarchyNode
-from onyx.connectors.models import TextSection
-from onyx.connectors.zulip.schemas import GetMessagesResponse
-from onyx.connectors.zulip.schemas import Message
-from onyx.connectors.zulip.utils import build_search_narrow
-from onyx.connectors.zulip.utils import call_api
-from onyx.connectors.zulip.utils import encode_zulip_narrow_operand
+from onyx.connectors.interfaces import (
+    GenerateDocumentsOutput,
+    LoadConnector,
+    PollConnector,
+    SecondsSinceUnixEpoch,
+)
+from onyx.connectors.models import (
+    ConnectorMissingCredentialError,
+    Document,
+    HierarchyNode,
+    TextSection,
+)
+from onyx.connectors.zulip.schemas import GetMessagesResponse, Message
+from onyx.connectors.zulip.utils import (
+    build_search_narrow,
+    call_api,
+    encode_zulip_narrow_operand,
+)
 from onyx.utils.logger import setup_logger
 
 # Potential improvements
@@ -170,6 +170,8 @@ class ZulipConnector(LoadConnector, PollConnector):
             semantic_identifier=f"{message.display_recipient} > {message.subject}",
             metadata=metadata,
             doc_updated_at=doc_time,  # Use most recent edit time or post time
+            # NOTE: doc_created_at population not yet verified against live data
+            doc_created_at=post_time,
         )
 
     def _get_docs(

@@ -1,15 +1,16 @@
 import threading
 import time
-from typing import Any
-from typing import Dict
+from typing import Any, Dict
 from urllib.request import Request
 
 from redis.lock import Lock as RedisLock
 from slack_sdk import WebClient
 
-from onyx.connectors.slack.utils import ONYX_SLACK_LOCK_BLOCKING_TIMEOUT
-from onyx.connectors.slack.utils import ONYX_SLACK_LOCK_TOTAL_BLOCKING_TIMEOUT
-from onyx.connectors.slack.utils import ONYX_SLACK_LOCK_TTL
+from onyx.connectors.slack.utils import (
+    ONYX_SLACK_LOCK_BLOCKING_TIMEOUT,
+    ONYX_SLACK_LOCK_TOTAL_BLOCKING_TIMEOUT,
+    ONYX_SLACK_LOCK_TTL,
+)
 from onyx.redis.tenant_redis_client import TenantRedisClient
 from onyx.utils.logger import setup_logger
 

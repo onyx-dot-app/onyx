@@ -1,23 +1,27 @@
 import time
-from datetime import datetime
-from datetime import timezone
+from datetime import datetime, timezone
 from typing import Any
 
 import requests
 from pydantic import BaseModel
 
-from onyx.configs.app_configs import INDEX_BATCH_SIZE
-from onyx.configs.app_configs import REQUEST_TIMEOUT_SECONDS
+from onyx.configs.app_configs import INDEX_BATCH_SIZE, REQUEST_TIMEOUT_SECONDS
 from onyx.configs.constants import DocumentSource
-from onyx.connectors.cross_connector_utils.miscellaneous_utils import process_in_batches
-from onyx.connectors.cross_connector_utils.miscellaneous_utils import time_str_to_utc
+from onyx.connectors.cross_connector_utils.miscellaneous_utils import (
+    process_in_batches,
+    time_str_to_utc,
+)
 from onyx.connectors.cross_connector_utils.rate_limit_wrapper import rate_limit_builder
-from onyx.connectors.interfaces import GenerateDocumentsOutput
-from onyx.connectors.interfaces import PollConnector
-from onyx.connectors.interfaces import SecondsSinceUnixEpoch
-from onyx.connectors.models import ConnectorMissingCredentialError
-from onyx.connectors.models import Document
-from onyx.connectors.models import TextSection
+from onyx.connectors.interfaces import (
+    GenerateDocumentsOutput,
+    PollConnector,
+    SecondsSinceUnixEpoch,
+)
+from onyx.connectors.models import (
+    ConnectorMissingCredentialError,
+    Document,
+    TextSection,
+)
 from onyx.file_processing.html_utils import parse_html_page_basic
 from onyx.utils.logger import setup_logger
 from onyx.utils.retry_wrapper import retry_builder
@@ -124,6 +128,7 @@ class AxeroForum(BaseModel):
     initial_content: str
     responses: list[str]
     last_update: datetime
+    created: datetime | None = None
 
 
 def _map_post_to_parent(
@@ -152,11 +157,11 @@ def _map_post_to_parent(
             initial_post_d = _get_obj_by_id(p_id, api_key, axero_base_url)[
                 "ResponseData"
             ]
+            initial_post_created = initial_post_d.get("DateCreated")
             initial_post_time = time_str_to_utc(
-                initial_post_d.get("DateUpdated")
-                or initial_post_d.get("DateCreated")
-                or epoch_str
+                initial_post_d.get("DateUpdated") or initial_post_created or epoch_str
             )
+
             post_map[p_id] = AxeroForum(
                 doc_id="AXERO_" + str(initial_post_d.get("ContentID")),
                 title=initial_post_d.get("ContentTitle"),
@@ -164,6 +169,11 @@ def _map_post_to_parent(
                 initial_content=initial_post_d.get("ContentSummary"),
                 responses=[post.get("ContentSummary")],
                 last_update=max(post_time, initial_post_time),
+                created=(
+                    time_str_to_utc(initial_post_created)
+                    if initial_post_created
+                    else None
+                ),
             )
 
     return list(post_map.values())
@@ -223,6 +233,8 @@ def _translate_forum_to_doc(af: AxeroForum) -> Document:
         source=DocumentSource.AXERO,
         semantic_identifier=af.title,
         doc_updated_at=af.last_update,
+        # NOTE: doc_created_at population not yet verified against live data
+        doc_created_at=af.created,
         metadata={},
     )
 
@@ -240,12 +252,15 @@ def _translate_content_to_doc(content: dict) -> Document:
         content_parsed = parse_html_page_basic(body)
         page_text += content_parsed
 
+    date_created = content["DateCreated"]
     doc = Document(
         id="AXERO_" + str(content["ContentID"]),
         sections=[TextSection(link=content["ContentURL"], text=page_text)],
         source=DocumentSource.AXERO,
         semantic_identifier=content["ContentTitle"],
         doc_updated_at=time_str_to_utc(content["DateUpdated"]),
+        # NOTE: doc_created_at population not yet verified against live data
+        doc_created_at=time_str_to_utc(date_created),
         metadata={"space": content["SpaceName"]},
     )
 

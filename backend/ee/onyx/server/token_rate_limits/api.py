@@ -1,30 +1,35 @@
 from collections import defaultdict
 
-from fastapi import APIRouter
-from fastapi import Depends
+from fastapi import APIRouter, Depends
 from sqlalchemy.orm import Session
 
-from ee.onyx.db.token_limit import fetch_all_user_group_token_rate_limits_by_group
-from ee.onyx.db.token_limit import fetch_user_group_token_rate_limits_for_group
-from ee.onyx.db.token_limit import insert_user_group_token_rate_limit
+from ee.onyx.db.token_limit import (
+    fetch_all_user_group_token_rate_limits_by_group,
+    fetch_user_group_token_rate_limits_for_group,
+    insert_user_group_token_rate_limit,
+)
 from onyx.auth.permissions import require_permission
-from onyx.auth.scoped_permissions import assert_manages_group
-from onyx.auth.scoped_permissions import assert_within_scope
-from onyx.configs.constants import PUBLIC_API_TAGS
-from onyx.configs.constants import TokenRateLimitScope
+from onyx.auth.scoped_permissions import assert_manages_group, assert_within_scope
+from onyx.configs.constants import PUBLIC_API_TAGS, TokenRateLimitScope
 from onyx.db.engine.sql_engine import get_session
 from onyx.db.enums import Permission
 from onyx.db.models import User
-from onyx.db.token_limit import delete_token_rate_limit
-from onyx.db.token_limit import fetch_all_user_token_rate_limits
-from onyx.db.token_limit import get_token_rate_limit_scope_and_group_ids
-from onyx.db.token_limit import insert_user_token_rate_limit
-from onyx.db.token_limit import update_token_rate_limit
+from onyx.db.token_limit import (
+    delete_token_rate_limit,
+    fetch_all_user_token_rate_limits,
+    get_token_rate_limit_scope_and_group_ids,
+    insert_user_token_rate_limit,
+    update_token_rate_limit,
+)
 from onyx.error_handling.error_codes import OnyxErrorCode
 from onyx.error_handling.exceptions import OnyxError
-from onyx.server.query_and_chat.token_limit import any_rate_limit_exists
-from onyx.server.token_rate_limits.models import TokenRateLimitArgs
-from onyx.server.token_rate_limits.models import TokenRateLimitDisplay
+from onyx.server.query_and_chat.token_limit import (
+    invalidate_any_rate_limit_exists_cache,
+)
+from onyx.server.token_rate_limits.models import (
+    TokenRateLimitArgs,
+    TokenRateLimitDisplay,
+)
 
 router = APIRouter(prefix="/admin/token-rate-limits", tags=PUBLIC_API_TAGS)
 
@@ -99,7 +104,7 @@ def create_group_token_limit_settings(
         )
     )
     # clear cache in case this was the first rate limit created
-    any_rate_limit_exists.cache_clear()
+    invalidate_any_rate_limit_exists_cache()
     return rate_limit_display
 
 
@@ -163,7 +168,7 @@ def update_group_token_limit_settings(
             token_rate_limit_settings=token_limit_settings,
         )
     )
-    any_rate_limit_exists.cache_clear()
+    invalidate_any_rate_limit_exists_cache()
     return rate_limit_display
 
 
@@ -180,7 +185,7 @@ def delete_group_token_limit_settings(
         user, db_session, group_id=group_id, rate_limit_id=rate_limit_id
     )
     delete_token_rate_limit(db_session=db_session, token_rate_limit_id=rate_limit_id)
-    any_rate_limit_exists.cache_clear()
+    invalidate_any_rate_limit_exists_cache()
 
 
 """
@@ -209,5 +214,5 @@ def create_user_token_limit_settings(
         insert_user_token_rate_limit(db_session, token_limit_settings)
     )
     # clear cache in case this was the first rate limit created
-    any_rate_limit_exists.cache_clear()
+    invalidate_any_rate_limit_exists_cache()
     return rate_limit_display

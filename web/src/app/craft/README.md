@@ -91,7 +91,7 @@ Craft supports two sandbox backends controlled by `SANDBOX_BACKEND`:
   - `sandbox` — Runs OpenCode agent and Next.js preview server
   - `file-sync` — Sidecar for S3 file synchronization
 
-For local development, see [docs/dev/local-kubernetes.md](/docs/dev/local-kubernetes.md) — one-shot setup via `make craft-up`.
+For local development, see [docs/craft/dev/local-kubernetes.md](/docs/craft/dev/local-kubernetes.md) — one-shot setup via `make craft-up`.
 
 **Docker** (self-hosted docker-compose)
 
@@ -141,7 +141,7 @@ Idle sandboxes are cleaned up by a Celery background task:
 Key configuration categories (see source for full reference):
 
 - **Core** — `ENABLE_CRAFT`, `SANDBOX_BACKEND` (local vs kubernetes)
-- **Lifecycle** — Idle timeout (default 1 hour), max concurrent sandboxes per org (default 10)
+- **Lifecycle** — Idle timeout (default 1 hour)
 - **Kubernetes** — Namespace, container image, S3 bucket for snapshots
 - **File uploads** — Size limits (50MB per file, 20 files per session, 200MB total)
 - **Rate limits** — Free users: 5 messages total; Paid users: 25 messages/week

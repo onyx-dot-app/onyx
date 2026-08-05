@@ -3,14 +3,12 @@
 from __future__ import annotations
 
 from typing import Any
-from unittest.mock import MagicMock
-from unittest.mock import patch
+from unittest.mock import MagicMock, patch
 
 import pytest
 
 from onyx.connectors.models import SlimDocument
-from onyx.connectors.web.connector import WEB_CONNECTOR_VALID_SETTINGS
-from onyx.connectors.web.connector import WebConnector
+from onyx.connectors.web.connector import WEB_CONNECTOR_VALID_SETTINGS, WebConnector
 
 BASE_URL = "http://example.com"
 

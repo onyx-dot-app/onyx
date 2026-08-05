@@ -82,6 +82,11 @@ _BASE_EMBEDDING_MODELS = [
         index_name="danswer_chunk_gemini_embedding_2_preview",
     ),
     _BaseEmbeddingModel(
+        name="google/gemini-embedding-2",
+        dim=3072,
+        index_name="danswer_chunk_gemini_embedding_2",
+    ),
+    _BaseEmbeddingModel(
         name="voyage/voyage-large-2-instruct",
         dim=1024,
         index_name="danswer_chunk_voyage_large_2_instruct",

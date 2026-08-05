@@ -14,8 +14,13 @@ def _reload_app_configs() -> ModuleType:
 def _reload_sql_engine() -> ModuleType:
     """Reload sql_engine after app_configs has been reloaded so it picks up
     the freshly parsed constants. Required because sql_engine binds them at
+    import time. pg_ssl is reloaded in between because sql_engine's merged
+    connect_args now compose pg_ssl's SSL params, which also bind config at
     import time."""
     _reload_app_configs()
+    import onyx.db.engine.pg_ssl as pg_ssl_module
+
+    importlib.reload(pg_ssl_module)
     import onyx.db.engine.sql_engine as module
 
     return importlib.reload(module)

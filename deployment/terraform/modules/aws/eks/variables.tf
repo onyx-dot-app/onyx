@@ -43,10 +43,34 @@ variable "main_node_instance_types" {
   default     = ["m7i.4xlarge"]
 }
 
+variable "main_node_min_size" {
+  type        = number
+  description = "Minimum number of nodes in the main node group. The cluster-autoscaler will not scale below this, so raise it to guarantee always-on baseline capacity for bursty workloads. Null keeps the node-group default."
+  default     = null
+}
+
+variable "main_node_max_size" {
+  type        = number
+  description = "Maximum number of nodes the main node group may scale up to. Null keeps the node-group default."
+  default     = null
+}
+
+variable "vespa_node_enabled" {
+  type        = bool
+  description = "Whether to create the dedicated Vespa/document-index node group. Disable when the index runs off-cluster (managed OpenSearch) or fits on the main node group."
+  default     = true
+}
+
 variable "vespa_node_instance_types" {
   type        = list(string)
   description = "Instance types for the Vespa node group"
   default     = ["m6i.2xlarge"]
+}
+
+variable "vespa_node_disk_size_gb" {
+  type        = number
+  description = "Root EBS volume (GiB) for the Vespa/document-index node. Size to the expected on-disk index; null keeps the node-group default."
+  default     = null
 }
 
 variable "vespa_node_subnet_ids" {
@@ -126,9 +150,9 @@ variable "tags" {
   default     = {}
 }
 
-variable "enable_craft_sandbox_node_group" {
+variable "enable_craft" {
   type        = bool
-  description = "Create a dedicated Craft sandbox node group (labeled onyx.app/workload=sandbox, tainted workload=sandbox:NoSchedule, IMDSv2 hop-limit 1)."
+  description = "Enable Craft infrastructure. Currently provisions a dedicated Craft sandbox node group (labeled onyx.app/workload=sandbox, tainted workload=sandbox:NoSchedule, IMDSv2 hop-limit 1)."
   default     = false
 }
 
@@ -140,8 +164,8 @@ variable "craft_sandbox_node_instance_types" {
 
 variable "craft_sandbox_node_min_size" {
   type        = number
-  description = "Min size of the Craft sandbox node group."
-  default     = 0
+  description = "Min size of the Craft sandbox node group. Keep >= 1: cluster-autoscaler can only scale a group back up from zero with node-template label/taint ASG tags, which are not configured here, so a value of 0 would leave sandbox pods Pending after idle scale-down."
+  default     = 1
 }
 
 variable "craft_sandbox_node_max_size" {
@@ -154,6 +178,17 @@ variable "craft_sandbox_node_desired_size" {
   type        = number
   description = "Desired size of the Craft sandbox node group."
   default     = 1
+}
+
+variable "craft_sandbox_node_disk_size_gb" {
+  type        = number
+  description = "Root EBS volume (GiB) for Craft sandbox nodes. Size this relative to the instance's vCPU and the sandbox pod's ephemeral-storage request (default 5Gi/pod): a node fits min(vCPU/pod-cpu, disk/pod-eph) sandboxes, so a disk too small for the instance makes ephemeral-storage the binding dimension and caps the node far below its CPU capacity. The default suits the default m5.large; raise it if you use larger instances."
+  default     = 50
+
+  validation {
+    condition     = var.craft_sandbox_node_disk_size_gb >= 20
+    error_message = "craft_sandbox_node_disk_size_gb must be at least 20 GiB; the AL2023 AMI and OS overlay consume ~8 GiB, leaving too little ephemeral storage for even one sandbox pod (5Gi request) below that threshold."
+  }
 }
 
 variable "create_gp3_storage_class" {

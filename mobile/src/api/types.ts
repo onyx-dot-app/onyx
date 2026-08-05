@@ -1,12 +1,5 @@
-// Shared API response types (mirrors web's src/lib/types.ts).
-//
-// Mobile-local and deliberately minimal — only the fields the app renders. Do
-// not mirror web's larger `User` type. If web later shares a DTO for one of
-// these via @onyx-ai/shared, reuse that instead (policy: extract-on-proven-reuse).
-// Mirrors the backend UserRole enum (backend/onyx/auth/schemas.py) exactly — all
-// 7 members. slack_user / ext_perm_user are non-web-login roles unlikely to reach
-// a mobile session, but the type must not claim values the API can return are
-// impossible (apiFetch casts the response without runtime validation).
+// Must list all 7 backend UserRole members: apiFetch casts without runtime
+// validation, so the type can't claim API-returnable values are impossible.
 export type UserRole =
   | "limited"
   | "basic"
@@ -16,9 +9,27 @@ export type UserRole =
   | "slack_user"
   | "ext_perm_user";
 
+// pinned_assistants drives the sidebar rail (null → featured fallback).
+export interface UserPreferences {
+  pinned_assistants?: number[] | null;
+}
+
 export interface CurrentUser {
   id: string;
   email: string;
   role: UserRole;
   is_active: boolean;
+  // `/me` always returns preferences; keep it required to surface a boundary mismatch rather
+  // than silently treating malformed data as "no pinned assistants".
+  preferences: UserPreferences;
+}
+
+export interface AuthTypeMetadata {
+  // Cloud (multi-tenant) signup provisions a tenant.
+  multi_tenant: boolean;
+  requires_verification: boolean;
+  anonymous_user_enabled?: boolean | null;
+  password_min_length: number;
+  has_users: boolean;
+  oauth_enabled: boolean;
 }

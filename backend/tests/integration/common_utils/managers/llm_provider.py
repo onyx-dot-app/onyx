@@ -2,15 +2,15 @@ import os
 from uuid import uuid4
 
 from onyx.llm.constants import LlmProviderNames
-from onyx.server.manage.llm.models import DefaultModel
-from onyx.server.manage.llm.models import LLMProviderUpsertRequest
-from onyx.server.manage.llm.models import LLMProviderView
-from onyx.server.manage.llm.models import ModelConfigurationUpsertRequest
-from tests.integration.common_utils.constants import API_SERVER_URL
-from tests.integration.common_utils.constants import GENERAL_HEADERS
+from onyx.server.manage.llm.models import (
+    DefaultModel,
+    LLMProviderUpsertRequest,
+    LLMProviderView,
+    ModelConfigurationUpsertRequest,
+)
+from tests.integration.common_utils.constants import API_SERVER_URL, GENERAL_HEADERS
 from tests.integration.common_utils.http_client import client
-from tests.integration.common_utils.test_models import DATestLLMProvider
-from tests.integration.common_utils.test_models import DATestUser
+from tests.integration.common_utils.test_models import DATestLLMProvider, DATestUser
 
 
 class LLMProviderManager:
@@ -100,11 +100,15 @@ class LLMProviderManager:
 
     @staticmethod
     def delete(
-        llm_provider: DATestLLMProvider,
+        llm_provider: DATestLLMProvider | LLMProviderView,
         user_performing_action: DATestUser,
+        force: bool = False,
     ) -> bool:
+        url = f"{API_SERVER_URL}/admin/llm/provider/{llm_provider.id}"
+        if force:
+            url += "?force=true"
         response = client.delete(
-            f"{API_SERVER_URL}/admin/llm/provider/{llm_provider.id}",
+            url,
             headers=user_performing_action.headers,
         )
         response.raise_for_status()

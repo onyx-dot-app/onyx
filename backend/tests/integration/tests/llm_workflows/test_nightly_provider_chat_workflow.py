@@ -4,8 +4,7 @@ import time
 from uuid import uuid4
 
 import pytest
-from pydantic import BaseModel
-from pydantic import ConfigDict
+from pydantic import BaseModel, ConfigDict
 
 from onyx.configs import app_configs
 from onyx.configs.constants import DocumentSource
@@ -15,8 +14,7 @@ from tests.integration.common_utils.http_client import client
 from tests.integration.common_utils.managers.cc_pair import CCPairManager
 from tests.integration.common_utils.managers.chat import ChatSessionManager
 from tests.integration.common_utils.managers.tool import ToolManager
-from tests.integration.common_utils.test_models import DATestUser
-from tests.integration.common_utils.test_models import ToolName
+from tests.integration.common_utils.test_models import DATestUser, ToolName
 
 _ENV_PROVIDER = "NIGHTLY_LLM_PROVIDER"
 _ENV_MODELS = "NIGHTLY_LLM_MODELS"
@@ -154,9 +152,6 @@ def _load_provider_config() -> NightlyProviderConfig:
         custom_config = _normalize_custom_config(
             provider=provider, raw_custom_config=parsed
         )
-
-    if provider == "ollama_chat" and api_key and not custom_config:
-        custom_config = {"OLLAMA_API_KEY": api_key}
 
     return NightlyProviderConfig(
         provider=provider,

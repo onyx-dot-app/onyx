@@ -75,7 +75,7 @@ function ColumnVisibilityPopover<TData extends RowData>({
                       <Tag title="Always Shown" color="blue" />
                     </div>
                   ) : isVisible ? (
-                    <SvgCheck size={16} className="text-action-link-05" />
+                    <SvgCheck size={16} className="text-action-selection-05" />
                   ) : undefined
                 }
                 onClick={canHide ? () => column.toggleVisibility() : undefined}

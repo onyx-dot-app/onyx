@@ -1,7 +1,6 @@
 import os
 
-from onyx.connectors.salesforce.utils import BASE_DATA_PATH
-from onyx.connectors.salesforce.utils import get_object_type_path
+from onyx.connectors.salesforce.utils import BASE_DATA_PATH, get_object_type_path
 
 
 def get_object_shelf_path(object_type: str) -> str:

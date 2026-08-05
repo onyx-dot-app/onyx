@@ -1,59 +1,69 @@
 from __future__ import annotations
 
-from fastapi import APIRouter
-from fastapi import Depends
-from fastapi import HTTPException
-from fastapi import Response
+from fastapi import APIRouter, Depends, HTTPException, Response
 from sqlalchemy.dialects.postgresql import insert
 from sqlalchemy.orm import Session
 
 from onyx.auth.permissions import require_permission
 from onyx.db.engine.sql_engine import get_session
 from onyx.db.enums import Permission
-from onyx.db.models import InternetContentProvider
-from onyx.db.models import InternetSearchProvider
-from onyx.db.models import User
-from onyx.db.web_search import deactivate_web_content_provider
-from onyx.db.web_search import deactivate_web_search_provider
-from onyx.db.web_search import delete_web_content_provider
-from onyx.db.web_search import delete_web_search_provider
-from onyx.db.web_search import fetch_web_content_provider_by_name
-from onyx.db.web_search import fetch_web_content_provider_by_type
-from onyx.db.web_search import fetch_web_content_providers
-from onyx.db.web_search import fetch_web_search_provider_by_name
-from onyx.db.web_search import fetch_web_search_provider_by_type
-from onyx.db.web_search import fetch_web_search_providers
-from onyx.db.web_search import set_active_web_content_provider
-from onyx.db.web_search import set_active_web_search_provider
-from onyx.db.web_search import upsert_web_content_provider
-from onyx.db.web_search import upsert_web_search_provider
-from onyx.server.manage.web_search.models import WebContentProviderTestRequest
-from onyx.server.manage.web_search.models import WebContentProviderUpsertRequest
-from onyx.server.manage.web_search.models import WebContentProviderView
-from onyx.server.manage.web_search.models import WebSearchProviderTestRequest
-from onyx.server.manage.web_search.models import WebSearchProviderUpsertRequest
-from onyx.server.manage.web_search.models import WebSearchProviderView
+from onyx.db.models import InternetContentProvider, InternetSearchProvider, User
+from onyx.db.web_search import (
+    deactivate_web_content_provider,
+    deactivate_web_search_provider,
+    delete_web_content_provider,
+    delete_web_search_provider,
+    fetch_web_content_provider_by_name,
+    fetch_web_content_provider_by_type,
+    fetch_web_content_providers,
+    fetch_web_search_provider_by_name,
+    fetch_web_search_provider_by_type,
+    fetch_web_search_providers,
+    set_active_web_content_provider,
+    set_active_web_search_provider,
+    upsert_web_content_provider,
+    upsert_web_search_provider,
+)
+from onyx.server.manage.web_search.models import (
+    WebContentProviderTestRequest,
+    WebContentProviderUpsertRequest,
+    WebContentProviderView,
+    WebSearchProviderTestRequest,
+    WebSearchProviderUpsertRequest,
+    WebSearchProviderView,
+)
 from onyx.tools.tool_implementations.open_url.utils import (
     filter_web_contents_with_no_title_or_content,
 )
 from onyx.tools.tool_implementations.web_search.models import WebContentProviderConfig
 from onyx.tools.tool_implementations.web_search.providers import (
     build_content_provider_from_config,
-)
-from onyx.tools.tool_implementations.web_search.providers import (
     build_search_provider_from_config,
-)
-from onyx.tools.tool_implementations.web_search.providers import (
     provider_requires_api_key,
 )
 from onyx.utils.logger import setup_logger
 from shared_configs.configs import MULTI_TENANT
-from shared_configs.enums import WebContentProviderType
-from shared_configs.enums import WebSearchProviderType
+from shared_configs.enums import WebContentProviderType, WebSearchProviderType
 
 logger = setup_logger()
 
 admin_router = APIRouter(prefix="/admin/web-search")
+
+# Providers whose API key is shared between the search and content sides: a key
+# entered on one side seeds the other (see the upsert endpoints below). Each
+# entry is (provider_type_on_this_side, display_name, provider_type_other_side).
+_SEARCH_TO_CONTENT_SYNC: list[
+    tuple[WebSearchProviderType, str, WebContentProviderType]
+] = [
+    (WebSearchProviderType.EXA, "Exa", WebContentProviderType.EXA),
+    (WebSearchProviderType.TAVILY, "Tavily", WebContentProviderType.TAVILY),
+]
+_CONTENT_TO_SEARCH_SYNC: list[
+    tuple[WebContentProviderType, str, WebSearchProviderType]
+] = [
+    (WebContentProviderType.EXA, "Exa", WebSearchProviderType.EXA),
+    (WebContentProviderType.TAVILY, "Tavily", WebSearchProviderType.TAVILY),
+]
 
 
 @admin_router.get("/search-providers", response_model=list[WebSearchProviderView])
@@ -107,27 +117,26 @@ def upsert_search_provider_endpoint(
         db_session=db_session,
     )
 
-    # Sync Exa key of search engine to content provider
-    if (
-        request.provider_type == WebSearchProviderType.EXA
-        and request.api_key_changed
-        and request.api_key
-    ):
-        stmt = (
-            insert(InternetContentProvider)
-            .values(
-                name="Exa",
-                provider_type=WebContentProviderType.EXA.value,
-                api_key=request.api_key,
-                is_active=False,
-            )
-            .on_conflict_do_update(
-                index_elements=["name"],
-                set_={"api_key": request.api_key},
-            )
-        )
-        db_session.execute(stmt)
-        db_session.flush()
+    # Sync API key from search provider to content provider (Exa / Tavily)
+    if request.api_key_changed and request.api_key:
+        for search_type, name, content_type in _SEARCH_TO_CONTENT_SYNC:
+            if request.provider_type == search_type:
+                stmt = (
+                    insert(InternetContentProvider)
+                    .values(
+                        name=name,
+                        provider_type=content_type.value,
+                        api_key=request.api_key,
+                        is_active=False,
+                    )
+                    .on_conflict_do_update(
+                        index_elements=["name"],
+                        set_={"api_key": request.api_key},
+                    )
+                )
+                db_session.execute(stmt)
+                db_session.flush()
+                break
 
     db_session.commit()
     return WebSearchProviderView(
@@ -288,27 +297,26 @@ def upsert_content_provider_endpoint(
         db_session=db_session,
     )
 
-    # Sync Exa key of content provider to search provider
-    if (
-        request.provider_type == WebContentProviderType.EXA
-        and request.api_key_changed
-        and request.api_key
-    ):
-        stmt = (
-            insert(InternetSearchProvider)
-            .values(
-                name="Exa",
-                provider_type=WebSearchProviderType.EXA.value,
-                api_key=request.api_key,
-                is_active=False,
-            )
-            .on_conflict_do_update(
-                index_elements=["name"],
-                set_={"api_key": request.api_key},
-            )
-        )
-        db_session.execute(stmt)
-        db_session.flush()
+    # Sync API key from content provider to search provider (Exa / Tavily)
+    if request.api_key_changed and request.api_key:
+        for content_type, name, search_type in _CONTENT_TO_SEARCH_SYNC:
+            if request.provider_type == content_type:
+                stmt = (
+                    insert(InternetSearchProvider)
+                    .values(
+                        name=name,
+                        provider_type=search_type.value,
+                        api_key=request.api_key,
+                        is_active=False,
+                    )
+                    .on_conflict_do_update(
+                        index_elements=["name"],
+                        set_={"api_key": request.api_key},
+                    )
+                )
+                db_session.execute(stmt)
+                db_session.flush()
+                break
 
     db_session.commit()
     return WebContentProviderView(

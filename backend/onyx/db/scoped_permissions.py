@@ -7,15 +7,10 @@ GATE 2 write gate) lives in ``onyx/auth/scoped_permissions.py``.
 
 from typing import TypeVar
 
-from sqlalchemy import and_
-from sqlalchemy import ColumnElement
-from sqlalchemy import Select
-from sqlalchemy import select
-from sqlalchemy.orm import InstrumentedAttribute
-from sqlalchemy.orm import Session
+from sqlalchemy import ColumnElement, Select, and_, select
+from sqlalchemy.orm import InstrumentedAttribute, Session
 
-from onyx.db.models import User
-from onyx.db.models import User__UserGroup
+from onyx.db.models import User, User__UserGroup
 
 # Resource PK type — int for connectors/doc-sets, UUID for skills. The clause is
 # key-type agnostic; the TypeVar just ties the resource + junction cols together.

@@ -1,35 +1,38 @@
-from collections.abc import Callable
-from collections.abc import Sequence
+from collections.abc import Callable, Sequence
 from typing import Any
 from uuid import UUID
 
 from fastapi_users.password import PasswordHelper
-from sqlalchemy import case
-from sqlalchemy import delete
-from sqlalchemy import func
-from sqlalchemy import select
+from sqlalchemy import Select, case, delete, func, literal, select, update
 from sqlalchemy.dialects.postgresql import insert as pg_insert
 from sqlalchemy.exc import IntegrityError
-from sqlalchemy.orm import Session
+from sqlalchemy.orm import Session, lazyload, selectinload
 from sqlalchemy.sql import expression
-from sqlalchemy.sql.elements import ColumnElement
-from sqlalchemy.sql.elements import KeyedColumnElement
+from sqlalchemy.sql.elements import ColumnElement, KeyedColumnElement
 from sqlalchemy.sql.expression import or_
 
 from onyx.auth.invited_users import remove_user_from_invited_users
-from onyx.configs.constants import ANONYMOUS_USER_EMAIL
-from onyx.configs.constants import DANSWER_API_KEY_DUMMY_EMAIL_DOMAIN
-from onyx.configs.constants import NO_AUTH_PLACEHOLDER_USER_EMAIL
-from onyx.db.enums import AccountType
-from onyx.db.enums import Permission
-from onyx.db.models import DocumentSet
-from onyx.db.models import DocumentSet__User
-from onyx.db.models import Persona
-from onyx.db.models import Persona__User
-from onyx.db.models import SamlAccount
-from onyx.db.models import User
-from onyx.db.models import User__UserGroup
-from onyx.db.models import UserGroup
+from onyx.configs.constants import (
+    ANONYMOUS_USER_EMAIL,
+    DANSWER_API_KEY_DUMMY_EMAIL_DOMAIN,
+    NO_AUTH_PLACEHOLDER_USER_EMAIL,
+    SLACK_SERVICE_ACCOUNT_EMAIL,
+)
+from onyx.db.enums import AccountType, Permission
+from onyx.db.models import (
+    DocumentSet,
+    DocumentSet__User,
+    MCPConnectionConfig,
+    MCPServer,
+    OAuthAccount,
+    Persona,
+    Persona__User,
+    SamlAccount,
+    User,
+    User__ExternalUserGroupId,
+    User__UserGroup,
+    UserGroup,
+)
 from onyx.db.permissions import recompute_user_permissions__no_commit
 from onyx.server.models import UserGroupInfo
 from onyx.utils.logger import setup_logger
@@ -68,31 +71,43 @@ def user_is_admin(user: User) -> bool:
     )
 
 
-def get_active_admin_users(db_session: Session) -> list[User]:
+def _active_admin_user_stmt() -> Select[tuple[User]]:
     """Active human admins — API-key dummies and system placeholders excluded. Admin is
     the FULL_ADMIN_PANEL_ACCESS permission now, not a role. Keep in step with
     ``_add_live_user_count_where_clause(only_admin_users=True)`` in ``db/auth.py``, which
     can't be reused here: auth -> api_key -> users is an import cycle."""
     email_col: KeyedColumnElement[Any] = User.__table__.c.email
     is_active_col: KeyedColumnElement[Any] = User.__table__.c.is_active
-    stmt = select(User).where(
+    return select(User).where(
         is_active_col.is_(True),
         User.effective_permissions.contains([Permission.FULL_ADMIN_PANEL_ACCESS.value]),
         expression.not_(email_col.endswith(DANSWER_API_KEY_DUMMY_EMAIL_DOMAIN)),
         email_col != ANONYMOUS_USER_EMAIL,
         email_col != NO_AUTH_PLACEHOLDER_USER_EMAIL,
     )
-    return list(db_session.execute(stmt).unique().scalars().all())
+
+
+def get_active_admin_users(db_session: Session) -> list[User]:
+    return list(db_session.execute(_active_admin_user_stmt()).unique().scalars().all())
 
 
 def get_all_users(
     db_session: Session,
     email_filter_string: str | None = None,
     include_external: bool = False,
+    include_api_key_users: bool = True,
 ) -> Sequence[User]:
     """List all users. No pagination as of now, as the # of users
     is assumed to be relatively small (<< 1 million)"""
-    stmt = select(User)
+    # Override the default joined-eager load of oauth_accounts: a selectin load
+    # avoids multiplying user rows and fetching the (potentially large) OAuth
+    # token columns, while still populating the collection so that
+    # User.password_configured works.
+    stmt = select(User).options(
+        selectinload(User.oauth_accounts).load_only(
+            OAuthAccount.id  # ty: ignore[invalid-argument-type]
+        )
+    )
 
     # Exclude system users (anonymous user, no-auth placeholder)
     stmt = stmt.where(
@@ -104,6 +119,13 @@ def get_all_users(
 
     if not include_external:
         stmt = stmt.where(User.account_type != AccountType.EXT_PERM_USER)
+
+    if not include_api_key_users:
+        stmt = stmt.where(
+            expression.not_(
+                User.__table__.c.email.endswith(DANSWER_API_KEY_DUMMY_EMAIL_DOMAIN)
+            )
+        )
 
     if email_filter_string is not None:
         stmt = stmt.where(
@@ -279,21 +301,168 @@ def get_user_by_email(email: str, db_session: Session) -> User | None:
     return user
 
 
-def fetch_user_by_id(db_session: Session, user_id: UUID) -> User | None:
+def get_user_by_oauth_account(
+    oauth_name: str, account_id: str, db_session: Session
+) -> User | None:
+    """Find a user by the IdP subject their account is linked to.
+
+    Unlike the email lookup, this keeps working after an IdP rename.
+    """
     return (
         db_session.query(User)
-        .filter(User.id == user_id)  # ty: ignore[invalid-argument-type]
+        .join(
+            OAuthAccount,
+            OAuthAccount.user_id == User.id,  # ty: ignore[invalid-argument-type]
+        )
+        .filter(
+            OAuthAccount.oauth_name == oauth_name,  # ty: ignore[invalid-argument-type]
+            OAuthAccount.account_id == account_id,  # ty: ignore[invalid-argument-type]
+        )
         .first()
     )
 
 
+def build_email_reconcile_update(user: User, new_email: str) -> dict[str, Any] | None:
+    """Fields that move `user` onto `new_email`, or None when they already match
+    case-insensitively.
+
+    The replaced address is kept in `prior_emails`, which keeps matching the
+    documents whose indexed ACLs still name it.
+    """
+    current_email = user.email.lower()
+    new_email = new_email.lower()
+    if current_email == new_email:
+        return None
+
+    # Re-adopting an old address makes it current, so it stops being an alias.
+    kept = [
+        email.lower()
+        for email in user.prior_emails
+        if email.lower() not in (new_email, current_email)
+    ]
+    return {"email": new_email, "prior_emails": [*kept, current_email]}
+
+
+def reconcile_user_email__no_commit(
+    user_id: UUID, new_email: str, db_session: Session
+) -> tuple[str, list[str]] | None:
+    """Move a user and their email-keyed rows in one transaction.
+
+    Rows are locked so a concurrent login builds `prior_emails` from the latest
+    address. Returns None when the address was already current, which does not
+    mean nothing changed: a shadow user may still have been merged in.
+    """
+    normalized_new_email = new_email.lower()
+    users = (
+        db_session.query(User)
+        .filter(
+            or_(
+                User.id == user_id,  # ty: ignore[invalid-argument-type]
+                func.lower(User.email) == normalized_new_email,
+            )
+        )
+        .order_by(User.id)  # ty: ignore[invalid-argument-type]
+        .populate_existing()
+        .with_for_update(of=User)
+        .all()
+    )
+    user = next((candidate for candidate in users if candidate.id == user_id), None)
+    if user is None:
+        raise ValueError(f"User {user_id} disappeared during email reconciliation")
+
+    shadow_user = next(
+        (
+            candidate
+            for candidate in users
+            if candidate.id != user_id
+            and candidate.account_type == AccountType.EXT_PERM_USER
+            and not candidate.oauth_accounts
+        ),
+        None,
+    )
+    if shadow_user is not None:
+        membership_insert = pg_insert(User__ExternalUserGroupId).from_select(
+            ["user_id", "external_user_group_id", "cc_pair_id", "stale"],
+            select(
+                literal(user_id),
+                User__ExternalUserGroupId.external_user_group_id,
+                User__ExternalUserGroupId.cc_pair_id,
+                User__ExternalUserGroupId.stale,
+            ).where(User__ExternalUserGroupId.user_id == shadow_user.id),
+        )
+        db_session.execute(
+            membership_insert.on_conflict_do_update(
+                index_elements=[
+                    User__ExternalUserGroupId.user_id,
+                    User__ExternalUserGroupId.external_user_group_id,
+                    User__ExternalUserGroupId.cc_pair_id,
+                ],
+                set_={
+                    "stale": User__ExternalUserGroupId.stale
+                    & membership_insert.excluded.stale
+                },
+            )
+        )
+        db_session.execute(
+            delete(User__ExternalUserGroupId).where(
+                User__ExternalUserGroupId.user_id == shadow_user.id
+            )
+        )
+        db_session.delete(shadow_user)
+        db_session.flush()
+        logger.info(
+            "Merged external-permission shadow user %s into user %s",
+            shadow_user.id,
+            user_id,
+        )
+
+    email_update = build_email_reconcile_update(user, normalized_new_email)
+    if email_update is None:
+        return None
+
+    old_email = user.email
+    prior_emails = list(email_update["prior_emails"])
+
+    user.email = normalized_new_email
+    user.prior_emails = prior_emails
+    db_session.execute(
+        update(MCPServer)
+        .where(MCPServer.owner == old_email)
+        .values(owner=normalized_new_email)
+    )
+    db_session.execute(
+        update(MCPConnectionConfig)
+        .where(MCPConnectionConfig.user_email == old_email)
+        .values(user_email=normalized_new_email)
+    )
+    return old_email, prior_emails
+
+
+def fetch_user_by_id(
+    db_session: Session, user_id: UUID, for_update: bool = False
+) -> User | None:
+    """``for_update`` adds ``SELECT ... FOR UPDATE``, serializing concurrent
+    transactions that use the user row as a reservation boundary (e.g. Craft
+    sandbox/session reservation). Hold only for a short transaction."""
+    query = db_session.query(User).filter(
+        User.id == user_id  # ty: ignore[invalid-argument-type]
+    )
+    if for_update:
+        # oauth_accounts is lazy="joined"; Postgres forbids FOR UPDATE on the
+        # nullable side of an outer join, so defer it when locking.
+        query = query.options(lazyload(User.oauth_accounts)).with_for_update()
+    return query.first()
+
+
+def _generate_password_hash() -> str:
+    password_helper = PasswordHelper()
+    return password_helper.hash(password_helper.generate())
+
+
 def _generate_slack_user(email: str) -> User:
-    fastapi_users_pw_helper = PasswordHelper()
-    password = fastapi_users_pw_helper.generate()
-    hashed_pass = fastapi_users_pw_helper.hash(password)
     return User(
         email=email,
-        hashed_password=hashed_pass,
+        hashed_password=_generate_password_hash(),
         account_type=AccountType.BOT,
     )
 
@@ -327,6 +496,30 @@ def add_slack_user_if_not_exists(
     db_session.add(user)
     db_session.commit()
     return user
+
+
+def get_or_create_slack_service_account(db_session: Session) -> User:
+    user = get_user_by_email(SLACK_SERVICE_ACCOUNT_EMAIL, db_session)
+    if user is not None:
+        return user
+
+    user = User(
+        email=SLACK_SERVICE_ACCOUNT_EMAIL,
+        hashed_password=_generate_password_hash(),
+        is_active=True,
+        is_verified=True,
+        account_type=AccountType.SERVICE_ACCOUNT,
+    )
+    db_session.add(user)
+    try:
+        db_session.commit()
+        return user
+    except IntegrityError:
+        db_session.rollback()
+        concurrent_user = get_user_by_email(SLACK_SERVICE_ACCOUNT_EMAIL, db_session)
+        if concurrent_user is None:
+            raise
+        return concurrent_user
 
 
 def _get_users_by_emails(
@@ -464,6 +657,15 @@ def assign_user_to_default_groups__no_commit(
     )
 
 
+def get_active_admin_count(db_session: Session) -> int:
+    """Count for the share dialog's Admins row — same filter set as
+    get_active_admin_users (no API-key dummies or system placeholders).
+    Runs on the hot GET /persona/{id} path, so count in SQL rather than
+    materializing every admin row."""
+    stmt = select(func.count()).select_from(_active_admin_user_stmt().subquery())
+    return db_session.execute(stmt).scalar_one()
+
+
 def delete_user_from_db(
     user_to_delete: User,
     db_session: Session,
@@ -481,14 +683,30 @@ def delete_user_from_db(
     db_session.query(SamlAccount).filter(
         SamlAccount.user_id == user_to_delete.id
     ).delete()
-    # Null out ownership on document sets and personas so they're
-    # preserved for other users instead of being cascade-deleted
+    # Null out ownership on document sets so they're preserved for other
+    # users instead of being cascade-deleted
     db_session.query(DocumentSet).filter(
         DocumentSet.user_id == user_to_delete.id
     ).update({DocumentSet.user_id: None})
-    db_session.query(Persona).filter(Persona.user_id == user_to_delete.id).update(
-        {Persona.user_id: None}
+    # Personas: private ones die with their owner; shared/public ones are
+    # orphaned (ownerless ⇒ managed by admins until transferred away)
+    owned_personas = (
+        db_session.query(Persona)
+        .options(
+            selectinload(Persona.user_shares),
+            selectinload(Persona.group_shares),
+        )
+        .filter(Persona.user_id == user_to_delete.id)
+        .all()
     )
+    for persona in owned_personas:
+        if (
+            not persona.is_public
+            and not persona.user_shares
+            and not persona.group_shares
+        ):
+            persona.deleted = True
+        persona.user_id = None
 
     db_session.query(DocumentSet__User).filter(
         DocumentSet__User.user_id == user_to_delete.id

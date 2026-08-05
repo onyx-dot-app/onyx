@@ -19,8 +19,7 @@ from tests.integration.common_utils.constants import API_SERVER_URL
 from tests.integration.common_utils.http_client import client
 from tests.integration.common_utils.managers.chat import ChatSessionManager
 from tests.integration.common_utils.managers.llm_provider import LLMProviderManager
-from tests.integration.common_utils.test_models import DATestChatSession
-from tests.integration.common_utils.test_models import DATestUser
+from tests.integration.common_utils.test_models import DATestChatSession, DATestUser
 
 TERMINATED_RESPONSE_MESSAGE = (
     "Response was terminated prior to completion, try regenerating."

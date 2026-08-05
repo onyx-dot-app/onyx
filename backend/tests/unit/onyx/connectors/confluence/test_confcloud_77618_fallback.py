@@ -19,9 +19,11 @@ from onyx.connectors.confluence.access import (
     get_page_restrictions_with_per_ancestor_fetch as get_page_restrictions_with_per_ancestor_fetch_shim,
 )
 from onyx.connectors.confluence.connector import ConfluenceConnector
-from onyx.connectors.confluence.onyx_confluence import _is_confcloud_77618_response
-from onyx.connectors.confluence.onyx_confluence import Confcloud77618Error
-from onyx.connectors.confluence.onyx_confluence import OnyxConfluence
+from onyx.connectors.confluence.onyx_confluence import (
+    Confcloud77618Error,
+    OnyxConfluence,
+    _is_confcloud_77618_response,
+)
 from onyx.connectors.interfaces import CredentialsProviderInterface
 
 _CONFCLOUD_77618_BODY = (
@@ -44,16 +46,12 @@ def _make_response(
     response = requests.Response()
     response.status_code = status_code
     if json_data is not None:
-        response.json = mock.Mock(  # ty: ignore[invalid-assignment]
-            return_value=json_data
-        )
+        response.json = mock.Mock(return_value=json_data)
     if body_text is not None:
         response._content = body_text.encode()
     if status_code >= 400:
         response.reason = "Mock Error"
-        response.raise_for_status = mock.Mock(  # ty: ignore[invalid-assignment]
-            side_effect=HTTPError(response=response)
-        )
+        response.raise_for_status = mock.Mock(side_effect=HTTPError(response=response))
     return response
 
 
@@ -234,9 +232,7 @@ def test_fetch_content_read_restrictions_hits_byoperation_endpoint(
             },
         )
 
-    cloud_client._confluence.get = mock.Mock(  # ty: ignore[invalid-assignment]
-        side_effect=get_side_effect
-    )
+    cloud_client._confluence.get = mock.Mock(side_effect=get_side_effect)
 
     result = cloud_client.fetch_content_read_restrictions("999")
     assert result is not None
@@ -250,7 +246,7 @@ def test_fetch_content_read_restrictions_returns_none_on_403(
     cloud_client: OnyxConfluence,
 ) -> None:
     """403 = draft permission reply; silent skip."""
-    cloud_client._confluence.get = mock.Mock(  # ty: ignore[invalid-assignment]
+    cloud_client._confluence.get = mock.Mock(
         return_value=_make_response(
             403, body_text="confluence.user.view.draft.permission"
         )
@@ -262,7 +258,7 @@ def test_fetch_content_read_restrictions_returns_none_on_404(
     cloud_client: OnyxConfluence,
 ) -> None:
     """404 = ancestor deleted between search and follow-up."""
-    cloud_client._confluence.get = mock.Mock(  # ty: ignore[invalid-assignment]
+    cloud_client._confluence.get = mock.Mock(
         return_value=_make_response(404, body_text="not found")
     )
     assert cloud_client.fetch_content_read_restrictions("missing-id") is None
@@ -272,7 +268,7 @@ def test_fetch_content_read_restrictions_raises_on_500(
     cloud_client: OnyxConfluence,
 ) -> None:
     """5xx must propagate; can't silently mask as "no restriction"."""
-    cloud_client._confluence.get = mock.Mock(  # ty: ignore[invalid-assignment]
+    cloud_client._confluence.get = mock.Mock(
         return_value=_make_response(500, body_text="boom")
     )
     with pytest.raises(HTTPError):

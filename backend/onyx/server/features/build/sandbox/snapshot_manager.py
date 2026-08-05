@@ -260,14 +260,3 @@ class SnapshotManager:
         except Exception as e:
             logger.warning("Failed to delete snapshot %s: %s", storage_path, e)
             raise RuntimeError(f"Failed to delete snapshot: {e}") from e
-
-    def get_snapshot_size(self, storage_path: str) -> int | None:
-        """Get the size of a snapshot in bytes.
-
-        Args:
-            storage_path: The file store path of the snapshot
-
-        Returns:
-            Size in bytes, or None if not available
-        """
-        return self._file_store.get_file_size(storage_path)

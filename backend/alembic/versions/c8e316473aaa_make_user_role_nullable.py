@@ -9,7 +9,7 @@ safety and will be dropped in a follow-up migration once the new model
 has been in production for a release cycle.
 
 Revision ID: c8e316473aaa
-Revises: 8f2c4a1d9e3b
+Revises: a44c4ebac3d6
 Create Date: 2026-04-14 14:57:29.520645
 
 """
@@ -21,7 +21,7 @@ from alembic import op
 
 
 revision = "c8e316473aaa"
-down_revision = "8f2c4a1d9e3b"
+down_revision = "a44c4ebac3d6"
 branch_labels: str | None = None
 depends_on: str | Sequence[str] | None = None
 

@@ -1,76 +1,87 @@
 from uuid import UUID
 
-from fastapi import APIRouter
-from fastapi import Depends
-from fastapi import HTTPException
-from fastapi import Query
-from fastapi import Request
-from fastapi import Response
-from fastapi import UploadFile
+from fastapi import (
+    APIRouter,
+    Depends,
+    HTTPException,
+    Query,
+    Request,
+    Response,
+    UploadFile,
+)
 from fastapi.responses import StreamingResponse
-from pydantic import BaseModel
-from pydantic import model_validator
+from pydantic import BaseModel, model_validator
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
 
 from onyx.auth.permission_projection import persona_permissions
-from onyx.auth.permissions import has_global_permission
-from onyx.auth.permissions import has_permission
-from onyx.auth.permissions import require_permission
-from onyx.auth.users import current_chat_accessible_user
-from onyx.auth.users import current_limited_user
+from onyx.auth.permissions import (
+    has_global_permission,
+    has_permission,
+    require_permission,
+)
+from onyx.auth.users import current_chat_accessible_user, current_limited_user
 from onyx.configs.app_configs import DISABLE_VECTOR_DB
-from onyx.configs.constants import FileOrigin
-from onyx.configs.constants import MilestoneRecordType
-from onyx.configs.constants import PUBLIC_API_TAGS
+from onyx.configs.constants import PUBLIC_API_TAGS, FileOrigin, MilestoneRecordType
 from onyx.db.engine.sql_engine import get_session
-from onyx.db.enums import Permission
-from onyx.db.enums import PermissionAuthority
-from onyx.db.enums import PersonaSharePermission
+from onyx.db.enums import Permission, PermissionAuthority, PersonaSharePermission
 from onyx.db.file_record import get_filerecord_by_file_id_optional
 from onyx.db.models import User
-from onyx.db.persona import can_delete_persona
-from onyx.db.persona import can_edit_persona
-from onyx.db.persona import can_view_persona_stats
-from onyx.db.persona import create_assistant_label
-from onyx.db.persona import create_update_persona
-from onyx.db.persona import delete_persona_label
-from onyx.db.persona import get_assistant_labels
-from onyx.db.persona import get_minimal_persona_snapshots_for_user
-from onyx.db.persona import get_minimal_persona_snapshots_paginated
-from onyx.db.persona import get_persona_by_id
-from onyx.db.persona import get_persona_count_for_user
-from onyx.db.persona import get_persona_snapshots_for_user
-from onyx.db.persona import get_persona_snapshots_paginated
-from onyx.db.persona import is_persona_editable_by_user
-from onyx.db.persona import mark_persona_as_deleted
-from onyx.db.persona import mark_persona_as_not_deleted
-from onyx.db.persona import update_persona_featured
-from onyx.db.persona import update_persona_label
-from onyx.db.persona import update_persona_public_status
-from onyx.db.persona import update_persona_shared
-from onyx.db.persona import update_persona_visibility
-from onyx.db.persona import update_personas_display_priority
-from onyx.db.persona_sharing import get_persona_access_level
-from onyx.db.persona_sharing import get_user_group_ids_for_user
+from onyx.db.persona import (
+    can_delete_persona,
+    can_edit_persona,
+    can_view_persona_stats,
+    create_assistant_label,
+    create_update_persona,
+    delete_persona_label,
+    get_assistant_labels,
+    get_minimal_persona_snapshots_for_user,
+    get_minimal_persona_snapshots_paginated,
+    get_persona_by_id,
+    get_persona_count_for_user,
+    get_persona_snapshots_for_user,
+    get_persona_snapshots_paginated,
+    is_persona_editable_by_user,
+    mark_persona_as_deleted,
+    mark_persona_as_not_deleted,
+    remove_user_from_persona_shares,
+    update_persona_featured,
+    update_persona_label,
+    update_persona_public_status,
+    update_persona_shared,
+    update_persona_visibility,
+    update_personas_display_priority,
+)
+from onyx.db.persona_sharing import (
+    get_persona_access_level,
+    get_user_group_ids_for_user,
+    persona_ownership_is_vacant,
+)
+from onyx.db.users import get_active_admin_count
 from onyx.error_handling.error_codes import OnyxErrorCode
 from onyx.error_handling.exceptions import OnyxError
 from onyx.file_store.file_store import get_default_file_store
 from onyx.file_store.models import ChatFileType
 from onyx.server.documents.models import PaginatedReturn
-from onyx.server.features.persona.constants import ADMIN_AGENTS_RESOURCE
-from onyx.server.features.persona.constants import AGENTS_RESOURCE
-from onyx.server.features.persona.models import FullPersonaSnapshot
-from onyx.server.features.persona.models import MinimalPersonaSnapshot
-from onyx.server.features.persona.models import PersonaLabelCreate
-from onyx.server.features.persona.models import PersonaLabelResponse
-from onyx.server.features.persona.models import PersonaSnapshot
-from onyx.server.features.persona.models import PersonaUpsertRequest
+from onyx.server.features.persona.constants import (
+    ADMIN_AGENTS_RESOURCE,
+    AGENTS_RESOURCE,
+)
+from onyx.server.features.persona.models import (
+    FullPersonaSnapshot,
+    MinimalPersonaSnapshot,
+    PersonaLabelCreate,
+    PersonaLabelResponse,
+    PersonaSnapshot,
+    PersonaUpsertRequest,
+)
 from onyx.server.manage.llm.api import get_valid_model_configuration_ids_for_persona
+from onyx.server.manage.llm.provider_cache import invalidate_provider_listing_cache
 from onyx.server.models import DisplayPriorityRequest
 from onyx.server.settings.store import load_settings
 from onyx.utils.logger import setup_logger
 from onyx.utils.telemetry import mt_cloud_telemetry
+from onyx.utils.variable_functionality import fetch_versioned_implementation
 from shared_configs.contextvars import get_current_tenant_id
 
 logger = setup_logger()
@@ -370,6 +381,9 @@ def update_persona(
         user=user,
         db_session=db_session,
     )
+    # The persona's default model is baked into the cached LLM provider listing
+    # (see onyx/server/manage/llm/provider_cache.py), so edits must drop it.
+    invalidate_provider_listing_cache()
     return persona_snapshot
 
 
@@ -504,6 +518,54 @@ def share_persona(
         raise HTTPException(status_code=400, detail=str(e))
     except ValueError as e:
         logger.exception("Failed to share persona")
+        raise HTTPException(status_code=400, detail=str(e))
+
+
+class TransferPersonaOwnershipRequest(BaseModel):
+    new_owner_user_id: UUID | None = None
+    new_owner_group_id: int | None = None
+
+
+@basic_router.post("/{persona_id}/transfer-ownership")
+def transfer_persona_ownership_endpoint(
+    persona_id: int,
+    transfer_request: TransferPersonaOwnershipRequest,
+    user: User = Depends(require_permission(Permission.BASIC_ACCESS)),
+    db_session: Session = Depends(get_session),
+) -> None:
+    versioned_transfer = fetch_versioned_implementation(
+        "onyx.db.persona", "transfer_persona_ownership"
+    )
+    try:
+        versioned_transfer(
+            persona_id=persona_id,
+            user=user,
+            db_session=db_session,
+            new_owner_user_id=transfer_request.new_owner_user_id,
+            new_owner_group_id=transfer_request.new_owner_group_id,
+        )
+    except PermissionError as e:
+        logger.exception("Failed to transfer persona ownership")
+        raise HTTPException(status_code=403, detail=str(e))
+    except (ValueError, NotImplementedError) as e:
+        logger.exception("Failed to transfer persona ownership")
+        raise HTTPException(status_code=400, detail=str(e))
+
+
+@basic_router.delete("/{persona_id}/share/me")
+def leave_persona_shares(
+    persona_id: int,
+    user: User = Depends(require_permission(Permission.BASIC_ACCESS)),
+    db_session: Session = Depends(get_session),
+) -> None:
+    try:
+        remove_user_from_persona_shares(
+            persona_id=persona_id,
+            user=user,
+            db_session=db_session,
+        )
+    except ValueError as e:
+        logger.exception("Failed to remove user from persona shares")
         raise HTTPException(status_code=400, detail=str(e))
 
 
@@ -656,6 +718,9 @@ def get_persona(
                 user, Permission.FULL_ADMIN_PANEL_ACCESS
             ),
         )
+
+    snapshot.admin_count = get_active_admin_count(db_session)
+    snapshot.ownership_vacant = persona_ownership_is_vacant(persona)
     return snapshot
 
 

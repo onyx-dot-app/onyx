@@ -1,7 +1,6 @@
 from tests.integration.common_utils.constants import API_SERVER_URL
 from tests.integration.common_utils.http_client import client
-from tests.integration.common_utils.test_models import DATestScimToken
-from tests.integration.common_utils.test_models import DATestUser
+from tests.integration.common_utils.test_models import DATestScimToken, DATestUser
 
 
 class ScimTokenManager:

@@ -13,8 +13,7 @@ denied actions go through the shared ``_access_matrix`` helpers, which verify th
 """
 
 import os
-from typing import Any
-from typing import NamedTuple
+from typing import Any, NamedTuple
 from uuid import uuid4
 
 import pytest
@@ -30,10 +29,11 @@ from tests.integration.common_utils.managers.credential import CredentialManager
 from tests.integration.common_utils.managers.document_set import DocumentSetManager
 from tests.integration.common_utils.managers.user import UserManager
 from tests.integration.common_utils.managers.user_group import UserGroupManager
-from tests.integration.common_utils.test_models import DATestUser
-from tests.integration.common_utils.test_models import DATestUserGroup
-from tests.integration.tests.permissions._access_matrix import assert_response
-from tests.integration.tests.permissions._access_matrix import call_endpoint
+from tests.integration.common_utils.test_models import DATestUser, DATestUserGroup
+from tests.integration.tests.permissions._access_matrix import (
+    assert_response,
+    call_endpoint,
+)
 
 pytestmark = pytest.mark.skipif(
     os.environ.get("ENABLE_PAID_ENTERPRISE_EDITION_FEATURES", "").lower() != "true",

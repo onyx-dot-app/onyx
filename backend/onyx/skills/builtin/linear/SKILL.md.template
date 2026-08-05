@@ -56,8 +56,15 @@ python linear_api.py projects [--limit N]
 ### Create an issue (write)
 
 ```
-python linear_api.py create-issue <team_id> "Title" [--description D] [--assignee USER_ID]
+python linear_api.py create-issue <team_id> "Title" \
+  [--description D] [--assignee USER_ID] [--project PROJECT_ID] \
+  [--state NAME_OR_ID] [--priority 0-4] [--label LABEL_ID ...] \
+  [--estimate N] [--parent ISSUE_ID]
 ```
+
+`--state` accepts a workflow state name (resolved case-insensitively against
+the team's states) or a state id. `--label` is repeatable. `--priority` is an
+int 0-4 (0 none, 1 urgent, 2 high, 3 normal, 4 low).
 
 ### Comment on an issue (write)
 
@@ -74,6 +81,8 @@ the error rather than retrying blindly.
 
 ## Notes
 
-- `create-issue` needs a team id (from `teams`); `--assignee` takes a user id.
+- `create-issue` needs a team id (from `teams`); `--assignee` takes a user id,
+  `--project` a project id (from `projects`, which now lists each project's
+  linked `teams`), and `--label`/`--parent` take label/issue ids.
 - `call` lets you send any GraphQL — pass user input as variables, not by
   string-formatting into the query.

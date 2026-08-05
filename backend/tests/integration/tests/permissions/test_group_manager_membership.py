@@ -15,26 +15,25 @@ denied actions go through the shared ``_access_matrix`` helpers, which verify th
 """
 
 import os
-from typing import Any
-from typing import NamedTuple
+from typing import Any, NamedTuple
 
 import pytest
 
 from onyx.auth.permissions import SCOPED_MANAGER_PERMISSIONS_EXPANDED
 from onyx.db.engine.sql_engine import get_session_with_current_tenant
 from onyx.db.enums import AccessType
-from onyx.db.models import User__UserGroup
-from onyx.db.models import UserGroup__ConnectorCredentialPair
+from onyx.db.models import User__UserGroup, UserGroup__ConnectorCredentialPair
 from onyx.db.permissions import recompute_user_permissions__no_commit
 from tests.integration.common_utils.constants import API_SERVER_URL
 from tests.integration.common_utils.http_client import client
 from tests.integration.common_utils.managers.cc_pair import CCPairManager
 from tests.integration.common_utils.managers.user import UserManager
 from tests.integration.common_utils.managers.user_group import UserGroupManager
-from tests.integration.common_utils.test_models import DATestUser
-from tests.integration.common_utils.test_models import DATestUserGroup
-from tests.integration.tests.permissions._access_matrix import assert_response
-from tests.integration.tests.permissions._access_matrix import call_endpoint
+from tests.integration.common_utils.test_models import DATestUser, DATestUserGroup
+from tests.integration.tests.permissions._access_matrix import (
+    assert_response,
+    call_endpoint,
+)
 
 pytestmark = pytest.mark.skipif(
     os.environ.get("ENABLE_PAID_ENTERPRISE_EDITION_FEATURES", "").lower() != "true",

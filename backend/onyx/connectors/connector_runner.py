@@ -2,19 +2,22 @@ import sys
 import time
 from collections.abc import Generator
 from datetime import datetime
-from typing import Generic
-from typing import TypeVar
+from typing import Generic, TypeVar
 
-from onyx.connectors.interfaces import BaseConnector
-from onyx.connectors.interfaces import CheckpointedConnector
-from onyx.connectors.interfaces import CheckpointedConnectorWithPermSync
-from onyx.connectors.interfaces import CheckpointOutput
-from onyx.connectors.interfaces import LoadConnector
-from onyx.connectors.interfaces import PollConnector
-from onyx.connectors.models import ConnectorCheckpoint
-from onyx.connectors.models import ConnectorFailure
-from onyx.connectors.models import Document
-from onyx.connectors.models import HierarchyNode
+from onyx.connectors.interfaces import (
+    BaseConnector,
+    CheckpointedConnector,
+    CheckpointedConnectorWithPermSync,
+    CheckpointOutput,
+    LoadConnector,
+    PollConnector,
+)
+from onyx.connectors.models import (
+    ConnectorCheckpoint,
+    ConnectorFailure,
+    Document,
+    HierarchyNode,
+)
 from onyx.utils.logger import setup_logger
 
 logger = setup_logger()
