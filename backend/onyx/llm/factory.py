@@ -2,7 +2,8 @@ from collections.abc import Callable
 from typing import Any
 
 from sqlalchemy.orm import Session
-from onyx.auth.permissions import has_permission
+
+from onyx.auth.permissions import has_global_permission
 from onyx.configs.model_configs import GEN_AI_TEMPERATURE
 from onyx.db.engine.sql_engine import get_session_with_current_tenant
 from onyx.db.enums import LLMModelFlowType
@@ -174,7 +175,7 @@ def get_llm_for_persona(
             provider_model,
             user_group_ids,
             persona,
-            has_permission(user, Permission.FULL_ADMIN_PANEL_ACCESS),
+            has_global_permission(user, Permission.FULL_ADMIN_PANEL_ACCESS),
         ):
             logger.warning(
                 "User %s with persona %s cannot access provider %s. Falling back to default provider.",

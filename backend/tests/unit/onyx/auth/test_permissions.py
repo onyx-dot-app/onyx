@@ -12,12 +12,15 @@ from fastapi import Request
 from onyx.auth.permissions import ALL_PERMISSIONS
 from onyx.auth.permissions import CE_UNGATED_PERMISSIONS
 from onyx.auth.permissions import get_effective_permissions
+from onyx.auth.permissions import has_global_permission
+from onyx.auth.permissions import has_permission
 from onyx.auth.permissions import IMPLIED_PERMISSIONS
 from onyx.auth.permissions import NON_TOGGLEABLE_PERMISSIONS
 from onyx.auth.permissions import require_permission
 from onyx.auth.permissions import resolve_effective_permissions
 from onyx.auth.users import get_anonymous_user
 from onyx.db.enums import Permission
+from onyx.db.enums import PermissionAuthority
 from onyx.error_handling.error_codes import OnyxErrorCode
 from onyx.error_handling.exceptions import OnyxError
 from onyx.utils.variable_functionality import global_version
@@ -64,9 +67,13 @@ class TestResolveEffectivePermissions:
         """The chat write surface must not leak into the search surface."""
         assert "read:search" not in resolve_effective_permissions({"write:chat"})
 
-    def test_single_implication(self) -> None:
-        result = resolve_effective_permissions({"add:agents"})
-        assert result == {"add:agents", "read:agents"}
+    def test_manage_service_account_api_keys_implies_read_user_groups(self) -> None:
+        result = resolve_effective_permissions({"manage:service_account_api_keys"})
+        assert result == {"manage:service_account_api_keys", "read:user_groups"}
+
+    def test_add_agents_implies_nothing(self) -> None:
+        """ADD_AGENTS must NOT imply READ_AGENTS — creating agents grants no see-all."""
+        assert resolve_effective_permissions({"add:agents"}) == {"add:agents"}
 
     def test_manage_agents_implies_add_and_reads(self) -> None:
         """manage:agents implies add:agents, read:agents, and read:document_sets."""
@@ -129,7 +136,6 @@ class TestResolveEffectivePermissions:
             "read:chat",
             "write:chat",
             "add:agents",
-            "read:agents",
             "manage:connectors",
             "read:connectors",
         }
@@ -161,11 +167,12 @@ class TestGetEffectivePermissions:
         global_version.unset_ee()
 
     def test_expands_implied_permissions(self) -> None:
-        """Column stores only granted; get_effective_permissions expands implied."""
+        """Column stores only granted; get_effective_permissions expands implied. ADD_AGENTS
+        implies nothing — it must not grant READ_AGENTS (see-all-agents)."""
         user = MagicMock()
         user.effective_permissions = ["add:agents"]
         result = get_effective_permissions(user)
-        assert result == {Permission.ADD_AGENTS, Permission.READ_AGENTS}
+        assert result == {Permission.ADD_AGENTS}
 
     def test_admin_expands_to_all(self) -> None:
         user = MagicMock()
@@ -205,7 +212,7 @@ class TestCEUngatedPermissions:
         user.effective_permissions = ["basic"]
         result = get_effective_permissions(user)
         assert Permission.ADD_AGENTS in result
-        assert Permission.READ_AGENTS in result
+        assert Permission.READ_AGENTS not in result  # ADD_AGENTS doesn't grant see-all
         assert Permission.BASIC_ACCESS in result
 
     def test_empty_user_gets_ungated_permissions_in_ce(self) -> None:
@@ -213,7 +220,7 @@ class TestCEUngatedPermissions:
         user.effective_permissions = []
         result = get_effective_permissions(user)
         assert Permission.ADD_AGENTS in result
-        assert Permission.READ_AGENTS in result
+        assert Permission.READ_AGENTS not in result  # ADD_AGENTS doesn't grant see-all
 
     def test_basic_user_does_not_get_ungated_permissions_in_ee(self) -> None:
         global_version.set_ee()
@@ -383,6 +390,125 @@ class TestAnonymousUserPermissions:
         with pytest.raises(OnyxError) as exc_info:
             await dep(request=_request([Permission.READ_SEARCH]), user=user)
         assert exc_info.value.error_code == OnyxErrorCode.INSUFFICIENT_PERMISSIONS
+
+
+class TestRequirePermissionScope:
+    """GATE 1 wiring: allow_scope admits a scoped group manager (cached flag +
+    bundle token, no global grant) while the token cap still applies."""
+
+    def setup_method(self) -> None:
+        global_version.set_ee()
+
+    def teardown_method(self) -> None:
+        global_version.unset_ee()
+
+    def _manager(self) -> MagicMock:
+        user = MagicMock()
+        user.effective_permissions = ["basic"]  # no global manage token
+        user.is_group_manager = True
+        return user
+
+    @pytest.mark.asyncio
+    async def test_allow_scope_admits_scoped_manager(self) -> None:
+        user = self._manager()
+        dep = require_permission(Permission.MANAGE_DOCUMENT_SETS, allow_scope=True)
+        assert await dep(request=_request(None), user=user) is user
+
+    @pytest.mark.asyncio
+    async def test_default_rejects_scoped_manager(self) -> None:
+        # allow_scope off (default) → no behavior change; manager lacks the token.
+        user = self._manager()
+        dep = require_permission(Permission.MANAGE_DOCUMENT_SETS)
+        with pytest.raises(OnyxError):
+            await dep(request=_request(None), user=user)
+
+    @pytest.mark.asyncio
+    async def test_allow_scope_rejects_non_bundle_token(self) -> None:
+        user = self._manager()
+        dep = require_permission(Permission.MANAGE_LLMS, allow_scope=True)
+        with pytest.raises(OnyxError):
+            await dep(request=_request(None), user=user)
+
+    @pytest.mark.asyncio
+    async def test_allow_scope_rejects_non_manager(self) -> None:
+        user = self._manager()
+        user.is_group_manager = False
+        dep = require_permission(Permission.MANAGE_DOCUMENT_SETS, allow_scope=True)
+        with pytest.raises(OnyxError):
+            await dep(request=_request(None), user=user)
+
+    @pytest.mark.asyncio
+    async def test_allow_scope_still_capped_by_token(self) -> None:
+        # Scope would admit, but a read:search-scoped PAT can't reach the token.
+        user = self._manager()
+        dep = require_permission(Permission.MANAGE_DOCUMENT_SETS, allow_scope=True)
+        with pytest.raises(OnyxError):
+            await dep(request=_request([Permission.READ_SEARCH]), user=user)
+
+
+class TestHasPermissionAuthority:
+    """has_permission is the single 3-state classifier: GLOBAL / SCOPED / NONE."""
+
+    def setup_method(self) -> None:
+        global_version.set_ee()
+
+    def teardown_method(self) -> None:
+        global_version.unset_ee()
+
+    def _user(self, perms: list[str], is_manager: bool = False) -> MagicMock:
+        user = MagicMock()
+        user.effective_permissions = perms
+        user.is_group_manager = is_manager
+        return user
+
+    def test_global_when_held_outright(self) -> None:
+        user = self._user(["manage:document_sets"])
+        assert (
+            has_permission(user, Permission.MANAGE_DOCUMENT_SETS)
+            is PermissionAuthority.GLOBAL
+        )
+
+    def test_global_for_admin_on_any_token(self) -> None:
+        user = self._user(["admin"])
+        assert (
+            has_permission(user, Permission.MANAGE_LLMS) is PermissionAuthority.GLOBAL
+        )
+
+    def test_scoped_when_manager_holds_only_via_bundle(self) -> None:
+        user = self._user(["basic"], is_manager=True)
+        assert (
+            has_permission(user, Permission.MANAGE_DOCUMENT_SETS)
+            is PermissionAuthority.SCOPED
+        )
+
+    def test_none_when_manager_but_token_not_in_bundle(self) -> None:
+        user = self._user(["basic"], is_manager=True)
+        assert has_permission(user, Permission.MANAGE_LLMS) is PermissionAuthority.NONE
+
+    def test_none_when_not_manager_and_not_held(self) -> None:
+        user = self._user(["basic"], is_manager=False)
+        assert (
+            has_permission(user, Permission.MANAGE_DOCUMENT_SETS)
+            is PermissionAuthority.NONE
+        )
+
+    def test_global_outranks_scoped(self) -> None:
+        # holds the token globally AND is a manager → GLOBAL wins
+        user = self._user(["manage:document_sets"], is_manager=True)
+        assert (
+            has_permission(user, Permission.MANAGE_DOCUMENT_SETS)
+            is PermissionAuthority.GLOBAL
+        )
+
+    def test_has_global_permission_true_only_for_global(self) -> None:
+        holder = self._user(["manage:document_sets"])
+        assert has_global_permission(holder, Permission.MANAGE_DOCUMENT_SETS) is True
+        # SCOPED manager → not global
+        manager = self._user(["basic"], is_manager=True)
+        assert has_global_permission(manager, Permission.MANAGE_DOCUMENT_SETS) is False
+        # NONE → not global
+        plain = self._user(["basic"])
+        assert has_global_permission(plain, Permission.MANAGE_DOCUMENT_SETS) is False
 
 
 # ---------------------------------------------------------------------------

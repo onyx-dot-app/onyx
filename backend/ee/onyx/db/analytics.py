@@ -11,7 +11,7 @@ from sqlalchemy import or_
 from sqlalchemy import select
 from sqlalchemy.orm import Session
 
-from onyx.auth.permissions import has_permission
+from onyx.auth.permissions import has_global_permission
 from onyx.configs.constants import MessageType
 from onyx.db.enums import Permission
 from onyx.db.models import ChatMessage
@@ -339,7 +339,7 @@ def fetch_assistant_unique_users_total(
 def user_can_view_assistant_stats(
     db_session: Session, user: User, assistant_id: int
 ) -> bool:
-    if has_permission(user, Permission.FULL_ADMIN_PANEL_ACCESS):
+    if has_global_permission(user, Permission.FULL_ADMIN_PANEL_ACCESS):
         return True
 
     # Check if the user created the persona

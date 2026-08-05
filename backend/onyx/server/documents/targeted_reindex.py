@@ -19,7 +19,8 @@ from fastapi import Depends
 from pydantic import BaseModel
 from sqlalchemy.orm import Session
 
-from onyx.auth.users import current_curator_or_admin_user
+from onyx.auth.permissions import Permission
+from onyx.auth.permissions import require_permission
 from onyx.background.celery.versioned_apps.client import app as client_app
 from onyx.configs.constants import OnyxCeleryPriority
 from onyx.configs.constants import OnyxCeleryQueues
@@ -77,7 +78,7 @@ class TargetedReindexJobStatusResponse(BaseModel):
 @router.post("/admin/indexing/targeted-reindex")
 def submit_targeted_reindex(
     request: TargetedReindexRequest,
-    user: User = Depends(current_curator_or_admin_user),
+    user: User = Depends(require_permission(Permission.MANAGE_CONNECTORS)),
     db_session: Session = Depends(get_session),
 ) -> TargetedReindexResponse:
     error_ids = request.error_ids or []
@@ -160,7 +161,7 @@ def submit_targeted_reindex(
 @router.get("/admin/indexing/targeted-reindex/{job_id}")
 def get_targeted_reindex_status(
     job_id: int,
-    _: User = Depends(current_curator_or_admin_user),
+    _: User = Depends(require_permission(Permission.MANAGE_CONNECTORS)),
     db_session: Session = Depends(get_session),
 ) -> TargetedReindexJobStatusResponse:
     job = get_targeted_reindex_job(db_session, job_id)

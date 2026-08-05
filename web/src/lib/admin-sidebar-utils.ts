@@ -47,7 +47,7 @@ export function buildItems(
       requiredTier: route.requiredTier,
     };
 
-    // Special case: INDEX_SETTINGS shows reindexing error indicator
+    // INDEX_SETTINGS surfaces a reindexing-needed error indicator
     if (route.path === ADMIN_ROUTES.INDEX_SETTINGS.path) {
       item.error = settings?.settings.needs_reindexing;
     }
@@ -55,7 +55,6 @@ export function buildItems(
     items.push(item);
   }
 
-  // Upgrade Plan — only for full admins without a subscription
   if (
     userCanAccess(Permission.FULL_ADMIN_PANEL_ACCESS) &&
     !flags.hasSubscription

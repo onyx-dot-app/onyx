@@ -13,6 +13,9 @@ from pydantic import model_validator
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
 
+from onyx.auth.permission_projection import persona_permissions
+from onyx.auth.permissions import has_global_permission
+from onyx.auth.permissions import has_permission
 from onyx.auth.permissions import require_permission
 from onyx.auth.users import current_chat_accessible_user
 from onyx.auth.users import current_limited_user
@@ -22,9 +25,13 @@ from onyx.configs.constants import MilestoneRecordType
 from onyx.configs.constants import PUBLIC_API_TAGS
 from onyx.db.engine.sql_engine import get_session
 from onyx.db.enums import Permission
+from onyx.db.enums import PermissionAuthority
 from onyx.db.enums import PersonaSharePermission
 from onyx.db.file_record import get_filerecord_by_file_id_optional
 from onyx.db.models import User
+from onyx.db.persona import can_delete_persona
+from onyx.db.persona import can_edit_persona
+from onyx.db.persona import can_view_persona_stats
 from onyx.db.persona import create_assistant_label
 from onyx.db.persona import create_update_persona
 from onyx.db.persona import delete_persona_label
@@ -35,6 +42,7 @@ from onyx.db.persona import get_persona_by_id
 from onyx.db.persona import get_persona_count_for_user
 from onyx.db.persona import get_persona_snapshots_for_user
 from onyx.db.persona import get_persona_snapshots_paginated
+from onyx.db.persona import is_persona_editable_by_user
 from onyx.db.persona import mark_persona_as_deleted
 from onyx.db.persona import mark_persona_as_not_deleted
 from onyx.db.persona import update_persona_featured
@@ -211,9 +219,18 @@ def patch_agents_display_priorities(
         raise HTTPException(status_code=403, detail=str(e))
 
 
+def _admin_list_get_editable(user: User, get_editable: bool) -> bool:
+    """GATE 2 (read) for the admin agent lists: pin a scoped manager to the editable set.
+    The non-editable branch of ``_add_user_filters`` has no scope restriction, so without
+    this they'd see every listed agent in the org. Global holders keep what they asked for."""
+    if has_permission(user, Permission.READ_AGENTS) is PermissionAuthority.SCOPED:
+        return True
+    return get_editable
+
+
 @admin_router.get("", tags=PUBLIC_API_TAGS)
 def list_personas_admin(
-    user: User = Depends(require_permission(Permission.READ_AGENTS)),
+    user: User = Depends(require_permission(Permission.READ_AGENTS, allow_scope=True)),
     db_session: Session = Depends(get_session),
     include_deleted: bool = False,
     get_editable: bool = Query(False, description="If true, return editable personas"),
@@ -221,7 +238,7 @@ def list_personas_admin(
     return get_persona_snapshots_for_user(
         user=user,
         db_session=db_session,
-        get_editable=get_editable,
+        get_editable=_admin_list_get_editable(user, get_editable),
         include_deleted=include_deleted,
     )
 
@@ -230,7 +247,7 @@ def list_personas_admin(
 def get_agents_admin_paginated(
     page_num: int = Query(0, ge=0, description="Page number (0-indexed)."),
     page_size: int = Query(10, ge=1, le=1000, description="Items per page."),
-    user: User = Depends(require_permission(Permission.READ_AGENTS)),
+    user: User = Depends(require_permission(Permission.READ_AGENTS, allow_scope=True)),
     db_session: Session = Depends(get_session),
     include_deleted: bool = Query(
         False, description="If true, includes deleted personas."
@@ -247,12 +264,14 @@ def get_agents_admin_paginated(
     Returns items for the requested page plus total count.
     Agents are ordered by display_priority (ASC, nulls last) then by ID (ASC).
     """
+    # Resolve once — the page and its total must use the same filter.
+    scoped_get_editable = _admin_list_get_editable(user, get_editable)
     agents = get_persona_snapshots_paginated(
         user=user,
         db_session=db_session,
         page_num=page_num,
         page_size=page_size,
-        get_editable=get_editable,
+        get_editable=scoped_get_editable,
         include_default=include_default,
         include_deleted=include_deleted,
     )
@@ -260,7 +279,7 @@ def get_agents_admin_paginated(
     total_count = get_persona_count_for_user(
         user=user,
         db_session=db_session,
-        get_editable=get_editable,
+        get_editable=scoped_get_editable,
         include_default=include_default,
         include_deleted=include_deleted,
     )
@@ -307,7 +326,7 @@ def upload_file(
 @basic_router.post("", tags=PUBLIC_API_TAGS)
 def create_persona(
     persona_upsert_request: PersonaUpsertRequest,
-    user: User = Depends(require_permission(Permission.ADD_AGENTS)),
+    user: User = Depends(require_permission(Permission.ADD_AGENTS, allow_scope=True)),
     db_session: Session = Depends(get_session),
 ) -> PersonaSnapshot:
     tenant_id = get_current_tenant_id()
@@ -337,7 +356,9 @@ def create_persona(
 def update_persona(
     persona_id: int,
     persona_upsert_request: PersonaUpsertRequest,
-    user: User = Depends(require_permission(Permission.ADD_AGENTS)),
+    # Editable is the gate (get_editable fetch in create_update_persona), not ADD_AGENTS — an
+    # editor-shared user should be able to edit the agent they were granted access to.
+    user: User = Depends(require_permission(Permission.BASIC_ACCESS)),
     db_session: Session = Depends(get_session),
 ) -> PersonaSnapshot:
     _validate_user_knowledge_enabled(persona_upsert_request, "update")
@@ -444,7 +465,9 @@ class PersonaShareRequest(BaseModel):
 def share_persona(
     persona_id: int,
     persona_share_request: PersonaShareRequest,
-    user: User = Depends(require_permission(Permission.ADD_AGENTS)),
+    # Editable is the gate (get_editable fetch in update_persona_shared), not ADD_AGENTS — an
+    # editor-shared user should still manage the agent's sharing.
+    user: User = Depends(require_permission(Permission.BASIC_ACCESS)),
     db_session: Session = Depends(get_session),
 ) -> None:
     user_shares = (
@@ -487,14 +510,25 @@ def share_persona(
 @basic_router.delete("/{persona_id}", tags=PUBLIC_API_TAGS)
 def delete_persona(
     persona_id: int,
-    user: User = Depends(require_permission(Permission.ADD_AGENTS)),
+    # allow_scope admits an owner who holds ADD_AGENTS only by scope; ownership is enforced
+    # below (mark_persona_as_deleted → get_persona_by_id).
+    user: User = Depends(require_permission(Permission.ADD_AGENTS, allow_scope=True)),
     db_session: Session = Depends(get_session),
 ) -> None:
-    mark_persona_as_deleted(
-        persona_id=persona_id,
-        user=user,
-        db_session=db_session,
-    )
+    try:
+        mark_persona_as_deleted(
+            persona_id=persona_id,
+            user=user,
+            db_session=db_session,
+        )
+    except ValueError as e:
+        logger.exception("Failed to delete persona")
+        # A non-owner failed the ownership check; its ValueError would 400 via the global
+        # handler, so surface the real authorization failure as a 403.
+        raise OnyxError(
+            OnyxErrorCode.INSUFFICIENT_PERMISSIONS,
+            "You can only delete agents you created.",
+        ) from e
 
 
 @basic_router.get("")
@@ -596,6 +630,31 @@ def get_persona(
     if user is not None:
         snapshot.user_permission = get_persona_access_level(
             persona, user, user_group_ids
+        )
+        is_editable = is_persona_editable_by_user(db_session, persona.id, user)
+        snapshot.permissions = persona_permissions(
+            can_edit=can_edit_persona(
+                user,
+                persona,
+                db_session,
+                is_editable=is_editable,
+                user_group_ids=user_group_ids,
+            ),
+            # share tracks the share guard (get_editable), broader than edit's scope gate
+            can_share=is_editable,
+            can_view_stats=can_view_persona_stats(user, persona),
+            can_delete=can_delete_persona(
+                user, persona, db_session, user_group_ids=user_group_ids
+            ),
+            # delete/publish also gate on ADD_AGENTS (GATE 1); edit/share don't
+            holds_add_agents=has_permission(user, Permission.ADD_AGENTS)
+            is not PermissionAuthority.NONE,
+            is_manage_agents_admin=has_global_permission(
+                user, Permission.MANAGE_AGENTS
+            ),
+            is_full_admin=has_global_permission(
+                user, Permission.FULL_ADMIN_PANEL_ACCESS
+            ),
         )
     return snapshot
 

@@ -13,7 +13,7 @@ from sqlalchemy import select
 from sqlalchemy.orm import aliased
 from sqlalchemy.orm import Session
 
-from onyx.auth.permissions import has_permission
+from onyx.auth.permissions import has_global_permission
 from onyx.configs.constants import MessageType
 from onyx.configs.constants import SearchFeedbackType
 from onyx.db.chat import get_chat_message
@@ -44,7 +44,7 @@ def _fetch_db_doc_by_id(doc_id: str, db_session: Session) -> DbDocument:
 
 
 def _add_user_filters(stmt: Select, user: User, get_editable: bool = True) -> Select:
-    if has_permission(user, Permission.FULL_ADMIN_PANEL_ACCESS):
+    if has_global_permission(user, Permission.FULL_ADMIN_PANEL_ACCESS):
         return stmt
 
     stmt = stmt.distinct()
