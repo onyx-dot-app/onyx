@@ -716,9 +716,8 @@ def test_openai_auto_reasoning_effort_maps_to_medium() -> None:
 
 @pytest.mark.parametrize("model_name", VERTEX_OPUS_MODELS_REJECTING_STREAM_OPTIONS)
 def test_vertex_opus_still_sends_thinking(model_name: str) -> None:
-    """Rejecting stream_options must not cost these models their reasoning.
-    A provider that rejects a reasoning kwarg answers with a 400 naming it,
-    which the retry ladder strips."""
+    """Rejecting stream_options must not cost these models their reasoning:
+    thinking is still sent."""
     llm = LitellmLLM(
         api_key="test_key",
         timeout=30,
@@ -744,9 +743,9 @@ def test_vertex_opus_still_sends_thinking(model_name: str) -> None:
 
 
 def test_claude_via_openai_compatible_proxy_uses_reasoning_param() -> None:
-    """The wire format follows the API surface, not the model vendor. An
-    OpenAI-shaped gateway drops Anthropic's thinking/output_config, so Claude
-    behind one must ask for reasoning the OpenAI way."""
+    """The wire format follows the API surface, not the model vendor: Claude
+    behind an OpenAI-shaped gateway asks for reasoning the OpenAI way, never
+    Anthropic's thinking/output_config."""
     llm = LitellmLLM(
         api_key="test_key",
         timeout=30,

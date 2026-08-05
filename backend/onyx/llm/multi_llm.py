@@ -413,19 +413,25 @@ def _parse_anthropic_model_version(model_name: str) -> tuple[int, int] | None:
     return (major, minor)
 
 
-def _anthropic_uses_adaptive_thinking(model_name: str) -> bool:
+def _anthropic_meets_version(model_name: str, min_version: tuple[int, int]) -> bool:
     version = _parse_anthropic_model_version(model_name)
-    return version is not None and version >= _ANTHROPIC_ADAPTIVE_THINKING_MIN_VERSION
+    return version is not None and version >= min_version
+
+
+def _anthropic_uses_adaptive_thinking(model_name: str) -> bool:
+    return _anthropic_meets_version(
+        model_name, _ANTHROPIC_ADAPTIVE_THINKING_MIN_VERSION
+    )
 
 
 def _anthropic_supports_thinking(model_name: str) -> bool:
-    version = _parse_anthropic_model_version(model_name)
-    return version is not None and version >= _ANTHROPIC_THINKING_MIN_VERSION
+    return _anthropic_meets_version(model_name, _ANTHROPIC_THINKING_MIN_VERSION)
 
 
 def _anthropic_omits_sampling_params(model_name: str) -> bool:
-    version = _parse_anthropic_model_version(model_name)
-    return version is not None and version >= _ANTHROPIC_ADAPTIVE_THINKING_MIN_VERSION
+    return _anthropic_meets_version(
+        model_name, _ANTHROPIC_ADAPTIVE_THINKING_MIN_VERSION
+    )
 
 
 def _env_injection_enabled() -> bool:
@@ -652,9 +658,6 @@ class LitellmLLM(LLM):
         uses_adaptive_thinking = any(
             _anthropic_uses_adaptive_thinking(name) for name in model_identity_names
         )
-        # Claude >= 3.7 reasons regardless of what the litellm registry knows,
-        # so parse the version off the name too. Without this, an aliased
-        # deployment silently drops the user's reasoning setting.
         anthropic_supports_thinking = any(
             _anthropic_supports_thinking(name) for name in model_identity_names
         )
@@ -675,8 +678,8 @@ class LitellmLLM(LLM):
         is_mistral = self._model_provider == LlmProviderNames.MISTRAL
         is_vertex_ai = self._model_provider == LlmProviderNames.VERTEX_AI
         # Some Vertex Anthropic models reject stream_options. Reasoning params
-        # are no longer gated on this: a provider that rejects them answers
-        # with a 400 naming the kwarg, and the retry ladder below strips it.
+        # are sent regardless: a provider that rejects one answers with a 400
+        # naming the kwarg, which the retry ladder below strips.
         is_vertex_model_rejecting_stream_options = (
             is_vertex_ai
             and _is_vertex_model_rejecting_stream_options(self.config.model_name)
@@ -770,25 +773,26 @@ class LitellmLLM(LLM):
             and reasoning_effort != ReasoningEffort.OFF
             and not openai_model_rejects_reasoning_effort(self.config.model_name)
         ):
+            openai_style_reasoning = {
+                "effort": OPENAI_REASONING_EFFORT[reasoning_effort],
+                "summary": "auto",
+            }
+
             if is_openai_model:
                 # OpenAI API does not accept reasoning params for GPT 5 chat models
                 # (neither reasoning nor reasoning_effort are accepted)
                 # even though they are reasoning models (bug in OpenAI)
                 if "-chat" not in model:
-                    optional_kwargs["reasoning"] = {
-                        "effort": OPENAI_REASONING_EFFORT[reasoning_effort],
-                        "summary": "auto",
-                    }
+                    optional_kwargs["reasoning"] = openai_style_reasoning
 
             elif is_claude_model and is_openai_compatible_proxy:
                 # Wire format follows the API surface, not the model vendor.
                 # LiteLLM drops thinking/output_config as unsupported on an
                 # openai surface, so a gateway only sees reasoning.effort.
+                # The gateway still translates to Anthropic, so the tool-call
+                # constraint below applies here too.
                 if not _prompt_contains_tool_call_history(prompt):
-                    optional_kwargs["reasoning"] = {
-                        "effort": OPENAI_REASONING_EFFORT[reasoning_effort],
-                        "summary": "auto",
-                    }
+                    optional_kwargs["reasoning"] = openai_style_reasoning
 
             elif is_claude_model:
                 # Anthropic requires every assistant message with tool_use
