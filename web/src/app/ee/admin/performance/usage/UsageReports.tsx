@@ -1,7 +1,7 @@
 "use client";
 
 import React, { useEffect, useRef, useState } from "react";
-import { format, startOfDay, subDays } from "date-fns";
+import { endOfDay, format, startOfDay, subDays } from "date-fns";
 import useSWR from "swr";
 import {
   Button,
@@ -316,7 +316,9 @@ export default function UsageReports() {
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
           period_from: period.range ? period.range.from.toISOString() : null,
-          period_to: period.range ? period.range.to.toISOString() : null,
+          period_to: period.range
+            ? endOfDay(period.range.to).toISOString()
+            : null,
           report_id: reportId,
         }),
       });
