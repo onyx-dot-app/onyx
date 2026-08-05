@@ -158,6 +158,52 @@ interface GroupScopeOptionProps {
   onSelectGroup: (groupId: number) => void;
 }
 
+interface GroupMenuContentProps {
+  groups: { name: string; value: number }[];
+  selectedGroupId: number | undefined;
+  onSelectGroup: (groupId: number) => void;
+}
+
+/** Shared group list for every popover that picks a user group. */
+function GroupMenuContent({
+  groups,
+  selectedGroupId,
+  onSelectGroup,
+}: GroupMenuContentProps) {
+  return (
+    <Popover.Content align="start" side="bottom" width="lg">
+      <Popover.Menu>
+        {groups.length === 0
+          ? [
+              <div className="p-2" key="empty">
+                <Text font="secondary-body" color="text-03" as="p">
+                  No user groups yet. Create one under Users &amp; Groups.
+                </Text>
+              </div>,
+            ]
+          : groups.map((group) => (
+              <Popover.Close asChild key={group.value}>
+                <LineItemButton
+                  onClick={() => onSelectGroup(group.value)}
+                  rounding="md"
+                  selectVariant="select-heavy"
+                  sizePreset="main-ui"
+                  state={
+                    String(group.value) === String(selectedGroupId)
+                      ? "selected"
+                      : "empty"
+                  }
+                  title={group.name}
+                  variant="section"
+                  width="full"
+                />
+              </Popover.Close>
+            ))}
+      </Popover.Menu>
+    </Popover.Content>
+  );
+}
+
 function GroupScopeOption({
   option,
   selected,
@@ -175,36 +221,11 @@ function GroupScopeOption({
           onSelect={onSelectScope}
         />
       </Popover.Trigger>
-      <Popover.Content align="start" side="bottom" width="lg">
-        <Popover.Menu>
-          {groups.length === 0
-            ? [
-                <div className="p-2" key="empty">
-                  <Text font="secondary-body" color="text-03" as="p">
-                    No user groups yet. Create one under Users &amp; Groups.
-                  </Text>
-                </div>,
-              ]
-            : groups.map((group) => (
-                <Popover.Close asChild key={group.value}>
-                  <LineItemButton
-                    onClick={() => onSelectGroup(group.value)}
-                    rounding="md"
-                    selectVariant="select-heavy"
-                    sizePreset="main-ui"
-                    state={
-                      String(group.value) === String(selectedGroupId)
-                        ? "selected"
-                        : "empty"
-                    }
-                    title={group.name}
-                    variant="section"
-                    width="full"
-                  />
-                </Popover.Close>
-              ))}
-        </Popover.Menu>
-      </Popover.Content>
+      <GroupMenuContent
+        groups={groups}
+        selectedGroupId={selectedGroupId}
+        onSelectGroup={onSelectGroup}
+      />
     </Popover>
   );
 }
@@ -277,40 +298,15 @@ function GroupPicker({
   return (
     <Popover>
       <Popover.Trigger asChild>
-        <Button prominence="secondary" aria-haspopup="menu" width="full">
+        <Button prominence="secondary" width="full">
           {selectedGroup?.name ?? "Choose a group"}
         </Button>
       </Popover.Trigger>
-      <Popover.Content align="start" side="bottom" width="lg">
-        <Popover.Menu>
-          {groups.length === 0
-            ? [
-                <div className="p-2" key="empty">
-                  <Text font="secondary-body" color="text-03" as="p">
-                    No user groups yet. Create one under Users &amp; Groups.
-                  </Text>
-                </div>,
-              ]
-            : groups.map((group) => (
-                <Popover.Close asChild key={group.value}>
-                  <LineItemButton
-                    onClick={() => onSelectGroup(group.value)}
-                    rounding="md"
-                    selectVariant="select-heavy"
-                    sizePreset="main-ui"
-                    state={
-                      String(group.value) === String(selectedGroupId)
-                        ? "selected"
-                        : "empty"
-                    }
-                    title={group.name}
-                    variant="section"
-                    width="full"
-                  />
-                </Popover.Close>
-              ))}
-        </Popover.Menu>
-      </Popover.Content>
+      <GroupMenuContent
+        groups={groups}
+        selectedGroupId={selectedGroupId}
+        onSelectGroup={onSelectGroup}
+      />
     </Popover>
   );
 }
