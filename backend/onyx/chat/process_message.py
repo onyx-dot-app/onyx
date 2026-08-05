@@ -1201,7 +1201,12 @@ def _run_models(
                 reserved_tokens=setup.reserved_token_count,
                 # All models share one mainline chain — compressing per model
                 # would create duplicate summaries and N summarization calls.
+                # The single check must still protect the smallest-window
+                # model, so the trigger measures against the min window.
                 run_compression=model_idx == 0,
+                compression_max_input_tokens=min(
+                    model_llm.config.max_input_tokens for model_llm in setup.llms
+                ),
             )
         except Exception:
             logger.exception(
@@ -1857,6 +1862,7 @@ def llm_loop_completion_handle(
     llm: LLM,
     reserved_tokens: int,
     run_compression: bool = True,
+    compression_max_input_tokens: int | None = None,
 ) -> None:
     # Snapshot all state under the container's lock before any DB write.
     # Worker threads may still be running (e.g. user-cancellation path), so
@@ -1937,7 +1943,7 @@ def llm_loop_completion_handle(
         return
 
     compression_params = get_compression_params(
-        max_input_tokens=llm.config.max_input_tokens,
+        max_input_tokens=compression_max_input_tokens or llm.config.max_input_tokens,
         current_history_tokens=total_tokens,
         reserved_tokens=reserved_tokens,
     )
