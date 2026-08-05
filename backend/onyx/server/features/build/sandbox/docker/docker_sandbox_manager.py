@@ -1515,7 +1515,6 @@ fi
             agent_provider=agent_provider,
             agent_model=agent_model,
             connectable_apps_section=connectable_apps_section,
-            session_id=session_id,
             user_name=user_name,
         )
         session_opencode_config = (
