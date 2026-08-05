@@ -72,6 +72,7 @@ from ee.onyx.server.license.models import LicenseMetadata
 from ee.onyx.utils.license import maybe_schedule_license_reclaim
 from onyx.cache.interface import CACHE_TRANSIENT_ERRORS
 from onyx.db.engine.sql_engine import get_session_with_current_tenant
+from onyx.server.middleware.api_prefix import strip_api_prefix
 from onyx.server.settings.models import ApplicationStatus
 from shared_configs.contextvars import get_current_tenant_id
 
@@ -116,9 +117,7 @@ def add_license_enforcement_middleware(
         if not LICENSE_ENFORCEMENT_ENABLED:
             return await call_next(request)
 
-        path = request.url.path
-        if path.startswith("/api/"):
-            path = path[4:]
+        path = strip_api_prefix(request.url.path)
 
         if _is_path_allowed(path):
             return await call_next(request)

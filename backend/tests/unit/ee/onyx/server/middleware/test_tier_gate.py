@@ -61,6 +61,29 @@ async def test_community_blocked_from_business_path(
 
 
 @pytest.mark.asyncio
+@patch("onyx.server.middleware.api_prefix.APP_API_PREFIX", "v2")
+@patch("ee.onyx.server.middleware.tier_gate.get_tier")
+async def test_custom_api_prefix_still_applies_tier_gate(
+    mock_get_tier: MagicMock, middleware_harness: MiddlewareHarness
+) -> None:
+    mock_get_tier.return_value = Tier.COMMUNITY
+    middleware, call_next = middleware_harness
+    response = await middleware(_make_request("/v2/admin/hooks"), call_next)
+    assert response.status_code == 402
+
+
+@pytest.mark.asyncio
+@patch("ee.onyx.server.middleware.tier_gate.get_tier")
+async def test_bare_path_still_applies_tier_gate(
+    mock_get_tier: MagicMock, middleware_harness: MiddlewareHarness
+) -> None:
+    mock_get_tier.return_value = Tier.COMMUNITY
+    middleware, call_next = middleware_harness
+    response = await middleware(_make_request("/admin/query-history"), call_next)
+    assert response.status_code == 402
+
+
+@pytest.mark.asyncio
 @patch("ee.onyx.server.middleware.tier_gate.get_tier")
 async def test_business_passes_business_path(
     mock_get_tier: MagicMock, middleware_harness: MiddlewareHarness
