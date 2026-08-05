@@ -675,6 +675,36 @@ class TestRunModels:
 
         mock_handle.assert_not_called()
 
+    def test_compression_falls_to_first_successful_model_when_model_0_errors(
+        self,
+    ) -> None:
+        """Compression ownership goes to the first non-errored completion, not
+        a fixed model index — a model-0 failure must not skip compression."""
+        setup = _make_setup(n_models=2)
+
+        def fail_model_0(**kwargs: Any) -> None:
+            if kwargs["llm"] is setup.llms[0]:
+                raise RuntimeError("fail")
+
+        with (
+            patch("onyx.chat.process_message.run_llm_loop", side_effect=fail_model_0),
+            patch("onyx.chat.process_message.run_deep_research_llm_loop"),
+            patch("onyx.chat.process_message.construct_tools", return_value={}),
+            patch(
+                "onyx.chat.process_message.llm_loop_completion_handle"
+            ) as mock_handle,
+            patch(
+                "onyx.chat.process_message.get_llm_token_counter",
+                return_value=lambda _: 0,
+            ),
+        ):
+            _run_models_collect(setup)
+
+        assert mock_handle.call_count == 1
+        call = mock_handle.call_args_list[0]
+        assert call.kwargs["llm"] is setup.llms[1]
+        assert call.kwargs["run_compression"] is True
+
     def test_http_disconnect_completion_via_generator_exit(self) -> None:
         """Worker-thread completion survives HTTP disconnect."""
 

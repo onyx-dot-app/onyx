@@ -1146,6 +1146,10 @@ def _run_models(
     model_error_info: list[LLMErrorInfo | None] = [None] * n_models
     persist_lock = threading.Lock()
     persisted: list[bool] = [False] * n_models
+    # All models share one mainline chain, so exactly one completion should
+    # run history compression — the first non-errored one to persist, not a
+    # fixed index (model 0 may have errored). Guarded by persist_lock.
+    compression_claimed: list[bool] = [False]
     post_steps_done = threading.Event()
 
     # Set only on stop-button: workers can't be interrupted, so their remaining
@@ -1192,6 +1196,10 @@ def _run_models(
         def _is_connected(value: bool = completed_normally) -> bool:
             return value
 
+        with persist_lock:
+            run_compression = not compression_claimed[0]
+            compression_claimed[0] = True
+
         try:
             llm_loop_completion_handle(
                 state_container=state_containers[model_idx],
@@ -1199,11 +1207,10 @@ def _run_models(
                 assistant_message=setup.reserved_messages[model_idx],
                 llm=setup.llms[model_idx],
                 reserved_tokens=setup.reserved_token_count,
-                # All models share one mainline chain — compressing per model
-                # would create duplicate summaries and N summarization calls.
-                # The single check must still protect the smallest-window
-                # model, so the trigger measures against the min window.
-                run_compression=model_idx == 0,
+                run_compression=run_compression,
+                # The single compression check must still protect the
+                # smallest-window model, so it measures against the min
+                # window across the turn's models.
                 compression_max_input_tokens=min(
                     model_llm.config.max_input_tokens for model_llm in setup.llms
                 ),
@@ -1215,6 +1222,12 @@ def _run_models(
                 model_idx,
                 setup.model_display_names[model_idx],
             )
+            if run_compression:
+                # The handle failed before compression could have run
+                # (compress_chat_history swallows its own errors), so let a
+                # later model's completion pick it up.
+                with persist_lock:
+                    compression_claimed[0] = False
 
     def _run_post_steps() -> None:
         with persist_lock:
