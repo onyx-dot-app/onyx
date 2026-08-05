@@ -11,6 +11,7 @@ from ee.onyx.db.usage_export import (
     UsageReportMetadata,
     get_all_usage_reports,
     get_usage_report_data,
+    usage_report_id_in_use,
 )
 from onyx.auth.permissions import require_permission
 from onyx.background.celery.versioned_apps.client import app as client_app
@@ -34,6 +35,7 @@ class GenerateUsageReportParams(BaseModel):
 def generate_report(
     params: GenerateUsageReportParams,
     user: User = Depends(require_permission(Permission.FULL_ADMIN_PANEL_ACCESS)),
+    db_session: Session = Depends(get_session),
 ) -> None:
     # Validate period parameters
     if params.period_from and params.period_to:
@@ -42,6 +44,12 @@ def generate_report(
             datetime.fromisoformat(params.period_to)
         except ValueError as e:
             raise HTTPException(status_code=400, detail=str(e))
+
+    if params.report_id and usage_report_id_in_use(db_session, params.report_id):
+        raise HTTPException(
+            status_code=409,
+            detail=f"report_id {params.report_id} is already in use",
+        )
 
     tenant_id = get_current_tenant_id()
     client_app.send_task(

@@ -132,6 +132,20 @@ def get_all_empty_chat_message_entries(
         initial_time = time_created
 
 
+def usage_report_id_in_use(db_session: Session, report_id: uuid.UUID) -> bool:
+    """Checks whether a usage report already exists for the given report_id.
+
+    report_name is formatted as `{date}_{report_id}_usage_report.zip`, so a
+    substring match on report_id is sufficient to detect reuse.
+    """
+    return (
+        db_session.query(UsageReport)
+        .filter(UsageReport.report_name.contains(str(report_id)))
+        .first()
+        is not None
+    )
+
+
 def get_all_usage_reports(db_session: Session) -> list[UsageReportMetadata]:
     # Get the user emails
     usage_reports = db_session.query(UsageReport).all()
