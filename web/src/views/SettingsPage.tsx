@@ -69,7 +69,8 @@ import { cn } from "@opal/utils";
 import { Interactive } from "@opal/core";
 import { useTierAtLeast } from "@/hooks/useTierAtLeast";
 import { Tier } from "@/lib/settings/types";
-import { useIsSearchModeAvailable } from "@/lib/settings/hooks";
+import { useIsSearchModeAvailable, useSettings } from "@/lib/settings/hooks";
+import { tierAtLeast } from "@/lib/tiers";
 import { Tooltip } from "@opal/components";
 import { useCloudSubscription } from "@/hooks/useCloudSubscription";
 import { useSmoothStreaming } from "@/hooks/useSmoothStreaming";
@@ -90,6 +91,7 @@ interface PatScopeOption {
   group_label: string;
   label: string;
   description: string;
+  min_tier: Tier;
   implies: string[];
 }
 
@@ -1363,12 +1365,21 @@ function AccountsAccessSettings() {
     }
   );
 
-  const { data: scopeOptions = [], error: scopeOptionsError } = useSWR<
+  const { data: allScopeOptions = [], error: scopeOptionsError } = useSWR<
     PatScopeOption[]
   >(
     showTokensSection && canCreateTokens ? SWR_KEYS.userPatScopes : null,
     errorHandlingFetcher,
     { fallbackData: [] }
+  );
+  const currentTier = useSettings().tier;
+  const scopeOptions = useMemo(
+    () =>
+      // Undefined tier (settings loading/failed) must not hide Community scopes.
+      allScopeOptions.filter((option) =>
+        tierAtLeast(currentTier ?? Tier.COMMUNITY, option.min_tier)
+      ),
+    [allScopeOptions, currentTier]
   );
 
   const scopeLabels = useMemo(
