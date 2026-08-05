@@ -5,46 +5,40 @@ SO WHEN CHECKING IF A USER CAN ACCESS A DOCUMENT, WE ONLY NEED TO CHECK THEIR EM
 THERE IS NO USERGROUP <-> DOCUMENT PERMISSION MAPPING
 """
 
-from slack_sdk import WebClient
-
 from ee.onyx.db.external_perm import ExternalUserGroup
 from ee.onyx.external_permissions.slack.utils import fetch_user_id_to_email_map
-from ee.onyx.external_permissions.utils import credential_json
-from onyx.connectors.credentials_provider import OnyxDBCredentialsProvider
-from onyx.connectors.slack.connector import SlackConnector
-from onyx.connectors.slack.utils import make_paginated_slack_api_call
+from onyx.configs.constants import DocumentSource
+from onyx.connectors.credentials_provider import build_db_credentials_provider
+from onyx.connectors.slack.source_operations import SlackSourceOperations
 from onyx.db.models import ConnectorCredentialPair
-from onyx.redis.redis_pool import get_redis_client
 from onyx.utils.logger import setup_logger
 
 logger = setup_logger()
 
 
 def _get_slack_group_ids(
-    slack_client: WebClient,
+    source_operations: SlackSourceOperations,
 ) -> list[str]:
     group_ids = []
-    for result in make_paginated_slack_api_call(slack_client.usergroups_list):
+    for result in source_operations.list_usergroups():
         for group in result.get("usergroups", []):
             group_ids.append(group.get("id"))
     return group_ids
 
 
 def _get_slack_group_members_email(
-    slack_client: WebClient,
+    source_operations: SlackSourceOperations,
     group_name: str,
     user_id_to_email_map: dict[str, str],
 ) -> list[str]:
     group_member_emails = []
-    for result in make_paginated_slack_api_call(
-        slack_client.usergroups_users_list, usergroup=group_name
-    ):
+    for result in source_operations.list_usergroup_members(usergroup_id=group_name):
         for member_id in result.get("users", []):
             member_email = user_id_to_email_map.get(member_id)
             if not member_email:
                 # If the user is an external user, they wont get returned from the
                 # conversations_members call so we need to make a separate call to users_info
-                member_info = slack_client.users_info(user=member_id)
+                member_info = source_operations.fetch_user_info(member_id)
                 member_email = member_info["user"]["profile"].get("email")
                 if not member_email:
                     # If no email is found, we skip the user
@@ -56,28 +50,24 @@ def _get_slack_group_members_email(
 
 
 def slack_group_sync(
-    tenant_id: str,
+    tenant_id: str,  # noqa: ARG001
     cc_pair: ConnectorCredentialPair,
 ) -> list[ExternalUserGroup]:
     """NOTE: not used atm. All channel access is done at the
     individual user level. Leaving in for now in case we need it later."""
 
-    provider = OnyxDBCredentialsProvider(tenant_id, "slack", cc_pair.credential.id)
-    r = get_redis_client(tenant_id=tenant_id)
-    creds = credential_json(cc_pair)
-    slack_client = SlackConnector.make_slack_web_client(
-        provider.get_provider_key(),
-        creds["slack_bot_token"],
-        SlackConnector.MAX_RETRIES,
-        r,
+    # The provider derives the tenant from the request context, like doc sync.
+    provider = build_db_credentials_provider(
+        DocumentSource.SLACK, cc_pair.credential.id
     )
+    source_operations = SlackSourceOperations(credentials_provider=provider)
 
-    user_id_to_email_map = fetch_user_id_to_email_map(slack_client)
+    user_id_to_email_map = fetch_user_id_to_email_map(source_operations)
 
     onyx_groups: list[ExternalUserGroup] = []
-    for group_name in _get_slack_group_ids(slack_client):
+    for group_name in _get_slack_group_ids(source_operations):
         group_member_emails = _get_slack_group_members_email(
-            slack_client=slack_client,
+            source_operations=source_operations,
             group_name=group_name,
             user_id_to_email_map=user_id_to_email_map,
         )
