@@ -36,10 +36,15 @@ data:
   {{- end }}
 {{- range $key, $value := .Values.configMap }}
 {{- $skipCraftProxyKey := and $craftEnabled (or (eq $key "SANDBOX_PROXY_HOST") (eq $key "SANDBOX_PROXY_PORT")) }}
-{{- if and (not (empty $value)) (not $skipCraftProxyKey) }}
+{{- $skipPostgresTlsKey := and (eq (include "onyx.postgresTls.enabled" $) "true") (or (eq $key "POSTGRES_SSLMODE") (eq $key "POSTGRES_SSLROOTCERT")) }}
+{{- if and (not (empty $value)) (not $skipCraftProxyKey) (not $skipPostgresTlsKey) }}
   {{ $key }}: "{{ $value }}"
 {{- end }}
 {{- end }}
+  {{- if eq (include "onyx.postgresTls.enabled" .) "true" }}
+  POSTGRES_SSLMODE: {{ .Values.postgresTls.sslMode | default "verify-ca" | quote }}
+  POSTGRES_SSLROOTCERT: {{ .Values.postgresTls.caMountPath | default "/etc/postgres-ca/ca.crt" | quote }}
+  {{- end }}
   {{- if .Values.minio.enabled }}
   S3_ENDPOINT_URL: "http://{{ .Release.Name }}-minio:{{ default 9000 .Values.minio.service.port }}"
   {{- end }}
