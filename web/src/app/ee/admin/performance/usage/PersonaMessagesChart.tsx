@@ -139,6 +139,7 @@ export function PersonaMessagesChart({
     personaMessagesData,
     personaUniqueUsersData,
     timeRange.from,
+    timeRange.to,
     selectedPersonaId,
   ]);
 

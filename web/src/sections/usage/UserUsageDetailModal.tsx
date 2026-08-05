@@ -206,7 +206,7 @@ export default function UserUsageDetailModal({
   );
   const byProvider = useMemo(
     () =>
-      user ? sliceBy(user, (record) => record.provider ?? UNLABELED_FLOW) : [],
+      user ? sliceBy(user, (record) => record.provider || UNLABELED_FLOW) : [],
     [user]
   );
   const days = useMemo(() => (user ? dailySpend(user) : []), [user]);
