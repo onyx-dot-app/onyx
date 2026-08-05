@@ -243,7 +243,13 @@ def get_usage_export(
         .group_by(
             email_label, UserUsage.model, UserUsage.flow, UserUsage.provider, utc_day
         )
-        .order_by(email_label, utc_day, UserUsage.model)
+        .order_by(
+            email_label,
+            utc_day,
+            UserUsage.model,
+            UserUsage.flow,
+            UserUsage.provider,
+        )
     )
     if model is not None:
         query = query.where(UserUsage.model == model)
