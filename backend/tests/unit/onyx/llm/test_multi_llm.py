@@ -743,13 +743,39 @@ def test_vertex_opus_still_sends_thinking(model_name: str) -> None:
         assert "thinking" in kwargs
 
 
+def test_claude_via_openai_compatible_proxy_uses_reasoning_param() -> None:
+    """The wire format follows the API surface, not the model vendor. An
+    OpenAI-shaped gateway drops Anthropic's thinking/output_config, so Claude
+    behind one must ask for reasoning the OpenAI way."""
+    llm = LitellmLLM(
+        api_key="test_key",
+        timeout=30,
+        model_provider=LlmProviderNames.BIFROST,
+        model_name="anthropic/claude-sonnet-4-5",
+        api_base="https://gateway.example/v1",
+        max_input_tokens=200000,
+        custom_config={"bifrost_api_mode": "chat_completions"},
+    )
+
+    with patch("litellm.completion") as mock_completion:
+        mock_completion.return_value = []
+
+        messages: LanguageModelInput = [UserMessage(content="Hi")]
+        list(llm.stream(messages, reasoning_effort=ReasoningEffort.HIGH))
+
+        kwargs = mock_completion.call_args.kwargs
+        assert kwargs["reasoning"] == {"effort": "high", "summary": "auto"}
+        assert "thinking" not in kwargs
+        assert "output_config" not in kwargs
+
+
 def test_aliased_claude_model_still_reasons() -> None:
     """A gateway alias the litellm registry doesn't know still reasons: the
     version parsed off the name decides, not the registry."""
     llm = LitellmLLM(
         api_key="test_key",
         timeout=30,
-        model_provider=LlmProviderNames.BIFROST,
+        model_provider=LlmProviderNames.VERTEX_AI,
         model_name="gateway-claude-sonnet-4-5-prod",
         max_input_tokens=100000,
     )

@@ -780,6 +780,16 @@ class LitellmLLM(LLM):
                         "summary": "auto",
                     }
 
+            elif is_claude_model and is_openai_compatible_proxy:
+                # Wire format follows the API surface, not the model vendor.
+                # LiteLLM drops thinking/output_config as unsupported on an
+                # openai surface, so a gateway only sees reasoning.effort.
+                if not _prompt_contains_tool_call_history(prompt):
+                    optional_kwargs["reasoning"] = {
+                        "effort": OPENAI_REASONING_EFFORT[reasoning_effort],
+                        "summary": "auto",
+                    }
+
             elif is_claude_model:
                 # Anthropic requires every assistant message with tool_use
                 # blocks to start with a thinking block that carries a
