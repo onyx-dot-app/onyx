@@ -2,12 +2,14 @@
 
 from collections.abc import Iterable
 from pathlib import Path
+from uuid import UUID
 
 from onyx.db.models import ExternalApp
 from onyx.server.features.build.configs import (
     SANDBOX_APPROVAL_WAIT_MARGIN_SECONDS,
     SANDBOX_APPROVAL_WAIT_TIMEOUT_SECONDS,
 )
+from onyx.server.features.build.sandbox.nextjs_dev import webapp_base_path
 from onyx.utils.logger import setup_logger
 
 logger = setup_logger()
@@ -107,6 +109,7 @@ def generate_agent_instructions(
     provider: str | None = None,
     model_name: str | None = None,
     nextjs_port: int | None = None,
+    session_id: UUID | None = None,
     disabled_tools: list[str] | None = None,
     user_name: str | None = None,
     organization_instructions: str | None = None,
@@ -119,6 +122,7 @@ def generate_agent_instructions(
         provider: LLM provider type (e.g., "openai", "anthropic")
         model_name: Model name (e.g., "claude-sonnet-4-5", "gpt-4o")
         nextjs_port: Port for Next.js development server
+        session_id: Session ID, used to render the webapp preview base path
         disabled_tools: List of disabled tools
         user_name: User's name for personalization
         organization_instructions: Admin-set workspace-wide Craft instructions
@@ -152,6 +156,12 @@ def generate_agent_instructions(
     content = content.replace("{{LLM_MODEL_NAME}}", model_name or "Unknown")
     content = content.replace(
         "{{NEXTJS_PORT}}", str(nextjs_port) if nextjs_port else "Unknown"
+    )
+    content = content.replace(
+        "{{WEBAPP_BASE_PATH}}",
+        webapp_base_path(session_id)
+        if session_id
+        else webapp_base_path("<session-id>"),
     )
     content = content.replace(
         "{{APPROVAL_WAIT_TIMEOUT_SECONDS}}",

@@ -40,7 +40,6 @@ from onyx.server.features.build.interactive_turns.state import (
     get_turn_for_request,
 )
 from onyx.server.features.build.sandbox.models import PromptAttachment
-from onyx.server.features.build.session.errors import RateLimitError
 from onyx.server.features.build.session.llm_config import GatewaySelection
 from onyx.server.features.build.session.manager import SessionManager
 from onyx.server.features.build.session.models import (
@@ -57,27 +56,6 @@ logger = setup_logger()
 
 
 router = APIRouter()
-
-
-def check_build_rate_limits(
-    user: User = Depends(require_permission(Permission.BASIC_ACCESS)),
-    db_session: Session = Depends(get_session),
-) -> None:
-    """
-    Dependency to check build mode rate limits before processing the request.
-
-    Raises HTTPException(429) if rate limit is exceeded.
-    Follows the same pattern as chat's check_token_rate_limits.
-    """
-    session_manager = SessionManager(db_session)
-
-    try:
-        session_manager.check_rate_limit(user)
-    except RateLimitError as e:
-        raise HTTPException(
-            status_code=429,
-            detail=str(e),
-        )
 
 
 @router.get("/sessions/{session_id}/messages", tags=PUBLIC_API_TAGS)
@@ -145,8 +123,7 @@ def send_message(
         if session_runtime_stale(session, sandbox):
             session_manager.reload_session_skills(session_id, user)
 
-        check_build_rate_limits(user=user, db_session=db_session)
-        # Craft turns also respect the org/user token + cost budgets. No-op when
+        # Craft turns respect the org/user token + cost budgets. No-op when
         # none are configured; raises the structured 429 when over budget.
         check_token_rate_limits(user)
 
@@ -246,8 +223,7 @@ def send_subagent_message(
     subagent_session_id: str,
     request: SubagentMessageRequest,
     user: User = Depends(require_permission(Permission.BASIC_ACCESS)),
-    _rate_limit_check: None = Depends(check_build_rate_limits),
-    # Craft turns also respect the org/user token + cost budgets (no-op when none).
+    # Craft turns respect the org/user token + cost budgets (no-op when none).
     _token_rate_limit_check: None = Depends(check_token_rate_limits),
 ) -> StreamingResponse:
     """

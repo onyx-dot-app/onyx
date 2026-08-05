@@ -17,21 +17,25 @@ from sqlalchemy.orm import Session
 from ee.onyx.configs.app_configs import CLOUD_DATA_PLANE_URL
 from ee.onyx.db.license import delete_license as db_delete_license
 from ee.onyx.db.license import (
-    get_license,
     get_license_metadata,
-    invalidate_license_cache,
     refresh_license_cache,
-    update_license_cache,
-    upsert_license,
 )
+from ee.onyx.server.billing.api import invalidate_billing_info_cache
 from ee.onyx.server.license.models import (
     LicenseResponse,
-    LicenseSource,
     LicenseStatusResponse,
     LicenseUploadResponse,
     SeatUsageResponse,
 )
-from ee.onyx.utils.license import verify_license_signature
+from ee.onyx.utils.license import (
+    LicenseNotStoredError,
+    LicenseRejectedError,
+    claim_cooldown_is_active,
+    license_from_control_plane_response,
+    normalize_license_file,
+    reclaim_license_from_control_plane,
+    verify_and_store_license,
+)
 from onyx.auth.permissions import require_permission
 from onyx.auth.users import User
 from onyx.db.engine.sql_engine import get_session
@@ -44,20 +48,6 @@ from shared_configs.configs import MULTI_TENANT
 logger = setup_logger()
 
 router = APIRouter(prefix="/license")
-
-# PEM-style delimiters used in license file format
-_PEM_BEGIN = "-----BEGIN ONYX LICENSE-----"
-_PEM_END = "-----END ONYX LICENSE-----"
-
-
-def _strip_pem_delimiters(content: str) -> str:
-    """Strip PEM-style delimiters from license content if present."""
-    content = content.strip()
-    if content.startswith(_PEM_BEGIN) and content.endswith(_PEM_END):
-        # Remove first and last lines (the delimiters)
-        lines = content.split("\n")
-        return "\n".join(lines[1:-1]).strip()
-    return content
 
 
 @router.get("")
@@ -82,6 +72,7 @@ async def get_license_status(
         status=metadata.status,
         expiry_warning_stage=metadata.expiry_warning_stage,
         source=metadata.source,
+        trial_end=metadata.trial_end,
     )
 
 
@@ -113,22 +104,11 @@ async def claim_license(
     _: User = Depends(require_permission(Permission.FULL_ADMIN_PANEL_ACCESS)),
     db_session: Session = Depends(get_session),
 ) -> LicenseResponse:
-    """
-    Claim a license from the control plane (self-hosted only).
+    """Claim a license from the control plane (self-hosted only).
 
-    Two modes:
-    1. With session_id: After Stripe checkout, exchange session_id for license
-    2. Without session_id: Re-claim using existing license for auth
-
-    Use without session_id after:
-    - Updating seats via the billing API
-    - Returning from the Stripe customer portal
-    - Any operation that regenerates the license on control plane
-    Claim a license from the control plane (self-hosted only).
-
-    Two modes:
-    1. With session_id: After Stripe checkout, exchange session_id for license
-    2. Without session_id: Re-claim using existing license for auth
+    With a session_id, exchanges a completed Stripe checkout for a license.
+    Without one, re-claims using the stored license for auth, which picks up
+    whatever the control plane regenerated after a seat or plan change.
     """
     if MULTI_TENANT:
         raise OnyxError(
@@ -138,58 +118,27 @@ async def claim_license(
 
     try:
         if session_id:
-            # Claim license after checkout using session_id
-            url = f"{CLOUD_DATA_PLANE_URL}/proxy/claim-license"
             response = requests.post(
-                url,
+                f"{CLOUD_DATA_PLANE_URL}/proxy/claim-license",
                 json={"session_id": session_id},
                 headers={"Content-Type": "application/json"},
                 timeout=30,
             )
-        else:
-            # Re-claim using existing license for auth
-            metadata = get_license_metadata(db_session)
-            if not metadata or not metadata.tenant_id:
-                raise OnyxError(
-                    OnyxErrorCode.VALIDATION_ERROR,
-                    "No license found. Provide session_id after checkout.",
-                )
-
-            license_row = get_license(db_session)
-            if not license_row or not license_row.license_data:
-                raise OnyxError(
-                    OnyxErrorCode.VALIDATION_ERROR,
-                    "No license found in database",
-                )
-
-            url = f"{CLOUD_DATA_PLANE_URL}/proxy/license/{metadata.tenant_id}"
-            response = requests.get(
-                url,
-                headers={
-                    "Authorization": f"Bearer {license_row.license_data}",
-                    "Content-Type": "application/json",
-                },
-                timeout=30,
+            response.raise_for_status()
+            payload = verify_and_store_license(
+                db_session, license_from_control_plane_response(response)
             )
+        else:
+            if claim_cooldown_is_active():
+                raise OnyxError(
+                    OnyxErrorCode.RATE_LIMITED,
+                    "A license sync just ran. Try again in a few seconds.",
+                )
+            payload = reclaim_license_from_control_plane(db_session)
 
-        response.raise_for_status()
-
-        data = response.json()
-        license_data = data.get("license")
-
-        if not license_data:
-            raise OnyxError(OnyxErrorCode.NOT_FOUND, "No license in response")
-
-        # Verify signature before persisting
-        payload = verify_license_signature(license_data)
-
-        # Store in DB
-        upsert_license(db_session, license_data)
-
-        try:
-            update_license_cache(payload, source=LicenseSource.AUTO_FETCH)
-        except Exception as cache_error:
-            logger.warning("Failed to update license cache: %s", cache_error)
+        # A Stripe-side change lands with this license, so the plan snapshot
+        # cached beside it is now stale.
+        invalidate_billing_info_cache()
 
         logger.info(
             "License claimed: seats=%s, expires=%s",
@@ -209,7 +158,14 @@ async def claim_license(
         raise OnyxError(
             OnyxErrorCode.BAD_GATEWAY, detail, status_code_override=status_code
         )
-    except ValueError as e:
+    except LicenseNotStoredError:
+        raise OnyxError(
+            OnyxErrorCode.VALIDATION_ERROR,
+            "No license found. Provide session_id after checkout.",
+        )
+    except (LicenseRejectedError, ValueError) as e:
+        # A rejection is terminal: the reclaim authenticates with the blob
+        # being refused, so retrying cannot help.
         raise OnyxError(OnyxErrorCode.VALIDATION_ERROR, str(e))
     except requests.RequestException:
         raise OnyxError(
@@ -237,28 +193,16 @@ async def upload_license(
 
     try:
         content = await license_file.read()
-        license_data = content.decode("utf-8").strip()
-        # Strip PEM-style delimiters if present (used in .lic file format)
-        license_data = _strip_pem_delimiters(license_data)
-        # Remove any stray whitespace/newlines from user input
-        license_data = license_data.strip()
+        license_data = normalize_license_file(content.decode("utf-8"))
     except UnicodeDecodeError:
         raise OnyxError(OnyxErrorCode.INVALID_INPUT, "Invalid license file format")
 
-    # Verify cryptographic signature - this is the only validation needed
-    # The license's tenant_id identifies the customer in control plane, not locally
+    # The signature is the only validation needed. The license's tenant_id identifies
+    # the customer in the control plane, not locally.
     try:
-        payload = verify_license_signature(license_data)
+        payload = verify_and_store_license(db_session, license_data)
     except ValueError as e:
         raise OnyxError(OnyxErrorCode.VALIDATION_ERROR, str(e))
-
-    # Persist to DB and update cache
-    upsert_license(db_session, license_data)
-
-    try:
-        update_license_cache(payload, source=LicenseSource.MANUAL_UPLOAD)
-    except Exception as cache_error:
-        logger.warning("Failed to update license cache: %s", cache_error)
 
     return LicenseUploadResponse(
         success=True,
@@ -293,6 +237,7 @@ async def refresh_license_cache_endpoint(
         status=metadata.status,
         expiry_warning_stage=metadata.expiry_warning_stage,
         source=metadata.source,
+        trial_end=metadata.trial_end,
     )
 
 
@@ -312,11 +257,8 @@ async def delete_license(
             "License deletion is only available for self-hosted deployments",
         )
 
-    try:
-        invalidate_license_cache()
-    except Exception as cache_error:
-        logger.warning("Failed to invalidate license cache: %s", cache_error)
-
+    # db_delete_license invalidates after its commit and under the cache lock,
+    # which is the ordering a concurrent reader needs.
     deleted = db_delete_license(db_session)
 
     return {"deleted": deleted}

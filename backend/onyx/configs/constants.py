@@ -397,6 +397,7 @@ class FileOrigin(str, Enum):
     GENERATED_REPORT = "generated_report"
     INDEXING_CHECKPOINT = "indexing_checkpoint"
     INDEXING_STAGING = "indexing_staging"
+    LOG_EXPORT = "log_export"
     PLAINTEXT_CACHE = "plaintext_cache"
     OTHER = "other"
     QUERY_HISTORY_CSV = "query_history_csv"
@@ -668,11 +669,16 @@ class OnyxCeleryTask:
     EXPORT_QUERY_HISTORY_TASK = "export_query_history_task"
     EXPORT_QUERY_HISTORY_CLEANUP_TASK = "export_query_history_cleanup_task"
 
+    # Admin log export
+    EXPORT_LOGS_COLLECT_TASK = "export_logs_collect_task"
+    EXPORT_LOGS_CLEANUP_TASK = "export_logs_cleanup_task"
+
     # Hook execution log retention
     HOOK_EXECUTION_LOG_CLEANUP_TASK = "hook_execution_log_cleanup_task"
 
-    # License expiry tiered warnings
+    # License expiry monitoring and renewal
     CHECK_LICENSE_EXPIRY_NOTIFICATIONS = "check_license_expiry_notifications"
+    RECLAIM_LICENSE = "reclaim_license"
 
     # Sandbox cleanup
     CLEANUP_IDLE_SANDBOXES = "cleanup_idle_sandboxes"

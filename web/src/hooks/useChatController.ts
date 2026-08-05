@@ -530,7 +530,8 @@ export default function useChatController({
         structureValue(
           finalLLM.name || "",
           finalLLM.provider || "",
-          finalLLM.modelName || ""
+          finalLLM.modelName || "",
+          finalLLM.modelConfigurationId
         )
       );
 
@@ -937,6 +938,11 @@ export default function useChatController({
               llmManager.currentLlm.modelName ||
               searchParams?.get(SEARCH_PARAM_NAMES.MODEL_VERSION) ||
               undefined,
+          modelConfigurationId: isMultiModel
+            ? undefined
+            : modelOverride
+              ? (modelOverride.modelConfigurationId ?? undefined)
+              : (llmManager.currentLlm.modelConfigurationId ?? undefined),
           temperature: llmManager.temperature || undefined,
           deepResearch,
           enabledToolIds:
@@ -953,6 +959,7 @@ export default function useChatController({
                 model_provider: m.name,
                 model_version: m.modelName,
                 display_name: m.displayName,
+                model_configuration_id: m.modelConfigurationId ?? undefined,
               }))
             : undefined,
         });

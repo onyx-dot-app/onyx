@@ -10,7 +10,6 @@ import {
   useBuildSessionStore,
   SessionHistoryItem,
 } from "@/app/craft/hooks/useBuildSessionStore";
-import { useUsageLimits } from "@/app/craft/hooks/useUsageLimits";
 import { CRAFT_SEARCH_PARAM_NAMES } from "@/app/craft/services/searchParams";
 import { SidebarTab, Text } from "@opal/components";
 import {
@@ -348,21 +347,11 @@ const MemoizedBuildSidebarInner = memo(() => {
   const returnToMainAgent = useBuildSessionStore(
     (state) => state.returnToMainAgent
   );
-  const { limits, isEnabled } = useUsageLimits();
 
   // Fetch session history on mount
   useEffect(() => {
     refreshSessionHistory();
   }, [refreshSessionHistory]);
-
-  // Build section title with usage if cloud is enabled
-  // limit=0 indicates unlimited (local/self-hosted mode), so hide the count
-  const sessionsTitle = useMemo(() => {
-    if (isEnabled && limits && limits.limit > 0) {
-      return `Total Messages (${limits.messagesUsed}/${limits.limit})`;
-    }
-    return "Sessions";
-  }, [isEnabled, limits]);
 
   // Navigate to new build - session controller handles setCurrentSession and pre-provisioning
   const navigate = useCallback(
@@ -479,7 +468,7 @@ const MemoizedBuildSidebarInner = memo(() => {
       <SidebarLayouts.Body scrollKey="build-sidebar">
         {!folded && (
           <>
-            <SidebarLayouts.Section title={sessionsTitle} />
+            <SidebarLayouts.Section title="Sessions" />
             {sessionHistory.length === 0 ? (
               <div className="pl-2 pr-1.5 py-1">
                 <Text color="text-01">

@@ -62,7 +62,7 @@ export default function AccessRestricted() {
       ? NEXT_PUBLIC_CLOUD_ENABLED
         ? "Your access to Onyx has been temporarily suspended due to a lapse in your subscription."
         : "Your access to Onyx has been temporarily suspended due to a lapse in your license."
-      : "An Enterprise license is required to use Onyx. Your data is protected and will be available once a license is activated.";
+      : "A license is required to use Onyx. Your data is protected and will be available once a license is activated.";
 
   const handleResubscribe = async () => {
     setIsLoading(true);
@@ -150,7 +150,7 @@ export default function AccessRestricted() {
           <Text text03>
             {hadPreviousLicense
               ? "To reinstate your access and continue using Onyx, please contact your system administrator to renew your license."
-              : "To get started, please contact your system administrator to obtain an Enterprise license."}
+              : "To get started, please contact your system administrator to obtain a license."}
           </Text>
 
           <Text text03>

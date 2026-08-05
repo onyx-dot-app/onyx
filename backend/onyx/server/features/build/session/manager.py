@@ -24,6 +24,7 @@ from sqlalchemy.orm import Session as DBSession
 
 from onyx.cache.factory import get_cache_backend
 from onyx.configs.app_configs import WEB_DOMAIN
+from onyx.configs.constants import MessageType
 from onyx.db.enums import BuildSessionStatus, SandboxStatus, SessionOrigin
 from onyx.db.external_app import get_connectable_apps_for_user
 from onyx.db.llm import fetch_all_accessible_llm_providers
@@ -39,6 +40,7 @@ from onyx.server.features.build.configs import (
 )
 from onyx.server.features.build.db.build_session import (
     create_build_session__no_commit,
+    create_message,
     delete_build_session__no_commit,
     finalize_session_initialization__no_commit,
     get_build_session,
@@ -55,7 +57,6 @@ from onyx.server.features.build.db.sandbox import (
     get_snapshots_for_session,
     update_sandbox_heartbeat,
 )
-from onyx.server.features.build.rate_limit import get_user_rate_limit_status
 from onyx.server.features.build.sandbox.factory import get_sandbox_manager
 from onyx.server.features.build.sandbox.models import (
     CraftLLMProviderConfig,
@@ -76,7 +77,6 @@ from onyx.server.features.build.sandbox.util.opencode_config import (
 )
 from onyx.server.features.build.session import streaming as _streaming
 from onyx.server.features.build.session.errors import (
-    RateLimitError,
     StaleProvisioningAttemptError,
     UploadLimitExceededError,
 )
@@ -102,7 +102,6 @@ from onyx.server.features.build.timeouts import (
 from onyx.server.metrics.craft_sandbox import SandboxReadyOutcome
 from onyx.utils.logger import setup_logger
 from onyx.utils.threadpool_concurrency import start_thread_with_context
-from shared_configs.configs import MULTI_TENANT
 from shared_configs.contextvars import get_current_tenant_id
 
 logger = setup_logger()
@@ -162,39 +161,6 @@ class SessionManager:
         """
         self._db_session = db_session
         self._sandbox_manager = get_sandbox_manager()
-
-    # =========================================================================
-    # Rate Limiting
-    # =========================================================================
-
-    def check_rate_limit(self, user: User) -> None:
-        """
-        Check build mode rate limits for a user.
-
-        Args:
-            user: The user to check rate limits for
-
-        Raises:
-            RateLimitError: If rate limit is exceeded
-        """
-        # Skip rate limiting for self-hosted deployments
-        if not MULTI_TENANT:
-            return
-
-        rate_limit_status = get_user_rate_limit_status(user, self._db_session)
-        if rate_limit_status.is_limited:
-            raise RateLimitError(
-                message=(
-                    f"Rate limit exceeded. You have used "
-                    f"{rate_limit_status.messages_used}/{rate_limit_status.limit} messages. "
-                    f"Limit resets at {rate_limit_status.reset_timestamp}."
-                    if rate_limit_status.reset_timestamp
-                    else "This is a lifetime limit."
-                ),
-                messages_used=rate_limit_status.messages_used,
-                limit=rate_limit_status.limit,
-                reset_timestamp=rate_limit_status.reset_timestamp,
-            )
 
     # =========================================================================
     # LLM Configuration
@@ -1166,6 +1132,44 @@ class SessionManager:
         routing_meta: dict[str, Any] | None = None,
     ) -> None:
         _streaming.finalize_persist(self._db_session, session_id, state, routing_meta)
+
+    def persist_turn_error(
+        self,
+        session_id: UUID,
+        turn_index: int,
+        message: str,
+    ) -> None:
+        """User-visible error row so a failed turn still explains itself
+        after reload (the live SSE error dies with the stream)."""
+        create_message(
+            session_id=session_id,
+            message_type=MessageType.ASSISTANT,
+            turn_index=turn_index,
+            message_metadata={
+                "type": "error",
+                "message": message,
+                "timestamp": datetime.now(tz=timezone.utc).isoformat(),
+            },
+            db_session=self._db_session,
+        )
+
+    def stamp_turn_deadline(
+        self,
+        sandbox_id: UUID,
+        session_id: UUID,
+        *,
+        soft_budget_seconds: int,
+        hard_cap_seconds: int,
+    ) -> None:
+        self._sandbox_manager.stamp_turn_deadline(
+            sandbox_id,
+            session_id,
+            soft_budget_seconds=soft_budget_seconds,
+            hard_cap_seconds=hard_cap_seconds,
+        )
+
+    def clear_turn_deadline(self, sandbox_id: UUID, session_id: UUID) -> None:
+        self._sandbox_manager.clear_turn_deadline(sandbox_id, session_id)
 
     # =========================================================================
     # Artifact Operations

@@ -56,8 +56,9 @@ export default function InlineFileManagement({
     mutate: refreshFiles,
   } = useSWR<{ files: ConnectorFileInfo[] }>(
     `/api/manage/admin/connector/${connectorId}/files`,
-    errorHandlingFetcher,
-    { refreshInterval: isEditing ? 0 : 5000 } // Disable auto-refresh while editing
+    errorHandlingFetcher
+    // No refreshInterval: the file list only changes through this component's
+    // own save flow, which calls refreshFiles() explicitly.
   );
 
   const files = filesResponse?.files || [];

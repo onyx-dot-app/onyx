@@ -52,6 +52,74 @@ def test_get_expiry_warning_stage_boundaries(
         assert get_expiry_warning_stage(NOW + delta) == want
 
 
+@pytest.mark.parametrize(
+    "delta,want",
+    [
+        (timedelta(days=14), ExpiryWarningStage.NONE),
+        (timedelta(days=4), ExpiryWarningStage.NONE),
+        (timedelta(days=3, seconds=1), ExpiryWarningStage.NONE),
+        (timedelta(days=3), ExpiryWarningStage.T_14D),
+        (timedelta(days=2), ExpiryWarningStage.T_14D),
+        (timedelta(days=1), ExpiryWarningStage.T_1D),
+        (timedelta(hours=12), ExpiryWarningStage.T_1D),
+        # Suppression covers the lead-up only, so a lapsed trial still reaches
+        # grace, where the sync and the daily reminder hang off it.
+        (timedelta(0), ExpiryWarningStage.GRACE),
+        (timedelta(days=-13), ExpiryWarningStage.GRACE),
+        (timedelta(days=-14), ExpiryWarningStage.NONE),
+    ],
+)
+def test_a_trial_stays_quiet_until_its_final_days(
+    delta: timedelta, want: ExpiryWarningStage
+) -> None:
+    """A trial is always Stripe-billed, so it is self-renewing too."""
+    with patch("ee.onyx.utils.license_expiry.datetime") as dt:
+        dt.now.return_value = NOW
+        stage = get_expiry_warning_stage(
+            NOW + delta, ends_with_trial=True, self_renewing=True
+        )
+        assert stage == want
+
+
+@pytest.mark.parametrize(
+    "delta,want",
+    [
+        (timedelta(days=25), ExpiryWarningStage.NONE),
+        (timedelta(days=7), ExpiryWarningStage.NONE),
+        (timedelta(hours=1), ExpiryWarningStage.NONE),
+        # The renewal failing to arrive is the first thing worth saying.
+        (timedelta(0), ExpiryWarningStage.GRACE),
+        (timedelta(days=-13), ExpiryWarningStage.GRACE),
+    ],
+)
+def test_a_self_renewing_license_warns_only_once_it_has_actually_lapsed(
+    delta: timedelta, want: ExpiryWarningStage
+) -> None:
+    """Warning a Stripe-billed customer before expiry asks for an action that
+    does not exist, since the replacement arrives on its own."""
+    with patch("ee.onyx.utils.license_expiry.datetime") as dt:
+        dt.now.return_value = NOW
+        assert get_expiry_warning_stage(NOW + delta, self_renewing=True) == want
+
+
+@pytest.mark.parametrize(
+    "delta,want",
+    [
+        (timedelta(days=25), ExpiryWarningStage.T_30D),
+        (timedelta(days=7), ExpiryWarningStage.T_14D),
+        (timedelta(hours=12), ExpiryWarningStage.T_1D),
+        (timedelta(days=-1), ExpiryWarningStage.GRACE),
+    ],
+)
+def test_a_sales_issued_license_warns_across_the_whole_lead_up(
+    delta: timedelta, want: ExpiryWarningStage
+) -> None:
+    """Nothing replaces it automatically, so every stage is actionable."""
+    with patch("ee.onyx.utils.license_expiry.datetime") as dt:
+        dt.now.return_value = NOW
+        assert get_expiry_warning_stage(NOW + delta, self_renewing=False) == want
+
+
 def test_grace_days_remaining_full_window() -> None:
     just_expired = NOW - timedelta(seconds=1)
     with patch("ee.onyx.utils.license_expiry.datetime") as dt:

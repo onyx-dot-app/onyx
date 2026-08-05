@@ -2,43 +2,31 @@
  * @jest-environment jsdom
  */
 import React from "react";
-import {
-  act,
-  fireEvent,
-  render,
-  screen,
-  waitFor,
-} from "@tests/setup/test-utils";
+import { act, fireEvent, render, screen } from "@tests/setup/test-utils";
 import SandboxAsleepNotice from "@/app/craft/components/SandboxAsleepNotice";
 import { useBuildSessionStore } from "@/app/craft/hooks/useBuildSessionStore";
-import * as api from "@/app/craft/services/apiServices";
-import { ApiSandboxResponse } from "@/app/craft/types/streamingTypes";
-
-jest.mock("@/app/craft/services/apiServices");
-
-const mockedApi = api as jest.Mocked<typeof api>;
+import type { SandboxRuntimeState } from "@/app/craft/types/streamingTypes";
 
 const SESSION_A = "11111111-1111-1111-1111-111111111111";
 const SESSION_B = "22222222-2222-2222-2222-222222222222";
 const TITLE = "Your sandbox fell asleep";
 
 function sandbox(
-  overrides: Partial<ApiSandboxResponse> = {}
-): ApiSandboxResponse {
+  overrides: Partial<SandboxRuntimeState> = {}
+): SandboxRuntimeState {
   return {
     id: "sb1",
     status: "sleeping",
     container_id: null,
     created_at: "2026-07-01T00:00:00.000Z",
     last_heartbeat: "2026-07-01T00:00:00.000Z",
-    nextjs_port: null,
     ...overrides,
   };
 }
 
 function seedSession(
   sessionId: string,
-  sandboxState: ApiSandboxResponse
+  sandboxState: SandboxRuntimeState
 ): void {
   useBuildSessionStore.getState().createSession(sessionId, {
     status: "running",
@@ -58,16 +46,11 @@ describe("SandboxAsleepNotice", () => {
       currentSessionId: null,
       loadSession,
     } as never);
-    mockedApi.fetchSandboxStatus.mockResolvedValue({ status: "running" });
   });
 
-  it("renders nothing when the sandbox is running", async () => {
+  it("renders nothing when the sandbox is running", () => {
     seedSession(SESSION_A, sandbox({ status: "running" }));
     render(<SandboxAsleepNotice />);
-
-    await waitFor(() => {
-      expect(mockedApi.fetchSandboxStatus).toHaveBeenCalled();
-    });
 
     expect(screen.queryByText(TITLE)).toBeNull();
   });

@@ -41,7 +41,11 @@ from onyx.db.models import MCPServer as DbMCPServer
 from onyx.error_handling.error_codes import OnyxErrorCode
 from onyx.error_handling.exceptions import OnyxError
 from onyx.redis.redis_pool import get_redis_client
-from onyx.server.features.mcp.models import MCPConnectionData, MCPOAuthKeys
+from onyx.server.features.mcp.models import (
+    MCPConnectionData,
+    MCPOAuthKeys,
+    merge_mcp_headers,
+)
 from onyx.server.features.mcp.ssrf import mcp_ssrf_httpx_client_factory
 from onyx.utils.logger import setup_logger
 from onyx.utils.threadpool_concurrency import run_async_sync_no_cancel
@@ -410,9 +414,10 @@ class OnyxTokenStorage(TokenStorage):
                 config_data[MCPOAuthKeys.METADATA.value] = (
                     self._oauth_context.oauth_metadata.model_dump(mode="json")
                 )
-            config_data["headers"] = {
-                "Authorization": f"{tokens.token_type} {tokens.access_token}"
-            }
+            config_data["headers"] = merge_mcp_headers(
+                config_data.get("headers", {}),
+                {"Authorization": f"{tokens.token_type} {tokens.access_token}"},
+            )
             update_connection_config(config.id, db_session, config_data)
 
         if self.refresh_attempt_id and self.refresh_log_context:

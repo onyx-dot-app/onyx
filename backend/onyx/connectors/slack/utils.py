@@ -19,6 +19,26 @@ basic_retry_wrapper = retry_builder(tries=7)
 # number of messages we request per page when fetching paginated slack messages
 _SLACK_LIMIT = 900
 
+# Skips an @ preceded by a word character, where a zero-width space would
+# split an address rather than defang a mention
+_MENTION_AT_PATTERN = re.compile(r"(?<!\w)@")
+
+# Regions needing special handling: only a link destination and code are exempt
+# from defanging, a link label is not
+_DEFANG_EXEMPT_REGION_PATTERN = re.compile(
+    r"<(?P<url>(?:https?://|mailto:)[^|<>]+)(?:\|(?P<label>[^<>]*))?>"
+    r"|(?P<code>```[\s\S]*?```|`[^`\n]*`)"
+)
+# Optional label group, so the labelled form resolves to its label not the raw ID
+_SUBTEAM_MENTION_PATTERN = re.compile(
+    r"<!subteam\^(?P<id>[^<>|]+)(?:\|(?P<label>[^<>]*))?>"
+)
+
+
+def _defang_mentions(text: str) -> str:
+    return _MENTION_AT_PATTERN.sub("@​", text)
+
+
 # used to serialize access to the retry TTL
 ONYX_SLACK_LOCK_TTL = 1800  # how long the lock is allowed to idle before it expires
 ONYX_SLACK_LOCK_BLOCKING_TIMEOUT = 60  # how long to wait for the lock per wait attempt
@@ -309,6 +329,9 @@ class SlackTextCleaner:
         message = message.replace("<!channel>", "@channel")
         message = message.replace("<!here>", "@here")
         message = message.replace("<!everyone>", "@everyone")
+        message = _SUBTEAM_MENTION_PATTERN.sub(
+            lambda match: match.group("label") or f"@{match.group('id')}", message
+        )
         return message
 
     @staticmethod
@@ -322,5 +345,24 @@ class SlackTextCleaner:
 
     @staticmethod
     def add_zero_width_whitespace_after_tag(message: str) -> str:
-        """Add a 0 width whitespace after every @"""
-        return message.replace("@", "@\u200b")
+        """Defang plain-text mentions without changing link destinations or code.
+
+        A mailto token whose label is its own address is left whole, so its raw
+        @ survives.
+        """
+
+        result: list[str] = []
+        cursor = 0
+        for match in _DEFANG_EXEMPT_REGION_PATTERN.finditer(message):
+            result.append(_defang_mentions(message[cursor : match.start()]))
+            url = match.group("url")
+            label = match.group("label")
+            if url is None or label is None:
+                result.append(match.group(0))
+            elif url.startswith("mailto:") and label == url.removeprefix("mailto:"):
+                result.append(match.group(0))
+            else:
+                result.append(f"<{url}|{_defang_mentions(label)}>")
+            cursor = match.end()
+        result.append(_defang_mentions(message[cursor:]))
+        return "".join(result)

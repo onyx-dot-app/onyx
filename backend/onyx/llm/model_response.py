@@ -4,6 +4,11 @@ from typing import TYPE_CHECKING, Any, List
 
 from pydantic import BaseModel, Field
 
+from onyx.llm.models import AnyThinkingBlock, RedactedThinkingBlock, ThinkingBlock
+from onyx.utils.logger import setup_logger
+
+logger = setup_logger()
+
 
 class FunctionCall(BaseModel):
     arguments: str | None = None
@@ -26,6 +31,7 @@ class ChatCompletionDeltaToolCall(BaseModel):
 class Delta(BaseModel):
     content: str | None = None
     reasoning_content: str | None = None
+    thinking_blocks: List[AnyThinkingBlock] | None = None
     tool_calls: List[ChatCompletionDeltaToolCall] = Field(default_factory=list)
 
 
@@ -59,6 +65,7 @@ class Message(BaseModel):
     role: str = "assistant"
     tool_calls: List[ChatCompletionMessageToolCall] | None = None
     reasoning_content: str | None = None
+    thinking_blocks: List[AnyThinkingBlock] | None = None
 
 
 class Choice(BaseModel):
@@ -109,6 +116,31 @@ def _parse_delta_tool_calls(
             )
         )
     return parsed_tool_calls
+
+
+def _parse_thinking_blocks(
+    thinking_blocks: list[dict[str, Any]] | None,
+) -> list[AnyThinkingBlock] | None:
+    if not thinking_blocks:
+        return None
+
+    parsed: list[AnyThinkingBlock] = []
+    for block in thinking_blocks:
+        if not isinstance(block, dict):
+            logger.warning(
+                "Dropping malformed thinking block of type %s", type(block).__name__
+            )
+            continue
+        if block.get("type") == "redacted_thinking":
+            parsed.append(RedactedThinkingBlock(data=block.get("data") or ""))
+        else:
+            parsed.append(
+                ThinkingBlock(
+                    thinking=block.get("thinking") or "",
+                    signature=block.get("signature"),
+                )
+            )
+    return parsed or None
 
 
 def _parse_message_tool_calls(
@@ -190,6 +222,7 @@ def from_litellm_model_response_stream(
     parsed_delta = Delta(
         content=delta_data.get("content"),
         reasoning_content=delta_data.get("reasoning_content"),
+        thinking_blocks=_parse_thinking_blocks(delta_data.get("thinking_blocks")),
         tool_calls=_parse_delta_tool_calls(delta_data.get("tool_calls")),
     )
 
@@ -226,6 +259,7 @@ def from_litellm_model_response(
         role=message_data.get("role", "assistant"),
         tool_calls=parsed_tool_calls if parsed_tool_calls else None,
         reasoning_content=message_data.get("reasoning_content"),
+        thinking_blocks=_parse_thinking_blocks(message_data.get("thinking_blocks")),
     )
 
     choice = Choice(

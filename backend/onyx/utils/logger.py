@@ -12,6 +12,7 @@ from shared_configs.configs import (
     JSON_LOGGING,
     LOG_FILE_NAME,
     LOG_LEVEL,
+    LOG_THIRD_PARTY_DEBUG,
     LOG_TO_FILE,
     MULTI_TENANT,
     POSTGRES_DEFAULT_SCHEMA,
@@ -41,6 +42,50 @@ class LoggerContextVars:
         doc_permission_sync_ctx.set(dict())
 
 
+# Third-party loggers that are extremely chatty at DEBUG (LiteLLM logs several
+# records per streamed token; httpcore logs every network event; pdfminer logs
+# per PDF object). Capped at INFO unless LOG_THIRD_PARTY_DEBUG opts back in.
+THIRD_PARTY_CAPPED_LOGGER_NAMES: tuple[str, ...] = (
+    "LiteLLM",
+    "LiteLLM Proxy",
+    "LiteLLM Router",
+    "litellm",
+    "httpx",
+    "httpcore",
+    "openai",
+    "anthropic",
+    "urllib3",
+    "botocore",
+    "boto3",
+    "s3transfer",
+    "google",
+    "googleapiclient",
+    "opensearch",
+    "kombu",
+    "amqp",
+    "msal",
+    "asyncio",
+    "charset_normalizer",
+    "filelock",
+    "pdfminer",
+    "unstructured",
+)
+
+# Loggers LiteLLM attaches its own stream handler to at import time.
+LITELLM_NATIVE_LOGGER_NAMES: tuple[str, ...] = (
+    "LiteLLM",
+    "LiteLLM Proxy",
+    "LiteLLM Router",
+)
+
+_third_party_log_levels_capped = False
+
+# Levels this cap itself applied, per logger name. Lets a later re-cap at a
+# more permissive app level replace our own earlier, stricter cap while still
+# preserving levels that other modules raised explicitly.
+_cap_applied_levels: dict[str, int] = {}
+
+
 def get_log_level_from_str(log_level_str: str = LOG_LEVEL) -> int:
     log_level_dict = {
         "CRITICAL": logging.CRITICAL,
@@ -53,6 +98,56 @@ def get_log_level_from_str(log_level_str: str = LOG_LEVEL) -> int:
     }
 
     return log_level_dict.get(log_level_str.upper(), logging.INFO)
+
+
+def cap_third_party_log_levels(
+    app_log_level: int | None = None,
+    allow_third_party_debug: bool | None = None,
+) -> None:
+    """Cap chatty third-party loggers at INFO, or at the app log level if that
+    is stricter. LOG_THIRD_PARTY_DEBUG=true opts back into their DEBUG output.
+
+    Levels are set explicitly by logger name, so the cap holds no matter which
+    handler tree the process uses (uvicorn, celery root logger, plain stdout)
+    and even when the root logger runs at DEBUG. Never lowers a level that
+    another module raised explicitly (e.g. httpx -> WARNING); levels this cap
+    applied itself are replaceable, so re-running at a more permissive app
+    level relaxes the cap instead of ratcheting.
+    """
+    global _third_party_log_levels_capped
+    _third_party_log_levels_capped = True
+
+    level = app_log_level if app_log_level is not None else get_log_level_from_str()
+    allow_debug = (
+        LOG_THIRD_PARTY_DEBUG
+        if allow_third_party_debug is None
+        else allow_third_party_debug
+    )
+    for logger_name in THIRD_PARTY_CAPPED_LOGGER_NAMES:
+        third_party_logger = logging.getLogger(logger_name)
+        existing_level = third_party_logger.level
+        # A level equal to what this cap last set is ours to replace; anything
+        # else was raised externally and is preserved.
+        if _cap_applied_levels.get(logger_name) == existing_level:
+            existing_level = logging.NOTSET
+        cap_target = level if allow_debug else max(logging.INFO, level)
+        third_party_logger.setLevel(max(cap_target, existing_level))
+        _cap_applied_levels[logger_name] = cap_target
+
+
+def remove_litellm_native_log_handlers() -> None:
+    """LiteLLM attaches its own colored StreamHandler to its loggers at import
+    time while leaving propagation on, so every record is emitted twice: once
+    by LiteLLM's handler and once by the app/root handlers. Drop LiteLLM's
+    handlers so the app logging pipeline is the single emission path.
+
+    Must be called after ``litellm`` has been imported (its handlers are
+    attached as an import side effect).
+    """
+    for logger_name in LITELLM_NATIVE_LOGGER_NAMES:
+        litellm_logger = logging.getLogger(logger_name)
+        litellm_logger.handlers.clear()
+        litellm_logger.propagate = True
 
 
 class OnyxRequestIDFilter(logging.Filter):
@@ -315,6 +410,9 @@ def setup_logger(
     extra: MutableMapping[str, Any] | None = None,
     propagate: bool = True,
 ) -> OnyxLoggingAdapter:
+    if not _third_party_log_levels_capped:
+        cap_third_party_log_levels()
+
     logger = logging.getLogger(name)
 
     # If the logger already has handlers, assume it was already configured and return it.
