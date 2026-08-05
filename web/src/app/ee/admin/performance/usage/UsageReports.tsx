@@ -351,9 +351,15 @@ export default function UsageReports() {
         reportTimeoutRef.current = null;
       }, REPORT_TIMEOUT_MS);
     } catch (error) {
+      // Always log, but only toast if the admin is still on this page: a
+      // request aborted by navigating away must not surface as a failure
+      // notice on whatever page they landed on.
       console.error("Failed to start usage report generation:", error);
-      const message = error instanceof Error ? error.message : "unknown error";
-      toast.error(`Failed to start report generation: ${message}`);
+      if (mountedRef.current) {
+        const message =
+          error instanceof Error ? error.message : "unknown error";
+        toast.error(`Failed to start report generation: ${message}`);
+      }
       return;
     } finally {
       if (mountedRef.current) setRequesting(false);
