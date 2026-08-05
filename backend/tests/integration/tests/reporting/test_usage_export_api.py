@@ -3,7 +3,7 @@ import os
 import time
 from datetime import datetime, timedelta, timezone
 from io import BytesIO, StringIO
-from uuid import UUID
+from uuid import UUID, uuid4
 from zipfile import ZipFile
 
 import pytest
@@ -42,11 +42,12 @@ class TestUsageExportAPI:
         assert initial_response.status_code == 200
         initial_reports = initial_response.json()
         initial_count = len(initial_reports)
+        report_id = uuid4()
 
         # Test generating a report without date filters (all time)
         response = client.post(
             f"{API_SERVER_URL}/admin/usage-report",
-            json={},
+            json={"report_id": str(report_id)},
             headers=admin_user.headers,
         )
         assert response.status_code == 204
@@ -73,10 +74,16 @@ class TestUsageExportAPI:
         # Verify a new report was created
         assert len(current_reports) > initial_count
 
-        # Find the new report (should be the first one since they're ordered by time)
-        new_report = current_reports[0]
+        new_reports = [
+            report
+            for report in current_reports
+            if str(report_id) in report["report_name"]
+        ]
+        assert len(new_reports) == 1
+        new_report = new_reports[0]
         assert "report_name" in new_report
         assert new_report["report_name"].endswith(".zip")
+        assert str(report_id) in new_report["report_name"]
 
     def test_generate_usage_report_with_date_range(
         self,
