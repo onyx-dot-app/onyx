@@ -201,7 +201,7 @@ export default function UserUsageDetailModal({
   );
   const byFlow = useMemo(
     () =>
-      user ? sliceBy(user, (record) => record.flow ?? UNLABELED_FLOW) : [],
+      user ? sliceBy(user, (record) => record.flow || UNLABELED_FLOW) : [],
     [user]
   );
   const byProvider = useMemo(
