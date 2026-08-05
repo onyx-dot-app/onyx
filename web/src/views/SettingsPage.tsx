@@ -1375,8 +1375,9 @@ function AccountsAccessSettings() {
   const currentTier = useSettings().tier;
   const scopeOptions = useMemo(
     () =>
+      // Undefined tier (settings loading/failed) must not hide Community scopes.
       allScopeOptions.filter((option) =>
-        tierAtLeast(currentTier, option.min_tier)
+        tierAtLeast(currentTier ?? Tier.COMMUNITY, option.min_tier)
       ),
     [allScopeOptions, currentTier]
   );
