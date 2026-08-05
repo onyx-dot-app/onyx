@@ -21,7 +21,7 @@ function sliceBy(
   key: (record: { model: string; flow?: string; provider?: string }) => string
 ): BreakdownSlice[] {
   const byLabel = new Map<string, BreakdownSlice>();
-  for (const record of user.records ?? []) {
+  for (const record of user.records) {
     const label = key(record);
     const slice = byLabel.get(label) ?? {
       label,
@@ -44,7 +44,7 @@ interface DailySpend {
 
 function dailySpend(user: UsageExportUser): DailySpend[] {
   const byDay = new Map<string, number>();
-  for (const record of user.records ?? []) {
+  for (const record of user.records) {
     byDay.set(record.day, (byDay.get(record.day) ?? 0) + record.cost_cents);
   }
   const days = Array.from(byDay.keys()).sort();

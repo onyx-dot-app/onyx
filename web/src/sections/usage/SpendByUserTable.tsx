@@ -40,7 +40,7 @@ function filteredRow(
   if (model === ALL && flow === ALL) {
     return { email: user.email, ...user.totals };
   }
-  const records = (user.records ?? []).filter(
+  const records = user.records.filter(
     (record) =>
       (model === ALL || record.model === model) &&
       (flow === ALL || record.flow === flow)
@@ -144,9 +144,7 @@ export default function SpendByUserTable({
     () =>
       Array.from(
         new Set(
-          users.flatMap((user) =>
-            (user.records ?? []).map((record) => record.model)
-          )
+          users.flatMap((user) => user.records.map((record) => record.model))
         )
       ).sort(),
     [users]
@@ -156,7 +154,7 @@ export default function SpendByUserTable({
       Array.from(
         new Set(
           users.flatMap((user) =>
-            (user.records ?? []).flatMap((record) =>
+            user.records.flatMap((record) =>
               record.flow !== undefined ? [record.flow] : []
             )
           )
@@ -237,6 +235,9 @@ export default function SpendByUserTable({
       </div>
 
       <Table
+        // Remount on filter change so the Table's internal page index resets;
+        // otherwise a narrower `rows` can leave it stranded past the last page.
+        key={`${model}-${flow}-${searchTerm}`}
         data={rows}
         columns={COLUMNS}
         getRowId={(row) => row.email}

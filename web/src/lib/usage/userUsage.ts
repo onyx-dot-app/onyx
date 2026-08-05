@@ -15,7 +15,7 @@ export interface UsageExportTotals {
 export interface UsageExportUser {
   email: string;
   totals: UsageExportTotals;
-  records?: UsageExportRecord[];
+  records: UsageExportRecord[];
 }
 
 export interface UsageExportRecord {
