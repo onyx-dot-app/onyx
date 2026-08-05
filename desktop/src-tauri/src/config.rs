@@ -68,7 +68,7 @@ impl Default for AppConfig {
             show_menu_bar: true,
             hide_window_decorations: false,
             summon_shortcut: default_summon_shortcut(),
-            summon_opens_new_chat: true,
+            summon_opens_new_chat: default_summon_opens_new_chat(),
         }
     }
 }
@@ -187,13 +187,21 @@ impl ConfigState {
     /// concurrent caller can't save its own update in between this update and
     /// this save (which would otherwise leave `config.json` not matching
     /// whichever update actually happened last in memory).
+    ///
+    /// A failed save rolls the in-memory config back to its prior value, so a
+    /// setting can't appear to change for the session and then silently revert
+    /// on the next launch.
     pub fn update_and_persist(&self, f: impl FnOnce(&mut AppConfig)) -> Result<AppConfig, String> {
         let _guard = self
             .persist_lock
             .lock()
             .unwrap_or_else(std::sync::PoisonError::into_inner);
+        let previous = self.config();
         let config = self.update_config(f);
-        save_config(&config)?;
+        if let Err(e) = save_config(&config) {
+            self.update_config(|current| *current = previous);
+            return Err(e);
+        }
         Ok(config)
     }
 

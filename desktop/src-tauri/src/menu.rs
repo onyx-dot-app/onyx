@@ -135,9 +135,12 @@ fn build_view_menu(app: &AppHandle, menu: &Menu<Wry>) -> tauri::Result<()> {
 /// (menu accelerators only fire while the app is active, but the app can have
 /// several windows).
 fn focused_webview_window(app: &AppHandle) -> Option<tauri::WebviewWindow> {
-    app.webview_windows()
-        .into_values()
-        .find(|window| window.is_focused().unwrap_or(false))
+    app.webview_windows().into_values().find(|window| {
+        window.is_focused().unwrap_or_else(|e| {
+            log_backend_error(app, &format!("Failed to query window focus: {e}"));
+            false
+        })
+    })
 }
 
 pub fn handle_reload(app: &AppHandle) {
