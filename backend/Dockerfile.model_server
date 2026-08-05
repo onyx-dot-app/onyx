@@ -50,11 +50,10 @@ RUN uv pip install --python /app/.venv/bin/python --no-cache-dir --no-deps --req
         -r /tmp/requirements.txt && \
     rm -rf ~/.cache/uv /tmp/*.txt
 
-# Stage for downloading embedding models. Instantiating SentenceTransformer
-# pulls down both the weights and the custom architecture code.
+# Cache the embedding model's weights, tokenizer, and metadata in the image.
 FROM builder AS embedding-models
 RUN python -c "from sentence_transformers import SentenceTransformer; \
-SentenceTransformer(model_name_or_path='nomic-ai/nomic-embed-text-v1', trust_remote_code=True);"
+SentenceTransformer(model_name_or_path='nomic-ai/nomic-embed-text-v1', trust_remote_code=False);"
 
 # Runtime stage. The DHI runtime variant is near-distroless: no shell or package
 # manager, runs non-root. We run as the `onyx` user (UID 1001, carried over from
