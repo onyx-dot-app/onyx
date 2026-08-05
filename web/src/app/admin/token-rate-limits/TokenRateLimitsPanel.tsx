@@ -99,6 +99,7 @@ export default function TokenRateLimitsPanel({
       toast.success("Spending limit created!");
       updateTable(targetScope);
     } catch (error) {
+      console.error("Failed to create spending limit:", error);
       toast.error(
         error instanceof Error ? error.message : CREATE_ERROR_MESSAGE
       );

@@ -259,6 +259,62 @@ function formatTokens(raw: string): string | null {
   return `${new Intl.NumberFormat("en-US").format(amount)} tokens`;
 }
 
+interface GroupPickerProps {
+  groups: { name: string; value: number }[];
+  selectedGroupId: number | undefined;
+  onSelectGroup: (groupId: number) => void;
+}
+
+function GroupPicker({
+  groups,
+  selectedGroupId,
+  onSelectGroup,
+}: GroupPickerProps) {
+  const selectedGroup = groups.find(
+    (group) => String(group.value) === String(selectedGroupId)
+  );
+
+  return (
+    <Popover>
+      <Popover.Trigger asChild>
+        <Button prominence="secondary" aria-haspopup="menu" width="full">
+          {selectedGroup?.name ?? "Choose a group"}
+        </Button>
+      </Popover.Trigger>
+      <Popover.Content align="start" side="bottom" width="lg">
+        <Popover.Menu>
+          {groups.length === 0
+            ? [
+                <div className="p-2" key="empty">
+                  <Text font="secondary-body" color="text-03" as="p">
+                    No user groups yet. Create one under Users &amp; Groups.
+                  </Text>
+                </div>,
+              ]
+            : groups.map((group) => (
+                <Popover.Close asChild key={group.value}>
+                  <LineItemButton
+                    onClick={() => onSelectGroup(group.value)}
+                    rounding="md"
+                    selectVariant="select-heavy"
+                    sizePreset="main-ui"
+                    state={
+                      String(group.value) === String(selectedGroupId)
+                        ? "selected"
+                        : "empty"
+                    }
+                    title={group.name}
+                    variant="section"
+                    width="full"
+                  />
+                </Popover.Close>
+              ))}
+        </Popover.Menu>
+      </Popover.Content>
+    </Popover>
+  );
+}
+
 interface LimitSummaryProps {
   groupName?: string;
 }
@@ -377,6 +433,11 @@ export default function CreateRateLimitModal({
                 original === "" ? undefined : value
               )
               .moreThan(0, "Cost budget must be greater than 0")
+              .test(
+                "minimum-cents",
+                "Cost budget must be at least $0.01",
+                (value) => value == null || Math.round(value * 100) > 0
+              )
               .when("token_budget", {
                 is: (value: string | undefined) =>
                   value === undefined || value === "",
@@ -497,6 +558,27 @@ export default function CreateRateLimitModal({
                         )}
                       </InputVertical>
                     )}
+
+                    {forSpecificScope === Scope.USER_GROUP &&
+                      forSpecificUserGroup === undefined && (
+                        <InputVertical
+                          title="User group"
+                          description="Choose which group shares this budget"
+                        >
+                          <GroupPicker
+                            groups={modalUserGroups}
+                            selectedGroupId={values.user_group_id}
+                            onSelectGroup={(groupId) =>
+                              void setFieldValue("user_group_id", groupId)
+                            }
+                          />
+                          {touched.user_group_id && errors.user_group_id && (
+                            <InputErrorText>
+                              {errors.user_group_id}
+                            </InputErrorText>
+                          )}
+                        </InputVertical>
+                      )}
 
                     <InputVertical
                       withLabel="cost_budget_dollars"

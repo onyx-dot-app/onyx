@@ -59,6 +59,24 @@ test("formats and submits a token-only budget", async () => {
   );
 });
 
+test("rejects a cost budget that rounds below one cent", async () => {
+  const onSubmit = jest.fn().mockResolvedValue(undefined);
+
+  render(
+    <CreateRateLimitModal isOpen setIsOpen={jest.fn()} onSubmit={onSubmit} />
+  );
+
+  fireEvent.change(screen.getByRole("textbox", { name: /Cost budget/ }), {
+    target: { value: "0.001" },
+  });
+  fireEvent.click(screen.getByRole("button", { name: "Create limit" }));
+
+  expect(
+    await screen.findByText("Cost budget must be at least $0.01")
+  ).toBeInTheDocument();
+  expect(onSubmit).not.toHaveBeenCalled();
+});
+
 test("supports arrow-key navigation between scope options", async () => {
   render(
     <CreateRateLimitModal

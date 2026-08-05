@@ -1,12 +1,12 @@
 import { redirect } from "next/navigation";
 import type { Route } from "next";
-import { SERVER_SIDE_ONLY__PAID_ENTERPRISE_FEATURES_ENABLED } from "@/lib/constants";
+import { EE_ENABLED } from "@/lib/constants";
 import { ADMIN_ROUTES } from "@/lib/admin-routes";
 import { SettingsLayouts } from "@opal/layouts";
 import TokenRateLimitsPanel from "./TokenRateLimitsPanel";
 
 export default function Page() {
-  if (SERVER_SIDE_ONLY__PAID_ENTERPRISE_FEATURES_ENABLED) {
+  if (EE_ENABLED) {
     redirect(ADMIN_ROUTES.USAGE.path as Route);
   }
 
