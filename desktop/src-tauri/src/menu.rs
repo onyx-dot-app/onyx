@@ -29,6 +29,9 @@ pub const MENU_NEW_CHAT_ID: &str = "new_chat";
 pub const MENU_NEW_WINDOW_ID: &str = "new_window";
 pub const MENU_OPEN_SETTINGS_ID: &str = "open_settings";
 pub const MENU_OPEN_DOCS_ID: &str = "open_docs";
+pub const MENU_RELOAD_ID: &str = "reload_page";
+pub const MENU_GO_BACK_ID: &str = "go_back";
+pub const MENU_GO_FORWARD_ID: &str = "go_forward";
 
 /// Handles to the checkable menu items, populated once in `setup_app_menu`.
 /// Toggling reaches for these directly instead of re-walking the whole menu
@@ -79,6 +82,80 @@ fn build_file_menu(app: &AppHandle, menu: &Menu<Wry>) -> tauri::Result<()> {
     }
 
     Ok(())
+}
+
+/// Reload/Back/Forward as View-menu accelerators. These are the chords the
+/// removed global-shortcut set (#7914) wrongly registered system-wide; as
+/// menu accelerators they only fire while an Onyx window has focus.
+fn build_view_menu(app: &AppHandle, menu: &Menu<Wry>) -> tauri::Result<()> {
+    let reload_item = MenuItem::with_id(app, MENU_RELOAD_ID, "Reload", true, Some("CmdOrCtrl+R"))?;
+
+    // Browser-convention history chords: Cmd+[ / Cmd+] on macOS, Alt+arrows elsewhere.
+    let (back_accel, forward_accel) = if cfg!(target_os = "macos") {
+        ("CmdOrCtrl+BracketLeft", "CmdOrCtrl+BracketRight")
+    } else {
+        ("Alt+ArrowLeft", "Alt+ArrowRight")
+    };
+    let back_item = MenuItem::with_id(app, MENU_GO_BACK_ID, "Back", true, Some(back_accel))?;
+    let forward_item = MenuItem::with_id(
+        app,
+        MENU_GO_FORWARD_ID,
+        "Forward",
+        true,
+        Some(forward_accel),
+    )?;
+
+    if let Some(view_menu) = menu
+        .items()?
+        .into_iter()
+        .filter_map(|item| item.as_submenu().cloned())
+        .find(|submenu| submenu.text().ok().as_deref() == Some("View"))
+    {
+        view_menu.insert_items(&[&reload_item, &back_item, &forward_item], 0)?;
+        view_menu.insert(&PredefinedMenuItem::separator(app)?, 3)?;
+    } else {
+        let view_menu = SubmenuBuilder::new(app, "View")
+            .items(&[&reload_item, &back_item, &forward_item])
+            .build()?;
+        let items = menu.items()?;
+        let insert_idx = items
+            .iter()
+            .position(|item| {
+                let text = item.as_submenu().and_then(|submenu| submenu.text().ok());
+                matches!(text.as_deref(), Some("Window" | "Help"))
+            })
+            .unwrap_or(items.len());
+        menu.insert(&view_menu, insert_idx)?;
+    }
+
+    Ok(())
+}
+
+/// The window a View-menu action should apply to: whichever one is focused
+/// (menu accelerators only fire while the app is active, but the app can have
+/// several windows).
+fn focused_webview_window(app: &AppHandle) -> Option<tauri::WebviewWindow> {
+    app.webview_windows()
+        .into_values()
+        .find(|window| window.is_focused().unwrap_or(false))
+}
+
+pub fn handle_reload(app: &AppHandle) {
+    if let Some(window) = focused_webview_window(app) {
+        crate::commands::reload_page(window);
+    }
+}
+
+pub fn handle_go_back(app: &AppHandle) {
+    if let Some(window) = focused_webview_window(app) {
+        crate::commands::go_back(window);
+    }
+}
+
+pub fn handle_go_forward(app: &AppHandle) {
+    if let Some(window) = focused_webview_window(app) {
+        crate::commands::go_forward(window);
+    }
 }
 
 #[cfg(not(target_os = "macos"))]
@@ -218,6 +295,7 @@ pub fn setup_app_menu(app: &AppHandle) -> tauri::Result<()> {
     let menu = app.menu().unwrap_or(Menu::default(app)?);
 
     build_file_menu(app, &menu)?;
+    build_view_menu(app, &menu)?;
     #[cfg(not(target_os = "macos"))]
     build_window_menu(app, &menu)?;
     build_help_menu(app, &menu)?;

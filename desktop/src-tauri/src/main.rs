@@ -230,6 +230,9 @@ fn main() {
             menu::MENU_NEW_CHAT_ID => window::trigger_new_chat(app),
             menu::MENU_NEW_WINDOW_ID => window::trigger_new_window(app),
             menu::MENU_OPEN_SETTINGS_ID => window::open_settings(app),
+            menu::MENU_RELOAD_ID => menu::handle_reload(app),
+            menu::MENU_GO_BACK_ID => menu::handle_go_back(app),
+            menu::MENU_GO_FORWARD_ID => menu::handle_go_forward(app),
             menu::MENU_SHOW_MENU_BAR_ID => menu::handle_menu_bar_toggle(app),
             #[cfg(target_os = "linux")]
             menu::MENU_HIDE_DECORATIONS_ID => menu::handle_decorations_toggle(app),
