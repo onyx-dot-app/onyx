@@ -9,6 +9,7 @@ mod commands;
 mod config;
 mod debug_log;
 mod menu;
+mod shortcuts;
 mod window;
 
 use clap::Parser;
@@ -107,6 +108,9 @@ fn print_debug_startup_banner() {
 /// window's platform tweaks, and Alt-menu/devtools wiring. Every failure here
 /// is logged and non-fatal, so this never needs to return a `Result`.
 fn setup_app(app: &tauri::AppHandle) {
+    // Before the tray, so its menu can reflect whether the shortcut registered.
+    shortcuts::setup_global_shortcuts(app);
+
     if let Err(e) = menu::setup_app_menu(app) {
         debug_log::log_backend_error(app, &format!("Failed to setup menu: {e}"));
     }
@@ -170,6 +174,7 @@ fn main() {
     // `std::process::exit` internally on some platforms.
     #[allow(clippy::expect_used, clippy::exit)]
     tauri::Builder::default()
+        .plugin(tauri_plugin_global_shortcut::Builder::new().build())
         .plugin(tauri_plugin_shell::init())
         .plugin(
             tauri::plugin::Builder::<Wry>::new("chat-external-navigation-handler")
@@ -225,6 +230,9 @@ fn main() {
             menu::MENU_NEW_CHAT_ID => window::trigger_new_chat(app),
             menu::MENU_NEW_WINDOW_ID => window::trigger_new_window(app),
             menu::MENU_OPEN_SETTINGS_ID => window::open_settings(app),
+            menu::MENU_RELOAD_ID => menu::handle_reload(app),
+            menu::MENU_GO_BACK_ID => menu::handle_go_back(app),
+            menu::MENU_GO_FORWARD_ID => menu::handle_go_forward(app),
             menu::MENU_SHOW_MENU_BAR_ID => menu::handle_menu_bar_toggle(app),
             #[cfg(target_os = "linux")]
             menu::MENU_HIDE_DECORATIONS_ID => menu::handle_decorations_toggle(app),
