@@ -477,7 +477,7 @@ jobs:
           # Use the release created by the create-release job to avoid race conditions
           # when multiple matrix jobs try to create/update the same release simultaneously
           releaseId: ${{ needs.create-release.outputs.release-id }}
-          assetNamePattern: "[name]_[arch][ext]"
+          releaseAssetNamePattern: "[name]_[arch][ext]"
           args: ${{ matrix.args }}
 
   build-web-amd64:
