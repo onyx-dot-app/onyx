@@ -34,14 +34,6 @@ class TestUsageExportAPI:
             persona_id=DEFAULT_PERSONA_ID,
         )
 
-        # Get initial list of reports
-        initial_response = client.get(
-            f"{API_SERVER_URL}/admin/usage-report",
-            headers=admin_user.headers,
-        )
-        assert initial_response.status_code == 200
-        initial_reports = initial_response.json()
-        initial_count = len(initial_reports)
         report_id = uuid4()
 
         # Test generating a report without date filters (all time)
@@ -55,7 +47,7 @@ class TestUsageExportAPI:
         # Wait for the new report to appear (with timeout)
         max_wait_time = 60  # seconds
         start_time = time.time()
-        current_reports = initial_reports
+        new_reports: list[dict] = []
 
         while time.time() - start_time < max_wait_time:
             check_response = client.get(
@@ -65,20 +57,18 @@ class TestUsageExportAPI:
             assert check_response.status_code == 200
             current_reports = check_response.json()
 
-            if len(current_reports) > initial_count:
-                # New report has been generated
+            new_reports = [
+                report
+                for report in current_reports
+                if str(report_id) in report["report_name"]
+            ]
+            if new_reports:
+                # The requested report has been generated
                 break
 
             time.sleep(2)
 
-        # Verify a new report was created
-        assert len(current_reports) > initial_count
-
-        new_reports = [
-            report
-            for report in current_reports
-            if str(report_id) in report["report_name"]
-        ]
+        # Verify the requested report was created
         assert len(new_reports) == 1
         new_report = new_reports[0]
         assert "report_name" in new_report

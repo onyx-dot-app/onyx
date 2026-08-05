@@ -209,8 +209,8 @@ class TestGetUsageExportHelper:
             db_session,
             user_id,
             "model-a",
-            "BATCH",
-            "anthropic",
+            "CHAT",
+            "openai",
             100,
             50,
             0,
@@ -222,7 +222,7 @@ class TestGetUsageExportHelper:
             user_id,
             "model-a",
             "BATCH",
-            "openai",
+            "anthropic",
             200,
             60,
             0,
@@ -235,7 +235,7 @@ class TestGetUsageExportHelper:
 
         assert [(row.flow, row.provider) for row in rows] == [
             ("BATCH", "anthropic"),
-            ("BATCH", "openai"),
+            ("CHAT", "openai"),
         ]
 
     def test_date_range_bounds_half_open(self, db_session: Session) -> None:
