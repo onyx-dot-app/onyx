@@ -8,11 +8,14 @@ from onyx.db.user_usage import (
     normalize_token_period_hours,
 )
 
+# 1T tokens; stored in thousands so the ceiling stays inside the int32 column.
+MAX_TOKEN_BUDGET_THOUSANDS = 1_000_000_000
+
 
 class TokenRateLimitArgs(BaseModel):
     enabled: bool
     # Null side exempt. ge/gt=0 — zero/NaN budgets silently disable or break the gate.
-    token_budget: int | None = Field(default=None, ge=1)
+    token_budget: int | None = Field(default=None, ge=1, le=MAX_TOKEN_BUDGET_THOUSANDS)
     period_hours: int = Field(gt=0)
     cost_budget_cents: float | None = Field(default=None, gt=0, allow_inf_nan=False)
 
