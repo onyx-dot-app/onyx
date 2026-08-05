@@ -203,6 +203,10 @@ export interface ChatController {
   ) => void;
   stop: () => void;
   isHydrating: boolean;
+  // The persona the backend says owns this session. The sessions list can't answer this for a
+  // project chat (it is fetched with only_non_project_chats=true), so the hydrated session is the
+  // only authority. null for a new chat, or before hydration lands.
+  conversationPersonaId: number | null;
 }
 
 // `personaId` binds the agent only when this send creates a new session (ignored for an existing
@@ -371,5 +375,7 @@ export function useChatController(
     submit,
     stop,
     isHydrating: needsHydration && hydration.isLoading,
+    // Query keeps serving this once hydration is disabled, so it survives revisiting the chat.
+    conversationPersonaId: hydration.data?.persona_id ?? null,
   };
 }

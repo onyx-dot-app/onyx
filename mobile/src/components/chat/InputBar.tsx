@@ -118,7 +118,9 @@ export function InputBar({
         ) : null}
 
         <View className="min-h-40 flex-row items-center justify-between p-4">
-          <View className="flex-row items-center gap-8">
+          {/* `min-w-0 shrink` so a long forced-tool pill compresses instead of pushing the send
+              cluster past the card's right edge — RN defaults flexShrink to 0. */}
+          <View className="min-w-0 shrink flex-row items-center gap-8">
             <Button
               prominence="tertiary"
               icon={SvgPaperclip}

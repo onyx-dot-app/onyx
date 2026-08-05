@@ -2,20 +2,44 @@ import { describe, expect, it, jest } from "@jest/globals";
 import { fireEvent, render, screen } from "@testing-library/react-native";
 
 import { ToolbarControls } from "@/components/chat/ToolbarControls";
+import { SEARCH_TOOL_ID, type ToolSnapshot } from "@/chat/tools";
 import {
   ComposerToolsProvider,
   type ComposerTools,
 } from "@/state/ComposerToolsProvider";
 
-// The provider module pulls in the settings API (→ MMKV, no native binary under jest); this suite
-// only uses the context.
+// The provider reaches MMKV via the settings/preferences APIs, which jest can't load; this suite
+// only needs the context.
 jest.mock("@/api/settings", () => ({ useWorkspaceSettings: jest.fn() }));
+jest.mock("@/hooks/useAgentPreferences", () => ({
+  useAgentPreferences: jest.fn(),
+}));
+// ActionsMenu mounts the sheet shell even while closed.
+jest.mock("react-native-safe-area-context", () => ({
+  useSafeAreaInsets: () => ({ top: 0, bottom: 0, left: 0, right: 0 }),
+}));
+
+const searchTool: ToolSnapshot = {
+  id: 1,
+  name: "internal_search",
+  display_name: "Search",
+  description: "",
+  in_code_tool_id: SEARCH_TOOL_ID,
+  mcp_server_id: null,
+  chat_selectable: true,
+};
 
 function renderControls(overrides: Partial<ComposerTools> = {}) {
   const value: ComposerTools = {
     showDeepResearch: true,
     deepResearchEnabled: false,
     toggleDeepResearch: jest.fn(),
+    actionTools: [],
+    forcedToolId: null,
+    toggleForcedTool: jest.fn(),
+    disabledToolIds: [],
+    toggleToolEnabled: jest.fn(),
+    notePendingSend: jest.fn(),
     resolveToolOptions: () => ({
       deepResearch: false,
       allowedToolIds: null,
@@ -57,5 +81,46 @@ describe("ToolbarControls", () => {
     const value = renderControls();
     fireEvent.press(screen.getByLabelText("Deep Research"));
     expect(value.toggleDeepResearch).toHaveBeenCalledTimes(1);
+  });
+
+  it("hides the actions trigger when the agent has no selectable tools", () => {
+    renderControls({ actionTools: [] });
+    expect(screen.queryByLabelText("Manage Actions")).toBeNull();
+  });
+
+  it("shows the actions trigger once the agent has selectable tools", () => {
+    renderControls({ actionTools: [searchTool] });
+    expect(screen.getByLabelText("Manage Actions")).toBeTruthy();
+  });
+
+  it("shows no forced pill when nothing is forced", () => {
+    renderControls({ actionTools: [searchTool] });
+    expect(screen.queryByLabelText("Search (forced)")).toBeNull();
+  });
+
+  it("shows a labelled forced pill and releases the force on press", () => {
+    const value = renderControls({
+      actionTools: [searchTool],
+      forcedToolId: 1,
+    });
+    const pill = screen.getByLabelText("Search (forced)");
+    expect(pill.props.accessibilityState.selected).toBe(true);
+
+    fireEvent.press(pill);
+    expect(value.toggleForcedTool).toHaveBeenCalledWith(1);
+  });
+
+  it("ignores a forced id the current agent doesn't expose", () => {
+    renderControls({ actionTools: [searchTool], forcedToolId: 99 });
+    expect(screen.queryByLabelText("Search (forced)")).toBeNull();
+  });
+
+  it("hides the pill for a forced tool that is switched off, matching what gets sent", () => {
+    renderControls({
+      actionTools: [searchTool],
+      forcedToolId: 1,
+      disabledToolIds: [1],
+    });
+    expect(screen.queryByLabelText("Search (forced)")).toBeNull();
   });
 });

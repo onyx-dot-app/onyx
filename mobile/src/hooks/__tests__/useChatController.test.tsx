@@ -622,4 +622,27 @@ describe("useChatController", () => {
     expect(result.current.messages[0]!.message).toBe("hi there");
     expect(getSessionMock).toHaveBeenCalledWith("s2");
   });
+
+  it("reports the hydrated session's persona", async () => {
+    // The sessions list omits project chats, so this is the only way the composer can learn which
+    // agent a project chat runs on.
+    getSessionMock.mockResolvedValue({
+      chat_session_id: "s3",
+      description: "",
+      persona_id: 7,
+      messages: [],
+      packets: [],
+      time_created: "",
+    });
+
+    const { result } = renderHook(() => useChatController("s3"), { wrapper });
+
+    await waitFor(() => expect(result.current.conversationPersonaId).toBe(7));
+  });
+
+  it("has no conversation persona for a brand-new chat", () => {
+    const { result } = renderHook(() => useChatController(null), { wrapper });
+    expect(result.current.conversationPersonaId).toBeNull();
+    expect(getSessionMock).not.toHaveBeenCalled();
+  });
 });

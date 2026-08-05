@@ -1,66 +1,208 @@
-// The state lives in a hook rather than inside the provider because ChatSurface both hosts the
-// provider and calls `resolveToolOptions()` at send time — a component can't read a context it
-// provides.
-import { createContext, useContext, useMemo, type ReactNode } from "react";
+// State lives in a hook, not the provider: ChatSurface both hosts the provider and calls
+// `resolveToolOptions()` at send time, and a component can't read a context it provides.
+import {
+  createContext,
+  useCallback,
+  useContext,
+  useMemo,
+  useState,
+  type ReactNode,
+} from "react";
 
 import { useWorkspaceSettings } from "@/api/settings";
 import type { ChatToolOptions } from "@/api/chat/stream";
 import type { MinimalAgent } from "@/chat/agents";
-import { hasSearchToolsAvailable } from "@/chat/tools";
+import {
+  computeAllowedToolIds,
+  displayableTools,
+  hasSearchToolsAvailable,
+  type ToolSnapshot,
+} from "@/chat/tools";
+import { useAgentPreferences } from "@/hooks/useAgentPreferences";
 import { useDeepResearchToggle } from "@/hooks/useDeepResearchToggle";
+import { useForcedTools } from "@/hooks/useForcedTools";
+
+const NO_TOOLS: ToolSnapshot[] = [];
+const NO_IDS: number[] = [];
 
 export interface ComposerTools {
   showDeepResearch: boolean;
   deepResearchEnabled: boolean;
   toggleDeepResearch: () => void;
+  // Filtered for display — not the agent's full tool list.
+  actionTools: ToolSnapshot[];
+  forcedToolId: number | null;
+  toggleForcedTool: (toolId: number) => void;
+  disabledToolIds: number[];
+  toggleToolEnabled: (toolId: number) => void;
+  // Report the agent a send used, once that send is known to have created the session. Carries
+  // the agent rather than a flag because the selection can change while the create is in flight.
+  notePendingSend: (agentForSend: MinimalAgent | null) => void;
   // Read at send time, never during render.
   resolveToolOptions: () => ChatToolOptions;
 }
 
 interface ComposerToolsInputs {
   chatSessionId: string | null;
-  // null while the conversation's agent isn't knowable yet.
+  // null when ChatSurface can't prove which agent owns the conversation.
   agent: MinimalAgent | null;
   // Deep research is unsupported in projects (web hides it too — ENG-3818). Only the project
   // landing composer is detectable: a chat opened from a project has no project id on the wire.
   isProjectWorkflow: boolean;
+  // Crossing this boundary releases a forced tool.
+  projectId: number | null;
 }
 
 export function useComposerToolsState({
   chatSessionId,
   agent,
   isProjectWorkflow,
+  projectId,
 }: ComposerToolsInputs): ComposerTools {
   const { settings } = useWorkspaceSettings();
+  const agentId = agent?.id;
+
   const { deepResearchEnabled, toggleDeepResearch } = useDeepResearchToggle({
     chatSessionId,
-    agentId: agent?.id,
+    agentId,
   });
+  const { forcedToolId, toggleForcedTool, clearForcedTool } = useForcedTools({
+    chatSessionId,
+    agentId,
+    projectId,
+  });
+  const { disabledToolIdsFor, toggleDisabledTool } = useAgentPreferences();
 
-  // Agent unknown → hold the pill as the user left it. Re-gating on the placeholder agent would
-  // either withdraw a control the user just used or offer deep research to an agent that can't
-  // search.
-  const canSearch = agent
-    ? hasSearchToolsAvailable(agent.tools)
+  /*
+   * `agent` goes null for a beat after a send, before the new session reaches the sessions list.
+   * Only our knowledge lapses, not the agent, so hold the last one — otherwise the menu vanishes
+   * and the send re-allows tools the user switched off.
+   *
+   * The hold is stamped with the conversation it belongs to and is only honoured back in that
+   * same conversation, so it can never describe a chat it was not captured in. It carries over to
+   * a new session only when the host reports the send that created it, and then takes that send's
+   * agent — picking a different agent while the create was in flight must not rewrite what the
+   * finished session runs on. Adjusted during render, not in an effect, so the hold is right on
+   * the first render that loses the agent; compared by id so a caller that rebuilds the object
+   * each render can't loop.
+   */
+  const [pendingSend, setPendingSend] = useState<{
+    agent: MinimalAgent | null;
+  } | null>(null);
+  const [held, setHeld] = useState<{
+    agent: MinimalAgent | null;
+    sessionId: string | null;
+  }>({ agent, sessionId: chatSessionId });
+  if (
+    agent &&
+    (held.agent?.id !== agent.id || held.sessionId !== chatSessionId)
+  ) {
+    setHeld({ agent, sessionId: chatSessionId });
+  } else if (
+    !agent &&
+    pendingSend &&
+    held.sessionId === null &&
+    chatSessionId !== null
+  ) {
+    setHeld({ agent: pendingSend.agent, sessionId: chatSessionId });
+    setPendingSend(null);
+  }
+  const effectiveAgent =
+    agent ?? (held.sessionId === chatSessionId ? held.agent : null);
+  const effectiveAgentId = effectiveAgent?.id;
+
+  // No agent has ever resolved → leave the pill as the user set it rather than withdrawing a
+  // control they just used.
+  const canSearch = effectiveAgent
+    ? hasSearchToolsAvailable(effectiveAgent.tools)
     : deepResearchEnabled;
   const showDeepResearch =
     !isProjectWorkflow && settings.deep_research_enabled && canSearch;
+
+  const actionTools = useMemo(
+    () => (effectiveAgent ? displayableTools(effectiveAgent.tools) : NO_TOOLS),
+    [effectiveAgent],
+  );
+
+  const disabledToolIds = useMemo(
+    () =>
+      effectiveAgentId == null ? NO_IDS : disabledToolIdsFor(effectiveAgentId),
+    [effectiveAgentId, disabledToolIdsFor],
+  );
+
+  const toggleToolEnabled = useCallback(
+    (toolId: number) => {
+      const agentId = effectiveAgentId;
+      if (agentId == null) return;
+      // The backend kills the turn when a forced tool isn't among the constructed ones
+      // ("Forced tool … not found in tools"), so disabling it must release the force.
+      if (!disabledToolIds.includes(toolId) && forcedToolId === toolId) {
+        clearForcedTool();
+      }
+      void toggleDisabledTool(agentId, toolId);
+    },
+    [
+      effectiveAgentId,
+      clearForcedTool,
+      disabledToolIds,
+      forcedToolId,
+      toggleDisabledTool,
+    ],
+  );
+
+  const notePendingSend = useCallback(
+    (agentForSend: MinimalAgent | null) =>
+      setPendingSend({ agent: agentForSend }),
+    [],
+  );
 
   return useMemo(
     () => ({
       showDeepResearch,
       deepResearchEnabled,
       toggleDeepResearch,
+      actionTools,
+      forcedToolId,
+      toggleForcedTool,
+      disabledToolIds,
+      toggleToolEnabled,
+      notePendingSend,
       // Gated on `showDeepResearch` so a hidden control can never send `true` — e.g. the admin
       // disabled deep research while a toggle was left on.
-      resolveToolOptions: () => ({
-        deepResearch: showDeepResearch && deepResearchEnabled,
-        allowedToolIds: null,
-        forcedToolId: null,
-        internalSearchFilters: null,
-      }),
+      resolveToolOptions: () => {
+        // The FULL tool list, not the displayed rows: omitting the ones the menu hides (File
+        // Reader, MCP) strips them server-side as soon as any tool is off.
+        const allowedToolIds = effectiveAgent
+          ? computeAllowedToolIds(effectiveAgent.tools, disabledToolIds)
+          : null;
+        // A forced id the request filters out, or that belongs to another agent, fails the turn
+        // mid-stream.
+        const forcedIsSendable =
+          forcedToolId != null &&
+          !disabledToolIds.includes(forcedToolId) &&
+          (effectiveAgent?.tools.some((tool) => tool.id === forcedToolId) ??
+            false);
+
+        return {
+          deepResearch: showDeepResearch && deepResearchEnabled,
+          allowedToolIds,
+          forcedToolId: forcedIsSendable ? forcedToolId : null,
+          internalSearchFilters: null,
+        };
+      },
     }),
-    [showDeepResearch, deepResearchEnabled, toggleDeepResearch],
+    [
+      effectiveAgent,
+      showDeepResearch,
+      deepResearchEnabled,
+      toggleDeepResearch,
+      actionTools,
+      forcedToolId,
+      toggleForcedTool,
+      disabledToolIds,
+      toggleToolEnabled,
+      notePendingSend,
+    ],
   );
 }
 

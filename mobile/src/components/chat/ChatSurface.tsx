@@ -50,6 +50,7 @@ function ChatSurfaceContent({ focus }: { focus: ChatFocus }) {
   const isProject = focus.kind === "project";
 
   const { sessions } = useChatSessions();
+  const { agents } = useAgents();
   const { agentId: agentIdParam } = useGlobalSearchParams<{
     agentId?: string;
   }>();
@@ -66,18 +67,34 @@ function ChatSurfaceContent({ focus }: { focus: ChatFocus }) {
     Number.isInteger(parsedAgentId) && parsedAgentId >= 0
       ? parsedAgentId
       : null;
-  const liveAgent = useLiveAgent(selectedAgentId, session?.persona_id ?? null);
+  // Which persona a *new* session would be created with. Deliberately resolved without any session
+  // data: it is only read when `sessionId` is null, i.e. when there is no session to describe. That
+  // is what keeps this off the cycle personaId → controller → hydrated persona → liveAgent.
+  const creationAgent = useLiveAgent(selectedAgentId, null);
   // Project chats create with the default agent; new/chat honors the picked one.
   const personaId = isProject
     ? DEFAULT_AGENT_ID
-    : (liveAgent?.id ?? selectedAgentId ?? DEFAULT_AGENT_ID);
-  const isDefaultAgent = personaId === DEFAULT_AGENT_ID;
+    : (creationAgent?.id ?? selectedAgentId ?? DEFAULT_AGENT_ID);
 
-  const { messages, chatState, submit, stop, isHydrating } = useChatController(
-    sessionId,
-    personaId,
-    projectId,
+  const {
+    messages,
+    chatState,
+    submit,
+    stop,
+    isHydrating,
+    conversationPersonaId,
+  } = useChatController(sessionId, personaId, projectId);
+
+  // The agent this conversation actually runs on. The sessions list omits project chats, so the
+  // hydrated persona is the fallback authority — without it a project chat can never name its agent.
+  const liveAgent = useLiveAgent(
+    selectedAgentId,
+    session?.persona_id ?? conversationPersonaId,
   );
+  // Pairs with `liveAgent` in ChatEmptyState, so it describes the agent on screen rather than the
+  // one a new session would be created with.
+  const isDefaultAgent =
+    (liveAgent?.id ?? selectedAgentId ?? DEFAULT_AGENT_ID) === DEFAULT_AGENT_ID;
   // re-attaches to an in-flight run when opened cold
   useChatSessionController(sessionId);
 
@@ -85,18 +102,29 @@ function ChatSurfaceContent({ focus }: { focus: ChatFocus }) {
   // persistent composer.
   const draft = useComposerDraft(`${sessionId ?? "new"}:${projectId ?? ""}`);
 
-  // null while the agent isn't knowable: until the new session reaches the sessions list,
-  // `liveAgent` falls back to the default agent, which would look like an agent switch and re-gate
-  // the toolbar mid-conversation.
-  const conversationAgent = sessionId == null || session ? liveAgent : null;
+  // null while the agent isn't knowable: until the session's persona is known (from the list or
+  // from hydration), `liveAgent` falls back to the default agent, which would look like an agent
+  // switch and re-gate the toolbar mid-conversation. `persona_id` is nullable, so a session row
+  // alone is not proof of knowledge.
+  const conversationPersonaKnown =
+    session?.persona_id != null || conversationPersonaId != null;
+  const conversationAgent =
+    sessionId == null || conversationPersonaKnown ? liveAgent : null;
+  // Project chats are always created with the default persona (see `personaId` above), so the tool
+  // controls must describe that persona — not whichever agent the sidebar happens to have selected.
+  // Otherwise the menu lists another agent's tools and a forced id from it kills the turn
+  // server-side ("Forced tool N not found in tools").
+  const composerAgent = isProject
+    ? (agents.find((candidate) => candidate.id === personaId) ?? null)
+    : conversationAgent;
   const composerTools = useComposerToolsState({
     chatSessionId: sessionId,
-    agent: conversationAgent,
+    agent: composerAgent,
     isProjectWorkflow: isProject,
+    projectId,
   });
 
   const { data: details, isLoading } = useProjectDetails(projectId);
-  const { agents } = useAgents();
   const chats = details?.project?.chat_sessions ?? [];
 
   const title = isProject
@@ -111,10 +139,21 @@ function ChatSurfaceContent({ focus }: { focus: ChatFocus }) {
   // (consumeAttachments), a send clears both.
   const sendWithAttachments = (message?: string) => {
     if (draft.hasBlockingFiles) return;
+    const clearDraft =
+      message == null ? draft.consume : draft.consumeAttachments;
+    // Captured before the create await: picking a different agent while it is in flight must not
+    // change what this session is recorded as running on.
+    const sentWithAgent = composerAgent;
     submit(
       message ?? draft.text,
       draft.descriptors,
-      message == null ? draft.consume : draft.consumeAttachments,
+      () => {
+        // `onAccepted` runs only once the session exists — a failed create throws before it — and
+        // everything from here to the route change is synchronous. That makes it the one moment
+        // we can say "this send created the session", which a null → non-null id alone cannot.
+        if (sessionId == null) composerTools.notePendingSend(sentWithAgent);
+        clearDraft();
+      },
       composerTools.resolveToolOptions(),
     );
   };
