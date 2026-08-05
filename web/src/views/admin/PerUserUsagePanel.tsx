@@ -74,11 +74,13 @@ export default function PerUserUsagePanel({
     (user) =>
       user.totals.input_tokens > 0 ||
       user.totals.output_tokens > 0 ||
-      user.totals.cache_read_tokens > 0
+      user.totals.cache_read_tokens > 0 ||
+      user.totals.cost_cents > 0
   ).length;
   const topSpender = users.reduce<(typeof users)[number] | null>(
     (top, user) =>
-      top === null || user.totals.cost_cents > top.totals.cost_cents
+      user.totals.cost_cents > 0 &&
+      (top === null || user.totals.cost_cents > top.totals.cost_cents)
         ? user
         : top,
     null
@@ -206,7 +208,6 @@ export default function PerUserUsagePanel({
           <Text font="heading-h3">Spend by user</Text>
           <Text font="secondary-body" color="text-03">
             Filter by model or flow, and click a user for their full breakdown.
-            Enforcement limits are managed below.
           </Text>
         </Section>
 
