@@ -107,37 +107,38 @@ export function VoiceProviderSetupModal({
     stt_model: Yup.string(),
     tts_model: Yup.string(),
     default_voice: Yup.string(),
-    stt_languages: detail.sttLanguages
-      ? Yup.string().test(
-          "locales",
-          "Enter comma-separated locales like en-US, fr-FR (one per language)",
-          (value, context) => {
-            if (!value) return true;
-            const languages = parseSttLanguages(value);
-            const bases = languages.map((lang) =>
-              lang.split("-")[0]!.toLowerCase()
-            );
-            if (
-              new Set(bases).size !== bases.length ||
-              !languages.every((lang) => STT_LOCALE_PATTERN.test(lang))
-            ) {
-              return false;
+    stt_languages:
+      mode === "stt" && detail.sttLanguages
+        ? Yup.string().test(
+            "locales",
+            "Enter comma-separated locales like en-US, fr-FR (one per language)",
+            (value, context) => {
+              if (!value) return true;
+              const languages = parseSttLanguages(value);
+              const bases = languages.map((lang) =>
+                lang.split("-")[0]!.toLowerCase()
+              );
+              if (
+                new Set(bases).size !== bases.length ||
+                !languages.every((lang) => STT_LOCALE_PATTERN.test(lang))
+              ) {
+                return false;
+              }
+              const cap = maxSttLanguagesForTargetUri(
+                context.parent.target_uri ?? ""
+              );
+              if (languages.length > cap) {
+                return context.createError({
+                  message:
+                    cap === MAX_STT_LANGUAGES
+                      ? `Azure supports at most ${cap} spoken languages`
+                      : `Self-hosted endpoints support at most ${cap} spoken languages (at-start detection)`,
+                });
+              }
+              return true;
             }
-            const cap = maxSttLanguagesForTargetUri(
-              context.parent.target_uri ?? ""
-            );
-            if (languages.length > cap) {
-              return context.createError({
-                message:
-                  cap === MAX_STT_LANGUAGES
-                    ? `Azure supports at most ${cap} spoken languages`
-                    : `Self-hosted endpoints support at most ${cap} spoken languages (at-start detection)`,
-              });
-            }
-            return true;
-          }
-        )
-      : Yup.string(),
+          )
+        : Yup.string(),
   });
 
   const initialValues: VoiceFormValues = {
