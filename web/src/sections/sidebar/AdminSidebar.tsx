@@ -147,6 +147,7 @@ function buildItems(
     }
     addGated(SECTIONS.USAGE, ADMIN_ROUTES.USAGE, Tier.BUSINESS);
     addGated(SECTIONS.USAGE, ADMIN_ROUTES.WORKSPACE_ANALYTICS, Tier.BUSINESS);
+    addGated(SECTIONS.USAGE, ADMIN_ROUTES.TOKEN_RATE_LIMITS, Tier.ENTERPRISE);
     if (
       settings?.query_history_type !== "disabled" &&
       !settings?.hide_query_history_from_admin_panel
