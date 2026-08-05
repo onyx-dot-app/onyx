@@ -91,9 +91,6 @@ class OAuthFlowSpec(BaseModel):
     authorize_url: str
     token_url: str
     scope: str
-    # Requested in place of `scope` on Onyx's own OAuth client, which is bound by
-    # what its provider verification covers. Empty = `scope` everywhere.
-    managed_scope: str = ""
     # The query param the `scope` value rides under. Slack uses `user_scope`
     # to request user-acting tokens; without it Slack assumes bot scopes.
     scope_param: str
@@ -105,12 +102,6 @@ class OAuthFlowSpec(BaseModel):
     # The query param `optional_scope` rides under, mirroring `scope_param`.
     optional_scope_param: str = "optional_scope"
     extra_authorize_params: dict[str, str] = {}
-
-    def scope_for(self, *, onyx_oauth_client: bool) -> str:
-        """The scope to request, given whose OAuth client drives the flow."""
-        if onyx_oauth_client and self.managed_scope:
-            return self.managed_scope
-        return self.scope
 
 
 class AdminDescriptorSpec(BaseModel):

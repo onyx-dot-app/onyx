@@ -18,8 +18,9 @@ _TOKEN_URL = "https://oauth2.googleapis.com/token"
 
 # Google's restricted scopes (all of Gmail bar `gmail.send`/`gmail.labels`, all
 # of Drive bar `drive.file`) put the OAuth client under an annual third-party
-# security assessment, so Onyx's own client requests a narrower `managed_scope`
-# and marks the actions it can't cover `requires_own_oauth_client`.
+# security assessment. Cloud runs Onyx's verified client, so each provider picks
+# a restricted-free scope there and marks the actions it can't cover
+# `requires_self_hosted_scope`.
 
 # Every Google provider authenticates with the same Cloud Console OAuth client.
 _CLIENT_CREDENTIAL_FIELDS = [
@@ -74,7 +75,6 @@ class GoogleOAuthProvider(OAuthExternalAppProvider, abstract=True):
         upstream_url_patterns: list[str],
         google_api_name: str,
         endpoint_catalog: list[EndpointSpec],
-        managed_scope: str = "",
     ) -> OAuthProviderSpec:
         return OAuthProviderSpec(
             app_type=app_type,
@@ -83,7 +83,6 @@ class GoogleOAuthProvider(OAuthExternalAppProvider, abstract=True):
                 authorize_url=_AUTHORIZE_URL,
                 token_url=_TOKEN_URL,
                 scope=scope,
-                managed_scope=managed_scope,
                 scope_param="scope",
                 # access_type=offline issues a refresh_token; prompt=consent
                 # forces fresh consent so Google reissues it on re-auth.

@@ -62,11 +62,11 @@ def get_onyx_managed_provider(app_type: ExternalAppType) -> OnyxManagedExtApp | 
     return provider if isinstance(provider, OnyxManagedExtApp) else None
 
 
-def uses_onyx_oauth_client(app_type: ExternalAppType) -> bool:
-    """Whether this app authenticates through Onyx's own OAuth client rather than
-    credentials the deployment owns — true only for Onyx-managed built-ins on
-    cloud. That client is verified with the upstream provider, so it requests a
-    narrower scope set and exposes correspondingly fewer actions."""
+def uses_cloud_scope(app_type: ExternalAppType) -> bool:
+    """Whether this app connects with Onyx's cloud OAuth client rather than
+    credentials the deployment owns. That client is verified with the upstream
+    provider, so providers narrow their scope there (see ``GoogleOAuthProvider``)
+    and the actions it can't cover drop out of the catalog."""
     return MULTI_TENANT and get_onyx_managed_provider(app_type) is not None
 
 
@@ -121,8 +121,8 @@ def get_endpoint_catalog(app_type: ExternalAppType) -> list[EndpointSpec]:
     if provider is None:
         return []
     catalog = provider.spec.endpoint_catalog
-    if uses_onyx_oauth_client(app_type):
-        return [e for e in catalog if not e.requires_own_oauth_client]
+    if uses_cloud_scope(app_type):
+        return [e for e in catalog if not e.requires_self_hosted_scope]
     return list(catalog)
 
 
