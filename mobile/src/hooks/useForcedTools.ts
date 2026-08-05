@@ -56,7 +56,6 @@ export function useForcedTools({
     if (previousId !== projectId) setForcedToolId(null);
   }, [projectId]);
 
-  // Single-force: a second tool replaces the first, never accumulates.
   const toggleForcedTool = useCallback((toolId: number) => {
     setForcedToolId((current) => (current === toolId ? null : toolId));
   }, []);

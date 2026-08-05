@@ -33,7 +33,6 @@ interface SheetProps {
   visible: boolean;
   onClose: () => void;
   title: string;
-  // Rendered under the title, inside the header row.
   subtitle?: string;
   background?: SheetBackground;
   // Fires after the dismiss animation finishes; iOS drops a picker presented before then.

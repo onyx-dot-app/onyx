@@ -39,7 +39,6 @@ export function ToolbarControls() {
         <SelectButton
           icon={SvgHourglass}
           state={deepResearchEnabled ? "selected" : "empty"}
-          // folded = label hidden
           foldable={!deepResearchEnabled}
           onPress={toggleDeepResearch}
           accessibilityLabel="Deep Research"

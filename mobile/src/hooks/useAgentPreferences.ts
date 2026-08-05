@@ -12,10 +12,9 @@ import { useSession } from "@/state/session";
 
 const EMPTY_PREFERENCES: AgentPreferences = {};
 
-// The PATCH replaces the whole record, so two in-flight writes are last-write-wins on the server
-// regardless of how carefully we compose them here — an earlier request completing second would
-// undo the later toggle. Chaining keeps one write in flight at a time. Module-scoped because the
-// record is per-user, not per-hook-instance.
+// The PATCH replaces the whole record, so two in-flight writes are last-write-wins: an earlier
+// request completing second would undo the later toggle. Chaining keeps one write in flight at a
+// time. Module-scoped because the record is per-user, not per-hook-instance.
 let writeQueue: Promise<unknown> = Promise.resolve();
 
 function enqueueWrite<T>(write: () => Promise<T>): Promise<T> {

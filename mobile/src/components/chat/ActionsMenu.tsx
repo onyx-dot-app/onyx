@@ -10,7 +10,7 @@ import { Sheet } from "@/components/ui/sheet";
 import { useComposerTools } from "@/state/ComposerToolsProvider";
 import SvgSliders from "@/icons/sliders";
 
-// An agent rarely has more than a handful of tools; this only bites on the outliers.
+// Caps the list height; an agent rarely has enough tools to reach it.
 const MAX_LIST_HEIGHT = 420;
 
 export function ActionsMenu() {
