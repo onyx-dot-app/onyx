@@ -116,7 +116,7 @@ function ReportRow({ report, justArrived }: ReportRowProps) {
           <Button
             prominence="tertiary"
             icon={SvgDownload}
-            tooltip="Download CSV"
+            tooltip="Download ZIP"
             aria-label={`Download report for ${periodLabel(report)}`}
             href={`/api/admin/usage-report/${report.report_name}`}
           />
@@ -261,6 +261,7 @@ export default function UsageReports() {
   const [pendingReportId, setPendingReportId] = useState<string | null>(null);
   const slowTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const reportTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const mountedRef = useRef(true);
 
   const pending = pendingSince !== null;
   const {
@@ -300,7 +301,9 @@ export default function UsageReports() {
   }, [reports, pending, pendingReportId]);
 
   useEffect(() => {
+    mountedRef.current = true;
     return () => {
+      mountedRef.current = false;
       if (slowTimerRef.current) clearTimeout(slowTimerRef.current);
       if (reportTimeoutRef.current) clearTimeout(reportTimeoutRef.current);
     };
@@ -325,6 +328,10 @@ export default function UsageReports() {
       if (!res.ok) {
         throw Error(`Received an error: ${res.statusText}`);
       }
+      // The request outlives the component if the admin navigates away
+      // mid-flight; the cleanup effect has already run, so scheduling timers
+      // here would fire a stray "taking too long" toast on another page.
+      if (!mountedRef.current) return;
       setPendingSince(Date.now());
       setPendingReportId(reportId);
       setPendingLabel(period.label);
@@ -343,14 +350,21 @@ export default function UsageReports() {
         );
         reportTimeoutRef.current = null;
       }, REPORT_TIMEOUT_MS);
-      await mutate();
     } catch (error) {
       console.error("Failed to start usage report generation:", error);
       const message = error instanceof Error ? error.message : "unknown error";
       toast.error(`Failed to start report generation: ${message}`);
+      return;
     } finally {
-      setRequesting(false);
+      if (mountedRef.current) setRequesting(false);
     }
+
+    // Best-effort list refresh: generation already succeeded, so a failed
+    // revalidation must not surface as "failed to start report generation".
+    // Polling picks the new report up regardless.
+    void mutate().catch((error: unknown) => {
+      console.error("Failed to refresh the usage report list:", error);
+    });
   }
 
   const orderedReports = reports ? [...reports].reverse() : [];
@@ -366,12 +380,12 @@ export default function UsageReports() {
         <div className="flex flex-col gap-0.5">
           <Text font="heading-h3">Usage reports</Text>
           <Text font="secondary-body" color="text-03">
-            Export per-user usage as a CSV. Reports build in the background and
-            stay available here.
+            Export per-user usage as a ZIP of CSV files. Reports build in the
+            background and stay available here.
           </Text>
         </div>
         <GenerateReportMenu
-          disabled={requesting || pending || listLoading}
+          disabled={requesting || pending}
           pending={pending}
           onGenerate={(period) => void requestReport(period)}
         />
