@@ -31,6 +31,10 @@ import {
 import {
   getVoiceProviderDetail,
   resolveModelId,
+  parseSttLanguages,
+  sttLanguagesToInput,
+  MAX_STT_LANGUAGES,
+  STT_LOCALE_PATTERN,
   type ProviderMode,
 } from "@/lib/voice/utils";
 
@@ -102,6 +106,20 @@ export function VoiceProviderSetupModal({
     stt_model: Yup.string(),
     tts_model: Yup.string(),
     default_voice: Yup.string(),
+    stt_languages: detail.sttLanguages
+      ? Yup.string().test(
+          "locales",
+          `Enter up to ${MAX_STT_LANGUAGES} comma-separated locales like en-US, fr-FR`,
+          (value) => {
+            if (!value) return true;
+            const languages = parseSttLanguages(value);
+            return (
+              languages.length <= MAX_STT_LANGUAGES &&
+              languages.every((lang) => STT_LOCALE_PATTERN.test(lang))
+            );
+          }
+        )
+      : Yup.string(),
   });
 
   const initialValues: VoiceFormValues = {
@@ -110,6 +128,9 @@ export function VoiceProviderSetupModal({
     stt_model: existingProvider?.stt_model ?? "whisper-1",
     tts_model: initialTtsModel,
     default_voice: initialDefaultVoice,
+    stt_languages: sttLanguagesToInput(
+      existingProvider?.custom_config?.stt_languages
+    ),
   };
 
   async function handleSubmit(
@@ -140,6 +161,19 @@ export function VoiceProviderSetupModal({
         }
       }
 
+      // Preserve config keys the form doesn't own (e.g. speech_region).
+      const customConfig: Record<string, unknown> = {
+        ...existingProvider?.custom_config,
+      };
+      if (mode === "stt" && detail.sttLanguages) {
+        const languages = parseSttLanguages(values.stt_languages);
+        if (languages.length > 0) {
+          customConfig.stt_languages = languages;
+        } else {
+          delete customConfig.stt_languages;
+        }
+      }
+
       const response = await upsertVoiceProvider({
         id: existingProvider?.id,
         name: detail.label,
@@ -147,6 +181,7 @@ export function VoiceProviderSetupModal({
         api_key: apiKeyChanged ? values.api_key : undefined,
         api_key_changed: apiKeyChanged,
         target_uri: values.target_uri || undefined,
+        custom_config: customConfig,
         stt_model: values.stt_model,
         tts_model: values.tts_model,
         default_voice: values.default_voice,
@@ -227,6 +262,21 @@ export function VoiceProviderSetupModal({
                       placeholder="API key"
                     />
                   </InputVertical>
+
+                  {mode === "stt" && detail.sttLanguages && (
+                    <InputVertical
+                      title="Spoken Languages"
+                      subDescription={markdown(
+                        `Comma-separated locales users may speak, e.g. \`en-US, fr-FR\`. With more than one, live transcription auto-detects the spoken language (uploaded audio uses the first). See [supported locales](${detail.sttLanguages.docsUrl}).`
+                      )}
+                      withLabel="stt_languages"
+                    >
+                      <InputTypeInField
+                        name="stt_languages"
+                        placeholder="en-US, fr-FR"
+                      />
+                    </InputVertical>
+                  )}
 
                   {mode === "stt" && (detail.sttModels?.length ?? 0) > 1 && (
                     <InputVertical title="STT Model" withLabel="stt_model">

@@ -38,6 +38,29 @@ export interface VoiceProviderDetail {
   sttModels?: Array<{ id: string; name: string }>;
   /** Selectable TTS models for this provider. Omit if the provider has no TTS model choice. */
   ttsModels?: Array<{ id: string; name: string }>;
+  /** Set if the provider supports configurable STT languages; renders the Spoken Languages field. */
+  sttLanguages?: { docsUrl: string };
+}
+
+/** Locale shape for STT languages; mirrors AZURE_LOCALE_PATTERN in backend/onyx/voice/providers/azure.py. */
+export const STT_LOCALE_PATTERN = /^[A-Za-z]{2,3}(-[A-Za-z]{2,8}){1,2}$/;
+
+/** Azure's candidate cap for STT language auto-detect. */
+export const MAX_STT_LANGUAGES = 10;
+
+/** Splits comma-separated locale input into trimmed entries. */
+export function parseSttLanguages(value: string): string[] {
+  return value
+    .split(",")
+    .map((lang) => lang.trim())
+    .filter(Boolean);
+}
+
+/** Renders stored stt_languages config as the form's comma-separated input value. */
+export function sttLanguagesToInput(raw: unknown): string {
+  return Array.isArray(raw)
+    ? raw.filter((v): v is string => typeof v === "string").join(", ")
+    : "";
 }
 
 const DEFAULT_VOICE_PROVIDER_DETAIL: VoiceProviderDetail = {
@@ -71,6 +94,10 @@ export const VOICE_PROVIDER_DETAILS: Record<string, VoiceProviderDetail> = {
     voiceDocsUrl: {
       url: "https://learn.microsoft.com/en-us/azure/ai-services/speech-service/language-support?tabs=tts",
       label: "Azure",
+    },
+    sttLanguages: {
+      docsUrl:
+        "https://learn.microsoft.com/en-us/azure/ai-services/speech-service/language-support?tabs=stt",
     },
   },
   elevenlabs: {

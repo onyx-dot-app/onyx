@@ -28,3 +28,21 @@ def test_azure_provider_rejects_invalid_speech_region() -> None:
             api_base=None,
             custom_config={"speech_region": "westus/../../etc"},
         )
+
+
+def test_azure_provider_stt_languages_from_custom_config() -> None:
+    provider = AzureVoiceProvider(
+        api_key="key",
+        api_base=None,
+        custom_config={"speech_region": "eastus", "stt_languages": ["en-US", "fr-FR"]},
+    )
+    assert provider.stt_languages == ["en-US", "fr-FR"]
+
+
+def test_azure_provider_stt_languages_default_to_english() -> None:
+    provider = AzureVoiceProvider(
+        api_key="key",
+        api_base=None,
+        custom_config={"speech_region": "eastus"},
+    )
+    assert provider.stt_languages == ["en-US"]
