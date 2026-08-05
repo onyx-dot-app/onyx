@@ -47,9 +47,9 @@ def _verify_user_pagination(
         retrieved_items.extend(page.items)
 
     retrieved_emails = [u.email for u in retrieved_items]
-    assert len(retrieved_emails) == len(
-        set(retrieved_emails)
-    ), f"pagination returned duplicate emails across pages: {retrieved_emails}"
+    assert len(retrieved_emails) == len(set(retrieved_emails)), (
+        f"pagination returned duplicate emails across pages: {retrieved_emails}"
+    )
     assert set(retrieved_emails) == {u.email for u in users}
 
 

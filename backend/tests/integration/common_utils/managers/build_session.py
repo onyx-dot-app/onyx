@@ -84,7 +84,7 @@ class BuildSessionManager:
         if response.is_error:
             raise AssertionError(
                 f"POST /build/sessions failed: {response.status_code} {response.reason_phrase} "
-                f"— body: {response.text!r} (user_id={user.id}, role={user.role})"
+                f"— body: {response.text!r} (user_id={user.id}, is_admin={user.is_admin})"
             )
         return response.json()
 

@@ -12,9 +12,10 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import selectinload
 from sqlalchemy.orm import Session
 
-from onyx.auth.schemas import UserRole
+from onyx.auth.permissions import has_global_permission
 from onyx.configs.constants import MessageType
 from onyx.db.enums import BuildSessionStatus
+from onyx.db.enums import Permission
 from onyx.db.enums import SandboxStatus
 from onyx.db.enums import SessionOrigin
 from onyx.db.enums import SharingScope
@@ -635,13 +636,13 @@ def fetch_all_supported_build_llm_providers(
         )
     )
     user_group_ids = fetch_user_group_ids(db_session, user)
-    is_admin = user.role == UserRole.ADMIN
+    can_manage_llms = has_global_permission(user, Permission.MANAGE_LLMS)
     # persona=None: Craft has no persona context, so a provider restricted to
     # specific personas is intentionally excluded even when otherwise public.
     return [
         LLMProviderView.from_model(p)
         for p in provider_models
         if can_user_access_llm_provider(
-            p, user_group_ids, persona=None, is_admin=is_admin
+            p, user_group_ids, persona=None, can_manage_llms=can_manage_llms
         )
     ]

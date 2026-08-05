@@ -9,7 +9,6 @@ import httpx
 import pytest
 from sqlalchemy import select
 
-from onyx.auth.schemas import UserRole
 from onyx.configs.constants import FileOrigin
 from onyx.db.engine.sql_engine import get_session_with_current_tenant
 from onyx.db.models import FileRecord
@@ -19,7 +18,6 @@ from tests.integration.common_utils.constants import API_SERVER_URL
 from tests.integration.common_utils.http_client import client
 from tests.integration.common_utils.managers.skill import build_minimal_bundle
 from tests.integration.common_utils.managers.skill import SkillManager
-from tests.integration.common_utils.managers.user import UserManager
 from tests.integration.common_utils.managers.user_group import UserGroupManager
 from tests.integration.common_utils.test_models import DATestUser
 
@@ -401,33 +399,3 @@ def test_non_admin_returns_403_on_admin_list(basic_user: DATestUser) -> None:
         headers=basic_user.headers,
     )
     assert response.status_code == 403
-
-
-def test_curator_can_post_skill(
-    admin_user: DATestUser,
-    basic_user: DATestUser,
-) -> None:
-    """Curators are accepted by the admin-skills endpoints.
-
-    Pins current behavior — see `craft-risks.md` §2.4.
-    """
-    curator = UserManager.set_role(
-        user_to_set=basic_user,
-        target_role=UserRole.CURATOR,
-        user_performing_action=admin_user,
-        explicit_override=True,
-    )
-    try:
-        skill = SkillManager.create_custom(
-            curator, slug=f"curator-create-{uuid4().hex[:6]}"
-        )
-        assert skill.id is not None
-        assert skill.enabled is True
-    finally:
-        # restore so module-shared basic_user fixture stays BASIC
-        UserManager.set_role(
-            user_to_set=basic_user,
-            target_role=UserRole.BASIC,
-            user_performing_action=admin_user,
-            explicit_override=True,
-        )

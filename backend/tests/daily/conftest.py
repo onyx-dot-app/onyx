@@ -19,7 +19,6 @@ from fastapi.testclient import TestClient  # noqa: E402
 from onyx.auth.users import current_user  # noqa: E402
 from onyx.db.engine.sql_engine import get_session  # noqa: E402
 from onyx.db.enums import Permission  # noqa: E402
-from onyx.db.models import UserRole  # noqa: E402
 from onyx.main import get_application  # noqa: E402
 from onyx.utils.logger import setup_logger  # noqa: E402
 

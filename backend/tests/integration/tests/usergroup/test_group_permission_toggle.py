@@ -177,12 +177,12 @@ def test_bulk_replaces_previous_state(reset: None) -> None:  # noqa: ARG001
     ).raise_for_status()
 
     group_perms = UserGroupManager.get_permissions(group, admin_user)
-    assert (
-        "manage:llms" not in group_perms
-    ), f"manage:llms should be removed: {group_perms}"
-    assert (
-        "manage:actions" in group_perms
-    ), f"manage:actions should remain: {group_perms}"
-    assert (
-        "manage:user_groups" in group_perms
-    ), f"manage:user_groups should be added: {group_perms}"
+    assert "manage:llms" not in group_perms, (
+        f"manage:llms should be removed: {group_perms}"
+    )
+    assert "manage:actions" in group_perms, (
+        f"manage:actions should remain: {group_perms}"
+    )
+    assert "manage:user_groups" in group_perms, (
+        f"manage:user_groups should be added: {group_perms}"
+    )
