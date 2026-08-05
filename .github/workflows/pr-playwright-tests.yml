@@ -94,6 +94,7 @@ jobs:
       pull-requests: read
     outputs:
       playwright: ${{ steps.filter.outputs.playwright || 'true' }}
+      airgap: ${{ steps.filter.outputs.airgap || 'true' }}
       # Whether this change touches MCP-OAuth-relevant code. Drives whether a
       # same-repo PR validates the OAuth spec against the real Okta org instead of
       # the mock IdP. Defaults to 'false' on events where the filter doesn't run.
@@ -118,6 +119,33 @@ jobs:
               - 'uv.lock'
               - '.github/workflows/pr-playwright-tests.yml'
               - '.github/actions/setup-test-license/**'
+              - '.github/actions/login-ecr-pullthrough-cache/**'
+            airgap:
+              - 'backend/Dockerfile'
+              - 'backend/Dockerfile.model_server'
+              - 'backend/alembic/**'
+              - 'backend/alembic_tenants/**'
+              - 'backend/model_server/**'
+              - 'backend/onyx/configs/model_configs.py'
+              - 'backend/onyx/db/engine/**'
+              - 'backend/onyx/db/search_settings.py'
+              - 'backend/onyx/document_index/**'
+              - 'backend/onyx/main.py'
+              - 'backend/onyx/natural_language_processing/search_nlp_models.py'
+              - 'backend/onyx/natural_language_processing/utils.py'
+              - 'backend/onyx/setup.py'
+              - 'backend/requirements/**'
+              - 'backend/shared_configs/**'
+              - 'backend/tests/airgap/**'
+              - 'deployment/docker_compose/docker-compose.yml'
+              - 'deployment/docker_compose/docker-compose.airgap-test.yml'
+              - 'deployment/docker_compose/docker-compose.airgap-tls-test.yml'
+              - 'deployment/docker_compose/docker-compose.template.yml'
+              - 'pyproject.toml'
+              - 'uv.lock'
+              - '.github/workflows/pr-airgap-deployment-tests.yml'
+              - '.github/workflows/pr-playwright-tests.yml'
+              - '.github/actions/build-model-server-image/**'
               - '.github/actions/login-ecr-pullthrough-cache/**'
             mcp_oauth:
               - 'backend/onyx/server/features/mcp/**'
@@ -200,7 +228,9 @@ jobs:
 
   build-backend-image:
     needs: changes
-    if: needs.changes.outputs.playwright == 'true'
+    if: >-
+      needs.changes.outputs.playwright == 'true' ||
+      needs.changes.outputs.airgap == 'true'
     runs-on:
       [
         runs-on,
@@ -264,7 +294,9 @@ jobs:
 
   build-model-server-image:
     needs: changes
-    if: needs.changes.outputs.playwright == 'true'
+    if: >-
+      needs.changes.outputs.playwright == 'true' ||
+      needs.changes.outputs.airgap == 'true'
     runs-on:
       [
         runs-on,
@@ -294,6 +326,128 @@ jobs:
           ecr-registry: ${{ vars.ECR_REGISTRY }}
           docker-username: ${{ secrets.DOCKER_USERNAME }}
           docker-token: ${{ secrets.DOCKER_TOKEN }}
+
+  airgap-health:
+    needs: [changes, build-backend-image, build-model-server-image]
+    if: needs.changes.outputs.airgap == 'true'
+    runs-on:
+      [
+        runs-on,
+        runner=4cpu-linux-arm64,
+        "run-id=${{ github.run_id }}-airgap-health",
+        "extras=ecr-cache",
+      ]
+    timeout-minutes: 20
+    environment: ci-protected
+    steps:
+      - uses: runs-on/action@4e5f72399b6b17f2e79c511c1b38a315a64d22dc
+      - uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0
+        with:
+          persist-credentials: false
+
+      - name: Set deployment images
+        env:
+          BACKEND_IMAGE: ${{ env.RUNS_ON_ECR_CACHE }}:playwright-test-backend-${{ github.run_id }}
+          MODEL_SERVER_IMAGE: ${{ env.RUNS_ON_ECR_CACHE }}:playwright-test-model-server-${{ github.run_id }}
+        run: |
+          echo "ONYX_BACKEND_IMAGE=${BACKEND_IMAGE}" >> "${GITHUB_ENV}"
+          echo "ONYX_MODEL_SERVER_IMAGE=${MODEL_SERVER_IMAGE}" >> "${GITHUB_ENV}"
+
+      - name: Log in to ECR pull-through cache
+        uses: ./.github/actions/login-ecr-pullthrough-cache
+        with:
+          ecr-registry: ${{ vars.ECR_REGISTRY }}
+
+      - name: Pull deployment images
+        working-directory: deployment/docker_compose
+        run: |
+          docker pull "${ONYX_BACKEND_IMAGE}"
+          docker pull "${ONYX_MODEL_SERVER_IMAGE}"
+          docker compose -f docker-compose.yml pull relational_db opensearch cache minio
+
+      - name: Verify deployment without external network
+        working-directory: deployment/docker_compose
+        run: |
+          compose=(
+            docker compose
+            -p onyx-airgap
+            --profile s3-filestore
+            -f docker-compose.yml
+            -f docker-compose.airgap-test.yml
+          )
+          api_server_is_healthy() {
+            local container_id
+            container_id="$("${compose[@]}" ps -q api_server)"
+            [[ -n "${container_id}" ]] &&
+              [[ "$(docker inspect --format '{{.State.Health.Status}}' "${container_id}")" == "healthy" ]]
+          }
+          default_model_embeddings_are_finite() {
+            local container_id
+            container_id="$("${compose[@]}" ps -q api_server)"
+            [[ -n "${container_id}" ]] &&
+              docker exec -i "${container_id}" python - \
+                < ../../backend/tests/airgap/test_default_model_server_embeddings_are_finite.py
+          }
+          if ! "${compose[@]}" up -d --no-build --wait --wait-timeout 180 \
+            api_server inference_model_server minio ||
+            ! api_server_is_healthy ||
+            ! default_model_embeddings_are_finite; then
+            "${compose[@]}" logs --no-color > "${RUNNER_TEMP}/airgap.log"
+            exit 1
+          fi
+          "${compose[@]}" logs --no-color > "${RUNNER_TEMP}/airgap.log"
+          "${compose[@]}" down -v
+
+      - name: Verify deployment with untrusted Hugging Face TLS
+        working-directory: deployment/docker_compose
+        env:
+          AIRGAP_HF_ENDPOINT: https://tls_failure:4443
+        run: |
+          compose=(
+            docker compose
+            -p onyx-airgap-tls
+            --profile s3-filestore
+            -f docker-compose.yml
+            -f docker-compose.airgap-test.yml
+            -f docker-compose.airgap-tls-test.yml
+          )
+          api_server_is_healthy() {
+            local container_id
+            container_id="$("${compose[@]}" ps -q api_server)"
+            [[ -n "${container_id}" ]] &&
+              [[ "$(docker inspect --format '{{.State.Health.Status}}' "${container_id}")" == "healthy" ]]
+          }
+          if ! "${compose[@]}" up -d --no-build --wait --wait-timeout 180 \
+            api_server inference_model_server minio ||
+            ! api_server_is_healthy; then
+            "${compose[@]}" logs --no-color > "${RUNNER_TEMP}/airgap-tls.log"
+            exit 1
+          fi
+          "${compose[@]}" logs --no-color > "${RUNNER_TEMP}/airgap-tls.log"
+          "${compose[@]}" down -v
+
+      - name: Stop deployments
+        if: always()
+        working-directory: deployment/docker_compose
+        run: |
+          docker compose -p onyx-airgap \
+            -f docker-compose.yml \
+            -f docker-compose.airgap-test.yml \
+            down -v || true
+          docker compose -p onyx-airgap-tls \
+            -f docker-compose.yml \
+            -f docker-compose.airgap-test.yml \
+            -f docker-compose.airgap-tls-test.yml \
+            down -v || true
+
+      - name: Upload deployment logs
+        if: always()
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a
+        with:
+          name: airgap-deployment-logs
+          path: |
+            ${{ runner.temp }}/airgap.log
+            ${{ runner.temp }}/airgap-tls.log
 
   playwright-tests:
     needs: [build-web-image, build-backend-image, build-model-server-image]
@@ -1050,14 +1204,22 @@ jobs:
     runs-on: ubuntu-slim
     timeout-minutes: 5
     needs:
-      [changes, playwright-tests, playwright-tests-lite, playwright-tests-oauth-okta]
+      [
+        changes,
+        airgap-health,
+        playwright-tests,
+        playwright-tests-lite,
+        playwright-tests-oauth-okta,
+      ]
     if: ${{ always() }}
     steps:
       - name: Check job status
         env:
           EVENT_NAME: ${{ github.event_name }}
           CHANGES_RESULT: ${{ needs.changes.result }}
+          RUN_AIRGAP: ${{ needs.changes.outputs.airgap }}
           RUN_TESTS: ${{ needs.changes.outputs.playwright }}
+          AIRGAP_RESULT: ${{ needs.airgap-health.result }}
           TESTS_RESULT: ${{ needs.playwright-tests.result }}
           LITE_RESULT: ${{ needs.playwright-tests-lite.result }}
           OKTA_RESULT: ${{ needs.playwright-tests-oauth-okta.result }}
@@ -1068,6 +1230,10 @@ jobs:
           # would incorrectly pass the required check.
           if [ "${CHANGES_RESULT}" != "success" ]; then
             echo "changes job did not succeed (result: ${CHANGES_RESULT})"
+            exit 1
+          fi
+          if [ "${RUN_AIRGAP}" = "true" ] && [ "${AIRGAP_RESULT}" != "success" ]; then
+            echo "Airgap deployment result: ${AIRGAP_RESULT}"
             exit 1
           fi
           if [ "${RUN_TESTS}" != "true" ]; then
