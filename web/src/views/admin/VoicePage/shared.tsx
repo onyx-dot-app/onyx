@@ -33,6 +33,7 @@ import {
   resolveModelId,
   parseSttLanguages,
   sttLanguagesToInput,
+  maxSttLanguagesForTargetUri,
   MAX_STT_LANGUAGES,
   STT_LOCALE_PATTERN,
   type ProviderMode,
@@ -109,18 +110,31 @@ export function VoiceProviderSetupModal({
     stt_languages: detail.sttLanguages
       ? Yup.string().test(
           "locales",
-          `Enter up to ${MAX_STT_LANGUAGES} comma-separated locales like en-US, fr-FR (one per language)`,
-          (value) => {
+          "Enter comma-separated locales like en-US, fr-FR (one per language)",
+          (value, context) => {
             if (!value) return true;
             const languages = parseSttLanguages(value);
             const bases = languages.map((lang) =>
               lang.split("-")[0]!.toLowerCase()
             );
-            return (
-              languages.length <= MAX_STT_LANGUAGES &&
-              new Set(bases).size === bases.length &&
-              languages.every((lang) => STT_LOCALE_PATTERN.test(lang))
+            if (
+              new Set(bases).size !== bases.length ||
+              !languages.every((lang) => STT_LOCALE_PATTERN.test(lang))
+            ) {
+              return false;
+            }
+            const cap = maxSttLanguagesForTargetUri(
+              context.parent.target_uri ?? ""
             );
+            if (languages.length > cap) {
+              return context.createError({
+                message:
+                  cap === MAX_STT_LANGUAGES
+                    ? `Azure supports at most ${cap} spoken languages`
+                    : `Self-hosted endpoints support at most ${cap} spoken languages (at-start detection)`,
+              });
+            }
+            return true;
           }
         )
       : Yup.string(),

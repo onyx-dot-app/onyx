@@ -45,8 +45,34 @@ export interface VoiceProviderDetail {
 /** Locale shape for STT languages; mirrors AZURE_LOCALE_PATTERN in backend/onyx/voice/providers/azure.py. */
 export const STT_LOCALE_PATTERN = /^[A-Za-z]{2,3}(-[A-Za-z]{2,8}){1,2}$/;
 
-/** Azure's candidate cap for STT language auto-detect. */
+/** Azure's candidate caps for STT language auto-detect: continuous LID (cloud) vs at-start (self-hosted). */
 export const MAX_STT_LANGUAGES = 10;
+export const MAX_AT_START_STT_LANGUAGES = 4;
+
+const AZURE_CLOUD_HOST_SUFFIXES = [
+  ".speech.microsoft.com",
+  ".api.cognitive.microsoft.com",
+  ".cognitiveservices.azure.com",
+];
+
+/** Mirrors _is_azure_cloud_url in backend/onyx/voice/providers/azure.py. */
+function isAzureCloudUrl(uri: string): boolean {
+  try {
+    const hostname = new URL(uri).hostname.toLowerCase();
+    return AZURE_CLOUD_HOST_SUFFIXES.some((suffix) =>
+      hostname.endsWith(suffix)
+    );
+  } catch {
+    return false;
+  }
+}
+
+/** Language cap for the endpoint the admin entered: self-hosted endpoints use at-start detection. */
+export function maxSttLanguagesForTargetUri(targetUri: string): number {
+  return !targetUri || isAzureCloudUrl(targetUri)
+    ? MAX_STT_LANGUAGES
+    : MAX_AT_START_STT_LANGUAGES;
+}
 
 /** Splits comma-separated locale input into trimmed entries. */
 export function parseSttLanguages(value: string): string[] {
