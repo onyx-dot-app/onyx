@@ -1,5 +1,5 @@
 use crate::config::ConfigState;
-use crate::debug_log::log_backend_error;
+use crate::debug_log::{log_backend_debug, log_backend_error};
 use crate::window::{focus_main_window, open_chat_window};
 use tauri::{AppHandle, Manager};
 use tauri_plugin_global_shortcut::{GlobalShortcutExt, Shortcut, ShortcutState};
@@ -36,7 +36,12 @@ pub fn setup_global_shortcuts(app: &AppHandle) {
             if event.state() != ShortcutState::Pressed {
                 return;
             }
-            if app.state::<ConfigState>().config().summon_opens_new_chat {
+            let opens_new_chat = app.state::<ConfigState>().config().summon_opens_new_chat;
+            log_backend_debug(
+                app,
+                &format!("Summon shortcut fired (opens_new_chat={opens_new_chat})"),
+            );
+            if opens_new_chat {
                 open_chat_window(app);
             } else {
                 focus_main_window(app);
@@ -45,6 +50,7 @@ pub fn setup_global_shortcuts(app: &AppHandle) {
 
     match result {
         Ok(()) => {
+            log_backend_debug(app, &format!("Registered summon shortcut \"{chord}\""));
             app.manage(SummonShortcut { chord });
         }
         // Registration fails when another app owns the chord (reliably

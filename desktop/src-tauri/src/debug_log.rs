@@ -109,6 +109,26 @@ pub fn log_backend_error(app: &AppHandle, message: &str) {
     }
 }
 
+/// Debug-mode-only sibling of `log_backend_error` for tracing expected
+/// behavior, e.g. confirming a global shortcut registered and actually fires.
+pub fn log_backend_debug(app: &AppHandle, message: &str) {
+    let state = app.state::<ConfigState>();
+    if !state.debug_mode {
+        return;
+    }
+    eprintln!("[ONYX DEBUG] {message}");
+
+    // Named binding for the same borrow-checker reason as `log_backend_error`.
+    let lock_result = state.debug_log_file.lock();
+    if let Ok(mut guard) = lock_result {
+        if let Some(ref mut file) = *guard {
+            let line = format!("[{}] [DEBUG] {}", format_utc_timestamp(), message);
+            let _ = writeln!(file, "{line}");
+            let _ = file.flush();
+        }
+    }
+}
+
 pub fn inject_console_capture(webview: &Webview) {
     if let Err(e) = webview.eval(CONSOLE_CAPTURE_SCRIPT) {
         log_backend_error(
