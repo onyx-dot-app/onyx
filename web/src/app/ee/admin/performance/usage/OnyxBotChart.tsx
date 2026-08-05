@@ -37,7 +37,7 @@ export function OnyxBotChart({
   } else {
     const initialDate =
       timeRange.from || new Date(onyxBotAnalyticsData[0].date);
-    const dateRange = getDatesList(initialDate);
+    const dateRange = getDatesList(initialDate, timeRange.to);
 
     const dateToOnyxBotAnalytics = new Map(
       onyxBotAnalyticsData.map((onyxBotAnalyticsEntry) => [

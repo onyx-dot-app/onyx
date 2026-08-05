@@ -1,6 +1,6 @@
 "use client";
 
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import {
   InputSelect,
   InputTypeIn,
@@ -173,6 +173,14 @@ export default function SpendByUserTable({
       ].sort(),
     [users]
   );
+
+  useEffect(() => {
+    if (model !== ALL && !models.includes(model)) setModel(ALL);
+  }, [model, models]);
+
+  useEffect(() => {
+    if (flow !== ALL && !flows.includes(flow)) setFlow(ALL);
+  }, [flow, flows]);
 
   const rows = useMemo(
     () =>

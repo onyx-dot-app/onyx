@@ -74,8 +74,13 @@ class TestUsageExportAPI:
         # Verify a new report was created
         assert len(current_reports) > initial_count
 
-        # Find the new report (should be the first one since they're ordered by time)
-        new_report = current_reports[0]
+        new_reports = [
+            report
+            for report in current_reports
+            if str(report_id) in report["report_name"]
+        ]
+        assert len(new_reports) == 1
+        new_report = new_reports[0]
         assert "report_name" in new_report
         assert new_report["report_name"].endswith(".zip")
         assert str(report_id) in new_report["report_name"]

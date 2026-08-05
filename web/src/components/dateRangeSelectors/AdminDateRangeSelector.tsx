@@ -74,7 +74,7 @@ export const AdminDateRangeSelector = memo(function AdminDateRangeSelector({
   const customActive = !activePreset;
   const customLabel =
     customActive && value
-      ? `${format(value.from, "MMM d")} – ${format(value.to, "MMM d")}`
+      ? `${format(value.from, value.from.getFullYear() === value.to.getFullYear() ? "MMM d" : "MMM d, y")} – ${format(value.to, value.from.getFullYear() === value.to.getFullYear() ? "MMM d" : "MMM d, y")}`
       : "Custom";
 
   function selectPreset(preset: DatePreset) {

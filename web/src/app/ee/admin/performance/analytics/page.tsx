@@ -16,7 +16,11 @@ const route = ADMIN_ROUTES.WORKSPACE_ANALYTICS;
 
 export default function WorkspaceAnalyticsPage() {
   const [timeRange, setTimeRange] = useTimeRange();
-  const { agents } = useAdminAgents();
+  const {
+    agents,
+    error: agentsError,
+    isLoading: agentsLoading,
+  } = useAdminAgents();
 
   return (
     <SettingsLayouts.Root width="lg">
@@ -41,6 +45,8 @@ export default function WorkspaceAnalyticsPage() {
         <OnyxBotChart timeRange={timeRange} />
         <PersonaMessagesChart
           availablePersonas={agents}
+          agentsError={agentsError}
+          agentsLoading={agentsLoading}
           timeRange={timeRange}
         />
         <Divider />

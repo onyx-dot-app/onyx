@@ -17,7 +17,7 @@ interface BreakdownSlice {
 
 function sliceBy(
   user: UsageExportUser,
-  key: (record: { model: string; flow?: string }) => string
+  key: (record: { model: string; flow?: string; provider?: string }) => string
 ): BreakdownSlice[] {
   const byLabel = new Map<string, BreakdownSlice>();
   for (const record of user.records ?? []) {
@@ -202,6 +202,11 @@ export default function UserUsageDetailModal({
       user ? sliceBy(user, (record) => record.flow ?? UNLABELED_FLOW) : [],
     [user]
   );
+  const byProvider = useMemo(
+    () =>
+      user ? sliceBy(user, (record) => record.provider ?? UNLABELED_FLOW) : [],
+    [user]
+  );
   const days = useMemo(() => (user ? dailySpend(user) : []), [user]);
 
   if (!user) return null;
@@ -242,6 +247,11 @@ export default function UserUsageDetailModal({
             <BreakdownList
               title="By flow"
               slices={byFlow}
+              totalCostCents={totals.cost_cents}
+            />
+            <BreakdownList
+              title="By provider"
+              slices={byProvider}
               totalCostCents={totals.cost_cents}
             />
 

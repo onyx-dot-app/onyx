@@ -22,9 +22,13 @@ import { Agent } from "@/lib/agents/types";
 
 export function PersonaMessagesChart({
   availablePersonas,
+  agentsError,
+  agentsLoading,
   timeRange,
 }: {
   availablePersonas: Agent[];
+  agentsError?: unknown;
+  agentsLoading?: boolean;
   timeRange: DateRangePickerValue;
 }) {
   const [selectedPersonaId, setSelectedPersonaId] = useState<
@@ -45,8 +49,10 @@ export function PersonaMessagesChart({
     error: personaUniqueUsersError,
   } = usePersonaUniqueUsers(selectedPersonaId, timeRange);
 
-  const isLoading = isPersonaMessagesLoading || isPersonaUniqueUsersLoading;
-  const hasError = personaMessagesError || personaUniqueUsersError;
+  const isLoading =
+    agentsLoading || isPersonaMessagesLoading || isPersonaUniqueUsersLoading;
+  const hasError =
+    agentsError || personaMessagesError || personaUniqueUsersError;
 
   const filteredPersonaList = useMemo(() => {
     if (!availablePersonas) return [];
@@ -110,7 +116,7 @@ export function PersonaMessagesChart({
           ...personaMessagesData.map((entry) => new Date(entry.date).getTime())
         )
       );
-    const dateRange = getDatesList(initialDate);
+    const dateRange = getDatesList(initialDate, timeRange.to);
 
     // Create maps for messages and unique users data
     const messagesMap = new Map(

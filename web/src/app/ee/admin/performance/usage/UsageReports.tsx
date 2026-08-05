@@ -273,6 +273,10 @@ export default function UsageReports() {
   });
 
   useEffect(() => {
+    if (listError) console.error("Failed to load usage reports:", listError);
+  }, [listError]);
+
+  useEffect(() => {
     if (!reports || !pendingReportId) return;
     const completed = reports.find((report) =>
       report.report_name.includes(pendingReportId)
@@ -339,6 +343,7 @@ export default function UsageReports() {
       }, REPORT_TIMEOUT_MS);
       await mutate();
     } catch (error) {
+      console.error("Failed to start usage report generation:", error);
       const message = error instanceof Error ? error.message : "unknown error";
       toast.error(`Failed to start report generation: ${message}`);
     } finally {
@@ -364,7 +369,7 @@ export default function UsageReports() {
           </Text>
         </div>
         <GenerateReportMenu
-          disabled={requesting || pending || listLoading || Boolean(listError)}
+          disabled={requesting || pending || listLoading}
           pending={pending}
           onGenerate={(period) => void requestReport(period)}
         />

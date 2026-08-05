@@ -59,11 +59,11 @@ export const useOnyxBotAnalytics = (timeRange: DateRangePickerValue) => {
   };
 };
 
-export function getDatesList(startDate: Date): string[] {
+export function getDatesList(startDate: Date, endDate = new Date()): string[] {
   const datesList: string[] = [];
-  const endDate = new Date(); // current date
+  const lastDate = new Date(endDate);
 
-  for (let d = new Date(startDate); d <= endDate; d.setDate(d.getDate() + 1)) {
+  for (let d = new Date(startDate); d <= lastDate; d.setDate(d.getDate() + 1)) {
     const dateStr = d.toISOString().split("T")[0]; // convert date object to 'YYYY-MM-DD' format
     if (dateStr !== undefined) {
       datesList.push(dateStr);

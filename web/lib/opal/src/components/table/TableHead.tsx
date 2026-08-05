@@ -90,7 +90,7 @@ export default function TableHead({
       <div
         className={cn(
           "flex items-center gap-1",
-          alignment === "right" && "flex-row-reverse",
+          alignment === "right" && "justify-end",
           alignment === "center" && "justify-center"
         )}
       >

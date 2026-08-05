@@ -46,12 +46,12 @@ interface OnyxColumnBase<TData> {
   id: string;
   def: ColumnDef<TData, any>;
   width: ColumnWidth | ((size: TableSize) => ColumnWidth);
-  alignment?: ColumnAlignment;
 }
 
 /** Qualifier column — leading avatar/icon/checkbox column. */
 export interface OnyxQualifierColumn<TData> extends OnyxColumnBase<TData> {
   kind: "qualifier";
+  alignment?: never;
   /** Content type for body-row `<TableQualifier>`. */
   content: QualifierContentType;
   /** Return the icon component to render for a row (for "icon" content). */
@@ -69,6 +69,7 @@ export interface OnyxQualifierColumn<TData> extends OnyxColumnBase<TData> {
 /** Data column — accessor-based column with sorting/resizing. */
 export interface OnyxDataColumn<TData> extends OnyxColumnBase<TData> {
   kind: "data";
+  alignment?: ColumnAlignment;
   /** Override the sort icon for this column. */
   icon?: (sorted: SortDirection) => IconFunctionComponent;
 }
@@ -76,11 +77,13 @@ export interface OnyxDataColumn<TData> extends OnyxColumnBase<TData> {
 /** Display column — non-accessor column with custom rendering. */
 export interface OnyxDisplayColumn<TData> extends OnyxColumnBase<TData> {
   kind: "display";
+  alignment?: ColumnAlignment;
 }
 
 /** Actions column — fixed column with visibility/sorting popovers. */
 export interface OnyxActionsColumn<TData> extends OnyxColumnBase<TData> {
   kind: "actions";
+  alignment?: never;
   /** Show column visibility popover. @default true */
   showColumnVisibility?: boolean;
   /** Show sorting popover. @default true */

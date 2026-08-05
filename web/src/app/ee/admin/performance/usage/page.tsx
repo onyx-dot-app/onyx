@@ -16,7 +16,7 @@ export default function UsagePage() {
       <SettingsLayouts.Header
         icon={route.icon}
         title={route.title}
-        description="Monitor workspace spend, review usage by user, and manage spending limits."
+        description="Monitor workspace spend and review usage by user."
         divider
       />
       <SettingsLayouts.Body>
