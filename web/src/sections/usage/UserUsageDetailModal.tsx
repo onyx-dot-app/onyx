@@ -1,7 +1,7 @@
 "use client";
 
 import { useMemo } from "react";
-import { Button, Modal, ProgressBar, Text, Tooltip } from "@opal/components";
+import { Modal, ProgressBar, Text, Tooltip } from "@opal/components";
 import { Section } from "@opal/layouts";
 import type { UsageExportUser } from "@/lib/usage/userUsage";
 import { formatCost, formatTokens } from "@/sections/usage/SpendByUserTable";
@@ -83,19 +83,30 @@ function StatCell({ label, value }: { label: string; value: string }) {
   );
 }
 
-interface BreakdownListProps {
+function sharePercent(share: number): string {
+  return `${(share * 100).toFixed(share >= 0.1 ? 0 : 1)}%`;
+}
+
+interface BreakdownSectionProps {
   title: string;
   slices: BreakdownSlice[];
   totalCostCents: number;
 }
 
-function BreakdownList({ title, slices, totalCostCents }: BreakdownListProps) {
+/** Stacked variant: full-width rows under a prominent, ruled section heading. */
+function BreakdownSection({
+  title,
+  slices,
+  totalCostCents,
+}: BreakdownSectionProps) {
   if (slices.length === 0) return null;
   return (
-    <div className="flex flex-col gap-2">
-      <Text font="main-ui-action" color="text-04">
-        {title}
-      </Text>
+    <div className="flex flex-col gap-2 rounded-12 border border-border-01 bg-background-neutral-00 p-3">
+      <div className="border-b border-border-01 pb-2">
+        <Text font="main-content-emphasis" color="text-05">
+          {title}
+        </Text>
+      </div>
       <div className="flex flex-col gap-2.5">
         {slices.map((slice) => {
           const share =
@@ -113,7 +124,7 @@ function BreakdownList({ title, slices, totalCostCents }: BreakdownListProps) {
                     {formatCost(slice.cost_cents)}
                   </Text>
                   <Text font="secondary-body" color="text-03">
-                    {` · ${(share * 100).toFixed(share >= 0.1 ? 0 : 1)}% · ${formatTokens(slice.tokens)} tokens`}
+                    {` · ${sharePercent(share)} · ${formatTokens(slice.tokens)} tokens`}
                   </Text>
                 </span>
               </div>
@@ -147,7 +158,7 @@ function DailySpendStrip({ days }: { days: DailySpend[] }) {
             (day) => `${formatDayLabel(day.day)}, ${formatCost(day.cost_cents)}`
           )
           .join("; ")}`}
-        className="flex h-14 items-end gap-[2px]"
+        className="flex h-14 items-end justify-center gap-[2px]"
       >
         {days.map((day) => (
           <Tooltip
@@ -156,8 +167,9 @@ function DailySpendStrip({ days }: { days: DailySpend[] }) {
             side="top"
             delayDuration={0}
           >
-            {/* Full-height hit target so quiet days are hoverable too. */}
-            <div className="flex h-full flex-1 items-end">
+            {/* Capped width keeps 2-day ranges from rendering as giant slabs;
+                full-height hit target so quiet days are hoverable too. */}
+            <div className="flex h-full max-w-8 flex-1 items-end">
               <div
                 className="w-full rounded-t-[2px] bg-theme-blue-05"
                 style={{
@@ -172,12 +184,13 @@ function DailySpendStrip({ days }: { days: DailySpend[] }) {
           </Tooltip>
         ))}
       </div>
-      <div className="flex justify-between">
+      {/* One centered caption instead of edge labels: bars are width-capped and
+          centered, so on short ranges there are no row edges to align to. */}
+      <div className="flex justify-center">
         <Text font="secondary-body" color="text-03">
-          {formatDayLabel(days[0]!.day)}
-        </Text>
-        <Text font="secondary-body" color="text-03">
-          {formatDayLabel(days[days.length - 1]!.day)}
+          {days.length === 1
+            ? formatDayLabel(days[0]!.day)
+            : `${formatDayLabel(days[0]!.day)} – ${formatDayLabel(days[days.length - 1]!.day)}`}
         </Text>
       </div>
     </div>
@@ -241,21 +254,26 @@ export default function UserUsageDetailModal({
             </div>
 
             <DailySpendStrip days={days} />
-            <BreakdownList
-              title="By model"
-              slices={byModel}
-              totalCostCents={totals.cost_cents}
-            />
-            <BreakdownList
-              title="By flow"
-              slices={byFlow}
-              totalCostCents={totals.cost_cents}
-            />
-            <BreakdownList
-              title="By provider"
-              slices={byProvider}
-              totalCostCents={totals.cost_cents}
-            />
+
+            {/* Tighter gap than the modal's section rhythm: these three read as
+                one group of breakdowns, not three unrelated sections. */}
+            <div className="flex flex-col gap-2">
+              <BreakdownSection
+                title="By model"
+                slices={byModel}
+                totalCostCents={totals.cost_cents}
+              />
+              <BreakdownSection
+                title="By flow"
+                slices={byFlow}
+                totalCostCents={totals.cost_cents}
+              />
+              <BreakdownSection
+                title="By provider"
+                slices={byProvider}
+                totalCostCents={totals.cost_cents}
+              />
+            </div>
 
             {byModel.length === 0 && (
               <Text font="main-ui-body" color="text-03">
@@ -264,11 +282,6 @@ export default function UserUsageDetailModal({
             )}
           </Section>
         </Modal.Body>
-        <Modal.Footer>
-          <Button prominence="secondary" onClick={() => onOpenChange(false)}>
-            Done
-          </Button>
-        </Modal.Footer>
       </Modal.Content>
     </Modal>
   );

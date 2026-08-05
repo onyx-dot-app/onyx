@@ -148,6 +148,37 @@ export const DetailModal: Story = {
   ),
 };
 
+/** Two-day range: checks the daily-spend chart no longer renders giant slabs. */
+function shortRangeUser(): UsageExportUser {
+  const base = USERS[1]!;
+  const days = ["2026-08-02", "2026-08-03"];
+  const records = (base.records ?? []).filter((_, index) => index < 12);
+  const shortRecords = records.map((record, index) => ({
+    ...record,
+    day: days[index % days.length]!,
+  }));
+  const totals = shortRecords.reduce(
+    (sum, record) => ({
+      input_tokens: sum.input_tokens + record.input_tokens,
+      output_tokens: sum.output_tokens + record.output_tokens,
+      cache_read_tokens: sum.cache_read_tokens + record.cache_read_tokens,
+      cost_cents: sum.cost_cents + record.cost_cents,
+    }),
+    { input_tokens: 0, output_tokens: 0, cache_read_tokens: 0, cost_cents: 0 }
+  );
+  return { email: base.email, totals, records: shortRecords };
+}
+
+export const DetailModalShortRange: Story = {
+  render: () => (
+    <UserUsageDetailModal
+      user={shortRangeUser()}
+      periodLabel="Aug 2, 2026 – Aug 3, 2026"
+      onOpenChange={() => {}}
+    />
+  ),
+};
+
 export const Empty: Story = {
   render: () => <SpendByUserTable users={[]} onSelectUser={() => {}} />,
 };
