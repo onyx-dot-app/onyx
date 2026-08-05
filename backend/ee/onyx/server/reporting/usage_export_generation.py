@@ -131,8 +131,9 @@ def create_new_usage_report(
     db_session: Session,
     user_id: UUID_ID | None,  # None = auto-generated
     period: tuple[datetime, datetime] | None,
+    report_id: str | None = None,  # None = auto-generated (e.g. scheduled reports)
 ) -> UsageReportMetadata:
-    report_id = str(uuid.uuid4())
+    report_id = report_id or str(uuid.uuid4())
     file_store = get_default_file_store()
 
     messages_file_id = generate_chat_messages_report(
