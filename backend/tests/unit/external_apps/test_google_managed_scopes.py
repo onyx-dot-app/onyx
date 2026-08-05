@@ -11,11 +11,7 @@ from onyx.external_apps.providers import registry
 from onyx.external_apps.providers.base import OAuthExternalAppProvider
 from onyx.external_apps.providers.gmail import GmailAction
 from onyx.external_apps.providers.google_drive import GoogleDriveAction
-from onyx.external_apps.providers.registry import (
-    PROVIDERS,
-    get_endpoint_catalog,
-    get_unavailable_endpoints,
-)
+from onyx.external_apps.providers.registry import PROVIDERS, get_endpoint_catalog
 
 # Requesting any of these subjects the OAuth client to an annual third-party
 # security assessment: https://support.google.com/cloud/answer/13464325
@@ -78,7 +74,6 @@ def test_self_hosted_keeps_the_full_catalog(app_type: ExternalAppType) -> None:
     """Without Onyx's client nothing is filtered — self-hosted deployments run
     their own OAuth client and keep every action."""
     assert not registry.uses_onyx_oauth_client(app_type)
-    assert get_unavailable_endpoints(app_type) == []
     assert get_endpoint_catalog(app_type) == PROVIDERS[app_type].spec.endpoint_catalog
 
 
@@ -87,28 +82,21 @@ def test_gmail_is_send_only_on_onyx_client() -> None:
     assert [e.id for e in get_endpoint_catalog(ExternalAppType.GMAIL)] == [
         GmailAction.MESSAGES_SEND
     ]
-    unavailable = {e.id for e in get_unavailable_endpoints(ExternalAppType.GMAIL)}
-    assert GmailAction.MESSAGES_READ in unavailable
-    assert GmailAction.DRAFTS_CREATE in unavailable
-    assert GmailAction.MESSAGES_SEND not in unavailable
 
 
 @pytest.mark.usefixtures("onyx_client")
 def test_drive_drops_only_shared_drive_listing_on_onyx_client() -> None:
     """`drive.file` + the Docs API cover the rest of the catalog; only
     drives.list needs a Drive-wide scope."""
-    assert [e.id for e in get_unavailable_endpoints(ExternalAppType.GOOGLE_DRIVE)] == [
-        GoogleDriveAction.DRIVES_READ
-    ]
-    assert GoogleDriveAction.DOCS_UPDATE in {
-        e.id for e in get_endpoint_catalog(ExternalAppType.GOOGLE_DRIVE)
-    }
+    withheld = {
+        e.id for e in PROVIDERS[ExternalAppType.GOOGLE_DRIVE].spec.endpoint_catalog
+    } - {e.id for e in get_endpoint_catalog(ExternalAppType.GOOGLE_DRIVE)}
+    assert withheld == {GoogleDriveAction.DRIVES_READ}
 
 
 @pytest.mark.usefixtures("onyx_client")
 def test_calendar_catalog_survives_on_onyx_client() -> None:
     """No Calendar scope is restricted, so the narrowed grant costs no actions."""
-    assert get_unavailable_endpoints(ExternalAppType.GOOGLE_CALENDAR) == []
     assert (
         get_endpoint_catalog(ExternalAppType.GOOGLE_CALENDAR)
         == PROVIDERS[ExternalAppType.GOOGLE_CALENDAR].spec.endpoint_catalog

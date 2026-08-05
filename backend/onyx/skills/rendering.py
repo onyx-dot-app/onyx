@@ -10,10 +10,7 @@ from onyx.db.connector_credential_pair import get_connector_credential_pairs_for
 from onyx.db.enums import EndpointPolicy, ExternalAppType, GatedAppKind
 from onyx.db.gated_app import get_action_policies
 from onyx.db.models import ExternalApp, User
-from onyx.external_apps.providers.registry import (
-    action_policy_views,
-    get_unavailable_endpoints,
-)
+from onyx.external_apps.providers.registry import action_policy_views
 from onyx.utils.logger import setup_logger
 
 logger = setup_logger()
@@ -85,29 +82,33 @@ def build_action_availability_section(
     app_type: ExternalAppType,
     stored: dict[str, EndpointPolicy],
 ) -> str:
-    """Render the warning listing the app's unavailable actions, or an empty
-    string when nothing is disabled. Available actions are intentionally
-    omitted — the skill body already documents what the agent can do; this only
-    fences off what it must not attempt.
+    """Render the list of actions the agent can actually perform: the catalog the
+    app's OAuth grant authorizes, minus anything an admin set to ``DENY``.
 
-    An action is unavailable either because an admin set ``DENY`` or because the
-    OAuth grant can't authorize it — the latter never reaches the policy map,
-    being absent from the catalog entirely.
+    An allow-list rather than a deny-list, so the agent plans against what it
+    has. The skill body documents the provider's full surface, which can outrun
+    the grant — a narrower OAuth client (see ``get_endpoint_catalog``) leaves
+    documented commands unauthorized, and enumerating those instead would mean
+    listing everything the agent *can't* do.
 
     ``stored`` is the app's per-action overrides; an empty map falls back to the
     catalog defaults.
     """
-    unavailable = [
-        endpoint.normalised_name for endpoint in get_unavailable_endpoints(app_type)
-    ] + [
-        view.normalised_name
+    available = [
+        view
         for view in action_policy_views(app_type, stored)
-        if view.state == EndpointPolicy.DENY
+        if view.state != EndpointPolicy.DENY
     ]
-    if not unavailable:
-        return ""
-    header = "These actions are unavailable and should not be attempted:"
-    return "\n".join([header, "", *(f"- {name}" for name in unavailable)])
+    if not available:
+        return "No actions are available for this app — do not use this skill."
+    header = "Only these actions are available; anything else will be rejected:"
+    return "\n".join(
+        [
+            header,
+            "",
+            *(f"- {view.normalised_name} — {view.description}" for view in available),
+        ]
+    )
 
 
 def render_external_app_skill(
@@ -126,9 +127,7 @@ def render_external_app_skill(
         if external_app
         else {}
     )
-    section = build_action_availability_section(app_type, stored)
-    if section:
-        return template.replace(ACTION_AVAILABILITY_PLACEHOLDER, section)
-    # Nothing disabled: drop the placeholder and its trailing blank line so the
-    # surrounding sections stay flush.
-    return template.replace(f"{ACTION_AVAILABILITY_PLACEHOLDER}\n\n", "")
+    return template.replace(
+        ACTION_AVAILABILITY_PLACEHOLDER,
+        build_action_availability_section(app_type, stored),
+    )

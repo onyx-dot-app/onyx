@@ -126,16 +126,6 @@ def get_endpoint_catalog(app_type: ExternalAppType) -> list[EndpointSpec]:
     return list(catalog)
 
 
-def get_unavailable_endpoints(app_type: ExternalAppType) -> list[EndpointSpec]:
-    """The complement of ``get_endpoint_catalog``: actions withheld because the
-    grant in force can't authorize them. Surfaced to the agent so it doesn't
-    attempt calls the provider would reject."""
-    provider = PROVIDERS.get(app_type)
-    if provider is None or not uses_onyx_oauth_client(app_type):
-        return []
-    return [e for e in provider.spec.endpoint_catalog if e.requires_own_oauth_client]
-
-
 def effective_policy(
     endpoint: EndpointSpec,
     stored: dict[str, EndpointPolicy],
