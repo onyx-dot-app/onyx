@@ -151,26 +151,26 @@ export default function SpendByUserTable({
 
   const models = useMemo(
     () =>
-      [
-        ...new Set(
+      Array.from(
+        new Set(
           users.flatMap((user) =>
             (user.records ?? []).map((record) => record.model)
           )
-        ),
-      ].sort(),
+        )
+      ).sort(),
     [users]
   );
   const flows = useMemo(
     () =>
-      [
-        ...new Set(
+      Array.from(
+        new Set(
           users.flatMap((user) =>
             (user.records ?? []).flatMap((record) =>
               record.flow !== undefined ? [record.flow] : []
             )
           )
-        ),
-      ].sort(),
+        )
+      ).sort(),
     [users]
   );
 
