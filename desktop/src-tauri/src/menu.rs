@@ -1,5 +1,6 @@
 use crate::config::ConfigState;
 use crate::debug_log::{log_backend_error, MENU_OPEN_DEBUG_LOG_ID, MENU_TOGGLE_DEVTOOLS_ID};
+use crate::shortcuts::SummonShortcut;
 use crate::window::{focus_main_window, open_chat_window};
 use tauri::image::Image;
 #[cfg(not(target_os = "macos"))]
@@ -18,6 +19,7 @@ const TRAY_ICON_BYTES: &[u8] = include_bytes!("../icons/tray-icon.png");
 const ABOUT_ICON_BYTES: &[u8] = include_bytes!("../icons/128x128.png");
 const TRAY_MENU_OPEN_APP_ID: &str = "tray_open_app";
 const TRAY_MENU_OPEN_CHAT_ID: &str = "tray_open_chat";
+const TRAY_MENU_SUMMON_NEW_CHAT_ID: &str = "tray_summon_new_chat";
 const TRAY_MENU_SHOW_IN_BAR_ID: &str = "tray_show_in_menu_bar";
 const TRAY_MENU_QUIT_ID: &str = "tray_quit";
 pub const MENU_SHOW_MENU_BAR_ID: &str = "show_menu_bar";
@@ -288,14 +290,47 @@ pub fn handle_decorations_toggle(app: &AppHandle) {
 }
 
 fn build_tray_menu(app: &AppHandle) -> tauri::Result<Menu<Wry>> {
-    let open_app = MenuItem::with_id(app, TRAY_MENU_OPEN_APP_ID, "Open Onyx", true, None::<&str>)?;
+    let summon_chord = app
+        .try_state::<SummonShortcut>()
+        .map(|shortcut| shortcut.chord.clone());
+    let summon_opens_new_chat = app.state::<ConfigState>().config().summon_opens_new_chat;
+
+    // Surface the summon chord on whichever tray action it actually triggers.
+    // Tray accelerators are display-only hints here; the real binding is the
+    // global shortcut registered in `shortcuts.rs`.
+    let (open_app_chord, open_chat_chord) = if summon_opens_new_chat {
+        (None, summon_chord.clone())
+    } else {
+        (summon_chord.clone(), None)
+    };
+
+    let open_app = MenuItem::with_id(
+        app,
+        TRAY_MENU_OPEN_APP_ID,
+        "Open Onyx",
+        true,
+        open_app_chord.as_deref(),
+    )?;
     let open_chat = MenuItem::with_id(
         app,
         TRAY_MENU_OPEN_CHAT_ID,
         "Open Chat Window",
         true,
-        None::<&str>,
+        open_chat_chord.as_deref(),
     )?;
+    // Only meaningful while a summon shortcut is registered.
+    let summon_new_chat = if summon_chord.is_some() {
+        Some(CheckMenuItem::with_id(
+            app,
+            TRAY_MENU_SUMMON_NEW_CHAT_ID,
+            "New Chat on Summon",
+            true,
+            summon_opens_new_chat,
+            None::<&str>,
+        )?)
+    } else {
+        None
+    };
     let show_in_menu_bar = CheckMenuItem::with_id(
         app,
         TRAY_MENU_SHOW_IN_BAR_ID,
@@ -308,14 +343,42 @@ fn build_tray_menu(app: &AppHandle) -> tauri::Result<Menu<Wry>> {
     show_in_menu_bar.set_enabled(false)?;
     let quit = PredefinedMenuItem::quit(app, Some("Quit Onyx"))?;
 
-    MenuBuilder::new(app)
-        .item(&open_app)
-        .item(&open_chat)
+    let mut builder = MenuBuilder::new(app).item(&open_app).item(&open_chat);
+    if let Some(item) = summon_new_chat.as_ref() {
+        builder = builder.separator().item(item);
+    }
+    builder
         .separator()
         .item(&show_in_menu_bar)
         .separator()
         .item(&quit)
         .build()
+}
+
+/// Toggle whether the global summon shortcut opens a new chat or just focuses
+/// the window, then rebuild the tray menu so the accelerator hint follows the
+/// action it actually triggers.
+fn handle_summon_new_chat_toggle(app: &AppHandle) {
+    let state = app.state::<ConfigState>();
+    if let Err(e) = state.update_and_persist(|c| c.summon_opens_new_chat = !c.summon_opens_new_chat)
+    {
+        log_backend_error(app, &format!("Failed to save config: {e}"));
+    }
+    refresh_tray_menu(app);
+}
+
+fn refresh_tray_menu(app: &AppHandle) {
+    let Some(tray) = app.tray_by_id(TRAY_ID) else {
+        return;
+    };
+    match build_tray_menu(app) {
+        Ok(menu) => {
+            if let Err(e) = tray.set_menu(Some(menu)) {
+                log_backend_error(app, &format!("Failed to refresh tray menu: {e}"));
+            }
+        }
+        Err(e) => log_backend_error(app, &format!("Failed to rebuild tray menu: {e}")),
+    }
 }
 
 // `TRAY_MENU_SHOW_IN_BAR_ID`'s arm is intentionally kept distinct from the
@@ -334,6 +397,7 @@ fn handle_tray_menu_event(app: &AppHandle, id: &str) {
         TRAY_MENU_QUIT_ID => {
             app.exit(0);
         }
+        TRAY_MENU_SUMMON_NEW_CHAT_ID => handle_summon_new_chat_toggle(app),
         TRAY_MENU_SHOW_IN_BAR_ID => {}
         _ => {}
     }

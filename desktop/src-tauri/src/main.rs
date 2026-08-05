@@ -9,6 +9,7 @@ mod commands;
 mod config;
 mod debug_log;
 mod menu;
+mod shortcuts;
 mod window;
 
 use clap::Parser;
@@ -107,6 +108,9 @@ fn print_debug_startup_banner() {
 /// window's platform tweaks, and Alt-menu/devtools wiring. Every failure here
 /// is logged and non-fatal, so this never needs to return a `Result`.
 fn setup_app(app: &tauri::AppHandle) {
+    // Before the tray, so its menu can reflect whether the shortcut registered.
+    shortcuts::setup_global_shortcuts(app);
+
     if let Err(e) = menu::setup_app_menu(app) {
         debug_log::log_backend_error(app, &format!("Failed to setup menu: {e}"));
     }
@@ -170,6 +174,7 @@ fn main() {
     // `std::process::exit` internally on some platforms.
     #[allow(clippy::expect_used, clippy::exit)]
     tauri::Builder::default()
+        .plugin(tauri_plugin_global_shortcut::Builder::new().build())
         .plugin(tauri_plugin_shell::init())
         .plugin(
             tauri::plugin::Builder::<Wry>::new("chat-external-navigation-handler")
