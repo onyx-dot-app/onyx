@@ -71,6 +71,8 @@ _ENDPOINTS: list[EndpointSpec] = [
             RestRoute(method="GET", path="/drive/v3/drives/{driveId}"),
         ),
         default_policy=EndpointPolicy.ALWAYS,
+        # drives.list needs a Drive-wide scope; `drive.file` can't reach it.
+        requires_own_oauth_client=True,
     ),
     EndpointSpec(
         id=GoogleDriveAction.FILES_CREATE,
@@ -131,6 +133,13 @@ class GoogleDriveProvider(GoogleOAuthProvider, OnyxManagedExtApp):
         # Full drive scope: read, search, create, edit, and delete any of the
         # user's files. Mutations are gated by per-action ASK approval.
         scope="https://www.googleapis.com/auth/drive",
+        # Every Drive-wide scope is restricted, so Onyx's client pairs per-file
+        # access (files Onyx created or the user opened with it) with the Docs
+        # API, which reaches any Google Doc by id.
+        managed_scope=(
+            "https://www.googleapis.com/auth/drive.file "
+            "https://www.googleapis.com/auth/documents"
+        ),
         upstream_url_patterns=[
             "https://www\\.googleapis\\.com/drive/.*",
             # Content uploads use the separate /upload host path.

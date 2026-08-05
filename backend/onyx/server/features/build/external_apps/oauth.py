@@ -20,7 +20,10 @@ from onyx.db.models import ExternalApp, User
 from onyx.error_handling.error_codes import OnyxErrorCode
 from onyx.error_handling.exceptions import OnyxError
 from onyx.external_apps.providers.base import OAuthExternalAppProvider
-from onyx.external_apps.providers.registry import get_provider_or_raise
+from onyx.external_apps.providers.registry import (
+    get_provider_or_raise,
+    uses_onyx_oauth_client,
+)
 from onyx.external_apps.token_utils import stamp_expires_at
 from onyx.redis.redis_pool import get_redis_client
 from onyx.server.features.build.external_apps.models import (
@@ -118,7 +121,9 @@ def start_external_app_oauth(
     params: dict[str, str] = {
         "client_id": client_id,
         "redirect_uri": redirect_uri,
-        oauth.scope_param: oauth.scope,
+        oauth.scope_param: oauth.scope_for(
+            onyx_oauth_client=uses_onyx_oauth_client(app.app_type)
+        ),
         "state": state,
         **oauth.extra_authorize_params,
     }

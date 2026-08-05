@@ -18,6 +18,7 @@ from onyx.external_apps.providers.hubspot import HubspotProvider
 from onyx.external_apps.providers.linear import LinearProvider
 from onyx.external_apps.providers.notion import NotionProvider
 from onyx.external_apps.providers.slack import SlackProvider
+from shared_configs.configs import MULTI_TENANT
 
 _PROVIDER_CLASSES: list[type[ExternalAppProvider]] = [
     SlackProvider,
@@ -61,6 +62,14 @@ def get_onyx_managed_provider(app_type: ExternalAppType) -> OnyxManagedExtApp | 
     return provider if isinstance(provider, OnyxManagedExtApp) else None
 
 
+def uses_onyx_oauth_client(app_type: ExternalAppType) -> bool:
+    """Whether this app authenticates through Onyx's own OAuth client rather than
+    credentials the deployment owns — true only for Onyx-managed built-ins on
+    cloud. That client is verified with the upstream provider, so it requests a
+    narrower scope set and exposes correspondingly fewer actions."""
+    return MULTI_TENANT and get_onyx_managed_provider(app_type) is not None
+
+
 def get_provider_or_raise(app: ExternalApp) -> ExternalAppProvider:
     provider = get_provider_for_app(app)
     if provider is None:
@@ -98,15 +107,33 @@ def _descriptor_for(
                 description=e.description,
                 default_policy=e.default_policy,
             )
-            for e in spec.endpoint_catalog
+            for e in get_endpoint_catalog(spec.app_type)
         ],
     )
 
 
 def get_endpoint_catalog(app_type: ExternalAppType) -> list[EndpointSpec]:
-    """The action catalog for an app_type (empty for CUSTOM / unregistered)."""
+    """The action catalog for an app_type (empty for CUSTOM / unregistered),
+    minus the actions the OAuth grant in force can't cover. Every consumer
+    (admin view, policy resolution, the runtime gate) funnels through here, so
+    none of them can offer an action the grant won't authorize."""
     provider = PROVIDERS.get(app_type)
-    return list(provider.spec.endpoint_catalog) if provider is not None else []
+    if provider is None:
+        return []
+    catalog = provider.spec.endpoint_catalog
+    if uses_onyx_oauth_client(app_type):
+        return [e for e in catalog if not e.requires_own_oauth_client]
+    return list(catalog)
+
+
+def get_unavailable_endpoints(app_type: ExternalAppType) -> list[EndpointSpec]:
+    """The complement of ``get_endpoint_catalog``: actions withheld because the
+    grant in force can't authorize them. Surfaced to the agent so it doesn't
+    attempt calls the provider would reject."""
+    provider = PROVIDERS.get(app_type)
+    if provider is None or not uses_onyx_oauth_client(app_type):
+        return []
+    return [e for e in provider.spec.endpoint_catalog if e.requires_own_oauth_client]
 
 
 def effective_policy(

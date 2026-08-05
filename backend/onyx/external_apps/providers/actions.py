@@ -116,3 +116,6 @@ class EndpointSpec(BaseModel):
     # The policy a freshly-created built-in app starts this action at, unless the
     # admin overrides it.
     default_policy: EndpointPolicy = EndpointPolicy.ASK
+    # Set when the action needs a scope Onyx's own OAuth client doesn't request,
+    # which drops it from the catalog there (``registry.get_endpoint_catalog``).
+    requires_own_oauth_client: bool = False

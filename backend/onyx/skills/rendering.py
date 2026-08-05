@@ -10,7 +10,10 @@ from onyx.db.connector_credential_pair import get_connector_credential_pairs_for
 from onyx.db.enums import EndpointPolicy, ExternalAppType, GatedAppKind
 from onyx.db.gated_app import get_action_policies
 from onyx.db.models import ExternalApp, User
-from onyx.external_apps.providers.registry import action_policy_views
+from onyx.external_apps.providers.registry import (
+    action_policy_views,
+    get_unavailable_endpoints,
+)
 from onyx.utils.logger import setup_logger
 
 logger = setup_logger()
@@ -82,23 +85,29 @@ def build_action_availability_section(
     app_type: ExternalAppType,
     stored: dict[str, EndpointPolicy],
 ) -> str:
-    """Render the warning listing the app's ``DENY`` (unavailable) actions, or an
-    empty string when nothing is disabled. Available actions are intentionally
+    """Render the warning listing the app's unavailable actions, or an empty
+    string when nothing is disabled. Available actions are intentionally
     omitted — the skill body already documents what the agent can do; this only
     fences off what it must not attempt.
+
+    An action is unavailable either because an admin set ``DENY`` or because the
+    OAuth grant can't authorize it — the latter never reaches the policy map,
+    being absent from the catalog entirely.
 
     ``stored`` is the app's per-action overrides; an empty map falls back to the
     catalog defaults.
     """
-    disabled = [
-        f"- {view.normalised_name}"
+    unavailable = [
+        endpoint.normalised_name for endpoint in get_unavailable_endpoints(app_type)
+    ] + [
+        view.normalised_name
         for view in action_policy_views(app_type, stored)
         if view.state == EndpointPolicy.DENY
     ]
-    if not disabled:
+    if not unavailable:
         return ""
     header = "These actions are unavailable and should not be attempted:"
-    return "\n".join([header, "", *disabled])
+    return "\n".join([header, "", *(f"- {name}" for name in unavailable)])
 
 
 def render_external_app_skill(

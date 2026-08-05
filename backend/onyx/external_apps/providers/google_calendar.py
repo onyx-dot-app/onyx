@@ -84,6 +84,13 @@ class GoogleCalendarProvider(GoogleOAuthProvider, OnyxManagedExtApp):
         app_type=ExternalAppType.GOOGLE_CALENDAR,
         app_name="Google Calendar",
         scope="https://www.googleapis.com/auth/calendar",
+        # No Calendar scope is restricted, so this is just the least-privilege
+        # spelling of `auth/calendar` — the whole catalog survives.
+        managed_scope=(
+            "https://www.googleapis.com/auth/calendar.events "
+            "https://www.googleapis.com/auth/calendar.calendarlist.readonly "
+            "https://www.googleapis.com/auth/calendar.freebusy"
+        ),
         upstream_url_patterns=["https://www\\.googleapis\\.com/calendar/.*"],
         google_api_name="Google Calendar API",
         endpoint_catalog=_ENDPOINTS,

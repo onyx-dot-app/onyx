@@ -35,7 +35,9 @@ def test_registered_as_managed_drive_provider() -> None:
 
 def test_scope_and_patterns_cover_read_and_upload() -> None:
     spec = _provider().spec
-    # The single `auth/drive` scope also authorizes the Google Docs API.
+    # The single `auth/drive` scope also authorizes the Google Docs API. Onyx's
+    # own OAuth client requests the narrower `managed_scope` instead — see
+    # test_google_managed_scopes.py.
     assert spec.oauth.scope == "https://www.googleapis.com/auth/drive"
     # The /upload host path is required for content uploads to be token-injected;
     # the Docs API lives on its own `docs.googleapis.com` host.
