@@ -1,10 +1,12 @@
 from functools import cached_property
+from typing import Any, cast
 
 import pytest
 
 from onyx.configs.constants import DocumentSource
 from onyx.connectors import source_operations as source_operations_module
 from onyx.connectors.capability_checks.models import CredentialCapability
+from onyx.connectors.credentials_provider import OnyxStaticCredentialsProvider
 from onyx.connectors.source_operations import (
     OperationConsumes,
     SourceOperations,
@@ -18,6 +20,11 @@ from onyx.connectors.source_operations import (
 def isolated_registry(monkeypatch: pytest.MonkeyPatch) -> None:
     """Isolates the gateway registry so test classes never leak globally."""
     monkeypatch.setattr(source_operations_module, "_SOURCE_OPERATIONS_BY_SOURCE", {})
+
+
+def _static_provider() -> OnyxStaticCredentialsProvider:
+    """Builds a throwaway credentials provider for gateway construction."""
+    return OnyxStaticCredentialsProvider(None, "test", {})
 
 
 @pytest.mark.usefixtures("isolated_registry")
@@ -397,7 +404,7 @@ def test_variant_bearing_operation_requires_a_declared_variant() -> None:
         def list_channels(self, *, variant: str | None = None) -> str | None:
             return variant
 
-    gateway = _VariantOperations()
+    gateway = _VariantOperations(credentials_provider=_static_provider())
 
     # Under test and postcondition.
     assert gateway.list_channels(variant="public") == "public"
@@ -429,4 +436,65 @@ def test_variantless_operation_is_not_wrapped() -> None:
             return "history"
 
     # Under test and postcondition.
-    assert _PlainOperations().fetch_history() == "history"
+    gateway = _PlainOperations(credentials_provider=_static_provider())
+    assert gateway.fetch_history() == "history"
+
+
+@pytest.mark.usefixtures("isolated_registry")
+def test_framework_constructor_stores_provider_and_config() -> None:
+    """Verifies gateways construct uniformly from a provider plus config."""
+
+    # Precondition.
+    class _SlackOperations(SourceOperations):
+        source = DocumentSource.SLACK
+        sdk_modules = ()
+
+    provider = _static_provider()
+
+    # Under test.
+    gateway = _SlackOperations(
+        credentials_provider=provider,
+        connector_specific_config={"workspace": "onyx"},
+    )
+    configless = _SlackOperations(credentials_provider=provider)
+
+    # Postcondition.
+    assert gateway.credentials_provider is provider
+    assert gateway.connector_specific_config == {"workspace": "onyx"}
+    assert configless.connector_specific_config is None
+
+
+@pytest.mark.usefixtures("isolated_registry")
+def test_framework_constructor_is_keyword_only() -> None:
+    """
+    Verifies positional construction is rejected, so every construction site
+    names its inputs and cannot silently swap them.
+    """
+
+    # Precondition.
+    class _SlackOperations(SourceOperations):
+        source = DocumentSource.SLACK
+        sdk_modules = ()
+
+    # Under test and postcondition. ``Any``-cast to exercise at runtime the
+    # call shape ty rejects statically.
+    with pytest.raises(TypeError):
+        cast(Any, _SlackOperations)(_static_provider())
+
+
+@pytest.mark.usefixtures("isolated_registry")
+def test_init_override_is_rejected() -> None:
+    """
+    Verifies a gateway cannot define ``__init__``: per-gateway constructor
+    signatures would break the runner's uniform gateway construction.
+    """
+
+    # Under test and postcondition.
+    with pytest.raises(TypeError, match="must not override __init__"):
+
+        class _InitOverridingOperations(SourceOperations):
+            source = DocumentSource.SLACK
+            sdk_modules = ()
+
+            def __init__(self) -> None:
+                super().__init__(credentials_provider=_static_provider())

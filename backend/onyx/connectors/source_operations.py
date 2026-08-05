@@ -28,6 +28,7 @@ from pydantic import BaseModel, ConfigDict
 
 from onyx.configs.constants import DocumentSource
 from onyx.connectors.capabilities import CredentialCapability
+from onyx.connectors.interfaces import CredentialsProviderInterface
 
 _SPEC_ATTR = "__source_operation_spec__"
 
@@ -155,9 +156,16 @@ class SourceOperations(ABC):
     - Every public method must be classified with ``@source_operation``. Helpers
       (including any staticmethod/classmethod/property) stay private; data
       models live at module level.
+    - Do not override ``__init__``: every gateway is constructed through the
+      framework constructor below, so the checks runner can construct any
+      registered gateway uniformly. Build clients lazily inside operations or
+      private helpers.
 
     The gateway owns client construction from the credential plus optional
     connector config; operations return plain data, never live SDK objects.
+    Credentials arrive as a provider (built via
+    ``build_db_credentials_provider`` for persisted credentials), which carries
+    the decrypt-audit, refresh write-back, and rotation-lock guarantees.
     """
 
     source: ClassVar[DocumentSource]
@@ -171,6 +179,17 @@ class SourceOperations(ABC):
 
     _operation_specs: ClassVar[Mapping[str, SourceOperationSpec]] = MappingProxyType({})
 
+    def __init__(
+        self,
+        *,
+        credentials_provider: CredentialsProviderInterface,
+        connector_specific_config: dict[str, Any] | None = None,
+    ) -> None:
+        self.credentials_provider = credentials_provider
+        # None on config-less credential-time runs; config-consuming operations
+        # are not called then (their checks skip instead).
+        self.connector_specific_config = connector_specific_config
+
     def __init_subclass__(cls, **kwargs: Any) -> None:
         super().__init_subclass__(**kwargs)
 
@@ -181,6 +200,14 @@ class SourceOperations(ABC):
                 "the import-time enforcement, which scans only the class's "
                 "own namespace. Put shared logic in private module-level "
                 "helpers."
+            )
+
+        if "__init__" in vars(cls):
+            raise TypeError(
+                f"{cls.__name__} must not override __init__: gateways are "
+                "constructed uniformly from a credentials provider plus "
+                "optional connector config. Build clients lazily inside "
+                "operations or private helpers."
             )
 
         # Read the subclass's own namespace, like the method scan below: the
