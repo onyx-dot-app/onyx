@@ -182,14 +182,17 @@ export default function SpendByUserTable({
     if (flow !== ALL && !flows.includes(flow)) setFlow(ALL);
   }, [flow, flows]);
 
-  const rows = useMemo(
-    () =>
-      users.flatMap((user) => {
-        const row = filteredRow(user, model, flow);
-        return row ? [row] : [];
-      }),
-    [users, model, flow]
-  );
+  // Filter on email here rather than passing `searchTerm` to Table: Table's
+  // global filter matches any accessor column, so "500" would surface users by
+  // their token counts even though the field is labelled as an email search.
+  const rows = useMemo(() => {
+    const query = searchTerm.trim().toLowerCase();
+    return users.flatMap((user) => {
+      if (query && !user.email.toLowerCase().includes(query)) return [];
+      const row = filteredRow(user, model, flow);
+      return row ? [row] : [];
+    });
+  }, [users, model, flow, searchTerm]);
 
   return (
     <div className="flex flex-col gap-2">
@@ -242,7 +245,6 @@ export default function SpendByUserTable({
         getRowId={(row) => row.email}
         pageSize={10}
         initialSorting={[{ id: "cost_cents", desc: true }]}
-        searchTerm={searchTerm}
         onRowClick={(row) => onSelectUser(row.email)}
         getRowLabel={(row) => `View usage details for ${row.email}`}
         footer={{}}
