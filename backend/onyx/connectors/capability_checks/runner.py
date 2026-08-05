@@ -28,6 +28,7 @@ from onyx.connectors.factory import identify_connector_class, instantiate_connec
 from onyx.connectors.interfaces import BaseConnector
 from onyx.connectors.models import InputType
 from onyx.db.models import Credential
+from onyx.utils.credential_audit import emit_credential_access
 from onyx.utils.logger import setup_logger
 from onyx.utils.threadpool_concurrency import run_with_timeout
 
@@ -287,6 +288,15 @@ def generate_capability_report(
             e,
         )
 
+    if credential.credential_json:
+        # Distinct decrypt site from ``instantiate_connector``'s paths (which
+        # may not have decrypted at all when instantiation fails). Audit is
+        # best-effort and never raises.
+        emit_credential_access(
+            credential_type="connector",
+            provider=str(source),
+            row_id=credential.id,
+        )
     credential_json = (
         credential.credential_json.get_value(apply_mask=False)
         if credential.credential_json
