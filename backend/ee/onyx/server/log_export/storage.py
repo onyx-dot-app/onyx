@@ -6,15 +6,31 @@ file store: one ``piece_{hostname}.zip`` per container plus one
 celery tasks and the log-export API endpoints.
 """
 
+import os
+import shutil
 import socket
+import tempfile
+import zipfile
 from collections.abc import Sequence
 from datetime import datetime, timedelta, timezone
 from io import BytesIO
 from pathlib import Path
 
-from ee.onyx.server.log_export.collection import build_log_zip
-from ee.onyx.server.log_export.models import LogExportReceipt, LogExportReceiptStatus
+from ee.onyx.server.log_export.collection import (
+    SENSITIVE_DATA_WARNING,
+    BuiltLogZip,
+    build_log_zip,
+)
+from ee.onyx.server.log_export.models import (
+    LogExportBundleManifest,
+    LogExportManifest,
+    LogExportReceipt,
+    LogExportReceiptStatus,
+    LogExportSnapshot,
+    LogExportState,
+)
 from onyx.configs.constants import FileOrigin
+from onyx.file_store.constants import MAX_IN_MEMORY_SIZE, STANDARD_CHUNK_SIZE
 from onyx.file_store.file_store import get_default_file_store
 from onyx.utils.logger import setup_logger
 
@@ -26,8 +42,16 @@ LOG_EXPORT_FILE_ID_PREFIX = "log_export/"
 # the hourly cleanup task deletes them.
 LOG_EXPORT_RETENTION = timedelta(hours=12)
 
+# How long an export waits for worker receipts before reporting ``READY``
+# regardless; also the ``expires=`` of the fanned-out collector tasks, so a task
+# a dead worker never picked up is discarded instead of running late.
+LOG_EXPORT_COLLECTION_DEADLINE = timedelta(seconds=90)
+
 ZIP_FILE_TYPE = "application/zip"
 JSON_FILE_TYPE = "application/json"
+
+BUNDLE_README_FILE_NAME = "README.txt"
+BUNDLE_MANIFEST_FILE_NAME = "manifest.json"
 
 
 def export_file_id_prefix(export_id: str) -> str:
@@ -43,6 +67,141 @@ def piece_file_id(export_id: str, hostname: str) -> str:
 def receipt_file_id(export_id: str, worker_name: str) -> str:
     """Returns the file ID of the given worker's collection receipt."""
     return f"{export_file_id_prefix(export_id)}receipt_{worker_name}.json"
+
+
+def manifest_file_id(export_id: str) -> str:
+    """Returns the file ID of the export's manifest."""
+    return f"{export_file_id_prefix(export_id)}{BUNDLE_MANIFEST_FILE_NAME}"
+
+
+def save_manifest(manifest: LogExportManifest) -> None:
+    """Writes the export's manifest to the file store."""
+    get_default_file_store().save_file(
+        content=BytesIO(manifest.model_dump_json(indent=2).encode("utf-8")),
+        display_name=BUNDLE_MANIFEST_FILE_NAME,
+        file_origin=FileOrigin.LOG_EXPORT,
+        file_type=JSON_FILE_TYPE,
+        file_id=manifest_file_id(manifest.export_id),
+    )
+
+
+def read_export_snapshot(export_id: str) -> LogExportSnapshot | None:
+    """Reads the manifest, receipts, and piece IDs stored for an export.
+
+    Returns:
+        The export's current contents, or None when no manifest exists under its
+        prefix (i.e. the export was never started or has been cleaned up).
+    """
+    file_store = get_default_file_store()
+    prefix = export_file_id_prefix(export_id)
+    file_ids = {record.file_id for record in file_store.list_files_by_prefix(prefix)}
+    if manifest_file_id(export_id) not in file_ids:
+        return None
+    manifest = LogExportManifest.model_validate_json(
+        file_store.read_file(manifest_file_id(export_id)).read()
+    )
+    receipts = [
+        LogExportReceipt.model_validate_json(file_store.read_file(file_id).read())
+        for file_id in sorted(file_ids)
+        if file_id.removeprefix(prefix).startswith("receipt_")
+    ]
+    piece_file_ids = sorted(
+        file_id
+        for file_id in file_ids
+        if file_id.removeprefix(prefix).startswith("piece_")
+    )
+    return LogExportSnapshot(
+        manifest=manifest, receipts=receipts, piece_file_ids=piece_file_ids
+    )
+
+
+def derive_export_state(snapshot: LogExportSnapshot, now: datetime) -> LogExportState:
+    """Returns ``READY`` once every worker reported or the deadline passed."""
+    reported = {receipt.worker_name for receipt in snapshot.receipts}
+    if set(snapshot.manifest.worker_names) <= reported:
+        return LogExportState.READY
+    if now >= snapshot.manifest.deadline:
+        return LogExportState.READY
+    return LogExportState.COLLECTING
+
+
+def _build_bundle_readme(snapshot: LogExportSnapshot) -> str:
+    """Builds the README.txt content describing the download bundle."""
+    manifest = snapshot.manifest
+    lines = [
+        "Onyx log export bundle",
+        "======================",
+        "",
+        SENSITIVE_DATA_WARNING,
+        "",
+        f"Export ID: {manifest.export_id}",
+        f"Onyx version: {manifest.onyx_version}",
+        f"Requested by: {manifest.requester_email}",
+        f"Created at (UTC): {manifest.created_at.isoformat()}",
+        "",
+        "Contents: one piece_<hostname>.zip per host that uploaded logs, plus",
+        f"{BUNDLE_MANIFEST_FILE_NAME} with per-worker receipt outcomes.",
+        "On Kubernetes, each piece samples a single replica per worker type;",
+        "logs from other replicas and from stdout-only pods are not includedas of now.",
+        "",
+        "Worker outcomes:",
+    ]
+    reported = {receipt.worker_name for receipt in snapshot.receipts}
+    for receipt in snapshot.receipts:
+        detail = f" ({receipt.file_count} files, {receipt.size_bytes} bytes)"
+        if receipt.status is not LogExportReceiptStatus.UPLOADED:
+            detail = f" ({receipt.error})" if receipt.error else ""
+        lines.append(f"  {receipt.worker_name}: {receipt.status.value}{detail}")
+    lines.extend(
+        f"  {worker_name}: no receipt (did not report before the deadline)"
+        for worker_name in manifest.worker_names
+        if worker_name not in reported
+    )
+    lines.append("")
+    return "\n".join(lines)
+
+
+def build_export_bundle(snapshot: LogExportSnapshot) -> BuiltLogZip:
+    """Assembles the download zip from an export's stored artifacts.
+
+    The bundle contains a ``README.txt``, a ``manifest.json`` enriched with
+    receipt outcomes, and every stored ``piece_{hostname}.zip``. Pieces are
+    copied in without recompression (they are already DEFLATE zips), streamed in
+    chunks so large pieces never fully load into memory.
+
+    Returns:
+        The bundle per ``BuiltLogZip``; ``log_file_count`` is the number of
+        pieces. The caller owns the buffer and must close it.
+    """
+    file_store = get_default_file_store()
+    bundle_manifest = LogExportBundleManifest(
+        **snapshot.manifest.model_dump(), receipts=snapshot.receipts
+    )
+    zip_buffer: tempfile.SpooledTemporaryFile[bytes] = tempfile.SpooledTemporaryFile(
+        max_size=MAX_IN_MEMORY_SIZE
+    )
+    with zipfile.ZipFile(zip_buffer, "w", zipfile.ZIP_STORED) as zip_file:
+        zip_file.writestr(BUNDLE_README_FILE_NAME, _build_bundle_readme(snapshot))
+        zip_file.writestr(
+            BUNDLE_MANIFEST_FILE_NAME, bundle_manifest.model_dump_json(indent=2)
+        )
+        prefix = export_file_id_prefix(snapshot.manifest.export_id)
+        for piece_id in snapshot.piece_file_ids:
+            arcname = piece_id.removeprefix(prefix)
+            with (
+                file_store.read_file(piece_id, use_tempfile=True) as piece_stream,
+                zip_file.open(arcname, mode="w") as destination,
+            ):
+                shutil.copyfileobj(piece_stream, destination, STANDARD_CHUNK_SIZE)
+
+    zip_buffer.seek(0, os.SEEK_END)
+    size_bytes = zip_buffer.tell()
+    zip_buffer.seek(0)
+    return BuiltLogZip(
+        zip_buffer=zip_buffer,
+        log_file_count=len(snapshot.piece_file_ids),
+        size_bytes=size_bytes,
+    )
 
 
 def collect_logs_into_file_store(
