@@ -41,6 +41,8 @@ class CostOverride(BaseModel):
 
 class UsageExportRecord(BaseModel):
     model: str
+    flow: str
+    provider: str
     day: str  # YYYY-MM-DD
     input_tokens: int
     output_tokens: int
