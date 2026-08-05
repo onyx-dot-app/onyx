@@ -188,9 +188,7 @@ function DailySpendStrip({ days }: { days: DailySpend[] }) {
           centered, so on short ranges there are no row edges to align to. */}
       <div className="flex justify-center">
         <Text font="secondary-body" color="text-03">
-          {days.length === 1
-            ? formatDayLabel(days[0]!.day)
-            : `${formatDayLabel(days[0]!.day)} – ${formatDayLabel(days[days.length - 1]!.day)}`}
+          {`${formatDayLabel(days[0]!.day)} – ${formatDayLabel(days[days.length - 1]!.day)}`}
         </Text>
       </div>
     </div>
