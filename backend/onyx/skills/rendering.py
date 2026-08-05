@@ -82,33 +82,23 @@ def build_action_availability_section(
     app_type: ExternalAppType,
     stored: dict[str, EndpointPolicy],
 ) -> str:
-    """Render the list of actions the agent can actually perform: the catalog the
-    app's OAuth grant authorizes, minus anything an admin set to ``DENY``.
-
-    An allow-list rather than a deny-list, so the agent plans against what it
-    has. The skill body documents the provider's full surface, which can outrun
-    the grant — a narrower OAuth client (see ``get_endpoint_catalog``) leaves
-    documented commands unauthorized, and enumerating those instead would mean
-    listing everything the agent *can't* do.
+    """Render the warning listing the app's ``DENY`` (unavailable) actions, or an
+    empty string when nothing is disabled. Available actions are intentionally
+    omitted — the skill body already documents what the agent can do; this only
+    fences off what it must not attempt.
 
     ``stored`` is the app's per-action overrides; an empty map falls back to the
     catalog defaults.
     """
-    available = [
-        view
+    disabled = [
+        f"- {view.normalised_name}"
         for view in action_policy_views(app_type, stored)
-        if view.state != EndpointPolicy.DENY
+        if view.state == EndpointPolicy.DENY
     ]
-    if not available:
-        return "No actions are available for this app — do not use this skill."
-    header = "Only these actions are available; anything else will be rejected:"
-    return "\n".join(
-        [
-            header,
-            "",
-            *(f"- {view.normalised_name} — {view.description}" for view in available),
-        ]
-    )
+    if not disabled:
+        return ""
+    header = "These actions are unavailable and should not be attempted:"
+    return "\n".join([header, "", *disabled])
 
 
 def render_external_app_skill(
@@ -127,7 +117,9 @@ def render_external_app_skill(
         if external_app
         else {}
     )
-    return template.replace(
-        ACTION_AVAILABILITY_PLACEHOLDER,
-        build_action_availability_section(app_type, stored),
-    )
+    section = build_action_availability_section(app_type, stored)
+    if section:
+        return template.replace(ACTION_AVAILABILITY_PLACEHOLDER, section)
+    # Nothing disabled: drop the placeholder and its trailing blank line so the
+    # surrounding sections stay flush.
+    return template.replace(f"{ACTION_AVAILABILITY_PLACEHOLDER}\n\n", "")
