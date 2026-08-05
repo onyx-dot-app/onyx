@@ -31,7 +31,9 @@ function sliceBy(
     slice.tokens += record.input_tokens + record.output_tokens;
     byLabel.set(label, slice);
   }
-  return [...byLabel.values()].sort((a, b) => b.cost_cents - a.cost_cents);
+  return Array.from(byLabel.values()).sort(
+    (a, b) => b.cost_cents - a.cost_cents
+  );
 }
 
 interface DailySpend {
@@ -44,7 +46,7 @@ function dailySpend(user: UsageExportUser): DailySpend[] {
   for (const record of user.records ?? []) {
     byDay.set(record.day, (byDay.get(record.day) ?? 0) + record.cost_cents);
   }
-  const days = [...byDay.keys()].sort();
+  const days = Array.from(byDay.keys()).sort();
   if (days.length === 0) return [];
   const filled: DailySpend[] = [];
   const first = days[0]!;
