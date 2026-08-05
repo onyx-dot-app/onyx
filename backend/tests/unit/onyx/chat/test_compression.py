@@ -11,6 +11,7 @@ from onyx.chat.compression import (
     generate_summary,
     get_compression_params,
     get_messages_to_summarize,
+    get_summary_parent_message_id,
 )
 from onyx.configs.constants import MessageType
 from onyx.llm.models import AssistantMessage, SystemMessage, UserMessage
@@ -197,6 +198,32 @@ def test_no_user_in_recent_tail_keeps_last_user_exchange() -> None:
     )
     assert [m.id for m in result.recent_messages] == [3, 4]
     assert [m.id for m in result.older_messages] == [1, 2]
+
+
+def test_summary_parent_is_last_user_message() -> None:
+    """Summaries parent to the last USER message so every sibling branch
+    (multi-model answers, regenerations) can find them."""
+    messages = [
+        create_mock_message(1, "q1", 100),
+        create_mock_message(2, "a1", 100, MessageType.ASSISTANT),
+        create_mock_message(3, "q2", 100),
+        create_mock_message(4, "a2", 100, MessageType.ASSISTANT),
+    ]
+    assert (
+        get_summary_parent_message_id(messages)  # ty: ignore[invalid-argument-type]
+        == 3
+    )
+
+
+def test_summary_parent_falls_back_to_tail_without_user_messages() -> None:
+    messages = [
+        create_mock_message(1, "a1", 100, MessageType.ASSISTANT),
+        create_mock_message(2, "a2", 100, MessageType.ASSISTANT),
+    ]
+    assert (
+        get_summary_parent_message_id(messages)  # ty: ignore[invalid-argument-type]
+        == 2
+    )
 
 
 def test_no_user_messages_at_all_skips_compression() -> None:

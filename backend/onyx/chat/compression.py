@@ -161,6 +161,21 @@ def find_summary_for_branch(
     return None
 
 
+def get_summary_parent_message_id(chat_history: list[ChatMessage]) -> int:
+    """Parent for a new summary: the last USER message in the chain.
+
+    Every sibling branch — multi-model answers, regenerations — shares that
+    USER message, so the summary applies to whichever answer the user
+    continues from. Parenting to the assistant tail would orphan the summary
+    for all but that one branch (find_summary_for_branch matches on
+    parent_message_id being in the branch's history).
+    """
+    for msg in reversed(chat_history):
+        if msg.message_type == MessageType.USER:
+            return msg.id
+    return chat_history[-1].id
+
+
 def get_messages_to_summarize(
     chat_history: list[ChatMessage],
     existing_summary: ChatMessage | None,
@@ -458,7 +473,7 @@ def compress_chat_history(
                     message_type=MessageType.ASSISTANT,
                     message=summary_text,
                     token_count=summary_token_count,
-                    parent_message_id=chat_history[-1].id,
+                    parent_message_id=get_summary_parent_message_id(chat_history),
                     last_summarized_message_id=summary_content.older_messages[-1].id,
                 )
                 write_session.add(summary_message)
