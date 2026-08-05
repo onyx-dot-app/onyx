@@ -108,6 +108,7 @@ from onyx.llm.utils import (
     litellm_exception_to_safe_error,
     scrub_sensitive_values,
 )
+from onyx.natural_language_processing.utils import get_tokenizer
 from onyx.onyxbot.slack.models import SlackContext
 from onyx.prompts.prompt_utils import substitute_user_placeholders
 from onyx.server.query_and_chat.chat_utils import mime_type_to_chat_file_type
@@ -762,11 +763,15 @@ def build_chat_turn(
                 hook_result, message_text
             )
 
+        # Store with the model-agnostic default tokenizer (same convention as
+        # assistant/summary rows in save_chat.py) so budget math sums a single
+        # unit even after mid-session model switches.
+        default_tokenizer = get_tokenizer(None, None)
         user_message = create_new_chat_message(
             chat_session_id=chat_session.id,
             parent_message=parent_message,
             message=message_text,
-            token_count=token_counter(message_text),
+            token_count=len(default_tokenizer.encode(message_text)),
             message_type=MessageType.USER,
             files=new_msg_req.file_descriptors,
             db_session=db_session,
@@ -1194,6 +1199,9 @@ def _run_models(
                 assistant_message=setup.reserved_messages[model_idx],
                 llm=setup.llms[model_idx],
                 reserved_tokens=setup.reserved_token_count,
+                # All models share one mainline chain — compressing per model
+                # would create duplicate summaries and N summarization calls.
+                run_compression=model_idx == 0,
             )
         except Exception:
             logger.exception(
@@ -1848,6 +1856,7 @@ def llm_loop_completion_handle(
     assistant_message: ChatMessage,
     llm: LLM,
     reserved_tokens: int,
+    run_compression: bool = True,
 ) -> None:
     # Snapshot all state under the container's lock before any DB write.
     # Worker threads may still be running (e.g. user-cancellation path), so
@@ -1908,7 +1917,24 @@ def llm_loop_completion_handle(
             chat_session_id=chat_session_id,
             db_session=db_session,
         )
-        total_tokens = calculate_total_history_tokens(updated_chat_history)
+
+        # Measure what the next turn will actually replay: the branch summary
+        # (if any) plus messages after its cutoff. The full chain only grows,
+        # so counting it would keep the trigger on permanently once crossed
+        # and inflate tokens_for_recent until compression stalls.
+        summary_message = find_summary_for_branch(db_session, updated_chat_history)
+        effective_history = updated_chat_history
+        summary_tokens = 0
+        if summary_message and summary_message.last_summarized_message_id:
+            cutoff_id = summary_message.last_summarized_message_id
+            effective_history = [m for m in updated_chat_history if m.id > cutoff_id]
+            summary_tokens = summary_message.token_count or 0
+        total_tokens = summary_tokens + calculate_total_history_tokens(
+            effective_history
+        )
+
+    if not run_compression:
+        return
 
     compression_params = get_compression_params(
         max_input_tokens=llm.config.max_input_tokens,

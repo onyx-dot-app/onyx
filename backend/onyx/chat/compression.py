@@ -68,7 +68,8 @@ class SummaryContent(NamedTuple):
 
 def calculate_total_history_tokens(chat_history: list[ChatMessage]) -> int:
     """
-    Calculate the total token count for the given chat history.
+    Calculate the total token count for the given chat history, including
+    tool-call argument tokens (which are replayed alongside the messages).
 
     Args:
         chat_history: Branch-aware list of messages
@@ -76,7 +77,12 @@ def calculate_total_history_tokens(chat_history: list[ChatMessage]) -> int:
     Returns:
         Total token count for the history
     """
-    return sum(m.token_count or 0 for m in chat_history)
+    total = 0
+    for m in chat_history:
+        total += m.token_count or 0
+        for tool_call in m.tool_calls or []:
+            total += tool_call.tool_call_tokens or 0
+    return total
 
 
 def get_compression_params(
@@ -202,6 +208,23 @@ def get_messages_to_summarize(
     # non-user messages from recent_messages to older_messages
     while recent_messages and recent_messages[0].message_type != MessageType.USER:
         recent_messages.pop(0)
+
+    if not recent_messages:
+        # The verbatim tail had no USER message (e.g. a tool-heavy turn).
+        # Rather than summarizing away the latest exchange, keep everything
+        # from the last USER message onward; with no USER at all, skip
+        # compression entirely (older_messages empty → caller no-ops).
+        last_user_idx = next(
+            (
+                i
+                for i in range(len(messages) - 1, -1, -1)
+                if messages[i].message_type == MessageType.USER
+            ),
+            None,
+        )
+        if last_user_idx is None:
+            return SummaryContent(older_messages=[], recent_messages=messages)
+        recent_messages = messages[last_user_idx:]
 
     # Everything else gets summarized
     recent_ids = {m.id for m in recent_messages}

@@ -842,11 +842,7 @@ def convert_chat_history(
                         simple_messages.append(
                             ChatMessageSimple(
                                 message=tool_response_message,
-                                token_count=(
-                                    token_counter(tool_response_message)
-                                    if tool_name == IMAGE_GENERATION_TOOL_NAME
-                                    else 20
-                                ),
+                                token_count=token_counter(tool_response_message),
                                 message_type=MessageType.TOOL_CALL_RESPONSE,
                                 tool_call_id=tool_call.tool_call_id,
                                 image_files=None,
