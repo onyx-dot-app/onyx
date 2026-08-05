@@ -54,8 +54,10 @@ AZURE_LOCALE_PATTERN = re.compile(r"^[A-Za-z]{2,3}(-[A-Za-z]{2,8}){1,2}$")
 
 DEFAULT_LOCALE = "en-US"
 
-# Azure caps language-identification candidates at 10 (continuous LID).
+# Azure caps language-identification candidates at 10 for continuous LID and
+# 4 for at-start LID (the self-hosted endpoint path).
 MAX_STT_LANGUAGES = 10
+MAX_AT_START_STT_LANGUAGES = 4
 
 
 def _normalize_stt_language(raw: str) -> str:
@@ -85,6 +87,12 @@ def _parse_stt_languages(value: Any) -> list[str]:
     if len(languages) > MAX_STT_LANGUAGES:
         raise ValueError(
             f"Azure supports at most {MAX_STT_LANGUAGES} STT languages; got {len(languages)}."
+        )
+    bases = [lang.split("-", 1)[0] for lang in languages]
+    if len(set(bases)) != len(bases):
+        raise ValueError(
+            "Azure language detection allows one locale per language "
+            "(e.g. not both en-US and en-GB)."
         )
     return languages or [DEFAULT_LOCALE]
 
@@ -457,6 +465,14 @@ class AzureVoiceProvider(VoiceProviderInterface):
         )
         self.speech_region = self._validate_speech_region(raw_speech_region)
         self.stt_languages = _parse_stt_languages(custom_config.get("stt_languages"))
+        if (
+            self._is_self_hosted()
+            and len(self.stt_languages) > MAX_AT_START_STT_LANGUAGES
+        ):
+            raise ValueError(
+                "Self-hosted Azure endpoints use at-start detection, which supports "
+                f"at most {MAX_AT_START_STT_LANGUAGES} STT languages."
+            )
         self.stt_model = stt_model
         self.tts_model = tts_model
         self.default_voice = default_voice or "en-US-JennyNeural"

@@ -109,12 +109,16 @@ export function VoiceProviderSetupModal({
     stt_languages: detail.sttLanguages
       ? Yup.string().test(
           "locales",
-          `Enter up to ${MAX_STT_LANGUAGES} comma-separated locales like en-US, fr-FR`,
+          `Enter up to ${MAX_STT_LANGUAGES} comma-separated locales like en-US, fr-FR (one per language)`,
           (value) => {
             if (!value) return true;
             const languages = parseSttLanguages(value);
+            const bases = languages.map((lang) =>
+              lang.split("-")[0]!.toLowerCase()
+            );
             return (
               languages.length <= MAX_STT_LANGUAGES &&
+              new Set(bases).size === bases.length &&
               languages.every((lang) => STT_LOCALE_PATTERN.test(lang))
             );
           }
