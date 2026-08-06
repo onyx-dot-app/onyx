@@ -7,7 +7,8 @@ import { Button, MessageCard, Text } from "@opal/components";
 import { SvgDownload } from "@opal/icons";
 import { ADMIN_ROUTES } from "@/lib/admin-routes";
 import { downloadFile } from "@/lib/download";
-import { errorHandlingFetcher } from "@/lib/fetcher";
+import { errorHandlingFetcher, FetchError } from "@/lib/fetcher";
+import { SWR_KEYS } from "@/lib/swr-keys";
 import { Section } from "@/layouts/general-layouts";
 import Card from "@/refresh-components/cards/Card";
 
@@ -93,8 +94,8 @@ export default function ExportLogsPage() {
   const [isDownloading, setIsDownloading] = useState(false);
   const downloadedExportIdRef = useRef<string | null>(null);
 
-  const { data: status } = useSWR<LogExportStatus>(
-    exportId === null ? null : `${EXPORT_URL}/${exportId}`,
+  const { data: status, error: statusError } = useSWR<LogExportStatus>(
+    exportId === null ? null : SWR_KEYS.logExportStatus(exportId),
     errorHandlingFetcher,
     {
       refreshInterval: (latest) =>
@@ -103,6 +104,21 @@ export default function ExportLogsPage() {
   );
 
   const isCollecting = exportId !== null && status?.state !== "ready";
+
+  // A definitive 4xx means the export is gone (already cleaned up) or no
+  // longer accessible; drop it so the page recovers instead of showing
+  // "collecting" forever. Other errors are transient: interval polling keeps
+  // running and self-heals.
+  useEffect(() => {
+    if (
+      statusError instanceof FetchError &&
+      statusError.status >= 400 &&
+      statusError.status < 500
+    ) {
+      toast.error("Lost access to the running export. Start a new one.");
+      setExportId(null);
+    }
+  }, [statusError]);
 
   const downloadBundle = useCallback(async (id: string): Promise<void> => {
     setIsDownloading(true);
@@ -122,6 +138,9 @@ export default function ExportLogsPage() {
     } catch (error) {
       console.error("Error downloading log export:", error);
       toast.error("Failed to download the log export.");
+      // Un-mark the export so the download can be retried; the bundle stays
+      // available in the file store until retention sweeps it.
+      downloadedExportIdRef.current = null;
     } finally {
       setIsDownloading(false);
     }
@@ -236,6 +255,18 @@ export default function ExportLogsPage() {
                   pending={row.pending}
                 />
               ))
+            )}
+            {status?.state === "ready" && (
+              <Section flexDirection="row" justifyContent="end" height="fit">
+                <Button
+                  prominence="secondary"
+                  icon={SvgDownload}
+                  onClick={() => void downloadBundle(status.export_id)}
+                  disabled={isDownloading}
+                >
+                  Download
+                </Button>
+              </Section>
             )}
           </Card>
         )}
