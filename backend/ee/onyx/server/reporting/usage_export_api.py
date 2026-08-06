@@ -19,6 +19,8 @@ from onyx.configs.constants import OnyxCeleryTask
 from onyx.db.engine.sql_engine import get_session
 from onyx.db.enums import Permission
 from onyx.db.models import User
+from onyx.error_handling.error_codes import OnyxErrorCode
+from onyx.error_handling.exceptions import OnyxError
 from onyx.file_store.constants import STANDARD_CHUNK_SIZE
 from shared_configs.contextvars import get_current_tenant_id
 
@@ -46,9 +48,9 @@ def generate_report(
             raise HTTPException(status_code=400, detail=str(e))
 
     if params.report_id and usage_report_id_in_use(db_session, params.report_id):
-        raise HTTPException(
-            status_code=409,
-            detail=f"report_id {params.report_id} is already in use",
+        raise OnyxError(
+            OnyxErrorCode.DUPLICATE_RESOURCE,
+            f"report_id {params.report_id} is already in use",
         )
 
     tenant_id = get_current_tenant_id()
