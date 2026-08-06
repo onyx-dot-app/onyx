@@ -71,6 +71,7 @@ def _provider_to_view(provider: VoiceProvider) -> VoiceProviderView:
         default_voice=provider.default_voice,
         api_key=mask_string(raw_key) if raw_key else None,
         target_uri=provider.api_base,  # api_base stores the target URI for Azure
+        custom_config=provider.custom_config,
     )
 
 
@@ -138,6 +139,10 @@ async def upsert_voice_provider_endpoint(
     except OnyxError:
         db_session.rollback()
         raise
+    except ValueError as e:
+        # Bad provider config (e.g. invalid stt_languages) — surface the real reason.
+        db_session.rollback()
+        raise OnyxError(OnyxErrorCode.VALIDATION_ERROR, str(e)) from e
     except Exception as e:
         db_session.rollback()
         logger.error("Voice provider credential validation failed on save: %s", e)

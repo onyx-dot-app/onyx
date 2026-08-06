@@ -14,6 +14,9 @@ from fastapi.responses import StreamingResponse
 from fastapi.routing import APIRoute
 from sqlalchemy.orm import Session
 
+from ee.onyx.server.gateway import api as gateway_api
+from ee.onyx.server.gateway import stream_bridge
+from ee.onyx.server.gateway.api import _MESSAGES_ADAPTER
 from onyx.db.enums import Permission
 from onyx.db.models import User
 from onyx.error_handling.error_codes import OnyxErrorCode
@@ -36,10 +39,12 @@ from onyx.llm.models import (
     ChatCompletionMessage,
     ImageContentPart,
     ImageUrlDetail,
+    NamedToolChoice,
     ReasoningEffort,
     SystemMessage,
     TextContentPart,
     ToolCall,
+    ToolChoice,
     ToolChoiceOptions,
     UserMessage,
 )
@@ -48,8 +53,6 @@ from onyx.llm.multi_llm import LLMRateLimitError, LLMTimeoutError
 from onyx.server.auth_check import check_router_auth
 from onyx.server.features.build import craft_gateway
 from onyx.server.features.build.craft_gateway import gateway_request_flow
-from onyx.server.gateway import api as gateway_api
-from onyx.server.gateway.api import _MESSAGES_ADAPTER
 from onyx.server.gateway.configs import GATEWAY_PATH_PREFIX
 from onyx.server.gateway.models import (
     ChatCompletionRequest,
@@ -261,7 +264,7 @@ class _RaisingCloseLLM(_ConfigOnlyLLM):
 
 
 def _gateway_stream(llm: LLM):
-    return gateway_api._run_bridged_stream(
+    return stream_bridge._run_bridged_stream(
         gateway_api._stream_worker,
         {
             "llm": llm,
@@ -615,7 +618,7 @@ def _reasoning_stream_llm() -> _ChunkStreamLLM:
 def test_stream_records_accumulated_reasoning_on_span() -> None:
     with (
         patch.object(gateway_api, "llm_generation_span"),
-        patch.object(gateway_api, "record_llm_span_output") as record,
+        patch.object(stream_bridge, "record_llm_span_output") as record,
     ):
         frames = list(_gateway_stream(_reasoning_stream_llm()))
 
@@ -690,6 +693,16 @@ class _InvokeLLM(_ConfigOnlyLLM):
     def invoke(self, *args: object, **kwargs: object) -> ModelResponse:
         del args, kwargs
         return self._response
+
+
+class _RecordingInvokeLLM(_InvokeLLM):
+    def __init__(self, response: ModelResponse) -> None:
+        super().__init__(response)
+        self.received_tool_choice: ToolChoice | None = None
+
+    def invoke(self, *args: object, **kwargs: object) -> ModelResponse:
+        self.received_tool_choice = cast("ToolChoice | None", kwargs.get("tool_choice"))
+        return super().invoke(*args, **kwargs)
 
 
 def _handle_completion_call(request: ChatCompletionRequest) -> Any:
@@ -828,7 +841,20 @@ def test_parse_tool_choice(raw: object, expected: ToolChoiceOptions | None) -> N
 
 @pytest.mark.parametrize(
     "raw",
-    ["bogus", {"type": "function", "function": {"name": "bash"}}],
+    [
+        {"type": "function", "function": {"name": "bash"}},
+        {"type": "function", "name": "bash"},
+    ],
+)
+def test_parse_tool_choice_maps_named_function(raw: object) -> None:
+    """Both the Chat Completions and Responses API wire shapes for a named
+    tool_choice must map to the same NamedToolChoice."""
+    assert gateway_api._parse_tool_choice(raw) == NamedToolChoice(name="bash")
+
+
+@pytest.mark.parametrize(
+    "raw",
+    ["bogus", {"type": "bogus"}, {"type": "function", "function": {}}],
 )
 def test_parse_tool_choice_refuses_unsupported(raw: object) -> None:
     """A tool_choice we cannot honor must fail loudly. Downgrading to auto lets
@@ -836,6 +862,60 @@ def test_parse_tool_choice_refuses_unsupported(raw: object) -> None:
     say the constraint was dropped."""
     with pytest.raises(OnyxError) as exc_info:
         gateway_api._parse_tool_choice(raw)
+
+    assert exc_info.value.error_code is OnyxErrorCode.INVALID_INPUT
+
+
+@pytest.mark.parametrize(
+    ("tool_choice", "tools", "should_raise"),
+    [
+        (ToolChoiceOptions.AUTO, None, False),
+        (ToolChoiceOptions.REQUIRED, [], False),
+        (None, None, False),
+        (
+            NamedToolChoice(name="bash"),
+            [{"type": "function", "function": {"name": "bash"}}],
+            False,
+        ),
+        (
+            NamedToolChoice(name="bash"),
+            [{"type": "function", "function": {"name": "other"}}],
+            True,
+        ),
+        (NamedToolChoice(name="bash"), None, True),
+    ],
+)
+def test_require_named_tool(
+    tool_choice: ToolChoiceOptions | NamedToolChoice | None,
+    tools: list[dict[str, Any]] | None,
+    should_raise: bool,
+) -> None:
+    if should_raise:
+        with pytest.raises(OnyxError) as exc_info:
+            gateway_api._require_named_tool(tool_choice, tools)
+        assert exc_info.value.error_code is OnyxErrorCode.INVALID_INPUT
+    else:
+        gateway_api._require_named_tool(tool_choice, tools)
+
+
+def test_handle_chat_completion_rejects_named_tool_choice_for_unknown_tool() -> None:
+    request = ChatCompletionRequest(
+        model="1/test",
+        messages=[{"role": "user", "content": "hi"}],
+        tools=[{"type": "function", "function": {"name": "bash", "parameters": {}}}],
+        tool_choice={"type": "function", "function": {"name": "other"}},
+    )
+    response = ModelResponse(
+        id="chatcmpl-1",
+        created="1784577999",
+        choice=Choice(finish_reason="stop", message=Message(content="ok")),
+    )
+
+    with patch.object(
+        gateway_api, "llm_from_provider", return_value=_InvokeLLM(response)
+    ):
+        with pytest.raises(OnyxError) as exc_info:
+            _handle_completion_call(request)
 
     assert exc_info.value.error_code is OnyxErrorCode.INVALID_INPUT
 
@@ -1262,6 +1342,51 @@ def test_handle_responses_request_non_streaming_returns_completed_response() -> 
     assert payload["usage"]["input_tokens"] == 120
 
 
+def test_handle_responses_request_forwards_named_tool_choice() -> None:
+    """The Responses request must survive the litellm tools transform plus
+    _require_named_tool and reach the LLM as a NamedToolChoice."""
+    request = ResponsesRequest(
+        model="1/test",
+        input="hi",
+        tools=[{"type": "function", "name": "bash", "parameters": {}}],
+        tool_choice={"type": "function", "name": "bash"},
+    )
+    response = ModelResponse(
+        id="chatcmpl-1",
+        created="1784577999",
+        choice=Choice(finish_reason="stop", message=Message(content="ok")),
+        usage=_wire_usage(),
+    )
+    fake_llm = _RecordingInvokeLLM(response)
+
+    with patch.object(gateway_api, "llm_from_provider", return_value=fake_llm):
+        _handle_responses_call(request)
+
+    assert fake_llm.received_tool_choice == NamedToolChoice(name="bash")
+
+
+def test_handle_responses_request_rejects_named_tool_choice_for_unknown_tool() -> None:
+    request = ResponsesRequest(
+        model="1/test",
+        input="hi",
+        tools=[{"type": "function", "name": "bash", "parameters": {}}],
+        tool_choice={"type": "function", "name": "other"},
+    )
+    response = ModelResponse(
+        id="chatcmpl-1",
+        created="1784577999",
+        choice=Choice(finish_reason="stop", message=Message(content="ok")),
+    )
+
+    with patch.object(
+        gateway_api, "llm_from_provider", return_value=_InvokeLLM(response)
+    ):
+        with pytest.raises(OnyxError) as exc_info:
+            _handle_responses_call(request)
+
+    assert exc_info.value.error_code is OnyxErrorCode.INVALID_INPUT
+
+
 _TEXT_CHUNKS = [
     ModelResponseStream(
         id="r1", created="0", choice=StreamingChoice(delta=Delta(content="Hi"))
@@ -1315,7 +1440,7 @@ def _responses_stream_events(
         gateway_api, "llm_generation_span", return_value=nullcontext(span)
     ):
         frames = list(
-            gateway_api._run_bridged_stream(
+            stream_bridge._run_bridged_stream(
                 gateway_api._responses_stream_worker,
                 {
                     "llm": llm,
@@ -1597,7 +1722,7 @@ def test_responses_stream_validates_against_openai_sdk_models() -> None:
 def test_responses_stream_disconnect_closes_upstream_and_omits_completed() -> None:
     closed = threading.Event()
     with patch.object(gateway_api, "llm_generation_span", return_value=nullcontext()):
-        stream = gateway_api._run_bridged_stream(
+        stream = stream_bridge._run_bridged_stream(
             gateway_api._responses_stream_worker,
             {
                 "llm": _StreamingLLM(closed),
@@ -1625,7 +1750,7 @@ def test_responses_stream_records_output_usage_and_reasoning_on_span() -> None:
     silently, because the worker skips all span recording."""
     span = MagicMock()
 
-    with patch.object(gateway_api, "record_llm_span_output") as record:
+    with patch.object(stream_bridge, "record_llm_span_output") as record:
         _responses_stream_events(
             _reasoning_stream_llm(), span=span, response_id="resp_span"
         )
@@ -1635,7 +1760,7 @@ def test_responses_stream_records_output_usage_and_reasoning_on_span() -> None:
     assert record.call_args.kwargs["reasoning"] == "thinking hard"
     assert record.call_args.kwargs["output"] == "done"
 
-    with patch.object(gateway_api, "record_llm_span_output") as record:
+    with patch.object(stream_bridge, "record_llm_span_output") as record:
         _responses_stream_events(
             _ChunkStreamLLM(_TEXT_CHUNKS), span=span, response_id="resp_usage"
         )

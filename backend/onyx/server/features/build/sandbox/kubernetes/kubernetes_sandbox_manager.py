@@ -174,6 +174,8 @@ _OPENCODE_SESSION_TAG_PLUGIN_PATH = "/workspace/opencode-plugins/session-proxy-t
 # Surfaces the no-op `connect_app` tool; always on. Its "ask" permission is what
 # the api-server intercepts to drive the connect-app OAuth flow.
 _OPENCODE_CONNECT_APP_PLUGIN_PATH = "/workspace/opencode-plugins/connect-app.ts"
+# Soft turn-budget wrap-up steer (reads the per-turn deadline stamp).
+_OPENCODE_TURN_BUDGET_PLUGIN_PATH = "/workspace/opencode-plugins/turn-budget.ts"
 
 
 _PROXY_RESOLVE_RETRY_ATTEMPTS = 5
@@ -438,6 +440,7 @@ class KubernetesSandboxManager(SandboxManager):
         provider: str | None = None,
         model_name: str | None = None,
         nextjs_port: int | None = None,
+        session_id: UUID | None = None,
         disabled_tools: list[str] | None = None,
         user_name: str | None = None,
     ) -> str:
@@ -448,6 +451,7 @@ class KubernetesSandboxManager(SandboxManager):
             provider=provider,
             model_name=model_name,
             nextjs_port=nextjs_port,
+            session_id=session_id,
             disabled_tools=disabled_tools,
             user_name=user_name,
             organization_instructions=load_settings().craft_instructions,
@@ -1105,6 +1109,7 @@ class KubernetesSandboxManager(SandboxManager):
                     disabled_tools=OPENCODE_DISABLED_TOOLS,
                     plugins=[
                         _OPENCODE_CONNECT_APP_PLUGIN_PATH,
+                        _OPENCODE_TURN_BUDGET_PLUGIN_PATH,
                         _OPENCODE_SESSION_TAG_PLUGIN_PATH,
                     ],
                 )
@@ -1400,6 +1405,7 @@ class KubernetesSandboxManager(SandboxManager):
             provider=llm_config.provider,
             model_name=llm_config.model_name,
             nextjs_port=nextjs_port,
+            session_id=session_id,
             disabled_tools=OPENCODE_DISABLED_TOOLS,
             user_name=user_name,
         )
@@ -1878,6 +1884,7 @@ echo "Session cleanup complete"
             provider=agent_provider,
             model_name=agent_model,
             nextjs_port=nextjs_port,
+            session_id=session_id,
             disabled_tools=OPENCODE_DISABLED_TOOLS,
             user_name=user_name,
         )

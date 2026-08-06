@@ -101,6 +101,21 @@ if not MULTI_TENANT:
                 "queue": OnyxCeleryQueues.CSV_GENERATION,
             },
         },
+        # Log export is rejected in multi-tenant deployments, so its cleanup
+        # only needs to run here.
+        {
+            "name": "export-logs-cleanup-task",
+            "task": OnyxCeleryTask.EXPORT_LOGS_CLEANUP_TASK,
+            "schedule": timedelta(hours=1),
+            "options": {
+                "priority": OnyxCeleryPriority.LOW,
+                "expires": BEAT_EXPIRES_DEFAULT,
+                # Cleanup belongs on the heavy worker; it shares the queue the
+                # query-history cleanup uses rather than minting a new one,
+                # which would require deployment changes.
+                "queue": OnyxCeleryQueues.CSV_GENERATION,
+            },
+        },
     ]
 
 

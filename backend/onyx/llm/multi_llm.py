@@ -23,7 +23,7 @@ from onyx.llm.api_surfaces import (
     LlmApiSurface,
     resolve_api_surface,
 )
-from onyx.llm.constants import LlmProviderNames
+from onyx.llm.constants import MODEL_PREFIX_TO_VENDOR, LlmProviderNames
 from onyx.llm.cost import compute_cost_cents
 from onyx.llm.custom_config_mapping import (
     UI_ONLY_CONFIG_KEYS,
@@ -35,7 +35,7 @@ from onyx.llm.interfaces import (
     LLMConfig,
     LLMUserIdentity,
     ReasoningEffort,
-    ToolChoiceOptions,
+    ToolChoice,
 )
 from onyx.llm.model_capabilities import (
     is_true_openai_model,
@@ -47,6 +47,8 @@ from onyx.llm.models import (
     ANTHROPIC_ADAPTIVE_REASONING_EFFORT,
     ANTHROPIC_REASONING_EFFORT_BUDGET,
     OPENAI_REASONING_EFFORT,
+    NamedToolChoice,
+    ToolChoiceOptions,
 )
 from onyx.llm.request_context import get_llm_mock_response
 from onyx.llm.utils import build_litellm_passthrough_kwargs
@@ -75,7 +77,7 @@ STANDARD_MAX_TOKENS_KWARG = "max_completion_tokens"
 # LiteLLM's BaseAzureLLM._is_azure_v1_api_version.
 _AZURE_V1_API_VERSIONS = frozenset({"preview", "latest", "v1"})
 
-_VERTEX_ANTHROPIC_MODELS_REJECTING_OUTPUT_CONFIG = (
+_VERTEX_ANTHROPIC_MODELS_REJECTING_STREAM_OPTIONS = (
     "claude-opus-4-5",
     "claude-opus-4-6",
     "claude-opus-4-7",
@@ -92,6 +94,11 @@ _VERTEX_ANTHROPIC_MODELS_REJECTING_OUTPUT_CONFIG = (
 # avoids relying on LiteLLM's drop_params (unreliable here, since AnthropicConfig
 # still advertises temperature as supported).
 _ANTHROPIC_ADAPTIVE_THINKING_MIN_VERSION = (4, 7)
+
+# Extended thinking landed in Claude 3.7. Parsing the version off the name
+# keeps aliased deployments (gateways, custom model names) reasoning even when
+# the litellm registry doesn't recognize the string.
+_ANTHROPIC_THINKING_MIN_VERSION = (3, 7)
 
 # Best-effort tuning kwargs, never worth failing a chat over. _completion
 # retries provider rejections without them: reasoning keys first, then all.
@@ -298,6 +305,24 @@ def _fix_tool_user_message_ordering(
     return result
 
 
+_MISTRAL_FAMILY_MARKERS: frozenset[str] = frozenset(
+    prefix for prefix, vendor in MODEL_PREFIX_TO_VENDOR.items() if vendor == "mistral"
+)
+
+
+def _is_mistral_family_name(identity_names: list[str]) -> bool:
+    """Whether any model/deployment identity name looks like a Mistral-family
+    model (mistral, mixtral, codestral, ...). The provider name alone is not
+    enough: Mistral models are frequently served behind Azure or
+    OpenAI-compatible endpoints (e.g. vLLM), where only the configured names
+    carry the signal."""
+    return any(
+        marker in name.lower()
+        for name in identity_names
+        for marker in _MISTRAL_FAMILY_MARKERS
+    )
+
+
 def _messages_contain_tool_content(messages: list[dict[str, Any]]) -> bool:
     """Check if any messages contain tool-related content blocks."""
     for msg in messages:
@@ -341,11 +366,11 @@ def _log_azure_responses_api_version_override(
     )
 
 
-def _is_vertex_model_rejecting_output_config(model_name: str) -> bool:
+def _is_vertex_model_rejecting_stream_options(model_name: str) -> bool:
     normalized_model_name = model_name.lower()
     return any(
         blocked_model in normalized_model_name
-        for blocked_model in _VERTEX_ANTHROPIC_MODELS_REJECTING_OUTPUT_CONFIG
+        for blocked_model in _VERTEX_ANTHROPIC_MODELS_REJECTING_STREAM_OPTIONS
     )
 
 
@@ -388,14 +413,25 @@ def _parse_anthropic_model_version(model_name: str) -> tuple[int, int] | None:
     return (major, minor)
 
 
-def _anthropic_uses_adaptive_thinking(model_name: str) -> bool:
+def _anthropic_meets_version(model_name: str, min_version: tuple[int, int]) -> bool:
     version = _parse_anthropic_model_version(model_name)
-    return version is not None and version >= _ANTHROPIC_ADAPTIVE_THINKING_MIN_VERSION
+    return version is not None and version >= min_version
+
+
+def _anthropic_uses_adaptive_thinking(model_name: str) -> bool:
+    return _anthropic_meets_version(
+        model_name, _ANTHROPIC_ADAPTIVE_THINKING_MIN_VERSION
+    )
+
+
+def _anthropic_supports_thinking(model_name: str) -> bool:
+    return _anthropic_meets_version(model_name, _ANTHROPIC_THINKING_MIN_VERSION)
 
 
 def _anthropic_omits_sampling_params(model_name: str) -> bool:
-    version = _parse_anthropic_model_version(model_name)
-    return version is not None and version >= _ANTHROPIC_ADAPTIVE_THINKING_MIN_VERSION
+    return _anthropic_meets_version(
+        model_name, _ANTHROPIC_ADAPTIVE_THINKING_MIN_VERSION
+    )
 
 
 def _env_injection_enabled() -> bool:
@@ -591,7 +627,7 @@ class LitellmLLM(LLM):
         self,
         prompt: LanguageModelInput,
         tools: list[dict] | None,
-        tool_choice: ToolChoiceOptions | None,
+        tool_choice: ToolChoice | None,
         stream: bool,
         parallel_tool_calls: bool,
         reasoning_effort: ReasoningEffort = ReasoningEffort.AUTO,
@@ -619,16 +655,19 @@ class LitellmLLM(LLM):
         ]
         is_claude_model = any("claude" in name.lower() for name in model_identity_names)
         is_qwen_model = "qwen" in self.config.model_name.lower()
-        # Claude >= 4.7 always reasons via the adaptive thinking API, so treat
-        # it as a reasoning model even when the litellm registry doesn't know
-        # the (possibly aliased) name — otherwise reasoning_effort is silently
-        # dropped for such models.
         uses_adaptive_thinking = any(
             _anthropic_uses_adaptive_thinking(name) for name in model_identity_names
         )
-        is_reasoning = uses_adaptive_thinking or any(
-            model_is_reasoning_model(name, self.config.model_provider)
-            for name in model_identity_names
+        anthropic_supports_thinking = any(
+            _anthropic_supports_thinking(name) for name in model_identity_names
+        )
+        is_reasoning = (
+            uses_adaptive_thinking
+            or anthropic_supports_thinking
+            or any(
+                model_is_reasoning_model(name, self.config.model_provider)
+                for name in model_identity_names
+            )
         )
         # All OpenAI models will use responses API for consistency
         # Responses API is needed to get reasoning packets from OpenAI models
@@ -638,11 +677,12 @@ class LitellmLLM(LLM):
         is_ollama = self._model_provider == LlmProviderNames.OLLAMA_CHAT
         is_mistral = self._model_provider == LlmProviderNames.MISTRAL
         is_vertex_ai = self._model_provider == LlmProviderNames.VERTEX_AI
-        # Some Vertex Anthropic models reject output_config.
-        # Keep this guard until LiteLLM/Vertex accept the field for these models.
-        is_vertex_model_rejecting_output_config = (
+        # Some Vertex Anthropic models reject stream_options. Reasoning params
+        # are sent regardless: a provider that rejects one answers with a 400
+        # naming the kwarg, which the retry ladder below strips.
+        is_vertex_model_rejecting_stream_options = (
             is_vertex_ai
-            and _is_vertex_model_rejecting_output_config(self.config.model_name)
+            and _is_vertex_model_rejecting_stream_options(self.config.model_name)
         )
 
         #########################
@@ -694,6 +734,10 @@ class LitellmLLM(LLM):
         # enforces the forced tool. Matched by model name rather than
         # `is_reasoning` because the litellm/local registry lags behind new
         # Qwen releases (e.g. qwen3.7-plus).
+        # A NamedToolChoice is deliberately NOT downgraded: legacy Claude
+        # thinking is skipped below instead, and Qwen thinking models may still
+        # reject the forced tool upstream (a loud 400 beats silently ignoring
+        # the caller's forced tool).
         if (is_claude_model or is_qwen_model) and (
             tool_choice == ToolChoiceOptions.REQUIRED
         ):
@@ -718,7 +762,7 @@ class LitellmLLM(LLM):
         if not omits_sampling_params:
             optional_kwargs["temperature"] = 1 if is_reasoning else self._temperature
 
-        if stream and not is_vertex_model_rejecting_output_config:
+        if stream and not is_vertex_model_rejecting_stream_options:
             optional_kwargs["stream_options"] = {"include_usage": True}
 
         # Note, there is a reasoning_effort parameter in LiteLLM but it is completely jank and does not work for any
@@ -727,18 +771,28 @@ class LitellmLLM(LLM):
             is_reasoning
             # The default of this parameter not set is surprisingly not the equivalent of an Auto but is actually Off
             and reasoning_effort != ReasoningEffort.OFF
-            and not is_vertex_model_rejecting_output_config
             and not openai_model_rejects_reasoning_effort(self.config.model_name)
         ):
+            openai_style_reasoning = {
+                "effort": OPENAI_REASONING_EFFORT[reasoning_effort],
+                "summary": "auto",
+            }
+
             if is_openai_model:
                 # OpenAI API does not accept reasoning params for GPT 5 chat models
                 # (neither reasoning nor reasoning_effort are accepted)
                 # even though they are reasoning models (bug in OpenAI)
                 if "-chat" not in model:
-                    optional_kwargs["reasoning"] = {
-                        "effort": OPENAI_REASONING_EFFORT[reasoning_effort],
-                        "summary": "auto",
-                    }
+                    optional_kwargs["reasoning"] = openai_style_reasoning
+
+            elif is_claude_model and is_openai_compatible_proxy:
+                # Wire format follows the API surface, not the model vendor.
+                # LiteLLM drops thinking/output_config as unsupported on an
+                # openai surface, so a gateway only sees reasoning.effort.
+                # The gateway still translates to Anthropic, so the tool-call
+                # constraint below applies here too.
+                if not _prompt_contains_tool_call_history(prompt):
+                    optional_kwargs["reasoning"] = openai_style_reasoning
 
             elif is_claude_model:
                 # Anthropic requires every assistant message with tool_use
@@ -765,7 +819,14 @@ class LitellmLLM(LLM):
                     budget_tokens: int | None = ANTHROPIC_REASONING_EFFORT_BUDGET.get(
                         reasoning_effort
                     )
-                    if budget_tokens is not None and not has_tool_call_history:
+                    # thinking.type=enabled is rejected alongside a forced
+                    # tool_choice (only adaptive thinking supports forced tool
+                    # use), so skip thinking for a NamedToolChoice.
+                    if (
+                        budget_tokens is not None
+                        and not has_tool_call_history
+                        and not isinstance(tool_choice, NamedToolChoice)
+                    ):
                         if max_tokens is not None:
                             # Anthropic has a weird rule where max token has to be at least as much as budget tokens if set
                             # and the minimum budget tokens is 1024
@@ -897,19 +958,28 @@ class LitellmLLM(LLM):
             # Some models (e.g. Mistral) reject a user message
             # immediately after a tool message. Insert a synthetic
             # assistant bridge message to satisfy the ordering
-            # constraint. Check both the provider and the deployment/
-            # model name to catch Mistral hosted on Azure.
-            model_or_deployment = (
-                self._deployment_name or self._model_version or ""
-            ).lower()
-            is_mistral_model = is_mistral or "mistral" in model_or_deployment
+            # constraint. Check the provider, the LiteLLM routing
+            # override, and every identity name (deployment alias and
+            # model name) to catch Mistral served behind Azure or
+            # OpenAI-compatible endpoints (e.g. vLLM).
+            is_mistral_model = (
+                is_mistral
+                or self._custom_llm_provider == LlmProviderNames.MISTRAL
+                or _is_mistral_family_name(model_identity_names)
+            )
             if is_mistral_model:
                 messages = _fix_tool_user_message_ordering(messages)
 
             # Only pass tool_choice when tools are present — some providers (e.g. Fireworks)
             # reject requests where tool_choice is explicitly null.
             if tools and tool_choice is not None:
-                optional_kwargs["tool_choice"] = tool_choice
+                if isinstance(tool_choice, NamedToolChoice):
+                    optional_kwargs["tool_choice"] = {
+                        "type": "function",
+                        "function": {"name": tool_choice.name},
+                    }
+                else:
+                    optional_kwargs["tool_choice"] = tool_choice
 
             if not _env_injection_enabled() and self._env_only_custom_config:
                 _warn_dropped_env_only_keys(
@@ -1023,7 +1093,7 @@ class LitellmLLM(LLM):
         self,
         prompt: LanguageModelInput,
         tools: list[dict] | None = None,
-        tool_choice: ToolChoiceOptions | None = None,
+        tool_choice: ToolChoice | None = None,
         structured_response_format: dict | None = None,
         timeout_override: int | None = None,
         max_tokens: int | None = None,
@@ -1132,7 +1202,7 @@ class LitellmLLM(LLM):
         self,
         prompt: LanguageModelInput,
         tools: list[dict] | None = None,
-        tool_choice: ToolChoiceOptions | None = None,
+        tool_choice: ToolChoice | None = None,
         structured_response_format: dict | None = None,
         timeout_override: int | None = None,
         max_tokens: int | None = None,

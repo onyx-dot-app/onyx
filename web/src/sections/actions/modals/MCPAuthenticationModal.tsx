@@ -200,8 +200,8 @@ export default function MCPAuthenticationModal({
         auth_performer: MCPAuthenticationPerformer.PER_USER,
         api_token: "",
         auth_template: {
-          headers: { Authorization: "Bearer {api_key}" },
-          required_fields: ["api_key"],
+          headers: {},
+          required_fields: [],
         },
         user_credentials: {},
         oauth_client_id: "",
@@ -213,6 +213,13 @@ export default function MCPAuthenticationModal({
         oauth_additional_auth_params: "",
       };
     }
+
+    // Only shared API-token servers return their header substitutions in
+    // `admin_credentials`. For every other auth type that field carries OAuth
+    // client credentials, which must not be replayed as per-user substitutions.
+    const sharedApiToken =
+      fullServer.auth_type === MCPAuthenticationType.API_TOKEN &&
+      fullServer.auth_performer === MCPAuthenticationPerformer.ADMIN;
 
     return {
       transport: fullServer.server_url
@@ -243,12 +250,16 @@ export default function MCPAuthenticationModal({
         : "",
       // Auth Template
       auth_template: (fullServer.auth_template as MCPAuthTemplate) || {
-        headers: { Authorization: "Bearer {api_key}" },
-        required_fields: ["api_key"],
+        headers: {},
+        required_fields: [],
       },
       // User Credentials (substitutions)
       user_credentials:
-        (fullServer.user_credentials as Record<string, string>) || {},
+        (fullServer.user_credentials as Record<string, string>) ||
+        (sharedApiToken
+          ? (fullServer.admin_credentials as Record<string, string>)
+          : undefined) ||
+        {},
     };
   }, [fullServer, mcpServer?.server_url]);
 
@@ -277,10 +288,7 @@ export default function MCPAuthenticationModal({
   const computeAdminCredentialsChangedFlags = (
     values: MCPAuthFormValues
   ): Record<string, boolean> => {
-    if (
-      values.auth_type !== MCPAuthenticationType.API_TOKEN ||
-      values.auth_performer !== MCPAuthenticationPerformer.PER_USER
-    ) {
+    if (!values.auth_template.required_fields.length) {
       return {};
     }
     const current = values.user_credentials || {};
@@ -292,13 +300,30 @@ export default function MCPAuthenticationModal({
     return flags;
   };
 
+  const computeAuthTemplateChangedFlags = (
+    values: MCPAuthFormValues
+  ): Record<string, boolean> => {
+    const initialHeaders = initialValues.auth_template.headers;
+    return Object.fromEntries(
+      Object.entries(values.auth_template.headers).map(([name, value]) => [
+        name,
+        value !== initialHeaders[name],
+      ])
+    );
+  };
+
   const constructServerData = (values: MCPAuthFormValues) => {
     if (!mcpServer) return null;
     const authType = values.auth_type;
     const oauthChangedFlags = computeOAuthChangedFlags(values);
-    const isPerUserApiToken =
-      values.auth_performer === MCPAuthenticationPerformer.PER_USER &&
-      authType === MCPAuthenticationType.API_TOKEN;
+    const hasUserHeaderValues = values.auth_template.required_fields.some(
+      (field) =>
+        !(
+          values.auth_performer === MCPAuthenticationPerformer.ADMIN &&
+          authType === MCPAuthenticationType.API_TOKEN &&
+          field === "api_key"
+        )
+    );
     const isAdminApiToken =
       values.auth_performer === MCPAuthenticationPerformer.ADMIN &&
       authType === MCPAuthenticationType.API_TOKEN;
@@ -345,14 +370,16 @@ export default function MCPAuthenticationModal({
       api_token_changed: isAdminApiToken
         ? values.api_token !== initialValues.api_token
         : false,
-      auth_template:
-        authType === MCPAuthenticationType.API_TOKEN
-          ? values.auth_template
-          : undefined,
-      admin_credentials: isPerUserApiToken
-        ? values.user_credentials || {}
+      auth_template: values.auth_template,
+      auth_template_headers_changed: computeAuthTemplateChangedFlags(values),
+      admin_credentials: hasUserHeaderValues
+        ? Object.fromEntries(
+            Object.entries(values.user_credentials || {}).filter(
+              ([field]) => !isAdminApiToken || field !== "api_key"
+            )
+          )
         : undefined,
-      admin_credentials_changed: isPerUserApiToken
+      admin_credentials_changed: hasUserHeaderValues
         ? computeAdminCredentialsChangedFlags(values)
         : undefined,
       oauth_client_id:
@@ -933,6 +960,12 @@ export default function MCPAuthenticationModal({
                         </Tabs.Content>
                       </Tabs>
                     </div>
+                  )}
+                  {values.auth_type !== MCPAuthenticationType.API_TOKEN && (
+                    <PerUserAuthConfig
+                      values={values}
+                      setFieldValue={setFieldValue}
+                    />
                   )}
                   {values.auth_type === MCPAuthenticationType.NONE && (
                     <MessageCard

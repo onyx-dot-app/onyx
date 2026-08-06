@@ -6,7 +6,7 @@ from sqlalchemy.orm import Session
 from onyx.configs.app_configs import INTEGRATION_TESTS_MODE
 from onyx.configs.constants import DocumentSource
 from onyx.configs.llm_configs import get_image_extraction_and_analysis_enabled
-from onyx.connectors.credentials_provider import OnyxDBCredentialsProvider
+from onyx.connectors.credentials_provider import build_db_credentials_provider
 from onyx.connectors.exceptions import ConnectorValidationError, ValidationError
 from onyx.connectors.interfaces import (
     BaseConnector,
@@ -24,7 +24,6 @@ from onyx.db.enums import AccessType
 from onyx.db.models import Credential
 from onyx.file_store.staging import RawFileCallback
 from onyx.utils.credential_audit import emit_credential_access
-from shared_configs.contextvars import get_current_tenant_id
 
 
 class ConnectorMissingException(Exception):
@@ -116,9 +115,7 @@ def instantiate_connector(
     connector = connector_class(**connector_specific_config)
 
     if isinstance(connector, CredentialsConnector):
-        provider = OnyxDBCredentialsProvider(
-            get_current_tenant_id(), str(source), credential.id
-        )
+        provider = build_db_credentials_provider(source, credential.id)
         connector.set_credentials_provider(provider)
     else:
         if credential.credential_json:

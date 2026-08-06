@@ -3,12 +3,19 @@
 from __future__ import annotations
 
 import json
+import re
+import subprocess
+import tempfile
 from pathlib import Path
 from unittest.mock import MagicMock, patch
 from uuid import UUID
 
 from onyx.server.features.build.sandbox import nextjs_dev
-from onyx.server.features.build.sandbox.nextjs_dev import build_nextjs_start_script
+from onyx.server.features.build.sandbox.nextjs_dev import (
+    build_nextjs_start_script,
+    build_webapp_bootstrap_script,
+    build_webapp_script_write_snippet,
+)
 from onyx.server.features.build.session.manager import SessionManager
 
 _SESSION_PATH = "/workspace/sessions/0d9ed7f2-8757-4d09-9812-bd7e4a45e232"
@@ -29,6 +36,7 @@ _TEMPLATE_PACKAGE_JSON = (
     / "web"
     / "package.json"
 )
+_TEMPLATE_AGENTS_MD = _TEMPLATE_PACKAGE_JSON.parent / "AGENTS.md"
 
 
 def test_start_script_exports_allowed_dev_origins() -> None:
@@ -76,6 +84,21 @@ def test_template_dev_script_wires_port_to_managed_env_and_port_file() -> None:
     assert (web_dir / "../../.nextjs-port").resolve() == Path(
         _SESSION_PATH
     ) / ".nextjs-port"
+
+
+def test_template_agents_md_documents_only_real_scripts() -> None:
+    """The template AGENTS.md and package.json are the two halves of the
+    sandbox tool contract. A documented `bun run <script>` that doesn't exist
+    sends agents into guess-and-fail loops (the doc once said "Run ESLint"
+    while the template shipped oxlint and no typecheck script)."""
+    scripts = set(json.loads(_TEMPLATE_PACKAGE_JSON.read_text())["scripts"])
+    documented = set(
+        re.findall(r"bun run ([A-Za-z0-9:_-]+)", _TEMPLATE_AGENTS_MD.read_text())
+    )
+
+    assert documented <= scripts
+    # The verify workflow's commands must stay documented, not just valid.
+    assert {"dev", "lint", "typecheck"} <= documented
 
 
 def test_start_script_passes_port_flag_when_dev_script_ignores_env() -> None:
@@ -136,3 +159,50 @@ def test_nextjs_ready_probe_targets_base_path_dev_asset() -> None:
         f"http://sandbox-x:3010/api/build/sessions/{session_id}/webapp"
         "/_next/static/onyx-ready-probe.js"
     )
+
+
+def _assert_valid_bash(script: str) -> None:
+    with tempfile.NamedTemporaryFile("w", suffix=".sh") as f:
+        f.write(script)
+        f.flush()
+        result = subprocess.run(["bash", "-n", f.name], capture_output=True, text=True)
+    assert result.returncode == 0, result.stderr
+
+
+def test_bootstrap_script_is_valid_bash() -> None:
+    script = build_webapp_bootstrap_script(_SESSION_PATH, 3010)
+    _assert_valid_bash(script)
+
+
+def test_bootstrap_script_embeds_port_write_and_env_exports() -> None:
+    script = build_webapp_bootstrap_script(_SESSION_PATH, 3010)
+
+    assert f"echo 3010 > {_SESSION_PATH}/.nextjs-port" in script
+    assert "export ONYX_WEBAPP_PORT=3010" in script
+    assert (
+        'export ONYX_WEBAPP_BASE_PATH="/api/build/sessions/'
+        f'$(basename {_SESSION_PATH})/webapp"' in script
+    )
+
+
+def test_bootstrap_script_reuses_live_server_via_embedded_guard() -> None:
+    script = build_webapp_bootstrap_script(_SESSION_PATH, 3010)
+
+    assert 'kill -0 "$NEXTJS_PID" 2>/dev/null' in script
+    assert (
+        f'[ "$(readlink /proc/$NEXTJS_PID/cwd 2>/dev/null)" '
+        f'= "{_SESSION_PATH}/outputs/web" ]' in script
+    )
+    assert "already running" in script
+    # Exactly one liveness guard: the embedded start script's.
+    assert script.count("kill -0") == 1
+
+
+def test_webapp_script_write_snippet_removes_before_writing() -> None:
+    snippet = build_webapp_script_write_snippet(_SESSION_PATH, 3010)
+
+    assert f"rm -f {_SESSION_PATH}/start-webapp.sh" in snippet
+    assert f"chmod 444 {_SESSION_PATH}/start-webapp.sh" in snippet
+    remove_index = snippet.index("rm -f")
+    write_index = snippet.index("printf")
+    assert remove_index < write_index

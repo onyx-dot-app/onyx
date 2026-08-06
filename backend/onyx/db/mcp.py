@@ -29,7 +29,13 @@ from onyx.db.models import (
     User__UserGroup,
     UserRole,
 )
-from onyx.server.features.mcp.models import DENYLISTED_MCP_HEADERS, MCPConnectionData
+from onyx.server.features.mcp.models import (
+    DENYLISTED_MCP_HEADERS,
+    MCPAuthTemplate,
+    MCPConnectionData,
+    MCPOAuthKeys,
+    merge_mcp_headers,
+)
 from onyx.utils.logger import setup_logger
 from onyx.utils.sensitive import SensitiveValue
 
@@ -419,28 +425,80 @@ class MCPCredentialsError(Exception):
     """Credentials for an MCP server cannot be resolved for this user."""
 
 
-class ResolvedMCPCredentials(BaseModel):
-    """Credential source for one (server, user) pair.
+def get_mcp_auth_template(mcp_server: MCPServer) -> MCPAuthTemplate | None:
+    """Read the canonical admin template, including legacy per-user API keys."""
+    config = mcp_server.admin_connection_config
+    if config is None:
+        return None
+    data = extract_connection_data(config, apply_mask=False)
+    headers = data.get("header_template")
+    if headers is None and (
+        mcp_server.auth_type == MCPAuthenticationType.API_TOKEN
+        and mcp_server.auth_performer == MCPAuthenticationPerformer.PER_USER
+    ):
+        headers = data.get("headers")
+    if headers is None:
+        return None
+    return MCPAuthTemplate(headers=headers)
 
-    Exactly one of the fields is populated (both are None for auth type NONE):
-    `connection_config` for API_TOKEN / OAUTH servers, `user_oauth_token` for
-    PT_OAUTH servers.
-    """
+
+class ResolvedMCPCredentials(BaseModel):
+    """Effective connection state for one MCP server and user."""
 
     model_config = ConfigDict(arbitrary_types_allowed=True, frozen=True)
 
     connection_config: MCPConnectionConfig | None
     user_oauth_token: str | None
+    auth_type: MCPAuthenticationType | None = None
+    auth_template: MCPAuthTemplate | None = None
+    user_email: str = ""
+
+    def _config_data(self) -> MCPConnectionData:
+        return extract_connection_data(self.connection_config, apply_mask=False)
+
+    def _template_substitutions(self) -> dict[str, str]:
+        data = self._config_data()
+        substitutions = dict(data.get("header_substitutions", {}))
+        if api_token := data.get("api_token"):
+            substitutions["api_key"] = api_token
+        return substitutions
+
+    def _configured_headers(self) -> dict[str, str]:
+        data = self._config_data()
+        template_headers: dict[str, str] = {}
+        if self.auth_template is not None and self._has_required_substitutions():
+            template_headers = self.auth_template.render(
+                self._template_substitutions(), user_email=self.user_email
+            )
+        return merge_mcp_headers(data.get("headers", {}), template_headers)
+
+    def _generated_auth_headers(self) -> dict[str, str]:
+        if self.user_oauth_token:
+            return {"Authorization": f"Bearer {self.user_oauth_token}"}
+        if self.auth_type != MCPAuthenticationType.OAUTH:
+            return {}
+        tokens = self._config_data().get(MCPOAuthKeys.TOKENS.value)
+        if not tokens:
+            return {}
+        token_type = tokens.get("token_type")
+        access_token = tokens.get("access_token")
+        if not token_type or not access_token:
+            return {}
+        return {"Authorization": f"{token_type} {access_token}"}
+
+    def _has_required_substitutions(self) -> bool:
+        if self.auth_template is None or not self.auth_template.required_fields:
+            return True
+        substitutions = self._template_substitutions()
+        return all(
+            substitutions.get(field) for field in self.auth_template.required_fields
+        )
 
     def build_headers(self) -> dict[str, str]:
-        """Auth headers for a request to the server: the stored
-        connection-config headers, with PT_OAUTH's login token taking
-        precedence. Empty when no credentials are stored.
-
-        Denylisted headers (see DENYLISTED_MCP_HEADERS) are stripped so every
-        consumer gets the security filter automatically — stored credentials
-        must never source e.g. a Host header."""
-        stored = extract_connection_data(self.connection_config).get("headers", {})
+        """Build configured headers with generated authentication taking precedence."""
+        stored = merge_mcp_headers(
+            self._configured_headers(), self._generated_auth_headers()
+        )
         headers = {
             k: v for k, v in stored.items() if k.lower() not in DENYLISTED_MCP_HEADERS
         }
@@ -451,9 +509,19 @@ class ResolvedMCPCredentials(BaseModel):
                 "that were stripped: %s",
                 sorted(k for k in stored if k.lower() in DENYLISTED_MCP_HEADERS),
             )
-        if self.user_oauth_token:
-            headers["Authorization"] = f"Bearer {self.user_oauth_token}"
         return headers
+
+    def is_authenticated(self) -> bool:
+        if self.auth_type in (None, MCPAuthenticationType.NONE):
+            return self._has_required_substitutions()
+        if self.auth_type == MCPAuthenticationType.PT_OAUTH:
+            return bool(self.user_oauth_token) and self._has_required_substitutions()
+        if self.auth_type == MCPAuthenticationType.OAUTH:
+            return (
+                bool(self._generated_auth_headers())
+                and self._has_required_substitutions()
+            )
+        return bool(self._configured_headers()) and self._has_required_substitutions()
 
 
 def resolve_mcp_credentials(
@@ -463,33 +531,31 @@ def resolve_mcp_credentials(
     *,
     user_configs: Mapping[int, MCPConnectionConfig] | None = None,
 ) -> ResolvedMCPCredentials:
-    """Resolve which stored credentials authenticate `user` against `mcp_server`.
+    """Combine the admin template, user substitutions, and generated auth.
 
-    The single source of truth for the performer/auth-type branching, shared by
-    chat's MCPTool construction and Craft's sandbox-proxy credential injection:
-    - PT_OAUTH: the user's login OAuth token; no stored config row.
-    - API_TOKEN / OAUTH: the user's own `mcp_connection_config` row for
-      PER_USER servers, the admin config row otherwise.
-    - NONE: no credentials.
-
-    `user_configs` lets a caller resolving many servers pre-load the per-user
-    rows in one query (see `get_user_connection_configs`) instead of one per
-    server. It must cover every server the caller resolves — a miss reads as no
-    stored credential, not as unknown.
-
-    Raises MCPCredentialsError for PT_OAUTH with the anonymous user, who has no
-    login OAuth token.
+    `user_configs` may preload every requested server's user row; a missing key
+    means no stored user values.
     """
+    auth_template = get_mcp_auth_template(mcp_server)
+    user_connection_config = (
+        user_configs.get(mcp_server.id)
+        if user_configs is not None
+        else get_user_connection_config(mcp_server.id, user.email, db_session)
+    )
+
     if mcp_server.auth_type == MCPAuthenticationType.PT_OAUTH:
         if user.is_anonymous:
             raise MCPCredentialsError(
                 f"Anonymous user cannot use PT_OAUTH MCP server {mcp_server.id}"
             )
         return ResolvedMCPCredentials(
-            connection_config=None,
+            connection_config=user_connection_config,
             user_oauth_token=(
                 user.oauth_accounts[0].access_token if user.oauth_accounts else None
             ),
+            auth_type=mcp_server.auth_type,
+            auth_template=auth_template,
+            user_email=user.email,
         )
 
     if mcp_server.auth_type in (
@@ -497,18 +563,24 @@ def resolve_mcp_credentials(
         MCPAuthenticationType.OAUTH,
     ):
         if mcp_server.auth_performer == MCPAuthenticationPerformer.PER_USER:
-            connection_config = (
-                user_configs.get(mcp_server.id)
-                if user_configs is not None
-                else get_user_connection_config(mcp_server.id, user.email, db_session)
-            )
+            connection_config = user_connection_config
         else:
             connection_config = mcp_server.admin_connection_config
         return ResolvedMCPCredentials(
-            connection_config=connection_config, user_oauth_token=None
+            connection_config=connection_config,
+            user_oauth_token=None,
+            auth_type=mcp_server.auth_type,
+            auth_template=auth_template,
+            user_email=user.email,
         )
 
-    return ResolvedMCPCredentials(connection_config=None, user_oauth_token=None)
+    return ResolvedMCPCredentials(
+        connection_config=user_connection_config,
+        user_oauth_token=None,
+        auth_type=mcp_server.auth_type,
+        auth_template=auth_template,
+        user_email=user.email,
+    )
 
 
 def can_resolve_mcp_credentials(
@@ -518,23 +590,14 @@ def can_resolve_mcp_credentials(
     *,
     user_configs: Mapping[int, MCPConnectionConfig] | None = None,
 ) -> bool:
-    """Whether the sandbox proxy will be able to authenticate `user` against
-    `mcp_server`, mirroring `MCPServerResolver._resolve_for_server`'s block
-    condition so callers can't drift from what injection does.
-
-    Not the same as the user having their own connection config: admin-managed,
-    `PT_OAUTH`, and no-auth servers all authenticate without one. See
-    `resolve_mcp_credentials` for `user_configs`.
-    """
-    if mcp_server.auth_type in (None, MCPAuthenticationType.NONE):
-        return True
+    """Whether every generated credential and template value is available."""
     try:
         credentials = resolve_mcp_credentials(
             mcp_server, user, db_session, user_configs=user_configs
         )
     except MCPCredentialsError:
         return False
-    return bool(credentials.build_headers())
+    return credentials.is_authenticated()
 
 
 def get_user_connection_configs(
@@ -591,14 +654,24 @@ def update_connection_config(
     config_data: MCPConnectionData | None = None,
 ) -> MCPConnectionConfig:
     """Update an existing connection config"""
+    config = update_connection_config__no_commit(config_id, db_session, config_data)
+    db_session.commit()
+    return config
+
+
+def update_connection_config__no_commit(
+    config_id: int,
+    db_session: Session,
+    config_data: MCPConnectionData | None = None,
+) -> MCPConnectionConfig:
+    """Update a connection config without owning the transaction."""
     config = get_connection_config_by_id(config_id, db_session)
 
     if config_data is not None:
         config.config = config_data  # ty: ignore[invalid-assignment]
-        # Force SQLAlchemy to detect the change by marking the field as modified
         flag_modified(config, "config")
 
-    db_session.commit()
+    db_session.flush()
     return config
 
 
@@ -622,20 +695,6 @@ def upsert_user_connection_config(
             user_email=user_email,
             db_session=db_session,
         )
-
-
-# TODO: do this in one db call
-def get_server_auth_template(
-    server_id: int, db_session: Session
-) -> MCPConnectionConfig | None:
-    """Get the authentication template for a server (from the admin connection config)"""
-    server = get_mcp_server_by_id(server_id, db_session)
-    if not server.admin_connection_config_id:
-        return None
-
-    if server.auth_performer == MCPAuthenticationPerformer.ADMIN:
-        return None  # admin server implies no template
-    return server.admin_connection_config
 
 
 def delete_connection_config(config_id: int, db_session: Session) -> None:
@@ -670,7 +729,10 @@ def delete_all_user_connection_configs_for_server_no_commit(
     """Delete all user connection configs for a specific MCP server"""
     db_session.execute(
         delete(MCPConnectionConfig).where(
-            MCPConnectionConfig.mcp_server_id == server_id
+            and_(
+                MCPConnectionConfig.mcp_server_id == server_id,
+                MCPConnectionConfig.user_email != "",
+            )
         )
     )
     db_session.flush()  # Don't commit yet, let caller decide when to commit

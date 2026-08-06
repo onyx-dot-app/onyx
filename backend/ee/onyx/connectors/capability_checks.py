@@ -17,6 +17,7 @@ from onyx.connectors.capability_checks.models import (
     CapabilityCheckContext,
     CredentialCapability,
 )
+from onyx.connectors.source_operations import get_source_operations_class
 
 # Named perm-sync checks per source. Empty at framework stage: per-connector
 # work registers named checks here.
@@ -75,6 +76,10 @@ def get_perm_sync_capability_checks(source: DocumentSource) -> list[CapabilityCh
     no-op get no perm-sync checks at all until named ones are registered; their
     verdict renders as "no checks available yet" rather than a trivial PASSED
     built on a no-op probe.
+
+    Ratchet: named checks require a registered source-operations gateway --
+    participation in the checks system is an anti-drift guarantee. Unmigrated
+    sources keep the fallback path.
     """
     applicable = get_applicable_perm_sync_capabilities(source)
     registered_by_capability: dict[CredentialCapability, list[CapabilityCheck]] = {
@@ -85,6 +90,13 @@ def get_perm_sync_capability_checks(source: DocumentSource) -> list[CapabilityCh
             _EXTERNAL_GROUP_SYNC_CHECKS_BY_SOURCE.get(source, [])
         ),
     }
+    assert (
+        not any(registered_by_capability.values())
+        or get_source_operations_class(source) is not None
+    ), (
+        f"{source.value} registers named perm-sync checks but no "
+        "source-operations gateway; migrate the connector first."
+    )
     checks: list[CapabilityCheck] = []
     for capability, registered in registered_by_capability.items():
         if registered:

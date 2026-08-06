@@ -82,21 +82,16 @@ export function externalAppToConnectable(
 }
 
 export function mcpServerToConnectable(server: MCPServer): ConnectableApp {
-  // Pass-through OAuth authenticates via the user's Onyx login token at runtime,
-  // so there is nothing for the user to connect or disconnect. That says nothing
-  // about whether it works for them — a password-login user has no login OAuth
-  // token, and `craft_connected` reports that.
-  const passThrough = server.auth_type === MCPAuthenticationType.PT_OAUTH;
-  const perUser =
-    !passThrough &&
+  const credentialKeys = server.auth_template?.required_fields ?? [];
+  const requiresHeaderValues = credentialKeys.length > 0;
+  const perUserAuth =
     server.auth_performer === MCPAuthenticationPerformer.PER_USER &&
-    server.auth_type !== MCPAuthenticationType.NONE;
-  // The backend's craft-emission predicate, not "a config row exists" — the
-  // page must not claim connected for a server Craft drops from the session.
+    server.auth_type !== MCPAuthenticationType.NONE &&
+    server.auth_type !== MCPAuthenticationType.PT_OAUTH;
+  const userConnectable = perUserAuth || requiresHeaderValues;
   const authenticated = server.craft_connected ?? false;
-  const credentialKeys: string[] = server.auth_template?.required_fields?.length
-    ? server.auth_template.required_fields
-    : ["api_key"];
+  const startOAuth = async () =>
+    (await startMCPUserOAuth(server.id, CRAFT_APPS_PATH)).oauth_url;
   return {
     key: `mcp-${server.id}`,
     kind: "mcp",
@@ -106,17 +101,20 @@ export function mcpServerToConnectable(server: MCPServer): ConnectableApp {
     connectId: null,
     authenticated,
     logo: getActionIcon(server.server_url, server.name),
-    connectMode: !perUser
-      ? null
-      : server.auth_type === MCPAuthenticationType.API_TOKEN
-        ? "credentials"
-        : "oauth",
-    credentialKeys,
+    connectMode: requiresHeaderValues
+      ? "credentials"
+      : perUserAuth && server.auth_type === MCPAuthenticationType.OAUTH
+        ? "oauth"
+        : null,
+    credentialKeys: credentialKeys.length ? credentialKeys : ["api_key"],
     credentialValues: server.user_credentials ?? {},
-    startOAuth: async () =>
-      (await startMCPUserOAuth(server.id, CRAFT_APPS_PATH)).oauth_url,
-    saveCredentials: (values) =>
-      saveMCPUserCredentials(server.id, values, server.transport),
-    disconnect: perUser ? () => disconnectMCPServer(server.id) : null,
+    startOAuth,
+    saveCredentials: async (values) => {
+      await saveMCPUserCredentials(server.id, values, server.transport);
+      if (server.auth_type === MCPAuthenticationType.OAUTH) {
+        window.location.href = await startOAuth();
+      }
+    },
+    disconnect: userConnectable ? () => disconnectMCPServer(server.id) : null,
   };
 }

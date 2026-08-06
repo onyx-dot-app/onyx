@@ -19,6 +19,7 @@ from onyx.redis.redis_pool import (
     retrieve_auth_token_data_from_bearer,
     retrieve_auth_token_data_from_redis,
 )
+from onyx.server.middleware.api_prefix import strip_api_prefix
 from shared_configs.configs import MULTI_TENANT, POSTGRES_DEFAULT_SCHEMA
 from shared_configs.contextvars import CURRENT_TENANT_ID_CONTEXTVAR
 
@@ -101,8 +102,7 @@ def add_api_server_tenant_id_middleware(
 
 
 def _is_path_allowed(path: str) -> bool:
-    if path.startswith("/api/"):
-        path = path[4:]
+    path = strip_api_prefix(path)
     return any(
         path.startswith(prefix) for prefix in MULTI_TENANT_GATING_ALLOWED_PREFIXES
     )

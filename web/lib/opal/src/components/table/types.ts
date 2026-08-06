@@ -38,6 +38,8 @@ export type OnyxColumnKind = "qualifier" | "data" | "display" | "actions";
 // Column definitions (discriminated union on `kind`)
 // ---------------------------------------------------------------------------
 
+export type ColumnAlignment = "left" | "center" | "right";
+
 interface OnyxColumnBase<TData> {
   kind: OnyxColumnKind;
   /** Stable column identifier (mirrors the TanStack column ID). */
@@ -49,6 +51,7 @@ interface OnyxColumnBase<TData> {
 /** Qualifier column — leading avatar/icon/checkbox column. */
 export interface OnyxQualifierColumn<TData> extends OnyxColumnBase<TData> {
   kind: "qualifier";
+  alignment?: never;
   /** Content type for body-row `<TableQualifier>`. */
   content: QualifierContentType;
   /** Return the icon component to render for a row (for "icon" content). */
@@ -66,6 +69,7 @@ export interface OnyxQualifierColumn<TData> extends OnyxColumnBase<TData> {
 /** Data column — accessor-based column with sorting/resizing. */
 export interface OnyxDataColumn<TData> extends OnyxColumnBase<TData> {
   kind: "data";
+  alignment?: ColumnAlignment;
   /** Override the sort icon for this column. */
   icon?: (sorted: SortDirection) => IconFunctionComponent;
 }
@@ -73,11 +77,13 @@ export interface OnyxDataColumn<TData> extends OnyxColumnBase<TData> {
 /** Display column — non-accessor column with custom rendering. */
 export interface OnyxDisplayColumn<TData> extends OnyxColumnBase<TData> {
   kind: "display";
+  alignment?: ColumnAlignment;
 }
 
 /** Actions column — fixed column with visibility/sorting popovers. */
 export interface OnyxActionsColumn<TData> extends OnyxColumnBase<TData> {
   kind: "actions";
+  alignment?: never;
   /** Show column visibility popover. @default true */
   showColumnVisibility?: boolean;
   /** Show sorting popover. @default true */
@@ -162,6 +168,7 @@ export interface DataTableProps<TData> {
   onSelectionChange?: (selectedIds: string[]) => void;
   /** Called when a row is clicked (replaces the default selection toggle). */
   onRowClick?: (row: TData) => void;
+  getRowLabel?: (row: TData) => string;
   /** Search term for global text filtering. When provided, rows are filtered
    *  to those containing the term in any accessor column value (case-insensitive). */
   searchTerm?: string;

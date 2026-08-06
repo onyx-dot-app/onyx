@@ -72,6 +72,7 @@ PATH_PREFIX_MIN_TIER: dict[str, Tier] = {
     "/admin/enterprise-settings": Tier.BUSINESS,  # admin writes; public /enterprise-settings stays open
     "/manage/admin/user-group": Tier.BUSINESS,  # groups + RBAC (Curator roles, group-scoped access)
     # ----- ENTERPRISE -----
+    "/gateway": Tier.ENTERPRISE,  # external LLM gateway API
     "/admin/enterprise-settings/custom-analytics-script": Tier.ENTERPRISE,  # JS injection
     "/admin/enterprise-settings/scim": Tier.ENTERPRISE,  # SCIM token mgmt
     "/manage/admin/standard-answer": Tier.ENTERPRISE,

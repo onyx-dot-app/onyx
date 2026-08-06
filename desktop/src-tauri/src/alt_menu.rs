@@ -123,7 +123,7 @@ pub use linux::setup_alt_menu_toggle;
 // entirely.
 #[cfg(target_os = "windows")]
 mod windows {
-    use tauri::Webview;
+    use tauri::{Manager, Webview};
 
     const ALT_MENU_SCRIPT: &str = include_str!("scripts/alt_menu_windows.js");
 

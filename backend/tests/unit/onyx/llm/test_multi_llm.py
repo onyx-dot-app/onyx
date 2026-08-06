@@ -19,9 +19,11 @@ from onyx.llm.models import (
     AssistantMessage,
     FunctionCall,
     LanguageModelInput,
+    NamedToolChoice,
     ReasoningEffort,
     ToolCall,
     ToolChoiceOptions,
+    ToolMessage,
     UserMessage,
 )
 from onyx.llm.multi_llm import (
@@ -32,7 +34,7 @@ from onyx.llm.multi_llm import (
     temporary_env_and_lock,
 )
 
-VERTEX_OPUS_MODELS_REJECTING_OUTPUT_CONFIG = [
+VERTEX_OPUS_MODELS_REJECTING_STREAM_OPTIONS = [
     "claude-opus-4-5@20251101",
     "claude-opus-4-6",
     "claude-opus-4-7",
@@ -663,7 +665,7 @@ def test_parse_anthropic_model_version(
     assert _parse_anthropic_model_version(model_name) == expected
 
 
-@pytest.mark.parametrize("model_name", VERTEX_OPUS_MODELS_REJECTING_OUTPUT_CONFIG)
+@pytest.mark.parametrize("model_name", VERTEX_OPUS_MODELS_REJECTING_STREAM_OPTIONS)
 def test_vertex_stream_omits_stream_options(model_name: str) -> None:
     llm = LitellmLLM(
         api_key="test_key",
@@ -712,8 +714,10 @@ def test_openai_auto_reasoning_effort_maps_to_medium() -> None:
         assert kwargs["reasoning"]["effort"] == "medium"
 
 
-@pytest.mark.parametrize("model_name", VERTEX_OPUS_MODELS_REJECTING_OUTPUT_CONFIG)
-def test_vertex_opus_omits_reasoning_effort(model_name: str) -> None:
+@pytest.mark.parametrize("model_name", VERTEX_OPUS_MODELS_REJECTING_STREAM_OPTIONS)
+def test_vertex_opus_still_sends_thinking(model_name: str) -> None:
+    """Rejecting stream_options must not cost these models their reasoning:
+    thinking is still sent."""
     llm = LitellmLLM(
         api_key="test_key",
         timeout=30,
@@ -732,10 +736,60 @@ def test_vertex_opus_omits_reasoning_effort(model_name: str) -> None:
         mock_completion.return_value = []
 
         messages: LanguageModelInput = [UserMessage(content="Hi")]
-        list(llm.stream(messages))
+        list(llm.stream(messages, reasoning_effort=ReasoningEffort.HIGH))
 
         kwargs = mock_completion.call_args.kwargs
-        assert "reasoning_effort" not in kwargs
+        assert "thinking" in kwargs
+
+
+def test_claude_via_openai_compatible_proxy_uses_reasoning_param() -> None:
+    """The wire format follows the API surface, not the model vendor: Claude
+    behind an OpenAI-shaped gateway asks for reasoning the OpenAI way, never
+    Anthropic's thinking/output_config."""
+    llm = LitellmLLM(
+        api_key="test_key",
+        timeout=30,
+        model_provider=LlmProviderNames.BIFROST,
+        model_name="anthropic/claude-sonnet-4-5",
+        api_base="https://gateway.example/v1",
+        max_input_tokens=200000,
+        custom_config={"bifrost_api_mode": "chat_completions"},
+    )
+
+    with patch("litellm.completion") as mock_completion:
+        mock_completion.return_value = []
+
+        messages: LanguageModelInput = [UserMessage(content="Hi")]
+        list(llm.stream(messages, reasoning_effort=ReasoningEffort.HIGH))
+
+        kwargs = mock_completion.call_args.kwargs
+        assert kwargs["reasoning"] == {"effort": "high", "summary": "auto"}
+        assert "thinking" not in kwargs
+        assert "output_config" not in kwargs
+
+
+def test_aliased_claude_model_still_reasons() -> None:
+    """A gateway alias the litellm registry doesn't know still reasons: the
+    version parsed off the name decides, not the registry."""
+    llm = LitellmLLM(
+        api_key="test_key",
+        timeout=30,
+        model_provider=LlmProviderNames.VERTEX_AI,
+        model_name="gateway-claude-sonnet-4-5-prod",
+        max_input_tokens=100000,
+    )
+
+    with (
+        patch("litellm.completion") as mock_completion,
+        patch("onyx.llm.multi_llm.model_is_reasoning_model", return_value=False),
+    ):
+        mock_completion.return_value = []
+
+        messages: LanguageModelInput = [UserMessage(content="Hi")]
+        list(llm.stream(messages, reasoning_effort=ReasoningEffort.HIGH))
+
+        kwargs = mock_completion.call_args.kwargs
+        assert kwargs["thinking"] == {"type": "enabled", "budget_tokens": 4096}
 
 
 def test_openai_chat_omits_reasoning_params() -> None:
@@ -2380,6 +2434,93 @@ def test_required_tool_choice_preserved_for_other_models(
         assert kwargs["tool_choice"] == ToolChoiceOptions.REQUIRED
 
 
+def test_named_tool_choice_serialized_for_litellm(
+    default_multi_llm: LitellmLLM,
+) -> None:
+    with patch("litellm.completion") as mock_completion:
+        mock_completion.return_value = []
+
+        messages: LanguageModelInput = [UserMessage(content="Weather in NYC?")]
+        list(
+            default_multi_llm.stream(
+                messages,
+                tools=_TOOL_CHOICE_DOWNGRADE_TOOLS,
+                tool_choice=NamedToolChoice(name="get_weather"),
+            )
+        )
+
+        kwargs = mock_completion.call_args.kwargs
+        assert kwargs["tool_choice"] == {
+            "type": "function",
+            "function": {"name": "get_weather"},
+        }
+
+
+def test_named_tool_choice_not_downgraded_for_claude_model() -> None:
+    """Unlike REQUIRED, a NamedToolChoice must pass through unchanged even for
+    models that downgrade tool_choice=required."""
+    llm = LitellmLLM(
+        api_key="test_key",
+        timeout=30,
+        model_provider=LlmProviderNames.ANTHROPIC,
+        model_name="claude-sonnet-5",
+        max_input_tokens=32000,
+    )
+
+    with patch("litellm.completion") as mock_completion:
+        mock_completion.return_value = []
+
+        messages: LanguageModelInput = [UserMessage(content="Weather in NYC?")]
+        list(
+            llm.stream(
+                messages,
+                tools=_TOOL_CHOICE_DOWNGRADE_TOOLS,
+                tool_choice=NamedToolChoice(name="get_weather"),
+            )
+        )
+
+        kwargs = mock_completion.call_args.kwargs
+        assert kwargs["tool_choice"] == {
+            "type": "function",
+            "function": {"name": "get_weather"},
+        }
+
+
+def test_named_tool_choice_skips_legacy_claude_thinking() -> None:
+    """Anthropic rejects thinking.type=enabled combined with a forced tool, so
+    a NamedToolChoice must suppress the legacy budget_tokens thinking param."""
+    llm = LitellmLLM(
+        api_key="test_key",
+        timeout=30,
+        model_provider=LlmProviderNames.ANTHROPIC,
+        model_name="claude-sonnet-4-5",
+        max_input_tokens=32000,
+    )
+
+    with (
+        patch("litellm.completion") as mock_completion,
+        patch("onyx.llm.multi_llm.model_is_reasoning_model", return_value=True),
+    ):
+        mock_completion.return_value = []
+
+        messages: LanguageModelInput = [UserMessage(content="Weather in NYC?")]
+        list(
+            llm.stream(
+                messages,
+                tools=_TOOL_CHOICE_DOWNGRADE_TOOLS,
+                tool_choice=NamedToolChoice(name="get_weather"),
+                reasoning_effort=ReasoningEffort.HIGH,
+            )
+        )
+
+        kwargs = mock_completion.call_args.kwargs
+        assert "thinking" not in kwargs
+        assert kwargs["tool_choice"] == {
+            "type": "function",
+            "function": {"name": "get_weather"},
+        }
+
+
 def test_bifrost_normalizes_api_base_in_model_kwargs() -> None:
     llm = LitellmLLM(
         api_key="test_key",
@@ -2808,6 +2949,79 @@ def test_ui_only_keys_never_injected_or_warned(
             llm.invoke([UserMessage(content="Hi")])
         assert env_during_call["BEDROCK_AUTH_METHOD"] is None
         mock_warn.assert_not_called()
+
+
+def _openai_compatible_llm(
+    model_name: str, deployment_name: str | None = None
+) -> LitellmLLM:
+    return LitellmLLM(
+        api_key="test_key",
+        timeout=30,
+        model_provider=LlmProviderNames.OPENAI,
+        model_name=model_name,
+        deployment_name=deployment_name,
+        api_base="http://vllm.internal:8000/v1",
+        max_input_tokens=32000,
+    )
+
+
+def _tool_cycle_prompt() -> LanguageModelInput:
+    return [
+        UserMessage(content="What's the weather in Paris?"),
+        AssistantMessage(
+            role="assistant",
+            content=None,
+            tool_calls=[
+                ToolCall(
+                    type="function",
+                    id="call_1",
+                    function=FunctionCall(name="get_weather", arguments="{}"),
+                )
+            ],
+        ),
+        ToolMessage(content="Sunny, 21C", tool_call_id="call_1"),
+        UserMessage(content="Remember to cite your sources."),
+    ]
+
+
+def _completion_message_roles(llm: LitellmLLM) -> list[str]:
+    with (
+        patch("litellm.completion") as mock_completion,
+        patch("onyx.llm.multi_llm.is_true_openai_model", return_value=False),
+    ):
+        mock_completion.return_value = []
+        list(llm.stream(_tool_cycle_prompt()))
+        return [m["role"] for m in mock_completion.call_args.kwargs["messages"]]
+
+
+@pytest.mark.parametrize(
+    "model_name",
+    ["mistralai/Mistral-Small-3.2-24B-Instruct", "Codestral-2501", "pixtral-large"],
+)
+def test_tool_user_bridge_for_mistral_family_behind_openai_compatible(
+    model_name: str,
+) -> None:
+    """Mistral-family models served behind OpenAI-compatible endpoints (e.g.
+    vLLM) reject user-after-tool ordering; the bridge must fire on the model
+    name alone (#12503)."""
+    roles = _completion_message_roles(_openai_compatible_llm(model_name))
+    tool_idx = roles.index("tool")
+    assert roles[tool_idx + 1 :] == ["assistant", "user"]
+
+
+def test_tool_user_bridge_checks_model_name_despite_deployment_alias() -> None:
+    """A non-Mistral deployment alias must not shadow a Mistral model name."""
+    roles = _completion_message_roles(
+        _openai_compatible_llm("mistral-small-2506", deployment_name="prod-chat")
+    )
+    tool_idx = roles.index("tool")
+    assert roles[tool_idx + 1 :] == ["assistant", "user"]
+
+
+def test_tool_user_bridge_not_inserted_for_other_models() -> None:
+    roles = _completion_message_roles(_openai_compatible_llm("glm-4.7"))
+    tool_idx = roles.index("tool")
+    assert roles[tool_idx + 1 :] == ["user"]
 
 
 class _PingStream:

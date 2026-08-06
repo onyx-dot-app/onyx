@@ -30,8 +30,20 @@ from onyx.server.security.store import (
 )
 from onyx.utils.encryption import reject_masked_credentials, restore_masked_credentials
 from onyx.utils.variable_functionality import fetch_ee_implementation_or_noop
+from shared_configs.configs import MULTI_TENANT
 
-admin_router = APIRouter(prefix="/admin/sso")
+
+def _reject_if_multi_tenant() -> None:
+    if MULTI_TENANT:
+        raise OnyxError(
+            OnyxErrorCode.SINGLE_TENANT_ONLY,
+            "SSO provider configuration is not available on this deployment.",
+        )
+
+
+admin_router = APIRouter(
+    prefix="/admin/sso", dependencies=[Depends(_reject_if_multi_tenant)]
+)
 
 
 def _require_business_tier_for_additional_enabled_provider(

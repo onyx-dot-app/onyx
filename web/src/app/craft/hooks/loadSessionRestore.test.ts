@@ -119,6 +119,104 @@ describe("loadSession restore status", () => {
     expect(session?.webappNeedsRemount).toBe(1);
   });
 
+  it("renders a persisted turn-error row when it is the latest activity", async () => {
+    mockedApi.fetchSession.mockResolvedValue(runningSession() as never);
+    mockedApi.fetchMessages.mockResolvedValue([
+      {
+        id: "user-1",
+        type: "user",
+        content: "Do a thing",
+        timestamp: new Date(),
+        message_metadata: {
+          type: "user_message",
+          content: { type: "text", text: "Do a thing" },
+        },
+      },
+      {
+        id: "error-1",
+        type: "assistant",
+        content: "",
+        timestamp: new Date(),
+        message_metadata: {
+          type: "error",
+          message: "This turn was stopped after reaching its time limit.",
+        },
+      },
+    ] as never);
+
+    await useBuildSessionStore.getState().loadSession(SESSION_ID);
+
+    const session = useBuildSessionStore.getState().sessions.get(SESSION_ID);
+    const assistant = session?.messages.find((message) => {
+      return message.type === "assistant";
+    });
+    expect(assistant?.message_metadata?.streamItems).toEqual([
+      {
+        type: "error",
+        id: "error-1",
+        content: "This turn was stopped after reaching its time limit.",
+      },
+    ]);
+  });
+
+  it("drops a persisted turn-error row once later activity exists", async () => {
+    mockedApi.fetchSession.mockResolvedValue(runningSession() as never);
+    mockedApi.fetchMessages.mockResolvedValue([
+      {
+        id: "user-1",
+        type: "user",
+        content: "Do a thing",
+        timestamp: new Date(),
+        message_metadata: {
+          type: "user_message",
+          content: { type: "text", text: "Do a thing" },
+        },
+      },
+      {
+        id: "error-1",
+        type: "assistant",
+        content: "",
+        timestamp: new Date(),
+        message_metadata: {
+          type: "error",
+          message: "This turn was stopped after reaching its time limit.",
+        },
+      },
+      {
+        id: "user-2",
+        type: "user",
+        content: "Continue",
+        timestamp: new Date(),
+        message_metadata: {
+          type: "user_message",
+          content: { type: "text", text: "Continue" },
+        },
+      },
+      {
+        id: "answer-2",
+        type: "assistant",
+        content: "",
+        timestamp: new Date(),
+        message_metadata: {
+          type: "agent_message",
+          content: { type: "text", text: "Continued and finished." },
+        },
+      },
+    ] as never);
+
+    await useBuildSessionStore.getState().loadSession(SESSION_ID);
+
+    const session = useBuildSessionStore.getState().sessions.get(SESSION_ID);
+    const allItems = (session?.messages ?? [])
+      .filter((message) => message.type === "assistant")
+      .flatMap(
+        (message) =>
+          (message.message_metadata?.streamItems ?? []) as { type: string }[]
+      );
+    expect(allItems.some((item) => item.type === "error")).toBe(false);
+    expect(allItems.some((item) => item.type === "text")).toBe(true);
+  });
+
   it("restores persisted agent thought packets as collapsed transcript stream items", async () => {
     mockedApi.fetchSession.mockResolvedValue(runningSession() as never);
     mockedApi.fetchMessages.mockResolvedValue([
