@@ -45,7 +45,7 @@ function ImageRendererWrapper({ content, fileName }: FileRendererProps) {
 const PREVIEW_REGISTRY: PreviewEntry[] = [
   {
     type: "standalone",
-    matches: (path) => /\.pptx$/i.test(path),
+    matches: (path) => /\.pptx?$/i.test(path),
     component: PptxPreview,
   },
   {

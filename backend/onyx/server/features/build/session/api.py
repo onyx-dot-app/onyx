@@ -764,7 +764,7 @@ def get_pptx_preview(
     user: User = Depends(require_permission(Permission.BASIC_ACCESS)),
     db_session: Session = Depends(get_session),
 ) -> PptxPreviewResponse:
-    """Generate slide image previews for a PPTX file."""
+    """Generate slide image previews for a PowerPoint file."""
     session_manager = SessionManager(db_session)
 
     try:

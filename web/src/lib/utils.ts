@@ -254,7 +254,7 @@ export function getFileIcon(
 ): ComponentType<IconProps> {
   if (!fileName) return SvgFileText;
   if (isImageFile(fileName)) return SvgImage;
-  if (/\.pptx$/i.test(fileName)) return SvgFileChartPie;
+  if (/\.pptx?$/i.test(fileName)) return SvgFileChartPie;
   if (/\.pdf$/i.test(fileName)) return SvgFileText;
   if (isCodeFile(fileName)) return SvgFileBraces;
   return SvgFileText;
