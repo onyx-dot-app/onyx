@@ -13,7 +13,6 @@ import MarkdownFilePreview, {
 } from "@/app/craft/components/output-panel/MarkdownFilePreview";
 import PptxPreview from "@/app/craft/components/output-panel/PptxPreview";
 import PdfPreview from "@/app/craft/components/output-panel/PdfPreview";
-import { isPowerPointPath } from "@/app/craft/utils/fileTypes";
 
 // ── Preview registry ─────────────────────────────────────────────────────
 // Unified registry for all file preview types. First match wins.
@@ -46,7 +45,7 @@ function ImageRendererWrapper({ content, fileName }: FileRendererProps) {
 const PREVIEW_REGISTRY: PreviewEntry[] = [
   {
     type: "standalone",
-    matches: isPowerPointPath,
+    matches: (path) => /\.pptx?$/i.test(path),
     component: PptxPreview,
   },
   {

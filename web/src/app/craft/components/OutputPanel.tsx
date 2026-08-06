@@ -36,7 +36,6 @@ import CraftingLoader from "@/app/craft/components/CraftingLoader";
 // panel opens.
 import dynamic from "next/dynamic";
 import UrlBar from "@/app/craft/components/output-panel/UrlBar";
-import { isPowerPointPath } from "@/app/craft/utils/fileTypes";
 
 const PreviewTab = dynamic(
   () => import("@/app/craft/components/output-panel/PreviewTab"),
@@ -302,7 +301,7 @@ const BuildOutputPanel = memo(({ isOpen }: BuildOutputPanelProps) => {
     isFilePreviewActive && activeFilePath && /\.md$/i.test(activeFilePath);
 
   const isPowerPointPreview =
-    isFilePreviewActive && activeFilePath && isPowerPointPath(activeFilePath);
+    isFilePreviewActive && activeFilePath && /\.pptx?$/i.test(activeFilePath);
 
   const isPdfPreview =
     isFilePreviewActive && activeFilePath && /\.pdf$/i.test(activeFilePath);
