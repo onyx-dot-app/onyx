@@ -10,12 +10,12 @@ from onyx.background.celery.apps.app_base import task_logger
 from onyx.configs.constants import OnyxCeleryTask, OnyxRedisLocks
 from onyx.db.engine.sql_engine import get_session_with_current_tenant
 from onyx.db.models import Sandbox
-from onyx.db.sandbox import get_sweepable_sandboxes
 from onyx.redis.redis_pool import get_redis_client
 from onyx.redis.redis_tenant_work_gating import maybe_mark_tenant_active
 from onyx.server.features.build.configs import SANDBOX_IDLE_TIMEOUT_SECONDS
 from onyx.server.features.build.db.sandbox import (
     get_latest_snapshot_for_session,
+    get_sweepable_sandboxes,
     user_has_stale_active_session,
 )
 from onyx.server.features.build.sandbox.factory import get_sandbox_manager
