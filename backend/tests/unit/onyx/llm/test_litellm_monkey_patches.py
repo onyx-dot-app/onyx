@@ -1,5 +1,6 @@
 from datetime import datetime
 from typing import Any, cast
+from unittest import mock
 
 from litellm.completion_extras.litellm_responses_transformation.transformation import (
     LiteLLMResponsesTransformationHandler,
@@ -299,3 +300,53 @@ def test_bridge_check_delegates_without_prefix() -> None:
     )
     assert model_info.get("mode") != "responses"
     assert model == "gpt-4o"
+
+
+def test_openai_should_fake_stream_streams_natively_on_registry_miss() -> None:
+    # Force the registry miss so the except branch is unambiguously covered.
+    from litellm.llms.openai.responses.transformation import OpenAIResponsesAPIConfig
+
+    apply_monkey_patches()
+    config = OpenAIResponsesAPIConfig()
+    with mock.patch(
+        "litellm.get_model_info",
+        side_effect=Exception("This model isn't mapped yet"),
+    ) as get_model_info_mock:
+        result = config.should_fake_stream(
+            model="bedrock_mantle/openai.gpt-5.6-sol",
+            stream=True,
+            custom_llm_provider="openai",
+        )
+    assert get_model_info_mock.called
+    assert result is False
+
+
+def test_openai_should_fake_stream_keeps_faking_for_non_streaming_models() -> None:
+    # o1-pro is registry-marked supports_native_streaming=False.
+    from litellm.llms.openai.responses.transformation import OpenAIResponsesAPIConfig
+
+    apply_monkey_patches()
+    config = OpenAIResponsesAPIConfig()
+    assert (
+        config.should_fake_stream(
+            model="o1-pro",
+            stream=True,
+            custom_llm_provider="openai",
+        )
+        is True
+    )
+
+
+def test_openai_should_fake_stream_ignores_non_streaming_requests() -> None:
+    from litellm.llms.openai.responses.transformation import OpenAIResponsesAPIConfig
+
+    apply_monkey_patches()
+    config = OpenAIResponsesAPIConfig()
+    assert (
+        config.should_fake_stream(
+            model="o1-pro",
+            stream=None,
+            custom_llm_provider="openai",
+        )
+        is False
+    )
