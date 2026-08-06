@@ -1018,14 +1018,21 @@ class UserManager(UUIDIDMixin, BaseUserManager[User, uuid.UUID]):
                     user = await self.user_db.get_by_email(account_email)
                     if user is None:
                         raise exceptions.UserNotExists()
-                    if not associate_by_email and user.account_type.is_web_login():
-                        # Linking a login to an existing same-email account is
-                        # an account-takeover vector unless explicitly enabled.
-                        # Non-web-login placeholders (permission-sync
-                        # EXT_PERM_USER, bots) carry no credentials or sessions,
-                        # so there is nothing to take over, and the non-web-login
-                        # upgrade below claims them.
-                        raise exceptions.UserAlreadyExists()
+                    # Placeholders (EXT_PERM_USER, bots) carry no credentials or
+                    # sessions, so neither check applies and the upgrade claims them.
+                    if user.account_type.is_web_login():
+                        # Linking commits, so a disabled row comes back unlinked.
+                        # Linking would hand it to this identity on reactivation.
+                        if not user.is_active:
+                            return user
+
+                        # An owned row must not take a second provider, and a
+                        # rename stops the address identifying the row. All else
+                        # is claimable, password signups included.
+                        if not associate_by_email and (
+                            user.oauth_accounts or user.prior_emails
+                        ):
+                            raise exceptions.UserAlreadyExists()
 
                     user = await self.user_db.add_oauth_account(
                         user, oauth_account_dict
