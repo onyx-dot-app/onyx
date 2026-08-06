@@ -55,7 +55,6 @@ from onyx.server.features.build.db.sandbox import (
     set_sandbox_mcp_config_hashes__no_commit,
     set_sandbox_skills_hashes__no_commit,
     sleep_running_sandbox__no_commit,
-    terminate_failed_sandbox__no_commit,
 )
 from onyx.server.features.build.sandbox.base import SandboxManager
 from onyx.server.features.build.sandbox.models import (
@@ -815,8 +814,8 @@ def sleep_sandbox(
     tenant_id: str,
     session_creation_lock: RedisLock,
 ) -> None:
-    """Snapshot an idle ``RUNNING`` sandbox, terminate its pod, and mark it
-    ``SLEEPING``. Commits on success; on abort the sandbox stays ``RUNNING``.
+    """Snapshot an idle ``RUNNING`` or ``FAILED`` sandbox, terminate its pod,
+    and mark it ``SLEEPING``. Commits on success; on abort its status is unchanged.
 
     Invariant: snapshot before terminate, fail-closed — a snapshot failure on
     a reachable pod aborts the reap so the next sweep retries, while an
@@ -895,10 +894,10 @@ def sleep_sandbox(
     logger.info("Putting sandbox %s to sleep", sandbox_id)
 
     # Fail-closed: terminating with an unsnapshotted workspace loses it
-    # (restore falls back to a fresh template). Keep the sandbox RUNNING to
+    # (restore falls back to a fresh template). Keep the sandbox sweepable to
     # retry next cycle — unless the pod is unreachable, where snapshots can
-    # never succeed and the workspace is already gone, so don't pin it
-    # RUNNING forever.
+    # never succeed and the workspace is already gone, so don't pin it in a
+    # sweepable state forever.
     pod_unreachable = False
     if snapshot_failed:
         if sandbox_manager.health_check(
@@ -906,7 +905,7 @@ def sleep_sandbox(
         ):
             logger.error(
                 "Snapshot failed for sandbox %s; "
-                "leaving it RUNNING to retry next cycle",
+                "leaving it unchanged to retry next cycle",
                 sandbox_id,
             )
             return
@@ -947,9 +946,10 @@ def sleep_sandbox(
         # Snapshotting above can take minutes; re-check idleness right before
         # the kill and capture the attempt number the sleep must still match.
         db_session.refresh(sandbox)
-        if sandbox.status != SandboxStatus.RUNNING or not is_sandbox_idle(
-            sandbox, datetime.now(timezone.utc)
-        ):
+        if sandbox.status not in {
+            SandboxStatus.RUNNING,
+            SandboxStatus.FAILED,
+        } or not is_sandbox_idle(sandbox, datetime.now(timezone.utc)):
             logger.info("Sandbox %s went active mid-sweep; skipping reap", sandbox_id)
             return
         sleep_attempt_number = sandbox.provisioning_attempt_number
@@ -981,54 +981,6 @@ def sleep_sandbox(
 
         db_session.commit()
         logger.info("Sandbox %s is now sleeping", sandbox_id)
-    finally:
-        if session_creation_lock.owned():
-            session_creation_lock.release()
-
-
-def reap_failed_sandbox(
-    db_session: DBSession,
-    sandbox_manager: SandboxManager,
-    sandbox: Sandbox,
-    session_creation_lock: RedisLock,
-) -> None:
-    """Tear down a FAILED sandbox's runtime and mark it TERMINATED.
-
-    The session-flow lock serializes cleanup against create/restore. The status
-    and attempt number are checked again immediately before teardown so a row
-    selected earlier in the sweep cannot race a retry.
-    """
-    if not session_creation_lock.acquire(blocking=False):
-        logger.info(
-            "Skipping failed sandbox %s while a session is being created",
-            sandbox.id,
-        )
-        return
-
-    try:
-        db_session.refresh(sandbox)
-        if sandbox.status != SandboxStatus.FAILED:
-            logger.info(
-                "Sandbox %s left FAILED state mid-sweep; skipping reap",
-                sandbox.id,
-            )
-            return
-
-        attempt_number = sandbox.provisioning_attempt_number
-        sandbox_manager.terminate(sandbox.id)
-        if not terminate_failed_sandbox__no_commit(
-            db_session, sandbox.id, attempt_number
-        ):
-            db_session.rollback()
-            logger.warning(
-                "Sandbox %s started a newer attempt during failed reap; "
-                "leaving its database state untouched",
-                sandbox.id,
-            )
-            return
-
-        db_session.commit()
-        logger.info("Cleaned up failed sandbox %s", sandbox.id)
     finally:
         if session_creation_lock.owned():
             session_creation_lock.release()

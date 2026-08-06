@@ -167,40 +167,19 @@ def sleep_running_sandbox__no_commit(
     sandbox_id: UUID,
     attempt_number: int,
 ) -> bool:
-    """``RUNNING`` → ``SLEEPING`` for the idle reaper — applied only if the
-    sandbox still belongs to attempt ``attempt_number``. Returns False when the
-    row moved on (a concurrent recovery or create started a newer attempt /
-    left RUNNING), so the reaper must not clobber that decision."""
-    result = db_session.execute(
-        update(Sandbox)
-        .where(
-            Sandbox.id == sandbox_id,
-            Sandbox.provisioning_attempt_number == attempt_number,
-            Sandbox.status == SandboxStatus.RUNNING,
-        )
-        .values(status=SandboxStatus.SLEEPING)
-    )
-    return result.rowcount == 1  # ty: ignore[unresolved-attribute]
-
-
-def terminate_failed_sandbox__no_commit(
-    db_session: Session,
-    sandbox_id: UUID,
-    attempt_number: int,
-) -> bool:
-    """Mark a cleaned-up ``FAILED`` sandbox ``TERMINATED``.
+    """Move ``RUNNING``/``FAILED`` to ``SLEEPING`` for the idle reaper.
 
     The attempt-number guard prevents a stale reaper from overwriting a newer
-    provisioning attempt if the caller's session-flow lock was lost.
+    provisioning attempt. Returns False when the row has already moved on.
     """
     result = db_session.execute(
         update(Sandbox)
         .where(
             Sandbox.id == sandbox_id,
             Sandbox.provisioning_attempt_number == attempt_number,
-            Sandbox.status == SandboxStatus.FAILED,
+            Sandbox.status.in_([SandboxStatus.RUNNING, SandboxStatus.FAILED]),
         )
-        .values(status=SandboxStatus.TERMINATED)
+        .values(status=SandboxStatus.SLEEPING)
     )
     return result.rowcount == 1  # ty: ignore[unresolved-attribute]
 
@@ -270,14 +249,16 @@ def update_sandbox_heartbeat(db_session: Session, sandbox_id: UUID) -> Sandbox:
 
 
 def get_running_sandboxes(db_session: Session) -> list[Sandbox]:
-    """Get all RUNNING sandboxes (the sweep task's working set)."""
+    """Get all RUNNING sandboxes."""
     stmt = select(Sandbox).where(Sandbox.status == SandboxStatus.RUNNING)
     return list(db_session.execute(stmt).scalars().all())
 
 
-def get_failed_sandboxes(db_session: Session) -> list[Sandbox]:
-    """Get FAILED sandboxes whose runtime resources may need cleanup."""
-    stmt = select(Sandbox).where(Sandbox.status == SandboxStatus.FAILED)
+def get_sweepable_sandboxes(db_session: Session) -> list[Sandbox]:
+    """Get sandboxes whose runtime may need snapshotting or cleanup."""
+    stmt = select(Sandbox).where(
+        Sandbox.status.in_([SandboxStatus.RUNNING, SandboxStatus.FAILED])
+    )
     return list(db_session.execute(stmt).scalars().all())
 
 

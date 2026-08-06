@@ -31,7 +31,6 @@ from onyx.server.features.build.sandbox.models import SnapshotResult
 from onyx.server.features.build.session import (
     sandbox_lifecycle as sandbox_lifecycle_module,
 )
-from onyx.server.features.build.session.locks import get_session_creation_lock
 from shared_configs.configs import POSTGRES_DEFAULT_SCHEMA_STANDARD_VALUE
 from shared_configs.contextvars import CURRENT_TENANT_ID_CONTEXTVAR
 from tests.common.craft.stubs import StubSandboxManager
@@ -136,68 +135,20 @@ def _backdate_created_at(
 # ---------------------------------------------------------------------------
 
 
-def test_failed_sandbox_is_terminated(
-    db_session: Session,
-    test_user: User,  # noqa: ARG001
-    stubbed_cleanup: StubSandboxManager,
-) -> None:
-    """A failed provision can leave a pod, so the sweep tears it down."""
-    user = make_user(db_session)
-    sandbox = make_sandbox(db_session, user, status=SandboxStatus.FAILED)
-    db_session.commit()
-    stubbed_cleanup.terminate_silent = True
-
-    cleanup_idle_sandboxes_task.run(tenant_id=POSTGRES_DEFAULT_SCHEMA_STANDARD_VALUE)  # ty: ignore[invalid-argument-type]
-
-    db_session.expire_all()
-    refreshed = db_session.get(Sandbox, sandbox.id)
-    assert refreshed is not None
-    assert refreshed.status == SandboxStatus.TERMINATED
-    assert sandbox.id in stubbed_cleanup.terminated_sandbox_ids
-
-
-def test_session_creation_lock_prevents_failed_reap(
-    db_session: Session,
-    test_user: User,  # noqa: ARG001
-    stubbed_cleanup: StubSandboxManager,
-) -> None:
-    """A retry holding the session-flow lock owns the failed sandbox."""
-    user = make_user(db_session)
-    sandbox = make_sandbox(db_session, user, status=SandboxStatus.FAILED)
-    db_session.commit()
-    stubbed_cleanup.terminate_silent = True
-
-    token = CURRENT_TENANT_ID_CONTEXTVAR.set(POSTGRES_DEFAULT_SCHEMA_STANDARD_VALUE)
-    redis_client = get_redis_client(tenant_id=POSTGRES_DEFAULT_SCHEMA_STANDARD_VALUE)
-    creation_lock = get_session_creation_lock(redis_client, user.id)
-    try:
-        assert creation_lock.acquire(blocking=False) is True
-        cleanup_idle_sandboxes_task.run(
-            tenant_id=POSTGRES_DEFAULT_SCHEMA_STANDARD_VALUE  # ty: ignore[invalid-argument-type]
-        )
-    finally:
-        if creation_lock.owned():
-            creation_lock.release()
-        CURRENT_TENANT_ID_CONTEXTVAR.reset(token)
-
-    db_session.expire_all()
-    refreshed = db_session.get(Sandbox, sandbox.id)
-    assert refreshed is not None
-    assert refreshed.status == SandboxStatus.FAILED
-    assert sandbox.id not in stubbed_cleanup.terminated_sandbox_ids
-
-
+@pytest.mark.parametrize(
+    "sandbox_status", [SandboxStatus.RUNNING, SandboxStatus.FAILED]
+)
 def test_idle_sandbox_snapshotted_then_terminated_then_sleep_status(
     db_session: Session,
-    test_user: User,  # noqa: ARG001
+    test_user: User,
     stubbed_cleanup: StubSandboxManager,
     short_idle_threshold: int,
+    sandbox_status: SandboxStatus,
 ) -> None:
-    """Happy path: snapshot session, terminate pod, mark sandbox SLEEPING."""
-    user = make_user(db_session)
-    sandbox = make_sandbox(db_session, user)
+    """Sweepable sandboxes snapshot sessions before becoming SLEEPING."""
+    sandbox = make_sandbox(db_session, test_user, status=sandbox_status)
     session_row = BuildSession(
-        user_id=user.id,
+        user_id=test_user.id,
         name="idle-session",
         status=BuildSessionStatus.ACTIVE,
     )
@@ -702,7 +653,7 @@ def test_idle_reaped_before_non_idle_background_snapshot(
     """A single sweep reaps the idle sandbox (snapshot + terminate) before it
     background-snapshots a non-idle-but-stale one.
 
-    ``get_running_sandboxes`` is forced to return the non-idle sandbox first,
+    ``get_sweepable_sandboxes`` is forced to return the non-idle sandbox first,
     so a regression to interleaved processing would background-snapshot it
     before the idle one is reaped; idle-first partitioning must override that.
     """
@@ -746,15 +697,15 @@ def test_idle_reaped_before_non_idle_background_snapshot(
 
     # The sweep query has no ORDER BY, so force the adversarial order rather
     # than relying on physical row order matching commit order.
-    real_get_running_sandboxes = tasks_module.get_running_sandboxes
+    real_get_sweepable_sandboxes = tasks_module.get_sweepable_sandboxes
 
     def _nonidle_first(session: Session) -> list[Sandbox]:
         return sorted(
-            real_get_running_sandboxes(session),
+            real_get_sweepable_sandboxes(session),
             key=lambda s: s.id != nonidle_sandbox.id,
         )
 
-    monkeypatch.setattr(tasks_module, "get_running_sandboxes", _nonidle_first)
+    monkeypatch.setattr(tasks_module, "get_sweepable_sandboxes", _nonidle_first)
 
     stubbed_cleanup.create_snapshot_returns = SnapshotResult(
         storage_path="s3://snapshots/ordering.tar.gz",
