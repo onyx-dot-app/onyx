@@ -879,6 +879,39 @@ def test_gateway_anthropic_count_tokens_includes_tools() -> None:
     )
 
 
+def test_gateway_anthropic_count_tokens_rejects_oversized_local_input() -> None:
+    provider = _provider(1, "openai", [_model("test")])
+    request = AnthropicCountTokensRequest(
+        model="1/test",
+        messages=[{"role": "user", "content": "too large"}],
+    )
+
+    with (
+        patch.object(
+            gateway_api,
+            "gateway_request_flow",
+            MagicMock(return_value=LLMFlow.LLM_GATEWAY),
+        ),
+        patch.object(
+            gateway_api,
+            "resolve_gateway_model",
+            return_value=(provider, provider.model_configurations[0]),
+        ),
+        patch.object(gateway_api, "GATEWAY_COUNT_TOKENS_MAX_LOCAL_INPUT_BYTES", 1),
+        patch("onyx.llm.litellm_singleton.litellm.token_counter") as token_counter,
+        pytest.raises(OnyxError) as exc_info,
+    ):
+        gateway_api.gateway_anthropic_count_tokens(
+            request=request,
+            http_request=MagicMock(spec=Request),
+            user=MagicMock(),
+            db_session=MagicMock(spec=Session),
+        )
+
+    assert exc_info.value.error_code == OnyxErrorCode.PAYLOAD_TOO_LARGE
+    token_counter.assert_not_called()
+
+
 def test_anthropic_signed_thinking_blocks_survive_input_translation() -> None:
     messages = [
         {"role": "user", "content": "hi"},

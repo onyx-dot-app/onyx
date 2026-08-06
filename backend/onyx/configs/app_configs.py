@@ -967,6 +967,27 @@ FEEDBACK_RATE_LIMITING_ENABLED = (
     and CACHE_BACKEND == CacheBackendType.REDIS
 )
 
+# Rate limiting for the Anthropic-compatible count-tokens endpoint. Counting is
+# not billable model usage, but local fallback tokenization can still consume
+# substantial API-server CPU for large requests.
+GATEWAY_COUNT_TOKENS_RATE_LIMIT_MAX_REQUESTS = int(
+    os.environ.get("GATEWAY_COUNT_TOKENS_RATE_LIMIT_MAX_REQUESTS", "60")
+)
+GATEWAY_COUNT_TOKENS_RATE_LIMIT_WINDOW_SECONDS = int(
+    os.environ.get("GATEWAY_COUNT_TOKENS_RATE_LIMIT_WINDOW_SECONDS", "60")
+)
+GATEWAY_COUNT_TOKENS_RATE_LIMITING_ENABLED = (
+    GATEWAY_COUNT_TOKENS_RATE_LIMIT_MAX_REQUESTS > 0
+    and GATEWAY_COUNT_TOKENS_RATE_LIMIT_WINDOW_SECONDS > 0
+    and CACHE_BACKEND == CacheBackendType.REDIS
+)
+
+# Local tokenization is the fallback when a provider cannot count tokens. Keep
+# this below the upstream API body limit so a fallback cannot monopolize CPU.
+GATEWAY_COUNT_TOKENS_MAX_LOCAL_INPUT_BYTES = _non_negative_int_env(
+    "GATEWAY_COUNT_TOKENS_MAX_LOCAL_INPUT_BYTES", 4 * 1024 * 1024
+)
+
 # Used for general redis things
 REDIS_DB_NUMBER = int(os.environ.get("REDIS_DB_NUMBER", 0))
 
