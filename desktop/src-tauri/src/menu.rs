@@ -1,5 +1,6 @@
 use crate::config::ConfigState;
 use crate::debug_log::{log_backend_error, MENU_OPEN_DEBUG_LOG_ID, MENU_TOGGLE_DEVTOOLS_ID};
+use crate::shortcuts::SummonShortcut;
 use crate::window::{focus_main_window, open_chat_window};
 use tauri::image::Image;
 #[cfg(not(target_os = "macos"))]
@@ -18,6 +19,7 @@ const TRAY_ICON_BYTES: &[u8] = include_bytes!("../icons/tray-icon.png");
 const ABOUT_ICON_BYTES: &[u8] = include_bytes!("../icons/128x128.png");
 const TRAY_MENU_OPEN_APP_ID: &str = "tray_open_app";
 const TRAY_MENU_OPEN_CHAT_ID: &str = "tray_open_chat";
+const TRAY_MENU_SUMMON_NEW_CHAT_ID: &str = "tray_summon_new_chat";
 const TRAY_MENU_SHOW_IN_BAR_ID: &str = "tray_show_in_menu_bar";
 const TRAY_MENU_QUIT_ID: &str = "tray_quit";
 pub const MENU_SHOW_MENU_BAR_ID: &str = "show_menu_bar";
@@ -27,6 +29,9 @@ pub const MENU_NEW_CHAT_ID: &str = "new_chat";
 pub const MENU_NEW_WINDOW_ID: &str = "new_window";
 pub const MENU_OPEN_SETTINGS_ID: &str = "open_settings";
 pub const MENU_OPEN_DOCS_ID: &str = "open_docs";
+pub const MENU_RELOAD_ID: &str = "reload_page";
+pub const MENU_GO_BACK_ID: &str = "go_back";
+pub const MENU_GO_FORWARD_ID: &str = "go_forward";
 
 /// Handles to the checkable menu items, populated once in `setup_app_menu`.
 /// Toggling reaches for these directly instead of re-walking the whole menu
@@ -77,6 +82,83 @@ fn build_file_menu(app: &AppHandle, menu: &Menu<Wry>) -> tauri::Result<()> {
     }
 
     Ok(())
+}
+
+/// Reload/Back/Forward as View-menu accelerators. These are the chords the
+/// removed global-shortcut set (#7914) wrongly registered system-wide; as
+/// menu accelerators they only fire while an Onyx window has focus.
+fn build_view_menu(app: &AppHandle, menu: &Menu<Wry>) -> tauri::Result<()> {
+    let reload_item = MenuItem::with_id(app, MENU_RELOAD_ID, "Reload", true, Some("CmdOrCtrl+R"))?;
+
+    // Browser-convention history chords: Cmd+[ / Cmd+] on macOS, Alt+arrows elsewhere.
+    let (back_accel, forward_accel) = if cfg!(target_os = "macos") {
+        ("CmdOrCtrl+BracketLeft", "CmdOrCtrl+BracketRight")
+    } else {
+        ("Alt+ArrowLeft", "Alt+ArrowRight")
+    };
+    let back_item = MenuItem::with_id(app, MENU_GO_BACK_ID, "Back", true, Some(back_accel))?;
+    let forward_item = MenuItem::with_id(
+        app,
+        MENU_GO_FORWARD_ID,
+        "Forward",
+        true,
+        Some(forward_accel),
+    )?;
+
+    if let Some(view_menu) = menu
+        .items()?
+        .into_iter()
+        .filter_map(|item| item.as_submenu().cloned())
+        .find(|submenu| submenu.text().ok().as_deref() == Some("View"))
+    {
+        view_menu.insert_items(&[&reload_item, &back_item, &forward_item], 0)?;
+        view_menu.insert(&PredefinedMenuItem::separator(app)?, 3)?;
+    } else {
+        let view_menu = SubmenuBuilder::new(app, "View")
+            .items(&[&reload_item, &back_item, &forward_item])
+            .build()?;
+        let items = menu.items()?;
+        let insert_idx = items
+            .iter()
+            .position(|item| {
+                let text = item.as_submenu().and_then(|submenu| submenu.text().ok());
+                matches!(text.as_deref(), Some("Window" | "Help"))
+            })
+            .unwrap_or(items.len());
+        menu.insert(&view_menu, insert_idx)?;
+    }
+
+    Ok(())
+}
+
+/// The window a View-menu action should apply to: whichever one is focused
+/// (menu accelerators only fire while the app is active, but the app can have
+/// several windows).
+fn focused_webview_window(app: &AppHandle) -> Option<tauri::WebviewWindow> {
+    app.webview_windows().into_values().find(|window| {
+        window.is_focused().unwrap_or_else(|e| {
+            log_backend_error(app, &format!("Failed to query window focus: {e}"));
+            false
+        })
+    })
+}
+
+pub fn handle_reload(app: &AppHandle) {
+    if let Some(window) = focused_webview_window(app) {
+        crate::commands::reload_page(window);
+    }
+}
+
+pub fn handle_go_back(app: &AppHandle) {
+    if let Some(window) = focused_webview_window(app) {
+        crate::commands::go_back(window);
+    }
+}
+
+pub fn handle_go_forward(app: &AppHandle) {
+    if let Some(window) = focused_webview_window(app) {
+        crate::commands::go_forward(window);
+    }
 }
 
 #[cfg(not(target_os = "macos"))]
@@ -216,6 +298,7 @@ pub fn setup_app_menu(app: &AppHandle) -> tauri::Result<()> {
     let menu = app.menu().unwrap_or(Menu::default(app)?);
 
     build_file_menu(app, &menu)?;
+    build_view_menu(app, &menu)?;
     #[cfg(not(target_os = "macos"))]
     build_window_menu(app, &menu)?;
     build_help_menu(app, &menu)?;
@@ -288,14 +371,47 @@ pub fn handle_decorations_toggle(app: &AppHandle) {
 }
 
 fn build_tray_menu(app: &AppHandle) -> tauri::Result<Menu<Wry>> {
-    let open_app = MenuItem::with_id(app, TRAY_MENU_OPEN_APP_ID, "Open Onyx", true, None::<&str>)?;
+    let summon_chord = app
+        .try_state::<SummonShortcut>()
+        .map(|shortcut| shortcut.chord.clone());
+    let summon_opens_new_chat = app.state::<ConfigState>().config().summon_opens_new_chat;
+
+    // Surface the summon chord on whichever tray action it actually triggers.
+    // Tray accelerators are display-only hints here; the real binding is the
+    // global shortcut registered in `shortcuts.rs`.
+    let (open_app_chord, open_chat_chord) = if summon_opens_new_chat {
+        (None, summon_chord.clone())
+    } else {
+        (summon_chord.clone(), None)
+    };
+
+    let open_app = MenuItem::with_id(
+        app,
+        TRAY_MENU_OPEN_APP_ID,
+        "Open Onyx",
+        true,
+        open_app_chord.as_deref(),
+    )?;
     let open_chat = MenuItem::with_id(
         app,
         TRAY_MENU_OPEN_CHAT_ID,
         "Open Chat Window",
         true,
-        None::<&str>,
+        open_chat_chord.as_deref(),
     )?;
+    // Only meaningful while a summon shortcut is registered.
+    let summon_new_chat = if summon_chord.is_some() {
+        Some(CheckMenuItem::with_id(
+            app,
+            TRAY_MENU_SUMMON_NEW_CHAT_ID,
+            "New Chat on Summon",
+            true,
+            summon_opens_new_chat,
+            None::<&str>,
+        )?)
+    } else {
+        None
+    };
     let show_in_menu_bar = CheckMenuItem::with_id(
         app,
         TRAY_MENU_SHOW_IN_BAR_ID,
@@ -308,14 +424,42 @@ fn build_tray_menu(app: &AppHandle) -> tauri::Result<Menu<Wry>> {
     show_in_menu_bar.set_enabled(false)?;
     let quit = PredefinedMenuItem::quit(app, Some("Quit Onyx"))?;
 
-    MenuBuilder::new(app)
-        .item(&open_app)
-        .item(&open_chat)
+    let mut builder = MenuBuilder::new(app).item(&open_app).item(&open_chat);
+    if let Some(item) = summon_new_chat.as_ref() {
+        builder = builder.separator().item(item);
+    }
+    builder
         .separator()
         .item(&show_in_menu_bar)
         .separator()
         .item(&quit)
         .build()
+}
+
+/// Toggle whether the global summon shortcut opens a new chat or just focuses
+/// the window, then rebuild the tray menu so the accelerator hint follows the
+/// action it actually triggers.
+fn handle_summon_new_chat_toggle(app: &AppHandle) {
+    let state = app.state::<ConfigState>();
+    if let Err(e) = state.update_and_persist(|c| c.summon_opens_new_chat = !c.summon_opens_new_chat)
+    {
+        log_backend_error(app, &format!("Failed to save config: {e}"));
+    }
+    refresh_tray_menu(app);
+}
+
+fn refresh_tray_menu(app: &AppHandle) {
+    let Some(tray) = app.tray_by_id(TRAY_ID) else {
+        return;
+    };
+    match build_tray_menu(app) {
+        Ok(menu) => {
+            if let Err(e) = tray.set_menu(Some(menu)) {
+                log_backend_error(app, &format!("Failed to refresh tray menu: {e}"));
+            }
+        }
+        Err(e) => log_backend_error(app, &format!("Failed to rebuild tray menu: {e}")),
+    }
 }
 
 // `TRAY_MENU_SHOW_IN_BAR_ID`'s arm is intentionally kept distinct from the
@@ -334,6 +478,7 @@ fn handle_tray_menu_event(app: &AppHandle, id: &str) {
         TRAY_MENU_QUIT_ID => {
             app.exit(0);
         }
+        TRAY_MENU_SUMMON_NEW_CHAT_ID => handle_summon_new_chat_toggle(app),
         TRAY_MENU_SHOW_IN_BAR_ID => {}
         _ => {}
     }
