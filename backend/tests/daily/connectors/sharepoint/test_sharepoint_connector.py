@@ -6,6 +6,7 @@ from unittest.mock import MagicMock, patch
 
 import pytest
 
+from onyx.access.models import ExternalAccess
 from onyx.configs.constants import DocumentSource
 from onyx.connectors.models import (
     ConnectorFailure,
@@ -94,6 +95,10 @@ EXPECTED_PAGES = [
     ),
 ]
 
+EXPECTED_SITE_ACCESS: ExternalAccess | None = None
+EXPECTED_SHARED_DOCUMENTS_ACCESS: ExternalAccess | None = None
+EXPECTED_TEST_FOLDER_ACCESS: ExternalAccess | None = None
+
 
 def verify_document_metadata(doc: Document) -> None:
     """Verify common metadata that should be present on all documents."""
@@ -139,6 +144,26 @@ def find_document(documents: list[Document], semantic_identifier: str) -> Docume
         f"Expected exactly one document with identifier {semantic_identifier}"
     )
     return matching_docs[0]
+
+
+def find_hierarchy_node(
+    nodes: list[HierarchyNode],
+    node_type: HierarchyNodeType,
+    display_name: str,
+    raw_parent_id: str | None,
+) -> HierarchyNode:
+    matching_nodes = [
+        node
+        for node in nodes
+        if node.node_type == node_type
+        and node.display_name == display_name
+        and node.raw_parent_id == raw_parent_id
+    ]
+    assert len(matching_nodes) == 1, (
+        f"Expected one {node_type.value} node named {display_name} "
+        f"under {raw_parent_id}, found {len(matching_nodes)}"
+    )
+    return matching_nodes[0]
 
 
 @pytest.fixture
@@ -552,6 +577,61 @@ def sharepoint_cert_credentials(
         ],
         "sp_directory_id": test_secrets[TestSecret.PERM_SYNC_SHAREPOINT_DIRECTORY_ID],
     }
+
+
+def test_sharepoint_connector_hierarchy_node_permissions(
+    mock_get_unstructured_api_key: MagicMock,  # noqa: ARG001
+    mock_store_image: MagicMock,
+    sharepoint_cert_credentials: dict[str, str],
+) -> None:
+    site_expected_access = EXPECTED_SITE_ACCESS
+    drive_expected_access = EXPECTED_SHARED_DOCUMENTS_ACCESS
+    folder_expected_access = EXPECTED_TEST_FOLDER_ACCESS
+    assert site_expected_access is not None
+    assert drive_expected_access is not None
+    assert folder_expected_access is not None
+
+    site_url = os.environ["SHAREPOINT_SITE"]
+    connector = SharepointConnector(
+        sites=[site_url],
+        include_site_pages=False,
+        include_site_documents=True,
+    )
+    connector.load_credentials(sharepoint_cert_credentials)
+
+    with patch(
+        "onyx.connectors.sharepoint.connector.store_image_and_create_section",
+        mock_store_image,
+    ):
+        result = load_all_from_connector(
+            connector,
+            start=0,
+            end=time.time(),
+            include_permissions=True,
+        )
+
+    site_node = find_hierarchy_node(
+        result.hierarchy_nodes,
+        HierarchyNodeType.SITE,
+        site_url.rstrip("/").rsplit("/", 1)[-1],
+        None,
+    )
+    drive_node = find_hierarchy_node(
+        result.hierarchy_nodes,
+        HierarchyNodeType.DRIVE,
+        "Shared Documents",
+        site_node.raw_node_id,
+    )
+    folder_node = find_hierarchy_node(
+        result.hierarchy_nodes,
+        HierarchyNodeType.FOLDER,
+        "test",
+        drive_node.raw_node_id,
+    )
+
+    assert site_node.external_access == site_expected_access
+    assert drive_node.external_access == drive_expected_access
+    assert folder_node.external_access == folder_expected_access
 
 
 def test_resolve_tenant_domain_from_site_urls(
