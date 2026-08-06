@@ -56,7 +56,7 @@ test("formats and submits a token-only budget", async () => {
       720,
       1_500_000,
       null,
-      expect.any(Number)
+      undefined
     )
   );
 });

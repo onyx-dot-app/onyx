@@ -27,6 +27,9 @@ import InputTypeInField from "@/refresh-components/form/InputTypeInField";
 const HOURS_PER_DAY = 24;
 // 1T tokens stored as thousands (1e9) stays well inside the column's int32.
 const MAX_TOKEN_BUDGET = 1_000_000_000_000;
+// Cents must fit the column's Numeric(18,6); $10B keeps *100 well under that cap
+// and away from float precision loss (JSON.stringify(Infinity) serializes to null).
+const MAX_COST_BUDGET_DOLLARS = 10_000_000_000;
 
 interface RateLimitFormValues {
   enabled: boolean;
@@ -344,7 +347,7 @@ interface CreateRateLimitModalProps {
     period_hours: number,
     token_budget: number | null,
     cost_budget_cents: number | null,
-    group_id: number
+    group_id?: number
   ) => Promise<void>;
   forSpecificScope?: Scope;
   forSpecificUserGroup?: number;
@@ -415,6 +418,10 @@ export default function CreateRateLimitModal({
                 original === "" ? undefined : value
               )
               .moreThan(0, "Cost budget must be greater than 0")
+              .max(
+                MAX_COST_BUDGET_DOLLARS,
+                `The maximum cost budget is $${new Intl.NumberFormat("en-US").format(MAX_COST_BUDGET_DOLLARS)}`
+              )
               .test(
                 "minimum-cents",
                 "Cost budget must be at least $0.01",
@@ -471,7 +478,9 @@ export default function CreateRateLimitModal({
               Number(values.period_days) * HOURS_PER_DAY,
               tokenBudget,
               costBudgetCents,
-              Number(values.user_group_id)
+              values.target_scope === Scope.USER_GROUP
+                ? Number(values.user_group_id)
+                : undefined
             );
           }}
         >
