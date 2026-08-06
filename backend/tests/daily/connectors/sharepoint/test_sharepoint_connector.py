@@ -33,6 +33,7 @@ pytestmark = pytest.mark.secrets(
 
 # NOTE: Sharepoint site for tests is "sharepoint-tests"
 SCALE_TEST_SITE_URL = "https://danswerai.sharepoint.com/sites/OnyxTesting2"
+PERMISSION_SYNC_SITE_URL = "https://danswerai.sharepoint.com/sites/Permisisonsync"
 
 
 @dataclass
@@ -95,9 +96,39 @@ EXPECTED_PAGES = [
     ),
 ]
 
-EXPECTED_SITE_ACCESS: ExternalAccess | None = None
-EXPECTED_SHARED_DOCUMENTS_ACCESS: ExternalAccess | None = None
-EXPECTED_TEST_FOLDER_ACCESS: ExternalAccess | None = None
+EXPECTED_HIERARCHY_ACCESS = ExternalAccess(
+    external_user_emails=set(),
+    external_user_group_ids={
+        "sharepoint_https://danswerai.sharepoint.com/sites/sharepoint-tests::sharepoint-tests members",
+        "sharepoint_https://danswerai.sharepoint.com/sites/sharepoint-tests::sharepoint-tests owners",
+        "sharepoint_https://danswerai.sharepoint.com/sites/sharepoint-tests::sharepoint-tests visitors",
+        "sharepoint_sharepoint-tests members_b1e591ce-fda6-4f5f-8ef3-eac8296a5b1d",
+        "sharepoint_sharepoint-tests owners_b1e591ce-fda6-4f5f-8ef3-eac8296a5b1d",
+    },
+    is_public=False,
+)
+EXPECTED_PERMISSION_SYNC_HIERARCHY_ACCESS = ExternalAccess(
+    external_user_emails=set(),
+    external_user_group_ids={
+        "sharepoint_https://danswerai.sharepoint.com/sites/permisisonsync::permisison sync members",
+        "sharepoint_https://danswerai.sharepoint.com/sites/permisisonsync::permisison sync owners",
+        "sharepoint_https://danswerai.sharepoint.com/sites/permisisonsync::permisison sync visitors",
+        "sharepoint_https://danswerai.sharepoint.com/sites/permisisonsync::test group",
+        "sharepoint_inner group test_4054a013-e061-43fc-95ed-103c3a8c94d5",
+        "sharepoint_permisison sync members_5c0de9c9-6d58-452d-8b35-e5a18f583799",
+        "sharepoint_permisison sync owners_5c0de9c9-6d58-452d-8b35-e5a18f583799",
+        "sharepoint_sharepoint group sync 365 group members_757ef1f5-0bfb-44b4-8d03-3b0dc5c862d1",
+        "sharepoint_sharepoint group sync test_3ae47611-eadb-45b0-89c8-ad454fc04b12",
+    },
+    is_public=False,
+)
+EXPECTED_PERMISSION_SYNC_FOLDER_ACCESS = ExternalAccess(
+    external_user_emails={"subash@onyx.app"},
+    external_user_group_ids=(
+        EXPECTED_PERMISSION_SYNC_HIERARCHY_ACCESS.external_user_group_ids
+    ),
+    is_public=False,
+)
 
 
 def verify_document_metadata(doc: Document) -> None:
@@ -584,13 +615,6 @@ def test_sharepoint_connector_hierarchy_node_permissions(
     mock_store_image: MagicMock,
     sharepoint_cert_credentials: dict[str, str],
 ) -> None:
-    site_expected_access = EXPECTED_SITE_ACCESS
-    drive_expected_access = EXPECTED_SHARED_DOCUMENTS_ACCESS
-    folder_expected_access = EXPECTED_TEST_FOLDER_ACCESS
-    assert site_expected_access is not None
-    assert drive_expected_access is not None
-    assert folder_expected_access is not None
-
     site_url = os.environ["SHAREPOINT_SITE"]
     connector = SharepointConnector(
         sites=[site_url],
@@ -629,9 +653,55 @@ def test_sharepoint_connector_hierarchy_node_permissions(
         drive_node.raw_node_id,
     )
 
-    assert site_node.external_access == site_expected_access
-    assert drive_node.external_access == drive_expected_access
-    assert folder_node.external_access == folder_expected_access
+    assert site_node.external_access == EXPECTED_HIERARCHY_ACCESS
+    assert drive_node.external_access == EXPECTED_HIERARCHY_ACCESS
+    assert folder_node.external_access == EXPECTED_HIERARCHY_ACCESS
+
+
+def test_permission_sync_site_hierarchy_node_permissions(
+    mock_get_unstructured_api_key: MagicMock,  # noqa: ARG001
+    mock_store_image: MagicMock,
+    sharepoint_cert_credentials: dict[str, str],
+) -> None:
+    connector = SharepointConnector(
+        sites=[PERMISSION_SYNC_SITE_URL],
+        include_site_pages=False,
+        include_site_documents=True,
+    )
+    connector.load_credentials(sharepoint_cert_credentials)
+    with patch(
+        "onyx.connectors.sharepoint.connector.store_image_and_create_section",
+        mock_store_image,
+    ):
+        result = load_all_from_connector(
+            connector,
+            start=0,
+            end=time.time(),
+            include_permissions=True,
+        )
+
+    site_node = find_hierarchy_node(
+        result.hierarchy_nodes,
+        HierarchyNodeType.SITE,
+        "Permisisonsync",
+        None,
+    )
+    drive_node = find_hierarchy_node(
+        result.hierarchy_nodes,
+        HierarchyNodeType.DRIVE,
+        "Test library 1",
+        site_node.raw_node_id,
+    )
+    folder_node = find_hierarchy_node(
+        result.hierarchy_nodes,
+        HierarchyNodeType.FOLDER,
+        "test folder",
+        drive_node.raw_node_id,
+    )
+
+    assert site_node.external_access == EXPECTED_PERMISSION_SYNC_HIERARCHY_ACCESS
+    assert drive_node.external_access == EXPECTED_PERMISSION_SYNC_HIERARCHY_ACCESS
+    assert folder_node.external_access == EXPECTED_PERMISSION_SYNC_FOLDER_ACCESS
 
 
 def test_resolve_tenant_domain_from_site_urls(
