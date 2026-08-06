@@ -16,7 +16,6 @@ import requests
 from fastapi import APIRouter, Depends, HTTPException, Request
 from mcp.client.auth import OAuthClientProvider
 from mcp.shared.auth import OAuthClientInformationFull, OAuthToken
-from mcp.types import InitializeResult
 from mcp.types import Tool as MCPLibTool
 from pydantic import AnyUrl, BaseModel
 from sqlalchemy.orm import Session
@@ -116,6 +115,7 @@ from onyx.server.features.mcp.oauth import (
     UNUSED_RETURN_PATH,
     MCPOauthState,
     _absolute_token_expiry,
+    initiate_auto_discovery_oauth,
     key_auth_url,
     key_code,
     key_state,
@@ -868,20 +868,13 @@ async def _connect_oauth(
         MCPOAuthKeys.CLIENT_INFO.value in connection_config_dict
         and connection_config_dict.get("headers")
     )
-    # Step 1: make unauthenticated request and parse returned www authenticate header
-    # Ensure we have a trailing slash for the MCP endpoint
-
     if mcp_server.transport is None:
         raise HTTPException(
             status_code=400,
             detail="MCP server transport is not configured",
         )
 
-    # always make a http request for the initial probe
-    transport = mcp_server.transport if is_connected else MCPTransport.STREAMABLE_HTTP
     probe_url = mcp_server.server_url
-    logger.info("Probing OAuth server at: %s", probe_url)
-
     oauth_auth = make_oauth_provider(
         mcp_server,
         str(user.id),
@@ -890,103 +883,62 @@ async def _connect_oauth(
         mcp_server.admin_connection_config_id,
     )
 
-    # start the oauth handshake in the background
-    # the background task will block on the callback handler after setting
-    # the auth_url for us to send to the frontend. The callback handler waits for
-    # the auth code to be available in redis; this code gets set by our callback endpoint
-    # which is called by the frontend after the user goes through the login flow.
-    async def tmp_func() -> InitializeResult:
-        try:
-            x = await initialize_mcp_client(
-                probe_url,
-                connection_headers=connection_config_dict.get("headers", {}),
-                transport=transport,
-                auth=oauth_auth,
-            )
-            logger.info("OAuth initialization completed successfully: %s", x)
-            return x
-        except Exception:
-            logger.exception("OAuth initialization failed")
-            raise
-
-    init_task = asyncio.create_task(tmp_func())
-
-    # Wait for whichever happens first:
-    # 1) The OAuth redirect URL becomes available in Redis (we should return it)
-    # 2) The initialize task completes (tokens already valid) — return to the provided return_path
-    r = get_redis_client()
-    loop = asyncio.get_running_loop()
-
-    async def wait_auth_url() -> str | None:
-        raw = await loop.run_in_executor(
-            None,
-            lambda: r.blpop([key_auth_url(str(user.id))], timeout=OAUTH_WAIT_SECONDS),
-        )
-        if raw is None:
-            return None
-        return raw[1].decode()
-
-    auth_task = None if is_connected else asyncio.create_task(wait_auth_url())
-
-    done, pending = await asyncio.wait(
-        [init_task] + ([auth_task] if auth_task else []),
-        return_when=asyncio.FIRST_COMPLETED,
-    )
-
-    # If we got an auth URL first, return it
-    if auth_task is not None and auth_task in done:
-        oauth_url = await auth_task
-        # If no URL was retrieved within the timeout, treat as error
-        if not oauth_url:
-            # If initialization also finished, treat as already authenticated
-            if init_task.done() and not init_task.cancelled():
-                try:
-                    init_result = init_task.result()
-                    logger.info(
-                        "OAuth initialization completed during timeout: %s", init_result
-                    )
-                    return MCPUserOAuthConnectResponse(
-                        server_id=int(request.server_id),
-                        oauth_url=request.return_path,
-                    )
-                except Exception as e:
-                    logger.error("OAuth initialization failed during timeout: %s", e)
-                    raise HTTPException(
-                        status_code=400, detail=f"OAuth initialization failed: {str(e)}"
-                    )
-            raise HTTPException(status_code=400, detail="Auth URL retrieval timed out")
-
-        logger.info(
-            "Connected to auth url: %s for mcp server: %s", oauth_url, mcp_server.name
-        )
-        return MCPUserOAuthConnectResponse(
-            server_id=int(request.server_id), oauth_url=oauth_url
-        )
-
-    # Otherwise, initialization finished first — no redirect needed; go back to return_path
-    for t in pending:
-        t.cancel()
-    try:
-        init_result = init_task.result()
-        logger.info("OAuth initialization completed without redirect: %s", init_result)
-    except Exception as e:
-        if isinstance(e, ExceptionGroup):
-            saved_e = log_exception_group(e)
-        else:
-            saved_e = e
-        logger.error("OAuth initialization failed: %s", saved_e)
-        # If initialize failed and we also didn't get an auth URL, surface an error
-        raise HTTPException(
-            status_code=400, detail=f"Failed to initialize OAuth client: {str(saved_e)}"
-        )
-
     if not is_connected:
+        redis_client = get_redis_client()
+
+        async def wait_auth_url() -> str | None:
+            raw = await asyncio.to_thread(
+                redis_client.blpop,
+                [key_auth_url(str(user.id))],
+                timeout=OAUTH_WAIT_SECONDS,
+            )
+            return raw[1].decode() if raw is not None else None
+
+        oauth_task = asyncio.create_task(
+            initiate_auto_discovery_oauth(oauth_auth, probe_url)
+        )
+        auth_url_task = asyncio.create_task(wait_auth_url())
+        done, _ = await asyncio.wait(
+            [oauth_task, auth_url_task],
+            return_when=asyncio.FIRST_COMPLETED,
+        )
+        if oauth_task in done:
+            try:
+                await oauth_task
+            except Exception:
+                auth_url_task.cancel()
+                raise
+
+        oauth_url = await auth_url_task
+        if oauth_url:
+            logger.info(
+                "Connected to auth url: %s for mcp server: %s",
+                oauth_url,
+                mcp_server.name,
+            )
+            return MCPUserOAuthConnectResponse(
+                server_id=int(request.server_id), oauth_url=oauth_url
+            )
+        oauth_task.cancel()
         raise OnyxError(
             OnyxErrorCode.INVALID_INPUT,
-            "OAuth auto-discovery did not produce an authorization redirect. "
-            "The MCP server permits unauthenticated initialization; configure "
-            "it with Known Provider OAuth, including its authorization endpoint, "
-            "token endpoint, and scopes.",
+            "OAuth auto-discovery did not produce an authorization redirect.",
+        )
+
+    logger.info("Initializing authenticated OAuth server at: %s", probe_url)
+    try:
+        init_result = await initialize_mcp_client(
+            probe_url,
+            connection_headers=connection_config_dict.get("headers", {}),
+            transport=mcp_server.transport,
+            auth=oauth_auth,
+        )
+        logger.info("OAuth initialization completed successfully: %s", init_result)
+    except Exception as e:
+        saved_e = log_exception_group(e) if isinstance(e, ExceptionGroup) else e
+        logger.error("OAuth initialization failed: %s", saved_e)
+        raise HTTPException(
+            status_code=400, detail=f"Failed to initialize OAuth client: {str(saved_e)}"
         )
 
     return MCPUserOAuthConnectResponse(

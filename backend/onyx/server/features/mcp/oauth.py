@@ -17,6 +17,11 @@ from uuid import uuid4
 import httpx
 from mcp.client.auth import OAuthClientProvider, TokenStorage
 from mcp.client.auth.oauth2 import OAuthContext
+from mcp.client.auth.utils import (
+    build_protected_resource_metadata_discovery_urls,
+    create_oauth_metadata_request,
+    handle_protected_resource_response,
+)
 from mcp.shared.auth import (
     OAuthClientInformationFull,
     OAuthClientMetadata,
@@ -98,6 +103,46 @@ def key_client_info(user_id: str) -> str:
 
 
 REQUESTED_SCOPE: str | None = None
+
+
+async def initiate_auto_discovery_oauth(
+    oauth_auth: OAuthClientProvider,
+    server_url: str,
+) -> None:
+    discovery_urls = build_protected_resource_metadata_discovery_urls(None, server_url)
+    metadata_url: str | None = None
+    async with mcp_ssrf_httpx_client_factory() as client:
+        for url in discovery_urls:
+            response = await client.send(create_oauth_metadata_request(url))
+            if await handle_protected_resource_response(response) is not None:
+                metadata_url = url
+                break
+
+    if metadata_url is None:
+        raise OnyxError(
+            OnyxErrorCode.INVALID_INPUT,
+            "OAuth auto-discovery could not find protected resource metadata at "
+            "the MCP server's well-known URI.",
+        )
+
+    initial_request = httpx.Request("GET", server_url)
+    auth_flow = oauth_auth.async_auth_flow(initial_request)
+    request = await anext(auth_flow)
+    # The SDK only enters its OAuth flow in response to a challenge. The MCP
+    # endpoint may allow public initialization even though its tools need OAuth.
+    response = httpx.Response(
+        status_code=401,
+        headers={"WWW-Authenticate": f'Bearer resource_metadata="{metadata_url}"'},
+        request=request,
+    )
+
+    async with mcp_ssrf_httpx_client_factory() as client:
+        while True:
+            request = await auth_flow.asend(response)
+            if request is initial_request:
+                await auth_flow.aclose()
+                return
+            response = await client.send(request)
 
 
 class MCPOauthState(BaseModel):
