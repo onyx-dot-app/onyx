@@ -250,7 +250,7 @@ function TokenBudgetField() {
   );
 }
 
-function formatDollars(raw: string): string | null {
+function formatDollarBudgetInput(raw: string): string | null {
   const amount = Number(raw);
   if (raw === "" || !Number.isFinite(amount) || amount <= 0) return null;
   return new Intl.NumberFormat("en-US", {
@@ -259,7 +259,7 @@ function formatDollars(raw: string): string | null {
   }).format(amount);
 }
 
-function formatTokens(raw: string): string | null {
+function formatTokenBudgetInput(raw: string): string | null {
   const amount = Number(raw);
   if (raw === "" || !Number.isFinite(amount) || amount <= 0) return null;
   return `${new Intl.NumberFormat("en-US").format(amount)} tokens`;
@@ -307,8 +307,8 @@ function LimitSummary({ groupName }: LimitSummaryProps) {
   if (!Number.isInteger(period) || period < 1) return null;
 
   const budgets = [
-    formatDollars(values.cost_budget_dollars),
-    formatTokens(values.token_budget),
+    formatDollarBudgetInput(values.cost_budget_dollars),
+    formatTokenBudgetInput(values.token_budget),
   ].filter((budget): budget is string => budget !== null);
   if (budgets.length === 0) return null;
 
@@ -366,6 +366,7 @@ export default function CreateRateLimitModal({
     if (!isOpen || !groupScopeAvailable || forSpecificUserGroup !== undefined) {
       return;
     }
+    let stale = false;
     const fetchData = async () => {
       try {
         const response = await fetch("/api/manage/user-groups/minimal");
@@ -376,16 +377,20 @@ export default function CreateRateLimitModal({
           id: number;
           name: string;
         }>;
+        if (stale) return;
         const options = data.map((userGroup) => ({
           name: userGroup.name,
           value: userGroup.id,
         }));
         setModalUserGroups(options);
       } catch (error) {
-        toast.error(`Failed to fetch user groups: ${error}`);
+        if (!stale) toast.error(`Failed to fetch user groups: ${error}`);
       }
     };
     fetchData();
+    return () => {
+      stale = true;
+    };
   }, [isOpen, groupScopeAvailable, forSpecificUserGroup]);
 
   return (
