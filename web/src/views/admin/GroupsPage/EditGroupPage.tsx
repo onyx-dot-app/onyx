@@ -187,9 +187,12 @@ function EditGroupPage({ groupId }: EditGroupPageProps) {
     }
   }, [tokenRateLimits]);
 
-  // Pre-populate permissions when fetched
+  // Pre-populate permissions once. Re-seeding on later revalidations (focus,
+  // reconnect, a concurrent edit) would silently discard unsaved toggles.
+  const permissionsSeededRef = useRef(false);
   useEffect(() => {
-    if (groupPermissions) {
+    if (groupPermissions && !permissionsSeededRef.current) {
+      permissionsSeededRef.current = true;
       setEnabledPermissions(new Set(groupPermissions));
     }
   }, [groupPermissions]);
