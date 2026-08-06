@@ -259,6 +259,8 @@ class TestCEUngatedPermissions:
             Permission.READ_SEARCH,
             Permission.READ_CHAT,
             Permission.WRITE_CHAT,
+            Permission.GENERATE_IMAGE,
+            Permission.USE_LLM_GATEWAY,
         }
 
     def test_admin_unaffected_by_ce_ungating(self) -> None:

@@ -16,7 +16,7 @@ import pytest
 from fastapi.security import OAuth2PasswordRequestForm
 from fastapi_users import exceptions
 
-from onyx.auth.schemas import UserCreate, UserRole
+from onyx.auth.schemas import UserCreate
 from onyx.auth.users import UserManager
 from onyx.db.enums import AccountType
 from onyx.error_handling.error_codes import OnyxErrorCode
@@ -708,7 +708,6 @@ class TestOAuthPlaceholderPromotion:
         # The oauth account attaches instead of UserAlreadyExists, and the
         # existing non-web-login upgrade block promotes the placeholder.
         cast(AsyncMock, user_manager.user_db.add_oauth_account).assert_awaited_once()
-        assert sync_user.role == UserRole.BASIC
         assert sync_user.account_type == AccountType.STANDARD
         assert sync_user.is_verified is True
         mock_assign_groups.assert_called_once()

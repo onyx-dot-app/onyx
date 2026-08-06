@@ -4,9 +4,11 @@ from fastapi import APIRouter, Depends, File, Form, HTTPException, UploadFile
 from sqlalchemy.orm import Session
 
 from onyx.auth.permissions import require_permission
+from onyx.auth.scoped_permissions import assert_within_scope
 from onyx.configs.constants import PUBLIC_API_TAGS
 from onyx.connectors.factory import validate_ccpair_for_user
 from onyx.db.credentials import (
+    CREDENTIAL_PERMISSIONS_TO_IGNORE,
     alter_credential,
     create_credential,
     delete_credential,
@@ -141,9 +143,24 @@ def swap_credentials_for_connector(
 @router.post("/credential")
 def create_credential_from_model(
     credential_info: CredentialBase,
-    user: User = Depends(require_permission(Permission.MANAGE_CONNECTORS)),
+    user: User = Depends(
+        require_permission(Permission.MANAGE_CONNECTORS, allow_scope=True)
+    ),
     db_session: Session = Depends(get_session),
 ) -> ObjectCreationIdResponse:
+    # GATE 2 — a scoped manager reaches this route, so bound what they may create.
+    # Sources in CREDENTIAL_PERMISSIONS_TO_IGNORE carry no real secret (file, web,
+    # wiki), so they are exempt exactly as they were before the permission system.
+    if credential_info.source not in CREDENTIAL_PERMISSIONS_TO_IGNORE:
+        assert_within_scope(
+            user,
+            db_session,
+            permission=Permission.MANAGE_CONNECTORS,
+            current_group_ids=[],
+            requested_group_ids=credential_info.groups,
+            is_non_public=not credential_info.curator_public,
+        )
+
     credential = create_credential(credential_info, user, db_session)
     emit_audit_event(
         AuditAction.CREDENTIAL_CREATE,

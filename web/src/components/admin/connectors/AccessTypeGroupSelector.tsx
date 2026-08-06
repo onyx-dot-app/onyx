@@ -56,16 +56,21 @@ export function AccessTypeGroupSelector({
         access_type_helpers.setValue("private");
       }
 
+      // Groups apply to private (they grant document access) and to sync (they
+      // scope who may *manage* the connector; the source still decides who can
+      // read its documents). Public connectors have nothing to scope.
+      const usesGroups =
+        access_type.value === "private" || access_type.value === "sync";
+
       if (
-        access_type.value === "private" &&
+        usesGroups &&
         userGroups.length === 1 &&
         userGroups[0] !== undefined &&
         !isUserAdmin
       ) {
         groups_helpers.setValue([userGroups[0].id]);
         setShouldHideContent(true);
-      } else if (access_type.value !== "private") {
-        // If the access type is public or sync, empty the groups selection
+      } else if (access_type.value === "public") {
         groups_helpers.setValue([]);
         setShouldHideContent(false);
       } else {
@@ -104,22 +109,28 @@ export function AccessTypeGroupSelector({
 
   return (
     <div>
-      {access_type.value === "private" &&
+      {(access_type.value === "private" || access_type.value === "sync") &&
         userGroups &&
         userGroups?.length > 0 && (
           <>
             <Divider />
             <div className="flex flex-col gap-3 pt-4">
               <Text as="p" mainUiAction text05>
-                Assign group access for this Connector
+                {access_type.value === "sync"
+                  ? "Assign this Connector to a group"
+                  : "Assign group access for this Connector"}
               </Text>
               {userGroupsIsLoading ? (
                 <div className="animate-pulse bg-background-200 h-8 w-32 rounded-sm" />
               ) : (
                 <Text as="p" mainUiMuted text03>
-                  {isAdmin
-                    ? "This Connector will be visible/accessible by the groups selected below"
-                    : "Curators must select one or more groups to give access to this Connector"}
+                  {access_type.value === "sync"
+                    ? // Groups never widen or narrow a synced connector's document
+                      // access — the source system's permissions decide that.
+                      "The groups below control who can manage this Connector. Access to its documents is inherited from the source's own permissions."
+                    : isAdmin
+                      ? "This Connector will be visible/accessible by the groups selected below"
+                      : "Group managers must select one or more groups to give access to this Connector"}
                 </Text>
               )}
             </div>

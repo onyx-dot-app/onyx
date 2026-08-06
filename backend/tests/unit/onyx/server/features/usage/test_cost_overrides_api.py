@@ -13,7 +13,7 @@ from sqlalchemy.pool import StaticPool
 
 from onyx.auth.users import current_user
 from onyx.db.engine.sql_engine import get_session
-from onyx.db.enums import Permission
+from onyx.db.enums import AccountType, Permission
 from onyx.db.models import ModelCostOverride
 from onyx.error_handling.exceptions import register_onyx_exception_handlers
 from onyx.llm import cost_overrides
@@ -22,11 +22,13 @@ from onyx.server.features.usage.api import router as cost_override_router
 
 
 class _StubUser:
-    """Minimal stand-in for User: require_permission only reads these two."""
+    """Minimal stand-in for User, carrying only what require_permission reads."""
 
     def __init__(self, permissions: list[str]) -> None:
         self.id = "00000000-0000-0000-0000-000000000001"
         self.effective_permissions = permissions
+        self.account_type = AccountType.STANDARD
+        self.is_group_manager = False
 
 
 _ADMIN = _StubUser([Permission.FULL_ADMIN_PANEL_ACCESS.value])

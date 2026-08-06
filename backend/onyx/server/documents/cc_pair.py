@@ -765,14 +765,25 @@ def associate_credential_to_connector(
     """
 
     # GATE 2 write authorization (see assert_within_scope).
-    assert_within_scope(
-        user,
-        db_session,
-        permission=Permission.MANAGE_CONNECTORS,
-        current_group_ids=[],
-        requested_group_ids=metadata.groups or [],
-        is_non_public=metadata.access_type != AccessType.PUBLIC,
+    #
+    # A permission-synced connector carrying no groups is exempt: its ACLs are
+    # mirrored from the source, so it cannot surface a document to anyone who
+    # could not already read it there. There is no reach for a group to bound,
+    # and requiring one would attach a group that does not affect access at all.
+    # Groups may still be supplied to scope who may *manage* it, and those are
+    # checked normally below.
+    is_groupless_perm_sync = (
+        metadata.access_type == AccessType.SYNC and not metadata.groups
     )
+    if not is_groupless_perm_sync:
+        assert_within_scope(
+            user,
+            db_session,
+            permission=Permission.MANAGE_CONNECTORS,
+            current_group_ids=[],
+            requested_group_ids=metadata.groups or [],
+            is_non_public=metadata.access_type != AccessType.PUBLIC,
+        )
 
     try:
         validate_ccpair_for_user(

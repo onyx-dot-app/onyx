@@ -203,6 +203,11 @@ def _add_user_filters(
             non_public_clause=ConnectorCredentialPair.access_type != AccessType.PUBLIC,
             managed_subq=scoped_group_ids_subquery(user),
         )
+        # The creator keeps management of what they made even when it sits in no
+        # group — a permission-synced connector has none to sit in. Creating a
+        # cc_pair already requires MANAGE_CONNECTORS, so this only ever applies
+        # to someone who holds it.
+        where_clause |= ConnectorCredentialPair.creator_id == user.id
     else:
         where_clause |= ConnectorCredentialPair.access_type == AccessType.PUBLIC
         where_clause |= ConnectorCredentialPair.access_type == AccessType.SYNC

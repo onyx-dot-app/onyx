@@ -272,7 +272,9 @@ SCOPED_MANAGER_PERMISSIONS_EXPANDED: frozenset[str] = frozenset(
 
 def get_effective_permissions(user: User) -> set[Permission]:
     """Read granted permissions from the column and expand implied permissions."""
-    granted = set(parse_permission_values(user.effective_permissions))
+    # `or []`: the column is only defaulted on INSERT, so an unpersisted User
+    # still reads None — treat it as holding nothing rather than crashing.
+    granted = set(parse_permission_values(user.effective_permissions or []))
     if Permission.FULL_ADMIN_PANEL_ACCESS in granted:
         return set(Permission)
 
