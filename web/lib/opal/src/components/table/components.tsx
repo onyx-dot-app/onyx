@@ -154,6 +154,7 @@ export function Table<TData>(props: DataTableProps<TData>) {
     selectionBehavior = "no-select",
     onSelectionChange,
     onRowClick,
+    getRowLabel,
     searchTerm,
     height,
     serverSide,
@@ -447,6 +448,7 @@ export function Table<TData>(props: DataTableProps<TData>) {
                       <TableHead
                         key={header.id}
                         width={columnWidths[header.id]}
+                        alignment={colDef?.alignment}
                         sorted={
                           canSort ? toOnyxSortDirection(sortDir) : undefined
                         }
@@ -511,6 +513,22 @@ export function Table<TData>(props: DataTableProps<TData>) {
                     key={row.id}
                     sortableId={rowId}
                     selected={row.getIsSelected()}
+                    data-clickable={onRowClick ? true : undefined}
+                    role={onRowClick ? "button" : undefined}
+                    tabIndex={onRowClick ? 0 : undefined}
+                    aria-label={
+                      onRowClick ? getRowLabel?.(row.original) : undefined
+                    }
+                    onKeyDown={(event) => {
+                      if (
+                        onRowClick &&
+                        event.currentTarget === event.target &&
+                        (event.key === "Enter" || event.key === " ")
+                      ) {
+                        event.preventDefault();
+                        onRowClick(row.original);
+                      }
+                    }}
                     onClick={() => {
                       if (
                         hasDraggable &&
@@ -589,6 +607,9 @@ export function Table<TData>(props: DataTableProps<TData>) {
                         <TableCell
                           key={cell.id}
                           data-column-id={cell.column.id}
+                          alignment={
+                            columnKindMap.get(cell.column.id)?.alignment
+                          }
                         >
                           {flexRender(
                             cell.column.columnDef.cell,

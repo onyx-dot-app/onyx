@@ -34,7 +34,7 @@ from onyx.llm.multi_llm import (
     temporary_env_and_lock,
 )
 
-VERTEX_OPUS_MODELS_REJECTING_OUTPUT_CONFIG = [
+VERTEX_OPUS_MODELS_REJECTING_STREAM_OPTIONS = [
     "claude-opus-4-5@20251101",
     "claude-opus-4-6",
     "claude-opus-4-7",
@@ -665,7 +665,7 @@ def test_parse_anthropic_model_version(
     assert _parse_anthropic_model_version(model_name) == expected
 
 
-@pytest.mark.parametrize("model_name", VERTEX_OPUS_MODELS_REJECTING_OUTPUT_CONFIG)
+@pytest.mark.parametrize("model_name", VERTEX_OPUS_MODELS_REJECTING_STREAM_OPTIONS)
 def test_vertex_stream_omits_stream_options(model_name: str) -> None:
     llm = LitellmLLM(
         api_key="test_key",
@@ -714,8 +714,10 @@ def test_openai_auto_reasoning_effort_maps_to_medium() -> None:
         assert kwargs["reasoning"]["effort"] == "medium"
 
 
-@pytest.mark.parametrize("model_name", VERTEX_OPUS_MODELS_REJECTING_OUTPUT_CONFIG)
-def test_vertex_opus_omits_reasoning_effort(model_name: str) -> None:
+@pytest.mark.parametrize("model_name", VERTEX_OPUS_MODELS_REJECTING_STREAM_OPTIONS)
+def test_vertex_opus_still_sends_thinking(model_name: str) -> None:
+    """Rejecting stream_options must not cost these models their reasoning:
+    thinking is still sent."""
     llm = LitellmLLM(
         api_key="test_key",
         timeout=30,
@@ -734,10 +736,60 @@ def test_vertex_opus_omits_reasoning_effort(model_name: str) -> None:
         mock_completion.return_value = []
 
         messages: LanguageModelInput = [UserMessage(content="Hi")]
-        list(llm.stream(messages))
+        list(llm.stream(messages, reasoning_effort=ReasoningEffort.HIGH))
 
         kwargs = mock_completion.call_args.kwargs
-        assert "reasoning_effort" not in kwargs
+        assert "thinking" in kwargs
+
+
+def test_claude_via_openai_compatible_proxy_uses_reasoning_param() -> None:
+    """The wire format follows the API surface, not the model vendor: Claude
+    behind an OpenAI-shaped gateway asks for reasoning the OpenAI way, never
+    Anthropic's thinking/output_config."""
+    llm = LitellmLLM(
+        api_key="test_key",
+        timeout=30,
+        model_provider=LlmProviderNames.BIFROST,
+        model_name="anthropic/claude-sonnet-4-5",
+        api_base="https://gateway.example/v1",
+        max_input_tokens=200000,
+        custom_config={"bifrost_api_mode": "chat_completions"},
+    )
+
+    with patch("litellm.completion") as mock_completion:
+        mock_completion.return_value = []
+
+        messages: LanguageModelInput = [UserMessage(content="Hi")]
+        list(llm.stream(messages, reasoning_effort=ReasoningEffort.HIGH))
+
+        kwargs = mock_completion.call_args.kwargs
+        assert kwargs["reasoning"] == {"effort": "high", "summary": "auto"}
+        assert "thinking" not in kwargs
+        assert "output_config" not in kwargs
+
+
+def test_aliased_claude_model_still_reasons() -> None:
+    """A gateway alias the litellm registry doesn't know still reasons: the
+    version parsed off the name decides, not the registry."""
+    llm = LitellmLLM(
+        api_key="test_key",
+        timeout=30,
+        model_provider=LlmProviderNames.VERTEX_AI,
+        model_name="gateway-claude-sonnet-4-5-prod",
+        max_input_tokens=100000,
+    )
+
+    with (
+        patch("litellm.completion") as mock_completion,
+        patch("onyx.llm.multi_llm.model_is_reasoning_model", return_value=False),
+    ):
+        mock_completion.return_value = []
+
+        messages: LanguageModelInput = [UserMessage(content="Hi")]
+        list(llm.stream(messages, reasoning_effort=ReasoningEffort.HIGH))
+
+        kwargs = mock_completion.call_args.kwargs
+        assert kwargs["thinking"] == {"type": "enabled", "budget_tokens": 4096}
 
 
 def test_openai_chat_omits_reasoning_params() -> None:

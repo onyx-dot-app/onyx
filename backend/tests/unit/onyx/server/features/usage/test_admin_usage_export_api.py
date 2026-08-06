@@ -150,6 +150,8 @@ class TestGetUsageExportHelper:
             UsageExportRow(
                 email="alice@example.com",
                 model="model-a",
+                flow="CHAT",
+                provider="openai",
                 day="2026-06-01",
                 input_tokens=100,
                 output_tokens=50,
@@ -159,6 +161,8 @@ class TestGetUsageExportHelper:
             UsageExportRow(
                 email="alice@example.com",
                 model="model-b",
+                flow="CHAT",
+                provider="openai",
                 day="2026-06-01",
                 input_tokens=200,
                 output_tokens=60,
@@ -168,6 +172,8 @@ class TestGetUsageExportHelper:
             UsageExportRow(
                 email="alice@example.com",
                 model="model-a",
+                flow="CHAT",
+                provider="openai",
                 day="2026-06-08",
                 input_tokens=300,
                 output_tokens=70,
@@ -177,6 +183,8 @@ class TestGetUsageExportHelper:
             UsageExportRow(
                 email="bob@example.com",
                 model="model-a",
+                flow="CHAT",
+                provider="anthropic",
                 day="2026-06-08",
                 input_tokens=400,
                 output_tokens=80,
@@ -196,6 +204,41 @@ class TestGetUsageExportHelper:
         assert len(rows) == 1
         assert rows[0].model == "model-b"
         assert rows[0].email == "alice@example.com"
+
+    def test_orders_rows_by_flow_and_provider(self, db_session: Session) -> None:
+        user_id = _add_user(db_session, "alice@example.com")
+        _seed_usage(
+            db_session,
+            user_id,
+            "model-a",
+            "CHAT",
+            "openai",
+            100,
+            50,
+            0,
+            1.0,
+            _W1,
+        )
+        _seed_usage(
+            db_session,
+            user_id,
+            "model-a",
+            "BATCH",
+            "anthropic",
+            200,
+            60,
+            0,
+            2.0,
+            _W1,
+        )
+        db_session.commit()
+
+        rows = get_usage_export(db_session, start=_W1, end=_W2)
+
+        assert [(row.flow, row.provider) for row in rows] == [
+            ("BATCH", "anthropic"),
+            ("CHAT", "openai"),
+        ]
 
     def test_date_range_bounds_half_open(self, db_session: Session) -> None:
         _seed_two_users(db_session)
