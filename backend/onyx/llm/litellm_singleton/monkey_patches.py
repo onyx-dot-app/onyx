@@ -508,7 +508,9 @@ def _patch_openai_responses_should_fake_stream() -> None:
         return model_info.get("supports_native_streaming") is False
 
     _patched_openai_should_fake_stream.__name__ = "_patched_openai_should_fake_stream"
-    OpenAIResponsesAPIConfig.should_fake_stream = _patched_openai_should_fake_stream
+    OpenAIResponsesAPIConfig.should_fake_stream = (  # ty: ignore[invalid-assignment]
+        _patched_openai_should_fake_stream
+    )
 
 
 def _patch_responses_api_usage_format() -> None:
