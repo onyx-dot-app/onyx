@@ -27,8 +27,7 @@ import InputTypeInField from "@/refresh-components/form/InputTypeInField";
 const HOURS_PER_DAY = 24;
 // 1T tokens stored as thousands (1e9) stays well inside the column's int32.
 const MAX_TOKEN_BUDGET = 1_000_000_000_000;
-// Cents must fit the column's Numeric(18,6); $10B keeps *100 well under that cap
-// and away from float precision loss (JSON.stringify(Infinity) serializes to null).
+// Keeps *100 finite: an unbounded value can overflow to Infinity, which JSON.stringify serializes as null.
 const MAX_COST_BUDGET_DOLLARS = 10_000_000_000;
 
 interface RateLimitFormValues {
@@ -40,8 +39,6 @@ interface RateLimitFormValues {
   user_group_id: number | undefined;
 }
 
-// Cards are title-only so the three scopes fit one row; the meaning of the
-// selected scope is carried by the caption beneath them.
 interface ScopeOptionConfig {
   value: Scope;
   icon: IconFunctionComponent;
@@ -153,7 +150,6 @@ interface GroupMenuContentProps {
   onSelectGroup: (groupId: number) => void;
 }
 
-/** Shared group list for every popover that picks a user group. */
 function GroupMenuContent({
   groups,
   selectedGroupId,
