@@ -140,15 +140,5 @@ class SetGroupManagerRequest(BaseModel):
     is_manager: bool
 
 
-class SetPermissionRequest(BaseModel):
-    permission: Permission
-    enabled: bool
-
-
-class SetPermissionResponse(BaseModel):
-    permission: Permission
-    enabled: bool
-
-
 class BulkSetPermissionsRequest(BaseModel):
     permissions: list[Permission]
