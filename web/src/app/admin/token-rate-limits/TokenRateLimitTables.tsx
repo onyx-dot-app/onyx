@@ -7,6 +7,7 @@ import { errorHandlingFetcher } from "@/lib/fetcher";
 import useSWR, { mutate } from "swr";
 import { Button, Switch, Text } from "@opal/components";
 import { SvgTrash, SvgUsers, SvgWallet } from "@opal/icons";
+import { formatCurrencyFromCents, formatTokenCount } from "@/lib/format";
 
 const HOURS_PER_DAY = 24;
 const UPDATE_ERROR_MESSAGE = "Failed to update token rate limit";
@@ -15,17 +16,10 @@ const DELETE_ERROR_MESSAGE = "Failed to delete token rate limit";
 function formatBudget(limit: TokenRateLimitDisplay): string {
   const parts: string[] = [];
   if (limit.cost_budget_cents != null) {
-    parts.push(
-      new Intl.NumberFormat("en-US", {
-        style: "currency",
-        currency: "USD",
-      }).format(limit.cost_budget_cents / 100)
-    );
+    parts.push(formatCurrencyFromCents(limit.cost_budget_cents));
   }
   if (limit.token_budget != null) {
-    parts.push(
-      `${new Intl.NumberFormat("en-US").format(limit.token_budget * 1000)} tokens`
-    );
+    parts.push(`${formatTokenCount(limit.token_budget * 1000)} tokens`);
   }
   if (parts.length === 0) return "No budget set";
   return `Up to ${parts.join(" or ")}`;
