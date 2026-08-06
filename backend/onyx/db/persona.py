@@ -368,8 +368,15 @@ def _assert_persona_update_within_managed_scope(
     ``upsert_persona``, so an owner who happens to manage a group keeps that right."""
     if has_permission(user, Permission.MANAGE_AGENTS) is not PermissionAuthority.SCOPED:
         return
+    # Lock before reading — a content-only edit carries no groups, so update_persona_access
+    # skips its own gate and a reassignment could land between this check and the write.
+    # populate_existing stops an already-loaded row from serving pre-lock state.
     persona = (
-        db_session.query(Persona).filter(Persona.id == persona_id).first()
+        db_session.query(Persona)
+        .populate_existing()
+        .filter(Persona.id == persona_id)
+        .with_for_update()
+        .first()
         if persona_id is not None
         else None
     )

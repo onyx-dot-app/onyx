@@ -50,6 +50,7 @@ from onyx.db.connector_credential_pair import (
     get_connector_credential_pair_from_id_for_user,
 )
 from onyx.db.document_set import fetch_all_document_sets_for_user
+from onyx.db.engine.sql_engine import get_session_with_current_tenant
 from onyx.db.enums import (
     AccessType,
     ConnectorCredentialPairStatus,
@@ -409,6 +410,62 @@ def test_persona_projection_matches_gates(db_session: Session) -> None:
     assert mgr_map["edit"] is True and mgr_map["share"] is True
     assert mgr_map["view_stats"] is False
     assert not any(mgr_map[a] for a in ("delete", "publish", "feature", "reorder"))
+
+
+def test_persona_scope_guard_rereads_groups_after_concurrent_reassign(
+    db_session: Session,
+) -> None:
+    """The guard authorizes the state it's about to modify: a reassignment committed after
+    the agent was loaded must flip the decision, not be served from the loaded collection.
+
+    Reassign before the guard runs — once it holds the row lock a competing write blocks
+    until this transaction ends, which a single-threaded test can't observe.
+    """
+    managed = _make_group(db_session)
+    unmanaged = _make_group(db_session)
+
+    manager = create_test_user(db_session, "b-persona-reassign-mgr")
+    _manage(db_session, manager, managed)
+    manager.effective_permissions = []
+
+    owner = create_test_user(db_session, "b-persona-reassign-owner")
+    owner.effective_permissions = []
+    db_session.commit()
+
+    persona = _make_persona(db_session, owner=owner, is_public=False, groups=[managed])
+    # Load the collection, so a stale read has something to serve.
+    assert [group.id for group in persona.groups] == [managed.id]
+
+    # groups=None: the request leaves the shares alone.
+    request = PersonaUpsertRequest(
+        name=persona.name,
+        description=persona.description or "",
+        system_prompt="",
+        task_prompt="",
+        datetime_aware=False,
+        document_set_ids=[],
+        tool_ids=[],
+        groups=None,
+        is_public=persona.is_public,
+    )
+    with get_session_with_current_tenant() as other_session:
+        other_session.query(Persona__UserGroup).filter(
+            Persona__UserGroup.persona_id == persona.id
+        ).delete()
+        other_session.add(
+            Persona__UserGroup(persona_id=persona.id, user_group_id=unmanaged.id)
+        )
+        other_session.commit()
+
+    # Still the loaded collection — only a fresh in-txn read flips the decision.
+    assert [group.id for group in persona.groups] == [managed.id]
+    assert _guard_raises(
+        _assert_persona_update_within_managed_scope,
+        persona.id,
+        request,
+        manager,
+        db_session,
+    )
 
 
 def test_delete_persona_route_admits_scoped_owner(
