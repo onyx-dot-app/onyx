@@ -171,20 +171,24 @@ function EditGroupPage({ groupId }: EditGroupPageProps) {
     }
   }, [group, initialized]);
 
-  // Pre-populate token limits when fetched
+  // Pre-populate token limits once. Re-seeding on later revalidations (focus,
+  // reconnect, a concurrent edit) would silently discard unsaved edits.
+  const tokenLimitsSeededRef = useRef(false);
   useEffect(() => {
-    if (tokenRateLimits && tokenRateLimits.length > 0) {
-      setTokenLimits(
-        tokenRateLimits.map((trl) => ({
-          tokenId: trl.token_id,
-          enabled: trl.enabled,
-          tokenBudget: trl.token_budget,
-          periodDays: trl.period_hours / HOURS_PER_DAY,
-          costBudgetDollars:
-            trl.cost_budget_cents != null ? trl.cost_budget_cents / 100 : null,
-        }))
-      );
-    }
+    if (!tokenRateLimits || tokenLimitsSeededRef.current) return;
+    tokenLimitsSeededRef.current = true;
+    // No saved limits — keep the blank starter row.
+    if (tokenRateLimits.length === 0) return;
+    setTokenLimits(
+      tokenRateLimits.map((trl) => ({
+        tokenId: trl.token_id,
+        enabled: trl.enabled,
+        tokenBudget: trl.token_budget,
+        periodDays: trl.period_hours / HOURS_PER_DAY,
+        costBudgetDollars:
+          trl.cost_budget_cents != null ? trl.cost_budget_cents / 100 : null,
+      }))
+    );
   }, [tokenRateLimits]);
 
   // Pre-populate permissions once. Re-seeding on later revalidations (focus,
