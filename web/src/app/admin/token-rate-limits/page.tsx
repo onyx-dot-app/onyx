@@ -1,3 +1,5 @@
+"use client";
+
 import { redirect } from "next/navigation";
 import type { Route } from "next";
 import { EE_ENABLED } from "@/lib/constants";
