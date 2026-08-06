@@ -67,12 +67,18 @@ def recompute_user_permissions__no_commit(
     Does NOT commit — caller must commit the session.
     """
     if isinstance(user_ids, (UUID, str)):
-        uid_list = [user_ids]
+        raw_ids: list[UUID | str] = [user_ids]
     else:
-        uid_list = list(user_ids)
+        raw_ids = list(user_ids)
 
-    if not uid_list:
+    if not raw_ids:
         return
+
+    # Normalize up front: the lookups below key on str(id), so a valid but non-canonical
+    # string ("6F89..." / unhyphenated) would miss them even though Postgres matches it.
+    uid_list: list[UUID] = [
+        uid if isinstance(uid, UUID) else UUID(str(uid)) for uid in raw_ids
+    ]
 
     # Single query to fetch ALL permissions for these users across ALL their
     # groups (a user may belong to multiple groups with different grants).
@@ -111,7 +117,7 @@ def recompute_user_permissions__no_commit(
     }
 
     # Group permissions by user; users with no grants get an empty set.
-    perms_by_user: dict[UUID | str, set[str]] = defaultdict(set)
+    perms_by_user: dict[UUID, set[str]] = defaultdict(set)
     for uid in uid_list:
         perms_by_user[uid]  # ensure every user has an entry
     for uid, perm in rows:
