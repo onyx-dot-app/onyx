@@ -311,6 +311,7 @@ def update_persona_access(
     user_shares: dict[UUID, PersonaSharePermission] | None = None,
     group_shares: dict[int, PersonaSharePermission] | None = None,
     public_permission: PersonaSharePermission | None = None,
+    original_is_public: bool | None = None,  # noqa: ARG001  (lockstep with EE)
 ) -> None:
     """Updates the access settings for a persona including public status and user shares.
 
@@ -592,6 +593,14 @@ def create_update_persona(
             persona_id, create_persona_request, user, db_session
         )
 
+        # Capture before upsert_persona stages the requested value: autoflush writes it
+        # before update_persona_access reads the row.
+        original_is_public = (
+            db_session.scalar(select(Persona.is_public).where(Persona.id == persona_id))
+            if persona_id is not None
+            else None
+        )
+
         # Featured persona validation
         if create_persona_request.is_featured:
             if not has_global_permission(user, Permission.MANAGE_AGENTS):
@@ -648,6 +657,7 @@ def create_update_persona(
             acting_user=user,
             user_ids=create_persona_request.users,
             group_ids=create_persona_request.groups,
+            original_is_public=original_is_public,
         )
         db_session.commit()
 

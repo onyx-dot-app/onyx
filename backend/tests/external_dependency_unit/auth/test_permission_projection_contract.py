@@ -468,6 +468,36 @@ def test_persona_scope_guard_rereads_groups_after_concurrent_reassign(
     )
 
 
+def test_group_share_gate_anchors_on_pre_update_public_state(
+    enable_ee: None,  # noqa: ARG001 -- side-effect fixture: forces EE for the whole test
+    db_session: Session,
+) -> None:
+    """A public->private convert must be judged on the state from before the caller staged
+    it — otherwise a scoped manager could pull a public agent into a group in one call."""
+    from ee.onyx.db.persona import update_persona_access
+
+    managed = _make_group(db_session)
+    manager = create_test_user(db_session, "b-anchor-mgr")
+    _manage(db_session, manager, managed)
+    manager.effective_permissions = []
+    db_session.commit()
+
+    persona = _make_persona(db_session, owner=manager, is_public=True, groups=[])
+    # What upsert_persona stages before update_persona_access runs.
+    persona.is_public = False
+
+    assert _guard_raises(
+        update_persona_access,
+        persona_id=persona.id,
+        creator_user_id=manager.id,
+        db_session=db_session,
+        acting_user=manager,
+        group_ids=[managed.id],
+        original_is_public=True,
+    ), "a public agent must not be convertible into managed scope"
+    db_session.rollback()
+
+
 def test_delete_persona_route_admits_scoped_owner(
     enable_ee: None,  # noqa: ARG001 -- side-effect fixture: forces EE for the whole test
     db_session: Session,

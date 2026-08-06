@@ -132,17 +132,19 @@ def update_persona_access(
     user_shares: dict[UUID, PersonaSharePermission] | None = None,
     group_shares: dict[int, PersonaSharePermission] | None = None,
     public_permission: PersonaSharePermission | None = None,
+    original_is_public: bool | None = None,
 ) -> None:
     """EE version of the MIT function: identical semantics plus group-share
     support.
+
+    Pass ``original_is_public`` if you changed is_public before calling: autoflush writes
+    the pending value before the read below, so deriving it here reads back the new state.
 
     NOTE: Callers are responsible for committing."""
     needs_sync = False
     # Lock the agent so the gate and _apply_persona_group_share_diff can't be split by a
     # concurrent save; populate_existing refreshes the caller's already-loaded row, which
     # would otherwise serve pre-lock is_public out of the identity map.
-    # Read is_public before it's overwritten below, so the gate anchors on the ORIGINAL
-    # state: a public->private convert plus a group-share in one call must not slip through.
     persona = (
         db_session.query(Persona)
         .populate_existing()
@@ -150,7 +152,8 @@ def update_persona_access(
         .with_for_update()
         .first()
     )
-    original_is_public = persona.is_public if persona is not None else False
+    if original_is_public is None:
+        original_is_public = persona.is_public if persona is not None else False
 
     if is_public is not None or public_permission is not None:
         needs_sync = True
