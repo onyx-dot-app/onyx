@@ -217,10 +217,7 @@ def get_channel_messages(
     """Get all messages in a channel"""
     # join so that the bot can access messages
     if not channel["is_member"]:
-        source_operations.join_channel(
-            channel_id=channel["id"],
-            is_private=channel["is_private"],
-        )
+        source_operations.join_channel(channel_id=channel["id"])
         logger.info("Successfully joined '%s'", channel["name"])
 
     for result in source_operations.fetch_channel_history(
@@ -541,10 +538,7 @@ def _get_messages(
     # have to be in the channel in order to read messages
     if not channel["is_member"]:
         try:
-            source_operations.join_channel(
-                channel_id=channel["id"],
-                is_private=channel["is_private"],
-            )
+            source_operations.join_channel(channel_id=channel["id"])
         except SlackApiError as e:
             if e.response["error"] == "is_archived":
                 logger.warning("Channel %s is archived. Skipping.", channel["name"])

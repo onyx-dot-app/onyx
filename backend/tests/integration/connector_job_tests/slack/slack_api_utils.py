@@ -47,10 +47,9 @@ def get_channel_messages(
 ) -> Generator[list[MessageType], None, None]:
     """Yields message batches for a channel via the test-management client."""
     if not channel["is_member"]:
-        slack_client.conversations_join(
-            channel=channel["id"],
-            is_private=channel["is_private"],
-        )
+        # Join only works for public channels; private membership needs an
+        # invite, handled by the test setup.
+        slack_client.conversations_join(channel=channel["id"])
     for result in make_paginated_slack_api_call(
         slack_client.conversations_history,
         channel=channel["id"],

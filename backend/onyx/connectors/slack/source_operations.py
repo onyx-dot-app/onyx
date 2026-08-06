@@ -530,14 +530,13 @@ class SlackSourceOperations(SourceOperations):
         untested="Side effect: joins the bot to the channel; probing it would "
         "mutate workspace state.",
     )
-    def join_channel(self, *, channel_id: str, is_private: bool) -> dict[str, Any]:
-        """``conversations.join``: the bot must be a member to read messages."""
-        return _response_data(
-            self._client().conversations_join(
-                channel=channel_id,
-                is_private=is_private,
-            )
-        )
+    def join_channel(self, *, channel_id: str) -> dict[str, Any]:
+        """``conversations.join``: the bot must be a member to read messages.
+
+        Only works for public channels; private-channel membership requires an
+        invite, so joining one raises a ``SlackApiError``.
+        """
+        return _response_data(self._client().conversations_join(channel=channel_id))
 
     @source_operation(
         capabilities={CredentialCapability.INDEXING},
