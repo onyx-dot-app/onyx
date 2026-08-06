@@ -55,6 +55,7 @@ from onyx.server.features.build.db.sandbox import (
     set_sandbox_mcp_config_hashes__no_commit,
     set_sandbox_skills_hashes__no_commit,
     sleep_running_sandbox__no_commit,
+    terminate_failed_sandbox__no_commit,
 )
 from onyx.server.features.build.sandbox.base import SandboxManager
 from onyx.server.features.build.sandbox.models import (
@@ -980,6 +981,54 @@ def sleep_sandbox(
 
         db_session.commit()
         logger.info("Sandbox %s is now sleeping", sandbox_id)
+    finally:
+        if session_creation_lock.owned():
+            session_creation_lock.release()
+
+
+def reap_failed_sandbox(
+    db_session: DBSession,
+    sandbox_manager: SandboxManager,
+    sandbox: Sandbox,
+    session_creation_lock: RedisLock,
+) -> None:
+    """Tear down a FAILED sandbox's runtime and mark it TERMINATED.
+
+    The session-flow lock serializes cleanup against create/restore. The status
+    and attempt number are checked again immediately before teardown so a row
+    selected earlier in the sweep cannot race a retry.
+    """
+    if not session_creation_lock.acquire(blocking=False):
+        logger.info(
+            "Skipping failed sandbox %s while a session is being created",
+            sandbox.id,
+        )
+        return
+
+    try:
+        db_session.refresh(sandbox)
+        if sandbox.status != SandboxStatus.FAILED:
+            logger.info(
+                "Sandbox %s left FAILED state mid-sweep; skipping reap",
+                sandbox.id,
+            )
+            return
+
+        attempt_number = sandbox.provisioning_attempt_number
+        sandbox_manager.terminate(sandbox.id)
+        if not terminate_failed_sandbox__no_commit(
+            db_session, sandbox.id, attempt_number
+        ):
+            db_session.rollback()
+            logger.warning(
+                "Sandbox %s started a newer attempt during failed reap; "
+                "leaving its database state untouched",
+                sandbox.id,
+            )
+            return
+
+        db_session.commit()
+        logger.info("Cleaned up failed sandbox %s", sandbox.id)
     finally:
         if session_creation_lock.owned():
             session_creation_lock.release()

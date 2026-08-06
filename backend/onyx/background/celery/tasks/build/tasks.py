@@ -14,6 +14,7 @@ from onyx.redis.redis_pool import get_redis_client
 from onyx.redis.redis_tenant_work_gating import maybe_mark_tenant_active
 from onyx.server.features.build.configs import SANDBOX_IDLE_TIMEOUT_SECONDS
 from onyx.server.features.build.db.sandbox import (
+    get_failed_sandboxes,
     get_latest_snapshot_for_session,
     get_running_sandboxes,
     user_has_stale_active_session,
@@ -24,6 +25,7 @@ from onyx.server.features.build.session.sandbox_lifecycle import (
     create_session_snapshot_keep_latest,
     is_sandbox_idle,
     list_snapshotable_session_workspaces,
+    reap_failed_sandbox,
     sleep_sandbox,
 )
 
@@ -43,7 +45,7 @@ SNAPSHOT_INTERVAL_DIVISOR = 4
     ignore_result=True,
 )
 def cleanup_idle_sandboxes_task(self: Task, *, tenant_id: str) -> None:  # noqa: ARG001
-    """Sweep RUNNING sandboxes: background-snapshot sessions, sleep idle ones.
+    """Clean FAILED runtimes and sweep RUNNING sandboxes.
 
     Background snapshots bound data loss from ungraceful pod death (kubelet
     eviction, node loss, spot reclaim) to ~idle_timeout/SNAPSHOT_INTERVAL_DIVISOR:
@@ -71,14 +73,33 @@ def cleanup_idle_sandboxes_task(self: Task, *, tenant_id: str) -> None:  # noqa:
         sandbox_manager = get_sandbox_manager()
 
         with get_session_with_current_tenant() as db_session:
+            failed_sandboxes = get_failed_sandboxes(db_session)
             running_sandboxes = get_running_sandboxes(db_session)
-            if not running_sandboxes:
-                task_logger.debug("No running sandboxes found")
+            if not failed_sandboxes and not running_sandboxes:
+                task_logger.debug("No failed or running sandboxes found")
                 return
 
             # Tenant-work-gating hook: refresh this tenant's active-set
             # membership whenever the sweep has work to do.
             maybe_mark_tenant_active(tenant_id, caller="sandbox_cleanup")
+
+            for sandbox in failed_sandboxes:
+                session_creation_lock = get_session_creation_lock(
+                    redis_client, sandbox.user_id
+                )
+                try:
+                    reap_failed_sandbox(
+                        db_session=db_session,
+                        sandbox_manager=sandbox_manager,
+                        sandbox=sandbox,
+                        session_creation_lock=session_creation_lock,
+                    )
+                except Exception as e:
+                    task_logger.error(
+                        f"Failed to clean up failed sandbox {sandbox.id}: {e}",
+                        exc_info=True,
+                    )
+                    db_session.rollback()
 
             now = datetime.datetime.now(datetime.timezone.utc)
             snapshot_cutoff = now - datetime.timedelta(

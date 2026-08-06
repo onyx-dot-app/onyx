@@ -183,6 +183,28 @@ def sleep_running_sandbox__no_commit(
     return result.rowcount == 1  # ty: ignore[unresolved-attribute]
 
 
+def terminate_failed_sandbox__no_commit(
+    db_session: Session,
+    sandbox_id: UUID,
+    attempt_number: int,
+) -> bool:
+    """Mark a cleaned-up ``FAILED`` sandbox ``TERMINATED``.
+
+    The attempt-number guard prevents a stale reaper from overwriting a newer
+    provisioning attempt if the caller's session-flow lock was lost.
+    """
+    result = db_session.execute(
+        update(Sandbox)
+        .where(
+            Sandbox.id == sandbox_id,
+            Sandbox.provisioning_attempt_number == attempt_number,
+            Sandbox.status == SandboxStatus.FAILED,
+        )
+        .values(status=SandboxStatus.TERMINATED)
+    )
+    return result.rowcount == 1  # ty: ignore[unresolved-attribute]
+
+
 def get_sandbox_by_id(db_session: Session, sandbox_id: UUID) -> Sandbox | None:
     """Get sandbox by its ID."""
     stmt = select(Sandbox).where(Sandbox.id == sandbox_id)
@@ -250,6 +272,12 @@ def update_sandbox_heartbeat(db_session: Session, sandbox_id: UUID) -> Sandbox:
 def get_running_sandboxes(db_session: Session) -> list[Sandbox]:
     """Get all RUNNING sandboxes (the sweep task's working set)."""
     stmt = select(Sandbox).where(Sandbox.status == SandboxStatus.RUNNING)
+    return list(db_session.execute(stmt).scalars().all())
+
+
+def get_failed_sandboxes(db_session: Session) -> list[Sandbox]:
+    """Get FAILED sandboxes whose runtime resources may need cleanup."""
+    stmt = select(Sandbox).where(Sandbox.status == SandboxStatus.FAILED)
     return list(db_session.execute(stmt).scalars().all())
 
 

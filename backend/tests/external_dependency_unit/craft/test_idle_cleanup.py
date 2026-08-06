@@ -31,6 +31,7 @@ from onyx.server.features.build.sandbox.models import SnapshotResult
 from onyx.server.features.build.session import (
     sandbox_lifecycle as sandbox_lifecycle_module,
 )
+from onyx.server.features.build.session.locks import get_session_creation_lock
 from shared_configs.configs import POSTGRES_DEFAULT_SCHEMA_STANDARD_VALUE
 from shared_configs.contextvars import CURRENT_TENANT_ID_CONTEXTVAR
 from tests.common.craft.stubs import StubSandboxManager
@@ -81,14 +82,14 @@ def short_idle_threshold(monkeypatch: pytest.MonkeyPatch) -> int:
 
 @pytest.fixture(autouse=True)
 def _quiesce_leaked_sandboxes(db_session: Session) -> None:
-    """Terminate RUNNING sandboxes leaked by earlier tests.
+    """Terminate sweepable sandboxes leaked by earlier tests.
 
-    The sweep covers ALL RUNNING sandboxes globally, so rows committed by
-    other tests in this directory would otherwise leak into our assertions.
+    The sweep covers all RUNNING and FAILED sandboxes globally, so rows
+    committed by other tests would otherwise leak into our assertions.
     """
     db_session.execute(
         update(Sandbox)
-        .where(Sandbox.status == SandboxStatus.RUNNING)
+        .where(Sandbox.status.in_([SandboxStatus.RUNNING, SandboxStatus.FAILED]))
         .values(status=SandboxStatus.TERMINATED)
     )
     db_session.commit()
@@ -133,6 +134,57 @@ def _backdate_created_at(
 # ---------------------------------------------------------------------------
 # Tests
 # ---------------------------------------------------------------------------
+
+
+def test_failed_sandbox_is_terminated(
+    db_session: Session,
+    test_user: User,  # noqa: ARG001
+    stubbed_cleanup: StubSandboxManager,
+) -> None:
+    """A failed provision can leave a pod, so the sweep tears it down."""
+    user = make_user(db_session)
+    sandbox = make_sandbox(db_session, user, status=SandboxStatus.FAILED)
+    db_session.commit()
+    stubbed_cleanup.terminate_silent = True
+
+    cleanup_idle_sandboxes_task.run(tenant_id=POSTGRES_DEFAULT_SCHEMA_STANDARD_VALUE)  # ty: ignore[invalid-argument-type]
+
+    db_session.expire_all()
+    refreshed = db_session.get(Sandbox, sandbox.id)
+    assert refreshed is not None
+    assert refreshed.status == SandboxStatus.TERMINATED
+    assert sandbox.id in stubbed_cleanup.terminated_sandbox_ids
+
+
+def test_session_creation_lock_prevents_failed_reap(
+    db_session: Session,
+    test_user: User,  # noqa: ARG001
+    stubbed_cleanup: StubSandboxManager,
+) -> None:
+    """A retry holding the session-flow lock owns the failed sandbox."""
+    user = make_user(db_session)
+    sandbox = make_sandbox(db_session, user, status=SandboxStatus.FAILED)
+    db_session.commit()
+    stubbed_cleanup.terminate_silent = True
+
+    token = CURRENT_TENANT_ID_CONTEXTVAR.set(POSTGRES_DEFAULT_SCHEMA_STANDARD_VALUE)
+    redis_client = get_redis_client(tenant_id=POSTGRES_DEFAULT_SCHEMA_STANDARD_VALUE)
+    creation_lock = get_session_creation_lock(redis_client, user.id)
+    try:
+        assert creation_lock.acquire(blocking=False) is True
+        cleanup_idle_sandboxes_task.run(
+            tenant_id=POSTGRES_DEFAULT_SCHEMA_STANDARD_VALUE  # ty: ignore[invalid-argument-type]
+        )
+    finally:
+        if creation_lock.owned():
+            creation_lock.release()
+        CURRENT_TENANT_ID_CONTEXTVAR.reset(token)
+
+    db_session.expire_all()
+    refreshed = db_session.get(Sandbox, sandbox.id)
+    assert refreshed is not None
+    assert refreshed.status == SandboxStatus.FAILED
+    assert sandbox.id not in stubbed_cleanup.terminated_sandbox_ids
 
 
 def test_idle_sandbox_snapshotted_then_terminated_then_sleep_status(
