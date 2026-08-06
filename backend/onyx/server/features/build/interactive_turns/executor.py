@@ -198,6 +198,11 @@ def _ready_session_runtime(
     is rebuilt through the same path and the same lock the restore endpoint
     uses, blocking, because the turn has nothing to do until the workspace is
     there.
+
+    The pre-lock check is only a fast path: ``ensure_session_ready`` re-verifies
+    everything (pod liveness included) under the lock, so it stays with this
+    caller — its point is skipping the lock on the hot path, and lock
+    acquisition is caller policy (the turn blocks; restore 409s).
     """
     session = get_build_session(session_id, user_id, db_session)
     sandbox = get_sandbox_by_user_id(db_session, user_id)

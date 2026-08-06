@@ -70,10 +70,12 @@ def ensure_session_ready(
 ) -> Sandbox:
     """Return the user's RUNNING sandbox with ``session``'s workspace in place.
 
-    Provisions or wakes the sandbox, rebuilds the workspace from its latest
-    snapshot (or a fresh template) when the pod does not have it, and leaves the
-    session ACTIVE. A failed rebuild discards the partial workspace so a later
-    attempt does not mistake it for a restored one.
+    Provisions or wakes the sandbox — a claimed-RUNNING pod is health-checked
+    and recovered inside ``ensure_sandbox_ready``, so no caller can skip that
+    verification — rebuilds the workspace from its latest snapshot (or a fresh
+    template) when the pod does not have it, and leaves the session ACTIVE. A
+    failed rebuild discards the partial workspace so a later attempt does not
+    mistake it for a restored one.
 
     The caller must already hold the user's session-creation lock: this
     provisions and writes into the sandbox, so it must not interleave with a
@@ -122,8 +124,12 @@ def ensure_session_ready(
     sandbox_mcp_config_hash = sandbox.mcp_config_hash
     db_session.commit()
 
-    # The rebuild rewrites opencode.json; claim the dispose before the write so
-    # the next turn's reconcile hands the running instance the new config.
+    # A reused pod may already hold an opencode instance for this session's
+    # directory — instances outlive the workspace and stay pinned to the config
+    # they saw at creation. The rebuild writes an opencode.json that already
+    # matches what the next turn's reconcile expects, so reconcile would
+    # short-circuit without disposing; claim the dispose up front instead
+    # (a no-op on a freshly provisioned pod).
     mark_opencode_dispose_pending(session_id)
 
     try:
