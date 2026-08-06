@@ -77,7 +77,7 @@ STANDARD_MAX_TOKENS_KWARG = "max_completion_tokens"
 # LiteLLM's BaseAzureLLM._is_azure_v1_api_version.
 _AZURE_V1_API_VERSIONS = frozenset({"preview", "latest", "v1"})
 
-_VERTEX_ANTHROPIC_MODELS_REJECTING_OUTPUT_CONFIG = (
+_VERTEX_ANTHROPIC_MODELS_REJECTING_STREAM_OPTIONS = (
     "claude-opus-4-5",
     "claude-opus-4-6",
     "claude-opus-4-7",
@@ -94,6 +94,11 @@ _VERTEX_ANTHROPIC_MODELS_REJECTING_OUTPUT_CONFIG = (
 # avoids relying on LiteLLM's drop_params (unreliable here, since AnthropicConfig
 # still advertises temperature as supported).
 _ANTHROPIC_ADAPTIVE_THINKING_MIN_VERSION = (4, 7)
+
+# Extended thinking landed in Claude 3.7. Parsing the version off the name
+# keeps aliased deployments (gateways, custom model names) reasoning even when
+# the litellm registry doesn't recognize the string.
+_ANTHROPIC_THINKING_MIN_VERSION = (3, 7)
 
 # Best-effort tuning kwargs, never worth failing a chat over. _completion
 # retries provider rejections without them: reasoning keys first, then all.
@@ -361,11 +366,11 @@ def _log_azure_responses_api_version_override(
     )
 
 
-def _is_vertex_model_rejecting_output_config(model_name: str) -> bool:
+def _is_vertex_model_rejecting_stream_options(model_name: str) -> bool:
     normalized_model_name = model_name.lower()
     return any(
         blocked_model in normalized_model_name
-        for blocked_model in _VERTEX_ANTHROPIC_MODELS_REJECTING_OUTPUT_CONFIG
+        for blocked_model in _VERTEX_ANTHROPIC_MODELS_REJECTING_STREAM_OPTIONS
     )
 
 
@@ -408,14 +413,25 @@ def _parse_anthropic_model_version(model_name: str) -> tuple[int, int] | None:
     return (major, minor)
 
 
-def _anthropic_uses_adaptive_thinking(model_name: str) -> bool:
+def _anthropic_meets_version(model_name: str, min_version: tuple[int, int]) -> bool:
     version = _parse_anthropic_model_version(model_name)
-    return version is not None and version >= _ANTHROPIC_ADAPTIVE_THINKING_MIN_VERSION
+    return version is not None and version >= min_version
+
+
+def _anthropic_uses_adaptive_thinking(model_name: str) -> bool:
+    return _anthropic_meets_version(
+        model_name, _ANTHROPIC_ADAPTIVE_THINKING_MIN_VERSION
+    )
+
+
+def _anthropic_supports_thinking(model_name: str) -> bool:
+    return _anthropic_meets_version(model_name, _ANTHROPIC_THINKING_MIN_VERSION)
 
 
 def _anthropic_omits_sampling_params(model_name: str) -> bool:
-    version = _parse_anthropic_model_version(model_name)
-    return version is not None and version >= _ANTHROPIC_ADAPTIVE_THINKING_MIN_VERSION
+    return _anthropic_meets_version(
+        model_name, _ANTHROPIC_ADAPTIVE_THINKING_MIN_VERSION
+    )
 
 
 def _env_injection_enabled() -> bool:
@@ -639,16 +655,19 @@ class LitellmLLM(LLM):
         ]
         is_claude_model = any("claude" in name.lower() for name in model_identity_names)
         is_qwen_model = "qwen" in self.config.model_name.lower()
-        # Claude >= 4.7 always reasons via the adaptive thinking API, so treat
-        # it as a reasoning model even when the litellm registry doesn't know
-        # the (possibly aliased) name — otherwise reasoning_effort is silently
-        # dropped for such models.
         uses_adaptive_thinking = any(
             _anthropic_uses_adaptive_thinking(name) for name in model_identity_names
         )
-        is_reasoning = uses_adaptive_thinking or any(
-            model_is_reasoning_model(name, self.config.model_provider)
-            for name in model_identity_names
+        anthropic_supports_thinking = any(
+            _anthropic_supports_thinking(name) for name in model_identity_names
+        )
+        is_reasoning = (
+            uses_adaptive_thinking
+            or anthropic_supports_thinking
+            or any(
+                model_is_reasoning_model(name, self.config.model_provider)
+                for name in model_identity_names
+            )
         )
         # All OpenAI models will use responses API for consistency
         # Responses API is needed to get reasoning packets from OpenAI models
@@ -658,11 +677,12 @@ class LitellmLLM(LLM):
         is_ollama = self._model_provider == LlmProviderNames.OLLAMA_CHAT
         is_mistral = self._model_provider == LlmProviderNames.MISTRAL
         is_vertex_ai = self._model_provider == LlmProviderNames.VERTEX_AI
-        # Some Vertex Anthropic models reject output_config.
-        # Keep this guard until LiteLLM/Vertex accept the field for these models.
-        is_vertex_model_rejecting_output_config = (
+        # Some Vertex Anthropic models reject stream_options. Reasoning params
+        # are sent regardless: a provider that rejects one answers with a 400
+        # naming the kwarg, which the retry ladder below strips.
+        is_vertex_model_rejecting_stream_options = (
             is_vertex_ai
-            and _is_vertex_model_rejecting_output_config(self.config.model_name)
+            and _is_vertex_model_rejecting_stream_options(self.config.model_name)
         )
 
         #########################
@@ -742,7 +762,7 @@ class LitellmLLM(LLM):
         if not omits_sampling_params:
             optional_kwargs["temperature"] = 1 if is_reasoning else self._temperature
 
-        if stream and not is_vertex_model_rejecting_output_config:
+        if stream and not is_vertex_model_rejecting_stream_options:
             optional_kwargs["stream_options"] = {"include_usage": True}
 
         # Note, there is a reasoning_effort parameter in LiteLLM but it is completely jank and does not work for any
@@ -751,18 +771,28 @@ class LitellmLLM(LLM):
             is_reasoning
             # The default of this parameter not set is surprisingly not the equivalent of an Auto but is actually Off
             and reasoning_effort != ReasoningEffort.OFF
-            and not is_vertex_model_rejecting_output_config
             and not openai_model_rejects_reasoning_effort(self.config.model_name)
         ):
+            openai_style_reasoning = {
+                "effort": OPENAI_REASONING_EFFORT[reasoning_effort],
+                "summary": "auto",
+            }
+
             if is_openai_model:
                 # OpenAI API does not accept reasoning params for GPT 5 chat models
                 # (neither reasoning nor reasoning_effort are accepted)
                 # even though they are reasoning models (bug in OpenAI)
                 if "-chat" not in model:
-                    optional_kwargs["reasoning"] = {
-                        "effort": OPENAI_REASONING_EFFORT[reasoning_effort],
-                        "summary": "auto",
-                    }
+                    optional_kwargs["reasoning"] = openai_style_reasoning
+
+            elif is_claude_model and is_openai_compatible_proxy:
+                # Wire format follows the API surface, not the model vendor.
+                # LiteLLM drops thinking/output_config as unsupported on an
+                # openai surface, so a gateway only sees reasoning.effort.
+                # The gateway still translates to Anthropic, so the tool-call
+                # constraint below applies here too.
+                if not _prompt_contains_tool_call_history(prompt):
+                    optional_kwargs["reasoning"] = openai_style_reasoning
 
             elif is_claude_model:
                 # Anthropic requires every assistant message with tool_use
