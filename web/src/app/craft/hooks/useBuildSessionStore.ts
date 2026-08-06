@@ -1745,12 +1745,15 @@ export const useBuildSessionStore = create<BuildSessionStore>()((set, get) => ({
         newSessions.delete(sessionId);
         return {
           sessions: newSessions,
+          sessionHistory: state.sessionHistory.filter(
+            (historyItem) => historyItem.id !== sessionId
+          ),
           currentSessionId:
             currentSessionId === sessionId ? null : state.currentSessionId,
         };
       });
 
-      await refreshSessionHistory();
+      void refreshSessionHistory();
     } catch (err) {
       console.error("Failed to delete session:", err);
       throw err;

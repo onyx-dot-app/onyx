@@ -76,7 +76,7 @@ export function CraftSessionDeleteModal({
     <ConfirmationModalLayout
       title={`Delete "${sessionTitle}"?`}
       icon={SvgTrash}
-      onClose={onClose}
+      onClose={isDeleting ? undefined : onClose}
       submit={
         <Button
           disabled={isDeleting}
@@ -146,6 +146,7 @@ function BuildSessionButton({
 
       try {
         await onDelete();
+        setIsDeleting(false);
         toast.success(`Deleted "${historyItem.title}".`);
         closeModal();
         if (isActive && onDeleteActiveSession) {
