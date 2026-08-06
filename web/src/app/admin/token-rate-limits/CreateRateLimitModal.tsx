@@ -37,8 +37,6 @@ interface RateLimitFormValues {
   user_group_id: number | undefined;
 }
 
-// Cards are title-only so the three scopes fit one row; the meaning of the
-// selected scope is carried by the caption beneath them.
 interface ScopeOptionConfig {
   value: Scope;
   icon: IconFunctionComponent;
@@ -150,7 +148,6 @@ interface GroupMenuContentProps {
   onSelectGroup: (groupId: number) => void;
 }
 
-/** Shared group list for every popover that picks a user group. */
 function GroupMenuContent({
   groups,
   selectedGroupId,
