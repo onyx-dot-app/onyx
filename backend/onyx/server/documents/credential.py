@@ -148,10 +148,13 @@ def create_credential_from_model(
     ),
     db_session: Session = Depends(get_session),
 ) -> ObjectCreationIdResponse:
-    # GATE 2 — a scoped manager reaches this route, so bound what they may create.
-    # Sources in CREDENTIAL_PERMISSIONS_TO_IGNORE carry no real secret (file, web,
-    # wiki), so they are exempt exactly as they were before the permission system.
-    if credential_info.source not in CREDENTIAL_PERMISSIONS_TO_IGNORE:
+    # GATE 2 — only what the caller actually shares needs bounding. A credential
+    # with no groups and no public flag is private to its creator, so there is
+    # nothing to scope; sharing it (groups or curator_public) is what must land
+    # inside the groups they manage. Sources in CREDENTIAL_PERMISSIONS_TO_IGNORE
+    # carry no real secret (file, web, wiki) and stay exempt as they always were.
+    is_shared = bool(credential_info.groups) or credential_info.curator_public
+    if is_shared and credential_info.source not in CREDENTIAL_PERMISSIONS_TO_IGNORE:
         assert_within_scope(
             user,
             db_session,
