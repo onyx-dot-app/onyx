@@ -32,6 +32,7 @@ from sqlalchemy.orm import Session as DBSession
 
 from onyx.db.enums import SandboxStatus
 from onyx.db.models import Sandbox, User
+from onyx.db.sandbox import sleep_sweepable_sandbox__no_commit
 from onyx.db.users import fetch_user_by_id
 from onyx.file_store.file_store import get_default_file_store
 from onyx.server.features.build.configs import SANDBOX_IDLE_TIMEOUT_SECONDS
@@ -54,7 +55,6 @@ from onyx.server.features.build.db.sandbox import (
     get_snapshots_for_session,
     set_sandbox_mcp_config_hashes__no_commit,
     set_sandbox_skills_hashes__no_commit,
-    sleep_running_sandbox__no_commit,
 )
 from onyx.server.features.build.sandbox.base import SandboxManager
 from onyx.server.features.build.sandbox.models import (
@@ -960,7 +960,7 @@ def sleep_sandbox(
         # A recovery/create that started a newer attempt mid-terminate owns
         # the sandbox now; only claim ports/sessions if the sleep write
         # applies.
-        if not sleep_running_sandbox__no_commit(
+        if not sleep_sweepable_sandbox__no_commit(
             db_session, sandbox_id, sleep_attempt_number
         ):
             db_session.rollback()

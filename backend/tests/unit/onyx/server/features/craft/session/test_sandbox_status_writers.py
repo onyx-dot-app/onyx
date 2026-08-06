@@ -14,12 +14,13 @@ STATUS_MUTATION_HELPERS: tuple[str, ...] = (
     "begin_provisioning_attempt__no_commit",
     "begin_recovery_attempt__no_commit",
     "finalize_provisioning_attempt__no_commit",
-    "sleep_running_sandbox__no_commit",
+    "sleep_sweepable_sandbox__no_commit",
 )
 
 # Modules that MUST reference the status mutation (the spec).
 ALLOWED_REFERENCES: set[str] = {
     # Canonical DB mutations.
+    "onyx/db/sandbox.py",
     "onyx/server/features/build/db/sandbox.py",
     # Substrate-invariant transitions + invariants.
     "onyx/server/features/build/session/sandbox_lifecycle.py",
@@ -29,6 +30,7 @@ ALLOWED_REFERENCES: set[str] = {
 def _modules_referencing_status_mutation() -> set[str]:
     backend_dir = find_ancestor_containing("backend/onyx") / "backend"
     scan_roots = (
+        backend_dir / "onyx" / "db",
         backend_dir / "onyx" / "server" / "features" / "build",
         backend_dir / "onyx" / "background",
     )

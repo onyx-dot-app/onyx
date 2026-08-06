@@ -162,28 +162,6 @@ def finalize_provisioning_attempt__no_commit(
     return result.rowcount == 1  # ty: ignore[unresolved-attribute]
 
 
-def sleep_running_sandbox__no_commit(
-    db_session: Session,
-    sandbox_id: UUID,
-    attempt_number: int,
-) -> bool:
-    """Move ``RUNNING``/``FAILED`` to ``SLEEPING`` for the idle reaper.
-
-    The attempt-number guard prevents a stale reaper from overwriting a newer
-    provisioning attempt. Returns False when the row has already moved on.
-    """
-    result = db_session.execute(
-        update(Sandbox)
-        .where(
-            Sandbox.id == sandbox_id,
-            Sandbox.provisioning_attempt_number == attempt_number,
-            Sandbox.status.in_([SandboxStatus.RUNNING, SandboxStatus.FAILED]),
-        )
-        .values(status=SandboxStatus.SLEEPING)
-    )
-    return result.rowcount == 1  # ty: ignore[unresolved-attribute]
-
-
 def get_sandbox_by_id(db_session: Session, sandbox_id: UUID) -> Sandbox | None:
     """Get sandbox by its ID."""
     stmt = select(Sandbox).where(Sandbox.id == sandbox_id)
@@ -251,14 +229,6 @@ def update_sandbox_heartbeat(db_session: Session, sandbox_id: UUID) -> Sandbox:
 def get_running_sandboxes(db_session: Session) -> list[Sandbox]:
     """Get all RUNNING sandboxes."""
     stmt = select(Sandbox).where(Sandbox.status == SandboxStatus.RUNNING)
-    return list(db_session.execute(stmt).scalars().all())
-
-
-def get_sweepable_sandboxes(db_session: Session) -> list[Sandbox]:
-    """Get sandboxes whose runtime may need snapshotting or cleanup."""
-    stmt = select(Sandbox).where(
-        Sandbox.status.in_([SandboxStatus.RUNNING, SandboxStatus.FAILED])
-    )
     return list(db_session.execute(stmt).scalars().all())
 
 
