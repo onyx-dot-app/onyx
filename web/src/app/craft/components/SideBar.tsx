@@ -75,7 +75,6 @@ export function CraftSessionDeleteModal({
   return (
     <ConfirmationModalLayout
       title={`Delete "${sessionTitle}"?`}
-      description="This permanently removes the Craft session and all of its data. This action cannot be undone."
       icon={SvgTrash}
       onClose={onClose}
       submit={
@@ -89,7 +88,10 @@ export function CraftSessionDeleteModal({
           {isDeleting ? "Deleting..." : "Delete"}
         </Button>
       }
-    />
+    >
+      This permanently removes the Craft session and all of its data. This
+      action cannot be undone.
+    </ConfirmationModalLayout>
   );
 }
 
