@@ -120,6 +120,27 @@ def test_cannot_set_basic_access(reset: None) -> None:  # noqa: ARG001
 
 
 @ENTERPRISE_SKIP
+def test_basic_access_survives_bulk_set(reset: None) -> None:  # noqa: ARG001
+    """The SYSTEM basic_access grant must not be revoked by a bulk set."""
+    admin_user: DATestUser = UserManager.create(name="admin_basic_survive")
+    basic_user: DATestUser = UserManager.create(name="basic_survive")
+
+    group = UserGroupManager.create(
+        name="basic-survive-group",
+        user_ids=[admin_user.id, basic_user.id],
+        user_performing_action=admin_user,
+    )
+
+    UserGroupManager.set_permissions(
+        group, ["manage:llms"], admin_user
+    ).raise_for_status()
+    UserGroupManager.set_permissions(group, [], admin_user).raise_for_status()
+
+    user_perms = UserManager.get_permissions(basic_user)
+    assert "basic" in user_perms, f"basic_access should survive: {user_perms}"
+
+
+@ENTERPRISE_SKIP
 def test_cannot_set_admin(reset: None) -> None:  # noqa: ARG001
     admin_user: DATestUser = UserManager.create(name="admin_admin_block")
 

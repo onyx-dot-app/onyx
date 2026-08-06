@@ -11,7 +11,7 @@ from ee.onyx.server.user_group.models import (
     UserGroupCreate,
     UserGroupUpdate,
 )
-from onyx.auth.permissions import has_permission
+from onyx.auth.permissions import NON_TOGGLEABLE_PERMISSIONS, has_permission
 from onyx.auth.scoped_permissions import assert_manages_group, assert_within_scope
 from onyx.configs.app_configs import DISABLE_VECTOR_DB
 from onyx.db.connector_credential_pair import (
@@ -977,6 +977,10 @@ def set_group_permissions_bulk__no_commit(
         g.permission: g for g in existing_grants
     }
 
+    # Non-toggleable grants (e.g. the SYSTEM basic_access every group gets) are
+    # not managed here — never enabled, never disabled.
+    desired_permissions = desired_permissions - NON_TOGGLEABLE_PERMISSIONS
+
     # Enable desired permissions
     for perm in desired_permissions:
         existing = grant_map.get(perm)
@@ -997,7 +1001,11 @@ def set_group_permissions_bulk__no_commit(
 
     # Disable toggleable permissions not in the desired set
     for perm, grant in grant_map.items():
-        if perm not in desired_permissions and not grant.is_deleted:
+        if (
+            perm not in desired_permissions
+            and perm not in NON_TOGGLEABLE_PERMISSIONS
+            and not grant.is_deleted
+        ):
             grant.is_deleted = True
 
     db_session.flush()
