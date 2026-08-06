@@ -6,7 +6,7 @@ import { useSWRConfig } from "swr";
 import {
   Artifact,
   ArtifactType,
-  SessionErrorCode,
+  BuildMessageAttachment,
 } from "@/app/craft/types/streamingTypes";
 
 import {
@@ -17,8 +17,9 @@ import {
   processSSEStream,
   fetchSession,
   fetchScheduledRunEventStream,
-  RateLimitError,
+  RateLimitedError,
 } from "@/app/craft/services/apiServices";
+import type { BuildLlmSelection } from "@/app/craft/onboarding/constants";
 import { SWR_KEYS } from "@/lib/swr-keys";
 
 import {
@@ -647,8 +648,8 @@ export function useBuildStreaming() {
             if (isWebapp) {
               fetchSession(sessionId)
                 .then((sessionData) => {
-                  if (sessionData.sandbox?.nextjs_port) {
-                    const webappUrl = `http://localhost:${sessionData.sandbox.nextjs_port}`;
+                  if (sessionData.nextjs_port) {
+                    const webappUrl = `http://localhost:${sessionData.nextjs_port}`;
                     updateSessionData(sessionId, { webappUrl });
                   }
                 })
@@ -736,7 +737,7 @@ export function useBuildStreaming() {
               type: "connect_app_request",
               id: parsed.requestId,
               requestId: parsed.requestId,
-              appSlug: parsed.appSlug,
+              externalAppId: parsed.externalAppId,
               reason: parsed.reason,
             });
             break;
@@ -951,7 +952,8 @@ export function useBuildStreaming() {
     async (
       sessionId: string,
       content: string,
-      model?: { provider: string; modelName: string } | null
+      model?: BuildLlmSelection | null,
+      attachments: BuildMessageAttachment[] = []
     ): Promise<void> => {
       const currentState = useBuildSessionStore.getState();
       const existingSession = currentState.sessions.get(sessionId);
@@ -965,6 +967,7 @@ export function useBuildStreaming() {
 
       updateSessionData(sessionId, {
         status: "running",
+        error: null,
         isInterrupting: false,
         wasInterrupted: false,
         turnGeneration: (existingSession?.turnGeneration ?? 0) + 1,
@@ -980,7 +983,8 @@ export function useBuildStreaming() {
           content,
           crypto.randomUUID(),
           controller.signal,
-          model
+          model,
+          attachments
         );
         updateSessionData(sessionId, {
           activeTurnId: turn.turn_id,
@@ -992,11 +996,19 @@ export function useBuildStreaming() {
       } catch (err) {
         if ((err as Error).name === "AbortError") {
           updateSessionData(sessionId, { isInterrupting: false });
-        } else if (err instanceof RateLimitError) {
-          console.warn("[Streaming] Rate limit exceeded");
+        } else if (err instanceof RateLimitedError) {
+          // Usage-budget 429: recoverable once the budget resets, so keep the
+          // session active and surface the same rate-limit banner as chat.
+          // `error` stays set so queued messages don't auto-send into the limit.
+          appendStreamItem(sessionId, {
+            type: "error",
+            id: genId("error"),
+            content: err.message,
+            rateLimit: err.details,
+          });
           updateSessionData(sessionId, {
             status: "active",
-            error: SessionErrorCode.RATE_LIMIT_EXCEEDED,
+            error: err.message,
             isInterrupting: false,
             activeTurnId: null,
             activeTurnIndex: null,
@@ -1023,7 +1035,13 @@ export function useBuildStreaming() {
         }
       }
     },
-    [setAbortController, updateSessionData, clearStreamItems, streamTurnEvents]
+    [
+      setAbortController,
+      updateSessionData,
+      appendStreamItem,
+      clearStreamItems,
+      streamTurnEvents,
+    ]
   );
 
   /**

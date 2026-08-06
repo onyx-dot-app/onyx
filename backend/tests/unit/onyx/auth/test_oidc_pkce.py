@@ -84,9 +84,7 @@ def _build_test_client(
     if login_status_code in {301, 302, 303, 307, 308}:
         login_response.headers["location"] = "/app"
     login_response.set_cookie("testsession", "session-token")
-    backend.login = AsyncMock(  # ty: ignore[invalid-assignment]
-        return_value=login_response
-    )
+    backend.login = AsyncMock(return_value=login_response)
 
     user = MagicMock()
     user.is_active = True
@@ -315,7 +313,7 @@ def test_oidc_callback_uses_code_verifier_when_pkce_enabled() -> None:
 
     with patch(
         "onyx.auth.users.fetch_ee_implementation_or_noop",
-        return_value=lambda _email: "tenant_1",
+        return_value=lambda *_identity: "tenant_1",
     ):
         response = client.get(
             "/auth/oidc/callback",
@@ -337,7 +335,7 @@ def test_oidc_callback_works_without_pkce_when_flag_disabled() -> None:
 
     with patch(
         "onyx.auth.users.fetch_ee_implementation_or_noop",
-        return_value=lambda _email: "tenant_1",
+        return_value=lambda *_identity: "tenant_1",
     ):
         response = client.get(
             "/auth/oidc/callback",
@@ -362,7 +360,7 @@ def test_oidc_callback_pkce_preserves_redirect_when_backend_login_is_non_redirec
 
     with patch(
         "onyx.auth.users.fetch_ee_implementation_or_noop",
-        return_value=lambda _email: "tenant_1",
+        return_value=lambda *_identity: "tenant_1",
     ):
         response = client.get(
             "/auth/oidc/callback",

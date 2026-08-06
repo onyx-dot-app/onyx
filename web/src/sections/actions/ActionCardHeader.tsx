@@ -9,7 +9,7 @@ import ButtonRenaming from "@/refresh-components/buttons/ButtonRenaming";
 import type { IconProps } from "@opal/types";
 import Truncated from "@/refresh-components/texts/Truncated";
 import { SvgEdit } from "@opal/icons";
-import { useActionCardContext } from "@/sections/actions/ActionCardContext";
+import { Hoverable } from "@opal/core";
 
 interface ActionCardHeaderProps {
   title: string;
@@ -29,14 +29,13 @@ function ActionCardHeader({
   onRename,
 }: ActionCardHeaderProps) {
   const [isRenaming, setIsRenaming] = useState(false);
-  const { isHovered } = useActionCardContext();
 
   const isConnected = status === ActionStatus.CONNECTED;
   const isPending = status === ActionStatus.PENDING;
   const isDisconnected = status === ActionStatus.DISCONNECTED;
   const isFetching = status === ActionStatus.FETCHING;
 
-  const showRenameIcon = onRename && isHovered && !isRenaming;
+  const showRenameIcon = onRename && !isRenaming;
 
   const handleRename = async (newName: string) => {
     if (onRename) {
@@ -116,16 +115,18 @@ function ActionCardHeader({
             </Text>
           )}
           {showRenameIcon && (
-            // TODO(@raunakab): migrate to opal Button once className/iconClassName is resolved
-            <IconButton
-              icon={SvgEdit}
-              tooltip="Rename"
-              internal
-              tertiary
-              onClick={handleRenameClick}
-              className="h-6 w-6 opacity-70 hover:opacity-100"
-              aria-label={`Rename ${title}`}
-            />
+            <Hoverable.Item group="action-card" variant="appear-on-hover">
+              {/* TODO(@raunakab): migrate to opal Button once className/iconClassName is resolved */}
+              <IconButton
+                icon={SvgEdit}
+                tooltip="Rename"
+                internal
+                tertiary
+                onClick={handleRenameClick}
+                className="h-6 w-6 opacity-70 hover:opacity-100"
+                aria-label={`Rename ${title}`}
+              />
+            </Hoverable.Item>
           )}
         </div>
 

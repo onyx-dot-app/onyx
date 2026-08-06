@@ -81,7 +81,9 @@ def create_token(
 
     db_session.commit()
 
-    logger.info("User %s created PAT '%s'", user.email, request.name)
+    # %r escapes control chars in the user-supplied name so it can't forge log
+    # lines (CR/LF injection) in the shared log stream.
+    logger.info("User %s created PAT %r", user.email, request.name)
 
     return CreatedTokenResponse(
         **TokenResponse.model_validate(pat).model_dump(),

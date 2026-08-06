@@ -1,0 +1,403 @@
+"""Physical database ("shard") registry for tenant routing.
+
+Onyx addresses a tenant by *schema* via ``schema_translate_map``. This module adds
+the orthogonal axis: which *database* that schema lives in.
+
+Design notes:
+
+- The default shard's engine is owned by :class:`onyx.db.engine.sql_engine.SqlEngine`,
+  not by this module. That keeps the ~20 existing ``init_engine`` call sites and the
+  single-database deployment path completely unchanged.
+- Non-default shard engines are created lazily here, on first use, mirroring the pool
+  configuration the default engine was initialized with.
+- With no ``ONYX_DB_SHARDS`` configured there is exactly one shard and this module is
+  a thin pass-through to ``SqlEngine``.
+
+Connection budget: applied per shard rather than split across them — see
+``pool_budget_for_shard``. A connection limit belongs to a database, so a pool against
+one shard costs another shard nothing.
+"""
+
+import json
+import threading
+import urllib.parse
+from dataclasses import dataclass
+from typing import Any
+
+from sqlalchemy import event
+from sqlalchemy.engine import Engine, create_engine
+
+from onyx.configs.app_configs import (
+    ONYX_DB_CATALOG_SHARD,
+    ONYX_DB_DEFAULT_SHARD,
+    ONYX_DB_NEW_TENANT_SHARD,
+    ONYX_DB_SHARD_POOL_OVERFLOW,
+    ONYX_DB_SHARD_POOL_SIZE,
+    ONYX_DB_SHARDS_JSON,
+    POSTGRES_DB,
+    POSTGRES_HOST,
+    POSTGRES_PASSWORD,
+    POSTGRES_PORT,
+    POSTGRES_USER,
+)
+from onyx.utils.logger import setup_logger
+
+logger = setup_logger()
+
+
+# Alembic Config attribute a caller sets to pin a migration run to one database.
+# Deliberately NOT `sqlalchemy.url`: that option is already set by other callers (the
+# integration-test reset helpers) with a sync-driver URL, on the established
+# understanding that alembic/env.py ignores it and builds its own async engine.
+ALEMBIC_TARGET_URL_ATTRIBUTE = "onyx_target_url"
+
+
+class ShardConfigurationError(RuntimeError):
+    """Raised when ONYX_DB_SHARDS is malformed or references an unknown shard."""
+
+
+@dataclass(frozen=True, repr=False)
+class ShardSpec:
+    """Connection coordinates for one physical database.
+
+    repr/str omit the password so it can't leak via a log line or traceback; the
+    dataclass-generated repr would have included it.
+    """
+
+    name: str
+    host: str
+    port: str
+    db: str
+    user: str
+    password: str
+
+    def __repr__(self) -> str:
+        return f"{self.name}({self.user}@{self.host}:{self.port}/{self.db})"
+
+    __str__ = __repr__
+
+
+def _validate_named_shards(specs: dict[str, ShardSpec]) -> None:
+    """Fail at startup if a settings-named shard does not exist.
+
+    Checked on the unconfigured path too: naming one of these without also defining
+    ONYX_DB_SHARDS otherwise starts cleanly and then breaks at request time — every
+    catalog session for the former, every signup for the latter.
+    """
+    for setting, name in (
+        ("ONYX_DB_CATALOG_SHARD", ONYX_DB_CATALOG_SHARD),
+        ("ONYX_DB_NEW_TENANT_SHARD", ONYX_DB_NEW_TENANT_SHARD),
+    ):
+        if name not in specs:
+            raise ShardConfigurationError(
+                f"{setting}='{name}' is not a configured shard (known: {sorted(specs)})"
+            )
+
+
+def _parse_shard_specs() -> dict[str, ShardSpec]:
+    """Build the shard table from configuration.
+
+    The default shard always exists and is derived from the POSTGRES_* settings, so
+    an unconfigured deployment gets exactly one shard.
+    """
+    default_spec = ShardSpec(
+        name=ONYX_DB_DEFAULT_SHARD,
+        host=POSTGRES_HOST,
+        port=POSTGRES_PORT,
+        db=POSTGRES_DB,
+        user=POSTGRES_USER,
+        password=POSTGRES_PASSWORD,
+    )
+    specs: dict[str, ShardSpec] = {default_spec.name: default_spec}
+
+    if not ONYX_DB_SHARDS_JSON:
+        _validate_named_shards(specs)
+        return specs
+
+    try:
+        raw = json.loads(ONYX_DB_SHARDS_JSON)
+    except json.JSONDecodeError as e:
+        raise ShardConfigurationError(f"ONYX_DB_SHARDS is not valid JSON: {e}") from e
+
+    if not isinstance(raw, dict):
+        raise ShardConfigurationError(
+            f"ONYX_DB_SHARDS must be a JSON object of shard name -> overrides, got {type(raw).__name__}"
+        )
+
+    for name, overrides in raw.items():
+        if not isinstance(overrides, dict):
+            raise ShardConfigurationError(
+                f"ONYX_DB_SHARDS['{name}'] must be an object of connection overrides"
+            )
+        if name == ONYX_DB_DEFAULT_SHARD:
+            # The default shard's engine comes from SqlEngine, built from POSTGRES_*.
+            # Accepting overrides here would let sessions and migrations disagree
+            # about which database the default shard actually is.
+            raise ShardConfigurationError(
+                f"ONYX_DB_SHARDS must not redefine the default shard "
+                f"'{ONYX_DB_DEFAULT_SHARD}'; configure it via the POSTGRES_* settings"
+            )
+        unknown = set(overrides) - {"host", "port", "db", "user", "password"}
+        if unknown:
+            raise ShardConfigurationError(
+                f"ONYX_DB_SHARDS['{name}'] has unknown keys: {sorted(map(str, unknown))}"
+            )
+        # POSTGRES_PASSWORD is already percent-encoded at config load; an explicit
+        # override is raw, so encode it here to match. Without this a password
+        # containing '@' or ':' silently produces a misparsed connection URL.
+        raw_password = overrides.get("password")
+        password = (
+            urllib.parse.quote_plus(str(raw_password))
+            if raw_password is not None
+            else POSTGRES_PASSWORD
+        )
+
+        specs[name] = ShardSpec(
+            name=name,
+            host=str(overrides.get("host", POSTGRES_HOST)),
+            port=str(overrides.get("port", POSTGRES_PORT)),
+            db=str(overrides.get("db", POSTGRES_DB)),
+            user=str(overrides.get("user", POSTGRES_USER)),
+            password=password,
+        )
+
+    _validate_named_shards(specs)
+
+    return specs
+
+
+_SHARD_SPECS: dict[str, ShardSpec] | None = None
+_SPECS_LOCK = threading.Lock()
+
+
+def get_shard_specs() -> dict[str, ShardSpec]:
+    """All configured shards, keyed by name. Parsed once per process."""
+    global _SHARD_SPECS
+    if _SHARD_SPECS is None:
+        with _SPECS_LOCK:
+            if _SHARD_SPECS is None:
+                _SHARD_SPECS = _parse_shard_specs()
+                if len(_SHARD_SPECS) > 1:
+                    logger.info(
+                        "Tenant sharding enabled across %d databases: %s",
+                        len(_SHARD_SPECS),
+                        ", ".join(str(s) for s in _SHARD_SPECS.values()),
+                    )
+    return _SHARD_SPECS
+
+
+def reset_shard_specs() -> None:
+    """Re-read the shard table from configuration, disposing engines built from the old one.
+
+    Mirrors ``SqlEngine.reset_engine``. Needed anywhere shard configuration can change
+    within a process — tests, and forked children that re-read their environment.
+    """
+    global _SHARD_SPECS
+    ShardRegistry.reset()
+    with _SPECS_LOCK:
+        _SHARD_SPECS = None
+
+
+def is_sharded() -> bool:
+    """True when more than one physical database is configured.
+
+    The single-shard answer is always the default shard, so callers use this to skip
+    routing work — including the catalog and Redis I/O that resolution would do.
+    """
+    return len(get_shard_specs()) > 1
+
+
+def pool_budget_for_shard(
+    shard_name: str, pool_size: int, max_overflow: int
+) -> tuple[int, int]:
+    """SQLAlchemy pool settings for one shard's engine.
+
+    A connection limit is a property of a *database*, not of the fleet: a pool against
+    one shard consumes nothing from another shard's ``max_connections``. So the budget
+    is applied per shard rather than split across them. Splitting would shrink the
+    default shard's pool the moment a second shard is configured — cutting capacity on
+    the database still carrying every tenant, to relieve one that is empty.
+
+    Extra shards can be given a smaller allocation of their own while they are filling
+    up. An explicit ``max_overflow=0`` (celery beat) stays 0.
+    """
+    if is_default_shard(shard_name):
+        return pool_size, max_overflow
+
+    return (
+        ONYX_DB_SHARD_POOL_SIZE if ONYX_DB_SHARD_POOL_SIZE is not None else pool_size,
+        (
+            0
+            if max_overflow == 0
+            else (
+                ONYX_DB_SHARD_POOL_OVERFLOW
+                if ONYX_DB_SHARD_POOL_OVERFLOW is not None
+                else max_overflow
+            )
+        ),
+    )
+
+
+def shard_app_name(base_app_name: str, driver: str, shard_name: str) -> str:
+    """`application_name` for a shard's connections, as seen in `pg_stat_activity`.
+
+    The default shard keeps its historical `<app>_<driver>` name; only extra shards
+    get a suffix.
+    """
+    name = f"{base_app_name}_{driver}"
+    return name if is_default_shard(shard_name) else f"{name}_{shard_name}"
+
+
+def is_default_shard(shard_name: str) -> bool:
+    return shard_name == ONYX_DB_DEFAULT_SHARD
+
+
+def get_default_shard_name() -> str:
+    return ONYX_DB_DEFAULT_SHARD
+
+
+def get_catalog_shard_name() -> str:
+    return ONYX_DB_CATALOG_SHARD
+
+
+def get_new_tenant_shard_name() -> str:
+    """Shard that newly created tenants are placed on."""
+    return ONYX_DB_NEW_TENANT_SHARD
+
+
+class ShardRegistry:
+    """Lazily-created engines for non-default shards.
+
+    The default shard is deliberately absent from ``_engines``; requests for it are
+    delegated to ``SqlEngine`` so there is exactly one default engine per process.
+    """
+
+    _engines: dict[str, Engine] = {}
+    _lock: threading.Lock = threading.Lock()
+
+    @classmethod
+    def get_engine(cls, shard_name: str) -> Engine:
+        # Imported here: sql_engine imports this module for pool sizing.
+        from onyx.db.engine.sql_engine import SqlEngine
+
+        if is_default_shard(shard_name):
+            return SqlEngine.get_engine()
+
+        engine = cls._engines.get(shard_name)
+        if engine is not None:
+            return engine
+
+        with cls._lock:
+            # Re-check: another thread may have built it while we waited. The lock has
+            # to span build-and-store as a unit — locking each dict access instead lets
+            # racing callers each build an engine and orphan the losers' pools.
+            engine = cls._engines.get(shard_name)
+            if engine is not None:
+                return engine
+
+            specs = get_shard_specs()
+            spec = specs.get(shard_name)
+            if spec is None:
+                raise ShardConfigurationError(
+                    f"No configuration for shard '{shard_name}' (known: {sorted(specs)})"
+                )
+
+            engine = cls._build_engine(spec)
+            cls._engines[shard_name] = engine
+            logger.info("Created engine for shard %s", spec)
+            return engine
+
+    @classmethod
+    def _build_engine(cls, spec: ShardSpec) -> Engine:
+        """Build a shard engine mirroring the default engine's pool configuration."""
+        from onyx.db.engine.iam_auth import make_provide_iam_token
+        from onyx.db.engine.sql_engine import (
+            SYNC_DB_API,
+            SqlEngine,
+            build_connection_string,
+        )
+
+        profile = SqlEngine.get_engine_profile()
+
+        connection_string = build_connection_string(
+            db_api=SYNC_DB_API,
+            user=spec.user,
+            password=spec.password,
+            host=spec.host,
+            port=spec.port,
+            db=spec.db,
+            app_name=shard_app_name(SqlEngine.get_app_name(), "sync", spec.name),
+            use_iam_auth=profile.use_iam,
+        )
+
+        engine_kwargs: dict[str, Any] = dict(profile.engine_kwargs)
+        # NullPool deployments carry no pool sizing to override.
+        if "pool_size" in engine_kwargs:
+            (
+                engine_kwargs["pool_size"],
+                engine_kwargs["max_overflow"],
+            ) = pool_budget_for_shard(
+                spec.name,
+                engine_kwargs["pool_size"],
+                engine_kwargs.get("max_overflow", 0),
+            )
+        engine = create_engine(connection_string, **engine_kwargs)
+
+        if profile.use_iam:
+            # Bound to this shard's coordinates: an RDS IAM token is only valid for
+            # the host/port/user it was minted for.
+            event.listen(
+                engine,
+                "do_connect",
+                make_provide_iam_token(spec.host, spec.port, spec.user),
+            )
+
+        return engine
+
+    @classmethod
+    def reset(cls) -> None:
+        """Dispose every non-default shard engine.
+
+        Must be called anywhere ``SqlEngine.reset_engine()`` is called — notably in
+        forked child processes, which inherit unusable parent connections.
+        """
+        with cls._lock:
+            for name, engine in cls._engines.items():
+                try:
+                    engine.dispose()
+                except Exception:
+                    logger.warning("Failed disposing engine for shard %s", name)
+            cls._engines = {}
+
+
+def get_shard_spec(shard_name: str) -> ShardSpec:
+    """Connection coordinates for one shard.
+
+    For callers that need to reach a shard without going through an ``Engine`` —
+    notably Alembic, which wants a URL string.
+    """
+    specs = get_shard_specs()
+    spec = specs.get(shard_name)
+    if spec is None:
+        raise ShardConfigurationError(
+            f"No configuration for shard '{shard_name}' (known: {sorted(specs)})"
+        )
+    return spec
+
+
+def validate_shard_name(shard_name: str) -> None:
+    """Raise unless this names a configured shard.
+
+    For callers that want the check without the spec, so a bad `-x shard=` fails at
+    argument-parsing time rather than after connecting somewhere unintended.
+    """
+    get_shard_spec(shard_name)
+
+
+def get_engine_for_shard(shard_name: str) -> Engine:
+    return ShardRegistry.get_engine(shard_name)
+
+
+def get_catalog_engine() -> Engine:
+    """Engine for the database holding the shared `public` catalog tables."""
+    return ShardRegistry.get_engine(ONYX_DB_CATALOG_SHARD)

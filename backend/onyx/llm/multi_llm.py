@@ -4,6 +4,7 @@ import re
 import time
 from collections.abc import Iterator
 from contextlib import AbstractContextManager, contextmanager, nullcontext
+from functools import lru_cache
 from typing import TYPE_CHECKING, Any, Union, cast
 
 from readerwriterlock import rwlock
@@ -17,7 +18,12 @@ from onyx.configs.chat_configs import (
     LLM_SOCKET_READ_TIMEOUT,
 )
 from onyx.configs.model_configs import GEN_AI_TEMPERATURE, LITELLM_EXTRA_BODY
-from onyx.llm.constants import LlmProviderNames
+from onyx.llm.api_surfaces import (
+    OPENAI_COMPATIBLE_SURFACES,
+    LlmApiSurface,
+    resolve_api_surface,
+)
+from onyx.llm.constants import MODEL_PREFIX_TO_VENDOR, LlmProviderNames
 from onyx.llm.cost import compute_cost_cents
 from onyx.llm.custom_config_mapping import (
     UI_ONLY_CONFIG_KEYS,
@@ -29,18 +35,25 @@ from onyx.llm.interfaces import (
     LLMConfig,
     LLMUserIdentity,
     ReasoningEffort,
-    ToolChoiceOptions,
+    ToolChoice,
 )
-from onyx.llm.model_capabilities import is_true_openai_model, model_is_reasoning_model
+from onyx.llm.model_capabilities import (
+    is_true_openai_model,
+    model_is_reasoning_model,
+    openai_model_rejects_reasoning_effort,
+)
 from onyx.llm.model_response import ModelResponse, ModelResponseStream, Usage
 from onyx.llm.models import (
     ANTHROPIC_ADAPTIVE_REASONING_EFFORT,
     ANTHROPIC_REASONING_EFFORT_BUDGET,
     OPENAI_REASONING_EFFORT,
+    NamedToolChoice,
+    ToolChoiceOptions,
 )
 from onyx.llm.request_context import get_llm_mock_response
 from onyx.llm.utils import build_litellm_passthrough_kwargs
 from onyx.llm.well_known_providers.constants import VERTEX_LOCATION_KWARG
+from onyx.tracing.llm_utils import record_llm_request_params
 from onyx.utils.encryption import mask_env_value_for_logging, mask_string
 from onyx.utils.logger import setup_logger
 
@@ -59,7 +72,12 @@ if TYPE_CHECKING:
 _LLM_PROMPT_LONG_TERM_LOG_CATEGORY = "llm_prompt"
 LEGACY_MAX_TOKENS_KWARG = "max_tokens"
 STANDARD_MAX_TOKENS_KWARG = "max_completion_tokens"
-_VERTEX_ANTHROPIC_MODELS_REJECTING_OUTPUT_CONFIG = (
+
+# Azure api-versions that route to the modern /openai/v1/* surface. Mirrors
+# LiteLLM's BaseAzureLLM._is_azure_v1_api_version.
+_AZURE_V1_API_VERSIONS = frozenset({"preview", "latest", "v1"})
+
+_VERTEX_ANTHROPIC_MODELS_REJECTING_STREAM_OPTIONS = (
     "claude-opus-4-5",
     "claude-opus-4-6",
     "claude-opus-4-7",
@@ -76,6 +94,41 @@ _VERTEX_ANTHROPIC_MODELS_REJECTING_OUTPUT_CONFIG = (
 # avoids relying on LiteLLM's drop_params (unreliable here, since AnthropicConfig
 # still advertises temperature as supported).
 _ANTHROPIC_ADAPTIVE_THINKING_MIN_VERSION = (4, 7)
+
+# Extended thinking landed in Claude 3.7. Parsing the version off the name
+# keeps aliased deployments (gateways, custom model names) reasoning even when
+# the litellm registry doesn't recognize the string.
+_ANTHROPIC_THINKING_MIN_VERSION = (3, 7)
+
+# Best-effort tuning kwargs, never worth failing a chat over. _completion
+# retries provider rejections without them: reasoning keys first, then all.
+# Semantics-changing keys (tools, tool_choice, messages) are never stripped.
+_REASONING_KWARG_KEYS = frozenset(
+    {"thinking", "output_config", "reasoning", "reasoning_effort"}
+)
+_BEST_EFFORT_KWARG_KEYS = _REASONING_KWARG_KEYS | frozenset({"temperature"})
+
+# Substrings provider 400s use to name each strippable kwarg (errors may
+# cite only inner fields like budget_tokens or effort).
+_KWARG_ERROR_ALIASES: dict[str, tuple[str, ...]] = {
+    "thinking": ("thinking", "budget_tokens"),
+    "output_config": ("output_config", "effort"),
+    "reasoning": ("reasoning", "effort"),
+    "reasoning_effort": ("reasoning_effort", "effort"),
+    "temperature": ("temperature",),
+}
+
+
+def _rejection_names_strippable_kwargs(error: Exception, strippable: set[str]) -> bool:
+    """True when the 400's message names a kwarg a later attempt would drop.
+    Unrelated 400s (context length, malformed input) must not be retried."""
+    message = str(error).lower()
+    return any(
+        alias in message
+        for key in strippable
+        for alias in _KWARG_ERROR_ALIASES.get(key, (key,))
+    )
+
 
 # Named tiers spanning Claude's naming schemes, including the Claude 5 line whose
 # version digit can precede or follow the tier ("claude-sonnet-5" vs
@@ -94,6 +147,28 @@ class LLMRateLimitError(Exception):
     """
     Exception raised when an LLM call is rate limited.
     """
+
+
+def _consume_stream_with_timeout(stream: Any, total_timeout: float | None) -> list[Any]:
+    """Drain a litellm stream, capping total wall-clock time when set.
+
+    The socket read timeout only bounds the gap between packets, so keepalive
+    pings defeat it; this caps the whole call. On breach we raise — never close,
+    since litellm 1.93.0 exposes only async ``aclose`` — which frees the thread;
+    GC releases the connection.
+    """
+    if total_timeout is None:
+        return list(stream)
+
+    deadline = time.monotonic() + total_timeout
+    chunks: list[Any] = []
+    for chunk in stream:
+        chunks.append(chunk)
+        if time.monotonic() > deadline:
+            raise LLMTimeoutError(
+                f"LLM streaming call exceeded total timeout of {total_timeout}s"
+            )
+    return chunks
 
 
 def _prompt_to_dicts(prompt: LanguageModelInput) -> list[dict[str, Any]]:
@@ -123,6 +198,25 @@ def _normalize_content(raw: Any) -> str:
             for block in raw
         )
     return str(raw)
+
+
+# Providers not in this set forward the unknown `thinking_blocks` key verbatim,
+# so strip it for them.
+_THINKING_BLOCK_PROVIDERS = {
+    LlmProviderNames.ANTHROPIC,
+    LlmProviderNames.BEDROCK,
+    LlmProviderNames.BEDROCK_CONVERSE,
+    LlmProviderNames.VERTEX_AI,
+}
+
+
+def _strip_thinking_blocks_from_messages(
+    messages: list[dict[str, Any]],
+) -> list[dict[str, Any]]:
+    return [
+        {key: value for key, value in msg.items() if key != "thinking_blocks"}
+        for msg in messages
+    ]
 
 
 def _strip_tool_content_from_messages(
@@ -211,6 +305,24 @@ def _fix_tool_user_message_ordering(
     return result
 
 
+_MISTRAL_FAMILY_MARKERS: frozenset[str] = frozenset(
+    prefix for prefix, vendor in MODEL_PREFIX_TO_VENDOR.items() if vendor == "mistral"
+)
+
+
+def _is_mistral_family_name(identity_names: list[str]) -> bool:
+    """Whether any model/deployment identity name looks like a Mistral-family
+    model (mistral, mixtral, codestral, ...). The provider name alone is not
+    enough: Mistral models are frequently served behind Azure or
+    OpenAI-compatible endpoints (e.g. vLLM), where only the configured names
+    carry the signal."""
+    return any(
+        marker in name.lower()
+        for name in identity_names
+        for marker in _MISTRAL_FAMILY_MARKERS
+    )
+
+
 def _messages_contain_tool_content(messages: list[dict[str, Any]]) -> bool:
     """Check if any messages contain tool-related content blocks."""
     for msg in messages:
@@ -236,11 +348,29 @@ def _prompt_contains_tool_call_history(prompt: LanguageModelInput) -> bool:
     return any(isinstance(msg, AssistantMessage) and msg.tool_calls for msg in msgs)
 
 
-def _is_vertex_model_rejecting_output_config(model_name: str) -> bool:
+@lru_cache(maxsize=None)
+def _log_azure_responses_api_version_override(
+    api_base: str | None, configured_api_version: str
+) -> None:
+    """Log once per provider config per process (LLM instances and calls are
+    per-request, so unconditional logging here would fire on every LLM call)."""
+    logger.warning(
+        "Azure responses API calls for %s ignore the configured api_version %s: "
+        "dated api-versions target the legacy /openai/responses surface, which "
+        "some clouds (e.g. Azure Government) do not serve. These calls use "
+        "LiteLLM's responses default instead (AZURE_DEFAULT_RESPONSES_API_VERSION, "
+        "default 'preview'); the configured version still applies to "
+        "chat-completions calls.",
+        api_base,
+        configured_api_version,
+    )
+
+
+def _is_vertex_model_rejecting_stream_options(model_name: str) -> bool:
     normalized_model_name = model_name.lower()
     return any(
         blocked_model in normalized_model_name
-        for blocked_model in _VERTEX_ANTHROPIC_MODELS_REJECTING_OUTPUT_CONFIG
+        for blocked_model in _VERTEX_ANTHROPIC_MODELS_REJECTING_STREAM_OPTIONS
     )
 
 
@@ -283,14 +413,25 @@ def _parse_anthropic_model_version(model_name: str) -> tuple[int, int] | None:
     return (major, minor)
 
 
-def _anthropic_uses_adaptive_thinking(model_name: str) -> bool:
+def _anthropic_meets_version(model_name: str, min_version: tuple[int, int]) -> bool:
     version = _parse_anthropic_model_version(model_name)
-    return version is not None and version >= _ANTHROPIC_ADAPTIVE_THINKING_MIN_VERSION
+    return version is not None and version >= min_version
+
+
+def _anthropic_uses_adaptive_thinking(model_name: str) -> bool:
+    return _anthropic_meets_version(
+        model_name, _ANTHROPIC_ADAPTIVE_THINKING_MIN_VERSION
+    )
+
+
+def _anthropic_supports_thinking(model_name: str) -> bool:
+    return _anthropic_meets_version(model_name, _ANTHROPIC_THINKING_MIN_VERSION)
 
 
 def _anthropic_omits_sampling_params(model_name: str) -> bool:
-    version = _parse_anthropic_model_version(model_name)
-    return version is not None and version >= _ANTHROPIC_ADAPTIVE_THINKING_MIN_VERSION
+    return _anthropic_meets_version(
+        model_name, _ANTHROPIC_ADAPTIVE_THINKING_MIN_VERSION
+    )
 
 
 def _env_injection_enabled() -> bool:
@@ -338,9 +479,7 @@ class LitellmLLM(LLM):
         # request can run indefinitely as long as data keeps arriving within this
         # window. If the LLM pauses for longer than this timeout between chunks,
         # a ReadTimeout is raised.
-        self._timeout = timeout
-        if timeout is None:
-            self._timeout = LLM_SOCKET_READ_TIMEOUT
+        self._timeout = timeout if timeout is not None else LLM_SOCKET_READ_TIMEOUT
 
         self._temperature = GEN_AI_TEMPERATURE if temperature is None else temperature
 
@@ -353,6 +492,8 @@ class LitellmLLM(LLM):
         self._custom_llm_provider = custom_llm_provider
         self._max_input_tokens = max_input_tokens
         self._custom_config = custom_config
+
+        self._api_surface = resolve_api_surface(model_provider, custom_config)
 
         # Create a dictionary for model-specific arguments if it's None
         model_kwargs = model_kwargs or {}
@@ -396,14 +537,7 @@ class LitellmLLM(LLM):
         ):
             model_kwargs[VERTEX_LOCATION_KWARG] = "global"
 
-        # Bifrost and OpenAI-compatible: OpenAI-compatible proxies that send
-        # model names directly to the endpoint. We route through LiteLLM's
-        # openai provider with the server's base URL, and ensure /v1 is appended.
-        if model_provider in (
-            LlmProviderNames.BIFROST,
-            LlmProviderNames.OPENAI_COMPATIBLE,
-            LlmProviderNames.NEBIUS_TOKENFACTORY,
-        ):
+        if self._api_surface in OPENAI_COMPATIBLE_SURFACES:
             self._custom_llm_provider = "openai"
             # LiteLLM's OpenAI client requires an api_key to be set.
             # Many OpenAI-compatible servers don't need auth, so supply a
@@ -414,6 +548,11 @@ class LitellmLLM(LLM):
                 base = self._api_base.rstrip("/")
                 self._api_base = base if base.endswith("/v1") else f"{base}/v1"
                 model_kwargs["api_base"] = self._api_base
+        elif self._api_surface is LlmApiSurface.ANTHROPIC_MESSAGES:
+            # Base stays bare; LiteLLM appends /v1/messages itself.
+            self._custom_llm_provider = "anthropic"
+            if self._api_base is not None:
+                self._api_base = self._api_base.rstrip("/")
 
         # This is needed for Ollama to do proper function calling
         if model_provider == LlmProviderNames.OLLAMA_CHAT and api_base is not None:
@@ -488,7 +627,7 @@ class LitellmLLM(LLM):
         self,
         prompt: LanguageModelInput,
         tools: list[dict] | None,
-        tool_choice: ToolChoiceOptions | None,
+        tool_choice: ToolChoice | None,
         stream: bool,
         parallel_tool_calls: bool,
         reasoning_effort: ReasoningEffort = ReasoningEffort.AUTO,
@@ -499,17 +638,36 @@ class LitellmLLM(LLM):
         client: "HTTPHandler | None" = None,
     ) -> Union["ModelResponse", "CustomStreamWrapper"]:
         # Lazy loading to avoid memory bloat for non-inference flows
-        from litellm.exceptions import RateLimitError, Timeout
+        from litellm.exceptions import BadRequestError, RateLimitError, Timeout
 
         from onyx.llm.litellm_singleton import litellm
 
         #########################
         # Flags that modify the final arguments
         #########################
-        is_claude_model = "claude" in self.config.model_name.lower()
+        # Custom providers (e.g. Azure AI Foundry) may carry the model identity
+        # only in the deployment alias, which is also the string actually sent
+        # to LiteLLM — so model detection must consider both names.
+        model_identity_names = [
+            name
+            for name in (self.config.model_name, self.config.deployment_name)
+            if name
+        ]
+        is_claude_model = any("claude" in name.lower() for name in model_identity_names)
         is_qwen_model = "qwen" in self.config.model_name.lower()
-        is_reasoning = model_is_reasoning_model(
-            self.config.model_name, self.config.model_provider
+        uses_adaptive_thinking = any(
+            _anthropic_uses_adaptive_thinking(name) for name in model_identity_names
+        )
+        anthropic_supports_thinking = any(
+            _anthropic_supports_thinking(name) for name in model_identity_names
+        )
+        is_reasoning = (
+            uses_adaptive_thinking
+            or anthropic_supports_thinking
+            or any(
+                model_is_reasoning_model(name, self.config.model_provider)
+                for name in model_identity_names
+            )
         )
         # All OpenAI models will use responses API for consistency
         # Responses API is needed to get reasoning packets from OpenAI models
@@ -519,11 +677,12 @@ class LitellmLLM(LLM):
         is_ollama = self._model_provider == LlmProviderNames.OLLAMA_CHAT
         is_mistral = self._model_provider == LlmProviderNames.MISTRAL
         is_vertex_ai = self._model_provider == LlmProviderNames.VERTEX_AI
-        # Some Vertex Anthropic models reject output_config.
-        # Keep this guard until LiteLLM/Vertex accept the field for these models.
-        is_vertex_model_rejecting_output_config = (
+        # Some Vertex Anthropic models reject stream_options. Reasoning params
+        # are sent regardless: a provider that rejects one answers with a 400
+        # naming the kwarg, which the retry ladder below strips.
+        is_vertex_model_rejecting_stream_options = (
             is_vertex_ai
-            and _is_vertex_model_rejecting_output_config(self.config.model_name)
+            and _is_vertex_model_rejecting_stream_options(self.config.model_name)
         )
 
         #########################
@@ -533,24 +692,40 @@ class LitellmLLM(LLM):
         optional_kwargs: dict[str, Any] = {}
 
         # Model name
-        is_openai_compatible_proxy = self._model_provider in (
-            LlmProviderNames.BIFROST,
-            LlmProviderNames.OPENAI_COMPATIBLE,
-            LlmProviderNames.NEBIUS_TOKENFACTORY,
-        )
+        is_openai_compatible_proxy = self._api_surface in OPENAI_COMPATIBLE_SURFACES
         model_provider = (
             f"{self.config.model_provider}/responses"
             if is_openai_model  # Uses litellm's completions -> responses bridge
             else self.config.model_provider
         )
-        if is_openai_compatible_proxy:
-            # OpenAI-compatible proxies (Bifrost, generic OpenAI-compatible
-            # servers) expect model names sent directly to their endpoint.
-            # We use custom_llm_provider="openai" so LiteLLM doesn't try
-            # to route based on the provider prefix.
-            model = self.config.deployment_name or self.config.model_name
+
+        # Azure responses-bridge calls must target the v1 responses surface:
+        # with a dated api-version, LiteLLM builds the legacy /openai/responses
+        # URL, which sovereign clouds (e.g. Azure Government) do not serve
+        # (#11420). Dropping the dated version lets LiteLLM apply its responses
+        # default (AZURE_DEFAULT_RESPONSES_API_VERSION env var, default
+        # "preview"), which routes to /openai/v1/responses — working on all
+        # clouds with reasoning summaries intact. Admin-configured v1 versions
+        # ("preview"/"latest"/"v1") pass through, and the dated version still
+        # applies to every non-bridge call (e.g. Azure chat completions).
+        api_version = self._api_version or None
+        if (
+            is_openai_model
+            and self._model_provider == LlmProviderNames.AZURE
+            and api_version is not None
+            and api_version not in _AZURE_V1_API_VERSIONS
+        ):
+            _log_azure_responses_api_version_override(self._api_base, api_version)
+            api_version = None
+
+        model_bare = self.config.deployment_name or self.config.model_name
+        if self._api_surface is LlmApiSurface.OPENAI_RESPONSES:
+            # Drives LiteLLM's completions -> responses bridge.
+            model = f"responses/{model_bare}"
+        elif self._api_surface is not None:
+            model = model_bare
         else:
-            model = f"{model_provider}/{self.config.deployment_name or self.config.model_name}"
+            model = f"{model_provider}/{model_bare}"
 
         # Tool choice
         # Downgrade tool_choice=required to AUTO for models that mishandle it:
@@ -559,6 +734,10 @@ class LitellmLLM(LLM):
         # enforces the forced tool. Matched by model name rather than
         # `is_reasoning` because the litellm/local registry lags behind new
         # Qwen releases (e.g. qwen3.7-plus).
+        # A NamedToolChoice is deliberately NOT downgraded: legacy Claude
+        # thinking is skipped below instead, and Qwen thinking models may still
+        # reject the forced tool upstream (a loud 400 beats silently ignoring
+        # the caller's forced tool).
         if (is_claude_model or is_qwen_model) and (
             tool_choice == ToolChoiceOptions.REQUIRED
         ):
@@ -577,11 +756,13 @@ class LitellmLLM(LLM):
         # https://github.com/BerriAI/litellm/issues/26444
         # TODO(litellm): Consider removing this once the above is resolved,
         # although this assumes users have upgraded their litellm if relevant.
-        omits_sampling_params = _anthropic_omits_sampling_params(self.config.model_name)
+        omits_sampling_params = any(
+            _anthropic_omits_sampling_params(name) for name in model_identity_names
+        )
         if not omits_sampling_params:
             optional_kwargs["temperature"] = 1 if is_reasoning else self._temperature
 
-        if stream and not is_vertex_model_rejecting_output_config:
+        if stream and not is_vertex_model_rejecting_stream_options:
             optional_kwargs["stream_options"] = {"include_usage": True}
 
         # Note, there is a reasoning_effort parameter in LiteLLM but it is completely jank and does not work for any
@@ -590,17 +771,28 @@ class LitellmLLM(LLM):
             is_reasoning
             # The default of this parameter not set is surprisingly not the equivalent of an Auto but is actually Off
             and reasoning_effort != ReasoningEffort.OFF
-            and not is_vertex_model_rejecting_output_config
+            and not openai_model_rejects_reasoning_effort(self.config.model_name)
         ):
+            openai_style_reasoning = {
+                "effort": OPENAI_REASONING_EFFORT[reasoning_effort],
+                "summary": "auto",
+            }
+
             if is_openai_model:
                 # OpenAI API does not accept reasoning params for GPT 5 chat models
                 # (neither reasoning nor reasoning_effort are accepted)
                 # even though they are reasoning models (bug in OpenAI)
                 if "-chat" not in model:
-                    optional_kwargs["reasoning"] = {
-                        "effort": OPENAI_REASONING_EFFORT[reasoning_effort],
-                        "summary": "auto",
-                    }
+                    optional_kwargs["reasoning"] = openai_style_reasoning
+
+            elif is_claude_model and is_openai_compatible_proxy:
+                # Wire format follows the API surface, not the model vendor.
+                # LiteLLM drops thinking/output_config as unsupported on an
+                # openai surface, so a gateway only sees reasoning.effort.
+                # The gateway still translates to Anthropic, so the tool-call
+                # constraint below applies here too.
+                if not _prompt_contains_tool_call_history(prompt):
+                    optional_kwargs["reasoning"] = openai_style_reasoning
 
             elif is_claude_model:
                 # Anthropic requires every assistant message with tool_use
@@ -612,7 +804,7 @@ class LitellmLLM(LLM):
                 # (notably Bedrock).
                 has_tool_call_history = _prompt_contains_tool_call_history(prompt)
 
-                if _anthropic_uses_adaptive_thinking(self.config.model_name):
+                if uses_adaptive_thinking:
                     # Newer Anthropic models (Claude Opus 4.7+) reject
                     # thinking.type.enabled — they require the adaptive
                     # thinking config with output_config.effort.
@@ -627,7 +819,14 @@ class LitellmLLM(LLM):
                     budget_tokens: int | None = ANTHROPIC_REASONING_EFFORT_BUDGET.get(
                         reasoning_effort
                     )
-                    if budget_tokens is not None and not has_tool_call_history:
+                    # thinking.type=enabled is rejected alongside a forced
+                    # tool_choice (only adaptive thinking supports forced tool
+                    # use), so skip thinking for a NamedToolChoice.
+                    if (
+                        budget_tokens is not None
+                        and not has_tool_call_history
+                        and not isinstance(tool_choice, NamedToolChoice)
+                    ):
                         if max_tokens is not None:
                             # Anthropic has a weird rule where max token has to be at least as much as budget tokens if set
                             # and the minimum budget tokens is 1024
@@ -651,6 +850,10 @@ class LitellmLLM(LLM):
                     ReasoningEffort.HIGH,
                 ]:
                     optional_kwargs["reasoning_effort"] = reasoning_effort.value
+                elif reasoning_effort is ReasoningEffort.XHIGH:
+                    # Provider mappings behind litellm's reasoning_effort are
+                    # uneven (Gemini raises on xhigh), clamp to high.
+                    optional_kwargs["reasoning_effort"] = ReasoningEffort.HIGH.value
                 else:
                     optional_kwargs["reasoning_effort"] = ReasoningEffort.MEDIUM.value
 
@@ -732,6 +935,15 @@ class LitellmLLM(LLM):
 
             messages = _prompt_to_dicts(prompt)
 
+            if not (
+                is_claude_model
+                and (
+                    self._model_provider in _THINKING_BLOCK_PROVIDERS
+                    or self._api_surface is LlmApiSurface.ANTHROPIC_MESSAGES
+                )
+            ):
+                messages = _strip_thinking_blocks_from_messages(messages)
+
             # Bedrock's Converse API requires toolConfig when messages
             # contain toolUse/toolResult content blocks. When no tools are
             # provided for this request but the history contains tool
@@ -746,50 +958,105 @@ class LitellmLLM(LLM):
             # Some models (e.g. Mistral) reject a user message
             # immediately after a tool message. Insert a synthetic
             # assistant bridge message to satisfy the ordering
-            # constraint. Check both the provider and the deployment/
-            # model name to catch Mistral hosted on Azure.
-            model_or_deployment = (
-                self._deployment_name or self._model_version or ""
-            ).lower()
-            is_mistral_model = is_mistral or "mistral" in model_or_deployment
+            # constraint. Check the provider, the LiteLLM routing
+            # override, and every identity name (deployment alias and
+            # model name) to catch Mistral served behind Azure or
+            # OpenAI-compatible endpoints (e.g. vLLM).
+            is_mistral_model = (
+                is_mistral
+                or self._custom_llm_provider == LlmProviderNames.MISTRAL
+                or _is_mistral_family_name(model_identity_names)
+            )
             if is_mistral_model:
                 messages = _fix_tool_user_message_ordering(messages)
 
             # Only pass tool_choice when tools are present — some providers (e.g. Fireworks)
             # reject requests where tool_choice is explicitly null.
             if tools and tool_choice is not None:
-                optional_kwargs["tool_choice"] = tool_choice
+                if isinstance(tool_choice, NamedToolChoice):
+                    optional_kwargs["tool_choice"] = {
+                        "type": "function",
+                        "function": {"name": tool_choice.name},
+                    }
+                else:
+                    optional_kwargs["tool_choice"] = tool_choice
 
-            # Injection disabled means no env writer exists anywhere in the
-            # process, so skip the rwlock entirely.
-            env_ctx: AbstractContextManager[None]
-            if _env_injection_enabled():
-                env_ctx = temporary_env_and_lock(self._env_only_custom_config)
-            else:
-                if self._env_only_custom_config:
-                    _warn_dropped_env_only_keys(
-                        self._model_provider,
-                        tuple(sorted(self._env_only_custom_config)),
-                    )
-                env_ctx = nullcontext()
-
-            with env_ctx:
-                response = litellm.completion(
-                    mock_response=get_llm_mock_response() or MOCK_LLM_RESPONSE,
-                    model=model,
-                    base_url=self._api_base or None,
-                    api_version=self._api_version or None,
-                    custom_llm_provider=self._custom_llm_provider or None,
-                    messages=messages,
-                    tools=tools,
-                    stream=stream,
-                    timeout=timeout_override or self._timeout,
-                    max_tokens=max_tokens,
-                    client=client,
-                    **optional_kwargs,
-                    **passthrough_kwargs,
+            if not _env_injection_enabled() and self._env_only_custom_config:
+                _warn_dropped_env_only_keys(
+                    self._model_provider,
+                    tuple(sorted(self._env_only_custom_config)),
                 )
-            return response
+
+            def _call_litellm(opts: dict[str, Any]) -> Any:
+                # Injection disabled means no env writer exists anywhere in
+                # the process, so skip the rwlock entirely. Built per attempt
+                # because the context manager is single-use.
+                env_ctx: AbstractContextManager[None] = (
+                    temporary_env_and_lock(self._env_only_custom_config)
+                    if _env_injection_enabled()
+                    else nullcontext()
+                )
+                with env_ctx:
+                    return litellm.completion(
+                        mock_response=get_llm_mock_response() or MOCK_LLM_RESPONSE,
+                        model=model,
+                        base_url=self._api_base or None,
+                        api_version=api_version,
+                        custom_llm_provider=self._custom_llm_provider or None,
+                        messages=messages,
+                        # None (omitted) rather than [] — some OpenAI-compatible
+                        # servers reject requests with an empty tools array.
+                        tools=tools or None,
+                        stream=stream,
+                        timeout=timeout_override or self._timeout,
+                        max_tokens=max_tokens,
+                        client=client,
+                        **opts,
+                        **passthrough_kwargs,
+                    )
+
+            # Retry ladder for provider 400s: drop reasoning kwargs, then every
+            # best-effort kwarg. Unknown models or capability drift degrade to
+            # provider defaults with a warning instead of failing the message.
+            attempts = [optional_kwargs]
+            for strip_keys in (_REASONING_KWARG_KEYS, _BEST_EFFORT_KWARG_KEYS):
+                stripped = {
+                    k: v for k, v in optional_kwargs.items() if k not in strip_keys
+                }
+                if len(stripped) < len(attempts[-1]):
+                    attempts.append(stripped)
+
+            for i, opts in enumerate(attempts):
+                # Last write wins: sent_kwargs holds what the returning (or
+                # final failing) attempt sent, reasoning_effort the requested
+                # intent.
+                record_llm_request_params(
+                    {
+                        "reasoning_effort": reasoning_effort.value,
+                        "max_tokens": max_tokens,
+                        "sent_kwargs": {
+                            k: opts[k]
+                            for k in sorted(_BEST_EFFORT_KWARG_KEYS & opts.keys())
+                        },
+                    }
+                )
+                try:
+                    return _call_litellm(opts)
+                except BadRequestError as e:
+                    if i == len(attempts) - 1:
+                        raise
+                    # Only retry rejections a later attempt can strip away.
+                    remaining_strippable = set(opts) - set(attempts[-1])
+                    if not _rejection_names_strippable_kwargs(e, remaining_strippable):
+                        raise
+                    logger.warning(
+                        "Provider rejected request for model %s. Retrying "
+                        "without %s: %s",
+                        model,
+                        sorted(set(opts) - set(attempts[i + 1])),
+                        e,
+                    )
+            raise RuntimeError("unreachable: retry ladder always returns or raises")
         except Exception as e:
             # for break pointing
             if isinstance(e, Timeout):
@@ -814,16 +1081,25 @@ class LitellmLLM(LLM):
             max_input_tokens=self._max_input_tokens,
         )
 
+    def _uses_isolated_client(self) -> bool:
+        """Providers whose sync calls need a fresh per-call HTTPHandler instead of
+        litellm's shared module_level_client (see threading notes in invoke())."""
+        return (
+            is_true_openai_model(self.config.model_provider, self.config.model_name)
+            or self.config.model_provider == LlmProviderNames.ANTHROPIC
+        )
+
     def invoke(
         self,
         prompt: LanguageModelInput,
         tools: list[dict] | None = None,
-        tool_choice: ToolChoiceOptions | None = None,
+        tool_choice: ToolChoice | None = None,
         structured_response_format: dict | None = None,
         timeout_override: int | None = None,
         max_tokens: int | None = None,
         reasoning_effort: ReasoningEffort = ReasoningEffort.AUTO,
         user_identity: LLMUserIdentity | None = None,
+        total_timeout_override: float | None = None,
     ) -> ModelResponse:
         from litellm import HTTPHandler
         from litellm import ModelResponse as LiteLLMModelResponse
@@ -849,11 +1125,12 @@ class LitellmLLM(LLM):
         #      corrupt the pool state for other threads
         #    - Each request gets its own fresh httpx.Client via HTTPHandler
         #
-        # 3. WHY OTHER PROVIDERS DON'T NEED THIS:
-        #    - Other providers (Anthropic, Bedrock, etc.) use litellm.module_level_client
-        #      which handles concurrency appropriately
-        #    - httpx.Client itself IS thread-safe for concurrent requests
-        #    - The issue is specific to OpenAI's responses API path and connection reuse
+        # 3. WHY ANTHROPIC ALSO GETS AN ISOLATED CLIENT:
+        #    - An abandoned sync stream is finalized by GC, which can fire on a thread
+        #      already inside the shared pool's non-reentrant lock and deadlock it,
+        #      wedging all later LLM calls (encode/httpcore#996; seen in prod).
+        #    - A per-call client keeps abandoned streams off the shared pool. litellm's
+        #      anthropic handler uses module_level_client only when client is None.
         #
         # 4. PITFALL - is_true_openai_model() CHECK:
         #    - Must use is_true_openai_model() NOT just check model_provider == "openai"
@@ -864,9 +1141,17 @@ class LitellmLLM(LLM):
         # This note may not be entirely accurate as there is a lot of complexity in the LiteLLM codebase around this
         # and not every model path was traced thoroughly. It is also possible that in future versions of LiteLLM
         # they will realize that their OpenAI handling is not threadsafe. Hope they will just fix it.
+        # Cap the per-read timeout at the total budget. The deadline is only
+        # checked between chunks, so without this a single blocking read could
+        # overshoot a total shorter than the socket read timeout. No-op when the
+        # total exceeds it (our defaults do).
+        read_timeout = timeout_override or self._timeout
+        if total_timeout_override is not None:
+            read_timeout = min(read_timeout, max(1, int(total_timeout_override)))
+
         client = None
-        if is_true_openai_model(self.config.model_provider, self.config.model_name):
-            client = HTTPHandler(timeout=timeout_override or self._timeout)
+        if self._uses_isolated_client():
+            client = HTTPHandler(timeout=read_timeout)
 
         try:
             # When env-only custom_config keys are injected (self-hosted
@@ -886,7 +1171,7 @@ class LitellmLLM(LLM):
                     tool_choice=tool_choice,
                     stream=True,
                     structured_response_format=structured_response_format,
-                    timeout_override=timeout_override,
+                    timeout_override=read_timeout,
                     max_tokens=max_tokens,
                     parallel_tool_calls=True,
                     reasoning_effort=reasoning_effort,
@@ -894,7 +1179,9 @@ class LitellmLLM(LLM):
                     client=client,
                 ),
             )
-            chunks = list(stream_response)
+            chunks = _consume_stream_with_timeout(
+                stream_response, total_timeout_override
+            )
             response = cast(
                 LiteLLMModelResponse,
                 stream_chunk_builder(chunks),
@@ -915,7 +1202,7 @@ class LitellmLLM(LLM):
         self,
         prompt: LanguageModelInput,
         tools: list[dict] | None = None,
-        tool_choice: ToolChoiceOptions | None = None,
+        tool_choice: ToolChoice | None = None,
         structured_response_format: dict | None = None,
         timeout_override: int | None = None,
         max_tokens: int | None = None,
@@ -947,7 +1234,7 @@ class LitellmLLM(LLM):
         # See invoke() method for full explanation. Key points for streaming:
         #
         # 1. SAME RESTRICTIONS APPLY:
-        #    - HTTPHandler ONLY for true OpenAI models (use is_true_openai_model())
+        #    - HTTPHandler only for providers in _uses_isolated_client()
         #    - OpenAI-compatible providers will fail with AttributeError on api_key
         #
         # 2. STREAMING-SPECIFIC CONCERNS:
@@ -973,7 +1260,7 @@ class LitellmLLM(LLM):
         #    - Per-request HTTPHandler eliminates cross-thread interference
         for attempt in range(max_attempts):
             client = None
-            if is_true_openai_model(self.config.model_provider, self.config.model_name):
+            if self._uses_isolated_client():
                 client = HTTPHandler(timeout=timeout_override or self._timeout)
 
             try:

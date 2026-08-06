@@ -112,7 +112,7 @@ def run_jobs() -> None:
         "--loglevel=INFO",
         "--hostname=user_file_processing@%n",
         "-Q",
-        "user_file_processing,user_file_project_sync,user_file_delete",
+        "user_file_processing,user_file_project_sync,user_file_delete,user_file_port",
     ]
 
     cmd_worker_scheduled_tasks = [

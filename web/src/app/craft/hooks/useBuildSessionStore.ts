@@ -4,14 +4,16 @@ import { create } from "zustand";
 import { DELETE_SUCCESS_DISPLAY_DURATION_MS } from "@/app/craft/constants";
 
 import {
-  ApiSandboxResponse,
+  ApiSessionResponse,
   Artifact,
   ArtifactType,
   BuildMessage,
+  BuildMessageAttachment,
   FileSystemEntry,
   SessionHistoryItem,
   SessionOrigin,
   SessionStatus,
+  SandboxRuntimeState,
 } from "@/app/craft/types/streamingTypes";
 
 import {
@@ -26,11 +28,7 @@ import {
   type SubagentTurn,
 } from "@/app/craft/types/displayTypes";
 
-import {
-  QueuedMessage,
-  MAX_QUEUED_MESSAGES,
-  EMPTY_QUEUED_MESSAGES,
-} from "@/app/app/interfaces";
+import { MAX_QUEUED_MESSAGES } from "@/app/app/interfaces";
 
 import {
   createSession as apiCreateSession,
@@ -180,6 +178,17 @@ function convertMessagesToStreamItems(messages: BuildMessage[]): StreamItem[] {
           id: message.id || genId("compaction"),
           summary: packet.summary,
         });
+        break;
+
+      case "error":
+        // Persisted terminal-failure rows (e.g. turn hard-cap).
+        if (packet.message) {
+          items.push({
+            type: "error",
+            id: message.id || genId("error"),
+            content: packet.message,
+          });
+        }
         break;
 
       default:
@@ -442,6 +451,20 @@ function buildSubagentsFromMessages(
   return subagents;
 }
 
+/** Persisted turn-failure rows are only relevant while they're the latest
+ * thing in the transcript — once any later activity exists, a stale
+ * "turn stopped" banner mid-history is just noise. */
+function stripSupersededErrors(messages: BuildMessage[]): BuildMessage[] {
+  const isErrorRow = (message: BuildMessage) =>
+    message.type === "assistant" && message.message_metadata?.type === "error";
+  const lastActivityIdx = messages.findLastIndex(
+    (message) => !isErrorRow(message)
+  );
+  return messages.filter(
+    (message, idx) => idx > lastActivityIdx || !isErrorRow(message)
+  );
+}
+
 /**
  * Consolidate raw backend messages into proper conversation turns.
  *
@@ -455,6 +478,7 @@ function buildSubagentsFromMessages(
 function consolidateMessagesIntoTurns(
   rawMessages: BuildMessage[]
 ): BuildMessage[] {
+  rawMessages = stripSupersededErrors(rawMessages);
   const consolidated: BuildMessage[] = [];
   let currentAgentPackets: BuildMessage[] = [];
 
@@ -536,6 +560,22 @@ function splitActiveTurnTranscript(
   return { messages: settledMessages, streamItems: activeStreamItems };
 }
 
+function mapApiSessionStatus(
+  apiStatus: ApiSessionResponse["status"]
+): SessionStatus {
+  switch (apiStatus) {
+    case "active":
+      return "active";
+    case "initializing":
+      // Backend is still building the workspace (or a create was
+      // interrupted); the next create/restore repairs it.
+      return "creating";
+    default:
+      // "idle" and "failed" both recover through the restore flow.
+      return "idle";
+  }
+}
+
 // Re-export types for consumers
 export type { Artifact, ArtifactType, SessionHistoryItem };
 
@@ -555,6 +595,14 @@ let provisioningPromise: Promise<string | null> | null = null;
 
 // Monotonic id for queued messages (kept out of Zustand state for simplicity).
 let nextQueuedMessageId = 1;
+
+interface CraftQueuedMessage {
+  id: number;
+  text: string;
+  attachments: BuildMessageAttachment[];
+}
+
+const EMPTY_CRAFT_QUEUED_MESSAGES: readonly CraftQueuedMessage[] = [];
 
 /** File preview tab data */
 export interface FilePreviewTab {
@@ -607,7 +655,7 @@ export interface BuildSessionData {
    * Messages typed while a response is streaming. Auto-sent FIFO once the
    * current run finishes (see the auto-send effect in BuildChatPanel).
    */
-  queuedMessages: QueuedMessage[];
+  queuedMessages: CraftQueuedMessage[];
   /**
    * True between an interrupt request and the turn actually terminating. Drives
    * the "stopping…" affordance; cleared by each terminal stream handler (and on
@@ -626,8 +674,8 @@ export interface BuildSessionData {
   turnGeneration: number;
   error: string | null;
   webappUrl: string | null;
-  /** Sandbox info from backend */
-  sandbox: ApiSandboxResponse | null;
+  /** Backend sandbox state plus transient client-owned lifecycle states. */
+  sandbox: SandboxRuntimeState | null;
   /** Model this session runs on (from the row); seeds the composer picker. */
   agentProvider: string | null;
   agentModel: string | null;
@@ -704,7 +752,6 @@ interface BuildSessionStore {
   // Actions - Current Session Shortcuts
   appendMessageToCurrent: (message: BuildMessage) => void;
   addArtifactToCurrent: (artifact: Artifact) => void;
-  setCurrentError: (error: string | null) => void;
   toggleCurrentOutputPanel: () => void;
 
   // Actions - Session-specific operations (for streaming - immune to currentSessionId changes)
@@ -734,7 +781,11 @@ interface BuildSessionStore {
   clearStreamItems: (sessionId: string) => void;
 
   // Actions - Queued Messages
-  enqueueMessage: (sessionId: string, text: string) => void;
+  enqueueMessage: (
+    sessionId: string,
+    text: string,
+    attachments: BuildMessageAttachment[]
+  ) => void;
   removeQueuedMessage: (sessionId: string, index: number) => void;
 
   // Actions - Abort Control
@@ -1080,13 +1131,6 @@ export const useBuildSessionStore = create<BuildSessionStore>()((set, get) => ({
     });
   },
 
-  setCurrentError: (error: string | null) => {
-    const { currentSessionId, updateSessionData } = get();
-    if (currentSessionId) {
-      updateSessionData(currentSessionId, { error });
-    }
-  },
-
   toggleCurrentOutputPanel: () => {
     const {
       currentSessionId,
@@ -1380,7 +1424,11 @@ export const useBuildSessionStore = create<BuildSessionStore>()((set, get) => ({
   // Queued Messages
   // ===========================================================================
 
-  enqueueMessage: (sessionId: string, text: string) => {
+  enqueueMessage: (
+    sessionId: string,
+    text: string,
+    attachments: BuildMessageAttachment[]
+  ) => {
     set((state) => {
       const session = state.sessions.get(sessionId);
       if (!session || session.queuedMessages.length >= MAX_QUEUED_MESSAGES) {
@@ -1390,7 +1438,7 @@ export const useBuildSessionStore = create<BuildSessionStore>()((set, get) => ({
         ...session,
         queuedMessages: [
           ...session.queuedMessages,
-          { id: nextQueuedMessageId++, text },
+          { id: nextQueuedMessageId++, text, attachments },
         ],
         lastAccessed: new Date(),
       };
@@ -1465,11 +1513,13 @@ export const useBuildSessionStore = create<BuildSessionStore>()((set, get) => ({
       let sessionData = await fetchSession(sessionId);
 
       // Check if session needs to be restored:
-      // - Sandbox is sleeping or terminated
+      // - Sandbox is sleeping, terminated, or failed (the backend treats
+      //   failed as reprovisionable — restore retries the attempt)
       // - Sandbox is running but session workspace is not loaded
       const needsRestore =
         sessionData.sandbox?.status === "sleeping" ||
         sessionData.sandbox?.status === "terminated" ||
+        sessionData.sandbox?.status === "failed" ||
         (sessionData.sandbox?.status === "running" &&
           !sessionData.session_loaded_in_sandbox);
 
@@ -1512,8 +1562,8 @@ export const useBuildSessionStore = create<BuildSessionStore>()((set, get) => ({
       const hasWebapp = artifacts.some(
         (a) => a.type === "nextjs_app" || a.type === "web_app"
       );
-      if (hasWebapp && sessionData.sandbox?.nextjs_port) {
-        webappUrl = `http://localhost:${sessionData.sandbox.nextjs_port}`;
+      if (hasWebapp && sessionData.nextjs_port) {
+        webappUrl = `http://localhost:${sessionData.nextjs_port}`;
       }
 
       const resolvedActiveTurnId =
@@ -1529,9 +1579,7 @@ export const useBuildSessionStore = create<BuildSessionStore>()((set, get) => ({
           ? "running"
           : needsRestore
             ? "creating"
-            : sessionData.status === "active"
-              ? "active"
-              : "idle";
+            : mapApiSessionStatus(sessionData.status);
       const persistedMessages = useDbMessages
         ? consolidateMessagesIntoTurns(messages)
         : currentSession!.messages;
@@ -1596,7 +1644,7 @@ export const useBuildSessionStore = create<BuildSessionStore>()((set, get) => ({
         // Hold the chip on "restoring" (and poll webapp readiness) until the
         // webapp actually serves, then flip to the real status below.
         updateSessionData(sessionId, {
-          status: sessionData.status === "active" ? "active" : "idle",
+          status: mapApiSessionStatus(sessionData.status),
           sandbox: sessionData.sandbox
             ? { ...sessionData.sandbox, status: "restoring" }
             : sessionData.sandbox,
@@ -2710,9 +2758,10 @@ export const usePreProvisionedSessionId = () =>
 export const useQueuedMessages = () =>
   useBuildSessionStore((state) => {
     const { currentSessionId, sessions } = state;
-    if (!currentSessionId) return EMPTY_QUEUED_MESSAGES;
+    if (!currentSessionId) return EMPTY_CRAFT_QUEUED_MESSAGES;
     return (
-      sessions.get(currentSessionId)?.queuedMessages ?? EMPTY_QUEUED_MESSAGES
+      sessions.get(currentSessionId)?.queuedMessages ??
+      EMPTY_CRAFT_QUEUED_MESSAGES
     );
   });
 

@@ -72,7 +72,7 @@ export default function SkillBundlePicker({
           ? "p-2 gap-1"
           : "min-h-40 items-center justify-center gap-2 p-4 text-center",
         isDragActive
-          ? "bg-action-link-01 border-action-link-05"
+          ? "bg-action-selection-01 border-action-selection-05"
           : "border-border-01"
       )}
     >

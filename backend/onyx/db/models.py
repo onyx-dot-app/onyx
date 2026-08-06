@@ -30,12 +30,15 @@ from sqlalchemy import (
     desc,
     event,
     func,
+    inspect,
     text,
     true,
+    update,
 )
 from sqlalchemy.dialects import postgresql
 from sqlalchemy.dialects.postgresql import JSONB as PGJSONB
 from sqlalchemy.dialects.postgresql import UUID as PGUUID
+from sqlalchemy.engine import Connection
 from sqlalchemy.engine.interfaces import Dialect
 from sqlalchemy.orm import (
     DeclarativeBase,
@@ -83,6 +86,7 @@ from onyx.db.enums import (
     IndexingMode,
     IndexingStatus,
     IndexModelStatus,
+    IndexReclaimStatus,
     LLMModelFlowType,
     MCPAuthenticationPerformer,
     MCPAuthenticationType,
@@ -117,6 +121,7 @@ from onyx.db.pydantic_type import PydanticListType, PydanticType
 from onyx.external_apps.url_glob import UrlGlob
 from onyx.file_store.models import FileDescriptor
 from onyx.kg.models import KGEntityTypeAttributes, KGStage
+from onyx.llm.models import ReasoningEffort
 from onyx.llm.override_models import LLMOverride, PromptOverride
 from onyx.server.security.models import SSRFProtectionLevel
 from onyx.tools.tool_implementations.web_search.models import WebContentProviderConfig
@@ -335,6 +340,13 @@ class User(SQLAlchemyBaseUserTableUUID, Base):
     # Craft gate (PostHog flag / ENABLE_CRAFT).
     craft_enabled: Mapped[bool | None] = mapped_column(
         Boolean, nullable=True, default=None
+    )
+
+    # Addresses this user was renamed away from. They still match indexed ACLs
+    # that name them, so each one grants access until another identity claims
+    # the address.
+    prior_emails: Mapped[list[str]] = mapped_column(
+        postgresql.ARRAY(String), nullable=False, default=list, server_default="{}"
     )
 
     """
@@ -2152,6 +2164,28 @@ class SearchSettings(Base):
         ForeignKey("search_settings.id", ondelete="SET NULL"), nullable=True
     )
 
+    # Old-index reclamation (see reclaim helpers in db/search_settings.py).
+    # NULL = not reclaim-tracked; set to PENDING at reindex submit on the current
+    # PRESENT (the future PAST).
+    reclaim_status: Mapped[IndexReclaimStatus | None] = mapped_column(
+        Enum(IndexReclaimStatus, native_enum=False), nullable=True
+    )
+    # Soak anchor: when the index stopped being read (port drained), NOT swap time —
+    # so INSTANT backfills (which read PAST post-swap) anchor correctly.
+    reclaim_stopped_reading_at: Mapped[datetime.datetime | None] = mapped_column(
+        DateTime(timezone=True), nullable=True
+    )
+    # Consecutive failures on the current step; drives BLOCKED.
+    reclaim_attempts: Mapped[int] = mapped_column(
+        Integer, nullable=False, default=0, server_default=text("0")
+    )
+    reclaim_last_error: Mapped[str | None] = mapped_column(String, nullable=True)
+    # Consented not-ported cc_pairs to delete once the port completes. Re-validated
+    # at fire time (only those still INVALID/PAUSED are deleted).
+    pending_cc_pair_deletions: Mapped[list[int] | None] = mapped_column(
+        postgresql.ARRAY(Integer), nullable=True
+    )
+
     # allows for quantization -> less memory usage for a small performance hit.
     # Defaults to FLOAT (float32). OpenSearch ignores this field and stores
     # vectors as float32 regardless; BFLOAT16 is only honored by Vespa.
@@ -2201,6 +2235,12 @@ class SearchSettings(Base):
             "status",
             unique=True,
             postgresql_where=(status == IndexModelStatus.FUTURE),
+        ),
+        # Scan predicate for the reclaim beat task: PAST rows still needing cleanup.
+        Index(
+            "ix_search_settings_reclaimable",
+            "reclaim_status",
+            postgresql_where=(status == IndexModelStatus.PAST),
         ),
     )
 
@@ -2562,9 +2602,16 @@ class PortAttempt(Base):
 
     id: Mapped[int] = mapped_column(primary_key=True)
 
-    cc_pair_id: Mapped[int] = mapped_column(
+    # exactly one of cc_pair_id / port_user_id is set (see ck_..._exactly_one_scope)
+    cc_pair_id: Mapped[int | None] = mapped_column(
         ForeignKey("connector_credential_pair.id", ondelete="CASCADE"),
-        nullable=False,
+        nullable=True,
+        index=True,
+    )
+    port_user_id: Mapped[UUID | None] = mapped_column(
+        PGUUID(as_uuid=True),
+        ForeignKey("user.id", ondelete="CASCADE"),
+        nullable=True,
         index=True,
     )
     search_settings_id: Mapped[int] = mapped_column(  # the FUTURE settings
@@ -2619,24 +2666,101 @@ class PortAttempt(Base):
         DateTime(timezone=True), nullable=True, default=None
     )
 
-    connector_credential_pair: Mapped["ConnectorCredentialPair"] = relationship(
+    connector_credential_pair: Mapped["ConnectorCredentialPair | None"] = relationship(
         "ConnectorCredentialPair"
     )
     search_settings: Mapped["SearchSettings"] = relationship("SearchSettings")
 
-    # at most one active attempt per (cc_pair, FUTURE)
     __table_args__ = (
+        CheckConstraint(
+            "num_nonnulls(cc_pair_id, port_user_id) = 1",
+            name="ck_port_attempt_exactly_one_scope",
+        ),
+        # one active attempt per (cc_pair, FUTURE); scoped to non-NULL cc_pair so
+        # user rows (NULLs are distinct in PG) don't collide here — hence the
+        # separate user index below.
         Index(
             "ix_port_attempt_active_unique",
             "cc_pair_id",
             "search_settings_id",
             unique=True,
-            postgresql_where=text("status IN ('NOT_STARTED', 'IN_PROGRESS')"),
+            postgresql_where=text(
+                "status IN ('NOT_STARTED', 'IN_PROGRESS') AND cc_pair_id IS NOT NULL"
+            ),
+        ),
+        Index(
+            "ix_port_attempt_active_unique_user",
+            "port_user_id",
+            "search_settings_id",
+            unique=True,
+            postgresql_where=text(
+                "status IN ('NOT_STARTED', 'IN_PROGRESS') AND port_user_id IS NOT NULL"
+            ),
         ),
     )
 
     def is_finished(self) -> bool:
         return self.status.is_terminal()
+
+
+class PortOrphanCandidate(Base):
+    """A doc deleted while a port was filling a target index, possibly resurrected there
+    by a racing create-only copy. The sweep deletes only the chunks the port itself wrote
+    (written_by_port) for these docs — removing a resurrection but leaving a legitimately
+    re-added doc (unmarked chunks) intact."""
+
+    __tablename__ = "port_orphan_candidate"
+
+    id: Mapped[int] = mapped_column(primary_key=True)
+
+    # the port target: FUTURE for a reindex, the promoted live PRESENT for INSTANT
+    search_settings_id: Mapped[int] = mapped_column(
+        ForeignKey("search_settings.id", ondelete="CASCADE"),
+        nullable=False,
+    )
+
+    # exactly one of cc_pair_id / port_user_id is set (see the CHECK below)
+    cc_pair_id: Mapped[int | None] = mapped_column(
+        ForeignKey("connector_credential_pair.id", ondelete="CASCADE"),
+        nullable=True,
+        index=True,
+    )
+    port_user_id: Mapped[UUID | None] = mapped_column(
+        PGUUID(as_uuid=True),
+        ForeignKey("user.id", ondelete="CASCADE"),
+        nullable=True,
+        index=True,
+    )
+    document_id: Mapped[str] = mapped_column(String, nullable=False)
+
+    created_at: Mapped[datetime.datetime] = mapped_column(
+        DateTime(timezone=True), server_default=func.now()
+    )
+
+    __table_args__ = (
+        CheckConstraint(
+            "num_nonnulls(cc_pair_id, port_user_id) = 1",
+            name="ck_port_orphan_candidate_exactly_one_scope",
+        ),
+        # idempotent inserts + the sweep lookup, split per scope (NULLs are distinct
+        # in Postgres, so a single all-column unique key can't dedup user rows).
+        Index(
+            "uq_port_orphan_candidate_connector",
+            "search_settings_id",
+            "cc_pair_id",
+            "document_id",
+            unique=True,
+            postgresql_where=text("cc_pair_id IS NOT NULL"),
+        ),
+        Index(
+            "uq_port_orphan_candidate_user",
+            "search_settings_id",
+            "port_user_id",
+            "document_id",
+            unique=True,
+            postgresql_where=text("port_user_id IS NOT NULL"),
+        ),
+    )
 
 
 class HierarchyFetchAttempt(Base):
@@ -2920,6 +3044,16 @@ Messages Tables
 
 class ChatSession(Base):
     __tablename__ = "chat_session"
+    __table_args__ = (
+        # Backs the chat-history sidebar query: filter on (user_id,
+        # onyxbot_flow), order by time_updated DESC.
+        Index(
+            "ix_chat_session_user_id_onyxbot_flow_time_updated",
+            "user_id",
+            "onyxbot_flow",
+            desc("time_updated"),
+        ),
+    )
 
     id: Mapped[UUID] = mapped_column(
         PGUUID(as_uuid=True), primary_key=True, default=uuid4
@@ -2967,6 +3101,15 @@ class ChatSession(Base):
 
     # The latest temperature override specified by the user
     temperature_override: Mapped[float | None] = mapped_column(Float, nullable=True)
+    # User-pinned reasoning level. NULL means no override, AUTO is never stored.
+    reasoning_effort_override: Mapped[ReasoningEffort | None] = mapped_column(
+        Enum(
+            ReasoningEffort,
+            native_enum=False,
+            values_callable=lambda x: [e.value for e in x],
+        ),
+        nullable=True,
+    )
 
     prompt_override: Mapped[PromptOverride | None] = mapped_column(
         PydanticType(PromptOverride), nullable=True
@@ -3000,6 +3143,12 @@ class ChatMessage(Base):
     """
 
     __tablename__ = "chat_message"
+    __table_args__ = (
+        # Backs every session-scoped message lookup (history replay, the
+        # failed-session check, retention/GC deletes and the cascade delete of
+        # a session's messages), which otherwise seq-scan chat_message.
+        Index("ix_chat_message_chat_session_id", "chat_session_id"),
+    )
 
     id: Mapped[int] = mapped_column(primary_key=True)
 
@@ -4375,6 +4524,46 @@ class KVStore(Base):
     )
 
 
+def _release_prior_email_claim(
+    email: str, connection: Connection, *, user_id: UUID | None = None
+) -> None:
+    """Revoke the alias grant when a different identity takes the address.
+
+    A prior address keeps granting its former holder access, so it has to stop
+    the moment it legitimately belongs to someone else.
+    """
+    normalized_email = email.lower()
+    release = (
+        update(User)
+        .where(User.prior_emails.contains([normalized_email]))
+        .values(prior_emails=func.array_remove(User.prior_emails, normalized_email))
+    )
+    if user_id is not None:
+        release = release.where(User.id != user_id)  # ty: ignore[invalid-argument-type]
+
+    connection.execute(release)
+
+
+# Claiming an address anywhere revokes it as anyone else's alias.
+@event.listens_for(User, "before_insert")
+def _release_inserted_user_email(
+    mapper: Mapper,  # noqa: ARG001
+    connection: Connection,
+    target: User,
+) -> None:
+    _release_prior_email_claim(target.email, connection)
+
+
+@event.listens_for(User, "before_update")
+def _release_updated_user_email(
+    mapper: Mapper,  # noqa: ARG001
+    connection: Connection,
+    target: User,
+) -> None:
+    if inspect(target).attrs.email.history.has_changes():
+        _release_prior_email_claim(target.email, connection, user_id=target.id)
+
+
 class EncryptedKeyValueStore(Base):
     """Encrypted-at-rest key/value storage for instance-level secrets. Postgres
     only, never cached, so secrets stay out of Redis."""
@@ -4444,7 +4633,6 @@ class SecuritySettings(Base):
     password_require_special_char: Mapped[bool | None] = mapped_column(
         Boolean, nullable=True, default=None
     )
-
     __table_args__ = (
         CheckConstraint("id = true", name="ck_security_settings_singleton"),
         # Only catches min > max when both are explicitly overridden; the
@@ -4473,6 +4661,12 @@ class FileRecord(Base):
     bucket_name: Mapped[str] = mapped_column(String)
     object_key: Mapped[str] = mapped_column(String)
 
+    # Size of the stored content in bytes. NULL for rows written before this
+    # column existed (size unknown without a per-object storage lookup);
+    # -1 when the backing object was confirmed missing at lookup time
+    # (terminal - listings stop re-probing the object store).
+    file_size: Mapped[int | None] = mapped_column(BigInteger, nullable=True)
+
     # Timestamps for external storage
     created_at: Mapped[datetime.datetime] = mapped_column(
         DateTime(timezone=True), server_default=func.now()
@@ -4499,7 +4693,7 @@ class FileContent(Base):
 
 
 class Skill(Base):
-    """A custom (admin-uploaded) skill.
+    """A built-in or custom skill.
 
     Skill metadata is shared schema state. Group-based grants use user_group,
     which is available in the base migration chain even though its ORM model
@@ -4584,6 +4778,10 @@ class Skill(Base):
             name="ck_skill_definition_source",
         ),
     )
+
+    @property
+    def is_custom(self) -> bool:
+        return self.built_in_skill_id is None
 
 
 """
@@ -5186,6 +5384,12 @@ class UserFile(Base):
     needs_persona_sync: Mapped[bool] = mapped_column(
         Boolean, nullable=False, default=False
     )
+    # reindex-port dirty bit: the secondary index is stale/missing for this file (content
+    # and/or ACL). The reconciler drains it; the swap waits on it. (Document has an ACL-only
+    # analog, secondary_only_sync_pending — this one is broader, hence "reconcile".)
+    secondary_reconcile_pending: Mapped[bool] = mapped_column(
+        Boolean, nullable=False, default=False, server_default=text("false")
+    )
     last_project_sync_at: Mapped[datetime.datetime | None] = mapped_column(
         DateTime(timezone=True), nullable=True
     )
@@ -5204,6 +5408,21 @@ class UserFile(Base):
         lazy="selectin",
     )
 
+    __table_args__ = (
+        Index(
+            "ix_user_file_secondary_reconcile_pending",
+            "id",
+            postgresql_where=text("secondary_reconcile_pending IS TRUE"),
+        ),
+        # back the port scheduler's per-user cursor scan + COMPLETED enumeration
+        Index("ix_user_file_user_status_id", "user_id", "status", "id"),
+        Index(
+            "ix_user_file_user_id_completed",
+            "user_id",
+            postgresql_where=text("status = 'COMPLETED'"),
+        ),
+    )
+
 
 """
 Multi-tenancy related tables
@@ -5211,11 +5430,26 @@ Multi-tenancy related tables
 
 
 class PublicBase(DeclarativeBase):
+    """Base for globally-shared tables living in the `public` schema.
+
+    These are *not* per-tenant: there is exactly one copy of each, in the catalog
+    database. They are deliberately kept off `Base` so that:
+
+      - the per-tenant Alembic tree (whose target_metadata is `Base.metadata`) never
+        considers creating them inside a tenant schema, and
+      - the `alembic_tenants` tree (target_metadata `PublicBase.metadata`) can actually
+        autogenerate against them.
+
+    Access these only through `get_catalog_session()`. A tenant-scoped session lands on
+    whichever database that tenant lives on — the same one today, but the wrong one
+    once the tenant has been moved to another shard.
+    """
+
     __abstract__ = True
 
 
 # Strictly keeps track of the tenant that a given user will authenticate to.
-class UserTenantMapping(Base):
+class UserTenantMapping(PublicBase):
     __tablename__ = "user_tenant_mapping"
     __table_args__ = ({"schema": "public"},)
 
@@ -5228,8 +5462,42 @@ class UserTenantMapping(Base):
         return value.lower() if value else value
 
 
-class AvailableTenant(Base):
+class UserTenantMappingOAuthAccount(PublicBase):
+    """Copy of an `OAuthAccount` subject, which survives an email change at the
+    provider, keyed to the mapping row it authenticates. The primary key holds
+    one mapping per subject. ON UPDATE CASCADE follows an email rekey, and ON
+    DELETE CASCADE drops the link with its membership. Widths mirror the source
+    columns."""
+
+    __tablename__ = "user_tenant_mapping_oauth_account"
+
+    oauth_name: Mapped[str] = mapped_column(
+        String(length=100), nullable=False, primary_key=True
+    )
+    account_id: Mapped[str] = mapped_column(
+        String(length=320), nullable=False, primary_key=True
+    )
+    email: Mapped[str] = mapped_column(String, nullable=False)
+    tenant_id: Mapped[str] = mapped_column(String, nullable=False)
+
+    __table_args__ = (
+        ForeignKeyConstraint(
+            ["email", "tenant_id"],
+            [
+                "public.user_tenant_mapping.email",
+                "public.user_tenant_mapping.tenant_id",
+            ],
+            ondelete="CASCADE",
+            onupdate="CASCADE",
+        ),
+        Index("ix_user_tenant_mapping_oauth_account_mapping", "email", "tenant_id"),
+        {"schema": "public"},
+    )
+
+
+class AvailableTenant(PublicBase):
     __tablename__ = "available_tenant"
+    __table_args__ = ({"schema": "public"},)
     """
     These entries will only exist ephemerally and are meant to be picked up by new users on registration.
     """
@@ -5237,11 +5505,16 @@ class AvailableTenant(Base):
     tenant_id: Mapped[str] = mapped_column(String, primary_key=True, nullable=False)
     alembic_version: Mapped[str] = mapped_column(String, nullable=False)
     date_created: Mapped[datetime.datetime] = mapped_column(DateTime, nullable=False)
+    # Which physical database this pre-provisioned schema was actually created on.
+    # A pooled tenant is bound to the shard it was built on and cannot be handed out
+    # as living anywhere else.
+    shard_name: Mapped[str | None] = mapped_column(String, nullable=True)
 
 
 # This is a mapping from tenant IDs to anonymous user paths
-class TenantAnonymousUserPath(Base):
+class TenantAnonymousUserPath(PublicBase):
     __tablename__ = "tenant_anonymous_user_path"
+    __table_args__ = ({"schema": "public"},)
 
     tenant_id: Mapped[str] = mapped_column(String, primary_key=True, nullable=False)
     anonymous_user_path: Mapped[str] = mapped_column(
@@ -5252,7 +5525,7 @@ class TenantAnonymousUserPath(Base):
 # Lifetime invite counter per tenant. Incremented atomically on every
 # invite reservation; never decremented — removals do not free quota, so
 # loops of invite → remove → invite cannot bypass the trial cap.
-class TenantInviteCounter(Base):
+class TenantInviteCounter(PublicBase):
     __tablename__ = "tenant_invite_counter"
     __table_args__ = {"schema": "public"}
 
@@ -5260,6 +5533,23 @@ class TenantInviteCounter(Base):
     total_invites_sent: Mapped[int] = mapped_column(
         Integer, nullable=False, default=0, server_default="0"
     )
+    updated_at: Mapped[datetime.datetime] = mapped_column(
+        DateTime(timezone=True),
+        server_default=func.now(),
+        onupdate=func.now(),
+        nullable=False,
+    )
+
+
+# Maps a tenant to the physical database ("shard") holding its schema.
+# A tenant with no row here lives on the default shard, so this table stays empty
+# until tenants are actually migrated — no backfill is required.
+class TenantShard(PublicBase):
+    __tablename__ = "tenant_shard"
+    __table_args__ = ({"schema": "public"},)
+
+    tenant_id: Mapped[str] = mapped_column(String, primary_key=True)
+    shard_name: Mapped[str] = mapped_column(String, nullable=False)
     updated_at: Mapped[datetime.datetime] = mapped_column(
         DateTime(timezone=True),
         server_default=func.now(),
@@ -5405,6 +5695,8 @@ class MCPConnectionConfig(Base):
     #   "refresh_token": "<token>",  # OAuth only
     #   "access_token": "<token>",   # OAuth only
     #   "headers": {"key": "value", "key2": "value2"},
+    #   "header_template": {"Authorization": "Bearer {api_key}"}, # shared API-token config
+    #   "api_token": "<token>",  # shared API-token config
     #   "header_substitutions": {"<key>": "<value>"}, # stored header template substitutions
     #   "request_body": ["path/in/body:value", "path2/in2/body2:value2"] # TBD
     #   "client_id": "<id>",  # For dynamically registered OAuth clients
@@ -5655,8 +5947,8 @@ class UserUsage(Base):
     id: Mapped[int] = mapped_column(primary_key=True)
 
     # No index=True: uq_user_usage_dims (user_id-first) covers user-only lookups.
-    user_id: Mapped[UUID] = mapped_column(
-        ForeignKey("user.id", ondelete="CASCADE"), nullable=False
+    user_id: Mapped[UUID | None] = mapped_column(
+        ForeignKey("user.id", ondelete="SET NULL"), nullable=True
     )
 
     window_start: Mapped[datetime.datetime] = mapped_column(
@@ -5806,6 +6098,7 @@ class BuildSession(Base):
     agent_provider: Mapped[str | None] = mapped_column(String, nullable=True)
     agent_model: Mapped[str | None] = mapped_column(String, nullable=True)
     skills_hash: Mapped[str | None] = mapped_column(String(64), nullable=True)
+    mcp_config_hash: Mapped[str | None] = mapped_column(String(64), nullable=True)
 
     # Relationships
     user: Mapped[User | None] = relationship("User", foreign_keys=[user_id])
@@ -5830,6 +6123,16 @@ class BuildSession(Base):
             desc("created_at"),
         ),
         Index("ix_build_session_status", "status"),
+        # Durable port reservation: allocation retries on collision instead of
+        # trusting the application-level scan. Scoped per user — ports only
+        # collide within one user's sandbox.
+        Index(
+            "uq_build_session_nextjs_port",
+            "user_id",
+            "nextjs_port",
+            unique=True,
+            postgresql_where=text("nextjs_port IS NOT NULL"),
+        ),
     )
 
 
@@ -5860,9 +6163,28 @@ class Sandbox(Base):
         DateTime(timezone=True), nullable=True
     )
     skills_hash: Mapped[str | None] = mapped_column(String(64), nullable=True)
+    mcp_config_hash: Mapped[str | None] = mapped_column(String(64), nullable=True)
 
     encrypted_pat: Mapped[SensitiveValue[str] | None] = mapped_column(
         EncryptedString(), nullable=True
+    )
+
+    # Attempt number: incremented (under the per-user reservation lock) each
+    # time a new provisioning attempt is authorized. Every status write names
+    # the attempt it belongs to and only applies while the row still holds
+    # that number, so an old attempt can never overwrite a newer attempt's
+    # outcome. Backend runtime deletes are name-keyed and best-effort
+    # serialized by the provisioning lock; a wrongly deleted pod self-heals
+    # through unhealthy-RUNNING recovery.
+    provisioning_attempt_number: Mapped[int] = mapped_column(
+        Integer, nullable=False, default=0, server_default="0"
+    )
+    # When the current attempt was authorized; a committed PROVISIONING row
+    # whose attempt is older than the managers' bounded waits is dead and may
+    # be taken over. Failure diagnostics live in logs (keyed by sandbox ID +
+    # attempt number), not here.
+    provisioning_started_at: Mapped[datetime.datetime | None] = mapped_column(
+        DateTime(timezone=True), nullable=True
     )
 
     # Relationships
@@ -6462,18 +6784,36 @@ class HookExecutionLog(Base):
     hook: Mapped["Hook"] = relationship("Hook", back_populates="execution_logs")
 
 
+class ExternalApp__Skill(Base):
+    """Non-owning association between an app and its dependent skills.
+
+    One app may support many skills. The unique skill constraint keeps the
+    initial dependency model to at most one external app per skill.
+    """
+
+    __tablename__ = "external_app__skill"
+    __table_args__ = (
+        UniqueConstraint("skill_id", name="uq_external_app__skill_skill_id"),
+    )
+
+    external_app_id: Mapped[int] = mapped_column(
+        Integer,
+        ForeignKey("external_app.id", ondelete="CASCADE"),
+        primary_key=True,
+    )
+    skill_id: Mapped[UUID] = mapped_column(
+        PGUUID(as_uuid=True),
+        ForeignKey("skill.id", ondelete="CASCADE"),
+        primary_key=True,
+    )
+
+
 class ExternalApp(Base):
     __tablename__ = "external_app"
 
     id: Mapped[int] = mapped_column(Integer, primary_key=True)
     # App display metadata is independent of the linked skill's canonical name.
     name: Mapped[str] = mapped_column(String, nullable=False)
-    skill_id: Mapped[UUID] = mapped_column(
-        PGUUID(as_uuid=True),
-        ForeignKey("skill.id", ondelete="CASCADE"),
-        nullable=False,
-        unique=True,
-    )
     # Discriminator for the OAuth-provider dispatch layer. Decoupled
     # from the linked skill's name so renaming the skill doesn't
     # silently break OAuth.
@@ -6526,7 +6866,10 @@ class ExternalApp(Base):
         nullable=False,
     )
 
-    skill: Mapped["Skill"] = relationship("Skill")
+    associated_skills: Mapped[list["Skill"]] = relationship(
+        "Skill",
+        secondary=ExternalApp__Skill.__table__,
+    )
     user_credentials: Mapped[list["ExternalAppUserCredential"]] = relationship(
         "ExternalAppUserCredential",
         back_populates="external_app",

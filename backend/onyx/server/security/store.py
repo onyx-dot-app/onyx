@@ -1,6 +1,7 @@
 import threading
 import time
-from collections.abc import Callable
+from collections.abc import Callable, Iterator
+from contextlib import contextmanager
 from typing import Any
 
 from cachetools import TTLCache
@@ -8,12 +9,15 @@ from pydantic import ValidationError
 
 from onyx.cache.factory import get_cache_backend
 from onyx.configs import app_configs as _cfg
-from onyx.configs.constants import OnyxRedisLocks
+from onyx.configs.constants import KV_PASSWORD_AUTH_ENABLED_KEY, OnyxRedisLocks
 from onyx.db.engine.sql_engine import get_session_with_current_tenant
 from onyx.db.security_settings import load_overrides as _db_load_overrides
 from onyx.db.security_settings import upsert_overrides as _db_upsert_overrides
+from onyx.db.sso_provider import fetch_sso_providers
 from onyx.error_handling.error_codes import OnyxErrorCode
 from onyx.error_handling.exceptions import OnyxError
+from onyx.key_value_store.factory import get_kv_store
+from onyx.key_value_store.interface import KvKeyNotFoundError
 from onyx.server.security.models import (
     OPERATOR_LOCKED_FIELDS,
     SecuritySettings,
@@ -95,6 +99,7 @@ def _build_env_defaults() -> SecuritySettings:
         password_require_lowercase=_cfg.PASSWORD_REQUIRE_LOWERCASE,
         password_require_digit=_cfg.PASSWORD_REQUIRE_DIGIT,
         password_require_special_char=_cfg.PASSWORD_REQUIRE_SPECIAL_CHAR,
+        password_auth_enabled=True,
     )
 
 
@@ -124,20 +129,26 @@ def merge_with_env(overrides: SecuritySettingsOverrides) -> SecuritySettings:
     return SecuritySettings(**merged)
 
 
+def _load_password_auth_override() -> bool | None:
+    try:
+        raw = get_kv_store().load(KV_PASSWORD_AUTH_ENABLED_KEY)
+    except KvKeyNotFoundError:
+        return None
+    return raw if isinstance(raw, bool) else None
+
+
 def _load_raw_overrides_unlocked() -> SecuritySettingsOverrides:
-    """Uncached DB read. Read-consistency comes from the write path's lock;
-    cache-miss readers may see a stale value bounded by the TTL.
-    """
+    """Uncached read: DB row overrides with the KV-backed override overlaid."""
     with get_session_with_current_tenant() as db_session:
-        return _db_load_overrides(db_session)
+        overrides = _db_load_overrides(db_session)
+    return overrides.model_copy(
+        update={"password_auth_enabled": _load_password_auth_override()}
+    )
 
 
 def _store_overrides_unlocked(overrides: SecuritySettingsOverrides) -> None:
-    """DB upsert + local cache invalidate. ``apply_patch`` is the only caller,
-    and only while holding the Redis write lock.
-
-    In multi-tenant, operator-locked fields are forced to ``None`` before
-    write — defense-in-depth if a future internal caller bypasses the API check.
+    """Persist under the write lock. Multi-tenant forces operator-locked
+    fields to None before write.
     """
     if MULTI_TENANT:
         overrides = overrides.model_copy(
@@ -145,6 +156,7 @@ def _store_overrides_unlocked(overrides: SecuritySettingsOverrides) -> None:
         )
     with get_session_with_current_tenant() as db_session:
         _db_upsert_overrides(db_session, overrides)
+    get_kv_store().store(KV_PASSWORD_AUTH_ENABLED_KEY, overrides.password_auth_enabled)
     invalidate_security_cache(_current_tenant_id_or_default())
 
 
@@ -163,15 +175,24 @@ def _apply_present_keys(
     return SecuritySettingsOverrides.model_validate(merged)
 
 
-def apply_patch(
-    patch: SecuritySettingsOverrides, present_keys: set[str]
-) -> SecuritySettings:
-    """Public write entry point. Acquires the Redis lock for the full
-    read-modify-write so concurrent writers can't clobber each other.
+def _assert_login_path_survives(effective: SecuritySettings) -> None:
+    """Refuse turning password auth off with no enabled SSO provider left."""
+    if effective.password_auth_enabled:
+        return
+    with get_session_with_current_tenant() as db_session:
+        if not fetch_sso_providers(db_session, enabled_only=True):
+            raise OnyxError(
+                OnyxErrorCode.INVALID_INPUT,
+                "Enable an SSO provider before turning off password login, "
+                "otherwise no one can sign in.",
+            )
 
-    Raises ``OnyxError(CONFLICT)`` if a competing writer holds the lock past
-    the wait window, and ``OnyxError(INVALID_INPUT)`` if the merged effective
-    state would violate a model invariant.
+
+@contextmanager
+def security_settings_write_lock() -> Iterator[None]:
+    """Serialize mutations that depend on the joint settings + SSO provider
+    state. Raises ``OnyxError(CONFLICT)`` if a competing writer holds it past the wait
+    window.
     """
     cache = get_cache_backend()
     lock = cache.lock(
@@ -183,6 +204,31 @@ def apply_patch(
             "Another security settings save is in progress, please retry.",
         )
     try:
+        yield
+    finally:
+        # Lease may have expired during the write. Unconditional release would
+        # raise LockNotOwnedError and mask a successful save as a 500.
+        if lock.owned():
+            lock.release()
+
+
+def load_effective_uncached() -> SecuritySettings:
+    """Fresh, cache-bypassing effective settings. Use inside the write lock when
+    a decision must see the latest persisted value, not a TTL-stale one."""
+    return merge_with_env(_load_raw_overrides_unlocked())
+
+
+def apply_patch(
+    patch: SecuritySettingsOverrides, present_keys: set[str]
+) -> SecuritySettings:
+    """Public write entry point. Holds the shared write lock for the full
+    read-modify-write so concurrent writers can't clobber each other.
+
+    Raises ``OnyxError(CONFLICT)`` if a competing writer holds the lock past
+    the wait window, and ``OnyxError(INVALID_INPUT)`` if the merged effective
+    state would violate a model invariant.
+    """
+    with security_settings_write_lock():
         existing = _load_raw_overrides_unlocked()
         merged = _apply_present_keys(existing, patch, present_keys)
         try:
@@ -190,13 +236,9 @@ def apply_patch(
             effective = merge_with_env(merged)
         except ValidationError as e:
             raise OnyxError(OnyxErrorCode.INVALID_INPUT, str(e))
+        _assert_login_path_survives(effective)
         _store_overrides_unlocked(merged)
         return effective
-    finally:
-        # Lease may have expired during the write. Unconditional release would
-        # raise LockNotOwnedError and mask a successful save as a 500.
-        if lock.owned():
-            lock.release()
 
 
 def _current_tenant_id_or_default() -> str:

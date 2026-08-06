@@ -1,8 +1,6 @@
 from fastapi import APIRouter, Depends
-from sqlalchemy.orm import Session
 
 from onyx.auth.permissions import require_permission
-from onyx.db.engine.sql_engine import get_session
 from onyx.db.enums import Permission
 from onyx.db.models import User
 from onyx.error_handling.error_codes import OnyxErrorCode
@@ -18,10 +16,6 @@ from onyx.server.features.build.external_apps.oauth import (
 )
 from onyx.server.features.build.interactive_turns.api import router as turns_router
 from onyx.server.features.build.models import BaseInstructionsResponse
-from onyx.server.features.build.rate_limit import (
-    RateLimitResponse,
-    get_user_rate_limit_status,
-)
 from onyx.server.features.build.sandbox.util.agent_instructions import (
     AGENT_INSTRUCTIONS_TEMPLATE_PATH,
 )
@@ -81,17 +75,3 @@ router.include_router(external_apps_router, tags=["build"])
 router.include_router(external_apps_oauth_router, tags=["build"])
 router.include_router(debug_router, tags=["build-debug"])
 router.include_router(approvals_router, tags=["build"])
-
-
-# -----------------------------------------------------------------------------
-# Rate Limiting
-# -----------------------------------------------------------------------------
-
-
-@router.get("/limit", response_model=RateLimitResponse)
-def get_rate_limit(
-    user: User = Depends(require_permission(Permission.BASIC_ACCESS)),
-    db_session: Session = Depends(get_session),
-) -> RateLimitResponse:
-    """Get rate limit information for the current user."""
-    return get_user_rate_limit_status(user, db_session)

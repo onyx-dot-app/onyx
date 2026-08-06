@@ -14,7 +14,10 @@ from onyx.auth.users import current_user
 from onyx.configs.constants import PUBLIC_API_TAGS
 from onyx.db.engine.sql_engine import get_session
 from onyx.db.enums import Permission
-from onyx.db.llm import fetch_default_llm_model
+from onyx.db.llm import (
+    fetch_all_llm_providers_accessible_in_any_context,
+    fetch_default_llm_model,
+)
 from onyx.db.models import TokenRateLimit, User
 from onyx.db.token_limit import (
     fetch_all_global_token_rate_limits,
@@ -22,17 +25,20 @@ from onyx.db.token_limit import (
     fetch_user_group_token_rate_limits,
 )
 from onyx.db.user_usage import (
-    USER_USAGE_BUCKET_SECONDS,
+    get_cost_window_start,
     get_group_cost_cents_buckets_since,
     get_total_cost_cents_buckets_since,
     get_usage_export,
+    get_usage_reset_window_start,
     get_user_cost_cents_buckets_since,
     get_user_cost_cents_since,
     get_user_usage_by_day_and_model,
+    reset_user_usage,
 )
+from onyx.db.users import get_user_by_email
 from onyx.error_handling.error_codes import OnyxErrorCode
 from onyx.error_handling.exceptions import OnyxError
-from onyx.llm.cost import get_model_price_per_million
+from onyx.llm.cost import ModelPrice, get_model_price_per_million
 from onyx.llm.cost_overrides import (
     delete_override,
     invalidate_override_cache,
@@ -43,7 +49,8 @@ from onyx.server.features.usage.models import (
     CostOverride,
     CostOverrideUpsertRequest,
     EffectiveCostBudget,
-    ModelPrice,
+    ResetUsageRequest,
+    ResetUsageResponse,
     UsageExportRecord,
     UsageExportResponse,
     UsageExportTotals,
@@ -55,9 +62,6 @@ from shared_configs.configs import USAGE_LIMIT_WINDOW_SECONDS
 
 # Default trailing range for the export when no start is given.
 _DEFAULT_EXPORT_DAYS = 30
-
-# Relax budget cutoffs to include the partially overlapping ledger bucket.
-_LEDGER_GRID = timedelta(seconds=USER_USAGE_BUCKET_SECONDS)
 
 
 def _used_from_buckets(
@@ -78,7 +82,7 @@ def _user_cost_budget(db_session: Session, user_id: str) -> EffectiveCostBudget 
         for rl in limits:
             if rl.cost_budget_cents is None:
                 continue
-            cutoff = now - timedelta(hours=rl.period_hours) - _LEDGER_GRID
+            cutoff = get_cost_window_start(now, rl.period_hours)
             used = _used_from_buckets(buckets, cutoff)
             candidates.append(
                 EffectiveCostBudget(
@@ -92,7 +96,7 @@ def _user_cost_budget(db_session: Session, user_id: str) -> EffectiveCostBudget 
     user_cost_rls = [rl for rl in user_rls if rl.cost_budget_cents is not None]
     if user_cost_rls:
         broadest = max(rl.period_hours for rl in user_cost_rls)
-        fetch_cutoff = now - timedelta(hours=broadest) - _LEDGER_GRID
+        fetch_cutoff = get_cost_window_start(now, broadest)
         _add_from_limits(
             user_cost_rls,
             get_user_cost_cents_buckets_since(db_session, user_id, fetch_cutoff),
@@ -102,7 +106,7 @@ def _user_cost_budget(db_session: Session, user_id: str) -> EffectiveCostBudget 
     global_cost_rls = [rl for rl in global_rls if rl.cost_budget_cents is not None]
     if global_cost_rls:
         broadest = max(rl.period_hours for rl in global_cost_rls)
-        fetch_cutoff = now - timedelta(hours=broadest) - _LEDGER_GRID
+        fetch_cutoff = get_cost_window_start(now, broadest)
         _add_from_limits(
             global_cost_rls,
             get_total_cost_cents_buckets_since(db_session, fetch_cutoff),
@@ -142,7 +146,7 @@ def _group_cost_budget_candidate(
 
     # One batched query for every group's cost buckets, then window in Python.
     broadest = max(rl.period_hours for rl in cost_rls)
-    fetch_cutoff = now - timedelta(hours=broadest) - _LEDGER_GRID
+    fetch_cutoff = get_cost_window_start(now, broadest)
     buckets = get_group_cost_cents_buckets_since(
         db_session, list(group_limits.keys()), fetch_cutoff
     )
@@ -154,7 +158,7 @@ def _group_cost_budget_candidate(
         for rl in limits:
             if rl.cost_budget_cents is None:
                 continue
-            cutoff = now - timedelta(hours=rl.period_hours) - _LEDGER_GRID
+            cutoff = get_cost_window_start(now, rl.period_hours)
             used = _used_from_buckets(group_buckets, cutoff)
             remaining = rl.cost_budget_cents - used
             if group_binding is None or remaining < group_binding.remaining_cents:
@@ -199,22 +203,39 @@ def get_my_usage(
     )
     window_cost_cents = get_user_cost_cents_since(db_session, user_id, window_start)
 
-    # Price tenant default chat model (no per-user model selection yet).
+    accessible_providers = fetch_all_llm_providers_accessible_in_any_context(
+        db_session, user
+    )
+    available_model_prices: list[ModelPrice] = []
+    accessible_model_configuration_ids: set[int] = set()
+    seen: set[tuple[str, str]] = set()
+    for provider in accessible_providers:
+        for model_configuration in provider.model_configurations:
+            if not model_configuration.is_visible:
+                continue
+            if model_configuration.id is not None:
+                accessible_model_configuration_ids.add(model_configuration.id)
+            key = (provider.provider, model_configuration.name)
+            if key in seen:
+                continue
+            seen.add(key)
+            price = get_model_price_per_million(
+                model_configuration.name, provider.provider, db_session
+            )
+            if price.input_per_mtok is not None and price.output_per_mtok is not None:
+                available_model_prices.append(price)
+    available_model_prices.sort(key=lambda p: (p.input_per_mtok or 0.0, p.model))
+
     default_model = fetch_default_llm_model(db_session)
     selected_model_price: ModelPrice | None = None
-    if default_model is not None:
+    if (
+        default_model is not None
+        and default_model.id in accessible_model_configuration_ids
+    ):
         provider = default_model.llm_provider.provider
-        input_per_mtok, output_per_mtok = get_model_price_per_million(
-            default_model.name, provider, db_session
-        )
-        # Omit price block unless both input/output rates known.
-        if input_per_mtok is not None and output_per_mtok is not None:
-            selected_model_price = ModelPrice(
-                model=default_model.name,
-                provider=provider,
-                input_per_mtok=input_per_mtok,
-                output_per_mtok=output_per_mtok,
-            )
+        price = get_model_price_per_million(default_model.name, provider, db_session)
+        if price.input_per_mtok is not None and price.output_per_mtok is not None:
+            selected_model_price = price
 
     budget = _user_cost_budget(db_session, user_id)
 
@@ -225,6 +246,7 @@ def get_my_usage(
         budget_remaining_cents=(budget.remaining_cents if budget is not None else None),
         budget_period_hours=budget.period_hours if budget is not None else None,
         selected_model_price=selected_model_price,
+        available_model_prices=available_model_prices,
     )
 
 
@@ -276,6 +298,30 @@ def export_usage(
         end=end_date.isoformat(),
         users=users,
     )
+
+
+@admin_usage_router.post("/reset")
+def reset_usage(
+    payload: ResetUsageRequest,
+    _: User = Depends(require_permission(Permission.FULL_ADMIN_PANEL_ACCESS)),
+    db_session: Session = Depends(get_session),
+) -> ResetUsageResponse:
+    """Clear a user's usage across every applicable active limit window."""
+    user = get_user_by_email(payload.user_email, db_session)
+    if user is None:
+        raise OnyxError(OnyxErrorCode.NOT_FOUND, "User not found")
+
+    user_id = str(user.id)
+    group_limits = fetch_user_group_token_rate_limits(db_session, user.id)
+    rate_limits = [
+        *fetch_all_user_token_rate_limits(db_session, enabled_only=True),
+        *fetch_all_global_token_rate_limits(db_session, enabled_only=True),
+        *(limit for limits in group_limits.values() for limit in limits),
+    ]
+    window_start = get_usage_reset_window_start(datetime.now(timezone.utc), rate_limits)
+    reset_rows = reset_user_usage(db_session, user_id, window_start)
+    db_session.commit()
+    return ResetUsageResponse(reset_rows=reset_rows)
 
 
 @router.get("")

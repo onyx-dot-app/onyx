@@ -56,6 +56,7 @@ from ee.onyx.server.billing.service import (
     get_billing_information as get_billing_service,
 )
 from ee.onyx.server.billing.service import update_seat_count as update_seat_service
+from ee.onyx.utils.license import clear_claim_cooldown
 from onyx.auth.permissions import require_permission
 from onyx.auth.users import User
 from onyx.configs.app_configs import (
@@ -209,7 +210,7 @@ async def create_checkout_session(
 
     # Force the next /billing-information read to hit the live service so the
     # post-checkout subscription snapshot isn't delayed by the cache.
-    _invalidate_billing_cache()
+    invalidate_billing_info_cache()
 
     return result
 
@@ -259,8 +260,8 @@ def _billing_cache_client() -> TenantRedisClient | None:
         return None
 
 
-def _invalidate_billing_cache() -> None:
-    """Drop the cached billing entries after a subscription mutation.
+def invalidate_billing_info_cache() -> None:
+    """Drop the cached billing entries once the subscription is known to have moved.
 
     Best-effort. Busts the 5-min admin /billing-information entry, plus (cloud
     only) the 24h per-tenant trial-status entry the indexing path reads via
@@ -392,7 +393,10 @@ async def update_seats(
 
     # Bust the billing-info cache so the new seat count is visible on the
     # next /billing-information read.
-    _invalidate_billing_cache()
+    invalidate_billing_info_cache()
+    # The follow-up claim carries this write's reissued license, so it must not
+    # be turned away by a cooldown a sync moments earlier had started.
+    clear_claim_cooldown()
 
     return result
 
@@ -421,7 +425,7 @@ async def end_trial(
 
     # Bust the billing-info cache so the post-trial subscription state is
     # visible on the next /billing-information read.
-    _invalidate_billing_cache()
+    invalidate_billing_info_cache()
 
     return result
 

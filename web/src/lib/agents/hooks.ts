@@ -266,19 +266,29 @@ export function useAgentController(
     return pinnedAgents[0] || availableAgents[0];
   }, [selectedAgent, pinnedAgents, availableAgents, disableDefaultAssistant]);
 
+  const availableAgentsRef = useRef<MinimalAgent[]>(availableAgents);
+  const defaultAgentIdRef = useRef<number | undefined>(defaultAgentId);
+  availableAgentsRef.current = availableAgents;
+  defaultAgentIdRef.current = defaultAgentId;
   const setSelectedAgentFromId = useCallback(
     (agentId: number | null | undefined) => {
+      const latestAvailableAgents = availableAgentsRef.current;
+      const latestDefaultAgentId = defaultAgentIdRef.current;
+
       let newAssistant =
         agentId !== null
-          ? availableAgents.find((a) => a.id === agentId)
+          ? latestAvailableAgents.find((a) => a.id === agentId)
           : undefined;
-      if (!newAssistant && defaultAgentId !== undefined) {
-        newAssistant = availableAgents.find((a) => a.id === defaultAgentId);
+
+      if (!newAssistant && latestDefaultAgentId !== undefined) {
+        newAssistant = latestAvailableAgents.find(
+          (a) => a.id === latestDefaultAgentId
+        );
       }
       setSelectedAssistant(newAssistant);
       onAgentSelect?.();
     },
-    [availableAgents, defaultAgentId, onAgentSelect]
+    [onAgentSelect]
   );
 
   return { selectedAgent, setSelectedAgentFromId, liveAgent };

@@ -51,7 +51,7 @@ env:
   SANDBOX_CONTAINER_IMAGE: "onyxdotapp/sandbox:ci"
   # Read by api_server on boot; Sandbox containers call back via this URL on the
   # compose bridge.
-  SANDBOX_API_SERVER_URL: "http://api_server:8080"
+  ONYX_SERVER_URL: "http://api_server:8080"
 
 jobs:
   changes:
@@ -91,6 +91,7 @@ jobs:
               - 'backend/tests/integration/tests/craft/*.py'
               - 'backend/tests/integration/tests/craft/docker_e2e/**'
               - '.github/workflows/pr-craft-compose-integration.yml'
+              - '.github/actions/setup-test-license/**'
               - '.github/actions/setup-python-and-install-dependencies/**'
               - '.github/actions/login-ecr-pullthrough-cache/**'
 
@@ -152,10 +153,14 @@ jobs:
             # on (ENABLE_BROWSER defaults true) — chromium is lighter than the
             # skill bundle and keeps the CI image consistent with prod.
             extra_build_args: "ENABLE_SKILLS=false"
+            target: ""
           - image: backend
             context: ./backend
             file: ./backend/Dockerfile
             extra_build_args: ""
+            # The production image; the backend Dockerfile's default (last) stage is the
+            # dev variant.
+            target: runtime
     runs-on:
       - runs-on
       - runner=8cpu-linux-x64
@@ -187,6 +192,8 @@ jobs:
         with:
           context: ${{ matrix.context }}
           file: ${{ matrix.file }}
+          # Empty target means the Dockerfile's default (last) stage.
+          target: ${{ matrix.target }}
           platforms: linux/amd64
           build-args: |
             BASE_IMAGE_REGISTRY=${{ env.BASE_IMAGE_REGISTRY }}
@@ -200,6 +207,9 @@ jobs:
     name: craft-compose (${{ matrix.test-file.name }})
     needs: [changes, discover-test-files, build-images]
     if: needs.changes.outputs.craft_compose == 'true'
+    permissions:
+      contents: read
+      id-token: write
     runs-on:
       - runs-on
       - runner=4cpu-linux-x64
@@ -226,6 +236,11 @@ jobs:
         uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0
         with:
           persist-credentials: false
+
+      - name: Fetch dev license
+        uses: ./.github/actions/setup-test-license
+        with:
+          aws-oidc-role-arn: ${{ secrets.AWS_OIDC_ROLE_ARN }}
 
       - name: Setup Python + deps
         uses: ./.github/actions/setup-python-and-install-dependencies
@@ -297,6 +312,13 @@ jobs:
           docker ps --format 'table {{.Names}}\t{{.Status}}'
           curl --fail -sS -o /dev/null -w "api_server /health -> %{http_code}\n" \
             http://localhost:8080/health
+
+      - name: Seed dev license
+        run: |
+          docker exec \
+            -e ONYX_DEV_LICENSE="${ONYX_DEV_LICENSE}" \
+            onyx-api_server-1 \
+            python -m scripts.seed_dev_license
 
       - name: Run integration tests
         timeout-minutes: 25

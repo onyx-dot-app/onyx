@@ -450,12 +450,15 @@ export default function AppPage({ firstMessage }: ChatPageProps) {
       if (
         model.provider !== current.provider ||
         model.modelName !== current.modelName ||
-        model.name !== current.name
+        model.name !== current.name ||
+        (model.modelConfigurationId ?? null) !==
+          (current.modelConfigurationId ?? null)
       ) {
         llmManager.updateCurrentLlm({
           name: model.name,
           provider: model.provider,
           modelName: model.modelName,
+          modelConfigurationId: model.modelConfigurationId,
         });
       }
     }
@@ -919,6 +922,8 @@ export default function AppPage({ firstMessage }: ChatPageProps) {
                             onAdd={multiModel.addModel}
                             onRemove={multiModel.removeModel}
                             onReplace={multiModel.replaceModel}
+                            temperatureManager={llmManager}
+                            reasoningManager={llmManager}
                           />
                         )}
                     </Section>
@@ -939,7 +944,7 @@ export default function AppPage({ firstMessage }: ChatPageProps) {
                       "relative w-full flex flex-col",
                       onboardingVisible && "min-h-0",
                       !fullWidthActive &&
-                        "max-w-(--app-page-main-content-width)"
+                        "md:max-w-(--app-page-main-content-width)"
                     )}
                   >
                     {/* Scroll to bottom button - positioned absolutely above AppInputBar */}
@@ -999,6 +1004,8 @@ export default function AppPage({ firstMessage }: ChatPageProps) {
                             onAdd={multiModel.addModel}
                             onRemove={multiModel.removeModel}
                             onReplace={multiModel.replaceModel}
+                            temperatureManager={llmManager}
+                            reasoningManager={llmManager}
                           />
                         </div>
                       )}

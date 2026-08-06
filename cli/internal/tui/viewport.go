@@ -6,10 +6,9 @@ import (
 	"strings"
 	"time"
 
-	"github.com/charmbracelet/glamour"
-	"github.com/charmbracelet/glamour/styles"
-
 	"charm.land/lipgloss/v2"
+
+	"github.com/onyx-dot-app/onyx/cli/internal/markdown"
 )
 
 // entryKind is the type of chat entry.
@@ -54,7 +53,7 @@ type viewport struct {
 	streaming    bool
 	streamBuf    string
 	showSources  bool
-	renderer     *glamour.TermRenderer
+	renderer     *markdown.Renderer
 	pickerItems  []pickerItem
 	pickerActive bool
 	pickerIndex  int
@@ -68,16 +67,10 @@ type viewport struct {
 	lastRenderLen  int // length of streamBuf at last render (skip if unchanged)
 }
 
-// newMarkdownRenderer creates a Glamour renderer with zero left margin.
-func newMarkdownRenderer(width int) *glamour.TermRenderer {
-	style := styles.DarkStyleConfig
-	zero := uint(0)
-	style.Document.Margin = &zero
-	r, _ := glamour.NewTermRenderer(
-		glamour.WithStyles(style),
-		glamour.WithWordWrap(width-4),
-	)
-	return r
+// newMarkdownRenderer creates a markdown renderer wrapping at width-4 to
+// leave room for the agent-entry indent.
+func newMarkdownRenderer(width int) *markdown.Renderer {
+	return markdown.NewRenderer(width - 4)
 }
 
 func newViewport(width int, streamMarkdown bool) *viewport {
@@ -182,11 +175,7 @@ func (v *viewport) renderMarkdown(md string) string {
 	if v.renderer == nil {
 		return md
 	}
-	out, err := v.renderer.Render(md)
-	if err != nil {
-		return md
-	}
-	return out
+	return v.renderer.Render(md)
 }
 
 func (v *viewport) addInfo(msg string) {

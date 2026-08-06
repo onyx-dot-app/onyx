@@ -20,9 +20,8 @@ import {
   useViewedSubagentSessionId,
 } from "@/app/craft/hooks/useBuildSessionStore";
 import { useBuildStreaming } from "@/app/craft/hooks/useBuildStreaming";
-import { useUsageLimits } from "@/app/craft/hooks/useUsageLimits";
 import { useWakeOnIntent } from "@/app/craft/hooks/useWakeOnIntent";
-import { SessionErrorCode } from "@/app/craft/types/streamingTypes";
+import { BuildMessageAttachment } from "@/app/craft/types/streamingTypes";
 import {
   BuildFile,
   UploadFileStatus,
@@ -41,7 +40,10 @@ import { useLLMProviders } from "@/lib/languageModels/hooks";
 import {
   BuildLlmSelection,
   hasSupportedCraftProvider,
+  resolveSessionLlmSelection,
 } from "@/app/craft/onboarding/constants";
+import { getPreferredLlmSelection } from "@/app/craft/utils/llmPreferences";
+import { useUser } from "@/providers/UserProvider";
 import ScheduledRunBanner, {
   useScheduledRunContext,
 } from "@/app/craft/components/ScheduledRunBanner";
@@ -53,7 +55,6 @@ import SubagentView from "@/app/craft/components/SubagentView";
 import SandboxStatusIndicator from "@/app/craft/components/SandboxStatusIndicator";
 import SandboxAsleepNotice from "@/app/craft/components/SandboxAsleepNotice";
 import SkillsStaleNotice from "@/app/craft/components/SkillsStaleNotice";
-import UpgradePlanModal from "@/app/craft/components/UpgradePlanModal";
 import IconButton from "@/refresh-components/buttons/IconButton";
 import { SvgSidebar, SvgChevronDown, SvgStopCircle } from "@opal/icons";
 import { Button as OpalButton, Tooltip } from "@opal/components";
@@ -65,6 +66,20 @@ import { motion, AnimatePresence, useReducedMotion } from "motion/react";
 interface BuildChatPanelProps {
   /** Session ID from URL - used to prevent welcome flash while loading */
   existingSessionId?: string | null;
+}
+
+function toMessageAttachments(files: BuildFile[]): BuildMessageAttachment[] {
+  return files.flatMap((file) =>
+    file.status === UploadFileStatus.COMPLETED && file.path
+      ? [
+          {
+            name: file.name,
+            path: file.path,
+            mimeType: file.file_type,
+          },
+        ]
+      : []
+  );
 }
 
 /**
@@ -95,6 +110,7 @@ export default function BuildChatPanel({
   const hasSession = useHasSession();
   const isRunning = useIsRunning();
   const displayIsRunning = isRunning || scheduledRunInFlight;
+  const hasInterruptibleTurn = session?.status === "running";
   const wasInterrupted = useWasInterrupted();
   const { setLeftSidebarFolded, leftSidebarFolded, videoBackgroundEnabled } =
     useBuildContext();
@@ -107,23 +123,29 @@ export default function BuildChatPanel({
   // exists (the model picker stays enabled so admins can connect from it).
   const hasProvider = hasSupportedCraftProvider(llmProviders);
   // Picker shows the session's stored model unless the user picks another.
-  // The pick is keyed by session so it can't leak across sessions.
-  const sessionModel = useMemo<BuildLlmSelection | null>(() => {
-    if (!session?.agentProvider || !session?.agentModel) return null;
-    const match = llmProviders?.find(
-      (p) => p.provider === session.agentProvider
-    );
-    return {
-      provider: session.agentProvider,
-      providerName: match?.name ?? session.agentProvider,
-      modelName: session.agentModel,
-    };
-  }, [session?.agentProvider, session?.agentModel, llmProviders]);
+  // The pick is keyed by session so it can't leak across sessions; only when
+  // neither exists does the user's persisted preference (or the recommended
+  // default) apply.
+  const sessionModel = useMemo<BuildLlmSelection | null>(
+    () =>
+      resolveSessionLlmSelection(
+        session?.agentProvider,
+        session?.agentModel,
+        llmProviders
+      ),
+    [session?.agentProvider, session?.agentModel, llmProviders]
+  );
   const [modelBySession, setModelBySession] = useState<
     Record<string, BuildLlmSelection>
   >({});
-  const selectedModel =
-    (sessionId ? modelBySession[sessionId] : undefined) ?? sessionModel;
+  const { user } = useUser();
+  const selectedModel = useMemo(
+    () =>
+      (sessionId ? modelBySession[sessionId] : undefined) ??
+      sessionModel ??
+      getPreferredLlmSelection(user?.id, llmProviders),
+    [sessionId, modelBySession, sessionModel, user?.id, llmProviders]
+  );
 
   const contextUsage = useMemo(() => {
     const usage = session?.contextUsage;
@@ -131,7 +153,7 @@ export default function BuildChatPanel({
     let limit: number | null = null;
     if (selectedModel) {
       const provider = llmProviders?.find(
-        (p) => p.provider === selectedModel.provider
+        (candidate) => candidate.id === selectedModel.providerId
       );
       const config = provider?.model_configurations.find(
         (m) => m.name === selectedModel.modelName
@@ -149,22 +171,9 @@ export default function BuildChatPanel({
   const isViewingSubagent = viewedSubagentSessionId !== null;
   const reduceMotion = useReducedMotion();
 
-  const { limits, refreshLimits } = useUsageLimits();
-  const [showUpgradeModal, setShowUpgradeModal] = useState(false);
   const updateSessionData = useBuildSessionStore(
     (state) => state.updateSessionData
   );
-  const setCurrentError = useBuildSessionStore(
-    (state) => state.setCurrentError
-  );
-
-  useEffect(() => {
-    if (session?.error === SessionErrorCode.RATE_LIMIT_EXCEEDED) {
-      setShowUpgradeModal(true);
-      setCurrentError(null);
-      refreshLimits();
-    }
-  }, [session?.error, refreshLimits, setCurrentError]);
 
   // Access actions directly like chat does - these don't cause re-renders
   const consumePreProvisionedSession = useBuildSessionStore(
@@ -425,17 +434,12 @@ export default function BuildChatPanel({
     setShowScrollButton(false);
   }, [sessionId]);
 
-  const handleSubmit = useCallback(
+  const sendMessage = useCallback(
     async (
       message: string,
-      files: BuildFile[],
+      attachments: BuildMessageAttachment[],
       modelOverride?: BuildLlmSelection | null
     ) => {
-      if (limits?.isLimited) {
-        setShowUpgradeModal(true);
-        return;
-      }
-
       if (scheduledRunInFlight) {
         toast.error("Please wait for the scheduled run to finish.");
         return;
@@ -444,9 +448,6 @@ export default function BuildChatPanel({
       track(AnalyticsEvent.SENT_CRAFT_MESSAGE);
 
       const chosen = modelOverride ?? selectedModel;
-      const model = chosen
-        ? { provider: chosen.provider, modelName: chosen.modelName }
-        : null;
 
       if (hasSession && sessionId) {
         // Existing session flow
@@ -462,10 +463,10 @@ export default function BuildChatPanel({
           type: "user",
           content: message,
           timestamp: new Date(),
+          attachments,
         });
         // Stream the response
-        await streamMessage(sessionId, message, model);
-        refreshLimits();
+        await streamMessage(sessionId, message, chosen, attachments);
       } else {
         // New session flow - ALWAYS use pre-provisioned session
         const newSessionId = await consumePreProvisionedSession();
@@ -481,20 +482,6 @@ export default function BuildChatPanel({
         // The backend session already exists (created during pre-provisioning).
         // Files were already uploaded immediately when attached to the pre-provisioned session.
         // Here we initialize the LOCAL Zustand store entry with the right state.
-        const userMessage = {
-          id: `msg-${Date.now()}`,
-          type: "user" as const,
-          content: message,
-          timestamp: new Date(),
-        };
-        // Initialize local state (NOT an API call - backend session already exists)
-        // - status: "running" disables input immediately
-        // - isLoaded: false allows loadSession to fetch sandbox info while preserving messages
-        createSession(newSessionId, {
-          messages: [userMessage],
-          status: "running",
-        });
-
         // Handle files that weren't successfully uploaded yet
         // This handles edge cases where:
         // 1. File is still uploading when user sends message - wait for it
@@ -526,6 +513,20 @@ export default function BuildChatPanel({
         }
 
         // Note: PENDING files are auto-uploaded by the context when session becomes available
+        const userMessage = {
+          id: `msg-${Date.now()}`,
+          type: "user" as const,
+          content: message,
+          timestamp: new Date(),
+          attachments,
+        };
+        // Initialize local state (NOT an API call - backend session already exists)
+        // - status: "running" disables input immediately
+        // - isLoaded: false allows loadSession to fetch sandbox info while preserving messages
+        createSession(newSessionId, {
+          messages: [userMessage],
+          status: "running",
+        });
 
         // Navigate to URL - session controller will set currentSessionId
         router.push(
@@ -538,8 +539,7 @@ export default function BuildChatPanel({
         setTimeout(() => nameBuildSession(newSessionId), 1000);
 
         // Stream the response (uses session ID directly, not currentSessionId)
-        await streamMessage(newSessionId, message, model);
-        refreshLimits();
+        await streamMessage(newSessionId, message, chosen, attachments);
       }
     },
     [
@@ -554,10 +554,17 @@ export default function BuildChatPanel({
       nameBuildSession,
       router,
       hasUploadingFiles,
-      limits,
-      refreshLimits,
       selectedModel,
     ]
+  );
+
+  const handleSubmit = useCallback(
+    (
+      message: string,
+      files: BuildFile[],
+      modelOverride?: BuildLlmSelection | null
+    ) => sendMessage(message, toMessageAttachments(files), modelOverride),
+    [sendMessage]
   );
 
   const handleInterrupt = useCallback(() => {
@@ -565,8 +572,10 @@ export default function BuildChatPanel({
   }, [sessionId, interruptStreaming]);
 
   const handleQueueMessage = useCallback(
-    (text: string) => {
-      if (sessionId) enqueueMessage(sessionId, text);
+    (text: string, files: BuildFile[]) => {
+      if (sessionId) {
+        enqueueMessage(sessionId, text, toMessageAttachments(files));
+      }
     },
     [sessionId, enqueueMessage]
   );
@@ -581,11 +590,10 @@ export default function BuildChatPanel({
   // Auto-send the next queued message FIFO after a run cleanly succeeds (each
   // send re-arms this for the message after). Only fire on a clean completion
   // and when the send is actually eligible — otherwise we'd dequeue a message
-  // that a failed/rate-limited run never sends, silently dropping it. The
-  // sessionId guard avoids mistaking a session switch for a run completion.
+  // that a failed run never sends, silently dropping it. The sessionId guard
+  // avoids mistaking a session switch for a run completion.
   const sessionStatus = session?.status;
   const sessionError = session?.error;
-  const isLimited = limits?.isLimited ?? false;
   const prevIsRunningRef = useRef(isRunning);
   const prevSessionIdRef = useRef(sessionId);
   useEffect(() => {
@@ -599,13 +607,12 @@ export default function BuildChatPanel({
       !isRunning &&
       sessionId === prevSessionId &&
       sessionStatus === "active" &&
-      !sessionError &&
-      !isLimited;
+      !sessionError;
     if (runSucceeded && sessionId && queuedMessages.length > 0) {
       const next = queuedMessages[0];
       if (next) {
         removeQueuedMessage(sessionId, 0);
-        void handleSubmit(next.text, []);
+        void sendMessage(next.text, next.attachments);
       }
     }
   }, [
@@ -613,19 +620,13 @@ export default function BuildChatPanel({
     sessionId,
     sessionStatus,
     sessionError,
-    isLimited,
     queuedMessages,
-    handleSubmit,
+    sendMessage,
     removeQueuedMessage,
   ]);
 
   return (
     <div className="h-full w-full">
-      <UpgradePlanModal
-        open={showUpgradeModal}
-        onClose={() => setShowUpgradeModal(false)}
-        limits={limits}
-      />
       {/* Content wrapper - shrinks when output panel opens. Wrapped in a
           dropzone so files can be dropped anywhere in the chat area. */}
       <Dropzone
@@ -650,6 +651,7 @@ export default function BuildChatPanel({
                 {isMobile && leftSidebarFolded && (
                   <OpalButton
                     icon={SvgSidebar}
+                    aria-label="Open Sidebar"
                     onClick={() => setLeftSidebarFolded(false)}
                     prominence="tertiary"
                     size="sm"
@@ -717,6 +719,8 @@ export default function BuildChatPanel({
                     />
                   ) : (
                     <BuildMessageList
+                      sessionId={sessionId ?? existingSessionId ?? null}
+                      attachmentRefreshKey={session?.webappNeedsRefresh}
                       messages={session?.messages ?? []}
                       streamItems={session?.streamItems ?? []}
                       isStreaming={displayIsRunning}
@@ -811,7 +815,9 @@ export default function BuildChatPanel({
                     isRunning={displayIsRunning}
                     isInterrupting={isInterrupting}
                     onInterrupt={
-                      scheduledRunInFlight ? undefined : handleInterrupt
+                      hasInterruptibleTurn && !scheduledRunInFlight
+                        ? handleInterrupt
+                        : undefined
                     }
                     disabled={
                       isViewingSubagent || scheduledRunInFlight || !hasProvider

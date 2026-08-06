@@ -8,6 +8,7 @@ from mcp.types import Tool as MCPLibTool
 from pydantic import BaseModel, Field, model_validator
 
 from onyx.db.enums import (
+    EndpointPolicy,
     MCPAuthenticationPerformer,
     MCPAuthenticationType,
     MCPOAuthProviderMode,
@@ -17,6 +18,8 @@ from onyx.db.enums import (
 
 # Matches `{placeholder_name}` inside header value templates.
 _PLACEHOLDER_RE = re.compile(r"\{([^}]+)\}")
+# RFC 9110 field-name syntax: a non-empty sequence of HTTP token characters.
+_HTTP_FIELD_NAME_RE = re.compile(r"[!#$%&'*+\-.^_`|~0-9A-Za-z]+")
 
 
 def _build_auto_substitution_map(*, user_email: str) -> dict[str, str]:
@@ -49,12 +52,30 @@ def apply_auto_substitutions(value: str, *, user_email: str) -> str:
     return value
 
 
+def contains_mcp_placeholder(value: str) -> bool:
+    return _PLACEHOLDER_RE.search(value) is not None
+
+
 # Headers that must never be sourced from stored MCP credentials or request
 # templates. Host is particularly critical — it can be used for Host Header
 # Injection attacks to route requests to unintended internal servers.
 DENYLISTED_MCP_HEADERS = {
     "host",
 }
+
+
+def merge_mcp_headers(*sources: dict[str, str]) -> dict[str, str]:
+    """Merge HTTP headers case-insensitively; later sources win."""
+    merged: dict[str, str] = {}
+    names_by_lower: dict[str, str] = {}
+    for source in sources:
+        for name, value in source.items():
+            lowered = name.lower()
+            if previous_name := names_by_lower.get(lowered):
+                merged.pop(previous_name, None)
+            merged[name] = value
+            names_by_lower[lowered] = name
+    return merged
 
 
 # This should be updated along with MCPConnectionData
@@ -74,6 +95,12 @@ class MCPConnectionData(TypedDict):
     in Postgres"""
 
     headers: dict[str, str]
+    # Admin-authored source template. User configs store its rendered result in
+    # `headers`; admin-managed configs may render it at request time.
+    header_template: NotRequired[dict[str, str]]
+    # Stored in the encrypted connection config so an admin can edit the
+    # header template without re-entering the masked API token.
+    api_token: NotRequired[str]
     header_substitutions: NotRequired[dict[str, str]]
     # Names of fields the user must supply for header substitution. Persisted
     # only on the per-user template config (the admin's connection config that
@@ -95,7 +122,7 @@ class MCPConnectionData(TypedDict):
 
 
 class MCPAuthTemplate(BaseModel):
-    """Template for per-user authentication configuration"""
+    """Header template shared by every MCP authentication type."""
 
     headers: dict[str, str] = Field(
         default_factory=dict,
@@ -110,6 +137,24 @@ class MCPAuthTemplate(BaseModel):
         description="List of required field names that users must provide",
     )
 
+    @model_validator(mode="after")
+    def validate_headers(self) -> "MCPAuthTemplate":
+        seen: set[str] = set()
+        for name in self.headers:
+            lowered = name.lower()
+            if _HTTP_FIELD_NAME_RE.fullmatch(name) is None:
+                raise ValueError(f"Invalid MCP header name: {name!r}")
+            if lowered in DENYLISTED_MCP_HEADERS:
+                raise ValueError(f"MCP header {name!r} is not allowed")
+            if lowered in seen:
+                raise ValueError(f"Duplicate MCP header name: {name!r}")
+            seen.add(lowered)
+
+        derived_fields = self.derive_required_fields(self.headers)
+        if self.headers or not self.required_fields:
+            self.required_fields = derived_fields
+        return self
+
     @staticmethod
     def derive_required_fields(headers: dict[str, str]) -> list[str]:
         """Extract the set of `{placeholder}` field names referenced by
@@ -122,7 +167,26 @@ class MCPAuthTemplate(BaseModel):
                 if match in AUTO_SUBSTITUTED_PLACEHOLDER_KEYS:
                     continue
                 seen.add(match)
-        return list(seen)
+        return sorted(seen)
+
+    def render(
+        self, substitutions: dict[str, str], *, user_email: str
+    ) -> dict[str, str]:
+        missing = [
+            field for field in self.required_fields if not substitutions.get(field)
+        ]
+        if missing:
+            raise ValueError(
+                f"Missing MCP header substitutions: {', '.join(sorted(missing))}"
+            )
+
+        headers: dict[str, str] = {}
+        for name, template in self.headers.items():
+            value = template
+            for key, replacement in substitutions.items():
+                value = value.replace(f"{{{key}}}", replacement)
+            headers[name] = apply_auto_substitutions(value, user_email=user_email)
+        return headers
 
 
 class MCPToolCreateRequest(BaseModel):
@@ -135,6 +199,13 @@ class MCPToolCreateRequest(BaseModel):
     )
     api_token: Optional[str] = Field(
         None, description="API token for api_token auth type"
+    )
+    api_token_changed: bool = Field(
+        default=False,
+        description=(
+            "True if the shared API token was edited. When False on an update, "
+            "the stored token is reused instead of the masked request value."
+        ),
     )
     oauth_client_id: Optional[str] = Field(None, description="OAuth client ID")
     oauth_client_secret: Optional[str] = Field(None, description="OAuth client secret")
@@ -178,7 +249,15 @@ class MCPToolCreateRequest(BaseModel):
         None, description="MCP transport type (STREAMABLE_HTTP or SSE)"
     )
     auth_template: Optional[MCPAuthTemplate] = Field(
-        None, description="Template configuration for per-user authentication"
+        None,
+        description=(
+            "Headers sent to the MCP server. Values may contain placeholders "
+            "supplied per user."
+        ),
+    )
+    auth_template_headers_changed: dict[str, bool] = Field(
+        default_factory=dict,
+        description="Per-header flags marking edited template values.",
     )
     admin_credentials: Optional[dict[str, str]] = Field(
         None,
@@ -214,16 +293,36 @@ class MCPToolCreateRequest(BaseModel):
 
     @model_validator(mode="after")
     def validate_auth_configuration(self) -> "MCPToolCreateRequest":
-        # Validate API token requirements for admin auth
+        # A shared API token is required to create an admin-managed server.
+        # On update (`existing_server_id` set) it may be omitted: the upsert
+        # path reuses the stored token, so requiring it here would reject
+        # legitimate template-only edits from clients that don't replay it.
         if (
             self.auth_type == MCPAuthenticationType.API_TOKEN
             and self.auth_performer == MCPAuthenticationPerformer.ADMIN
+            and self.existing_server_id is None
             and not self.api_token
         ):
             raise ValueError(
                 "api_token is required when auth_type is 'api_token' and auth_performer is 'admin'"
             )
 
+        if (
+            self.auth_type == MCPAuthenticationType.API_TOKEN
+            and self.auth_performer == MCPAuthenticationPerformer.ADMIN
+        ):
+            # An omitted template is resolved against the existing server
+            # configuration during an update, or defaults to Bearer when a
+            # server is created. Do not materialize that default here, since
+            # doing so makes an omitted template look like an explicit edit.
+            if self.auth_template is not None:
+                if not any(
+                    "{api_key}" in value
+                    for value in self.auth_template.headers.values()
+                ):
+                    raise ValueError(
+                        "Shared API-token header templates must include the {api_key} placeholder"
+                    )
         # Validate that API token is not provided for per-user auth
         if (
             self.auth_type == MCPAuthenticationType.API_TOKEN
@@ -244,7 +343,7 @@ class MCPToolCreateRequest(BaseModel):
                 raise ValueError(
                     "auth_template is required when auth_performer is 'per_user'"
                 )
-            if not self.admin_credentials:
+            if self.auth_template.required_fields and not self.admin_credentials:
                 raise ValueError(
                     "admin_credentials is required when auth_performer is 'per_user'"
                 )
@@ -319,6 +418,14 @@ class MCPServerSimpleUpdateRequest(BaseModel):
         None, description="Description of the MCP server"
     )
     server_url: Optional[str] = Field(None, description="URL of the MCP server")
+    tool_policies: Optional[dict[str, EndpointPolicy]] = Field(
+        default=None,
+        description=(
+            "Sparse per-tool Craft approval overrides keyed by tool name; "
+            "replaces the stored set. Unlisted tools use the default (ASK). "
+            "None leaves existing overrides unchanged."
+        ),
+    )
     # None leaves the server's existing access unchanged.
     is_public: Optional[bool] = Field(
         default=None,
@@ -503,6 +610,13 @@ class MCPServer(BaseModel):
     groups: list[int] = Field(default_factory=list)
     users: list[UUID] = Field(default_factory=list)
     available_in_craft: bool = False
+    tool_policies: Optional[dict[str, EndpointPolicy]] = Field(
+        None,
+        description=(
+            "Stored per-tool Craft approval overrides (sparse; unlisted tools "
+            "default to ASK). Owner/admin views only."
+        ),
+    )
     last_refreshed_at: Optional[datetime.datetime] = None
     tool_count: int = Field(
         default=0, description="Number of tools associated with this server"
@@ -516,6 +630,13 @@ class MCPServer(BaseModel):
     admin_credentials: Optional[dict[str, str]] = Field(
         None,
         description="Admin's credential key-value pairs for template substitution and storage",
+    )
+    craft_connected: Optional[bool] = Field(
+        None,
+        description=(
+            "Whether Craft can authenticate this user against the server. "
+            "None outside the Craft listing, the only one that computes it."
+        ),
     )
 
 

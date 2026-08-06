@@ -1,4 +1,4 @@
-import type { Meta, StoryObj } from "@storybook/react";
+import type { Meta, StoryObj } from "@storybook/react-vite";
 import * as TooltipPrimitive from "@radix-ui/react-tooltip";
 import { SvgSettings, SvgStar, SvgRefreshCw, SvgUser } from "@opal/icons";
 import { Button } from "@opal/components/buttons/button/components";

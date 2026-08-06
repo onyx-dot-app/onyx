@@ -68,6 +68,8 @@ class AuthConfigResponse(BaseModel):
     # whether there are any users in the system
     has_users: bool = True
     oauth_enabled: bool = False
+    # Kill switch (single-tenant). UI hint only, the backend guards enforce.
+    password_auth_enabled: bool = True
     # Enabled DB-backed SSO providers, one login button each. Empty on cloud and
     # on instances with no provider rows, so the page falls back to the built-in
     # password (and Google when oauth_enabled) login.

@@ -4,16 +4,19 @@ A window rollup: rows accumulate in place per (user, window,
 model, flow, provider), not an append-only per-call ledger."""
 
 from collections import defaultdict
+from collections.abc import Sequence
 from datetime import datetime, timedelta
 from math import ceil
+from typing import Any, cast
 
 from pydantic import BaseModel
-from sqlalchemy import func, select
+from sqlalchemy import delete, func, select
 from sqlalchemy.dialects.postgresql import insert as pg_insert
+from sqlalchemy.engine.cursor import CursorResult
 from sqlalchemy.orm import Session
 
-from onyx.db.models import User, User__UserGroup, UserUsage
-from onyx.utils.datetime import datetime_to_utc
+from onyx.db.models import TokenRateLimit, User, User__UserGroup, UserUsage
+from onyx.utils.datetime import datetime_to_utc, get_window_start
 from onyx.utils.logger import setup_logger
 
 logger = setup_logger()
@@ -21,6 +24,9 @@ logger = setup_logger()
 USER_USAGE_BUCKET_SECONDS = 24 * 60 * 60
 USER_USAGE_BUCKET_HOURS = USER_USAGE_BUCKET_SECONDS // (60 * 60)
 TOKEN_BUDGET_PERIOD_ERROR = "Token budget periods must be whole UTC days"
+COST_BUDGET_PERIOD_ERROR = "Cost budget periods must be whole UTC days"
+# Not email-shaped on purpose: it can never collide with a real address.
+DELETED_USER_EXPORT_EMAIL = "(deleted user)"
 _CONFLICT_COLS = ["user_id", "window_start", "model", "flow", "provider"]
 
 
@@ -39,10 +45,66 @@ def normalize_token_period_hours(period_hours: int) -> int:
 
 def get_token_window_start(now: datetime, period_hours: int) -> datetime:
     period_hours = normalize_token_period_hours(period_hours)
-    current_bucket = datetime_to_utc(now).replace(
-        hour=0, minute=0, second=0, microsecond=0
-    )
+    current_bucket = get_window_start(now, USER_USAGE_BUCKET_SECONDS)
     return current_bucket - timedelta(hours=period_hours - USER_USAGE_BUCKET_HOURS)
+
+
+def _get_cost_period_seconds(period_hours: int) -> int:
+    period_seconds = period_hours * 60 * 60
+    if (
+        period_seconds < USER_USAGE_BUCKET_SECONDS
+        or period_seconds % USER_USAGE_BUCKET_SECONDS
+    ):
+        raise ValueError(COST_BUDGET_PERIOD_ERROR)
+    return period_seconds
+
+
+def get_cost_window_start(now: datetime, period_hours: int) -> datetime:
+    """Start of the UTC-day buckets in a cost-budget window."""
+    period_seconds = _get_cost_period_seconds(period_hours)
+    current_bucket = get_window_start(now, USER_USAGE_BUCKET_SECONDS)
+    return current_bucket - timedelta(
+        seconds=period_seconds - USER_USAGE_BUCKET_SECONDS
+    )
+
+
+def get_token_window_reset(now: datetime, period_hours: int) -> datetime:
+    period_hours = normalize_token_period_hours(period_hours)
+    current_bucket = get_window_start(now, USER_USAGE_BUCKET_SECONDS)
+    return current_bucket + timedelta(hours=period_hours)
+
+
+def get_cost_window_reset(now: datetime, period_hours: int) -> datetime:
+    period_seconds = _get_cost_period_seconds(period_hours)
+    current_bucket = get_window_start(now, USER_USAGE_BUCKET_SECONDS)
+    return current_bucket + timedelta(seconds=period_seconds)
+
+
+def earliest_window_reset(
+    now: datetime,
+    period_hours: int,
+    buckets: Sequence[tuple[datetime, float]],
+    threshold: float,
+) -> datetime:
+    """First future UTC-day boundary at which the trailing-window sum drops below
+    `threshold`, assuming no further usage.
+
+    Usage is bucketed by whole UTC days and the window slides forward one day at
+    a time, so the reset is always a midnight. As each day rolls off, the trailing
+    sum can only drop; this returns the first boundary where it clears. Equals the
+    full-window expiry when even the current day alone is over threshold.
+    `period_hours` must be a whole number of days.
+    """
+    day = timedelta(seconds=USER_USAGE_BUCKET_SECONDS)
+    today = get_window_start(now, USER_USAGE_BUCKET_SECONDS)
+    period_days = period_hours // USER_USAGE_BUCKET_HOURS
+    window_start = today - day * (period_days - 1)
+    for days_elapsed in range(1, period_days + 1):
+        cutoff = window_start + day * days_elapsed
+        remaining = sum(amount for ws, amount in buckets if ws >= cutoff)
+        if remaining < threshold:
+            return today + day * days_elapsed
+    return today + day * period_days
 
 
 class UserUsageByDay(BaseModel):
@@ -57,10 +119,10 @@ class UserUsageByDay(BaseModel):
 
 
 class UsageExportRow(BaseModel):
-    """Tenant-wide usage row by email, model, and UTC day."""
-
     email: str
     model: str
+    flow: str
+    provider: str
     day: str  # YYYY-MM-DD
     input_tokens: int
     output_tokens: int
@@ -154,27 +216,40 @@ def get_usage_export(
     end: datetime,
     model: str | None = None,
 ) -> list[UsageExportRow]:
-    """Tenant-wide usage by email, model, and UTC day."""
     utc_day = func.date(func.timezone("UTC", UserUsage.window_start))
+    # Deleted users/API keys leave user_id NULL but keep their spend. An inner
+    # join would hide that spend here while the tenant-wide totals still count
+    # it, so the export would silently stop reconciling with them.
+    email_label = func.coalesce(User.email, DELETED_USER_EXPORT_EMAIL)
     query = (
-        # User.email comes from the fastapi-users base; ty mis-resolves it as a
-        # non-column role, so the multi-column select overload doesn't match.
-        select(  # ty: ignore[no-matching-overload]
-            User.email,
+        select(
+            email_label,
             UserUsage.model,
+            UserUsage.flow,
+            UserUsage.provider,
             utc_day.label("day"),
             func.sum(UserUsage.input_tokens),
             func.sum(UserUsage.output_tokens),
             func.sum(UserUsage.cache_read_tokens),
             func.sum(UserUsage.cost_cents),
         )
-        .join(User, User.id == UserUsage.user_id)
+        # UserUsage.user_id on the left: User.id comes from the fastapi-users
+        # base, which ty resolves as a plain value rather than a column.
+        .outerjoin(User, UserUsage.user_id == User.id)
         .where(
             UserUsage.window_start >= start,
             UserUsage.window_start < end,
         )
-        .group_by(User.email, UserUsage.model, utc_day)
-        .order_by(User.email, utc_day, UserUsage.model)
+        .group_by(
+            email_label, UserUsage.model, UserUsage.flow, UserUsage.provider, utc_day
+        )
+        .order_by(
+            email_label,
+            utc_day,
+            UserUsage.model,
+            UserUsage.flow,
+            UserUsage.provider,
+        )
     )
     if model is not None:
         query = query.where(UserUsage.model == model)
@@ -185,14 +260,44 @@ def get_usage_export(
         UsageExportRow(
             email=str(email),
             model=mdl,
+            flow=flow,
+            provider=provider,
             day=str(day),
             input_tokens=int(in_tok or 0),
             output_tokens=int(out_tok or 0),
             cache_read_tokens=int(cache_tok or 0),
             cost_cents=float(cost or 0.0),
         )
-        for email, mdl, day, in_tok, out_tok, cache_tok, cost in rows
+        for email, mdl, flow, provider, day, in_tok, out_tok, cache_tok, cost in rows
     ]
+
+
+def get_usage_reset_window_start(
+    now: datetime, rate_limits: Sequence[TokenRateLimit]
+) -> datetime:
+    """Return the earliest bucket included by any applicable limit."""
+    window_starts = [get_window_start(now, USER_USAGE_BUCKET_SECONDS)]
+    for rate_limit in rate_limits:
+        if rate_limit.token_budget is not None:
+            window_starts.append(get_token_window_start(now, rate_limit.period_hours))
+        if rate_limit.cost_budget_cents is not None:
+            window_starts.append(get_cost_window_start(now, rate_limit.period_hours))
+    return min(window_starts)
+
+
+def reset_user_usage(db_session: Session, user_id: str, window_start: datetime) -> int:
+    """Clear a user's usage within the active enforcement window."""
+    result = cast(
+        CursorResult[Any],
+        db_session.execute(
+            delete(UserUsage).where(
+                UserUsage.user_id == user_id,
+                UserUsage.window_start >= window_start,
+            )
+        ),
+    )
+    db_session.flush()
+    return result.rowcount or 0
 
 
 def get_user_cost_cents_in_window(

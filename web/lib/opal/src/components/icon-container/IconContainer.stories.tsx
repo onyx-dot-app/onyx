@@ -1,4 +1,4 @@
-import type { Meta, StoryObj } from "@storybook/react";
+import type { Meta, StoryObj } from "@storybook/react-vite";
 import { IconContainer, type IconContainerSize } from "@opal/components";
 import { SvgSearch, SvgUser } from "@opal/icons";
 import { SvgSlack } from "@opal/logos";

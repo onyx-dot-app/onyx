@@ -118,12 +118,15 @@ export default function NRFPage({ isSidePanel = false }: NRFPageProps) {
       if (
         model.provider !== current.provider ||
         model.modelName !== current.modelName ||
-        model.name !== current.name
+        model.name !== current.name ||
+        (model.modelConfigurationId ?? null) !==
+          (current.modelConfigurationId ?? null)
       ) {
         llmManager.updateCurrentLlm({
           name: model.name,
           provider: model.provider,
           modelName: model.modelName,
+          modelConfigurationId: model.modelConfigurationId,
         });
       }
     }
@@ -516,6 +519,8 @@ export default function NRFPage({ isSidePanel = false }: NRFPageProps) {
                       onAdd={multiModel.addModel}
                       onRemove={multiModel.removeModel}
                       onReplace={multiModel.replaceModel}
+                      temperatureManager={llmManager}
+                      reasoningManager={llmManager}
                     />
                   )}
                 </Section>
@@ -538,6 +543,8 @@ export default function NRFPage({ isSidePanel = false }: NRFPageProps) {
                     onAdd={multiModel.addModel}
                     onRemove={multiModel.removeModel}
                     onReplace={multiModel.replaceModel}
+                    temperatureManager={llmManager}
+                    reasoningManager={llmManager}
                   />
                 </div>
               )}

@@ -28,6 +28,7 @@ def _make_attempt() -> MagicMock:
     attempt.up_to_doc_id = None
     attempt.docs_ported = 0
     attempt.cc_pair_id = 123
+    attempt.port_user_id = None  # connector scope (a bare MagicMock would read truthy)
     attempt.search_settings_id = 2
     return attempt
 

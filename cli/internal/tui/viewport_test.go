@@ -106,7 +106,7 @@ func TestFinishAgentMultiline(t *testing.T) {
 
 	e := v.entries[1]
 	plain := stripANSI(e.rendered)
-	// Glamour may merge or reformat lines; just check content is present
+	// The markdown renderer may reformat blank lines; just check content is present
 	if !strings.Contains(plain, "Line one") {
 		t.Errorf("expected 'Line one' in rendered, got %q", plain)
 	}

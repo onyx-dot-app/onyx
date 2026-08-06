@@ -36,11 +36,16 @@ export const CREATABLE_SSO_PROVIDER_TYPES: SSOProviderType[] = [
   "SAML",
 ];
 
-export type SSOConfigFieldKind = "text" | "textarea" | "password";
+export type SSOConfigFieldKind =
+  | "text"
+  | "textarea"
+  | "password"
+  | "switch"
+  | "chips";
 
-// One entry per key in a provider type's backend config model. `name` must
-// match the backend config field exactly, since values are sent as
-// config.<name>.
+// One entry per admin-editable key in a provider type's backend config model.
+// `name` must match the backend config field exactly, since values are sent
+// as config.<name>.
 export interface SSOConfigField {
   name: string;
   label: string;
@@ -64,10 +69,33 @@ const CLIENT_SECRET_FIELD: SSOConfigField = {
   description: "The OAuth client secret. Stored encrypted.",
   placeholder: "Client secret",
 };
+const PKCE_FIELD: SSOConfigField = {
+  name: "pkce_enabled",
+  label: "Enable PKCE",
+  kind: "switch",
+  description:
+    "Send a PKCE code challenge with this provider's login flow. " +
+    "A deployment-wide setting may force this on.",
+};
+const SCOPES_FIELD: SSOConfigField = {
+  name: "scopes",
+  label: "Scopes",
+  kind: "chips",
+  optional: true,
+  description:
+    "Override the OAuth scopes requested at login. " +
+    "Empty uses the deployment defaults.",
+  placeholder: "Add a scope (e.g. openid)",
+};
 
 export const CONFIG_FIELDS_BY_TYPE: Record<SSOProviderType, SSOConfigField[]> =
   {
-    GOOGLE_OAUTH: [CLIENT_ID_FIELD, CLIENT_SECRET_FIELD],
+    GOOGLE_OAUTH: [
+      CLIENT_ID_FIELD,
+      CLIENT_SECRET_FIELD,
+      PKCE_FIELD,
+      SCOPES_FIELD,
+    ],
     OIDC: [
       CLIENT_ID_FIELD,
       CLIENT_SECRET_FIELD,
@@ -78,6 +106,17 @@ export const CONFIG_FIELDS_BY_TYPE: Record<SSOProviderType, SSOConfigField[]> =
         description: "The IdP's OpenID Connect discovery document URL.",
         placeholder: "https://example.com/.well-known/openid-configuration",
       },
+      {
+        name: "require_verified_email",
+        label: "Require Verified Email Claim",
+        kind: "switch",
+        description:
+          "Reject sign-ins when the IdP omits the optional email_verified " +
+          "claim. Leave off for IdPs that do not send it, such as " +
+          "Microsoft Entra ID.",
+      },
+      PKCE_FIELD,
+      SCOPES_FIELD,
     ],
     SAML: [
       {

@@ -7,45 +7,6 @@ export type SharingScope = "private" | "public_org";
 export type SessionOrigin = "INTERACTIVE" | "SCHEDULED" | "SLACK";
 
 // =============================================================================
-// Session Error Constants
-// =============================================================================
-
-export const SessionErrorCode = {
-  RATE_LIMIT_EXCEEDED: "RATE_LIMIT_EXCEEDED",
-} as const;
-
-export type SessionErrorCode =
-  (typeof SessionErrorCode)[keyof typeof SessionErrorCode];
-
-// =============================================================================
-// Usage Limits Types
-// =============================================================================
-
-export type LimitType = "weekly" | "total";
-
-export interface UsageLimits {
-  /** Whether the user has reached their limit */
-  isLimited: boolean;
-  /** Type of limit period: "weekly" for paid, "total" for free */
-  limitType: LimitType;
-  /** Number of messages used in current period */
-  messagesUsed: number;
-  /** Maximum messages allowed in the period */
-  limit: number;
-  /** For weekly limits: timestamp when the limit resets (null for total limits) */
-  resetTimestamp: Date | null;
-}
-
-// API response shape (snake_case from backend)
-export interface ApiUsageLimitsResponse {
-  is_limited: boolean;
-  limit_type: LimitType;
-  messages_used: number;
-  limit: number;
-  reset_timestamp: string | null;
-}
-
-// =============================================================================
 // Artifact & Message Types
 // =============================================================================
 
@@ -77,8 +38,15 @@ export interface BuildMessage {
   content: string;
   timestamp: Date;
   turn_index?: number;
+  attachments?: BuildMessageAttachment[];
   /** Structured sandbox event data (tool calls, thinking, plans) */
   message_metadata?: Record<string, any> | null;
+}
+
+export interface BuildMessageAttachment {
+  name: string;
+  path: string;
+  mimeType: string;
 }
 
 // =============================================================================
@@ -147,33 +115,33 @@ export interface SessionHistoryItem {
 // API Response Types
 // =============================================================================
 
+export type ApiSandboxStatus =
+  | "provisioning"
+  | "running"
+  | "sleeping"
+  | "terminated"
+  | "failed";
+
 export interface ApiSandboxResponse {
   id: string;
-  status:
-    | "provisioning"
-    | "running"
-    | "idle"
-    | "sleeping"
-    | "terminated"
-    | "failed"
-    | "restoring"; // Frontend-only: set during snapshot restore
+  status: ApiSandboxStatus;
   container_id: string | null;
   created_at: string;
   last_heartbeat: string | null;
-  nextjs_port: number | null;
 }
 
 export interface ApiSandboxStatusResponse {
-  status: Exclude<ApiSandboxResponse["status"], "restoring"> | null;
+  status: ApiSandboxStatus | null;
 }
 
 export interface ApiSessionResponse {
   id: string;
   user_id: string | null;
   name: string | null;
-  status: "active" | "idle" | "archived";
+  status: "initializing" | "active" | "idle" | "failed";
   created_at: string;
   last_activity_at: string;
+  nextjs_port: number | null;
   sandbox: ApiSandboxResponse | null;
   artifacts: ApiArtifactResponse[];
   sharing_scope: SharingScope;
@@ -245,6 +213,19 @@ export interface FileSystemEntry {
 export interface DirectoryListing {
   path: string;
   entries: FileSystemEntry[];
+}
+
+// =============================================================================
+// Client Runtime Types
+// =============================================================================
+
+export type SandboxRuntimeStatus = ApiSandboxStatus | "restoring";
+
+export interface SandboxRuntimeState extends Omit<
+  ApiSandboxResponse,
+  "status"
+> {
+  status: SandboxRuntimeStatus;
 }
 
 // =============================================================================

@@ -16,6 +16,7 @@ import queue
 import time
 from collections.abc import Callable, Generator, Iterable
 from dataclasses import dataclass, field
+from pathlib import PurePosixPath
 from typing import Any, cast
 from uuid import uuid4
 
@@ -49,6 +50,7 @@ from onyx.server.features.build.sandbox.event_schema import (
     ToolCallProgress,
     ToolCallStart,
 )
+from onyx.server.features.build.sandbox.models import PromptAttachment
 from onyx.server.features.build.sandbox.opencode.event_bus import (
     BUS_CLOSED_SENTINEL,
     PodEventBus,
@@ -1332,6 +1334,7 @@ class OpencodeServeClient:
         directory: str,
         model_provider: str | None = None,
         model_id: str | None = None,
+        attachments: list[PromptAttachment] | None = None,
         timeout: float = OPENCODE_PROMPT_INACTIVITY_TIMEOUT_SECONDS,
         absolute_timeout: float | None = None,
         should_interrupt: Callable[[], bool] | None = None,
@@ -1388,6 +1391,7 @@ class OpencodeServeClient:
                     message,
                     model_provider,
                     model_id,
+                    attachments=attachments,
                     directory=directory,
                 )
                 prompt_posted = True
@@ -1628,6 +1632,7 @@ class OpencodeServeClient:
         model_provider: str | None,
         model_id: str | None,
         *,
+        attachments: list[PromptAttachment] | None = None,
         directory: str,
     ) -> None:
         """POST /session/.../prompt_async.
@@ -1637,7 +1642,17 @@ class OpencodeServeClient:
         ``model`` and opencode falls back to the session's default
         (written by ``setup_session_workspace`` into ``opencode.json``).
         """
-        body: dict[str, Any] = {"parts": [{"type": "text", "text": message}]}
+        parts: list[dict[str, str]] = [{"type": "text", "text": message}]
+        parts.extend(
+            {
+                "type": "file",
+                "mime": attachment.mime_type,
+                "filename": attachment.name,
+                "url": (PurePosixPath(directory) / attachment.path).as_uri(),  # ty: ignore[deprecated]
+            }
+            for attachment in attachments or []
+        )
+        body: dict[str, Any] = {"parts": parts}
         if model_provider and model_id:
             body["model"] = {"providerID": model_provider, "modelID": model_id}
         # idempotent=False: only the 401 reload retries this POST.
@@ -1726,15 +1741,30 @@ class OpencodeServeClient:
         """Announce the card and stash the answer context, then return — the
         decision endpoint answers opencode out-of-band (see :mod:`connect_app`).
         Doesn't block; the consume loop's timeout fallback rejects if the user
-        never decides. App slug comes from the tool's ``context.ask`` metadata.
+        never decides. The app ID comes from the tool's ``context.ask`` metadata.
         """
         props = evt.get("properties") or {}
         meta_raw = props.get("metadata")
         meta = meta_raw if isinstance(meta_raw, dict) else {}
-        app_slug = meta.get("app")
-        if not app_slug:
+        raw_external_app_id = meta.get("external_app_id")
+        if raw_external_app_id is None:
             logger.warning(
-                "connect_app permission missing app metadata (meta=%s perm_id=%s); "
+                "connect_app permission is missing app metadata "
+                "(meta=%s perm_id=%s); denying",
+                meta,
+                perm_id,
+            )
+            self.answer_permission(
+                state.session_id, perm_id, allow=False, directory=directory
+            )
+            return
+
+        try:
+            external_app_id = int(raw_external_app_id)
+        except (TypeError, ValueError):
+            logger.warning(
+                "connect_app permission has invalid app metadata "
+                "(meta=%s perm_id=%s); "
                 "denying",
                 meta,
                 perm_id,
@@ -1762,14 +1792,14 @@ class OpencodeServeClient:
                 build_session_id,
                 connect_app.ConnectAppRequest(
                     request_id=request_id,
-                    app_slug=str(app_slug),
+                    external_app_id=external_app_id,
                     reason=meta.get("reason") or None,
                 ),
                 cache,
             )
         except Exception:
             logger.exception(
-                "connect_app announce failed for app=%s; denying", app_slug
+                "connect_app announce failed for app=%s; denying", external_app_id
             )
             self.answer_permission(
                 state.session_id, perm_id, allow=False, directory=directory

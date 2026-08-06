@@ -1,7 +1,9 @@
 """Unit tests for ee.onyx.server.features.hooks.api helpers.
 
 Covers:
-- _check_ssrf_safety: scheme enforcement and private-IP blocklist
+- _check_ssrf_safety: scheme enforcement and private-IP blocklist, driven by
+  the admin SSRF Protection level (allow_private_network opens RFC1918 hosts
+  while loopback/metadata stay blocked; https_only holds at every level)
 - _validate_endpoint: httpx exception → HookValidateStatus mapping
   ConnectTimeout     → timeout         (any timeout directs user to increase timeout_seconds)
   ConnectError       → cannot_connect  (DNS / TLS failure)
@@ -15,6 +17,7 @@ from unittest.mock import MagicMock, patch
 import httpx
 import pytest
 
+from ee.onyx.server.features.hooks import api as hooks_api
 from ee.onyx.server.features.hooks.api import (
     _check_ssrf_safety,
     _raise_for_validation_failure,
@@ -23,6 +26,8 @@ from ee.onyx.server.features.hooks.api import (
 from onyx.error_handling.error_codes import OnyxErrorCode
 from onyx.error_handling.exceptions import OnyxError
 from onyx.hooks.models import HookValidateResponse, HookValidateStatus
+from onyx.server.security.models import SecuritySettings, SSRFProtectionLevel
+from onyx.server.security.store import _build_env_defaults
 
 # ---------------------------------------------------------------------------
 # Helpers
@@ -37,6 +42,23 @@ def _mock_response(status_code: int) -> MagicMock:
     response = MagicMock()
     response.status_code = status_code
     return response
+
+
+def _settings_with(level: SSRFProtectionLevel) -> SecuritySettings:
+    return _build_env_defaults().model_copy(update={"ssrf_protection_level": level})
+
+
+def _set_level(monkeypatch: pytest.MonkeyPatch, level: SSRFProtectionLevel) -> None:
+    """Pin the effective SSRF level for _check_ssrf_safety, bypassing the
+    tenant-aware store (no DB in unit tests)."""
+    settings = _settings_with(level)
+    monkeypatch.setattr(hooks_api, "get_security_settings", lambda: settings)
+
+
+@pytest.fixture(autouse=True)
+def _default_ssrf_level(monkeypatch: pytest.MonkeyPatch) -> None:
+    """Default every test to the shipped default level unless it overrides."""
+    _set_level(monkeypatch, SSRFProtectionLevel.VALIDATE_ALL)
 
 
 # ---------------------------------------------------------------------------
@@ -107,6 +129,54 @@ class TestCheckSsrfSafety:
         ):
             self._call("https://no-such-host.example.com/hook")
         assert exc_info.value.error_code == OnyxErrorCode.BAD_GATEWAY
+
+    # --- SSRF protection level ---
+
+    def test_allow_private_network_allows_private_ip(
+        self, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        _set_level(monkeypatch, SSRFProtectionLevel.ALLOW_PRIVATE_NETWORK)
+        self._call("https://10.0.0.5/hook")  # must not raise
+
+    def test_allow_private_network_allows_private_hostname(
+        self, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        _set_level(monkeypatch, SSRFProtectionLevel.ALLOW_PRIVATE_NETWORK)
+        with patch("onyx.utils.url.socket.getaddrinfo") as mock_dns:
+            mock_dns.return_value = [(None, None, None, None, ("10.0.0.5", 0))]
+            self._call("https://hook-svc.internal.cluster.local/hook")  # must not raise
+
+    @pytest.mark.parametrize(
+        "url",
+        [
+            pytest.param("https://127.0.0.1/hook", id="loopback"),
+            pytest.param("https://169.254.169.254/hook", id="link-local-IMDS"),
+            pytest.param("https://localhost/hook", id="blocked-hostname"),
+        ],
+    )
+    def test_allow_private_network_keeps_loopback_and_metadata_blocked(
+        self, url: str, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        _set_level(monkeypatch, SSRFProtectionLevel.ALLOW_PRIVATE_NETWORK)
+        with pytest.raises(OnyxError) as exc_info:
+            self._call(url)
+        assert exc_info.value.error_code == OnyxErrorCode.BAD_GATEWAY
+
+    def test_disabled_allows_loopback_but_not_metadata(
+        self, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        _set_level(monkeypatch, SSRFProtectionLevel.DISABLED)
+        self._call("https://127.0.0.1/hook")  # must not raise
+        with pytest.raises(OnyxError):
+            self._call("https://169.254.169.254/hook")
+
+    def test_https_required_even_when_disabled(
+        self, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        _set_level(monkeypatch, SSRFProtectionLevel.DISABLED)
+        with pytest.raises(OnyxError) as exc_info:
+            self._call("http://10.0.0.5/hook")
+        assert "https" in (exc_info.value.detail or "").lower()
 
 
 # ---------------------------------------------------------------------------

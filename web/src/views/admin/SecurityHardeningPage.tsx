@@ -2,6 +2,7 @@
 
 import { useCallback, useEffect, useState } from "react";
 import useSWR, { mutate } from "swr";
+import { useAuthTypeMetadata } from "@/lib/auth/hooks";
 import { errorHandlingFetcher } from "@/lib/fetcher";
 import { SWR_KEYS } from "@/lib/swr-keys";
 import { ADMIN_ROUTES } from "@/lib/admin-routes";
@@ -49,6 +50,7 @@ interface SecuritySettings {
   password_require_lowercase: boolean;
   password_require_digit: boolean;
   password_require_special_char: boolean;
+  password_auth_enabled: boolean;
 }
 
 // Write shape: a partial patch. The backend treats only the keys present in the
@@ -87,6 +89,15 @@ function ToggleRow({
 
 export default function SecurityHardeningPage() {
   const isMultiTenant = NEXT_PUBLIC_CLOUD_ENABLED;
+  const { authTypeMetadata, isLoading: authTypeLoading } =
+    useAuthTypeMetadata();
+  // The kill switch only enforces on single-tenant deployments, so the
+  // card hides where the backend would refuse the save. The explicit === false
+  // waits for the fetch, metadata is undefined while loading or unreachable.
+  const showPasswordLockdown =
+    !isMultiTenant &&
+    !authTypeLoading &&
+    authTypeMetadata?.multiTenant === false;
 
   const { data: settings, isLoading: settingsLoading } =
     useSWR<SecuritySettings>(
@@ -261,6 +272,17 @@ export default function SecurityHardeningPage() {
                     </InputVertical>
                   )}
                 </>
+              )}
+
+              {showPasswordLockdown && (
+                <ToggleRow
+                  title="Disable Password Login & Signup"
+                  description="Everyone signs in and registers through SSO only. Requires at least one enabled SSO provider."
+                  checked={!draft.password_auth_enabled}
+                  onCheckedChange={(checked) =>
+                    void saveSettings({ password_auth_enabled: !checked })
+                  }
+                />
               )}
             </Section>
           </Card>

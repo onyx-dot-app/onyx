@@ -100,7 +100,7 @@ from onyx.hooks.points.query_processing import (
 )
 from onyx.llm.factory import get_llm_for_persona, get_llm_token_counter
 from onyx.llm.interfaces import LLM, LLMUserIdentity
-from onyx.llm.models import LLMErrorInfo
+from onyx.llm.models import LLMErrorInfo, ReasoningEffort
 from onyx.llm.override_models import LLMOverride
 from onyx.llm.request_context import reset_llm_mock_response, set_llm_mock_response
 from onyx.llm.utils import (
@@ -1018,6 +1018,7 @@ def build_chat_turn(
         reserved_messages=reserved_messages,
         processing_run_id=processing_run_id,
         reserved_token_count=reserved_token_count,
+        reasoning_effort=chat_session.reasoning_effort_override or ReasoningEffort.AUTO,
         search_params=search_params,
         all_injected_file_metadata=all_injected_file_metadata,
         available_files=available_files,
@@ -1057,6 +1058,23 @@ _CANCEL_POLL_INTERVAL_S: Final[float] = 0.05
 
 # How often the writer re-arms the processing fence (FENCE_TTL is 30 min).
 _FENCE_REFRESH_INTERVAL_S: Final[float] = 60.0
+
+
+def _model_error_details(
+    error: Exception,
+    llm: LLM,
+    model_index: int,
+) -> dict[str, str | int | None]:
+    details: dict[str, str | int | None] = {
+        "model": llm.config.model_name,
+        "provider": llm.config.model_provider,
+        "model_index": model_index,
+    }
+    if isinstance(error, EmptyLLMResponseError):
+        details["tool_choice"] = error.tool_choice.value
+        details["finish_reason"] = error.finish_reason
+
+    return details
 
 
 def _run_models(
@@ -1274,6 +1292,7 @@ def _run_models(
                     custom_agent_prompt=setup.custom_agent_prompt,
                     llm=model_llm,
                     token_counter=get_llm_token_counter(model_llm),
+                    reasoning_effort=setup.reasoning_effort,
                     skip_clarification=setup.skip_clarification,
                     user_identity=setup.user_identity,
                     chat_session_id=str(setup.chat_session.id),
@@ -1295,6 +1314,7 @@ def _run_models(
                     user_identity=setup.user_identity,
                     chat_session_id=str(setup.chat_session.id),
                     chat_files=setup.chat_files_for_tools,
+                    reasoning_effort=setup.reasoning_effort,
                     include_citations=setup.new_msg_req.include_citations,
                     all_injected_file_metadata=setup.all_injected_file_metadata,
                     inject_memories_in_prompt=user.use_memories,
@@ -1431,11 +1451,7 @@ def _run_models(
                             stack_trace=stack_trace,
                             error_code=info.error_code,
                             is_retryable=info.is_retryable,
-                            details={
-                                "model": model_llm.config.model_name,
-                                "provider": model_llm.config.model_provider,
-                                "model_index": model_idx,
-                            },
+                            details=_model_error_details(item, model_llm, model_idx),
                         )
                     )
                 elif isinstance(item, Packet):
@@ -1671,10 +1687,12 @@ def _stream_chat_turn(
     except EmptyLLMResponseError as e:
         stack_trace = traceback.format_exc()
         logger.warning(
-            "LLM returned an empty response (provider=%s, model=%s, tool_choice=%s)",
+            "LLM returned an empty response "
+            "(provider=%s, model=%s, tool_choice=%s, finish_reason=%s)",
             e.provider,
             e.model,
             e.tool_choice,
+            e.finish_reason,
         )
         yield StreamingError(
             error=e.client_error_msg,
@@ -1685,6 +1703,7 @@ def _stream_chat_turn(
                 "model": e.model,
                 "provider": e.provider,
                 "tool_choice": e.tool_choice.value,
+                "finish_reason": e.finish_reason,
             },
         )
 

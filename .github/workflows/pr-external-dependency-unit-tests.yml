@@ -17,6 +17,7 @@ on:
       - ".github/actions/login-ecr-pullthrough-cache/**"
       - "deployment/docker_compose/docker-compose.yml"
       - "deployment/docker_compose/docker-compose.dev.yml"
+      - "deployment/helm/**"
   push:
     tags:
       - "v*.*.*"
@@ -115,6 +116,25 @@ jobs:
 
       - name: Setup Playwright
         uses: ./.github/actions/setup-playwright
+
+      - name: Setup Helm
+        if: matrix.test-dir == 'craft_helm'
+        uses: azure/setup-helm@dda3372f752e03dde6b3237bc9431cdc2f7a02a2 # ratchet:azure/setup-helm@v5.0.0
+        with:
+          version: v3.19.0
+
+      - name: Build Helm chart dependencies
+        if: matrix.test-dir == 'craft_helm'
+        run: |
+          # Register every repo the lockfile pins, then vendor the deps the
+          # pod-spec tests need to render the chart (charts/*.tgz is gitignored).
+          i=0
+          awk '$1 == "repository:" && $2 ~ /^https/ {print $2}' \
+              deployment/helm/charts/onyx/Chart.lock | sort -u |
+            while read -r repo; do
+              helm repo add "dep-$((i+=1))" "$repo"
+            done
+          helm dependency build deployment/helm/charts/onyx
 
       - name: Log in to ECR pull-through cache
         uses: ./.github/actions/login-ecr-pullthrough-cache

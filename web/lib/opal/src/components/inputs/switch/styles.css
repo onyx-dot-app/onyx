@@ -15,15 +15,15 @@
 }
 
 .switch-normal-checked {
-  background-color: var(--action-link-05);
+  background-color: var(--action-selection-05);
   border: 1px solid transparent;
 }
 .switch-normal-checked:hover {
-  background-color: var(--action-link-04);
+  background-color: var(--action-selection-04);
 }
 .switch-normal-checked:focus,
 .switch-normal-checked:focus-within {
-  border-color: var(--action-link-04);
+  border-color: var(--action-selection-04);
 }
 .switch-normal-checked:focus:hover,
 .switch-normal-checked:focus-within:hover {
@@ -36,7 +36,7 @@
   cursor: not-allowed !important;
 }
 .switch-disabled-checked {
-  background-color: var(--action-link-03);
+  background-color: var(--action-selection-03);
   border: 1px solid transparent;
   cursor: not-allowed !important;
 }

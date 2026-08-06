@@ -14,6 +14,7 @@ from onyx.connectors.slack.connector import (
     SlackConnector,
     _channel_team_id,
     _channel_to_hierarchy_node,
+    _WorkspaceMetadata,
     channel_team_ids,
     fetch_team_url,
     get_channels_across_teams,
@@ -296,10 +297,12 @@ class TestSlackConnectorGridProperties:
         team_id_to_user_emails: dict[str, set[str]],
     ) -> SlackConnector:
         c = SlackConnector(channels=None, use_redis=False)
-        c._is_grid = is_grid
-        c._team_ids = team_ids
-        c._team_id_to_url = team_id_to_url
-        c._team_id_to_user_emails = team_id_to_user_emails
+        c._workspace_metadata = _WorkspaceMetadata(
+            is_grid=is_grid,
+            team_ids=team_ids,
+            team_id_to_url=team_id_to_url,
+            team_id_to_user_emails=team_id_to_user_emails,
+        )
         return c
 
     def test_grid_properties_return_underlying_fields_on_grid(self) -> None:

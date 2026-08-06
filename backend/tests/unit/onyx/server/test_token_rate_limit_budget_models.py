@@ -6,11 +6,18 @@ from pydantic import ValidationError
 from onyx.configs.constants import TokenRateLimitScope
 from onyx.db.models import TokenRateLimit
 from onyx.db.user_usage import TokenUsageBucket
-from onyx.server.query_and_chat.token_limit import _is_rate_limited
+from onyx.server.query_and_chat.token_limit import _token_budget_reset
 from onyx.server.token_rate_limits.models import (
     TokenRateLimitArgs,
     TokenRateLimitDisplay,
 )
+
+
+def _is_rate_limited(
+    rate_limits: list[TokenRateLimit],
+    usage: list[TokenUsageBucket],
+) -> bool:
+    return _token_budget_reset(rate_limits, usage) is not None
 
 
 def _rate_limit(

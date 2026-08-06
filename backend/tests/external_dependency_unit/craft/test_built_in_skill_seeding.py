@@ -21,7 +21,12 @@ from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
 
 from onyx.db.models import Skill, User
-from onyx.db.skill import SkillAccessPolicy, fetch_skill, list_skills
+from onyx.db.skill import (
+    SkillManagementPolicy,
+    fetch_skill,
+    list_runtime_skills_for_user,
+    list_skills,
+)
 from onyx.skills.built_in import BUILT_IN_SKILLS, BuiltInSkillDefinition
 from tests.external_dependency_unit.craft.db_helpers import (
     make_built_in_skill_row,
@@ -81,7 +86,7 @@ class TestAvailabilityGate:
         visible = {
             s.built_in_skill_id
             for s in list_skills(
-                policy=SkillAccessPolicy.VIEW,
+                policy=SkillManagementPolicy.VIEW,
                 user=test_user,
                 db_session=db_session,
             )
@@ -98,7 +103,7 @@ class TestAvailabilityGate:
         visible_built_ins = {
             s.built_in_skill_id
             for s in list_skills(
-                policy=SkillAccessPolicy.VIEW,
+                policy=SkillManagementPolicy.VIEW,
                 user=test_user,
                 db_session=db_session,
             )
@@ -124,8 +129,7 @@ class TestAvailabilityGate:
         monkeypatch.setattr("onyx.skills.built_in.ENABLE_BROWSER", False)
         off = {
             s.built_in_skill_id
-            for s in list_skills(
-                policy=SkillAccessPolicy.USE,
+            for s in list_runtime_skills_for_user(
                 user=test_user,
                 db_session=db_session,
             )
@@ -135,8 +139,7 @@ class TestAvailabilityGate:
         monkeypatch.setattr("onyx.skills.built_in.ENABLE_BROWSER", True)
         on = {
             s.built_in_skill_id
-            for s in list_skills(
-                policy=SkillAccessPolicy.USE,
+            for s in list_runtime_skills_for_user(
                 user=test_user,
                 db_session=db_session,
             )
@@ -166,7 +169,7 @@ class TestAvailabilityGate:
         assert (
             fetch_skill(
                 row.id,
-                policy=SkillAccessPolicy.VIEW,
+                policy=SkillManagementPolicy.VIEW,
                 user=test_user,
                 db_session=db_session,
             )
@@ -188,7 +191,7 @@ class TestBuiltInIsImmutable:
         assert (
             fetch_skill(
                 row.id,
-                policy=SkillAccessPolicy.EDIT,
+                policy=SkillManagementPolicy.EDIT,
                 user=test_user,
                 db_session=db_session,
             )
@@ -206,7 +209,7 @@ class TestBuiltInIsImmutable:
 
         skill = fetch_skill(
             custom.id,
-            policy=SkillAccessPolicy.EDIT,
+            policy=SkillManagementPolicy.EDIT,
             user=test_user,
             db_session=db_session,
         )

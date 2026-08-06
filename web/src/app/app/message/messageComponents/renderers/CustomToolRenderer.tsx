@@ -203,14 +203,14 @@ export const CustomToolRenderer: MessageRenderer<CustomToolPacket, {}> = ({
                   href={buildImgUrl(fid)}
                   target="_blank"
                   rel="noreferrer"
-                  className="inline-flex items-center gap-1 text-xs text-action-link-01 hover:underline whitespace-nowrap"
+                  className="inline-flex items-center gap-1 text-xs text-action-selection-01 hover:underline whitespace-nowrap"
                 >
                   <SvgExternalLink className="w-3 h-3" /> Open
                 </a>
                 <a
                   href={buildImgUrl(fid)}
                   download
-                  className="inline-flex items-center gap-1 text-xs text-action-link-01 hover:underline whitespace-nowrap"
+                  className="inline-flex items-center gap-1 text-xs text-action-selection-01 hover:underline whitespace-nowrap"
                 >
                   <SvgDownload className="w-3 h-3" /> Download
                 </a>

@@ -83,7 +83,7 @@ function MemoryItem({
         "rounded-08 w-full p-0.5 border border-transparent",
         "transition-colors ",
         isHighlighting &&
-          "bg-action-link-01 hover:bg-action-link-01 border-action-link-05 duration-700"
+          "bg-action-selection-01 hover:bg-action-selection-01 border-action-selection-05 duration-700"
       )}
     >
       <Section gap={0.25} alignItems="start">

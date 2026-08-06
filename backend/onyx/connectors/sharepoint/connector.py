@@ -94,6 +94,17 @@ SHARED_DOCUMENTS_MAP = {
 }
 SHARED_DOCUMENTS_MAP_REVERSE = {v: k for k, v in SHARED_DOCUMENTS_MAP.items()}
 
+# On OneDrive personal sites the Graph API reports the primary library's name as
+# one of these, while the browser/SharePoint URL uses "Documents".
+ONEDRIVE_DRIVE_NAMES = frozenset(
+    {"onedrive", "onedrive for business", "documentlibrary"}
+)
+# `driveType` values that identify a user's primary OneDrive (as opposed to an
+# extra "documentLibrary" added to the personal site). OneDrive personal returns
+# "personal", OneDrive for Business returns "business".
+ONEDRIVE_PRIMARY_DRIVE_TYPES = frozenset({"personal", "business"})
+PERSONAL_SITE_URL_MARKER = "/personal/"
+
 ASPX_EXTENSION = ".aspx"
 
 
@@ -1258,10 +1269,12 @@ class SharepointConnector(
         # Ensure sites are sharepoint urls
         for site_url in self.sites:
             if not site_url.startswith("https://") or not (
-                "/sites/" in site_url or "/teams/" in site_url
+                "/sites/" in site_url
+                or "/teams/" in site_url
+                or "/personal/" in site_url
             ):
                 raise ConnectorValidationError(
-                    "Site URLs must be full Sharepoint URLs (e.g. https://your-tenant.sharepoint.com/sites/your-site or https://your-tenant.sharepoint.com/teams/your-team)"
+                    "Site URLs must be full Sharepoint/OneDrive URLs (e.g. https://your-tenant.sharepoint.com/sites/your-site, https://your-tenant.sharepoint.com/teams/your-team or https://your-tenant-my.sharepoint.com/personal/your-user)"
                 )
             try:
                 validate_outbound_http_url(site_url, https_only=True)
@@ -1491,14 +1504,14 @@ class SharepointConnector(
 
             lower_parts = [part.lower() for part in parts]
             site_type_index = None
-            for site_token in ("sites", "teams"):
+            for site_token in ("sites", "teams", "personal"):
                 if site_token in lower_parts:
                     site_type_index = lower_parts.index(site_token)
                     break
 
             if site_type_index is None or len(parts) <= site_type_index + 1:
                 logger.warning(
-                    "Site URL '%s' is not a valid Sharepoint URL (must contain /sites/<name> or /teams/<name>)",
+                    "Site URL '%s' is not a valid Sharepoint URL (must contain /sites/<name>, /teams/<name>, or /personal/<name>)",
                     url,
                 )
                 continue
@@ -1551,6 +1564,41 @@ class SharepointConnector(
                 and SHARED_DOCUMENTS_MAP[d.name] == drive_name
             )
         ]
+        if not matched and drives:
+            # Fallback for OneDrive personal sites: Graph reports the primary
+            # library's name as "OneDrive"/"documentLibrary" while the
+            # browser/SharePoint URL uses "Documents". Identify the intended
+            # drive by its stable driveType (falling back to name), never by
+            # position in the /drives response, whose order is not guaranteed.
+            # Prefer driveType matches so a uniquely-typed primary drive is not
+            # made ambiguous by an unrelated library sharing a fallback name;
+            # only consult names when no drive has a primary type.
+            type_matches = [
+                d
+                for d in drives
+                if (d.drive_type or "").lower() in ONEDRIVE_PRIMARY_DRIVE_TYPES
+            ]
+            name_matches = [
+                d for d in drives if d.name and d.name.lower() in ONEDRIVE_DRIVE_NAMES
+            ]
+            onedrive_matches = type_matches or name_matches
+            if PERSONAL_SITE_URL_MARKER in site_descriptor.url.lower():
+                # A personal site has exactly one user OneDrive; refuse to guess
+                # when the lookup is ambiguous rather than index an arbitrary
+                # library.
+                if len(onedrive_matches) == 1:
+                    matched = onedrive_matches
+                elif len(onedrive_matches) > 1:
+                    logger.warning(
+                        "Could not unambiguously resolve the primary OneDrive "
+                        "for personal site '%s' (%d candidate drives: %s)",
+                        site_descriptor.url,
+                        len(onedrive_matches),
+                        [d.name for d in onedrive_matches],
+                    )
+            elif onedrive_matches:
+                matched = [onedrive_matches[0]]
+
         if not matched:
             logger.warning("Drive '%s' not found", drive_name)
             return None
@@ -1915,10 +1963,10 @@ class SharepointConnector(
         params: dict[str, str] | None = None,
     ) -> dict[str, Any]:
         """Make an authenticated GET request to the Graph API with retry."""
-        access_token = self._get_graph_access_token()
-        headers = {"Authorization": f"Bearer {access_token}"}
-
         for attempt in range(GRAPH_API_MAX_RETRIES + 1):
+            # Tokens can expire during long traversals — re-acquire per attempt.
+            access_token = self._get_graph_access_token()
+            headers = {"Authorization": f"Bearer {access_token}"}
             try:
                 response = requests.get(
                     url,
@@ -1928,37 +1976,31 @@ class SharepointConnector(
                 )
                 if response.status_code in GRAPH_API_RETRYABLE_STATUSES:
                     if attempt < GRAPH_API_MAX_RETRIES:
-                        parsed_retry_after = parse_retry_after_seconds(
-                            response.headers.get("Retry-After")
+                        wait = _backoff_seconds(
+                            attempt, response.headers.get("Retry-After")
                         )
-                        retry_after = (
-                            parsed_retry_after
-                            if parsed_retry_after is not None
-                            else float(2**attempt)
-                        )
-                        wait = min(retry_after, 60)
                         logger.warning(
-                            "Graph API %s on attempt %s, retrying in %ss: %s",
+                            "Graph API %s on attempt %s, retrying in %.1fs: %s",
                             response.status_code,
                             attempt + 1,
                             wait,
                             url,
                         )
                         time.sleep(wait)
-                        # Re-acquire token in case it expired during a long traversal
-                        access_token = self._get_graph_access_token()
-                        headers = {"Authorization": f"Bearer {access_token}"}
                         continue
                 _log_and_raise_for_status(response)
+                # ValueError covers the empty/non-JSON 2xx bodies Graph
+                # intermittently returns under load.
                 return response.json()
-            except (requests.ConnectionError, requests.Timeout):
+            except TRANSIENT_TRANSPORT_EXCEPTIONS + (ValueError,) as e:
                 if attempt < GRAPH_API_MAX_RETRIES:
-                    wait = min(2**attempt, 60)
+                    wait = _backoff_seconds(attempt, retry_after=None)
                     logger.warning(
-                        "Graph API connection error on attempt %s, retrying in %ss: %s",
+                        "Graph API transient error on attempt %s, retrying in %.1fs: %s (%r)",
                         attempt + 1,
                         wait,
                         url,
+                        e,
                     )
                     time.sleep(wait)
                     continue

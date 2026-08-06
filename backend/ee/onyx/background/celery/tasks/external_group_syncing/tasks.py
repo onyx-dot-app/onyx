@@ -160,7 +160,7 @@ def _is_external_group_sync_due(cc_pair: ConnectorCredentialPair) -> bool:
     return False
 
 
-@shared_task(
+@shared_task(  # ty: ignore[invalid-argument-type]
     name=OnyxCeleryTask.CHECK_FOR_EXTERNAL_GROUP_SYNC,
     ignore_result=True,
     soft_time_limit=JOB_TIMEOUT,
@@ -346,7 +346,7 @@ def try_creating_external_group_sync_task(
     return payload_id
 
 
-@shared_task(
+@shared_task(  # ty: ignore[invalid-argument-type]
     name=OnyxCeleryTask.CONNECTOR_EXTERNAL_GROUP_SYNC_GENERATOR_TASK,
     acks_late=False,
     soft_time_limit=JOB_TIMEOUT,

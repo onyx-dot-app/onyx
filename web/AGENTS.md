@@ -208,14 +208,20 @@ be a single DOM element. Interactive primitives and buttons manage their own dis
 
 A standardized way to provide "opacity-100 on hover" behavior. Instead of manually wiring
 `opacity-0 group-hover:opacity-100` with Tailwind, use `Hoverable` for consistent, coordinated
-hover-to-reveal patterns.
+hover-to-reveal patterns. It is entirely CSS-driven (no React state), and on devices whose
+primary input cannot hover (touch), items are always shown in their revealed state so actions
+stay reachable on mobile.
 
-- **`Hoverable.Root`** — Wraps a hover group. Tracks mouse enter/leave and broadcasts hover
-  state to descendants via a per-group React context.
+- **`Hoverable.Root`** — Wraps a hover group. Renders a container with a `data-hover-group`
+  attribute; CSS `:hover`/`:focus-within` on it reveals descendant items.
 - **`Hoverable.Item`** — Marks an element that should appear on hover. Supports two modes:
-  - **Group mode** (`group` prop provided): visibility driven by a matching `Hoverable.Root`
-    ancestor. Throws if no matching Root is found.
+  - **Group mode** (`group` prop provided): visibility driven by CSS `:hover` on the
+    `Hoverable.Root` ancestor.
   - **Local mode** (`group` omitted): uses CSS `:hover` on the item itself.
+
+For hover-reveal styling that cannot go through `Hoverable`, pair the hover utilities with the
+`no-hover:` variant (defined in opal's `_reference.css`, matching `@media (hover: none)`) so the
+element stays visible on touch devices, e.g. `opacity-0 group-hover:opacity-100 no-hover:opacity-100`.
 
 ```typescript
 import { Hoverable } from "@opal/core";
@@ -437,7 +443,7 @@ function ContactForm() {
 - **Text:** `text-01` through `text-05`, `text-inverted-XX`
 - **Backgrounds:** `background-neutral-XX`, `background-tint-XX` (and inverted variants)
 - **Borders:** `border-01` through `border-05`, `border-inverted-XX`
-- **Actions:** `action-link-XX`, `action-danger-XX`
+- **Actions:** `action-selection-XX`, `action-danger-XX`
 - **Status:** `status-info-XX`, `status-success-XX`, `status-warning-XX`, `status-error-XX`
 - **Theme:** `theme-primary-XX`, `theme-red-XX`, `theme-blue-XX`, etc.
 
@@ -446,7 +452,7 @@ function ContactForm() {
 <div className="bg-background-neutral-01 border border-border-02" />
 <div className="bg-background-tint-02 border border-border-01" />
 <div className="bg-status-success-01" />
-<div className="bg-action-link-01" />
+<div className="bg-action-selection-01" />
 <div className="bg-theme-primary-05" />
 
 // ❌ Bad - Do NOT use standard Tailwind colors
@@ -633,3 +639,12 @@ export function useToast() { ... }
 // ❌ Bad — user/session hook dumped in the global hooks directory
 // web/src/hooks/useSessionWatcher.ts
 ```
+
+# Tests
+
+- Jest + React Testing Library guide for component tests: `web/tests/README.md`.
+- Playwright e2e specs live in `web/tests/e2e`; hard rules (Page Object Model, locator priority)
+  are in `web/tests/e2e/README.md`.
+- Run an e2e test with the repo-pinned Playwright: `cd web && bun run playwright <TEST_NAME>`
+  (the `playwright` script expands to `playwright test`; avoid `bunx`/`npx`, which can silently
+  fetch an unpinned version).

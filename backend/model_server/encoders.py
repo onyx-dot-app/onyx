@@ -6,6 +6,7 @@ from fastapi import APIRouter, HTTPException, Request
 
 from model_server.utils import simple_log_function_time
 from onyx.utils.logger import setup_logger
+from shared_configs.configs import DEFAULT_DOCUMENT_ENCODER_MODEL
 from shared_configs.enums import EmbedTextType
 from shared_configs.model_server_models import Embedding, EmbedRequest, EmbedResponse
 
@@ -57,7 +58,8 @@ def get_embedding_model(
         logger.notice("Loading %s", model_name)
         model = SentenceTransformer(
             model_name_or_path=model_name,
-            trust_remote_code=True,
+            local_files_only=model_name == DEFAULT_DOCUMENT_ENCODER_MODEL,
+            trust_remote_code=False,
         )
         model.max_seq_length = max_context_length
         _prewarm_rope(model, max_context_length)

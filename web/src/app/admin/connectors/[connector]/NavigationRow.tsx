@@ -1,24 +1,28 @@
+"use client";
+
 import { useFormContext } from "@/components/context/FormContext";
 import { Button } from "@opal/components";
 import { SvgArrowLeft, SvgArrowRight, SvgPlusCircle } from "@opal/icons";
 
-const NavigationRow = ({
-  noAdvanced,
-  noCredentials,
-  activatedCredential,
-  onSubmit,
-  isValid,
-}: {
+interface NavigationRowProps {
   isValid: boolean;
   onSubmit: () => void;
   noAdvanced: boolean;
   noCredentials: boolean;
   activatedCredential: boolean;
-}) => {
+}
+
+export default function NavigationRow({
+  noAdvanced,
+  noCredentials,
+  activatedCredential,
+  onSubmit,
+  isValid,
+}: NavigationRowProps) {
   const { formStep, prevFormStep, nextFormStep } = useFormContext();
 
   return (
-    <div className="mt-4 w-full grid grid-cols-3">
+    <div className="py-4 w-full grid grid-cols-3">
       <div>
         {((formStep > 0 && !noCredentials) ||
           (formStep > 1 && !noAdvanced)) && (
@@ -66,5 +70,4 @@ const NavigationRow = ({
       </div>
     </div>
   );
-};
-export default NavigationRow;
+}

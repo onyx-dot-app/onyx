@@ -65,6 +65,37 @@ repos:
         pass_filenames: true
         files: ^backend/(?!\.venv/|scripts/).*\.py$
       - id: uv-run
+        alias: docker-compose-sync
+        name: sync docker compose files from template
+        # Regenerates docker-compose.yml / docker-compose.prod.yml /
+        # docker-compose.prod-no-letsencrypt.yml from docker-compose.template.yml,
+        # then refreshes the copies of the guided-install deployment files that
+        # onyx-cli embeds (cli/internal/deploy/deployfiles/embedded/).
+        # `ods generate-compose` ships in onyx-devtools (tools/ods); changes to the
+        # generator need an ods release before this hook picks them up — until the
+        # release that adds the embedded-copy sync, the extra trigger paths below
+        # are harmless no-ops (the cli module's drift test still gates staleness).
+        args:
+          ["--no-project", "--with=onyx-devtools", "ods", "generate-compose", "--write"]
+        pass_filenames: false
+        files: >-
+          (?x)^(
+            deployment/docker_compose/(
+              docker-compose\.template\.yml
+              |docker-compose\.yml
+              |docker-compose\.prod\.yml
+              |docker-compose\.prod-no-letsencrypt\.yml
+              |docker-compose\.onyx-lite\.yml
+              |docker-compose\.craft\.yml
+              |env\.template
+              |env\.prod\.template
+              |env\.nginx\.template
+              |README\.md
+            )
+            |deployment/data/nginx/(app\.conf\.template|app\.conf\.template\.prod|run-nginx\.sh)
+            |cli/internal/deploy/deployfiles/embedded/.+
+          )$
+      - id: uv-run
         alias: ty
         name: ty
         args: ["ty", "check"]
@@ -94,13 +125,13 @@ repos:
         # of uv's project handling, so config still applies. Keep the pinned
         # version in sync with `ruff` in the dev dependency group in
         # pyproject.toml.
-        args: ["--no-project", "--with=ruff==0.15.21", "ruff", "check", "--fix"]
+        args: ["--no-project", "--with=ruff==0.16.0", "ruff", "check", "--fix"]
         pass_filenames: true
         types_or: [python]
       - id: uv-run
         alias: ruff-format
         name: ruff format
-        args: ["--no-project", "--with=ruff==0.15.21", "ruff", "format"]
+        args: ["--no-project", "--with=ruff==0.16.0", "ruff", "format"]
         pass_filenames: true
         types_or: [python]
       - id: uv-run
@@ -151,7 +182,7 @@ repos:
     rev: 5d1e709b7be35cb2025444e19de266b056b7b7ee # frozen: v2.10.1
     hooks:
       - id: golangci-lint
-        language_version: "1.26.4"
+        language_version: "1.26.5"
         entry: bash -c "find . -name go.mod -not -path './.venv/*' -print0 | xargs -0 -I{} bash -c 'cd \"$(dirname {})\" && golangci-lint run ./...'"
 
   - repo: https://github.com/sirwart/ripsecrets

@@ -17,7 +17,7 @@ permissions:
   contents: read # needed to checkout the repo on private repos (no-op on public)
 
 env:
-  GO_VERSION: "1.26.4"
+  GO_VERSION: "1.26.5"
 
 jobs:
   detect-modules:
@@ -43,7 +43,7 @@ jobs:
       - uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # ratchet:actions/checkout@v6
         with:
           persist-credentials: false
-      - uses: actions/setup-go@4a3601121dd01d1626a1e23e37211e3254c1c06c # zizmor: ignore[cache-poisoning]
+      - uses: actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e # zizmor: ignore[cache-poisoning]
         with:
           go-version: ${{ env.GO_VERSION }}
           cache-dependency-path: "**/go.sum"
@@ -53,5 +53,5 @@ jobs:
       - run: git diff --exit-code go.mod go.sum
         working-directory: ${{ matrix.modules }}
 
-      - run: go test ./...
+      - run: go test -race ./...
         working-directory: ${{ matrix.modules }}

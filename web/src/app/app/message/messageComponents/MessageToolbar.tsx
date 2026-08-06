@@ -347,6 +347,7 @@ export default function MessageToolbar({
                       });
                     }}
                     temperatureManager={llmManager}
+                    reasoningManager={llmManager}
                   />
                 </div>
               )}

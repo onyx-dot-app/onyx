@@ -105,6 +105,9 @@ class PortAttemptStatus(str, PyEnum):
     SUCCESS = "SUCCESS"
     FAILED = "FAILED"
     CANCELED = "CANCELED"
+    # Auto-parked failing unit; non-terminal + non-settled so it blocks the swap until
+    # the operator resumes or skips.
+    PAUSED = "PAUSED"
 
     def is_terminal(self) -> bool:
         return self in {
@@ -115,6 +118,11 @@ class PortAttemptStatus(str, PyEnum):
 
     def is_successful(self) -> bool:
         return self == PortAttemptStatus.SUCCESS
+
+    def is_resting(self) -> bool:
+        # terminal + PAUSED: the owning task must stop, else a stall-failed-then-paused
+        # worker could drive a paused attempt back to SUCCESS
+        return self.is_terminal() or self == PortAttemptStatus.PAUSED
 
 
 class IndexingMode(str, PyEnum):
@@ -207,6 +215,22 @@ class IndexModelStatus(str, PyEnum):
 
     def is_future(self) -> bool:
         return self == IndexModelStatus.FUTURE
+
+
+class IndexReclaimStatus(str, PyEnum):
+    """Lifecycle of reclaiming a now-PAST index's data after a reindex-port.
+
+    PENDING: consented at reindex submit; waiting for the swap + port to drain.
+    SOAKING: the old index stopped being read; waiting out the retention window.
+    DELETING: deleting the old index's data (loops until count-verified empty).
+    BLOCKED: parked after repeated failures; alerted, needs operator/cooldown revival.
+    On success the PAST row is deleted, so there is no persisted terminal state.
+    """
+
+    PENDING = "PENDING"
+    SOAKING = "SOAKING"
+    DELETING = "DELETING"
+    BLOCKED = "BLOCKED"
 
 
 class ChatSessionSharedStatus(str, PyEnum):
@@ -309,8 +333,20 @@ class OpenSearchTenantMigrationStatus(str, PyEnum):
 
 # Onyx Build Mode Enums
 class BuildSessionStatus(str, PyEnum):
+    """Lifecycle of a build session.
+
+    INITIALIZING: reserved identity committed; workspace/OpenCode setup is
+                  still reconciling (or was interrupted and is repairable).
+    ACTIVE:       workspace, config, and OpenCode session are usable.
+    IDLE:         sandbox slept; workspace must be restored before use.
+    FAILED:       initialization failed after the sandbox came up; the
+                  session identity is retained and repaired on retry.
+    """
+
+    INITIALIZING = "initializing"
     ACTIVE = "active"
     IDLE = "idle"
+    FAILED = "failed"
 
 
 class SessionOrigin(str, PyEnum):
@@ -537,6 +573,7 @@ class LLMModelFlowType(str, PyEnum):
     VISION = "vision"
     CONTEXTUAL_RAG = "contextual_rag"
     REASONING = "reasoning"
+    CHAT_NAMING = "chat_naming"
 
 
 class HookPoint(str, PyEnum):
@@ -578,6 +615,7 @@ class Permission(str, PyEnum):
     WRITE_CHAT = "write:chat"
     READ_ADMIN = "read:admin"
     GENERATE_IMAGE = "generate:image"
+    USE_LLM_GATEWAY = "use:llm_gateway"
 
     # Add / Manage pairs
     ADD_AGENTS = "add:agents"
@@ -619,6 +657,7 @@ Permission.IMPLIED = frozenset(
         Permission.WRITE_CHAT,
         Permission.READ_ADMIN,
         Permission.GENERATE_IMAGE,
+        Permission.USE_LLM_GATEWAY,
     }
 )
 

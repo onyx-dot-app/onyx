@@ -27,13 +27,17 @@ import { MinimalAgent } from "@/lib/agents/types";
 import {
   DefaultModel,
   LLMProviderDescriptor,
+  ReasoningEffortOverride,
 } from "@/lib/languageModels/types";
 import { isAnthropic } from "@/lib/languageModels/svc";
 import { getSourceMetadataForSources } from "./sources";
 import { DEFAULT_AGENT_ID, NEXT_PUBLIC_CLOUD_ENABLED } from "./constants";
 import { useUser } from "@/providers/UserProvider";
 import { SEARCH_TOOL_ID } from "@/app/app/components/tools/constants";
-import { updateTemperatureOverrideForChatSession } from "@/app/app/services/lib";
+import {
+  updateReasoningEffortForChatSession,
+  updateTemperatureOverrideForChatSession,
+} from "@/app/app/services/lib";
 import { useLLMProviders } from "@/lib/languageModels/hooks";
 import { SWR_KEYS } from "@/lib/swr-keys";
 
@@ -395,6 +399,8 @@ export interface LlmDescriptor {
   name: string;
   provider: string;
   modelName: string;
+  // Provider display names are not unique; only the id routes unambiguously.
+  modelConfigurationId?: number | null;
 }
 
 export interface LlmManager {
@@ -402,6 +408,17 @@ export interface LlmManager {
   updateCurrentLlm: (newOverride: LlmDescriptor) => void;
   temperature: number;
   updateTemperature: (temperature: number) => void;
+  /** True once updateTemperature was called for the current session, marking
+   * an explicit choice vs the 0/0.5 heuristic default. */
+  temperatureExplicitlySet: boolean;
+  reasoningEffort: ReasoningEffortOverride | null;
+  updateReasoningEffort: (effort: ReasoningEffortOverride | null) => void;
+  /** True when updates persist to a session row at selection time. */
+  hasBoundSession: boolean;
+  /** Ensure the session row reflects the local override selections. No-op
+   * when the session is bound and every selection is confirmed persisted.
+   * Throws when a write fails, leaving the overrides unconfirmed for retry. */
+  persistOverrides: (sessionId: string) => Promise<void>;
   updateModelOverrideBasedOnChatSession: (chatSession?: ChatSession) => void;
   imageFilesPresent: boolean;
   updateImageFilesPresent: (present: boolean) => void;
@@ -464,6 +481,9 @@ export function getDefaultLlmDescriptor(
         name: provider.name ?? "",
         provider: provider.provider,
         modelName: defaultText.model_name,
+        modelConfigurationId: provider.model_configurations.find(
+          (m) => m.name === defaultText.model_name
+        )?.id,
       };
     }
   }
@@ -478,6 +498,7 @@ export function getDefaultLlmDescriptor(
     return {
       name: firstLlmProvider.name ?? "",
       provider: firstLlmProvider.provider,
+      modelConfigurationId: firstModel?.id,
       modelName: firstModel?.name ?? "",
     };
   }
@@ -497,6 +518,24 @@ export function getValidLlmDescriptorForProviders(
 
   if (modelName) {
     const model = parseLlmDescriptor(modelName);
+
+    // An id resolves exactly even when providers share a display name.
+    if (model.modelConfigurationId != null) {
+      for (const provider of llmProviders) {
+        const mc = provider.model_configurations.find(
+          (config) => config.id === model.modelConfigurationId
+        );
+        if (mc) {
+          return {
+            name: provider.name ?? "",
+            provider: provider.provider,
+            modelName: mc.name,
+            modelConfigurationId: mc.id,
+          };
+        }
+      }
+    }
+
     // If we have no parsed modelName, try to find the provider by the raw modelName string
     if (!(model.modelName && model.modelName.length > 0)) {
       const provider = llmProviders.find((p) =>
@@ -509,6 +548,9 @@ export function getValidLlmDescriptorForProviders(
           modelName: modelName,
           name: provider.name ?? "",
           provider: provider.provider,
+          modelConfigurationId: provider.model_configurations.find(
+            (mc) => mc.name === modelName
+          )?.id,
         };
       }
     }
@@ -532,6 +574,9 @@ export function getValidLlmDescriptorForProviders(
           ...model,
           name: matchingProvider.name ?? "",
           provider: matchingProvider.provider,
+          modelConfigurationId: matchingProvider.model_configurations.find(
+            (mc) => mc.name === model.modelName
+          )?.id,
         };
       }
       // Provider info was present but not found - fall through to default
@@ -548,6 +593,9 @@ export function getValidLlmDescriptorForProviders(
           ...model,
           provider: provider.provider,
           name: provider.name ?? "",
+          modelConfigurationId: provider.model_configurations.find(
+            (mc) => mc.name === model.modelName
+          )?.id,
         };
       }
     }
@@ -700,7 +748,9 @@ export function useLlmManager(
     if (
       prev.name === resolved.name &&
       prev.provider === resolved.provider &&
-      prev.modelName === resolved.modelName
+      prev.modelName === resolved.modelName &&
+      (prev.modelConfigurationId ?? null) ===
+        (resolved.modelConfigurationId ?? null)
     ) {
       return prev;
     }
@@ -765,6 +815,48 @@ export function useLlmManager(
     return 0.5;
   });
 
+  const [reasoningEffort, setReasoningEffort] =
+    useState<ReasoningEffortOverride | null>(
+      currentChatSession?.current_reasoning_effort_override ?? null
+    );
+  const [temperatureExplicitlySet, setTemperatureExplicitlySet] =
+    useState(false);
+
+  // A selection bumps selectionGen alongside its value, and a confirmed
+  // persist records the generation whose values it wrote. Overrides are
+  // unconfirmed while persistedGen trails, so a selection made mid-persist
+  // can never be marked clean by an older persist completing.
+  const [selectionGen, setSelectionGen] = useState(0);
+  const persistedGenRef = useRef(0);
+
+  // Serializes every override PUT so an older selection can never land on
+  // the server after a newer one. persistOverrides joins the same chain.
+  const overrideWriteChainRef = useRef<Promise<unknown>>(Promise.resolve());
+  const enqueueOverrideWrite = (
+    write: () => Promise<Response>
+  ): Promise<Response> => {
+    const next = overrideWriteChainRef.current.then(write, write);
+    overrideWriteChainRef.current = next.catch(() => undefined);
+    return next;
+  };
+
+  // Adopt the stored reasoning override (and reset the explicit-temperature
+  // flag) only when session identity changes. Keying on identity, not the
+  // object, keeps new-chat dep churn from wiping a pre-first-message choice.
+  const prevSessionIdRef = useRef<string | null>(
+    currentChatSession?.id ?? null
+  );
+  useEffect(() => {
+    const sessionId = currentChatSession?.id ?? null;
+    if (prevSessionIdRef.current === sessionId) return;
+    prevSessionIdRef.current = sessionId;
+    setTemperatureExplicitlySet(false);
+    persistedGenRef.current = selectionGen;
+    setReasoningEffort(
+      currentChatSession?.current_reasoning_effort_override ?? null
+    );
+  }, [currentChatSession]);
+
   const maxTemperature = useMemo(() => {
     // Check currentLlm first, fall back to chat session model if currentLlm isn't populated
     if (currentLlm.provider) {
@@ -785,18 +877,26 @@ export function useLlmManager(
     if (isAnthropic(currentLlm.provider, currentLlm.modelName)) {
       const newTemperature = Math.min(temperature, 1.0);
       setTemperature(newTemperature);
-      if (chatSession?.id) {
-        updateTemperatureOverrideForChatSession(chatSession.id, newTemperature);
+      const sessionId = chatSession?.id;
+      if (sessionId) {
+        void enqueueOverrideWrite(() =>
+          updateTemperatureOverrideForChatSession(sessionId, newTemperature)
+        );
       }
     }
   }, [currentLlm]);
 
   useEffect(() => {
     if (!chatSession && currentChatSession) {
+      const sessionId = currentChatSession.id;
       if (temperature) {
-        updateTemperatureOverrideForChatSession(
-          currentChatSession.id,
-          temperature
+        void enqueueOverrideWrite(() =>
+          updateTemperatureOverrideForChatSession(sessionId, temperature)
+        );
+      }
+      if (reasoningEffort) {
+        void enqueueOverrideWrite(() =>
+          updateReasoningEffortForChatSession(sessionId, reasoningEffort)
         );
       }
       return;
@@ -823,9 +923,57 @@ export function useLlmManager(
       ? Math.min(temperature, 1.0)
       : temperature;
     setTemperature(clampedTemp);
-    if (chatSession) {
-      updateTemperatureOverrideForChatSession(chatSession.id, clampedTemp);
+    setTemperatureExplicitlySet(true);
+    setSelectionGen((generation) => generation + 1);
+    const sessionId = chatSession?.id;
+    if (sessionId) {
+      void enqueueOverrideWrite(() =>
+        updateTemperatureOverrideForChatSession(sessionId, clampedTemp)
+      );
     }
+  };
+
+  const updateReasoningEffort = (effort: ReasoningEffortOverride | null) => {
+    setReasoningEffort(effort);
+    setSelectionGen((generation) => generation + 1);
+    const sessionId = chatSession?.id;
+    if (sessionId) {
+      void enqueueOverrideWrite(() =>
+        updateReasoningEffortForChatSession(sessionId, effort)
+      );
+    }
+  };
+
+  const persistOverrides = async (sessionId: string): Promise<void> => {
+    // selectionGen is render-captured with the values below, so this persist
+    // confirms exactly the generation whose values it writes.
+    if (chatSession != null && persistedGenRef.current >= selectionGen) {
+      return;
+    }
+    const writes: Promise<Response>[] = [];
+    if (reasoningEffort) {
+      writes.push(
+        enqueueOverrideWrite(() =>
+          updateReasoningEffortForChatSession(sessionId, reasoningEffort)
+        )
+      );
+    }
+    if (temperatureExplicitlySet) {
+      writes.push(
+        enqueueOverrideWrite(() =>
+          updateTemperatureOverrideForChatSession(sessionId, temperature)
+        )
+      );
+    }
+    if (writes.length === 0) return;
+    const responses = await Promise.all(writes);
+    const failed = responses.find((response) => !response.ok);
+    if (failed) {
+      throw new Error(
+        `Failed to persist chat session overrides: ${failed.status}`
+      );
+    }
+    persistedGenRef.current = Math.max(persistedGenRef.current, selectionGen);
   };
 
   // Track if any provider exists for the current persona context.
@@ -839,6 +987,11 @@ export function useLlmManager(
     updateCurrentLlm,
     temperature,
     updateTemperature,
+    temperatureExplicitlySet,
+    reasoningEffort,
+    updateReasoningEffort,
+    hasBoundSession: chatSession != null,
+    persistOverrides,
     imageFilesPresent,
     updateImageFilesPresent,
     liveAgent: liveAgent ?? null,

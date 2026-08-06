@@ -125,7 +125,7 @@ class TestQueueDepthBackpressure:
             ),
         ):
             check_user_file_processing.run(
-                tenant_id=POSTGRES_DEFAULT_SCHEMA_STANDARD_VALUE
+                tenant_id=POSTGRES_DEFAULT_SCHEMA_STANDARD_VALUE  # ty: ignore[invalid-argument-type]
             )
 
         mock_app.send_task.assert_not_called()
@@ -157,7 +157,7 @@ class TestPerFileGuardKey:
                 patch(_PATCH_QUEUE_LEN, return_value=0),
             ):
                 check_user_file_processing.run(
-                    tenant_id=POSTGRES_DEFAULT_SCHEMA_STANDARD_VALUE
+                    tenant_id=POSTGRES_DEFAULT_SCHEMA_STANDARD_VALUE  # ty: ignore[invalid-argument-type]
                 )
 
             # send_task must not have been called with this specific file's ID
@@ -192,7 +192,7 @@ class TestPerFileGuardKey:
                 patch(_PATCH_QUEUE_LEN, return_value=0),
             ):
                 check_user_file_processing.run(
-                    tenant_id=POSTGRES_DEFAULT_SCHEMA_STANDARD_VALUE
+                    tenant_id=POSTGRES_DEFAULT_SCHEMA_STANDARD_VALUE  # ty: ignore[invalid-argument-type]
                 )
 
             assert redis_client.exists(guard_key), (
@@ -232,7 +232,7 @@ class TestTaskExpiry:
                 patch(_PATCH_QUEUE_LEN, return_value=0),
             ):
                 check_user_file_processing.run(
-                    tenant_id=POSTGRES_DEFAULT_SCHEMA_STANDARD_VALUE
+                    tenant_id=POSTGRES_DEFAULT_SCHEMA_STANDARD_VALUE  # ty: ignore[invalid-argument-type]
                 )
 
             # At least one task should have been submitted (for our file)
@@ -286,8 +286,8 @@ class TestWorkerClearsGuardKey:
 
         try:
             process_single_user_file.run(
-                user_file_id=user_file_id,
-                tenant_id=POSTGRES_DEFAULT_SCHEMA_STANDARD_VALUE,
+                user_file_id=user_file_id,  # ty: ignore[invalid-argument-type]
+                tenant_id=POSTGRES_DEFAULT_SCHEMA_STANDARD_VALUE,  # ty: ignore[invalid-argument-type]
             )
         finally:
             if processing_lock.owned():

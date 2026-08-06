@@ -565,6 +565,7 @@ def get_accessible_documents_for_hierarchy_node_paginated(
     parent_hierarchy_node_id: int,
     user_email: str | None,
     external_group_ids: list[str],
+    user_id: UUID | None,
     limit: int,
     # Sort options
     sort_by_name: bool = False,
@@ -580,7 +581,9 @@ def get_accessible_documents_for_hierarchy_node_paginated(
     stmt = select(DbDocument).where(
         DbDocument.parent_hierarchy_node_id == parent_hierarchy_node_id
     )
-    stmt = apply_document_access_filter(stmt, user_email, external_group_ids)
+    stmt = apply_document_access_filter(
+        stmt, user_email, external_group_ids, user_id=user_id
+    )
 
     # Apply cursor filter based on sort type and direction
     if sort_by_name:
@@ -902,7 +905,7 @@ def upsert_documents(
         # Use COALESCE to preserve existing permissions when new values are NULL.
         # This prevents subsequent indexing runs (which don't fetch permissions)
         # from overwriting permissions set by permission sync jobs.
-        update_set.update(  # ty: ignore[no-matching-overload]
+        update_set.update(
             {
                 "external_user_emails": func.coalesce(
                     insert_stmt.excluded.external_user_emails,
@@ -1082,31 +1085,46 @@ def mark_document_as_modified(
     db_session.commit()
 
 
-def mark_document_as_synced(document_id: str, db_session: Session) -> None:
+def mark_document_as_synced(
+    document_id: str,
+    db_session: Session,
+    synced_as_of: datetime | None = None,
+) -> None:
+    """``synced_as_of``: the doc's ``last_modified`` captured when the synced
+    state was read. Stamping that watermark (not now()) keeps a doc that was
+    modified during the index write stale, so the newer state re-syncs."""
     stmt = select(DbDocument).where(DbDocument.id == document_id)
     doc = db_session.scalar(stmt)
     if doc is None:
         raise ValueError(f"No document with ID: {document_id}")
 
     # update last_synced
-    doc.last_synced = datetime.now(timezone.utc)
+    doc.last_synced = (
+        synced_as_of if synced_as_of is not None else datetime.now(timezone.utc)
+    )
     # reaching here means every index synced, so clear any deferred FUTURE write
     doc.secondary_only_sync_pending = False
     db_session.commit()
 
 
 def mark_document_synced_secondary_pending(
-    document_id: str, db_session: Session
+    document_id: str,
+    db_session: Session,
+    synced_as_of: datetime | None = None,
 ) -> None:
     """Reindex-port: PRESENT synced but the doc wasn't in FUTURE yet. Clear
     needs-sync and flag the deferred FUTURE write, in one commit. Cleared later by
-    mark_document_as_synced once a sync reaches FUTURE."""
+    mark_document_as_synced once a sync reaches FUTURE.
+
+    ``synced_as_of``: see mark_document_as_synced."""
     stmt = select(DbDocument).where(DbDocument.id == document_id)
     doc = db_session.scalar(stmt)
     if doc is None:
         raise ValueError(f"No document with ID: {document_id}")
 
-    doc.last_synced = datetime.now(timezone.utc)
+    doc.last_synced = (
+        synced_as_of if synced_as_of is not None else datetime.now(timezone.utc)
+    )
     doc.secondary_only_sync_pending = True
     db_session.commit()
 

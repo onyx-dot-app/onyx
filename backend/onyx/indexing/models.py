@@ -289,4 +289,5 @@ class IndexingBatchAdapter(Protocol):
         filtered_documents: list[Document],
         enrichment: ChunkEnrichmentContext,
         db_session: Session,
+        index_to_secondary: bool,
     ) -> None: ...

@@ -229,7 +229,7 @@ class TestApplyUserPatch:
         """Entra ID sends ``"Replace"`` instead of ``"replace"``."""
         user = _make_user()
         op = ScimPatchOperation(
-            op="Replace",  # ty: ignore[invalid-argument-type]
+            op="Replace",
             path="active",
             value=False,
         )
@@ -240,7 +240,7 @@ class TestApplyUserPatch:
         """Entra ID sends ``"Add"`` instead of ``"add"``."""
         user = _make_user()
         op = ScimPatchOperation(
-            op="Add",  # ty: ignore[invalid-argument-type]
+            op="Add",
             path="externalId",
             value="ext-999",
         )

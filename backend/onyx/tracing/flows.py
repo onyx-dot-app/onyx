@@ -30,6 +30,10 @@ class LLMFlow(StrEnum):
 
     # Build session (assistants)
     BUILD_SESSION_NAMING = "build_session_naming"
+    CRAFT_LLM_GENERATION = "craft_llm_generation"
+
+    # LLM gateway (external clients via use:llm_gateway PATs)
+    LLM_GATEWAY = "llm_gateway"
 
     # Federated search helpers
     SLACK_DATE_EXTRACTION = "slack_date_extraction"

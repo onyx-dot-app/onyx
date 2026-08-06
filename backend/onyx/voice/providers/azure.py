@@ -43,12 +43,74 @@ from onyx.voice.interface import (
     VoiceProviderInterface,
 )
 
+logger = setup_logger()
+
 # SSML namespace — W3C standard for Speech Synthesis Markup Language.
 # This is a fixed W3C specification and will not change.
 SSML_NAMESPACE = "http://www.w3.org/2001/10/synthesis"
 
-# Common Azure Neural voices
+# Locale shape (en-US, iu-Latn-CA); doubles as an SSML attribute injection guard.
+AZURE_LOCALE_PATTERN = re.compile(r"^[A-Za-z]{2,3}(-[A-Za-z]{2,8}){1,2}$")
+
+DEFAULT_LOCALE = "en-US"
+
+# Azure caps language-identification candidates at 10 for continuous LID and
+# 4 for at-start LID (the self-hosted endpoint path).
+MAX_STT_LANGUAGES = 10
+MAX_AT_START_STT_LANGUAGES = 4
+
+
+def _normalize_stt_language(raw: str) -> str:
+    """Canonicalize casing (en-us -> en-US) so Azure always gets exact locales."""
+    if not AZURE_LOCALE_PATTERN.fullmatch(raw):
+        raise ValueError(
+            f"Invalid Azure STT language {raw!r}. Use locales like 'en-US' or 'fr-FR'."
+        )
+    lang, *rest = raw.split("-")
+    return "-".join(
+        [lang.lower()] + [s.upper() if len(s) == 2 else s.capitalize() for s in rest]
+    )
+
+
+def _parse_stt_languages(value: Any) -> list[str]:
+    if value is None:
+        return [DEFAULT_LOCALE]
+    if not isinstance(value, list):
+        raise ValueError("stt_languages must be a list of locales like ['fr-FR']")
+    languages = list(
+        dict.fromkeys(
+            _normalize_stt_language(str(item).strip())
+            for item in value
+            if str(item).strip()
+        )
+    )
+    if len(languages) > MAX_STT_LANGUAGES:
+        raise ValueError(
+            f"Azure supports at most {MAX_STT_LANGUAGES} STT languages; got {len(languages)}."
+        )
+    bases = [lang.split("-", 1)[0] for lang in languages]
+    if len(set(bases)) != len(bases):
+        raise ValueError(
+            "Azure language detection allows one locale per language "
+            "(e.g. not both en-US and en-GB)."
+        )
+    return languages or [DEFAULT_LOCALE]
+
+
+def _voice_locale(voice_name: str | None) -> str:
+    """Derive the SSML locale from an Azure voice name (fr-FR-DeniseNeural -> fr-FR)."""
+    locale = "-".join((voice_name or "").split("-")[:-1])
+    return locale if AZURE_LOCALE_PATTERN.fullmatch(locale) else DEFAULT_LOCALE
+
+
+# Curated picker subset — any Azure voice ID can also be typed in. Multilingual
+# voices speak the language of the input text.
 AZURE_VOICES = [
+    {"id": "en-US-AvaMultilingualNeural", "name": "Ava (Multilingual, Female)"},
+    {"id": "en-US-AndrewMultilingualNeural", "name": "Andrew (Multilingual, Male)"},
+    {"id": "fr-FR-DeniseNeural", "name": "Denise (fr-FR, Female)"},
+    {"id": "fr-FR-HenriNeural", "name": "Henri (fr-FR, Male)"},
+    {"id": "fr-CA-SylvieNeural", "name": "Sylvie (fr-CA, Female)"},
     {"id": "en-US-JennyNeural", "name": "Jenny (en-US, Female)"},
     {"id": "en-US-GuyNeural", "name": "Guy (en-US, Male)"},
     {"id": "en-US-AriaNeural", "name": "Aria (en-US, Female)"},
@@ -73,6 +135,7 @@ class AzureStreamingTranscriber(StreamingTranscriberProtocol):
         endpoint: str | None = None,
         input_sample_rate: int = 24000,
         target_sample_rate: int = 16000,
+        languages: list[str] | None = None,
     ):
         self._logger = setup_logger()
         self.api_key = api_key
@@ -80,6 +143,7 @@ class AzureStreamingTranscriber(StreamingTranscriberProtocol):
         self.endpoint = endpoint
         self.input_sample_rate = input_sample_rate
         self.target_sample_rate = target_sample_rate
+        self.languages = languages or [DEFAULT_LOCALE]
         self._transcript_queue: asyncio.Queue[TranscriptResult | None] = asyncio.Queue()
         self._accumulated_transcript = ""
         self._recognizer: Any = None
@@ -98,17 +162,42 @@ class AzureStreamingTranscriber(StreamingTranscriberProtocol):
 
         self._loop = asyncio.get_running_loop()
 
+        multilingual = len(self.languages) > 1
+
         # Use endpoint for self-hosted containers, region for Azure cloud
         if self.endpoint:
             speech_config = speechsdk.SpeechConfig(
                 subscription=self.api_key,
                 endpoint=self.endpoint,
             )
+        elif multilingual:
+            # Continuous LID (language switches mid-session) requires the
+            # universal/v2 endpoint; a region-based config silently falls
+            # back to at-start detection.
+            speech_config = speechsdk.SpeechConfig(
+                subscription=self.api_key,
+                endpoint=f"wss://{self.region}.stt.speech.microsoft.com/speech/universal/v2",
+            )
+            speech_config.set_property(
+                speechsdk.PropertyId.SpeechServiceConnection_LanguageIdMode,
+                "Continuous",
+            )
         else:
             speech_config = speechsdk.SpeechConfig(
                 subscription=self.api_key,
                 region=self.region,
             )
+
+        auto_detect_config = None
+        if multilingual:
+            # Self-hosted containers keep the default at-start detection.
+            auto_detect_config = (
+                speechsdk.languageconfig.AutoDetectSourceLanguageConfig(
+                    languages=self.languages
+                )
+            )
+        else:
+            speech_config.speech_recognition_language = self.languages[0]
 
         audio_format = speechsdk.audio.AudioStreamFormat(
             samples_per_second=16000,
@@ -121,6 +210,7 @@ class AzureStreamingTranscriber(StreamingTranscriberProtocol):
         self._recognizer = speechsdk.SpeechRecognizer(
             speech_config=speech_config,
             audio_config=audio_config,
+            auto_detect_source_language_config=auto_detect_config,
         )
 
         transcriber = self
@@ -256,6 +346,7 @@ class AzureStreamingSynthesizer(StreamingSynthesizerProtocol):
         self.region = region
         self.endpoint = endpoint
         self.voice = voice
+        self._locale = _voice_locale(voice)
         self.speed = max(0.5, min(2.0, speed))
         self._audio_queue: asyncio.Queue[bytes | None] = asyncio.Queue()
         self._synthesizer: Any = None
@@ -324,7 +415,7 @@ class AzureStreamingSynthesizer(StreamingSynthesizerProtocol):
             # Build SSML with prosody for speed control
             rate = f"{int((self.speed - 1) * 100):+d}%"
             escaped_text = escape(text)
-            ssml = f"""<speak version='1.0' xmlns='{SSML_NAMESPACE}' xml:lang='en-US'>
+            ssml = f"""<speak version='1.0' xmlns='{SSML_NAMESPACE}' xml:lang='{self._locale}'>
                 <voice name={quoteattr(self.voice)}>
                     <prosody rate='{rate}'>{escaped_text}</prosody>
                 </voice>
@@ -373,6 +464,15 @@ class AzureVoiceProvider(VoiceProviderInterface):
             or ""
         )
         self.speech_region = self._validate_speech_region(raw_speech_region)
+        self.stt_languages = _parse_stt_languages(custom_config.get("stt_languages"))
+        if (
+            self._is_self_hosted()
+            and len(self.stt_languages) > MAX_AT_START_STT_LANGUAGES
+        ):
+            raise ValueError(
+                "Self-hosted Azure endpoints use at-start detection, which supports "
+                f"at most {MAX_AT_START_STT_LANGUAGES} STT languages."
+            )
         self.stt_model = stt_model
         self.tts_model = tts_model
         self.default_voice = default_voice or "en-US-JennyNeural"
@@ -492,7 +592,12 @@ class AzureVoiceProvider(VoiceProviderInterface):
             content_type = "audio/webm; codecs=opus"
 
         url = self._get_stt_url()
-        params = {"language": "en-US", "format": "detailed"}
+        # The short-audio REST API takes a single language (no auto-detect).
+        if len(self.stt_languages) > 1:
+            logger.warning(
+                "Azure chunked STT cannot auto-detect; using %s", self.stt_languages[0]
+            )
+        params = {"language": self.stt_languages[0], "format": "detailed"}
         headers = {
             "Ocp-Apim-Subscription-Key": self.api_key,
             "Content-Type": content_type,
@@ -551,7 +656,7 @@ class AzureVoiceProvider(VoiceProviderInterface):
 
         # Build SSML with escaped text and quoted attributes to prevent injection
         escaped_text = escape(text)
-        ssml = f"""<speak version='1.0' xmlns='{SSML_NAMESPACE}' xml:lang='en-US'>
+        ssml = f"""<speak version='1.0' xmlns='{SSML_NAMESPACE}' xml:lang='{_voice_locale(voice_name)}'>
             <voice name={quoteattr(voice_name)}>
                 <prosody rate='{rate}'>{escaped_text}</prosody>
             </voice>
@@ -642,6 +747,7 @@ class AzureVoiceProvider(VoiceProviderInterface):
             endpoint=self.api_base if self._is_self_hosted() else None,
             input_sample_rate=24000,
             target_sample_rate=16000,
+            languages=self.stt_languages,
         )
         await transcriber.connect()
         return transcriber

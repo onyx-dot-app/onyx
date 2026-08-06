@@ -85,7 +85,10 @@ def upsert_voice_provider(
     provider.name = name
     provider.provider_type = provider_type
     provider.api_base = api_base
-    provider.custom_config = custom_config
+    # None means "leave unchanged" (pass {} to clear) so partial writers can't
+    # wipe keys like speech_region.
+    if custom_config is not None:
+        provider.custom_config = custom_config
     provider.stt_model = stt_model
     provider.tts_model = tts_model
     provider.default_voice = default_voice

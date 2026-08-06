@@ -363,13 +363,14 @@ const ChatScrollContainer = React.memo(
             data-chat-scroll
             className={cn(
               "flex flex-col flex-1 min-h-0 overflow-y-auto overflow-x-hidden",
-              hideScrollbar ? "no-scrollbar" : "default-scrollbar"
+              hideScrollbar ? "no-scrollbar" : "default-scrollbar",
+              // Full-width (always the case below md) drops the reserved
+              // gutters so content sits flush with the chat edge; centered
+              // mode keeps both-edges to avoid shift.
+              !fullWidth && "md:[scrollbar-gutter:stable_both-edges]"
             )}
             onScroll={handleScroll}
             style={{
-              // Full-width drops the reserved gutters so content sits flush with
-              // the chat edge; centered mode keeps both-edges to avoid shift.
-              scrollbarGutter: fullWidth ? "auto" : "stable both-edges",
               // Apply mask to fade content opacity at edges
               maskImage: contentMask,
               WebkitMaskImage: contentMask,

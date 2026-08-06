@@ -13,10 +13,25 @@ LM_STUDIO_API_KEY_CONFIG_KEY = "LM_STUDIO_API_KEY"
 LITELLM_PROXY_PROVIDER_NAME = "litellm_proxy"
 
 BIFROST_PROVIDER_NAME = "bifrost"
+# Which API surface a Bifrost provider targets; stored in custom_config.
+BIFROST_API_MODE_CONFIG_KEY = "bifrost_api_mode"
+BIFROST_API_MODE_CHAT_COMPLETIONS = "chat_completions"
+BIFROST_API_MODE_RESPONSES = "responses"
+BIFROST_DEFAULT_API_MODE = BIFROST_API_MODE_CHAT_COMPLETIONS
 
 OPENAI_COMPATIBLE_PROVIDER_NAME = "openai_compatible"
 
 NEBIUS_TOKENFACTORY_PROVIDER_NAME = "nebius_tokenfactory"
+
+PORTKEY_PROVIDER_NAME = "portkey"
+# Which API surface a Portkey provider targets; stored in custom_config.
+PORTKEY_API_MODE_CONFIG_KEY = "portkey_api_mode"
+PORTKEY_API_MODE_CHAT_COMPLETIONS = "chat_completions"
+PORTKEY_API_MODE_RESPONSES = "responses"
+PORTKEY_API_MODE_MESSAGES = "messages"
+PORTKEY_DEFAULT_API_MODE = PORTKEY_API_MODE_CHAT_COMPLETIONS
+PORTKEY_DEFAULT_API_BASE_OPENAI = "https://api.portkey.ai/v1"
+PORTKEY_DEFAULT_API_BASE_ANTHROPIC = "https://api.portkey.ai"
 
 # Providers that use optional Bearer auth from custom_config
 PROVIDERS_WITH_SPECIAL_API_KEY_HANDLING: dict[str, str] = {

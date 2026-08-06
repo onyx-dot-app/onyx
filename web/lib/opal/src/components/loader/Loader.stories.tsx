@@ -1,4 +1,4 @@
-import type { Meta, StoryObj } from "@storybook/react";
+import type { Meta, StoryObj } from "@storybook/react-vite";
 import { OnyxLoader, IconLoader } from "@opal/components";
 import { SvgSettings } from "@opal/icons";
 

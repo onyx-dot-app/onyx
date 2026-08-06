@@ -14,6 +14,7 @@ from fastapi import HTTPException
 from starlette.requests import Request
 
 from ee.onyx.server.middleware import tenant_tracking
+from onyx.server.middleware import api_prefix
 from shared_configs.configs import POSTGRES_DEFAULT_SCHEMA
 
 MODULE = "ee.onyx.server.middleware.tenant_tracking"
@@ -22,6 +23,12 @@ MODULE = "ee.onyx.server.middleware.tenant_tracking"
 def _request(headers: dict[str, str] | None = None) -> Request:
     raw = [(k.lower().encode(), v.encode()) for k, v in (headers or {}).items()]
     return Request({"type": "http", "method": "GET", "path": "/me", "headers": raw})
+
+
+def test_custom_api_prefix_allowlist(monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.setattr(api_prefix, "APP_API_PREFIX", "v2")
+    assert tenant_tracking._is_path_allowed("/v2/auth/login") is True
+    assert tenant_tracking._is_path_allowed("/v2/chat") is False
 
 
 @pytest.mark.asyncio

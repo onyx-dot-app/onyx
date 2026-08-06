@@ -24,6 +24,7 @@ from onyx.db.models import (
     Connector,
     ConnectorCredentialPair,
     Credential,
+    ExternalApp__Skill,
     Sandbox,
     Skill,
     User,
@@ -332,10 +333,11 @@ def _rendered_company_search_lines(db_session: Session, user: User) -> list[str]
 
 
 class TestSkillPush:
-    def test_external_app_skill_lands_after_user_authenticates(
+    def test_external_app_skill_requires_authentication_and_selection(
         self,
         k8s_admin_user: DATestUser,
         running_sandbox: Callable[..., SandboxHandle],
+        db_session: Session,
     ) -> None:
         handle = running_sandbox()
         user = handle.api_user
@@ -343,15 +345,30 @@ class TestSkillPush:
         app = ExternalAppManager.create(
             user_performing_action=k8s_admin_user,
             name=f"Credential-gated app {uuid4().hex[:8]}",
-            description="External app hydration integration test",
             upstream_url_patterns=["https://api.example.com/*"],
             auth_template={"Authorization": "Bearer {access_token}"},
             organization_credentials={},
             app_type=ExternalAppType.CUSTOM,
         )
         try:
-            user_app = ExternalAppManager.get_for_user(user, app.id)
-            skill_file = _skill_file_path(workspace, user_app.slug)
+            assert app.associated_skills == []
+            skill_response = _create_skill(
+                k8s_admin_user,
+                f"credential-gated-skill-{uuid4().hex[:8]}",
+                body="credential gated skill body\n",
+            )
+            db_session.expire_all()
+            skill = db_session.get(Skill, skill_response.id)
+            assert skill is not None
+            skill.public_permission = SkillSharePermission.VIEWER
+            db_session.add(
+                ExternalApp__Skill(external_app_id=app.id, skill_id=skill.id)
+            )
+            db_session.commit()
+
+            push_skill_to_affected_sandboxes(skill, db_session)
+            db_session.commit()
+            skill_file = _skill_file_path(workspace, skill.name)
             skill_file.wait_for_absent()
 
             ExternalAppManager.upsert_user_credentials(
@@ -360,7 +377,9 @@ class TestSkillPush:
                 credentials={"access_token": "integration-test-token"},
             )
 
-            skill_file.wait_for_file()
+            skill_file.wait_for_absent()
+            SkillManager.set_enabled(skill_response, user, True)
+            skill_file.wait_for_bytes(b"credential gated skill body\n")
         finally:
             ExternalAppManager.delete(k8s_admin_user, app.id)
 

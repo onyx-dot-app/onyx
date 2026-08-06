@@ -74,6 +74,13 @@ MAX_CHARS_ACROSS_URLS = 10 * MAX_CHARS_PER_URL
 # it still gets included normally.
 MIN_CONTENT_CHARS = 200
 
+# LLM-facing reason used when the chat disabled web access (Web Search off) and
+# a URL couldn't be served from indexed documents.
+WEB_FETCH_DISABLED_REASON = (
+    "not fetched: web access is disabled for this conversation and this URL's "
+    "content is not in the connected knowledge sources"
+)
+
 
 class IndexedDocumentRequest(BaseModel):
     document_id: str
@@ -405,6 +412,12 @@ def _convert_sections_to_llm_string_with_citations(
 class OpenURLTool(Tool[OpenURLToolOverrideKwargs]):
     NAME = "open_url"
     DESCRIPTION = "Open and read the content of one or more URLs."
+    DESCRIPTION_NO_WEB_FETCH = (
+        "Open and read the content of one or more URLs. Web access is "
+        "disabled for this conversation, so only URLs whose content already "
+        "exists in the connected knowledge sources can be read — nothing is "
+        "fetched from the live internet."
+    )
     DISPLAY_NAME = "Open URL"
 
     def __init__(
@@ -414,6 +427,7 @@ class OpenURLTool(Tool[OpenURLToolOverrideKwargs]):
         document_index: DocumentIndex,
         user: User,
         content_provider: WebContentProvider | None = None,
+        web_fetch_disabled: bool = False,
     ) -> None:
         """Initialize the OpenURLTool.
 
@@ -425,14 +439,22 @@ class OpenURLTool(Tool[OpenURLToolOverrideKwargs]):
             content_provider: Optional content provider. If not provided,
                 will use the default provider from the database or fall back
                 to the built-in Onyx web crawler.
+            web_fetch_disabled: When True (e.g. the user turned Web Search off
+                for the chat), URLs are only served from indexed documents —
+                the live-crawl path is never used.
         """
         super().__init__(emitter=emitter)
         self._id = tool_id
         self._document_index = document_index
         self._user = user
+        self._web_fetch_disabled = web_fetch_disabled
 
+        self._provider: WebContentProvider | None
         if content_provider is not None:
             self._provider = content_provider
+        elif web_fetch_disabled:
+            # Indexed-only mode never crawls, so no provider is needed.
+            self._provider = None
         else:
             provider = get_default_content_provider()
             if provider is None:
@@ -453,6 +475,8 @@ class OpenURLTool(Tool[OpenURLToolOverrideKwargs]):
 
     @property
     def description(self) -> str:
+        if self._web_fetch_disabled:
+            return self.DESCRIPTION_NO_WEB_FETCH
         return self.DESCRIPTION
 
     @property
@@ -558,6 +582,14 @@ class OpenURLTool(Tool[OpenURLToolOverrideKwargs]):
                 return None
 
             if DISABLE_VECTOR_DB:
+                if self._web_fetch_disabled:
+                    # No index to serve from and crawling is off — nothing to do.
+                    # (construct_tools normally drops the tool in this config;
+                    # this is a defensive fallback.)
+                    return ToolResponse(
+                        rich_response=None,
+                        llm_facing_response=WEB_FETCH_DISABLED_REASON,
+                    )
                 # Crawl-only: no indexed retrieval / link-based fallback without a vector DB.
                 crawled_result = run_functions_tuples_in_parallel(
                     [
@@ -605,19 +637,41 @@ class OpenURLTool(Tool[OpenURLToolOverrideKwargs]):
                         requests, filters
                     )
 
-                # Indexed + crawl in parallel; allow_failures keeps partial results.
-                indexed_result, crawled_result = run_functions_tuples_in_parallel(
-                    [
-                        (_retrieve_indexed_with_filters, (all_requests,)),
-                        (
-                            self._fetch_web_content,
-                            (urls, override_kwargs.url_snippet_map),
-                        ),
-                    ],
-                    allow_failures=True,
-                    timeout=OPEN_URL_TIMEOUT_SECONDS,
-                    timeout_callback=_timeout_handler,
-                )
+                if self._web_fetch_disabled:
+                    # Indexed-only: never crawl. Unresolved URLs are seeded as
+                    # failed (with the disabled reason) so the link-based
+                    # fallback below still gets a chance to serve them from the
+                    # index; whatever it can't rescue is reported as
+                    # unavailable rather than silently fetched from the web.
+                    indexed_result = run_functions_tuples_in_parallel(
+                        [(_retrieve_indexed_with_filters, (all_requests,))],
+                        allow_failures=True,
+                        timeout=OPEN_URL_TIMEOUT_SECONDS,
+                        timeout_callback=_timeout_handler,
+                    )[0]
+                    crawled_result = (
+                        [],
+                        [
+                            FailedFetch(
+                                url=url, failure_reason=WEB_FETCH_DISABLED_REASON
+                            )
+                            for url in unresolved_urls
+                        ],
+                    )
+                else:
+                    # Indexed + crawl in parallel; allow_failures keeps partial results.
+                    indexed_result, crawled_result = run_functions_tuples_in_parallel(
+                        [
+                            (_retrieve_indexed_with_filters, (all_requests,)),
+                            (
+                                self._fetch_web_content,
+                                (urls, override_kwargs.url_snippet_map),
+                            ),
+                        ],
+                        allow_failures=True,
+                        timeout=OPEN_URL_TIMEOUT_SECONDS,
+                        timeout_callback=_timeout_handler,
+                    )
 
                 indexed_result = indexed_result or IndexedRetrievalResult(
                     sections=[], missing_document_ids=[]
@@ -882,6 +936,13 @@ class OpenURLTool(Tool[OpenURLToolOverrideKwargs]):
     ) -> tuple[list[InferenceSection], list[FailedFetch]]:
         if not urls:
             return [], []
+
+        if self._provider is None:
+            # Only possible in web-fetch-disabled mode, which never routes here.
+            return [], [
+                FailedFetch(url=url, failure_reason=WEB_FETCH_DISABLED_REASON)
+                for url in urls
+            ]
 
         raw_web_contents = self._provider.contents(urls)
         # Track per-URL failure reasons (preferred) but de-dupe by URL since the

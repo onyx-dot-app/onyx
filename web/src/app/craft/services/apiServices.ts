@@ -4,14 +4,13 @@ import {
   ApiMessageResponse,
   ApiInteractiveTurnResponse,
   ApiArtifactResponse,
-  ApiUsageLimitsResponse,
   ApiWebappInfoResponse,
   ApiSandboxStatusResponse,
   SessionHistoryItem,
   Artifact,
+  BuildMessageAttachment,
   BuildMessage,
   StreamPacket,
-  UsageLimits,
   DirectoryListing,
   SharingScope,
   ApiSessionSkillsState,
@@ -21,13 +20,13 @@ import {
   ApprovalSubmitDecision,
   ApprovalView,
 } from "@/app/craft/types/approvals";
+import {
+  RATE_LIMITED_ERROR_CODE,
+  RateLimitDetails,
+} from "@/app/app/interfaces";
 import { BUILD_API_BASE } from "@/app/craft/v1/constants";
-
-// =============================================================================
-// API Configuration
-// =============================================================================
-
-export const USAGE_LIMITS_ENDPOINT = `${BUILD_API_BASE}/limit`;
+import { CRAFT_GATEWAY_PROVIDER } from "@/app/craft/onboarding/constants";
+import type { BuildLlmSelection } from "@/app/craft/onboarding/constants";
 
 // =============================================================================
 // SSE Stream Processing
@@ -90,8 +89,6 @@ export async function processSSEStream(
 
 export interface CreateSessionOptions {
   name?: string | null;
-  llmProviderType?: string | null;
-  llmModelName?: string | null;
 }
 
 // Pull the backend's human-readable error detail out of a failed response,
@@ -116,8 +113,6 @@ export async function createSession(
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify({
       name: options?.name || null,
-      llm_provider_type: options?.llmProviderType || null,
-      llm_model_name: options?.llmModelName || null,
     }),
   });
 
@@ -329,6 +324,35 @@ function extractContentFromMetadata(
   return "";
 }
 
+function extractAttachmentsFromMetadata(
+  metadata: Record<string, any> | null | undefined
+): BuildMessageAttachment[] {
+  if (!Array.isArray(metadata?.attachments)) return [];
+
+  return metadata.attachments.flatMap((attachment: unknown) => {
+    if (
+      typeof attachment !== "object" ||
+      attachment === null ||
+      !("name" in attachment) ||
+      !("path" in attachment) ||
+      !("mime_type" in attachment) ||
+      typeof attachment.name !== "string" ||
+      typeof attachment.path !== "string" ||
+      typeof attachment.mime_type !== "string"
+    ) {
+      return [];
+    }
+
+    return [
+      {
+        name: attachment.name,
+        path: attachment.path,
+        mimeType: attachment.mime_type,
+      },
+    ];
+  });
+}
+
 export async function fetchMessages(
   sessionId: string
 ): Promise<BuildMessage[]> {
@@ -345,22 +369,33 @@ export async function fetchMessages(
     turn_index: m.turn_index,
     // Content is stored in message_metadata, not as a separate field
     content: m.content || extractContentFromMetadata(m.message_metadata),
+    attachments: extractAttachmentsFromMetadata(m.message_metadata),
     message_metadata: m.message_metadata,
     timestamp: new Date(m.created_at),
   }));
 }
 
-/**
- * Custom error class for rate limit (429) errors.
- * Used to distinguish rate limit errors from other API errors
- * so the UI can show an upsell modal instead of a generic error.
- */
-export class RateLimitError extends Error {
-  public readonly statusCode: number = 429;
+// 429 JSON body emitted by the backend usage rate-limiter (token/cost budgets).
+interface RateLimited429Body {
+  error_code?: string;
+  detail?: string;
+  scope?: string;
+  reset_at?: string;
+  retry_after_seconds?: number;
+}
 
-  constructor() {
-    super("Rate limit exceeded");
-    this.name = "RateLimitError";
+/**
+ * Thrown when the backend's usage rate-limiter (org/user token + cost
+ * budgets) rejects a turn with a structured 429. Carries the reset details
+ * so the UI can render the same rate-limit banner as chat.
+ */
+export class RateLimitedError extends Error {
+  public readonly details: RateLimitDetails;
+
+  constructor(message: string, details: RateLimitDetails) {
+    super(message);
+    this.name = "RateLimitedError";
+    this.details = details;
   }
 }
 
@@ -369,7 +404,8 @@ export async function createTurn(
   content: string,
   clientRequestId: string,
   signal?: AbortSignal,
-  model?: { provider: string; modelName: string } | null
+  model?: BuildLlmSelection | null,
+  attachments: BuildMessageAttachment[] = []
 ): Promise<ApiInteractiveTurnResponse> {
   const res = await fetch(
     `${BUILD_API_BASE}/sessions/${sessionId}/send-message`,
@@ -379,7 +415,18 @@ export async function createTurn(
       body: JSON.stringify({
         content,
         client_request_id: clientRequestId,
-        ...(model ? { provider: model.provider, model: model.modelName } : {}),
+        attachments: attachments.map((attachment) => ({
+          name: attachment.name,
+          path: attachment.path,
+          mime_type: attachment.mimeType,
+        })),
+        ...(model
+          ? {
+              provider: CRAFT_GATEWAY_PROVIDER,
+              provider_id: model.providerId,
+              model: model.modelName,
+            }
+          : {}),
       }),
       signal,
     }
@@ -387,7 +434,20 @@ export async function createTurn(
 
   if (!res.ok) {
     if (res.status === 429) {
-      throw new RateLimitError();
+      const body: RateLimited429Body | null = await res
+        .json()
+        .catch(() => null);
+      if (body?.error_code === RATE_LIMITED_ERROR_CODE) {
+        throw new RateLimitedError(
+          body.detail || "You've reached your usage limit.",
+          {
+            scope: body.scope,
+            reset_at: body.reset_at,
+            retry_after_seconds: body.retry_after_seconds,
+          }
+        );
+      }
+      throw new Error(body?.detail || `Failed to create turn: ${res.status}`);
     }
     throw new Error(await errorDetail(res, "Failed to create turn"));
   }
@@ -534,13 +594,17 @@ export async function fetchDirectoryListing(
 /**
  * Trigger a browser download for a single file from the sandbox.
  */
-export function downloadArtifactFile(sessionId: string, path: string): void {
+export function buildArtifactUrl(sessionId: string, path: string): string {
   const encodedPath = path
     .split("/")
     .map((segment) => encodeURIComponent(segment))
     .join("/");
+  return `${BUILD_API_BASE}/sessions/${sessionId}/artifacts/${encodedPath}`;
+}
+
+export function downloadArtifactFile(sessionId: string, path: string): void {
   const link = document.createElement("a");
-  link.href = `${BUILD_API_BASE}/sessions/${sessionId}/artifacts/${encodedPath}`;
+  link.href = buildArtifactUrl(sessionId, path);
   link.download = path.split("/").pop() || path;
   document.body.appendChild(link);
   link.click();
@@ -581,15 +645,7 @@ export async function fetchFileContent(
   sessionId: string,
   path: string
 ): Promise<FileContentResponse> {
-  // Encode each path segment individually (spaces, special chars) but preserve slashes
-  const encodedPath = path
-    .split("/")
-    .map((segment) => encodeURIComponent(segment))
-    .join("/");
-
-  const res = await fetch(
-    `${BUILD_API_BASE}/sessions/${sessionId}/artifacts/${encodedPath}`
-  );
+  const res = await fetch(buildArtifactUrl(sessionId, path));
 
   if (!res.ok) {
     throw new Error(`Failed to fetch file content: ${res.status}`);
@@ -637,36 +693,6 @@ export async function fetchFileContent(
 
   const content = await res.text();
   return { content, mimeType, isImage: false };
-}
-
-// =============================================================================
-// Usage Limits API
-// =============================================================================
-
-/** Transform API response to frontend types */
-function transformUsageLimitsResponse(
-  data: ApiUsageLimitsResponse
-): UsageLimits {
-  return {
-    isLimited: data.is_limited,
-    limitType: data.limit_type,
-    messagesUsed: data.messages_used,
-    limit: data.limit,
-    resetTimestamp: data.reset_timestamp
-      ? new Date(data.reset_timestamp)
-      : null,
-  };
-}
-
-export async function fetchUsageLimits(): Promise<UsageLimits> {
-  const res = await fetch(USAGE_LIMITS_ENDPOINT);
-
-  if (!res.ok) {
-    throw new Error(`Failed to fetch usage limits: ${res.status}`);
-  }
-
-  const data: ApiUsageLimitsResponse = await res.json();
-  return transformUsageLimitsResponse(data);
 }
 
 // =============================================================================

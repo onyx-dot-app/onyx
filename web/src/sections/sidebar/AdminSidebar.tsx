@@ -153,13 +153,21 @@ function buildItems(
     ) {
       addGated(SECTIONS.USAGE, ADMIN_ROUTES.QUERY_HISTORY, Tier.BUSINESS);
     }
+    // Log export reads container-local log files; not applicable on
+    // multi-tenant cloud.
+    if (!enableCloud) {
+      addGated(SECTIONS.USAGE, ADMIN_ROUTES.EXPORT_LOGS, Tier.ENTERPRISE);
+    }
   }
 
   // 8. Organization (admin only)
   if (!isCurator) {
     addGated(SECTIONS.ORGANIZATION, ADMIN_ROUTES.THEME, Tier.BUSINESS);
     add(SECTIONS.ORGANIZATION, ADMIN_ROUTES.SECURITY_HARDENING);
-    add(SECTIONS.ORGANIZATION, ADMIN_ROUTES.SSO_PROVIDERS);
+    // SSO provider config is not supported on multi-tenant cloud.
+    if (!enableCloud) {
+      add(SECTIONS.ORGANIZATION, ADMIN_ROUTES.SSO_PROVIDERS);
+    }
     if (hasSubscription) {
       add(SECTIONS.ORGANIZATION, ADMIN_ROUTES.BILLING);
     }

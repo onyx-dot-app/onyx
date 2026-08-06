@@ -13,7 +13,7 @@ import {
   EmbeddingModel,
   EmbeddingProvider,
   EmbeddingProviderName,
-} from "@/lib/indexing/interfaces";
+} from "@/lib/indexing/types";
 import { DOCS_ADMINS_PATH } from "@/lib/constants";
 
 // ═══════════════════════════════════════════════════════════════════════════

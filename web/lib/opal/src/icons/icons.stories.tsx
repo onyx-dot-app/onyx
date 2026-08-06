@@ -1,5 +1,5 @@
 import React from "react";
-import type { Meta, StoryObj } from "@storybook/react";
+import type { Meta, StoryObj } from "@storybook/react-vite";
 import * as Icons from "@opal/icons";
 
 const icons = Object.entries(Icons).map(([name, Component]) => ({

@@ -40,6 +40,7 @@ from onyx.document_index.opensearch.schema import (
     TITLE_FIELD_NAME,
     TITLE_VECTOR_FIELD_NAME,
     USER_PROJECTS_FIELD_NAME,
+    WRITTEN_BY_PORT_FIELD_NAME,
 )
 from onyx.utils.datetime import datetime_to_utc
 
@@ -307,6 +308,34 @@ class DocumentQuery:
         return final_delete_query
 
     @staticmethod
+    def delete_port_written_chunks_query(
+        document_ids: list[str],
+        tenant_state: TenantState,
+    ) -> dict[str, Any]:
+        """Delete-by-query matching only PORT-written chunks (written_by_port=true) of the
+        given documents in this tenant. The orphan sweep uses it to remove a resurrected
+        doc while leaving a legitimately re-added one (its forward-written chunks are
+        unmarked) untouched — so no Postgres re-check is needed."""
+        filter_clauses: list[dict[str, Any]] = [
+            {"terms": {DOCUMENT_ID_FIELD_NAME: list(document_ids)}},
+            {"term": {WRITTEN_BY_PORT_FIELD_NAME: {"value": True}}},
+        ]
+        # Single-tenant indices have no tenant_id field (added only in multitenant mode);
+        # a term on the unmapped field would match zero docs. Mirror _get_search_filters.
+        if tenant_state.multitenant:
+            filter_clauses.append(
+                {"term": {TENANT_ID_FIELD_NAME: {"value": tenant_state.tenant_id}}}
+            )
+        final_delete_query: dict[str, Any] = {
+            "query": {"bool": {"filter": filter_clauses}},
+            "timeout": f"{DEFAULT_OPENSEARCH_QUERY_TIMEOUT_S}s",
+        }
+        if not OPENSEARCH_PROFILING_DISABLED:
+            final_delete_query["profile"] = True
+
+        return final_delete_query
+
+    @staticmethod
     def get_hybrid_search_query(
         query_text: str,
         query_vector: list[float],
@@ -369,6 +398,7 @@ class DocumentQuery:
             max_chunk_index=None,
             attached_document_ids=index_filters.attached_document_ids,
             hierarchy_node_ids=index_filters.hierarchy_node_ids,
+            forced_document_sets=index_filters.forced_document_set,
         )
 
         # See https://docs.opensearch.org/latest/query-dsl/compound/hybrid/
@@ -465,6 +495,7 @@ class DocumentQuery:
             max_chunk_index=None,
             attached_document_ids=index_filters.attached_document_ids,
             hierarchy_node_ids=index_filters.hierarchy_node_ids,
+            forced_document_sets=index_filters.forced_document_set,
         )
 
         keyword_search_query = (
@@ -548,6 +579,7 @@ class DocumentQuery:
             max_chunk_index=None,
             attached_document_ids=index_filters.attached_document_ids,
             hierarchy_node_ids=index_filters.hierarchy_node_ids,
+            forced_document_sets=index_filters.forced_document_set,
         )
 
         semantic_search_query = (
@@ -610,6 +642,7 @@ class DocumentQuery:
             max_chunk_index=None,
             attached_document_ids=index_filters.attached_document_ids,
             hierarchy_node_ids=index_filters.hierarchy_node_ids,
+            forced_document_sets=index_filters.forced_document_set,
         )
         final_random_search_query = {
             "query": {
@@ -853,6 +886,8 @@ class DocumentQuery:
         # Assistant knowledge filters
         attached_document_ids: list[str] | None = None,
         hierarchy_node_ids: list[int] | None = None,
+        # Operator-forced document-set scope (NAMES), applied as a standalone AND clause.
+        forced_document_sets: list[str] | None = None,
     ) -> list[dict[str, Any]]:
         """Returns filters to be passed into the "filter" key of a search query.
 
@@ -1239,6 +1274,12 @@ class DocumentQuery:
             # there is explicitly no list provided, we make no restrictions on
             # the documents that can be retrieved.
             filter_clauses.append(_get_acl_visibility_filter(access_control_list))
+
+        if forced_document_sets:
+            # Its own top-level AND clause (not merged into the OR-based
+            # knowledge_filter below), so it INTERSECTS rather than widens; placed
+            # after the ACL clause so it never loosens permissions.
+            filter_clauses.append(_get_document_set_filter(forced_document_sets))
 
         if source_types:
             # If at least one source type is provided, the caller will only

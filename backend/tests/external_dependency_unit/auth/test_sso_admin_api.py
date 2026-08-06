@@ -1,5 +1,6 @@
-"""Guard SSO admin CRUD: secret masking, masked-placeholder round-trips,
-partial-config merges, and duplicate or missing provider handling.
+"""Guard the SSO admin API contract: secrets never persist masked, config
+merges stay partial, conflicting or missing providers are reported, and the
+routes are single-tenant only.
 
 The API must never persist masked secrets as real config values.
 """
@@ -150,6 +151,13 @@ def test_sso_provider_crud_masks_and_restores_secrets(
     assert masked_secret != original_secret
     assert is_masked_credential(masked_secret) is True
 
+    # Non-secret fields read back real so an admin can verify the setup.
+    assert created_provider["config"]["client_id"] == "client-id"
+    assert (
+        created_provider["config"]["openid_config_url"]
+        == "https://idp.example.com/.well-known/openid-configuration"
+    )
+
     provider_id = created_provider["id"]
     provider_names.append(name)
 
@@ -286,6 +294,8 @@ def test_create_saml_provider(
     # AuthnRequest advertises this exact URL).
     assert body["redirect_uri"] == f"{WEB_DOMAIN}/auth/saml/callback"
     assert is_masked_credential(body["config"]["sp_private_key"]) is True
+    assert body["config"]["idp_sso_url"] == "https://idp.example.com/sso"
+    assert body["config"]["idp_x509_cert"] == "MIIDsamplecertvalue"
 
     raw = _stored_config(db_session, body["id"])
     assert raw["idp_entity_id"] == "https://idp.example.com/entity"
@@ -353,6 +363,88 @@ def test_create_duplicate_name_returns_duplicate_resource(
         db_session.scalars(select(SSOProvider).where(SSOProvider.name == name)).all()
     )
     assert len(stored_providers) == 1
+
+
+def _auth_disabled_settings() -> SimpleNamespace:
+    return SimpleNamespace(password_auth_enabled=False)
+
+
+def test_cannot_disable_last_provider_when_password_auth_off(
+    client: TestClient,
+    db_session: Session,
+    provider_names: list[str],
+) -> None:
+    """With password auth already off, disabling the only enabled provider
+    would leave no way in, so it's refused and the row stays enabled.
+
+    The enabled-provider count is patched so the guard sees exactly this row,
+    independent of any provider rows the shared DB already holds.
+    """
+    name = _new_provider_name()
+    create_response = client.post(
+        "/admin/sso/provider",
+        json=_build_oidc_request(name, "super-secret-value"),
+    )
+    assert create_response.status_code == 200
+    provider_names.append(name)
+    provider_id = create_response.json()["id"]
+
+    with (
+        patch(
+            "onyx.server.manage.sso.api.load_effective_uncached",
+            _auth_disabled_settings,
+        ),
+        patch(
+            "onyx.server.manage.sso.api.fetch_sso_providers",
+            return_value=[SimpleNamespace(id=provider_id)],
+        ),
+    ):
+        response = client.post(
+            f"/admin/sso/provider/{provider_id}/enabled",
+            json={"enabled": False},
+        )
+
+    assert response.status_code == OnyxErrorCode.INVALID_INPUT.status_code
+    assert response.json()["error_code"] == OnyxErrorCode.INVALID_INPUT.code
+
+    db_session.expire_all()
+    stored = db_session.get(SSOProvider, provider_id)
+    assert stored is not None
+    assert stored.enabled is True
+
+
+def test_can_disable_provider_when_another_remains_and_auth_off(
+    client: TestClient,
+    provider_names: list[str],
+) -> None:
+    """A second enabled provider keeps a login path open, so disabling one is
+    allowed even with password auth off."""
+    name = _new_provider_name()
+    provider_id = client.post(
+        "/admin/sso/provider", json=_build_oidc_request(name, "secret-a")
+    ).json()["id"]
+    provider_names.append(name)
+
+    with (
+        patch(
+            "onyx.server.manage.sso.api.load_effective_uncached",
+            _auth_disabled_settings,
+        ),
+        patch(
+            "onyx.server.manage.sso.api.fetch_sso_providers",
+            return_value=[
+                SimpleNamespace(id=provider_id),
+                SimpleNamespace(id=provider_id + 1),
+            ],
+        ),
+    ):
+        response = client.post(
+            f"/admin/sso/provider/{provider_id}/enabled",
+            json={"enabled": False},
+        )
+
+    assert response.status_code == 200
+    assert response.json()["enabled"] is False
 
 
 def test_missing_provider_routes_return_not_found(client: TestClient) -> None:
@@ -452,3 +544,19 @@ def test_second_enabled_provider_requires_business_tier(
             gated_reenable.status_code
             == OnyxErrorCode.FEATURE_NOT_AVAILABLE.status_code
         )
+
+
+@patch("onyx.server.manage.sso.api.MULTI_TENANT", True)
+def test_multi_tenant_deployments_are_rejected(client: TestClient) -> None:
+    """The gate sits on the router, so no handler below it is reachable."""
+    for response in (
+        client.get("/admin/sso/provider"),
+        client.post(
+            "/admin/sso/provider",
+            json=_build_oidc_request(_new_provider_name(), "secret"),
+        ),
+        client.patch("/admin/sso/provider/1", json={"display_name": "Blocked"}),
+        client.post("/admin/sso/provider/1/enabled", json={"enabled": True}),
+    ):
+        assert response.status_code == OnyxErrorCode.SINGLE_TENANT_ONLY.status_code
+        assert response.json()["error_code"] == OnyxErrorCode.SINGLE_TENANT_ONLY.code

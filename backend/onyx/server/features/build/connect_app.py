@@ -32,7 +32,7 @@ class ConnectAppRequest(BaseModel):
     """The connect prompt carried from the turn consumer to the live stream."""
 
     request_id: str
-    app_slug: str
+    external_app_id: int
     reason: str | None = None
 
 
