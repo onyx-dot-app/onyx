@@ -759,15 +759,15 @@ class SandboxManager(_ServeMixin, ABC):
         pptx_path: str,
         cache_dir: str,
     ) -> tuple[list[str], bool]:
-        """Convert PPTX to slide JPEG images for preview, with caching.
+        """Convert a PowerPoint file to slide JPEG images for preview, with caching.
 
-        Checks if cache_dir already has slides. If the PPTX is newer than the
+        Checks if cache_dir already has slides. If the presentation is newer than the
         cached images (or no cache exists), runs soffice -> pdftoppm pipeline.
 
         Args:
             sandbox_id: The sandbox ID
             session_id: The session ID
-            pptx_path: Relative path to the PPTX file within the session workspace
+            pptx_path: Relative path to the PowerPoint file within the session workspace
             cache_dir: Relative path for the cache directory
                        (e.g., "outputs/.pptx-preview/abc123")
 

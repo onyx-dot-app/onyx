@@ -1407,15 +1407,15 @@ class SessionManager:
         path: str,
     ) -> dict[str, Any] | None:
         """
-        Generate slide image previews for a PPTX file.
+        Generate slide image previews for a PowerPoint file.
 
-        Converts the PPTX to individual JPEG slide images using
+        Converts the presentation to individual JPEG slide images using
         soffice + pdftoppm, with caching to avoid re-conversion.
 
         Args:
             session_id: The session UUID
             user_id: The user ID to verify ownership
-            path: Relative path to the PPTX file within session workspace
+            path: Relative path to the PowerPoint file within session workspace
 
         Returns:
             Dict with slide_count, slide_paths, and cached flag,
@@ -1430,8 +1430,8 @@ class SessionManager:
         _, sandbox = resolved
 
         # Validate file extension
-        if not path.lower().endswith(".pptx"):
-            raise ValueError("Only .pptx files are supported for preview")
+        if Path(path).suffix.lower() not in {".ppt", ".pptx"}:
+            raise ValueError("Only .ppt and .pptx files are supported for preview")
 
         # Compute cache directory from path hash
         path_hash = hashlib.sha256(path.encode()).hexdigest()[:12]
