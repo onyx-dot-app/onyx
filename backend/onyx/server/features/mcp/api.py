@@ -980,6 +980,15 @@ async def _connect_oauth(
             status_code=400, detail=f"Failed to initialize OAuth client: {str(saved_e)}"
         )
 
+    if not is_connected:
+        raise OnyxError(
+            OnyxErrorCode.INVALID_INPUT,
+            "OAuth auto-discovery did not produce an authorization redirect. "
+            "The MCP server permits unauthenticated initialization; configure "
+            "it with Known Provider OAuth, including its authorization endpoint, "
+            "token endpoint, and scopes.",
+        )
+
     return MCPUserOAuthConnectResponse(
         server_id=int(request.server_id),
         oauth_url=request.return_path,
