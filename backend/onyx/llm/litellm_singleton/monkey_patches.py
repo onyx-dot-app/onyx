@@ -36,15 +36,16 @@ Status checked against LiteLLM v1.93.0 (2026-07-20):
    STATUS: STILL NEEDED - Upstream now uses " ".join() instead of discarding earlier
            parts, but we override to use "\\n\\n".join() for readable section breaks.
 
-4. Azure Responses API Fake Streaming (_patch_azure_responses_should_fake_stream):
-   - LiteLLM uses "fake streaming" (MockResponsesAPIStreamingIterator) for models
-     not in its database, which buffers the entire response before yielding
-   - This causes poor time-to-first-token for Azure custom model deployments
-   - Azure's Responses API supports native streaming, so we force real streaming
-   STATUS: STILL NEEDED - AzureOpenAIResponsesAPIConfig does NOT override should_fake_stream,
-           so it inherits from OpenAIResponsesAPIConfig which returns True for models not
-           in litellm.utils.supports_native_streaming(). Custom Azure deployments will
-           still use fake streaming without this patch.
+4. Responses API Fake Streaming (_patch_openai_responses_should_fake_stream):
+   - LiteLLM fake-streams (MockResponsesAPIStreamingIterator) any responses-API
+     call whose model its registry doesn't recognize, buffering the whole
+     generation before the first chunk. Azure custom deployments and
+     OpenAI-compatible gateway aliases (Bifrost/Portkey responses mode) are
+     never in the registry
+   - Patched on the base OpenAIResponsesAPIConfig; AzureOpenAIResponsesAPIConfig
+     inherits it (no upstream override). Models the registry explicitly marks
+     supports_native_streaming=False (e.g. o1-pro) keep the fake stream
+   STATUS: STILL NEEDED - v1.93.0 treats a registry miss as "cannot stream".
 
 # Note: 5 and 6 suppress a warning and may fix usage info but are not strictly required
 5. Responses API Usage Format Mismatch (_patch_responses_api_usage_format):
@@ -79,6 +80,7 @@ Status checked against LiteLLM v1.93.0 (2026-07-20):
      OpenAI-compatible gateways such as Bifrost and Portkey), so honor it
      unconditionally and pass the remainder through as the literal model id
    STATUS: STILL NEEDED - v1.93.0 consults the registry before honoring the prefix.
+
 """
 
 import time
@@ -425,38 +427,44 @@ def _patch_openai_responses_transform_response() -> None:
     )
 
 
-def _patch_azure_responses_should_fake_stream() -> None:
+def _patch_openai_responses_should_fake_stream() -> None:
     """
-    Patches AzureOpenAIResponsesAPIConfig.should_fake_stream to always return False.
-
-    By default, LiteLLM uses "fake streaming" (MockResponsesAPIStreamingIterator) for models
-    not in its database. This causes Azure custom model deployments to buffer the entire
-    response before yielding, resulting in poor time-to-first-token.
-
-    Azure's Responses API supports native streaming, so we override this to always use
-    real streaming (SyncResponsesAPIStreamingIterator).
+    Patches OpenAIResponsesAPIConfig.should_fake_stream so a registry miss
+    (e.g. a gateway model alias or Azure custom deployment) streams natively
+    instead of buffering the generation. Models explicitly marked
+    supports_native_streaming=False (e.g. o1-pro) keep the fake stream — a
+    native stream request would be rejected upstream.
+    AzureOpenAIResponsesAPIConfig inherits this patch.
     """
-    from litellm.llms.azure.responses.transformation import (
-        AzureOpenAIResponsesAPIConfig,
-    )
+    from litellm.llms.openai.responses.transformation import OpenAIResponsesAPIConfig
 
     if (
-        getattr(AzureOpenAIResponsesAPIConfig.should_fake_stream, "__name__", "")
-        == "_patched_should_fake_stream"
+        getattr(OpenAIResponsesAPIConfig.should_fake_stream, "__name__", "")
+        == "_patched_openai_should_fake_stream"
     ):
         return
 
-    def _patched_should_fake_stream(
+    def _patched_openai_should_fake_stream(
         self: Any,  # noqa: ARG001
-        model: Optional[str],  # noqa: ARG001
-        stream: Optional[bool],  # noqa: ARG001
-        custom_llm_provider: Optional[str] = None,  # noqa: ARG001
+        model: Optional[str],
+        stream: Optional[bool],
+        custom_llm_provider: Optional[str] = None,
     ) -> bool:
-        # Azure Responses API supports native streaming - never fake it
-        return False
+        import litellm
 
-    _patched_should_fake_stream.__name__ = "_patched_should_fake_stream"
-    AzureOpenAIResponsesAPIConfig.should_fake_stream = _patched_should_fake_stream
+        if stream is not True or model is None:
+            return False
+        try:
+            model_info = litellm.get_model_info(
+                model=model, custom_llm_provider=custom_llm_provider
+            )
+        except Exception:
+            # Registry miss (e.g. gateway alias): assume native streaming.
+            return False
+        return model_info.get("supports_native_streaming") is False
+
+    _patched_openai_should_fake_stream.__name__ = "_patched_openai_should_fake_stream"
+    OpenAIResponsesAPIConfig.should_fake_stream = _patched_openai_should_fake_stream
 
 
 def _patch_responses_api_usage_format() -> None:
@@ -694,7 +702,8 @@ def apply_monkey_patches() -> None:
     - Patching OllamaChatCompletionResponseIterator.chunk_parser for streaming content
     - Patching chunk_parser for reasoning summary newline insertion between sections
     - Patching LiteLLMResponsesTransformationHandler.transform_response for non-streaming responses
-    - Patching AzureOpenAIResponsesAPIConfig.should_fake_stream to enable native streaming
+    - Patching OpenAIResponsesAPIConfig.should_fake_stream (Azure inherits) to stream
+      natively on registry misses
     - Patching ResponsesAPIResponse.model_construct to fix usage format in all code paths
     - Patching Logging._get_assembled_streaming_response to avoid mutating original response
     - Patching responses_api_bridge_check to always honor an explicit responses/ prefix
@@ -702,7 +711,7 @@ def apply_monkey_patches() -> None:
     _patch_ollama_chunk_parser()
     _patch_responses_reasoning_summary_newlines()
     _patch_openai_responses_transform_response()
-    _patch_azure_responses_should_fake_stream()
+    _patch_openai_responses_should_fake_stream()
     _patch_responses_api_usage_format()
     _patch_logging_assembled_streaming_response()
     _patch_responses_api_bridge_check()

@@ -6,10 +6,12 @@ from unittest.mock import MagicMock, patch
 from onyx.chat.compression import (
     SummaryContent,
     _build_llm_messages_for_summarization,
+    calculate_total_history_tokens,
     find_summary_for_branch,
     generate_summary,
     get_compression_params,
     get_messages_to_summarize,
+    get_summary_parent_message_id,
 )
 from onyx.configs.constants import MessageType
 from onyx.llm.models import AssistantMessage, SystemMessage, UserMessage
@@ -155,6 +157,88 @@ def test_empty_history_returns_empty() -> None:
     )
     assert result.older_messages == []
     assert result.recent_messages == []
+
+
+def test_calculate_total_history_tokens_includes_tool_call_tokens() -> None:
+    """Tool-call argument tokens are replayed with the history, so the
+    compression trigger must count them too."""
+    tool_call = MagicMock()
+    tool_call.tool_call_tokens = 30
+    messages = [
+        create_mock_message(1, "question", 100),
+        create_mock_message(
+            2,
+            "answer",
+            50,
+            MessageType.ASSISTANT,
+            tool_calls=[tool_call, tool_call],
+        ),
+    ]
+    assert (
+        calculate_total_history_tokens(messages)  # ty: ignore[invalid-argument-type]
+        == 210
+    )
+
+
+def test_no_user_in_recent_tail_keeps_last_user_exchange() -> None:
+    """A verbatim tail without a USER message must not cause the entire
+    conversation (including the latest exchange) to be summarized away."""
+    messages = [
+        create_mock_message(1, "q1", 100),
+        create_mock_message(2, "a1", 100, MessageType.ASSISTANT),
+        create_mock_message(3, "q2", 100),
+        create_mock_message(4, "a2", 50, MessageType.ASSISTANT),
+    ]
+    result = get_messages_to_summarize(
+        chat_history=messages,  # ty: ignore[invalid-argument-type]
+        existing_summary=None,
+        # Only fits the final ASSISTANT message, which then gets popped as a
+        # leading non-USER message.
+        tokens_for_recent=60,
+    )
+    assert [m.id for m in result.recent_messages] == [3, 4]
+    assert [m.id for m in result.older_messages] == [1, 2]
+
+
+def test_summary_parent_is_last_user_message() -> None:
+    """Summaries parent to the last USER message so every sibling branch
+    (multi-model answers, regenerations) can find them."""
+    messages = [
+        create_mock_message(1, "q1", 100),
+        create_mock_message(2, "a1", 100, MessageType.ASSISTANT),
+        create_mock_message(3, "q2", 100),
+        create_mock_message(4, "a2", 100, MessageType.ASSISTANT),
+    ]
+    assert (
+        get_summary_parent_message_id(messages)  # ty: ignore[invalid-argument-type]
+        == 3
+    )
+
+
+def test_summary_parent_falls_back_to_tail_without_user_messages() -> None:
+    messages = [
+        create_mock_message(1, "a1", 100, MessageType.ASSISTANT),
+        create_mock_message(2, "a2", 100, MessageType.ASSISTANT),
+    ]
+    assert (
+        get_summary_parent_message_id(messages)  # ty: ignore[invalid-argument-type]
+        == 2
+    )
+
+
+def test_no_user_messages_at_all_skips_compression() -> None:
+    """With no USER message anywhere, nothing is summarized (caller no-ops
+    on empty older_messages)."""
+    messages = [
+        create_mock_message(1, "a1", 100, MessageType.ASSISTANT),
+        create_mock_message(2, "a2", 100, MessageType.ASSISTANT),
+    ]
+    result = get_messages_to_summarize(
+        chat_history=messages,  # ty: ignore[invalid-argument-type]
+        existing_summary=None,
+        tokens_for_recent=50,
+    )
+    assert result.older_messages == []
 
 
 def test_find_summary_for_branch_returns_matching_branch() -> None:
