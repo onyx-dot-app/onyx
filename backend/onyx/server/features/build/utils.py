@@ -11,7 +11,11 @@ from onyx.db.models import User
 from onyx.db.notification import create_notification
 from onyx.feature_flags.factory import get_default_feature_flag_provider
 from onyx.feature_flags.interface import NoOpFeatureFlagProvider
-from onyx.server.features.build.configs import ENABLE_CRAFT, MAX_UPLOAD_FILE_SIZE_BYTES
+from onyx.server.features.build.configs import (
+    ENABLE_CRAFT,
+    MAX_UPLOAD_FILE_SIZE_BYTES,
+    OPENCODE_DISABLED_TOOLS,
+)
 from onyx.server.settings.store import load_settings
 from onyx.utils.logger import setup_logger
 from shared_configs.contextvars import get_current_tenant_id
@@ -103,6 +107,9 @@ def validate_file(size: int) -> tuple[bool, str | None]:
 # Flag logic: True = enabled, False/null/not found = disabled
 ONYX_CRAFT_ENABLED_FLAG = "onyx-craft-enabled"
 
+# Payload: a JSON list of tool name strings, e.g. ["question", "webfetch"].
+OPENCODE_DISABLED_TOOLS_FLAG = "onyx-craft-opencode-disabled-tools"
+
 # Feature identifier in additional_data
 BUILD_MODE_FEATURE_ID = "build_mode"
 
@@ -173,6 +180,32 @@ def is_craft_enabled_for_user(
     if deployment_available is None:
         deployment_available = is_craft_available_for_deployment(user)
     return deployment_available
+
+
+def get_opencode_disabled_tools(user: User) -> list[str]:
+    feature_flag_provider = get_default_feature_flag_provider()
+
+    if isinstance(feature_flag_provider, NoOpFeatureFlagProvider):
+        return OPENCODE_DISABLED_TOOLS
+
+    payload = feature_flag_provider.feature_payload_for_user_tenant(
+        OPENCODE_DISABLED_TOOLS_FLAG,
+        user,
+        get_current_tenant_id(),
+    )
+
+    if payload is None:
+        return OPENCODE_DISABLED_TOOLS
+
+    if isinstance(payload, list) and all(isinstance(t, str) for t in payload):
+        return payload
+
+    logger.warning(
+        "Ignoring malformed %s payload (expected list[str]): %r",
+        OPENCODE_DISABLED_TOOLS_FLAG,
+        payload,
+    )
+    return OPENCODE_DISABLED_TOOLS
 
 
 def ensure_build_mode_intro_notification(user: User, db_session: Session) -> None:

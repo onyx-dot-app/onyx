@@ -36,7 +36,6 @@ from onyx.file_store.file_store import get_default_file_store
 from onyx.server.features.build.configs import (
     MAX_TOTAL_UPLOAD_SIZE_BYTES,
     MAX_UPLOAD_FILES_PER_SESSION,
-    OPENCODE_DISABLED_TOOLS,
 )
 from onyx.server.features.build.db.build_session import (
     create_build_session__no_commit,
@@ -102,6 +101,7 @@ from onyx.server.features.build.timeouts import (
     PROMPT_SLOT_KEEP_ALIVE_MAX_SECONDS,
     PROVISION_WAIT_SECONDS,
 )
+from onyx.server.features.build.utils import get_opencode_disabled_tools
 from onyx.server.metrics.craft_sandbox import SandboxReadyOutcome
 from onyx.utils.logger import setup_logger
 from onyx.utils.threadpool_concurrency import start_thread_with_context
@@ -268,10 +268,11 @@ class SessionManager:
     ) -> None:
         llm_config = self.session_llm_config(session, user)
         mcp_servers = resolve_craft_mcp_servers(self._db_session, user)
+        disabled_tools = get_opencode_disabled_tools(user)
         expected = json.dumps(
             build_provider_opencode_config(
                 llm_config,
-                disabled_tools=OPENCODE_DISABLED_TOOLS,
+                disabled_tools=disabled_tools,
                 mcp_servers=mcp_servers,
                 session_id=str(session.id),
             )
@@ -332,6 +333,7 @@ class SessionManager:
             user_name=user.personal_name,
             llm_config=llm_config,
             mcp_servers=mcp_servers,
+            disabled_tools=disabled_tools,
         )
         if session.opencode_session_id is not None:
             self._sandbox_manager.dispose_opencode_instance(sandbox.id, session.id)
@@ -397,6 +399,7 @@ class SessionManager:
                         user_name=user.personal_name,
                         llm_config=llm_config,
                         mcp_servers=mcp_servers,
+                        disabled_tools=get_opencode_disabled_tools(user),
                     )
                     if session.opencode_session_id is not None:
                         self._sandbox_manager.dispose_opencode_instance(
@@ -689,6 +692,7 @@ class SessionManager:
                 connectable_apps_section=connectable_apps_section,
                 user_name=user_name,
                 mcp_servers=mcp_servers,
+                disabled_tools=get_opencode_disabled_tools(user),
             )
             minted_opencode_session_id = self._sandbox_manager.ensure_opencode_session(
                 sandbox_id=sandbox.id,

@@ -515,6 +515,7 @@ class _PushRecordingStub(StubSandboxManager):
         connectable_apps_section: str,
         user_name: str | None = None,
         mcp_servers: Sequence[CraftMCPServerConfig] = (),
+        disabled_tools: list[str] | None = None,
     ) -> None:
         self.ops.append("render_workspace")
         super().setup_session_workspace(
@@ -525,6 +526,7 @@ class _PushRecordingStub(StubSandboxManager):
             connectable_apps_section,
             user_name,
             mcp_servers,
+            disabled_tools,
         )
 
     def restore_snapshot(
@@ -536,6 +538,7 @@ class _PushRecordingStub(StubSandboxManager):
         llm_config: CraftLLMProviderConfig,
         connectable_apps_section: str,
         mcp_servers: Sequence[CraftMCPServerConfig] = (),
+        disabled_tools: list[str] | None = None,
     ) -> None:
         self.ops.append("render_workspace")
         super().restore_snapshot(
@@ -546,6 +549,7 @@ class _PushRecordingStub(StubSandboxManager):
             llm_config,
             connectable_apps_section,
             mcp_servers,
+            disabled_tools,
         )
 
 

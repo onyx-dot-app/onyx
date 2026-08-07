@@ -815,6 +815,7 @@ class DockerSandboxManager(SandboxManager):
         tenant_id: str,
         onyx_pat: str | None,
         provisioning_attempt_number: int,
+        disabled_tools: list[str] | None = None,
     ) -> SandboxInfo:
         if not onyx_pat:
             raise ValueError("onyx_pat is required for Docker sandbox provisioning.")
@@ -857,7 +858,11 @@ class DockerSandboxManager(SandboxManager):
                 SANDBOX_PROXY_INJECTED_PLACEHOLDER if SANDBOX_PROXY_HOST else onyx_pat
             )
             opencode_config = build_opencode_base_config(
-                disabled_tools=OPENCODE_DISABLED_TOOLS,
+                disabled_tools=(
+                    disabled_tools
+                    if disabled_tools is not None
+                    else OPENCODE_DISABLED_TOOLS
+                ),
                 plugins=plugins,
             )
             opencode_config_json = json.dumps(opencode_config)
@@ -1060,6 +1065,7 @@ class DockerSandboxManager(SandboxManager):
         agent_model: str | None,
         connectable_apps_section: str,
         user_name: str | None = None,
+        disabled_tools: list[str] | None = None,
     ) -> str:
         """Raw (unescaped) AGENTS.md content."""
         return generate_agent_instructions(
@@ -1067,7 +1073,11 @@ class DockerSandboxManager(SandboxManager):
             connectable_apps_section=connectable_apps_section,
             provider=agent_provider,
             model_name=agent_model,
-            disabled_tools=OPENCODE_DISABLED_TOOLS,
+            disabled_tools=(
+                disabled_tools
+                if disabled_tools is not None
+                else OPENCODE_DISABLED_TOOLS
+            ),
             user_name=user_name,
             organization_instructions=load_settings().craft_instructions,
         )
@@ -1081,19 +1091,24 @@ class DockerSandboxManager(SandboxManager):
         connectable_apps_section: str,
         user_name: str | None = None,
         mcp_servers: Sequence[CraftMCPServerConfig] = (),
+        disabled_tools: list[str] | None = None,
     ) -> None:
         container = self._require_container(sandbox_id)
         session_path = f"{SESSIONS_ROOT}/{session_id}"
+        resolved_disabled_tools = (
+            disabled_tools if disabled_tools is not None else OPENCODE_DISABLED_TOOLS
+        )
         agents_md = self._build_agents_md(
             agent_provider=llm_config.provider,
             agent_model=llm_config.model_name,
             connectable_apps_section=connectable_apps_section,
             user_name=user_name,
+            disabled_tools=resolved_disabled_tools,
         )
         session_opencode_config = json.dumps(
             build_provider_opencode_config(
                 llm_config,
-                disabled_tools=OPENCODE_DISABLED_TOOLS,
+                disabled_tools=resolved_disabled_tools,
                 mcp_servers=mcp_servers,
                 session_id=str(session_id),
             )
@@ -1406,6 +1421,7 @@ echo "Session cleanup complete"
         llm_config: CraftLLMProviderConfig,
         connectable_apps_section: str,
         mcp_servers: Sequence[CraftMCPServerConfig] = (),
+        disabled_tools: list[str] | None = None,
     ) -> None:
         container = self._require_container(sandbox_id)
         session_path = f"{SESSIONS_ROOT}/{session_id}"
@@ -1475,6 +1491,7 @@ fi
             connectable_apps_section=connectable_apps_section,
             llm_config=llm_config,
             mcp_servers=mcp_servers,
+            disabled_tools=disabled_tools,
         )
 
         if nextjs_port is not None:
@@ -1503,12 +1520,16 @@ fi
         user_name: str | None = None,
         llm_config: CraftLLMProviderConfig | None = None,
         mcp_servers: Sequence[CraftMCPServerConfig] = (),
+        disabled_tools: list[str] | None = None,
     ) -> None:
         """Rewrite generated session configuration and managed symlinks."""
         # nextjs_port stays in the signature to match the abstract contract
         # (base.py) shared with restore_snapshot's own webapp-script rewrite;
         # AGENTS.md no longer embeds it.
         _ = nextjs_port
+        resolved_disabled_tools = (
+            disabled_tools if disabled_tools is not None else OPENCODE_DISABLED_TOOLS
+        )
         container = self._require_container(sandbox_id)
         session_path = f"{SESSIONS_ROOT}/{session_id}"
         agents_md = self._build_agents_md(
@@ -1516,12 +1537,13 @@ fi
             agent_model=agent_model,
             connectable_apps_section=connectable_apps_section,
             user_name=user_name,
+            disabled_tools=resolved_disabled_tools,
         )
         session_opencode_config = (
             json.dumps(
                 build_provider_opencode_config(
                     llm_config,
-                    disabled_tools=OPENCODE_DISABLED_TOOLS,
+                    disabled_tools=resolved_disabled_tools,
                     mcp_servers=mcp_servers,
                     session_id=str(session_id),
                 )

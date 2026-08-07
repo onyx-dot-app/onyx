@@ -287,6 +287,7 @@ class StubSandboxManager(SandboxManager):
         tenant_id: str,
         onyx_pat: str | None,
         provisioning_attempt_number: int,
+        disabled_tools: list[str] | None = None,
     ) -> SandboxInfo:
         self.provision_count += 1
         self.last_provision_payload = {
@@ -295,6 +296,7 @@ class StubSandboxManager(SandboxManager):
             "tenant_id": tenant_id,
             "onyx_pat": onyx_pat,
             "provisioning_attempt_number": provisioning_attempt_number,
+            "disabled_tools": disabled_tools,
         }
         if self.provision_returns is None:
             raise _not_configured("provision")
@@ -316,6 +318,7 @@ class StubSandboxManager(SandboxManager):
         connectable_apps_section: str,
         user_name: str | None = None,
         mcp_servers: Sequence[CraftMCPServerConfig] = (),
+        disabled_tools: list[str] | None = None,
     ) -> None:
         self.setup_session_workspace_count += 1
         self.last_setup_session_workspace_payload = {
@@ -326,6 +329,7 @@ class StubSandboxManager(SandboxManager):
             "connectable_apps_section": connectable_apps_section,
             "user_name": user_name,
             "mcp_servers": mcp_servers,
+            "disabled_tools": disabled_tools,
         }
         if not self.setup_session_workspace_silent:
             raise _not_configured("setup_session_workspace")
@@ -355,6 +359,7 @@ class StubSandboxManager(SandboxManager):
         user_name: str | None = None,
         llm_config: CraftLLMProviderConfig | None = None,
         mcp_servers: Sequence[CraftMCPServerConfig] = (),
+        disabled_tools: list[str] | None = None,
     ) -> None:
         self.session_runtime_call_order.append("regenerate_session_config")
         self.regenerate_session_config_count += 1
@@ -368,6 +373,7 @@ class StubSandboxManager(SandboxManager):
             "user_name": user_name,
             "llm_config": llm_config,
             "mcp_servers": mcp_servers,
+            "disabled_tools": disabled_tools,
         }
         if not self.regenerate_session_config_silent:
             raise _not_configured("regenerate_session_config")
@@ -422,6 +428,7 @@ class StubSandboxManager(SandboxManager):
         llm_config: CraftLLMProviderConfig,
         connectable_apps_section: str,
         mcp_servers: Sequence[CraftMCPServerConfig] = (),
+        disabled_tools: list[str] | None = None,
     ) -> None:
         self.restore_snapshot_count += 1
         self.last_restore_snapshot_payload = {
@@ -432,6 +439,7 @@ class StubSandboxManager(SandboxManager):
             "llm_config": llm_config,
             "connectable_apps_section": connectable_apps_section,
             "mcp_servers": mcp_servers,
+            "disabled_tools": disabled_tools,
         }
         if not self.restore_snapshot_silent:
             raise _not_configured("restore_snapshot")

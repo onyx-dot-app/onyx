@@ -55,3 +55,31 @@ class PostHogFeatureFlagProvider(FeatureFlagProvider):
                 "Error checking feature flag %s for user %s: %s", flag_key, user_id, e
             )
             return False
+
+    def feature_payload(
+        self,
+        flag_key: str,
+        user_id: UUID,
+        user_properties: dict[str, Any] | None = None,
+    ) -> Any | None:
+        if not posthog:
+            return None
+
+        try:
+            posthog.set(
+                distinct_id=user_id,
+                properties=user_properties,
+            )
+            return posthog.get_feature_flag_payload(
+                flag_key,
+                str(user_id),
+                person_properties=user_properties,
+            )
+        except Exception as e:
+            logger.error(
+                "Error fetching feature flag payload %s for user %s: %s",
+                flag_key,
+                user_id,
+                e,
+            )
+            return None

@@ -50,6 +50,26 @@ class FeatureFlagProvider(abc.ABC):
             },
         )
 
+    def feature_payload(
+        self,
+        flag_key: str,  # noqa: ARG002
+        user_id: UUID,  # noqa: ARG002
+        user_properties: dict[str, Any] | None = None,  # noqa: ARG002
+    ) -> Any | None:
+        return None
+
+    def feature_payload_for_user_tenant(
+        self, flag_key: str, user: User, tenant_id: str
+    ) -> Any | None:
+        return self.feature_payload(
+            flag_key,
+            user.id if user else UUID("caa1e0cd-6ee6-4550-b1ec-8affaef4bf83"),
+            user_properties={
+                "tenant_id": tenant_id,
+                "email": user.email if user else "anonymous@onyx.app",
+            },
+        )
+
 
 class NoOpFeatureFlagProvider(FeatureFlagProvider):
     """

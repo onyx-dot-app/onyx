@@ -41,6 +41,7 @@ from onyx.server.features.build.session.sandbox_lifecycle import (
     ensure_sandbox_ready,
     sync_managed_content,
 )
+from onyx.server.features.build.utils import get_opencode_disabled_tools
 from onyx.utils.logger import setup_logger
 
 logger = setup_logger()
@@ -132,6 +133,7 @@ def ensure_session_ready(
     # (a no-op on a freshly provisioned pod).
     mark_opencode_dispose_pending(session_id)
 
+    disabled_tools = get_opencode_disabled_tools(user)
     try:
         if snapshot:
             sandbox_manager.restore_snapshot(
@@ -142,6 +144,7 @@ def ensure_session_ready(
                 llm_config=llm_config,
                 connectable_apps_section=connectable_apps_section,
                 mcp_servers=mcp_servers,
+                disabled_tools=disabled_tools,
             )
         else:
             sandbox_manager.setup_session_workspace(
@@ -151,6 +154,7 @@ def ensure_session_ready(
                 nextjs_port=nextjs_port,
                 connectable_apps_section=connectable_apps_section,
                 mcp_servers=mcp_servers,
+                disabled_tools=disabled_tools,
             )
     except Exception:
         if snapshot:

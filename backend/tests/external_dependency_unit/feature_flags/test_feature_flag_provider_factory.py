@@ -5,8 +5,12 @@ These tests verify the feature flag service implementation with real
 PostHog integration when available, and fallback behavior otherwise.
 """
 
+from unittest.mock import MagicMock
 from uuid import UUID
 
+import pytest
+
+from ee.onyx.feature_flags import posthog_provider as posthog_provider_module
 from ee.onyx.feature_flags.posthog_provider import PostHogFeatureFlagProvider
 from onyx.feature_flags.factory import get_default_feature_flag_provider
 from onyx.feature_flags.interface import FeatureFlagProvider, NoOpFeatureFlagProvider
@@ -21,6 +25,47 @@ class TestNoOpFeatureFlagProvider:
 
         my_uuid = UUID("79a75f76-6b63-43ee-b04c-a0c6806900bd")
         assert provider.feature_enabled("another-flag", my_uuid) is False
+
+    def test_payload_always_returns_none(self) -> None:
+        provider = NoOpFeatureFlagProvider()
+
+        my_uuid = UUID("79a75f76-6b63-43ee-b04c-a0c6806900bd")
+        assert provider.feature_payload("another-flag", my_uuid) is None
+
+
+class TestPostHogFeatureFlagProviderPayload:
+    """Tests for `PostHogFeatureFlagProvider.feature_payload`."""
+
+    my_uuid = UUID("79a75f76-6b63-43ee-b04c-a0c6806900bd")
+
+    def test_returns_none_when_posthog_unconfigured(
+        self, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        monkeypatch.setattr(posthog_provider_module, "posthog", None)
+        provider = PostHogFeatureFlagProvider()
+
+        assert provider.feature_payload("some-flag", self.my_uuid) is None
+
+    def test_returns_payload_from_posthog(
+        self, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        mock_posthog = MagicMock()
+        mock_posthog.get_feature_flag_payload.return_value = ["webfetch"]
+        monkeypatch.setattr(posthog_provider_module, "posthog", mock_posthog)
+        provider = PostHogFeatureFlagProvider()
+
+        assert provider.feature_payload("some-flag", self.my_uuid) == ["webfetch"]
+
+    def test_returns_none_on_posthog_error(
+        self, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        """Errors fail closed: the caller falls back to its safe default."""
+        mock_posthog = MagicMock()
+        mock_posthog.get_feature_flag_payload.side_effect = RuntimeError("boom")
+        monkeypatch.setattr(posthog_provider_module, "posthog", mock_posthog)
+        provider = PostHogFeatureFlagProvider()
+
+        assert provider.feature_payload("some-flag", self.my_uuid) is None
 
 
 class TestFeatureFlagFactory:
