@@ -30,6 +30,11 @@ from onyx.connectors.sharepoint.connector import (
     SHARED_DOCUMENTS_MAP_REVERSE,
     sleep_and_retry,
 )
+from onyx.connectors.sharepoint.connector_utils import (
+    SharepointGroup,
+    SharepointGroupExpansion,
+    SharepointPermissionCache,
+)
 from onyx.db.enums import HierarchyNodeType
 from onyx.utils.logger import setup_logger
 from onyx.utils.retry_after import parse_retry_after_seconds
@@ -44,6 +49,7 @@ AZURE_AD_GROUP_PRINCIPAL_TYPE = 4  # Azure Active Directory security groups
 SHAREPOINT_GROUP_PRINCIPAL_TYPE = 8  # SharePoint site groups (local to the site)
 MICROSOFT_DOMAIN = ".onmicrosoft"
 SHAREPOINT_GROUP_SCOPE_SEPARATOR = "::"
+GROUP_CACHE_KEY_SEPARATOR = ":"
 # PnP RoleType defines Guest=1 and RestrictedGuest=9:
 # https://github.com/pnp/pnpcore/blob/4e4f58fcac797f2957bfcd14fedcecd690dfe7ee/src/sdk/PnP.Core/Model/SharePoint/Core/Public/Enums/RoleType.cs
 LIMITED_ACCESS_ROLE_TYPES = frozenset({1, 9})
@@ -145,16 +151,13 @@ def _normalize_email(email: str) -> str:
     return email
 
 
-class SharepointGroup(BaseModel):
-    model_config = {"frozen": True}
-
-    name: str
-    login_name: str
-    principal_type: int
-
-
 class GroupsResult(BaseModel):
     groups_to_emails: dict[str, set[str]]
+    found_public_group: bool
+
+
+class DocumentGroupsResult(BaseModel):
+    group_ids: set[str]
     found_public_group: bool
 
 
@@ -515,10 +518,88 @@ def _get_groups_and_members_recursively(
     )
 
 
+def _group_cache_key(
+    client_context: ClientContext,
+    group: SharepointGroup,
+) -> str:
+    identity = group.login_name
+    if group.principal_type == SHAREPOINT_GROUP_PRINCIPAL_TYPE:
+        identity = _get_site_scoped_group_name(client_context, identity)
+    elif guid := _extract_guid_from_claims_token(identity):
+        identity = guid
+    return f"{group.principal_type}{GROUP_CACHE_KEY_SEPARATOR}{identity}"
+
+
+def _get_cached_group_expansion(
+    client_context: ClientContext,
+    graph_client: GraphClient,
+    group: SharepointGroup,
+    permission_cache: SharepointPermissionCache,
+) -> SharepointGroupExpansion:
+    cache_key = _group_cache_key(client_context, group)
+    cached_expansion = permission_cache.group_expansions.get(cache_key)
+    if cached_expansion is not None:
+        return cached_expansion
+
+    try:
+        if group.principal_type == SHAREPOINT_GROUP_PRINCIPAL_TYPE:
+            nested_groups, _ = _get_sharepoint_groups(
+                client_context, group.login_name, graph_client
+            )
+        else:
+            nested_groups, _ = _get_azuread_groups(graph_client, group.login_name)
+    except ClientRequestException as e:
+        if (
+            group.principal_type != AZURE_AD_GROUP_PRINCIPAL_TYPE
+            or e.response is None
+            or e.response.status_code != 404
+        ):
+            raise
+        logger.warning("Group %s not found", group.login_name)
+        nested_groups = set()
+
+    expansion = SharepointGroupExpansion(nested_groups=nested_groups)
+    permission_cache.group_expansions[cache_key] = expansion
+    return expansion
+
+
+def _resolve_document_groups(
+    client_context: ClientContext,
+    graph_client: GraphClient,
+    groups: set[SharepointGroup],
+    permission_cache: SharepointPermissionCache,
+) -> DocumentGroupsResult:
+    group_queue: deque[SharepointGroup] = deque(groups)
+    visited_group_keys: set[str] = set()
+    group_ids: set[str] = set()
+
+    while group_queue:
+        group = group_queue.popleft()
+        if _is_public_login_name(group.login_name):
+            return DocumentGroupsResult(group_ids=set(), found_public_group=True)
+
+        group_ids.add(group.name)
+        cache_key = _group_cache_key(client_context, group)
+        if cache_key in visited_group_keys:
+            continue
+        visited_group_keys.add(cache_key)
+
+        expansion = _get_cached_group_expansion(
+            client_context, graph_client, group, permission_cache
+        )
+        group_queue.extend(expansion.nested_groups)
+
+    return DocumentGroupsResult(
+        group_ids=group_ids,
+        found_public_group=False,
+    )
+
+
 def _get_external_access_from_securable_object(
     client_context: ClientContext,
     graph_client: GraphClient,
     securable_object: SecurableObject,
+    permission_cache: SharepointPermissionCache,
     add_prefix: bool = False,
 ) -> ExternalAccess:
     groups: set[SharepointGroup] = set()
@@ -578,17 +659,20 @@ def _get_external_access_from_securable_object(
         "get_external_access_from_sharepoint",
     )
 
-    groups_and_members = _get_groups_and_members_recursively(
-        client_context, graph_client, groups
+    resolved_groups = _resolve_document_groups(
+        client_context,
+        graph_client,
+        groups,
+        permission_cache,
     )
-    if groups_and_members.found_public_group:
+    if resolved_groups.found_public_group:
         return ExternalAccess(
             external_user_emails=set(),
             external_user_group_ids=set(),
             is_public=True,
         )
 
-    for group_name in groups_and_members.groups_to_emails:
+    for group_name in resolved_groups.group_ids:
         if add_prefix:
             group_name = build_ext_group_name_for_onyx(
                 group_name, DocumentSource.SHAREPOINT
@@ -612,7 +696,9 @@ def get_external_access_from_sharepoint(
     site_page: dict[str, Any] | None,
     add_prefix: bool = False,
     treat_sharing_link_as_public: bool = False,
+    permission_cache: SharepointPermissionCache | None = None,
 ) -> ExternalAccess:
+    permission_cache = permission_cache or SharepointPermissionCache()
     if drive_item and drive_name:
         is_public = _is_public_item(drive_item, treat_sharing_link_as_public)
         if is_public:
@@ -655,6 +741,7 @@ def get_external_access_from_sharepoint(
         client_context,
         graph_client,
         item,
+        permission_cache,
         add_prefix,
     )
 
@@ -665,7 +752,9 @@ def get_hierarchy_node_external_access_from_sharepoint(
     node_type: HierarchyNodeType,
     drive_name: str | None,
     folder_url: str | None,
+    permission_cache: SharepointPermissionCache | None = None,
 ) -> ExternalAccess:
+    permission_cache = permission_cache or SharepointPermissionCache()
     if node_type == HierarchyNodeType.SITE:
         securable_object = client_context.web
     elif node_type == HierarchyNodeType.DRIVE and drive_name:
@@ -683,6 +772,7 @@ def get_hierarchy_node_external_access_from_sharepoint(
         client_context,
         graph_client,
         securable_object,
+        permission_cache,
         add_prefix=True,
     )
 

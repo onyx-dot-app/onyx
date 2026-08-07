@@ -3,6 +3,7 @@ from typing import Any
 from office365.graph_client import GraphClient
 from office365.onedrive.driveitems.driveItem import DriveItem
 from office365.sharepoint.client_context import ClientContext
+from pydantic import BaseModel, Field, field_serializer
 
 from onyx.connectors.models import ExternalAccess
 from onyx.db.enums import HierarchyNodeType
@@ -11,9 +12,32 @@ from onyx.utils.variable_functionality import (
 )
 
 
+class SharepointGroup(BaseModel):
+    model_config = {"frozen": True}
+
+    name: str
+    login_name: str
+    principal_type: int
+
+
+class SharepointGroupExpansion(BaseModel):
+    nested_groups: set[SharepointGroup]
+
+    @field_serializer("nested_groups")
+    def serialize_nested_groups(
+        self, nested_groups: set[SharepointGroup]
+    ) -> list[SharepointGroup]:
+        return list(nested_groups)
+
+
+class SharepointPermissionCache(BaseModel):
+    group_expansions: dict[str, SharepointGroupExpansion] = Field(default_factory=dict)
+
+
 def get_sharepoint_external_access(
     ctx: ClientContext,
     graph_client: GraphClient,
+    permission_cache: SharepointPermissionCache,
     drive_item: DriveItem | None = None,
     drive_name: str | None = None,
     site_page: dict[str, Any] | None = None,
@@ -44,6 +68,7 @@ def get_sharepoint_external_access(
         site_page,
         add_prefix,
         treat_sharing_link_as_public,
+        permission_cache,
     )
 
     return external_access
@@ -52,6 +77,7 @@ def get_sharepoint_external_access(
 def get_sharepoint_hierarchy_node_external_access(
     ctx: ClientContext,
     graph_client: GraphClient,
+    permission_cache: SharepointPermissionCache,
     node_type: HierarchyNodeType,
     drive_name: str | None = None,
     folder_url: str | None = None,
@@ -73,4 +99,5 @@ def get_sharepoint_hierarchy_node_external_access(
         node_type,
         drive_name,
         folder_url,
+        permission_cache,
     )
