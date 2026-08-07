@@ -11,6 +11,7 @@ from sqlalchemy.orm import Session
 
 from ee.onyx.db.usage_export import (
     get_all_empty_chat_message_entries,
+    usage_report_id_in_use,
     write_usage_report,
 )
 from ee.onyx.server.reporting.usage_export_models import (
@@ -140,6 +141,13 @@ def create_new_usage_report(
         db_session, file_store, report_id, period
     )
     users_file_id = generate_user_report(db_session, file_store, report_id)
+
+    # Re-check just before writing the final report: the API-level check
+    # happens before this (async) task runs, so a second request with the
+    # same client-supplied report_id can slip past it while this task is
+    # still generating the first report.
+    if usage_report_id_in_use(db_session, uuid.UUID(report_id)):
+        raise ValueError(f"report_id {report_id} is already in use")
 
     with tempfile.SpooledTemporaryFile(max_size=MAX_IN_MEMORY_SIZE) as zip_buffer:
         with zipfile.ZipFile(zip_buffer, "a", zipfile.ZIP_DEFLATED) as zip_file:

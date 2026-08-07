@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import json
+from typing import Any
 
 import pytest
 
@@ -194,6 +195,32 @@ def test_base_config_keeps_sandbox_permissions_and_plugins() -> None:
         "*": "allow",
         "customize-opencode": "deny",
     }
+
+
+@pytest.mark.parametrize(
+    "config",
+    [build_opencode_base_config(), build_provider_opencode_config(_gateway())],
+)
+def test_start_webapp_script_is_write_protected(config: dict[str, Any]) -> None:
+    permissions = config["permission"]
+    assert isinstance(permissions, dict)
+
+    for permission_name in ("edit", "write", "patch"):
+        rules = permissions[permission_name]
+        assert isinstance(rules, dict)
+        assert rules["start-webapp.sh"] == "deny"
+        assert rules["**/start-webapp.sh"] == "deny"
+        assert list(rules).index("*") < list(rules).index("start-webapp.sh")
+
+    bash_rules = permissions["bash"]
+    assert isinstance(bash_rules, dict)
+    assert bash_rules["*start-webapp.sh*"] == "deny"
+    assert bash_rules["bash start-webapp.sh"] == "allow"
+    assert bash_rules["bash ./start-webapp.sh"] == "allow"
+    bash_rule_names = list(bash_rules)
+    deny_index = bash_rule_names.index("*start-webapp.sh*")
+    assert deny_index < bash_rule_names.index("bash start-webapp.sh")
+    assert deny_index < bash_rule_names.index("bash ./start-webapp.sh")
 
 
 def test_dev_mode_allows_external_directories() -> None:

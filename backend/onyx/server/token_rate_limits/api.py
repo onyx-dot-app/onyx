@@ -18,6 +18,7 @@ from onyx.server.query_and_chat.token_limit import (
 from onyx.server.token_rate_limits.models import (
     TokenRateLimitArgs,
     TokenRateLimitDisplay,
+    TokenRateLimitUpdateArgs,
 )
 
 router = APIRouter(prefix="/admin/token-rate-limits", tags=PUBLIC_API_TAGS)
@@ -61,7 +62,7 @@ General Token Limit Settings
 @router.put("/rate-limit/{token_rate_limit_id}")
 def update_token_limit_settings(
     token_rate_limit_id: int,
-    token_limit_settings: TokenRateLimitArgs,
+    token_limit_settings: TokenRateLimitUpdateArgs,
     _: User = Depends(require_permission(Permission.FULL_ADMIN_PANEL_ACCESS)),
     db_session: Session = Depends(get_session),
 ) -> TokenRateLimitDisplay:
