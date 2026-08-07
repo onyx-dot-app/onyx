@@ -160,6 +160,17 @@ export const formatDateShort = (dateStr: string | null | undefined): string => {
   });
 };
 
+// Parses at local midnight so the day never shifts the way `formatDateShort` can for callers west of UTC.
+export const formatCalendarDay = (
+  dateStr: string,
+  { withYear = false }: { withYear?: boolean } = {}
+): string =>
+  new Date(`${dateStr}T00:00:00`).toLocaleDateString(undefined, {
+    month: "short",
+    day: "numeric",
+    ...(withYear && { year: "numeric" }),
+  });
+
 /**
  * Format an ISO timestamp as "YYYY/MM/DD HH:MM:SS" (24-hour, local time).
  * Intended for log displays where full precision is needed.
