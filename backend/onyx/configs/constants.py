@@ -168,12 +168,14 @@ CELERY_PRUNING_LOCK_TIMEOUT = 3600  # 1 hour (in seconds)
 
 CELERY_PERMISSIONS_SYNC_LOCK_TIMEOUT = 3600  # 1 hour (in seconds)
 
-# Must exceed the longest legitimate sync (the gdrive folder crawl enforces a
-# JOB_TIMEOUT deadline, 6h by default): while the lock is held, beat's
-# re-dispatches of the same cc_pair exit immediately instead of stacking
-# duplicate multi-hour crawls on one heavy worker (the OOM mechanism). A worker
-# that dies mid-sync leaves the lock stuck for at most this TTL.
-CELERY_EXTERNAL_GROUP_SYNC_LOCK_TIMEOUT = 7 * 3600  # JOB_TIMEOUT + 1h margin
+# While this lock is held, duplicate dispatches for the same cc_pair exit
+# immediately. Deployments whose group syncs legitimately run for hours should
+# raise this toward the JOB_TIMEOUT crawl deadline (6h) so re-dispatches can't
+# stack concurrent crawls on one heavy worker; a worker that dies mid-sync
+# leaves the lock stuck for at most this TTL.
+CELERY_EXTERNAL_GROUP_SYNC_LOCK_TIMEOUT = int(
+    os.environ.get("CELERY_EXTERNAL_GROUP_SYNC_LOCK_TIMEOUT") or 300
+)
 
 CELERY_USER_FILE_PROCESSING_LOCK_TIMEOUT = 30 * 60  # 30 minutes (in seconds)
 
