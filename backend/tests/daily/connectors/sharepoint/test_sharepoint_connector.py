@@ -21,6 +21,7 @@ from onyx.connectors.sharepoint.connector import (
 )
 from onyx.db.enums import HierarchyNodeType
 from tests.daily.connectors.utils import load_all_from_connector
+from tests.utils.pytest_secrets import RedactedDict
 from tests.utils.secret_names import TestSecret
 
 pytestmark = pytest.mark.secrets(
@@ -211,12 +212,14 @@ def mock_store_image() -> MagicMock:
 @pytest.fixture
 def sharepoint_credentials(
     test_secrets: dict[TestSecret, str],
-) -> dict[str, str]:
-    return {
-        "sp_client_id": os.environ["SHAREPOINT_CLIENT_ID"],
-        "sp_client_secret": test_secrets[TestSecret.SHAREPOINT_CLIENT_SECRET],
-        "sp_directory_id": os.environ["SHAREPOINT_CLIENT_DIRECTORY_ID"],
-    }
+) -> RedactedDict[str, str]:
+    return RedactedDict(
+        {
+            "sp_client_id": os.environ["SHAREPOINT_CLIENT_ID"],
+            "sp_client_secret": test_secrets[TestSecret.SHAREPOINT_CLIENT_SECRET],
+            "sp_directory_id": os.environ["SHAREPOINT_CLIENT_DIRECTORY_ID"],
+        }
+    )
 
 
 def test_sharepoint_connector_all_sites__docs_only(
@@ -598,22 +601,27 @@ def test_sharepoint_connector_hierarchy_nodes(
 @pytest.fixture
 def sharepoint_cert_credentials(
     test_secrets: dict[TestSecret, str],
-) -> dict[str, str]:
-    return {
-        "authentication_method": SharepointAuthMethod.CERTIFICATE.value,
-        "sp_client_id": test_secrets[TestSecret.PERM_SYNC_SHAREPOINT_CLIENT_ID],
-        "sp_private_key": test_secrets[TestSecret.PERM_SYNC_SHAREPOINT_PRIVATE_KEY],
-        "sp_certificate_password": test_secrets[
-            TestSecret.PERM_SYNC_SHAREPOINT_CERTIFICATE_PASSWORD
-        ],
-        "sp_directory_id": test_secrets[TestSecret.PERM_SYNC_SHAREPOINT_DIRECTORY_ID],
-    }
+) -> RedactedDict[str, str]:
+    return RedactedDict(
+        {
+            "authentication_method": SharepointAuthMethod.CERTIFICATE.value,
+            "sp_client_id": test_secrets[TestSecret.PERM_SYNC_SHAREPOINT_CLIENT_ID],
+            "sp_private_key": test_secrets[TestSecret.PERM_SYNC_SHAREPOINT_PRIVATE_KEY],
+            "sp_certificate_password": test_secrets[
+                TestSecret.PERM_SYNC_SHAREPOINT_CERTIFICATE_PASSWORD
+            ],
+            "sp_directory_id": test_secrets[
+                TestSecret.PERM_SYNC_SHAREPOINT_DIRECTORY_ID
+            ],
+        }
+    )
 
 
 def test_sharepoint_connector_hierarchy_node_permissions(
     mock_get_unstructured_api_key: MagicMock,  # noqa: ARG001
     mock_store_image: MagicMock,
     sharepoint_cert_credentials: dict[str, str],
+    enable_ee: None,  # noqa: ARG001
 ) -> None:
     site_url = os.environ["SHAREPOINT_SITE"]
     connector = SharepointConnector(
@@ -662,6 +670,7 @@ def test_permission_sync_site_hierarchy_node_permissions(
     mock_get_unstructured_api_key: MagicMock,  # noqa: ARG001
     mock_store_image: MagicMock,
     sharepoint_cert_credentials: dict[str, str],
+    enable_ee: None,  # noqa: ARG001
 ) -> None:
     connector = SharepointConnector(
         sites=[PERMISSION_SYNC_SITE_URL],
