@@ -83,7 +83,7 @@ from onyx.redis.redis_pool import get_redis_client, get_redis_replica_client
 from onyx.redis.redis_tenant_work_gating import maybe_mark_tenant_active
 from onyx.redis.tenant_redis_client import TenantRedisClient
 from onyx.server.metrics.pruning_metrics import (
-    inc_pruning_rate_limit_error,
+    inc_pruning_rate_limit_error_if_detected,
     observe_pruning_diff_duration,
     observe_pruning_enumeration_duration,
 )
@@ -616,12 +616,9 @@ def connector_pruning_generator_task(
                 reacquire_lock=lock.reacquire,
             )
         except PruneEnumerationError as e:
-            # Best-effort rate limit detection via string matching on the
-            # child's exception text (the child's own Prometheus registry
-            # dies with it, so the metric must be emitted here).
-            error_str = str(e)
-            if "rate limit" in error_str.lower() or "429" in error_str:
-                inc_pruning_rate_limit_error(connector_type)
+            # the child's own Prometheus registry dies with it, so rate limit
+            # errors are detected from its exception text and emitted here
+            inc_pruning_rate_limit_error_if_detected(str(e), connector_type)
             raise
         finally:
             observe_pruning_enumeration_duration(
