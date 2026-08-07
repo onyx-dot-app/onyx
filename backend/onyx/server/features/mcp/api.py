@@ -624,6 +624,11 @@ def make_pkce_pair() -> tuple[str, str]:
 
 MCP_OAUTH_CALLBACK_PATH = "/mcp/oauth/callback"
 
+# BLPOP slice for the authorization-URL wait. Cancellation cannot abort an
+# in-flight BLPOP, so each call stays short to keep a cancelled wait from
+# parking an executor thread and a Redis connection for the rest of the window.
+AUTH_URL_POLL_SECONDS: int = 1
+
 
 def _mcp_oauth_redirect_uri() -> str:
     return f"{WEB_DOMAIN}{MCP_OAUTH_CALLBACK_PATH}"
@@ -915,16 +920,15 @@ async def _connect_oauth(
     # 1) The OAuth redirect URL becomes available in Redis (we should return it)
     # 2) The initialize task completes (tokens already valid) — return to the provided return_path
     r = get_redis_client()
-    loop = asyncio.get_running_loop()
 
     async def wait_auth_url() -> str | None:
-        raw = await loop.run_in_executor(
-            None,
-            lambda: r.blpop([key_auth_url(str(user.id))], timeout=OAUTH_WAIT_SECONDS),
-        )
-        if raw is None:
-            return None
-        return raw[1].decode()
+        key = key_auth_url(str(user.id))
+        deadline = time.monotonic() + OAUTH_WAIT_SECONDS
+        while time.monotonic() < deadline:
+            raw = await asyncio.to_thread(r.blpop, [key], AUTH_URL_POLL_SECONDS)
+            if raw is not None:
+                return raw[1].decode()
+        return None
 
     # The stored config can't tell us whether the handshake will demand a fresh
     # authorization, and the SDK offers that URL exactly once — always listen.

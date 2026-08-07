@@ -2,6 +2,8 @@
 connect flow must forward the URL the MCP SDK emits even when the caller's
 stored connection config already carries `client_info` plus rendered headers,
 because a stored config never proves the handshake will skip authorization.
+The relay also has to wait in short BLPOP slices so the losing task's
+cancellation is not stranded behind a blocking call.
 """
 
 from __future__ import annotations
@@ -16,7 +18,7 @@ import pytest
 from fastapi import HTTPException
 
 from onyx.db.enums import MCPAuthenticationType, MCPOAuthProviderMode, MCPTransport
-from onyx.server.features.mcp.api import _connect_oauth
+from onyx.server.features.mcp.api import AUTH_URL_POLL_SECONDS, _connect_oauth
 from onyx.server.features.mcp.models import (
     MCPUserOAuthConnectRequest,
     MCPUserOAuthConnectResponse,
@@ -120,3 +122,27 @@ async def test_connect_surfaces_init_failure_when_no_auth_url_arrives() -> None:
         await _connect(failing_initialize, _blocking_blpop)
 
     assert exc_info.value.status_code == 400
+
+
+@pytest.mark.asyncio
+async def test_connect_waits_for_auth_url_in_short_blocking_slices() -> None:
+    timeouts: list[int] = []
+
+    def blpop_after_a_few_slices(
+        _keys: Any, timeout: int = 0
+    ) -> tuple[bytes, bytes] | None:
+        timeouts.append(timeout)
+        if len(timeouts) < 3:
+            return None
+        return (b"key", AUTH_URL.encode())
+
+    async def hanging_initialize(*_args: Any, **_kwargs: Any) -> Any:
+        await asyncio.sleep(5)
+        raise RuntimeError("Timed out waiting for OAuth callback")
+
+    response = await _connect(hanging_initialize, blpop_after_a_few_slices)
+
+    assert response.oauth_url == AUTH_URL
+    # Several bounded waits rather than one block spanning the whole window.
+    assert len(timeouts) == 3
+    assert max(timeouts) <= AUTH_URL_POLL_SECONDS
