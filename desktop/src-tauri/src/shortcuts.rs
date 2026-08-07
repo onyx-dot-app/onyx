@@ -36,6 +36,14 @@ pub fn setup_global_shortcuts(app: &AppHandle) {
             if event.state() != ShortcutState::Pressed {
                 return;
             }
+            // Toggle contract: the chord that summons Onyx also dismisses it,
+            // returning focus to whatever app was active before. This also
+            // keeps repeated presses from stacking up new chats.
+            if main_window_is_focused(app) {
+                log_backend_debug(app, "Summon shortcut fired (action=hide)");
+                hide_main_window(app);
+                return;
+            }
             let opens_new_chat = app.state::<ConfigState>().config().summon_opens_new_chat;
             log_backend_debug(
                 app,
@@ -61,6 +69,23 @@ pub fn setup_global_shortcuts(app: &AppHandle) {
                 app,
                 &format!("Failed to register summon shortcut \"{chord}\": {e}"),
             );
+        }
+    }
+}
+
+fn main_window_is_focused(app: &AppHandle) -> bool {
+    app.get_webview_window("main").is_some_and(|window| {
+        window.is_focused().unwrap_or_else(|e| {
+            log_backend_error(app, &format!("Failed to query window focus: {e}"));
+            false
+        })
+    })
+}
+
+fn hide_main_window(app: &AppHandle) {
+    if let Some(window) = app.get_webview_window("main") {
+        if let Err(e) = window.hide() {
+            log_backend_error(app, &format!("Failed to hide main window: {e}"));
         }
     }
 }
