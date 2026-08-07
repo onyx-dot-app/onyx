@@ -8,6 +8,10 @@ import {
   getTextContent,
   deleteTokenBeforeCursor,
   stripLeadingBr,
+  captureSnapshot,
+  restoreSnapshot,
+  snapshotsEqual,
+  type EditableSnapshot,
 } from "@/lib/contentEditable";
 import {
   createRichInputTileNode,
@@ -20,6 +24,27 @@ import {
 } from "@/lib/richInputTile";
 
 type PasteTileData = { text: string; tile: HTMLElement };
+
+// App-level undo history. The browser's native undo stack cannot be used:
+// paste, tiles, and draft restores mutate the DOM programmatically, which the
+// native stack can't see, so native undo restores stale states and destroys
+// typed text. All undo entry points (Cmd+Z, menu/context-menu historyUndo)
+// are intercepted and served from these snapshots instead.
+const UNDO_COALESCE_MS = 1000;
+const MAX_UNDO_ENTRIES = 100;
+// Paste tiles can hold very large text; bound total retained snapshot HTML.
+const MAX_UNDO_TOTAL_CHARS = 2_000_000;
+
+const CARET_KEYS = new Set([
+  "ArrowLeft",
+  "ArrowRight",
+  "ArrowUp",
+  "ArrowDown",
+  "Home",
+  "End",
+  "PageUp",
+  "PageDown",
+]);
 
 export interface UseContentEditableOptions {
   initialContent?: string;
@@ -77,6 +102,10 @@ export function useContentEditable({
   const wrapperPaddingYRef = useRef(0);
   const selectedTileRef = useRef<HTMLElement | null>(null);
   const plainPasteRef = useRef(false);
+  const undoStackRef = useRef<EditableSnapshot[]>([]);
+  const redoStackRef = useRef<EditableSnapshot[]>([]);
+  const lastEditKindRef = useRef<string | null>(null);
+  const lastEditAtRef = useRef(0);
   const [tilePopover, setTilePopover] = useState<PasteTileData | null>(null);
   const [pasteExpandHintVisible, setPasteExpandHintVisible] = useState(false);
 
@@ -173,6 +202,86 @@ export function useContentEditable({
     return text;
   }, []);
 
+  /** Push the current state as an undo restore point (starts a new undo unit). */
+  const pushUndoSnapshot = useCallback(() => {
+    const el = ref.current;
+    if (!el) return;
+    redoStackRef.current = [];
+    lastEditKindRef.current = null;
+    const stack = undoStackRef.current;
+    const snapshot = captureSnapshot(el);
+    const top = stack[stack.length - 1];
+    if (top && snapshotsEqual(top, snapshot)) return;
+    stack.push(snapshot);
+    if (stack.length > MAX_UNDO_ENTRIES) stack.shift();
+    let total = 0;
+    for (let i = stack.length - 1; i >= 0; i--) {
+      total += stack[i]!.html.length;
+      if (total > MAX_UNDO_TOTAL_CHARS && i > 0) {
+        stack.splice(0, i);
+        break;
+      }
+    }
+  }, []);
+
+  /** Record an edit, coalescing bursts of the same kind into one undo unit. */
+  const noteEdit = useCallback(
+    (kind: string) => {
+      const coalescible =
+        kind === "typing" || kind === "deleting" || kind === "tile-edit";
+      const now = Date.now();
+      if (
+        !coalescible ||
+        lastEditKindRef.current !== kind ||
+        now - lastEditAtRef.current > UNDO_COALESCE_MS
+      ) {
+        pushUndoSnapshot();
+      }
+      lastEditKindRef.current = coalescible ? kind : null;
+      lastEditAtRef.current = now;
+    },
+    [pushUndoSnapshot]
+  );
+
+  const clearUndoHistory = useCallback(() => {
+    undoStackRef.current = [];
+    redoStackRef.current = [];
+    lastEditKindRef.current = null;
+  }, []);
+
+  const performUndo = useCallback(() => {
+    const el = ref.current;
+    if (!el) return;
+    const current = captureSnapshot(el);
+    const stack = undoStackRef.current;
+    let snapshot = stack.pop();
+    // Skip no-op restore points (e.g. an op that bailed without mutating).
+    while (snapshot && snapshotsEqual(snapshot, current))
+      snapshot = stack.pop();
+    if (!snapshot) return;
+    redoStackRef.current.push(current);
+    restoreSnapshot(el, snapshot);
+    lastEditKindRef.current = null;
+    clearTileSelection();
+    setTilePopover(null);
+    syncFromDOM();
+    resize();
+  }, [clearTileSelection, syncFromDOM, resize]);
+
+  const performRedo = useCallback(() => {
+    const el = ref.current;
+    if (!el) return;
+    const snapshot = redoStackRef.current.pop();
+    if (!snapshot) return;
+    undoStackRef.current.push(captureSnapshot(el));
+    restoreSnapshot(el, snapshot);
+    lastEditKindRef.current = null;
+    clearTileSelection();
+    setTilePopover(null);
+    syncFromDOM();
+    resize();
+  }, [clearTileSelection, syncFromDOM, resize]);
+
   const handleInput = useCallback(
     (_event: React.SyntheticEvent<HTMLDivElement>): string => {
       if (isComposingRef.current) return messageRef.current;
@@ -197,15 +306,17 @@ export function useContentEditable({
   );
 
   const handleCompositionStart = useCallback(() => {
+    pushUndoSnapshot();
     isComposingRef.current = true;
     if (ref.current) {
       ref.current.removeAttribute("data-empty");
     }
-  }, []);
+  }, [pushUndoSnapshot]);
 
   const handleCompositionEnd = useCallback(() => {
     isComposingRef.current = false;
     plainPasteRef.current = false;
+    lastEditKindRef.current = null;
     syncFromDOM();
     resize();
   }, [syncFromDOM, resize]);
@@ -215,10 +326,92 @@ export function useContentEditable({
     disabledRef.current = disabled;
   }, [disabled]);
 
+  // Undo/redo entry points and typed-edit tracking. Native listeners (not
+  // React props) so every consumer of this hook is covered.
+  useEffect(() => {
+    const el = ref.current;
+    if (!el) return;
+
+    function handleBeforeInput(event: Event) {
+      if (disabledRef.current) return;
+      const inputType = (event as InputEvent).inputType;
+      if (inputType === "historyUndo") {
+        event.preventDefault();
+        performUndo();
+        return;
+      }
+      if (inputType === "historyRedo") {
+        event.preventDefault();
+        performRedo();
+        return;
+      }
+      if (isComposingRef.current || inputType === "insertCompositionText") {
+        return;
+      }
+      if (
+        inputType === "insertText" ||
+        inputType === "insertParagraph" ||
+        inputType === "insertLineBreak"
+      ) {
+        noteEdit("typing");
+      } else if (
+        inputType === "deleteContentBackward" ||
+        inputType === "deleteContentForward"
+      ) {
+        noteEdit("deleting");
+      } else {
+        noteEdit(inputType);
+      }
+    }
+
+    function handleUndoKeys(event: KeyboardEvent) {
+      if (disabledRef.current) return;
+      const mod = event.metaKey || event.ctrlKey;
+      if (mod && !event.altKey && event.key.toLowerCase() === "z") {
+        // Always intercept, even with empty stacks: native undo must never
+        // run against this element.
+        event.preventDefault();
+        if (event.shiftKey) {
+          performRedo();
+        } else {
+          performUndo();
+        }
+        return;
+      }
+      if (
+        mod &&
+        !event.altKey &&
+        !event.shiftKey &&
+        event.key.toLowerCase() === "y"
+      ) {
+        event.preventDefault();
+        performRedo();
+        return;
+      }
+      if (CARET_KEYS.has(event.key)) {
+        lastEditKindRef.current = null;
+      }
+    }
+
+    function handleCaretMouseDown() {
+      lastEditKindRef.current = null;
+    }
+
+    el.addEventListener("beforeinput", handleBeforeInput);
+    el.addEventListener("keydown", handleUndoKeys);
+    el.addEventListener("mousedown", handleCaretMouseDown);
+    return () => {
+      el.removeEventListener("beforeinput", handleBeforeInput);
+      el.removeEventListener("keydown", handleUndoKeys);
+      el.removeEventListener("mousedown", handleCaretMouseDown);
+    };
+  }, [performUndo, performRedo, noteEdit]);
+
   const setMessage = useCallback(
     (text: string) => {
       if (!ref.current) return;
 
+      pushUndoSnapshot();
       clearTileSelection();
       setTilePopover(null);
       setPasteExpandHintVisible(false);
@@ -242,12 +435,15 @@ export function useContentEditable({
         }
       });
     },
-    [resize, clearTileSelection]
+    [resize, clearTileSelection, pushUndoSnapshot]
   );
 
   const clearMessage = useCallback(() => {
     if (!ref.current) return;
 
+    // Submit/reset starts a fresh history — a sent message is not undoable
+    // back into the input.
+    clearUndoHistory();
     clearTileSelection();
     setTilePopover(null);
     setPasteExpandHintVisible(false);
@@ -257,21 +453,23 @@ export function useContentEditable({
     setMessageState("");
     resize();
     onContentChangeRef.current?.("");
-  }, [resize, clearTileSelection]);
+  }, [resize, clearTileSelection, clearUndoHistory]);
 
   const insertTextAtCursor = useCallback(
     (text: string) => {
       if (!ref.current) return;
+      pushUndoSnapshot();
       insertTextAtCursorUtil(ref.current, text);
       syncFromDOM();
       resize();
     },
-    [syncFromDOM, resize]
+    [syncFromDOM, resize, pushUndoSnapshot]
   );
 
   const insertTileAtCursor = useCallback(
     (text: string): HTMLElement | null => {
       if (!ref.current) return null;
+      pushUndoSnapshot();
       const tile = createRichInputTileNode({
         type: "paste",
         text,
@@ -285,7 +483,7 @@ export function useContentEditable({
       resize();
       return tile;
     },
-    [syncFromDOM, resize]
+    [syncFromDOM, resize, pushUndoSnapshot]
   );
 
   const expandTile = useCallback(
@@ -293,6 +491,7 @@ export function useContentEditable({
       const el = ref.current;
       if (!el || !el.contains(tile)) return;
 
+      pushUndoSnapshot();
       const sel = window.getSelection();
       const caret =
         sel && sel.rangeCount > 0 ? sel.getRangeAt(0).cloneRange() : null;
@@ -323,13 +522,14 @@ export function useContentEditable({
       syncFromDOM();
       resize();
     },
-    [syncFromDOM, resize]
+    [syncFromDOM, resize, pushUndoSnapshot]
   );
 
   const insertSkillTile = useCallback(
     (slug: string, name: string, beforeToken: string): boolean => {
       const el = ref.current;
       if (!el) return false;
+      pushUndoSnapshot();
       // Replacing a typed `/<query>`: bail if it can't be verifiably removed,
       // since the tile serializes back to `/<slug> ` and would duplicate it. An
       // empty `beforeToken` (e.g. paste) just inserts at the caret.
@@ -347,7 +547,7 @@ export function useContentEditable({
       resize();
       return true;
     },
-    [syncFromDOM, resize]
+    [syncFromDOM, resize, pushUndoSnapshot]
   );
 
   const findMatchingPasteTile = useCallback(
@@ -404,13 +604,14 @@ export function useContentEditable({
       event.preventDefault();
       const tile = removeBtn.closest("[data-rich-tile]");
       if (tile) {
+        pushUndoSnapshot();
         tile.remove();
         setTilePopover(null);
         syncFromDOM();
         resize();
       }
     },
-    [syncFromDOM, resize, clearTileSelection]
+    [syncFromDOM, resize, clearTileSelection, pushUndoSnapshot]
   );
 
   const handleTileClick = useCallback(
@@ -460,6 +661,7 @@ export function useContentEditable({
       const { tile } = tilePopover;
 
       if (!newText.trim()) {
+        pushUndoSnapshot();
         const next = tile.nextSibling;
         const prev = tile.previousSibling;
         tile.remove();
@@ -479,6 +681,7 @@ export function useContentEditable({
         return;
       }
 
+      noteEdit("tile-edit");
       tile.setAttribute("data-text", newText);
       tile.title = newText.length > 200 ? newText.slice(0, 200) + "…" : newText;
 
@@ -491,7 +694,7 @@ export function useContentEditable({
         meta.textContent = getPasteTileMeta(newText);
       }
     },
-    [tilePopover, syncFromDOM, resize]
+    [tilePopover, syncFromDOM, resize, pushUndoSnapshot, noteEdit]
   );
 
   const handleTileKeyDown = useCallback(
@@ -557,6 +760,7 @@ export function useContentEditable({
 
         if (isDelete) {
           event.preventDefault();
+          pushUndoSnapshot();
           selected.remove();
           selectedTileRef.current = null;
           syncFromDOM();
@@ -620,7 +824,7 @@ export function useContentEditable({
       }
       return true;
     },
-    [syncFromDOM, resize, clearTileSelection]
+    [syncFromDOM, resize, clearTileSelection, pushUndoSnapshot]
   );
 
   const handleCopy = useCallback(
@@ -660,12 +864,13 @@ export function useContentEditable({
       event.preventDefault();
       event.clipboardData.setData("text/plain", getTextContent(temp));
 
+      pushUndoSnapshot();
       range.deleteContents();
       selectedTileRef.current = null;
       syncFromDOM();
       resize();
     },
-    [syncFromDOM, resize]
+    [syncFromDOM, resize, pushUndoSnapshot]
   );
 
   const setCursorToEnd = useCallback(() => {

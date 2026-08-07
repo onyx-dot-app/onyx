@@ -88,6 +88,138 @@ export function insertNodeAtCursor(element: HTMLElement, node: Node): void {
   element.normalize();
 }
 
+// ─── Undo Snapshots ─────────────────────────────────────────────────────────
+
+/**
+ * A serialized editor state for the app-level undo/redo history. The native
+ * browser undo stack cannot be used: programmatic mutations (paste, tiles,
+ * drafts) are invisible to it, so native undo restores stale states and eats
+ * typed text. Selection endpoints are stored in "flat units" — one unit per
+ * text character, `<br>`, or atomic rich tile — so they survive the
+ * innerHTML round-trip.
+ */
+export interface EditableSnapshot {
+  html: string;
+  selStart: number;
+  selEnd: number;
+}
+
+function isAtomicNode(node: Node): boolean {
+  if (node.nodeType !== Node.ELEMENT_NODE) return false;
+  const el = node as HTMLElement;
+  return el.tagName === "BR" || el.hasAttribute("data-rich-tile");
+}
+
+function unitLength(node: Node): number {
+  if (node.nodeType === Node.TEXT_NODE) return node.textContent?.length ?? 0;
+  if (isAtomicNode(node)) return 1;
+  let sum = 0;
+  node.childNodes.forEach((child) => {
+    sum += unitLength(child);
+  });
+  return sum;
+}
+
+function boundaryToFlatOffset(
+  root: HTMLElement,
+  container: Node,
+  offset: number
+): number {
+  const range = document.createRange();
+  range.selectNodeContents(root);
+  range.setEnd(container, offset);
+  return unitLength(range.cloneContents());
+}
+
+function resolveFlatOffset(
+  root: HTMLElement,
+  target: number
+): { node: Node; offset: number } {
+  let remaining = target;
+
+  function walk(parent: Node): { node: Node; offset: number } | null {
+    const children = parent.childNodes;
+    for (let i = 0; i < children.length; i++) {
+      const child = children[i]!;
+      if (child.nodeType === Node.TEXT_NODE) {
+        const len = child.textContent?.length ?? 0;
+        if (remaining <= len) return { node: child, offset: remaining };
+        remaining -= len;
+      } else if (isAtomicNode(child)) {
+        if (remaining === 0) return { node: parent, offset: i };
+        remaining -= 1;
+        if (remaining === 0) return { node: parent, offset: i + 1 };
+      } else {
+        const found = walk(child);
+        if (found) return found;
+      }
+    }
+    return null;
+  }
+
+  return walk(root) ?? { node: root, offset: root.childNodes.length };
+}
+
+export function captureSnapshot(element: HTMLElement): EditableSnapshot {
+  const end = unitLength(element);
+  let selStart = end;
+  let selEnd = end;
+  const sel = window.getSelection();
+  if (sel && sel.rangeCount > 0) {
+    const range = sel.getRangeAt(0);
+    if (
+      element.contains(range.startContainer) &&
+      element.contains(range.endContainer)
+    ) {
+      selStart = boundaryToFlatOffset(
+        element,
+        range.startContainer,
+        range.startOffset
+      );
+      selEnd = boundaryToFlatOffset(
+        element,
+        range.endContainer,
+        range.endOffset
+      );
+    }
+  }
+  return { html: element.innerHTML, selStart, selEnd };
+}
+
+/**
+ * `snapshot.html` must only ever come from `captureSnapshot` of the same
+ * element (a browser serialization of DOM whose content enters via text
+ * nodes / `createRichInputTileNode`) — never from external input, or the
+ * innerHTML assignment below becomes an XSS sink.
+ */
+export function restoreSnapshot(
+  element: HTMLElement,
+  snapshot: EditableSnapshot
+): void {
+  element.innerHTML = snapshot.html;
+  const sel = window.getSelection();
+  if (!sel) return;
+  const start = resolveFlatOffset(element, snapshot.selStart);
+  const end =
+    snapshot.selEnd === snapshot.selStart
+      ? start
+      : resolveFlatOffset(element, snapshot.selEnd);
+  const range = document.createRange();
+  range.setStart(start.node, start.offset);
+  range.setEnd(end.node, end.offset);
+  sel.removeAllRanges();
+  sel.addRange(range);
+}
+
+export function snapshotsEqual(
+  a: EditableSnapshot,
+  b: EditableSnapshot
+): boolean {
+  return (
+    a.html === b.html && a.selStart === b.selStart && a.selEnd === b.selEnd
+  );
+}
+
 // ─── Text Content Extraction ────────────────────────────────────────────────
 
 const BLOCK_TAGS = new Set([
