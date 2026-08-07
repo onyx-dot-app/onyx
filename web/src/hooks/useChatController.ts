@@ -1475,7 +1475,10 @@ export default function useChatController({
     (async () => {
       try {
         if (sessionId) {
-          const available = await getAvailableContextTokens(sessionId);
+          const available = await getAvailableContextTokens(
+            sessionId,
+            llmManager.currentLlm.modelConfigurationId
+          );
           setIfActive(available ?? DEFAULT_CONTEXT_TOKENS);
           return;
         }
@@ -1502,6 +1505,7 @@ export default function useChatController({
     existingChatSessionId,
     liveAgent?.id,
     llmManager.hasAnyProvider,
+    llmManager.currentLlm.modelConfigurationId,
   ]);
 
   // check if there's an image file in the message history so that we know
