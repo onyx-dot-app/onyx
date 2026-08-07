@@ -274,10 +274,10 @@ manager flip (no membership change) refreshes the cached flag. `effective_permis
 
 ## 3. Filter rewrites — the `_add_user_filters` set
 
-> **Superseded by §11.4/§11.7** (regression review): the real set is **4 re-keyed filters** (connector,
+> **Reconciled with §11.4/§11.7** (regression review): the real set is **4 re-keyed filters** (connector,
 > document_set, persona, **skill**) + the `token_limit` write-path. Credentials AND **feedback** are
-> unchanged (no feedback permission in the bundle). The table below still applies row-by-row except the
-> feedback row, which is now NO CHANGE.
+> unchanged (no feedback permission in the bundle). The table below now carries all four, with the two
+> no-ops marked — read it row-by-row. Skill is the odd one out: a new admin-list path, not a filter edit.
 
 **The scope clause is OR-ed *into* each existing editable predicate — it does NOT replace the filter.** Each
 `_add_user_filters` keeps its full structure; only two things change: (1) the global short-circuit flips to
@@ -326,6 +326,7 @@ def within_managed_scope_clause(
 | `backend/onyx/db/document_set.py:41` | `sa_false()` (no owner/share concept) | `|=` scope clause over `DocumentSet__UserGroup` (`is_public.is_(False)`). The one resource where a standalone scope filter *happens* to match (`false() OR clause == clause`); still expressed as `|=` for uniformity. |
 | `backend/onyx/db/connector_credential_pair.py:50` | member-of-owning-group (all groups ⊆ mine) ∨ creator | `|=` scope clause over `UserGroup__ConnectorCredentialPair` (`access_type == PRIVATE`). |
 | `backend/onyx/db/persona.py:77` | owner ∨ owning-group member ∨ EDITOR direct/group share ∨ org-edit | `|=` scope clause over `Persona__UserGroup` (`is_public.is_(False)`); `add:agents` ownership tier unchanged. |
+| `backend/onyx/db/skill.py:260` (`list_skills_for_admin`) | none — unfiltered `select(Skill)` | **NEW scoped admin-list path**, not an `_add_user_filters` edit: scope clause over `Skill__UserGroup` (`is_public.is_(False)`), fail-closed, taken only when the caller is `SCOPED`. **Do NOT touch `_add_user_visibility_filter` (`skill.py:85`)** — it has no editable/viewing split and feeds the agent RUNTIME injection path. (§11.2) |
 | `backend/onyx/db/feedback.py:46` | admin-only (`FULL_ADMIN_PANEL_ACCESS`) | **NO CHANGE** — not in the bundle. (§11.7) |
 | `backend/onyx/db/credentials.py:41` | owner-keyed (`Credential.user_id==user.id`) | **NO CHANGE** — credentials stay owner-scoped; document the deliberate no-op. |
 | `backend/ee/onyx/db/token_limit.py` | no `_add_user_filters`; direct group query | enforce managed-scope in the group-token-limit **write/endpoint** path. Minor. |
