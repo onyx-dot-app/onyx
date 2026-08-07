@@ -108,6 +108,23 @@ logger = setup_logger()
 
 _DISPOSE_PENDING_TTL_SECONDS = 24 * 3600
 
+
+def _dispose_pending_key(session_id: UUID) -> str:
+    return f"craft:llm_config_dispose_pending:{session_id}"
+
+
+def mark_opencode_dispose_pending(session_id: UUID) -> None:
+    """Claim the dispose owed to a running instance after rewriting its config.
+
+    ``reconcile_session_llm_config`` performs it on the next turn, and needs the
+    marker because it short-circuits when the file already matches what it would
+    write — which it does after a workspace rebuild.
+    """
+    get_cache_backend().set(
+        _dispose_pending_key(session_id), "1", ex=_DISPOSE_PENDING_TTL_SECONDS
+    )
+
+
 # Webapp-ready probe on the UI-poll hot path; any response (even 404) counts.
 _WEBAPP_PROBE_TIMEOUT_SECONDS = 2.0
 
@@ -270,7 +287,7 @@ class SessionManager:
             current = None
 
         cache = get_cache_backend()
-        dispose_pending_key = f"craft:llm_config_dispose_pending:{session.id}"
+        dispose_pending_key = _dispose_pending_key(session.id)
         if current == expected:
             # A matching file does NOT prove the running opencode instance
             # picked it up: a prior reconcile may have written the file and
@@ -296,7 +313,7 @@ class SessionManager:
         # the next reconcile, so the marker is the only thing that tells it to
         # retry the missed dispose. Setting it after the write leaves that exact
         # window uncovered.
-        cache.set(dispose_pending_key, "1", ex=_DISPOSE_PENDING_TTL_SECONDS)
+        mark_opencode_dispose_pending(session.id)
         self._sandbox_manager.regenerate_session_config(
             sandbox_id=sandbox.id,
             session_id=session.id,
