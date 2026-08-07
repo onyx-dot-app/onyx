@@ -112,12 +112,15 @@ fn dismiss_all_windows(app: &AppHandle) {
 }
 
 /// Re-show the windows the last dismissal hid. `main` is skipped here; the
-/// summon action that follows shows and focuses it.
+/// summon action that follows shows and focuses it. A window whose `show`
+/// fails stays queued so a later summon retries it -- dropping the label
+/// would strand the window hidden with no path back.
 fn restore_dismissed_windows(app: &AppHandle) {
     let Some(state) = app.try_state::<DismissedWindows>() else {
         return;
     };
     let labels = std::mem::take(&mut *state.0.lock().unwrap_or_else(PoisonError::into_inner));
+    let mut failed = Vec::new();
     for label in labels {
         if label == "main" {
             continue;
@@ -125,8 +128,16 @@ fn restore_dismissed_windows(app: &AppHandle) {
         if let Some(window) = app.get_webview_window(&label) {
             if let Err(e) = window.show() {
                 log_backend_error(app, &format!("Failed to restore window \"{label}\": {e}"));
+                failed.push(label);
             }
         }
+    }
+    if !failed.is_empty() {
+        state
+            .0
+            .lock()
+            .unwrap_or_else(PoisonError::into_inner)
+            .extend(failed);
     }
 }
 
