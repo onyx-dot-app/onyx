@@ -12,6 +12,7 @@ import { Divider } from "@opal/components";
 import { useAdminAgents } from "@/lib/agents/hooks";
 import { ADMIN_ROUTES } from "@/lib/admin-routes";
 import { SettingsLayouts } from "@opal/layouts";
+import TokenRateLimitsPanel from "@/app/admin/token-rate-limits/TokenRateLimitsPanel";
 
 const route = ADMIN_ROUTES.USAGE;
 
@@ -38,6 +39,8 @@ export default function AnalyticsPage() {
         <PerUserUsagePanel />
         <Divider />
         <UsageReports />
+        <Divider />
+        <TokenRateLimitsPanel embedded />
       </SettingsLayouts.Body>
     </SettingsLayouts.Root>
   );

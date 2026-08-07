@@ -24,17 +24,13 @@ import {
   type UsagePerDayByModel,
   type ModelPrice,
 } from "@/app/app/settings/usage/lib";
+import {
+  formatCurrencyFromCents as formatDollars,
+  formatTokenCount as formatTokens,
+} from "@/lib/format";
 
 const DAYS_OPTIONS = ["7", "30"] as const;
 const DEFAULT_DAYS = 30;
-
-function formatDollars(cents: number): string {
-  return `$${(cents / 100).toFixed(2)}`;
-}
-
-function formatTokens(tokens: number): string {
-  return tokens.toLocaleString();
-}
 
 interface WindowCostSectionProps {
   windowCostCents: number;
