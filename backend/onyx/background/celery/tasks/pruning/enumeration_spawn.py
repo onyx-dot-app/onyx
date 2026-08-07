@@ -6,6 +6,9 @@ pod OOMs; running them in an ephemeral child (mirroring docfetching's
 The celery task acts as the watchdog (owns the redis lock/fence, kills the
 child on stop or timeout); the child returns its result through a JSON file,
 schema-validated on read (an mp queue can deadlock on multi-MB payloads).
+`run_in_isolated_process` is not usable here: it blocks the calling thread for
+the child's whole lifetime, but multi-hour enumerations need the parent free
+to renew the redis lock and react to the stop fence.
 Prometheus metrics are emitted by the parent — the child's registry is never
 scraped.
 """
