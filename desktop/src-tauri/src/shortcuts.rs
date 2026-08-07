@@ -1,6 +1,7 @@
 use crate::config::ConfigState;
 use crate::debug_log::{log_backend_debug, log_backend_error};
 use crate::window::{focus_main_window, focused_webview_window, open_chat_window};
+use std::sync::{Mutex, PoisonError};
 use tauri::{AppHandle, Manager};
 use tauri_plugin_global_shortcut::{GlobalShortcutExt, Shortcut, ShortcutState};
 
@@ -10,6 +11,11 @@ use tauri_plugin_global_shortcut::{GlobalShortcutExt, Shortcut, ShortcutState};
 pub struct SummonShortcut {
     pub chord: String,
 }
+
+/// Labels of the windows the last chord dismissal hid. Auxiliary windows
+/// have no other path back once hidden (the tray and summon paths only
+/// manage `main`), so the next summon restores this exact set.
+struct DismissedWindows(Mutex<Vec<String>>);
 
 /// Register the configured summon shortcut. This is deliberately the only
 /// global (system-wide) shortcut the app registers: summoning Onyx is the one
@@ -30,6 +36,8 @@ pub fn setup_global_shortcuts(app: &AppHandle) {
         }
     };
 
+    app.manage(DismissedWindows(Mutex::new(Vec::new())));
+
     let result = app
         .global_shortcut()
         .on_shortcut(shortcut, |app, _shortcut, event| {
@@ -37,18 +45,15 @@ pub fn setup_global_shortcuts(app: &AppHandle) {
                 return;
             }
             // Toggle contract: the chord that summons Onyx also dismisses it,
-            // returning focus to whatever app was active before. This also
-            // keeps repeated presses from stacking up new chats. Any focused
-            // Onyx window counts -- with an auxiliary window frontmost, the
-            // user is in Onyx, so the chord should dismiss rather than drag
-            // the main window forward.
-            if let Some(window) = focused_webview_window(app) {
-                log_backend_debug(app, "Summon shortcut fired (action=hide)");
-                if let Err(e) = window.hide() {
-                    log_backend_error(app, &format!("Failed to hide focused window: {e}"));
-                }
+            // returning focus to whatever app was active before. Dismissal
+            // hides every visible Onyx window -- hiding only the focused one
+            // would just hand focus to the next Onyx window instead of the
+            // previous application.
+            if focused_webview_window(app).is_some() {
+                dismiss_all_windows(app);
                 return;
             }
+            restore_dismissed_windows(app);
             let opens_new_chat = app.state::<ConfigState>().config().summon_opens_new_chat;
             log_backend_debug(
                 app,
@@ -74,6 +79,53 @@ pub fn setup_global_shortcuts(app: &AppHandle) {
                 app,
                 &format!("Failed to register summon shortcut \"{chord}\": {e}"),
             );
+        }
+    }
+}
+
+fn dismiss_all_windows(app: &AppHandle) {
+    let mut hidden = Vec::new();
+    for (label, window) in app.webview_windows() {
+        let visible = window.is_visible().unwrap_or_else(|e| {
+            log_backend_error(app, &format!("Failed to query window visibility: {e}"));
+            false
+        });
+        if !visible {
+            continue;
+        }
+        if let Err(e) = window.hide() {
+            log_backend_error(app, &format!("Failed to hide window \"{label}\": {e}"));
+        } else {
+            hidden.push(label);
+        }
+    }
+    log_backend_debug(
+        app,
+        &format!(
+            "Summon shortcut fired (action=dismiss, windows={})",
+            hidden.len()
+        ),
+    );
+    if let Some(state) = app.try_state::<DismissedWindows>() {
+        *state.0.lock().unwrap_or_else(PoisonError::into_inner) = hidden;
+    }
+}
+
+/// Re-show the windows the last dismissal hid. `main` is skipped here; the
+/// summon action that follows shows and focuses it.
+fn restore_dismissed_windows(app: &AppHandle) {
+    let Some(state) = app.try_state::<DismissedWindows>() else {
+        return;
+    };
+    let labels = std::mem::take(&mut *state.0.lock().unwrap_or_else(PoisonError::into_inner));
+    for label in labels {
+        if label == "main" {
+            continue;
+        }
+        if let Some(window) = app.get_webview_window(&label) {
+            if let Err(e) = window.show() {
+                log_backend_error(app, &format!("Failed to restore window \"{label}\": {e}"));
+            }
         }
     }
 }
