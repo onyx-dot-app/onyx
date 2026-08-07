@@ -458,9 +458,12 @@ def test_snapshot_failure_on_healthy_pod_preserves_status(
     snapshot_attempts = 0
 
     def _boom(
-        _sandbox_id: object, _session_id: object, _tenant_id: object
+        sandbox_id: object, session_id: object, tenant_id: object
     ) -> SnapshotResult:
         nonlocal snapshot_attempts
+        assert sandbox_id == sandbox.id
+        assert session_id == session_row.id
+        assert tenant_id == POSTGRES_DEFAULT_SCHEMA_STANDARD_VALUE
         snapshot_attempts += 1
         raise RuntimeError("S3 unreachable")
 
@@ -610,10 +613,16 @@ def test_snapshot_failure_on_unreachable_pod_still_terminates(
     _backdate_heartbeat(db_session, sandbox, seconds_ago=short_idle_threshold * 4)
 
     stubbed_cleanup.list_session_workspaces_returns = [session_row.id]
+    snapshot_attempts = 0
 
     def _boom(
-        _sandbox_id: object, _session_id: object, _tenant_id: object
+        sandbox_id: object, session_id: object, tenant_id: object
     ) -> SnapshotResult:
+        nonlocal snapshot_attempts
+        assert sandbox_id == sandbox.id
+        assert session_id == session_row.id
+        assert tenant_id == POSTGRES_DEFAULT_SCHEMA_STANDARD_VALUE
+        snapshot_attempts += 1
         # Once the snapshot call establishes that the pod is unreachable, a
         # second workspace listing must not be required to terminate it.
         stubbed_cleanup.list_session_workspaces_returns = None
@@ -633,6 +642,7 @@ def test_snapshot_failure_on_unreachable_pod_still_terminates(
     assert refreshed.status == SandboxStatus.SLEEPING
     assert stubbed_cleanup.list_session_workspaces_count == 1
     assert sandbox.id in stubbed_cleanup.terminated_sandbox_ids
+    assert snapshot_attempts == 1
 
 
 def test_sessions_marked_idle_and_nextjs_ports_cleared(
