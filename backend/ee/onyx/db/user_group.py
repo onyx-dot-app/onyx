@@ -11,7 +11,11 @@ from ee.onyx.server.user_group.models import (
     UserGroupCreate,
     UserGroupUpdate,
 )
-from onyx.auth.permissions import NON_TOGGLEABLE_PERMISSIONS, has_permission
+from onyx.auth.permissions import (
+    NON_TOGGLEABLE_PERMISSIONS,
+    has_global_permission,
+    has_permission,
+)
 from onyx.auth.scoped_permissions import assert_manages_group, assert_within_scope
 from onyx.configs.app_configs import DISABLE_VECTOR_DB
 from onyx.db.connector_credential_pair import (
@@ -674,6 +678,17 @@ def update_user_group(
     updated_user_ids = set(user_group_update.user_ids)
     added_user_ids = list(updated_user_ids - current_user_ids)
     removed_user_ids = list(current_user_ids - updated_user_ids)
+
+    # Removing yourself deletes the membership row that carries is_manager, so a scoped
+    # manager would lock themselves out of the group with no way back. A global holder
+    # keeps authority regardless and can re-add themselves, so only scoped is blocked.
+    if user.id in removed_user_ids and not has_global_permission(
+        user, Permission.MANAGE_USER_GROUPS
+    ):
+        raise OnyxError(
+            OnyxErrorCode.INVALID_INPUT,
+            "You can't remove yourself from a group you manage.",
+        )
 
     if added_user_ids:
         missing_users = [

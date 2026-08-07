@@ -338,9 +338,20 @@ function EditGroupPage({ groupId }: EditGroupPageProps) {
   const handleSelectionChange = useCallback(
     (ids: string[]) => {
       if (!initialized) return;
+      // Add mode can deselect your own row, which the member list disables — it would
+      // drop the membership carrying your manager role. The backend rejects it too.
+      if (
+        currentUserId &&
+        isOwnManagerRow(currentUserId) &&
+        !ids.includes(currentUserId)
+      ) {
+        toast.error("You can't remove yourself while managing this group");
+        setSelectedUserIds([currentUserId, ...ids, ...hiddenMemberIds]);
+        return;
+      }
       setSelectedUserIds([...ids, ...hiddenMemberIds]);
     },
-    [initialized, hiddenMemberIds]
+    [initialized, hiddenMemberIds, currentUserId, isOwnManagerRow]
   );
 
   async function handleSave() {

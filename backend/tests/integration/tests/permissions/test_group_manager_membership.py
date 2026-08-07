@@ -118,6 +118,17 @@ def _patch_group_body(user_ids: list[str], cc_pair_ids: list[int]) -> dict[str, 
     return {"user_ids": user_ids, "cc_pair_ids": cc_pair_ids}
 
 
+def _group_member_ids(group_id: int) -> set[str]:
+    """Membership read from the DB — a status code only proves what came back."""
+    with get_session_with_current_tenant() as db_session:
+        return {
+            str(row.user_id)
+            for row in db_session.query(User__UserGroup).filter(
+                User__UserGroup.user_group_id == group_id
+            )
+        }
+
+
 def _current_cc_pair_ids(group_id: int) -> set[int]:
     """The group's live cc_pair junctions, read from the DB. A 403 only proves what came
     back; this proves the rejected write left no rows behind."""
@@ -260,6 +271,41 @@ def test_manager_cannot_add_user_to_unmanaged_group(env: _ScopedEnv) -> None:
         env.manager.cookies,
     )
     assert_response(resp, "POST", path, "manager", "denied")
+
+
+def test_manager_cannot_remove_self_from_managed_group(env: _ScopedEnv) -> None:
+    """is_manager lives on the membership edge, so dropping yourself is a one-way
+    lockout. The member list disables it; the route has to reject it too."""
+    path = f"/manage/admin/user-group/{env.managed_group.id}"
+    resp = call_endpoint(
+        "PATCH",
+        path,
+        _patch_group_body([env.member.id], []),
+        env.manager.headers,
+        env.manager.cookies,
+    )
+    assert resp.status_code == 400, resp.text
+    assert _group_member_ids(env.managed_group.id) >= {env.manager.id, env.member.id}
+
+
+def test_admin_may_remove_self_from_group(env: _ScopedEnv) -> None:
+    """A global holder keeps authority regardless of membership, so there is no
+    lockout to prevent — the guard must not catch them."""
+    UserGroupManager.add_users(
+        env.managed_group, [env.admin.id], user_performing_action=env.admin
+    )
+    UserGroupManager.wait_for_sync(
+        user_performing_action=env.admin, user_groups_to_check=[env.managed_group]
+    )
+    resp = call_endpoint(
+        "PATCH",
+        f"/manage/admin/user-group/{env.managed_group.id}",
+        _patch_group_body([env.manager.id, env.member.id], []),
+        env.admin.headers,
+        env.admin.cookies,
+    )
+    assert resp.status_code == 200, resp.text
+    assert env.admin.id not in _group_member_ids(env.managed_group.id)
 
 
 def test_manager_renames_managed_group(env: _ScopedEnv) -> None:
