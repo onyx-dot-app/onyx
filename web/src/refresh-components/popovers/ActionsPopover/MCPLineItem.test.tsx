@@ -60,29 +60,28 @@ function renderMCPLineItem({
   return { onAuthenticate, onSelect };
 }
 
+function getTrailingIndicator(row: HTMLElement): HTMLElement {
+  const indicator = row.querySelector<HTMLElement>("[aria-hidden='true']");
+  if (!indicator) throw new Error("Expected a trailing MCP row indicator.");
+  return indicator;
+}
+
 describe("MCPLineItem", () => {
-  it("authenticates once when the row is clicked", async () => {
+  it("uses the row as the sole authentication target", async () => {
     const user = userEvent.setup();
     const { onAuthenticate, onSelect } = renderMCPLineItem();
+    const row = screen.getByRole("button", { name: oauthServer.name });
 
-    await user.click(screen.getByRole("button", { name: oauthServer.name }));
-
-    expect(onAuthenticate).toHaveBeenCalledTimes(1);
-    expect(onSelect).not.toHaveBeenCalled();
-  });
-
-  it("authenticates once when the key indicator is clicked", async () => {
-    const user = userEvent.setup();
-    const { onAuthenticate, onSelect } = renderMCPLineItem();
-
-    await user.click(screen.getByTestId("mcp-auth-indicator"));
-
-    expect(onAuthenticate).toHaveBeenCalledTimes(1);
-    expect(onSelect).not.toHaveBeenCalled();
     expect(screen.getAllByRole("button")).toHaveLength(1);
+    expect(getTrailingIndicator(row)).toHaveClass("pointer-events-none");
+
+    await user.click(row);
+
+    expect(onAuthenticate).toHaveBeenCalledTimes(1);
+    expect(onSelect).not.toHaveBeenCalled();
   });
 
-  it("authenticates once when the row is activated from the keyboard", async () => {
+  it("authenticates once per keyboard activation", async () => {
     const user = userEvent.setup();
     const { onAuthenticate, onSelect } = renderMCPLineItem();
     const row = screen.getByRole("button", { name: oauthServer.name });
@@ -92,19 +91,27 @@ describe("MCPLineItem", () => {
 
     expect(onAuthenticate).toHaveBeenCalledTimes(1);
     expect(onSelect).not.toHaveBeenCalled();
+
+    await user.keyboard(" ");
+
+    expect(onAuthenticate).toHaveBeenCalledTimes(2);
+    expect(onSelect).not.toHaveBeenCalled();
   });
 
-  it("selects once when the chevron indicator is clicked", async () => {
+  it("uses the row as the sole selection target", async () => {
     const user = userEvent.setup();
     const { onAuthenticate, onSelect } = renderMCPLineItem({
       isAuthenticated: true,
       tools: [tool],
     });
+    const row = screen.getByRole("button", { name: oauthServer.name });
 
-    await user.click(screen.getByTestId("mcp-select-indicator"));
+    expect(screen.getAllByRole("button")).toHaveLength(1);
+    expect(getTrailingIndicator(row)).toHaveClass("pointer-events-none");
+
+    await user.click(row);
 
     expect(onSelect).toHaveBeenCalledTimes(1);
     expect(onAuthenticate).not.toHaveBeenCalled();
-    expect(screen.getAllByRole("button")).toHaveLength(1);
   });
 });

@@ -115,8 +115,7 @@ export default function MCPLineItem({
           {canClickIntoServer && (
             <span
               aria-hidden="true"
-              className="flex size-8 shrink-0 items-center justify-center"
-              data-testid="mcp-select-indicator"
+              className="pointer-events-none flex size-8 shrink-0 items-center justify-center"
             >
               <SvgChevronRight className="size-4 stroke-text-03" />
             </span>
@@ -124,8 +123,7 @@ export default function MCPLineItem({
           {showReauthButton && (
             <span
               aria-hidden="true"
-              className="flex size-8 shrink-0 items-center justify-center"
-              data-testid="mcp-auth-indicator"
+              className="pointer-events-none flex size-8 shrink-0 items-center justify-center"
             >
               <SvgKey className="size-4 stroke-text-03" />
             </span>
