@@ -76,6 +76,7 @@ from onyx.llm.models import (
     ReasoningEffort,
     parse_user_selectable_reasoning_effort,
 )
+from onyx.llm.override_models import LLMOverride
 from onyx.secondary_llm_flows.chat_session_naming import generate_chat_session_name
 from onyx.server.api_key_usage import check_api_key_usage
 from onyx.server.middleware.rate_limiting import get_feedback_rate_limiters
