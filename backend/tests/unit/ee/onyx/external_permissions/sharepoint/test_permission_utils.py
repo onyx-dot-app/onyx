@@ -3,6 +3,7 @@ from typing import Any
 from unittest.mock import MagicMock, patch
 
 import pytest
+from office365.runtime.client_request import ClientRequestException
 
 from ee.onyx.external_permissions.sharepoint.permission_utils import (
     AD_GROUP_ENUMERATION_THRESHOLD,
@@ -97,6 +98,19 @@ def test_sharepoint_group_cache_is_scoped_to_site(
 
     assert mock_get_group.call_count == 2
     assert len(cache.group_expansions) == 2
+
+
+@patch(f"{MODULE}._get_sharepoint_groups")
+def test_sharepoint_group_404_is_not_cached(mock_get_group: MagicMock) -> None:
+    response = MagicMock(status_code=404, headers={}, content=b"")
+    mock_get_group.side_effect = ClientRequestException(response=response)
+    group = _make_sharepoint_group("Missing Group")
+    cache = SharepointPermissionCache()
+
+    with pytest.raises(ClientRequestException):
+        _resolve_document_groups(MagicMock(), MagicMock(), {group}, cache)
+
+    assert cache.group_expansions == {}
 
 
 @patch(f"{MODULE}._get_azuread_groups")

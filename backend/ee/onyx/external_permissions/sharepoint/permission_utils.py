@@ -549,7 +549,11 @@ def _get_cached_group_expansion(
         else:
             nested_groups, _ = _get_azuread_groups(graph_client, group.login_name)
     except ClientRequestException as e:
-        if e.response is None or e.response.status_code != 404:
+        if (
+            group.principal_type != AZURE_AD_GROUP_PRINCIPAL_TYPE
+            or e.response is None
+            or e.response.status_code != 404
+        ):
             raise
         logger.warning("Group %s not found", group.login_name)
         nested_groups = set()
