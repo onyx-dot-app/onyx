@@ -178,7 +178,9 @@ def patch_persona_visibility(
 def patch_user_persona_public_status(
     persona_id: int,
     is_public_request: IsPublicRequest,
-    user: User = Depends(require_permission(Permission.ADD_AGENTS)),
+    # allow_scope: update_persona_public_status enforces ownership at GATE 2, and /share
+    # already publishes for a scoped owner.
+    user: User = Depends(require_permission(Permission.ADD_AGENTS, allow_scope=True)),
     db_session: Session = Depends(get_session),
 ) -> None:
     try:

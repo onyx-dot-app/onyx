@@ -98,7 +98,10 @@ from onyx.server.features.mcp.api import (
     _ensure_mcp_server_owner_or_admin,
     _ensure_mcp_server_viewable,
 )
-from onyx.server.features.persona.api import delete_persona
+from onyx.server.features.persona.api import (
+    delete_persona,
+    patch_user_persona_public_status,
+)
 from onyx.server.features.persona.models import PersonaUpsertRequest
 from onyx.server.features.tool.api import _get_manageable_custom_tool
 from onyx.server.manage.administrative import create_deletion_attempt_for_connector_id
@@ -562,6 +565,9 @@ def test_delete_persona_route_admits_scoped_owner(
     ), "manager should hold ADD_AGENTS only by scope"
     assert _route_admits(delete_persona, "user", manager), (
         "delete route must admit scoped managers at GATE 1 (allow_scope=True)"
+    )
+    assert _route_admits(patch_user_persona_public_status, "user", manager), (
+        "public route must admit scoped managers at GATE 1 (allow_scope=True)"
     )
 
 
