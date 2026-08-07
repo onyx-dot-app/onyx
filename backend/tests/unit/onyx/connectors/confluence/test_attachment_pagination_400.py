@@ -15,12 +15,13 @@ import pytest
 import requests
 from requests.exceptions import HTTPError
 
+from onyx.configs.constants import DocumentSource
 from onyx.connectors.confluence.connector import (
     ConfluenceConnector,
     _extract_page_id_from_url,
 )
 from onyx.connectors.confluence.onyx_confluence import OnyxConfluence
-from onyx.connectors.models import ConnectorFailure, Document
+from onyx.connectors.models import ConnectorFailure, Document, DocumentFailure
 
 _PAGE = {
     "id": "111",
@@ -122,3 +123,89 @@ def test_400_date_error_propagates() -> None:
     time-offset retry instead of being skipped as a page failure."""
     with pytest.raises(HTTPError):
         _fetch_with_pagination_error(400, "The field 'updated' is invalid")
+
+
+_PAGE_URL = "https://confluence.example.com/spaces/X/pages/111/Page"
+
+
+def _run_reindex(attachment_error_code: int | None) -> list[Any]:
+    """Run targeted reindex for _PAGE with a client whose attachment pagination
+    yields one attachment and then optionally fails."""
+    connector = ConfluenceConnector(
+        wiki_base="https://confluence.example.com",
+        is_cloud=False,
+        include_attachments=True,
+    )
+    fake_client = mock.Mock(spec=OnyxConfluence)
+
+    def paginate(**kwargs: Any) -> Iterator[dict[str, Any]]:
+        if str(kwargs.get("cql", "")).startswith("type=page"):
+            yield _PAGE
+            return
+        yield _PDF_ATTACHMENT
+        if attachment_error_code is not None:
+            raise _http_error(attachment_error_code)
+
+    fake_client.paginated_cql_retrieval.side_effect = paginate
+
+    error = ConnectorFailure(
+        failed_document=DocumentFailure(document_id=_PAGE_URL, document_link=_PAGE_URL),
+        failure_message="Bad request (400) while paginating attachments",
+    )
+    with (
+        mock.patch.object(
+            ConfluenceConnector,
+            "confluence_client",
+            new_callable=mock.PropertyMock,
+            return_value=fake_client,
+        ),
+        mock.patch.object(
+            connector, "_yield_space_hierarchy_nodes", return_value=iter([])
+        ),
+        mock.patch.object(
+            connector, "_yield_ancestor_hierarchy_nodes", return_value=iter([])
+        ),
+        mock.patch.object(
+            connector, "_maybe_yield_page_hierarchy_node", return_value=None
+        ),
+        mock.patch.object(
+            connector,
+            "_convert_page_to_document",
+            return_value=Document(
+                id=_PAGE_URL,
+                sections=[],
+                source=DocumentSource.CONFLUENCE,
+                semantic_identifier="Big Page",
+                metadata={},
+            ),
+        ),
+        mock.patch(
+            "onyx.connectors.confluence.connector.convert_attachment_to_content",
+            return_value=("extracted text", None),
+        ),
+    ):
+        return list(connector.reindex([error]))
+
+
+def test_reindex_refetches_attachments() -> None:
+    outputs = _run_reindex(attachment_error_code=None)
+
+    assert any(
+        isinstance(o, Document) and o.semantic_identifier == "spec.pdf" for o in outputs
+    )
+    assert not any(isinstance(o, ConnectorFailure) for o in outputs)
+
+
+def test_reindex_rerecords_attachment_failure() -> None:
+    """If the 400 recurs during targeted reindex, the failure must be yielded
+    again so the error is not silently cleared."""
+    outputs = _run_reindex(attachment_error_code=400)
+
+    assert any(
+        isinstance(o, Document) and o.semantic_identifier == "spec.pdf" for o in outputs
+    )
+    failures = [o for o in outputs if isinstance(o, ConnectorFailure)]
+    assert len(failures) == 1
+    assert "400" in failures[0].failure_message
+    assert failures[0].failed_document is not None
+    assert _extract_page_id_from_url(failures[0].failed_document.document_id) == "111"

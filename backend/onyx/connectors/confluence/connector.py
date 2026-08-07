@@ -1044,6 +1044,11 @@ class ConfluenceConnector(
                 ) or space_level_access.get(space_key)
             yield doc_or_failure
 
+            # Refetch attachments too
+            attachment_docs, attachment_failures = self._fetch_page_attachments(page)
+            yield from attachment_docs
+            yield from attachment_failures
+
         for doc_id, page_id in url_to_page_id.items():
             if page_id not in seen_page_ids:
                 yield ConnectorFailure(
