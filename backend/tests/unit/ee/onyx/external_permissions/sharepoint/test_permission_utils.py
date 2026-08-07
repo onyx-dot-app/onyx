@@ -15,8 +15,11 @@ from ee.onyx.external_permissions.sharepoint.permission_utils import (
     _iter_graph_collection,
     _normalize_email,
     get_external_access_from_sharepoint,
+    get_hierarchy_node_external_access_from_sharepoint,
     get_sharepoint_external_groups,
 )
+from onyx.access.models import ExternalAccess
+from onyx.db.enums import HierarchyNodeType
 
 MODULE = "ee.onyx.external_permissions.sharepoint.permission_utils"
 GRAPH_API_BASE = "https://graph.microsoft.com/v1.0"
@@ -270,6 +273,51 @@ def test_default_skips_ad_enumeration(
     assert len(results) == 1
     assert results[0].id == "SiteGroup_abc"
     assert results[0].user_emails == ["alice@contoso.com"]
+
+
+@pytest.mark.parametrize(
+    ("node_type", "drive_name", "folder_url"),
+    [
+        (HierarchyNodeType.SITE, None, None),
+        (HierarchyNodeType.DRIVE, "Shared Documents", None),
+        (
+            HierarchyNodeType.FOLDER,
+            None,
+            "https://contoso.sharepoint.com/sites/eng/Shared%20Documents/API",
+        ),
+    ],
+)
+@patch(f"{MODULE}._get_external_access_from_securable_object")
+def test_hierarchy_node_access_uses_securable_object(
+    mock_get_access: MagicMock,
+    node_type: HierarchyNodeType,
+    drive_name: str | None,
+    folder_url: str | None,
+) -> None:
+    expected_access = ExternalAccess.empty()
+    mock_get_access.return_value = expected_access
+    ctx = MagicMock()
+    graph_client = MagicMock()
+
+    result = get_hierarchy_node_external_access_from_sharepoint(
+        ctx,
+        graph_client,
+        node_type,
+        drive_name,
+        folder_url,
+    )
+
+    assert result is expected_access
+    securable_object = mock_get_access.call_args.args[2]
+    if node_type == HierarchyNodeType.SITE:
+        assert securable_object is ctx.web
+    elif node_type == HierarchyNodeType.DRIVE:
+        ctx.web.lists.get_by_title.assert_called_once_with("Documents")
+    else:
+        ctx.web.get_folder_by_server_relative_url.assert_called_once_with(
+            "/sites/eng/Shared%20Documents/API"
+        )
+    assert mock_get_access.call_args.kwargs == {"add_prefix": True}
 
 
 @patch(f"{MODULE}._get_groups_and_members_recursively")
