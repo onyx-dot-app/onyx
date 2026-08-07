@@ -1,6 +1,5 @@
-// Per-resource action vocabularies, hand-written to match the keys the server stamps
-// on each resource's `permissions` map. A backend coverage test guards that the server
-// never stamps a key absent here, so this stays in sync without a codegen pipeline.
+// Per-resource action vocabularies — the keys the server stamps on each resource's
+// `permissions` map.
 
 // `A` is the resource's own action union, which `can()` infers back out of `permissions`
 // at the call site to reject another resource's action.
