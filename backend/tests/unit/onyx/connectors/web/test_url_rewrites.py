@@ -3,14 +3,15 @@
 from unittest.mock import patch
 
 from onyx.configs.constants import DocumentSource
-from onyx.connectors.models import Document
-from onyx.connectors.models import TextSection
-from onyx.connectors.web.connector import _parse_url_rewrites
-from onyx.connectors.web.connector import _rewrite_url
-from onyx.connectors.web.connector import _URL_REWRITES_ADAPTER
-from onyx.connectors.web.connector import ScrapeResult
-from onyx.connectors.web.connector import UrlRewriteRule
-from onyx.connectors.web.connector import WebConnector
+from onyx.connectors.models import Document, TextSection
+from onyx.connectors.web.connector import (
+    _URL_REWRITES_ADAPTER,
+    ScrapeResult,
+    UrlRewriteRule,
+    WebConnector,
+    _parse_url_rewrites,
+    _rewrite_url,
+)
 
 
 def test_parse_url_rewrites_rules() -> None:
