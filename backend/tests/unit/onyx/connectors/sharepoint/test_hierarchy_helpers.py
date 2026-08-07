@@ -2,7 +2,15 @@
 
 from __future__ import annotations
 
-from onyx.connectors.sharepoint.connector import SharepointConnector
+from unittest.mock import MagicMock, patch
+
+from onyx.access.models import ExternalAccess
+from onyx.connectors.sharepoint.connector import (
+    SharepointConnector,
+    SharepointConnectorCheckpoint,
+    SiteDescriptor,
+)
+from onyx.db.enums import HierarchyNodeType
 
 
 def test_extract_folder_path_from_parent_reference_with_folder() -> None:
@@ -108,3 +116,63 @@ def test_build_folder_url_with_spaces() -> None:
     result = connector._build_folder_url(site_url, drive_name, folder_path)
     expected = "https://company.sharepoint.com/sites/eng/Shared Documents/Engineering/API Docs/Version 2"
     assert result == expected
+
+
+@patch(
+    "onyx.connectors.sharepoint.connector.get_sharepoint_hierarchy_node_external_access"
+)
+def test_hierarchy_helpers_fetch_permissions_when_requested(
+    mock_get_access: MagicMock,
+) -> None:
+    access = ExternalAccess(
+        external_user_emails={"user@contoso.com"},
+        external_user_group_ids={"sharepoint_group"},
+        is_public=False,
+    )
+    mock_get_access.return_value = access
+    connector = SharepointConnector()
+    connector._graph_client = MagicMock()
+    checkpoint = SharepointConnectorCheckpoint(has_more=True)
+    site_url = "https://contoso.sharepoint.com/sites/eng"
+    drive_url = f"{site_url}/Shared%20Documents"
+
+    with patch.object(
+        connector,
+        "_create_rest_client_context",
+        return_value=MagicMock(),
+    ):
+        site_node = next(
+            connector._yield_site_hierarchy_node(
+                SiteDescriptor(url=site_url, drive_name=None, folder_path=None),
+                checkpoint,
+                include_permissions=True,
+            )
+        )
+        drive_node = next(
+            connector._yield_drive_hierarchy_node(
+                site_url,
+                drive_url,
+                "Shared Documents",
+                checkpoint,
+                include_permissions=True,
+            )
+        )
+        folder_node = next(
+            connector._yield_folder_hierarchy_nodes(
+                site_url,
+                drive_url,
+                "Shared Documents",
+                "Engineering",
+                checkpoint,
+                include_permissions=True,
+            )
+        )
+
+    assert site_node.external_access is access
+    assert drive_node.external_access is access
+    assert folder_node.external_access is access
+    assert [call.args[2] for call in mock_get_access.call_args_list] == [
+        HierarchyNodeType.SITE,
+        HierarchyNodeType.DRIVE,
+        HierarchyNodeType.FOLDER,
+    ]

@@ -142,7 +142,7 @@ def _build_bundle_readme(snapshot: LogExportSnapshot) -> str:
         "Contents: one piece_<hostname>.zip per host that uploaded logs, plus",
         f"{BUNDLE_MANIFEST_FILE_NAME} with per-worker receipt outcomes.",
         "On Kubernetes, each piece samples a single replica per worker type;",
-        "logs from other replicas and from stdout-only pods are not includedas of now.",
+        "logs from other replicas and from stdout-only pods are not included as of now.",
         "",
         "Worker outcomes:",
     ]

@@ -10,7 +10,7 @@ import {
   SelectCard,
   Text,
 } from "@opal/components";
-import React, { useEffect, useState } from "react";
+import React, { useRef } from "react";
 import { Form, Formik, useField, useFormikContext } from "formik";
 import { Scope } from "./types";
 import {
@@ -18,11 +18,12 @@ import {
   InputErrorText,
   InputVertical,
   Section,
-  toast,
 } from "@opal/layouts";
 import { SvgCheck, SvgGlobe, SvgUser, SvgUsers } from "@opal/icons";
 import type { IconFunctionComponent } from "@opal/types";
 import InputTypeInField from "@/refresh-components/form/InputTypeInField";
+import useShareableGroups from "@/hooks/useShareableGroups";
+import { formatCurrency, formatTokenCount } from "@/lib/format";
 
 const HOURS_PER_DAY = 24;
 // 1T tokens stored as thousands (1e9) stays well inside the column's int32.
@@ -51,11 +52,10 @@ const SCOPE_OPTIONS: ScopeOptionConfig[] = [
   { value: Scope.USER_GROUP, icon: SvgUsers, title: "User group" },
 ];
 
-interface ScopeOptionProps extends React.HTMLAttributes<HTMLElement> {
-  option: ScopeOptionConfig;
-  selected: boolean;
-  onSelect: () => void;
-  ref?: React.Ref<HTMLDivElement>;
+function scopeSubject(scope: Scope, groupName?: string): string {
+  if (scope === Scope.GLOBAL) return "Everyone in the workspace";
+  if (scope === Scope.USER) return "Each user";
+  return groupName ? `Members of ${groupName}` : "Members of the chosen group";
 }
 
 function handleRadioOptionKeyDown(
@@ -93,6 +93,13 @@ function handleRadioOptionKeyDown(
           : (currentIndex - 1 + options.length) % options.length;
   options[nextIndex]?.focus();
   options[nextIndex]?.click();
+}
+
+interface ScopeOptionProps extends React.HTMLAttributes<HTMLElement> {
+  option: ScopeOptionConfig;
+  selected: boolean;
+  onSelect: () => void;
+  ref?: React.Ref<HTMLDivElement>;
 }
 
 function ScopeOption({
@@ -181,11 +188,7 @@ function GroupMenuContent({
                   rounding="md"
                   selectVariant="select-heavy"
                   sizePreset="main-ui"
-                  state={
-                    String(group.value) === String(selectedGroupId)
-                      ? "selected"
-                      : "empty"
-                  }
+                  state={group.value === selectedGroupId ? "selected" : "empty"}
                   title={group.name}
                   variant="section"
                   width="full"
@@ -225,6 +228,7 @@ function GroupScopeOption({
 
 function TokenBudgetField() {
   const [field, meta, helpers] = useField<string>("token_budget");
+  const inputRef = useRef<HTMLInputElement>(null);
   const digits = String(field.value ?? "")
     .replace(/\D/g, "")
     .slice(0, 15);
@@ -234,6 +238,7 @@ function TokenBudgetField() {
 
   return (
     <InputTypeIn
+      ref={inputRef}
       id="token_budget"
       name="token_budget"
       value={formattedValue}
@@ -242,8 +247,33 @@ function TokenBudgetField() {
       maxLength={19}
       placeholder="No token limit"
       onChange={(event) => {
-        const nextDigits = event.target.value.replace(/\D/g, "").slice(0, 15);
+        const input = event.target;
+        const cursorPosition = input.selectionStart ?? input.value.length;
+        const digitsBeforeCursor = input.value
+          .slice(0, cursorPosition)
+          .replace(/\D/g, "").length;
+
+        const nextDigits = input.value.replace(/\D/g, "").slice(0, 15);
         void helpers.setValue(nextDigits);
+
+        const nextFormatted = nextDigits
+          ? new Intl.NumberFormat("en-US").format(Number(nextDigits))
+          : "";
+        let seenDigits = 0;
+        let nextCursorPosition = nextFormatted.length;
+        for (let i = 0; i < nextFormatted.length; i++) {
+          if (/\d/.test(nextFormatted.charAt(i))) seenDigits++;
+          if (seenDigits === digitsBeforeCursor) {
+            nextCursorPosition = i + 1;
+            break;
+          }
+        }
+        requestAnimationFrame(() => {
+          inputRef.current?.setSelectionRange(
+            nextCursorPosition,
+            nextCursorPosition
+          );
+        });
       }}
       onBlur={() => void helpers.setTouched(true)}
       variant={meta.touched && meta.error ? "error" : "primary"}
@@ -261,16 +291,13 @@ function TokenBudgetField() {
 function formatDollarBudgetInput(raw: string): string | null {
   const amount = Number(raw);
   if (raw === "" || !Number.isFinite(amount) || amount <= 0) return null;
-  return new Intl.NumberFormat("en-US", {
-    style: "currency",
-    currency: "USD",
-  }).format(amount);
+  return formatCurrency(amount);
 }
 
 function formatTokenBudgetInput(raw: string): string | null {
   const amount = Number(raw);
   if (raw === "" || !Number.isFinite(amount) || amount <= 0) return null;
-  return `${new Intl.NumberFormat("en-US").format(amount)} tokens`;
+  return `${formatTokenCount(amount)} tokens`;
 }
 
 interface GroupPickerProps {
@@ -284,9 +311,7 @@ function GroupPicker({
   selectedGroupId,
   onSelectGroup,
 }: GroupPickerProps) {
-  const selectedGroup = groups.find(
-    (group) => String(group.value) === String(selectedGroupId)
-  );
+  const selectedGroup = groups.find((group) => group.value === selectedGroupId);
 
   return (
     <Popover>
@@ -323,14 +348,11 @@ function LimitSummary({ groupName }: LimitSummaryProps) {
   const budgetText = budgets.join(" or ");
   const periodText = period === 1 ? "every day" : `every ${period} days`;
 
+  const subject = scopeSubject(values.target_scope, groupName);
   const subjectText =
-    values.target_scope === Scope.GLOBAL
-      ? "Everyone in the workspace shares"
-      : values.target_scope === Scope.USER
-        ? "Each user can spend"
-        : groupName
-          ? `Members of ${groupName} share`
-          : "Group members share";
+    values.target_scope === Scope.USER
+      ? `${subject} can spend`
+      : `${subject} share${values.target_scope === Scope.GLOBAL ? "s" : ""}`;
 
   const summary = `${subjectText} up to ${budgetText} ${periodText}. Usage is blocked until the period resets.`;
 
@@ -364,43 +386,11 @@ export default function CreateRateLimitModal({
   forSpecificScope,
   forSpecificUserGroup,
 }: CreateRateLimitModalProps) {
-  const [modalUserGroups, setModalUserGroups] = useState<
-    { name: string; value: number }[]
-  >([]);
-  const groupScopeAvailable =
-    forSpecificScope === undefined || forSpecificScope === Scope.USER_GROUP;
-
-  useEffect(() => {
-    if (!isOpen || !groupScopeAvailable || forSpecificUserGroup !== undefined) {
-      return;
-    }
-    let stale = false;
-    const fetchData = async () => {
-      try {
-        const response = await fetch("/api/manage/user-groups/minimal");
-        if (!response.ok) {
-          throw new Error(response.statusText || "Request failed");
-        }
-        const data = (await response.json()) as Array<{
-          id: number;
-          name: string;
-        }>;
-        if (stale) return;
-        const options = data.map((userGroup) => ({
-          name: userGroup.name,
-          value: userGroup.id,
-        }));
-        setModalUserGroups(options);
-      } catch (error) {
-        console.error("Failed to fetch user groups:", error);
-        if (!stale) toast.error(`Failed to fetch user groups: ${error}`);
-      }
-    };
-    fetchData();
-    return () => {
-      stale = true;
-    };
-  }, [isOpen, groupScopeAvailable, forSpecificUserGroup]);
+  const { data: shareableGroupsData } = useShareableGroups();
+  const modalUserGroups = (shareableGroupsData ?? []).map((userGroup) => ({
+    name: userGroup.name,
+    value: userGroup.id,
+  }));
 
   return (
     <Modal open={isOpen} onOpenChange={setIsOpen}>
@@ -496,16 +486,18 @@ export default function CreateRateLimitModal({
         >
           {({ isSubmitting, values, setFieldValue, errors, touched }) => {
             const selectedGroupName = modalUserGroups.find(
-              (group) => String(group.value) === String(values.user_group_id)
+              (group) => group.value === values.user_group_id
             )?.name;
+            const scopeSubjectLabel = scopeSubject(
+              values.target_scope,
+              selectedGroupName
+            );
             const scopeCaption =
-              values.target_scope === Scope.GLOBAL
-                ? "Everyone in the workspace shares one budget."
-                : values.target_scope === Scope.USER
-                  ? "Every user gets their own budget."
-                  : selectedGroupName
-                    ? `Members of ${selectedGroupName} share one budget.`
-                    : "Members of the chosen group share one budget.";
+              values.target_scope === Scope.USER
+                ? `${scopeSubjectLabel} gets their own budget.`
+                : `${scopeSubjectLabel} share${
+                    values.target_scope === Scope.GLOBAL ? "s" : ""
+                  } one budget.`;
 
             return (
               <Form className="flex min-h-0 flex-1 flex-col overflow-hidden">
