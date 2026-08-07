@@ -107,8 +107,12 @@ def validate_file(size: int) -> tuple[bool, str | None]:
 # Flag logic: True = enabled, False/null/not found = disabled
 ONYX_CRAFT_ENABLED_FLAG = "onyx-craft-enabled"
 
-# Payload: a JSON list of tool name strings, e.g. ["question", "webfetch"].
+# PostHog multivariate flag; each variant key maps to a fixed disabled-tools
+# list below. An unrecognized/missing variant falls back to OPENCODE_DISABLED_TOOLS.
 OPENCODE_DISABLED_TOOLS_FLAG = "onyx-craft-opencode-disabled-tools"
+OPENCODE_DISABLED_TOOLS_VARIANTS: dict[str, list[str]] = {
+    "none": [],
+}
 
 # Feature identifier in additional_data
 BUILD_MODE_FEATURE_ID = "build_mode"
@@ -188,23 +192,15 @@ def get_opencode_disabled_tools(user: User) -> list[str]:
     if isinstance(feature_flag_provider, NoOpFeatureFlagProvider):
         return OPENCODE_DISABLED_TOOLS
 
-    payload = feature_flag_provider.feature_payload_for_user_tenant(
+    variant = feature_flag_provider.feature_variant_for_user_tenant(
         OPENCODE_DISABLED_TOOLS_FLAG,
         user,
         get_current_tenant_id(),
     )
 
-    if payload is None:
-        return OPENCODE_DISABLED_TOOLS
+    if isinstance(variant, str) and variant in OPENCODE_DISABLED_TOOLS_VARIANTS:
+        return OPENCODE_DISABLED_TOOLS_VARIANTS[variant]
 
-    if isinstance(payload, list) and all(isinstance(t, str) for t in payload):
-        return payload
-
-    logger.warning(
-        "Ignoring malformed %s payload (expected list[str]): %r",
-        OPENCODE_DISABLED_TOOLS_FLAG,
-        payload,
-    )
     return OPENCODE_DISABLED_TOOLS
 
 

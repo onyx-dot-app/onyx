@@ -50,18 +50,22 @@ class FeatureFlagProvider(abc.ABC):
             },
         )
 
-    def feature_payload(
+    def feature_variant(
         self,
         flag_key: str,  # noqa: ARG002
         user_id: UUID,  # noqa: ARG002
         user_properties: dict[str, Any] | None = None,  # noqa: ARG002
-    ) -> Any | None:
+    ) -> str | bool | None:
+        """
+        Get a multivariate flag's variant key for a user (or its bool value
+        for a simple flag). Returns None if unsupported, unset, or on error.
+        """
         return None
 
-    def feature_payload_for_user_tenant(
+    def feature_variant_for_user_tenant(
         self, flag_key: str, user: User, tenant_id: str
-    ) -> Any | None:
-        return self.feature_payload(
+    ) -> str | bool | None:
+        return self.feature_variant(
             flag_key,
             user.id if user else UUID("caa1e0cd-6ee6-4550-b1ec-8affaef4bf83"),
             user_properties={

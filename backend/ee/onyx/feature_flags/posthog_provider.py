@@ -56,12 +56,12 @@ class PostHogFeatureFlagProvider(FeatureFlagProvider):
             )
             return False
 
-    def feature_payload(
+    def feature_variant(
         self,
         flag_key: str,
         user_id: UUID,
         user_properties: dict[str, Any] | None = None,
-    ) -> Any | None:
+    ) -> str | bool | None:
         if not posthog:
             return None
 
@@ -70,14 +70,14 @@ class PostHogFeatureFlagProvider(FeatureFlagProvider):
                 distinct_id=user_id,
                 properties=user_properties,
             )
-            return posthog.get_feature_flag_payload(
+            return posthog.get_feature_flag(
                 flag_key,
                 str(user_id),
                 person_properties=user_properties,
             )
         except Exception as e:
             logger.error(
-                "Error fetching feature flag payload %s for user %s: %s",
+                "Error fetching feature flag variant %s for user %s: %s",
                 flag_key,
                 user_id,
                 e,
