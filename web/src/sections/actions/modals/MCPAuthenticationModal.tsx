@@ -17,9 +17,9 @@ import {
   MessageCard,
   PasswordInputTypeIn,
   Tabs,
+  Text,
 } from "@opal/components";
 import { markdown } from "@opal/utils";
-import Text from "@/refresh-components/texts/Text";
 import { Formik, Form } from "formik";
 import * as Yup from "yup";
 import { useModal } from "@opal/components";
@@ -682,11 +682,11 @@ export default function MCPAuthenticationModal({
 
                       {/* Info Text */}
                       <div className="flex flex-col gap-2">
-                        <Text as="p" text03 secondaryBody>
+                        <Text as="p" font="secondary-body" color="text-03">
                           Client ID and secret are optional if the server
                           connection supports Dynamic Client Registration (DCR).
                         </Text>
-                        <Text as="p" text03 secondaryBody>
+                        <Text as="p" font="secondary-body" color="text-03">
                           If your server does not support DCR, you need register
                           your Onyx instance with the server provider to obtain
                           these credentials first. Make sure to grant Onyx
@@ -696,20 +696,17 @@ export default function MCPAuthenticationModal({
                         <div className="flex items-center gap-1 w-full">
                           <Text
                             as="p"
-                            text03
-                            secondaryBody
-                            className="whitespace-nowrap"
+                            font="secondary-body"
+                            color="text-03"
+                            nowrap
                           >
-                            Use{" "}
-                            <span className="font-secondary-action">
-                              redirect URI
-                            </span>
-                            :
+                            {markdown("Use **redirect URI**:")}
                           </Text>
                           <Text
                             as="p"
-                            text04
-                            className="font-mono text-[12px] leading-[16px] truncate"
+                            font="secondary-mono"
+                            color="text-04"
+                            maxLines={1}
                           >
                             {redirectUri}
                           </Text>
@@ -870,12 +867,12 @@ export default function MCPAuthenticationModal({
                                   </FormField.Control>
                                 </FormField>
 
-                                <Text as="p" text03 secondaryBody>
-                                  Known-provider mode requires endpoint
-                                  configuration. Google reference endpoints:
-                                  authorization{" "}
-                                  {GOOGLE_AUTHORIZATION_ENDPOINT_HINT} and token{" "}
-                                  {GOOGLE_TOKEN_ENDPOINT_HINT}.
+                                <Text
+                                  as="p"
+                                  font="secondary-body"
+                                  color="text-03"
+                                >
+                                  {`Known-provider mode requires endpoint configuration. Google reference endpoints: authorization ${GOOGLE_AUTHORIZATION_ENDPOINT_HINT} and token ${GOOGLE_TOKEN_ENDPOINT_HINT}.`}
                                 </Text>
                               </>
                             )}
