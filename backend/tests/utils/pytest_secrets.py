@@ -21,12 +21,23 @@ Then in tests:
         ...
 """
 
+from typing import TypeVar
+
 import pytest
 
 from tests.utils.aws_secrets import get_secrets
 from tests.utils.secret_names import TestSecret
 
 _NEEDED_SECRETS_KEY = "_onyx_test_secrets_needed"
+_REDACTED_REPR = "<redacted>"
+
+Key = TypeVar("Key")
+Value = TypeVar("Value")
+
+
+class RedactedDict(dict[Key, Value]):
+    def __repr__(self) -> str:
+        return _REDACTED_REPR
 
 
 def pytest_configure(config: pytest.Config) -> None:
@@ -56,7 +67,7 @@ def pytest_collection_modifyitems(
 
 
 @pytest.fixture(scope="session")
-def test_secrets(request: pytest.FixtureRequest) -> dict[TestSecret, str]:
+def test_secrets(request: pytest.FixtureRequest) -> RedactedDict[TestSecret, str]:
     """Resolve only the secrets declared by collected tests, in one batch."""
     needed: set[TestSecret] = getattr(request.config, _NEEDED_SECRETS_KEY, set())
-    return get_secrets(sorted(needed, key=lambda s: s.value))
+    return RedactedDict(get_secrets(sorted(needed, key=lambda s: s.value)))
