@@ -1,5 +1,4 @@
 import asyncio
-import queue
 from collections.abc import AsyncGenerator
 from types import SimpleNamespace
 from typing import Any, cast
@@ -20,21 +19,6 @@ from onyx.error_handling.error_codes import OnyxErrorCode
 from onyx.error_handling.exceptions import OnyxError
 from onyx.server.features.mcp import api, oauth
 from onyx.server.features.mcp.models import MCPUserOAuthConnectRequest
-
-
-class _Redis:
-    def __init__(self) -> None:
-        self.auth_urls: queue.Queue[str] = queue.Queue()
-
-    def blpop(self, _keys: list[str], timeout: int) -> tuple[bytes, bytes] | None:
-        try:
-            value = self.auth_urls.get(timeout=min(timeout, 0.1))
-        except queue.Empty:
-            return None
-        return b"auth_url", value.encode()
-
-    def rpush(self, _key: str, value: str) -> None:
-        self.auth_urls.put(value)
 
 
 class _DiscoveryClient:
@@ -64,22 +48,25 @@ class _DiscoveryClient:
 
 
 class _OAuthProvider:
-    def __init__(self, redis_client: _Redis) -> None:
-        self.redis_client = redis_client
+    def __init__(self, authorization_url_callback: Any) -> None:
+        self.authorization_url_callback = authorization_url_callback
         self.challenge: str | None = None
+
+    async def publish_redirect(self, auth_url: str) -> None:
+        await self.authorization_url_callback(auth_url)
 
     async def async_auth_flow(
         self, request: httpx.Request
     ) -> AsyncGenerator[httpx.Request, httpx.Response]:
         response = yield request
         self.challenge = response.headers["WWW-Authenticate"]
-        self.redis_client.rpush("auth_url", "https://consent")
+        await self.publish_redirect("https://consent")
         yield request
 
 
 def _setup_fresh_auto_discovery(
     monkeypatch: pytest.MonkeyPatch,
-) -> tuple[SimpleNamespace, SimpleNamespace, _Redis, _OAuthProvider]:
+) -> tuple[SimpleNamespace, SimpleNamespace, list[_OAuthProvider]]:
     server = SimpleNamespace(
         id=42,
         name="Public MCP",
@@ -92,8 +79,12 @@ def _setup_fresh_auto_discovery(
         admin_connection_config_id=None,
     )
     user = SimpleNamespace(id=uuid4(), email="user@example.com")
-    redis_client = _Redis()
-    oauth_provider = _OAuthProvider(redis_client)
+    oauth_providers: list[_OAuthProvider] = []
+
+    def make_oauth_provider(*_args: Any, **kwargs: Any) -> _OAuthProvider:
+        provider = _OAuthProvider(kwargs["authorization_url_callback"])
+        oauth_providers.append(provider)
+        return provider
 
     monkeypatch.setattr(api, "get_mcp_server_by_id", lambda *_args: server)
     monkeypatch.setattr(api, "_ensure_mcp_server_owner_or_admin", lambda *_args: None)
@@ -112,12 +103,11 @@ def _setup_fresh_auto_discovery(
             "headers": {},
         },
     )
-    monkeypatch.setattr(api, "get_redis_client", lambda: redis_client)
-    monkeypatch.setattr(api, "make_oauth_provider", lambda *_args: oauth_provider)
+    monkeypatch.setattr(oauth, "make_oauth_provider", make_oauth_provider)
     monkeypatch.setattr(
-        api, "initialize_mcp_client", AsyncMock(return_value=MagicMock())
+        oauth, "initialize_mcp_client", AsyncMock(return_value=MagicMock())
     )
-    return server, user, redis_client, oauth_provider
+    return server, user, oauth_providers
 
 
 def _request(server_id: int) -> MCPUserOAuthConnectRequest:
@@ -130,10 +120,39 @@ def _request(server_id: int) -> MCPUserOAuthConnectRequest:
     )
 
 
+def test_fresh_auto_discovery_preserves_www_authenticate_flow(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    server, user, oauth_providers = _setup_fresh_auto_discovery(monkeypatch)
+    discovery_factory = MagicMock(
+        side_effect=AssertionError("well-known fallback should not run")
+    )
+    monkeypatch.setattr(oauth, "mcp_ssrf_httpx_client_factory", discovery_factory)
+
+    async def initialize_with_challenge(*_args: Any, **kwargs: Any) -> MagicMock:
+        await kwargs["auth"].publish_redirect("https://challenge-consent")
+        return MagicMock()
+
+    monkeypatch.setattr(oauth, "initialize_mcp_client", initialize_with_challenge)
+
+    response = asyncio.run(
+        api._connect_oauth(
+            _request(server.id),
+            MagicMock(),
+            is_admin=True,
+            user=cast(User, user),
+        )
+    )
+
+    assert response.oauth_url == "https://challenge-consent"
+    assert oauth_providers[0].challenge is None
+    discovery_factory.assert_not_called()
+
+
 def test_fresh_auto_discovery_uses_well_known_metadata_to_start_oauth(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
-    server, user, _, oauth_provider = _setup_fresh_auto_discovery(monkeypatch)
+    server, user, oauth_providers = _setup_fresh_auto_discovery(monkeypatch)
     discovery_client = _DiscoveryClient([404, 200])
     monkeypatch.setattr(
         oauth, "mcp_ssrf_httpx_client_factory", lambda: discovery_client
@@ -153,7 +172,7 @@ def test_fresh_auto_discovery_uses_well_known_metadata_to_start_oauth(
         "https://mcp.example.com/.well-known/oauth-protected-resource/mcp",
         "https://mcp.example.com/.well-known/oauth-protected-resource",
     ]
-    assert oauth_provider.challenge == (
+    assert oauth_providers[0].challenge == (
         'Bearer resource_metadata="https://mcp.example.com/'
         '.well-known/oauth-protected-resource"'
     )
@@ -162,7 +181,7 @@ def test_fresh_auto_discovery_uses_well_known_metadata_to_start_oauth(
 def test_fresh_auto_discovery_errors_when_well_known_metadata_is_missing(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
-    server, user, _, _ = _setup_fresh_auto_discovery(monkeypatch)
+    server, user, _ = _setup_fresh_auto_discovery(monkeypatch)
     discovery_client = _DiscoveryClient([404, 404])
     monkeypatch.setattr(
         oauth, "mcp_ssrf_httpx_client_factory", lambda: discovery_client
@@ -180,3 +199,44 @@ def test_fresh_auto_discovery_errors_when_well_known_metadata_is_missing(
 
     assert exc_info.value.error_code is OnyxErrorCode.INVALID_INPUT
     assert "well-known URI" in exc_info.value.detail
+
+
+def test_authenticated_connection_initializes_without_new_oauth(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    server, user, _ = _setup_fresh_auto_discovery(monkeypatch)
+    user_config = SimpleNamespace(id=101)
+    stored_data = {
+        "client_info": {"client_id": "client-id"},
+        "headers": {"Authorization": "Bearer stored-token"},
+        "tokens": {"access_token": "stored-token", "token_type": "Bearer"},
+        "token_expires_at": 1234.0,
+    }
+    update_connection_config = MagicMock()
+    discovery_factory = MagicMock(
+        side_effect=AssertionError("authenticated connection should not discover")
+    )
+    monkeypatch.setattr(api, "get_user_connection_config", lambda *_args: user_config)
+    monkeypatch.setattr(
+        api, "can_resolve_mcp_credentials", lambda *_args, **_kwargs: True
+    )
+    monkeypatch.setattr(
+        api, "extract_connection_data", lambda *_args, **_kwargs: stored_data
+    )
+    monkeypatch.setattr(api, "update_connection_config", update_connection_config)
+    monkeypatch.setattr(oauth, "mcp_ssrf_httpx_client_factory", discovery_factory)
+
+    response = asyncio.run(
+        api._connect_oauth(
+            _request(server.id),
+            MagicMock(),
+            is_admin=True,
+            user=cast(User, user),
+        )
+    )
+
+    assert response.oauth_url == "/admin/actions/mcp"
+    discovery_factory.assert_not_called()
+    updated_user_data = update_connection_config.call_args.args[2]
+    assert updated_user_data["tokens"] == stored_data["tokens"]
+    assert updated_user_data["token_expires_at"] == 1234.0

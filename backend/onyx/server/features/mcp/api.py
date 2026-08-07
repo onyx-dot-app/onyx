@@ -84,7 +84,6 @@ from onyx.error_handling.exceptions import OnyxError
 from onyx.redis.redis_pool import get_redis_client
 from onyx.server.features.mcp.client import (
     discover_mcp_tools,
-    initialize_mcp_client,
     log_exception_group,
 )
 from onyx.server.features.mcp.models import (
@@ -115,8 +114,7 @@ from onyx.server.features.mcp.oauth import (
     UNUSED_RETURN_PATH,
     MCPOauthState,
     _absolute_token_expiry,
-    initiate_auto_discovery_oauth,
-    key_auth_url,
+    connect_auto_discovery_oauth,
     key_code,
     key_state,
     key_tokens,
@@ -766,6 +764,17 @@ async def _connect_oauth(
         update_connection_config(mcp_server.admin_connection_config_id, db, config_data)
 
     connection_config = get_user_connection_config(mcp_server.id, user.email, db)
+    is_authenticated = bool(
+        connection_config is not None
+        and not request.oauth_client_id_changed
+        and not request.oauth_client_secret_changed
+        and can_resolve_mcp_credentials(
+            mcp_server,
+            user,
+            db,
+            user_configs={mcp_server.id: connection_config},
+        )
+    )
     auth_template = get_mcp_auth_template(mcp_server)
     if auth_template is not None and auth_template.required_fields:
         existing_data = extract_connection_data(connection_config, apply_mask=False)
@@ -794,6 +803,10 @@ async def _connect_oauth(
         user_config_data["headers"] = existing_user_data.get("headers", {})
         if substitutions := existing_user_data.get(HEADER_SUBSTITUTIONS):
             user_config_data[HEADER_SUBSTITUTIONS] = substitutions
+        if is_authenticated:
+            for key in (MCPOAuthKeys.TOKENS.value, MCPOAuthKeys.TOKEN_EXPIRES_AT.value):
+                if value := existing_user_data.get(key):
+                    user_config_data[key] = value
 
     if connection_config is None:
         connection_config = create_connection_config(
@@ -864,76 +877,25 @@ async def _connect_oauth(
             oauth_url=oauth_url,
         )
 
-    is_connected = (
-        MCPOAuthKeys.CLIENT_INFO.value in connection_config_dict
-        and connection_config_dict.get("headers")
-    )
     if mcp_server.transport is None:
         raise HTTPException(
             status_code=400,
             detail="MCP server transport is not configured",
         )
 
-    probe_url = mcp_server.server_url
-    oauth_auth = make_oauth_provider(
-        mcp_server,
-        str(user.id),
-        request.return_path,
-        connection_config.id,
-        mcp_server.admin_connection_config_id,
-    )
-
-    if not is_connected:
-        redis_client = get_redis_client()
-
-        async def wait_auth_url() -> str | None:
-            raw = await asyncio.to_thread(
-                redis_client.blpop,
-                [key_auth_url(str(user.id))],
-                timeout=OAUTH_WAIT_SECONDS,
-            )
-            return raw[1].decode() if raw is not None else None
-
-        oauth_task = asyncio.create_task(
-            initiate_auto_discovery_oauth(oauth_auth, probe_url)
-        )
-        auth_url_task = asyncio.create_task(wait_auth_url())
-        done, _ = await asyncio.wait(
-            [oauth_task, auth_url_task],
-            return_when=asyncio.FIRST_COMPLETED,
-        )
-        if oauth_task in done:
-            try:
-                await oauth_task
-            except Exception:
-                auth_url_task.cancel()
-                raise
-
-        oauth_url = await auth_url_task
-        if oauth_url:
-            logger.info(
-                "Connected to auth url: %s for mcp server: %s",
-                oauth_url,
-                mcp_server.name,
-            )
-            return MCPUserOAuthConnectResponse(
-                server_id=int(request.server_id), oauth_url=oauth_url
-            )
-        oauth_task.cancel()
-        raise OnyxError(
-            OnyxErrorCode.INVALID_INPUT,
-            "OAuth auto-discovery did not produce an authorization redirect.",
-        )
-
-    logger.info("Initializing authenticated OAuth server at: %s", probe_url)
     try:
-        init_result = await initialize_mcp_client(
-            probe_url,
+        oauth_url = await connect_auto_discovery_oauth(
+            mcp_server=mcp_server,
+            user_id=str(user.id),
+            return_path=request.return_path,
+            connection_config_id=connection_config.id,
+            admin_config_id=mcp_server.admin_connection_config_id,
             connection_headers=connection_config_dict.get("headers", {}),
             transport=mcp_server.transport,
-            auth=oauth_auth,
+            is_authenticated=is_authenticated,
         )
-        logger.info("OAuth initialization completed successfully: %s", init_result)
+    except OnyxError:
+        raise
     except Exception as e:
         saved_e = log_exception_group(e) if isinstance(e, ExceptionGroup) else e
         logger.error("OAuth initialization failed: %s", saved_e)
@@ -943,7 +905,7 @@ async def _connect_oauth(
 
     return MCPUserOAuthConnectResponse(
         server_id=int(request.server_id),
-        oauth_url=request.return_path,
+        oauth_url=oauth_url or request.return_path,
     )
 
 

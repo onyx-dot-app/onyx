@@ -9,7 +9,7 @@ Routes and route-only flow helpers stay in `api.py`.
 import asyncio
 import json
 import time
-from collections.abc import Awaitable, Callable
+from collections.abc import Awaitable, Callable, Coroutine
 from typing import Any, TypedDict
 from urllib.parse import parse_qs, urlparse
 from uuid import uuid4
@@ -35,7 +35,7 @@ from onyx.cache.interface import CacheLockAcquisitionError
 from onyx.cache.locks import cache_shared_lock
 from onyx.configs.app_configs import WEB_DOMAIN
 from onyx.db.engine.sql_engine import get_session_with_current_tenant
-from onyx.db.enums import MCPOAuthProviderMode
+from onyx.db.enums import MCPOAuthProviderMode, MCPTransport
 from onyx.db.mcp import (
     extract_connection_data,
     get_connection_config_by_id,
@@ -46,6 +46,7 @@ from onyx.db.models import MCPServer as DbMCPServer
 from onyx.error_handling.error_codes import OnyxErrorCode
 from onyx.error_handling.exceptions import OnyxError
 from onyx.redis.redis_pool import get_redis_client
+from onyx.server.features.mcp.client import initialize_mcp_client
 from onyx.server.features.mcp.models import (
     MCPConnectionData,
     MCPOAuthKeys,
@@ -82,10 +83,6 @@ OAUTH_WAIT_SECONDS = 30  # Give the user 30 seconds to complete the OAuth flow
 UNUSED_RETURN_PATH = "unused_path"
 
 
-def key_auth_url(user_id: str) -> str:
-    return f"mcp:oauth:{user_id}:auth_url"
-
-
 def key_state(user_id: str) -> str:
     return f"mcp:oauth:{user_id}:state"
 
@@ -104,8 +101,42 @@ def key_client_info(user_id: str) -> str:
 
 REQUESTED_SCOPE: str | None = None
 
+_INFLIGHT_OAUTH_TASKS: set[asyncio.Task[Any]] = set()
 
-async def initiate_auto_discovery_oauth(
+
+def _retain_oauth_task(task: asyncio.Task[Any]) -> None:
+    _INFLIGHT_OAUTH_TASKS.add(task)
+
+    def release(completed_task: asyncio.Task[Any]) -> None:
+        _INFLIGHT_OAUTH_TASKS.discard(completed_task)
+        exception = None if completed_task.cancelled() else completed_task.exception()
+        if exception is not None:
+            logger.error(
+                "Background MCP OAuth flow failed",
+                exc_info=exception,
+            )
+
+    task.add_done_callback(release)
+
+
+async def _run_until_oauth_redirect(
+    operation: Coroutine[Any, Any, Any],
+    redirect_future: asyncio.Future[str],
+) -> str | None:
+    operation_task = asyncio.create_task(operation)
+    done, _ = await asyncio.wait(
+        [operation_task, redirect_future],
+        return_when=asyncio.FIRST_COMPLETED,
+    )
+    if redirect_future in done:
+        _retain_oauth_task(operation_task)
+        return redirect_future.result()
+
+    await operation_task
+    return None
+
+
+async def _initiate_oauth_from_well_known_metadata(
     oauth_auth: OAuthClientProvider,
     server_url: str,
 ) -> None:
@@ -143,6 +174,55 @@ async def initiate_auto_discovery_oauth(
                 await auth_flow.aclose()
                 return
             response = await client.send(request)
+
+
+async def connect_auto_discovery_oauth(
+    mcp_server: DbMCPServer,
+    user_id: str,
+    return_path: str,
+    connection_config_id: int,
+    admin_config_id: int | None,
+    connection_headers: dict[str, str],
+    transport: MCPTransport,
+    is_authenticated: bool,
+) -> str | None:
+    redirect_future = asyncio.get_running_loop().create_future()
+
+    async def publish_redirect(auth_url: str) -> None:
+        if not redirect_future.done():
+            redirect_future.set_result(auth_url)
+
+    oauth_auth = make_oauth_provider(
+        mcp_server,
+        user_id,
+        return_path,
+        connection_config_id,
+        admin_config_id,
+        authorization_url_callback=publish_redirect,
+    )
+
+    redirect_url = await _run_until_oauth_redirect(
+        initialize_mcp_client(
+            mcp_server.server_url,
+            connection_headers=connection_headers,
+            transport=transport,
+            auth=oauth_auth,
+        ),
+        redirect_future,
+    )
+    if redirect_url is not None or is_authenticated:
+        return redirect_url
+
+    redirect_url = await _run_until_oauth_redirect(
+        _initiate_oauth_from_well_known_metadata(oauth_auth, mcp_server.server_url),
+        redirect_future,
+    )
+    if redirect_url is None:
+        raise OnyxError(
+            OnyxErrorCode.INVALID_INPUT,
+            "OAuth auto-discovery did not produce an authorization redirect.",
+        )
+    return redirect_url
 
 
 class MCPOauthState(BaseModel):
@@ -670,6 +750,7 @@ def make_oauth_provider(
     return_path: str,
     connection_config_id: int,
     admin_config_id: int | None,
+    authorization_url_callback: Callable[[str], Awaitable[None]] | None = None,
 ) -> OAuthClientProvider:
     async def redirect_handler(auth_url: str) -> None:
         if return_path == UNUSED_RETURN_PATH:
@@ -683,18 +764,17 @@ def make_oauth_provider(
             # Defensive: some providers encode state differently; adapt if needed.
             raise RuntimeError("Missing state in authorization_url")
 
-        # Save for the frontend & for callback validation
+        # Save for callback validation before exposing the URL to the browser.
         state_obj = MCPOauthState(
             server_id=mcp_server.id,
             return_path=return_path,
             is_admin=admin_config_id is not None,
             state=state,
         )
-        r.rpush(key_auth_url(user_id), auth_url)
-        r.expire(key_auth_url(user_id), OAUTH_WAIT_SECONDS)
         r.set(key_state(user_id), state_obj.model_dump_json(), ex=STATE_TTL_SECONDS)
-
-        # Return immediately; the HTTP layer will read the stored URL and send it to the browser.
+        if authorization_url_callback is None:
+            raise RuntimeError("OAuth authorization URL callback is not configured")
+        await authorization_url_callback(auth_url)
 
     async def callback_handler() -> tuple[str, str | None]:
         r = get_redis_client()
@@ -725,7 +805,7 @@ def make_oauth_provider(
             raise RuntimeError("Invalid state in OAuth callback")
 
         # Optional: cleanup
-        r.delete(key_auth_url(user_id), key_state(user_id))
+        r.delete(key_state(user_id))
         return code, state_obj.state
 
     refresh_log_context = _refresh_log_context(mcp_server, connection_config_id)
