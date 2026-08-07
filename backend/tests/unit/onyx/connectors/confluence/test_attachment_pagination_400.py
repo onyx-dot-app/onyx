@@ -196,6 +196,58 @@ def test_reindex_refetches_attachments() -> None:
     assert not any(isinstance(o, ConnectorFailure) for o in outputs)
 
 
+def _slim_attachments_with(side_effects: list[Any]) -> tuple[list[Any], mock.Mock]:
+    """Drive _retrieve_attachments_for_slim_page with a client whose
+    cql_paginate_all_expansions produces the given results/exceptions."""
+    connector = ConfluenceConnector(
+        wiki_base="https://confluence.example.com",
+        is_cloud=False,
+        include_attachments=True,
+    )
+    fake_client = mock.Mock(spec=OnyxConfluence)
+    fake_client.cql_paginate_all_expansions.side_effect = side_effects
+
+    with mock.patch.object(
+        ConfluenceConnector,
+        "confluence_client",
+        new_callable=mock.PropertyMock,
+        return_value=fake_client,
+    ):
+        results = connector._retrieve_attachments_for_slim_page(
+            "111", "space", None, None
+        )
+    return results, fake_client
+
+
+def test_slim_attachment_400_retries_then_succeeds() -> None:
+    results, fake_client = _slim_attachments_with(
+        [_http_error(400), _http_error(400), iter([_PDF_ATTACHMENT])]
+    )
+
+    assert results == [_PDF_ATTACHMENT]
+    assert fake_client.cql_paginate_all_expansions.call_count == 3
+
+
+def test_slim_attachment_persistent_400_raises() -> None:
+    """The slim path must never keep partial results (pruning deletes anything
+    not enumerated) -- a persistent 400 aborts instead of truncating."""
+    with pytest.raises(HTTPError):
+        _slim_attachments_with([_http_error(400), _http_error(400), _http_error(400)])
+
+
+@pytest.mark.parametrize(
+    "error",
+    [
+        _http_error(403),
+        _http_error(500),
+        _http_error(400, "The field 'updated' is invalid"),
+    ],
+)
+def test_slim_attachment_other_errors_raise_immediately(error: HTTPError) -> None:
+    with pytest.raises(HTTPError):
+        _slim_attachments_with([error])
+
+
 def test_reindex_rerecords_attachment_failure() -> None:
     """If the 400 recurs during targeted reindex, the failure must be yielded
     again so the error is not silently cleared."""
