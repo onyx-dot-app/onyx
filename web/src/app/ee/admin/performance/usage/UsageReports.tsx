@@ -24,7 +24,8 @@ import {
 import { humanReadableFormat, humanReadableFormatWithTime } from "@opal/time";
 import { errorHandlingFetcher } from "@/lib/fetcher";
 import { SWR_KEYS } from "@/lib/swr-keys";
-import { UsageReport } from "./types";
+import { cn } from "@opal/utils";
+import { UsageReport } from "@/app/ee/admin/performance/usage/types";
 
 interface ReportPeriod {
   label: string;
@@ -98,11 +99,11 @@ interface ReportRowProps {
 function ReportRow({ report, justArrived }: ReportRowProps) {
   return (
     <div
-      className={
-        justArrived
-          ? "rounded-12 border border-border-01 bg-background-neutral-00 motion-safe:animate-in motion-safe:fade-in motion-safe:slide-in-from-top-2 motion-safe:duration-500"
-          : "rounded-12 border border-border-01 bg-background-neutral-00"
-      }
+      className={cn(
+        "rounded-12 border border-border-01 bg-background-neutral-00",
+        justArrived &&
+          "motion-safe:animate-in motion-safe:fade-in motion-safe:slide-in-from-top-2 motion-safe:duration-500"
+      )}
     >
       <ContentAction
         sizePreset="main-ui"
