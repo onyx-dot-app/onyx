@@ -209,6 +209,7 @@ def test_public_initialization_uses_well_known_metadata(
             connection_headers={
                 "X-Gateway-Tenant": "tenant-1",
                 "Authorization": "Bearer stale-token",
+                "Host": "internal.example.com",
             },
         )
         == "https://consent"
@@ -223,9 +224,11 @@ def test_public_initialization_uses_well_known_metadata(
     assert initialize_call.kwargs["connection_headers"] == {
         "X-Gateway-Tenant": "tenant-1",
         "Authorization": "Bearer stale-token",
+        "Host": "internal.example.com",
     }
     assert all(headers["X-Gateway-Tenant"] == "tenant-1" for headers in request_headers)
     assert all("Authorization" not in headers for headers in request_headers)
+    assert all(headers["Host"] == "mcp.example.com" for headers in request_headers)
     assert providers[0].challenge == (
         'Bearer resource_metadata="https://mcp.example.com/'
         '.well-known/oauth-protected-resource"'

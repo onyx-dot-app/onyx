@@ -47,6 +47,7 @@ from onyx.error_handling.exceptions import OnyxError
 from onyx.redis.redis_pool import get_redis_client
 from onyx.server.features.mcp.client import initialize_mcp_client
 from onyx.server.features.mcp.models import (
+    DENYLISTED_MCP_HEADERS,
     MCPConnectionData,
     MCPOAuthKeys,
     merge_mcp_headers,
@@ -104,6 +105,9 @@ def key_client_info(user_id: str) -> str:
 REQUESTED_SCOPE: str | None = None
 
 _OAUTH_HTTP_TIMEOUT_SECONDS = 30.0
+# The connect request returns as soon as the SDK publishes its consent URL, but
+# that same task must stay alive to receive the callback code and exchange it.
+# Keep a strong reference until the task completes; asyncio only holds weak ones.
 _INFLIGHT_OAUTH_TASKS: set[asyncio.Task[object]] = set()
 
 
@@ -126,12 +130,23 @@ async def _run_until_oauth_redirect(
     operation: Awaitable[object],
     redirect_future: asyncio.Future[str],
 ) -> str | None:
+    """Run an SDK OAuth operation until it finishes or publishes a redirect.
+
+    A redirect returns immediately while the operation continues in the
+    background to exchange the eventual callback code. Completion without a
+    redirect returns ``None``; operation failures and the outer timeout are
+    propagated to the caller.
+    """
+
     async def run_operation() -> object:
         return await operation
 
     operation_task = asyncio.create_task(run_operation())
     operation_retained = False
     try:
+        # Wait until the SDK either produces a consent URL or completes without
+        # one because the connection is already authenticated. Bound the wait in
+        # case the MCP server does neither.
         async with asyncio.timeout(OAUTH_WAIT_SECONDS):
             done, _ = await asyncio.wait(
                 [operation_task, redirect_future],
@@ -139,10 +154,15 @@ async def _run_until_oauth_redirect(
             )
         if redirect_future in done:
             redirect_url = redirect_future.result()
+            # The browser can navigate now, but the SDK operation continues in
+            # the background and blocks on the Redis-delivered callback code.
             _retain_oauth_task(operation_task)
             operation_retained = True
             return redirect_url
 
+        # asyncio.wait() reports completion but does not consume the result.
+        # The task is already done here, so this cannot block; awaiting it
+        # propagates any operation exception instead of losing it.
         await operation_task
         return None
     finally:
@@ -159,14 +179,20 @@ async def _initiate_oauth_from_well_known_metadata(
     timeout = httpx.Timeout(_OAUTH_HTTP_TIMEOUT_SECONDS)
     discovery_urls = build_protected_resource_metadata_discovery_urls(None, server_url)
     metadata_url: str | None = None
+    # Preserve gateway/tenant routing headers on the server's own well-known
+    # paths, but do not replay an expired bearer token or allow a stored Host
+    # override to route the validated URL to a different virtual host.
+    excluded_headers = DENYLISTED_MCP_HEADERS | {"authorization"}
     discovery_headers = {
         key: value
         for key, value in connection_headers.items()
-        if key.lower() != "authorization"
+        if key.lower() not in excluded_headers
     }
     async with mcp_ssrf_httpx_client_factory(timeout=timeout) as client:
         for url in discovery_urls:
             request = create_oauth_metadata_request(url)
+            # The SDK returns a prebuilt Request, so AsyncClient default headers
+            # would not be merged by send(); apply the routing headers directly.
             request.headers.update(discovery_headers)
             response = await client.send(request)
             if await handle_protected_resource_response(response) is not None:
@@ -180,6 +206,9 @@ async def _initiate_oauth_from_well_known_metadata(
             "the MCP server's well-known URI.",
         )
 
+    # Feed the discovered metadata URL back through the SDK's normal challenge
+    # handling. The local transport supplies the otherwise-missing 401, letting
+    # the SDK own authorization-server discovery, registration, and token exchange.
     async with mcp_oauth_challenge_httpx_client_factory(
         server_url,
         metadata_url,
@@ -215,6 +244,9 @@ async def connect_auto_discovery_oauth(
     )
 
     async def initialize_or_start_oauth() -> None:
+        # HTTPX auth cannot inspect an infinite SSE response body. Use an
+        # auth-capable Streamable HTTP probe for fresh SSE connections solely to
+        # elicit a 401 challenge; authenticated connections use their real transport.
         probe_transport = (
             transport if is_authenticated else MCPTransport.STREAMABLE_HTTP
         )
@@ -226,6 +258,10 @@ async def connect_auto_discovery_oauth(
                 auth=oauth_auth,
             )
         except Exception:
+            # A fresh compatibility probe may fail because the endpoint is SSE
+            # or permits no Streamable HTTP initialization; well-known discovery
+            # can still start OAuth. Once a token already existed or was refreshed,
+            # however, this is a real authenticated initialization failure.
             if is_authenticated or oauth_auth.context.is_token_valid():
                 raise
             logger.info(
@@ -233,6 +269,9 @@ async def connect_auto_discovery_oauth(
                 exc_info=True,
             )
 
+        # Successful public initialization proves reachability, not consent.
+        # Only a usable token makes the connection complete; otherwise force the
+        # RFC 9728 well-known path so the user still receives a consent screen.
         if is_authenticated or oauth_auth.context.is_token_valid():
             return
         await _initiate_oauth_from_well_known_metadata(
