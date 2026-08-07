@@ -350,3 +350,29 @@ def test_openai_should_fake_stream_ignores_non_streaming_requests() -> None:
         )
         is False
     )
+
+
+def test_azure_should_fake_stream_inherits_registry_aware_patch() -> None:
+    # An upstream override on the Azure subclass would silently bypass the patch.
+    from litellm.llms.azure.responses.transformation import (
+        AzureOpenAIResponsesAPIConfig,
+    )
+
+    apply_monkey_patches()
+    assert (
+        AzureOpenAIResponsesAPIConfig.should_fake_stream.__name__
+        == "_patched_openai_should_fake_stream"
+    )
+    config = AzureOpenAIResponsesAPIConfig()
+    with mock.patch(
+        "litellm.get_model_info",
+        side_effect=Exception("This model isn't mapped yet"),
+    ):
+        assert (
+            config.should_fake_stream(
+                model="my-custom-deployment",
+                stream=True,
+                custom_llm_provider="azure",
+            )
+            is False
+        )
