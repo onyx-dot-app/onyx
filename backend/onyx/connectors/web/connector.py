@@ -48,13 +48,65 @@ from shared_configs.configs import MULTI_TENANT
 logger = setup_logger()
 
 
+def _parse_url_rewrites(
+    raw_rewrites: list[list[str] | str],
+) -> dict[str, str]:
+    """Parse URL rewrite rules into a {source_prefix: target_prefix} dict.
+
+    The admin form submits [source, target] pairs; "source -> target" strings
+    are also accepted for configs written by hand against the API.
+    """
+    rewrites: dict[str, str] = {}
+    for entry in raw_rewrites:
+        if isinstance(entry, str):
+            if "->" not in entry:
+                logger.warning(
+                    "Skipping invalid url_rewrite entry (no '->'): %s", entry
+                )
+                continue
+            src, dst = entry.split("->", 1)
+        elif (
+            isinstance(entry, list)
+            and len(entry) == 2
+            and all(isinstance(part, str) for part in entry)
+        ):
+            src, dst = entry
+        else:
+            logger.warning("Skipping malformed url_rewrite entry: %s", entry)
+            continue
+        src, dst = src.strip(), dst.strip()
+        if src and dst:
+            rewrites[src] = dst
+        else:
+            logger.warning("Skipping empty url_rewrite entry: %s", entry)
+    return rewrites
+
+
+def _rewrite_url(url: str, rewrites: dict[str, str]) -> str:
+    """Apply URL prefix rewrites. First matching prefix wins."""
+    for src_prefix, dst_prefix in rewrites.items():
+        if url.startswith(src_prefix):
+            return url.replace(src_prefix, dst_prefix, 1)
+    return url
+
+
 class ScrapeSessionContext:
     """Session level context for scraping"""
 
-    def __init__(self, base_url: str, to_visit: list[str]):
+    def __init__(
+        self,
+        base_url: str,
+        to_visit: list[str],
+        url_rewrites: dict[str, str] | None = None,
+    ):
         self.base_url = base_url
         self.to_visit = to_visit
+        self.url_rewrites = url_rewrites or {}
         self.visited_links: set[str] = set()
+        # Ids already emitted this run. Rewrite rules can map two fetched URLs
+        # onto the same storage id; only the first one wins (a duplicate id
+        # would overwrite the earlier document in the index).
+        self.emitted_doc_ids: set[str] = set()
         self.content_hashes: set[int] = set()
 
         self.at_least_one_doc: bool = False
@@ -350,6 +402,7 @@ class WebConnector(LoadConnector, SlimConnector):
         mintlify_cleanup: bool = True,  # Mostly ok to apply to other websites as well
         batch_size: int = INDEX_BATCH_SIZE,
         scroll_before_scraping: bool = False,
+        url_rewrites: list[list[str] | str] | None = None,
         **kwargs: Any,  # noqa: ARG002
     ) -> None:
         self.mintlify_cleanup = mintlify_cleanup
@@ -357,6 +410,7 @@ class WebConnector(LoadConnector, SlimConnector):
         self.recursive = False
         self.scroll_before_scraping = scroll_before_scraping
         self.web_connector_type = web_connector_type
+        self.url_rewrites = _parse_url_rewrites(url_rewrites or [])
         if web_connector_type == WEB_CONNECTOR_VALID_SETTINGS.RECURSIVE.value:
             self.recursive = True
             self.to_visit_list = [_ensure_valid_url(base_url)]
@@ -412,6 +466,11 @@ class WebConnector(LoadConnector, SlimConnector):
 
         result = ScrapeResult()
 
+        # The URL used for the stored document (id, link, semantic id). Fetching
+        # still uses initial_url; only what gets persisted is rewritten. Slim
+        # docs must use the same rewritten id or pruning would delete the docs.
+        storage_url = _rewrite_url(initial_url, session_ctx.url_rewrites)
+
         # Handle cookies for the URL
         _handle_cookies(session_ctx.playwright_context, initial_url)
 
@@ -428,10 +487,10 @@ class WebConnector(LoadConnector, SlimConnector):
         if is_pdf:
             if slim:
                 result.doc = Document(
-                    id=initial_url,
+                    id=storage_url,
                     sections=[],
                     source=DocumentSource.WEB,
-                    semantic_identifier=initial_url,
+                    semantic_identifier=storage_url,
                     metadata={},
                 )
                 return result
@@ -449,11 +508,11 @@ class WebConnector(LoadConnector, SlimConnector):
             # re-indexing. The content hash is the authoritative change signal for
             # web docs (see DocumentBase.content_hash).
             result.doc = Document(
-                id=initial_url,
-                sections=[TextSection(link=initial_url, text=page_text)],
+                id=storage_url,
+                sections=[TextSection(link=storage_url, text=page_text)],
                 source=DocumentSource.WEB,
-                semantic_identifier=initial_url.rstrip("/").split("/")[-1]
-                or initial_url,
+                semantic_identifier=storage_url.rstrip("/").split("/")[-1]
+                or storage_url,
                 metadata=metadata,
             )
 
@@ -561,10 +620,10 @@ class WebConnector(LoadConnector, SlimConnector):
 
             if slim:
                 result.doc = Document(
-                    id=initial_url,
+                    id=storage_url,
                     sections=[],
                     source=DocumentSource.WEB,
-                    semantic_identifier=initial_url,
+                    semantic_identifier=storage_url,
                     metadata={},
                 )
                 return result
@@ -607,10 +666,10 @@ class WebConnector(LoadConnector, SlimConnector):
             # branch above. The HTTP Last-Modified header is an unreliable change
             # signal for web content, so we rely on the content hash for dedup.
             result.doc = Document(
-                id=initial_url,
-                sections=[TextSection(link=initial_url, text=parsed_html.cleaned_text)],
+                id=storage_url,
+                sections=[TextSection(link=storage_url, text=parsed_html.cleaned_text)],
                 source=DocumentSource.WEB,
-                semantic_identifier=parsed_html.title or initial_url,
+                semantic_identifier=parsed_html.title or storage_url,
                 metadata={},
             )
         finally:
@@ -632,7 +691,9 @@ class WebConnector(LoadConnector, SlimConnector):
         base_url = self.to_visit_list[0]  # For the recursive case
         check_internet_connection(base_url)  # make sure we can connect to the base url
 
-        session_ctx = ScrapeSessionContext(base_url, self.to_visit_list)
+        session_ctx = ScrapeSessionContext(
+            base_url, self.to_visit_list, self.url_rewrites
+        )
         session_ctx.initialize()
 
         batch: list[Document | SlimDocument | HierarchyNode] = []
@@ -677,6 +738,17 @@ class WebConnector(LoadConnector, SlimConnector):
                         continue
 
                     if result.doc:
+                        if result.doc.id in session_ctx.emitted_doc_ids:
+                            logger.warning(
+                                "Skipping %s: rewritten document id %s was "
+                                "already emitted by another URL this run",
+                                initial_url,
+                                result.doc.id,
+                            )
+                            # Skip-and-move-on, not a transient failure: don't
+                            # burn the remaining retries re-scraping this URL.
+                            break
+                        session_ctx.emitted_doc_ids.add(result.doc.id)
                         batch.append(
                             SlimDocument(id=result.doc.id) if slim else result.doc
                         )
