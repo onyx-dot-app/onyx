@@ -38,17 +38,25 @@ def within_managed_scope_clause(
     junction_group_col: InstrumentedAttribute[int],
     non_public_clause: ColumnElement[bool],
     managed_subq: Select,
+    junction_live_clause: ColumnElement[bool] | None = None,
 ) -> ColumnElement[bool]:
     """Read-side mirror of GATE 2: editable-by-manager iff every group is managed,
     in ≥1 group, and non-public. ``non_public_clause`` is the caller's non-public
     predicate — resources encode it differently (``DocumentSet.is_public.is_(False)``
     vs ``ConnectorCredentialPair.access_type != AccessType.PUBLIC``). ``managed_subq``
-    yields no rows for a non-manager, so the clause fails closed."""
+    yields no rows for a non-manager, so the clause fails closed.
+
+    ``junction_live_clause`` narrows both EXISTS to live junction rows. Pass it for a
+    junction that keeps history — a group edit marks every cc_pair row
+    ``is_current=False`` until the sync cleans up, and counting those would both admit a
+    detached pair and hide an attached one. Omit it where rows have no history."""
+    junction_filters = () if junction_live_clause is None else (junction_live_clause,)
     belongs_to_managed = (
         select(junction_resource_col)
         .where(
             junction_resource_col == resource_id_col,
             junction_group_col.in_(managed_subq),
+            *junction_filters,
         )
         .exists()
     )
@@ -57,6 +65,7 @@ def within_managed_scope_clause(
         .where(
             junction_resource_col == resource_id_col,
             ~junction_group_col.in_(managed_subq),
+            *junction_filters,
         )
         .exists()
     )

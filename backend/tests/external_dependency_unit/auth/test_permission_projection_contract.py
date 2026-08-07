@@ -260,6 +260,49 @@ def test_cc_pair_projection_matches_gates(db_session: Session) -> None:
     ) == {"edit": True, "delete": False, "publish": False}
 
 
+def test_cc_pair_scope_ignores_stale_group_links(db_session: Session) -> None:
+    """A group edit marks every one of its cc_pair junction rows is_current=False until the
+    sync cleans up, so the scope read must count live rows only. Otherwise a detached pair
+    stays editable, and a pair whose *other* link is stale gets hidden."""
+    managed = _make_group(db_session)
+    unmanaged = _make_group(db_session)
+
+    manager = create_test_user(db_session, "proj-cc-stale-mgr")
+    _manage(db_session, manager, managed)
+    manager.effective_permissions = []
+    db_session.commit()
+
+    def editable(cc_pair: ConnectorCredentialPair) -> bool:
+        return (
+            get_connector_credential_pair_from_id_for_user(
+                cc_pair.id, db_session, manager, get_editable=True
+            )
+            is not None
+        )
+
+    def link(cc_pair: ConnectorCredentialPair, group: UserGroup, current: bool) -> None:
+        db_session.add(
+            UserGroup__ConnectorCredentialPair(
+                user_group_id=group.id, cc_pair_id=cc_pair.id, is_current=current
+            )
+        )
+        db_session.commit()
+
+    # Detached from the managed group: the stale row must not keep it editable.
+    detached = _make_cc_pair(db_session, is_public=False, groups=[])
+    link(detached, managed, current=False)
+    assert editable(detached) is False
+
+    # Attached, plus a stale link to a group they don't manage: must stay editable.
+    attached = _make_cc_pair(db_session, is_public=False, groups=[managed])
+    link(attached, unmanaged, current=False)
+    assert editable(attached) is True
+
+    # A *live* link to an unmanaged group still removes it from scope.
+    link(attached, unmanaged, current=True)
+    assert editable(attached) is False
+
+
 def test_cc_pair_projection_key_coverage() -> None:
     stamped = set(cc_pair_permissions(is_editable=True, is_connectors_admin=True))
     assert stamped == set(CC_PAIR_ACTIONS), (

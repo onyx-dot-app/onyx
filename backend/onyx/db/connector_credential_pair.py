@@ -202,6 +202,9 @@ def _add_user_filters(
             junction_group_col=UserGroup__ConnectorCredentialPair.user_group_id,
             non_public_clause=ConnectorCredentialPair.access_type != AccessType.PUBLIC,
             managed_subq=scoped_group_ids_subquery(user),
+            junction_live_clause=UserGroup__ConnectorCredentialPair.is_current.is_(
+                True
+            ),
         )
         # The creator keeps management of what they made even when it sits in no
         # group — a permission-synced connector has none to sit in. Creating a
