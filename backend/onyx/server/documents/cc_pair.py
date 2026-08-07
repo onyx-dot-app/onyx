@@ -22,7 +22,11 @@ from onyx.connectors.exceptions import ValidationError
 from onyx.connectors.factory import identify_connector_class, validate_ccpair_for_user
 from onyx.connectors.interfaces import Resolver
 from onyx.connectors.models import InputType
-from onyx.db.connector import delete_connector
+from onyx.db.connector import (
+    delete_connector,
+    mark_ccpair_with_indexing_trigger,
+    update_connector_specific_config_fields,
+)
 from onyx.db.connector_credential_pair import (
     add_credential_to_connector,
     get_connector_credential_pair_for_user,
@@ -36,6 +40,7 @@ from onyx.db.engine.sql_engine import get_session
 from onyx.db.enums import (
     AccessType,
     ConnectorCredentialPairStatus,
+    IndexingMode,
     IndexingStatus,
     Permission,
     PermissionSyncStatus,
@@ -74,6 +79,7 @@ from onyx.server.documents.models import (
     DocPermissionSyncAttemptSnapshot,
     DocumentSyncStatus,
     ExternalGroupSyncAttemptSnapshot,
+    GitlabFilterConfigUpdateRequest,
     IndexAttemptSnapshot,
     IndexAttemptStageMetricSnapshot,
     IndexAttemptStageMetricsResponse,
@@ -601,6 +607,58 @@ def update_cc_pair_property(
         )
 
     return StatusResponse(success=True, message=msg, data=cc_pair_id)
+
+
+@router.put("/admin/cc-pair/{cc_pair_id}/connector-config")
+def update_cc_pair_connector_config(
+    cc_pair_id: int,
+    update_request: GitlabFilterConfigUpdateRequest,
+    user: User = Depends(current_curator_or_admin_user),
+    db_session: Session = Depends(get_session),
+) -> StatusResponse[int]:
+    cc_pair = get_connector_credential_pair_from_id_for_user(
+        cc_pair_id=cc_pair_id,
+        db_session=db_session,
+        user=user,
+        get_editable=True,
+    )
+    if not cc_pair:
+        raise OnyxError(
+            OnyxErrorCode.NOT_FOUND,
+            "CC Pair not found for current user's permissions",
+        )
+
+    # The request schema carries GitLab-only filtering keys; writing them onto
+    # another connector type would break its next indexing run (the factory
+    # expands connector_specific_config into the connector constructor).
+    if cc_pair.connector.source != DocumentSource.GITLAB:
+        raise OnyxError(
+            OnyxErrorCode.INVALID_INPUT,
+            "Connector config editing is only supported for GitLab connectors",
+        )
+
+    config_updates = update_request.model_dump(exclude_none=True)
+    if not config_updates:
+        raise OnyxError(OnyxErrorCode.INVALID_INPUT, "No config fields provided")
+
+    updated_connector = update_connector_specific_config_fields(
+        connector_id=cc_pair.connector.id,
+        config_updates=config_updates,
+        db_session=db_session,
+    )
+    if updated_connector is None:
+        raise OnyxError(OnyxErrorCode.CONNECTOR_NOT_FOUND, "Connector not found")
+
+    # The new filter only applies repo-wide after a fresh re-index; an incremental
+    # sync would otherwise only pick up files that change after this edit. The
+    # config update above is only flushed, so this commit lands both atomically.
+    mark_ccpair_with_indexing_trigger(cc_pair_id, IndexingMode.REINDEX, db_session)
+
+    return StatusResponse(
+        success=True,
+        message="Connector configuration updated successfully",
+        data=cc_pair_id,
+    )
 
 
 @router.get("/admin/cc-pair/{cc_pair_id}/last_pruned")

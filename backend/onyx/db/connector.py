@@ -1,4 +1,5 @@
 from datetime import datetime, timezone
+from typing import Any
 
 from sqlalchemy import and_, exists, func, select
 from sqlalchemy.orm import Session, aliased
@@ -149,6 +150,31 @@ def update_connector(
     )
 
     db_session.commit()
+    return connector
+
+
+def update_connector_specific_config_fields(
+    connector_id: int,
+    config_updates: dict[str, Any],
+    db_session: Session,
+) -> Connector | None:
+    """Merge a partial set of fields into a connector's connector_specific_config.
+
+    The dict is reassigned (rather than mutated in place) so SQLAlchemy detects
+    the change on the JSON column. Returns ``None`` if the connector is missing.
+
+    Does NOT commit — the caller owns the transaction, so the config change can
+    be committed atomically with related updates (e.g. a re-index trigger).
+    """
+    connector = fetch_connector_by_id(connector_id, db_session)
+    if connector is None:
+        return None
+
+    new_config = dict(connector.connector_specific_config or {})
+    new_config.update(config_updates)
+    connector.connector_specific_config = new_config
+
+    db_session.flush()
     return connector
 
 

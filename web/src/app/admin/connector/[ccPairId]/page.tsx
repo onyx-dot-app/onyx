@@ -50,6 +50,7 @@ import {
   RefreshCwIcon,
 } from "lucide-react";
 import IndexAttemptErrorsModal from "./IndexAttemptErrorsModal";
+import EditGitlabFileTypesModal from "./EditGitlabFileTypesModal";
 import usePaginatedFetch from "@/hooks/usePaginatedFetch";
 import { IndexAttemptSnapshot } from "@/lib/types";
 import { Spinner } from "@/components/Spinner";
@@ -66,7 +67,7 @@ import { useStatusChange } from "./useStatusChange";
 import { useReIndexModal } from "./ReIndexModal";
 import { Button } from "@opal/components";
 import { SvgSettings } from "@opal/icons";
-import { UserRole } from "@/lib/types";
+import { UserRole, ValidSources } from "@/lib/types";
 import { useUser } from "@/providers/UserProvider";
 import { resolveAllErrorsForCCPair } from "@/lib/targeted_reindex";
 import { SWR_KEYS } from "@/lib/swr-keys";
@@ -152,6 +153,7 @@ function Main({ ccPairId }: { ccPairId: number }) {
   const [hasLoadedOnce, setHasLoadedOnce] = useState(false);
   const [editingRefreshFrequency, setEditingRefreshFrequency] = useState(false);
   const [editingPruningFrequency, setEditingPruningFrequency] = useState(false);
+  const [editingGitlabFileTypes, setEditingGitlabFileTypes] = useState(false);
   const [showIndexAttemptErrors, setShowIndexAttemptErrors] = useState(false);
 
   const [showIsResolvingKickoffLoader, setShowIsResolvingKickoffLoader] =
@@ -414,6 +416,22 @@ function Main({ ccPairId }: { ccPairId: number }) {
           validationSchema={PruneFrequencySchema}
           onSubmit={handlePruningSubmit}
           onClose={() => setEditingPruningFrequency(false)}
+        />
+      )}
+
+      {editingGitlabFileTypes && (
+        <EditGitlabFileTypesModal
+          ccPairId={ccPairId}
+          initialIncludeCodeFiles={Boolean(
+            (ccPair.connector.connector_specific_config as any)
+              ?.include_code_files
+          )}
+          initialCodeFilePatterns={
+            ((ccPair.connector.connector_specific_config as any)
+              ?.code_file_patterns as string[]) ?? []
+          }
+          onClose={() => setEditingGitlabFileTypes(false)}
+          onSaved={() => mutate(buildCCPairInfoUrl(ccPairId))}
         />
       )}
 
@@ -721,6 +739,20 @@ function Main({ ccPairId }: { ccPairId: number }) {
                   ccPair.connector.source
                 )}
               />
+
+              {/* Edit which file types are indexed (GitLab) */}
+              {ccPair.connector.source === ValidSources.GitLab &&
+                ccPair.is_editable_for_current_user && (
+                  <div className="mt-4 flex justify-end">
+                    <Button
+                      prominence="secondary"
+                      icon={SvgSettings}
+                      onClick={() => setEditingGitlabFileTypes(true)}
+                    >
+                      Edit indexed file types
+                    </Button>
+                  </div>
+                )}
 
               {/* Inline file management for file connectors */}
               {canManageInlineFileConnectorFiles && (
