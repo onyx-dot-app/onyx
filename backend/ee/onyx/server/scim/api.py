@@ -54,6 +54,7 @@ from ee.onyx.server.scim.schema_definitions import (
     USER_RESOURCE_TYPE,
     USER_SCHEMA_DEF,
 )
+from onyx.auth.users import is_user_curator_or_admin
 from onyx.db.engine.sql_engine import get_session
 from onyx.db.enums import AccountType, GrantSource, Permission
 from onyx.db.models import ScimToken, ScimUserMapping, User, UserGroup, UserRole
@@ -221,6 +222,16 @@ def _check_seat_availability(dal: ScimDAL) -> str | None:
     if not result.available:
         return result.error_message or "Seat limit reached"
     return None
+
+
+def _is_privileged_rename(user: User, new_email: str) -> bool:
+    """Whether this would move a curator or admin onto a different address.
+
+    A rename puts the account on an address the caller chose, and a row no IdP
+    owns yet is claimed by the first login for its address. Provisioning only
+    ever grants BASIC, so a token must not move anything above that.
+    """
+    return new_email.lower() != user.email.lower() and is_user_curator_or_admin(user)
 
 
 def _is_ext_perm_user(user: User) -> bool:
@@ -626,6 +637,9 @@ def replace_user(
         return result
     user = result
 
+    if _is_privileged_rename(user, user_resource.userName.strip()):
+        return _scim_error_response(403, "Cannot move a curator or admin address")
+
     # Handle activation (need seat check) / deactivation. Promoting a shadow
     # EXT_PERM_USER also consumes a seat, so self-heal any that the IdP
     # re-syncs after being adopted while still in the shadow role.
@@ -719,6 +733,9 @@ def patch_user(
         )
     except ScimPatchError as e:
         return _scim_error_response(e.status, e.detail)
+
+    if patched.userName and _is_privileged_rename(user, patched.userName.strip()):
+        return _scim_error_response(403, "Cannot move a curator or admin address")
 
     # Apply changes back to the DB model. A seat is consumed when the user
     # becomes active (reactivation) or when a shadow EXT_PERM_USER is promoted
