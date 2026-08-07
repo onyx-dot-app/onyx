@@ -1,0 +1,124 @@
+"""A 4xx during attachment CQL pagination must not abort the whole index run.
+
+Confluence Data Center intermittently 400s when offset pagination of an
+attachment query advances past the first page. The connector keeps the
+attachments retrieved before the error, records a ConnectorFailure for the
+page, and continues. 401/403 skip the page's attachments entirely; other
+statuses still propagate.
+"""
+
+from collections.abc import Iterator
+from typing import Any
+from unittest import mock
+
+import pytest
+import requests
+from requests.exceptions import HTTPError
+
+from onyx.connectors.confluence.connector import (
+    ConfluenceConnector,
+    _extract_page_id_from_url,
+)
+from onyx.connectors.confluence.onyx_confluence import OnyxConfluence
+from onyx.connectors.models import ConnectorFailure, Document
+
+_PAGE = {
+    "id": "111",
+    "title": "Big Page",
+    "_links": {"webui": "/spaces/X/pages/111/Page"},
+    "space": {"key": "X"},
+    "history": {"createdDate": "2023-01-01T12:00:00.000+0000"},
+}
+_PDF_ATTACHMENT = {
+    "id": "222",
+    "title": "spec.pdf",
+    "metadata": {"mediaType": "application/pdf"},
+    "_links": {
+        "webui": "/spaces/X/pages/111/Page?preview=spec.pdf",
+        "download": "/download/attachments/111/spec.pdf",
+    },
+    "space": {"key": "X"},
+    "history": {"createdDate": "2023-01-02T12:00:00.000+0000"},
+    "version": {"when": "2023-01-02T12:00:00.000+0000"},
+}
+
+
+def _http_error(status_code: int, message: str = "") -> HTTPError:
+    # A real Response: it is falsy for error statuses, which the handler's
+    # `is not None` check must tolerate.
+    response = requests.Response()
+    response.status_code = status_code
+    return HTTPError(message, response=response)
+
+
+def _fetch_with_pagination_error(
+    status_code: int, message: str = ""
+) -> tuple[list[Any], list[ConnectorFailure]]:
+    """Drive _fetch_page_attachments with a client that yields one attachment
+    and then fails pagination with the given status code."""
+    connector = ConfluenceConnector(
+        wiki_base="https://confluence.example.com",
+        is_cloud=False,
+        include_attachments=True,
+    )
+    fake_client = mock.Mock(spec=OnyxConfluence)
+
+    def failing_pagination(**_kwargs: Any) -> Iterator[dict[str, Any]]:
+        yield _PDF_ATTACHMENT
+        raise _http_error(status_code, message)
+
+    fake_client.paginated_cql_retrieval.side_effect = failing_pagination
+
+    with (
+        mock.patch.object(
+            ConfluenceConnector,
+            "confluence_client",
+            new_callable=mock.PropertyMock,
+            return_value=fake_client,
+        ),
+        mock.patch.object(
+            connector, "_maybe_yield_page_hierarchy_node", return_value=None
+        ),
+        mock.patch(
+            "onyx.connectors.confluence.connector.convert_attachment_to_content",
+            return_value=("extracted text", None),
+        ),
+    ):
+        return connector._fetch_page_attachments(_PAGE)
+
+
+def test_400_keeps_partial_attachments_and_records_failure() -> None:
+    docs, failures = _fetch_with_pagination_error(400)
+
+    assert len(docs) == 1
+    assert isinstance(docs[0], Document)
+    assert docs[0].semantic_identifier == "spec.pdf"
+
+    assert len(failures) == 1
+    failure = failures[0]
+    assert "400" in failure.failure_message
+    assert failure.failed_document is not None
+    # document_id must be the page URL so targeted reindex can recover the page id
+    assert _extract_page_id_from_url(failure.failed_document.document_id) == "111"
+    assert isinstance(failure.exception, HTTPError)
+
+
+@pytest.mark.parametrize("status_code", [401, 403])
+def test_401_403_skips_page_attachments(status_code: int) -> None:
+    docs, failures = _fetch_with_pagination_error(status_code)
+
+    assert docs == []
+    assert len(failures) == 1
+    assert str(status_code) in failures[0].failure_message
+
+
+def test_other_http_errors_propagate() -> None:
+    with pytest.raises(HTTPError):
+        _fetch_with_pagination_error(500)
+
+
+def test_400_date_error_propagates() -> None:
+    """Atlassian date errors are 400s but must reach load_from_checkpoint's
+    time-offset retry instead of being skipped as a page failure."""
+    with pytest.raises(HTTPError):
+        _fetch_with_pagination_error(400, "The field 'updated' is invalid")

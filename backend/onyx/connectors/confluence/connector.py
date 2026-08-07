@@ -790,43 +790,58 @@ class ConfluenceConnector(
                         )
                     )
         except HTTPError as e:
-            # If we get a 403 after all retries, the user likely doesn't have permission
-            # to access attachments on this page. Log and skip rather than failing the whole job.
+            # A 400/401/403 on the attachment query shouldn't fail the whole job:
+            # log, record a failure for the page, and continue.
+            # NOTE: requests.Response is falsy for error statuses, so compare to None.
+            status_code = e.response.status_code if e.response is not None else None
             page_id = _get_page_id(page, allow_missing=True)
-            page_title = page.get("title", "unknown")
-            if e.response and e.response.status_code in [401, 403]:
-                failure_message_prefix = (
-                    "Invalid credentials (401)"
-                    if e.response.status_code == 401
-                    else "Permission denied (403)"
-                )
-                failure_message = (
-                    f"{failure_message_prefix} when fetching attachments for page '{page_title}' "
-                    f"(ID: {page_id}). The user may not have permission to query attachments on this page. "
-                    "Skipping attachments for this page."
-                )
-                logger.warning(failure_message)
-
-                # Build the page URL for the failure record
-                try:
-                    page_url = build_confluence_document_id(
-                        self.wiki_base, page["_links"]["webui"], self.is_cloud
+            page_ref = f"page '{page.get('title', 'unknown')}' (ID: {page_id})"
+            match status_code:
+                # Date errors are 400s but must propagate so load_from_checkpoint
+                # can retry the batch with an adjusted time offset.
+                case 400 if not is_atlassian_date_error(e):
+                    # Confluence Data Center intermittently rejects offset
+                    # pagination of attachment queries.
+                    failure_message = (
+                        f"Bad request (400) while paginating attachments for {page_ref}. "
+                        "Keeping the attachments retrieved so far and skipping the rest."
                     )
-                except Exception:
-                    page_url = f"page_id:{page_id}"
-
-                return [], [
-                    ConnectorFailure(
-                        failed_document=DocumentFailure(
-                            document_id=page_id,
-                            document_link=page_url,
-                        ),
-                        failure_message=failure_message,
-                        exception=e,
+                case 401 | 403:
+                    failure_message_prefix = (
+                        "Invalid credentials (401)"
+                        if status_code == 401
+                        else "Permission denied (403)"
                     )
-                ]
-            else:
-                raise
+                    failure_message = (
+                        f"{failure_message_prefix} when fetching attachments for {page_ref}. "
+                        "The user may not have permission to query attachments on this page. "
+                        "Skipping attachments for this page."
+                    )
+                    attachment_docs = []
+                    attachment_failures = []
+                case _:
+                    raise
+            logger.warning(failure_message)
+
+            # Build the page URL for the failure record
+            try:
+                page_url = build_confluence_document_id(
+                    self.wiki_base, page["_links"]["webui"], self.is_cloud
+                )
+            except Exception:
+                page_url = f"page_id:{page_id}"
+            attachment_failures.append(
+                ConnectorFailure(
+                    # Confluence document ids are page URLs; targeted reindex
+                    # extracts the page id from this field.
+                    failed_document=DocumentFailure(
+                        document_id=page_url,
+                        document_link=page_url,
+                    ),
+                    failure_message=failure_message,
+                    exception=e,
+                )
+            )
 
         return attachment_docs, attachment_failures
 
