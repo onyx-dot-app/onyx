@@ -628,7 +628,6 @@ class Permission(str, PyEnum):
     # Toggle tokens
     READ_AGENT_ANALYTICS = "read:agent_analytics"
     MANAGE_ACTIONS = "manage:actions"
-    # In the scoped-manager bundle; registry/enforcement land in a later PR.
     MANAGE_SKILLS = "manage:skills"
     READ_QUERY_HISTORY = "read:query_history"
     MANAGE_USER_GROUPS = "manage:user_groups"
