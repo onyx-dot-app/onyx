@@ -105,11 +105,15 @@ export default function ExportLogsPage() {
 
   const isCollecting = exportId !== null && status?.state !== "ready";
 
-  // A definitive 4xx means the export is gone (already cleaned up) or no
-  // longer accessible; drop it so the page recovers instead of showing
-  // "collecting" forever. Other errors are transient: interval polling keeps
-  // running and self-heals.
+  // A definitive 4xx means the export is gone (already cleaned up) or no longer
+  // accessible; drop it so the page recovers instead of showing "collecting"
+  // forever. Other errors are transient: interval polling keeps running and
+  // self-heals.
   useEffect(() => {
+    if (statusError === undefined) {
+      return;
+    }
+    console.error("Log export status poll failed:", statusError);
     if (
       statusError instanceof FetchError &&
       statusError.status >= 400 &&
@@ -195,7 +199,12 @@ export default function ExportLogsPage() {
           })),
           ...status.pending_worker_names.map((workerName) => ({
             workerName,
-            label: "collecting...",
+            // Once the export is ready, a missing receipt is final: that
+            // worker's logs are not in the bundle.
+            label:
+              status.state === "ready"
+                ? "did not report before the deadline"
+                : "collecting...",
             pending: true,
           })),
         ].sort((a, b) => a.workerName.localeCompare(b.workerName));
@@ -228,7 +237,7 @@ export default function ExportLogsPage() {
             variant="section"
             icon={SvgDownload}
             title="Export logs"
-            description="Collects log files from the API server and every background worker into a single zip. The download starts automatically once collection finishes."
+            description="Collects log files from the API server and background workers into a single zip. The download starts automatically once collection finishes."
             rightChildren={
               <Button
                 icon={SvgDownload}
