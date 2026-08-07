@@ -22,8 +22,8 @@ global:
 # -- Custom (private/internal) CA certificates for outbound TLS.
 # When enabled, every pod that makes outbound TLS connections mounts the
 # referenced Secret/ConfigMap and trusts its roots. Keys must be PEM certs
-# ending in `.crt` (model servers also accept `.pem`). Two mechanisms, by pod
-# type:
+# ending in `.crt` (model servers also accept `.pem`). The handling varies by
+# pod type:
 #   - Shell-based pods (api server, celery workers, bots, MCP server) mount at
 #     /usr/local/share/ca-certificates, run `update-ca-certificates` at startup,
 #     and get REQUESTS_CA_BUNDLE / SSL_CERT_FILE pointed at the merged system
