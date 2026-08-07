@@ -106,8 +106,15 @@ fn dismiss_all_windows(app: &AppHandle) {
             hidden.len()
         ),
     );
+    // Merge rather than replace: the queue may still hold labels whose
+    // restore failed earlier, and overwriting would strand those windows.
     if let Some(state) = app.try_state::<DismissedWindows>() {
-        *state.0.lock().unwrap_or_else(PoisonError::into_inner) = hidden;
+        let mut queued = state.0.lock().unwrap_or_else(PoisonError::into_inner);
+        for label in hidden {
+            if !queued.contains(&label) {
+                queued.push(label);
+            }
+        }
     }
 }
 
