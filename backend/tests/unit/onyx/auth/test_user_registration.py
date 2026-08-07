@@ -622,10 +622,30 @@ class TestOAuthDottedGmail:
             assert call.kwargs.get("is_registration") is not True
 
 
-class TestOAuthPlaceholderPromotion:
-    """A permission-sync placeholder (non-web-login account_type) must be
-    claimed and upgraded by SSO login even with auto-link off, while real
-    web-login accounts keep the account-takeover rejection."""
+class TestOAuthNoAutoLinkClaim:
+    """With auto-link off, a first SSO login claims a web-login row unless an IdP
+    already owns it or it is deactivated. Placeholders skip both checks and are
+    promoted instead."""
+
+    @staticmethod
+    def _unclaimed(**attrs: object) -> MagicMock:
+        """A row provisioned ahead of its owner: no IdP, active.
+
+        Every attribute the guard reads is set explicitly. A bare MagicMock
+        attribute is truthy, which would silently invert the assertions here.
+        """
+        return MagicMock(
+            **{  # ty: ignore[invalid-argument-type]
+                "id": "user-id",
+                "email": "provisioned@corp.com",
+                "oauth_accounts": [],
+                "is_active": True,
+                "account_type": AccountType.STANDARD,
+                # Read by the offboarding tail of oauth_callback, not the guard.
+                "oidc_expiry": None,
+                **attrs,
+            }
+        )
 
     @staticmethod
     def _manager_with_existing(existing_user: MagicMock) -> UserManager:
@@ -647,6 +667,9 @@ class TestOAuthPlaceholderPromotion:
         return user_manager
 
     @pytest.mark.asyncio
+    # The deactivation check is web-login-only, so a deactivated placeholder must
+    # still reach the upgrade rather than being turned away.
+    @pytest.mark.parametrize("is_active", [True, False], ids=["active", "deactivated"])
     @patch("onyx.auth.users.MULTI_TENANT", False)
     @patch("onyx.auth.users.verify_email_in_whitelist")
     @patch("onyx.auth.users.verify_email_domain")
@@ -666,6 +689,7 @@ class TestOAuthPlaceholderPromotion:
         mock_fetch_ee: MagicMock,
         mock_verify_domain: MagicMock,  # noqa: ARG002
         mock_verify_whitelist: MagicMock,  # noqa: ARG002
+        is_active: bool,
         mock_async_session: MagicMock,
     ) -> None:
         mock_session_manager.return_value = _AsyncSessionContextManager(
@@ -673,13 +697,15 @@ class TestOAuthPlaceholderPromotion:
         )
         mock_fetch_ee.return_value = AsyncMock(return_value="test_tenant")
 
-        placeholder = MagicMock(id="placeholder-id", email="synced@corp.com")
-        placeholder.account_type = AccountType.EXT_PERM_USER
-        placeholder.oidc_expiry = None
-        placeholder.is_active = True
+        placeholder = self._unclaimed(
+            id="placeholder-id",
+            email="synced@corp.com",
+            account_type=AccountType.EXT_PERM_USER,
+            is_active=is_active,
+        )
         user_manager = self._manager_with_existing(placeholder)
 
-        sync_user = MagicMock(is_active=True)
+        sync_user = MagicMock(is_active=is_active)
         mock_sync_db = MagicMock()
         mock_sync_db.query.return_value.filter.return_value.first.return_value = (
             sync_user
@@ -704,6 +730,9 @@ class TestOAuthPlaceholderPromotion:
         assert sync_user.role == UserRole.BASIC
         assert sync_user.account_type == AccountType.STANDARD
         assert sync_user.is_verified is True
+        # Promotion reactivates, so the web-login deactivation check must not
+        # short-circuit a placeholder before it reaches the upgrade.
+        assert sync_user.is_active is True
         mock_assign_groups.assert_called_once()
         mock_sync_db.commit.assert_called_once()
         assert result is placeholder
@@ -715,7 +744,7 @@ class TestOAuthPlaceholderPromotion:
     @patch("onyx.auth.users.fetch_ee_implementation_or_noop")
     @patch("onyx.auth.users.get_async_session_context_manager")
     @patch("onyx.auth.users.remove_user_from_invited_users")
-    async def test_web_login_account_still_rejected_without_auto_link(
+    async def test_unclaimed_row_is_claimed_by_first_login(
         self,
         mock_remove_invited: MagicMock,  # noqa: ARG002
         mock_session_manager: MagicMock,
@@ -724,25 +753,101 @@ class TestOAuthPlaceholderPromotion:
         mock_verify_whitelist: MagicMock,  # noqa: ARG002
         mock_async_session: MagicMock,
     ) -> None:
+        """The provisioned-ahead-of-its-owner case: SCIM, invite, any out-of-band
+        create. Nothing about the row is spoken for, so the login claims it."""
         mock_session_manager.return_value = _AsyncSessionContextManager(
             mock_async_session
         )
         mock_fetch_ee.return_value = AsyncMock(return_value="test_tenant")
 
-        real_user = MagicMock(id="real-id", email="taken@corp.com")
-        real_user.account_type = AccountType.STANDARD
-        user_manager = self._manager_with_existing(real_user)
+        provisioned = self._unclaimed()
+        user_manager = self._manager_with_existing(provisioned)
+
+        result = await user_manager.oauth_callback(
+            oauth_name="okta",
+            access_token="token",
+            account_id="acct-3",
+            account_email="provisioned@corp.com",
+            associate_by_email=False,
+        )
+
+        cast(AsyncMock, user_manager.user_db.add_oauth_account).assert_awaited_once()
+        assert result is provisioned
+
+    @pytest.mark.asyncio
+    @patch("onyx.auth.users.MULTI_TENANT", False)
+    @patch("onyx.auth.users.verify_email_in_whitelist")
+    @patch("onyx.auth.users.verify_email_domain")
+    @patch("onyx.auth.users.fetch_ee_implementation_or_noop")
+    @patch("onyx.auth.users.get_async_session_context_manager")
+    @patch("onyx.auth.users.remove_user_from_invited_users")
+    async def test_already_linked_row_is_rejected(
+        self,
+        mock_remove_invited: MagicMock,  # noqa: ARG002
+        mock_session_manager: MagicMock,
+        mock_fetch_ee: MagicMock,
+        mock_verify_domain: MagicMock,  # noqa: ARG002
+        mock_verify_whitelist: MagicMock,  # noqa: ARG002
+        mock_async_session: MagicMock,
+    ) -> None:
+        """A second provider must not attach to a row an IdP already owns."""
+        mock_session_manager.return_value = _AsyncSessionContextManager(
+            mock_async_session
+        )
+        mock_fetch_ee.return_value = AsyncMock(return_value="test_tenant")
+
+        user_manager = self._manager_with_existing(
+            self._unclaimed(oauth_accounts=[MagicMock()])
+        )
 
         with pytest.raises(exceptions.UserAlreadyExists):
             await user_manager.oauth_callback(
-                oauth_name="okta",
+                oauth_name="entra",
                 access_token="token",
-                account_id="acct-2",
-                account_email="taken@corp.com",
+                account_id="acct-4",
+                account_email="provisioned@corp.com",
                 associate_by_email=False,
             )
 
         cast(AsyncMock, user_manager.user_db.add_oauth_account).assert_not_awaited()
+
+    @pytest.mark.asyncio
+    @patch("onyx.auth.users.MULTI_TENANT", False)
+    @patch("onyx.auth.users.verify_email_in_whitelist")
+    @patch("onyx.auth.users.verify_email_domain")
+    @patch("onyx.auth.users.fetch_ee_implementation_or_noop")
+    @patch("onyx.auth.users.get_async_session_context_manager")
+    @patch("onyx.auth.users.remove_user_from_invited_users")
+    async def test_deactivated_row_is_not_linked(
+        self,
+        mock_remove_invited: MagicMock,  # noqa: ARG002
+        mock_session_manager: MagicMock,
+        mock_fetch_ee: MagicMock,
+        mock_verify_domain: MagicMock,  # noqa: ARG002
+        mock_verify_whitelist: MagicMock,  # noqa: ARG002
+        mock_async_session: MagicMock,
+    ) -> None:
+        """Linking commits, so a deprovisioned row must come back unclaimed. The
+        caller's is_active gate is what turns this into a rejected login."""
+        mock_session_manager.return_value = _AsyncSessionContextManager(
+            mock_async_session
+        )
+        mock_fetch_ee.return_value = AsyncMock(return_value="test_tenant")
+
+        deactivated = self._unclaimed(is_active=False)
+        user_manager = self._manager_with_existing(deactivated)
+
+        result = await user_manager.oauth_callback(
+            oauth_name="okta",
+            access_token="token",
+            account_id="acct-5",
+            account_email="provisioned@corp.com",
+            associate_by_email=False,
+        )
+
+        cast(AsyncMock, user_manager.user_db.add_oauth_account).assert_not_awaited()
+        assert result is deactivated
+        assert result.is_active is False
 
 
 class TestPasswordAuthKillSwitch:
