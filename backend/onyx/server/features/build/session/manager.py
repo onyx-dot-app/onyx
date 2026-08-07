@@ -64,6 +64,9 @@ from onyx.server.features.build.sandbox.models import (
     FilesystemEntry,
     PromptAttachment,
 )
+from onyx.server.features.build.sandbox.nextjs_dev import (
+    WEBAPP_PACKAGE_JSON_PATH,
+)
 from onyx.server.features.build.sandbox.serve_transport import PromptSlot
 from onyx.server.features.build.sandbox.snapshot_manager import SnapshotManager
 from onyx.server.features.build.sandbox.util.agent_instructions import (
@@ -143,6 +146,9 @@ HIDDEN_PATTERNS = {
     "nextjs.log",
     "nextjs.pid",
 }
+
+_WEBAPP_DIRECTORY = str(Path(WEBAPP_PACKAGE_JSON_PATH).parent)
+_WEBAPP_PACKAGE_FILENAME = Path(WEBAPP_PACKAGE_JSON_PATH).name
 
 
 def _sanitize_zip_basename(name: str, *, allow_dots: bool) -> str:
@@ -1491,32 +1497,58 @@ class SessionManager:
         sandbox = get_sandbox_by_user_id(self._db_session, user_id)
         if sandbox is None:
             return {
-                "has_webapp": False,
+                "has_webapp": None,
                 "webapp_url": None,
                 "status": "no_sandbox",
                 "ready": False,
                 "sharing_scope": session.sharing_scope,
             }
 
+        has_webapp = (
+            self._has_scaffolded_webapp(sandbox.id, session_id)
+            if sandbox.status == SandboxStatus.RUNNING
+            else None
+        )
         # Return the proxy URL - the proxy handles routing to the correct sandbox
-        # for both local and Kubernetes environments
+        # for both local and Kubernetes environments.
         webapp_url = None
         ready = False
-        if session.nextjs_port:
+        if has_webapp and session.nextjs_port:
             webapp_url = f"{WEB_DOMAIN}/api/build/sessions/{session_id}/webapp"
-
-            # Quick health check: can the API server reach the NextJS dev server?
             ready = self._check_nextjs_ready(
                 sandbox.id, session_id, session.nextjs_port
             )
 
         return {
-            "has_webapp": session.nextjs_port is not None,
+            "has_webapp": has_webapp,
             "webapp_url": webapp_url,
             "status": sandbox.status.value,
             "ready": ready,
             "sharing_scope": session.sharing_scope,
         }
+
+    def _has_scaffolded_webapp(self, sandbox_id: UUID, session_id: UUID) -> bool | None:
+        """Return True if ``outputs/web/package.json`` exists in the session."""
+        try:
+            entries = self._sandbox_manager.list_directory(
+                sandbox_id=sandbox_id,
+                session_id=session_id,
+                path=_WEBAPP_DIRECTORY,
+            )
+        except ValueError:
+            return False
+        except RuntimeError:
+            logger.warning(
+                "Could not check webapp scaffold for session %s",
+                session_id,
+                exc_info=True,
+            )
+            return None
+
+        return any(
+            entry.name == _WEBAPP_PACKAGE_FILENAME and not entry.is_directory
+            for entry in entries
+        )
 
     def _check_nextjs_ready(
         self, sandbox_id: UUID, session_id: UUID, port: int

@@ -130,7 +130,7 @@ from onyx.server.features.build.sandbox.models import (
 )
 from onyx.server.features.build.sandbox.nextjs_dev import (
     allowed_dev_origins,
-    build_nextjs_start_script,
+    build_webapp_restore_script,
 )
 from onyx.server.features.build.sandbox.serve_transport import ServeConnectionInfo
 from onyx.server.features.build.sandbox.session_workspace import (
@@ -201,6 +201,8 @@ _OPENCODE_SESSION_TAG_PLUGIN_PATH = "/workspace/opencode-plugins/session-proxy-t
 _OPENCODE_CONNECT_APP_PLUGIN_PATH = "/workspace/opencode-plugins/connect-app.ts"
 # Soft turn-budget wrap-up steer (reads the per-turn deadline stamp).
 _OPENCODE_TURN_BUDGET_PLUGIN_PATH = "/workspace/opencode-plugins/turn-budget.ts"
+# Surfaces the `webapp` tool (start/status/logs/restart); always on.
+_OPENCODE_WEBAPP_PLUGIN_PATH = "/workspace/opencode-plugins/webapp.ts"
 _MUTABLE_SANDBOX_IMAGE_TAGS = {"latest", "beta", "edge"}
 
 # In-container opencode-history archive builder: reuses the sandbox_daemon
@@ -841,11 +843,13 @@ class DockerSandboxManager(SandboxManager):
             # opencode-serve reads provider config from env at startup; must be
             # in create_kwargs before the container ever runs.
             opencode_password = secrets.token_urlsafe(32)
-            # connect_app is always loaded; the egress-tagging plugin only when
-            # the proxy is wired up (else it no-ops — no HTTP(S)_PROXY to re-tag).
+            # connect_app, turn_budget, and webapp are always loaded; the
+            # egress-tagging plugin only when the proxy is wired up (else it
+            # no-ops — no HTTP(S)_PROXY to re-tag).
             plugins = [
                 _OPENCODE_CONNECT_APP_PLUGIN_PATH,
                 _OPENCODE_TURN_BUDGET_PLUGIN_PATH,
+                _OPENCODE_WEBAPP_PLUGIN_PATH,
             ]
             if SANDBOX_PROXY_HOST:
                 plugins.append(_OPENCODE_SESSION_TAG_PLUGIN_PATH)
@@ -1054,9 +1058,7 @@ class DockerSandboxManager(SandboxManager):
         *,
         agent_provider: str | None,
         agent_model: str | None,
-        nextjs_port: int | None,
         connectable_apps_section: str,
-        session_id: UUID | None = None,
         user_name: str | None = None,
     ) -> str:
         """Raw (unescaped) AGENTS.md content."""
@@ -1065,8 +1067,6 @@ class DockerSandboxManager(SandboxManager):
             connectable_apps_section=connectable_apps_section,
             provider=agent_provider,
             model_name=agent_model,
-            nextjs_port=nextjs_port,
-            session_id=session_id,
             disabled_tools=OPENCODE_DISABLED_TOOLS,
             user_name=user_name,
             organization_instructions=load_settings().craft_instructions,
@@ -1087,9 +1087,7 @@ class DockerSandboxManager(SandboxManager):
         agents_md = self._build_agents_md(
             agent_provider=llm_config.provider,
             agent_model=llm_config.model_name,
-            nextjs_port=nextjs_port,
             connectable_apps_section=connectable_apps_section,
-            session_id=session_id,
             user_name=user_name,
         )
         session_opencode_config = json.dumps(
@@ -1480,16 +1478,18 @@ fi
         )
 
         if nextjs_port is not None:
-            start_script = build_nextjs_start_script(
-                session_path, nextjs_port, check_node_modules=True
+            restore_webapp_script = build_webapp_restore_script(
+                session_path, nextjs_port
             )
             try:
                 _run_in_container_as_sandbox_user(
                     container,
-                    ["/bin/sh", "-c", start_script],
+                    ["/bin/sh", "-c", restore_webapp_script],
                 )
             except ExecError as e:
-                raise RuntimeError(f"Failed to start Next.js after restore: {e}") from e
+                raise RuntimeError(
+                    f"Failed to restore webapp bootstrap script: {e}"
+                ) from e
 
     def regenerate_session_config(
         self,
@@ -1505,14 +1505,16 @@ fi
         mcp_servers: Sequence[CraftMCPServerConfig] = (),
     ) -> None:
         """Rewrite generated session configuration and managed symlinks."""
+        # nextjs_port stays in the signature to match the abstract contract
+        # (base.py) shared with restore_snapshot's own webapp-script rewrite;
+        # AGENTS.md no longer embeds it.
+        _ = nextjs_port
         container = self._require_container(sandbox_id)
         session_path = f"{SESSIONS_ROOT}/{session_id}"
         agents_md = self._build_agents_md(
             agent_provider=agent_provider,
             agent_model=agent_model,
-            nextjs_port=nextjs_port,
             connectable_apps_section=connectable_apps_section,
-            session_id=session_id,
             user_name=user_name,
         )
         session_opencode_config = (

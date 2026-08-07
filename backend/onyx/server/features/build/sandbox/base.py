@@ -98,10 +98,13 @@ class SandboxManager(_ServeMixin, ABC):
         └── sessions/
             ├── $session_id_1/         # Per-session workspace
             │   ├── outputs/           # Agent output for this session
-            │   │   └── web/           # Next.js app
+            │   │   └── web/           # Next.js app (scaffolded lazily by
+            │   │                      # start-webapp.sh, not at setup)
             │   ├── venv/              # Python virtual environment
             │   ├── .opencode/skills   # Symlink → managed/skills
             │   ├── AGENTS.md          # Agent instructions
+            │   ├── start-webapp.sh    # Bootstrap script, chmod 444 (present
+            │   │                      # when session has a port)
             │   └── attachments/
             └── $session_id_2/
                 └── ...
@@ -190,6 +193,14 @@ class SandboxManager(_ServeMixin, ABC):
         - sessions/$session_id/.opencode/skills (symlink → managed skills dir)
         - sessions/$session_id/AGENTS.md
         - sessions/$session_id/attachments/
+
+        Does NOT scaffold ``outputs/web`` or install/start the dev server.
+        When ``nextjs_port`` is given, writes an executable
+        ``sessions/$session_id/start-webapp.sh`` bootstrap script (see
+        :func:`nextjs_dev.build_webapp_bootstrap_script`) that the agent runs
+        later, purely locally, to lazily scaffold and start the webapp; no
+        server-side trigger is involved. Skipped entirely when
+        ``nextjs_port`` is None (headless callers).
 
         Args:
             sandbox_id: The sandbox ID (must be provisioned)
@@ -286,6 +297,11 @@ class SandboxManager(_ServeMixin, ABC):
 
         For Kubernetes: Downloads and extracts the snapshot, regenerates config files.
         For Local: No-op since workspaces persist on disk (no snapshots).
+
+        When ``nextjs_port`` is given, always (re)writes ``start-webapp.sh``
+        with the new port (ports change across sleep/wake) and auto-starts
+        the dev server in the background, but only if the restored snapshot
+        actually contains a webapp (``outputs/web/package.json``).
 
         Args:
             sandbox_id: The sandbox ID

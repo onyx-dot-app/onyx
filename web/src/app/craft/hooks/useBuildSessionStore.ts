@@ -978,7 +978,7 @@ export async function waitForWebappReady(
       // keep polling
     }
     // Done on a definitive answer (no webapp or serving); errors keep polling.
-    if (info && (!info.has_webapp || info.ready)) return;
+    if (info && (info.has_webapp === false || info.ready)) return;
     await new Promise((resolve) => setTimeout(resolve, intervalMs));
   }
 }

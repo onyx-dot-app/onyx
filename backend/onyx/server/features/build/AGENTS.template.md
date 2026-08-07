@@ -17,10 +17,11 @@ in the user's connected apps. Use all available resources to best accomplish the
   `not_authorized` / `policy_denied`). Surface the outcome and offer an alternative.
 - **Never** state a fact that isn't grounded in a retrieved source or an attachment. If you
   don't have the data, search again or say so. Do not guess or fabricate.
-- The Next.js dev server is already running on port {{NEXTJS_PORT}}. Never start
-  another (`bun run dev`). Preview the app at
-  `http://localhost:{{NEXTJS_PORT}}{{WEBAPP_BASE_PATH}}` — requests outside that
-  base path 404 or redirect even when the app is healthy.
+- No web server is running initially. If your deliverable is a web app, call the `webapp`
+  tool with `action: "start"` FIRST. It scaffolds `outputs/web`, installs deps, starts the
+  dev server, and reports the port; safe to call repeatedly, and `status`/`logs` diagnose
+  problems. (If the tool is unavailable, run `bash start-webapp.sh` from the session root.)
+  Never run `bun run dev` or start your own server.
 - Be autonomous when building. Act within the turn rather than stopping to ask.
 
 {{DISABLED_TOOLS_SECTION}}
@@ -39,10 +40,11 @@ Your working directory is the session root. Everything you produce goes under `o
 ```
 ./
 ├── AGENTS.md          # this file
+├── start-webapp.sh    # fallback: use the `webapp` tool (action: "start") instead
 ├── attachments/       # files attached to THIS session (see Files & attachments)
 ├── user_library/      # the user's persistent library, shared across sessions (symlink)
 ├── outputs/           # ALL deliverables go here
-│   └── web/           # Next.js app, pre-scaffolded and running
+│   └── web/           # Next.js app; appears once the webapp tool is started
 └── .opencode/skills/  # installed skills
 ```
 
@@ -107,10 +109,13 @@ as needed. Pick the format that best answers the request.
 | **Markdown** | Reports, analyses, docs → `outputs/markdown/*.md` |
 | **Response** | Quick answers and lookups (no file needed)       |
 
-The web app under `outputs/web` renders live (Next.js 16.1.1, React 19, Tailwind, Recharts,
-shadcn/ui) — read `outputs/web/AGENTS.md` for its specs and styling before building. For a
-direct Response, put the full answer in your reply; don't paste a file's full contents
-into chat when you can point to it under `outputs/`. Give files human-readable names.
+A web app requires calling the `webapp` tool with `action: "start"` before building. It
+scaffolds `outputs/web`, installs deps, and starts the dev server (fallback: `bash
+start-webapp.sh`). Once running, it renders live (Next.js 16.1.1, React 19, Tailwind,
+Recharts, shadcn/ui); read `outputs/web/AGENTS.md` for its specs and styling before
+building. For a direct Response, put the full answer in your reply; don't paste a file's
+full contents into chat when you can point to it under `outputs/`. Give files
+human-readable names.
 
 ## How to work
 
