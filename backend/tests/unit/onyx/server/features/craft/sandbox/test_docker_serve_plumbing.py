@@ -479,6 +479,28 @@ def test_terminate_closes_event_bus_and_tombstones_sandbox() -> None:
     fake_bus_b.close.assert_called_once()
 
 
+def test_terminate_surfaces_cleanup_failures_after_attempting_all_resources() -> None:
+    mgr = _bare_manager()
+    mgr._docker = MagicMock()
+
+    container = MagicMock()
+    container.name = "sandbox-12345678"
+    container.remove.side_effect = dsm.APIError("container removal failed")
+    mgr._docker.containers.get.return_value = container
+
+    volume = MagicMock()
+    volume.remove.side_effect = dsm.APIError("volume removal failed")
+    mgr._docker.volumes.get.return_value = volume
+
+    with pytest.raises(RuntimeError, match="Failed to fully terminate") as exc_info:
+        mgr.terminate(_SBX)
+
+    assert "container removal failed" in str(exc_info.value)
+    assert "volume removal failed" in str(exc_info.value)
+    container.remove.assert_called_once_with(force=True, v=False)
+    volume.remove.assert_called_once_with(force=True)
+
+
 def test_reuse_existing_container_removes_created_state() -> None:
     """
     A container stranded in 'created' state is an incomplete prior provision.

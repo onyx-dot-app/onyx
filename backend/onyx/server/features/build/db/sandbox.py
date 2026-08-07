@@ -16,6 +16,7 @@ from onyx.utils.logger import setup_logger
 logger = setup_logger()
 
 _PAT_EXPIRATION_DAYS = 30
+FAILED_SANDBOX_SWEEP_BATCH_SIZE = 10
 
 
 def ensure_sandbox_pat(db_session: Session, sandbox: Sandbox, user: User) -> str:
@@ -256,10 +257,19 @@ def get_running_sandboxes(db_session: Session) -> list[Sandbox]:
 
 def get_sweepable_sandboxes(db_session: Session) -> list[Sandbox]:
     """Get sandboxes whose runtime may need snapshotting or cleanup."""
-    stmt = select(Sandbox).where(
-        Sandbox.status.in_([SandboxStatus.RUNNING, SandboxStatus.FAILED])
+    running_stmt = select(Sandbox).where(Sandbox.status == SandboxStatus.RUNNING)
+    failed_stmt = (
+        select(Sandbox)
+        .where(Sandbox.status == SandboxStatus.FAILED)
+        .order_by(
+            func.coalesce(Sandbox.last_heartbeat, Sandbox.created_at),
+            Sandbox.id,
+        )
+        .limit(FAILED_SANDBOX_SWEEP_BATCH_SIZE)
     )
-    return list(db_session.execute(stmt).scalars().all())
+    running = list(db_session.execute(running_stmt).scalars().all())
+    failed = list(db_session.execute(failed_stmt).scalars().all())
+    return running + failed
 
 
 def user_has_stale_active_session(
