@@ -195,7 +195,7 @@ export interface ApiArtifactResponse {
 }
 
 export interface ApiWebappInfoResponse {
-  has_webapp: boolean;
+  has_webapp: boolean | null;
   webapp_url: string | null;
   status: string;
   ready: boolean;

@@ -23,6 +23,17 @@ from onyx.server.features.build.sandbox.models import (
 _OPENAI_COMPATIBLE_NPM = "@ai-sdk/openai-compatible"
 
 
+_PROTECTED_FILE_RULES: dict[str, str] = {
+    # OpenCode uses the last matching rule, so specific denies must follow the
+    # catch-all allow.
+    "*": "allow",
+    "opencode.json": "deny",
+    "**/opencode.json": "deny",
+    "start-webapp.sh": "deny",
+    "**/start-webapp.sh": "deny",
+}
+
+
 _PERMISSIONS_TEMPLATE: dict[str, Any] = {
     "bash": {
         "rm": "deny",
@@ -41,17 +52,14 @@ _PERMISSIONS_TEMPLATE: dict[str, Any] = {
         "strings": "deny",
         "base64": "deny",
         "*": "allow",
+        "*start-webapp.sh*": "deny",
+        # The webapp plugin starts the script via child_process, not the bash
+        # tool. These are the two documented direct fallbacks for the agent.
+        "bash start-webapp.sh": "allow",
+        "bash ./start-webapp.sh": "allow",
     },
-    "edit": {
-        "opencode.json": "deny",
-        "**/opencode.json": "deny",
-        "*": "allow",
-    },
-    "write": {
-        "opencode.json": "deny",
-        "**/opencode.json": "deny",
-        "*": "allow",
-    },
+    "edit": _PROTECTED_FILE_RULES,
+    "write": _PROTECTED_FILE_RULES,
     "read": {
         "*": "allow",
         "opencode.json": "deny",
@@ -69,7 +77,7 @@ _PERMISSIONS_TEMPLATE: dict[str, Any] = {
     },
     "list": "allow",
     "lsp": "allow",
-    "patch": "allow",
+    "patch": _PROTECTED_FILE_RULES,
     # Deny opencode's built-in customize-opencode skill (edits opencode.json
     # via the skill tool, bypassing our edit/write denies). "*" must precede
     # the named deny — opencode evaluates skill rules with findLast().
