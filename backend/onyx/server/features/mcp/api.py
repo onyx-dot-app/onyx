@@ -926,15 +926,17 @@ async def _connect_oauth(
             return None
         return raw[1].decode()
 
-    auth_task = None if is_connected else asyncio.create_task(wait_auth_url())
+    # The stored config can't tell us whether the handshake will demand a fresh
+    # authorization, and the SDK offers that URL exactly once — always listen.
+    auth_task = asyncio.create_task(wait_auth_url())
 
     done, pending = await asyncio.wait(
-        [init_task] + ([auth_task] if auth_task else []),
+        [init_task, auth_task],
         return_when=asyncio.FIRST_COMPLETED,
     )
 
     # If we got an auth URL first, return it
-    if auth_task is not None and auth_task in done:
+    if auth_task in done:
         oauth_url = await auth_task
         # If no URL was retrieved within the timeout, treat as error
         if not oauth_url:
