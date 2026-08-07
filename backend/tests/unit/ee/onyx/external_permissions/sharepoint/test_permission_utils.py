@@ -60,6 +60,14 @@ def _make_ad_group(name: str, login_name: str | None = None) -> SharepointGroup:
     )
 
 
+def _make_sharepoint_group(name: str) -> SharepointGroup:
+    return SharepointGroup(
+        name=name,
+        login_name=name,
+        principal_type=SHAREPOINT_GROUP_PRINCIPAL_TYPE,
+    )
+
+
 @patch(f"{MODULE}._get_azuread_groups")
 def test_document_group_expansion_is_cached(mock_get_group: MagicMock) -> None:
     group = _make_ad_group("Engineering", "engineering-id")
@@ -72,6 +80,23 @@ def test_document_group_expansion_is_cached(mock_get_group: MagicMock) -> None:
     assert first == second
     assert first.group_ids == {"Engineering"}
     mock_get_group.assert_called_once()
+
+
+@patch(f"{MODULE}._get_sharepoint_groups")
+def test_sharepoint_group_cache_is_scoped_to_site(
+    mock_get_group: MagicMock,
+) -> None:
+    group = _make_sharepoint_group("Site Members")
+    first_context = MagicMock(base_url="https://tenant.sharepoint.com/sites/first")
+    second_context = MagicMock(base_url="https://tenant.sharepoint.com/sites/second")
+    mock_get_group.return_value = (set(), set())
+    cache = SharepointPermissionCache()
+
+    _resolve_document_groups(first_context, MagicMock(), {group}, cache)
+    _resolve_document_groups(second_context, MagicMock(), {group}, cache)
+
+    assert mock_get_group.call_count == 2
+    assert len(cache.group_expansions) == 2
 
 
 @patch(f"{MODULE}._get_azuread_groups")

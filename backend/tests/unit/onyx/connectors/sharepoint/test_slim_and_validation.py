@@ -8,7 +8,13 @@ from unittest.mock import MagicMock, patch
 import pytest
 
 from onyx.connectors.exceptions import ConnectorValidationError
-from onyx.connectors.sharepoint.connector import SharepointConnector
+from onyx.connectors.models import ExternalAccess
+from onyx.connectors.sharepoint.connector import (
+    SharepointConnector,
+    _convert_sitepage_to_document,
+    _convert_sitepage_to_slim_document,
+)
+from onyx.connectors.sharepoint.connector_utils import SharepointPermissionCache
 
 SITE_URL = "https://tenant.sharepoint.com/sites/MySite"
 
@@ -20,6 +26,46 @@ def _make_connector() -> SharepointConnector:
     connector._credential_json = {"sp_client_id": "x", "sp_directory_id": "y"}
     connector._graph_client = MagicMock()
     return connector
+
+
+@patch("onyx.connectors.sharepoint.connector.get_sharepoint_external_access")
+def test_full_and_slim_site_pages_share_permission_resolution(
+    mock_get_access: MagicMock,
+) -> None:
+    access = ExternalAccess(
+        external_user_emails={"alice@contoso.com"},
+        external_user_group_ids={"engineering"},
+        is_public=False,
+    )
+    mock_get_access.return_value = access
+    permission_cache = SharepointPermissionCache()
+    site_page = {
+        "id": "page-1",
+        "webUrl": f"{SITE_URL}/SitePages/Home.aspx",
+        "title": "Home",
+        "name": "Home.aspx",
+    }
+
+    full_document = _convert_sitepage_to_document(
+        site_page,
+        "MySite",
+        MagicMock(),
+        MagicMock(),
+        permission_cache,
+        include_permissions=True,
+    )
+    slim_document = _convert_sitepage_to_slim_document(
+        site_page,
+        MagicMock(),
+        MagicMock(),
+        permission_cache,
+    )
+
+    assert full_document.external_access == slim_document.external_access == access
+    assert all(
+        call.kwargs["permission_cache"] is permission_cache
+        for call in mock_get_access.call_args_list
+    )
 
 
 # ---------------------------------------------------------------------------
