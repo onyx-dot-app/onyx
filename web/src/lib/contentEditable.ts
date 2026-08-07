@@ -91,12 +91,9 @@ export function insertNodeAtCursor(element: HTMLElement, node: Node): void {
 // ─── Undo Snapshots ─────────────────────────────────────────────────────────
 
 /**
- * A serialized editor state for the app-level undo/redo history. The native
- * browser undo stack cannot be used: programmatic mutations (paste, tiles,
- * drafts) are invisible to it, so native undo restores stale states and eats
- * typed text. Selection endpoints are stored in "flat units" — one unit per
- * text character, `<br>`, or atomic rich tile — so they survive the
- * innerHTML round-trip.
+ * Serialized editor state for the app-level undo/redo history. Selection
+ * endpoints are in "flat units" — one per text character, `<br>`, or atomic
+ * rich tile — so they survive the innerHTML round-trip.
  */
 export interface EditableSnapshot {
   html: string;
@@ -187,10 +184,8 @@ export function captureSnapshot(element: HTMLElement): EditableSnapshot {
 }
 
 /**
- * `snapshot.html` must only ever come from `captureSnapshot` of the same
- * element (a browser serialization of DOM whose content enters via text
- * nodes / `createRichInputTileNode`) — never from external input, or the
- * innerHTML assignment below becomes an XSS sink.
+ * `snapshot.html` must come from `captureSnapshot` of the same element,
+ * never from external input — the innerHTML write would be an XSS sink.
  */
 export function restoreSnapshot(
   element: HTMLElement,

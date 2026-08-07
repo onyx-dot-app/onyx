@@ -25,11 +25,8 @@ import {
 
 type PasteTileData = { text: string; tile: HTMLElement };
 
-// App-level undo history. The browser's native undo stack cannot be used:
-// paste, tiles, and draft restores mutate the DOM programmatically, which the
-// native stack can't see, so native undo restores stale states and destroys
-// typed text. All undo entry points (Cmd+Z, menu/context-menu historyUndo)
-// are intercepted and served from these snapshots instead.
+// App-level undo history: the native undo stack can't see programmatic
+// mutations (paste, tiles, drafts), so it must never run against the input.
 const UNDO_COALESCE_MS = 1000;
 const MAX_UNDO_ENTRIES = 100;
 // Paste tiles can hold very large text; bound total retained snapshot HTML.
@@ -326,8 +323,8 @@ export function useContentEditable({
     disabledRef.current = disabled;
   }, [disabled]);
 
-  // Undo/redo entry points and typed-edit tracking. Native listeners (not
-  // React props) so every consumer of this hook is covered.
+  // Undo/redo entry points and typed-edit tracking, as native listeners so
+  // every consumer of the hook is covered.
   useEffect(() => {
     const el = ref.current;
     if (!el) return;
@@ -368,8 +365,7 @@ export function useContentEditable({
       if (disabledRef.current) return;
       const mod = event.metaKey || event.ctrlKey;
       if (mod && !event.altKey && event.key.toLowerCase() === "z") {
-        // Always intercept, even with empty stacks: native undo must never
-        // run against this element.
+        // Intercept even with empty stacks so native undo never runs.
         event.preventDefault();
         if (event.shiftKey) {
           performRedo();
@@ -441,8 +437,7 @@ export function useContentEditable({
   const clearMessage = useCallback(() => {
     if (!ref.current) return;
 
-    // Submit/reset starts a fresh history — a sent message is not undoable
-    // back into the input.
+    // Submit/reset starts fresh history — a sent message is not undoable.
     clearUndoHistory();
     clearTileSelection();
     setTilePopover(null);
