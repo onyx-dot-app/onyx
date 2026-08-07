@@ -1,6 +1,6 @@
 import asyncio
 from collections.abc import AsyncGenerator, Awaitable, Callable
-from types import SimpleNamespace, TracebackType
+from types import SimpleNamespace
 from typing import cast
 from unittest.mock import AsyncMock, MagicMock
 from uuid import uuid4
@@ -24,25 +24,15 @@ from onyx.server.features.mcp.models import (
 )
 
 
-class _DiscoveryClient:
-    def __init__(self, responses: list[int]) -> None:
-        self.responses = iter(responses)
-        self.request_urls: list[str] = []
+def _install_discovery_responses(
+    monkeypatch: pytest.MonkeyPatch, statuses: list[int]
+) -> list[str]:
+    remaining_statuses = iter(statuses)
+    request_urls: list[str] = []
 
-    async def __aenter__(self) -> "_DiscoveryClient":
-        return self
-
-    async def __aexit__(
-        self,
-        exc_type: type[BaseException] | None,
-        exc_value: BaseException | None,
-        traceback: TracebackType | None,
-    ) -> None:
-        return None
-
-    async def send(self, request: httpx.Request) -> httpx.Response:
-        self.request_urls.append(str(request.url))
-        status = next(self.responses)
+    def handle_request(request: httpx.Request) -> httpx.Response:
+        request_urls.append(str(request.url))
+        status = next(remaining_statuses)
         if status == 200:
             return httpx.Response(
                 status,
@@ -53,6 +43,21 @@ class _DiscoveryClient:
                 request=request,
             )
         return httpx.Response(status, request=request)
+
+    def client_factory(
+        headers: dict[str, str] | None = None,
+        timeout: httpx.Timeout | None = None,
+        auth: httpx.Auth | None = None,
+    ) -> httpx.AsyncClient:
+        return httpx.AsyncClient(
+            auth=auth,
+            headers=headers,
+            timeout=timeout,
+            transport=httpx.MockTransport(handle_request),
+        )
+
+    monkeypatch.setattr(oauth, "mcp_ssrf_httpx_client_factory", client_factory)
+    return request_urls
 
 
 class _OAuthContext:
@@ -166,20 +171,31 @@ def test_challenge_redirect_skips_well_known_fallback(
     discovery_factory.assert_not_called()
 
 
-def test_public_initialization_uses_path_then_root_metadata(
+@pytest.mark.parametrize(
+    ("transport", "initialization_error"),
+    [
+        (MCPTransport.STREAMABLE_HTTP, None),
+        (MCPTransport.SSE, RuntimeError("SSE endpoint is not streamable")),
+    ],
+    ids=["public-streamable", "sse-probe-failure"],
+)
+def test_public_initialization_uses_well_known_metadata(
     monkeypatch: pytest.MonkeyPatch,
+    transport: MCPTransport,
+    initialization_error: Exception | None,
 ) -> None:
-    server, providers, _ = _setup_coordinator(monkeypatch)
-    discovery_client = _DiscoveryClient([404, 200])
-    monkeypatch.setattr(
-        oauth, "mcp_ssrf_httpx_client_factory", lambda **_kwargs: discovery_client
-    )
+    server, providers, initialize = _setup_coordinator(monkeypatch, transport)
+    initialize.side_effect = initialization_error
+    request_urls = _install_discovery_responses(monkeypatch, [404, 200])
 
     assert _connect(server) == "https://consent"
-    assert discovery_client.request_urls == [
+    assert request_urls == [
         "https://mcp.example.com/.well-known/oauth-protected-resource/mcp",
         "https://mcp.example.com/.well-known/oauth-protected-resource",
     ]
+    initialize_call = initialize.await_args
+    assert initialize_call is not None
+    assert initialize_call.kwargs["transport"] is MCPTransport.STREAMABLE_HTTP
     assert providers[0].challenge == (
         'Bearer resource_metadata="https://mcp.example.com/'
         '.well-known/oauth-protected-resource"'
@@ -190,32 +206,13 @@ def test_public_initialization_errors_when_metadata_is_missing(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     server, _, _ = _setup_coordinator(monkeypatch)
-    discovery_client = _DiscoveryClient([404, 404])
-    monkeypatch.setattr(
-        oauth, "mcp_ssrf_httpx_client_factory", lambda **_kwargs: discovery_client
-    )
+    _install_discovery_responses(monkeypatch, [404, 404])
 
     with pytest.raises(OnyxError) as exc_info:
         _connect(server)
 
     assert exc_info.value.error_code is OnyxErrorCode.INVALID_INPUT
     assert "well-known URI" in exc_info.value.detail
-
-
-def test_fresh_sse_connection_uses_auth_capable_probe_before_fallback(
-    monkeypatch: pytest.MonkeyPatch,
-) -> None:
-    server, _, initialize = _setup_coordinator(monkeypatch, MCPTransport.SSE)
-    initialize.side_effect = RuntimeError("SSE endpoint is not streamable")
-    discovery_client = _DiscoveryClient([200])
-    monkeypatch.setattr(
-        oauth, "mcp_ssrf_httpx_client_factory", lambda **_kwargs: discovery_client
-    )
-
-    assert _connect(server) == "https://consent"
-    initialize_call = initialize.await_args
-    assert initialize_call is not None
-    assert initialize_call.kwargs["transport"] is MCPTransport.STREAMABLE_HTTP
 
 
 def test_oauth_redirect_wait_is_bounded_and_cancels_probe(
@@ -280,59 +277,39 @@ def _setup_api_connection(
     return server, user, update_connection_config
 
 
-def test_valid_connection_preserves_oauth_state_without_new_consent(
+@pytest.mark.parametrize(
+    ("expires_at", "expected_oauth_url", "expected_discovery_urls"),
+    [
+        (4_000_000_000.0, "/admin/actions/mcp", []),
+        (
+            1.0,
+            "https://consent",
+            ["https://mcp.example.com/.well-known/oauth-protected-resource/mcp"],
+        ),
+    ],
+    ids=["valid", "expired"],
+)
+def test_token_expiry_controls_fast_path_without_dropping_oauth_state(
     monkeypatch: pytest.MonkeyPatch,
+    expires_at: float,
+    expected_oauth_url: str,
+    expected_discovery_urls: list[str],
 ) -> None:
     stored_data = MCPConnectionData(
         client_info={"client_id": "client-id"},
         headers={"Authorization": "Bearer stored-token"},
-        tokens={"access_token": "stored-token", "token_type": "Bearer"},
-        token_expires_at=4_000_000_000.0,
-        metadata={"token_endpoint": "https://accounts.example.com/token"},
-    )
-    server, user, update_connection_config = _setup_api_connection(
-        monkeypatch, stored_data
-    )
-    discovery_factory = MagicMock(
-        side_effect=AssertionError("authenticated connection should not discover")
-    )
-    monkeypatch.setattr(oauth, "mcp_ssrf_httpx_client_factory", discovery_factory)
-
-    response = asyncio.run(
-        api._connect_oauth(
-            _request(server.id), MagicMock(), is_admin=True, user=cast(User, user)
-        )
-    )
-
-    assert response.oauth_url == "/admin/actions/mcp"
-    discovery_factory.assert_not_called()
-    updated_data = update_connection_config.call_args.args[2]
-    assert updated_data["tokens"] == stored_data["tokens"]
-    assert updated_data["token_expires_at"] == stored_data["token_expires_at"]
-    assert updated_data["metadata"] == stored_data["metadata"]
-
-
-def test_expired_connection_preserves_refresh_state_but_requires_oauth(
-    monkeypatch: pytest.MonkeyPatch,
-) -> None:
-    stored_data = MCPConnectionData(
-        client_info={"client_id": "client-id"},
-        headers={"Authorization": "Bearer expired-token"},
         tokens={
-            "access_token": "expired-token",
+            "access_token": "stored-token",
             "refresh_token": "refresh-token",
             "token_type": "Bearer",
         },
-        token_expires_at=1.0,
+        token_expires_at=expires_at,
         metadata={"token_endpoint": "https://accounts.example.com/token"},
     )
     server, user, update_connection_config = _setup_api_connection(
         monkeypatch, stored_data
     )
-    discovery_client = _DiscoveryClient([200])
-    monkeypatch.setattr(
-        oauth, "mcp_ssrf_httpx_client_factory", lambda **_kwargs: discovery_client
-    )
+    request_urls = _install_discovery_responses(monkeypatch, [200])
 
     response = asyncio.run(
         api._connect_oauth(
@@ -340,7 +317,8 @@ def test_expired_connection_preserves_refresh_state_but_requires_oauth(
         )
     )
 
-    assert response.oauth_url == "https://consent"
+    assert response.oauth_url == expected_oauth_url
+    assert request_urls == expected_discovery_urls
     updated_data = update_connection_config.call_args.args[2]
     assert updated_data["tokens"] == stored_data["tokens"]
     assert updated_data["token_expires_at"] == stored_data["token_expires_at"]
