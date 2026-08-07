@@ -306,6 +306,42 @@ def test_cc_pair_scope_ignores_stale_group_links(db_session: Session) -> None:
     assert editable(attached) is False
 
 
+def test_cc_pair_creator_exception_is_bounded_to_groupless_private(
+    db_session: Session,
+) -> None:
+    """The creator carve-out exists because a permission-synced pair sits in no group, so
+    the scope clause (needs >=1 managed group) can never match it. Unbounded it outlives
+    the scope rules — keeping the creator editable once the pair is published or moved
+    into groups they don't manage, which is what the write routes authorize on."""
+    unmanaged = _make_group(db_session)
+
+    creator = create_test_user(db_session, "proj-cc-creator")
+    _manage(db_session, creator, _make_group(db_session))
+    creator.effective_permissions = []
+    db_session.commit()
+
+    def editable(cc_pair: ConnectorCredentialPair) -> bool:
+        return (
+            get_connector_credential_pair_from_id_for_user(
+                cc_pair.id, db_session, creator, get_editable=True
+            )
+            is not None
+        )
+
+    def own(**kwargs: object) -> ConnectorCredentialPair:
+        cc_pair = _make_cc_pair(db_session, **kwargs)  # ty: ignore[invalid-argument-type]
+        cc_pair.creator_id = creator.id
+        db_session.commit()
+        return cc_pair
+
+    # The case the carve-out is for: theirs, private, in no group.
+    assert editable(own(is_public=False, groups=[])) is True
+    # Published org-wide — public is out of scope for a manager, creator or not.
+    assert editable(own(is_public=True, groups=[])) is False
+    # Moved into a group they don't manage.
+    assert editable(own(is_public=False, groups=[unmanaged])) is False
+
+
 def test_cc_pair_projection_key_coverage() -> None:
     stamped = set(cc_pair_permissions(is_editable=True, is_connectors_admin=True))
     assert stamped == set(CC_PAIR_ACTIONS), (

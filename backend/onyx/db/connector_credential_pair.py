@@ -206,11 +206,25 @@ def _add_user_filters(
                 True
             ),
         )
-        # The creator keeps management of what they made even when it sits in no
-        # group — a permission-synced connector has none to sit in. Creating a
-        # cc_pair already requires MANAGE_CONNECTORS, so this only ever applies
-        # to someone who holds it.
-        where_clause |= ConnectorCredentialPair.creator_id == user.id
+        # The scope clause needs >=1 managed group, so it can never match a groupless
+        # pair — a permission-synced one has no group to sit in, which would lock its
+        # creator out of what they just made. All three conditions are load-bearing:
+        # creator alone would keep them editing it after it is published or moved into
+        # groups they don't manage.
+        has_live_group = (
+            select(UserGroup__ConnectorCredentialPair.cc_pair_id)
+            .where(
+                UserGroup__ConnectorCredentialPair.cc_pair_id
+                == ConnectorCredentialPair.id,
+                UserGroup__ConnectorCredentialPair.is_current.is_(True),
+            )
+            .exists()
+        )
+        where_clause |= and_(
+            ConnectorCredentialPair.creator_id == user.id,
+            ConnectorCredentialPair.access_type != AccessType.PUBLIC,
+            ~has_live_group,
+        )
     else:
         where_clause |= ConnectorCredentialPair.access_type == AccessType.PUBLIC
         where_clause |= ConnectorCredentialPair.access_type == AccessType.SYNC
