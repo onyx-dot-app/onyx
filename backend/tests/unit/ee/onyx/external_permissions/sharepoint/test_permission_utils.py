@@ -23,6 +23,7 @@ from ee.onyx.external_permissions.sharepoint.permission_utils import (
     get_sharepoint_external_groups,
 )
 from onyx.access.models import ExternalAccess
+from onyx.background.indexing.checkpointing_utils import check_checkpoint_size
 from onyx.connectors.sharepoint.connector import SharepointConnectorCheckpoint
 from onyx.connectors.sharepoint.connector_utils import (
     SharepointGroup,
@@ -136,7 +137,8 @@ def test_document_group_cache_survives_checkpoint(
     mock_get_group: MagicMock,
 ) -> None:
     group = _make_ad_group("Engineering", "engineering-id")
-    mock_get_group.return_value = (set(), set())
+    nested_group = _make_ad_group("Platform", "platform-id")
+    mock_get_group.side_effect = [({nested_group}, set()), (set(), set())]
     cache = SharepointPermissionCache()
     _resolve_document_groups(MagicMock(), MagicMock(), {group}, cache)
 
@@ -144,6 +146,7 @@ def test_document_group_cache_survives_checkpoint(
         has_more=True,
         permission_cache=cache,
     )
+    check_checkpoint_size(checkpoint)
     restored = SharepointConnectorCheckpoint.model_validate_json(
         checkpoint.model_dump_json()
     )
@@ -154,7 +157,11 @@ def test_document_group_cache_survives_checkpoint(
         restored.permission_cache,
     )
 
-    mock_get_group.assert_called_once()
+    assert isinstance(
+        next(iter(restored.permission_cache.group_expansions.values())).nested_groups,
+        set,
+    )
+    assert mock_get_group.call_count == 2
 
 
 @patch(f"{MODULE}._get_azuread_groups")

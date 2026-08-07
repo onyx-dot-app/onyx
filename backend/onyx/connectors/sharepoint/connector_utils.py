@@ -3,7 +3,7 @@ from typing import Any
 from office365.graph_client import GraphClient
 from office365.onedrive.driveitems.driveItem import DriveItem
 from office365.sharepoint.client_context import ClientContext
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, Field, field_serializer
 
 from onyx.connectors.models import ExternalAccess
 from onyx.db.enums import HierarchyNodeType
@@ -22,6 +22,12 @@ class SharepointGroup(BaseModel):
 
 class SharepointGroupExpansion(BaseModel):
     nested_groups: set[SharepointGroup]
+
+    @field_serializer("nested_groups")
+    def serialize_nested_groups(
+        self, nested_groups: set[SharepointGroup]
+    ) -> list[SharepointGroup]:
+        return list(nested_groups)
 
 
 class SharepointPermissionCache(BaseModel):
