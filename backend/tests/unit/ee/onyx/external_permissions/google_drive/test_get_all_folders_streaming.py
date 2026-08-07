@@ -123,3 +123,39 @@ def test_get_all_folders_aborts_after_too_many_user_failures(
                 skip_folders_without_permissions=True,
             )
         )
+
+
+@patch("ee.onyx.external_permissions.google_drive.group_sync.get_modified_folders")
+@patch("ee.onyx.external_permissions.google_drive.group_sync.get_drive_service")
+def test_get_all_folders_enforces_crawl_deadline(
+    mock_get_drive_service: MagicMock,
+    mock_get_modified_folders: MagicMock,
+) -> None:
+    """On large domains the crawl skips almost every folder and yields nothing
+    for hours, so consumer-side timeouts (checked between yields) never fire —
+    the crawl must enforce its own deadline and fail the sync outright rather
+    than being swallowed by the per-user failure accounting."""
+
+    def endless_folders(service: Any) -> Any:
+        del service
+        i = 0
+        while True:
+            i += 1
+            yield _folder(f"f{i}")
+
+    mock_get_drive_service.return_value = MagicMock()
+    mock_get_modified_folders.side_effect = endless_folders
+    connector = _make_connector(["a@example.com", "b@example.com"])
+
+    with patch("ee.onyx.external_permissions.google_drive.group_sync.JOB_TIMEOUT", 0):
+        with pytest.raises(TimeoutError, match="folder crawl exceeded"):
+            list(
+                _get_all_folders(
+                    google_drive_connector=connector,
+                    skip_folders_without_permissions=True,
+                )
+            )
+
+    # Only the first user was touched: the deadline ends the whole sync
+    # instead of counting as a per-user failure and moving on.
+    assert mock_get_drive_service.call_count == 1

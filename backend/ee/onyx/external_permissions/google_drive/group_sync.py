@@ -1,3 +1,4 @@
+import time
 from collections.abc import Generator
 
 from googleapiclient.errors import HttpError
@@ -14,6 +15,7 @@ from ee.onyx.external_permissions.google_drive.models import (
 )
 from ee.onyx.external_permissions.utils import credential_json
 from onyx.access.utils import build_domain_group_id
+from onyx.configs.app_configs import JOB_TIMEOUT
 from onyx.connectors.google_drive.connector import GoogleDriveConnector
 from onyx.connectors.google_utils.google_utils import execute_paginated_retrieval
 from onyx.connectors.google_utils.resources import (
@@ -57,6 +59,11 @@ def _get_all_folders(
     # enumerated user).
     SKIP_LOG_INTERVAL = 1000
 
+    # The crawl re-enumerates the whole domain once per user and can yield
+    # ~nothing for hours on large domains, so consumer-side timeouts (which
+    # only run between yields) never fire — the deadline must live in here.
+    crawl_deadline = time.monotonic() + JOB_TIMEOUT
+
     seen_folder_ids: set[str] = set()
     skipped_already_seen = 0
     skipped_no_permissions = 0
@@ -77,6 +84,12 @@ def _get_all_folders(
         for folder in get_modified_folders(
             service=drive_service,
         ):
+            if time.monotonic() > crawl_deadline:
+                raise TimeoutError(
+                    f"Drive folder crawl exceeded {JOB_TIMEOUT}s before completing "
+                    "domain enumeration; failing the sync so the worker releases "
+                    "its lock and fence instead of running indefinitely."
+                )
             folder_id = folder["id"]
             if folder_id in seen_folder_ids:
                 skipped_already_seen += 1
@@ -132,6 +145,10 @@ def _get_all_folders(
             yield from _get_all_folders_for_user(
                 google_drive_connector, skip_folders_without_permissions, user_email
             )
+        except TimeoutError:
+            # The crawl deadline is fatal for the whole sync, not a per-user
+            # failure — let it end the task.
+            raise
         except Exception as e:
             # 401 indicates a customer-side credential issue (token revoked /
             # expired), not a bug — surface as a warning instead of an error.
