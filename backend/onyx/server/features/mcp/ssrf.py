@@ -55,7 +55,7 @@ class _OAuthChallengeTransport(httpx.AsyncBaseTransport):
         self._delegate = _SSRFGuardAsyncTransport()
 
     async def handle_async_request(self, request: httpx.Request) -> httpx.Response:
-        if request.url == self._server_url:
+        if request.method == "GET" and request.url == self._server_url:
             if not self._challenged:
                 self._challenged = True
                 return httpx.Response(

@@ -154,13 +154,21 @@ async def _run_until_oauth_redirect(
 async def _initiate_oauth_from_well_known_metadata(
     oauth_auth: OAuthClientProvider,
     server_url: str,
+    connection_headers: dict[str, str],
 ) -> None:
     timeout = httpx.Timeout(_OAUTH_HTTP_TIMEOUT_SECONDS)
     discovery_urls = build_protected_resource_metadata_discovery_urls(None, server_url)
     metadata_url: str | None = None
+    discovery_headers = {
+        key: value
+        for key, value in connection_headers.items()
+        if key.lower() != "authorization"
+    }
     async with mcp_ssrf_httpx_client_factory(timeout=timeout) as client:
         for url in discovery_urls:
-            response = await client.send(create_oauth_metadata_request(url))
+            request = create_oauth_metadata_request(url)
+            request.headers.update(discovery_headers)
+            response = await client.send(request)
             if await handle_protected_resource_response(response) is not None:
                 metadata_url = url
                 break
@@ -218,7 +226,7 @@ async def connect_auto_discovery_oauth(
                 auth=oauth_auth,
             )
         except Exception:
-            if is_authenticated:
+            if is_authenticated or oauth_auth.context.is_token_valid():
                 raise
             logger.info(
                 "Initial MCP OAuth probe failed; trying well-known discovery",
@@ -228,7 +236,7 @@ async def connect_auto_discovery_oauth(
         if is_authenticated or oauth_auth.context.is_token_valid():
             return
         await _initiate_oauth_from_well_known_metadata(
-            oauth_auth, mcp_server.server_url
+            oauth_auth, mcp_server.server_url, connection_headers
         )
 
     try:

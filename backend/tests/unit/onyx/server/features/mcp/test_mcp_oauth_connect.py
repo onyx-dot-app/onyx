@@ -22,16 +22,21 @@ from onyx.server.features.mcp.models import (
     MCPConnectionData,
     MCPUserOAuthConnectRequest,
 )
+from onyx.server.features.mcp.ssrf import _OAuthChallengeTransport
 
 
 def _install_discovery_responses(
-    monkeypatch: pytest.MonkeyPatch, statuses: list[int]
+    monkeypatch: pytest.MonkeyPatch,
+    statuses: list[int],
+    request_headers: list[httpx.Headers] | None = None,
 ) -> list[str]:
     remaining_statuses = iter(statuses)
     request_urls: list[str] = []
 
     def handle_request(request: httpx.Request) -> httpx.Response:
         request_urls.append(str(request.url))
+        if request_headers is not None:
+            request_headers.append(request.headers)
         status = next(remaining_statuses)
         if status == 200:
             return httpx.Response(
@@ -61,8 +66,10 @@ def _install_discovery_responses(
 
 
 class _OAuthContext:
+    token_valid = False
+
     def is_token_valid(self) -> bool:
-        return False
+        return self.token_valid
 
 
 class _OAuthProvider(httpx.Auth):
@@ -127,7 +134,12 @@ def _setup_coordinator(
     return server, providers, initialize
 
 
-def _connect(server: SimpleNamespace, *, is_authenticated: bool = False) -> str | None:
+def _connect(
+    server: SimpleNamespace,
+    *,
+    is_authenticated: bool = False,
+    connection_headers: dict[str, str] | None = None,
+) -> str | None:
     return asyncio.run(
         oauth.connect_auto_discovery_oauth(
             mcp_server=cast(MCPServer, server),
@@ -135,7 +147,7 @@ def _connect(server: SimpleNamespace, *, is_authenticated: bool = False) -> str 
             return_path="/admin/actions/mcp",
             connection_config_id=101,
             admin_config_id=100,
-            connection_headers={},
+            connection_headers=connection_headers or {},
             transport=server.transport,
             is_authenticated=is_authenticated,
         )
@@ -186,9 +198,21 @@ def test_public_initialization_uses_well_known_metadata(
 ) -> None:
     server, providers, initialize = _setup_coordinator(monkeypatch, transport)
     initialize.side_effect = initialization_error
-    request_urls = _install_discovery_responses(monkeypatch, [404, 200])
+    request_headers: list[httpx.Headers] = []
+    request_urls = _install_discovery_responses(
+        monkeypatch, [404, 200], request_headers
+    )
 
-    assert _connect(server) == "https://consent"
+    assert (
+        _connect(
+            server,
+            connection_headers={
+                "X-Gateway-Tenant": "tenant-1",
+                "Authorization": "Bearer stale-token",
+            },
+        )
+        == "https://consent"
+    )
     assert request_urls == [
         "https://mcp.example.com/.well-known/oauth-protected-resource/mcp",
         "https://mcp.example.com/.well-known/oauth-protected-resource",
@@ -196,6 +220,12 @@ def test_public_initialization_uses_well_known_metadata(
     initialize_call = initialize.await_args
     assert initialize_call is not None
     assert initialize_call.kwargs["transport"] is MCPTransport.STREAMABLE_HTTP
+    assert initialize_call.kwargs["connection_headers"] == {
+        "X-Gateway-Tenant": "tenant-1",
+        "Authorization": "Bearer stale-token",
+    }
+    assert all(headers["X-Gateway-Tenant"] == "tenant-1" for headers in request_headers)
+    assert all("Authorization" not in headers for headers in request_headers)
     assert providers[0].challenge == (
         'Bearer resource_metadata="https://mcp.example.com/'
         '.well-known/oauth-protected-resource"'
@@ -239,6 +269,48 @@ def test_oauth_redirect_wait_is_bounded_and_cancels_probe(
 
     assert probe_started.is_set()
     assert probe_cancelled
+
+
+def test_probe_failure_after_token_refresh_is_not_treated_as_connected(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    server, providers, _ = _setup_coordinator(monkeypatch)
+
+    async def initialize_after_refresh(*_args: object, **_kwargs: object) -> object:
+        providers[0].context.token_valid = True
+        raise RuntimeError("MCP initialization failed after refresh")
+
+    monkeypatch.setattr(oauth, "initialize_mcp_client", initialize_after_refresh)
+
+    with pytest.raises(RuntimeError, match="initialization failed after refresh"):
+        _connect(server)
+
+
+def test_oauth_challenge_transport_delegates_same_url_posts(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    async def run() -> None:
+        delegated_requests: list[httpx.Request] = []
+
+        def handle_delegated(request: httpx.Request) -> httpx.Response:
+            delegated_requests.append(request)
+            return httpx.Response(201, request=request)
+
+        transport = _OAuthChallengeTransport(
+            "https://mcp.example.com/mcp",
+            "https://mcp.example.com/.well-known/oauth-protected-resource/mcp",
+        )
+        monkeypatch.setattr(
+            transport, "_delegate", httpx.MockTransport(handle_delegated)
+        )
+        async with httpx.AsyncClient(transport=transport) as client:
+            assert (await client.get("https://mcp.example.com/mcp")).status_code == 401
+            assert (await client.get("https://mcp.example.com/mcp")).status_code == 204
+            assert (await client.post("https://mcp.example.com/mcp")).status_code == 201
+
+        assert [request.method for request in delegated_requests] == ["POST"]
+
+    asyncio.run(run())
 
 
 def _request(server_id: int) -> MCPUserOAuthConnectRequest:
