@@ -11,17 +11,24 @@ import {
   SessionHistoryItem,
 } from "@/app/craft/hooks/useBuildSessionStore";
 import { CRAFT_SEARCH_PARAM_NAMES } from "@/app/craft/services/searchParams";
-import { SidebarTab, Text } from "@opal/components";
 import {
+  Button,
+  Popover,
+  PopoverMenu,
+  SidebarTab,
+  Text,
+} from "@opal/components";
+import {
+  ConfirmationModalLayout,
   SidebarLayouts,
   SidebarStateProvider,
+  toast,
   useSidebarState,
 } from "@opal/layouts";
 import RefreshText from "@/refresh-components/texts/Text";
 import { renderSidebarLogo } from "@/lib/sidebar/utils";
 import { useShowLogoWhenFolded } from "@/lib/sidebar/hooks";
 import AccountPopover from "@/sections/sidebar/AccountPopover";
-import { Popover, PopoverMenu } from "@opal/components";
 import IconButton from "@/refresh-components/buttons/IconButton";
 import ButtonRenaming from "@/refresh-components/buttons/ButtonRenaming";
 import LineItem from "@/refresh-components/buttons/LineItem";
@@ -35,18 +42,11 @@ import {
   SvgMoreHorizontal,
   SvgEdit,
   SvgTrash,
-  SvgCheckCircle,
   SvgPlug,
   SvgSimpleLoader,
 } from "@opal/icons";
-import { ConfirmationModalLayout } from "@opal/layouts";
-import { Button } from "@opal/components";
 import TypewriterText from "@/app/craft/components/TypewriterText";
 import OpencodeDebugLogsButton from "@/app/craft/components/OpencodeDebugLogs";
-import {
-  DELETE_SUCCESS_DISPLAY_DURATION_MS,
-  DELETE_MESSAGE_ROTATION_INTERVAL_MS,
-} from "@/app/craft/constants";
 import {
   CRAFT_PATH,
   CRAFT_SKILLS_PATH,
@@ -56,57 +56,44 @@ import {
 import { useUnsavedChangesNavigation } from "@/providers/UnsavedChangesNavigationProvider";
 
 // ============================================================================
-// Fun Deleting Messages
-// ============================================================================
-
-const DELETING_MESSAGES = [
-  "Mining away your blocks...",
-  "Returning diamonds to the caves...",
-  "Creeper blew up your save file...",
-  "Throwing items into lava...",
-  "Despawning your entities...",
-  "Breaking bedrock illegally...",
-  "Enderman teleported your data away...",
-  "Falling into the void...",
-  "Your build ran out of hearts...",
-  "Respawning at world spawn...",
-  "Feeding your code to the Ender Dragon...",
-  "Activating TNT chain reaction...",
-  "Zombie horde consumed your bytes...",
-  "Wither withering your session...",
-  "Herobrine deleted your world...",
-];
-
-function DeletingMessage() {
-  const [messageIndex, setMessageIndex] = useState(() =>
-    Math.floor(Math.random() * DELETING_MESSAGES.length)
-  );
-
-  useEffect(() => {
-    const interval = setInterval(() => {
-      setMessageIndex((prev) => {
-        let next = Math.floor(Math.random() * DELETING_MESSAGES.length);
-        while (next === prev && DELETING_MESSAGES.length > 1) {
-          next = Math.floor(Math.random() * DELETING_MESSAGES.length);
-        }
-        return next;
-      });
-    }, DELETE_MESSAGE_ROTATION_INTERVAL_MS);
-    return () => clearInterval(interval);
-  }, []);
-
-  return (
-    <div className="animate-subtle-pulse">
-      <Text as="p" color="text-03">
-        {DELETING_MESSAGES[messageIndex]}
-      </Text>
-    </div>
-  );
-}
-
-// ============================================================================
 // Build Session Button
 // ============================================================================
+
+interface CraftSessionDeleteModalProps {
+  sessionTitle: string;
+  isDeleting?: boolean;
+  onClose: () => void;
+  onConfirm: (event: React.MouseEvent<HTMLButtonElement>) => void;
+}
+
+export function CraftSessionDeleteModal({
+  sessionTitle,
+  isDeleting = false,
+  onClose,
+  onConfirm,
+}: CraftSessionDeleteModalProps) {
+  return (
+    <ConfirmationModalLayout
+      title={`Delete "${sessionTitle}"?`}
+      icon={SvgTrash}
+      onClose={isDeleting ? undefined : onClose}
+      submit={
+        <Button
+          disabled={isDeleting}
+          variant="danger"
+          prominence="primary"
+          onClick={onConfirm}
+          icon={isDeleting ? SvgSimpleLoader : undefined}
+        >
+          {isDeleting ? "Deleting..." : "Delete"}
+        </Button>
+      }
+    >
+      This permanently removes the Craft session and all of its data. This
+      action cannot be undone.
+    </ConfirmationModalLayout>
+  );
+}
 
 interface BuildSessionButtonProps {
   historyItem: SessionHistoryItem;
@@ -129,9 +116,6 @@ function BuildSessionButton({
   const [popoverOpen, setPopoverOpen] = useState(false);
   const [isDeleteModalOpen, setIsDeleteModalOpen] = useState(false);
   const [isDeleting, setIsDeleting] = useState(false);
-  const [deleteSuccess, setDeleteSuccess] = useState(false);
-  const [deleteError, setDeleteError] = useState<string | null>(null);
-  const deleteTimeoutRef = useRef<NodeJS.Timeout | null>(null);
 
   // Track title changes for typewriter animation (only for auto-naming, not manual rename)
   const prevTitleRef = useRef(historyItem.title);
@@ -151,42 +135,31 @@ function BuildSessionButton({
   }, [historyItem.title, renaming]);
 
   const closeModal = useCallback(() => {
-    if (deleteTimeoutRef.current) {
-      clearTimeout(deleteTimeoutRef.current);
-      deleteTimeoutRef.current = null;
-    }
     setIsDeleteModalOpen(false);
     setPopoverOpen(false);
-    setDeleteSuccess(false);
-    setDeleteError(null);
-    setIsDeleting(false);
   }, []);
 
   const handleConfirmDelete = useCallback(
     async (e: React.MouseEvent<HTMLButtonElement>) => {
       e.stopPropagation();
       setIsDeleting(true);
-      setDeleteError(null);
 
       try {
         await onDelete();
         setIsDeleting(false);
-        setDeleteSuccess(true);
-        // Show success briefly, then close and redirect if needed
-        deleteTimeoutRef.current = setTimeout(() => {
-          closeModal();
-          if (isActive && onDeleteActiveSession) {
-            onDeleteActiveSession();
-          }
-        }, DELETE_SUCCESS_DISPLAY_DURATION_MS);
+        toast.success(`Deleted "${historyItem.title}".`);
+        closeModal();
+        if (isActive && onDeleteActiveSession) {
+          onDeleteActiveSession();
+        }
       } catch (err) {
         setIsDeleting(false);
-        setDeleteError(
+        toast.error(
           err instanceof Error ? err.message : "Failed to delete session"
         );
       }
     },
-    [onDelete, closeModal, isActive, onDeleteActiveSession]
+    [onDelete, historyItem.title, closeModal, isActive, onDeleteActiveSession]
   );
 
   const rightMenu = (
@@ -271,53 +244,12 @@ function BuildSessionButton({
         </Popover.Anchor>
       </Popover>
       {isDeleteModalOpen && (
-        <ConfirmationModalLayout
-          title={
-            deleteSuccess
-              ? "Deleted"
-              : deleteError
-                ? "Delete Failed"
-                : "Delete Craft"
-          }
-          icon={deleteSuccess ? SvgCheckCircle : SvgTrash}
-          onClose={isDeleting || deleteSuccess ? undefined : closeModal}
-          hideCancel={isDeleting || deleteSuccess}
-          twoTone={!isDeleting && !deleteSuccess && !deleteError}
-          submit={
-            deleteSuccess ? (
-              <Button disabled variant="action" icon={SvgCheckCircle}>
-                Done
-              </Button>
-            ) : deleteError ? (
-              <Button variant="danger" onClick={closeModal}>
-                Close
-              </Button>
-            ) : (
-              <Button
-                disabled={isDeleting}
-                variant="danger"
-                onClick={handleConfirmDelete}
-                icon={isDeleting ? SvgSimpleLoader : undefined}
-              >
-                {isDeleting ? "Deleting..." : "Delete"}
-              </Button>
-            )
-          }
-        >
-          {deleteSuccess ? (
-            <Text as="p" color="text-03">
-              Build deleted successfully.
-            </Text>
-          ) : deleteError ? (
-            <Text as="p" color="status-error-02">
-              {deleteError}
-            </Text>
-          ) : isDeleting ? (
-            <DeletingMessage />
-          ) : (
-            "Are you sure you want to delete this craft? This action cannot be undone."
-          )}
-        </ConfirmationModalLayout>
+        <CraftSessionDeleteModal
+          sessionTitle={historyItem.title}
+          isDeleting={isDeleting}
+          onClose={closeModal}
+          onConfirm={handleConfirmDelete}
+        />
       )}
     </>
   );
