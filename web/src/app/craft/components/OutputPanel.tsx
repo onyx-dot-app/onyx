@@ -296,12 +296,12 @@ const BuildOutputPanel = memo(({ isOpen }: BuildOutputPanelProps) => {
   );
   const activeFilePath = activePanel?.kind === "file" ? activePanel.path : null;
 
-  // Determine if the active file preview is a markdown or pptx file (for download buttons)
+  // Determine the active preview type for download actions.
   const isMarkdownPreview =
     isFilePreviewActive && activeFilePath && /\.md$/i.test(activeFilePath);
 
-  const isPptxPreview =
-    isFilePreviewActive && activeFilePath && /\.pptx$/i.test(activeFilePath);
+  const isPowerPointPreview =
+    isFilePreviewActive && activeFilePath && /\.pptx?$/i.test(activeFilePath);
 
   const isPdfPreview =
     isFilePreviewActive && activeFilePath && /\.pdf$/i.test(activeFilePath);
@@ -571,15 +571,15 @@ const BuildOutputPanel = memo(({ isOpen }: BuildOutputPanelProps) => {
             : null
         }
         onDownloadRaw={
-          isMarkdownPreview || isPptxPreview || isPdfPreview
+          isMarkdownPreview || isPowerPointPreview || isPdfPreview
             ? handleRawFileDownload
             : undefined
         }
         downloadRawTooltip={
           isPdfPreview
             ? "Download PDF"
-            : isPptxPreview
-              ? "Download PPTX"
+            : isPowerPointPreview
+              ? "Download PowerPoint"
               : "Download MD file"
         }
         onDownload={isMarkdownPreview ? handleDocxDownload : undefined}

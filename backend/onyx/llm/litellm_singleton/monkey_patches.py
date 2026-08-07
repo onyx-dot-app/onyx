@@ -79,6 +79,15 @@ Status checked against LiteLLM v1.93.0 (2026-07-20):
      OpenAI-compatible gateways such as Bifrost and Portkey), so honor it
      unconditionally and pass the remainder through as the literal model id
    STATUS: STILL NEEDED - v1.93.0 consults the registry before honoring the prefix.
+
+8. OpenAI Responses API Fake Streaming (_patch_openai_responses_should_fake_stream):
+   - Same defect as 4 on the base OpenAIResponsesAPIConfig, which
+     OpenAI-compatible gateways (Bifrost/Portkey responses mode) resolve to:
+     registry-miss models are downgraded to fake streaming, buffering the
+     whole generation before the first chunk
+   - Unlike 4, models the registry explicitly marks
+     supports_native_streaming=False (e.g. o1-pro) keep the fake stream
+   STATUS: STILL NEEDED - v1.93.0 treats a registry miss as "cannot stream".
 """
 
 import time
@@ -459,6 +468,45 @@ def _patch_azure_responses_should_fake_stream() -> None:
     AzureOpenAIResponsesAPIConfig.should_fake_stream = _patched_should_fake_stream
 
 
+def _patch_openai_responses_should_fake_stream() -> None:
+    """
+    Patches OpenAIResponsesAPIConfig.should_fake_stream so a registry miss
+    (e.g. a gateway model alias) streams natively instead of buffering the
+    generation. Models explicitly marked supports_native_streaming=False
+    (e.g. o1-pro) keep the fake stream — a native stream request would be
+    rejected upstream.
+    """
+    from litellm.llms.openai.responses.transformation import OpenAIResponsesAPIConfig
+
+    if (
+        getattr(OpenAIResponsesAPIConfig.should_fake_stream, "__name__", "")
+        == "_patched_openai_should_fake_stream"
+    ):
+        return
+
+    def _patched_openai_should_fake_stream(
+        self: Any,  # noqa: ARG001
+        model: Optional[str],
+        stream: Optional[bool],
+        custom_llm_provider: Optional[str] = None,
+    ) -> bool:
+        import litellm
+
+        if stream is not True or model is None:
+            return False
+        try:
+            model_info = litellm.get_model_info(
+                model=model, custom_llm_provider=custom_llm_provider
+            )
+        except Exception:
+            # Registry miss (e.g. gateway alias): assume native streaming.
+            return False
+        return model_info.get("supports_native_streaming") is False
+
+    _patched_openai_should_fake_stream.__name__ = "_patched_openai_should_fake_stream"
+    OpenAIResponsesAPIConfig.should_fake_stream = _patched_openai_should_fake_stream
+
+
 def _patch_responses_api_usage_format() -> None:
     """
     Patches ResponsesAPIResponse.model_construct to properly transform usage data
@@ -695,6 +743,7 @@ def apply_monkey_patches() -> None:
     - Patching chunk_parser for reasoning summary newline insertion between sections
     - Patching LiteLLMResponsesTransformationHandler.transform_response for non-streaming responses
     - Patching AzureOpenAIResponsesAPIConfig.should_fake_stream to enable native streaming
+    - Patching OpenAIResponsesAPIConfig.should_fake_stream to stream natively on registry misses
     - Patching ResponsesAPIResponse.model_construct to fix usage format in all code paths
     - Patching Logging._get_assembled_streaming_response to avoid mutating original response
     - Patching responses_api_bridge_check to always honor an explicit responses/ prefix
@@ -703,6 +752,7 @@ def apply_monkey_patches() -> None:
     _patch_responses_reasoning_summary_newlines()
     _patch_openai_responses_transform_response()
     _patch_azure_responses_should_fake_stream()
+    _patch_openai_responses_should_fake_stream()
     _patch_responses_api_usage_format()
     _patch_logging_assembled_streaming_response()
     _patch_responses_api_bridge_check()

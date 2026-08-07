@@ -737,6 +737,59 @@ def _make_file_metadata(
     )
 
 
+class TestNonVisionImageBudgeting:
+    """When a non-vision model replays history images as text markers, the
+    truncation budget must charge the marker cost, not the stored image token
+    cost — otherwise history that actually fits gets evicted."""
+
+    @staticmethod
+    def _image_user_msg() -> ChatMessageSimple:
+        image = ChatLoadedFile(
+            file_id="img0",
+            content=b"",
+            file_type=ChatFileType.IMAGE,
+            filename="img0.png",
+            content_text=None,
+            token_count=500,
+        )
+        return ChatMessageSimple(
+            message="look at this",
+            token_count=505,
+            message_type=MessageType.USER,
+            image_files=[image],
+            image_token_count=500,
+        )
+
+    def _construct(self, replay_as_markers: bool) -> list[ChatMessageSimple]:
+        simple_chat_history = [
+            self._image_user_msg(),
+            create_message("Response", MessageType.ASSISTANT, 5),
+            create_message("Follow-up", MessageType.USER, 5),
+        ]
+        return construct_message_history(
+            system_prompt=None,
+            custom_agent_prompt=None,
+            simple_chat_history=simple_chat_history,
+            reminder_message=None,
+            context_files=create_context_files(),
+            available_tokens=100,
+            token_counter=lambda _: 10,
+            image_files_replayed_as_markers=replay_as_markers,
+        )
+
+    def test_full_image_cost_evicts_the_image_message(self) -> None:
+        result = self._construct(replay_as_markers=False)
+        assert [m.message for m in result] == ["Response", "Follow-up"]
+
+    def test_marker_cost_keeps_the_image_message(self) -> None:
+        result = self._construct(replay_as_markers=True)
+        assert [m.message for m in result] == [
+            "look at this",
+            "Response",
+            "Follow-up",
+        ]
+
+
 class TestForgottenFileMetadata:
     """Tests for the forgotten-files mechanism in construct_message_history.
 

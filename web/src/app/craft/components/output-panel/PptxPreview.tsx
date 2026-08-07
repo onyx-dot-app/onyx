@@ -17,7 +17,7 @@ interface PptxPreviewProps {
 }
 
 /**
- * PptxPreview - Displays PPTX files as navigable slide images.
+ * PptxPreview - Displays PowerPoint files as navigable slide images.
  * Triggers on-demand conversion via the backend, then renders
  * individual slide JPEGs in a carousel with keyboard navigation.
  */
