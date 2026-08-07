@@ -41,8 +41,7 @@ from onyx.db.mcp import (
     get_connection_config_by_id,
     update_connection_config,
 )
-from onyx.db.models import MCPConnectionConfig
-from onyx.db.models import MCPServer as DbMCPServer
+from onyx.db.models import MCPConnectionConfig, MCPServer
 from onyx.error_handling.error_codes import OnyxErrorCode
 from onyx.error_handling.exceptions import OnyxError
 from onyx.redis.redis_pool import get_redis_client
@@ -131,16 +130,25 @@ async def _run_until_oauth_redirect(
         return await operation
 
     operation_task = asyncio.create_task(run_operation())
-    done, _ = await asyncio.wait(
-        [operation_task, redirect_future],
-        return_when=asyncio.FIRST_COMPLETED,
-    )
-    if redirect_future in done:
-        _retain_oauth_task(operation_task)
-        return redirect_future.result()
+    operation_retained = False
+    try:
+        async with asyncio.timeout(OAUTH_WAIT_SECONDS):
+            done, _ = await asyncio.wait(
+                [operation_task, redirect_future],
+                return_when=asyncio.FIRST_COMPLETED,
+            )
+        if redirect_future in done:
+            redirect_url = redirect_future.result()
+            _retain_oauth_task(operation_task)
+            operation_retained = True
+            return redirect_url
 
-    await operation_task
-    return None
+        await operation_task
+        return None
+    finally:
+        if not operation_retained and not operation_task.done():
+            operation_task.cancel()
+            await asyncio.gather(operation_task, return_exceptions=True)
 
 
 async def _initiate_oauth_from_well_known_metadata(
@@ -148,42 +156,33 @@ async def _initiate_oauth_from_well_known_metadata(
     server_url: str,
 ) -> None:
     timeout = httpx.Timeout(_OAUTH_HTTP_TIMEOUT_SECONDS)
-    try:
-        async with asyncio.timeout(STATE_TTL_SECONDS):
-            discovery_urls = build_protected_resource_metadata_discovery_urls(
-                None, server_url
-            )
-            metadata_url: str | None = None
-            async with mcp_ssrf_httpx_client_factory(timeout=timeout) as client:
-                for url in discovery_urls:
-                    response = await client.send(create_oauth_metadata_request(url))
-                    if await handle_protected_resource_response(response) is not None:
-                        metadata_url = url
-                        break
+    discovery_urls = build_protected_resource_metadata_discovery_urls(None, server_url)
+    metadata_url: str | None = None
+    async with mcp_ssrf_httpx_client_factory(timeout=timeout) as client:
+        for url in discovery_urls:
+            response = await client.send(create_oauth_metadata_request(url))
+            if await handle_protected_resource_response(response) is not None:
+                metadata_url = url
+                break
 
-            if metadata_url is None:
-                raise OnyxError(
-                    OnyxErrorCode.INVALID_INPUT,
-                    "OAuth auto-discovery could not find protected resource metadata "
-                    "at the MCP server's well-known URI.",
-                )
-
-            async with mcp_oauth_challenge_httpx_client_factory(
-                server_url,
-                metadata_url,
-                oauth_auth,
-                timeout,
-            ) as client:
-                await client.get(server_url)
-    except TimeoutError as e:
+    if metadata_url is None:
         raise OnyxError(
             OnyxErrorCode.INVALID_INPUT,
-            "OAuth auto-discovery timed out.",
-        ) from e
+            "OAuth auto-discovery could not find protected resource metadata at "
+            "the MCP server's well-known URI.",
+        )
+
+    async with mcp_oauth_challenge_httpx_client_factory(
+        server_url,
+        metadata_url,
+        oauth_auth,
+        timeout,
+    ) as client:
+        await client.get(server_url)
 
 
 async def connect_auto_discovery_oauth(
-    mcp_server: DbMCPServer,
+    mcp_server: MCPServer,
     user_id: str,
     return_path: str,
     connection_config_id: int,
@@ -207,28 +206,52 @@ async def connect_auto_discovery_oauth(
         authorization_url_callback=publish_redirect,
     )
 
-    redirect_url = await _run_until_oauth_redirect(
-        initialize_mcp_client(
-            mcp_server.server_url,
-            connection_headers=connection_headers,
-            transport=transport,
-            auth=oauth_auth,
-        ),
-        redirect_future,
-    )
-    if redirect_url is not None or is_authenticated:
-        return redirect_url
+    async def initialize_or_start_oauth() -> None:
+        probe_transport = (
+            transport if is_authenticated else MCPTransport.STREAMABLE_HTTP
+        )
+        try:
+            await initialize_mcp_client(
+                mcp_server.server_url,
+                connection_headers=connection_headers,
+                transport=probe_transport,
+                auth=oauth_auth,
+            )
+        except Exception:
+            if is_authenticated:
+                raise
+            logger.info(
+                "Initial MCP OAuth probe failed; trying well-known discovery",
+                exc_info=True,
+            )
 
-    redirect_url = await _run_until_oauth_redirect(
-        _initiate_oauth_from_well_known_metadata(oauth_auth, mcp_server.server_url),
-        redirect_future,
-    )
-    if redirect_url is None:
+        if is_authenticated or oauth_auth.context.is_token_valid():
+            return
+        await _initiate_oauth_from_well_known_metadata(
+            oauth_auth, mcp_server.server_url
+        )
+
+    try:
+        redirect_url = await _run_until_oauth_redirect(
+            initialize_or_start_oauth(), redirect_future
+        )
+    except TimeoutError as e:
         raise OnyxError(
             OnyxErrorCode.INVALID_INPUT,
-            "OAuth auto-discovery did not produce an authorization redirect.",
-        )
-    return redirect_url
+            "Timed out waiting for OAuth auto-discovery.",
+        ) from e
+
+    if (
+        redirect_url is not None
+        or is_authenticated
+        or oauth_auth.context.is_token_valid()
+    ):
+        return redirect_url
+
+    raise OnyxError(
+        OnyxErrorCode.INVALID_INPUT,
+        "OAuth auto-discovery did not produce an authorization redirect.",
+    )
 
 
 class MCPOauthState(BaseModel):
@@ -253,7 +276,7 @@ class MCPRefreshLogContext(TypedDict):
 
 
 def _refresh_log_context(
-    mcp_server: DbMCPServer, connection_config_id: int
+    mcp_server: MCPServer, connection_config_id: int
 ) -> MCPRefreshLogContext:
     return {
         "mcp_server_id": mcp_server.id,
@@ -333,7 +356,7 @@ def _absolute_token_expiry(tokens: OAuthToken) -> float | None:
 
 
 async def _refresh_mcp_oauth_token_if_expired(
-    mcp_server: DbMCPServer,
+    mcp_server: MCPServer,
     connection_config_id: int,
     user_id: str,
 ) -> str | None:
@@ -398,7 +421,7 @@ async def _refresh_mcp_oauth_token_if_expired(
 
 
 def refresh_mcp_oauth_token_if_expired(
-    mcp_server: DbMCPServer,
+    mcp_server: MCPServer,
     connection_config_id: int,
     user_id: str,
 ) -> str | None:
@@ -451,7 +474,7 @@ def _persisted_auth_header(connection_config_id: int) -> str | None:
     return (config_data.get("headers") or {}).get("Authorization")
 
 
-def _known_provider_oauth_metadata(mcp_server: DbMCPServer) -> OAuthMetadata | None:
+def _known_provider_oauth_metadata(mcp_server: MCPServer) -> OAuthMetadata | None:
     """Expose a KNOWN_PROVIDER server's configured endpoints as SDK OAuth
     metadata so refresh targets the real token endpoint, not the SDK's
     `<server-origin>/token` fallback."""
@@ -756,7 +779,7 @@ class OnyxOAuthClientProvider(OAuthClientProvider):
 
 
 def make_oauth_provider(
-    mcp_server: DbMCPServer,
+    mcp_server: MCPServer,
     user_id: str,
     return_path: str,
     connection_config_id: int,

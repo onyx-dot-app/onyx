@@ -119,6 +119,7 @@ from onyx.server.features.mcp.oauth import (
     key_state,
     key_tokens,
     make_oauth_provider,
+    mcp_token_expired,
 )
 from onyx.server.features.mcp.ssrf import validate_mcp_outbound_url
 from onyx.server.features.tool.models import ToolSnapshot
@@ -764,10 +765,15 @@ async def _connect_oauth(
         update_connection_config(mcp_server.admin_connection_config_id, db, config_data)
 
     connection_config = get_user_connection_config(mcp_server.id, user.email, db)
-    is_authenticated = bool(
+    existing_user_data = extract_connection_data(connection_config, apply_mask=False)
+    oauth_credentials_unchanged = bool(
         connection_config is not None
         and not request.oauth_client_id_changed
         and not request.oauth_client_secret_changed
+    )
+    is_authenticated = bool(
+        oauth_credentials_unchanged
+        and not mcp_token_expired(existing_user_data)
         and can_resolve_mcp_credentials(
             mcp_server,
             user,
@@ -777,8 +783,7 @@ async def _connect_oauth(
     )
     auth_template = get_mcp_auth_template(mcp_server)
     if auth_template is not None and auth_template.required_fields:
-        existing_data = extract_connection_data(connection_config, apply_mask=False)
-        substitutions = existing_data.get(HEADER_SUBSTITUTIONS, {})
+        substitutions = existing_user_data.get(HEADER_SUBSTITUTIONS, {})
         missing_fields = [
             field
             for field in auth_template.required_fields
@@ -793,9 +798,6 @@ async def _connect_oauth(
 
     user_config_data = config_data
     if connection_config is not None:
-        existing_user_data = extract_connection_data(
-            connection_config, apply_mask=False
-        )
         user_config_data = MCPConnectionData(
             headers=existing_user_data.get("headers", {}),
         )
@@ -803,9 +805,13 @@ async def _connect_oauth(
         user_config_data["headers"] = existing_user_data.get("headers", {})
         if substitutions := existing_user_data.get(HEADER_SUBSTITUTIONS):
             user_config_data[HEADER_SUBSTITUTIONS] = substitutions
-        if is_authenticated:
-            for key in (MCPOAuthKeys.TOKENS.value, MCPOAuthKeys.TOKEN_EXPIRES_AT.value):
-                if value := existing_user_data.get(key):
+        if oauth_credentials_unchanged:
+            for key in (
+                MCPOAuthKeys.TOKENS.value,
+                MCPOAuthKeys.TOKEN_EXPIRES_AT.value,
+                MCPOAuthKeys.METADATA.value,
+            ):
+                if (value := existing_user_data.get(key)) is not None:
                     user_config_data[key] = value
 
     if connection_config is None:

@@ -67,10 +67,6 @@ class _OAuthChallengeTransport(httpx.AsyncBaseTransport):
                     },
                     request=request,
                 )
-            if "Authorization" not in request.headers:
-                raise RuntimeError(
-                    "OAuth flow retried the MCP request without an access token"
-                )
             # The SDK retries the original request after storing the token. The
             # OAuth connection is complete; no MCP request is needed here.
             return httpx.Response(status_code=204, request=request)
