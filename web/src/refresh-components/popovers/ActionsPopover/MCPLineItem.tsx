@@ -19,7 +19,6 @@ import {
   SvgSimpleLoader,
 } from "@opal/icons";
 import { Section } from "@/layouts/general-layouts";
-import { Button } from "@opal/components";
 import EnabledCount from "@/refresh-components/EnabledCount";
 
 export interface MCPServer {
@@ -114,20 +113,22 @@ export default function MCPLineItem({
               />
             )}
           {canClickIntoServer && (
-            <Button
-              icon={SvgChevronRight}
-              prominence="tertiary"
-              size="sm"
-              onClick={onSelect}
-            />
+            <span
+              aria-hidden="true"
+              className="flex size-8 shrink-0 items-center justify-center"
+              data-testid="mcp-select-indicator"
+            >
+              <SvgChevronRight className="size-4 stroke-text-03" />
+            </span>
           )}
           {showReauthButton && (
-            <Button
-              icon={SvgKey}
-              prominence="tertiary"
-              size="sm"
-              onClick={onAuthenticate}
-            />
+            <span
+              aria-hidden="true"
+              className="flex size-8 shrink-0 items-center justify-center"
+              data-testid="mcp-auth-indicator"
+            >
+              <SvgKey className="size-4 stroke-text-03" />
+            </span>
           )}
         </Section>
       }
