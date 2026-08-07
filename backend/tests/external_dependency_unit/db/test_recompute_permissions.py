@@ -34,7 +34,7 @@ def test_recompute_batch_handles_mixed_users(db_session: Session) -> None:
         assign_default_group=False,
         account_type=AccountType.SERVICE_ACCOUNT,
     )
-    standard_user = create_test_user(db_session, "standard")
+    standard_user = create_test_user(db_session, "standard", assign_default_group=False)
     standard_user.effective_permissions = ["basic"]
     db_session.commit()
 
