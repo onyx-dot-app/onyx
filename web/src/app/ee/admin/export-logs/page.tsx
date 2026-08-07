@@ -19,6 +19,10 @@ const DESCRIPTION =
 const EXPORT_URL = "/api/admin/log-export";
 const FALLBACK_FILENAME = "onyx_logs.zip";
 const POLL_INTERVAL_MS = 2_000;
+// Give up on a poll that fails this many times in a row (~30s at the poll
+// interval); the export's server-side collection window is only 90s, so
+// polling through longer outages has no value.
+const MAX_CONSECUTIVE_POLL_FAILURES = 15;
 
 type LogExportReceiptStatus =
   | "uploaded"
@@ -105,23 +109,37 @@ export default function ExportLogsPage() {
 
   const isCollecting = exportId !== null && status?.state !== "ready";
 
+  const consecutivePollFailuresRef = useRef(0);
+
   // A definitive 4xx means the export is gone (already cleaned up) or no longer
-  // accessible; drop it so the page recovers instead of showing "collecting"
-  // forever. Other errors are transient: interval polling keeps running and
-  // self-heals.
+  // accessible; drop it immediately. Other errors are transient (interval
+  // polling keeps running and self-heals), but only up to a cap: a server that
+  // stays down must not leave the page collecting forever.
   useEffect(() => {
     if (statusError === undefined) {
+      consecutivePollFailuresRef.current = 0;
       return;
     }
     console.error("Log export status poll failed:", statusError);
-    if (
+    consecutivePollFailuresRef.current += 1;
+
+    const isTerminal4xx =
       statusError instanceof FetchError &&
       statusError.status >= 400 &&
-      statusError.status < 500
-    ) {
+      statusError.status < 500;
+    if (isTerminal4xx) {
       toast.error("Lost access to the running export. Start a new one.");
-      setExportId(null);
+    } else if (
+      consecutivePollFailuresRef.current >= MAX_CONSECUTIVE_POLL_FAILURES
+    ) {
+      toast.error(
+        "Cannot reach the server to check export progress. Start a new export once it is back."
+      );
+    } else {
+      return;
     }
+    consecutivePollFailuresRef.current = 0;
+    setExportId(null);
   }, [statusError]);
 
   const downloadBundle = useCallback(async (id: string): Promise<void> => {
