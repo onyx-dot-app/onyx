@@ -5,6 +5,7 @@ from __future__ import annotations
 from unittest.mock import MagicMock, patch
 from uuid import uuid4
 
+import pytest
 from fastapi import Response
 from sqlalchemy.exc import IntegrityError
 
@@ -585,6 +586,63 @@ class TestReplaceUser:
         mock_dal.update_user.assert_called_once()
         mock_dal.commit.assert_called_once()
 
+    @pytest.mark.parametrize(
+        "role", [UserRole.ADMIN, UserRole.CURATOR, UserRole.GLOBAL_CURATOR]
+    )
+    def test_moving_a_curator_or_admin_address_is_refused(
+        self,
+        mock_db_session: MagicMock,
+        mock_token: MagicMock,
+        mock_dal: MagicMock,
+        provider: ScimProvider,
+        role: UserRole,
+    ) -> None:
+        """A rename puts the account on an address the caller picked, and a row
+        no IdP owns yet is claimed by the first login for its address. Anything
+        above BASIC must not be movable by a token that can only grant BASIC."""
+        user = make_db_user(email="admin@example.com", role=role)
+        mock_dal.get_user.return_value = user
+        resource = make_scim_user(userName="attacker@example.com")
+
+        result = replace_user(
+            user_id=str(user.id),
+            user_resource=resource,
+            _token=mock_token,
+            provider=provider,
+            db_session=mock_db_session,
+        )
+
+        assert_scim_error(result, 403)
+        mock_dal.update_user.assert_not_called()
+
+    @pytest.mark.parametrize(
+        "role", [UserRole.ADMIN, UserRole.CURATOR, UserRole.GLOBAL_CURATOR]
+    )
+    def test_privileged_update_without_a_rename_is_allowed(
+        self,
+        mock_db_session: MagicMock,
+        mock_token: MagicMock,
+        mock_dal: MagicMock,
+        provider: ScimProvider,
+        role: UserRole,
+    ) -> None:
+        """Only the address is off limits. Deprovisioning an admin still has to
+        work, or a departing one keeps their seat and their access."""
+        user = make_db_user(email="admin@example.com", role=role)
+        mock_dal.get_user.return_value = user
+        resource = make_scim_user(userName="Admin@Example.com", active=False)
+
+        result = replace_user(
+            user_id=str(user.id),
+            user_resource=resource,
+            _token=mock_token,
+            provider=provider,
+            db_session=mock_db_session,
+        )
+
+        parse_scim_user(result)
+        mock_dal.update_user.assert_called_once()
+
     def test_not_found_returns_404(
         self,
         mock_db_session: MagicMock,
@@ -751,6 +809,38 @@ class TestPatchUser:
 
         parse_scim_user(result)
         mock_dal.update_user.assert_called_once()
+
+    def test_moving_a_curator_or_admin_address_is_refused(
+        self,
+        mock_db_session: MagicMock,
+        mock_token: MagicMock,
+        mock_dal: MagicMock,
+        provider: ScimProvider,
+    ) -> None:
+        """PATCH is what IdPs actually send, so the address guard has to hold
+        here and not only on PUT."""
+        user = make_db_user(email="admin@example.com", role=UserRole.ADMIN)
+        mock_dal.get_user.return_value = user
+        patch_req = ScimPatchRequest(
+            Operations=[
+                ScimPatchOperation(
+                    op=ScimPatchOperationType.REPLACE,
+                    path="userName",
+                    value="attacker@example.com",
+                )
+            ]
+        )
+
+        result = patch_user(
+            user_id=str(user.id),
+            patch_request=patch_req,
+            _token=mock_token,
+            provider=provider,
+            db_session=mock_db_session,
+        )
+
+        assert_scim_error(result, 403)
+        mock_dal.update_user.assert_not_called()
 
     @patch("ee.onyx.server.scim.api.assign_user_to_default_groups__no_commit")
     @patch("ee.onyx.server.scim.api._check_seat_availability", return_value=None)

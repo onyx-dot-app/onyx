@@ -54,7 +54,6 @@ _PROVIDER_D = "mock-d"
 _ISSUER_C = "issuer-c"
 _ISSUER_D = "issuer-d"
 _SHARED_USER = "shared@shared.com"
-# Provisioned by SCIM before ever logging in, on the same shared.com domain.
 _SCIM_USER = "provisioned@shared.com"
 
 _SESSION_COOKIE = cookie_transport.cookie_name
@@ -141,12 +140,8 @@ def same_domain_providers(db_session: Session) -> Generator[None, None, None]:
 def _provision(
     db_session: Session, scim_managed: bool = False, **overrides: object
 ) -> User:
-    """An account created ahead of its owner: complete, active, and holding only a
-    throwaway password, with no oauth_account until someone logs in as it.
-
-    ``scim_managed`` adds the mapping SCIM's POST /Users writes. The guard does not
-    read it, so it is opt-in for the tests that reproduce the SCIM report.
-    """
+    """A row created ahead of its owner: active by default, throwaway password, no
+    oauth_account. The SCIM mapping is opt-in because the guard never reads it."""
     pw_helper = PasswordHelper()
     user = User(
         **{
@@ -312,8 +307,7 @@ async def test_provisioned_user_links_on_first_login(
 
     db_session.expire_all()
     user = _user_by_email(db_session, _SCIM_USER)
-    # Claiming the row rather than creating a second one is the whole point: the
-    # SCIM mapping is keyed on user_id, so a new row would strand it.
+    # The SCIM mapping is keyed on user_id, so a second row would strand it.
     assert user.id == provisioned_id
     assert [oa.oauth_name for oa in user.oauth_accounts] == [_PROVIDER_C]
     assert db_session.query(ScimUserMapping).filter_by(user_id=user.id).count() == 1
@@ -327,7 +321,7 @@ async def test_claimed_row_rejects_second_provider(
     """A provisioned row is claimable only until an IdP claims it. A second
     provider asserting the same address is then refused, and the first provider's
     link is left untouched."""
-    _provision(db_session, scim_managed=True)
+    _provision(db_session)
 
     transport = ASGITransport(app=app)
     async with AsyncClient(transport=transport, base_url=_WEB_DOMAIN) as client:
@@ -345,30 +339,9 @@ async def test_claimed_row_rejects_second_provider(
 
 @pytest.mark.asyncio
 @pytest.mark.usefixtures("same_domain_providers")
-async def test_renamed_row_is_not_claimable(app: FastAPI, db_session: Session) -> None:
-    """A row moved onto this address by a rename must not be claimable. Whoever
-    performed the rename would otherwise hand the original account, and its
-    history and privileges, to any identity that can assert the new address."""
-    renamed = _provision(db_session, prior_emails=["someone-else@shared.com"])
-    renamed_id = renamed.id
-
-    transport = ASGITransport(app=app)
-    async with AsyncClient(transport=transport, base_url=_WEB_DOMAIN) as client:
-        resp = await _drive_login(client, _PROVIDER_C, _SCIM_USER)
-        assert resp.status_code == 400, resp.text
-        assert _SESSION_COOKIE not in resp.cookies
-
-    db_session.expire_all()
-    user = _user_by_email(db_session, _SCIM_USER)
-    assert user.id == renamed_id
-    assert user.oauth_accounts == []
-
-
-@pytest.mark.asyncio
-@pytest.mark.usefixtures("same_domain_providers")
 async def test_deactivated_row_is_not_linked(app: FastAPI, db_session: Session) -> None:
     """Claiming commits, so a deprovisioned row must come back unlinked. Linking
-    it would hand the account to this identity the moment SCIM reactivates it."""
+    it would hand the account to this identity on reactivation."""
     _provision(db_session, is_active=False)
 
     transport = ASGITransport(app=app)

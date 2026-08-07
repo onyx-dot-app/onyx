@@ -622,15 +622,14 @@ class TestOAuthDottedGmail:
             assert call.kwargs.get("is_registration") is not True
 
 
-class TestOAuthNoAutoLinkExemptions:
-    """With auto-link off, a web-login row refuses a same-email login once it is
-    spoken for: a linked IdP (a second provider must not attach), a rename (a moved
-    address stops proving whose row it is), or deactivation. A row with none of
-    those is claimed. Placeholders skip the checks and are promoted instead."""
+class TestOAuthNoAutoLinkClaim:
+    """With auto-link off, a first SSO login claims a web-login row unless an IdP
+    already owns it or it is deactivated. Placeholders skip both checks and are
+    promoted instead."""
 
     @staticmethod
     def _unclaimed(**attrs: object) -> MagicMock:
-        """A row provisioned ahead of its owner: no IdP, original address, active.
+        """A row provisioned ahead of its owner: no IdP, active.
 
         Every attribute the guard reads is set explicitly. A bare MagicMock
         attribute is truthy, which would silently invert the assertions here.
@@ -640,7 +639,6 @@ class TestOAuthNoAutoLinkExemptions:
                 "id": "user-id",
                 "email": "provisioned@corp.com",
                 "oauth_accounts": [],
-                "prior_emails": [],
                 "is_active": True,
                 "account_type": AccountType.STANDARD,
                 # Read by the offboarding tail of oauth_callback, not the guard.
@@ -669,8 +667,8 @@ class TestOAuthNoAutoLinkExemptions:
         return user_manager
 
     @pytest.mark.asyncio
-    # A placeholder is deactivated until its owner shows up, so the deactivated
-    # case is the one that matters: it must promote, not be turned away.
+    # The deactivation check is web-login-only, so a deactivated placeholder must
+    # still reach the upgrade rather than being turned away.
     @pytest.mark.parametrize("is_active", [True, False], ids=["active", "deactivated"])
     @patch("onyx.auth.users.MULTI_TENANT", False)
     @patch("onyx.auth.users.verify_email_in_whitelist")
@@ -777,38 +775,30 @@ class TestOAuthNoAutoLinkExemptions:
         assert result is provisioned
 
     @pytest.mark.asyncio
-    @pytest.mark.parametrize(
-        "overrides",
-        [
-            # A second provider must not attach to a row an IdP already owns.
-            pytest.param({"oauth_accounts": [MagicMock()]}, id="already-linked"),
-            # A rename moved this row onto the address, so the address no longer
-            # proves whose row it is.
-            pytest.param({"prior_emails": ["old@corp.com"]}, id="renamed"),
-        ],
-    )
     @patch("onyx.auth.users.MULTI_TENANT", False)
     @patch("onyx.auth.users.verify_email_in_whitelist")
     @patch("onyx.auth.users.verify_email_domain")
     @patch("onyx.auth.users.fetch_ee_implementation_or_noop")
     @patch("onyx.auth.users.get_async_session_context_manager")
     @patch("onyx.auth.users.remove_user_from_invited_users")
-    async def test_spoken_for_row_is_rejected(
+    async def test_already_linked_row_is_rejected(
         self,
         mock_remove_invited: MagicMock,  # noqa: ARG002
         mock_session_manager: MagicMock,
         mock_fetch_ee: MagicMock,
         mock_verify_domain: MagicMock,  # noqa: ARG002
         mock_verify_whitelist: MagicMock,  # noqa: ARG002
-        overrides: dict[str, object],
         mock_async_session: MagicMock,
     ) -> None:
+        """A second provider must not attach to a row an IdP already owns."""
         mock_session_manager.return_value = _AsyncSessionContextManager(
             mock_async_session
         )
         mock_fetch_ee.return_value = AsyncMock(return_value="test_tenant")
 
-        user_manager = self._manager_with_existing(self._unclaimed(**overrides))
+        user_manager = self._manager_with_existing(
+            self._unclaimed(oauth_accounts=[MagicMock()])
+        )
 
         with pytest.raises(exceptions.UserAlreadyExists):
             await user_manager.oauth_callback(

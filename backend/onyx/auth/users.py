@@ -960,12 +960,9 @@ class UserManager(UUIDIDMixin, BaseUserManager[User, uuid.UUID]):
                         if not user.is_active:
                             return user
 
-                        # An owned row must not take a second provider, and a
-                        # rename stops the address identifying the row. All else
-                        # is claimable, password signups included.
-                        if not associate_by_email and (
-                            user.oauth_accounts or user.prior_emails
-                        ):
+                        # Only a row an IdP already owns is off limits. Any other
+                        # row is claimed by the first login that proves its address.
+                        if not associate_by_email and user.oauth_accounts:
                             raise exceptions.UserAlreadyExists()
 
                     user = await self.user_db.add_oauth_account(
