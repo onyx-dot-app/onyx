@@ -157,15 +157,16 @@ def generate_usage_breakdown_report(
             ]
         )
         for row in get_usage_export(db_session, start, end):
-            # user_email is user-supplied — sanitize to prevent CSV/formula
-            # injection against whoever opens the report in a spreadsheet.
+            # email, model, flow, and provider are all admin/user-configurable
+            # strings — sanitize to prevent CSV/formula injection against
+            # whoever opens the report in a spreadsheet.
             csvwriter.writerow(
                 [
                     sanitize_csv_cell_or_none(row.email),
                     row.day,
-                    row.model,
-                    row.flow,
-                    row.provider,
+                    sanitize_csv_cell_or_none(row.model),
+                    sanitize_csv_cell_or_none(row.flow),
+                    sanitize_csv_cell_or_none(row.provider),
                     row.input_tokens,
                     row.output_tokens,
                     row.cache_read_tokens,
