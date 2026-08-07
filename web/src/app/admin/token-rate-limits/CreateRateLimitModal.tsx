@@ -28,6 +28,8 @@ import { formatCurrency, formatTokenCount } from "@/lib/format";
 const HOURS_PER_DAY = 24;
 // 1T tokens stored as thousands (1e9) stays well inside the column's int32.
 const MAX_TOKEN_BUDGET = 1_000_000_000_000;
+// Keeps *100 finite: an unbounded value can overflow to Infinity, which JSON.stringify serializes as null.
+const MAX_COST_BUDGET_DOLLARS = 10_000_000_000;
 
 interface RateLimitFormValues {
   enabled: boolean;
@@ -278,13 +280,13 @@ function TokenBudgetField() {
   );
 }
 
-function formatDollars(raw: string): string | null {
+function formatDollarBudgetInput(raw: string): string | null {
   const amount = Number(raw);
   if (raw === "" || !Number.isFinite(amount) || amount <= 0) return null;
   return formatCurrency(amount);
 }
 
-function formatTokens(raw: string): string | null {
+function formatTokenBudgetInput(raw: string): string | null {
   const amount = Number(raw);
   if (raw === "" || !Number.isFinite(amount) || amount <= 0) return null;
   return `${formatTokenCount(amount)} tokens`;
@@ -330,8 +332,8 @@ function LimitSummary({ groupName }: LimitSummaryProps) {
   if (!Number.isInteger(period) || period < 1) return null;
 
   const budgets = [
-    formatDollars(values.cost_budget_dollars),
-    formatTokens(values.token_budget),
+    formatDollarBudgetInput(values.cost_budget_dollars),
+    formatTokenBudgetInput(values.token_budget),
   ].filter((budget): budget is string => budget !== null);
   if (budgets.length === 0) return null;
 
@@ -363,7 +365,7 @@ interface CreateRateLimitModalProps {
     period_hours: number,
     token_budget: number | null,
     cost_budget_cents: number | null,
-    group_id: number
+    group_id?: number
   ) => Promise<void>;
   forSpecificScope?: Scope;
   forSpecificUserGroup?: number;
@@ -408,6 +410,10 @@ export default function CreateRateLimitModal({
                 original === "" ? undefined : value
               )
               .moreThan(0, "Cost budget must be greater than 0")
+              .max(
+                MAX_COST_BUDGET_DOLLARS,
+                `The maximum cost budget is $${new Intl.NumberFormat("en-US").format(MAX_COST_BUDGET_DOLLARS)}`
+              )
               .test(
                 "minimum-cents",
                 "Cost budget must be at least $0.01",
@@ -464,9 +470,9 @@ export default function CreateRateLimitModal({
               Number(values.period_days) * HOURS_PER_DAY,
               tokenBudget,
               costBudgetCents,
-              values.user_group_id === undefined
-                ? -1
-                : Number(values.user_group_id)
+              values.target_scope === Scope.USER_GROUP
+                ? Number(values.user_group_id)
+                : undefined
             );
           }}
         >
