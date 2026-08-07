@@ -227,6 +227,29 @@ export function snapshotsEqual(
   );
 }
 
+export const MAX_UNDO_ENTRIES = 100;
+// Paste tiles can hold very large text; bound total retained snapshot HTML.
+export const MAX_UNDO_TOTAL_CHARS = 2_000_000;
+
+/** Append to an undo/redo stack, enforcing the entry and total-size caps. */
+export function pushBoundedSnapshot(
+  stack: EditableSnapshot[],
+  snapshot: EditableSnapshot
+): void {
+  stack.push(snapshot);
+  if (stack.length > MAX_UNDO_ENTRIES) stack.shift();
+  let total = 0;
+  for (let i = stack.length - 1; i >= 0; i--) {
+    total += stack[i]!.html.length;
+    if (total > MAX_UNDO_TOTAL_CHARS) {
+      // Drop the entry that crossed the cap and everything older, but always
+      // retain the newest entry even if it alone exceeds the cap.
+      stack.splice(0, Math.min(i + 1, stack.length - 1));
+      break;
+    }
+  }
+}
+
 // ─── Text Content Extraction ────────────────────────────────────────────────
 
 const BLOCK_TAGS = new Set([

@@ -5,6 +5,12 @@ import {
   useContentEditable,
   type UseContentEditableReturn,
 } from "@/hooks/useContentEditable";
+import {
+  pushBoundedSnapshot,
+  MAX_UNDO_ENTRIES,
+  MAX_UNDO_TOTAL_CHARS,
+  type EditableSnapshot,
+} from "@/lib/contentEditable";
 
 let api: UseContentEditableReturn;
 
@@ -370,5 +376,37 @@ describe("useContentEditable undo/redo", () => {
     typeText("third");
     redo();
     expect(input().textContent).toBe("firstthird");
+  });
+});
+
+describe("pushBoundedSnapshot", () => {
+  function snap(chars: number): EditableSnapshot {
+    return { html: "x".repeat(chars), selStart: 0, selEnd: 0 };
+  }
+
+  it("keeps retained history within the size cap", () => {
+    const stack: EditableSnapshot[] = [];
+    const size = Math.ceil(MAX_UNDO_TOTAL_CHARS * 0.45);
+    pushBoundedSnapshot(stack, snap(size));
+    pushBoundedSnapshot(stack, snap(size));
+    pushBoundedSnapshot(stack, snap(size));
+    expect(stack.length).toBe(2);
+    const total = stack.reduce((sum, s) => sum + s.html.length, 0);
+    expect(total).toBeLessThanOrEqual(MAX_UNDO_TOTAL_CHARS);
+  });
+
+  it("always retains the newest snapshot, even oversized", () => {
+    const stack: EditableSnapshot[] = [];
+    pushBoundedSnapshot(stack, snap(MAX_UNDO_TOTAL_CHARS + 1));
+    pushBoundedSnapshot(stack, snap(MAX_UNDO_TOTAL_CHARS + 1));
+    expect(stack.length).toBe(1);
+  });
+
+  it("enforces the entry-count cap", () => {
+    const stack: EditableSnapshot[] = [];
+    for (let i = 0; i < MAX_UNDO_ENTRIES + 5; i++) {
+      pushBoundedSnapshot(stack, snap(1));
+    }
+    expect(stack.length).toBe(MAX_UNDO_ENTRIES);
   });
 });

@@ -11,6 +11,7 @@ import {
   captureSnapshot,
   restoreSnapshot,
   snapshotsEqual,
+  pushBoundedSnapshot,
   type EditableSnapshot,
 } from "@/lib/contentEditable";
 import {
@@ -28,9 +29,6 @@ type PasteTileData = { text: string; tile: HTMLElement };
 // App-level undo history: the native undo stack can't see programmatic
 // mutations (paste, tiles, drafts), so it must never run against the input.
 const UNDO_COALESCE_MS = 1000;
-const MAX_UNDO_ENTRIES = 100;
-// Paste tiles can hold very large text; bound total retained snapshot HTML.
-const MAX_UNDO_TOTAL_CHARS = 2_000_000;
 
 const CARET_KEYS = new Set([
   "ArrowLeft",
@@ -42,22 +40,6 @@ const CARET_KEYS = new Set([
   "PageUp",
   "PageDown",
 ]);
-
-function pushBoundedSnapshot(
-  stack: EditableSnapshot[],
-  snapshot: EditableSnapshot
-): void {
-  stack.push(snapshot);
-  if (stack.length > MAX_UNDO_ENTRIES) stack.shift();
-  let total = 0;
-  for (let i = stack.length - 1; i >= 0; i--) {
-    total += stack[i]!.html.length;
-    if (total > MAX_UNDO_TOTAL_CHARS && i > 0) {
-      stack.splice(0, i);
-      break;
-    }
-  }
-}
 
 export interface UseContentEditableOptions {
   initialContent?: string;
