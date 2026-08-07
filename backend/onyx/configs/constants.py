@@ -173,8 +173,21 @@ CELERY_PERMISSIONS_SYNC_LOCK_TIMEOUT = 3600  # 1 hour (in seconds)
 # raise this toward the JOB_TIMEOUT crawl deadline (6h) so re-dispatches can't
 # stack concurrent crawls on one heavy worker; a worker that dies mid-sync
 # leaves the lock stuck for at most this TTL.
-CELERY_EXTERNAL_GROUP_SYNC_LOCK_TIMEOUT = int(
-    os.environ.get("CELERY_EXTERNAL_GROUP_SYNC_LOCK_TIMEOUT") or 300
+# Non-positive values would break the guard (0 = a lock with no TTL that a
+# crashed worker leaves stuck forever; negatives fail acquisition), so clamp
+# bad overrides back to the default.
+_EXTERNAL_GROUP_SYNC_LOCK_TIMEOUT_DEFAULT = 300
+try:
+    _external_group_sync_lock_timeout = int(
+        os.environ.get("CELERY_EXTERNAL_GROUP_SYNC_LOCK_TIMEOUT")
+        or _EXTERNAL_GROUP_SYNC_LOCK_TIMEOUT_DEFAULT
+    )
+except ValueError:
+    _external_group_sync_lock_timeout = _EXTERNAL_GROUP_SYNC_LOCK_TIMEOUT_DEFAULT
+CELERY_EXTERNAL_GROUP_SYNC_LOCK_TIMEOUT: int = (
+    _external_group_sync_lock_timeout
+    if _external_group_sync_lock_timeout > 0
+    else _EXTERNAL_GROUP_SYNC_LOCK_TIMEOUT_DEFAULT
 )
 
 CELERY_USER_FILE_PROCESSING_LOCK_TIMEOUT = 30 * 60  # 30 minutes (in seconds)

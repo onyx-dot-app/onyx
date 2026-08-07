@@ -289,6 +289,7 @@ def _get_drive_members(
                 # is an admin
                 useDomainAdminAccess=is_admin,
             ):
+                _check_sync_deadline(deadline)
                 # NOTE: don't need to check for PermissionType.ANYONE since
                 # you can't share a drive with the internet
                 if permission["type"] == PermissionType.GROUP:
@@ -379,6 +380,7 @@ def _get_all_google_groups(
 def _google_group_to_onyx_group(
     admin_service: AdminService,
     group_email: str,
+    deadline: float,
 ) -> ExternalUserGroup:
     """
     This maps google group emails to their member emails.
@@ -390,6 +392,7 @@ def _google_group_to_onyx_group(
         groupKey=group_email,
         fields="members(email),nextPageToken",
     ):
+        _check_sync_deadline(deadline)
         group_member_emails.add(member["email"])
 
     return ExternalUserGroup(
@@ -527,7 +530,9 @@ def gdrive_group_sync(
     group_email_to_member_emails_map: dict[str, list[str]] = {}
     for group_email in all_group_emails:
         _check_sync_deadline(sync_deadline)
-        onyx_group = _google_group_to_onyx_group(admin_service, group_email)
+        onyx_group = _google_group_to_onyx_group(
+            admin_service, group_email, sync_deadline
+        )
         group_email_to_member_emails_map[group_email] = onyx_group.user_emails
         yield onyx_group
 
