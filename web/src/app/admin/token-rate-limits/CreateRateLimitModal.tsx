@@ -58,6 +58,43 @@ interface ScopeOptionProps extends React.HTMLAttributes<HTMLElement> {
   ref?: React.Ref<HTMLDivElement>;
 }
 
+function handleRadioOptionKeyDown(
+  event: React.KeyboardEvent<HTMLElement>,
+  onSelect: () => void
+): void {
+  if (event.key === "Enter" || event.key === " ") {
+    event.preventDefault();
+    onSelect();
+    return;
+  }
+  if (
+    event.key !== "ArrowRight" &&
+    event.key !== "ArrowDown" &&
+    event.key !== "ArrowLeft" &&
+    event.key !== "ArrowUp" &&
+    event.key !== "Home" &&
+    event.key !== "End"
+  ) {
+    return;
+  }
+  event.preventDefault();
+  const group = event.currentTarget.closest('[role="radiogroup"]');
+  const options = Array.from(
+    group?.querySelectorAll<HTMLElement>('[role="radio"]') ?? []
+  );
+  const currentIndex = options.indexOf(event.currentTarget);
+  const nextIndex =
+    event.key === "Home"
+      ? 0
+      : event.key === "End"
+        ? options.length - 1
+        : event.key === "ArrowRight" || event.key === "ArrowDown"
+          ? (currentIndex + 1) % options.length
+          : (currentIndex - 1 + options.length) % options.length;
+  options[nextIndex]?.focus();
+  options[nextIndex]?.click();
+}
+
 function ScopeOption({
   option,
   selected,
@@ -82,36 +119,7 @@ function ScopeOption({
       }}
       onKeyDown={(event) => {
         rest.onKeyDown?.(event);
-        if (event.key === "Enter" || event.key === " ") {
-          event.preventDefault();
-          onSelect();
-          return;
-        }
-        if (
-          event.key === "ArrowRight" ||
-          event.key === "ArrowDown" ||
-          event.key === "ArrowLeft" ||
-          event.key === "ArrowUp" ||
-          event.key === "Home" ||
-          event.key === "End"
-        ) {
-          event.preventDefault();
-          const group = event.currentTarget.closest('[role="radiogroup"]');
-          const options = Array.from(
-            group?.querySelectorAll<HTMLElement>('[role="radio"]') ?? []
-          );
-          const currentIndex = options.indexOf(event.currentTarget);
-          const nextIndex =
-            event.key === "Home"
-              ? 0
-              : event.key === "End"
-                ? options.length - 1
-                : event.key === "ArrowRight" || event.key === "ArrowDown"
-                  ? (currentIndex + 1) % options.length
-                  : (currentIndex - 1 + options.length) % options.length;
-          options[nextIndex]?.focus();
-          options[nextIndex]?.click();
-        }
+        handleRadioOptionKeyDown(event, onSelect);
       }}
     >
       <ContentAction
@@ -384,6 +392,7 @@ export default function CreateRateLimitModal({
         }));
         setModalUserGroups(options);
       } catch (error) {
+        console.error("Failed to fetch user groups:", error);
         if (!stale) toast.error(`Failed to fetch user groups: ${error}`);
       }
     };
