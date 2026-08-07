@@ -180,7 +180,19 @@ export function captureSnapshot(element: HTMLElement): EditableSnapshot {
       );
     }
   }
-  return { html: element.innerHTML, selStart, selEnd };
+  // Strip transient tile-highlight classes so a restore can't resurrect them.
+  const clone = element.cloneNode(true) as HTMLElement;
+  clone
+    .querySelectorAll(
+      ".rich-input-tile-selected, .rich-input-tile-in-selection"
+    )
+    .forEach((tile) => {
+      tile.classList.remove(
+        "rich-input-tile-selected",
+        "rich-input-tile-in-selection"
+      );
+    });
+  return { html: clone.innerHTML, selStart, selEnd };
 }
 
 /**

@@ -85,6 +85,27 @@ function pressKey(init: KeyboardEventInit): boolean {
 const undo = () => pressKey({ key: "z", metaKey: true });
 const redo = () => pressKey({ key: "z", metaKey: true, shiftKey: true });
 
+/** Collapsed-caret offset in text units from the start of the input. */
+function flatCaret(): number | null {
+  const sel = window.getSelection();
+  if (!sel || sel.rangeCount === 0 || !sel.isCollapsed) return null;
+  const r = document.createRange();
+  r.selectNodeContents(input());
+  const caret = sel.getRangeAt(0);
+  r.setEnd(caret.startContainer, caret.startOffset);
+  return r.toString().length;
+}
+
+function caretAtTextOffset(offset: number): void {
+  const node = input().firstChild as Text;
+  const sel = window.getSelection()!;
+  const r = document.createRange();
+  r.setStart(node, offset);
+  r.collapse(true);
+  sel.removeAllRanges();
+  sel.addRange(r);
+}
+
 describe("useContentEditable undo/redo", () => {
   let now: number;
 
@@ -262,6 +283,79 @@ describe("useContentEditable undo/redo", () => {
 
     undo();
     expect(input().textContent).toBe("original");
+  });
+
+  it("restores the caret alongside the content", () => {
+    render(<Harness />);
+    typeText("helloworld");
+    caretAtTextOffset(5);
+    advance(2000);
+    act(() => api.pasteText("-X-"));
+    expect(input().textContent).toBe("hello-X-world");
+    expect(flatCaret()).toBe(8);
+
+    undo();
+    expect(input().textContent).toBe("helloworld");
+    expect(flatCaret()).toBe(5);
+
+    redo();
+    expect(input().textContent).toBe("hello-X-world");
+    expect(flatCaret()).toBe(8);
+  });
+
+  it("starts a new undo unit when typing replaces a selection", () => {
+    render(<Harness />);
+    typeText("hello");
+    // Select-all within the coalescing window, then type over it
+    act(() => {
+      const sel = window.getSelection()!;
+      const r = document.createRange();
+      r.selectNodeContents(input());
+      sel.removeAllRanges();
+      sel.addRange(r);
+    });
+    act(() => {
+      fireBeforeInput("insertText");
+      input().textContent = "x";
+      caretToEnd();
+      input().dispatchEvent(new Event("input", { bubbles: true }));
+    });
+    expect(input().textContent).toBe("x");
+
+    undo();
+    expect(input().textContent).toBe("hello");
+    undo();
+    expect(input().textContent).toBe("");
+  });
+
+  it("does not resurrect the transient tile highlight on undo", () => {
+    render(<Harness pasteTilesEnabled />);
+    const longText = "line1\nline2\nline3\nline4\nline5";
+    act(() => api.pasteText(longText));
+    expect(input().querySelector("[data-rich-tile]")).not.toBeNull();
+
+    function pressBackspace(): void {
+      act(() => {
+        const event = new KeyboardEvent("keydown", {
+          key: "Backspace",
+          bubbles: true,
+          cancelable: true,
+        });
+        api.handleTileKeyDown(
+          event as unknown as React.KeyboardEvent<HTMLDivElement>
+        );
+      });
+    }
+
+    pressBackspace(); // first press selects the tile
+    expect(input().querySelector(".rich-input-tile-selected")).not.toBeNull();
+    pressBackspace(); // second press deletes it
+    expect(input().querySelector("[data-rich-tile]")).toBeNull();
+
+    undo();
+    const tile = input().querySelector("[data-rich-tile]");
+    expect(tile).not.toBeNull();
+    expect(tile!.classList.contains("rich-input-tile-selected")).toBe(false);
   });
 
   it("new edits after undo clear the redo stack", () => {

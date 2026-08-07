@@ -43,6 +43,22 @@ const CARET_KEYS = new Set([
   "PageDown",
 ]);
 
+function pushBoundedSnapshot(
+  stack: EditableSnapshot[],
+  snapshot: EditableSnapshot
+): void {
+  stack.push(snapshot);
+  if (stack.length > MAX_UNDO_ENTRIES) stack.shift();
+  let total = 0;
+  for (let i = stack.length - 1; i >= 0; i--) {
+    total += stack[i]!.html.length;
+    if (total > MAX_UNDO_TOTAL_CHARS && i > 0) {
+      stack.splice(0, i);
+      break;
+    }
+  }
+}
+
 export interface UseContentEditableOptions {
   initialContent?: string;
   wrapperRef: React.RefObject<HTMLDivElement | null>;
@@ -209,16 +225,7 @@ export function useContentEditable({
     const snapshot = captureSnapshot(el);
     const top = stack[stack.length - 1];
     if (top && snapshotsEqual(top, snapshot)) return;
-    stack.push(snapshot);
-    if (stack.length > MAX_UNDO_ENTRIES) stack.shift();
-    let total = 0;
-    for (let i = stack.length - 1; i >= 0; i--) {
-      total += stack[i]!.html.length;
-      if (total > MAX_UNDO_TOTAL_CHARS && i > 0) {
-        stack.splice(0, i);
-        break;
-      }
-    }
+    pushBoundedSnapshot(stack, snapshot);
   }, []);
 
   /** Record an edit, coalescing bursts of the same kind into one undo unit. */
@@ -226,9 +233,20 @@ export function useContentEditable({
     (kind: string) => {
       const coalescible =
         kind === "typing" || kind === "deleting" || kind === "tile-edit";
+      // Replacing a selection (e.g. Cmd+A then typing) is never a
+      // continuation of a burst — its restore point must be pushed.
+      const el = ref.current;
+      const sel = window.getSelection();
+      const replacesSelection =
+        !!el &&
+        !!sel &&
+        sel.rangeCount > 0 &&
+        !sel.isCollapsed &&
+        el.contains(sel.getRangeAt(0).commonAncestorContainer);
       const now = Date.now();
       if (
         !coalescible ||
+        replacesSelection ||
         lastEditKindRef.current !== kind ||
         now - lastEditAtRef.current > UNDO_COALESCE_MS
       ) {
@@ -256,7 +274,7 @@ export function useContentEditable({
     while (snapshot && snapshotsEqual(snapshot, current))
       snapshot = stack.pop();
     if (!snapshot) return;
-    redoStackRef.current.push(current);
+    pushBoundedSnapshot(redoStackRef.current, current);
     restoreSnapshot(el, snapshot);
     lastEditKindRef.current = null;
     clearTileSelection();
@@ -270,7 +288,7 @@ export function useContentEditable({
     if (!el) return;
     const snapshot = redoStackRef.current.pop();
     if (!snapshot) return;
-    undoStackRef.current.push(captureSnapshot(el));
+    pushBoundedSnapshot(undoStackRef.current, captureSnapshot(el));
     restoreSnapshot(el, snapshot);
     lastEditKindRef.current = null;
     clearTileSelection();
