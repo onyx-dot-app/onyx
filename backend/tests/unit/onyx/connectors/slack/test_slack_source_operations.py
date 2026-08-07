@@ -1,8 +1,7 @@
 """Pins the Slack source-operations gateway: inventory, variants, clients.
 
-The operation table is the living enumeration of every Slack remote
-interaction; these tests keep it and the client-construction unification
-honest.
+The operation table is the living enumeration of every Slack remote interaction;
+these tests keep it and the client-construction unification honest.
 """
 
 from typing import Any, cast
@@ -60,10 +59,9 @@ def test_gateway_registers_for_slack() -> None:
 
 def test_operation_inventory_is_pinned() -> None:
     """
-    Pins the one-method-per-Slack-API-method inventory; a new remote
-    interaction must show up here, not in ad-hoc client code.
+    Pins the one-method-per-Slack-API-method inventory; a new remote interaction
+    must show up here, not in ad-hoc client code.
     """
-
     # Precondition.
     specs = SlackSourceOperations.operation_specs()
 
@@ -78,7 +76,6 @@ def test_operation_inventory_is_pinned() -> None:
 
 def test_permission_class_variants_are_pinned() -> None:
     """Verifies the public/private permission split on channel-scoped reads."""
-
     # Precondition.
     specs = SlackSourceOperations.operation_specs()
 
@@ -91,8 +88,9 @@ def test_permission_class_variants_are_pinned() -> None:
 
 
 def test_capability_tags_are_pinned() -> None:
-    """Verifies which capabilities each operation serves, per real call sites."""
-
+    """
+    Verifies which capabilities each operation serves, per real call sites.
+    """
     # Precondition.
     specs = SlackSourceOperations.operation_specs()
 
@@ -115,13 +113,12 @@ def test_variant_enforcement_fires_before_any_client_exists() -> None:
     Verifies a variant-bearing operation rejects unclassified calls at the
     wrapper, before credential decrypt or client construction.
     """
-
     # Precondition.
     provider = _provider()
     gateway = SlackSourceOperations(credentials_provider=provider)
 
-    # Under test and postcondition. ``Any``-cast to exercise at runtime the
-    # call shape ty rejects statically.
+    # Under test and postcondition.
+    # ``Any``-cast to exercise at runtime the call shape ty rejects statically.
     with pytest.raises(TypeError, match="declares variants"):
         cast(Any, gateway).list_channels(channel_types=["public_channel"])
     provider.get_credentials.assert_not_called()
@@ -133,7 +130,6 @@ def test_coordinated_client_uses_the_connector_key_forms() -> None:
     clients under bare-provider-key delay keys that never coordinated with
     indexing; every consumer now shares these.
     """
-
     # Under test.
     client = _gateway()._client()
 
@@ -145,7 +141,6 @@ def test_coordinated_client_uses_the_connector_key_forms() -> None:
 
 def test_use_redis_false_builds_a_bare_client() -> None:
     """Verifies the dev/test escape hatch skips redis coordination."""
-
     # Under test.
     client = _gateway({"use_redis": False})._client()
 
@@ -155,7 +150,6 @@ def test_use_redis_false_builds_a_bare_client() -> None:
 
 def test_clients_are_memoized_and_fast_client_is_separate() -> None:
     """Verifies one coordinated client and one fast client per gateway."""
-
     # Precondition.
     gateway = _gateway({"use_redis": False})
 

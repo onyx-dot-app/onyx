@@ -234,10 +234,9 @@ def slack_doc_sync(
     callback: IndexingHeartbeatInterface | None,
 ) -> Generator[DocExternalAccess, None, None]:
     """
-    Adds the external permissions to the documents in postgres
-    if the document doesn't already exists in postgres, we create
-    it in postgres so that when it gets created later, the permissions are
-    already populated
+    Adds the external permissions to the documents in postgres if the document
+    doesn't already exists in postgres, we create it in postgres so that when it
+    gets created later, the permissions are already populated
     """
     # One provider and one gateway-owned client, shared with the indexing path:
     # the connector's rotation lock and rate-limit delay keys now coordinate

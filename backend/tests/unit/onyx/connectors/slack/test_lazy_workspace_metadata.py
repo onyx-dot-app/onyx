@@ -3,7 +3,7 @@
 Workspace URL and Enterprise Grid topology are resolved when an indexing entry
 point primes them, not when credentials are set. The coordinated client
 serializes on a Redis lock shared with running indexing jobs, so resolving
-eagerly let a rate-limited indexing job block connector creation for the length
+eagerly lets a rate-limited indexing job block connector creation for the length
 of its backoff. These tests pin the guarantee that the validation path never
 touches that client, and that the exposed properties stay side-effect free.
 """
@@ -22,7 +22,9 @@ _AUTH_GRID = {"url": "https://workspace.slack.com", "enterprise_id": "E1"}
 
 
 def _slack_response(data: dict[str, Any]) -> MagicMock:
-    """Mimics a SlackResponse: ``validate()``, ``.data``, and mapping ``get``."""
+    """
+    Mimics a SlackResponse: ``validate()``, ``.data``, and mapping ``get``.
+    """
     response = MagicMock()
     response.data = data
     response.get.side_effect = data.get

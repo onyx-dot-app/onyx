@@ -69,15 +69,14 @@ _TEMPORARILY_UNTESTED = "Not yet tested: checks land in the Slack capability che
 
 
 class OnyxRedisSlackRetryHandler(BaseRetryHandler):
-    """
-    This class uses Redis to share a rate limit among multiple threads.
+    """This class uses Redis to share a rate limit among multiple threads.
 
     As currently implemented, this code is already surrounded by a lock in Redis
     via an override of _perform_urllib_http_request in OnyxSlackWebClient.
 
-    This just sets the desired retry delay with TTL in redis. In conjunction with
-    a custom subclass of the client, the value is read and obeyed prior to an API call
-    and also serialized.
+    This just sets the desired retry delay with TTL in redis. In conjunction
+    with a custom subclass of the client, the value is read and obeyed prior to
+    an API call and also serialized.
 
     Another way to do this is just to do exponential backoff. Might be easier?
 
@@ -93,7 +92,8 @@ class OnyxRedisSlackRetryHandler(BaseRetryHandler):
         r: TenantRedisClient,
     ):
         """
-        delay_lock: the redis key to use with RedisLock (to synchronize access to delay_key)
+        delay_lock: the redis key to use with RedisLock (to synchronize access
+        to delay_key)
         delay_key: the redis key containing a shared TTL
         """
         super().__init__(max_retry_count=max_retry_count)
@@ -118,15 +118,16 @@ class OnyxRedisSlackRetryHandler(BaseRetryHandler):
         response: Optional[HttpResponse] = None,
         error: Optional[Exception] = None,
     ) -> None:
-        """As initially designed by the SDK authors, this function is responsible for
-        the wait to retry ... aka we actually sleep in this function.
+        """
+        As initially designed by the SDK authors, this function is responsible
+        for the wait to retry ... aka we actually sleep in this function.
 
-        This doesn't work well with multiple clients because every thread is unaware
-        of the current retry value until it actually calls the endpoint.
+        This doesn't work well with multiple clients because every thread is
+        unaware of the current retry value until it actually calls the endpoint.
 
         We're combining this with an actual subclass of the slack web client so
-        that the delay is used BEFORE calling an API endpoint. The subclassed client
-        has already taken the lock in redis when this method is called.
+        that the delay is used BEFORE calling an API endpoint. The subclassed
+        client has already taken the lock in redis when this method is called.
         """
         ttl_ms: int | None = None
 
@@ -136,8 +137,8 @@ class OnyxRedisSlackRetryHandler(BaseRetryHandler):
 
         if response is None:
             # NOTE(rkuo): this logic comes from RateLimitErrorRetryHandler.
-            # This reads oddly, as if the caller itself could raise the exception.
-            # We don't have the luxury of changing this.
+            # This reads oddly, as if the caller itself could raise the
+            # exception. We don't have the luxury of changing this.
             if error:
                 raise error
 
@@ -145,7 +146,7 @@ class OnyxRedisSlackRetryHandler(BaseRetryHandler):
 
         state.next_attempt_requested = True  # this signals the caller to retry
 
-        # calculate wait duration based on retry-after + some jitter
+        # Calculate wait duration based on retry-after + some jitter.
         for k in response.headers.keys():
             if k.lower() == "retry-after":
                 retry_after_header_name = k
@@ -164,7 +165,7 @@ class OnyxRedisSlackRetryHandler(BaseRetryHandler):
                     "OnyxRedisSlackRetryHandler.prepare_for_next_attempt: retry-after header value is None"
                 )
 
-            # Handle case where header value might be a list
+            # Handle case where header value might be a list.
             retry_after_value = (
                 retry_after_header_value[0]
                 if isinstance(retry_after_header_value, list)
@@ -182,7 +183,7 @@ class OnyxRedisSlackRetryHandler(BaseRetryHandler):
         except ValueError:
             duration_s += random.random()
 
-        # Read and extend the ttl
+        # Read and extend the ttl.
         ttl_ms = self._redis.pttl(self._delay_key)
         if ttl_ms < 0:  # negative values are error status codes ... see docs
             ttl_ms = 0
@@ -202,12 +203,11 @@ class OnyxRedisSlackRetryHandler(BaseRetryHandler):
 class OnyxSlackWebClient(WebClient):
     """Use in combination with the Onyx Retry Handler.
 
-    This client wrapper enforces a proper retry delay through redis BEFORE the api call
-    so that multiple clients can synchronize and rate limit properly.
+    This client wrapper enforces a proper retry delay through redis BEFORE the
+    api call so that multiple clients can synchronize and rate limit properly.
 
-    The retry handler writes the correct delay value to redis so that it is can be used
-    by this wrapper.
-
+    The retry handler writes the correct delay value to redis so that it is can
+    be used by this wrapper.
     """
 
     def __init__(
@@ -228,24 +228,26 @@ class OnyxSlackWebClient(WebClient):
     def _perform_urllib_http_request(
         self, *, url: str, args: Dict[str, Dict[str, Any]]
     ) -> Dict[str, Any]:
-        """By locking around the base class method, we ensure that both the delay from
-        Redis and parsing/writing of retry values to Redis are handled properly in
-        one place"""
-        # lock and extend the ttl
+        """
+        By locking around the base class method, we ensure that both the delay
+        from Redis and parsing/writing of retry values to Redis are handled
+        properly in one place.
+        """
+        # Lock and extend the ttl.
         lock: RedisLock = self._redis.lock(
             self._delay_lock,
             timeout=ONYX_SLACK_LOCK_TTL,
         )
 
-        # try to acquire the lock
+        # Try to acquire the lock.
         start = time.monotonic()
         while True:
             acquired = lock.acquire(blocking_timeout=ONYX_SLACK_LOCK_BLOCKING_TIMEOUT)
             if acquired:
                 break
 
-            # if we couldn't acquire the lock but it exists, there's at least some activity
-            # so keep trying...
+            # If we couldn't acquire the lock but it exists, there's at least
+            # some activity so keep trying...
             if self._redis.exists(self._delay_lock):
                 continue
 
@@ -272,12 +274,14 @@ class OnyxSlackWebClient(WebClient):
         url: str,
         req: Request,
     ) -> Dict[str, Any]:
-        """Overrides the internal method which is mostly the direct call to
-        urllib/urlopen ... so this is a good place to perform our delay."""
+        """
+        Overrides the internal method which is mostly the direct call to
+        urllib/urlopen ... so this is a good place to perform our delay.
+        """
 
-        # read and execute the delay
+        # Read and execute the delay.
         delay_ms = self._redis.pttl(self._delay_key)
-        if delay_ms < 0:  # negative values are error status codes ... see docs
+        if delay_ms < 0:  # Negative values are error status codes ... see docs.
             delay_ms = 0
 
         if delay_ms > 0:
@@ -294,7 +298,7 @@ class OnyxSlackWebClient(WebClient):
         with self._lock:
             self.num_requests += 1
 
-        # the delay key should have naturally expired by this point
+        # The delay key should have naturally expired by this point.
         return result
 
 
@@ -332,8 +336,9 @@ def make_slack_web_client(
     delay_lock = make_delay_lock(prefix)
     delay_key = make_delay_key(prefix)
 
-    # NOTE: slack has a built in RateLimitErrorRetryHandler, but it isn't designed
-    # for concurrent workers. We've extended it with OnyxRedisSlackRetryHandler.
+    # NOTE: Slack has a built in RateLimitErrorRetryHandler, but it isn't
+    # designed for concurrent workers. We've extended it with
+    # OnyxRedisSlackRetryHandler.
     onyx_rate_limit_error_retry_handler = OnyxRedisSlackRetryHandler(
         max_retry_count=max_retry_count,
         delay_key=delay_key,
@@ -362,8 +367,8 @@ def _paginate(
     """Handles cursor pagination; yields each validated page as a plain dict.
 
     Single-page callers take ``next(...)`` and read
-    ``response_metadata.next_cursor`` themselves -- pages are lazy, so no
-    second request fires.
+    ``response_metadata.next_cursor`` themselves -- pages are lazy, so no second
+    request fires.
     """
     cursor: str | None = None
     has_more = True
@@ -396,9 +401,9 @@ class SlackSourceOperations(SourceOperations):
       False`` downgrades it to a bare client with the connection-error handler
       only (dev/test escape hatch, mirrors the old connector flag).
     - The fast client (``fast=True`` operations): bare, ``timeout=1``, no
-      retries. For synchronous user-facing paths (settings validation) where
-      the coordinated client may block behind a rate-limited indexing job's
-      backoff for up to an hour.
+      retries. For synchronous user-facing paths (settings validation) where the
+      coordinated client may block behind a rate-limited indexing job's backoff
+      for up to an hour.
 
     Both are built lazily on first use: construction reads the credential (via
     the provider, which audits the decrypt), and credential-time report runs
@@ -511,7 +516,9 @@ class SlackSourceOperations(SourceOperations):
     def list_teams(
         self, *, limit: int | None = None, fast: bool = False
     ) -> Generator[dict[str, Any], None, None]:
-        """``auth.teams.list``, paginated: Grid org workspaces (``team:read``)."""
+        """
+        ``auth.teams.list``, paginated: Grid org workspaces (``team:read``).
+        """
         return _paginate(self._client_for(fast).auth_teams_list, limit=limit)
 
     @source_operation(
@@ -588,8 +595,10 @@ class SlackSourceOperations(SourceOperations):
         untested=_TEMPORARILY_UNTESTED,
     )
     def fetch_channel_info(self, *, channel_id: str) -> dict[str, Any]:
-        """``conversations.info``. No variants: the call exists to discover the
-        channel (including its privacy), so it cannot classify itself."""
+        """
+        ``conversations.info``. No variants: the call exists to discover the
+        channel (including its privacy), so it cannot classify itself.
+        """
         return _response_data(self._client().conversations_info(channel=channel_id))
 
     @source_operation(
@@ -602,9 +611,11 @@ class SlackSourceOperations(SourceOperations):
         untested=_TEMPORARILY_UNTESTED,
     )
     def fetch_user_info(self, user_id: str) -> dict[str, Any]:
-        """``users.info``. Positional ``user_id`` on purpose: the bound method
+        """
+        ``users.info``. Positional ``user_id`` on purpose: the bound method
         doubles as the ``FetchUserInfo`` callable that user-resolving helpers
-        (shared with onyxbot) take injected."""
+        (shared with onyxbot) take injected.
+        """
         return _response_data(self._client().users_info(user=user_id))
 
     @source_operation(
@@ -622,7 +633,9 @@ class SlackSourceOperations(SourceOperations):
         limit: int | None = None,
         fast: bool = False,
     ) -> Generator[dict[str, Any], None, None]:
-        """``users.list``, paginated; ``team_id`` scopes to one Grid workspace."""
+        """
+        ``users.list``, paginated; ``team_id`` scopes to one Grid workspace.
+        """
         kwargs: dict[str, Any] = {}
         if team_id is not None:
             kwargs["team_id"] = team_id

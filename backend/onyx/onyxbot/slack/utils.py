@@ -45,8 +45,10 @@ _ONYX_BOT_COUNT_START_TIME: float = time.time()
 
 
 def bot_user_info_fetcher(client: WebClient) -> FetchUserInfo:
-    """Adapts a bot WebClient to the ``FetchUserInfo`` contract of the shared
-    slack helpers (the connector satisfies it via its gateway operation)."""
+    """
+    Adapts a bot WebClient to the ``FetchUserInfo`` contract of the shared slack
+    helpers (the connector satisfies it via its gateway operation).
+    """
     return lambda user_id: cast(dict[str, Any], client.users_info(user=user_id).data)
 
 
