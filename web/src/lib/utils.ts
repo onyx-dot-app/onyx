@@ -254,7 +254,7 @@ export function getFileIcon(
 ): ComponentType<IconProps> {
   if (!fileName) return SvgFileText;
   if (isImageFile(fileName)) return SvgImage;
-  if (/\.pptx$/i.test(fileName)) return SvgFileChartPie;
+  if (/\.pptx?$/i.test(fileName)) return SvgFileChartPie;
   if (/\.pdf$/i.test(fileName)) return SvgFileText;
   if (isCodeFile(fileName)) return SvgFileBraces;
   return SvgFileText;
@@ -286,4 +286,15 @@ export function mergeRefs<T>(
       }
     });
   };
+}
+
+export function formatCost(cents: number): string {
+  return new Intl.NumberFormat("en-US", {
+    style: "currency",
+    currency: "USD",
+  }).format(cents / 100);
+}
+
+export function formatTokens(value: number): string {
+  return value.toLocaleString("en-US");
 }

@@ -14,6 +14,18 @@ use window_vibrancy::{apply_vibrancy, NSVisualEffectMaterial};
 const TITLEBAR_SCRIPT: &str = include_str!("../../src/titlebar.js");
 const CHAT_LINK_INTERCEPT_SCRIPT: &str = include_str!("scripts/chat_link_intercept.js");
 
+/// The window a shortcut or menu action should apply to: whichever one is
+/// focused (the app can have several windows). Focus-query failures are
+/// logged and treated as unfocused.
+pub fn focused_webview_window(app: &AppHandle) -> Option<WebviewWindow> {
+    app.webview_windows().into_values().find(|window| {
+        window.is_focused().unwrap_or_else(|e| {
+            log_backend_error(app, &format!("Failed to query window focus: {e}"));
+            false
+        })
+    })
+}
+
 pub fn focus_main_window(app: &AppHandle) {
     if let Some(window) = app.get_webview_window("main") {
         if let Err(e) = window.unminimize() {

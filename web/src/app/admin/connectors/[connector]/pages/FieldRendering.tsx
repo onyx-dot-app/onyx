@@ -4,6 +4,7 @@ import SelectInput from "./ConnectorInput/SelectInput";
 import NumberInput from "./ConnectorInput/NumberInput";
 import { TextFormField, MultiSelectField } from "@/components/Field";
 import ListInput from "./ConnectorInput/ListInput";
+import StringPairListInput from "./ConnectorInput/StringPairListInput";
 import FileInput from "./ConnectorInput/FileInput";
 import { ConfigurableSources } from "@/lib/types";
 import { Credential } from "@/lib/connectors/credentials";
@@ -177,6 +178,18 @@ export const RenderField: FC<RenderFieldProps> = ({
         />
       ) : field.type === "list" ? (
         <ListInput name={field.name} label={label} description={description} />
+      ) : field.type === "string_pair_list" ? (
+        <StringPairListInput
+          name={field.name}
+          label={label}
+          description={description}
+          leftKey={field.leftKey}
+          rightKey={field.rightKey}
+          leftLabel={field.leftLabel}
+          rightLabel={field.rightLabel}
+          leftPlaceholder={field.leftPlaceholder}
+          rightPlaceholder={field.rightPlaceholder}
+        />
       ) : field.type === "select" ? (
         <SelectInput
           name={field.name}

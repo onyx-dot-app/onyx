@@ -23,6 +23,7 @@ from onyx.error_handling.error_codes import OnyxErrorCode
 from onyx.error_handling.exceptions import OnyxError
 from onyx.server.features.build.configs import SSE_KEEPALIVE_INTERVAL
 from onyx.server.features.build.db.build_session import get_build_session
+from onyx.server.features.build.db.sandbox import get_sandbox_by_user_id
 from onyx.server.features.build.interactive_turns.executor import (
     start_interactive_turn_runner,
 )
@@ -192,7 +193,15 @@ def get_interactive_turn_events(
                 if session is None:
                     yield _format_stream_error("Session not found")
                     return
-                if session.opencode_session_id:
+                # The opencode session id outlives the pod that minted it, so
+                # after a reap it is set while nothing is listening — and the
+                # runner is concurrently waking the sandbox. Wait for both.
+                sandbox = get_sandbox_by_user_id(stream_db_session, user_id)
+                if (
+                    session.opencode_session_id
+                    and sandbox is not None
+                    and sandbox.status.is_active()
+                ):
                     break
 
             yield SSE_KEEPALIVE

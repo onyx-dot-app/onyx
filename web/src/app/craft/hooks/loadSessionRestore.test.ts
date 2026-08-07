@@ -32,7 +32,7 @@ function runningSession(nextjsPort: number | null = null): unknown {
   };
 }
 
-function webappInfo(has_webapp: boolean, ready: boolean): unknown {
+function webappInfo(has_webapp: boolean | null, ready: boolean): unknown {
   return { has_webapp, webapp_url: null, status: "running", ready };
 }
 
@@ -623,6 +623,14 @@ describe("waitForWebappReady", () => {
     mockedApi.fetchWebappInfo
       .mockRejectedValueOnce(new Error("sandbox not reachable"))
       .mockResolvedValue(webappInfo(true, true) as never);
+    await waitForWebappReady(SESSION_ID, { intervalMs: 0 });
+    expect(mockedApi.fetchWebappInfo).toHaveBeenCalledTimes(2);
+  });
+
+  it("keeps polling while webapp existence is unknown", async () => {
+    mockedApi.fetchWebappInfo
+      .mockResolvedValueOnce(webappInfo(null, false) as never)
+      .mockResolvedValue(webappInfo(false, false) as never);
     await waitForWebappReady(SESSION_ID, { intervalMs: 0 });
     expect(mockedApi.fetchWebappInfo).toHaveBeenCalledTimes(2);
   });

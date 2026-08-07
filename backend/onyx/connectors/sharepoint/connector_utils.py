@@ -5,6 +5,7 @@ from office365.onedrive.driveitems.driveItem import DriveItem
 from office365.sharepoint.client_context import ClientContext
 
 from onyx.connectors.models import ExternalAccess
+from onyx.db.enums import HierarchyNodeType
 from onyx.utils.variable_functionality import (
     fetch_versioned_implementation_with_fallback,
 )
@@ -46,3 +47,30 @@ def get_sharepoint_external_access(
     )
 
     return external_access
+
+
+def get_sharepoint_hierarchy_node_external_access(
+    ctx: ClientContext,
+    graph_client: GraphClient,
+    node_type: HierarchyNodeType,
+    drive_name: str | None = None,
+    folder_url: str | None = None,
+) -> ExternalAccess:
+    def noop_fallback(
+        *args: Any,  # noqa: ARG001
+        **kwargs: Any,  # noqa: ARG001
+    ) -> ExternalAccess:
+        return ExternalAccess.empty()
+
+    get_external_access_func = fetch_versioned_implementation_with_fallback(
+        "onyx.external_permissions.sharepoint.permission_utils",
+        "get_hierarchy_node_external_access_from_sharepoint",
+        fallback=noop_fallback,
+    )
+    return get_external_access_func(
+        ctx,
+        graph_client,
+        node_type,
+        drive_name,
+        folder_url,
+    )
