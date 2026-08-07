@@ -1,7 +1,7 @@
 use crate::config::ConfigState;
 use crate::debug_log::{log_backend_error, MENU_OPEN_DEBUG_LOG_ID, MENU_TOGGLE_DEVTOOLS_ID};
 use crate::shortcuts::SummonShortcut;
-use crate::window::{focus_main_window, open_chat_window};
+use crate::window::{focus_main_window, focused_webview_window, open_chat_window};
 use tauri::image::Image;
 #[cfg(not(target_os = "macos"))]
 use tauri::menu::AboutMetadataBuilder;
@@ -129,18 +129,6 @@ fn build_view_menu(app: &AppHandle, menu: &Menu<Wry>) -> tauri::Result<()> {
     }
 
     Ok(())
-}
-
-/// The window a View-menu action should apply to: whichever one is focused
-/// (menu accelerators only fire while the app is active, but the app can have
-/// several windows).
-fn focused_webview_window(app: &AppHandle) -> Option<tauri::WebviewWindow> {
-    app.webview_windows().into_values().find(|window| {
-        window.is_focused().unwrap_or_else(|e| {
-            log_backend_error(app, &format!("Failed to query window focus: {e}"));
-            false
-        })
-    })
 }
 
 pub fn handle_reload(app: &AppHandle) {
