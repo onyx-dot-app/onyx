@@ -69,6 +69,7 @@ from onyx.connectors.models import (
     TextSection,
 )
 from onyx.connectors.sharepoint.connector_utils import (
+    SharepointPermissionCache,
     get_sharepoint_external_access,
     get_sharepoint_hierarchy_node_external_access,
 )
@@ -464,6 +465,9 @@ class SharepointConnectorCheckpoint(ConnectorCheckpoint):
     # Track yielded document IDs to avoid processing the same document twice.
     # The Microsoft Graph delta API can return the same item on multiple pages.
     seen_document_ids: set[str] = Field(default_factory=set)
+    permission_cache: SharepointPermissionCache = Field(
+        default_factory=SharepointPermissionCache
+    )
 
 
 class SharepointAuthMethod(Enum):
@@ -799,12 +803,14 @@ def _convert_driveitem_to_document_with_permissions(
     access_token: str | None = None,
     treat_sharing_link_as_public: bool = False,
     raw_file_callback: RawFileCallback | None = None,
+    permission_cache: SharepointPermissionCache | None = None,
 ) -> Document | ConnectorFailure | None:
     if not driveitem.name or not driveitem.id:
         raise ValueError("DriveItem name/id is required")
 
     if include_permissions and ctx is None:
         raise ValueError("ClientContext is required for permissions")
+    permission_cache = permission_cache or SharepointPermissionCache()
 
     mime_type = driveitem.mime_type
     if not mime_type or mime_type in OnyxMimeTypes.EXCLUDED_IMAGE_TYPES:
@@ -939,6 +945,7 @@ def _convert_driveitem_to_document_with_permissions(
         external_access = get_sharepoint_external_access(
             ctx=ctx,
             graph_client=graph_client,
+            permission_cache=permission_cache,
             drive_item=sdk_item,
             drive_name=drive_name,
             add_prefix=True,
@@ -981,6 +988,7 @@ def _convert_sitepage_to_document(
     site_name: str | None,
     ctx: ClientContext | None,
     graph_client: GraphClient,
+    permission_cache: SharepointPermissionCache,
     include_permissions: bool = False,
     parent_hierarchy_raw_node_id: str | None = None,
     treat_sharing_link_as_public: bool = False,
@@ -1111,6 +1119,7 @@ def _convert_sitepage_to_document(
         external_access = get_sharepoint_external_access(
             ctx=ctx,  # ty: ignore[invalid-argument-type]
             graph_client=graph_client,
+            permission_cache=permission_cache,
             site_page=site_page,
             add_prefix=True,
             treat_sharing_link_as_public=treat_sharing_link_as_public,
@@ -1155,6 +1164,7 @@ def _convert_driveitem_to_slim_document(
     drive_name: str,
     ctx: ClientContext,
     graph_client: GraphClient,
+    permission_cache: SharepointPermissionCache,
     parent_hierarchy_raw_node_id: str | None = None,
     treat_sharing_link_as_public: bool = False,
 ) -> SlimDocument:
@@ -1165,6 +1175,7 @@ def _convert_driveitem_to_slim_document(
     external_access = get_sharepoint_external_access(
         ctx=ctx,
         graph_client=graph_client,
+        permission_cache=permission_cache,
         drive_item=sdk_item,
         drive_name=drive_name,
         treat_sharing_link_as_public=treat_sharing_link_as_public,
@@ -1186,6 +1197,7 @@ def _convert_sitepage_to_slim_document(
     site_page: dict[str, Any],
     ctx: ClientContext | None,
     graph_client: GraphClient,
+    permission_cache: SharepointPermissionCache,
     parent_hierarchy_raw_node_id: str | None = None,
     treat_sharing_link_as_public: bool = False,
 ) -> SlimDocument:
@@ -1197,6 +1209,7 @@ def _convert_sitepage_to_slim_document(
     external_access = get_sharepoint_external_access(
         ctx=ctx,  # ty: ignore[invalid-argument-type]
         graph_client=graph_client,
+        permission_cache=permission_cache,
         site_page=site_page,
         treat_sharing_link_as_public=treat_sharing_link_as_public,
     )
@@ -2323,6 +2336,7 @@ class SharepointConnector(
                                     drive_name,
                                     ctx,
                                     self.graph_client,
+                                    temp_checkpoint.permission_cache,
                                     parent_hierarchy_raw_node_id=parent_hierarchy_url,
                                     treat_sharing_link_as_public=self.treat_sharing_link_as_public,
                                 )
@@ -2372,6 +2386,7 @@ class SharepointConnector(
                                         site_page,
                                         ctx,
                                         self.graph_client,
+                                        temp_checkpoint.permission_cache,
                                         parent_hierarchy_raw_node_id=site_descriptor.url,
                                         treat_sharing_link_as_public=self.treat_sharing_link_as_public,
                                     )
@@ -2570,6 +2585,7 @@ class SharepointConnector(
             external_access = get_sharepoint_hierarchy_node_external_access(
                 ctx,
                 self.graph_client,
+                checkpoint.permission_cache,
                 HierarchyNodeType.SITE,
             )
 
@@ -2604,6 +2620,7 @@ class SharepointConnector(
             external_access = get_sharepoint_hierarchy_node_external_access(
                 ctx,
                 self.graph_client,
+                checkpoint.permission_cache,
                 HierarchyNodeType.DRIVE,
                 drive_name=drive_name,
             )
@@ -2657,6 +2674,7 @@ class SharepointConnector(
                 external_access = get_sharepoint_hierarchy_node_external_access(
                     ctx,
                     self.graph_client,
+                    checkpoint.permission_cache,
                     HierarchyNodeType.FOLDER,
                     folder_url=folder_url,
                 )
@@ -2794,6 +2812,7 @@ class SharepointConnector(
                 drive_name,
                 ctx,
                 self.graph_client,
+                permission_cache=checkpoint.permission_cache,
                 include_permissions=include_permissions,
                 parent_hierarchy_raw_node_id=parent_hierarchy_url,
                 graph_api_base=self.graph_api_base,
@@ -3187,6 +3206,7 @@ class SharepointConnector(
                                 site_descriptor.drive_name,
                                 client_ctx,
                                 self.graph_client,
+                                permission_cache=checkpoint.permission_cache,
                                 include_permissions=include_permissions,
                                 # Site pages have the site as their parent
                                 parent_hierarchy_raw_node_id=site_descriptor.url,
@@ -3449,6 +3469,7 @@ class SharepointConnector(
             site_descriptor.drive_name,
             ctx,
             self.graph_client,
+            permission_cache=dedup.permission_cache,
             include_permissions=include_permissions,
             parent_hierarchy_raw_node_id=site_descriptor.url,
             treat_sharing_link_as_public=self.treat_sharing_link_as_public,
