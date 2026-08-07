@@ -173,6 +173,11 @@ def get_summary_parent_message_id(chat_history: list[ChatMessage]) -> int:
     for msg in reversed(chat_history):
         if msg.message_type == MessageType.USER:
             return msg.id
+    logger.warning(
+        "No USER message in chat history when parenting summary "
+        "(session %s); falling back to chain tail",
+        chat_history[-1].chat_session_id,
+    )
     return chat_history[-1].id
 
 
@@ -213,7 +218,9 @@ def get_messages_to_summarize(
     tokens_used = 0
 
     for msg in reversed(messages):
-        msg_tokens = msg.token_count or 0
+        # Same per-message cost as the compression trigger (tool-call
+        # arguments included) so the verbatim tail respects the budget.
+        msg_tokens = calculate_total_history_tokens([msg])
         if tokens_used + msg_tokens > tokens_for_recent and recent_messages:
             break
         recent_messages.insert(0, msg)

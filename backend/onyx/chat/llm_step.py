@@ -866,10 +866,25 @@ def translate_history_to_llm_format(
     last_cacheable_msg_idx = -1
     all_previous_msgs_cacheable = True
 
+    # History can contain images even when the current model cannot accept
+    # them (e.g. the user switched models mid-session). Sending them yields a
+    # provider 400, so replay a text marker instead. Admins can mark custom
+    # vision models with the VISION flow type to keep images flowing.
+    supports_image_input = True
+    if any(msg.message_type == MessageType.USER and msg.image_files for msg in history):
+        supports_image_input = model_supports_image_input(
+            llm_config.model_name, llm_config.model_provider
+        )
+
     # Per-request image cap (provider-aware). When the cap is enforced and
     # images are dropped, we emit a system-reminder UserMessage at the end of
     # the translated request — the same pattern MessageType.USER_REMINDER uses.
-    image_cap = resolve_image_cap(llm_config.model_provider)
+    # The cap bounds image payloads, so it only applies when images are
+    # actually sent — markers for a non-vision model are plain text and must
+    # never be capped away.
+    image_cap = (
+        resolve_image_cap(llm_config.model_provider) if supports_image_input else None
+    )
     keep_image_indices: set[tuple[int, int]] | None = None
     image_drop_notice: str | None = None
     if image_cap is not None:
@@ -887,16 +902,6 @@ def translate_history_to_llm_format(
             image_drop_notice = IMAGE_DROP_REMINDER.format(
                 dropped_count=dropped_image_count
             )
-
-    # History can contain images even when the current model cannot accept
-    # them (e.g. the user switched models mid-session). Sending them yields a
-    # provider 400, so replay a text marker instead. Admins can mark custom
-    # vision models with the VISION flow type to keep images flowing.
-    supports_image_input = True
-    if any(msg.message_type == MessageType.USER and msg.image_files for msg in history):
-        supports_image_input = model_supports_image_input(
-            llm_config.model_name, llm_config.model_provider
-        )
 
     for idx, msg in enumerate(history):
         # if the message is being added to the history

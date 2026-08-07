@@ -407,11 +407,16 @@ def construct_message_history(
         )
 
     def _replay_token_count(msg: ChatMessageSimple) -> int:
-        if not image_files_replayed_as_markers or not msg.image_token_count:
+        if not image_files_replayed_as_markers:
             return msg.token_count
+        # Charge markers for every IMAGE entry, including ones whose stored
+        # token contribution is zero (project/context images are never
+        # counted) — the marker text is still sent for them.
         num_images = sum(
             1 for f in msg.image_files or [] if f.file_type == ChatFileType.IMAGE
         )
+        if not num_images:
+            return msg.token_count
         return (
             max(0, msg.token_count - msg.image_token_count) + num_images * marker_tokens
         )

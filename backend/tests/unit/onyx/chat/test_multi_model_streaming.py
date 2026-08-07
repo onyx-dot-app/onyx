@@ -652,6 +652,11 @@ class TestRunModels:
         persisted_llms = [call.kwargs["llm"] for call in mock_handle.call_args_list]
         assert persisted_llms.count(setup.llms[0]) == 1
         assert persisted_llms.count(setup.llms[1]) == 1
+        # Exactly one completion owns compression; the other must skip it.
+        compression_flags = sorted(
+            call.kwargs["run_compression"] for call in mock_handle.call_args_list
+        )
+        assert compression_flags == [False, True]
 
     def test_completion_handle_not_called_for_failed_model(self) -> None:
         """llm_loop_completion_handle must be skipped for a model that raised."""

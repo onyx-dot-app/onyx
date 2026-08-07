@@ -1149,7 +1149,7 @@ def _run_models(
     # All models share one mainline chain, so exactly one completion should
     # run history compression — the first non-errored one to persist, not a
     # fixed index (model 0 may have errored). Guarded by persist_lock.
-    compression_claimed: list[bool] = [False]
+    compression_claimed = False
     post_steps_done = threading.Event()
 
     # Set only on stop-button: workers can't be interrupted, so their remaining
@@ -1196,9 +1196,10 @@ def _run_models(
         def _is_connected(value: bool = completed_normally) -> bool:
             return value
 
+        nonlocal compression_claimed
         with persist_lock:
-            run_compression = not compression_claimed[0]
-            compression_claimed[0] = True
+            run_compression = not compression_claimed
+            compression_claimed = True
 
         try:
             llm_loop_completion_handle(
@@ -1225,9 +1226,12 @@ def _run_models(
             if run_compression:
                 # The handle failed before compression could have run
                 # (compress_chat_history swallows its own errors), so let a
-                # later model's completion pick it up.
+                # later model's completion pick it up. If every other model
+                # already persisted while the claim was held, this turn ends
+                # uncompressed — acceptable, since the next turn's completion
+                # re-evaluates the trigger and compresses then.
                 with persist_lock:
-                    compression_claimed[0] = False
+                    compression_claimed = False
 
     def _run_post_steps() -> None:
         with persist_lock:
