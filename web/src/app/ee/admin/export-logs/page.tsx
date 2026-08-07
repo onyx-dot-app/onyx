@@ -143,6 +143,10 @@ export default function ExportLogsPage() {
   }, [statusError]);
 
   const downloadBundle = useCallback(async (id: string): Promise<void> => {
+    // Mark before any await: an attempt is in flight or succeeded, and only
+    // failure re-arms the auto-download below. Owning this here keeps every
+    // call site (auto-fire, manual retry) consistent.
+    downloadedExportIdRef.current = id;
     setIsDownloading(true);
     try {
       const response = await fetch(`${EXPORT_URL}/${id}/download`);
@@ -177,7 +181,6 @@ export default function ExportLogsPage() {
     ) {
       return;
     }
-    downloadedExportIdRef.current = exportId;
     void downloadBundle(exportId);
   }, [exportId, status, downloadBundle]);
 
