@@ -2,9 +2,10 @@
 
 # §8 Scoped Permissions (Group Manager) — PR Roadmap
 
-> **Primitives per [03 §2](03-detailed-design.md) (single-classifier model).** `has_permission` →
-> `PermissionAuthority` (one classifier; `has_permission` removed); `has_global_permission` is the
-> GLOBAL-only bool helper. GATE 1 = `require_permission(..., allow_scope=True)` threshold; GATE 2 =
+> **Primitives per [03 §2](03-detailed-design.md) (single-classifier model).** `has_permission` returns
+> `PermissionAuthority` — one classifier replacing the old boolean form, since a scoped grant is
+> group-qualified and can't be a flat bool; `has_global_permission` is the GLOBAL-only bool helper.
+> GATE 1 = `require_permission(..., allow_scope=True)` threshold; GATE 2 =
 > `assert_within_scope` / `assert_global`. Names below updated to match.
 
 Six PRs, dependency-ordered. **Safety invariant:** every enforcement PR lands its read-filter + write-side gate
