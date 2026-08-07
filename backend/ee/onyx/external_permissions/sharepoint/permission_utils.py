@@ -575,15 +575,15 @@ def _resolve_document_groups(
 
     while group_queue:
         group = group_queue.popleft()
+        if _is_public_login_name(group.login_name):
+            return DocumentGroupsResult(group_ids=set(), found_public_group=True)
+
+        group_ids.add(group.name)
         cache_key = _group_cache_key(client_context, group)
         if cache_key in visited_group_keys:
             continue
         visited_group_keys.add(cache_key)
 
-        if _is_public_login_name(group.login_name):
-            return DocumentGroupsResult(group_ids=set(), found_public_group=True)
-
-        group_ids.add(group.name)
         expansion = _get_cached_group_expansion(
             client_context, graph_client, group, permission_cache
         )

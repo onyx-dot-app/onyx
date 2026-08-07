@@ -118,15 +118,17 @@ def test_ad_group_claims_token_and_guid_share_cache(
     mock_get_group: MagicMock,
 ) -> None:
     group_id = "11111111-1111-1111-1111-111111111111"
-    claims_group = _make_ad_group("Engineering", f"c:0t.c|tenant|{group_id}")
-    guid_group = _make_ad_group("Engineering", group_id)
+    claims_group = _make_ad_group("Engineering Members", f"c:0t.c|tenant|{group_id}")
+    guid_group = _make_ad_group("Engineering Owners", group_id)
     mock_get_group.return_value = (set(), set())
     cache = SharepointPermissionCache()
 
-    _resolve_document_groups(MagicMock(), MagicMock(), {claims_group}, cache)
-    _resolve_document_groups(MagicMock(), MagicMock(), {guid_group}, cache)
+    result = _resolve_document_groups(
+        MagicMock(), MagicMock(), {claims_group, guid_group}, cache
+    )
 
     mock_get_group.assert_called_once()
+    assert result.group_ids == {"Engineering Members", "Engineering Owners"}
 
 
 @patch(f"{MODULE}._get_azuread_groups")
