@@ -9,7 +9,7 @@ Routes and route-only flow helpers stay in `api.py`.
 import asyncio
 import json
 import time
-from collections.abc import Awaitable, Callable, Coroutine
+from collections.abc import Awaitable, Callable
 from typing import Any, TypedDict
 from urllib.parse import parse_qs, urlparse
 from uuid import uuid4
@@ -52,7 +52,10 @@ from onyx.server.features.mcp.models import (
     MCPOAuthKeys,
     merge_mcp_headers,
 )
-from onyx.server.features.mcp.ssrf import mcp_ssrf_httpx_client_factory
+from onyx.server.features.mcp.ssrf import (
+    mcp_oauth_challenge_httpx_client_factory,
+    mcp_ssrf_httpx_client_factory,
+)
 from onyx.utils.logger import setup_logger
 from onyx.utils.threadpool_concurrency import run_async_sync_no_cancel
 from shared_configs.contextvars import ONYX_REQUEST_ID_CONTEXTVAR, get_current_tenant_id
@@ -101,13 +104,14 @@ def key_client_info(user_id: str) -> str:
 
 REQUESTED_SCOPE: str | None = None
 
-_INFLIGHT_OAUTH_TASKS: set[asyncio.Task[Any]] = set()
+_OAUTH_HTTP_TIMEOUT_SECONDS = 30.0
+_INFLIGHT_OAUTH_TASKS: set[asyncio.Task[object]] = set()
 
 
-def _retain_oauth_task(task: asyncio.Task[Any]) -> None:
+def _retain_oauth_task(task: asyncio.Task[object]) -> None:
     _INFLIGHT_OAUTH_TASKS.add(task)
 
-    def release(completed_task: asyncio.Task[Any]) -> None:
+    def release(completed_task: asyncio.Task[object]) -> None:
         _INFLIGHT_OAUTH_TASKS.discard(completed_task)
         exception = None if completed_task.cancelled() else completed_task.exception()
         if exception is not None:
@@ -120,10 +124,13 @@ def _retain_oauth_task(task: asyncio.Task[Any]) -> None:
 
 
 async def _run_until_oauth_redirect(
-    operation: Coroutine[Any, Any, Any],
+    operation: Awaitable[object],
     redirect_future: asyncio.Future[str],
 ) -> str | None:
-    operation_task = asyncio.create_task(operation)
+    async def run_operation() -> object:
+        return await operation
+
+    operation_task = asyncio.create_task(run_operation())
     done, _ = await asyncio.wait(
         [operation_task, redirect_future],
         return_when=asyncio.FIRST_COMPLETED,
@@ -140,40 +147,39 @@ async def _initiate_oauth_from_well_known_metadata(
     oauth_auth: OAuthClientProvider,
     server_url: str,
 ) -> None:
-    discovery_urls = build_protected_resource_metadata_discovery_urls(None, server_url)
-    metadata_url: str | None = None
-    async with mcp_ssrf_httpx_client_factory() as client:
-        for url in discovery_urls:
-            response = await client.send(create_oauth_metadata_request(url))
-            if await handle_protected_resource_response(response) is not None:
-                metadata_url = url
-                break
+    timeout = httpx.Timeout(_OAUTH_HTTP_TIMEOUT_SECONDS)
+    try:
+        async with asyncio.timeout(STATE_TTL_SECONDS):
+            discovery_urls = build_protected_resource_metadata_discovery_urls(
+                None, server_url
+            )
+            metadata_url: str | None = None
+            async with mcp_ssrf_httpx_client_factory(timeout=timeout) as client:
+                for url in discovery_urls:
+                    response = await client.send(create_oauth_metadata_request(url))
+                    if await handle_protected_resource_response(response) is not None:
+                        metadata_url = url
+                        break
 
-    if metadata_url is None:
+            if metadata_url is None:
+                raise OnyxError(
+                    OnyxErrorCode.INVALID_INPUT,
+                    "OAuth auto-discovery could not find protected resource metadata "
+                    "at the MCP server's well-known URI.",
+                )
+
+            async with mcp_oauth_challenge_httpx_client_factory(
+                server_url,
+                metadata_url,
+                oauth_auth,
+                timeout,
+            ) as client:
+                await client.get(server_url)
+    except TimeoutError as e:
         raise OnyxError(
             OnyxErrorCode.INVALID_INPUT,
-            "OAuth auto-discovery could not find protected resource metadata at "
-            "the MCP server's well-known URI.",
-        )
-
-    initial_request = httpx.Request("GET", server_url)
-    auth_flow = oauth_auth.async_auth_flow(initial_request)
-    request = await anext(auth_flow)
-    # The SDK only enters its OAuth flow in response to a challenge. The MCP
-    # endpoint may allow public initialization even though its tools need OAuth.
-    response = httpx.Response(
-        status_code=401,
-        headers={"WWW-Authenticate": f'Bearer resource_metadata="{metadata_url}"'},
-        request=request,
-    )
-
-    async with mcp_ssrf_httpx_client_factory() as client:
-        while True:
-            request = await auth_flow.asend(response)
-            if request is initial_request:
-                await auth_flow.aclose()
-                return
-            response = await client.send(request)
+            "OAuth auto-discovery timed out.",
+        ) from e
 
 
 async def connect_auto_discovery_oauth(
@@ -231,6 +237,11 @@ class MCPOauthState(BaseModel):
     is_admin: bool
     state: str
     code_verifier: str | None = None
+
+
+class MCPOAuthCodePayload(BaseModel):
+    code: str
+    state: str
 
 
 class MCPRefreshLogContext(TypedDict):
@@ -751,7 +762,7 @@ def make_oauth_provider(
     connection_config_id: int,
     admin_config_id: int | None,
     authorization_url_callback: Callable[[str], Awaitable[None]] | None = None,
-) -> OAuthClientProvider:
+) -> OnyxOAuthClientProvider:
     async def redirect_handler(auth_url: str) -> None:
         if return_path == UNUSED_RETURN_PATH:
             raise ValueError("Please Reconnect to the server")
@@ -797,16 +808,13 @@ def make_oauth_provider(
         if not pop:
             raise RuntimeError("Timed out waiting for OAuth callback")
 
-        code_state_dict = json.loads(pop[1].decode())
-
-        code = code_state_dict["code"]
-
-        if code_state_dict["state"] != state_obj.state:
+        code_payload = MCPOAuthCodePayload.model_validate_json(pop[1])
+        if code_payload.state != state_obj.state:
             raise RuntimeError("Invalid state in OAuth callback")
 
         # Optional: cleanup
         r.delete(key_state(user_id))
-        return code, state_obj.state
+        return code_payload.code, state_obj.state
 
     refresh_log_context = _refresh_log_context(mcp_server, connection_config_id)
     storage = OnyxTokenStorage(

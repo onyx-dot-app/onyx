@@ -1,7 +1,7 @@
 import asyncio
-from collections.abc import AsyncGenerator
-from types import SimpleNamespace
-from typing import Any, cast
+from collections.abc import AsyncGenerator, Awaitable, Callable
+from types import SimpleNamespace, TracebackType
+from typing import cast
 from unittest.mock import AsyncMock, MagicMock
 from uuid import uuid4
 
@@ -29,7 +29,12 @@ class _DiscoveryClient:
     async def __aenter__(self) -> "_DiscoveryClient":
         return self
 
-    async def __aexit__(self, *_args: Any) -> None:
+    async def __aexit__(
+        self,
+        exc_type: type[BaseException] | None,
+        exc_value: BaseException | None,
+        traceback: TracebackType | None,
+    ) -> None:
         return None
 
     async def send(self, request: httpx.Request) -> httpx.Response:
@@ -47,8 +52,10 @@ class _DiscoveryClient:
         return httpx.Response(status, request=request)
 
 
-class _OAuthProvider:
-    def __init__(self, authorization_url_callback: Any) -> None:
+class _OAuthProvider(httpx.Auth):
+    def __init__(
+        self, authorization_url_callback: Callable[[str], Awaitable[None]]
+    ) -> None:
         self.authorization_url_callback = authorization_url_callback
         self.challenge: str | None = None
 
@@ -61,7 +68,20 @@ class _OAuthProvider:
         response = yield request
         self.challenge = response.headers["WWW-Authenticate"]
         await self.publish_redirect("https://consent")
+        request.headers["Authorization"] = "Bearer test-token"
         yield request
+
+
+class _HangingDiscoveryClient(_DiscoveryClient):
+    def __init__(self) -> None:
+        super().__init__([])
+        self.started = False
+
+    async def send(self, request: httpx.Request) -> httpx.Response:
+        del request
+        self.started = True
+        await asyncio.Event().wait()
+        raise RuntimeError("unreachable")
 
 
 def _setup_fresh_auto_discovery(
@@ -81,8 +101,17 @@ def _setup_fresh_auto_discovery(
     user = SimpleNamespace(id=uuid4(), email="user@example.com")
     oauth_providers: list[_OAuthProvider] = []
 
-    def make_oauth_provider(*_args: Any, **kwargs: Any) -> _OAuthProvider:
-        provider = _OAuthProvider(kwargs["authorization_url_callback"])
+    def make_oauth_provider(
+        _mcp_server: object,
+        _user_id: str,
+        _return_path: str,
+        _connection_config_id: int,
+        _admin_config_id: int | None,
+        authorization_url_callback: Callable[[str], Awaitable[None]] | None = None,
+    ) -> _OAuthProvider:
+        if authorization_url_callback is None:
+            raise TypeError("authorization_url_callback is required")
+        provider = _OAuthProvider(authorization_url_callback)
         oauth_providers.append(provider)
         return provider
 
@@ -129,8 +158,16 @@ def test_fresh_auto_discovery_preserves_www_authenticate_flow(
     )
     monkeypatch.setattr(oauth, "mcp_ssrf_httpx_client_factory", discovery_factory)
 
-    async def initialize_with_challenge(*_args: Any, **kwargs: Any) -> MagicMock:
-        await kwargs["auth"].publish_redirect("https://challenge-consent")
+    async def initialize_with_challenge(
+        _server_url: str,
+        connection_headers: dict[str, str] | None = None,
+        transport: MCPTransport = MCPTransport.STREAMABLE_HTTP,
+        auth: object | None = None,
+    ) -> MagicMock:
+        del connection_headers, transport
+        if not isinstance(auth, _OAuthProvider):
+            raise TypeError("expected test OAuth provider")
+        await auth.publish_redirect("https://challenge-consent")
         return MagicMock()
 
     monkeypatch.setattr(oauth, "initialize_mcp_client", initialize_with_challenge)
@@ -155,7 +192,7 @@ def test_fresh_auto_discovery_uses_well_known_metadata_to_start_oauth(
     server, user, oauth_providers = _setup_fresh_auto_discovery(monkeypatch)
     discovery_client = _DiscoveryClient([404, 200])
     monkeypatch.setattr(
-        oauth, "mcp_ssrf_httpx_client_factory", lambda: discovery_client
+        oauth, "mcp_ssrf_httpx_client_factory", lambda **_kwargs: discovery_client
     )
 
     response = asyncio.run(
@@ -184,7 +221,7 @@ def test_fresh_auto_discovery_errors_when_well_known_metadata_is_missing(
     server, user, _ = _setup_fresh_auto_discovery(monkeypatch)
     discovery_client = _DiscoveryClient([404, 404])
     monkeypatch.setattr(
-        oauth, "mcp_ssrf_httpx_client_factory", lambda: discovery_client
+        oauth, "mcp_ssrf_httpx_client_factory", lambda **_kwargs: discovery_client
     )
 
     with pytest.raises(OnyxError) as exc_info:
@@ -240,3 +277,27 @@ def test_authenticated_connection_initializes_without_new_oauth(
     updated_user_data = update_connection_config.call_args.args[2]
     assert updated_user_data["tokens"] == stored_data["tokens"]
     assert updated_user_data["token_expires_at"] == 1234.0
+
+
+def test_well_known_oauth_flow_has_total_timeout(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    server, user, _ = _setup_fresh_auto_discovery(monkeypatch)
+    discovery_client = _HangingDiscoveryClient()
+    monkeypatch.setattr(
+        oauth, "mcp_ssrf_httpx_client_factory", lambda **_kwargs: discovery_client
+    )
+    monkeypatch.setattr(oauth, "STATE_TTL_SECONDS", 0.01)
+
+    with pytest.raises(OnyxError) as exc_info:
+        asyncio.run(
+            api._connect_oauth(
+                _request(server.id),
+                MagicMock(),
+                is_admin=True,
+                user=cast(User, user),
+            )
+        )
+
+    assert discovery_client.started
+    assert "timed out" in exc_info.value.detail

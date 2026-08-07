@@ -142,6 +142,36 @@ def test_transport_blocks_before_network() -> None:
         asyncio.run(transport.handle_async_request(request))
 
 
+def test_oauth_challenge_transport_requires_authenticated_retry() -> None:
+    server_url = "https://mcp.example.com/mcp"
+    metadata_url = "https://mcp.example.com/.well-known/oauth-protected-resource/mcp"
+    transport = mcp_ssrf._OAuthChallengeTransport(server_url, metadata_url)
+
+    async def run_requests() -> tuple[httpx.Response, httpx.Response]:
+        try:
+            first_response = await transport.handle_async_request(
+                httpx.Request("GET", server_url)
+            )
+            with pytest.raises(RuntimeError, match="without an access token"):
+                await transport.handle_async_request(httpx.Request("GET", server_url))
+            retry_response = await transport.handle_async_request(
+                httpx.Request(
+                    "GET", server_url, headers={"Authorization": "Bearer token"}
+                )
+            )
+            return first_response, retry_response
+        finally:
+            await transport.aclose()
+
+    first_response, retry_response = asyncio.run(run_requests())
+
+    assert first_response.status_code == 401
+    assert first_response.headers["WWW-Authenticate"] == (
+        f'Bearer resource_metadata="{metadata_url}"'
+    )
+    assert retry_response.status_code == 204
+
+
 @pytest.mark.parametrize(
     "url", ["http://localhost:9000/mcp", "http://169.254.169.254/x"]
 )
