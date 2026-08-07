@@ -555,8 +555,11 @@ corrections (verified 2026-06-29):
   skill.is_public`, re-read in-txn). Also gate the `is_public` toggle in `patch_custom_skill` so a manager
   can't publish a private skill out of scope.
 - **Endpoint re-point BY VERB.** list/get/create/update/share → `require_permission(MANAGE_SKILLS,
-  allow_scope=True)`; **skill DELETE (`skill/api.py:320`, dep at `:322`) stays admin-only (D6) — exclude it
-  from the re-point.** `Skill.is_public` + `Skill__UserGroup` exist, so GATE 2 is expressible. (PR0 parks the
+  allow_scope=True)`; **skill DELETE stays admin-only (D6).** NOTE: the admin skill router this assumed is
+  gone — `31d5a492e4` unified the skill API onto `user_router` + `SkillManagementPolicy`, so the only delete
+  is `delete_current_user_skill` (`skill/api.py:937`, `BASIC_ACCESS` + `SkillManagementPolicy.EDIT`). There is
+  no admin route left to exclude from the re-point, so D6 has to be enforced inside that handler/policy
+  instead. `Skill.is_public` + `Skill__UserGroup` exist, so GATE 2 is expressible. (PR0 parks the
   re-point on `FULL_ADMIN_PANEL_ACCESS` to unbreak boot; PR4 adds `MANAGE_SKILLS` + `allow_scope` + the GATE 2
   and admin-list together, then narrows the deps.)
 
@@ -564,7 +567,8 @@ corrections (verified 2026-06-29):
 Managers may create / edit / attach / detach / pause / rename / share within managed groups (non-PUBLIC only —
 PRIVATE or SYNC; GATE 2). **Delete is admin-only for a resource that merely sits in a managed group.** These
 stay on the plain global dep (no `allow_scope`): connector/cc_pair delete (`administrative.py:141`),
-document-set delete (`document_set/api.py:93`), admin skill delete (`skill/api.py:425`); plus group create
+document-set delete (`document_set/api.py:93`), skill delete (`skill/api.py:937` — see §11.2: no admin route
+remains, so this one is enforced in the handler, not by a global dep); plus group create
 (D2) + group delete + `set_group_permissions` (admin-only).
 
 **D9 carve-out:** deleting something the manager *created* is ownership, not scope, so it follows the same
