@@ -20,8 +20,8 @@ const EXPORT_URL = "/api/admin/log-export";
 const FALLBACK_FILENAME = "onyx_logs.zip";
 const POLL_INTERVAL_MS = 2_000;
 // Give up on a poll that fails this many times in a row (~30s at the poll
-// interval); the export's server-side collection window is only 90s, so
-// polling through longer outages has no value.
+// interval); the export's server-side collection window is only 90s, so polling
+// through longer outages has no value.
 const MAX_CONSECUTIVE_POLL_FAILURES = 15;
 
 type LogExportReceiptStatus =
