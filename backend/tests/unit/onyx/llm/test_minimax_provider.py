@@ -107,7 +107,9 @@ def test_minimax_model_metadata_matches_official_limits_and_pricing() -> None:
         assert m3 is not None
         assert m3["max_input_tokens"] == 1_000_000
         assert m3["max_output_tokens"] == 524_288
-        assert m3["input_cost_per_token"] == 0.3 / 1_000_000
+        assert m3["input_cost_per_token"] == 0.6 / 1_000_000
+        assert m3["output_cost_per_token"] == 2.4 / 1_000_000
+        assert m3["cache_read_input_token_cost"] == 0.12 / 1_000_000
         assert m3["cache_creation_input_token_cost"] is None
         assert m3["output_cost_per_token_above_512k_tokens"] == 2.4 / 1_000_000
         assert m3["input_cost_per_token_priority"] == 0.45 / 1_000_000

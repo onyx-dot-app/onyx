@@ -47,9 +47,9 @@ CUSTOM_LITELLM_MODEL_OVERRIDES: dict[str, dict[str, Any]] = {
 
 _MINIMAX_MODEL_METADATA: dict[str, dict[str, Any]] = {
     "MiniMax-M3": {
-        "input_cost_per_token": 0.3 / 1_000_000,
-        "output_cost_per_token": 1.2 / 1_000_000,
-        "cache_read_input_token_cost": 0.06 / 1_000_000,
+        "input_cost_per_token": 0.6 / 1_000_000,
+        "output_cost_per_token": 2.4 / 1_000_000,
+        "cache_read_input_token_cost": 0.12 / 1_000_000,
         "cache_creation_input_token_cost": None,
         "input_cost_per_token_above_512k_tokens": 0.6 / 1_000_000,
         "output_cost_per_token_above_512k_tokens": 2.4 / 1_000_000,
