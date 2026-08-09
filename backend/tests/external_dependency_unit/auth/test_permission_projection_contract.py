@@ -94,6 +94,12 @@ from onyx.db.skill import get_group_ids_for_skill
 from onyx.db.token_limit import insert_global_token_rate_limit
 from onyx.db.tools import can_manage_mcp_server, can_manage_tool
 from onyx.error_handling.exceptions import OnyxError
+from onyx.server.documents.credential import (
+    _assert_credential_share_within_scope,
+    create_credential_from_model,
+    create_credential_with_private_key,
+)
+from onyx.server.documents.models import CredentialBase
 from onyx.server.features.mcp.api import (
     _ensure_mcp_server_owner_or_admin,
     _ensure_mcp_server_viewable,
@@ -340,6 +346,42 @@ def test_cc_pair_creator_exception_is_bounded_to_groupless_private(
     assert editable(own(is_public=True, groups=[])) is False
     # Moved into a group they don't manage.
     assert editable(own(is_public=False, groups=[unmanaged])) is False
+
+
+def test_both_credential_create_paths_share_the_scope_gate(
+    db_session: Session,
+) -> None:
+    """The private-key route only adds file upload on top of the same create, so its
+    gates must match — otherwise certificate-auth setup 403s a manager who could create
+    the identical credential by pasting the key as JSON."""
+    manager = create_test_user(db_session, "proj-cred-mgr")
+    _manage(db_session, manager, _make_group(db_session))
+    manager.effective_permissions = []
+    unmanaged = _make_group(db_session)
+    db_session.commit()
+
+    assert (
+        has_permission(manager, Permission.MANAGE_CONNECTORS)
+        is PermissionAuthority.SCOPED
+    ), "manager should hold MANAGE_CONNECTORS only by scope"
+
+    for route in (create_credential_from_model, create_credential_with_private_key):
+        assert _route_admits(route, "user", manager), route.__name__
+
+    def cred(groups: list[int]) -> CredentialBase:
+        return CredentialBase(
+            credential_json={},
+            admin_public=False,
+            source=DocumentSource.GMAIL,
+            groups=groups,
+        )
+
+    assert not _guard_raises(
+        _assert_credential_share_within_scope, cred([]), manager, db_session
+    )
+    assert _guard_raises(
+        _assert_credential_share_within_scope, cred([unmanaged.id]), manager, db_session
+    )
 
 
 def test_cc_pair_projection_key_coverage() -> None:

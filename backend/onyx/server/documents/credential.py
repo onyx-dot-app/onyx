@@ -140,19 +140,13 @@ def swap_credentials_for_connector(
     )
 
 
-@router.post("/credential")
-def create_credential_from_model(
-    credential_info: CredentialBase,
-    user: User = Depends(
-        require_permission(Permission.MANAGE_CONNECTORS, allow_scope=True)
-    ),
-    db_session: Session = Depends(get_session),
-) -> ObjectCreationIdResponse:
-    # GATE 2 — only what the caller actually shares needs bounding. A credential
-    # with no groups and no public flag is private to its creator, so there is
-    # nothing to scope; sharing it (groups or curator_public) is what must land
-    # inside the groups they manage. Sources in CREDENTIAL_PERMISSIONS_TO_IGNORE
-    # carry no real secret (file, web, wiki) and stay exempt as they always were.
+def _assert_credential_share_within_scope(
+    credential_info: CredentialBase, user: User, db_session: Session
+) -> None:
+    """GATE 2 for both create paths — they build the same CredentialBase, so the gate
+    can't differ by transport. Only sharing needs bounding: an unshared credential is
+    private to its creator. CREDENTIAL_PERMISSIONS_TO_IGNORE sources (file, web, wiki)
+    carry no real secret and stay exempt."""
     is_shared = bool(credential_info.groups) or credential_info.curator_public
     if is_shared and credential_info.source not in CREDENTIAL_PERMISSIONS_TO_IGNORE:
         assert_within_scope(
@@ -163,6 +157,17 @@ def create_credential_from_model(
             requested_group_ids=credential_info.groups,
             is_non_public=not credential_info.curator_public,
         )
+
+
+@router.post("/credential")
+def create_credential_from_model(
+    credential_info: CredentialBase,
+    user: User = Depends(
+        require_permission(Permission.MANAGE_CONNECTORS, allow_scope=True)
+    ),
+    db_session: Session = Depends(get_session),
+) -> ObjectCreationIdResponse:
+    _assert_credential_share_within_scope(credential_info, user, db_session)
 
     credential = create_credential(credential_info, user, db_session)
     emit_audit_event(
@@ -190,7 +195,9 @@ def create_credential_with_private_key(
     groups: list[int] = Form([]),
     name: str | None = Form(None),
     source: str = Form(...),
-    user: User = Depends(require_permission(Permission.MANAGE_CONNECTORS)),
+    user: User = Depends(
+        require_permission(Permission.MANAGE_CONNECTORS, allow_scope=True)
+    ),
     uploaded_file: UploadFile = File(...),
     field_key: str = Form(...),
     type_definition_key: str = Form(...),
@@ -224,6 +231,7 @@ def create_credential_with_private_key(
         name=name,
         source=DocumentSource(source),
     )
+    _assert_credential_share_within_scope(credential_info, user, db_session)
 
     credential = create_credential(credential_info, user, db_session)
     emit_audit_event(
