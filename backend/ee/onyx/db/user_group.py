@@ -932,6 +932,10 @@ def set_group_permissions_bulk__no_commit(
     permission not in the set. Non-toggleable permissions are ignored.
     Calls recompute once at the end. Does NOT commit.
 
+    Grants are soft-deleted: revoking flips `is_deleted`, re-granting flips it back and
+    re-stamps `granted_by`/`granted_at`, so a row is INSERTed only once per group and the
+    grant history survives. Readers must filter `is_deleted.is_(False)`.
+
     Returns the resulting list of enabled permissions.
     """
 

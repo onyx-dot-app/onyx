@@ -63,6 +63,9 @@ PRIVATE and strictly within their managed groups — enforced authoritatively at
   - **D6 delete (§11.3), narrowed by D9:** managers do everything *except delete a resource that merely sits
     in a managed group* (connector/cc_pair, doc set, admin skill). Deleting something they **created** —
     action, MCP server, agent — is ownership, not scope, and stays owner-or-admin.
+  - **D8 (§11.1, supersedes part of D4):** managing an existing action / MCP server is owner-or-admin
+    (`can_manage_tool` / `can_manage_mcp_server`); the bundle grants reach + create only.
+  - **D9 (§11.3, narrows D6):** deleting a resource the manager *created* is owner-or-admin, not admin-only.
   - **Persona GATE 2 (§11.5):** `update_persona_access` lacks the actor `User`+`permission`; thread the
     acting user into it from all 3 callers (create / share / `/agents`) and gate the shared chokepoint.
   - **cc_pair re-attach (§11.6):** `update_user_group` rewrites group↔cc_pair from client `cc_pair_ids` —
@@ -80,9 +83,10 @@ onto `require_permission(...)`. Until this lands, `import onyx.main` raises `Imp
 Lands as its own small commit ahead of (or at the head of) PR1.
 
 **Step 1 — Schema + cached flag + migration.** Add `User__UserGroup.is_manager` and `User.is_group_manager`
-(`db/models.py`). Author migration `c71a18ea7d07` (down_revision `c8e316473aaa`, `alembic/versions/`) adding both
-columns, role-gated `is_manager` backfill (CURATOR + GLOBAL_CURATOR), and `is_group_manager` backfill from the
-result. Extend `recompute_user_permissions__no_commit` (`db/permissions.py:43`) to recompute `is_group_manager`.
+(`db/models.py`). Migration `c71a18ea7d07` (down_revision `c8e316473aaa`, `alembic/versions/`) ships this in
+PR1 — verify, don't author: both columns, role-gated `is_manager` backfill (CURATOR + GLOBAL_CURATOR), and
+`is_group_manager` backfill from the result. Extend `recompute_user_permissions__no_commit`
+(`db/permissions.py:43`) to recompute `is_group_manager`.
 
 **Step 2 — Auth primitives.** New `auth/scoped_permissions.py`: `SCOPED_MANAGER_PERMISSIONS`,
 `scoped_group_ids_subquery`, `get_scoped_groups`, `has_permission` (reads cached flag),

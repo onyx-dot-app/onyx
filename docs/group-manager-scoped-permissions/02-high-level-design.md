@@ -124,7 +124,8 @@ The gate therefore loads the resource's **current** groups in the same transacti
 1. Route gate `has_permission(MANAGE_CONNECTORS)` → passes (she manages a group).
 2. Handler calls the connector update DB fn.
 3. **Inside the DB write**, `assert_within_scope` re-reads the cc_pair's current groups, checks
-   `current ∪ requested ⊆ get_scoped_groups(Alice)`, checks `access_type == PRIVATE`. Pass → write; fail →
+   `current ∪ requested ⊆ get_scoped_groups(Alice)`, checks `access_type != PUBLIC` (PRIVATE or SYNC).
+   Pass → write; fail →
    `OnyxError(INSUFFICIENT_PERMISSIONS)`, transaction rolls back.
 
 ### Membership path (Alice adds Bob to Engineering)
