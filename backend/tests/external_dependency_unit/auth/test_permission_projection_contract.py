@@ -644,9 +644,20 @@ def test_delete_persona_route_admits_scoped_owner(
     assert _route_admits(delete_persona, "user", manager), (
         "delete route must admit scoped managers at GATE 1 (allow_scope=True)"
     )
-    assert _route_admits(patch_user_persona_public_status, "user", manager), (
-        "public route must admit scoped managers at GATE 1 (allow_scope=True)"
+
+
+def test_public_route_admits_plain_owner(db_session: Session) -> None:
+    """/public is BASIC_ACCESS + GATE 2 like /share (update_persona_public_status checks
+    owner / owner-group / global MANAGE_AGENTS). Requiring ADD_AGENTS at GATE 1 would 403
+    an owner who can publish the same agent through /share."""
+    owner = create_test_user(db_session, "public-route-owner")
+    owner.effective_permissions = [Permission.BASIC_ACCESS.value]
+    db_session.commit()
+
+    assert has_permission(owner, Permission.ADD_AGENTS) is PermissionAuthority.NONE, (
+        "owner should not hold ADD_AGENTS, else the gate below proves nothing"
     )
+    assert _route_admits(patch_user_persona_public_status, "user", owner)
 
 
 def test_persona_share_projection_tracks_share_guard_not_edit(

@@ -178,9 +178,10 @@ def patch_persona_visibility(
 def patch_user_persona_public_status(
     persona_id: int,
     is_public_request: IsPublicRequest,
-    # allow_scope: update_persona_public_status enforces ownership at GATE 2, and /share
-    # already publishes for a scoped owner.
-    user: User = Depends(require_permission(Permission.ADD_AGENTS, allow_scope=True)),
+    # BASIC_ACCESS + GATE 2, matching /share: update_persona_public_status enforces
+    # owner / owner-group / global MANAGE_AGENTS. Requiring ADD_AGENTS here would 403 an
+    # owner who can publish the same agent through /share.
+    user: User = Depends(require_permission(Permission.BASIC_ACCESS)),
     db_session: Session = Depends(get_session),
 ) -> None:
     try:

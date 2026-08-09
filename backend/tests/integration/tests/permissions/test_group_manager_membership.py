@@ -288,9 +288,40 @@ def test_manager_cannot_remove_self_from_managed_group(env: _ScopedEnv) -> None:
     assert _group_member_ids(env.managed_group.id) >= {env.manager.id, env.member.id}
 
 
+def test_global_holder_cannot_remove_self_from_their_granting_group(
+    env: _ScopedEnv,
+) -> None:
+    """effective_permissions is derived from group grants, so leaving can revoke the very
+    authority that admitted the caller. The exemption has to be judged against the state
+    after the removal, not before it."""
+    holder = UserManager.create(name="grant_holder")
+    group = UserGroupManager.create(
+        name="grant-source",
+        user_ids=[holder.id],
+        cc_pair_ids=[],
+        user_performing_action=env.admin,
+    )
+    UserGroupManager.wait_for_sync(
+        user_performing_action=env.admin, user_groups_to_check=[group]
+    )
+    UserGroupManager.set_permissions(
+        group, ["manage:user_groups"], env.admin
+    ).raise_for_status()
+
+    resp = call_endpoint(
+        "PATCH",
+        f"/manage/admin/user-group/{group.id}",
+        _patch_group_body([], []),
+        holder.headers,
+        holder.cookies,
+    )
+    assert resp.status_code == 400, resp.text
+    assert holder.id in _group_member_ids(group.id)
+
+
 def test_admin_may_remove_self_from_group(env: _ScopedEnv) -> None:
-    """A global holder keeps authority regardless of membership, so there is no
-    lockout to prevent — the guard must not catch them."""
+    """A global holder whose grant comes from elsewhere keeps authority regardless of
+    this membership, so there is no lockout to prevent — the guard must not catch them."""
     UserGroupManager.add_users(
         env.managed_group, [env.admin.id], user_performing_action=env.admin
     )

@@ -13,8 +13,8 @@ from ee.onyx.server.user_group.models import (
 )
 from onyx.auth.permissions import (
     NON_TOGGLEABLE_PERMISSIONS,
-    has_global_permission,
     has_permission,
+    resolve_effective_permissions,
 )
 from onyx.auth.scoped_permissions import assert_manages_group, assert_within_scope
 from onyx.configs.app_configs import DISABLE_VECTOR_DB
@@ -644,6 +644,31 @@ def _assert_group_update_within_scope(
         )
 
 
+def _retains_group_admin_without(
+    user: User, group_id: int, db_session: Session
+) -> bool:
+    """Whether ``user`` would still hold global MANAGE_USER_GROUPS with ``group_id`` gone.
+
+    Reads grants directly rather than ``effective_permissions``, which still reflects the
+    membership being removed."""
+    granted = {
+        permission.value
+        for permission in db_session.scalars(
+            select(PermissionGrant.permission)
+            .join(
+                User__UserGroup,
+                User__UserGroup.user_group_id == PermissionGrant.group_id,
+            )
+            .where(
+                User__UserGroup.user_id == user.id,
+                User__UserGroup.user_group_id != group_id,
+                PermissionGrant.is_deleted.is_(False),
+            )
+        )
+    }
+    return Permission.MANAGE_USER_GROUPS.value in resolve_effective_permissions(granted)
+
+
 def update_user_group(
     db_session: Session,
     user: User,
@@ -679,11 +704,11 @@ def update_user_group(
     added_user_ids = list(updated_user_ids - current_user_ids)
     removed_user_ids = list(current_user_ids - updated_user_ids)
 
-    # Removing yourself deletes the membership row that carries is_manager, so a scoped
-    # manager would lock themselves out of the group with no way back. A global holder
-    # keeps authority regardless and can re-add themselves, so only scoped is blocked.
-    if user.id in removed_user_ids and not has_global_permission(
-        user, Permission.MANAGE_USER_GROUPS
+    # Removing yourself drops the membership row carrying is_manager, and
+    # effective_permissions is derived from group grants — so leaving can revoke the very
+    # authority that admitted you. Allowed only when a grant survives the removal.
+    if user.id in removed_user_ids and not _retains_group_admin_without(
+        user, user_group_id, db_session
     ):
         raise OnyxError(
             OnyxErrorCode.INVALID_INPUT,

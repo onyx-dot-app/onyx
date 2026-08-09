@@ -595,7 +595,7 @@ def create_update_persona(
 
         # Capture before upsert_persona stages the requested value: autoflush writes it
         # before update_persona_access reads the row.
-        original_is_public = (
+        original_is_public: bool | None = (
             db_session.scalar(select(Persona.is_public).where(Persona.id == persona_id))
             if persona_id is not None
             else None
