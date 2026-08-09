@@ -15,6 +15,8 @@ import { SWR_KEYS } from "@/lib/swr-keys";
 import TextChunk from "@/app/craft/components/TextChunk";
 import ThinkingCard from "@/app/craft/components/ThinkingCard";
 import { BlinkingBar } from "@/app/app/message/BlinkingBar";
+import { ErrorBanner } from "@/app/app/message/Resubmit";
+import { RATE_LIMITED_ERROR_CODE } from "@/app/app/interfaces";
 import { convertMarkdownTablesToTsv } from "@/app/app/message/copyingUtils";
 import CompactionMarker from "@/app/craft/components/CompactionMarker";
 import CraftToolCard from "@/app/craft/components/tool-cards/CraftToolCard";
@@ -248,6 +250,18 @@ export default function BuildMessageList({
             </div>
           );
         case "error":
+          if (item.rateLimit) {
+            return (
+              <div key={item.id} className={cn(topMargin)}>
+                <ErrorBanner
+                  error={item.content}
+                  errorCode={RATE_LIMITED_ERROR_CODE}
+                  isRetryable={false}
+                  details={item.rateLimit}
+                />
+              </div>
+            );
+          }
           return (
             <div
               key={item.id}

@@ -28,7 +28,10 @@ Ordering invariants (asserted by
 
     cadences < probes/connect < mutex leases < PROVISION_DEADLINE
       < ATTEMPT_DEADLINE (== observer staleness threshold)
-      < QUEUE_RESIDENCY < TURN_BUDGET < ACTIVE_TURN_TTL < REQUEST_ID_TTL
+      < QUEUE_RESIDENCY < INTERACTIVE_TURN_HARD_CAP < ACTIVE_TURN_TTL
+      < REQUEST_ID_TTL
+    soft budget == TURN_SOFT_BUDGET_FRACTION x hard cap, per origin
+      (the remainder is the wrap-up window)
     RUNNER_STALE_AFTER == 6 x SSE_KEEPALIVE_INTERVAL
     OPENCODE_PROMPT_INACTIVITY > SANDBOX_APPROVAL_WAIT (configs.py)
     SANDBOX_HEARTBEAT_REFRESH << SANDBOX_IDLE_TIMEOUT (configs.py)
@@ -86,21 +89,39 @@ ATTEMPT_DEADLINE_SECONDS = PROVISION_DEADLINE_SECONDS + ATTEMPT_OVERHEAD_SECONDS
 PROVISION_WAIT_SECONDS = 120.0
 
 # =============================================================================
-# Turn family (root: TURN_BUDGET_SECONDS)
+# Turn family (roots: the per-origin hard caps)
 # =============================================================================
 
-# Wall-clock budget of one agent turn, interactive or scheduled.
-TURN_BUDGET_SECONDS = 30 * 60
+# Hard caps: the executor aborts past these and persists a user-visible
+# error row. Independent per-origin policies (interactive is a latency
+# promise to a waiting user; scheduled runs are headless).
+INTERACTIVE_TURN_HARD_CAP_SECONDS = 30 * 60
+SCHEDULED_RUN_HARD_CAP_SECONDS = 60 * 60
 
-# Margin past the budget before out-of-band cleanup (stuck-run sweeper, turn
+# Past the soft budget the turn-budget plugin steers the agent to wrap up
+# (image/opencode-plugins/turn-budget.ts); the remainder is the wrap-up
+# window, so the hard cap only fires on a stuck or steer-ignoring turn.
+TURN_SOFT_BUDGET_FRACTION = 0.4
+INTERACTIVE_TURN_SOFT_BUDGET_SECONDS = int(
+    TURN_SOFT_BUDGET_FRACTION * INTERACTIVE_TURN_HARD_CAP_SECONDS
+)
+SCHEDULED_RUN_SOFT_BUDGET_SECONDS = int(
+    TURN_SOFT_BUDGET_FRACTION * SCHEDULED_RUN_HARD_CAP_SECONDS
+)
+
+# This close to the hard cap the plugin's converge steer escalates to
+# finish-now (stop and reply immediately).
+TURN_FINAL_NOTICE_MARGIN_SECONDS = 10 * 60
+
+# Margin past the hard cap before out-of-band cleanup (stuck-run sweeper, turn
 # TTL expiry) treats a run/turn as abandoned: a well-behaved turn that hits
-# its own budget must always finalize itself first.
+# its own cap must always finalize itself first.
 TURN_RECLAIM_SLACK_SECONDS = 15 * 60
 
-# Redis TTL of the turn record + active-turn pointer. Refreshed on every
-# heartbeat; the absolute floor is the budget plus slack so a live
-# budget-compliant turn's admission block never evaporates under it.
-ACTIVE_TURN_TTL_SECONDS = TURN_BUDGET_SECONDS + TURN_RECLAIM_SLACK_SECONDS
+# Redis TTL of the turn record + active-turn pointer (interactive turns only;
+# scheduled runs live in Postgres rows). Refreshed on every heartbeat; floor
+# is cap + slack so a live turn's admission block never evaporates under it.
+ACTIVE_TURN_TTL_SECONDS = INTERACTIVE_TURN_HARD_CAP_SECONDS + TURN_RECLAIM_SLACK_SECONDS
 
 # Post-terminal retention of the turn record and the client_request_id →
 # turn_id dedupe key: an idempotent send-message retry (or the attach stream
@@ -109,9 +130,10 @@ TURN_RETENTION_SECONDS = 15 * 60
 REQUEST_ID_TTL_SECONDS = ACTIVE_TURN_TTL_SECONDS + TURN_RETENTION_SECONDS
 
 # Ceiling for background prompt-slot renewal by holders whose progress is
-# client-paced or opaque (session delete, subagent turns). It IS the turn
-# budget: a slot held longer than any turn may run is leaked.
-PROMPT_SLOT_KEEP_ALIVE_MAX_SECONDS = TURN_BUDGET_SECONDS
+# client-paced or opaque (session delete, subagent turns) — all interactive-
+# context, so it IS the interactive hard cap: a slot held longer is leaked.
+# Scheduled turns bound themselves via the transport's absolute timeout.
+PROMPT_SLOT_KEEP_ALIVE_MAX_SECONDS = INTERACTIVE_TURN_HARD_CAP_SECONDS
 
 # =============================================================================
 # Liveness cadence family (root: SSE_KEEPALIVE_INTERVAL, configs.py)

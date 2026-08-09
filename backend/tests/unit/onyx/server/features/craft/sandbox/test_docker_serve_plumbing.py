@@ -246,7 +246,6 @@ def test_build_agents_md_renders_instructions(
     agents_md = mgr._build_agents_md(
         agent_provider=llm_config.provider,
         agent_model=llm_config.model_name,
-        nextjs_port=None,
         connectable_apps_section="",
     )
     assert isinstance(agents_md, str)
@@ -432,6 +431,7 @@ def test_provision_generates_fresh_password_and_injects_into_container_env(
         "ONYX_API_PREFIX",
         OPENCODE_SERVER_PASSWORD,
         "OPENCODE_CONFIG_CONTENT",
+        "ONYX_WEBAPP_ALLOWED_DEV_ORIGINS",
     }
     assert run_calls[0]["ports"] == {
         dev_mode_serve.OPENCODE_SERVE_CONTAINER_PORT: (

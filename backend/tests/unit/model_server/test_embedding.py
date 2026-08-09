@@ -5,9 +5,38 @@ from unittest.mock import MagicMock, patch
 
 import pytest
 
+from model_server import encoders
 from model_server.encoders import embed_text, process_embed_request
+from shared_configs.configs import DEFAULT_DOCUMENT_ENCODER_MODEL
 from shared_configs.enums import EmbedTextType
 from shared_configs.model_server_models import EmbedRequest
+
+_CUSTOM_MODEL_NAME = "custom/embedding-model"
+
+
+@pytest.mark.parametrize(
+    ("model_name", "expected_local_files_only"),
+    [
+        (DEFAULT_DOCUMENT_ENCODER_MODEL, True),
+        (_CUSTOM_MODEL_NAME, False),
+    ],
+)
+def test_only_bundled_embedding_model_uses_local_files(
+    model_name: str,
+    expected_local_files_only: bool,
+) -> None:
+    model = MagicMock()
+    with (
+        patch("sentence_transformers.SentenceTransformer", return_value=model) as load,
+        patch.object(encoders, "_GLOBAL_MODELS_DICT", {}),
+    ):
+        encoders.get_embedding_model(model_name, max_context_length=512)
+
+    load.assert_called_once_with(
+        model_name_or_path=model_name,
+        local_files_only=expected_local_files_only,
+        trust_remote_code=False,
+    )
 
 
 @pytest.mark.asyncio

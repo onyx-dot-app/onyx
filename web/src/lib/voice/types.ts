@@ -11,6 +11,8 @@ export interface VoiceProviderView {
   /** Masked API key (e.g. `"sk-a...b1c2"`). Non-null means a key is stored. */
   api_key: string | null;
   target_uri: string | null;
+  /** Provider-specific config (e.g. Azure `speech_region` / `stt_languages`). */
+  custom_config: Record<string, unknown> | null;
 }
 
 /** A selectable voice option returned by a provider's voices endpoint. */
@@ -27,4 +29,6 @@ export interface VoiceFormValues {
   stt_model: string;
   tts_model: string;
   default_voice: string;
+  /** Comma-separated STT locales (Azure only), e.g. "en-US, fr-FR". */
+  stt_languages: string;
 }

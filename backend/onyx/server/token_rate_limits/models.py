@@ -1,3 +1,5 @@
+from typing import Self
+
 from pydantic import BaseModel, Field, model_validator
 
 from onyx.db.models import TokenRateLimit
@@ -8,16 +10,18 @@ from onyx.db.user_usage import (
     normalize_token_period_hours,
 )
 
+# 1T tokens; stored in thousands so the ceiling stays inside the int32 column.
+MAX_TOKEN_BUDGET_THOUSANDS = 1_000_000_000
 
-class TokenRateLimitArgs(BaseModel):
+
+class _TokenRateLimitArgsBase(BaseModel):
     enabled: bool
-    # Null side exempt. ge/gt=0 — zero/NaN budgets silently disable or break the gate.
     token_budget: int | None = Field(default=None, ge=1)
     period_hours: int = Field(gt=0)
     cost_budget_cents: float | None = Field(default=None, gt=0, allow_inf_nan=False)
 
     @model_validator(mode="after")
-    def validate_budget_set(self) -> "TokenRateLimitArgs":
+    def validate_budget_set(self) -> Self:
         if self.token_budget is None and self.cost_budget_cents is None:
             raise ValueError("Either token_budget or cost_budget_cents must be set")
         if (
@@ -31,6 +35,14 @@ class TokenRateLimitArgs(BaseModel):
         ):
             raise ValueError(COST_BUDGET_PERIOD_ERROR)
         return self
+
+
+class TokenRateLimitArgs(_TokenRateLimitArgsBase):
+    token_budget: int | None = Field(default=None, ge=1, le=MAX_TOKEN_BUDGET_THOUSANDS)
+
+
+class TokenRateLimitUpdateArgs(_TokenRateLimitArgsBase):
+    pass
 
 
 class TokenRateLimitDisplay(BaseModel):

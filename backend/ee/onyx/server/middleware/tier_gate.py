@@ -31,6 +31,7 @@ from ee.onyx.configs.license_enforcement_config import (
 )
 from ee.onyx.utils.tier import get_tier
 from onyx.error_handling.error_codes import OnyxErrorCode
+from onyx.server.middleware.api_prefix import strip_api_prefix
 from onyx.server.settings.models import Tier
 from onyx.server.settings.tier_order import tier_at_least
 from shared_configs.contextvars import get_current_tenant_id
@@ -67,9 +68,7 @@ def add_tier_gate_middleware(app: FastAPI, logger: logging.LoggerAdapter) -> Non
         if not _SORTED_GATES:
             return await call_next(request)
 
-        path = request.url.path
-        if path.startswith("/api/"):
-            path = path[4:]
+        path = strip_api_prefix(request.url.path)
 
         if _is_allowed_path(path):
             return await call_next(request)

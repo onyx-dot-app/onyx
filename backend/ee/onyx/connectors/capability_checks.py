@@ -6,6 +6,7 @@ implementations stay in the OSS connector modules, mirroring the
 ``perm_sync_valid.py`` pattern.
 """
 
+from ee.onyx.connectors.perm_sync_valid import source_has_perm_sync_probe
 from ee.onyx.external_permissions.sync_params import (
     source_requires_doc_sync,
     source_requires_external_group_sync,
@@ -16,6 +17,7 @@ from onyx.connectors.capability_checks.models import (
     CapabilityCheckContext,
     CredentialCapability,
 )
+from onyx.connectors.source_operations import get_source_operations_class
 
 # Named perm-sync checks per source. Empty at framework stage: per-connector
 # work registers named checks here.
@@ -68,8 +70,16 @@ def get_perm_sync_capability_checks(source: DocumentSource) -> list[CapabilityCh
     """Returns the perm-sync capability checks for a source.
 
     Applicable capabilities with no registered named checks get the shared
-    ``validate_perm_sync`` fallback so every sync-capable source has day-one
-    coverage.
+    ``validate_perm_sync`` fallback -- but only for probe-bearing sources,
+    derived from that blob's own dispatch table via
+    ``source_has_perm_sync_probe``. Sync-capable sources where the blob is a
+    no-op get no perm-sync checks at all until named ones are registered; their
+    verdict renders as "no checks available yet" rather than a trivial PASSED
+    built on a no-op probe.
+
+    Ratchet: named checks require a registered source-operations gateway --
+    participation in the checks system is an anti-drift guarantee. Unmigrated
+    sources keep the fallback path.
     """
     applicable = get_applicable_perm_sync_capabilities(source)
     registered_by_capability: dict[CredentialCapability, list[CapabilityCheck]] = {
@@ -80,10 +90,17 @@ def get_perm_sync_capability_checks(source: DocumentSource) -> list[CapabilityCh
             _EXTERNAL_GROUP_SYNC_CHECKS_BY_SOURCE.get(source, [])
         ),
     }
+    assert (
+        not any(registered_by_capability.values())
+        or get_source_operations_class(source) is not None
+    ), (
+        f"{source.value} registers named perm-sync checks but no "
+        "source-operations gateway; migrate the connector first."
+    )
     checks: list[CapabilityCheck] = []
     for capability, registered in registered_by_capability.items():
         if registered:
             checks.extend(registered)
-        elif capability in applicable:
+        elif capability in applicable and source_has_perm_sync_probe(source):
             checks.append(_PermSyncFallbackCheck(source, capability))
     return checks

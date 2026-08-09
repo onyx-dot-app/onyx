@@ -135,6 +135,7 @@ def _get_available_tokens_for_persona(
     persona: Persona,
     db_session: Session,
     user: User,
+    llm_override: LLMOverride | None = None,
 ) -> int:
     def _get_non_reserved_input_tokens(
         model_max_input_tokens: int,
@@ -151,7 +152,7 @@ def _get_available_tokens_for_persona(
             - default_reserved_tokens
         )
 
-    llm = get_llm_for_persona(persona=persona, user=user)
+    llm = get_llm_for_persona(persona=persona, user=user, llm_override=llm_override)
     token_counter = get_llm_token_counter(llm)
 
     if persona.replace_base_system_prompt and persona.system_prompt:
@@ -917,10 +918,16 @@ class AvailableContextTokensResponse(BaseModel):
 @router.get("/available-context-tokens/{session_id}")
 def get_available_context_tokens_for_session(
     session_id: UUID,
+    model_configuration_id: int | None = None,
     user: User = Depends(current_chat_accessible_user),
     db_session: Session = Depends(get_session),
 ) -> AvailableContextTokensResponse:
-    """Return available context tokens for a chat session based on its persona."""
+    """Return available context tokens for a chat session based on its persona.
+
+    ``model_configuration_id`` selects the model the user currently has picked
+    for the session — without it the budget reflects the persona/global
+    default model, which can differ after a mid-session model switch.
+    """
 
     try:
         chat_session = get_chat_session_by_id(
@@ -936,10 +943,16 @@ def get_available_context_tokens_for_session(
     if not chat_session.persona:
         raise HTTPException(status_code=400, detail="Chat session has no persona")
 
+    llm_override = (
+        LLMOverride(model_configuration_id=model_configuration_id)
+        if model_configuration_id is not None
+        else None
+    )
     available = _get_available_tokens_for_persona(
         persona=chat_session.persona,
         user=user,
         db_session=db_session,
+        llm_override=llm_override,
     )
 
     return AvailableContextTokensResponse(available_tokens=available)

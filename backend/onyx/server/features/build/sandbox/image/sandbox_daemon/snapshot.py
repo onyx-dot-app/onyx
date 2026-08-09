@@ -29,6 +29,9 @@ class SnapshotError(RuntimeError):
 
 _SNAPSHOT_ROOTS = frozenset({"outputs", "attachments"})
 _SNAPSHOT_GENERATED_DIR_NAMES = frozenset({"node_modules", ".next"})
+# Excluded so a restore can't reintroduce a stale port/pid that would mislead
+# the webapp tool's liveness check when auto-start is skipped.
+_SNAPSHOT_GENERATED_FILE_NAMES = frozenset({".nextjs-port", "nextjs.pid"})
 MAX_SNAPSHOT_ARCHIVE_BYTES = 100 * 1024 * 1024
 MAX_SNAPSHOT_UNCOMPRESSED_BYTES = 500 * 1024 * 1024
 _ARCHIVE_CHUNK_BYTES = 1024 * 1024
@@ -84,13 +87,14 @@ def _snapshot_dirs(session_path: Path) -> list[str]:
 
 
 def _is_excluded_snapshot_dir(relative_path: Path) -> bool:
-    """True for generated dependency/build directories under outputs/."""
+    """True for generated dependency/build directories, or excluded runtime
+    scratch files, under outputs/."""
     parts = relative_path.parts
-    return (
-        len(parts) >= 2
-        and parts[0] == "outputs"
-        and any(part in _SNAPSHOT_GENERATED_DIR_NAMES for part in parts[1:])
-    )
+    if len(parts) < 2 or parts[0] != "outputs":
+        return False
+    if any(part in _SNAPSHOT_GENERATED_DIR_NAMES for part in parts[1:]):
+        return True
+    return relative_path.name in _SNAPSHOT_GENERATED_FILE_NAMES
 
 
 def _add_excluded_snapshot_path(

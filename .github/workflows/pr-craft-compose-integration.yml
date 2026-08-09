@@ -91,6 +91,7 @@ jobs:
               - 'backend/tests/integration/tests/craft/*.py'
               - 'backend/tests/integration/tests/craft/docker_e2e/**'
               - '.github/workflows/pr-craft-compose-integration.yml'
+              - '.github/actions/setup-test-license/**'
               - '.github/actions/setup-python-and-install-dependencies/**'
               - '.github/actions/login-ecr-pullthrough-cache/**'
 
@@ -206,6 +207,9 @@ jobs:
     name: craft-compose (${{ matrix.test-file.name }})
     needs: [changes, discover-test-files, build-images]
     if: needs.changes.outputs.craft_compose == 'true'
+    permissions:
+      contents: read
+      id-token: write
     runs-on:
       - runs-on
       - runner=4cpu-linux-x64
@@ -232,6 +236,11 @@ jobs:
         uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0
         with:
           persist-credentials: false
+
+      - name: Fetch dev license
+        uses: ./.github/actions/setup-test-license
+        with:
+          aws-oidc-role-arn: ${{ secrets.AWS_OIDC_ROLE_ARN }}
 
       - name: Setup Python + deps
         uses: ./.github/actions/setup-python-and-install-dependencies
@@ -303,6 +312,13 @@ jobs:
           docker ps --format 'table {{.Names}}\t{{.Status}}'
           curl --fail -sS -o /dev/null -w "api_server /health -> %{http_code}\n" \
             http://localhost:8080/health
+
+      - name: Seed dev license
+        run: |
+          docker exec \
+            -e ONYX_DEV_LICENSE="${ONYX_DEV_LICENSE}" \
+            onyx-api_server-1 \
+            python -m scripts.seed_dev_license
 
       - name: Run integration tests
         timeout-minutes: 25

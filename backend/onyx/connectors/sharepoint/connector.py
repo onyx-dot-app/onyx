@@ -68,7 +68,11 @@ from onyx.connectors.models import (
     TabularSection,
     TextSection,
 )
-from onyx.connectors.sharepoint.connector_utils import get_sharepoint_external_access
+from onyx.connectors.sharepoint.connector_utils import (
+    SharepointPermissionCache,
+    get_sharepoint_external_access,
+    get_sharepoint_hierarchy_node_external_access,
+)
 from onyx.db.enums import HierarchyNodeType
 from onyx.file_processing.extract_file_text import extract_text_and_images, get_file_ext
 from onyx.file_processing.file_types import OnyxFileExtensions, OnyxMimeTypes
@@ -461,6 +465,9 @@ class SharepointConnectorCheckpoint(ConnectorCheckpoint):
     # Track yielded document IDs to avoid processing the same document twice.
     # The Microsoft Graph delta API can return the same item on multiple pages.
     seen_document_ids: set[str] = Field(default_factory=set)
+    permission_cache: SharepointPermissionCache = Field(
+        default_factory=SharepointPermissionCache
+    )
 
 
 class SharepointAuthMethod(Enum):
@@ -796,12 +803,14 @@ def _convert_driveitem_to_document_with_permissions(
     access_token: str | None = None,
     treat_sharing_link_as_public: bool = False,
     raw_file_callback: RawFileCallback | None = None,
+    permission_cache: SharepointPermissionCache | None = None,
 ) -> Document | ConnectorFailure | None:
     if not driveitem.name or not driveitem.id:
         raise ValueError("DriveItem name/id is required")
 
     if include_permissions and ctx is None:
         raise ValueError("ClientContext is required for permissions")
+    permission_cache = permission_cache or SharepointPermissionCache()
 
     mime_type = driveitem.mime_type
     if not mime_type or mime_type in OnyxMimeTypes.EXCLUDED_IMAGE_TYPES:
@@ -936,6 +945,7 @@ def _convert_driveitem_to_document_with_permissions(
         external_access = get_sharepoint_external_access(
             ctx=ctx,
             graph_client=graph_client,
+            permission_cache=permission_cache,
             drive_item=sdk_item,
             drive_name=drive_name,
             add_prefix=True,
@@ -978,6 +988,7 @@ def _convert_sitepage_to_document(
     site_name: str | None,
     ctx: ClientContext | None,
     graph_client: GraphClient,
+    permission_cache: SharepointPermissionCache,
     include_permissions: bool = False,
     parent_hierarchy_raw_node_id: str | None = None,
     treat_sharing_link_as_public: bool = False,
@@ -1108,6 +1119,7 @@ def _convert_sitepage_to_document(
         external_access = get_sharepoint_external_access(
             ctx=ctx,  # ty: ignore[invalid-argument-type]
             graph_client=graph_client,
+            permission_cache=permission_cache,
             site_page=site_page,
             add_prefix=True,
             treat_sharing_link_as_public=treat_sharing_link_as_public,
@@ -1152,6 +1164,7 @@ def _convert_driveitem_to_slim_document(
     drive_name: str,
     ctx: ClientContext,
     graph_client: GraphClient,
+    permission_cache: SharepointPermissionCache,
     parent_hierarchy_raw_node_id: str | None = None,
     treat_sharing_link_as_public: bool = False,
 ) -> SlimDocument:
@@ -1162,6 +1175,7 @@ def _convert_driveitem_to_slim_document(
     external_access = get_sharepoint_external_access(
         ctx=ctx,
         graph_client=graph_client,
+        permission_cache=permission_cache,
         drive_item=sdk_item,
         drive_name=drive_name,
         treat_sharing_link_as_public=treat_sharing_link_as_public,
@@ -1183,6 +1197,7 @@ def _convert_sitepage_to_slim_document(
     site_page: dict[str, Any],
     ctx: ClientContext | None,
     graph_client: GraphClient,
+    permission_cache: SharepointPermissionCache,
     parent_hierarchy_raw_node_id: str | None = None,
     treat_sharing_link_as_public: bool = False,
 ) -> SlimDocument:
@@ -1194,6 +1209,7 @@ def _convert_sitepage_to_slim_document(
     external_access = get_sharepoint_external_access(
         ctx=ctx,  # ty: ignore[invalid-argument-type]
         graph_client=graph_client,
+        permission_cache=permission_cache,
         site_page=site_page,
         treat_sharing_link_as_public=treat_sharing_link_as_public,
     )
@@ -2258,7 +2274,11 @@ class SharepointConnector(
 
             # Yield site hierarchy node using helper
             doc_batch.extend(
-                self._yield_site_hierarchy_node(site_descriptor, temp_checkpoint)
+                self._yield_site_hierarchy_node(
+                    site_descriptor,
+                    temp_checkpoint,
+                    include_permissions=include_permissions,
+                )
             )
 
             # Process site documents if flag is True
@@ -2277,7 +2297,11 @@ class SharepointConnector(
                     if drive_web_url:
                         doc_batch.extend(
                             self._yield_drive_hierarchy_node(
-                                site_url, drive_web_url, drive_name, temp_checkpoint
+                                site_url,
+                                drive_web_url,
+                                drive_name,
+                                temp_checkpoint,
+                                include_permissions=include_permissions,
                             )
                         )
 
@@ -2292,6 +2316,7 @@ class SharepointConnector(
                                 drive_name,
                                 folder_path,
                                 temp_checkpoint,
+                                include_permissions=include_permissions,
                             )
                         )
 
@@ -2311,6 +2336,7 @@ class SharepointConnector(
                                     drive_name,
                                     ctx,
                                     self.graph_client,
+                                    temp_checkpoint.permission_cache,
                                     parent_hierarchy_raw_node_id=parent_hierarchy_url,
                                     treat_sharing_link_as_public=self.treat_sharing_link_as_public,
                                 )
@@ -2360,6 +2386,7 @@ class SharepointConnector(
                                         site_page,
                                         ctx,
                                         self.graph_client,
+                                        temp_checkpoint.permission_cache,
                                         parent_hierarchy_raw_node_id=site_descriptor.url,
                                         treat_sharing_link_as_public=self.treat_sharing_link_as_public,
                                     )
@@ -2537,6 +2564,7 @@ class SharepointConnector(
         self,
         site_descriptor: SiteDescriptor,
         checkpoint: SharepointConnectorCheckpoint,
+        include_permissions: bool = False,
     ) -> Generator[HierarchyNode, None, None]:
         """Yield a hierarchy node for a site if not already yielded.
 
@@ -2551,6 +2579,15 @@ class SharepointConnector(
 
         # Extract display name from URL (last path segment)
         display_name = site_url.rstrip("/").split("/")[-1]
+        external_access = None
+        if include_permissions:
+            ctx = self._create_rest_client_context(site_url)
+            external_access = get_sharepoint_hierarchy_node_external_access(
+                ctx,
+                self.graph_client,
+                checkpoint.permission_cache,
+                HierarchyNodeType.SITE,
+            )
 
         yield HierarchyNode(
             raw_node_id=site_url,
@@ -2558,6 +2595,7 @@ class SharepointConnector(
             display_name=display_name,
             link=site_url,
             node_type=HierarchyNodeType.SITE,
+            external_access=external_access,
         )
 
     def _yield_drive_hierarchy_node(
@@ -2566,6 +2604,7 @@ class SharepointConnector(
         drive_web_url: str,
         drive_name: str,
         checkpoint: SharepointConnectorCheckpoint,
+        include_permissions: bool = False,
     ) -> Generator[HierarchyNode, None, None]:
         """Yield a hierarchy node for a drive if not already yielded.
 
@@ -2575,6 +2614,16 @@ class SharepointConnector(
             return
 
         checkpoint.seen_hierarchy_node_raw_ids.add(drive_web_url)
+        external_access = None
+        if include_permissions:
+            ctx = self._create_rest_client_context(site_url)
+            external_access = get_sharepoint_hierarchy_node_external_access(
+                ctx,
+                self.graph_client,
+                checkpoint.permission_cache,
+                HierarchyNodeType.DRIVE,
+                drive_name=drive_name,
+            )
 
         yield HierarchyNode(
             raw_node_id=drive_web_url,
@@ -2582,6 +2631,7 @@ class SharepointConnector(
             display_name=drive_name,
             link=drive_web_url,
             node_type=HierarchyNodeType.DRIVE,
+            external_access=external_access,
         )
 
     def _yield_folder_hierarchy_nodes(
@@ -2591,6 +2641,7 @@ class SharepointConnector(
         drive_name: str,
         folder_path: str,
         checkpoint: SharepointConnectorCheckpoint,
+        include_permissions: bool = False,
     ) -> Generator[HierarchyNode, None, None]:
         """Yield hierarchy nodes for all folders in a path.
 
@@ -2617,6 +2668,16 @@ class SharepointConnector(
                 continue
 
             checkpoint.seen_hierarchy_node_raw_ids.add(folder_url)
+            external_access = None
+            if include_permissions:
+                ctx = self._create_rest_client_context(site_url)
+                external_access = get_sharepoint_hierarchy_node_external_access(
+                    ctx,
+                    self.graph_client,
+                    checkpoint.permission_cache,
+                    HierarchyNodeType.FOLDER,
+                    folder_url=folder_url,
+                )
 
             # Determine parent URL
             if i == 0:
@@ -2633,6 +2694,7 @@ class SharepointConnector(
                 display_name=part,  # Just the folder name
                 link=folder_url,
                 node_type=HierarchyNodeType.FOLDER,
+                external_access=external_access,
             )
 
     def _get_parent_hierarchy_url(
@@ -2727,6 +2789,7 @@ class SharepointConnector(
                 drive_name,
                 folder_path,
                 checkpoint,
+                include_permissions=include_permissions,
             )
 
         parent_hierarchy_url: str | None = None
@@ -2749,6 +2812,7 @@ class SharepointConnector(
                 drive_name,
                 ctx,
                 self.graph_client,
+                permission_cache=checkpoint.permission_cache,
                 include_permissions=include_permissions,
                 parent_hierarchy_raw_node_id=parent_hierarchy_url,
                 graph_api_base=self.graph_api_base,
@@ -2837,7 +2901,9 @@ class SharepointConnector(
                 )
                 # Yield site hierarchy node for the first site
                 yield from self._yield_site_hierarchy_node(
-                    checkpoint.current_site_descriptor, checkpoint
+                    checkpoint.current_site_descriptor,
+                    checkpoint,
+                    include_permissions=include_permissions,
                 )
                 return checkpoint
 
@@ -2979,6 +3045,7 @@ class SharepointConnector(
                     drive_web_url,
                     display_drive_name,
                     checkpoint,
+                    include_permissions=include_permissions,
                 )
 
             # For non-folder-scoped drives, use delta API with per-page
@@ -3139,6 +3206,7 @@ class SharepointConnector(
                                 site_descriptor.drive_name,
                                 client_ctx,
                                 self.graph_client,
+                                permission_cache=checkpoint.permission_cache,
                                 include_permissions=include_permissions,
                                 # Site pages have the site as their parent
                                 parent_hierarchy_raw_node_id=site_descriptor.url,
@@ -3234,7 +3302,9 @@ class SharepointConnector(
             )
             # Yield site hierarchy node for the new site
             yield from self._yield_site_hierarchy_node(
-                checkpoint.current_site_descriptor, checkpoint
+                checkpoint.current_site_descriptor,
+                checkpoint,
+                include_permissions=include_permissions,
             )
             return checkpoint
 
@@ -3345,10 +3415,15 @@ class SharepointConnector(
         yield from self._yield_site_hierarchy_node(
             SiteDescriptor(url=resolved.site_url, drive_name=None, folder_path=None),
             dedup,
+            include_permissions=include_permissions,
         )
         if resolved.drive_web_url:
             yield from self._yield_drive_hierarchy_node(
-                resolved.site_url, resolved.drive_web_url, resolved.drive_name, dedup
+                resolved.site_url,
+                resolved.drive_web_url,
+                resolved.drive_name,
+                dedup,
+                include_permissions=include_permissions,
             )
         yield from self._process_drive_item(
             resolved.driveitem,
@@ -3380,7 +3455,11 @@ class SharepointConnector(
 
         page = self._fetch_single_site_page(cast(str, site.id), document_id)
 
-        yield from self._yield_site_hierarchy_node(site_descriptor, dedup)
+        yield from self._yield_site_hierarchy_node(
+            site_descriptor,
+            dedup,
+            include_permissions=include_permissions,
+        )
 
         ctx: ClientContext | None = None
         if include_permissions:
@@ -3390,6 +3469,7 @@ class SharepointConnector(
             site_descriptor.drive_name,
             ctx,
             self.graph_client,
+            permission_cache=dedup.permission_cache,
             include_permissions=include_permissions,
             parent_hierarchy_raw_node_id=site_descriptor.url,
             treat_sharing_link_as_public=self.treat_sharing_link_as_public,

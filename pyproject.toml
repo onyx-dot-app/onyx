@@ -8,6 +8,7 @@ dependencies = [
     "cohere==7.0.5",
     "fastapi==0.133.1",
     "google-genai==1.52.0",
+    "huggingface-hub==1.26.0",
     "litellm[google]==1.93.0",
     "openai==2.38.0",
     "pydantic==2.12.5",
@@ -195,13 +196,7 @@ model_server = [
     "numpy==2.4.1",
     "sentence-transformers==5.4.1",
     "torch==2.9.1",
-    # Do NOT upgrade to >=5 without addressing the `from_pretrained()` buffer
-    # corruption bug: persistent=False buffers (notably RoPE `inv_freq`) are
-    # loaded with garbage memory, producing all-NaN embeddings.
-    # See https://github.com/huggingface/transformers/issues/44534 and
-    # https://github.com/huggingface/transformers/issues/43950 (both closed
-    # wontfix upstream).
-    "transformers==4.57.6",
+    "transformers==5.14.1",
     "sentry-sdk[fastapi,celery,starlette]==2.14.0",
 ]
 

@@ -1,5 +1,4 @@
 import asyncio
-import tempfile
 from collections.abc import MutableMapping, Sequence
 from pathlib import Path
 from typing import Any
@@ -9,6 +8,7 @@ from starlette.requests import ClientDisconnect
 
 from ee.onyx.server.log_export import api as log_export_api
 from ee.onyx.server.log_export.api import _ExpiringLock, download_api_server_logs
+from ee.onyx.server.log_export.collection import BuiltLogZip
 from onyx.error_handling.error_codes import OnyxErrorCode
 from onyx.error_handling.exceptions import OnyxError
 
@@ -95,14 +95,14 @@ def test_lock_released_even_if_buffer_close_fails(
 
     def build_with_broken_close(
         log_directories: Sequence[Path], scope_note: str
-    ) -> tempfile.SpooledTemporaryFile[bytes]:
-        zip_buffer = real_build(log_directories, scope_note)
+    ) -> BuiltLogZip:
+        built = real_build(log_directories, scope_note)
 
         def broken_close() -> None:
             raise OSError("Close failed.")
 
-        zip_buffer.close = broken_close  # ty: ignore[invalid-assignment]
-        return zip_buffer
+        built.zip_buffer.close = broken_close  # ty: ignore[invalid-assignment]
+        return built
 
     monkeypatch.setattr(log_export_api, "build_log_zip", build_with_broken_close)
 
@@ -153,14 +153,14 @@ def test_lock_released_when_iterator_raises_mid_stream(
 
     def build_with_broken_read(
         log_directories: Sequence[Path], scope_note: str
-    ) -> tempfile.SpooledTemporaryFile[bytes]:
-        zip_buffer = real_build(log_directories, scope_note)
+    ) -> BuiltLogZip:
+        built = real_build(log_directories, scope_note)
 
         def broken_read(size: int = -1) -> bytes:  # noqa: ARG001
             raise OSError("Read failed.")
 
-        zip_buffer.read = broken_read  # ty: ignore[invalid-assignment]
-        return zip_buffer
+        built.zip_buffer.read = broken_read  # ty: ignore[invalid-assignment]
+        return built
 
     monkeypatch.setattr(log_export_api, "build_log_zip", build_with_broken_read)
 

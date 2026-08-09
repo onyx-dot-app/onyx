@@ -227,3 +227,47 @@ def test_real_config_unlocks_config_requiring_checks(
     assert report.connector_id == 42
     assert report.trigger == CapabilityCheckTrigger.CC_PAIR_VALIDATION
     assert report.check_results[0].status == CapabilityCheckStatus.PASSED
+
+
+def test_report_decrypt_emits_a_credential_audit_event(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """
+    Verifies the report run's own decrypt is audited: it is a distinct decrypt
+    site from ``instantiate_connector``, which may not have decrypted at all.
+    """
+    # Precondition.
+    check = _CallableCheck(MagicMock(return_value=None), check_id="instance_check")
+    _patch_runner_environment(monkeypatch, [check])
+    emit = MagicMock()
+    monkeypatch.setattr(runner_module, "emit_credential_access", emit)
+    credential = _make_credential()
+    credential.credential_json = MagicMock()
+    credential.credential_json.get_value.return_value = {"token": "x"}
+
+    # Under test.
+    generate_capability_report(MagicMock(), credential)
+
+    # Postcondition.
+    emit.assert_called_once_with(
+        credential_type="connector",
+        provider=str(DocumentSource.GITHUB),
+        row_id=7,
+    )
+
+
+def test_empty_credential_decrypts_nothing_and_emits_no_audit(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """Verifies a credential-less row produces no phantom audit event."""
+    # Precondition.
+    check = _CallableCheck(MagicMock(return_value=None), check_id="instance_check")
+    _patch_runner_environment(monkeypatch, [check])
+    emit = MagicMock()
+    monkeypatch.setattr(runner_module, "emit_credential_access", emit)
+
+    # Under test.
+    generate_capability_report(MagicMock(), _make_credential())
+
+    # Postcondition.
+    emit.assert_not_called()

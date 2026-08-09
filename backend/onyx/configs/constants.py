@@ -1,3 +1,4 @@
+import logging
 import os
 import platform
 import re
@@ -168,7 +169,37 @@ CELERY_PRUNING_LOCK_TIMEOUT = 3600  # 1 hour (in seconds)
 
 CELERY_PERMISSIONS_SYNC_LOCK_TIMEOUT = 3600  # 1 hour (in seconds)
 
-CELERY_EXTERNAL_GROUP_SYNC_LOCK_TIMEOUT = 300  # 5 min
+# While this lock is held, duplicate dispatches for the same cc_pair exit
+# immediately. Deployments whose group syncs legitimately run for hours should
+# raise this toward the JOB_TIMEOUT crawl deadline (6h) so re-dispatches can't
+# stack concurrent crawls on one heavy worker; a worker that dies mid-sync
+# leaves the lock stuck for at most this TTL.
+# Non-positive values would break the guard (0 = a lock with no TTL that a
+# crashed worker leaves stuck forever; negatives fail acquisition), so clamp
+# bad overrides back to the default — loudly, since an operator who set a
+# long TTL needs to know their duplicate-crawl protection is NOT in effect.
+_EXTERNAL_GROUP_SYNC_LOCK_TIMEOUT_DEFAULT = 300
+_external_group_sync_lock_timeout_raw = os.environ.get(
+    "CELERY_EXTERNAL_GROUP_SYNC_LOCK_TIMEOUT"
+)
+try:
+    _external_group_sync_lock_timeout = (
+        int(_external_group_sync_lock_timeout_raw)
+        if _external_group_sync_lock_timeout_raw
+        else _EXTERNAL_GROUP_SYNC_LOCK_TIMEOUT_DEFAULT
+    )
+except ValueError:
+    _external_group_sync_lock_timeout = -1
+if _external_group_sync_lock_timeout > 0:
+    CELERY_EXTERNAL_GROUP_SYNC_LOCK_TIMEOUT: int = _external_group_sync_lock_timeout
+else:
+    logging.getLogger(__name__).warning(
+        "Ignoring invalid CELERY_EXTERNAL_GROUP_SYNC_LOCK_TIMEOUT=%r "
+        "(must be a positive integer of seconds); using the %ds default.",
+        _external_group_sync_lock_timeout_raw,
+        _EXTERNAL_GROUP_SYNC_LOCK_TIMEOUT_DEFAULT,
+    )
+    CELERY_EXTERNAL_GROUP_SYNC_LOCK_TIMEOUT = _EXTERNAL_GROUP_SYNC_LOCK_TIMEOUT_DEFAULT
 
 CELERY_USER_FILE_PROCESSING_LOCK_TIMEOUT = 30 * 60  # 30 minutes (in seconds)
 
@@ -397,6 +428,7 @@ class FileOrigin(str, Enum):
     GENERATED_REPORT = "generated_report"
     INDEXING_CHECKPOINT = "indexing_checkpoint"
     INDEXING_STAGING = "indexing_staging"
+    LOG_EXPORT = "log_export"
     PLAINTEXT_CACHE = "plaintext_cache"
     OTHER = "other"
     QUERY_HISTORY_CSV = "query_history_csv"
@@ -667,6 +699,10 @@ class OnyxCeleryTask:
 
     EXPORT_QUERY_HISTORY_TASK = "export_query_history_task"
     EXPORT_QUERY_HISTORY_CLEANUP_TASK = "export_query_history_cleanup_task"
+
+    # Admin log export
+    EXPORT_LOGS_COLLECT_TASK = "export_logs_collect_task"
+    EXPORT_LOGS_CLEANUP_TASK = "export_logs_cleanup_task"
 
     # Hook execution log retention
     HOOK_EXECUTION_LOG_CLEANUP_TASK = "hook_execution_log_cleanup_task"

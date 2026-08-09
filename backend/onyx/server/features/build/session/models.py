@@ -279,7 +279,8 @@ class MessageListResponse(BaseModel):
 
 
 class WebappInfo(BaseModel):
-    has_webapp: bool  # Whether a webapp exists in outputs/web
+    # None means the sandbox is unavailable, so existence cannot be inspected.
+    has_webapp: bool | None
     webapp_url: str | None  # URL to access the webapp (e.g., http://localhost:3015)
     status: str  # Sandbox status (running, terminated, etc.)
     ready: bool  # Whether the NextJS dev server is actually responding

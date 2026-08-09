@@ -11,26 +11,28 @@ const mockedApi = api as jest.Mocked<typeof api>;
 const SESSION_ID = "11111111-1111-1111-1111-111111111111";
 
 // Minimal DetailedSessionResponse shapes — loadSession only reads status,
-// session_loaded_in_sandbox, and sandbox.{status,nextjs_port}.
+// session_loaded_in_sandbox, nextjs_port, and sandbox.status.
 function sleepingSession(): unknown {
   return {
     id: SESSION_ID,
     status: "idle",
+    nextjs_port: null,
     session_loaded_in_sandbox: false,
-    sandbox: { id: "sb1", status: "sleeping", nextjs_port: null },
+    sandbox: { id: "sb1", status: "sleeping" },
   };
 }
 
-function runningSession(): unknown {
+function runningSession(nextjsPort: number | null = null): unknown {
   return {
     id: SESSION_ID,
     status: "active",
+    nextjs_port: nextjsPort,
     session_loaded_in_sandbox: true,
-    sandbox: { id: "sb1", status: "running", nextjs_port: null },
+    sandbox: { id: "sb1", status: "running" },
   };
 }
 
-function webappInfo(has_webapp: boolean, ready: boolean): unknown {
+function webappInfo(has_webapp: boolean | null, ready: boolean): unknown {
   return { has_webapp, webapp_url: null, status: "running", ready };
 }
 
@@ -61,6 +63,17 @@ describe("loadSession restore status", () => {
 
     const session = useBuildSessionStore.getState().sessions.get(SESSION_ID);
     expect(session?.sandbox?.status).toBe("running");
+  });
+
+  it("builds the webapp URL from the session port", async () => {
+    mockedApi.fetchSession.mockResolvedValue(runningSession(3210) as never);
+    mockedApi.fetchArtifacts.mockResolvedValue([{ type: "web_app" }] as never);
+
+    await useBuildSessionStore.getState().loadSession(SESSION_ID);
+
+    expect(
+      useBuildSessionStore.getState().sessions.get(SESSION_ID)?.webappUrl
+    ).toBe("http://localhost:3210");
   });
 
   it("marks the sandbox failed when restore itself fails", async () => {
@@ -104,6 +117,104 @@ describe("loadSession restore status", () => {
     session = useBuildSessionStore.getState().sessions.get(SESSION_ID);
     expect(session?.webappNeedsRefresh).toBe(2);
     expect(session?.webappNeedsRemount).toBe(1);
+  });
+
+  it("renders a persisted turn-error row when it is the latest activity", async () => {
+    mockedApi.fetchSession.mockResolvedValue(runningSession() as never);
+    mockedApi.fetchMessages.mockResolvedValue([
+      {
+        id: "user-1",
+        type: "user",
+        content: "Do a thing",
+        timestamp: new Date(),
+        message_metadata: {
+          type: "user_message",
+          content: { type: "text", text: "Do a thing" },
+        },
+      },
+      {
+        id: "error-1",
+        type: "assistant",
+        content: "",
+        timestamp: new Date(),
+        message_metadata: {
+          type: "error",
+          message: "This turn was stopped after reaching its time limit.",
+        },
+      },
+    ] as never);
+
+    await useBuildSessionStore.getState().loadSession(SESSION_ID);
+
+    const session = useBuildSessionStore.getState().sessions.get(SESSION_ID);
+    const assistant = session?.messages.find((message) => {
+      return message.type === "assistant";
+    });
+    expect(assistant?.message_metadata?.streamItems).toEqual([
+      {
+        type: "error",
+        id: "error-1",
+        content: "This turn was stopped after reaching its time limit.",
+      },
+    ]);
+  });
+
+  it("drops a persisted turn-error row once later activity exists", async () => {
+    mockedApi.fetchSession.mockResolvedValue(runningSession() as never);
+    mockedApi.fetchMessages.mockResolvedValue([
+      {
+        id: "user-1",
+        type: "user",
+        content: "Do a thing",
+        timestamp: new Date(),
+        message_metadata: {
+          type: "user_message",
+          content: { type: "text", text: "Do a thing" },
+        },
+      },
+      {
+        id: "error-1",
+        type: "assistant",
+        content: "",
+        timestamp: new Date(),
+        message_metadata: {
+          type: "error",
+          message: "This turn was stopped after reaching its time limit.",
+        },
+      },
+      {
+        id: "user-2",
+        type: "user",
+        content: "Continue",
+        timestamp: new Date(),
+        message_metadata: {
+          type: "user_message",
+          content: { type: "text", text: "Continue" },
+        },
+      },
+      {
+        id: "answer-2",
+        type: "assistant",
+        content: "",
+        timestamp: new Date(),
+        message_metadata: {
+          type: "agent_message",
+          content: { type: "text", text: "Continued and finished." },
+        },
+      },
+    ] as never);
+
+    await useBuildSessionStore.getState().loadSession(SESSION_ID);
+
+    const session = useBuildSessionStore.getState().sessions.get(SESSION_ID);
+    const allItems = (session?.messages ?? [])
+      .filter((message) => message.type === "assistant")
+      .flatMap(
+        (message) =>
+          (message.message_metadata?.streamItems ?? []) as { type: string }[]
+      );
+    expect(allItems.some((item) => item.type === "error")).toBe(false);
+    expect(allItems.some((item) => item.type === "text")).toBe(true);
   });
 
   it("restores persisted agent thought packets as collapsed transcript stream items", async () => {
@@ -512,6 +623,14 @@ describe("waitForWebappReady", () => {
     mockedApi.fetchWebappInfo
       .mockRejectedValueOnce(new Error("sandbox not reachable"))
       .mockResolvedValue(webappInfo(true, true) as never);
+    await waitForWebappReady(SESSION_ID, { intervalMs: 0 });
+    expect(mockedApi.fetchWebappInfo).toHaveBeenCalledTimes(2);
+  });
+
+  it("keeps polling while webapp existence is unknown", async () => {
+    mockedApi.fetchWebappInfo
+      .mockResolvedValueOnce(webappInfo(null, false) as never)
+      .mockResolvedValue(webappInfo(false, false) as never);
     await waitForWebappReady(SESSION_ID, { intervalMs: 0 });
     expect(mockedApi.fetchWebappInfo).toHaveBeenCalledTimes(2);
   });

@@ -13,6 +13,7 @@ from ee.onyx.configs.license_enforcement_config import (
     LICENSE_ENFORCEMENT_ALLOWED_PREFIXES,
 )
 from ee.onyx.server.middleware.license_enforcement import _is_path_allowed
+from onyx.server.middleware import api_prefix
 from onyx.server.settings.models import ApplicationStatus
 
 # Type alias for the middleware harness tuple
@@ -50,6 +51,14 @@ class TestPathAllowlist:
         """Subpaths of allowed prefixes should also be allowed."""
         assert _is_path_allowed("/auth/callback/google") is True
         assert _is_path_allowed("/admin/billing/checkout") is True
+
+    def test_custom_api_prefix_allowlist(self, monkeypatch: pytest.MonkeyPatch) -> None:
+        monkeypatch.setattr(api_prefix, "APP_API_PREFIX", "v2")
+        assert _is_path_allowed(api_prefix.strip_api_prefix("/v2/auth/login")) is True
+        assert (
+            _is_path_allowed(api_prefix.strip_api_prefix("/v2/admin/billing/checkout"))
+            is True
+        )
 
     @pytest.mark.parametrize("path", BLOCKED_PATHS)
     def test_blocked_paths_are_blocked(self, path: str) -> None:

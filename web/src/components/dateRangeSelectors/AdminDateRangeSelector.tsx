@@ -1,12 +1,8 @@
 import React, { memo, useState } from "react";
-import Calendar from "@/refresh-components/Calendar";
-import { Popover } from "@opal/components";
-import Button from "@/refresh-components/buttons/Button";
-import { Button as OpalButton } from "@opal/components";
-import { cn } from "@opal/utils";
-import { format } from "date-fns";
-import { getXDaysAgo } from "./dateUtils";
+import { endOfDay, format, isSameDay, startOfDay, subDays } from "date-fns";
+import { Calendar, Popover, SelectButton } from "@opal/components";
 import { SvgCalendar } from "@opal/icons";
+
 export const THIRTY_DAYS = "30d";
 
 export type DateRangePickerValue = DateRange & {
@@ -20,87 +16,174 @@ export type DateRange =
     }
   | undefined;
 
+type DraftDateRange =
+  | {
+      from: Date;
+      to?: Date;
+    }
+  | undefined;
+
+interface DatePreset {
+  label: string;
+  daysAgo: number;
+}
+
+const PRESETS: DatePreset[] = [
+  { label: "1D", daysAgo: 0 },
+  { label: "7D", daysAgo: 6 },
+  { label: "1M", daysAgo: 30 },
+  { label: "3M", daysAgo: 90 },
+];
+
+function rangeForPreset(preset: DatePreset): Exclude<DateRange, undefined> {
+  const to = endOfDay(new Date());
+  return { from: startOfDay(subDays(to, preset.daysAgo)), to };
+}
+
+function rangesMatch(left: DateRange, right: DateRange): boolean {
+  return Boolean(
+    left?.from &&
+    left.to &&
+    right?.from &&
+    right.to &&
+    isSameDay(left.from, right.from) &&
+    isSameDay(left.to, right.to)
+  );
+}
+
+type SelectorSize = "md" | "sm";
+
 export const AdminDateRangeSelector = memo(function AdminDateRangeSelector({
   value,
   onValueChange,
+  size = "md",
 }: {
   value: DateRange;
   onValueChange: (value: DateRange) => void;
+  size?: SelectorSize;
 }) {
+  const buttonSize = size === "sm" ? "sm" : "md";
   const [isOpen, setIsOpen] = useState(false);
+  const [draftRange, setDraftRange] = useState<DraftDateRange>(value);
+  const [pendingStart, setPendingStart] = useState<Date>();
+  const [hoveredEnd, setHoveredEnd] = useState<Date>();
 
-  const presets = [
-    {
-      label: "Last 30 days",
-      value: {
-        from: getXDaysAgo(30),
-        to: getXDaysAgo(0),
-      },
-    },
-    {
-      label: "Today",
-      value: {
-        from: getXDaysAgo(1),
-        to: getXDaysAgo(0),
-      },
-    },
-  ];
+  const activePreset = PRESETS.find((preset) =>
+    rangesMatch(value, rangeForPreset(preset))
+  );
+  const customActive = !activePreset;
+  const customLabel =
+    customActive && value
+      ? `${format(value.from, value.from.getFullYear() === value.to.getFullYear() ? "MMM d" : "MMM d, y")} – ${format(value.to, value.from.getFullYear() === value.to.getFullYear() ? "MMM d" : "MMM d, y")}`
+      : "Custom";
+
+  function selectPreset(preset: DatePreset) {
+    const range = rangeForPreset(preset);
+    setDraftRange(range);
+    setPendingStart(undefined);
+    setHoveredEnd(undefined);
+    setIsOpen(false);
+    onValueChange(range);
+  }
 
   return (
-    <div className="grid gap-2">
-      <Popover open={isOpen} onOpenChange={setIsOpen}>
-        <Popover.Trigger asChild>
-          {/* TODO(@raunakab): migrate to opal Button once className/iconClassName is resolved */}
-          <Button
-            data-testid="admin-date-range-selector-button"
-            secondary
-            className={cn("justify-start", !value && "text-muted-foreground")}
-            leftIcon={SvgCalendar}
+    <div
+      className="inline-flex max-w-full items-center overflow-x-auto rounded-12 border border-border-02 bg-background-tint-03 p-0.5"
+      role="group"
+      aria-label="Date range"
+      data-testid="admin-date-range-selector"
+    >
+      {PRESETS.map((preset) => {
+        const active = !isOpen && activePreset?.label === preset.label;
+
+        return (
+          <SelectButton
+            key={preset.label}
+            size={buttonSize}
+            state={active ? "selected" : "empty"}
+            aria-pressed={active}
+            onClick={() => selectPreset(preset)}
           >
-            {value?.from
-              ? value.to
-                ? `${format(value.from, "LLL dd, y")} - ${format(
-                    value.to,
-                    "LLL dd, y"
-                  )}`
-                : format(value.from, "LLL dd, y")
-              : "Pick a date range"}
-          </Button>
+            {preset.label}
+          </SelectButton>
+        );
+      })}
+
+      <Popover
+        open={isOpen}
+        onOpenChange={(open) => {
+          setIsOpen(open);
+          setPendingStart(undefined);
+          setHoveredEnd(undefined);
+          setDraftRange(open && customActive ? value : undefined);
+        }}
+      >
+        <Popover.Trigger asChild>
+          <SelectButton
+            size={buttonSize}
+            state={customActive || isOpen ? "selected" : "empty"}
+            rightIcon={customLabel === "Custom" ? SvgCalendar : undefined}
+            aria-label={
+              value
+                ? `Custom range: ${format(value.from, "MMM d, y")} to ${format(value.to, "MMM d, y")}`
+                : "Choose a custom range"
+            }
+            aria-pressed={customActive}
+            aria-haspopup="dialog"
+            aria-expanded={isOpen}
+            data-testid="admin-date-range-selector-button"
+          >
+            {customLabel}
+          </SelectButton>
         </Popover.Trigger>
-        <Popover.Content align="start">
-          <Calendar
-            initialFocus
-            mode="range"
-            defaultMonth={value?.from}
-            selected={value}
-            onSelect={(range) => {
-              if (range?.from) {
-                if (range.to) {
-                  // Normal range selection when initialized with a range
-                  onValueChange({ from: range.from, to: range.to });
-                } else {
-                  // Single date selection when initilized without a range
-                  const to = new Date(range.from);
-                  const from = new Date(to.setDate(to.getDate() - 1));
-                  onValueChange({ from, to });
-                }
+
+        <Popover.Content align="end">
+          <div className="flex w-full justify-center">
+            <Calendar
+              mode="range"
+              defaultMonth={customActive ? value?.from : undefined}
+              selected={draftRange}
+              modifiers={
+                pendingStart && hoveredEnd
+                  ? {
+                      range_preview_start:
+                        pendingStart < hoveredEnd ? pendingStart : hoveredEnd,
+                      range_preview_middle: {
+                        after:
+                          pendingStart < hoveredEnd ? pendingStart : hoveredEnd,
+                        before:
+                          pendingStart < hoveredEnd ? hoveredEnd : pendingStart,
+                      },
+                      range_preview_end:
+                        pendingStart < hoveredEnd ? hoveredEnd : pendingStart,
+                    }
+                  : undefined
               }
-            }}
-            numberOfMonths={2}
-          />
-          <div className="border-t p-3">
-            {presets.map((preset) => (
-              <OpalButton
-                key={preset.label}
-                prominence="internal"
-                width="full"
-                onClick={() => {
-                  onValueChange(preset.value);
-                }}
-              >
-                {preset.label}
-              </OpalButton>
-            ))}
+              onDayMouseEnter={(day) => {
+                if (pendingStart) setHoveredEnd(day);
+              }}
+              onDayClick={(day) => {
+                if (!pendingStart) {
+                  setDraftRange({ from: day });
+                  setPendingStart(day);
+                  setHoveredEnd(undefined);
+                  return;
+                }
+
+                const from = startOfDay(
+                  day < pendingStart ? day : pendingStart
+                );
+                const to = endOfDay(day < pendingStart ? pendingStart : day);
+
+                setPendingStart(undefined);
+                setHoveredEnd(undefined);
+                setDraftRange({ from, to });
+                onValueChange({ from, to });
+                setIsOpen(false);
+              }}
+              numberOfMonths={1}
+              disabled={(date) => date > new Date()}
+            />
           </div>
         </Popover.Content>
       </Popover>

@@ -1,0 +1,23 @@
+services:
+  api_server:
+    environment:
+      - HF_ENDPOINT=${AIRGAP_HF_ENDPOINT:-https://huggingface.co}
+      - USER_AUTH_SECRET=airgap-ci-only-dummy-secret
+    healthcheck:
+      interval: 5s
+      timeout: 5s
+      retries: 3
+      start_period: 120s
+
+  inference_model_server:
+    environment:
+      - HF_ENDPOINT=${AIRGAP_HF_ENDPOINT:-https://huggingface.co}
+    healthcheck:
+      interval: 5s
+      timeout: 5s
+      retries: 3
+      start_period: 120s
+
+networks:
+  default:
+    internal: true

@@ -1,37 +1,91 @@
 "use client";
 
-import {
-  Table,
-  TableHead,
-  TableRow,
-  TableBody,
-  TableCell,
-} from "@/components/ui/table";
-import Title from "@/components/ui/title";
-import { DeleteButton } from "@/components/DeleteButton";
 import { deleteTokenRateLimit, updateTokenRateLimit } from "./lib";
-import { PageLoader, toast } from "@opal/layouts";
+import { ContentAction, PageLoader, Section, toast } from "@opal/layouts";
 import { TokenRateLimitDisplay } from "./types";
 import { errorHandlingFetcher } from "@/lib/fetcher";
 import useSWR, { mutate } from "swr";
-import { Checkbox } from "@opal/components";
-import { TableHeader } from "@/components/ui/table";
-import { Text } from "@opal/components";
-import { Spacer } from "@opal/components";
+import { Button, Switch, Text } from "@opal/components";
+import { SvgTrash, SvgUsers, SvgWallet } from "@opal/icons";
+import { formatCurrencyFromCents, formatTokenCount } from "@/lib/format";
 
 const HOURS_PER_DAY = 24;
-const UTC_DAY_LABEL = "UTC day";
 const UPDATE_ERROR_MESSAGE = "Failed to update token rate limit";
 const DELETE_ERROR_MESSAGE = "Failed to delete token rate limit";
 
-export function formatPeriod(tokenRateLimit: TokenRateLimitDisplay): string {
-  const days = tokenRateLimit.period_hours / HOURS_PER_DAY;
-  return `${days} ${UTC_DAY_LABEL}${days === 1 ? "" : "s"}`;
+function formatBudget(limit: TokenRateLimitDisplay): string {
+  const parts: string[] = [];
+  if (limit.cost_budget_cents != null) {
+    parts.push(formatCurrencyFromCents(limit.cost_budget_cents));
+  }
+  if (limit.token_budget != null) {
+    parts.push(`${formatTokenCount(limit.token_budget * 1000)} tokens`);
+  }
+  if (parts.length === 0) return "No budget set";
+  return `Up to ${parts.join(" or ")}`;
+}
+
+function formatCadence(limit: TokenRateLimitDisplay): string {
+  const days = limit.period_hours / HOURS_PER_DAY;
+  const period = days === 1 ? "every day" : `every ${days} days`;
+  return `Resets ${period} at midnight UTC`;
+}
+
+interface LimitRowProps {
+  limit: TokenRateLimitDisplay;
+  isAdmin: boolean;
+  onToggle: (id: number) => void;
+  onDelete: (id: number) => void;
+}
+
+function LimitRow({ limit, isAdmin, onToggle, onDelete }: LimitRowProps) {
+  const limitLabel = `${formatBudget(limit)}, ${formatCadence(limit)}`;
+
+  return (
+    <div className="rounded-12 border border-border-01 bg-background-neutral-00">
+      <ContentAction
+        sizePreset="main-ui"
+        variant="section"
+        icon={limit.group_name !== undefined ? SvgUsers : SvgWallet}
+        title={formatBudget(limit)}
+        description={formatCadence(limit)}
+        tag={
+          limit.group_name !== undefined
+            ? { title: limit.group_name }
+            : undefined
+        }
+        padding="md"
+        center
+        rightChildren={
+          <div className="flex items-center gap-2">
+            <Switch
+              checked={limit.enabled}
+              disabled={!isAdmin}
+              onCheckedChange={() => onToggle(limit.token_id)}
+              aria-label={
+                limit.enabled ? `Disable ${limitLabel}` : `Enable ${limitLabel}`
+              }
+            />
+            {isAdmin && (
+              <Button
+                variant="danger"
+                prominence="tertiary"
+                icon={SvgTrash}
+                size="sm"
+                tooltip="Delete limit"
+                aria-label={`Delete ${limitLabel}`}
+                onClick={() => onDelete(limit.token_id)}
+              />
+            )}
+          </div>
+        }
+      />
+    </div>
+  );
 }
 
 type TokenRateLimitTableArgs = {
   tokenRateLimits: TokenRateLimitDisplay[];
-  title?: string;
   description?: string;
   fetchUrl: string;
   hideHeading?: boolean;
@@ -40,17 +94,11 @@ type TokenRateLimitTableArgs = {
 
 export const TokenRateLimitTable = ({
   tokenRateLimits,
-  title,
   description,
   fetchUrl,
   hideHeading,
   isAdmin,
 }: TokenRateLimitTableArgs) => {
-  const shouldRenderGroupName = () =>
-    tokenRateLimits.length > 0 &&
-    tokenRateLimits[0] !== undefined &&
-    tokenRateLimits[0].group_name !== undefined;
-
   const handleEnabledChange = async (id: number) => {
     const tokenRateLimit = tokenRateLimits.find(
       (tokenRateLimit) => tokenRateLimit.token_id === id
@@ -86,129 +134,42 @@ export const TokenRateLimitTable = ({
     }
   };
 
-  if (tokenRateLimits.length === 0) {
-    return (
-      <div className="w-full">
-        {!hideHeading && title && <Title>{title}</Title>}
-        {!hideHeading && description && (
-          <>
-            <Spacer rem={0.5} />
-            <Text as="p">{description}</Text>
-            <Spacer rem={0.5} />
-          </>
-        )}
-        {!hideHeading && <Spacer rem={2} />}
-        <Text as="p">No token rate limits set!</Text>
-        {!hideHeading && <Spacer rem={2} />}
-      </div>
-    );
-  }
-
   return (
-    <div className="w-full">
-      {!hideHeading && title && <Title>{title}</Title>}
+    <Section alignItems="stretch" height="auto" gap={0.5}>
       {!hideHeading && description && (
-        <>
-          <Spacer rem={0.5} />
-          <Text as="p">{description}</Text>
-          <Spacer rem={0.5} />
-        </>
+        <Text font="secondary-body" color="text-03" as="p">
+          {description}
+        </Text>
       )}
-      <Table
-        className={`overflow-visible ${
-          !hideHeading && "my-8"
-        } [&_td]:text-center [&_th]:text-center`}
-      >
-        <TableHeader>
-          <TableRow>
-            <TableHead>Enabled</TableHead>
-            {shouldRenderGroupName() && <TableHead>Group Name</TableHead>}
-            <TableHead>Time Window</TableHead>
-            <TableHead>Token Budget</TableHead>
-            <TableHead>Cost Budget (USD)</TableHead>
-            {isAdmin && <TableHead>Delete</TableHead>}
-          </TableRow>
-        </TableHeader>
-        <TableBody>
-          {tokenRateLimits.map((tokenRateLimit) => {
-            return (
-              <TableRow key={tokenRateLimit.token_id}>
-                <TableCell>
-                  <div className="flex justify-center">
-                    <div
-                      onClick={
-                        isAdmin
-                          ? () => handleEnabledChange(tokenRateLimit.token_id)
-                          : undefined
-                      }
-                      className={`px-1 py-0.5 rounded select-none w-24 ${
-                        isAdmin
-                          ? "hover:bg-accent-background cursor-pointer"
-                          : "opacity-50"
-                      }`}
-                    >
-                      <div className="flex items-center justify-center">
-                        <Checkbox
-                          checked={tokenRateLimit.enabled}
-                          onCheckedChange={
-                            isAdmin
-                              ? () =>
-                                  handleEnabledChange(tokenRateLimit.token_id)
-                              : undefined
-                          }
-                        />
-                        <p className="ml-2">
-                          {tokenRateLimit.enabled ? "Enabled" : "Disabled"}
-                        </p>
-                      </div>
-                    </div>
-                  </div>
-                </TableCell>
-                {shouldRenderGroupName() && (
-                  <TableCell className="font-bold text-text-darker">
-                    {tokenRateLimit.group_name}
-                  </TableCell>
-                )}
-                <TableCell>{formatPeriod(tokenRateLimit)}</TableCell>
-                <TableCell>
-                  {tokenRateLimit.token_budget != null
-                    ? (tokenRateLimit.token_budget * 1000).toLocaleString() +
-                      " tokens"
-                    : "—"}
-                </TableCell>
-                <TableCell>
-                  {tokenRateLimit.cost_budget_cents != null
-                    ? "$" + (tokenRateLimit.cost_budget_cents / 100).toFixed(2)
-                    : "—"}
-                </TableCell>
-                {isAdmin && (
-                  <TableCell>
-                    <div className="flex justify-center">
-                      <DeleteButton
-                        onClick={() => handleDelete(tokenRateLimit.token_id)}
-                      />
-                    </div>
-                  </TableCell>
-                )}
-              </TableRow>
-            );
-          })}
-        </TableBody>
-      </Table>
-    </div>
+      {tokenRateLimits.length === 0 ? (
+        <div className="rounded-12 border border-dashed border-border-02 p-4">
+          <Text font="secondary-body" color="text-03" as="p">
+            No limits yet. Create a spending limit to cap usage.
+          </Text>
+        </div>
+      ) : (
+        tokenRateLimits.map((tokenRateLimit) => (
+          <LimitRow
+            key={tokenRateLimit.token_id}
+            limit={tokenRateLimit}
+            isAdmin={isAdmin}
+            onToggle={handleEnabledChange}
+            onDelete={handleDelete}
+          />
+        ))
+      )}
+    </Section>
   );
 };
 
 export const GenericTokenRateLimitTable = ({
   fetchUrl,
-  title,
   description,
   hideHeading,
   responseMapper,
   isAdmin = true,
 }: {
   fetchUrl: string;
-  title?: string;
   description?: string;
   hideHeading?: boolean;
   responseMapper?: (data: any) => TokenRateLimitDisplay[];
@@ -236,7 +197,6 @@ export const GenericTokenRateLimitTable = ({
     <TokenRateLimitTable
       tokenRateLimits={processedData ?? []}
       fetchUrl={fetchUrl}
-      title={title}
       description={description}
       hideHeading={hideHeading}
       isAdmin={isAdmin}

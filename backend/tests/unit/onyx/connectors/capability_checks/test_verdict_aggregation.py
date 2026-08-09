@@ -82,10 +82,10 @@ def test_required_indeterminate_outranks_optional_failure() -> None:
     )
 
 
-def test_optional_failure_outranks_optional_indeterminate() -> None:
+def test_mixed_optional_degradations_pass_with_warnings() -> None:
     """
-    Verifies that with the required core verified, a definite warning outranks
-    a transient non-required indeterminate.
+    Verifies that with the required core verified, non-required failures and
+    indeterminates together downgrade to a single warnings verdict.
     """
     # Precondition.
     results = [
@@ -135,16 +135,64 @@ def test_empty_results_yield_skipped() -> None:
     assert aggregate_capability_verdict(True, []) == CapabilityVerdict.SKIPPED
 
 
-def test_skipped_mixed_with_passed_yields_passed() -> None:
-    """Verifies that partial skips do not mask passing required checks."""
+def test_required_skip_blocks_pass() -> None:
+    """
+    Verifies that a skipped required check blocks any pass-ish claim: the
+    capability's core is unverified until the check actually runs.
+    """
     # Precondition.
     results = [
         _result(CapabilityCheckStatus.PASSED),
-        _result(CapabilityCheckStatus.SKIPPED),
+        _result(CapabilityCheckStatus.SKIPPED, required=True),
+    ]
+
+    # Under test and postcondition.
+    assert aggregate_capability_verdict(True, results) == CapabilityVerdict.SKIPPED
+
+
+def test_required_skip_outranks_optional_failure() -> None:
+    """
+    Verifies precedence: an unverified required core blocks the warnings verdict
+    a non-required failure would otherwise produce.
+    """
+    # Precondition.
+    results = [
+        _result(CapabilityCheckStatus.FAILED, required=False),
+        _result(CapabilityCheckStatus.SKIPPED, required=True),
+    ]
+
+    # Under test and postcondition.
+    assert aggregate_capability_verdict(True, results) == CapabilityVerdict.SKIPPED
+
+
+def test_optional_skip_does_not_downgrade() -> None:
+    """Verifies that a skipped non-required check leaves PASSED intact."""
+    # Precondition.
+    results = [
+        _result(CapabilityCheckStatus.PASSED),
+        _result(CapabilityCheckStatus.SKIPPED, required=False),
     ]
 
     # Under test and postcondition.
     assert aggregate_capability_verdict(True, results) == CapabilityVerdict.PASSED
+
+
+def test_lone_optional_indeterminate_warns() -> None:
+    """
+    Verifies that a non-required indeterminate downgrades to warnings rather
+    than escalating to INDETERMINATE: the required core is verified.
+    """
+    # Precondition.
+    results = [
+        _result(CapabilityCheckStatus.PASSED),
+        _result(CapabilityCheckStatus.INDETERMINATE, required=False),
+    ]
+
+    # Under test and postcondition.
+    assert (
+        aggregate_capability_verdict(True, results)
+        == CapabilityVerdict.PASSED_WITH_WARNINGS
+    )
 
 
 def test_all_passed_yields_passed() -> None:

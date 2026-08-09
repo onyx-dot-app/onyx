@@ -7,7 +7,10 @@ from onyx.server.features.build.sandbox.docker.docker_sandbox_manager import (
     build_sandbox_labels,
 )
 from onyx.server.features.build.sandbox.labels import LABEL_PROVISIONING_ATTEMPT
-from onyx.server.features.build.sandbox.nextjs_dev import build_nextjs_start_script
+from onyx.server.features.build.sandbox.nextjs_dev import (
+    build_nextjs_start_script,
+    build_webapp_script_write_snippet,
+)
 from onyx.server.features.build.sandbox.session_workspace import (
     SETUP_IN_PROGRESS_MARKER,
     build_session_workspace_setup_script,
@@ -40,11 +43,13 @@ class TestWorkspaceExistsCheck:
 
 class TestSetupScriptReplaySafety:
     def test_marker_brackets_the_setup(self) -> None:
+        # The start-webapp.sh write is the last real mutation of the
+        # workspace; it must land between touch and removal of the marker.
         script = _setup_script()
         touch_index = script.index(f"touch {_SESSION_PATH}/{SETUP_IN_PROGRESS_MARKER}")
         remove_index = script.index(f"rm -f {_SESSION_PATH}/{SETUP_IN_PROGRESS_MARKER}")
-        outputs_index = script.index("Copying outputs template")
-        assert touch_index < outputs_index < remove_index
+        script_write_index = script.index(f"> {_SESSION_PATH}/start-webapp.sh")
+        assert touch_index < script_write_index < remove_index
 
     def test_materialization_serialized_with_session_flock(self) -> None:
         script = _setup_script()
@@ -52,13 +57,21 @@ class TestSetupScriptReplaySafety:
         # The flock must open before any workspace mutation.
         assert script.index("flock -x 8") < script.index("mkdir -p")
 
-    def test_dev_server_starts_outside_the_setup_lock(self) -> None:
-        # A backgrounded dev server inside the flock subshell would inherit
-        # fd 8 and hold the setup lock for its entire lifetime, deadlocking
-        # every later repair/restore. It must start after the lock releases.
-        script = _setup_script()
-        lock_close = script.index(f"8>{_SESSION_PATH}.setup.lock")
-        assert script.index("bun run dev") > lock_close
+    def test_setup_never_eagerly_installs_or_starts_dev_server(self) -> None:
+        # Setup is lazy: it writes start-webapp.sh but never itself scaffolds
+        # outputs/web, installs deps, or execs a dev server. Subtracting the
+        # printf'd start-webapp.sh payload (the one place those commands may
+        # legitimately appear, as inert quoted text) must leave a script with
+        # no scaffold/install/dev-server invocations at all.
+        script = _setup_script(nextjs_port=3010)
+        remainder = script.replace(
+            build_webapp_script_write_snippet(_SESSION_PATH, 3010), ""
+        )
+        assert "bun install" not in remainder
+        assert "bun run dev" not in remainder
+        assert "cp -r" not in remainder
+        assert "start-webapp.sh" in script
+        assert f"chmod 444 {_SESSION_PATH}/start-webapp.sh" in script
 
     def test_agents_md_is_shell_quoted(self) -> None:
         # Content with quotes must round-trip through printf without breaking

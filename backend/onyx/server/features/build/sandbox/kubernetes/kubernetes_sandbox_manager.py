@@ -115,7 +115,12 @@ from onyx.server.features.build.sandbox.models import (
     SandboxProvisionContentionError,
     SnapshotResult,
 )
-from onyx.server.features.build.sandbox.nextjs_dev import build_nextjs_start_script
+from onyx.server.features.build.sandbox.nextjs_dev import (
+    WEBAPP_ABSENT_SENTINEL,
+    WEBAPP_AUTOSTART_SENTINEL,
+    allowed_dev_origins,
+    build_webapp_restore_script,
+)
 from onyx.server.features.build.sandbox.serve_transport import ServeConnectionInfo
 from onyx.server.features.build.sandbox.session_workspace import (
     SESSIONS_ROOT,
@@ -171,6 +176,10 @@ _OPENCODE_SESSION_TAG_PLUGIN_PATH = "/workspace/opencode-plugins/session-proxy-t
 # Surfaces the no-op `connect_app` tool; always on. Its "ask" permission is what
 # the api-server intercepts to drive the connect-app OAuth flow.
 _OPENCODE_CONNECT_APP_PLUGIN_PATH = "/workspace/opencode-plugins/connect-app.ts"
+# Soft turn-budget wrap-up steer (reads the per-turn deadline stamp).
+_OPENCODE_TURN_BUDGET_PLUGIN_PATH = "/workspace/opencode-plugins/turn-budget.ts"
+# Surfaces the `webapp` tool (start/status/logs/restart); always on.
+_OPENCODE_WEBAPP_PLUGIN_PATH = "/workspace/opencode-plugins/webapp.ts"
 
 
 _PROXY_RESOLVE_RETRY_ATTEMPTS = 5
@@ -434,7 +443,6 @@ class KubernetesSandboxManager(SandboxManager):
         connectable_apps_section: str,
         provider: str | None = None,
         model_name: str | None = None,
-        nextjs_port: int | None = None,
         disabled_tools: list[str] | None = None,
         user_name: str | None = None,
     ) -> str:
@@ -444,7 +452,6 @@ class KubernetesSandboxManager(SandboxManager):
             connectable_apps_section=connectable_apps_section,
             provider=provider,
             model_name=model_name,
-            nextjs_port=nextjs_port,
             disabled_tools=disabled_tools,
             user_name=user_name,
             organization_instructions=load_settings().craft_instructions,
@@ -529,6 +536,12 @@ class KubernetesSandboxManager(SandboxManager):
                         key=self._OPENCODE_CONFIG_SECRET_KEY,
                     )
                 ),
+            ),
+            # In the pod env so a dev server the agent starts by hand inherits
+            # the allowlist the managed start path also sets.
+            client.V1EnvVar(
+                name="ONYX_WEBAPP_ALLOWED_DEV_ORIGINS",
+                value=allowed_dev_origins(),
             ),
         ]
 
@@ -1096,6 +1109,8 @@ class KubernetesSandboxManager(SandboxManager):
                     disabled_tools=OPENCODE_DISABLED_TOOLS,
                     plugins=[
                         _OPENCODE_CONNECT_APP_PLUGIN_PATH,
+                        _OPENCODE_TURN_BUDGET_PLUGIN_PATH,
+                        _OPENCODE_WEBAPP_PLUGIN_PATH,
                         _OPENCODE_SESSION_TAG_PLUGIN_PATH,
                     ],
                 )
@@ -1364,11 +1379,12 @@ class KubernetesSandboxManager(SandboxManager):
 
         Executes kubectl exec to:
         1. Create sessions/$session_id/ directory
-        2. Copy outputs template from local templates (downloaded during init)
-        3. Write AGENTS.md
-        4. Write opencode.json with LLM config
-        5. Start Next.js dev server (skipped when ``nextjs_port`` is None,
-           e.g. for headless scheduled-task fires that don't need a preview).
+        2. Write AGENTS.md
+        3. Write opencode.json with LLM config
+        4. Write the tamper-hardened ``start-webapp.sh`` pair (skipped when
+           ``nextjs_port`` is None, e.g. for headless scheduled-task fires
+           that don't need a preview). Does NOT scaffold ``outputs/web`` or
+           start a dev server — webapp provisioning is lazy.
 
         Args:
             sandbox_id: The sandbox ID (must be provisioned)
@@ -1390,7 +1406,6 @@ class KubernetesSandboxManager(SandboxManager):
             connectable_apps_section=connectable_apps_section,
             provider=llm_config.provider,
             model_name=llm_config.model_name,
-            nextjs_port=nextjs_port,
             disabled_tools=OPENCODE_DISABLED_TOOLS,
             user_name=user_name,
         )
@@ -1780,15 +1795,18 @@ echo "Session cleanup complete"
         1. Read the snapshot from Onyx FileStore in the api-server
         2. Stream it to the sidecar, which extracts it in the session workspace
         3. Regenerate configuration files (AGENTS.md, opencode.json)
-        4. Start the NextJS dev server (skipped when ``nextjs_port`` is None,
-           e.g. for headless scheduled-task fires that don't attach a preview).
+        4. Rewrite ``start-webapp.sh`` with the re-allocated port (skipped
+           when ``nextjs_port`` is None, e.g. headless scheduled-task fires)
+           and auto-start the dev server in the background, but only if the
+           restored snapshot actually contains a webapp
+           (``outputs/web/package.json``).
 
         Args:
             sandbox_id: The sandbox ID
             session_id: The session ID to restore
             snapshot_storage_path: FileStore file id for the snapshot archive
             nextjs_port: Port number for the NextJS dev server, or None to
-                skip starting it.
+                skip rewriting/starting it.
             llm_config: LLM provider configuration for opencode.json
 
         Raises:
@@ -1830,21 +1848,33 @@ echo "Session cleanup complete"
             )
 
             if nextjs_port is not None:
-                start_script = build_nextjs_start_script(
-                    safe_session_path, nextjs_port, check_node_modules=True
+                restore_webapp_script = build_webapp_restore_script(
+                    safe_session_path, nextjs_port
                 )
-                k8s_stream(
+                exec_response = k8s_stream(
                     self._stream_core_api.connect_get_namespaced_pod_exec,
                     name=pod_name,
                     namespace=self._namespace,
                     container=_SANDBOX_CONTAINER_NAME,
-                    command=["/bin/sh", "-c", start_script],
+                    command=["/bin/sh", "-c", restore_webapp_script],
                     stderr=True,
                     stdin=False,
                     stdout=True,
                     tty=False,
                     _request_timeout=WORKSPACE_SETUP_DEADLINE_SECONDS,
                 )
+                # The exec client returns buffered output without raising on
+                # timeout or nonzero exit, so the sentinel is the only
+                # reliable success signal (same contract as workspace setup).
+                if (
+                    WEBAPP_AUTOSTART_SENTINEL not in exec_response
+                    and WEBAPP_ABSENT_SENTINEL not in exec_response
+                ):
+                    raise RuntimeError(
+                        f"Webapp bootstrap-script restore for session "
+                        f"{session_id} did not complete (output tail: "
+                        f"{exec_response[-500:]!r})"
+                    )
         except ApiException as e:
             raise RuntimeError(f"Failed to restore snapshot: {e}") from e
 
@@ -1862,13 +1892,16 @@ echo "Session cleanup complete"
         mcp_servers: Sequence[CraftMCPServerConfig] = (),
     ) -> None:
         """Rewrite generated session configuration and managed symlinks."""
+        # nextjs_port stays in the signature to match the abstract contract
+        # (base.py) shared with restore_snapshot's own webapp-script rewrite;
+        # AGENTS.md no longer embeds it.
+        _ = nextjs_port
         pod_name = self._get_pod_name(str(sandbox_id))
         session_path = shlex.quote(f"/workspace/sessions/{session_id}")
         agent_instructions = self._load_agent_instructions(
             connectable_apps_section=connectable_apps_section,
             provider=agent_provider,
             model_name=agent_model,
-            nextjs_port=nextjs_port,
             disabled_tools=OPENCODE_DISABLED_TOOLS,
             user_name=user_name,
         )
