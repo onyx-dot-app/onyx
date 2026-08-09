@@ -87,18 +87,19 @@ export default function AgentCard({ agent }: AgentCardProps) {
               description={agent.description}
               rightChildren={
                 <>
-                  {can(agent, "view_stats") && businessTier && (
-                    // TODO(@raunakab): migrate to opal Button once className/iconClassName is resolved
-                    <IconButton
-                      icon={SvgBarChart}
-                      tertiary
-                      onClick={noProp(() =>
-                        router.push(`/ee/agents/stats/${agent.id}` as Route)
-                      )}
-                      tooltip="View Agent Stats"
-                      className="hidden group-hover/AgentCard:flex"
-                    />
-                  )}
+                  {can(agent, "view_stats") &&
+                    businessTier && (
+                      // TODO(@raunakab): migrate to opal Button once className/iconClassName is resolved
+                      <IconButton
+                        icon={SvgBarChart}
+                        tertiary
+                        onClick={noProp(() =>
+                          router.push(`/ee/agents/stats/${agent.id}` as Route)
+                        )}
+                        tooltip="View Agent Stats"
+                        className="hidden group-hover/AgentCard:flex"
+                      />
+                    )}
                   {can(agent, "edit") && (
                     // TODO(@raunakab): migrate to opal Button once className/iconClassName is resolved
                     <IconButton

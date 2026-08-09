@@ -70,7 +70,7 @@ function renderAccountTypeColumn(_value: unknown, row: MemberRow) {
       <Icon className="w-4 h-4 text-text-03" />
       <Text as="span" mainUiBody text03>
         {row.account_type
-          ? ACCOUNT_TYPE_LABELS[row.account_type] ?? row.account_type
+          ? (ACCOUNT_TYPE_LABELS[row.account_type] ?? row.account_type)
           : "\u2014"}
       </Text>
     </div>
