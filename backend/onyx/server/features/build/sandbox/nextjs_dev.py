@@ -15,6 +15,9 @@ _TEMPLATE_NEXT_CONFIG = (
     Path(__file__).parent / "image" / "templates" / "outputs" / "web" / "next.config.ts"
 )
 
+# Canonical scaffold marker shared by bootstrap, restore, and API detection.
+WEBAPP_PACKAGE_JSON_PATH = "outputs/web/package.json"
+
 
 def webapp_base_path(session_id: UUID | str) -> str:
     """Base path a session's Next.js dev server serves under.
@@ -135,7 +138,7 @@ PORT={nextjs_port}
 
     flock -x 9
 
-    if [ ! -f "$SESSION_PATH/outputs/web/package.json" ]; then
+    if [ ! -f "$SESSION_PATH/{WEBAPP_PACKAGE_JSON_PATH}" ]; then
         echo "Copying outputs template"
         if [ -d /workspace/templates/outputs ]; then
             cp -r /workspace/templates/outputs/* "$SESSION_PATH/outputs/"
@@ -186,6 +189,36 @@ echo "server did not become ready - check nextjs.log; if it crashed, fix the err
 echo "--- last 30 lines of nextjs.log ---" >&2
 tail -n 30 "$SESSION_PATH/nextjs.log" 2>/dev/null >&2 || true
 exit 1
+"""
+
+
+# Restore-script sentinels: the k8s exec client returns buffered output
+# without raising on timeout or nonzero exit, so callers verify one of these
+# appeared instead of trusting a clean return.
+WEBAPP_AUTOSTART_SENTINEL = "ONYX_WEBAPP_AUTOSTART"
+WEBAPP_ABSENT_SENTINEL = "ONYX_WEBAPP_ABSENT"
+
+
+def build_webapp_restore_script(session_path: str, nextjs_port: int) -> str:
+    """Builds the shell script both sandbox managers run after a snapshot
+    restore.
+
+    Ports change across sleep/wake, so the script is always rewritten. Auto-starts the dev server only if the restored snapshot
+    actually contains a webapp (``outputs/web/package.json``), and backgrounds
+    it so wake isn't blocked on a cold bun install (node_modules is excluded
+    from snapshots). Echoes exactly one of the sentinels above on completion;
+    they are diagnostics for Docker and the success signal for Kubernetes.
+    """
+    write_snippet = build_webapp_script_write_snippet(session_path, nextjs_port)
+    return f"""
+set -e
+{write_snippet}
+if [ -f {session_path}/{WEBAPP_PACKAGE_JSON_PATH} ]; then
+    nohup bash {session_path}/start-webapp.sh > {session_path}/webapp-bootstrap.log 2>&1 &
+    echo "{WEBAPP_AUTOSTART_SENTINEL}"
+else
+    echo "{WEBAPP_ABSENT_SENTINEL}"
+fi
 """
 
 

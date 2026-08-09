@@ -1,234 +1,26 @@
 "use client";
 
-import SimpleTabs from "@/refresh-components/SimpleTabs";
-import { SettingsLayouts, toast } from "@opal/layouts";
-import { Button, Text } from "@opal/components";
-import { useState } from "react";
-import {
-  insertGlobalTokenRateLimit,
-  insertGroupTokenRateLimit,
-  insertUserTokenRateLimit,
-} from "./lib";
-import { Scope, TokenRateLimit } from "./types";
-import { GenericTokenRateLimitTable } from "./TokenRateLimitTables";
-import { mutate } from "swr";
-import { SWR_KEYS } from "@/lib/swr-keys";
-import CreateRateLimitModal from "./CreateRateLimitModal";
-import { useTierAtLeast } from "@/hooks/useTierAtLeast";
-import { Tier } from "@/lib/settings/types";
-import { SvgGlobe, SvgPlusCircle, SvgUser, SvgUsers } from "@opal/icons";
-import { Section } from "@/layouts/general-layouts";
+import { redirect } from "next/navigation";
+import type { Route } from "next";
+import { EE_ENABLED } from "@/lib/constants";
 import { ADMIN_ROUTES } from "@/lib/admin-routes";
-
-const route = ADMIN_ROUTES.TOKEN_RATE_LIMITS;
-const GLOBAL_TOKEN_FETCH_URL = SWR_KEYS.globalTokenRateLimits;
-const USER_TOKEN_FETCH_URL = SWR_KEYS.userTokenRateLimits;
-const USER_GROUP_FETCH_URL = SWR_KEYS.userGroupTokenRateLimits;
-
-const GLOBAL_DESCRIPTION =
-  "Global rate limits apply to all users, user groups, and API keys. When the global \
-  rate limit is reached, no more tokens can be spent.";
-const USER_DESCRIPTION =
-  "User rate limits apply to individual users. When a user reaches a limit, they will \
-  be temporarily blocked from spending tokens.";
-const USER_GROUP_DESCRIPTION =
-  "User group rate limits apply to all users in a group. When a group reaches a limit, \
-  all users in the group will be temporarily blocked from spending tokens, regardless \
-  of their individual limits. If a user is in multiple groups, the most lenient limit \
-  will apply.";
-const CREATE_ERROR_MESSAGE = "Failed to create token rate limit";
-
-const handleCreateTokenRateLimit = async (
-  target_scope: Scope,
-  period_hours: number,
-  token_budget: number | null,
-  cost_budget_cents: number | null,
-  group_id: number = -1
-): Promise<void> => {
-  const tokenRateLimitArgs = {
-    enabled: true,
-    token_budget: token_budget,
-    period_hours: period_hours,
-    cost_budget_cents: cost_budget_cents,
-  };
-
-  if (target_scope === Scope.GLOBAL) {
-    await insertGlobalTokenRateLimit(tokenRateLimitArgs);
-    return;
-  }
-
-  if (target_scope === Scope.USER) {
-    await insertUserTokenRateLimit(tokenRateLimitArgs);
-    return;
-  }
-
-  if (target_scope === Scope.USER_GROUP) {
-    await insertGroupTokenRateLimit(tokenRateLimitArgs, group_id);
-    return;
-  }
-
-  throw new Error(`Invalid target_scope: ${target_scope}`);
-};
-
-function Main() {
-  const [tabIndex, setTabIndex] = useState(0);
-  const [modalIsOpen, setModalIsOpen] = useState(false);
-
-  const enterpriseTier = useTierAtLeast(Tier.ENTERPRISE);
-
-  const updateTable = (target_scope: Scope) => {
-    if (target_scope === Scope.GLOBAL) {
-      mutate(GLOBAL_TOKEN_FETCH_URL);
-      setTabIndex(0);
-    } else if (target_scope === Scope.USER) {
-      mutate(USER_TOKEN_FETCH_URL);
-      setTabIndex(1);
-    } else if (target_scope === Scope.USER_GROUP) {
-      mutate(USER_GROUP_FETCH_URL);
-      setTabIndex(2);
-    }
-  };
-
-  const handleSubmit = async (
-    target_scope: Scope,
-    period_hours: number,
-    token_budget: number | null,
-    cost_budget_cents: number | null,
-    group_id: number = -1
-  ): Promise<void> => {
-    try {
-      await handleCreateTokenRateLimit(
-        target_scope,
-        period_hours,
-        token_budget,
-        cost_budget_cents,
-        group_id
-      );
-      setModalIsOpen(false);
-      toast.success("Token rate limit created!");
-      updateTable(target_scope);
-    } catch (error) {
-      toast.error(
-        error instanceof Error ? error.message : CREATE_ERROR_MESSAGE
-      );
-    }
-  };
-
-  return (
-    <Section alignItems="stretch" justifyContent="start" height="auto">
-      <Text as="p">
-        Token rate limits enable you control how many tokens can be spent in a
-        given time period. With token rate limits, you can:
-      </Text>
-
-      <ul className="list-disc ml-4">
-        <li>
-          <Text as="p">
-            Set a global rate limit to control your team&apos;s overall token
-            spend.
-          </Text>
-        </li>
-        {enterpriseTier && (
-          <>
-            <li>
-              <Text as="p">
-                Set rate limits for users to ensure that no single user can
-                spend too many tokens.
-              </Text>
-            </li>
-            <li>
-              <Text as="p">
-                Set rate limits for user groups to control token spend for your
-                teams.
-              </Text>
-            </li>
-          </>
-        )}
-        <li>
-          <Text as="p">Enable and disable rate limits on the fly.</Text>
-        </li>
-      </ul>
-
-      <Button
-        icon={SvgPlusCircle}
-        prominence="secondary"
-        onClick={() => setModalIsOpen(true)}
-      >
-        Create a Token Rate Limit
-      </Button>
-
-      {enterpriseTier ? (
-        <SimpleTabs
-          tabs={{
-            "0": {
-              name: "Global",
-              icon: SvgGlobe,
-              content: (
-                <GenericTokenRateLimitTable
-                  fetchUrl={GLOBAL_TOKEN_FETCH_URL}
-                  title={"Global Token Rate Limits"}
-                  description={GLOBAL_DESCRIPTION}
-                />
-              ),
-            },
-            "1": {
-              name: "User",
-              icon: SvgUser,
-              content: (
-                <GenericTokenRateLimitTable
-                  fetchUrl={USER_TOKEN_FETCH_URL}
-                  title={"User Token Rate Limits"}
-                  description={USER_DESCRIPTION}
-                />
-              ),
-            },
-            "2": {
-              name: "User Groups",
-              icon: SvgUsers,
-              content: (
-                <GenericTokenRateLimitTable
-                  fetchUrl={USER_GROUP_FETCH_URL}
-                  title={"User Group Token Rate Limits"}
-                  description={USER_GROUP_DESCRIPTION}
-                  responseMapper={(data: Record<string, TokenRateLimit[]>) =>
-                    Object.entries(data).flatMap(([group_name, elements]) =>
-                      elements.map((element) => ({
-                        ...element,
-                        group_name,
-                      }))
-                    )
-                  }
-                />
-              ),
-            },
-          }}
-          value={tabIndex.toString()}
-          onValueChange={(val) => setTabIndex(parseInt(val))}
-        />
-      ) : (
-        <GenericTokenRateLimitTable
-          fetchUrl={GLOBAL_TOKEN_FETCH_URL}
-          title={"Global Token Rate Limits"}
-          description={GLOBAL_DESCRIPTION}
-        />
-      )}
-
-      <CreateRateLimitModal
-        isOpen={modalIsOpen}
-        setIsOpen={() => setModalIsOpen(false)}
-        onSubmit={handleSubmit}
-        forSpecificScope={enterpriseTier ? undefined : Scope.GLOBAL}
-      />
-    </Section>
-  );
-}
+import { SettingsLayouts } from "@opal/layouts";
+import TokenRateLimitsPanel from "./TokenRateLimitsPanel";
 
 export default function Page() {
+  if (EE_ENABLED) {
+    redirect(ADMIN_ROUTES.USAGE.path as Route);
+  }
+
   return (
     <SettingsLayouts.Root>
-      <SettingsLayouts.Header title={route.title} icon={route.icon} divider />
+      <SettingsLayouts.Header
+        title={ADMIN_ROUTES.TOKEN_RATE_LIMITS.title}
+        icon={ADMIN_ROUTES.TOKEN_RATE_LIMITS.icon}
+        divider
+      />
       <SettingsLayouts.Body>
-        <Main />
+        <TokenRateLimitsPanel />
       </SettingsLayouts.Body>
     </SettingsLayouts.Root>
   );
