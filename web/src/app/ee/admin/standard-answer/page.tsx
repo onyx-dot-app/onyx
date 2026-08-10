@@ -240,8 +240,6 @@ const StandardAnswersTable = ({
         <textarea
           autoFocus
           className="grow ml-2 h-6 bg-transparent outline-hidden placeholder-subtle overflow-hidden whitespace-normal resize-none"
-          role="textarea"
-          aria-multiline
           placeholder="Find standard answers by keyword/phrase..."
           value={query}
           onChange={(event) => {

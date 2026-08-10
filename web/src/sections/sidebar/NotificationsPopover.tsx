@@ -128,7 +128,10 @@ export default function NotificationsPopover({
   const sentinelRef = useRef<HTMLDivElement | null>(null);
   const loadMoreRef = useRef(loadMore);
   const lastLoadScrollTopRef = useRef<number | null>(null);
-  loadMoreRef.current = loadMore;
+
+  useEffect(() => {
+    loadMoreRef.current = loadMore;
+  }, [loadMore]);
 
   // Track IDs dismissed during this session (before popover closes)
   const [sessionDismissedIds, setSessionDismissedIds] = useState<Set<number>>(

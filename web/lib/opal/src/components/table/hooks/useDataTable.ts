@@ -270,7 +270,9 @@ export default function useDataTable<TData extends RowData>(
   // Single ref for the whole serverSide config — prevents effects from
   // re-firing when the consumer passes an inline object each render.
   const serverSideRef = useRef(serverSide);
-  serverSideRef.current = serverSide;
+  useEffect(() => {
+    serverSideRef.current = serverSide;
+  }, [serverSide]);
 
   useEffect(() => {
     if (!isServerSide) return;
@@ -423,7 +425,9 @@ export default function useDataTable<TData extends RowData>(
   // ---- selection change callback ------------------------------------------
   const isFirstRenderRef = useRef(true);
   const onSelectionChangeRef = useRef(onSelectionChange);
-  onSelectionChangeRef.current = onSelectionChange;
+  useEffect(() => {
+    onSelectionChangeRef.current = onSelectionChange;
+  }, [onSelectionChange]);
 
   useEffect(() => {
     if (isFirstRenderRef.current) {
@@ -451,10 +455,8 @@ export default function useDataTable<TData extends RowData>(
     table.toggleAllPageRowsSelected(selected);
   };
 
-  // TODO (@raunakab): In server-side mode, these only operate on the loaded
-  // page data, not all rows across all pages. TanStack can't select rows it
-  // doesn't have. Fixing this requires a server-side callback (e.g.
-  // `onSelectAll`) and a `totalItems`-aware selection model.
+  // In server-side mode, these only operate on the loaded page data because
+  // TanStack cannot select rows it has not loaded.
   const toggleAllRowsSelected = (selected: boolean) => {
     table.toggleAllRowsSelected(selected);
   };

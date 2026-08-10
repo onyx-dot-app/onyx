@@ -147,26 +147,18 @@ function ModalContent({
     hasUserTypedRef.current = true;
   }, []);
 
-  const containerNodeRef = React.useRef<HTMLDivElement | null>(null);
-
-  const contentRef = React.useCallback(
-    (node: HTMLDivElement | null) => {
-      if (containerNodeRef.current) {
-        containerNodeRef.current.removeEventListener(
-          "input",
-          handleInput,
-          true
-        );
-      }
-      if (node) {
-        node.addEventListener("input", handleInput, true);
-        containerNodeRef.current = node;
-      } else {
-        containerNodeRef.current = null;
-      }
-    },
-    [handleInput]
+  const [contentNode, setContentNode] = React.useState<HTMLDivElement | null>(
+    null
   );
+
+  React.useEffect(() => {
+    if (!contentNode) return;
+
+    contentNode.addEventListener("input", handleInput, true);
+    return () => {
+      contentNode.removeEventListener("input", handleInput, true);
+    };
+  }, [contentNode, handleInput]);
 
   const handleInteractOutside = React.useCallback(
     (e: Event) => {
@@ -198,9 +190,9 @@ function ModalContent({
       } else if (ref) {
         ref.current = node;
       }
-      contentRef(node);
+      setContentNode(node);
     },
-    [ref, contentRef]
+    [ref]
   );
 
   // Center on [data-main-container] when present (the content area beside

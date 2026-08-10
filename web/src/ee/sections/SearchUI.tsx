@@ -115,7 +115,10 @@ export default function SearchUI({ onDocumentClick }: SearchResultsProps) {
   }, [results]);
 
   // Create a set for fast lookup of LLM-selected docs
-  const llmSelectedSet = new Set(llmSelectedDocIds ?? []);
+  const llmSelectedSet = useMemo(
+    () => new Set(llmSelectedDocIds ?? []),
+    [llmSelectedDocIds]
+  );
 
   // Filter and sort results
   const filteredAndSortedResults = useMemo(() => {

@@ -91,6 +91,9 @@ function EntryInfoPopover({
     return () => observer.disconnect();
   }, [tileElement, onDismiss]);
 
+  // Browser-only: measures the viewport and portals into document.body.
+  if (typeof window === "undefined") return null;
+
   const POPOVER_MAX_H = 240;
   const POPOVER_MAX_W = 320;
   const GAP = 4;

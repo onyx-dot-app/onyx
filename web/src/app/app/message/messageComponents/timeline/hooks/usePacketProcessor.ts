@@ -1,3 +1,8 @@
+/* oxlint-disable react-doctor/no-ref-current-in-render --
+   Render-phase incremental packet processing is this hook's core design:
+   state advances idempotently from a packet-index cursor, so replayed or
+   discarded renders recompute the same result, and consumers (including
+   child mount effects) need the processed state in the same commit. */
 import { useRef, useState, useMemo, useCallback } from "react";
 import {
   Packet,

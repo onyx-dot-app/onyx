@@ -1,6 +1,6 @@
 "use client";
 
-import { useRef } from "react";
+import { useState } from "react";
 import { SvgPlusCircle, SvgMinusCircle } from "@opal/icons";
 import { Button } from "@opal/components";
 import { Disabled } from "@opal/core";
@@ -44,17 +44,33 @@ function TokenLimitSection({
   disabled,
   disabledTooltip,
 }: TokenLimitSectionProps) {
-  const nextKeyRef = useRef(limits.length);
-  const keysRef = useRef<number[]>(limits.map((_, i) => i));
+  const [rowKeys, setRowKeys] = useState<{
+    keys: number[];
+    nextKey: number;
+  }>({
+    keys: limits.map((_, i) => i),
+    nextKey: limits.length,
+  });
 
   // Sync keys if the parent provides a different number of limits externally
   // (e.g. loaded from server after initial mount).
-  if (keysRef.current.length < limits.length) {
-    while (keysRef.current.length < limits.length) {
-      keysRef.current.push(nextKeyRef.current++);
-    }
-  } else if (keysRef.current.length > limits.length) {
-    keysRef.current = keysRef.current.slice(0, limits.length);
+  if (rowKeys.keys.length < limits.length) {
+    const keysToAdd = limits.length - rowKeys.keys.length;
+    setRowKeys({
+      keys: [
+        ...rowKeys.keys,
+        ...Array.from(
+          { length: keysToAdd },
+          (_, index) => rowKeys.nextKey + index
+        ),
+      ],
+      nextKey: rowKeys.nextKey + keysToAdd,
+    });
+  } else if (rowKeys.keys.length > limits.length) {
+    setRowKeys({
+      keys: rowKeys.keys.slice(0, limits.length),
+      nextKey: rowKeys.nextKey,
+    });
   }
 
   function addLimit() {
@@ -65,8 +81,10 @@ function TokenLimitSection({
         l.costBudgetDollars === null
     );
     if (emptyIndex !== -1) return;
-    const key = nextKeyRef.current++;
-    keysRef.current = [...keysRef.current, key];
+    setRowKeys((prev) => ({
+      keys: [...prev.keys, prev.nextKey],
+      nextKey: prev.nextKey + 1,
+    }));
     onLimitsChange([
       ...limits,
       {
@@ -80,7 +98,10 @@ function TokenLimitSection({
   }
 
   function removeLimit(index: number) {
-    keysRef.current = keysRef.current.filter((_, i) => i !== index);
+    setRowKeys((prev) => ({
+      keys: prev.keys.filter((_, i) => i !== index),
+      nextKey: prev.nextKey,
+    }));
     onLimitsChange(limits.filter((_, i) => i !== index));
   }
 
@@ -143,10 +164,7 @@ function TokenLimitSection({
 
               {/* Limit rows */}
               {limits.map((limit, i) => (
-                <div
-                  key={keysRef.current[i]}
-                  className="flex items-center gap-1"
-                >
+                <div key={rowKeys.keys[i]} className="flex items-center gap-1">
                   <div className="flex-1">
                     <InputNumber
                       value={limit.tokenBudget}

@@ -46,7 +46,9 @@ export function SidebarStateProvider({
   const [folded, setFoldedInternal] = useState(defaultFolded);
 
   const onFoldedChangeRef = useRef(onFoldedChange);
-  onFoldedChangeRef.current = onFoldedChange;
+  useEffect(() => {
+    onFoldedChangeRef.current = onFoldedChange;
+  }, [onFoldedChange]);
 
   const setFolded: Dispatch<SetStateAction<boolean>> = useCallback((value) => {
     setFoldedInternal((prev) =>
