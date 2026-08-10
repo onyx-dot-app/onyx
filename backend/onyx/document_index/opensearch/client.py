@@ -160,9 +160,18 @@ _DOCUMENT_MISSING_ERROR_TYPE = "document_missing_exception"
 _VERSION_CONFLICT_ERROR_TYPE = "version_conflict_engine_exception"
 # Raised by a search whose PIT has expired/been deleted; we re-open and retry.
 _SEARCH_CONTEXT_MISSING_ERROR_TYPE = "search_context_missing"
+# Rejection by an index/cluster block, e.g. the read_only_allow_delete block
+# OpenSearch applies when disk usage crosses the flood-stage watermark.
+_CLUSTER_BLOCK_ERROR_TYPE = "cluster_block_exception"
 # Chunks per PIT-scan page. A port doc-batch is small (INDEX_BATCH_SIZE docs), so
 # one page covers a batch; paging still protects against a pathological doc.
 _PIT_SCAN_PAGE_SIZE = 1000
+
+
+def is_cluster_block_error(e: Exception) -> bool:
+    """True when a request was rejected by an index/cluster block rather than a
+    problem with the request itself."""
+    return isinstance(e, TransportError) and _CLUSTER_BLOCK_ERROR_TYPE in str(e.error)
 
 
 class OpenSearchServerSideTimeout(Exception):

@@ -40,6 +40,7 @@ from onyx.document_index.opensearch.client import (
     OpenSearchDocumentMissingError,
     OpenSearchIndexClient,
     SearchHit,
+    is_cluster_block_error,
 )
 from onyx.document_index.opensearch.cluster_settings import OPENSEARCH_CLUSTER_SETTINGS
 from onyx.document_index.opensearch.constants import OpenSearchSearchType
@@ -372,6 +373,20 @@ class OpenSearchDocumentIndex(DocumentIndex):
                 try:
                     self._client.put_mapping(expected_mappings)
                 except Exception as e:
+                    if is_cluster_block_error(e):
+                        # The index exists but is write-blocked (typically the
+                        # read_only_allow_delete block applied at the disk
+                        # flood-stage watermark). It is still fully readable, so
+                        # don't fail startup over a skipped mapping refresh.
+                        logger.error(
+                            "Index %s exists but is write-blocked; skipping the mapping "
+                            "refresh so startup can proceed. Search still works, but "
+                            "indexing will fail until the block is cleared (usually by "
+                            "freeing disk space below the flood-stage watermark). Error: %s",
+                            self._index_name,
+                            e,
+                        )
+                        return
                     logger.error(
                         "Failed to update mappings for index %s. This likely means a field type was changed which requires reindexing. Error: %s",
                         self._index_name,
