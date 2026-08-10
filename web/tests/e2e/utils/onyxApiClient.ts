@@ -681,6 +681,46 @@ export class OnyxApiClient {
   }
 
   /**
+   * Creates or updates a per-model cost override.
+   *
+   * @param model - Model id the negotiated rate applies to
+   * @returns The model id, for asserting the row renders
+   */
+  async upsertCostOverride(model: string): Promise<string> {
+    const response = await this.put("/admin/cost-overrides", {
+      model,
+      input_cost_per_mtok: 2.5,
+      output_cost_per_mtok: 10,
+    });
+
+    await this.handleResponse(
+      response,
+      `Failed to upsert cost override ${model}`
+    );
+
+    this.log(`Upserted cost override: ${model}`);
+    return model;
+  }
+
+  /**
+   * Deletes a per-model cost override.
+   *
+   * @param model - Model id whose override should be removed
+   */
+  async deleteCostOverride(model: string): Promise<void> {
+    const response = await this.delete(
+      `/admin/cost-overrides/${encodeURIComponent(model)}`
+    );
+
+    await this.handleResponseSoft(
+      response,
+      `Failed to delete cost override ${model}`
+    );
+
+    this.log(`Deleted cost override: ${model}`);
+  }
+
+  /**
    * Creates a user group.
    *
    * @param groupName - Name for the user group
