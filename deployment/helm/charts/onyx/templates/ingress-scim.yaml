@@ -1,0 +1,34 @@
+{{- if .Values.ingress.enabled -}}
+# SCIM lives at the domain root (/scim/v2, outside /api) because IdPs address
+# it directly. Separate resource: ingress-api's rewrite-target annotation is
+# resource-wide and would strip the prefix. Bound to the webserver host, not
+# the api host, because IdPs are configured with the browser-facing app domain.
+apiVersion: networking.k8s.io/v1
+kind: Ingress
+metadata:
+  name: {{ include "onyx.fullname" . }}-ingress-scim
+  annotations:
+    {{- if not .Values.ingress.className }}
+    kubernetes.io/ingress.class: nginx
+    {{- end }}
+    cert-manager.io/cluster-issuer: {{ include "onyx.fullname" . }}-letsencrypt
+spec:
+  {{- if .Values.ingress.className }}
+  ingressClassName: {{ .Values.ingress.className }}
+  {{- end }}
+  rules:
+    - host: {{ .Values.ingress.webserver.host }}
+      http:
+        paths:
+          - path: /scim
+            pathType: Prefix
+            backend:
+              service:
+                name: {{ include "onyx.fullname" . }}-api-service
+                port:
+                  number: {{ .Values.api.service.servicePort }}
+  tls:
+    - hosts:
+        - {{ .Values.ingress.webserver.host }}
+      secretName: {{ include "onyx.fullname" . }}-ingress-scim-tls
+{{- end }}
