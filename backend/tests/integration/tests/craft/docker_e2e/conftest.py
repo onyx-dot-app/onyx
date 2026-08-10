@@ -15,8 +15,18 @@ from onyx.db.external_app import (
     create_external_app,
     get_built_in_external_app,
 )
+from onyx.server.features.build.sandbox.docker.docker_sandbox_manager import (
+    SANDBOX_EXEC_USER,
+)
 from tests.integration.common_utils.managers.build_session import BuildSessionManager
 from tests.integration.common_utils.test_models import DATestUser
+from tests.integration.tests.craft.webapp_preview import (
+    WEBAPP_BOOTSTRAP_TIMEOUT_S,
+    WEBAPP_INSTALLED,
+    webapp_bootstrap_command,
+    webapp_install_check_command,
+    webapp_logs_command,
+)
 
 
 class DockerSandbox(NamedTuple):
@@ -107,6 +117,53 @@ def _provision_sandbox(
         session_id=UUID(session.id),
         container_name=_container_name(sandbox.id),
     )
+
+
+def start_session_webapp(container: str, session_id: UUID) -> str:
+    """Run the lazy webapp bootstrap in-container, standing in for the agent's
+    `webapp` tool, and return the script's output.
+
+    Blocks until the scaffold and install finish (the script's own readiness
+    wait can still lapse, so callers that need a live dev server must poll for
+    it). Fails the test unless the install landed — docker exec does not raise
+    on a nonzero exit, so the in-container state is the only trustworthy
+    signal.
+    """
+    try:
+        result = _docker_exec(
+            container,
+            ["sh", "-c", webapp_bootstrap_command(session_id)],
+            timeout=WEBAPP_BOOTSTRAP_TIMEOUT_S,
+            user=SANDBOX_EXEC_USER,
+        )
+    except subprocess.TimeoutExpired:
+        pytest.fail(
+            f"start-webapp.sh did not finish within "
+            f"{WEBAPP_BOOTSTRAP_TIMEOUT_S}s for session {session_id}:\n"
+            f"{session_webapp_logs(container, session_id)}"
+        )
+    output = f"{result.stdout}{result.stderr}"
+    state = _docker_exec(
+        container,
+        ["sh", "-c", webapp_install_check_command(session_id)],
+        user=SANDBOX_EXEC_USER,
+    ).stdout.strip()
+    if state != WEBAPP_INSTALLED:
+        pytest.fail(
+            f"start-webapp.sh did not install outputs/web for session "
+            f"{session_id} (state={state}, exit={result.returncode}):\n{output}"
+        )
+    return output
+
+
+def session_webapp_logs(container: str, session_id: UUID) -> str:
+    """Bootstrap + dev-server logs for a session, for failure diagnostics."""
+    result = _docker_exec(
+        container,
+        ["sh", "-c", webapp_logs_command(session_id)],
+        user=SANDBOX_EXEC_USER,
+    )
+    return f"{result.stdout}{result.stderr}"
 
 
 @pytest.fixture(scope="session")

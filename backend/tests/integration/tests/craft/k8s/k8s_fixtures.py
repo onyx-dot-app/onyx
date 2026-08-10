@@ -38,6 +38,13 @@ from shared_configs.configs import POSTGRES_DEFAULT_SCHEMA_STANDARD_VALUE
 from shared_configs.contextvars import CURRENT_TENANT_ID_CONTEXTVAR
 from tests.integration.common_utils.managers.build_session import BuildSessionManager
 from tests.integration.common_utils.managers.user import UserManager
+from tests.integration.tests.craft.webapp_preview import (
+    WEBAPP_BOOTSTRAP_TIMEOUT_S,
+    WEBAPP_INSTALLED,
+    webapp_bootstrap_command,
+    webapp_install_check_command,
+    webapp_logs_command,
+)
 
 logger = setup_logger()
 
@@ -468,10 +475,14 @@ def _cleanup_pool_workspace(
         "-mindepth 1 -delete 2>/dev/null; true",
         container="sidecar",
     )
+    # Dev servers are nohup'd, so deleting the tree alone leaves them running
+    # with a vanished cwd; on the module-scoped pool pod they accumulate until
+    # something OOMs and fails an unrelated test.
     pod_exec(
         k8s_client,
         pod_name,
         SANDBOX_NAMESPACE,
+        "pkill -f 'bun run dev'; pkill -f next-server; "
         "find /workspace/sessions -mindepth 1 -delete 2>/dev/null; true",
         container="sandbox",
     )
@@ -611,15 +622,20 @@ def pod_exec(
     namespace: str,
     command: str,
     container: str = "sandbox",
+    timeout_s: float | None = None,
 ) -> str:
     """Run a one-shot ``/bin/sh -c`` command in a pod container; return combined output.
 
     Pass ``container="sidecar"`` to write to ``/workspace/managed/`` (RO in the
-    sandbox container).
+    sandbox container). ``timeout_s`` bounds a long command so a wedged one
+    fails inside pytest instead of burning the whole CI job; note the exec
+    client returns buffered output on a lapse rather than raising, so callers
+    must verify the command's effect rather than trust the return.
     """
     from kubernetes.stream import stream as k8s_stream
 
     argv = ["/bin/sh", "-c", command]
+    optional_kwargs = {} if timeout_s is None else {"_request_timeout": timeout_s}
     resp = k8s_stream(
         client.connect_get_namespaced_pod_exec,
         name=pod_name,
@@ -630,6 +646,7 @@ def pod_exec(
         stdin=False,
         stdout=True,
         tty=False,
+        **optional_kwargs,
     )
     return str(resp) if resp is not None else ""
 
@@ -831,9 +848,14 @@ def pool_session(
     Same shape as ``live_pod`` but reuses the pool pod. Use this unless the test
     mutates pod-level state (lifecycle/terminate/restart); those must use ``live_pod``.
     Sessions are headless (no dev server) by default; parametrize indirectly
-    with ``{"headless": False}`` for webapp/preview tests.
+    with ``{"headless": False}`` for webapp/preview tests, or use
+    ``webapp_pool_session`` to also get the webapp bootstrapped.
     """
     headless = getattr(request, "param", {}).get("headless", True)
+    return _create_pool_session(_pool_pod, headless=headless)
+
+
+def _create_pool_session(_pool_pod: _PoolPod, *, headless: bool) -> PoolSession:
     _cleanup_pool_workspace(_pool_pod.k8s_client, _pool_pod.pod_name)
     session_id, sandbox_id = BuildSessionManager.create_with_sandbox(
         _pool_pod.api_user, headless=headless
@@ -853,6 +875,67 @@ def pool_session(
         session_id=session_id,
         pod_name=_pool_pod.pod_name,
     )
+
+
+def start_session_webapp(
+    k8s_client: "k8s_client_module.CoreV1Api",
+    pod_name: str,
+    session_id: UUID,
+) -> str:
+    """Run the lazy webapp bootstrap in-pod, standing in for the agent's
+    `webapp` tool, and return the script's output.
+
+    Blocks until the scaffold and install finish (the script's own readiness
+    wait can still lapse, so callers that need a live dev server must poll for
+    it). Fails the test unless the install landed — the exec returns buffered
+    output without raising on a nonzero exit or a lapsed timeout, so the
+    in-pod state is the only trustworthy signal.
+    """
+    output = pod_exec(
+        k8s_client,
+        pod_name,
+        SANDBOX_NAMESPACE,
+        webapp_bootstrap_command(session_id),
+        timeout_s=WEBAPP_BOOTSTRAP_TIMEOUT_S,
+    )
+    state = pod_exec(
+        k8s_client,
+        pod_name,
+        SANDBOX_NAMESPACE,
+        webapp_install_check_command(session_id),
+    ).strip()
+    if state != WEBAPP_INSTALLED:
+        pytest.fail(
+            f"start-webapp.sh did not install outputs/web for session "
+            f"{session_id} (state={state}):\n{output}"
+        )
+    return output
+
+
+def session_webapp_logs(
+    k8s_client: "k8s_client_module.CoreV1Api",
+    pod_name: str,
+    session_id: UUID,
+) -> str:
+    """Bootstrap + dev-server logs for a session, for failure diagnostics."""
+    return pod_exec(
+        k8s_client,
+        pod_name,
+        SANDBOX_NAMESPACE,
+        webapp_logs_command(session_id),
+    )
+
+
+@pytest.fixture(scope="function")
+def webapp_pool_session(_pool_pod: _PoolPod) -> PoolSession:
+    """``pool_session`` with a port reserved and the webapp bootstrapped.
+
+    For tests that need a scaffolded, installed ``outputs/web`` — provisioning
+    no longer produces one.
+    """
+    session = _create_pool_session(_pool_pod, headless=False)
+    start_session_webapp(_pool_pod.k8s_client, session.pod_name, session.session_id)
+    return session
 
 
 @pytest.fixture(scope="function")
