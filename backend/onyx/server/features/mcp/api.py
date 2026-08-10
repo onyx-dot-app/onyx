@@ -887,6 +887,17 @@ async def _connect_oauth(
     probe_url = mcp_server.server_url
     logger.info("Probing OAuth server at: %s", probe_url)
 
+    # An OAuth server's credential is the stored token; a leftover Authorization
+    # header can still satisfy the probe, reporting connected for a config every
+    # tool call rejects. Drop it so the probe 401s and authorization can run.
+    probe_headers = connection_config_dict.get("headers", {})
+    if not connection_config_dict.get(MCPOAuthKeys.TOKENS.value):
+        probe_headers = {
+            name: value
+            for name, value in probe_headers.items()
+            if name.lower() != "authorization"
+        }
+
     oauth_auth = make_oauth_provider(
         mcp_server,
         str(user.id),
@@ -904,7 +915,7 @@ async def _connect_oauth(
         try:
             x = await initialize_mcp_client(
                 probe_url,
-                connection_headers=connection_config_dict.get("headers", {}),
+                connection_headers=probe_headers,
                 transport=transport,
                 auth=oauth_auth,
             )

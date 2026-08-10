@@ -2,8 +2,10 @@
 connect flow must forward the URL the MCP SDK emits even when the caller's
 stored connection config already carries `client_info` plus rendered headers,
 because a stored config never proves the handshake will skip authorization.
-The relay also has to wait in short BLPOP slices so the losing task's
-cancellation is not stranded behind a blocking call.
+Without stored tokens the probe also has to leave the stored Authorization
+header behind, so a still-accepted bearer cannot masquerade as a connection.
+The relay waits in short BLPOP slices so the losing task's cancellation is not
+stranded behind a blocking call.
 """
 
 from __future__ import annotations
@@ -12,7 +14,7 @@ import asyncio
 import time
 from contextlib import ExitStack
 from typing import Any
-from unittest.mock import AsyncMock, MagicMock, patch
+from unittest.mock import MagicMock, patch
 
 import pytest
 from fastapi import HTTPException
@@ -32,18 +34,34 @@ RETURN_PATH = "/chat?mcp=1"
 USER_CONFIG = MagicMock(id=99)
 
 # A user who previously completed the handshake: `client_info` seeded from the
-# admin config plus the bearer header rendered by the last callback.
+# admin config, the bearer header left by the last callback, and a header the
+# admin's template renders. Tokens are absent — this is the state a connect call
+# leaves behind, and the state tool calls treat as unauthenticated.
 CONNECTED_USER_DATA: dict[str, Any] = {
     "client_info": {
         "client_id": "stored-client-id",
         "redirect_uris": ["https://onyx.example.com/mcp/oauth/callback"],
     },
-    "headers": {"Authorization": "Bearer stale-access-token"},
+    "headers": {
+        "Authorization": "Bearer stale-access-token",
+        "X-Workspace": "acme",
+    },
 }
 
 
-def _extract_connection_data(config: Any, **_kwargs: Any) -> dict[str, Any]:
-    return dict(CONNECTED_USER_DATA) if config is USER_CONFIG else {}
+# The same user after a successful handshake: the token is the credential tool
+# calls actually use.
+TOKENED_USER_DATA: dict[str, Any] = {
+    **CONNECTED_USER_DATA,
+    "tokens": {"access_token": "live-access-token", "token_type": "Bearer"},
+}
+
+
+def _extract_connection_data(user_data: dict[str, Any]) -> Any:
+    def extract(config: Any, **_kwargs: Any) -> dict[str, Any]:
+        return dict(user_data) if config is USER_CONFIG else {}
+
+    return extract
 
 
 def _mcp_server() -> MagicMock:
@@ -64,7 +82,11 @@ def _blocking_blpop(*_args: Any, **_kwargs: Any) -> None:
     return None
 
 
-async def _connect(initialize: Any, blpop: Any) -> MCPUserOAuthConnectResponse:
+async def _connect(
+    initialize: Any,
+    blpop: Any,
+    user_data: dict[str, Any] = CONNECTED_USER_DATA,
+) -> MCPUserOAuthConnectResponse:
     redis = MagicMock()
     redis.blpop = blpop
     user = MagicMock(id="user-uuid", email="user@example.com")
@@ -80,7 +102,7 @@ async def _connect(initialize: Any, blpop: Any) -> MCPUserOAuthConnectResponse:
             ("get_mcp_server_by_id", MagicMock(return_value=_mcp_server())),
             ("get_mcp_auth_template", MagicMock(return_value=None)),
             ("get_user_connection_config", MagicMock(return_value=USER_CONFIG)),
-            ("extract_connection_data", _extract_connection_data),
+            ("extract_connection_data", _extract_connection_data(user_data)),
             ("update_connection_config", MagicMock()),
             ("make_oauth_provider", MagicMock()),
             ("get_redis_client", MagicMock(return_value=redis)),
@@ -108,9 +130,47 @@ async def test_connect_relays_auth_url_for_previously_connected_user() -> None:
 
 @pytest.mark.asyncio
 async def test_connect_returns_return_path_when_stored_tokens_still_work() -> None:
-    response = await _connect(AsyncMock(return_value=MagicMock()), _blocking_blpop)
+    probes: list[dict[str, str]] = []
+
+    async def succeeding_initialize(*_args: Any, **kwargs: Any) -> Any:
+        probes.append(dict(kwargs["connection_headers"]))
+        return MagicMock()
+
+    response = await _connect(
+        succeeding_initialize, _blocking_blpop, user_data=TOKENED_USER_DATA
+    )
 
     assert response.oauth_url == RETURN_PATH
+    # Stored tokens make the stored headers meaningful, so the probe keeps them.
+    assert probes == [TOKENED_USER_DATA["headers"]]
+
+
+@pytest.mark.asyncio
+async def test_connect_probes_without_the_stored_bearer_when_tokens_are_missing() -> (
+    None
+):
+    probes: list[dict[str, str]] = []
+
+    async def initialize_accepting_any_bearer(*_args: Any, **kwargs: Any) -> Any:
+        headers = dict(kwargs["connection_headers"])
+        probes.append(headers)
+        if "Authorization" in headers:
+            # A provider whose access tokens do not expire answers the stored
+            # bearer, so the handshake reports a connection and never redirects.
+            return MagicMock()
+        await asyncio.sleep(5)
+        raise RuntimeError("Timed out waiting for OAuth callback")
+
+    def blpop_after_a_short_slice(_keys: Any, _timeout: int = 0) -> tuple[bytes, bytes]:
+        time.sleep(0.05)
+        return (b"key", AUTH_URL.encode())
+
+    response = await _connect(
+        initialize_accepting_any_bearer, blpop_after_a_short_slice
+    )
+
+    assert response.oauth_url == AUTH_URL
+    assert probes == [{"X-Workspace": "acme"}]
 
 
 @pytest.mark.asyncio
