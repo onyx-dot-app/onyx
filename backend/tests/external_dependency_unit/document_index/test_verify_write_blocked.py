@@ -1,10 +1,12 @@
-"""External dependency tests for index verification when the OpenSearch index
-carries a write block, as OpenSearch applies at the disk flood-stage watermark.
+"""External dependency tests for behavior when the OpenSearch index carries a
+write block, as OpenSearch applies at the disk flood-stage watermark.
 
 Regression tests for api-server pods crash-looping on startup while the index
 was read_only_allow_delete-blocked: the mapping refresh is a metadata write, so
-it is rejected while the block is active, and startup used to treat that as
-fatal even though the index was fully readable.
+it is rejected while the block is active. verify_and_create_index_if_necessary
+still raises (callers like embedding-model swaps must not silently continue);
+the tolerant call sites — startup's setup_document_indices and the multitenant
+DocumentIndex init — catch the block error and proceed degraded.
 """
 
 from collections.abc import Generator
@@ -24,7 +26,8 @@ from onyx.document_index.opensearch.client import (
 from onyx.document_index.opensearch.opensearch_document_index import (
     OpenSearchDocumentIndex,
 )
-from onyx.document_index.opensearch.schema import DocumentSchema
+from onyx.indexing.models import IndexingSetting
+from onyx.setup import setup_document_indices
 from shared_configs.configs import POSTGRES_DEFAULT_SCHEMA_STANDARD_VALUE
 from tests.external_dependency_unit.document_index.conftest import EMBEDDING_DIM
 
@@ -47,39 +50,41 @@ def write_blocked_index(
         client.update_settings({_WRITE_BLOCK_SETTING: None})
 
 
-def test_put_mapping_rejected_under_write_block(
-    write_blocked_index: OpenSearchDocumentIndex,  # noqa: ARG001
-    test_index_name: str,
+def test_verify_raises_recognizable_error_under_write_block(
+    write_blocked_index: OpenSearchDocumentIndex,
 ) -> None:
-    """Proves the premise: a mapping refresh is a metadata write and the block
-    rejects it — and the rejection is recognized as a cluster block error."""
-    client = OpenSearchIndexClient(index_name=test_index_name)
-    mappings = DocumentSchema.get_document_schema(EMBEDDING_DIM, False)
-
+    """verify_and_create_index_if_necessary keeps raising under the block (a
+    caller such as an embedding-model swap must not silently continue), and the
+    error is recognizable so tolerant call sites can catch it."""
     with pytest.raises(Exception) as exc_info:
-        client.put_mapping(mappings)
+        write_blocked_index.verify_and_create_index_if_necessary(
+            embedding_dim=EMBEDDING_DIM,
+            embedding_precision=EmbeddingPrecision.FLOAT,
+        )
 
     assert is_cluster_block_error(exc_info.value)
 
 
-def test_verify_succeeds_when_index_write_blocked(
+def test_setup_document_indices_succeeds_under_write_block(
     write_blocked_index: OpenSearchDocumentIndex,
 ) -> None:
-    """An existing, readable index that is merely write-blocked must not fail
-    startup verification."""
-    write_blocked_index.verify_and_create_index_if_necessary(
-        embedding_dim=EMBEDDING_DIM,
-        embedding_precision=EmbeddingPrecision.FLOAT,
+    """Startup must survive an existing, readable index that is merely
+    write-blocked instead of crash-looping."""
+    index_setting = IndexingSetting.model_construct(model_dim=EMBEDDING_DIM)
+
+    assert setup_document_indices(
+        document_indices=[write_blocked_index],
+        index_setting=index_setting,
+        num_attempts=1,
     )
 
 
-def test_write_blocked_verify_is_not_cached_as_verified(
+def test_mt_init_survives_write_block_and_is_not_cached(
     write_blocked_index: OpenSearchDocumentIndex,  # noqa: ARG001
     test_index_name: str,
 ) -> None:
-    """Multitenant __init__ caches verified indices per process; a verify that
-    had to skip the mapping refresh must not be cached, so the refresh is
-    retried once the block clears."""
+    """Multitenant __init__ tolerates the block without caching the index as
+    verified, so the mapping refresh is retried once the block clears."""
     verified_names = (
         opensearch_document_index_module._verified_index_names_for_current_process
     )

@@ -303,19 +303,32 @@ class OpenSearchDocumentIndex(DocumentIndex):
         self._index_name: str = index_name
         self._tenant_state: TenantState = tenant_state
         self._client = OpenSearchIndexClient(index_name=self._index_name)
-        # True when the last verify skipped the mapping refresh because the
-        # index was write-blocked; such a verify must not be cached as done.
-        self._mapping_refresh_skipped: bool = False
 
         if (
             self._tenant_state.multitenant
             and VERIFY_CREATE_OPENSEARCH_INDEX_ON_INIT_MT
             and index_name not in _verified_index_names_for_current_process
         ):
-            self.verify_and_create_index_if_necessary(
-                embedding_dim=embedding_dim, embedding_precision=embedding_precision
-            )
-            if not self._mapping_refresh_skipped:
+            try:
+                self.verify_and_create_index_if_necessary(
+                    embedding_dim=embedding_dim, embedding_precision=embedding_precision
+                )
+            except Exception as e:
+                if not is_cluster_block_error(e):
+                    raise
+                # The index is write-blocked (typically the read_only_allow_delete
+                # block applied at the disk flood-stage watermark) but still
+                # readable, so don't fail the caller. Not cached as verified, so
+                # a later init retries the refresh once the block clears.
+                logger.error(
+                    "Index %s is write-blocked; continuing without the mapping "
+                    "refresh. Search still works, but indexing will fail until "
+                    "the block is cleared (usually by freeing disk space below "
+                    "the flood-stage watermark). Error: %s",
+                    index_name,
+                    e,
+                )
+            else:
                 _verified_index_names_for_current_process.add(index_name)
 
     def verify_and_create_index_if_necessary(
@@ -350,7 +363,6 @@ class OpenSearchDocumentIndex(DocumentIndex):
             self._index_name,
             embedding_dim,
         )
-        self._mapping_refresh_skipped = False
 
         with redis_shared_lock(
             lock_name=f"{OnyxRedisLocks.OPENSEARCH_VERIFY_INDEX_LOCK_PREFIX}:{self._index_name}",
@@ -378,21 +390,6 @@ class OpenSearchDocumentIndex(DocumentIndex):
                 try:
                     self._client.put_mapping(expected_mappings)
                 except Exception as e:
-                    if is_cluster_block_error(e):
-                        # The index exists but is write-blocked (typically the
-                        # read_only_allow_delete block applied at the disk
-                        # flood-stage watermark). It is still fully readable, so
-                        # don't fail startup over a skipped mapping refresh.
-                        self._mapping_refresh_skipped = True
-                        logger.error(
-                            "Index %s exists but is write-blocked; skipping the mapping "
-                            "refresh so startup can proceed. Search still works, but "
-                            "indexing will fail until the block is cleared (usually by "
-                            "freeing disk space below the flood-stage watermark). Error: %s",
-                            self._index_name,
-                            e,
-                        )
-                        return
                     logger.error(
                         "Failed to update mappings for index %s. This likely means a field type was changed which requires reindexing. Error: %s",
                         self._index_name,
