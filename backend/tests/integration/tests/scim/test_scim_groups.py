@@ -47,17 +47,14 @@ def idp_style(request: pytest.FixtureRequest) -> str:
 
 
 @pytest.fixture(scope="module")
-def scim_token(idp_style: str) -> str:
-    """Create a single SCIM token shared across all tests in this module.
-
-    Creating a new token revokes the previous one, so we create exactly once
-    per IdP-style run and reuse. Uses UserManager directly to avoid
-    fixture-scope conflicts with the function-scoped admin_user fixture.
-    """
+def scim_admin() -> DATestUser:
+    """The admin that owns the SCIM token, also used to drive the non-SCIM admin
+    API. Uses UserManager directly to avoid fixture-scope conflicts with the
+    function-scoped admin_user fixture."""
     try:
-        admin = UserManager.create(name=ADMIN_USER_NAME)
+        return UserManager.create(name=ADMIN_USER_NAME)
     except Exception:
-        admin = UserManager.login_as_user(
+        return UserManager.login_as_user(
             DATestUser(
                 id="",
                 email=build_email(ADMIN_USER_NAME),
@@ -68,12 +65,46 @@ def scim_token(idp_style: str) -> str:
             )
         )
 
+
+@pytest.fixture(scope="module")
+def scim_token(idp_style: str, scim_admin: DATestUser) -> str:
+    """Create a single SCIM token shared across all tests in this module.
+
+    Creating a new token revokes the previous one, so we create exactly once
+    per IdP-style run and reuse.
+    """
     token = ScimTokenManager.create(
         name=f"scim-group-tests-{idp_style}",
-        user_performing_action=admin,
+        user_performing_action=scim_admin,
     ).raw_token
     assert token is not None
     return token
+
+
+def _set_manager(
+    group_id: str, user_id: str, is_manager: bool, admin: DATestUser
+) -> None:
+    """Promote/demote through the real admin route — the manager edge must be
+    seeded the way production writes it, or the test can't detect production
+    losing it."""
+    resp = client.put(
+        f"{API_SERVER_URL}/manage/admin/user-group/{group_id}/manager",
+        json={"user_id": user_id, "is_manager": is_manager},
+        headers=admin.headers,
+    )
+    assert resp.status_code == 200, resp.text
+
+
+def _manager_ids(group_id: str, admin: DATestUser) -> set[str]:
+    resp = client.get(
+        f"{API_SERVER_URL}/manage/admin/user-group",
+        headers=admin.headers,
+    )
+    assert resp.status_code == 200, resp.text
+    for group in resp.json():
+        if str(group["id"]) == str(group_id):
+            return {str(uid) for uid in group["manager_ids"]}
+    raise AssertionError(f"group {group_id} not found")
 
 
 def _make_group_resource(
@@ -312,6 +343,81 @@ def test_replace_group_clears_members(scim_token: str, idp_style: str) -> None:
     )
     assert resp.status_code == 200
     assert resp.json()["members"] == []
+
+
+def test_replace_group_preserves_manager_for_retained_member(
+    scim_token: str, idp_style: str, scim_admin: DATestUser
+) -> None:
+    """A retained member keeps is_manager across a full-sync PUT.
+
+    IdPs push PUT /Groups on routine reconciliation, so a delete-all-then-reinsert
+    replace would strip every group manager on each sync — silently, since the
+    re-inserted row takes is_manager's server_default and the audit event logs
+    only added/removed user ids.
+    """
+    keeper = _create_scim_user(
+        scim_token, f"grp_mgr_keep_{idp_style}@example.com", f"ext-gmk-{idp_style}"
+    ).json()
+    dropped = _create_scim_user(
+        scim_token, f"grp_mgr_drop_{idp_style}@example.com", f"ext-gmd-{idp_style}"
+    ).json()
+    created = _create_scim_group(
+        scim_token,
+        f"Manager Sync Group {idp_style}",
+        external_id=f"ext-mgr-sync-{idp_style}",
+        members=[{"value": keeper["id"]}, {"value": dropped["id"]}],
+    ).json()
+
+    _set_manager(created["id"], keeper["id"], True, scim_admin)
+    _set_manager(created["id"], dropped["id"], True, scim_admin)
+    assert _manager_ids(created["id"], scim_admin) == {keeper["id"], dropped["id"]}
+
+    resp = ScimClient.put(
+        f"/Groups/{created['id']}",
+        scim_token,
+        json=_make_group_resource(
+            f"Manager Sync Group {idp_style}",
+            f"ext-mgr-sync-{idp_style}",
+            members=[{"value": keeper["id"]}],
+        ),
+    )
+    assert resp.status_code == 200
+
+    # keeper stays a manager; dropped loses it only because they left the group.
+    assert _manager_ids(created["id"], scim_admin) == {keeper["id"]}
+
+
+def test_patch_group_preserves_manager_for_retained_member(
+    scim_token: str, idp_style: str, scim_admin: DATestUser
+) -> None:
+    """The PATCH path diffs rather than replacing, so an unrelated add must not
+    disturb an existing manager. Pins the PUT/PATCH pair to the same contract."""
+    manager = _create_scim_user(
+        scim_token, f"grp_mgr_patch_{idp_style}@example.com", f"ext-gmp-{idp_style}"
+    ).json()
+    newcomer = _create_scim_user(
+        scim_token, f"grp_mgr_new_{idp_style}@example.com", f"ext-gmn-{idp_style}"
+    ).json()
+    created = _create_scim_group(
+        scim_token,
+        f"Manager Patch Group {idp_style}",
+        external_id=f"ext-mgr-patch-{idp_style}",
+        members=[{"value": manager["id"]}],
+    ).json()
+
+    _set_manager(created["id"], manager["id"], True, scim_admin)
+
+    resp = ScimClient.patch(
+        f"/Groups/{created['id']}",
+        scim_token,
+        json=_make_patch_request(
+            [{"op": "add", "path": "members", "value": [{"value": newcomer["id"]}]}],
+            idp_style,
+        ),
+    )
+    assert resp.status_code == 200
+
+    assert _manager_ids(created["id"], scim_admin) == {manager["id"]}
 
 
 def test_patch_add_member(scim_token: str, idp_style: str) -> None:
