@@ -62,6 +62,57 @@ def test_subreaper_adopts_and_drains_orphaned_grandchild() -> None:
     assert "ok" in result.stdout
 
 
+_EXIT_HARNESS = """
+import os
+import sys
+import time
+
+from onyx.utils.os_reaper import (
+    _live_child_pids,
+    become_child_subreaper,
+    reap_children_before_exit,
+)
+
+assert become_child_subreaper(), "prctl(PR_SET_CHILD_SUBREAPER) failed"
+
+# orphan a grandchild that stays RUNNING well past the drain
+child_pid = os.fork()
+if child_pid == 0:
+    grandchild_pid = os.fork()
+    if grandchild_pid == 0:
+        time.sleep(60)
+        os._exit(0)
+    os._exit(0)
+
+os.waitpid(child_pid, 0)
+
+deadline = time.monotonic() + 10
+while not _live_child_pids() and time.monotonic() < deadline:
+    time.sleep(0.05)  # wait for the orphan to re-parent to us
+assert _live_child_pids(), "orphan never re-parented to the subreaper"
+
+reaped = reap_children_before_exit(grace_seconds=0.2)
+assert reaped >= 1, f"expected the running orphan to be killed and reaped, got {reaped}"
+assert not _live_child_pids(), "no running children should remain"
+print("ok")
+"""
+
+
+@pytest.mark.skipif(
+    sys.platform != "linux", reason="prctl/waitpid semantics are Linux-only"
+)
+def test_exit_drain_kills_and_reaps_running_orphan() -> None:
+    result = subprocess.run(
+        [sys.executable, "-c", _EXIT_HARNESS],
+        capture_output=True,
+        text=True,
+        timeout=30,
+        env={"PYTHONPATH": str(_BACKEND_DIR)},
+    )
+    assert result.returncode == 0, result.stderr
+    assert "ok" in result.stdout
+
+
 def test_reap_exited_children_noop_without_children() -> None:
     """The drain must be safe to call from a process with no children at all."""
     harness = (

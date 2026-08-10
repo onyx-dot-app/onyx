@@ -53,7 +53,7 @@ from onyx.db.indexing_coordination import IndexingCoordination
 from onyx.redis.redis_connector import RedisConnector
 from onyx.server.metrics.connector_health_metrics import on_index_attempt_status_change
 from onyx.utils.logger import setup_logger
-from onyx.utils.os_reaper import reap_exited_children
+from onyx.utils.os_reaper import reap_children_before_exit
 from onyx.utils.variable_functionality import global_version
 from shared_configs.configs import SENTRY_CELERY_TRACES_SAMPLE_RATE, SENTRY_DSN
 
@@ -274,7 +274,7 @@ def _docfetching_task(
         search_settings_id,
     )
     # os._exit bypasses the drain in _initializer's finally, so reap here.
-    reap_exited_children()
+    reap_children_before_exit()
     os._exit(0)  # ensure process exits cleanly
 
 

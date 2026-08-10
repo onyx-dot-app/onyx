@@ -10,7 +10,9 @@ from concurrent waiters.
 """
 
 import os
+import signal
 import sys
+import time
 
 from onyx.utils.logger import setup_logger
 
@@ -59,5 +61,59 @@ def reap_exited_children() -> int:
             break  # children exist but none have exited
 
         reaped += 1
+
+    return reaped
+
+
+def _live_child_pids() -> list[int]:
+    """Direct children (adopted orphans included) that are still running."""
+    me = os.getpid()
+    pids = []
+    for entry in os.listdir("/proc"):
+        if not entry.isdigit():
+            continue
+        try:
+            with open(f"/proc/{entry}/stat") as f:
+                data = f.read()
+            # comm may contain spaces; state and ppid follow the closing paren
+            state, ppid = data[data.rindex(")") + 2 :].split()[:2]
+            if int(ppid) == me and state != "Z":
+                pids.append(int(entry))
+        except (OSError, IndexError, ValueError):
+            continue
+    return pids
+
+
+def reap_children_before_exit(grace_seconds: float = 2.0) -> int:
+    """Exit-path drain: reap exited children, give still-running ones a short
+    grace to finish, then SIGKILL the rest and wait for them. A child left
+    alive at exit would re-parent to PID 1 and zombify there when it dies."""
+    if sys.platform != "linux":
+        return 0
+
+    reaped = reap_exited_children()
+    deadline = time.monotonic() + grace_seconds
+    while _live_child_pids() and time.monotonic() < deadline:
+        time.sleep(0.05)
+        reaped += reap_exited_children()
+
+    stragglers = _live_child_pids()
+    for pid in stragglers:
+        try:
+            os.kill(pid, signal.SIGKILL)
+        except OSError:
+            pass
+    if stragglers:
+        logger.warning(
+            "reap_children_before_exit: SIGKILLed %s straggler children",
+            len(stragglers),
+        )
+
+    while True:
+        try:
+            os.waitpid(-1, 0)  # blocking: SIGKILLed children exit promptly
+            reaped += 1
+        except (ChildProcessError, OSError):
+            break
 
     return reaped
