@@ -1611,7 +1611,9 @@ export const useBuildSessionStore = create<BuildSessionStore>()((set, get) => ({
         sandbox,
         agentProvider: sessionData.agent_provider,
         agentModel: sessionData.agent_model,
-        skillsStale: sessionData.skills_stale,
+        // The turn-start response owns stale-state reconciliation while this
+        // load preserves an optimistic, locally streaming turn.
+        ...(!isStreaming && { skillsStale: sessionData.skills_stale }),
         origin: sessionData.origin,
         activeTurnId: resolvedActiveTurnId,
         activeTurnIndex: resolvedActiveTurnIndex,

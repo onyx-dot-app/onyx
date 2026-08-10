@@ -957,7 +957,6 @@ export function useBuildStreaming() {
     ): Promise<void> => {
       const currentState = useBuildSessionStore.getState();
       const existingSession = currentState.sessions.get(sessionId);
-      const skillsStaleRevision = existingSession?.skillsStaleRevision;
 
       if (existingSession?.abortController) {
         existingSession.abortController.abort();
@@ -987,18 +986,10 @@ export function useBuildStreaming() {
           model,
           attachments
         );
-        const currentSkillsStaleRevision = useBuildSessionStore
-          .getState()
-          .sessions.get(sessionId)?.skillsStaleRevision;
         updateSessionData(sessionId, {
           activeTurnId: turn.turn_id,
           activeTurnIndex: turn.turn_index,
           activeTurnLocalOwner: true,
-          // Turn creation reloads stale runtime skills before it queues the turn.
-          // Preserve a newer stale state received while the request was pending.
-          ...(currentSkillsStaleRevision === skillsStaleRevision && {
-            skillsStale: turn.skills_stale,
-          }),
         });
 
         await streamTurnEvents(sessionId, turn.turn_id, controller.signal);
