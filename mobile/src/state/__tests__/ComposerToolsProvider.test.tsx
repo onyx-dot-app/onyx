@@ -217,7 +217,7 @@ describe("useComposerToolsState", () => {
   beforeEach(() => {
     mockDeepResearchAdminEnabled = true;
     apiFetchMock.mockReset();
-    apiFetchMock.mockResolvedValue({});
+    mockApi();
     client = new QueryClient({
       defaultOptions: { queries: { retry: false, gcTime: 0 } },
     });
@@ -321,7 +321,7 @@ describe("useComposerToolsState", () => {
   });
 
   it("computes allowed ids from every agent tool, not just the visible rows", async () => {
-    apiFetchMock.mockResolvedValue({ "0": { disabled_tool_ids: [2] } });
+    mockApi({ preferences: { "0": { disabled_tool_ids: [2] } } });
     const { result } = renderTools({
       agent: agent([searchTool, imageTool, fileReaderTool]),
     });
@@ -379,7 +379,7 @@ describe("useComposerToolsState", () => {
   });
 
   it("keeps the disabled set while the agent is momentarily unknown", async () => {
-    apiFetchMock.mockResolvedValue({ "0": { disabled_tool_ids: [2] } });
+    mockApi({ preferences: { "0": { disabled_tool_ids: [2] } } });
     const sendAgent = agent([searchTool, imageTool]);
     const { result, rerender } = renderHook(
       (props: Parameters<typeof useComposerToolsState>[0]) =>
@@ -474,7 +474,7 @@ describe("useComposerToolsState", () => {
   });
 
   it("refuses to describe a different conversation with the previous one's agent", async () => {
-    apiFetchMock.mockResolvedValue({ "0": { disabled_tool_ids: [2] } });
+    mockApi({ preferences: { "0": { disabled_tool_ids: [2] } } });
     const { result, rerender } = renderHook(
       (props: Parameters<typeof useComposerToolsState>[0]) =>
         useComposerToolsState(props),
@@ -508,7 +508,7 @@ describe("useComposerToolsState", () => {
   });
 
   it("still sends the force and the allowlist while the agent is momentarily unknown", async () => {
-    apiFetchMock.mockResolvedValue({ "0": { disabled_tool_ids: [2] } });
+    mockApi({ preferences: { "0": { disabled_tool_ids: [2] } } });
     const sendAgent = agent([searchTool, imageTool, fileReaderTool]);
     const { result, rerender } = renderHook(
       (props: Parameters<typeof useComposerToolsState>[0]) =>
@@ -539,7 +539,7 @@ describe("useComposerToolsState", () => {
   });
 
   it("never sends a forced id that is also disabled", async () => {
-    apiFetchMock.mockResolvedValue({ "0": { disabled_tool_ids: [2] } });
+    mockApi({ preferences: { "0": { disabled_tool_ids: [2] } } });
     const { result } = renderTools({ agent: agent([searchTool, imageTool]) });
     await waitFor(() => expect(result.current.disabledToolIds).toEqual([2]));
 
@@ -845,6 +845,47 @@ describe("useComposerToolsState — sources", () => {
     expect(result.current.resolveToolOptions().internalSearchFilters).toEqual({
       source_type: ["notion"],
     });
+  });
+
+  it("reports a connector list that comes back the wrong shape, without taking the composer down", async () => {
+    const warnSpy = jest.spyOn(console, "warn").mockImplementation(() => {});
+    // What a proxy error page or an auth redirect answers with: 200, but not the expected list.
+    apiFetchMock.mockImplementation((path: string) => {
+      if (path === "/manage/connector-status") {
+        return Promise.resolve({ detail: "Not authenticated" });
+      }
+      if (path === "/federated") return Promise.resolve([]);
+      return Promise.resolve({});
+    });
+
+    const { result } = renderTools();
+    await waitFor(() => expect(result.current.actionTools).toHaveLength(1));
+    await waitFor(() =>
+      expect(warnSpy).toHaveBeenCalledWith(
+        expect.stringContaining("/manage/connector-status"),
+      ),
+    );
+
+    expect(result.current.sourceOptions).toEqual([]);
+    // The body names the workspace's connectors, so only its shape may reach the log.
+    expect(warnSpy).not.toHaveBeenCalledWith(
+      expect.stringContaining("Not authenticated"),
+    );
+
+    warnSpy.mockRestore();
+  });
+
+  it("says nothing while the connector list is still in flight", async () => {
+    // Every launch passes through `undefined`; warning there would fire on each one.
+    const warnSpy = jest.spyOn(console, "warn").mockImplementation(() => {});
+    mockApi({ connectors: ["notion"], holdConnectors: true });
+
+    const { result } = renderTools();
+    await waitFor(() => expect(result.current.actionTools).toHaveLength(1));
+
+    expect(warnSpy).not.toHaveBeenCalled();
+
+    warnSpy.mockRestore();
   });
 
   it("sends no filter when the user has never narrowed the sources", async () => {

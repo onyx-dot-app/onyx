@@ -14,10 +14,20 @@ const NO_SOURCES: DocumentSource[] = [];
 
 /*
  * Array-checked, not just null-checked: a proxy error page or auth redirect answers 200 with a body
- * of another shape, and the picker must not take the composer down with it.
+ * of another shape, and the picker must not take the composer down with it. Reported rather than
+ * dropped in silence — an emptied picker is indistinguishable from a workspace with no connectors.
+ * The shape only, never the body: it names the workspace's connectors, which is why the response is
+ * kept out of persisted storage to begin with.
  */
-function sourcesOf(data: unknown): DocumentSource[] {
-  if (!Array.isArray(data)) return NO_SOURCES;
+function sourcesOf(data: unknown, endpoint: string): DocumentSource[] {
+  // `undefined` is the query before it resolves, not a bad answer.
+  if (data === undefined) return NO_SOURCES;
+  if (!Array.isArray(data)) {
+    console.warn(
+      `Ignoring ${endpoint} response: expected an array, got ${data === null ? "null" : typeof data}`,
+    );
+    return NO_SOURCES;
+  }
   return data
     .map((row: { source?: unknown }) => row?.source)
     .filter((source): source is DocumentSource => typeof source === "string");
@@ -47,7 +57,10 @@ export function useConnectorSources(): ConnectorSources {
   });
 
   const sources = useMemo(
-    () => [...sourcesOf(indexed.data), ...sourcesOf(federated.data)],
+    () => [
+      ...sourcesOf(indexed.data, "/manage/connector-status"),
+      ...sourcesOf(federated.data, "/federated"),
+    ],
     [indexed.data, federated.data],
   );
 
