@@ -4,10 +4,8 @@ The proxy contracts these pin (Origin/Sec-Fetch header stripping, basePath
 serving) must hold identically on every sandbox backend, so the k8s and
 docker suites assert them through this single implementation.
 
-Webapp provisioning is lazy: session setup only writes ``start-webapp.sh``,
-and nothing scaffolds ``outputs/web`` or starts a dev server until the agent's
-`webapp` tool runs it. Tests stand in for the agent by running that script
-themselves — see each backend's ``start_session_webapp``.
+Provisioning is lazy — setup only writes ``start-webapp.sh`` — so tests stand
+in for the agent and run it themselves via ``start_session_webapp``.
 """
 
 from __future__ import annotations
@@ -27,48 +25,37 @@ from tests.integration.common_utils.test_models import DATestUser
 
 _POLL_INTERVAL_S = 2.0
 
-# Cold path: template copy, bun-cache bootstrap, install, then a Next dev boot.
-# All of it used to happen during provisioning, outside the test's own clock.
-# This is only the hard exec cap, so a wedged bootstrap fails with diagnostics
-# instead of hanging; the budget the bootstrap must actually meet is below.
+# Hard exec cap only, so a wedged bootstrap fails with diagnostics rather than
+# hanging; the budget it must actually meet is WEBAPP_TOOL_START_BUDGET_S.
 WEBAPP_BOOTSTRAP_TIMEOUT_S = 420.0
 WEBAPP_READY_TIMEOUT_S = 300.0
 
 # What the agent's `webapp` tool allows before it kills the bootstrap
-# (START_TIMEOUT_MS in image/opencode-plugins/webapp.ts). Tests run the script
-# directly, so without asserting this a cold path that creeps past it stays
-# green here while being broken for every agent.
+# (START_TIMEOUT_MS in image/opencode-plugins/webapp.ts).
 WEBAPP_TOOL_START_BUDGET_S = 150.0
 
-# Last line the bootstrap prints on success. It is the only signal either
-# backend gets: neither exec surfaces the script's nonzero exit, so a dev
-# server that failed to boot is otherwise indistinguishable from one that did.
+# Neither backend's exec surfaces the script's nonzero exit, so this line is
+# the only signal that the dev server actually came up.
 WEBAPP_STARTED_SENTINEL = "dev server running on port"
 
-# Bootstrap output is unbounded (a full bun install); cap what a failure
-# message carries.
 _MAX_DIAGNOSTIC_CHARS = 4000
 
 
 def truncate_output(output: str) -> str:
-    """Last chunk of command output, for failure messages."""
     if len(output) <= _MAX_DIAGNOSTIC_CHARS:
         return output
     return f"...(truncated)\n{output[-_MAX_DIAGNOSTIC_CHARS:]}"
 
 
 def webapp_bootstrap_command(session_id: UUID) -> str:
-    """In-sandbox command that lazily scaffolds and starts the webapp."""
     return f"bash {SESSIONS_ROOT}/{session_id}/start-webapp.sh"
 
 
 def webapp_script_stat_command(session_id: UUID) -> str:
-    """In-sandbox command printing ``<uid>:<gid> <mode>`` for the bootstrap script."""
     return f'stat -c "%u:%g %a" {SESSIONS_ROOT}/{session_id}/start-webapp.sh'
 
 
 def webapp_logs_command(session_id: UUID, *, lines: int = 40) -> str:
-    """In-sandbox command dumping both webapp logs, for failure diagnostics."""
     session_path = f"{SESSIONS_ROOT}/{session_id}"
     return (
         f"for log in {session_path}/webapp-bootstrap.log {session_path}/nextjs.log; do "
@@ -81,12 +68,11 @@ WEBAPP_INSTALLED = "INSTALLED"
 
 
 def webapp_install_check_command(session_id: UUID) -> str:
-    """In-sandbox command echoing how far webapp provisioning actually got.
+    """Echoes how far provisioning got.
 
-    The scaffold alone is not enough to distinguish success: the template copy
-    writes ``package.json`` before the bun install runs, and neither backend's
-    exec raises on a nonzero exit or a lapsed timeout. Checking the install
-    marker is what makes a failed install loud instead of green.
+    Keys on the install marker, not the scaffold: the template copy writes
+    ``package.json`` before the bun install runs, so a scaffold check would
+    read a failed install as success.
     """
     session_path = f"{SESSIONS_ROOT}/{session_id}"
     web_path = f"{session_path}/outputs/web"
@@ -107,9 +93,8 @@ def verify_webapp_bootstrap(
 ) -> None:
     """Fail unless the bootstrap installed, started, and did so in budget.
 
-    Shared by both backends because neither exec raises on the script's own
-    failure paths, so the test has to judge success from what the script
-    printed and what it left behind.
+    Neither backend's exec raises on the script's own failure paths, so
+    success has to be judged from what it printed and what it left behind.
     """
     tail = truncate_output(output)
     if install_state != WEBAPP_INSTALLED:

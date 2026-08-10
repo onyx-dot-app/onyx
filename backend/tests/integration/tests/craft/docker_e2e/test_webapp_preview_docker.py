@@ -47,8 +47,6 @@ def test_preview_serves_at_base_path_and_reports_ready(
     sandbox = provision_sandbox(webapp_user, headless=False)
     try:
         session_id = str(sandbox.session_id)
-        # Provisioning writes start-webapp.sh but scaffolds nothing; the agent
-        # would run it via the `webapp` tool, so the test does it instead.
         bootstrap_output = start_session_webapp(
             sandbox.container_name, sandbox.session_id
         )

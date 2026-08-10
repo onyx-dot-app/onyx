@@ -67,8 +67,6 @@ def test_session_setup_creates_user_writable_workspace(
         "/workspace/managed/skills",
         "/workspace/managed/user_library",
         session_path,
-        # outputs/web is not a setup-time invariant: webapp provisioning is
-        # lazy, so the scaffold only lands once start-webapp.sh runs.
         f"{session_path}/outputs",
         f"{session_path}/attachments",
         f"{session_path}/.opencode",

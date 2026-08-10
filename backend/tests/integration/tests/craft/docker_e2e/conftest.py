@@ -130,11 +130,9 @@ def start_session_webapp(container: str, session_id: UUID) -> str:
     """Run the lazy webapp bootstrap in-container, standing in for the agent's
     `webapp` tool, and return the script's output.
 
-    Fails the test unless the bootstrap installed and started within the
-    budget the agent's `webapp` tool allows. Runs with the sandbox user's HOME
-    as well as its uid: the container itself runs as root under the egress
-    proxy, so a bare ``--user 1000:1000`` would leave HOME=/root and have the
-    agent's real privilege context diverge from the tested one.
+    Carries the sandbox user's HOME as well as its uid: under the egress proxy
+    the container runs as root, so a bare ``--user 1000:1000`` would leave
+    HOME=/root and diverge from the agent's real privilege context.
     """
     started_at = time.monotonic()
     try:
@@ -169,7 +167,6 @@ def start_session_webapp(container: str, session_id: UUID) -> str:
 
 
 def session_webapp_logs(container: str, session_id: UUID) -> str:
-    """Bootstrap + dev-server logs for a session, for failure diagnostics."""
     result = _docker_exec(
         container,
         ["sh", "-c", webapp_logs_command(session_id)],

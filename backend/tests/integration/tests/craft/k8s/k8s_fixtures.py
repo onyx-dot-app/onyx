@@ -33,6 +33,7 @@ from onyx.server.features.build.db.user_library import delete_user_file, list_us
 from onyx.server.features.build.sandbox.kubernetes.kubernetes_sandbox_manager import (
     KubernetesSandboxManager,
 )
+from onyx.server.features.build.sandbox.session_workspace import SESSIONS_ROOT
 from onyx.utils.logger import setup_logger
 from shared_configs.configs import POSTGRES_DEFAULT_SCHEMA_STANDARD_VALUE
 from shared_configs.contextvars import CURRENT_TENANT_ID_CONTEXTVAR
@@ -475,9 +476,8 @@ def _cleanup_pool_workspace(
         "-mindepth 1 -delete 2>/dev/null; true",
         container="sidecar",
     )
-    # Dev servers are nohup'd, so deleting the tree alone leaves them running
-    # with a vanished cwd; on the module-scoped pool pod they accumulate until
-    # something OOMs and fails an unrelated test.
+    # Dev servers are nohup'd: without the kill they survive the delete and
+    # accumulate on the module-scoped pool pod until something OOMs.
     pod_exec(
         k8s_client,
         pod_name,
@@ -629,10 +629,8 @@ def pod_exec(
     """Run a one-shot ``/bin/sh -c`` command in a pod container; return combined output.
 
     Pass ``container="sidecar"`` to write to ``/workspace/managed/`` (RO in the
-    sandbox container). ``timeout_s`` bounds a long command so a wedged one
-    fails inside pytest instead of burning the whole CI job; note the exec
-    client returns buffered output on a lapse rather than raising, so callers
-    must verify the command's effect rather than trust the return.
+    sandbox container). A lapsed ``timeout_s`` returns buffered output rather
+    than raising, so callers must verify the command's effect.
     """
     from kubernetes.stream import stream as k8s_stream
 
@@ -886,11 +884,6 @@ def start_session_webapp(
 ) -> str:
     """Run the lazy webapp bootstrap in-pod, standing in for the agent's
     `webapp` tool, and return the script's output.
-
-    Fails the test unless the bootstrap installed and started within the
-    budget the agent's `webapp` tool allows — the exec returns buffered output
-    without raising on a nonzero exit or a lapsed timeout, so what the script
-    printed and what it left behind are the only trustworthy signals.
     """
     started_at = time.monotonic()
     output = pod_exec(
@@ -921,7 +914,6 @@ def session_webapp_logs(
     pod_name: str,
     session_id: UUID,
 ) -> str:
-    """Bootstrap + dev-server logs for a session, for failure diagnostics."""
     return pod_exec(
         k8s_client,
         pod_name,
@@ -930,15 +922,42 @@ def session_webapp_logs(
     )
 
 
+def stop_session_webapp(
+    k8s_client: "k8s_client_module.CoreV1Api",
+    pod_name: str,
+    session_id: UUID,
+) -> None:
+    """Stop a session's dev server and wait for it to actually exit.
+
+    A live Turbopack keeps writing into the session tree, so a workspace
+    delete races it and leaves the directory behind — which then makes a
+    restore skip its reinstall, since the stale ``package.json`` is still
+    there.
+    """
+    session_path = f"{SESSIONS_ROOT}/{session_id}"
+    pod_exec(
+        k8s_client,
+        pod_name,
+        SANDBOX_NAMESPACE,
+        f"if [ -f {session_path}/nextjs.pid ]; then "
+        f"  pid=$(cat {session_path}/nextjs.pid); "
+        f"  kill $pid 2>/dev/null; "
+        f"  for _ in $(seq 1 20); do kill -0 $pid 2>/dev/null || break; sleep 1; done; "
+        f"  kill -9 $pid 2>/dev/null; "
+        f"fi; true",
+    )
+
+
 @pytest.fixture(scope="function")
 def webapp_pool_session(_pool_pod: _PoolPod) -> PoolSession:
-    """``pool_session`` with a port reserved and the webapp bootstrapped.
+    """``pool_session`` with an installed ``outputs/web`` and no dev server.
 
-    For tests that need a scaffolded, installed ``outputs/web`` — provisioning
-    no longer produces one.
+    Its consumers measure install state; leaving the server up would have it
+    writing into the tree while they snapshot, delete, and restore it.
     """
     session = _create_pool_session(_pool_pod, headless=False)
     start_session_webapp(_pool_pod.k8s_client, session.pod_name, session.session_id)
+    stop_session_webapp(_pool_pod.k8s_client, session.pod_name, session.session_id)
     return session
 
 

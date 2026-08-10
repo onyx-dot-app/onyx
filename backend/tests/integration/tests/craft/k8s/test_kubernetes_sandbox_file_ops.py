@@ -154,7 +154,6 @@ class TestCreateSnapshot:
     ) -> None:
         _sandbox_id, session_id, pod_name = pool_session
 
-        # Wipe snapshot-eligible trees so the session is truly empty.
         session_root = f"/workspace/sessions/{session_id}"
         pod_exec(
             k8s_client,
