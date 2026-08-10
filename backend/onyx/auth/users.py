@@ -173,6 +173,7 @@ from shared_configs.contextvars import (
     CURRENT_TENANT_ID_CONTEXTVAR,
     CURRENT_USAGE_CREDENTIAL_CONTEXTVAR,
     CURRENT_USER_ID_CONTEXTVAR,
+    SESSION_TENANT_OVERRIDE_CONTEXTVAR,
     UsageCredentialIdentity,
     get_current_tenant_id,
 )
@@ -522,6 +523,20 @@ def _invalidate_license_cache_after_seat_change() -> None:
     fetch_ee_implementation_or_noop(
         "onyx.db.license", "invalidate_license_cache", None
     )()
+
+
+async def resolve_tenant_for_user(email: str, request: Request | None = None) -> str:
+    """Workspace to bind a user to. An explicit override wins, since an SSO login
+    knows its workspace before the user row exists."""
+    override = SESSION_TENANT_OVERRIDE_CONTEXTVAR.get()
+    if override is not None:
+        return override
+
+    return await fetch_ee_implementation_or_noop(
+        "onyx.server.tenants.provisioning",
+        "get_or_provision_tenant",
+        async_return_default_schema,
+    )(email=email, request=request)
 
 
 @asynccontextmanager
@@ -959,7 +974,11 @@ class UserManager(UUIDIDMixin, BaseUserManager[User, uuid.UUID]):
             getattr(request.state, "referral_source", None) if request else None
         )
 
-        tenant_id = await fetch_ee_implementation_or_noop(
+        # A workspace-configured provider vouches for who someone is, never for
+        # where they belong, so a pinned login (override set) skips provisioning
+        # entirely and lets the invite gate below decide whether it admits them.
+        override = SESSION_TENANT_OVERRIDE_CONTEXTVAR.get()
+        tenant_id = override or await fetch_ee_implementation_or_noop(
             "onyx.server.tenants.provisioning",
             "get_or_provision_tenant",
             async_return_default_schema,
@@ -1219,14 +1238,7 @@ class UserManager(UUIDIDMixin, BaseUserManager[User, uuid.UUID]):
     async def on_after_register(
         self, user: User, request: Optional[Request] = None
     ) -> None:
-        tenant_id = await fetch_ee_implementation_or_noop(
-            "onyx.server.tenants.provisioning",
-            "get_or_provision_tenant",
-            async_return_default_schema,
-        )(
-            email=user.email,
-            request=request,
-        )
+        tenant_id = await resolve_tenant_for_user(user.email, request)
 
         user_count = None
         token = CURRENT_TENANT_ID_CONTEXTVAR.set(tenant_id)
@@ -1598,11 +1610,9 @@ class TenantAwareRedisStrategy(RedisStrategy[User, uuid.UUID]):
     async def write_token(self, user: User) -> str:
         redis = await get_async_redis_connection()
 
-        tenant_id = await fetch_ee_implementation_or_noop(
-            "onyx.server.tenants.provisioning",
-            "get_or_provision_tenant",
-            async_return_default_schema,
-        )(email=user.email)
+        # The token names the workspace every later request runs against, so it
+        # has to agree with the one the login actually entered.
+        tenant_id = await resolve_tenant_for_user(user.email)
 
         now = datetime.now(timezone.utc)
         token = secrets.token_urlsafe()
@@ -2543,7 +2553,14 @@ async def complete_login_flow(
     allowed_email_domains_override: Sequence[str] | None = None,
 ) -> RedirectResponse:
     """Shared post-token OAuth/OIDC login: read the verified identity, create or
-    authenticate the user, and return a web or mobile redirect."""
+    authenticate the user, and return a web or mobile redirect.
+
+    Runs inside whatever tenant context the caller set. An SSO login pins its
+    workspace via SESSION_TENANT_OVERRIDE_CONTEXTVAR, which keeps a pinned login
+    inside that one workspace: session issuance and the post-register hook read
+    the same override rather than re-deriving a workspace from the address, which
+    a first-time member does not yet answer to.
+    """
     # Convert a failed or unverified userinfo fetch into a controlled login
     # rejection. OnyxError has a global handler, GetIdEmailError would 500.
     try:
@@ -2566,9 +2583,14 @@ async def complete_login_flow(
     referral_source = state_data.get("referral_source", None)
     # Drives the new_team redirect below. Resolving differently from the login
     # itself would greet a returning user as a brand new signup.
-    tenant_id = fetch_ee_implementation_or_noop(
-        "onyx.db.user_tenant_mapping", "resolve_tenant_id", None
-    )(account_email, oauth_client.name, account_id)
+    tenant_id = (
+        SESSION_TENANT_OVERRIDE_CONTEXTVAR.get()
+        or fetch_ee_implementation_or_noop(
+            "onyx.db.user_tenant_mapping", "resolve_tenant_id", None
+        )(account_email, oauth_client.name, account_id)
+    )
+
+    request.state.referral_source = referral_source
 
     # Snapshot the raw IdP claims for directory-profile enrichment and the admin
     # "OAuth Test" page. The subject-resolved tenant keeps capture working after
@@ -2576,8 +2598,6 @@ async def complete_login_flow(
     await capture_oauth_login_claims(
         oauth_client, account_email, token, tenant_id=tenant_id
     )
-
-    request.state.referral_source = referral_source
 
     try:
         user = await user_manager.oauth_callback(  # ty: ignore[invalid-argument-type]

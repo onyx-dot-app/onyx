@@ -1932,6 +1932,13 @@ SIGNUP_RATE_LIMIT_ENABLED = (
     os.environ.get("SIGNUP_RATE_LIMIT_ENABLED", "").lower() == "true"
 )
 
+# Per-IP rate limit on /auth/sso/discover. On by default: the endpoint answers
+# for addresses it has not authenticated, so an unthrottled one is a workspace
+# membership oracle.
+SSO_DISCOVERY_RATE_LIMIT_ENABLED = (
+    os.environ.get("SSO_DISCOVERY_RATE_LIMIT_ENABLED", "true").lower() == "true"
+)
+
 MOCK_CONNECTOR_FILE_PATH = os.environ.get("MOCK_CONNECTOR_FILE_PATH")
 
 # Set to true to mock LLM responses for testing purposes
