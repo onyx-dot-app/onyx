@@ -1,12 +1,10 @@
-"""Integration tests for ADD_AGENTS permission gate.
+"""Integration tests for the ADD_AGENTS permission gate.
 
-ADD_AGENTS gates the "create / edit my own agent" endpoints on the
-basic_router (prefix ``/persona``) and agents_router (prefix
-``/agents``) in ``backend/onyx/server/features/persona/api.py``.
+ADD_AGENTS gates creating and deleting your own agent (``/persona``). Bogus ids
+are fine: the gate runs before the DB lookup.
 
-We target PATCH/DELETE endpoints with bogus persona IDs. The permission
-check runs before the DB lookup, so allowed callers receive 404 and
-denied callers receive 403.
+``PATCH /persona/{id}/public`` and ``/share`` are deliberately absent — both are
+BASIC_ACCESS + GATE 2, so they live in test_basic_access.py.
 """
 
 import os
@@ -32,8 +30,6 @@ pytestmark = pytest.mark.skipif(
 PERMISSION = Permission.ADD_AGENTS.value
 
 ENDPOINTS: list[Endpoint] = [
-    ("PATCH", "/persona/999999/public", {"is_public": True}),
-    ("PATCH", "/persona/999999/share", {"user_ids": []}),
     ("DELETE", "/persona/999999", None),
 ]
 

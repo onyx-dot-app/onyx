@@ -1,151 +1,95 @@
-"""Integration tests for BASIC_ACCESS permission gate.
+"""Integration tests for the BASIC_ACCESS permission gate.
 
-Verifies that endpoints protected by ``require_permission(Permission.BASIC_ACCESS)``
-allow admin and basic users but reject limited service accounts, bot users,
-external-permission users, and anonymous (unauthenticated) client.
-
-Each endpoint is tested with all six user types via parameterization.
+BASIC_ACCESS covers ~200 routes and is non-toggleable, so the only principals
+without it are group-less service accounts, BOT / EXT_PERM_USER, and anonymous.
+Endpoints are sampled one per BASIC-gated router to stay proportional.
 """
+
+from typing import Any
 
 import pytest
 
-from tests.integration.common_utils.constants import API_SERVER_URL
-from tests.integration.common_utils.http_client import client
-from tests.integration.common_utils.test_models import DATestAPIKey, DATestUser
+from tests.integration.common_utils.test_models import DATestUser
+from tests.integration.tests.permissions._access_matrix import (
+    Endpoint,
+    assert_response,
+    call_endpoint,
+    resolve_credentials,
+)
 
-# Representative endpoints that use require_permission(Permission.BASIC_ACCESS).
-# One per major router file to cover breadth without redundancy.
-# Chat endpoints are gated by READ_CHAT/WRITE_CHAT (not BASIC_ACCESS) and are
-# covered by test_chat_scopes.py.
-BASIC_ACCESS_ENDPOINTS: list[tuple[str, str]] = [
-    ("GET", "/manage/credential"),
-    ("GET", "/users"),
-    ("GET", "/settings"),
-    ("GET", "/query/valid-tags"),
-    ("GET", "/input_prompt"),
-    ("GET", "/notifications"),
-    ("GET", "/search-settings/get-all-search-settings"),
-    ("GET", "/user/pats"),
+# Replaces USER_KINDS: BASIC has no distinct "holder", every STANDARD user holds it.
+BASIC_USER_KINDS: list[tuple[str, str]] = [
+    ("admin", "allowed"),
+    ("basic", "allowed"),
+    ("service_account", "denied"),
+    ("bot", "denied"),
+    ("ext_perm", "denied"),
+    ("anonymous", "anon_denied"),
+]
+
+# One per BASIC-gated router. Bogus ids are fine: the gate runs before the
+# handler, so an allowed caller's 404 still proves it admitted them.
+ENDPOINTS: list[Endpoint] = [
+    ("GET", "/manage/credential", None),
+    ("GET", "/users", None),
+    ("GET", "/settings", None),
+    ("GET", "/input_prompt", None),
+    ("GET", "/notifications", None),
+    ("GET", "/search-settings/get-all-search-settings", None),
+    ("GET", "/user/pats", None),
+    ("GET", "/skills", None),
+    ("GET", "/user/projects", None),
+    ("GET", "/persona/labels", None),
+    ("GET", "/tool", None),
+    ("GET", "/manage/document-set", None),
+    ("GET", "/hierarchy-nodes", None),
+    ("GET", "/voice/status", None),
+    ("GET", "/federated", None),
+    ("GET", "/user-oauth-token/status", None),
+    ("GET", "/manage/indexed-sources", None),
+    ("GET", "/document/document-size-info", None),
+    # BASIC + GATE 2: the gate admits anyone, update_persona_* enforces ownership.
+    ("PATCH", "/persona/999999/public", {"is_public": True}),
+    ("PATCH", "/persona/999999/share", {"user_ids": []}),
 ]
 
 
-# ------------------------------------------------------------------
-# Allowed users: admin and basic
-# ------------------------------------------------------------------
+# Routes on a token BASIC implies — the only HTTP-level check of the implication
+# edge. Limited to tokens the limited service account lacks: it holds write:chat
+# (⇒ read:chat), so READ_CHAT routes wouldn't be denied for it.
+IMPLIED_ENDPOINTS: list[Endpoint] = [
+    # basic ⇒ read:search
+    ("GET", "/query/valid-tags", None),
+]
 
 
-@pytest.mark.parametrize("method,path", BASIC_ACCESS_ENDPOINTS)
-def test_admin_user_allowed(
+@pytest.mark.parametrize("user_kind,expected", BASIC_USER_KINDS)
+@pytest.mark.parametrize("method,path,body", ENDPOINTS)
+def test_access_matrix(
+    user_kind: str,
+    expected: str,
     method: str,
     path: str,
-    permission_admin_user: DATestUser,
-) -> None:
-    """Admin users should be able to access BASIC_ACCESS endpoints."""
-    resp = client.request(
-        method,
-        f"{API_SERVER_URL}{path}",
-        headers=permission_admin_user.headers,
-        cookies=permission_admin_user.cookies,
-        timeout=30,
-    )
-    assert resp.status_code < 400, (
-        f"Admin should access {method} {path}, got {resp.status_code}"
-    )
-
-
-@pytest.mark.parametrize("method,path", BASIC_ACCESS_ENDPOINTS)
-def test_basic_user_allowed(
-    method: str,
-    path: str,
-    permission_basic_user: DATestUser,
-) -> None:
-    """Basic users should be able to access BASIC_ACCESS endpoints."""
-    resp = client.request(
-        method,
-        f"{API_SERVER_URL}{path}",
-        headers=permission_basic_user.headers,
-        cookies=permission_basic_user.cookies,
-        timeout=30,
-    )
-    assert resp.status_code < 400, (
-        f"Basic user should access {method} {path}, got {resp.status_code}"
-    )
-
-
-# ------------------------------------------------------------------
-# Denied users: limited service account, bot, ext_perm, anonymous
-# ------------------------------------------------------------------
-
-
-@pytest.mark.parametrize("method,path", BASIC_ACCESS_ENDPOINTS)
-def test_limited_service_account_denied(
-    method: str,
-    path: str,
-    limited_service_account: DATestAPIKey,
-) -> None:
-    """Limited service accounts (no BASIC_ACCESS) should be denied."""
-    resp = client.request(
-        method,
-        f"{API_SERVER_URL}{path}",
-        headers=limited_service_account.headers,
-        timeout=30,
-    )
-    assert resp.status_code == 403, (
-        f"Limited service account should be denied on {method} {path}, "
-        f"got {resp.status_code}"
-    )
-
-
-@pytest.mark.parametrize("method,path", BASIC_ACCESS_ENDPOINTS)
-def test_bot_user_denied(
-    method: str,
-    path: str,
-    bot_user_headers: dict[str, str],
-) -> None:
-    """Bot (SLACK_USER) accounts should be denied from BASIC_ACCESS endpoints."""
-    resp = client.request(
-        method,
-        f"{API_SERVER_URL}{path}",
-        headers=bot_user_headers,
-        timeout=30,
-    )
-    assert resp.status_code == 403, (
-        f"Bot user should be denied on {method} {path}, got {resp.status_code}"
-    )
-
-
-@pytest.mark.parametrize("method,path", BASIC_ACCESS_ENDPOINTS)
-def test_ext_perm_user_denied(
-    method: str,
-    path: str,
-    ext_perm_user_headers: dict[str, str],
-) -> None:
-    """External permission users should be denied from BASIC_ACCESS endpoints."""
-    resp = client.request(
-        method,
-        f"{API_SERVER_URL}{path}",
-        headers=ext_perm_user_headers,
-        timeout=30,
-    )
-    assert resp.status_code == 403, (
-        f"Ext perm user should be denied on {method} {path}, got {resp.status_code}"
-    )
-
-
-@pytest.mark.parametrize("method,path", BASIC_ACCESS_ENDPOINTS)
-def test_anonymous_denied(
-    method: str,
-    path: str,
+    body: dict[str, Any] | None,
+    request: pytest.FixtureRequest,
     permission_admin_user: DATestUser,  # noqa: ARG001 -- ensures reset ran
 ) -> None:
-    """Unauthenticated (anonymous) requests should be denied."""
-    resp = client.request(
-        method,
-        f"{API_SERVER_URL}{path}",
-        headers={},
-        timeout=30,
-    )
-    assert resp.status_code in (
-        401,
-        403,
-    ), f"Anonymous should be denied on {method} {path}, got {resp.status_code}"
+    headers, cookies = resolve_credentials(user_kind, request)
+    resp = call_endpoint(method, path, body, headers, cookies)
+    assert_response(resp, method, path, user_kind, expected)
+
+
+@pytest.mark.parametrize("user_kind,expected", BASIC_USER_KINDS)
+@pytest.mark.parametrize("method,path,body", IMPLIED_ENDPOINTS)
+def test_implied_token_access_matrix(
+    user_kind: str,
+    expected: str,
+    method: str,
+    path: str,
+    body: dict[str, Any] | None,
+    request: pytest.FixtureRequest,
+    permission_admin_user: DATestUser,  # noqa: ARG001 -- ensures reset ran
+) -> None:
+    headers, cookies = resolve_credentials(user_kind, request)
+    resp = call_endpoint(method, path, body, headers, cookies)
+    assert_response(resp, method, path, user_kind, expected)

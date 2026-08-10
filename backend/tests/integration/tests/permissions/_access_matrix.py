@@ -18,7 +18,9 @@ on a bogus ID is fine — we only care that the caller was not blocked by
 the gate.
 """
 
-from typing import Any
+from collections.abc import Callable
+from enum import Enum
+from typing import Any, NamedTuple
 
 import httpx
 import pytest
@@ -93,33 +95,52 @@ def resolve_credentials(
 _LIMITED_USER_DETAIL = "Access denied. User has limited permissions."
 
 
-def _is_gate_denial(resp: httpx.Response) -> bool:
-    """True iff the 403 came from an auth-layer gate, not the handler.
+class Gate(str, Enum):
+    """Which auth layer produced a 403. All four denial sites share
+    ``INSUFFICIENT_PERMISSIONS`` — the only 403 code — so only the detail message
+    tells them apart, and a manager denied at GATE 1 vs GATE 2 means opposite
+    things (route forgot allow_scope vs scope check working)."""
 
-    Two auth-layer shapes exist:
+    GATE_1 = "gate_1"  # require_permission
+    GATE_2 = "gate_2"  # assert_within_scope / assert_manages_group
+    ADMIN_ONLY = "admin_only"  # assert_global
+    LIMITED_USER = "limited_user"  # current_user, empty effective_permissions
+    NOT_A_GATE = "not_a_gate"  # handler-level 403, or not a 403 at all
 
-    1. ``require_permission`` → ``OnyxError(INSUFFICIENT_PERMISSIONS)``
-       serialised as ``{"error_code": "INSUFFICIENT_PERMISSIONS", ...}``.
-    2. ``current_user`` rejects a user whose effective_permissions list is
-       empty via ``BasicAuthenticationError`` → plain
-       ``{"detail": "Access denied. User has limited permissions."}``.
 
-    A handler-level 403 (e.g. persona handlers re-raising ``ValueError`` as
-    ``HTTPException(403)``) matches neither shape.
-    """
+# Prefixes, not equality, so rewording a message can't silently reclassify the layer.
+_GATE_BY_DETAIL_PREFIX: list[tuple[str, Gate]] = [
+    ("You do not have the required permissions", Gate.GATE_1),
+    ("Group managers can only act", Gate.GATE_2),
+    ("This action is restricted to administrators", Gate.ADMIN_ONLY),
+    (_LIMITED_USER_DETAIL, Gate.LIMITED_USER),
+]
+
+
+def gate_of(resp: httpx.Response) -> Gate:
+    """Classify a 403 by the auth layer that raised it. A handler-level 403 (e.g.
+    persona handlers re-raising ValueError) matches nothing and is NOT_A_GATE."""
     if resp.status_code != 403:
-        return False
+        return Gate.NOT_A_GATE
     try:
         body = resp.json()
     except ValueError:
-        return False
+        return Gate.NOT_A_GATE
     if not isinstance(body, dict):
-        return False
+        return Gate.NOT_A_GATE
+    detail = body.get("detail")
+    if isinstance(detail, str):
+        for prefix, gate in _GATE_BY_DETAIL_PREFIX:
+            if detail.startswith(prefix):
+                return gate
+    # Unrecognised detail is still an auth denial; fall back rather than lose it.
     if body.get("error_code") == "INSUFFICIENT_PERMISSIONS":
-        return True
-    if body.get("detail") == _LIMITED_USER_DETAIL:
-        return True
-    return False
+        return Gate.GATE_1
+    return Gate.NOT_A_GATE
+
+
+def _is_gate_denial(resp: httpx.Response) -> bool:
+    return gate_of(resp) is not Gate.NOT_A_GATE
 
 
 def assert_response(
@@ -129,10 +150,10 @@ def assert_response(
     user_kind: str,
     expected: str,
 ) -> None:
+    """``expected``: allowed | denied (any auth layer) | denied_gate1 |
+    denied_gate2 | anon_denied (401 or 403)."""
     if expected == "allowed":
-        # A caller who cleared the gate may still hit a handler-level 403
-        # (e.g. persona-not-found paths that reuse 403). We only care that
-        # the permission gate itself did not reject the request.
+        # Tolerates a handler-level 403 (bogus ids reuse 403); only the gate matters.
         assert resp.status_code != 401 and not _is_gate_denial(resp), (
             f"{user_kind} should not be blocked by permission gate on "
             f"{method} {path}, got {resp.status_code} "
@@ -144,9 +165,72 @@ def assert_response(
             f"{method} {path}, got {resp.status_code} "
             f"(body={resp.text[:200]})"
         )
+    elif expected in ("denied_gate1", "denied_gate2"):
+        wanted = Gate.GATE_1 if expected == "denied_gate1" else Gate.GATE_2
+        actual = gate_of(resp)
+        assert actual is wanted, (
+            f"{user_kind} should be denied by {wanted.value} on {method} {path}, "
+            f"but got {actual.value} (status={resp.status_code}, "
+            f"body={resp.text[:200]})"
+        )
     elif expected == "anon_denied":
         assert resp.status_code in (401, 403), (
             f"Anonymous should be denied on {method} {path}, got {resp.status_code}"
         )
     else:
         raise ValueError(f"Unknown expected value: {expected}")
+
+
+# Scope vocabulary, for the permissions in SCOPED_MANAGER_PERMISSIONS. Separate
+# from USER_KINDS because scope asks "may this principal act on THIS resource",
+# which needs a resource and a managed/unmanaged group pair.
+
+# (kind, expectation in the managed group, expectation outside it). A manager
+# clears GATE 1 either way — a GATE 1 denial would mean the route forgot
+# allow_scope — and is stopped by GATE 2 only out of scope.
+SCOPE_USER_KINDS: list[tuple[str, str, str]] = [
+    ("admin", "allowed", "allowed"),
+    ("holder", "allowed", "allowed"),
+    ("manager", "allowed", "denied_gate2"),
+    ("plain_member", "denied_gate1", "denied_gate1"),
+]
+
+
+class ScopeEndpoint(NamedTuple):
+    """A route under scope test. ``path``/``body`` are built per resource, because
+    scope is only observable against a concrete resource."""
+
+    method: str
+    path: Callable[[Any], str]
+    body: Callable[[Any], dict[str, Any] | None] = lambda _resource: None
+    label: str = ""
+
+
+def resolve_scope_credentials(
+    user_kind: str, request: pytest.FixtureRequest
+) -> tuple[dict[str, str], Any]:
+    """``holder`` reuses the calling module's own fixture, so a file's scope block
+    and access-matrix block agree on what holding this permission means."""
+    fixture_map = {
+        "admin": "permission_admin_user",
+        "holder": "holder_user",
+        "manager": "scoped_manager_user",
+        "plain_member": "scoped_group_member",
+    }
+    user = request.getfixturevalue(fixture_map[user_kind])
+    return user.headers, user.cookies
+
+
+def assert_scope_case(
+    endpoint: ScopeEndpoint,
+    resource_id: Any,
+    user_kind: str,
+    expected: str,
+    request: pytest.FixtureRequest,
+) -> None:
+    headers, cookies = resolve_scope_credentials(user_kind, request)
+    path = endpoint.path(resource_id)
+    resp = call_endpoint(
+        endpoint.method, path, endpoint.body(resource_id), headers, cookies
+    )
+    assert_response(resp, endpoint.method, path, user_kind, expected)

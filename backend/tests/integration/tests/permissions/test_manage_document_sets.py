@@ -7,16 +7,25 @@ sends valid-shape bodies and tolerates 404 on a bogus DELETE path.
 """
 
 import os
-from typing import Any
+from typing import Any, NamedTuple
+from uuid import uuid4
 
 import pytest
 
 from onyx.db.enums import Permission
-from tests.integration.common_utils.test_models import DATestAPIKey, DATestUser
+from tests.integration.common_utils.managers.document_set import DocumentSetManager
+from tests.integration.common_utils.test_models import (
+    DATestAPIKey,
+    DATestUser,
+    DATestUserGroup,
+)
 from tests.integration.tests.permissions._access_matrix import (
+    SCOPE_USER_KINDS,
     USER_KINDS,
     Endpoint,
+    ScopeEndpoint,
     assert_response,
+    assert_scope_case,
     call_endpoint,
     resolve_credentials,
 )
@@ -81,3 +90,117 @@ def test_access_matrix(
     headers, cookies = resolve_credentials(user_kind, request)
     resp = call_endpoint(method, path, body, headers, cookies)
     assert_response(resp, method, path, user_kind, expected)
+
+
+# Scope matrix — MANAGE_DOCUMENT_SETS is in SCOPED_MANAGER_PERMISSIONS.
+
+
+class _ScopedDocSet(NamedTuple):
+    """The update body re-sends current groups, so the id alone isn't enough."""
+
+    id: int
+    group_id: int
+
+
+def _update_body(doc_set: _ScopedDocSet) -> dict[str, Any]:
+    """No-op update: re-sends current state, so only the gate verdict can fail it
+    and repeated runs stay order-independent."""
+    return {
+        "id": doc_set.id,
+        "name": f"scope-doc-set-{doc_set.id}",
+        "description": "scope matrix",
+        "cc_pair_ids": [],
+        "is_public": False,
+        "users": [],
+        "groups": [doc_set.group_id],
+        "federated_connectors": [],
+    }
+
+
+@pytest.fixture(scope="module")
+def scoped_document_sets(
+    permission_admin_user: DATestUser,
+    scoped_managed_group: DATestUserGroup,
+    scoped_other_group: DATestUserGroup,
+) -> tuple[_ScopedDocSet, _ScopedDocSet]:
+    """Created by the admin so the manager's create path isn't a precondition for
+    testing their edit path."""
+    in_scope = DocumentSetManager.create(
+        user_performing_action=permission_admin_user,
+        is_public=False,
+        groups=[scoped_managed_group.id],
+    )
+    out_of_scope = DocumentSetManager.create(
+        user_performing_action=permission_admin_user,
+        is_public=False,
+        groups=[scoped_other_group.id],
+    )
+    return (
+        _ScopedDocSet(in_scope.id, scoped_managed_group.id),
+        _ScopedDocSet(out_of_scope.id, scoped_other_group.id),
+    )
+
+
+def _create_body(doc_set: _ScopedDocSet) -> dict[str, Any]:
+    """Create is scoped by the groups the request asks for; the resource only
+    supplies the target group."""
+    return {
+        "name": f"scope-create-{uuid4()}",
+        "description": "scope matrix",
+        "cc_pair_ids": [],
+        "is_public": False,
+        "users": [],
+        "groups": [doc_set.group_id],
+        "federated_connectors": [],
+    }
+
+
+_CREATE_ENDPOINT = ScopeEndpoint(
+    method="POST",
+    path=lambda _doc_set: "/manage/admin/document-set",
+    body=_create_body,
+    label="create-document-set",
+)
+
+_PATCH_ENDPOINT = ScopeEndpoint(
+    method="PATCH",
+    path=lambda _doc_set: "/manage/admin/document-set",
+    body=_update_body,
+    label="patch-document-set",
+)
+
+_DELETE_ENDPOINT = ScopeEndpoint(
+    method="DELETE",
+    path=lambda doc_set: f"/manage/admin/document-set/{doc_set.id}",
+    label="delete-document-set",
+)
+
+
+@pytest.mark.parametrize(
+    "endpoint", [_CREATE_ENDPOINT, _PATCH_ENDPOINT], ids=lambda e: e.label
+)
+@pytest.mark.parametrize("user_kind,in_scope,out_of_scope", SCOPE_USER_KINDS)
+def test_scope_matrix(
+    endpoint: ScopeEndpoint,
+    user_kind: str,
+    in_scope: str,
+    out_of_scope: str,
+    scoped_document_sets: tuple[_ScopedDocSet, _ScopedDocSet],
+    request: pytest.FixtureRequest,
+) -> None:
+    in_scope_set, out_of_scope_set = scoped_document_sets
+    assert_scope_case(endpoint, in_scope_set, user_kind, in_scope, request)
+    assert_scope_case(endpoint, out_of_scope_set, user_kind, out_of_scope, request)
+
+
+@pytest.mark.parametrize("user_kind", ["manager", "plain_member"])
+def test_delete_is_out_of_manager_scope(
+    user_kind: str,
+    scoped_document_sets: tuple[_ScopedDocSet, _ScopedDocSet],
+    request: pytest.FixtureRequest,
+) -> None:
+    """No allow_scope on DELETE, so a manager is stopped at GATE 1 either way —
+    that is what keeps delete admin-only for a set they can otherwise edit. The
+    admin side is covered above; repeating it here would delete the fixture."""
+    for doc_set in scoped_document_sets:
+        assert_scope_case(_DELETE_ENDPOINT, doc_set, user_kind, "denied_gate1", request)

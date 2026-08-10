@@ -199,34 +199,51 @@ def test_manager_cannot_grant_skill_to_unmanaged_group(env: _ScopedEnv) -> None:
     skill = SkillManager.create_custom(
         env.manager, is_public=False, group_ids=[env.managed_group.id]
     )
-    path = f"/admin/skills/custom/{skill.id}/grants"
     _assert_manager(
         env,
-        "PUT",
-        path,
+        "PATCH",
+        f"/skills/custom/{skill.id}/share",
         "denied",
-        {"group_ids": [env.managed_group.id, env.other_group.id]},
+        {
+            "group_shares": [
+                {"group_id": env.managed_group.id, "permission": "VIEWER"},
+                {"group_id": env.other_group.id, "permission": "VIEWER"},
+            ]
+        },
     )
 
 
 def test_manager_cannot_publish_skill(env: _ScopedEnv) -> None:
+    # _ensure_can_edit_org_visibility admits only the owner or a global holder.
     skill = SkillManager.create_custom(
-        env.manager, is_public=False, group_ids=[env.managed_group.id]
+        env.admin, is_public=False, group_ids=[env.managed_group.id]
     )
     _assert_manager(
-        env, "PATCH", f"/admin/skills/custom/{skill.id}", "denied", {"is_public": True}
+        env,
+        "PATCH",
+        f"/skills/custom/{skill.id}",
+        "denied",
+        {"public_permission": "VIEWER"},
     )
 
 
-def test_manager_cannot_delete_skill(env: _ScopedEnv) -> None:
-    # Owns it, in a managed group — still denied: delete is admin-only.
+@pytest.mark.xfail(
+    strict=True,
+    reason="D6 (admin-only delete for managed resources) is not implemented. "
+    "31d5a492e4 removed the admin skill router, so the only delete is "
+    "delete_current_user_skill (BASIC_ACCESS + SkillManagementPolicy.EDIT), and "
+    "EDIT admits a scoped manager via _is_group_shared_only_within_managed_scope "
+    "— so the manager currently succeeds. Drop this marker when D6 lands.",
+)
+def test_manager_cannot_delete_skill_it_does_not_own(env: _ScopedEnv) -> None:
+    # Manager can edit it (managed group), but delete should stay admin-only.
     skill = SkillManager.create_custom(
-        env.manager, is_public=False, group_ids=[env.managed_group.id]
+        env.admin, is_public=False, group_ids=[env.managed_group.id]
     )
-    _assert_manager(env, "DELETE", f"/admin/skills/custom/{skill.id}", "denied")
+    _assert_manager(env, "DELETE", f"/skills/custom/{skill.id}", "denied")
 
 
-def test_manager_skill_admin_list_is_scoped(env: _ScopedEnv) -> None:
+def test_manager_skill_list_is_scoped(env: _ScopedEnv) -> None:
     mine = SkillManager.create_custom(
         env.manager, is_public=False, group_ids=[env.managed_group.id]
     )
@@ -234,7 +251,7 @@ def test_manager_skill_admin_list_is_scoped(env: _ScopedEnv) -> None:
         env.admin, is_public=False, group_ids=[env.other_group.id]
     )
     resp = call_endpoint(
-        "GET", "/admin/skills", None, env.manager.headers, env.manager.cookies
+        "GET", "/skills", None, env.manager.headers, env.manager.cookies
     )
     assert resp.status_code == 200, resp.text
     custom_ids = {c["id"] for c in resp.json()["customs"]}

@@ -19,6 +19,7 @@ This avoids a costly full reset per test.
 """
 
 from collections.abc import Callable
+from typing import NamedTuple
 
 import pytest
 
@@ -32,7 +33,11 @@ from tests.integration.common_utils.managers.api_key import APIKeyManager
 from tests.integration.common_utils.managers.user import UserManager
 from tests.integration.common_utils.managers.user_group import UserGroupManager
 from tests.integration.common_utils.reset import reset_all
-from tests.integration.common_utils.test_models import DATestAPIKey, DATestUser
+from tests.integration.common_utils.test_models import (
+    DATestAPIKey,
+    DATestUser,
+    DATestUserGroup,
+)
 
 
 def _attach_group_with_permission(
@@ -170,6 +175,76 @@ def permission_holder_user_factory(
         return user
 
     return _make
+
+
+class _ScopedSetup(NamedTuple):
+    manager: DATestUser
+    member: DATestUser
+    managed_group: DATestUserGroup
+    other_group: DATestUserGroup
+
+
+@pytest.fixture(scope="module")
+def _scoped_setup(permission_admin_user: DATestUser) -> _ScopedSetup:
+    """Private: depend on the four projections below. Promotion requires
+    membership, so users and group can't be independent fixtures without a cycle.
+
+    Promotes through the real route rather than writing ``is_manager`` directly —
+    production is what loses manager edges (see the SCIM replace path), so a test
+    that plants the edge itself can't detect production dropping it.
+
+    Module-scoped, so treat it as read-only: anything that promotes or demotes
+    must build its own throwaway manager and group or it will reorder-break the
+    rest of the file.
+    """
+    manager = UserManager.create(name="scoped_manager")
+    member = UserManager.create(name="scoped_member")
+
+    managed_group = UserGroupManager.create(
+        name="scoped-managed",
+        user_ids=[manager.id, member.id],
+        cc_pair_ids=[],
+        user_performing_action=permission_admin_user,
+    )
+    other_group = UserGroupManager.create(
+        name="scoped-unmanaged",
+        user_ids=[],
+        cc_pair_ids=[],
+        user_performing_action=permission_admin_user,
+    )
+    UserGroupManager.set_manager(
+        user_group=managed_group,
+        user=manager,
+        is_manager=True,
+        user_performing_action=permission_admin_user,
+    ).raise_for_status()
+
+    return _ScopedSetup(manager, member, managed_group, other_group)
+
+
+@pytest.fixture(scope="module")
+def scoped_manager_user(_scoped_setup: _ScopedSetup) -> DATestUser:
+    """Manages ``scoped_managed_group`` and nothing else."""
+    return _scoped_setup.manager
+
+
+@pytest.fixture(scope="module")
+def scoped_group_member(_scoped_setup: _ScopedSetup) -> DATestUser:
+    """Ordinary member of ``scoped_managed_group``. Unlike ``permission_basic_user``
+    they are *in* the group, so a scope check keyed on membership instead of the
+    manager flag would wrongly admit them and this principal catches it."""
+    return _scoped_setup.member
+
+
+@pytest.fixture(scope="module")
+def scoped_managed_group(_scoped_setup: _ScopedSetup) -> DATestUserGroup:
+    return _scoped_setup.managed_group
+
+
+@pytest.fixture(scope="module")
+def scoped_other_group(_scoped_setup: _ScopedSetup) -> DATestUserGroup:
+    """Out-of-scope target: ``scoped_manager_user`` neither manages nor belongs to it."""
+    return _scoped_setup.other_group
 
 
 @pytest.fixture(scope="module")
