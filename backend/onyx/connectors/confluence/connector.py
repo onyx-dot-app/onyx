@@ -121,6 +121,7 @@ _PRUNING_EXPANSION_FIELDS = [
 ]
 
 _SLIM_DOC_BATCH_SIZE = 5000
+_SLIM_ATTACHMENT_MAX_ATTEMPTS = 3
 
 # Confluence document_id is the page URL. Reindex inputs come from
 # IndexAttemptError rows (also URLs). Two URL shapes show up in the wild:
@@ -141,6 +142,11 @@ def _get_page_id(page: dict[str, Any], allow_missing: bool = False) -> str:
     if allow_missing and "id" not in page:
         return "unknown"
     return str(page["id"])
+
+
+def _http_status(e: HTTPError) -> int | None:
+    # NOTE: requests.Response is falsy for error statuses, so compare to None.
+    return e.response.status_code if e.response is not None else None
 
 
 class ConfluenceCheckpoint(ConnectorCheckpoint):
@@ -790,43 +796,57 @@ class ConfluenceConnector(
                         )
                     )
         except HTTPError as e:
-            # If we get a 403 after all retries, the user likely doesn't have permission
-            # to access attachments on this page. Log and skip rather than failing the whole job.
+            # A 400/401/403 on the attachment query shouldn't fail the whole job:
+            # log, record a failure for the page, and continue.
+            status_code = _http_status(e)
             page_id = _get_page_id(page, allow_missing=True)
-            page_title = page.get("title", "unknown")
-            if e.response and e.response.status_code in [401, 403]:
-                failure_message_prefix = (
-                    "Invalid credentials (401)"
-                    if e.response.status_code == 401
-                    else "Permission denied (403)"
-                )
-                failure_message = (
-                    f"{failure_message_prefix} when fetching attachments for page '{page_title}' "
-                    f"(ID: {page_id}). The user may not have permission to query attachments on this page. "
-                    "Skipping attachments for this page."
-                )
-                logger.warning(failure_message)
-
-                # Build the page URL for the failure record
-                try:
-                    page_url = build_confluence_document_id(
-                        self.wiki_base, page["_links"]["webui"], self.is_cloud
+            page_ref = f"page '{page.get('title', 'unknown')}' (ID: {page_id})"
+            match status_code:
+                # Date errors are 400s but must propagate so load_from_checkpoint
+                # can retry the batch with an adjusted time offset.
+                case 400 if not is_atlassian_date_error(e):
+                    # Confluence Data Center intermittently rejects offset
+                    # pagination of attachment queries.
+                    failure_message = (
+                        f"Bad request (400) while paginating attachments for {page_ref}. "
+                        "Keeping the attachments retrieved so far and skipping the rest."
                     )
-                except Exception:
-                    page_url = f"page_id:{page_id}"
-
-                return [], [
-                    ConnectorFailure(
-                        failed_document=DocumentFailure(
-                            document_id=page_id,
-                            document_link=page_url,
-                        ),
-                        failure_message=failure_message,
-                        exception=e,
+                case 401 | 403:
+                    failure_message_prefix = (
+                        "Invalid credentials (401)"
+                        if status_code == 401
+                        else "Permission denied (403)"
                     )
-                ]
-            else:
-                raise
+                    failure_message = (
+                        f"{failure_message_prefix} when fetching attachments for {page_ref}. "
+                        "The user may not have permission to query attachments on this page. "
+                        "Skipping attachments for this page."
+                    )
+                    attachment_docs = []
+                    attachment_failures = []
+                case _:
+                    raise
+            logger.warning(failure_message)
+
+            # Build the page URL for the failure record
+            try:
+                page_url = build_confluence_document_id(
+                    self.wiki_base, page["_links"]["webui"], self.is_cloud
+                )
+            except Exception:
+                page_url = f"page_id:{page_id}"
+            attachment_failures.append(
+                ConnectorFailure(
+                    # Confluence document ids are page URLs; targeted reindex
+                    # extracts the page id from this field.
+                    failed_document=DocumentFailure(
+                        document_id=page_url,
+                        document_link=page_url,
+                    ),
+                    failure_message=failure_message,
+                    exception=e,
+                )
+            )
 
         return attachment_docs, attachment_failures
 
@@ -1029,6 +1049,11 @@ class ConfluenceConnector(
                 ) or space_level_access.get(space_key)
             yield doc_or_failure
 
+            # Refetch attachments too
+            attachment_docs, attachment_failures = self._fetch_page_attachments(page)
+            yield from attachment_docs
+            yield from attachment_failures
+
         for doc_id, page_id in url_to_page_id.items():
             if page_id not in seen_page_ids:
                 yield ConnectorFailure(
@@ -1093,6 +1118,48 @@ class ConfluenceConnector(
             include_permissions=True,
             expand_per_page=True,
         )
+
+    def _retrieve_attachments_for_slim_page(
+        self,
+        page_id: str,
+        expand: str,
+        start: SecondsSinceUnixEpoch | None,
+        end: SecondsSinceUnixEpoch | None,
+    ) -> list[dict[str, Any]]:
+        """Fetch a page's attachments for the slim path, retrying Data
+        Center's intermittent pagination 400s (see _fetch_page_attachments).
+
+        Unlike the indexing path, partial results are never kept: pruning
+        deletes anything not enumerated, so a silently truncated enumeration
+        would delete validly indexed attachment docs. Enumerate fully or
+        raise.
+        """
+        attachment_query = self._construct_attachment_query(page_id, start, end)
+        attempts = 0
+        while True:
+            try:
+                return list(
+                    self.confluence_client.cql_paginate_all_expansions(
+                        cql=attachment_query,
+                        expand=expand,
+                        limit=_SLIM_DOC_BATCH_SIZE,
+                    )
+                )
+            except HTTPError as e:
+                attempts += 1
+                if (
+                    _http_status(e) != 400
+                    or is_atlassian_date_error(e)
+                    or attempts >= _SLIM_ATTACHMENT_MAX_ATTEMPTS
+                ):
+                    raise
+                logger.warning(
+                    "Bad request (400) while paginating attachments for page %s "
+                    "(attempt %d/%d); retrying.",
+                    page_id,
+                    attempts,
+                    _SLIM_ATTACHMENT_MAX_ATTEMPTS,
+                )
 
     def _retrieve_all_slim_docs(
         self,
@@ -1191,13 +1258,8 @@ class ConfluenceConnector(
             page_hierarchy_node_yielded = False
             attachment_results: Iterable[dict[str, Any]] = ()
             if self.include_attachments:
-                attachment_query = self._construct_attachment_query(
-                    _get_page_id(page), start, end
-                )
-                attachment_results = self.confluence_client.cql_paginate_all_expansions(
-                    cql=attachment_query,
-                    expand=restrictions_expand,
-                    limit=_SLIM_DOC_BATCH_SIZE,
+                attachment_results = self._retrieve_attachments_for_slim_page(
+                    _get_page_id(page), restrictions_expand, start, end
                 )
             for attachment in attachment_results:
                 # admission must mirror the main indexing pass
@@ -1273,7 +1335,7 @@ class ConfluenceConnector(
             )
             first_space = next(spaces_iter, None)
         except HTTPError as e:
-            status_code = e.response.status_code if e.response else None
+            status_code = _http_status(e)
             if status_code == 401:
                 raise CredentialExpiredError(
                     "Invalid or expired Confluence credentials (HTTP 401)."
