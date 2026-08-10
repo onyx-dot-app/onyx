@@ -1,11 +1,11 @@
 import os
 
 import pytest
-from sqlalchemy import select, update
+from sqlalchemy import update
 
 from onyx.db.engine.sql_engine import get_session_with_current_tenant
 from onyx.db.enums import Permission
-from onyx.db.models import PermissionGrant, User, User__UserGroup
+from onyx.db.models import PermissionGrant, User__UserGroup
 from onyx.db.models import UserGroup as UserGroupModel
 from onyx.db.permissions import (
     recompute_permissions_for_group__no_commit,
@@ -13,6 +13,7 @@ from onyx.db.permissions import (
 )
 from tests.integration.common_utils.managers.user import UserManager
 from tests.integration.common_utils.managers.user_group import UserGroupManager
+from tests.integration.common_utils.permission_state import is_group_manager
 from tests.integration.common_utils.test_models import DATestUser
 
 
@@ -33,17 +34,6 @@ def _set_membership_is_manager(user_id: str, group_id: int, value: bool) -> None
         db_session.flush()
         recompute_user_permissions__no_commit(user_id, db_session)
         db_session.commit()
-
-
-def _is_group_manager(user_id: str) -> bool:
-    with get_session_with_current_tenant() as db_session:
-        value = db_session.scalar(
-            select(User.is_group_manager).where(
-                User.id == user_id  # ty: ignore[invalid-argument-type]
-            )
-        )
-        assert value is not None
-        return value
 
 
 @pytest.mark.skipif(
@@ -163,13 +153,13 @@ def test_is_group_manager_flag_recomputed_on_manager_change(
         user_performing_action=admin_user,
     )
 
-    assert _is_group_manager(member.id) is False
+    assert is_group_manager(member.id) is False
 
     _set_membership_is_manager(member.id, group.id, True)
-    assert _is_group_manager(member.id) is True
+    assert is_group_manager(member.id) is True
 
     _set_membership_is_manager(member.id, group.id, False)
-    assert _is_group_manager(member.id) is False
+    assert is_group_manager(member.id) is False
 
 
 @pytest.mark.skipif(
@@ -192,10 +182,10 @@ def test_is_group_manager_true_when_managing_any_group(
         user_ids=[admin_user.id, member.id],
         user_performing_action=admin_user,
     )
-    assert _is_group_manager(member.id) is False
+    assert is_group_manager(member.id) is False
 
     _set_membership_is_manager(member.id, managed_group.id, True)
-    assert _is_group_manager(member.id) is True
+    assert is_group_manager(member.id) is True
 
     _set_membership_is_manager(member.id, managed_group.id, False)
-    assert _is_group_manager(member.id) is False
+    assert is_group_manager(member.id) is False

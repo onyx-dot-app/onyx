@@ -101,18 +101,42 @@ class UserGroupManager:
         response.raise_for_status()
         return response.json()
 
+    # *_by_id variants: SCIM tests hold only the group id the SCIM API returns.
+
+    @staticmethod
+    def set_permissions_by_id(
+        user_group_id: int | str,
+        permissions: list[str],
+        user_performing_action: DATestUser,
+    ) -> httpx.Response:
+        return client.put(
+            f"{API_SERVER_URL}/manage/admin/user-group/{user_group_id}/permissions",
+            json={"permissions": permissions},
+            headers=user_performing_action.headers,
+        )
+
     @staticmethod
     def set_permissions(
         user_group: DATestUserGroup,
         permissions: list[str],
         user_performing_action: DATestUser,
     ) -> httpx.Response:
-        response = client.put(
-            f"{API_SERVER_URL}/manage/admin/user-group/{user_group.id}/permissions",
-            json={"permissions": permissions},
+        return UserGroupManager.set_permissions_by_id(
+            user_group.id, permissions, user_performing_action
+        )
+
+    @staticmethod
+    def set_manager_by_id(
+        user_group_id: int | str,
+        user_id: str,
+        is_manager: bool,
+        user_performing_action: DATestUser,
+    ) -> httpx.Response:
+        return client.put(
+            f"{API_SERVER_URL}/manage/admin/user-group/{user_group_id}/manager",
+            json={"user_id": user_id, "is_manager": is_manager},
             headers=user_performing_action.headers,
         )
-        return response
 
     @staticmethod
     def set_manager(
@@ -122,12 +146,23 @@ class UserGroupManager:
         user_performing_action: DATestUser,
     ) -> httpx.Response:
         """(De)assign a group manager. The target must already be a member."""
-        response = client.put(
-            f"{API_SERVER_URL}/manage/admin/user-group/{user_group.id}/manager",
-            json={"user_id": user.id, "is_manager": is_manager},
+        return UserGroupManager.set_manager_by_id(
+            user_group.id, user.id, is_manager, user_performing_action
+        )
+
+    @staticmethod
+    def get_manager_ids(
+        user_group_id: int | str, user_performing_action: DATestUser
+    ) -> set[str]:
+        response = client.get(
+            f"{API_SERVER_URL}/manage/admin/user-group",
             headers=user_performing_action.headers,
         )
-        return response
+        response.raise_for_status()
+        for group in response.json():
+            if str(group["id"]) == str(user_group_id):
+                return {str(uid) for uid in group["manager_ids"]}
+        raise AssertionError(f"group {user_group_id} not found")
 
     @staticmethod
     def get_all(
