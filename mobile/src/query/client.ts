@@ -12,7 +12,6 @@ export const queryClient = new QueryClient({
     queries: {
       staleTime: 30_000,
       gcTime: persistMaxAge, // must cover the persist window or the offline cache collapses
-      // 401/402/403 can't succeed without re-auth.
       retry: (failureCount, error) => !isAuthError(error) && failureCount < 1,
       // Must stay true or the AppState->focusManager bridge in query/focus.ts no-ops.
       refetchOnWindowFocus: true,
@@ -25,24 +24,25 @@ export const persister = createSyncStoragePersister({
   storage: makeMmkvStorage(queryStorage),
 });
 
-// Keys excluded from the unencrypted MMKV snapshot. Identity (`me`), ALL chat data,
-// workspace-scoped config (agents, settings), and projects (their embedded chat titles
-// are PII) live in memory only and refetch on launch, so nothing personal or
-// workspace-specific lingers after logout or an account switch (the trailing serverUrl
-// varies per instance, so only the leading entity segment matches).
+/*
+ * Never written to the unencrypted MMKV snapshot: anything personal or workspace-specific, so
+ * nothing lingers after logout or an account switch (these all refetch on launch). Prefixes match
+ * only the leading entity segment because the trailing serverUrl varies per instance.
+ */
 const NON_PERSISTED_KEY_PREFIXES: readonly (readonly unknown[])[] = [
   [QUERY_KEYS.me(null)[0]],
   [QUERY_KEYS.agents(null)[0]],
   [QUERY_KEYS.workspaceSettings(null)[0]],
-  [QUERY_KEYS.userProjects(null)[0]], // "projects"
-  [QUERY_KEYS.userProject(null, null)[0]], // "project"
-  [QUERY_KEYS.userRecentFiles(null)[0]], // "recent-files" (file names are PII)
-  [QUERY_KEYS.agentPreferences(null)[0]], // "agent-preferences" (per-user workspace config)
+  [QUERY_KEYS.userProjects(null)[0]],
+  [QUERY_KEYS.userProject(null, null)[0]],
+  [QUERY_KEYS.userRecentFiles(null)[0]],
+  [QUERY_KEYS.agentPreferences(null)[0]],
+  [QUERY_KEYS.connectorSources(null)[0]], // names the workspace's connectors
+  [QUERY_KEYS.federatedSources(null)[0]],
 ];
 
 function isNonPersistedKey(queryKey: readonly unknown[]): boolean {
-  // Default-deny for chat: any key whose entity segment starts with `chat-` (covers
-  // chat-sessions/chat-session today + future chat-message/history keys) never persists.
+  // Default-deny so a future `chat-*` key is excluded without being listed.
   const head = queryKey[0];
   if (typeof head === "string" && head.startsWith("chat-")) return true;
   return NON_PERSISTED_KEY_PREFIXES.some((prefix) =>
