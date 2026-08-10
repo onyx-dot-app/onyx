@@ -1,16 +1,12 @@
 """Run pruning's connector enumeration in a spawned child process.
 
-Multi-hour enumerations ratchet the long-lived heavy worker's RSS until the
-pod OOMs; running them in an ephemeral child (mirroring docfetching's
-`SimpleJobClient` pattern) lets the OS reclaim everything at child exit.
-The celery task acts as the watchdog (owns the redis lock/fence, kills the
-child on stop or timeout); the child returns its result through a JSON file,
-schema-validated on read (an mp queue can deadlock on multi-MB payloads).
-`run_in_isolated_process` is not usable here: it blocks the calling thread for
-the child's whole lifetime, but multi-hour enumerations need the parent free
-to renew the redis lock and react to the stop fence.
-Prometheus metrics are emitted by the parent — the child's registry is never
-scraped.
+Multi-hour enumerations ratchet the long-lived heavy worker's RSS — allocator
+retention is only fully released on process exit — so the crawl runs in an
+ephemeral child (docfetching's `SimpleJobClient` pattern). The celery task
+stays behind as the watchdog: it renews the redis lock, kills the child on
+stop or timeout, and reads the result from a schema-validated JSON file
+(mp queues deadlock on multi-MB payloads; `run_in_isolated_process` would
+block this thread for the child's whole lifetime).
 """
 
 import os
@@ -37,13 +33,8 @@ from shared_configs.configs import SENTRY_CELERY_TRACES_SAMPLE_RATE, SENTRY_DSN
 
 logger = setup_logger()
 
-# how long the watchdog waits on the child between liveness checks
 _WATCHDOG_POLL_SECONDS = 5
-
-# how often the watchdog reacquires the pruning redis lock
 _LOCK_REACQUIRE_INTERVAL_SECONDS = 60
-
-# grace period for the child to exit after SIGTERM before SIGKILL
 _TERMINATE_GRACE_SECONDS = 10
 
 
@@ -54,10 +45,8 @@ class PruneEnumerationError(RuntimeError):
 class SpawnedPruneCallback(IndexingHeartbeatInterface):
     """Child-side heartbeat: liveness, stop fence, and orphan reaping.
 
-    The parent watchdog owns the redis lock and enforces the timeout by
-    killing this process. A raise out of the enumeration (stop fence, crawl
-    error) means no result file is written — a partial enumeration can never
-    be mistaken for a complete one.
+    A raise out of the enumeration means no result file is written, so a
+    partial enumeration can never be mistaken for a complete one.
     """
 
     def __init__(self, redis_connector: RedisConnector):
@@ -79,14 +68,9 @@ def pruning_enumeration_task(
     credential_id: int,
     tenant_id: str,
 ) -> None:
-    """Entrypoint of the spawned enumeration child process.
-
-    Instantiates the connector from the DB, enumerates all document IDs and
-    hierarchy nodes, and writes the pickled `SlimConnectorExtractionResult`
-    to `result_path` (atomically, via rename). Exits 0 on success.
-    """
-    # Spawned via SimpleJobClient, so init Sentry ourselves (mirrors
-    # _docfetching_task).
+    """Child entrypoint: enumerate all doc IDs / hierarchy nodes and write the
+    `SlimConnectorExtractionResult` JSON to `result_path` (atomic rename)."""
+    # spawned via SimpleJobClient, so init Sentry ourselves (mirrors _docfetching_task)
     if SENTRY_DSN:
         from onyx.configs.sentry import init_sentry
 
@@ -121,7 +105,7 @@ def pruning_enumeration_task(
             cc_pair.connector.connector_specific_config,
             cc_pair.credential,
         )
-    # session closed here — no DB connection held during the crawl
+    # session closed — no DB connection held during the crawl
 
     callback = SpawnedPruneCallback(redis_connector)
 
@@ -141,8 +125,7 @@ def pruning_enumeration_task(
         len(extraction_result.hierarchy_nodes),
     )
 
-    # reap Playwright orphans, then exit hard — os._exit skips
-    # _initializer's finally (mirrors _docfetching_task)
+    # os._exit skips _initializer's finally, so drain orphans here (mirrors _docfetching_task)
     reap_exited_children()
     os._exit(0)
 
@@ -157,8 +140,6 @@ def run_enumeration_in_subprocess(
 ) -> SlimConnectorExtractionResult:
     """Spawn the enumeration child and babysit it until it produces a result.
 
-    `reacquire_lock` is invoked periodically so the parent task's redis lock
-    does not expire during multi-hour enumerations.
     Raises PruneEnumerationError on child failure, stop signal, or timeout.
     """
     result_path = Path(tempfile.gettempdir()) / (
@@ -204,8 +185,8 @@ def run_enumeration_in_subprocess(
                     f"Pruning enumeration stopped by signal: cc_pair={cc_pair_id}"
                 )
 
-            # NOTE: celery's time limits don't work with thread pools, so the
-            # watchdog is the timeout enforcement for the enumeration
+            # celery time limits don't work with thread pools, so the watchdog
+            # is the timeout enforcement
             if now - start > JOB_TIMEOUT:
                 raise PruneEnumerationError(
                     f"Pruning enumeration timed out: cc_pair={cc_pair_id} "
@@ -222,8 +203,7 @@ def run_enumeration_in_subprocess(
             f"exit_code={job.process.exitcode} exception={job.exception()}"
         )
     finally:
-        # never leave a live child behind — this also covers exits caused by
-        # the watchdog itself failing (e.g. a lock reacquisition error)
+        # never leave a live child behind, even if the watchdog itself raised
         job.terminate_and_wait(_TERMINATE_GRACE_SECONDS)
         result_path.unlink(missing_ok=True)
         Path(f"{result_path}.tmp").unlink(missing_ok=True)

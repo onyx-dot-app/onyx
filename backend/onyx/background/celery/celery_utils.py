@@ -209,9 +209,8 @@ def extract_ids_from_runnable_connector(
     )
 
     # process raw batches to extract both IDs and hierarchy nodes.
-    # NOTE: Prometheus metrics (enumeration duration, rate limit errors) are
-    # emitted by the pruning parent task — this function runs in a spawned
-    # child whose metric registry is never scraped.
+    # metrics are emitted by the pruning parent task — this runs in a spawned
+    # child whose Prometheus registry is never scraped.
     last_memory_release = time.monotonic()
     try:
         for doc_list in raw_batch_generator:
@@ -231,8 +230,8 @@ def extract_ids_from_runnable_connector(
             if callback:
                 callback.progress("extract_ids_from_runnable_connector", len(batch_ids))
 
-            # long enumerations ratchet the worker's RSS via glibc retention
-            # of freed crawl allocations — periodically return them to the OS
+            # long enumerations ratchet RSS via allocator retention of freed
+            # crawl allocations — periodically return them to the OS
             if time.monotonic() - last_memory_release >= _MEMORY_RELEASE_INTERVAL:
                 gc.collect()
                 release_freed_native_memory()

@@ -74,13 +74,10 @@ def inc_pruning_rate_limit_error(connector_type: str) -> None:
 def inc_pruning_rate_limit_error_if_detected(
     error_str: str, connector_type: str
 ) -> bool:
-    """Best-effort rate limit detection via string matching.
-
-    Connectors surface rate limits inconsistently — some raise HTTP 429,
-    some use SDK-specific exceptions (e.g. google.api_core.exceptions.ResourceExhausted)
-    that may or may not include "rate limit" or "429" in the message.
-    TODO(Bo): replace with a standard ConnectorRateLimitError exception that all
-    connectors raise when rate limited, making this check precise.
+    """Best-effort rate limit detection — connectors surface rate limits
+    inconsistently (HTTP 429, SDK-specific exception types).
+    TODO(Bo): replace with a standard ConnectorRateLimitError raised by all
+    connectors, making this check precise.
     """
     if "rate limit" in error_str.lower() or "429" in error_str:
         inc_pruning_rate_limit_error(connector_type)
