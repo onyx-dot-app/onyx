@@ -2,7 +2,6 @@ import { useCallback, useMemo, useState } from "react";
 
 import {
   applySourcePreferences,
-  enabledSourcesFromSnapshot,
   mergeSourcePreferences,
   parseSourcePreferences,
   type DocumentSource,
@@ -60,13 +59,6 @@ export interface SourceSelection {
    * means "not ready", not "every source off".
    */
   initialized: boolean;
-  /*
-   * What storage alone says is switched on. A send can beat the catalogue — neither connector
-   * query persists, so every cold launch starts that way and a failed one stays that way — and
-   * sending nothing there would widen the search past what the user picked. `null` = never
-   * narrowed, the one case where "no filter" is the right answer; `[]` = switched everything off.
-   */
-  storedSelection: DocumentSource[] | null;
   isSourceEnabled: (source: DocumentSource) => boolean;
   toggleSource: (source: DocumentSource) => void;
   setSources: (sources: DocumentSource[]) => void;
@@ -103,15 +95,6 @@ export function useSourceSelection(
   }
 
   const selectedSources = initialized ? state.selected : NO_SOURCES;
-
-  /*
-   * Read once per instance: only a previous session can have written this, since every path that
-   * commits a selection needs a catalogue, and once there is one the live selection takes over.
-   */
-  const storedSelection = useMemo(
-    () => enabledSourcesFromSnapshot(readSnapshot(serverUrl)),
-    [serverUrl],
-  );
 
   const commit = useCallback(
     (next: DocumentSource[]) => {
@@ -161,7 +144,6 @@ export function useSourceSelection(
   return {
     selectedSources,
     initialized,
-    storedSelection,
     isSourceEnabled,
     toggleSource,
     setSources,

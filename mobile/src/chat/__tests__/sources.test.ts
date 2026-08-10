@@ -2,7 +2,6 @@ import { describe, expect, it } from "@jest/globals";
 
 import {
   applySourcePreferences,
-  enabledSourcesFromSnapshot,
   configuredSources,
   getSourceMeta,
   mergeSourcePreferences,
@@ -100,29 +99,6 @@ describe("mergeSourcePreferences", () => {
   it("ignores saved sources that are no longer available", () => {
     const snapshot = { sourcePreferences: { notion: true, gone: true } };
     expect(mergeSourcePreferences(["notion"], snapshot)).toEqual(["notion"]);
-  });
-});
-
-describe("enabledSourcesFromSnapshot", () => {
-  it("keeps only the sources the snapshot leaves switched on", () => {
-    expect(
-      enabledSourcesFromSnapshot({
-        sourcePreferences: { notion: true, web: false, jira: true },
-      }),
-    ).toEqual(["notion", "jira"]);
-  });
-
-  it("tells a missing snapshot apart from one with everything off", () => {
-    /*
-     * Downstream these mean opposite things: nothing saved is "no filter, search everything",
-     * while everything off is "the user wants no internal search".
-     */
-    expect(enabledSourcesFromSnapshot(null)).toBeNull();
-    expect(
-      enabledSourcesFromSnapshot({
-        sourcePreferences: { notion: false, web: false },
-      }),
-    ).toEqual([]);
   });
 });
 

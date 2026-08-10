@@ -25,9 +25,13 @@ export const persister = createSyncStoragePersister({
 });
 
 /*
- * Never written to the unencrypted MMKV snapshot: anything personal or workspace-specific, so
- * nothing lingers after logout or an account switch (these all refetch on launch). Prefixes match
- * only the leading entity segment because the trailing serverUrl varies per instance.
+ * Never written to the unencrypted MMKV snapshot: anything personal, so nothing lingers after
+ * logout or an account switch (these all refetch on launch). Prefixes match only the leading
+ * entity segment because the trailing serverUrl varies per instance.
+ *
+ * The source-picker keys are deliberately absent. They hold connector *types* and per-agent tool
+ * ids — no content, no identity — and persisting them is what lets a send made moments after
+ * launch honour the user's saved source and tool choices instead of a pre-load guess.
  */
 const NON_PERSISTED_KEY_PREFIXES: readonly (readonly unknown[])[] = [
   [QUERY_KEYS.me(null)[0]],
@@ -36,9 +40,6 @@ const NON_PERSISTED_KEY_PREFIXES: readonly (readonly unknown[])[] = [
   [QUERY_KEYS.userProjects(null)[0]],
   [QUERY_KEYS.userProject(null, null)[0]],
   [QUERY_KEYS.userRecentFiles(null)[0]],
-  [QUERY_KEYS.agentPreferences(null)[0]],
-  [QUERY_KEYS.connectorSources(null)[0]], // names the workspace's connectors
-  [QUERY_KEYS.federatedSources(null)[0]],
 ];
 
 function isNonPersistedKey(queryKey: readonly unknown[]): boolean {

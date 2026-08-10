@@ -208,21 +208,6 @@ export function mergeSourcePreferences(
 }
 
 /*
- * The sources a saved snapshot leaves switched on — what a send can honour before the catalogue
- * arrives. Only the explicit "on" flags: with no catalogue there is no way to name the sources
- * that carry no flag yet. `null` means nothing was ever saved, which is a different statement
- * from an empty array — that one is "the user switched everything off".
- */
-export function enabledSourcesFromSnapshot(
-  snapshot: SourcePreferencesSnapshot | null,
-): DocumentSource[] | null {
-  if (snapshot === null) return null;
-  return Object.entries(snapshot.sourcePreferences)
-    .filter(([, enabled]) => enabled)
-    .map(([source]) => source);
-}
-
-/*
  * Folded into the previous snapshot, not rewritten from `configured` as web does — that forgets
  * choices made under a differently-scoped agent, and the key set is bounded by the catalogue.
  */

@@ -141,7 +141,7 @@ function mockApi({
   holdPreferences?: boolean;
   // Leaves the PATCH pending so a test can act while a write is still in flight.
   holdPatch?: boolean;
-  // Leaves the connector list pending — the state every cold launch starts in.
+  // Leaves the connector list pending, so a test can act before it resolves.
   holdConnectors?: boolean;
 } = {}) {
   const stored: Record<string, { disabled_tool_ids: number[] }> = {
@@ -218,8 +218,6 @@ describe("useComposerToolsState", () => {
     mockDeepResearchAdminEnabled = true;
     apiFetchMock.mockReset();
     mockApi();
-    // Shared across tests, and a leaked snapshot changes what a cold send is allowed to do.
-    appStorage.clearAll();
     client = new QueryClient({
       defaultOptions: { queries: { retry: false, gcTime: 0 } },
     });
@@ -815,40 +813,6 @@ describe("useComposerToolsState — sources", () => {
     expect(result.current.enabledSourceCount).toBe(2);
   });
 
-  it("sends the saved narrowing when a send beats the connector list", async () => {
-    /*
-     * Neither connector query persists, so every cold launch starts here — and a failed one stays
-     * here. Sending no filter would quietly search every connected source instead of the one the
-     * user picked.
-     */
-    appStorage.set(
-      "onyx.chat.source_preferences.https://example.test",
-      JSON.stringify({ sourcePreferences: { notion: true, web: false } }),
-    );
-    const api = mockApi({
-      connectors: ["notion", "web"],
-      holdConnectors: true,
-    });
-    const { result } = renderTools();
-    await waitFor(() => expect(result.current.actionTools).toHaveLength(1));
-    expect(result.current.sourceOptions).toEqual([]);
-
-    expect(result.current.resolveToolOptions().internalSearchFilters).toEqual({
-      source_type: ["notion"],
-    });
-
-    // Once the catalogue lands, the live selection takes over and agrees with it.
-    await act(async () => {
-      api.releaseConnectors();
-    });
-    await waitFor(() =>
-      expect(result.current.sourceOptions).toEqual(["notion", "web"]),
-    );
-    expect(result.current.resolveToolOptions().internalSearchFilters).toEqual({
-      source_type: ["notion"],
-    });
-  });
-
   it("reports a connector list that comes back the wrong shape, without taking the composer down", async () => {
     const warnSpy = jest.spyOn(console, "warn").mockImplementation(() => {});
     // What a proxy error page or an auth redirect answers with: 200, but not the expected list.
@@ -876,7 +840,6 @@ describe("useComposerToolsState — sources", () => {
 
     warnSpy.mockRestore();
   });
-
   it("says nothing while the connector list is still in flight", async () => {
     // Every launch passes through `undefined`; warning there would fire on each one.
     const warnSpy = jest.spyOn(console, "warn").mockImplementation(() => {});
@@ -888,60 +851,6 @@ describe("useComposerToolsState — sources", () => {
     expect(warnSpy).not.toHaveBeenCalled();
 
     warnSpy.mockRestore();
-  });
-
-  it("keeps search off on a cold send when every saved source was switched off", async () => {
-    /*
-     * The preference record is cold on every launch too, so "search disabled" isn't known yet
-     * either. An empty source list is the backend's "no filter", so the intent has to be carried
-     * by dropping the tool — otherwise the one case where the user asked for no internal search
-     * becomes the one that searches everything.
-     */
-    appStorage.set(
-      "onyx.chat.source_preferences.https://example.test",
-      JSON.stringify({ sourcePreferences: { notion: false, web: false } }),
-    );
-    mockApi({
-      connectors: ["notion", "web"],
-      holdConnectors: true,
-      holdPreferences: true,
-    });
-    const { result } = renderTools({ agent: agent([searchTool, imageTool]) });
-    await waitFor(() => expect(result.current.actionTools).toHaveLength(2));
-
-    const options = result.current.resolveToolOptions();
-    expect(options.allowedToolIds).toEqual([2]);
-    expect(options.internalSearchFilters).toBeNull();
-  });
-
-  it("leaves search alone in a workspace that has no connectors at all", async () => {
-    /*
-     * An empty catalogue never initializes, so "not initialized" can't stand in for "unknown" —
-     * suppressing on it would drop search forever wherever nothing is connected, and there the
-     * saved selection describes sources this workspace doesn't have.
-     */
-    appStorage.set(
-      "onyx.chat.source_preferences.https://example.test",
-      JSON.stringify({ sourcePreferences: { notion: false, web: false } }),
-    );
-    mockApi({ connectors: [] });
-    const { result } = renderTools({ agent: agent([searchTool, imageTool]) });
-    await waitFor(() => expect(result.current.actionTools).toHaveLength(2));
-
-    await waitFor(() =>
-      expect(result.current.resolveToolOptions().allowedToolIds).toBeNull(),
-    );
-  });
-
-  it("sends no filter when the user has never narrowed the sources", async () => {
-    // No snapshot: "everything" is the correct answer, so the pre-load fallback must stay quiet.
-    mockApi({ connectors: ["notion", "web"], holdConnectors: true });
-    const { result } = renderTools();
-    await waitFor(() => expect(result.current.actionTools).toHaveLength(1));
-
-    expect(
-      result.current.resolveToolOptions().internalSearchFilters,
-    ).toBeNull();
   });
 
   it("reconciles an agent switched to while the previous agent's write is in flight", async () => {
