@@ -1,11 +1,9 @@
 """Release freed native memory back to the OS (Linux).
 
-Long-lived workers churning through multi-hour connector crawls accumulate
-freed-but-retained allocator memory, ratcheting RSS until the pod OOMs even
-though the live Python heap stays flat. The backend image LD_PRELOADs
-jemalloc (see backend/Dockerfile), so the release goes through jemalloc's
-mallctl (epoch bump + purge of all arenas); glibc malloc_trim(0) is the
-fallback when jemalloc is absent (e.g. bare-metal dev installs).
+The backend image LD_PRELOADs jemalloc (see backend/Dockerfile), where the
+release is a mallctl epoch bump + purge of all arenas; glibc `malloc_trim(0)`
+is the fallback for non-jemalloc installs. Without this, long crawls ratchet
+worker RSS with freed-but-retained allocator memory until the pod OOMs.
 """
 
 import ctypes
@@ -27,7 +25,7 @@ def _load() -> None:
     global _jemalloc, _glibc, _unavailable
     try:
         _jemalloc = ctypes.CDLL("libjemalloc.so.2")
-        _jemalloc.mallctl  # raises AttributeError if the symbol is missing
+        _jemalloc.mallctl
         return
     except (OSError, AttributeError):
         _jemalloc = None
@@ -52,8 +50,7 @@ def release_freed_native_memory() -> bool:
 
     try:
         if _jemalloc is not None:
-            # advance the epoch so the purge sees current state, then purge
-            # dirty+muzzy pages from every arena
+            # advance the epoch so the purge sees current state
             epoch = ctypes.c_uint64(1)
             epoch_sz = ctypes.c_size_t(ctypes.sizeof(epoch))
             _jemalloc.mallctl(

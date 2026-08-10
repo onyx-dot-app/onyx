@@ -1,14 +1,7 @@
-"""External dependency unit tests for the spawned pruning enumeration.
-
-Verifies the child-process enumeration harness end to end:
-1. A real connector (WEB, single URL) is instantiated inside the spawned
-   child from DB state, enumerated, and the result round-trips back to the
-   parent through the JSON handoff file.
-2. A child that fails (unreachable URL) surfaces a PruneEnumerationError in
-   the parent with the child's exception text attached.
-
-Requires Postgres + Redis (child sets prune-active liveness) + internet.
-"""
+"""End-to-end tests for the spawned pruning enumeration: a real WEB connector
+is instantiated inside the child from DB state and the result round-trips via
+the JSON handoff file; a failing child surfaces its exception in
+PruneEnumerationError. Requires Postgres + Redis + internet."""
 
 from collections.abc import Generator
 

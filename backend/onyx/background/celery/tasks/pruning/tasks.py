@@ -600,11 +600,8 @@ def connector_pruning_generator_task(
             )
         # Session 1 closed here — connection released before enumeration.
 
-        # Enumerate source doc IDs in a spawned child process so the crawl's
-        # memory churn is reclaimed by the OS instead of ratcheting up this
-        # long-lived worker's RSS (see enumeration_spawn.py). This task
-        # babysits the child: it keeps the redis lock alive and kills the
-        # child on stop signals or timeout.
+        # Enumerate in a spawned child so crawl memory is reclaimed at child
+        # exit instead of ratcheting this worker's RSS (see enumeration_spawn.py).
         enumeration_start = time.monotonic()
         try:
             extraction_result = run_enumeration_in_subprocess(
@@ -616,8 +613,8 @@ def connector_pruning_generator_task(
                 reacquire_lock=lock.reacquire,
             )
         except PruneEnumerationError as e:
-            # the child's own Prometheus registry dies with it, so rate limit
-            # errors are detected from its exception text and emitted here
+            # the child's Prometheus registry dies with it — detect from its
+            # surfaced exception text and emit here
             inc_pruning_rate_limit_error_if_detected(str(e), connector_type)
             raise
         finally:
