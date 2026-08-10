@@ -67,6 +67,16 @@ class TestRateLimitDetection:
         after = PRUNING_RATE_LIMIT_ERRORS.labels(connector_type="slack")._value.get()
         assert after == before
 
+    def test_increments_on_rate_limit_error_class_name(self) -> None:
+        before = PRUNING_RATE_LIMIT_ERRORS.labels(connector_type="notion")._value.get()
+
+        assert inc_pruning_rate_limit_error_if_detected(
+            "openai.RateLimitError: too many requests", "notion"
+        )
+
+        after = PRUNING_RATE_LIMIT_ERRORS.labels(connector_type="notion")._value.get()
+        assert after == before + 1
+
     def test_rate_limit_detection_is_case_insensitive(self) -> None:
         before = PRUNING_RATE_LIMIT_ERRORS.labels(connector_type="jira")._value.get()
 
