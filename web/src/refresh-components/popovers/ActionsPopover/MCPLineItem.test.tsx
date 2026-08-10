@@ -70,15 +70,19 @@ function getTrailingIndicator(row: HTMLElement): HTMLElement {
 }
 
 describe("MCPLineItem", () => {
-  it("uses the row as the sole authentication target", async () => {
+  it("authenticates once from either the row or key area", async () => {
     const user = userEvent.setup();
     const { onAuthenticate, onSelect } = renderMCPLineItem();
     const row = screen.getByRole("button", { name: oauthServer.name });
 
     expect(screen.getAllByRole("button")).toHaveLength(1);
-    expect(getTrailingIndicator(row)).toHaveClass("pointer-events-none");
-
     await user.click(row);
+
+    expect(onAuthenticate).toHaveBeenCalledTimes(1);
+    expect(onSelect).not.toHaveBeenCalled();
+
+    onAuthenticate.mockClear();
+    await user.click(getTrailingIndicator(row));
 
     expect(onAuthenticate).toHaveBeenCalledTimes(1);
     expect(onSelect).not.toHaveBeenCalled();
@@ -101,7 +105,7 @@ describe("MCPLineItem", () => {
     expect(onSelect).not.toHaveBeenCalled();
   });
 
-  it("uses the row as the sole selection target", async () => {
+  it("selects once when the chevron area is clicked", async () => {
     const user = userEvent.setup();
     const { onAuthenticate, onSelect } = renderMCPLineItem({
       isAuthenticated: true,
@@ -109,10 +113,7 @@ describe("MCPLineItem", () => {
     });
     const row = screen.getByRole("button", { name: oauthServer.name });
 
-    expect(screen.getAllByRole("button")).toHaveLength(1);
-    expect(getTrailingIndicator(row)).toHaveClass("pointer-events-none");
-
-    await user.click(row);
+    await user.click(getTrailingIndicator(row));
 
     expect(onSelect).toHaveBeenCalledTimes(1);
     expect(onAuthenticate).not.toHaveBeenCalled();
