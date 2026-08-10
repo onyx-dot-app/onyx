@@ -16,11 +16,22 @@ function storageKey(serverUrl: string): string {
   return `onyx.chat.source_preferences.${serverUrl}`;
 }
 
+/*
+ * Storage is treated as best-effort on both sides. A read runs during render, so a throw there
+ * would take the composer down; a write runs from the coupling state machine as well as from a
+ * tap, so a throw there would escape an `onPress` handler into the global error handler. Losing
+ * the saved choice is the smaller failure, and the log is what makes it diagnosable.
+ */
 function readSnapshot(
   serverUrl: string | null,
 ): SourcePreferencesSnapshot | null {
   if (serverUrl === null) return null;
-  return parseSourcePreferences(appStorage.getString(storageKey(serverUrl)));
+  try {
+    return parseSourcePreferences(appStorage.getString(storageKey(serverUrl)));
+  } catch (error) {
+    console.warn("Reading saved source preferences failed", error);
+    return null;
+  }
 }
 
 function writeSnapshot(
@@ -28,7 +39,16 @@ function writeSnapshot(
   snapshot: SourcePreferencesSnapshot,
 ): void {
   if (serverUrl === null) return;
-  appStorage.set(storageKey(serverUrl), JSON.stringify(snapshot));
+  try {
+    appStorage.set(storageKey(serverUrl), JSON.stringify(snapshot));
+  } catch (error) {
+    /*
+     * Deliberately not rolled back: the selection is still the truth for this session, and
+     * `commit` is driven by the search coupling too — snapping it back would desynchronise the
+     * parked-source restore from the effect that reconciles search against it.
+     */
+    console.warn("Saving source preferences failed", error);
+  }
 }
 
 const NO_SOURCES: DocumentSource[] = [];

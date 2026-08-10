@@ -122,4 +122,48 @@ describe("useSourceSelection", () => {
     act(() => result.current.toggleSource("jira"));
     expect(result.current.selectedSources).toEqual(["notion"]);
   });
+
+  it("keeps the session's choice when the write fails, rather than throwing at the caller", () => {
+    /*
+     * `commit` runs from an `onPress` handler and from the search coupling, and neither catches —
+     * a throw here would reach the global error handler. The choice still holds for this session;
+     * only its persistence is lost.
+     */
+    const warnSpy = jest.spyOn(console, "warn").mockImplementation(() => {});
+    const failure = new Error("mmkv: no space left on device");
+    const setSpy = jest.spyOn(appStorage, "set").mockImplementation(() => {
+      throw failure;
+    });
+
+    const { result } = render(["notion", "web"]);
+    expect(() =>
+      act(() => result.current.toggleSource("notion")),
+    ).not.toThrow();
+
+    expect(result.current.selectedSources).toEqual(["web"]);
+    expect(result.current.isSourceEnabled("notion")).toBe(false);
+    expect(warnSpy).toHaveBeenCalledWith(expect.any(String), failure);
+
+    setSpy.mockRestore();
+    warnSpy.mockRestore();
+  });
+
+  it("still initializes when the saved snapshot can't be read", () => {
+    // The read runs during render, so a throw would take the composer down with it.
+    const warnSpy = jest.spyOn(console, "warn").mockImplementation(() => {});
+    const getSpy = jest
+      .spyOn(appStorage, "getString")
+      .mockImplementation(() => {
+        throw new Error("mmkv: unreadable");
+      });
+
+    const { result } = render(["notion", "web"]);
+
+    expect(result.current.initialized).toBe(true);
+    expect(result.current.selectedSources).toEqual(["notion", "web"]);
+    expect(warnSpy).toHaveBeenCalled();
+
+    getSpy.mockRestore();
+    warnSpy.mockRestore();
+  });
 });
