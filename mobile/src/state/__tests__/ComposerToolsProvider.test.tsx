@@ -132,6 +132,7 @@ function mockApi({
   federated = [] as string[],
   holdPreferences = false,
   holdPatch = false,
+  holdConnectors = false,
 }: {
   preferences?: Record<string, { disabled_tool_ids: number[] }>;
   connectors?: string[];
@@ -140,6 +141,8 @@ function mockApi({
   holdPreferences?: boolean;
   // Leaves the PATCH pending so a test can act while a write is still in flight.
   holdPatch?: boolean;
+  // Leaves the connector list pending — the state every cold launch starts in.
+  holdConnectors?: boolean;
 } = {}) {
   const stored: Record<string, { disabled_tool_ids: number[] }> = {
     ...preferences,
@@ -152,15 +155,21 @@ function mockApi({
   const patchGate = new Promise<void>((resolve) => {
     releasePatchGate = resolve;
   });
+  let releaseConnectorGate = () => {};
+  const connectorGate = new Promise<void>((resolve) => {
+    releaseConnectorGate = resolve;
+  });
   apiFetchMock.mockImplementation((path: string, init?: ApiFetchInit) => {
     if (path === "/manage/connector-status") {
-      return Promise.resolve(
+      const rows = () =>
         connectors.map((source) => ({
           has_successful_run: true,
           source,
           status: "ACTIVE",
-        })),
-      );
+        }));
+      return holdConnectors
+        ? connectorGate.then(rows)
+        : Promise.resolve(rows());
     }
     if (path === "/federated") {
       return Promise.resolve(
@@ -186,6 +195,7 @@ function mockApi({
     releasePreferences: () => release(),
     releasePatch: () => releasePatchGate(),
     patchSettled: () => patchGate,
+    releaseConnectors: () => releaseConnectorGate(),
     stored,
   };
 }
@@ -801,6 +811,51 @@ describe("useComposerToolsState — sources", () => {
       result.current.toggleToolEnabled(1);
     });
     expect(result.current.enabledSourceCount).toBe(2);
+  });
+
+  it("sends the saved narrowing when a send beats the connector list", async () => {
+    /*
+     * Neither connector query persists, so every cold launch starts here — and a failed one stays
+     * here. Sending no filter would quietly search every connected source instead of the one the
+     * user picked.
+     */
+    appStorage.set(
+      "onyx.chat.source_preferences.https://example.test",
+      JSON.stringify({ sourcePreferences: { notion: true, web: false } }),
+    );
+    const api = mockApi({
+      connectors: ["notion", "web"],
+      holdConnectors: true,
+    });
+    const { result } = renderTools();
+    await waitFor(() => expect(result.current.actionTools).toHaveLength(1));
+    expect(result.current.sourceOptions).toEqual([]);
+
+    expect(result.current.resolveToolOptions().internalSearchFilters).toEqual({
+      source_type: ["notion"],
+    });
+
+    // Once the catalogue lands, the live selection takes over and agrees with it.
+    await act(async () => {
+      api.releaseConnectors();
+    });
+    await waitFor(() =>
+      expect(result.current.sourceOptions).toEqual(["notion", "web"]),
+    );
+    expect(result.current.resolveToolOptions().internalSearchFilters).toEqual({
+      source_type: ["notion"],
+    });
+  });
+
+  it("sends no filter when the user has never narrowed the sources", async () => {
+    // No snapshot: "everything" is the correct answer, so the pre-load fallback must stay quiet.
+    mockApi({ connectors: ["notion", "web"], holdConnectors: true });
+    const { result } = renderTools();
+    await waitFor(() => expect(result.current.actionTools).toHaveLength(1));
+
+    expect(
+      result.current.resolveToolOptions().internalSearchFilters,
+    ).toBeNull();
   });
 
   it("reconciles an agent switched to while the previous agent's write is in flight", async () => {

@@ -177,6 +177,7 @@ export function useComposerToolsState({
   const {
     selectedSources,
     initialized: sourcesInitialized,
+    storedSelection,
     isSourceEnabled,
     toggleSource: toggleSourceSelection,
     setSources,
@@ -390,10 +391,14 @@ export function useComposerToolsState({
           forcedToolId: forcedIsSendable ? forcedToolId : null,
           /*
            * Only the sources still on the menu: a stale pick from a wider agent would narrow the
-           * search to something this one can't reach.
+           * search to something this one can't reach. Until the catalogue lands there is no menu
+           * to intersect with, so fall back to what storage says rather than to "no filter",
+           * which would search every connected source.
            */
           internalSearchFilters: buildInternalSearchFilters(
-            sourceOptions.filter(isSourceEnabled),
+            sourcesInitialized
+              ? sourceOptions.filter(isSourceEnabled)
+              : storedSelection,
           ),
         };
       },
@@ -410,6 +415,8 @@ export function useComposerToolsState({
       toggleToolEnabled,
       sourceToolId,
       sourceOptions,
+      sourcesInitialized,
+      storedSelection,
       enabledSourceCount,
       isSourceEnabled,
       toggleSource,

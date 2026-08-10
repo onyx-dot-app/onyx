@@ -208,6 +208,20 @@ export function mergeSourcePreferences(
 }
 
 /*
+ * The sources a saved snapshot leaves switched on — what a send can honour before the catalogue
+ * arrives. Only the explicit "on" flags: with no catalogue there is no way to name the sources
+ * that carry no flag yet, and an empty result reads as "never narrowed", which sends no filter.
+ */
+export function enabledSourcesFromSnapshot(
+  snapshot: SourcePreferencesSnapshot | null,
+): DocumentSource[] {
+  if (snapshot === null) return [];
+  return Object.entries(snapshot.sourcePreferences)
+    .filter(([, enabled]) => enabled)
+    .map(([source]) => source);
+}
+
+/*
  * Folded into the previous snapshot, not rewritten from `configured` as web does — that forgets
  * choices made under a differently-scoped agent, and the key set is bounded by the catalogue.
  */

@@ -2,6 +2,7 @@ import { describe, expect, it } from "@jest/globals";
 
 import {
   applySourcePreferences,
+  enabledSourcesFromSnapshot,
   configuredSources,
   getSourceMeta,
   mergeSourcePreferences,
@@ -99,6 +100,21 @@ describe("mergeSourcePreferences", () => {
   it("ignores saved sources that are no longer available", () => {
     const snapshot = { sourcePreferences: { notion: true, gone: true } };
     expect(mergeSourcePreferences(["notion"], snapshot)).toEqual(["notion"]);
+  });
+});
+
+describe("enabledSourcesFromSnapshot", () => {
+  it("keeps only the sources the snapshot leaves switched on", () => {
+    expect(
+      enabledSourcesFromSnapshot({
+        sourcePreferences: { notion: true, web: false, jira: true },
+      }),
+    ).toEqual(["notion", "jira"]);
+  });
+
+  it("says nothing when the user has never narrowed anything", () => {
+    // Empty reads as "no filter" downstream, which is what "never narrowed" has to mean.
+    expect(enabledSourcesFromSnapshot(null)).toEqual([]);
   });
 });
 
