@@ -123,9 +123,7 @@ async def test_business_blocked_from_log_export(
 ) -> None:
     mock_get_tier.return_value = Tier.BUSINESS
     middleware, call_next = middleware_harness
-    response = await middleware(
-        _make_request("/api/admin/log-export/download"), call_next
-    )
+    response = await middleware(_make_request("/api/admin/log-export"), call_next)
     assert response.status_code == 402
 
 
@@ -136,9 +134,7 @@ async def test_enterprise_passes_log_export(
 ) -> None:
     mock_get_tier.return_value = Tier.ENTERPRISE
     middleware, call_next = middleware_harness
-    response = await middleware(
-        _make_request("/api/admin/log-export/download"), call_next
-    )
+    response = await middleware(_make_request("/api/admin/log-export"), call_next)
     assert response.status_code == 200
 
 
