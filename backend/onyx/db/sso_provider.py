@@ -81,6 +81,25 @@ _CONFIG_MODEL_BY_TYPE: dict[SSOProviderType, type[_ProviderConfig]] = {
 }
 
 
+# SAML picks its provider by scanning rows for the assertion's issuer, which
+# cannot name a workspace without a catalog issuer index.
+_CLOUD_SUPPORTED_PROVIDER_TYPES = frozenset(
+    {SSOProviderType.GOOGLE_OAUTH, SSOProviderType.OIDC}
+)
+
+
+def sso_provider_type_supported(provider_type: SSOProviderType) -> bool:
+    return not MULTI_TENANT or provider_type in _CLOUD_SUPPORTED_PROVIDER_TYPES
+
+
+def supported_sso_provider_types() -> list[SSOProviderType]:
+    return [
+        provider_type
+        for provider_type in SSOProviderType
+        if sso_provider_type_supported(provider_type)
+    ]
+
+
 def secret_config_keys(provider_type: SSOProviderType) -> frozenset[str]:
     """Config fields marked secret on the provider type's config model."""
     model = _CONFIG_MODEL_BY_TYPE[provider_type]
@@ -141,6 +160,20 @@ def sso_login_callback_uri(
     return f"{web_domain}/api/auth/oidc/{provider.name}/callback"
 
 
+# Keep in sync with the router prefixes in oidc_multi.py and saml_multi.py.
+_AUTHORIZE_ROUTER_BY_TYPE: dict[SSOProviderType, str] = {
+    SSOProviderType.GOOGLE_OAUTH: "oidc",
+    SSOProviderType.OIDC: "oidc",
+    SSOProviderType.SAML: "saml",
+}
+
+
+def sso_authorize_path(provider: SSOProvider) -> str:
+    """Login-page href that starts this provider's flow."""
+    router = _AUTHORIZE_ROUTER_BY_TYPE[provider.provider_type]
+    return f"/api/auth/{router}/{provider.name}/authorize"
+
+
 def validate_sso_provider_name(name: str) -> None:
     if not _PROVIDER_NAME_PATTERN.fullmatch(name):
         raise ValueError(
@@ -148,7 +181,7 @@ def validate_sso_provider_name(name: str) -> None:
         )
 
 
-def _normalize_domains(domains: list[str]) -> list[str]:
+def normalize_email_domains(domains: list[str]) -> list[str]:
     return sorted({domain.strip().lower() for domain in domains if domain.strip()})
 
 
@@ -196,7 +229,7 @@ def create_sso_provider(
         display_name=display_name,
         provider_type=provider_type,
         config=validate_sso_config(provider_type, config),
-        allowed_email_domains=_normalize_domains(allowed_email_domains),
+        allowed_email_domains=normalize_email_domains(allowed_email_domains),
     )
     db_session.add(provider)
     db_session.commit()
@@ -225,7 +258,7 @@ def update_sso_provider(
             provider.provider_type, config
         )
     if allowed_email_domains is not None:
-        provider.allowed_email_domains = _normalize_domains(allowed_email_domains)
+        provider.allowed_email_domains = normalize_email_domains(allowed_email_domains)
 
     db_session.commit()
     return provider

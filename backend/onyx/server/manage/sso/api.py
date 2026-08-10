@@ -5,14 +5,18 @@ from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
 
 from onyx.auth.permissions import require_permission
+from onyx.auth.sso_url_guard import UnsafeSSOUrl, validate_idp_url
 from onyx.configs.app_configs import WEB_DOMAIN
 from onyx.db.engine.sql_engine import get_session
-from onyx.db.enums import Permission
+from onyx.db.enums import Permission, SSOProviderType
 from onyx.db.models import SSOProvider, User
 from onyx.db.sso_provider import (
     create_sso_provider,
     fetch_sso_providers,
+    normalize_email_domains,
     set_sso_provider_enabled,
+    sso_provider_type_supported,
+    supported_sso_provider_types,
     update_sso_provider,
 )
 from onyx.error_handling.error_codes import OnyxErrorCode
@@ -33,17 +37,43 @@ from onyx.utils.variable_functionality import fetch_ee_implementation_or_noop
 from shared_configs.configs import MULTI_TENANT
 
 
-def _reject_if_multi_tenant() -> None:
-    if MULTI_TENANT:
+def _reject_unsupported_provider_type(provider_type: SSOProviderType) -> None:
+    if not sso_provider_type_supported(provider_type):
         raise OnyxError(
             OnyxErrorCode.SINGLE_TENANT_ONLY,
-            "SSO provider configuration is not available on this deployment.",
+            f"{provider_type.value} providers are not available on this deployment.",
         )
 
 
-admin_router = APIRouter(
-    prefix="/admin/sso", dependencies=[Depends(_reject_if_multi_tenant)]
-)
+def _reject_unbounded_email_domains(allowed_email_domains: list[str] | None) -> None:
+    """A list that stores empty disables the domain check entirely, so on cloud
+    the provider would admit every address its IdP is willing to assert, each one
+    a billed seat. Judged after normalization, since blank entries are dropped on
+    write and `[" "]` would otherwise pass here and store as `[]`."""
+    if not MULTI_TENANT or allowed_email_domains is None:
+        return
+    if normalize_email_domains(allowed_email_domains):
+        return
+    raise OnyxError(
+        OnyxErrorCode.INVALID_INPUT,
+        "List the email domains this provider may sign in. Leaving it empty "
+        "would let any address its identity provider asserts join the workspace.",
+    )
+
+
+def _reject_unfetchable_idp_url(config: dict[str, Any]) -> None:
+    """Fails the write rather than the first login, so an admin who typo'd a
+    host hears about it here."""
+    discovery_url = config.get("openid_config_url")
+    if not isinstance(discovery_url, str) or not discovery_url:
+        return
+    try:
+        validate_idp_url(discovery_url, field="openid_config_url")
+    except UnsafeSSOUrl as e:
+        raise OnyxError(OnyxErrorCode.INVALID_INPUT, str(e)) from e
+
+
+admin_router = APIRouter(prefix="/admin/sso")
 
 
 def _require_business_tier_for_additional_enabled_provider(
@@ -71,6 +101,15 @@ def _fetch_sso_provider_or_raise(db_session: Session, provider_id: int) -> SSOPr
     return provider
 
 
+@admin_router.get("/provider-type")
+def list_supported_sso_provider_types(
+    _: User = Depends(require_permission(Permission.FULL_ADMIN_PANEL_ACCESS)),
+) -> list[SSOProviderType]:
+    """Provider types this deployment can serve, so the admin UI never offers a
+    type the create endpoint would reject."""
+    return supported_sso_provider_types()
+
+
 @admin_router.get("/provider")
 def list_sso_providers(
     _: User = Depends(require_permission(Permission.FULL_ADMIN_PANEL_ACCESS)),
@@ -88,6 +127,9 @@ def create_sso_provider_endpoint(
     _: User = Depends(require_permission(Permission.FULL_ADMIN_PANEL_ACCESS)),
     db_session: Session = Depends(get_session),
 ) -> SSOProviderResponse:
+    _reject_unsupported_provider_type(request.provider_type)
+    _reject_unfetchable_idp_url(request.config)
+    _reject_unbounded_email_domains(request.allowed_email_domains)
     # New providers are created enabled, so an existing enabled provider
     # makes this a multi-SSO create.
     _require_business_tier_for_additional_enabled_provider(db_session)
@@ -123,6 +165,7 @@ def update_sso_provider_endpoint(
     db_session: Session = Depends(get_session),
 ) -> SSOProviderResponse:
     provider = _fetch_sso_provider_or_raise(db_session, provider_id)
+    _reject_unbounded_email_domains(request.allowed_email_domains)
 
     try:
         merged_config: dict[str, Any] | None = None
@@ -138,6 +181,7 @@ def update_sso_provider_endpoint(
                 **restore_masked_credentials(request.config, stored_config),
             }
             reject_masked_credentials(merged_config)
+            _reject_unfetchable_idp_url(merged_config)
         updated_provider = update_sso_provider(
             db_session=db_session,
             provider_id=provider_id,
@@ -159,8 +203,12 @@ def set_sso_provider_enabled_endpoint(
     _: User = Depends(require_permission(Permission.FULL_ADMIN_PANEL_ACCESS)),
     db_session: Session = Depends(get_session),
 ) -> SSOProviderResponse:
-    _fetch_sso_provider_or_raise(db_session, provider_id)
+    provider_to_toggle = _fetch_sso_provider_or_raise(db_session, provider_id)
     if request.enabled:
+        _reject_unsupported_provider_type(provider_to_toggle.provider_type)
+        # Catches a row stored before the bound existed, which the write paths
+        # never revisit.
+        _reject_unbounded_email_domains(provider_to_toggle.allowed_email_domains)
         _require_business_tier_for_additional_enabled_provider(
             db_session, exclude_provider_id=provider_id
         )

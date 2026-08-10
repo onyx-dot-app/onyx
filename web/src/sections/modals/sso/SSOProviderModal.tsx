@@ -13,6 +13,7 @@ import type {
   SSOProviderType,
   SSOProviderUpdateRequest,
 } from "@/lib/sso/interfaces";
+import { useSupportedSSOProviderTypes } from "@/lib/sso/hooks";
 import { createSSOProvider, updateSSOProvider } from "@/lib/sso/svc";
 import {
   CONFIG_FIELDS_BY_TYPE,
@@ -218,6 +219,8 @@ function ConfigInput({
 export function SSOProviderModal({ provider, onSaved }: SSOProviderModalProps) {
   const onClose = useModalClose();
   const isEditing = provider !== null;
+  const { providerTypes, isLoading: providerTypesLoading } =
+    useSupportedSSOProviderTypes();
 
   const initialValues: SSOProviderFormValues = {
     provider_type: provider?.provider_type ?? "GOOGLE_OAUTH",
@@ -302,7 +305,7 @@ export function SSOProviderModal({ provider, onSaved }: SSOProviderModalProps) {
                   description={
                     isEditing
                       ? "Update how this provider signs users in."
-                      : "Add a Google, OIDC, or SAML provider for sign-in."
+                      : "Add an SSO provider for sign-in."
                   }
                   onClose={onClose}
                 />
@@ -318,14 +321,14 @@ export function SSOProviderModal({ provider, onSaved }: SSOProviderModalProps) {
                       onValueChange={(value) => {
                         void setFieldValue("provider_type", value);
                       }}
-                      disabled={isEditing}
+                      disabled={isEditing || providerTypesLoading}
                       error={Boolean(
                         touched.provider_type && errors.provider_type
                       )}
                     >
                       <InputSelect.Trigger placeholder="Select a provider type" />
                       <InputSelect.Content>
-                        {CREATABLE_SSO_PROVIDER_TYPES.map((type) => {
+                        {providerTypes.map((type) => {
                           const detail = SSO_PROVIDER_DETAILS[type];
                           return (
                             <InputSelect.Item

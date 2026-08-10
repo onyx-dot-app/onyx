@@ -22,6 +22,7 @@ export const SWR_KEYS = {
   adminSecuritySettings: "/api/admin/security",
   incognitoAvailability: "/api/chat/incognito-availability",
   adminSsoProviders: "/api/admin/sso/provider",
+  adminSsoProviderTypes: "/api/admin/sso/provider-type",
 
   // ── Agents / Personas ─────────────────────────────────────────────────────
   personas: "/api/persona",

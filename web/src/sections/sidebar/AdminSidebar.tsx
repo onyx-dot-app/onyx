@@ -164,10 +164,7 @@ function buildItems(
   if (!isCurator) {
     addGated(SECTIONS.ORGANIZATION, ADMIN_ROUTES.THEME, Tier.BUSINESS);
     add(SECTIONS.ORGANIZATION, ADMIN_ROUTES.SECURITY_HARDENING);
-    // SSO provider config is not supported on multi-tenant cloud.
-    if (!enableCloud) {
-      add(SECTIONS.ORGANIZATION, ADMIN_ROUTES.SSO_PROVIDERS);
-    }
+    add(SECTIONS.ORGANIZATION, ADMIN_ROUTES.SSO_PROVIDERS);
     if (hasSubscription) {
       add(SECTIONS.ORGANIZATION, ADMIN_ROUTES.BILLING);
     }
