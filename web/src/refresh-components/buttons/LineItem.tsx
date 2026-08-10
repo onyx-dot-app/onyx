@@ -235,6 +235,7 @@ export default function LineItem({
       className={cn(
         "flex flex-row w-full items-start p-2 rounded-08 group/LineItem gap-2",
         children && description ? "items-start" : "items-center",
+        interactive && (disabled ? "cursor-not-allowed" : "cursor-pointer"),
         buttonClassNames[variant][emphasisKey]
       )}
       data-selected={selected}
