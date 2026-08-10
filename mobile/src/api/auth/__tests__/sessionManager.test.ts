@@ -26,8 +26,11 @@ jest.mock("@/query/client", () => ({
   queryClient: { clear: jest.fn() },
   persister: { removeClient: jest.fn() },
 }));
+// `mock`-prefixed and read lazily so the hoisted factory can close over it.
+let mockServerUrl: string | null = "https://a.test";
 jest.mock("@/state/session", () => ({
   useSession: { getState: () => ({ setStatus: jest.fn() }) },
+  getStoredServerUrl: () => mockServerUrl,
 }));
 
 // generic `apiFetch<T>` makes jest.mocked() infer `never`; cast to a concrete Mock signature.
@@ -61,6 +64,7 @@ const token = (access: string): BearerTokenResponse => ({
 beforeEach(() => {
   jest.clearAllMocks();
   __resetSessionStateForTests();
+  mockServerUrl = "https://a.test";
   mockSetToken.mockResolvedValue(undefined);
   mockGetToken.mockResolvedValue(null);
   mockRemoveClient.mockResolvedValue(undefined);
@@ -293,6 +297,45 @@ describe("refreshToken (single-flight)", () => {
 
     expect(mockSetToken).not.toHaveBeenCalledWith("tok-late");
     expect(mockSetToken).toHaveBeenLastCalledWith(null);
+  });
+
+  it("discards a refresh that lands after the user switched instances", async () => {
+    let resolveRefresh!: (value: BearerTokenResponse) => void;
+    mockApiFetch.mockReturnValue(
+      new Promise<BearerTokenResponse>((resolve) => {
+        resolveRefresh = resolve;
+      }),
+    );
+
+    const refreshP = refreshToken();
+    // The connect screen swaps instances without touching the session epoch.
+    mockServerUrl = "https://b.test";
+    resolveRefresh(token("tok-instance-a"));
+
+    await expect(refreshP).resolves.toBeNull();
+    /*
+     * `setToken` keys off the *current* URL, so writing here would file instance A's bearer under
+     * instance B's key and hand it to a different server on the next request.
+     */
+    expect(mockSetToken).not.toHaveBeenCalledWith("tok-instance-a");
+  });
+
+  it("leaves the new instance's session alone when the old one's refresh is rejected", async () => {
+    let rejectRefresh!: (reason: unknown) => void;
+    mockApiFetch.mockReturnValue(
+      new Promise<BearerTokenResponse>((_resolve, reject) => {
+        rejectRefresh = reject;
+      }),
+    );
+
+    const refreshP = refreshToken();
+    mockServerUrl = "https://b.test";
+    rejectRefresh(new ApiError({ status: 401 }));
+
+    await expect(refreshP).resolves.toBeNull();
+    // A dead token on instance A says nothing about B; wiping would sign the user out of B.
+    expect(mockClear).not.toHaveBeenCalled();
+    expect(mockSetToken).not.toHaveBeenCalledWith(null);
   });
 });
 

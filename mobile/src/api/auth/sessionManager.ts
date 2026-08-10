@@ -9,7 +9,7 @@ import { setToken } from "@/api/auth/tokenStore";
 import { isAuthError } from "@/api/errors";
 import { toast } from "@/hooks/useToast";
 import { persister, queryClient } from "@/query/client";
-import { useSession } from "@/state/session";
+import { getStoredServerUrl, useSession } from "@/state/session";
 import { useUserFileStore } from "@/state/userFileStore";
 
 export interface BearerTokenResponse {
@@ -30,6 +30,16 @@ const REGISTER_PATH = "/auth/register";
 
 // Bumped on every identity change; a late refresh applies its result only if unchanged, so it can't resurrect a logged-out session.
 let sessionEpoch = 0;
+
+/*
+ * The epoch alone can't see an instance switch: the connect screen swaps the stored server URL
+ * without touching it, while `setToken` derives its keychain key from whatever URL is current when
+ * it writes. A refresh that outlived the switch would file the old instance's bearer under the new
+ * one's key, and every later request would hand that bearer to a different server.
+ */
+function sameSession(epoch: number, serverUrl: string | null): boolean {
+  return sessionEpoch === epoch && getStoredServerUrl() === serverUrl;
+}
 
 // userFileStore keeps file records outside the Query cache, so clearing that cache alone would leak the prior user's data.
 async function purgeCache(): Promise<void> {
@@ -133,6 +143,7 @@ export function refreshToken(): Promise<string | null> {
   const pending = getInFlightRefresh();
   if (pending) return pending;
   const startedEpoch = sessionEpoch;
+  const startedServerUrl = getStoredServerUrl();
   const refresh = (async () => {
     try {
       const res = await apiFetch<BearerTokenResponse>(REFRESH_PATH, {
@@ -140,15 +151,21 @@ export function refreshToken(): Promise<string | null> {
         // This request *is* the in-flight refresh, so asking for a "valid" token would await its own promise.
         auth: "stored",
       });
-      // Logged out/replaced mid-flight: discard rather than mix identities.
-      if (sessionEpoch !== startedEpoch) return null;
+      /*
+       * Logged out, replaced, or pointed at another instance mid-flight: discard rather than mix
+       * identities.
+       */
+      if (!sameSession(startedEpoch, startedServerUrl)) return null;
       await setToken(res.access_token);
       useSession.getState().setStatus("authed");
       return res.access_token;
     } catch (err) {
       // Only an auth error means the token is dead; a transient one re-throws so the caller keeps it.
       if (isAuthError(err)) {
-        if (sessionEpoch === startedEpoch) await clearLocalSession();
+        // Same reasoning: clearing here after a switch would wipe the new instance's session.
+        if (sameSession(startedEpoch, startedServerUrl)) {
+          await clearLocalSession();
+        }
         return null;
       }
       throw err;
