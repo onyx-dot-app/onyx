@@ -98,21 +98,31 @@
   @apply px-2;
 }
 
-/* Logo: visible by default, hidden on hover while folded */
-.opal-sidebar-root__logo-default {
-  display: block;
+/* Folded logo/unfold button: one control, two faces. The logo shows at rest and
+   the fold icon replaces it while the sidebar is hovered or the button holds
+   keyboard focus — pointerless input keeps the logo, which is clickable either
+   way. Sized by the caller so the swap never changes the button's footprint. */
+.opal-sidebar-header__logo-swap {
+  @apply flex items-center justify-center;
 }
-.opal-sidebar-root__overlay:hover .opal-sidebar-root__logo-default,
-.opal-sidebar-root__column:hover .opal-sidebar-root__logo-default {
+
+.opal-sidebar-header__logo-rest {
+  display: flex;
+}
+.opal-sidebar-header__logo-fold {
   display: none;
 }
 
-/* Fold button: hidden by default, revealed on hover while folded */
-.opal-sidebar-root__logo-hover {
+.opal-sidebar-root__overlay:hover .opal-sidebar-header__logo-rest,
+.opal-sidebar-root__column:hover .opal-sidebar-header__logo-rest,
+.opal-sidebar-header__topbar-inner:has(:focus-visible)
+  .opal-sidebar-header__logo-rest {
   display: none;
 }
-.opal-sidebar-root__overlay:hover .opal-sidebar-root__logo-hover,
-.opal-sidebar-root__column:hover .opal-sidebar-root__logo-hover {
+.opal-sidebar-root__overlay:hover .opal-sidebar-header__logo-fold,
+.opal-sidebar-root__column:hover .opal-sidebar-header__logo-fold,
+.opal-sidebar-header__topbar-inner:has(:focus-visible)
+  .opal-sidebar-header__logo-fold {
   display: flex;
 }
 
