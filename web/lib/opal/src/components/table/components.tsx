@@ -514,7 +514,6 @@ export function Table<TData>(props: DataTableProps<TData>) {
                     sortableId={rowId}
                     selected={row.getIsSelected()}
                     data-clickable={onRowClick ? true : undefined}
-                    role={onRowClick ? "button" : undefined}
                     tabIndex={onRowClick ? 0 : undefined}
                     aria-label={
                       onRowClick ? getRowLabel?.(row.original) : undefined
