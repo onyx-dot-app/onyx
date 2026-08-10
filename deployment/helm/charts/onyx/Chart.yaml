@@ -5,7 +5,7 @@ home: https://www.onyx.app/
 sources:
   - "https://github.com/onyx-dot-app/onyx"
 type: application
-version: 0.8.12
+version: 0.8.13
 appVersion: latest
 annotations:
   category: Productivity
@@ -16,21 +16,12 @@ annotations:
     - name: background
       image: docker.io/onyxdotapp/onyx-backend:latest
   artifacthub.io/changes: |
-    - kind: changed
-      description: values-localdev.yaml now disables the sandbox image prepuller.
-        Local kind clusters side-load the sandbox image (kind load + IfNotPresent),
-        so there is no registry pull to front-run, and with the localdev defaults
-        (:edge, pullPolicy Always) the prepuller would eagerly pull the ~3.3 GB
-        image from Docker Hub onto the kind node. Production values are unchanged.
     - kind: fixed
-      description: Fixed "helm upgrade" failing with 'PriorityClass ... value: Forbidden;
-        may not be changed in an update' after the sandbox image prepuller landed in
-        0.8.6. PriorityClass.value is immutable and helm upgrade patches, so the
-        prepuller no longer ships a PriorityClass at all; it was buying very little.
-        Upgrading from 0.8.6 deletes it, and the prepuller runs at the cluster default
-        priority — set sandboxImagePrepull.priorityClassName to an existing class to
-        keep it preemptible. Running pods are unaffected, because pod priority is
-        resolved at admission. The chart now renders no cluster-scoped objects.
+      description: Route /scim to the api server in ingress mode (ingress.enabled=true).
+        The ingress templates only routed /api to the api server, so SCIM requests fell
+        through to the webserver and returned an HTML 404. A new ingress-scim.yaml
+        template forwards the /scim prefix, without a rewrite, to the api service on
+        the webserver host.
 dependencies:
   # Helm uses the first condition path that exists: `postgresqlOperator.enabled`
   # is unset by default, so this falls through to `postgresql.enabled`. Set it

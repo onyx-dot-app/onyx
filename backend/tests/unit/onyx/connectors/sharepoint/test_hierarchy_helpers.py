@@ -171,7 +171,7 @@ def test_hierarchy_helpers_fetch_permissions_when_requested(
     assert site_node.external_access is access
     assert drive_node.external_access is access
     assert folder_node.external_access is access
-    assert [call.args[2] for call in mock_get_access.call_args_list] == [
+    assert [call.args[3] for call in mock_get_access.call_args_list] == [
         HierarchyNodeType.SITE,
         HierarchyNodeType.DRIVE,
         HierarchyNodeType.FOLDER,

@@ -122,6 +122,7 @@ def _mock_convert(monkeypatch: pytest.MonkeyPatch) -> None:
         access_token: str | None = None,  # noqa: ARG001
         treat_sharing_link_as_public: bool = False,  # noqa: ARG001
         raw_file_callback: Any = None,  # noqa: ARG001
+        permission_cache: Any = None,  # noqa: ARG001
     ) -> Document:
         return _make_document(driveitem)
 
@@ -348,6 +349,7 @@ class TestSitePagesPerPageFailure:
             include_permissions: bool = False,  # noqa: ARG001
             parent_hierarchy_raw_node_id: str | None = None,  # noqa: ARG001
             treat_sharing_link_as_public: bool = False,  # noqa: ARG001
+            permission_cache: Any = None,  # noqa: ARG001
         ) -> Document:
             if page["id"] == "bad-1":
                 raise ValueError("malformed canvasLayout")
@@ -407,6 +409,7 @@ class TestSitePagesPerPageFailure:
             include_permissions: bool = False,  # noqa: ARG001
             parent_hierarchy_raw_node_id: str | None = None,  # noqa: ARG001
             treat_sharing_link_as_public: bool = False,  # noqa: ARG001
+            permission_cache: Any = None,  # noqa: ARG001
         ) -> Document:
             raise KeyError("id")
 

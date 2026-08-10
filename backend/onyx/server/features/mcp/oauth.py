@@ -17,6 +17,11 @@ from uuid import uuid4
 import httpx
 from mcp.client.auth import OAuthClientProvider, TokenStorage
 from mcp.client.auth.oauth2 import OAuthContext
+from mcp.client.auth.utils import (
+    build_protected_resource_metadata_discovery_urls,
+    create_oauth_metadata_request,
+    handle_protected_resource_response,
+)
 from mcp.shared.auth import (
     OAuthClientInformationFull,
     OAuthClientMetadata,
@@ -30,23 +35,27 @@ from onyx.cache.interface import CacheLockAcquisitionError
 from onyx.cache.locks import cache_shared_lock
 from onyx.configs.app_configs import WEB_DOMAIN
 from onyx.db.engine.sql_engine import get_session_with_current_tenant
-from onyx.db.enums import MCPOAuthProviderMode
+from onyx.db.enums import MCPOAuthProviderMode, MCPTransport
 from onyx.db.mcp import (
     extract_connection_data,
     get_connection_config_by_id,
     update_connection_config,
 )
-from onyx.db.models import MCPConnectionConfig
-from onyx.db.models import MCPServer as DbMCPServer
+from onyx.db.models import MCPConnectionConfig, MCPServer
 from onyx.error_handling.error_codes import OnyxErrorCode
 from onyx.error_handling.exceptions import OnyxError
 from onyx.redis.redis_pool import get_redis_client
+from onyx.server.features.mcp.client import initialize_mcp_client
 from onyx.server.features.mcp.models import (
+    DENYLISTED_MCP_HEADERS,
     MCPConnectionData,
     MCPOAuthKeys,
     merge_mcp_headers,
 )
-from onyx.server.features.mcp.ssrf import mcp_ssrf_httpx_client_factory
+from onyx.server.features.mcp.ssrf import (
+    mcp_oauth_challenge_httpx_client_factory,
+    mcp_ssrf_httpx_client_factory,
+)
 from onyx.utils.logger import setup_logger
 from onyx.utils.threadpool_concurrency import run_async_sync_no_cancel
 from shared_configs.contextvars import ONYX_REQUEST_ID_CONTEXTVAR, get_current_tenant_id
@@ -77,10 +86,6 @@ OAUTH_WAIT_SECONDS = 30  # Give the user 30 seconds to complete the OAuth flow
 UNUSED_RETURN_PATH = "unused_path"
 
 
-def key_auth_url(user_id: str) -> str:
-    return f"mcp:oauth:{user_id}:auth_url"
-
-
 def key_state(user_id: str) -> str:
     return f"mcp:oauth:{user_id}:state"
 
@@ -99,6 +104,202 @@ def key_client_info(user_id: str) -> str:
 
 REQUESTED_SCOPE: str | None = None
 
+_OAUTH_HTTP_TIMEOUT_SECONDS = 30.0
+# The connect request returns as soon as the SDK publishes its consent URL, but
+# that same task must stay alive to receive the callback code and exchange it.
+# Keep a strong reference until the task completes; asyncio only holds weak ones.
+_INFLIGHT_OAUTH_TASKS: set[asyncio.Task[object]] = set()
+
+
+def _retain_oauth_task(task: asyncio.Task[object]) -> None:
+    _INFLIGHT_OAUTH_TASKS.add(task)
+
+    def release(completed_task: asyncio.Task[object]) -> None:
+        _INFLIGHT_OAUTH_TASKS.discard(completed_task)
+        exception = None if completed_task.cancelled() else completed_task.exception()
+        if exception is not None:
+            logger.error(
+                "Background MCP OAuth flow failed",
+                exc_info=exception,
+            )
+
+    task.add_done_callback(release)
+
+
+async def _run_until_oauth_redirect(
+    operation: Awaitable[object],
+    redirect_future: asyncio.Future[str],
+) -> str | None:
+    """Run an SDK OAuth operation until it finishes or publishes a redirect.
+
+    A redirect returns immediately while the operation continues in the
+    background to exchange the eventual callback code. Completion without a
+    redirect returns ``None``; operation failures and the outer timeout are
+    propagated to the caller.
+    """
+
+    async def run_operation() -> object:
+        return await operation
+
+    operation_task = asyncio.create_task(run_operation())
+    operation_retained = False
+    try:
+        # Wait until the SDK either produces a consent URL or completes without
+        # one because the connection is already authenticated. Bound the wait in
+        # case the MCP server does neither.
+        async with asyncio.timeout(OAUTH_WAIT_SECONDS):
+            done, _ = await asyncio.wait(
+                [operation_task, redirect_future],
+                return_when=asyncio.FIRST_COMPLETED,
+            )
+        if redirect_future in done:
+            redirect_url = redirect_future.result()
+            # The browser can navigate now, but the SDK operation continues in
+            # the background and blocks on the Redis-delivered callback code.
+            _retain_oauth_task(operation_task)
+            operation_retained = True
+            return redirect_url
+
+        # asyncio.wait() reports completion but does not consume the result.
+        # The task is already done here, so this cannot block; awaiting it
+        # propagates any operation exception instead of losing it.
+        await operation_task
+        return None
+    finally:
+        if not operation_retained and not operation_task.done():
+            operation_task.cancel()
+            await asyncio.gather(operation_task, return_exceptions=True)
+
+
+async def _initiate_oauth_from_well_known_metadata(
+    oauth_auth: OAuthClientProvider,
+    server_url: str,
+    connection_headers: dict[str, str],
+) -> None:
+    timeout = httpx.Timeout(_OAUTH_HTTP_TIMEOUT_SECONDS)
+    discovery_urls = build_protected_resource_metadata_discovery_urls(None, server_url)
+    metadata_url: str | None = None
+    # Preserve gateway/tenant routing headers on the server's own well-known
+    # paths, but do not replay an expired bearer token or allow a stored Host
+    # override to route the validated URL to a different virtual host.
+    excluded_headers = DENYLISTED_MCP_HEADERS | {"authorization"}
+    discovery_headers = {
+        key: value
+        for key, value in connection_headers.items()
+        if key.lower() not in excluded_headers
+    }
+    async with mcp_ssrf_httpx_client_factory(timeout=timeout) as client:
+        for url in discovery_urls:
+            request = create_oauth_metadata_request(url)
+            # The SDK returns a prebuilt Request, so AsyncClient default headers
+            # would not be merged by send(); apply the routing headers directly.
+            request.headers.update(discovery_headers)
+            response = await client.send(request)
+            if await handle_protected_resource_response(response) is not None:
+                metadata_url = url
+                break
+
+    if metadata_url is None:
+        raise OnyxError(
+            OnyxErrorCode.INVALID_INPUT,
+            "OAuth auto-discovery could not find protected resource metadata at "
+            "the MCP server's well-known URI.",
+        )
+
+    # Feed the discovered metadata URL back through the SDK's normal challenge
+    # handling. The local transport supplies the otherwise-missing 401, letting
+    # the SDK own authorization-server discovery, registration, and token exchange.
+    async with mcp_oauth_challenge_httpx_client_factory(
+        server_url,
+        metadata_url,
+        oauth_auth,
+        timeout,
+    ) as client:
+        await client.get(server_url)
+
+
+async def connect_auto_discovery_oauth(
+    mcp_server: MCPServer,
+    user_id: str,
+    return_path: str,
+    connection_config_id: int,
+    admin_config_id: int | None,
+    connection_headers: dict[str, str],
+    transport: MCPTransport,
+    is_authenticated: bool,
+) -> str | None:
+    redirect_future = asyncio.get_running_loop().create_future()
+
+    async def publish_redirect(auth_url: str) -> None:
+        if not redirect_future.done():
+            redirect_future.set_result(auth_url)
+
+    oauth_auth = make_oauth_provider(
+        mcp_server,
+        user_id,
+        return_path,
+        connection_config_id,
+        admin_config_id,
+        authorization_url_callback=publish_redirect,
+    )
+
+    async def initialize_or_start_oauth() -> None:
+        # HTTPX auth cannot inspect an infinite SSE response body. Use an
+        # auth-capable Streamable HTTP probe for fresh SSE connections solely to
+        # elicit a 401 challenge; authenticated connections use their real transport.
+        probe_transport = (
+            transport if is_authenticated else MCPTransport.STREAMABLE_HTTP
+        )
+        try:
+            await initialize_mcp_client(
+                mcp_server.server_url,
+                connection_headers=connection_headers,
+                transport=probe_transport,
+                auth=oauth_auth,
+            )
+        except Exception:
+            # A fresh compatibility probe may fail because the endpoint is SSE
+            # or permits no Streamable HTTP initialization; well-known discovery
+            # can still start OAuth. Once a token already existed or was refreshed,
+            # however, this is a real authenticated initialization failure.
+            if is_authenticated or oauth_auth.context.is_token_valid():
+                raise
+            logger.info(
+                "Initial MCP OAuth probe failed; trying well-known discovery",
+                exc_info=True,
+            )
+
+        # Successful public initialization proves reachability, not consent.
+        # Only a usable token makes the connection complete; otherwise force the
+        # RFC 9728 well-known path so the user still receives a consent screen.
+        if is_authenticated or oauth_auth.context.is_token_valid():
+            return
+        await _initiate_oauth_from_well_known_metadata(
+            oauth_auth, mcp_server.server_url, connection_headers
+        )
+
+    try:
+        redirect_url = await _run_until_oauth_redirect(
+            initialize_or_start_oauth(), redirect_future
+        )
+    except TimeoutError as e:
+        raise OnyxError(
+            OnyxErrorCode.INVALID_INPUT,
+            "Timed out waiting for OAuth auto-discovery.",
+        ) from e
+
+    if (
+        redirect_url is not None
+        or is_authenticated
+        or oauth_auth.context.is_token_valid()
+    ):
+        return redirect_url
+
+    raise OnyxError(
+        OnyxErrorCode.INVALID_INPUT,
+        "OAuth auto-discovery did not produce an authorization redirect.",
+    )
+
 
 class MCPOauthState(BaseModel):
     server_id: int
@@ -106,6 +307,11 @@ class MCPOauthState(BaseModel):
     is_admin: bool
     state: str
     code_verifier: str | None = None
+
+
+class MCPOAuthCodePayload(BaseModel):
+    code: str
+    state: str
 
 
 class MCPRefreshLogContext(TypedDict):
@@ -117,7 +323,7 @@ class MCPRefreshLogContext(TypedDict):
 
 
 def _refresh_log_context(
-    mcp_server: DbMCPServer, connection_config_id: int
+    mcp_server: MCPServer, connection_config_id: int
 ) -> MCPRefreshLogContext:
     return {
         "mcp_server_id": mcp_server.id,
@@ -197,7 +403,7 @@ def _absolute_token_expiry(tokens: OAuthToken) -> float | None:
 
 
 async def _refresh_mcp_oauth_token_if_expired(
-    mcp_server: DbMCPServer,
+    mcp_server: MCPServer,
     connection_config_id: int,
     user_id: str,
 ) -> str | None:
@@ -262,7 +468,7 @@ async def _refresh_mcp_oauth_token_if_expired(
 
 
 def refresh_mcp_oauth_token_if_expired(
-    mcp_server: DbMCPServer,
+    mcp_server: MCPServer,
     connection_config_id: int,
     user_id: str,
 ) -> str | None:
@@ -315,7 +521,7 @@ def _persisted_auth_header(connection_config_id: int) -> str | None:
     return (config_data.get("headers") or {}).get("Authorization")
 
 
-def _known_provider_oauth_metadata(mcp_server: DbMCPServer) -> OAuthMetadata | None:
+def _known_provider_oauth_metadata(mcp_server: MCPServer) -> OAuthMetadata | None:
     """Expose a KNOWN_PROVIDER server's configured endpoints as SDK OAuth
     metadata so refresh targets the real token endpoint, not the SDK's
     `<server-origin>/token` fallback."""
@@ -620,12 +826,13 @@ class OnyxOAuthClientProvider(OAuthClientProvider):
 
 
 def make_oauth_provider(
-    mcp_server: DbMCPServer,
+    mcp_server: MCPServer,
     user_id: str,
     return_path: str,
     connection_config_id: int,
     admin_config_id: int | None,
-) -> OAuthClientProvider:
+    authorization_url_callback: Callable[[str], Awaitable[None]] | None = None,
+) -> OnyxOAuthClientProvider:
     async def redirect_handler(auth_url: str) -> None:
         if return_path == UNUSED_RETURN_PATH:
             raise ValueError("Please Reconnect to the server")
@@ -638,18 +845,17 @@ def make_oauth_provider(
             # Defensive: some providers encode state differently; adapt if needed.
             raise RuntimeError("Missing state in authorization_url")
 
-        # Save for the frontend & for callback validation
+        # Save for callback validation before exposing the URL to the browser.
         state_obj = MCPOauthState(
             server_id=mcp_server.id,
             return_path=return_path,
             is_admin=admin_config_id is not None,
             state=state,
         )
-        r.rpush(key_auth_url(user_id), auth_url)
-        r.expire(key_auth_url(user_id), OAUTH_WAIT_SECONDS)
         r.set(key_state(user_id), state_obj.model_dump_json(), ex=STATE_TTL_SECONDS)
-
-        # Return immediately; the HTTP layer will read the stored URL and send it to the browser.
+        if authorization_url_callback is None:
+            raise RuntimeError("OAuth authorization URL callback is not configured")
+        await authorization_url_callback(auth_url)
 
     async def callback_handler() -> tuple[str, str | None]:
         r = get_redis_client()
@@ -672,16 +878,13 @@ def make_oauth_provider(
         if not pop:
             raise RuntimeError("Timed out waiting for OAuth callback")
 
-        code_state_dict = json.loads(pop[1].decode())
-
-        code = code_state_dict["code"]
-
-        if code_state_dict["state"] != state_obj.state:
+        code_payload = MCPOAuthCodePayload.model_validate_json(pop[1])
+        if code_payload.state != state_obj.state:
             raise RuntimeError("Invalid state in OAuth callback")
 
         # Optional: cleanup
-        r.delete(key_auth_url(user_id), key_state(user_id))
-        return code, state_obj.state
+        r.delete(key_state(user_id))
+        return code_payload.code, state_obj.state
 
     refresh_log_context = _refresh_log_context(mcp_server, connection_config_id)
     storage = OnyxTokenStorage(

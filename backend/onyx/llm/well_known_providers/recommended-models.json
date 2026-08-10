@@ -1,6 +1,6 @@
 {
-  "version": "1.10",
-  "updated_at": "2026-07-24T00:00:00Z",
+  "version": "1.11",
+  "updated_at": "2026-08-10T00:00:00Z",
   "providers": {
     "openai": {
       "default_model": "gpt-5.6-sol",
@@ -65,8 +65,8 @@
           "display_name": "DeepSeek V4 Pro"
         },
         {
-          "name": "qwen/qwen3.7-plus",
-          "display_name": "Qwen3.7 Plus"
+          "name": "qwen/qwen3.8-max",
+          "display_name": "Qwen3.8 Max"
         },
         {
           "name": "moonshotai/kimi-k3",

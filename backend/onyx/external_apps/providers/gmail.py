@@ -16,6 +16,7 @@ from onyx.external_apps.providers.actions import (
 )
 from onyx.external_apps.providers.base import OnyxManagedExtApp
 from onyx.external_apps.providers.google_base import GoogleOAuthProvider
+from shared_configs.configs import MULTI_TENANT
 
 
 # Gmail API v1 (https://gmail.googleapis.com/gmail/v1/users/{userId}/...); the
@@ -56,6 +57,7 @@ _ENDPOINTS: list[EndpointSpec] = [
             RestRoute(method="GET", path=_MESSAGE_ITEM),
         ),
         default_policy=EndpointPolicy.ALWAYS,
+        requires_self_hosted_scope=True,
     ),
     EndpointSpec(
         id=GmailAction.LABELS_READ,
@@ -63,6 +65,9 @@ _ENDPOINTS: list[EndpointSpec] = [
         description="List the labels in the mailbox.",
         matches=(RestRoute(method="GET", path=f"{_USER}/labels"),),
         default_policy=EndpointPolicy.ALWAYS,
+        # `gmail.labels` isn't restricted, but labels are only useful alongside
+        # the message reads that are.
+        requires_self_hosted_scope=True,
     ),
     EndpointSpec(
         id=GmailAction.PROFILE_READ,
@@ -70,6 +75,7 @@ _ENDPOINTS: list[EndpointSpec] = [
         description="Read the connected account's Gmail profile.",
         matches=(RestRoute(method="GET", path=f"{_USER}/profile"),),
         default_policy=EndpointPolicy.ALWAYS,
+        requires_self_hosted_scope=True,
     ),
     EndpointSpec(
         id=GmailAction.MESSAGES_SEND,
@@ -82,12 +88,14 @@ _ENDPOINTS: list[EndpointSpec] = [
         normalised_name="Modify message labels",
         description="Add or remove labels on a message (mark read, archive, …).",
         matches=(RestRoute(method="POST", path=f"{_MESSAGE_ITEM}/modify"),),
+        requires_self_hosted_scope=True,
     ),
     EndpointSpec(
         id=GmailAction.MESSAGES_TRASH,
         normalised_name="Trash a message",
         description="Move a message to the trash.",
         matches=(RestRoute(method="POST", path=f"{_MESSAGE_ITEM}/trash"),),
+        requires_self_hosted_scope=True,
     ),
     EndpointSpec(
         id=GmailAction.THREADS_READ,
@@ -98,6 +106,7 @@ _ENDPOINTS: list[EndpointSpec] = [
             RestRoute(method="GET", path=_THREAD_ITEM),
         ),
         default_policy=EndpointPolicy.ALWAYS,
+        requires_self_hosted_scope=True,
     ),
     EndpointSpec(
         id=GmailAction.ATTACHMENTS_READ,
@@ -109,6 +118,7 @@ _ENDPOINTS: list[EndpointSpec] = [
             ),
         ),
         default_policy=EndpointPolicy.ALWAYS,
+        requires_self_hosted_scope=True,
     ),
     EndpointSpec(
         id=GmailAction.DRAFTS_READ,
@@ -119,6 +129,7 @@ _ENDPOINTS: list[EndpointSpec] = [
             RestRoute(method="GET", path=_DRAFT_ITEM),
         ),
         default_policy=EndpointPolicy.ALWAYS,
+        requires_self_hosted_scope=True,
     ),
     EndpointSpec(
         id=GmailAction.DRAFTS_CREATE,
@@ -128,6 +139,7 @@ _ENDPOINTS: list[EndpointSpec] = [
         description="Save a new draft email (not sent).",
         matches=(RestRoute(method="POST", path=_DRAFTS),),
         default_policy=EndpointPolicy.ALWAYS,
+        requires_self_hosted_scope=True,
     ),
     EndpointSpec(
         id=GmailAction.DRAFTS_UPDATE,
@@ -135,30 +147,39 @@ _ENDPOINTS: list[EndpointSpec] = [
         description="Replace the contents of an existing draft (not sent).",
         matches=(RestRoute(method="PUT", path=_DRAFT_ITEM),),
         default_policy=EndpointPolicy.ALWAYS,
+        requires_self_hosted_scope=True,
     ),
     EndpointSpec(
         id=GmailAction.DRAFTS_DELETE,
         normalised_name="Delete a draft",
         description="Permanently delete a draft.",
         matches=(RestRoute(method="DELETE", path=_DRAFT_ITEM),),
+        requires_self_hosted_scope=True,
     ),
     EndpointSpec(
         id=GmailAction.DRAFTS_SEND,
         normalised_name="Send a draft",
         description="Send an existing draft as an email.",
         matches=(RestRoute(method="POST", path=f"{_DRAFTS}/send"),),
+        requires_self_hosted_scope=True,
     ),
 ]
+
+
+# gmail.modify covers read, send, label, trash, threads, attachments, and the
+# full draft lifecycle — but not permanent message delete, which keeps the
+# integration safer by default.
+_SELF_HOSTED_SCOPE = "https://www.googleapis.com/auth/gmail.modify"
+# Every Gmail scope that can read mail or touch drafts is restricted, so on
+# cloud the app is send-only.
+_CLOUD_SCOPE = "https://www.googleapis.com/auth/gmail.send"
 
 
 class GmailProvider(GoogleOAuthProvider, OnyxManagedExtApp):
     spec = GoogleOAuthProvider.build_spec(
         app_type=ExternalAppType.GMAIL,
         app_name="Gmail",
-        # gmail.modify covers read, send, label, trash, threads, attachments, and
-        # the full draft lifecycle — but not permanent message delete, which keeps
-        # the integration safer by default.
-        scope="https://www.googleapis.com/auth/gmail.modify",
+        scope=_CLOUD_SCOPE if MULTI_TENANT else _SELF_HOSTED_SCOPE,
         upstream_url_patterns=["https://gmail\\.googleapis\\.com/gmail/.*"],
         google_api_name="Gmail API",
         endpoint_catalog=_ENDPOINTS,
