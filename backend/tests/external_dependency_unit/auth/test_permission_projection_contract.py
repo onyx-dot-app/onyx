@@ -646,10 +646,16 @@ def test_delete_persona_route_admits_scoped_owner(
     )
 
 
-def test_public_route_admits_plain_owner(db_session: Session) -> None:
+def test_public_route_admits_plain_owner(
+    enable_ee: None,  # noqa: ARG001 -- side-effect fixture: CE auto-grants ADD_AGENTS
+    db_session: Session,
+) -> None:
     """/public is BASIC_ACCESS + GATE 2 like /share (update_persona_public_status checks
     owner / owner-group / global MANAGE_AGENTS). Requiring ADD_AGENTS at GATE 1 would 403
-    an owner who can publish the same agent through /share."""
+    an owner who can publish the same agent through /share.
+
+    enable_ee so the owner genuinely lacks ADD_AGENTS — CE ungates it for every user
+    (CE_UNGATED_PERMISSIONS), which would make the premise below vacuous."""
     owner = create_test_user(db_session, "public-route-owner")
     owner.effective_permissions = [Permission.BASIC_ACCESS.value]
     db_session.commit()
