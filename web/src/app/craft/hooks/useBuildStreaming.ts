@@ -990,6 +990,8 @@ export function useBuildStreaming() {
           activeTurnId: turn.turn_id,
           activeTurnIndex: turn.turn_index,
           activeTurnLocalOwner: true,
+          // Turn creation reloads stale runtime skills before it queues the turn.
+          skillsStale: false,
         });
 
         await streamTurnEvents(sessionId, turn.turn_id, controller.signal);

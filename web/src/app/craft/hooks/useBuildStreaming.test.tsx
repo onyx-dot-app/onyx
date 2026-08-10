@@ -141,6 +141,21 @@ describe("useBuildStreaming thinking packets", () => {
     ).toBe(newerController);
   });
 
+  it("clears stale skills after the backend creates the turn", async () => {
+    useBuildSessionStore.getState().updateSessionData(sessionId, {
+      skillsStale: true,
+    });
+    const { result } = renderHook(() => useBuildStreaming());
+
+    await act(async () => {
+      await result.current.streamMessage(sessionId, "use the latest skill");
+    });
+
+    expect(
+      useBuildSessionStore.getState().sessions.get(sessionId)?.skillsStale
+    ).toBe(false);
+  });
+
   it("refreshes files only when an output write completes", async () => {
     useBuildSessionStore.getState().updateFilesTabState(sessionId, {
       expandedPaths: ["attachments", "attachments/reports"],
