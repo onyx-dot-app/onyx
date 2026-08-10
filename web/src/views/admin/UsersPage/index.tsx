@@ -85,8 +85,8 @@ export default function UsersPage() {
       >
         <MessageCard
           variant="info"
-          title="Upcoming changes to permissions"
-          description="Onyx is transitioning to group-based permissions for more granular access control. Curator and Global Curator roles will be replaced by configurable group permissions. We recommend reviewing current role assignments to ensure a smooth transition."
+          title="Permissions have changed"
+          description="Onyx now uses group-based permissions. The Curator and Global Curator roles have been replaced by configurable group permissions, with per-group managers for scoped administration."
           rightChildren={
             <Button
               icon={SvgExternalLink}

@@ -50,8 +50,8 @@ function GroupsPage() {
         <SettingsLayouts.Header icon={SvgUsers} title="Groups" divider>
           <MessageCard
             variant="info"
-            title="Upcoming changes to permissions"
-            description="Onyx is transitioning to group-based permissions, enabling more flexible access control through configurable permissions per group. We recommend reviewing your group structure to prepare for this update."
+            title="Permissions have changed"
+            description="Onyx now uses group-based permissions. Access is configured per group, so a user's permissions are the combination of every group they belong to."
             rightChildren={
               <Button
                 icon={SvgExternalLink}
