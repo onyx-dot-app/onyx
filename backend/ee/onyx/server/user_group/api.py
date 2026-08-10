@@ -319,6 +319,11 @@ def update_group_agents(
     ),
     db_session: Session = Depends(get_session),
 ) -> None:
+    # GATE 2: fetch_persona_by_id_for_user scopes the agent but says nothing about
+    # the group, so without this a manager of one group could attach agents into
+    # any other. Mirrors rename_user_group_endpoint and set_group_manager.
+    assert_manages_group(user, db_session, group_id=user_group_id)
+
     for agent_id in request.added_agent_ids:
         persona = fetch_persona_by_id_for_user(
             db_session=db_session, persona_id=agent_id, user=user

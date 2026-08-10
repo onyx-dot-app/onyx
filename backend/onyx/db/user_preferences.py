@@ -4,7 +4,7 @@ from uuid import UUID
 from sqlalchemy import Column, delete, desc, select, update
 from sqlalchemy.orm import Session
 
-from onyx.db.enums import DefaultAppMode, ThemePreference
+from onyx.db.enums import AccountType, DefaultAppMode, ThemePreference
 from onyx.db.models import (
     AccessToken,
     Assistant__UserSpecificConfig,
@@ -42,10 +42,12 @@ def activate_user(
     created while inactive or deactivated before the backfill migration.
     """
     user.is_active = True
-    # assign_user_to_default_groups__no_commit internally skips
-    # ANONYMOUS, BOT, and EXT_PERM_USER account types.
-    # Also skip limited users (no group assignment).
-    if not is_limited_user(user):
+    # That reconciliation is for STANDARD users only. A service account's groups
+    # are chosen at API-key creation, and is_limited_user won't exclude one that
+    # holds the derived write:chat, so reactivating a chat-only key would drop it
+    # into Basic and hand it the whole basic bundle.
+    # assign_user_to_default_groups__no_commit itself skips ANONYMOUS/BOT/EXT_PERM.
+    if not is_limited_user(user) and user.account_type != AccountType.SERVICE_ACCOUNT:
         assign_user_to_default_groups__no_commit(
             db_session, user, is_admin=user_is_admin(user)
         )
