@@ -174,6 +174,33 @@ async def test_connect_probes_without_the_stored_bearer_when_tokens_are_missing(
 
 
 @pytest.mark.asyncio
+async def test_connect_stops_polling_for_the_auth_url_once_initialization_wins() -> (
+    None
+):
+    slice_starts: list[float] = []
+
+    def blpop_empty_slice(_keys: Any, _timeout: int = 0) -> None:
+        slice_starts.append(time.monotonic())
+        time.sleep(0.1)
+        return None
+
+    async def slow_initialize(*_args: Any, **_kwargs: Any) -> Any:
+        await asyncio.sleep(0.35)
+        return MagicMock()
+
+    response = await _connect(slow_initialize, blpop_empty_slice, TOKENED_USER_DATA)
+
+    assert response.oauth_url == RETURN_PATH
+    slices_at_return = len(slice_starts)
+    assert slices_at_return >= 2
+
+    await asyncio.sleep(0.4)
+    # Cancellation lands between slices, so only the slice already in flight runs
+    # on — the wait does not linger for the rest of the window.
+    assert len(slice_starts) <= slices_at_return + 1
+
+
+@pytest.mark.asyncio
 async def test_connect_surfaces_init_failure_when_no_auth_url_arrives() -> None:
     async def failing_initialize(*_args: Any, **_kwargs: Any) -> Any:
         raise RuntimeError("connection refused")
