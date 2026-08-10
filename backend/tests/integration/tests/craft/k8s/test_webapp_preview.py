@@ -9,16 +9,22 @@ from __future__ import annotations
 import pytest
 from kubernetes import client
 
-from onyx.server.features.build.configs import SANDBOX_BACKEND, SandboxBackend
+from onyx.server.features.build.configs import (
+    SANDBOX_BACKEND,
+    SANDBOX_NAMESPACE,
+    SandboxBackend,
+)
 from tests.integration.common_utils.test_models import DATestUser
 from tests.integration.tests.craft.k8s.k8s_fixtures import (
     PoolSession,
+    pod_exec,
     session_webapp_logs,
     start_session_webapp,
 )
 from tests.integration.tests.craft.webapp_preview import (
     proxy_get,
     wait_for_webapp_ready,
+    webapp_script_stat_command,
 )
 
 pytestmark = [
@@ -60,6 +66,25 @@ def ready_webapp_session(
         ),
     )
     return pool_session
+
+
+def test_setup_writes_read_only_webapp_script(
+    pool_session: PoolSession,
+    k8s_client: client.CoreV1Api,
+) -> None:
+    """Setup's only webapp artifact, written through the k8s exec path.
+
+    The docker suite pins the same bytes; both matter because the two managers
+    write the script separately. Mode 444 is what keeps a stray redirect from
+    clobbering the one file opencode's deny rules treat as fixed.
+    """
+    stat_line = pod_exec(
+        k8s_client,
+        pool_session.pod_name,
+        SANDBOX_NAMESPACE,
+        webapp_script_stat_command(pool_session.session_id),
+    ).strip()
+    assert stat_line == "1000:1000 444", stat_line
 
 
 def test_preview_serves_at_base_path_and_reports_ready(

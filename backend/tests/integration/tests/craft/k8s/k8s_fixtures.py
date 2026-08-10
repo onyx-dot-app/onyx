@@ -40,7 +40,7 @@ from tests.integration.common_utils.managers.build_session import BuildSessionMa
 from tests.integration.common_utils.managers.user import UserManager
 from tests.integration.tests.craft.webapp_preview import (
     WEBAPP_BOOTSTRAP_TIMEOUT_S,
-    WEBAPP_INSTALLED,
+    verify_webapp_bootstrap,
     webapp_bootstrap_command,
     webapp_install_check_command,
     webapp_logs_command,
@@ -885,12 +885,12 @@ def start_session_webapp(
     """Run the lazy webapp bootstrap in-pod, standing in for the agent's
     `webapp` tool, and return the script's output.
 
-    Blocks until the scaffold and install finish (the script's own readiness
-    wait can still lapse, so callers that need a live dev server must poll for
-    it). Fails the test unless the install landed — the exec returns buffered
-    output without raising on a nonzero exit or a lapsed timeout, so the
-    in-pod state is the only trustworthy signal.
+    Fails the test unless the bootstrap installed and started within the
+    budget the agent's `webapp` tool allows — the exec returns buffered output
+    without raising on a nonzero exit or a lapsed timeout, so what the script
+    printed and what it left behind are the only trustworthy signals.
     """
+    started_at = time.monotonic()
     output = pod_exec(
         k8s_client,
         pod_name,
@@ -898,17 +898,19 @@ def start_session_webapp(
         webapp_bootstrap_command(session_id),
         timeout_s=WEBAPP_BOOTSTRAP_TIMEOUT_S,
     )
-    state = pod_exec(
+    elapsed_s = time.monotonic() - started_at
+    install_state = pod_exec(
         k8s_client,
         pod_name,
         SANDBOX_NAMESPACE,
         webapp_install_check_command(session_id),
     ).strip()
-    if state != WEBAPP_INSTALLED:
-        pytest.fail(
-            f"start-webapp.sh did not install outputs/web for session "
-            f"{session_id} (state={state}):\n{output}"
-        )
+    verify_webapp_bootstrap(
+        session_id,
+        output=output,
+        install_state=install_state,
+        elapsed_s=elapsed_s,
+    )
     return output
 
 

@@ -26,6 +26,7 @@ from tests.integration.tests.craft.docker_e2e.conftest import (
     ProvisionSandbox,
     remove_container,
 )
+from tests.integration.tests.craft.webapp_preview import webapp_script_stat_command
 
 pytestmark = pytest.mark.skipif(
     SANDBOX_BACKEND != SandboxBackend.DOCKER,
@@ -181,22 +182,23 @@ def test_session_setup_creates_user_writable_workspace(
     assert upload_name not in post_delete_names
 
 
-def test_session_setup_writes_tamper_hardened_webapp_script(
+def test_session_setup_writes_read_only_webapp_script(
     workspace_user: DATestUser,
     provision_sandbox: ProvisionSandbox,
     docker_exec: DockerExec,
 ) -> None:
     """A session with a preview port gets start-webapp.sh and nothing else.
 
-    Webapp provisioning is lazy, so this script is all that setup leaves behind
-    for the agent to run; it is chmod 444 so the agent can't rewrite it.
+    Webapp provisioning is lazy, so this script is all that setup leaves
+    behind for the agent to run. Mode 444 makes a stray redirect into the
+    script fail loudly; it is not a boundary against the agent, which owns
+    both the file and its directory.
     """
     sandbox = provision_sandbox(workspace_user, headless=False)
     try:
-        script_path = f"/workspace/sessions/{sandbox.session_id}/start-webapp.sh"
         stat_result = docker_exec(
             sandbox.container_name,
-            ["sh", "-c", f'stat -c "%u:%g %a" "{script_path}"'],
+            ["sh", "-c", webapp_script_stat_command(sandbox.session_id)],
             user=SANDBOX_EXEC_USER,
         )
         assert stat_result.returncode == 0, (

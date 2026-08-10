@@ -29,16 +29,45 @@ _POLL_INTERVAL_S = 2.0
 
 # Cold path: template copy, bun-cache bootstrap, install, then a Next dev boot.
 # All of it used to happen during provisioning, outside the test's own clock.
+# This is only the hard exec cap, so a wedged bootstrap fails with diagnostics
+# instead of hanging; the budget the bootstrap must actually meet is below.
 WEBAPP_BOOTSTRAP_TIMEOUT_S = 420.0
 WEBAPP_READY_TIMEOUT_S = 300.0
 
+# What the agent's `webapp` tool allows before it kills the bootstrap
+# (START_TIMEOUT_MS in image/opencode-plugins/webapp.ts). Tests run the script
+# directly, so without asserting this a cold path that creeps past it stays
+# green here while being broken for every agent.
+WEBAPP_TOOL_START_BUDGET_S = 150.0
 
-def webapp_bootstrap_command(session_id: UUID | str) -> str:
+# Last line the bootstrap prints on success. It is the only signal either
+# backend gets: neither exec surfaces the script's nonzero exit, so a dev
+# server that failed to boot is otherwise indistinguishable from one that did.
+WEBAPP_STARTED_SENTINEL = "dev server running on port"
+
+# Bootstrap output is unbounded (a full bun install); cap what a failure
+# message carries.
+_MAX_DIAGNOSTIC_CHARS = 4000
+
+
+def truncate_output(output: str) -> str:
+    """Last chunk of command output, for failure messages."""
+    if len(output) <= _MAX_DIAGNOSTIC_CHARS:
+        return output
+    return f"...(truncated)\n{output[-_MAX_DIAGNOSTIC_CHARS:]}"
+
+
+def webapp_bootstrap_command(session_id: UUID) -> str:
     """In-sandbox command that lazily scaffolds and starts the webapp."""
     return f"bash {SESSIONS_ROOT}/{session_id}/start-webapp.sh"
 
 
-def webapp_logs_command(session_id: UUID | str, *, lines: int = 40) -> str:
+def webapp_script_stat_command(session_id: UUID) -> str:
+    """In-sandbox command printing ``<uid>:<gid> <mode>`` for the bootstrap script."""
+    return f'stat -c "%u:%g %a" {SESSIONS_ROOT}/{session_id}/start-webapp.sh'
+
+
+def webapp_logs_command(session_id: UUID, *, lines: int = 40) -> str:
     """In-sandbox command dumping both webapp logs, for failure diagnostics."""
     session_path = f"{SESSIONS_ROOT}/{session_id}"
     return (
@@ -51,7 +80,7 @@ def webapp_logs_command(session_id: UUID | str, *, lines: int = 40) -> str:
 WEBAPP_INSTALLED = "INSTALLED"
 
 
-def webapp_install_check_command(session_id: UUID | str) -> str:
+def webapp_install_check_command(session_id: UUID) -> str:
     """In-sandbox command echoing how far webapp provisioning actually got.
 
     The scaffold alone is not enough to distinguish success: the template copy
@@ -67,6 +96,40 @@ def webapp_install_check_command(session_id: UUID | str) -> str:
         f"elif [ -f {session_path}/{WEBAPP_PACKAGE_JSON_PATH} ]; "
         f"then echo SCAFFOLD_ONLY; else echo MISSING; fi"
     )
+
+
+def verify_webapp_bootstrap(
+    session_id: UUID,
+    *,
+    output: str,
+    install_state: str,
+    elapsed_s: float,
+) -> None:
+    """Fail unless the bootstrap installed, started, and did so in budget.
+
+    Shared by both backends because neither exec raises on the script's own
+    failure paths, so the test has to judge success from what the script
+    printed and what it left behind.
+    """
+    tail = truncate_output(output)
+    if install_state != WEBAPP_INSTALLED:
+        pytest.fail(
+            f"start-webapp.sh did not install outputs/web for session "
+            f"{session_id} (state={install_state}):\n{tail}"
+        )
+    if WEBAPP_STARTED_SENTINEL not in output:
+        pytest.fail(
+            f"start-webapp.sh installed but never started a dev server for "
+            f"session {session_id}:\n{tail}"
+        )
+    if elapsed_s > WEBAPP_TOOL_START_BUDGET_S:
+        pytest.fail(
+            f"start-webapp.sh took {elapsed_s:.0f}s for session {session_id}, "
+            f"over the {WEBAPP_TOOL_START_BUDGET_S:.0f}s the `webapp` tool "
+            f"allows before it kills the bootstrap (START_TIMEOUT_MS in "
+            f"image/opencode-plugins/webapp.ts). The agent's path is broken "
+            f"even though the script eventually finished."
+        )
 
 
 def wait_for_webapp_ready(
