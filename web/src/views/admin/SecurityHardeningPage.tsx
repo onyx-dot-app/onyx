@@ -390,8 +390,9 @@ export default function SecurityHardeningPage() {
                 title="Full User Directory Visibility"
                 description="Exact name and email lookups work regardless of this setting."
                 withLabel
+                responsive
               >
-                <div className="w-60">
+                <div className="w-full sm:w-60">
                   <InputSelect
                     value={
                       draft.user_directory_admin_only
@@ -430,8 +431,9 @@ export default function SecurityHardeningPage() {
                   title="Mask Stored Credentials"
                   description="Display format for saved API keys and credentials for admins."
                   withLabel
+                  responsive
                 >
-                  <div className="w-60">
+                  <div className="w-full sm:w-60">
                     <InputSelect
                       value={
                         draft.mask_credential_prefix ? "masked" : "visible"
@@ -500,8 +502,9 @@ export default function SecurityHardeningPage() {
                   title="SSRF Protection"
                   description="Validate outbound requests against private or internal IPs for Server-Side Request Forgery (SSRF) protection."
                   withLabel
+                  responsive
                 >
-                  <div className="w-60">
+                  <div className="w-full sm:w-60">
                     <InputSelect
                       value={draft.ssrf_protection_level}
                       onValueChange={(value) =>
