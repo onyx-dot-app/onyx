@@ -1,5 +1,4 @@
-import { render, screen } from "@testing-library/react";
-import userEvent from "@testing-library/user-event";
+import { render, screen, setupUser } from "@tests/setup/test-utils";
 import {
   MCPAuthenticationPerformer,
   MCPAuthenticationType,
@@ -71,7 +70,7 @@ function getTrailingIndicator(row: HTMLElement): HTMLElement {
 
 describe("MCPLineItem", () => {
   it("authenticates once from either the row or key area", async () => {
-    const user = userEvent.setup();
+    const user = setupUser();
     const { onAuthenticate, onSelect } = renderMCPLineItem();
     const row = screen.getByRole("button", { name: oauthServer.name });
 
@@ -89,7 +88,7 @@ describe("MCPLineItem", () => {
   });
 
   it("authenticates once per keyboard activation", async () => {
-    const user = userEvent.setup();
+    const user = setupUser();
     const { onAuthenticate, onSelect } = renderMCPLineItem();
     const row = screen.getByRole("button", { name: oauthServer.name });
 
@@ -106,7 +105,7 @@ describe("MCPLineItem", () => {
   });
 
   it("selects once when the chevron area is clicked", async () => {
-    const user = userEvent.setup();
+    const user = setupUser();
     const { onAuthenticate, onSelect } = renderMCPLineItem({
       isAuthenticated: true,
       tools: [tool],
