@@ -183,6 +183,10 @@ export interface ApiInteractiveTurnResponse {
   turn_index: number;
 }
 
+export interface ApiInteractiveTurnStartResponse extends ApiInteractiveTurnResponse {
+  skills_stale: boolean;
+}
+
 export interface ApiArtifactResponse {
   id: string;
   session_id: string;

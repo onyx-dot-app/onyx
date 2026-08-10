@@ -3,6 +3,7 @@ import {
   ApiDetailedSessionResponse,
   ApiMessageResponse,
   ApiInteractiveTurnResponse,
+  ApiInteractiveTurnStartResponse,
   ApiArtifactResponse,
   ApiWebappInfoResponse,
   ApiSandboxStatusResponse,
@@ -406,7 +407,7 @@ export async function createTurn(
   signal?: AbortSignal,
   model?: BuildLlmSelection | null,
   attachments: BuildMessageAttachment[] = []
-): Promise<ApiInteractiveTurnResponse> {
+): Promise<ApiInteractiveTurnStartResponse> {
   const res = await fetch(
     `${BUILD_API_BASE}/sessions/${sessionId}/send-message`,
     {

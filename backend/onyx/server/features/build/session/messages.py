@@ -29,7 +29,9 @@ from onyx.server.features.build.db.sandbox import (
 from onyx.server.features.build.interactive_turns.executor import (
     start_interactive_turn_runner,
 )
-from onyx.server.features.build.interactive_turns.models import InteractiveTurnResponse
+from onyx.server.features.build.interactive_turns.models import (
+    InteractiveTurnStartResponse,
+)
 from onyx.server.features.build.interactive_turns.state import (
     TURN_STATUS_FAILED,
     InteractiveTurnLockError,
@@ -83,7 +85,7 @@ def send_message(
     request: MessageRequest,
     user: User = Depends(require_permission(Permission.BASIC_ACCESS)),
     db_session: Session = Depends(get_session),
-) -> InteractiveTurnResponse:
+) -> InteractiveTurnStartResponse:
     """Start an interactive Craft turn in the background."""
     session = get_build_session(session_id, user.id, db_session)
     if session is None:
@@ -102,6 +104,7 @@ def send_message(
 
     lock_released = False
     try:
+        sandbox = get_sandbox_by_user_id(db_session, user.id)
         existing = get_turn_for_request(
             cache=cache,
             session_id=session_id,
@@ -109,7 +112,10 @@ def send_message(
             client_request_id=client_request_id,
         )
         if existing is not None:
-            return InteractiveTurnResponse.from_turn(existing)
+            return InteractiveTurnStartResponse.from_turn_and_skills_state(
+                existing,
+                skills_stale=session_runtime_stale(session, sandbox),
+            )
 
         active = get_active_turn(cache=cache, session_id=session_id, user_id=user.id)
         if active is not None:
@@ -119,9 +125,9 @@ def send_message(
             )
 
         session_manager = SessionManager(db_session)
-        sandbox = get_sandbox_by_user_id(db_session, user.id)
-        if session_runtime_stale(session, sandbox):
-            session_manager.reload_session_skills(session_id, user)
+        skills_stale = session_runtime_stale(session, sandbox)
+        if skills_stale:
+            skills_stale = session_manager.reload_session_skills(session_id, user)
 
         # Craft turns respect the org/user token + cost budgets. No-op when
         # none are configured; raises the structured 429 when over budget.
@@ -211,7 +217,10 @@ def send_message(
             turn.turn_id,
         )
 
-    return InteractiveTurnResponse.from_turn(turn)
+    return InteractiveTurnStartResponse.from_turn_and_skills_state(
+        turn,
+        skills_stale=skills_stale,
+    )
 
 
 @router.post(

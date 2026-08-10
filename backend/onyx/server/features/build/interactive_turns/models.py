@@ -24,3 +24,24 @@ class InteractiveTurnResponse(BaseModel):
             status=turn.status,
             turn_index=turn.turn_index,
         )
+
+
+class InteractiveTurnStartResponse(InteractiveTurnResponse):
+    """Turn response with the runtime state used to start it."""
+
+    skills_stale: bool
+
+    @classmethod
+    def from_turn_and_skills_state(
+        cls,
+        turn: "InteractiveTurn",
+        *,
+        skills_stale: bool,
+    ) -> "InteractiveTurnStartResponse":
+        return cls(
+            turn_id=str(turn.turn_id),
+            session_id=str(turn.session_id),
+            status=turn.status,
+            turn_index=turn.turn_index,
+            skills_stale=skills_stale,
+        )

@@ -60,6 +60,7 @@ describe("useBuildStreaming thinking packets", () => {
       turn_id: "turn-thinking",
       status: "QUEUED",
       turn_index: 0,
+      skills_stale: false,
     });
     jest.mocked(fetchTurnEventStream).mockResolvedValue({} as Response);
     jest.mocked(interruptMessageStream).mockResolvedValue();
@@ -154,6 +155,44 @@ describe("useBuildStreaming thinking packets", () => {
     expect(
       useBuildSessionStore.getState().sessions.get(sessionId)?.skillsStale
     ).toBe(false);
+  });
+
+  it("preserves newer stale skill state received while creating the turn", async () => {
+    useBuildSessionStore.getState().updateSessionData(sessionId, {
+      skillsStale: true,
+    });
+    let resolveCreateTurn:
+      | ((turn: Awaited<ReturnType<typeof createTurn>>) => void)
+      | undefined;
+    jest.mocked(createTurn).mockReturnValueOnce(
+      new Promise((resolve) => {
+        resolveCreateTurn = resolve;
+      })
+    );
+    const { result } = renderHook(() => useBuildStreaming());
+
+    await act(async () => {
+      const streamPromise = result.current.streamMessage(
+        sessionId,
+        "use the latest skill"
+      );
+      await Promise.resolve();
+      useBuildSessionStore.getState().updateSessionData(sessionId, {
+        skillsStale: true,
+      });
+      resolveCreateTurn?.({
+        session_id: sessionId,
+        turn_id: "turn-thinking",
+        status: "QUEUED",
+        turn_index: 0,
+        skills_stale: false,
+      });
+      await streamPromise;
+    });
+
+    expect(
+      useBuildSessionStore.getState().sessions.get(sessionId)?.skillsStale
+    ).toBe(true);
   });
 
   it("refreshes files only when an output write completes", async () => {

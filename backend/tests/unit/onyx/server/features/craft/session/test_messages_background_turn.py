@@ -314,6 +314,7 @@ def test_send_message_reloads_stale_skills(
     user_id = uuid4()
     session = SimpleNamespace(id=session_id)
     session_manager = MagicMock()
+    session_manager.reload_session_skills.return_value = True
 
     monkeypatch.setattr(messages_api, "get_cache_backend", lambda: cache)
     _patch_skill_state(monkeypatch, stale=True)
@@ -324,7 +325,7 @@ def test_send_message_reloads_stale_skills(
     monkeypatch.setattr(messages_api, "start_interactive_turn_runner", MagicMock())
     user = cast(User, SimpleNamespace(id=user_id))
 
-    messages_api.send_message(
+    response = messages_api.send_message(
         session_id=session_id,
         request=MessageRequest(content="hello", client_request_id="req-1"),
         user=user,
@@ -332,6 +333,7 @@ def test_send_message_reloads_stale_skills(
     )
 
     session_manager.reload_session_skills.assert_called_once_with(session_id, user)
+    assert response.skills_stale is True
 
 
 def test_send_message_is_idempotent_for_same_client_request(
