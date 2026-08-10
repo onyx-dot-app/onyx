@@ -4,7 +4,9 @@ import { AdminDateRangeSelector } from "@/components/dateRangeSelectors/AdminDat
 import { useTimeRange } from "@/app/ee/admin/performance/lib";
 import PerUserUsagePanel from "@/views/admin/PerUserUsagePanel";
 import { ADMIN_ROUTES } from "@/lib/admin-routes";
+import { Divider } from "@opal/components";
 import { SettingsLayouts } from "@opal/layouts";
+import TokenRateLimitsPanel from "@/app/admin/token-rate-limits/TokenRateLimitsPanel";
 
 const route = ADMIN_ROUTES.USAGE;
 
@@ -29,6 +31,8 @@ export default function UsagePage() {
             />
           }
         />
+        <Divider />
+        <TokenRateLimitsPanel embedded />
       </SettingsLayouts.Body>
     </SettingsLayouts.Root>
   );

@@ -1,5 +1,4 @@
 import { render, screen, setupUser, waitFor } from "@tests/setup/test-utils";
-import { formatPeriod } from "@/app/admin/token-rate-limits/TokenRateLimitTables";
 import { TokenRateLimitTable } from "@/app/admin/token-rate-limits/TokenRateLimitTables";
 import type { TokenRateLimitDisplay } from "@/app/admin/token-rate-limits/types";
 
@@ -40,11 +39,35 @@ function tokenRateLimit(
 }
 
 test.each([
-  ["token-only", tokenRateLimit(24, 1, null), "1 UTC day"],
-  ["cost-only", tokenRateLimit(24, null, 100), "1 UTC day"],
-  ["dual", tokenRateLimit(48, 1, 100), "2 UTC days"],
-])("%s limits display UTC-day windows", (_name, limit, expected) => {
-  expect(formatPeriod(limit)).toBe(expected);
+  [
+    "token-only",
+    tokenRateLimit(24, 1, null),
+    "Up to 1,000 tokens",
+    "Resets every day at midnight UTC",
+  ],
+  [
+    "cost-only",
+    tokenRateLimit(24, null, 100),
+    "Up to $1.00",
+    "Resets every day at midnight UTC",
+  ],
+  [
+    "dual",
+    tokenRateLimit(48, 1, 100),
+    "Up to $1.00 or 1,000 tokens",
+    "Resets every 2 days at midnight UTC",
+  ],
+])("%s limits render budget and cadence", (_name, limit, budget, cadence) => {
+  render(
+    <TokenRateLimitTable
+      tokenRateLimits={[limit]}
+      fetchUrl="/api/test-limits"
+      isAdmin
+    />
+  );
+
+  expect(screen.getByText(budget)).toBeInTheDocument();
+  expect(screen.getByText(cadence)).toBeInTheDocument();
 });
 
 describe("token rate limit mutation failures", () => {
@@ -63,7 +86,7 @@ describe("token rate limit mutation failures", () => {
       />
     );
 
-    await user.click(screen.getByRole("checkbox"));
+    await user.click(screen.getByRole("switch"));
 
     await waitFor(() =>
       expect(mockToastError).toHaveBeenCalledWith("Update failed")
@@ -82,7 +105,7 @@ describe("token rate limit mutation failures", () => {
       />
     );
 
-    await user.click(screen.getByRole("button"));
+    await user.click(screen.getByRole("button", { name: /^Delete Up to/ }));
 
     await waitFor(() =>
       expect(mockToastError).toHaveBeenCalledWith("Delete failed")

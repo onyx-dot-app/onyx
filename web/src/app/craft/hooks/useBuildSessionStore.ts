@@ -1,7 +1,6 @@
 "use client";
 
 import { create } from "zustand";
-import { DELETE_SUCCESS_DISPLAY_DURATION_MS } from "@/app/craft/constants";
 
 import {
   ApiSessionResponse,
@@ -1746,16 +1745,15 @@ export const useBuildSessionStore = create<BuildSessionStore>()((set, get) => ({
         newSessions.delete(sessionId);
         return {
           sessions: newSessions,
+          sessionHistory: state.sessionHistory.filter(
+            (historyItem) => historyItem.id !== sessionId
+          ),
           currentSessionId:
             currentSessionId === sessionId ? null : state.currentSessionId,
         };
       });
 
-      // Refresh history after UI has shown success state
-      setTimeout(
-        () => refreshSessionHistory(),
-        DELETE_SUCCESS_DISPLAY_DURATION_MS
-      );
+      void refreshSessionHistory();
     } catch (err) {
       console.error("Failed to delete session:", err);
       throw err;

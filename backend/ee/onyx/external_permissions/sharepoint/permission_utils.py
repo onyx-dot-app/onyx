@@ -12,7 +12,10 @@ from office365.onedrive.driveitems.driveItem import DriveItem
 from office365.runtime.client_request import ClientRequestException
 from office365.sharepoint.client_context import ClientContext
 from office365.sharepoint.permissions.roles.definitions.definition import RoleDefinition
-from office365.sharepoint.permissions.securable_object import RoleAssignmentCollection
+from office365.sharepoint.permissions.securable_object import (
+    RoleAssignmentCollection,
+    SecurableObject,
+)
 from office365.sharepoint.principal.users.collection import UserCollection
 from pydantic import BaseModel
 
@@ -27,6 +30,7 @@ from onyx.connectors.sharepoint.connector import (
     SHARED_DOCUMENTS_MAP_REVERSE,
     sleep_and_retry,
 )
+from onyx.db.enums import HierarchyNodeType
 from onyx.utils.logger import setup_logger
 from onyx.utils.retry_after import parse_retry_after_seconds
 
@@ -511,23 +515,16 @@ def _get_groups_and_members_recursively(
     )
 
 
-def get_external_access_from_sharepoint(
+def _get_external_access_from_securable_object(
     client_context: ClientContext,
     graph_client: GraphClient,
-    drive_name: str | None,
-    drive_item: DriveItem | None,
-    site_page: dict[str, Any] | None,
+    securable_object: SecurableObject,
     add_prefix: bool = False,
-    treat_sharing_link_as_public: bool = False,
 ) -> ExternalAccess:
-    """
-    Get external access information from SharePoint.
-    """
     groups: set[SharepointGroup] = set()
     user_emails: set[str] = set()
     group_ids: set[str] = set()
 
-    # Add all members to a processing set first
     def add_user_and_group_to_sets(
         role_assignments: RoleAssignmentCollection,
     ) -> None:
@@ -571,6 +568,51 @@ def get_external_access_from_sharepoint(
                         )
                     )
 
+    sleep_and_retry(
+        securable_object.role_assignments.expand(
+            ["Member", "RoleDefinitionBindings"]
+        ).get_all(
+            page_size=ROLE_ASSIGNMENTS_PAGE_SIZE,
+            page_loaded=add_user_and_group_to_sets,
+        ),
+        "get_external_access_from_sharepoint",
+    )
+
+    groups_and_members = _get_groups_and_members_recursively(
+        client_context, graph_client, groups
+    )
+    if groups_and_members.found_public_group:
+        return ExternalAccess(
+            external_user_emails=set(),
+            external_user_group_ids=set(),
+            is_public=True,
+        )
+
+    for group_name in groups_and_members.groups_to_emails:
+        if add_prefix:
+            group_name = build_ext_group_name_for_onyx(
+                group_name, DocumentSource.SHAREPOINT
+            )
+        group_ids.add(group_name.lower())
+
+    logger.info("User emails: %s", len(user_emails))
+    logger.info("Group IDs: %s", len(group_ids))
+    return ExternalAccess(
+        external_user_emails=user_emails,
+        external_user_group_ids=group_ids,
+        is_public=False,
+    )
+
+
+def get_external_access_from_sharepoint(
+    client_context: ClientContext,
+    graph_client: GraphClient,
+    drive_name: str | None,
+    drive_item: DriveItem | None,
+    site_page: dict[str, Any] | None,
+    add_prefix: bool = False,
+    treat_sharing_link_as_public: bool = False,
+) -> ExternalAccess:
     if drive_item and drive_name:
         is_public = _is_public_item(drive_item, treat_sharing_link_as_public)
         if is_public:
@@ -594,14 +636,6 @@ def get_external_access_from_sharepoint(
         item = client_context.web.lists.get_by_title(drive_name).items.get_by_id(
             item_id
         )
-
-        sleep_and_retry(
-            item.role_assignments.expand(["Member", "RoleDefinitionBindings"]).get_all(
-                page_size=ROLE_ASSIGNMENTS_PAGE_SIZE,
-                page_loaded=add_user_and_group_to_sets,
-            ),
-            "get_external_access_from_sharepoint",
-        )
     elif site_page:
         site_url = site_page.get("webUrl")
         # Keep percent-encoding intact so the path matches the encoding
@@ -614,43 +648,42 @@ def get_external_access_from_sharepoint(
             server_relative_url
         )
         item = file_obj.listItemAllFields
-
-        sleep_and_retry(
-            item.role_assignments.expand(["Member", "RoleDefinitionBindings"]).get_all(
-                page_size=ROLE_ASSIGNMENTS_PAGE_SIZE,
-                page_loaded=add_user_and_group_to_sets,
-            ),
-            "get_external_access_from_sharepoint",
-        )
     else:
         raise RuntimeError("No drive item or site page provided")
 
-    groups_and_members: GroupsResult = _get_groups_and_members_recursively(
-        client_context, graph_client, groups
+    return _get_external_access_from_securable_object(
+        client_context,
+        graph_client,
+        item,
+        add_prefix,
     )
 
-    # If the site is public, w have default groups assigned to it, so we return early
-    if groups_and_members.found_public_group:
-        return ExternalAccess(
-            external_user_emails=set(),
-            external_user_group_ids=set(),
-            is_public=True,
-        )
 
-    for group_name, _ in groups_and_members.groups_to_emails.items():
-        if add_prefix:
-            group_name = build_ext_group_name_for_onyx(
-                group_name, DocumentSource.SHAREPOINT
-            )
-        group_ids.add(group_name.lower())
+def get_hierarchy_node_external_access_from_sharepoint(
+    client_context: ClientContext,
+    graph_client: GraphClient,
+    node_type: HierarchyNodeType,
+    drive_name: str | None,
+    folder_url: str | None,
+) -> ExternalAccess:
+    if node_type == HierarchyNodeType.SITE:
+        securable_object = client_context.web
+    elif node_type == HierarchyNodeType.DRIVE and drive_name:
+        list_name = SHARED_DOCUMENTS_MAP_REVERSE.get(drive_name, drive_name)
+        securable_object = client_context.web.lists.get_by_title(list_name)
+    elif node_type == HierarchyNodeType.FOLDER and folder_url:
+        server_relative_url = urlparse(folder_url).path
+        securable_object = client_context.web.get_folder_by_server_relative_url(
+            server_relative_url
+        ).list_item_all_fields
+    else:
+        raise ValueError(f"Unsupported SharePoint hierarchy node: {node_type}")
 
-    logger.info("User emails: %s", len(user_emails))
-    logger.info("Group IDs: %s", len(group_ids))
-
-    return ExternalAccess(
-        external_user_emails=user_emails,
-        external_user_group_ids=group_ids,
-        is_public=False,
+    return _get_external_access_from_securable_object(
+        client_context,
+        graph_client,
+        securable_object,
+        add_prefix=True,
     )
 
 
