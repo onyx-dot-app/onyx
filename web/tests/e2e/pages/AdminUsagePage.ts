@@ -20,9 +20,7 @@ export class AdminUsagePage {
     // The table only renders the first page (by spend) without filtering, so
     // narrow to this user via search before asserting their row is visible.
     await this.userSearchInput.fill(email);
-    // Clickable rows render role="button" (see opal Table's onRowClick
-    // handling), not role="row".
-    const row = this.page.getByRole("button", {
+    const row = this.page.getByRole("row", {
       name: `View usage details for ${email}`,
     });
     await expect(row).toBeVisible();

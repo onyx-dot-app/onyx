@@ -22,7 +22,7 @@ test("opens a user from the keyboard", () => {
     />
   );
 
-  const row = screen.getByRole("button", {
+  const row = screen.getByRole("row", {
     name: "View usage details for ada@example.com",
   });
   row.focus();
