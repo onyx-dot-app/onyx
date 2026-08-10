@@ -3,21 +3,35 @@
   transition: opacity var(--interactive-duration) var(--interactive-easing);
 }
 
-.hoverable-item[data-hoverable-variant="appear-on-hover"] {
-  opacity: 0;
-}
+/* Hover-driven visibility is gated on `@media (hover: hover)` (matching how
+   Tailwind v4 gates its `hover:` variant). On devices whose primary input
+   cannot hover (touch), hidden items could never be revealed, so every
+   variant renders in its revealed state instead: `appear-on-hover` items are
+   always visible and `replace-on-hover` always shows its hover content.
+   Focus and `interaction` overrides are input-agnostic and apply everywhere. */
 
 /* ---------------------------------------------------------------------------
    appear-on-hover — hidden at rest, visible on hover
    --------------------------------------------------------------------------- */
 
-/* Group mode — Root :hover controls descendant item visibility via CSS.
-   Exclude local-mode items so they aren't revealed by an ancestor root. */
-[data-hover-group]:hover
-  .hoverable-item[data-hoverable-variant="appear-on-hover"]:not(
-    [data-hoverable-local]
-  ) {
-  opacity: 1;
+@media (hover: hover) {
+  .hoverable-item[data-hoverable-variant="appear-on-hover"] {
+    opacity: 0;
+  }
+
+  /* Group mode — Root :hover controls descendant item visibility via CSS.
+     Exclude local-mode items so they aren't revealed by an ancestor root. */
+  [data-hover-group]:hover
+    .hoverable-item[data-hoverable-variant="appear-on-hover"]:not(
+      [data-hoverable-local]
+    ) {
+    opacity: 1;
+  }
+
+  /* Local mode — item handles its own :hover */
+  .hoverable-item[data-hoverable-variant="appear-on-hover"][data-hoverable-local="true"]:hover {
+    opacity: 1;
+  }
 }
 
 /* Interaction override — force items visible via JS */
@@ -25,11 +39,6 @@
   .hoverable-item[data-hoverable-variant="appear-on-hover"]:not(
     [data-hoverable-local]
   ) {
-  opacity: 1;
-}
-
-/* Local mode — item handles its own :hover */
-.hoverable-item[data-hoverable-variant="appear-on-hover"][data-hoverable-local="true"]:hover {
   opacity: 1;
 }
 
@@ -55,12 +64,19 @@
   opacity: 1;
 }
 
-/* Group mode */
-[data-hover-group]:hover
-  .hoverable-item[data-hoverable-variant="appear-on-rest"]:not(
-    [data-hoverable-local]
-  ) {
-  opacity: 0;
+@media (hover: hover) {
+  /* Group mode */
+  [data-hover-group]:hover
+    .hoverable-item[data-hoverable-variant="appear-on-rest"]:not(
+      [data-hoverable-local]
+    ) {
+    opacity: 0;
+  }
+
+  /* Local mode */
+  .hoverable-item[data-hoverable-variant="appear-on-rest"][data-hoverable-local="true"]:hover {
+    opacity: 0;
+  }
 }
 
 /* Interaction override */
@@ -68,11 +84,6 @@
   .hoverable-item[data-hoverable-variant="appear-on-rest"]:not(
     [data-hoverable-local]
   ) {
-  opacity: 0;
-}
-
-/* Local mode */
-.hoverable-item[data-hoverable-variant="appear-on-rest"][data-hoverable-local="true"]:hover {
   opacity: 0;
 }
 
@@ -101,12 +112,36 @@
   display: none;
 }
 
-/* Group mode */
-[data-hover-group]:hover .hoverable-replace-rest:not([data-hoverable-local]) {
-  display: none;
+@media (hover: hover) {
+  /* Group mode */
+  [data-hover-group]:hover .hoverable-replace-rest:not([data-hoverable-local]) {
+    display: none;
+  }
+  [data-hover-group]:hover
+    .hoverable-replace-hover:not([data-hoverable-local]) {
+    display: contents;
+  }
+
+  /* Local mode */
+  .hoverable-replace:hover
+    > .hoverable-replace-rest[data-hoverable-local="true"] {
+    display: none;
+  }
+  .hoverable-replace:hover
+    > .hoverable-replace-hover[data-hoverable-local="true"] {
+    display: contents;
+  }
 }
-[data-hover-group]:hover .hoverable-replace-hover:not([data-hoverable-local]) {
-  display: contents;
+
+/* No hover available — permanently show the hover content so its actions
+   stay reachable on touch devices. */
+@media (hover: none) {
+  .hoverable-replace-rest {
+    display: none;
+  }
+  .hoverable-replace-hover {
+    display: contents;
+  }
 }
 
 /* Interaction override */
@@ -116,16 +151,6 @@
 }
 [data-hover-group][data-interaction="hover"]
   .hoverable-replace-hover:not([data-hoverable-local]) {
-  display: contents;
-}
-
-/* Local mode */
-.hoverable-replace:hover
-  > .hoverable-replace-rest[data-hoverable-local="true"] {
-  display: none;
-}
-.hoverable-replace:hover
-  > .hoverable-replace-hover[data-hoverable-local="true"] {
   display: contents;
 }
 
