@@ -899,6 +899,7 @@ async def _connect_oauth(
             connection_headers=connection_config_dict.get("headers", {}),
             transport=mcp_server.transport,
             is_authenticated=is_authenticated,
+            force_reauthentication=request.force_reauthentication,
         )
     except OnyxError:
         raise

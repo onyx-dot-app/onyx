@@ -486,6 +486,10 @@ class MCPUserOAuthConnectRequest(BaseModel):
     server_id: int = Field(..., description="ID of the MCP server")
     return_path: str = Field(..., description="Path to redirect to after callback")
     include_resource_param: bool = Field(..., description="Include resource parameter")
+    force_reauthentication: bool = Field(
+        default=False,
+        description="Ignore stored OAuth tokens and start a fresh authorization flow",
+    )
     oauth_client_id: str | None = Field(
         None, description="OAuth client ID (optional for DCR)"
     )

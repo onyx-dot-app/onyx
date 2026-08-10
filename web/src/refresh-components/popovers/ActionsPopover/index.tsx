@@ -492,7 +492,8 @@ export default function ActionsPopover({
   // Handle MCP authentication
   const handleMCPAuthenticate = async (
     serverId: number,
-    authType: MCPAuthenticationType
+    authType: MCPAuthenticationType,
+    forceReauthentication = false
   ) => {
     if (authType === MCPAuthenticationType.OAUTH) {
       const updateLoadingState = (loading: boolean) => {
@@ -522,6 +523,7 @@ export default function ActionsPopover({
             server_id: serverId,
             return_path: window.location.pathname + window.location.search,
             include_resource_param: true,
+            force_reauthentication: forceReauthentication,
           }),
         });
 
@@ -591,16 +593,21 @@ export default function ActionsPopover({
     }
   };
 
-  const handleServerAuthentication = (server: MCPServer) => {
+  const handleServerAuthentication = (
+    server: MCPServer,
+    forceReauthentication = false
+  ) => {
     const authType = server.auth_type;
     const performer = server.auth_performer;
     const requiresHeaderValues =
       (server.auth_template?.required_fields.length ?? 0) > 0;
 
     if (!requiresHeaderValues && authType === MCPAuthenticationType.OAUTH) {
-      void handleMCPAuthenticate(server.id, MCPAuthenticationType.OAUTH).catch(
-        () => undefined
-      );
+      void handleMCPAuthenticate(
+        server.id,
+        MCPAuthenticationType.OAUTH,
+        forceReauthentication
+      ).catch(() => undefined);
       return;
     }
     if (
@@ -618,7 +625,11 @@ export default function ActionsPopover({
         authTemplate: server.auth_template,
         onSuccess: async () => {
           if (authType === MCPAuthenticationType.OAUTH) {
-            await handleMCPAuthenticate(server.id, MCPAuthenticationType.OAUTH);
+            await handleMCPAuthenticate(
+              server.id,
+              MCPAuthenticationType.OAUTH,
+              forceReauthentication
+            );
             return;
           }
           // Update the authentication state after successful credential submission
@@ -716,7 +727,7 @@ export default function ActionsPopover({
 
   const handleFooterReauthClick = () => {
     if (selectedMcpServer) {
-      handleServerAuthentication(selectedMcpServer);
+      handleServerAuthentication(selectedMcpServer, true);
     }
   };
 
@@ -730,13 +741,11 @@ export default function ActionsPopover({
 
   const mcpFooter = showActiveReauthRow ? (
     <LineItem
+      disabled={selectedMcpServerData?.isLoading}
       onClick={handleFooterReauthClick}
       icon={selectedMcpServerData?.isLoading ? SvgSimpleLoader : SvgKey}
-      rightChildren={
-        <Button icon={SvgChevronRight} prominence="tertiary" size="sm" />
-      }
     >
-      Re-Authenticate
+      Re-authenticate
     </LineItem>
   ) : undefined;
 
