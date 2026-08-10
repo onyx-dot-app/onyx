@@ -18,6 +18,7 @@ from onyx.external_apps.providers.hubspot import HubspotProvider
 from onyx.external_apps.providers.linear import LinearProvider
 from onyx.external_apps.providers.notion import NotionProvider
 from onyx.external_apps.providers.slack import SlackProvider
+from shared_configs.configs import MULTI_TENANT
 
 _PROVIDER_CLASSES: list[type[ExternalAppProvider]] = [
     SlackProvider,
@@ -61,6 +62,14 @@ def get_onyx_managed_provider(app_type: ExternalAppType) -> OnyxManagedExtApp | 
     return provider if isinstance(provider, OnyxManagedExtApp) else None
 
 
+def uses_cloud_scope(app_type: ExternalAppType) -> bool:
+    """Whether this app connects with Onyx's cloud OAuth client rather than
+    credentials the deployment owns. That client is verified with the upstream
+    provider, so providers narrow their scope there (see ``GoogleOAuthProvider``)
+    and the actions it can't cover drop out of the catalog."""
+    return MULTI_TENANT and get_onyx_managed_provider(app_type) is not None
+
+
 def get_provider_or_raise(app: ExternalApp) -> ExternalAppProvider:
     provider = get_provider_for_app(app)
     if provider is None:
@@ -98,15 +107,23 @@ def _descriptor_for(
                 description=e.description,
                 default_policy=e.default_policy,
             )
-            for e in spec.endpoint_catalog
+            for e in get_endpoint_catalog(spec.app_type)
         ],
     )
 
 
 def get_endpoint_catalog(app_type: ExternalAppType) -> list[EndpointSpec]:
-    """The action catalog for an app_type (empty for CUSTOM / unregistered)."""
+    """The action catalog for an app_type (empty for CUSTOM / unregistered),
+    minus the actions the OAuth grant in force can't cover. Every consumer
+    (admin view, policy resolution, the runtime gate) funnels through here, so
+    none of them can offer an action the grant won't authorize."""
     provider = PROVIDERS.get(app_type)
-    return list(provider.spec.endpoint_catalog) if provider is not None else []
+    if provider is None:
+        return []
+    catalog = provider.spec.endpoint_catalog
+    if uses_cloud_scope(app_type):
+        return [e for e in catalog if not e.requires_self_hosted_scope]
+    return list(catalog)
 
 
 def effective_policy(

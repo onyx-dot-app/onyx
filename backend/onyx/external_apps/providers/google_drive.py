@@ -10,6 +10,7 @@ from onyx.external_apps.providers.actions import (
 )
 from onyx.external_apps.providers.base import OnyxManagedExtApp
 from onyx.external_apps.providers.google_base import GoogleOAuthProvider
+from shared_configs.configs import MULTI_TENANT
 
 
 # Google Drive API v3. Reads (GET) live under `/drive/v3/...`; content uploads
@@ -71,6 +72,8 @@ _ENDPOINTS: list[EndpointSpec] = [
             RestRoute(method="GET", path="/drive/v3/drives/{driveId}"),
         ),
         default_policy=EndpointPolicy.ALWAYS,
+        # drives.list needs a Drive-wide scope; `drive.file` can't reach it.
+        requires_self_hosted_scope=True,
     ),
     EndpointSpec(
         id=GoogleDriveAction.FILES_CREATE,
@@ -124,13 +127,23 @@ _ENDPOINTS: list[EndpointSpec] = [
 ]
 
 
+# Full drive scope: read, search, create, edit, and delete any of the user's
+# files. Mutations are gated by per-action ASK approval.
+_SELF_HOSTED_SCOPE = "https://www.googleapis.com/auth/drive"
+# Every Drive-wide scope is restricted, so cloud pairs per-file access (files
+# Onyx created or the user opened with it) with the Docs API, which reaches any
+# Google Doc by id.
+_CLOUD_SCOPE = (
+    "https://www.googleapis.com/auth/drive.file "
+    "https://www.googleapis.com/auth/documents"
+)
+
+
 class GoogleDriveProvider(GoogleOAuthProvider, OnyxManagedExtApp):
     spec = GoogleOAuthProvider.build_spec(
         app_type=ExternalAppType.GOOGLE_DRIVE,
         app_name="Google Drive",
-        # Full drive scope: read, search, create, edit, and delete any of the
-        # user's files. Mutations are gated by per-action ASK approval.
-        scope="https://www.googleapis.com/auth/drive",
+        scope=_CLOUD_SCOPE if MULTI_TENANT else _SELF_HOSTED_SCOPE,
         upstream_url_patterns=[
             "https://www\\.googleapis\\.com/drive/.*",
             # Content uploads use the separate /upload host path.
