@@ -40,8 +40,16 @@ export interface ConnectorSources {
 
 export function useConnectorSources(): ConnectorSources {
   const serverUrl = useSession((state) => state.serverUrl);
-  const { settings } = useWorkspaceSettings();
-  const indexedEnabled = serverUrl !== null && settings.vector_db_enabled;
+  const { settings, isPending: settingsPending } = useWorkspaceSettings();
+  /*
+   * Held until the setting is known: the whole `/manage` router answers 501 without a vector DB
+   * (connector.py's router dependency), and the retry doubles it, so guessing costs every such
+   * deployment two failed requests per launch. Only the *pending* case waits — if `/settings`
+   * fails outright the optimistic default still applies, or one settings outage would leave the
+   * picker empty everywhere.
+   */
+  const indexedEnabled =
+    serverUrl !== null && settings.vector_db_enabled && !settingsPending;
 
   const indexed = useQuery({
     queryKey: QUERY_KEYS.connectorSources(serverUrl),
