@@ -4,9 +4,13 @@ Chromium helpers orphaned by Playwright teardown re-parent to PID 1 (the
 celery worker, which never wait()s) and accumulate as zombies. Spawned
 connector children mark themselves as the subreaper and drain them instead.
 
-Only call reap_exited_children from a process whose subprocess usage is
-sequential and fully owned — a blanket waitpid(-1) steals exit statuses
-from concurrent waiters.
+Linux-only by nature, not as a shortcut: the pathology exists only where
+PID 1 is a non-reaping worker (our containers). On macOS orphans re-parent
+to launchd, which reaps them.
+
+Only call the drains from a process whose subprocess usage is sequential and
+fully owned — a blanket waitpid(-1) steals exit statuses from concurrent
+waiters.
 """
 
 import os
@@ -136,4 +140,10 @@ def install_sigterm_drain() -> None:
         reap_children_before_exit()
         os._exit(128 + signal.SIGTERM)
 
-    signal.signal(signal.SIGTERM, _drain_and_exit)
+    try:
+        signal.signal(signal.SIGTERM, _drain_and_exit)
+    except (ValueError, OSError):
+        # not the main thread / exotic embedding — child startup must not fail
+        logger.warning(
+            "install_sigterm_drain: could not install handler", exc_info=True
+        )
