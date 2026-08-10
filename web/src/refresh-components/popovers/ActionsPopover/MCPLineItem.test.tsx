@@ -5,7 +5,9 @@ import {
   MCPAuthenticationType,
   ToolSnapshot,
 } from "@/lib/tools/interfaces";
-import MCPLineItem, { MCPServer } from "./MCPLineItem";
+import MCPLineItem, {
+  MCPServer,
+} from "@/refresh-components/popovers/ActionsPopover/MCPLineItem";
 
 const oauthServer: MCPServer = {
   id: 1,
