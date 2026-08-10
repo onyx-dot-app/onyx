@@ -131,12 +131,15 @@ function mockApi({
   connectors = [] as string[],
   federated = [] as string[],
   holdPreferences = false,
+  holdPatch = false,
 }: {
   preferences?: Record<string, { disabled_tool_ids: number[] }>;
   connectors?: string[];
   federated?: string[];
   // Leaves the preferences GET pending so a test can land the connector list first.
   holdPreferences?: boolean;
+  // Leaves the PATCH pending so a test can act while a write is still in flight.
+  holdPatch?: boolean;
 } = {}) {
   const stored: Record<string, { disabled_tool_ids: number[] }> = {
     ...preferences,
@@ -144,6 +147,10 @@ function mockApi({
   let release = () => {};
   const gate = new Promise<void>((resolve) => {
     release = resolve;
+  });
+  let releasePatchGate = () => {};
+  const patchGate = new Promise<void>((resolve) => {
+    releasePatchGate = resolve;
   });
   apiFetchMock.mockImplementation((path: string, init?: ApiFetchInit) => {
     if (path === "/manage/connector-status") {
@@ -166,13 +173,21 @@ function mockApi({
     }
     if (init?.method === "PATCH") {
       const agentId = path.split("/")[3];
-      stored[agentId] = init.body as { disabled_tool_ids: number[] };
-      return Promise.resolve(undefined);
+      const apply = () => {
+        stored[agentId] = init.body as { disabled_tool_ids: number[] };
+        return undefined;
+      };
+      return holdPatch ? patchGate.then(apply) : Promise.resolve(apply());
     }
     if (holdPreferences) return gate.then(() => ({ ...stored }));
     return Promise.resolve({ ...stored });
   });
-  return { releasePreferences: () => release(), stored };
+  return {
+    releasePreferences: () => release(),
+    releasePatch: () => releasePatchGate(),
+    patchSettled: () => patchGate,
+    stored,
+  };
 }
 
 function patchCalls(): { agentId: string; disabled: number[] }[] {
@@ -786,5 +801,64 @@ describe("useComposerToolsState — sources", () => {
       result.current.toggleToolEnabled(1);
     });
     expect(result.current.enabledSourceCount).toBe(2);
+  });
+
+  it("reconciles an agent switched to while the previous agent's write is in flight", async () => {
+    /*
+     * The write gate is a ref, and clearing a ref re-renders nothing — so blocking on it for every
+     * agent would leave the one switched into unreconciled until some unrelated render, sending
+     * source filters that disagree with the tools the same turn allows.
+     */
+    const api = mockApi({
+      preferences: {
+        "0": { disabled_tool_ids: [1] },
+        "12": { disabled_tool_ids: [1] },
+      },
+      connectors: ["notion", "web"],
+      holdPatch: true,
+    });
+    const { result, rerender } = renderHook(
+      (props: Parameters<typeof useComposerToolsState>[0]) =>
+        useComposerToolsState(props),
+      {
+        wrapper,
+        initialProps: {
+          chatSessionId: "session-1",
+          agent: agent([searchTool]),
+          isProjectWorkflow: false,
+          projectId: null,
+        },
+      },
+    );
+    // Both queries have to land before the count means anything — it reads 0 while empty.
+    await waitFor(() =>
+      expect(result.current.sourceOptions).toEqual(["notion", "web"]),
+    );
+    await waitFor(() => expect(result.current.disabledToolIds).toEqual([1]));
+    await waitFor(() => expect(result.current.enabledSourceCount).toBe(0));
+
+    // Switching search back on restores the sources and starts a write the gate holds open.
+    await act(async () => {
+      result.current.toggleToolEnabled(1);
+    });
+    expect(result.current.enabledSourceCount).toBe(2);
+
+    const other: MinimalAgent = { ...agent([searchTool]), id: 12 };
+    rerender({
+      chatSessionId: "session-1",
+      agent: other,
+      isProjectWorkflow: false,
+      projectId: null,
+    });
+    await act(async () => {
+      api.releasePatch();
+      await api.patchSettled();
+    });
+
+    // Agent 12 also has search off, so its first reconcile has to clear the carried-over sources.
+    await waitFor(() => expect(result.current.enabledSourceCount).toBe(0));
+    expect(
+      result.current.resolveToolOptions().internalSearchFilters,
+    ).toBeNull();
   });
 });

@@ -206,8 +206,12 @@ export function useComposerToolsState({
    * Single writer. Mobile's preference writes settle after an await, so a handler and this effect
    * would both act on the same stale "still enabled" and cancel out. Releasing the flag on settle
    * lets the resulting cache update — or rollback — re-run the effect, so a failed write retries.
+   *
+   * Held per agent, not as a bare flag: preferences are per agent, so a write for one can't
+   * confuse a reconcile for another. Blocking on it would, because clearing a ref re-renders
+   * nothing — the agent switched into would sit unreconciled until an unrelated render.
    */
-  const preferenceWriteInFlight = useRef(false);
+  const preferenceWriteAgentId = useRef<number | null>(null);
   /*
    * The first reconcile of an (agent, catalogue) pair runs backwards: a switched-off search is a
    * deliberate, server-persisted choice, while the sources it meets are only the picker's
@@ -218,7 +222,8 @@ export function useComposerToolsState({
     if (sourceToolId == null || !sourcesInitialized) return;
     if (effectiveAgentId == null) return;
     // Before the record loads, "nothing disabled" is a default, not an observation.
-    if (!preferencesLoaded || preferenceWriteInFlight.current) return;
+    if (!preferencesLoaded) return;
+    if (preferenceWriteAgentId.current === effectiveAgentId) return;
 
     const searchDisabled = disabledToolIds.includes(sourceToolId);
     const scope = `${effectiveAgentId}:${sourceOptions.join(",")}`;
@@ -232,9 +237,13 @@ export function useComposerToolsState({
 
     const wanted = enabledSourceCount > 0;
     if (wanted === !searchDisabled) return;
-    preferenceWriteInFlight.current = true;
+    const writingAgentId = effectiveAgentId;
+    preferenceWriteAgentId.current = writingAgentId;
     void applyToolDisabled(sourceToolId, !wanted).finally(() => {
-      preferenceWriteInFlight.current = false;
+      // Only if a later write for another agent hasn't taken the slot.
+      if (preferenceWriteAgentId.current === writingAgentId) {
+        preferenceWriteAgentId.current = null;
+      }
     });
   }, [
     applyToolDisabled,
@@ -260,9 +269,12 @@ export function useComposerToolsState({
        * The effect sees the sources cleared below before it sees this write, so without the flag
        * it would issue the opposite one.
        */
-      preferenceWriteInFlight.current = true;
+      const writingAgentId = effectiveAgentId ?? null;
+      preferenceWriteAgentId.current = writingAgentId;
       void write.finally(() => {
-        preferenceWriteInFlight.current = false;
+        if (preferenceWriteAgentId.current === writingAgentId) {
+          preferenceWriteAgentId.current = null;
+        }
       });
       if (wasDisabled) {
         /*
@@ -284,6 +296,7 @@ export function useComposerToolsState({
       applyToolDisabled,
       disableAllSourceSelection,
       disabledToolIds,
+      effectiveAgentId,
       enableAllSourceSelection,
       selectedSources,
       setSources,
