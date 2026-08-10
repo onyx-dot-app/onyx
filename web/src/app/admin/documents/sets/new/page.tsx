@@ -48,7 +48,6 @@ function Main() {
       <CardSection>
         <DocumentSetCreationForm
           ccPairs={ccPairs ?? []}
-          userGroups={userGroups}
           onClose={() => {
             refreshDocumentSets();
             router.push("/admin/documents/sets");

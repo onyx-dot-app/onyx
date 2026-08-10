@@ -13,7 +13,8 @@ import {
 import { GmailAuthSection } from "./Credential";
 import { usePublicCredentials } from "@/lib/hooks";
 import { useUser } from "@/providers/UserProvider";
-import { useConnectorAuthority } from "@/lib/connectors/authority";
+import { usePermissionAuthority } from "@/lib/permissions/hooks";
+import { Permission } from "@/lib/types";
 import {
   useGoogleCredentials,
   refreshAllGoogleData,
@@ -30,7 +31,9 @@ export const GmailMain = ({
 }: GmailMainProps) => {
   const { user } = useUser();
   // See GoogleDrivePage — same gate, same reasoning.
-  const { isGlobalHolder } = useConnectorAuthority();
+  const { isGlobalHolder } = usePermissionAuthority(
+    Permission.MANAGE_CONNECTORS
+  );
 
   const {
     data: credentialsData,

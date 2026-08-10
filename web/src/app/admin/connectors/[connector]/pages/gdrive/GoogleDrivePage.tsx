@@ -7,7 +7,8 @@ import { ValidSources } from "@/lib/types";
 import { usePublicCredentials } from "@/lib/hooks";
 import { DriveAuthSection } from "./Credential";
 import { useUser } from "@/providers/UserProvider";
-import { useConnectorAuthority } from "@/lib/connectors/authority";
+import { usePermissionAuthority } from "@/lib/permissions/hooks";
+import { Permission } from "@/lib/types";
 import {
   useGoogleCredentials,
   refreshAllGoogleData,
@@ -17,7 +18,9 @@ const GDriveMain = () => {
   const { user } = useUser();
   // Gated on the global holder, not isAdmin: managing connectors is what this
   // form does, and every endpoint behind it already enforces MANAGE_CONNECTORS.
-  const { isGlobalHolder } = useConnectorAuthority();
+  const { isGlobalHolder } = usePermissionAuthority(
+    Permission.MANAGE_CONNECTORS
+  );
 
   // Get all public credentials
   const {

@@ -30,7 +30,8 @@ import CardSection from "@/components/admin/CardSection";
 import { CredentialFieldsRenderer } from "@/lib/credentials/components/CredentialFieldsRenderer";
 import { TypedFile } from "@/lib/connectors/fileTypes";
 import ConnectorDocsLink from "@/components/admin/connectors/ConnectorDocsLink";
-import { useConnectorAuthority } from "@/lib/connectors/authority";
+import { usePermissionAuthority } from "@/lib/permissions/hooks";
+import { Permission } from "@/lib/types";
 import { SvgPlusCircle } from "@opal/icons";
 const CreateButton = ({
   onClick,
@@ -99,7 +100,9 @@ export default function CreateCredential({
   const [authMethod, setAuthMethod] = useState<string>();
   const businessTier = useTierAtLeast(Tier.BUSINESS);
 
-  const { isGlobalHolder, isScopedManager } = useConnectorAuthority();
+  const { isGlobalHolder, isScopedManager } = usePermissionAuthority(
+    Permission.MANAGE_CONNECTORS
+  );
 
   const handleSubmit = async (
     values: CreateCredentialFormValues,

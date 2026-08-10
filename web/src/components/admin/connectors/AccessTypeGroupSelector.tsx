@@ -12,7 +12,8 @@ import {
   ConfigurableSources,
   validAutoSyncSources,
 } from "@/lib/types";
-import { useConnectorAuthority } from "@/lib/connectors/authority";
+import { usePermissionAuthority } from "@/lib/permissions/hooks";
+import { Permission } from "@/lib/types";
 import { SvgUsers } from "@opal/icons";
 function isValidAutoSyncSource(
   value: ConfigurableSources
@@ -34,7 +35,9 @@ export function AccessTypeGroupSelector({
   connector: ConfigurableSources;
 }) {
   const { data: userGroups, isLoading: userGroupsIsLoading } = useUserGroups();
-  const { isScopedManager } = useConnectorAuthority();
+  const { isScopedManager } = usePermissionAuthority(
+    Permission.MANAGE_CONNECTORS
+  );
   const businessTier = useTierAtLeast(Tier.BUSINESS);
   const isAutoSyncSupported = isValidAutoSyncSource(connector);
 

@@ -13,7 +13,6 @@ import {
 import {
   ConnectorStatus,
   DocumentSetSummary,
-  UserGroup,
   FederatedConnectorConfig,
   Permission,
 } from "@/lib/types";
@@ -24,7 +23,7 @@ import { Tier } from "@/lib/settings/types";
 import { IsPublicGroupSelector } from "@/components/IsPublicGroupSelector";
 import React, { useEffect, useState } from "react";
 import { useUser } from "@/providers/UserProvider";
-import { hasPermission } from "@/lib/permissions";
+import { usePermissionAuthority } from "@/lib/permissions/hooks";
 import { ConnectorMultiSelect } from "@/components/ConnectorMultiSelect";
 import { NonSelectableConnectors } from "@/components/NonSelectableConnectors";
 import { FederatedConnectorSelector } from "@/components/FederatedConnectorSelector";
@@ -32,21 +31,22 @@ import { useFederatedConnectors } from "@/lib/hooks";
 
 interface SetCreationPopupProps {
   ccPairs: ConnectorStatus<any, any>[];
-  userGroups: UserGroup[] | undefined;
   onClose: () => void;
   existingDocumentSet?: DocumentSetSummary;
 }
 
 export const DocumentSetCreationForm = ({
   ccPairs,
-  userGroups,
   onClose,
   existingDocumentSet,
 }: SetCreationPopupProps) => {
   const businessTier = useTierAtLeast(Tier.BUSINESS);
   const isUpdate = existingDocumentSet !== undefined;
   const [localCcPairs, setLocalCcPairs] = useState(ccPairs);
-  const { user, permissions } = useUser();
+  const { user } = useUser();
+  const { isGlobalHolder, isScopedManager } = usePermissionAuthority(
+    Permission.MANAGE_DOCUMENT_SETS
+  );
   const { data: federatedConnectors } = useFederatedConnectors();
 
   useEffect(() => {
@@ -139,11 +139,9 @@ export const DocumentSetCreationForm = ({
         }}
       >
         {(props) => {
-          // Filter visible cc pairs for curator (non-admin with manage:document_sets)
-          const isCuratorOnly =
-            hasPermission(permissions, Permission.MANAGE_DOCUMENT_SETS) &&
-            !hasPermission(permissions, Permission.FULL_ADMIN_PANEL_ACCESS);
-          const visibleCcPairs = isCuratorOnly
+          // Only a scoped manager is restricted to connectors in their groups; a
+          // global MANAGE_DOCUMENT_SETS holder is org-wide and sees them all.
+          const visibleCcPairs = isScopedManager
             ? localCcPairs.filter(
                 (ccPair) =>
                   ccPair.access_type === "public" ||
@@ -154,8 +152,7 @@ export const DocumentSetCreationForm = ({
               )
             : localCcPairs;
 
-          // Filter non-visible cc pairs for curator
-          const nonVisibleCcPairs = isCuratorOnly
+          const nonVisibleCcPairs = isScopedManager
             ? localCcPairs.filter(
                 (ccPair) =>
                   !(ccPair.access_type === "public") &&
@@ -167,7 +164,7 @@ export const DocumentSetCreationForm = ({
             : [];
 
           // Deselect filtered out cc pairs
-          if (isCuratorOnly) {
+          if (isScopedManager) {
             const visibleCcPairIds = visibleCcPairs.map(
               (ccPair) => ccPair.cc_pair_id
             );
@@ -195,10 +192,7 @@ export const DocumentSetCreationForm = ({
                   <IsPublicGroupSelector
                     formikProps={props}
                     objectName="document set"
-                    isGlobalHolder={hasPermission(
-                      permissions,
-                      Permission.MANAGE_DOCUMENT_SETS
-                    )}
+                    isGlobalHolder={isGlobalHolder}
                   />
                 )}
               </div>
@@ -206,14 +200,14 @@ export const DocumentSetCreationForm = ({
               <div className="my-6 border-t border-border-02" />
 
               <div className="space-y-6">
-                {isCuratorOnly ? (
+                {isScopedManager ? (
                   <>
                     <ConnectorMultiSelect
                       name="cc_pair_ids"
                       label={`Connectors available to ${
-                        userGroups && userGroups.length > 1
-                          ? "the selected group"
-                          : "the group you curate"
+                        props.values.groups.length > 1
+                          ? "the selected groups"
+                          : "the selected group"
                       }`}
                       connectors={visibleCcPairs}
                       selectedIds={props.values.cc_pair_ids}
@@ -226,11 +220,9 @@ export const DocumentSetCreationForm = ({
                     <NonSelectableConnectors
                       connectors={nonVisibleCcPairs}
                       title={`Connectors not available to the ${
-                        userGroups && userGroups.length > 1
-                          ? `group${
-                              props.values.groups.length > 1 ? "s" : ""
-                            } you have selected`
-                          : "group you curate"
+                        props.values.groups.length > 1
+                          ? "groups you have selected"
+                          : "group you have selected"
                       }`}
                       description="Only connectors that are directly assigned to the group you are trying to add the document set to will be available."
                     />

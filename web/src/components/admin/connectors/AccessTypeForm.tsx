@@ -12,7 +12,8 @@ import { Tier } from "@/lib/settings/types";
 import { useEffect, useMemo } from "react";
 import { Credential } from "@/lib/connectors/credentials";
 import { credentialTemplates } from "@/lib/connectors/credentials";
-import { useConnectorAuthority } from "@/lib/connectors/authority";
+import { usePermissionAuthority } from "@/lib/permissions/hooks";
+import { Permission } from "@/lib/types";
 
 function isValidAutoSyncSource(
   value: ConfigurableSources
@@ -29,7 +30,9 @@ export function AccessTypeForm({
 }) {
   const [access_type, meta, access_type_helpers] =
     useField<AccessType>("access_type");
-  const { isScopedManager } = useConnectorAuthority();
+  const { isScopedManager } = usePermissionAuthority(
+    Permission.MANAGE_CONNECTORS
+  );
 
   // Private requires User Groups, Auto Sync requires permission-sync —
   // both are Business+ features.
