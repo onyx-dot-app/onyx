@@ -195,6 +195,10 @@ export const DocumentSetCreationForm = ({
                   <IsPublicGroupSelector
                     formikProps={props}
                     objectName="document set"
+                    isGlobalHolder={hasPermission(
+                      permissions,
+                      Permission.MANAGE_DOCUMENT_SETS
+                    )}
                   />
                 )}
               </div>

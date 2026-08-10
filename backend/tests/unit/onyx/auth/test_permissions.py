@@ -94,8 +94,14 @@ class TestResolveEffectivePermissions:
         }
 
     def test_manage_connectors_chain(self) -> None:
+        # read:user_groups comes along because assigning a connector to groups is
+        # part of creating one — same reason manage:document_sets implies it.
         result = resolve_effective_permissions({"manage:connectors"})
-        assert result == {"manage:connectors", "read:connectors"}
+        assert result == {
+            "manage:connectors",
+            "read:connectors",
+            "read:user_groups",
+        }
 
     def test_manage_document_sets(self) -> None:
         result = resolve_effective_permissions({"manage:document_sets"})
@@ -148,6 +154,7 @@ class TestResolveEffectivePermissions:
             "add:agents",
             "manage:connectors",
             "read:connectors",
+            "read:user_groups",
         }
 
     def test_toggle_permission_no_implications(self) -> None:

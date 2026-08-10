@@ -57,7 +57,7 @@ logger = setup_logger()
 def get_most_boosted_docs(
     ascending: bool,
     limit: int,
-    user: User = Depends(require_permission(Permission.FULL_ADMIN_PANEL_ACCESS)),
+    user: User = Depends(require_permission(Permission.MANAGE_CONNECTORS)),
     db_session: Session = Depends(get_session),
 ) -> list[BoostDoc]:
     boost_docs = fetch_docs_ranked_by_boost_for_user(
@@ -82,7 +82,7 @@ def get_most_boosted_docs(
 @router.post("/admin/doc-boosts")
 def document_boost_update(
     boost_update: BoostUpdateRequest,
-    user: User = Depends(require_permission(Permission.FULL_ADMIN_PANEL_ACCESS)),
+    user: User = Depends(require_permission(Permission.MANAGE_CONNECTORS)),
     db_session: Session = Depends(get_session),
 ) -> StatusResponse:
     update_document_boost_for_user(
@@ -97,7 +97,7 @@ def document_boost_update(
 @router.post("/admin/doc-hidden")
 def document_hidden_update(
     hidden_update: HiddenUpdateRequest,
-    user: User = Depends(require_permission(Permission.FULL_ADMIN_PANEL_ACCESS)),
+    user: User = Depends(require_permission(Permission.MANAGE_CONNECTORS)),
     db_session: Session = Depends(get_session),
 ) -> StatusResponse:
     update_document_hidden_for_user(

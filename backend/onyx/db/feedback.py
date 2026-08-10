@@ -36,7 +36,12 @@ def _fetch_db_doc_by_id(doc_id: str, db_session: Session) -> DbDocument:
 
 
 def _add_user_filters(stmt: Select, user: User, get_editable: bool = True) -> Select:
-    if has_global_permission(user, Permission.FULL_ADMIN_PANEL_ACCESS):
+    # MANAGE_CONNECTORS is org-wide over connectors, so boost/hide sees every
+    # document the same way an admin does; without this the routes would admit
+    # the holder and then silently return only their own groups' documents.
+    if has_global_permission(
+        user, Permission.FULL_ADMIN_PANEL_ACCESS
+    ) or has_global_permission(user, Permission.MANAGE_CONNECTORS):
         return stmt
 
     stmt = stmt.distinct()

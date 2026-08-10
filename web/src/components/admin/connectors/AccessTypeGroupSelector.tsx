@@ -1,6 +1,6 @@
 import { useTierAtLeast } from "@/hooks/useTierAtLeast";
 import { Tier } from "@/lib/settings/types";
-import React, { useState, useEffect } from "react";
+import React, { useEffect } from "react";
 import { FieldArray, ArrayHelpers, ErrorMessage, useField } from "formik";
 import Text from "@/refresh-components/texts/Text";
 import { Button, Divider } from "@opal/components";
@@ -12,7 +12,7 @@ import {
   ConfigurableSources,
   validAutoSyncSources,
 } from "@/lib/types";
-import { useUser } from "@/providers/UserProvider";
+import { useConnectorAuthority } from "@/lib/connectors/authority";
 import { SvgUsers } from "@opal/icons";
 function isValidAutoSyncSource(
   value: ConfigurableSources
@@ -34,56 +34,32 @@ export function AccessTypeGroupSelector({
   connector: ConfigurableSources;
 }) {
   const { data: userGroups, isLoading: userGroupsIsLoading } = useUserGroups();
-  const { isAdmin, user } = useUser();
+  const { isScopedManager } = useConnectorAuthority();
   const businessTier = useTierAtLeast(Tier.BUSINESS);
-  const [shouldHideContent, setShouldHideContent] = useState(false);
   const isAutoSyncSupported = isValidAutoSyncSource(connector);
 
   const [access_type, meta, access_type_helpers] =
     useField<AccessType>("access_type");
   const [groups, groups_meta, groups_helpers] = useField<number[]>("groups");
 
+  // A scoped manager can only create non-public connectors, so default them to
+  // private. Group selection stays theirs to make — auto-assigning their only
+  // group and hiding the control was curator-era behaviour, and it silently
+  // scoped a connector for anyone who merely happened to be in one group.
   useEffect(() => {
-    if (user && userGroups && businessTier) {
-      const isUserAdmin = isAdmin;
-      if (!businessTier) {
-        access_type_helpers.setValue("public");
-        return;
-      }
-
-      // Only set default access type if it's not already set, to avoid overriding user selections
-      if (!access_type.value && !isUserAdmin && !isAutoSyncSupported) {
-        access_type_helpers.setValue("private");
-      }
-
-      // Groups apply to private (they grant document access) and to sync (they
-      // scope who may *manage* the connector; the source still decides who can
-      // read its documents). Public connectors have nothing to scope.
-      const usesGroups =
-        access_type.value === "private" || access_type.value === "sync";
-
-      if (
-        usesGroups &&
-        userGroups.length === 1 &&
-        userGroups[0] !== undefined &&
-        !isUserAdmin
-      ) {
-        groups_helpers.setValue([userGroups[0].id]);
-        setShouldHideContent(true);
-      } else if (access_type.value === "public") {
-        groups_helpers.setValue([]);
-        setShouldHideContent(false);
-      } else {
-        setShouldHideContent(false);
-      }
+    if (!businessTier) return;
+    if (!access_type.value && isScopedManager && !isAutoSyncSupported) {
+      access_type_helpers.setValue("private");
+    }
+    if (access_type.value === "public") {
+      groups_helpers.setValue([]);
     }
   }, [
-    user,
-    userGroups,
     access_type.value,
     access_type_helpers,
     groups_helpers,
     businessTier,
+    isScopedManager,
     isAutoSyncSupported,
   ]);
 
@@ -92,19 +68,6 @@ export function AccessTypeGroupSelector({
   }
   if (!businessTier) {
     return null;
-  }
-
-  if (shouldHideContent) {
-    return (
-      <>
-        {userGroups && userGroups[0] !== undefined && (
-          <div className="mb-1 font-medium text-base">
-            This Connector will be assigned to group <b>{userGroups[0].name}</b>
-            .
-          </div>
-        )}
-      </>
-    );
   }
 
   return (
@@ -128,9 +91,9 @@ export function AccessTypeGroupSelector({
                     ? // Groups never widen or narrow a synced connector's document
                       // access — the source system's permissions decide that.
                       "The groups below control who can manage this Connector. Access to its documents is inherited from the source's own permissions."
-                    : isAdmin
-                      ? "This Connector will be visible/accessible by the groups selected below"
-                      : "Group managers must select one or more groups to give access to this Connector"}
+                    : isScopedManager
+                      ? "Select one or more of the groups you manage to give access to this Connector"
+                      : "This Connector will be visible/accessible by the groups selected below"}
                 </Text>
               )}
             </div>

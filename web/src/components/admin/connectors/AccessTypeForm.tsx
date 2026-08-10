@@ -12,6 +12,7 @@ import { Tier } from "@/lib/settings/types";
 import { useEffect, useMemo } from "react";
 import { Credential } from "@/lib/connectors/credentials";
 import { credentialTemplates } from "@/lib/connectors/credentials";
+import { useConnectorAuthority } from "@/lib/connectors/authority";
 
 function isValidAutoSyncSource(
   value: ConfigurableSources
@@ -28,6 +29,7 @@ export function AccessTypeForm({
 }) {
   const [access_type, meta, access_type_helpers] =
     useField<AccessType>("access_type");
+  const { isScopedManager } = useConnectorAuthority();
 
   // Private requires User Groups, Auto Sync requires permission-sync —
   // both are Business+ features.
@@ -53,7 +55,7 @@ export function AccessTypeForm({
   // Public. Mirrors the option-availability rules below.
   const defaultAccess: AccessType = showAutoSync
     ? "sync"
-    : businessTier
+    : businessTier || isScopedManager
       ? "private"
       : "public";
 
@@ -84,14 +86,19 @@ export function AccessTypeForm({
     });
   }
 
-  options.push({
-    name: "Public",
-    value: "public",
-    description:
-      "Everyone with an account on Onyx can access the documents pulled in by this connector",
-    disabled: false,
-    disabledReason: "",
-  });
+  // A scoped manager's authority stops at the groups they manage, so GATE 2
+  // rejects a public connector outright (`within_scope` requires non-public).
+  // Offering the option would only produce a 403 on submit.
+  if (!isScopedManager) {
+    options.push({
+      name: "Public",
+      value: "public",
+      description:
+        "Everyone with an account on Onyx can access the documents pulled in by this connector",
+      disabled: false,
+      disabledReason: "",
+    });
+  }
 
   if (showAutoSync) {
     options.push({

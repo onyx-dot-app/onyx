@@ -13,6 +13,7 @@ import {
 import { GmailAuthSection } from "./Credential";
 import { usePublicCredentials } from "@/lib/hooks";
 import { useUser } from "@/providers/UserProvider";
+import { useConnectorAuthority } from "@/lib/connectors/authority";
 import {
   useGoogleCredentials,
   refreshAllGoogleData,
@@ -27,7 +28,9 @@ export const GmailMain = ({
   buildMode = false,
   onOAuthRedirect,
 }: GmailMainProps) => {
-  const { isAdmin, user } = useUser();
+  const { user } = useUser();
+  // See GoogleDrivePage — same gate, same reasoning.
+  const { isGlobalHolder } = useConnectorAuthority();
 
   const {
     data: credentialsData,
@@ -68,7 +71,7 @@ export const GmailMain = ({
 
   return (
     <>
-      {isAdmin && (
+      {isGlobalHolder && (
         <>
           <GmailAuthSection
             refreshCredentials={handleRefresh}

@@ -41,6 +41,7 @@ IMPLIED_PERMISSIONS: dict[str, set[str]] = {
     },
     Permission.MANAGE_CONNECTORS.value: {
         Permission.READ_CONNECTORS.value,
+        Permission.READ_USER_GROUPS.value,
     },
     Permission.MANAGE_USER_GROUPS.value: {
         Permission.READ_CONNECTORS.value,
