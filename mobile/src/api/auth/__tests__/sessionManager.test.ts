@@ -1,4 +1,3 @@
-// Globals imported from `@jest/globals` so the app's TS config stays free of ambient test types.
 import { beforeEach, describe, expect, it, jest } from "@jest/globals";
 import type { Mock } from "jest-mock";
 
@@ -19,7 +18,7 @@ import { apiFetch, type ApiFetchInit } from "@/api/client";
 import { ApiError } from "@/api/errors";
 import { persister, queryClient } from "@/query/client";
 
-// `jest.mock` is hoisted above the imports by babel-jest; mocking whole modules also keeps native deps (MMKV) out.
+// babel-jest hoists `jest.mock` above the imports, so these can sit below the import block.
 jest.mock("@/api/client");
 jest.mock("@/api/auth/tokenStore");
 jest.mock("@/api/auth/browserSso");
@@ -61,7 +60,6 @@ const token = (access: string): BearerTokenResponse => ({
 
 beforeEach(() => {
   jest.clearAllMocks();
-  // Reset module-level session epoch + single-flight handle so state can't leak across tests.
   __resetSessionStateForTests();
   mockSetToken.mockResolvedValue(undefined);
   mockGetToken.mockResolvedValue(null);
@@ -110,7 +108,6 @@ describe("login (browser SSO)", () => {
     expect(path).toBe("/auth/mobile/sso/exchange");
     expect(init?.method).toBe("POST");
     expect(init?.auth).toBe(false);
-    // snake_case `code_verifier` for the backend.
     expect(init?.body).toEqual({
       code: "one-time-code",
       code_verifier: "the-verifier",
@@ -138,7 +135,6 @@ describe("login (browser SSO)", () => {
 
 describe("register", () => {
   it("creates the account as JSON, then logs in to mint the token", async () => {
-    // register returns no token; the subsequent login does.
     mockApiFetch.mockImplementation((path) =>
       Promise.resolve(path === "/auth/register" ? undefined : token("tok-new")),
     );
@@ -170,7 +166,6 @@ describe("register", () => {
   });
 
   it("flags a post-register login failure distinctly (the account exists)", async () => {
-    // register OK, auto-login fails (e.g. verification required): account created, not signed in.
     mockApiFetch.mockImplementation((path) =>
       path === "/auth/register"
         ? Promise.resolve(undefined)
@@ -227,7 +222,6 @@ describe("refreshToken (single-flight)", () => {
     const p2 = refreshToken();
     const p3 = refreshToken();
 
-    // Only the first issued a request; the others shared the in-flight promise.
     expect(mockApiFetch).toHaveBeenCalledTimes(1);
 
     resolveFetch(token("tok-refresh"));
@@ -238,6 +232,17 @@ describe("refreshToken (single-flight)", () => {
     expect(r3).toBe("tok-refresh");
     expect(mockSetToken).toHaveBeenCalledTimes(1);
     expect(mockSetToken).toHaveBeenCalledWith("tok-refresh");
+  });
+
+  it("sends the refresh with the stored token so it can't await its own promise", async () => {
+    mockApiFetch.mockResolvedValueOnce(token("tok-a"));
+
+    await refreshToken();
+
+    expect(mockApiFetch).toHaveBeenCalledWith(
+      "/auth/mobile/refresh",
+      expect.objectContaining({ auth: "stored" }),
+    );
   });
 
   it("starts a fresh request after the previous refresh settles", async () => {
@@ -283,10 +288,9 @@ describe("refreshToken (single-flight)", () => {
     const refreshP = refreshToken();
     await logout(); // bumps the session epoch
 
-    resolveRefresh(token("tok-late")); // resolves AFTER logout
+    resolveRefresh(token("tok-late"));
     await expect(refreshP).resolves.toBeNull();
 
-    // Late token must NOT be written back over the logged-out session.
     expect(mockSetToken).not.toHaveBeenCalledWith("tok-late");
     expect(mockSetToken).toHaveBeenLastCalledWith(null);
   });
@@ -332,7 +336,6 @@ describe("getValidToken", () => {
 
     rejectFetch(new ApiError({ status: 500 }));
 
-    // refresh propagates the transient error; getValidToken must not.
     await expect(refreshP).rejects.toBeInstanceOf(ApiError);
     await expect(validP).resolves.toBe("stored-tok");
   });

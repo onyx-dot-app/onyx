@@ -1,9 +1,8 @@
-// Streams /chat NDJSON. The one place that bypasses apiFetch: only expo/fetch exposes a readable
-// response.body on RN. Send POST and resume GET share the same reader + framing.
+// The one place that bypasses apiFetch: only expo/fetch exposes a readable response.body on RN.
 import { fetch as expoFetch } from "expo/fetch";
 
 import { getBaseUrl } from "@/api/config";
-import { getToken } from "@/api/auth/tokenStore";
+import { getValidToken } from "@/api/auth/refreshState";
 import { createNdjsonBuffer } from "@/chat/ndjson";
 import { FileDescriptor } from "@/chat/interfaces";
 import { InternalSearchFilters } from "@/chat/sources";
@@ -23,13 +22,12 @@ export interface SendMessageBody {
   file_descriptors: FileDescriptor[];
   deep_research: boolean;
   origin: string;
-  // Toolbar-driven; omitted/null = backend defaults (allow all tools, force none, no source filter).
+  // Omitted/null = backend defaults: allow all tools, force none, no source filter.
   allowed_tool_ids?: number[] | null;
   forced_tool_id?: number | null;
   internal_search_filters?: InternalSearchFilters | null;
 }
 
-// The toolbar-resolved send options threaded through submit(); mapped onto SendMessageBody.
 export interface ChatToolOptions {
   deepResearch: boolean;
   allowedToolIds: number[] | null;
@@ -61,14 +59,12 @@ export function isMessageIdInfo(
   return "user_message_id" in event;
 }
 
-// Root-level StreamingError: a top-level `error` string, not a wrapped packet (mirrors web's error check).
 export function isStreamError(event: StreamEvent): event is StreamingError {
   return (
     "error" in event && typeof (event as StreamingError).error === "string"
   );
 }
 
-// Heartbeats come wrapped or at root; drop both.
 export function isHeartbeat(event: unknown): boolean {
   if (typeof event !== "object" || event === null) return true;
   const wrapped = (event as { obj?: { type?: string } }).obj;
@@ -76,9 +72,8 @@ export function isHeartbeat(event: unknown): boolean {
   return (event as { type?: string }).type === "chat_heartbeat";
 }
 
-// Auth + Accept only. Content-Type is added by the send POST; the resume GET has no body.
 async function authHeaders(): Promise<Record<string, string>> {
-  const token = await getToken();
+  const token = await getValidToken();
   const headers: Record<string, string> = { Accept: "application/json" };
   if (token) headers.Authorization = `Bearer ${token}`;
   return headers;
@@ -141,8 +136,7 @@ export async function* streamChatMessage(
   yield* readNdjson(response);
 }
 
-// Replays an in-flight run's buffer from `cursor` (0 = whole buffer, matching web), then tails live.
-// A 404 means no resumable run — the caller falls back to the persisted snapshot.
+// Replays the in-flight run's buffer from `cursor` (0 = whole buffer, matching web), then tails live.
 export async function* resumeChatMessage(
   sessionId: string,
   cursor: number,
