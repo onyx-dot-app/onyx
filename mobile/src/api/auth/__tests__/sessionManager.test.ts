@@ -281,6 +281,22 @@ describe("refreshToken (single-flight)", () => {
     warnSpy.mockRestore();
   });
 
+  it("still answers null when clearing the session fails after a rejected token", async () => {
+    /*
+     * A throw from inside the catch escapes it, so this used to reject instead — reaching the
+     * fire-and-forget refresh loop as an unlogged rejection with the session half-cleared.
+     */
+    const warnSpy = jest.spyOn(console, "warn").mockImplementation(() => {});
+    const clearFailure = new Error("keychain unavailable");
+    mockApiFetch.mockRejectedValue(new ApiError({ status: 401 }));
+    mockSetToken.mockRejectedValue(clearFailure);
+
+    await expect(refreshToken()).resolves.toBeNull();
+    expect(warnSpy).toHaveBeenCalledWith(expect.any(String), clearFailure);
+
+    warnSpy.mockRestore();
+  });
+
   it("logs a transient failure once, however many callers were waiting on it", async () => {
     /*
      * Every caller swallows this rejection, so this line is the only trace a session that dies

@@ -164,7 +164,16 @@ export function refreshToken(): Promise<string | null> {
       if (isAuthError(err)) {
         // Same reasoning: clearing here after a switch would wipe the new instance's session.
         if (sameSession(startedEpoch, startedServerUrl)) {
-          await clearLocalSession();
+          try {
+            await clearLocalSession();
+          } catch (clearError) {
+            /*
+             * A throw in here escapes the enclosing catch, so it would reach the fire-and-forget
+             * caller as an unlogged rejection with the session half-cleared. The token is dead
+             * either way, so report it and still answer null.
+             */
+            console.warn("Mobile session clear failed", clearError);
+          }
         }
         return null;
       }
