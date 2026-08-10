@@ -598,6 +598,22 @@ describe("loadSession preferPersisted (interrupt reconciliation)", () => {
     expect(session?.activeTurnLocalOwner).toBe(false);
   });
 
+  it("reconciles stale skills when an interrupted turn settles", async () => {
+    seedInterruptedSession();
+    mockedApi.fetchSession.mockResolvedValue({
+      ...runningSession(),
+      skills_stale: true,
+    } as never);
+
+    await useBuildSessionStore
+      .getState()
+      .loadSession(SESSION_ID, { force: true, preferPersisted: true });
+
+    expect(
+      useBuildSessionStore.getState().sessions.get(SESSION_ID)?.skillsStale
+    ).toBe(true);
+  });
+
   it("keeps the stale local transcript without preferPersisted (the bug)", async () => {
     seedInterruptedSession();
 
