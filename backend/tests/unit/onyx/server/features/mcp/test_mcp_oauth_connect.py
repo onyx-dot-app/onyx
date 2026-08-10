@@ -74,9 +74,12 @@ class _OAuthContext:
 
 class _OAuthProvider(httpx.Auth):
     def __init__(
-        self, authorization_url_callback: Callable[[str], Awaitable[None]]
+        self,
+        authorization_url_callback: Callable[[str], Awaitable[None]],
+        load_stored_tokens: bool,
     ) -> None:
         self.authorization_url_callback = authorization_url_callback
+        self.load_stored_tokens = load_stored_tokens
         self.context = _OAuthContext()
         self.challenge: str | None = None
 
@@ -121,10 +124,12 @@ def _setup_coordinator(
         _connection_config_id: int,
         _admin_config_id: int | None,
         authorization_url_callback: Callable[[str], Awaitable[None]] | None = None,
+        *,
+        load_stored_tokens: bool = True,
     ) -> _OAuthProvider:
         if authorization_url_callback is None:
             raise TypeError("authorization_url_callback is required")
-        provider = _OAuthProvider(authorization_url_callback)
+        provider = _OAuthProvider(authorization_url_callback, load_stored_tokens)
         providers.append(provider)
         return provider
 
@@ -139,6 +144,7 @@ def _connect(
     *,
     is_authenticated: bool = False,
     connection_headers: dict[str, str] | None = None,
+    force_reauthentication: bool = False,
 ) -> str | None:
     return asyncio.run(
         oauth.connect_auto_discovery_oauth(
@@ -150,6 +156,7 @@ def _connect(
             connection_headers=connection_headers or {},
             transport=server.transport,
             is_authenticated=is_authenticated,
+            force_reauthentication=force_reauthentication,
         )
     )
 
@@ -181,6 +188,35 @@ def test_challenge_redirect_skips_well_known_fallback(
     assert _connect(server) == "https://challenge-consent"
     assert providers[0].challenge is None
     discovery_factory.assert_not_called()
+
+
+def test_forced_reauthentication_skips_authenticated_fast_path(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    server, providers, initialize = _setup_coordinator(monkeypatch)
+    request_urls = _install_discovery_responses(monkeypatch, [200])
+
+    assert (
+        _connect(
+            server,
+            is_authenticated=True,
+            connection_headers={
+                "Authorization": "Bearer current-token",
+                "X-Gateway-Tenant": "tenant-1",
+            },
+            force_reauthentication=True,
+        )
+        == "https://consent"
+    )
+    assert providers[0].load_stored_tokens is False
+    assert initialize.await_args is not None
+    assert initialize.await_args.kwargs["transport"] is MCPTransport.STREAMABLE_HTTP
+    assert initialize.await_args.kwargs["connection_headers"] == {
+        "X-Gateway-Tenant": "tenant-1"
+    }
+    assert request_urls == [
+        "https://mcp.example.com/.well-known/oauth-protected-resource/mcp"
+    ]
 
 
 @pytest.mark.parametrize(
@@ -316,13 +352,16 @@ def test_oauth_challenge_transport_delegates_same_url_posts(
     asyncio.run(run())
 
 
-def _request(server_id: int) -> MCPUserOAuthConnectRequest:
+def _request(
+    server_id: int, *, force_reauthentication: bool = False
+) -> MCPUserOAuthConnectRequest:
     return MCPUserOAuthConnectRequest(
         server_id=server_id,
         return_path="/admin/actions/mcp",
         include_resource_param=True,
         oauth_client_id="client-id",
         oauth_client_secret=None,
+        force_reauthentication=force_reauthentication,
     )
 
 
@@ -353,20 +392,33 @@ def _setup_api_connection(
 
 
 @pytest.mark.parametrize(
-    ("expires_at", "expected_oauth_url", "expected_discovery_urls"),
+    (
+        "expires_at",
+        "force_reauthentication",
+        "expected_oauth_url",
+        "expected_discovery_urls",
+    ),
     [
-        (4_000_000_000.0, "/admin/actions/mcp", []),
+        (4_000_000_000.0, False, "/admin/actions/mcp", []),
+        (
+            4_000_000_000.0,
+            True,
+            "https://consent",
+            ["https://mcp.example.com/.well-known/oauth-protected-resource/mcp"],
+        ),
         (
             1.0,
+            False,
             "https://consent",
             ["https://mcp.example.com/.well-known/oauth-protected-resource/mcp"],
         ),
     ],
-    ids=["valid", "expired"],
+    ids=["valid", "forced", "expired"],
 )
 def test_token_expiry_controls_fast_path_without_dropping_oauth_state(
     monkeypatch: pytest.MonkeyPatch,
     expires_at: float,
+    force_reauthentication: bool,
     expected_oauth_url: str,
     expected_discovery_urls: list[str],
 ) -> None:
@@ -388,7 +440,10 @@ def test_token_expiry_controls_fast_path_without_dropping_oauth_state(
 
     response = asyncio.run(
         api._connect_oauth(
-            _request(server.id), MagicMock(), is_admin=True, user=cast(User, user)
+            _request(server.id, force_reauthentication=force_reauthentication),
+            MagicMock(),
+            is_admin=True,
+            user=cast(User, user),
         )
     )
 

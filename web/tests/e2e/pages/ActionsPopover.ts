@@ -322,7 +322,16 @@ export class ActionsPopover {
   async clickReauthRow(): Promise<void> {
     const row = this.reauthRow();
     await expect(row).toBeVisible();
+    const requestPromise = this.page.waitForRequest(
+      (request) =>
+        new URL(request.url()).pathname === "/api/mcp/oauth/connect" &&
+        request.method() === "POST"
+    );
     await row.click({ force: true });
+    const request = await requestPromise;
+    expect(request.postDataJSON()).toMatchObject({
+      force_reauthentication: true,
+    });
   }
 
   /**

@@ -63,7 +63,8 @@ function renderMCPLineItem({
 }
 
 function getTrailingIndicator(row: HTMLElement): HTMLElement {
-  const indicator = row.querySelector<HTMLElement>("[aria-hidden='true']");
+  const indicators = row.querySelectorAll<HTMLElement>("[aria-hidden='true']");
+  const indicator = indicators.item(indicators.length - 1);
   if (!indicator) throw new Error("Expected a trailing MCP row indicator.");
   return indicator;
 }

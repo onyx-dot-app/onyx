@@ -314,6 +314,36 @@ def test_get_tokens_hydrates_expiry_and_invalidates_expired_token(
     assert provider.context.is_token_valid() is False
 
 
+def test_get_tokens_can_ignore_stored_token_for_reauthentication(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    provider = make_oauth_provider(
+        _make_mcp_server_stub(provider_mode=MCPOAuthProviderMode.AUTO_DISCOVERY),
+        user_id="user-1",
+        return_path="/return",
+        connection_config_id=1,
+        admin_config_id=None,
+        load_stored_tokens=False,
+    )
+    _patch_config_read(
+        monkeypatch,
+        {
+            MCPOAuthKeys.TOKENS.value: {
+                "access_token": "current-token",
+                "token_type": "Bearer",
+            },
+            MCPOAuthKeys.METADATA.value: {
+                "issuer": "https://accounts.example.com",
+                "authorization_endpoint": "https://accounts.example.com/authorize",
+                "token_endpoint": "https://accounts.example.com/token",
+            },
+        },
+    )
+
+    assert asyncio.run(provider.context.storage.get_tokens()) is None
+    assert provider.context.oauth_metadata is not None
+
+
 def test_get_tokens_clears_stale_expiry_when_absent(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:

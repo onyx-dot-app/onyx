@@ -227,6 +227,7 @@ async def connect_auto_discovery_oauth(
     connection_headers: dict[str, str],
     transport: MCPTransport,
     is_authenticated: bool,
+    force_reauthentication: bool = False,
 ) -> str | None:
     redirect_future = asyncio.get_running_loop().create_future()
 
@@ -241,6 +242,18 @@ async def connect_auto_discovery_oauth(
         connection_config_id,
         admin_config_id,
         authorization_url_callback=publish_redirect,
+        load_stored_tokens=not force_reauthentication,
+    )
+
+    use_authenticated_connection = is_authenticated and not force_reauthentication
+    oauth_connection_headers = (
+        {
+            key: value
+            for key, value in connection_headers.items()
+            if key.lower() != "authorization"
+        }
+        if force_reauthentication
+        else connection_headers
     )
 
     async def initialize_or_start_oauth() -> None:
@@ -248,12 +261,12 @@ async def connect_auto_discovery_oauth(
         # auth-capable Streamable HTTP probe for fresh SSE connections solely to
         # elicit a 401 challenge; authenticated connections use their real transport.
         probe_transport = (
-            transport if is_authenticated else MCPTransport.STREAMABLE_HTTP
+            transport if use_authenticated_connection else MCPTransport.STREAMABLE_HTTP
         )
         try:
             await initialize_mcp_client(
                 mcp_server.server_url,
-                connection_headers=connection_headers,
+                connection_headers=oauth_connection_headers,
                 transport=probe_transport,
                 auth=oauth_auth,
             )
@@ -262,7 +275,7 @@ async def connect_auto_discovery_oauth(
             # or permits no Streamable HTTP initialization; well-known discovery
             # can still start OAuth. Once a token already existed or was refreshed,
             # however, this is a real authenticated initialization failure.
-            if is_authenticated or oauth_auth.context.is_token_valid():
+            if use_authenticated_connection or oauth_auth.context.is_token_valid():
                 raise
             logger.info(
                 "Initial MCP OAuth probe failed; trying well-known discovery",
@@ -272,10 +285,10 @@ async def connect_auto_discovery_oauth(
         # Successful public initialization proves reachability, not consent.
         # Only a usable token makes the connection complete; otherwise force the
         # RFC 9728 well-known path so the user still receives a consent screen.
-        if is_authenticated or oauth_auth.context.is_token_valid():
+        if use_authenticated_connection or oauth_auth.context.is_token_valid():
             return
         await _initiate_oauth_from_well_known_metadata(
-            oauth_auth, mcp_server.server_url, connection_headers
+            oauth_auth, mcp_server.server_url, oauth_connection_headers
         )
 
     try:
@@ -290,7 +303,7 @@ async def connect_auto_discovery_oauth(
 
     if (
         redirect_url is not None
-        or is_authenticated
+        or use_authenticated_connection
         or oauth_auth.context.is_token_valid()
     ):
         return redirect_url
@@ -549,10 +562,13 @@ class OnyxTokenStorage(TokenStorage):
         connection_config_id: int,
         alt_config_id: int | None = None,
         refresh_log_context: MCPRefreshLogContext | None = None,
+        *,
+        load_stored_tokens: bool = True,
     ):
         self.alt_config_id = alt_config_id
         self.connection_config_id = connection_config_id
         self.refresh_log_context = refresh_log_context
+        self.load_stored_tokens = load_stored_tokens
         self.refresh_attempt_id: str | None = None
         # When bound, `get_tokens` hydrates its `token_expiry_time` from the
         # config read it already does — no separate query for the expiry.
@@ -588,7 +604,7 @@ class OnyxTokenStorage(TokenStorage):
                             OAuthMetadata.model_validate(metadata_raw)
                         )
             tokens_raw = config_data.get(MCPOAuthKeys.TOKENS.value)
-            if tokens_raw:
+            if tokens_raw and self.load_stored_tokens:
                 return OAuthToken.model_validate(tokens_raw)
             return None
 
@@ -832,6 +848,8 @@ def make_oauth_provider(
     connection_config_id: int,
     admin_config_id: int | None,
     authorization_url_callback: Callable[[str], Awaitable[None]] | None = None,
+    *,
+    load_stored_tokens: bool = True,
 ) -> OnyxOAuthClientProvider:
     async def redirect_handler(auth_url: str) -> None:
         if return_path == UNUSED_RETURN_PATH:
@@ -891,6 +909,7 @@ def make_oauth_provider(
         connection_config_id,
         admin_config_id,
         refresh_log_context,
+        load_stored_tokens=load_stored_tokens,
     )
     provider = OnyxOAuthClientProvider(
         refresh_log_context=refresh_log_context,
