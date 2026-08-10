@@ -88,6 +88,11 @@ ENV SENTRY_RELEASE=${SENTRY_RELEASE}
 # Add NODE_OPTIONS argument
 ARG NODE_OPTIONS
 
+# Type checking is already enforced by CI's `typescript-check` pre-commit hook, so it's
+# redundant (and slow) inside `next build`. Set to "1" to have next.config.js skip it here.
+ARG SKIP_TYPE_CHECK
+ENV SKIP_TYPE_CHECK=${SKIP_TYPE_CHECK}
+
 # SENTRY_AUTH_TOKEN is injected via BuildKit secret mount so it is never written
 # to any image layer, build cache, or registry manifest.
 # Use NODE_OPTIONS in the build command
