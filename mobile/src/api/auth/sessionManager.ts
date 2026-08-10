@@ -168,6 +168,13 @@ export function refreshToken(): Promise<string | null> {
         }
         return null;
       }
+      /*
+       * Both callers swallow this — the refresh loop drops it, and `getValidToken` falls back to
+       * the stored token — so without a line here a session that dies from repeated failed
+       * refreshes leaves no trace. Logged at the attempt, not at the call sites: one line per
+       * refresh however many requests were waiting on it.
+       */
+      console.warn("Mobile token refresh failed", err);
       throw err;
     } finally {
       setInFlightRefresh(null);

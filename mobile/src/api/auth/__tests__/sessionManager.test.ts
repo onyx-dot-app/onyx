@@ -270,12 +270,47 @@ describe("refreshToken (single-flight)", () => {
   });
 
   it("re-throws a transient error without dropping the token", async () => {
+    const warnSpy = jest.spyOn(console, "warn").mockImplementation(() => {});
     mockApiFetch.mockRejectedValue(new ApiError({ status: 500 }));
 
     await expect(refreshToken()).rejects.toBeInstanceOf(ApiError);
 
     expect(mockSetToken).not.toHaveBeenCalledWith(null);
     expect(mockClear).not.toHaveBeenCalled();
+
+    warnSpy.mockRestore();
+  });
+
+  it("logs a transient failure once, however many callers were waiting on it", async () => {
+    /*
+     * Every caller swallows this rejection, so this line is the only trace a session that dies
+     * from repeated failed refreshes ever leaves.
+     */
+    const warnSpy = jest.spyOn(console, "warn").mockImplementation(() => {});
+    mockGetToken.mockResolvedValue("stored-tok");
+    const failure = new ApiError({ status: 500 });
+    let rejectFetch!: (reason: unknown) => void;
+    mockApiFetch.mockReturnValue(
+      new Promise<BearerTokenResponse>((_resolve, reject) => {
+        rejectFetch = reject;
+      }),
+    );
+
+    const refreshP = refreshToken();
+    const waiters = [getValidToken(), getValidToken(), getValidToken()];
+    rejectFetch(failure);
+
+    await expect(refreshP).rejects.toBe(failure);
+    await expect(Promise.all(waiters)).resolves.toEqual([
+      "stored-tok",
+      "stored-tok",
+      "stored-tok",
+    ]);
+
+    expect(warnSpy).toHaveBeenCalledTimes(1);
+    expect(warnSpy).toHaveBeenCalledWith(expect.any(String), failure);
+
+    warnSpy.mockRestore();
   });
 
   it("does not resurrect the session when a logout completes mid-refresh", async () => {
