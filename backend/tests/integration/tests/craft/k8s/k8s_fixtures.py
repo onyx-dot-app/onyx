@@ -482,7 +482,9 @@ def _cleanup_pool_workspace(
         k8s_client,
         pod_name,
         SANDBOX_NAMESPACE,
-        "pkill -f 'bun run dev'; pkill -f next-server; "
+        # Bracketed so the patterns don't match this cleanup shell's own
+        # cmdline, which would kill it before the find runs.
+        "pkill -f 'bun run de[v]'; pkill -f 'next-serve[r]'; "
         "find /workspace/sessions -mindepth 1 -delete 2>/dev/null; true",
         container="sandbox",
     )
