@@ -28,7 +28,7 @@ from onyx.db.engine.sql_engine import get_session_with_current_tenant
 from onyx.indexing.indexing_heartbeat import IndexingHeartbeatInterface
 from onyx.redis.redis_connector import RedisConnector
 from onyx.utils.logger import pruning_ctx, setup_logger
-from onyx.utils.os_reaper import reap_exited_children
+from onyx.utils.os_reaper import reap_children_before_exit, reap_exited_children
 from shared_configs.configs import SENTRY_CELERY_TRACES_SAMPLE_RATE, SENTRY_DSN
 
 logger = setup_logger()
@@ -126,7 +126,7 @@ def pruning_enumeration_task(
     )
 
     # os._exit skips _initializer's finally, so drain orphans here (mirrors _docfetching_task)
-    reap_exited_children()
+    reap_children_before_exit()
     os._exit(0)
 
 
