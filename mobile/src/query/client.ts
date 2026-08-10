@@ -25,13 +25,16 @@ export const persister = createSyncStoragePersister({
 });
 
 /*
- * Never written to the unencrypted MMKV snapshot: anything personal, so nothing lingers after
- * logout or an account switch (these all refetch on launch). Prefixes match only the leading
+ * Never written to the unencrypted MMKV snapshot: message content, plus anything naming a person
+ * or a workspace (identity, agent and project names, file names). Prefixes match only the leading
  * entity segment because the trailing serverUrl varies per instance.
  *
- * The source-picker keys are deliberately absent. They hold connector *types* and per-agent tool
- * ids — no content, no identity — and persisting them is what lets a send made moments after
- * launch honour the user's saved source and tool choices instead of a pre-load guess.
+ * The bar is what stays legible on disk, NOT per-user-ness — a switched account is already covered
+ * by `purgeCache` (sessionManager), which drops the in-memory and on-disk caches on login and on
+ * logout alike. So the source-picker keys stay out of this list on purpose: connector *types* and
+ * per-agent tool ids are opaque without the agent names excluded above, and persisting them is what
+ * lets a send moments after launch honour the user's saved source and tool choices rather than
+ * guess at them.
  */
 const NON_PERSISTED_KEY_PREFIXES: readonly (readonly unknown[])[] = [
   [QUERY_KEYS.me(null)[0]],
