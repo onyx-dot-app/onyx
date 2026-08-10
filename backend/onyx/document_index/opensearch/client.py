@@ -174,6 +174,13 @@ def is_cluster_block_error(e: Exception) -> bool:
     return isinstance(e, TransportError) and _CLUSTER_BLOCK_ERROR_TYPE in str(e.error)
 
 
+class OpenSearchIndexWriteBlockedError(Exception):
+    """An existing index rejected a metadata write because of a block (e.g.
+    read_only_allow_delete applied at the disk flood-stage watermark). The
+    index is still fully readable — callers that can serve degraded may catch
+    this. Never raised for a missing index or a blocked index creation."""
+
+
 class OpenSearchServerSideTimeout(Exception):
     """
     A server-side timeout occurred when searching an OpenSearch index.

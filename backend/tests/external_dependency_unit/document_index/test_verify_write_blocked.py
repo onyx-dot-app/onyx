@@ -21,6 +21,7 @@ from onyx.document_index.opensearch import (
 )
 from onyx.document_index.opensearch.client import (
     OpenSearchIndexClient,
+    OpenSearchIndexWriteBlockedError,
     is_cluster_block_error,
 )
 from onyx.document_index.opensearch.opensearch_document_index import (
@@ -50,19 +51,22 @@ def write_blocked_index(
         client.update_settings({_WRITE_BLOCK_SETTING: None})
 
 
-def test_verify_raises_recognizable_error_under_write_block(
+def test_verify_raises_typed_error_under_write_block(
     write_blocked_index: OpenSearchDocumentIndex,
 ) -> None:
     """verify_and_create_index_if_necessary keeps raising under the block (a
-    caller such as an embedding-model swap must not silently continue), and the
-    error is recognizable so tolerant call sites can catch it."""
-    with pytest.raises(Exception) as exc_info:
+    caller such as an embedding-model swap must not silently continue). The
+    existing-index refresh raises the targeted type — never raised for a
+    missing index or blocked creation — chained from the block rejection."""
+    with pytest.raises(OpenSearchIndexWriteBlockedError) as exc_info:
         write_blocked_index.verify_and_create_index_if_necessary(
             embedding_dim=EMBEDDING_DIM,
             embedding_precision=EmbeddingPrecision.FLOAT,
         )
 
-    assert is_cluster_block_error(exc_info.value)
+    cause = exc_info.value.__cause__
+    assert isinstance(cause, Exception)
+    assert is_cluster_block_error(cause)
 
 
 def test_setup_document_indices_succeeds_under_write_block(
