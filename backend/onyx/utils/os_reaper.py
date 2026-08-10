@@ -86,8 +86,8 @@ def _live_child_pids() -> list[int]:
 
 def reap_children_before_exit(grace_seconds: float = 2.0) -> int:
     """Exit-path drain: reap exited children, give still-running ones a short
-    grace to finish, then SIGKILL the rest and wait for them. A child left
-    alive at exit would re-parent to PID 1 and zombify there when it dies."""
+    grace to finish, then SIGKILL the rest and reap them. A child left alive
+    at exit would re-parent to PID 1 and zombify there when it dies."""
     if sys.platform != "linux":
         return 0
 
@@ -97,23 +97,43 @@ def reap_children_before_exit(grace_seconds: float = 2.0) -> int:
         time.sleep(0.05)
         reaped += reap_exited_children()
 
-    stragglers = _live_child_pids()
-    for pid in stragglers:
-        try:
-            os.kill(pid, signal.SIGKILL)
-        except OSError:
-            pass
-    if stragglers:
+    # iterate: killing a child re-parents ITS children to us (we are the
+    # subreaper), so new live children can appear mid-kill; bounded hard stop
+    kill_deadline = time.monotonic() + 5.0
+    killed = 0
+    while time.monotonic() < kill_deadline:
+        live = _live_child_pids()
+        if not live:
+            break
+        for pid in live:
+            try:
+                os.kill(pid, signal.SIGKILL)
+                killed += 1
+            except OSError:
+                pass
+        time.sleep(0.05)
+        reaped += reap_exited_children()
+
+    if killed:
         logger.warning(
-            "reap_children_before_exit: SIGKILLed %s straggler children",
-            len(stragglers),
+            "reap_children_before_exit: SIGKILLed %s straggler children", killed
         )
 
-    while True:
-        try:
-            os.waitpid(-1, 0)  # blocking: SIGKILLed children exit promptly
-            reaped += 1
-        except (ChildProcessError, OSError):
-            break
-
+    reaped += reap_exited_children()
     return reaped
+
+
+def install_sigterm_drain() -> None:
+    """Make SIGTERM drain orphans before the process dies (Linux, main thread).
+
+    Watchdogs cancel spawned children with SIGTERM; the default disposition
+    kills the process instantly, stranding adopted zombies and live Chromium
+    descendants on PID 1. Exits 143 after draining."""
+    if sys.platform != "linux":
+        return
+
+    def _drain_and_exit(signum: int, frame: object) -> None:  # noqa: ARG001
+        reap_children_before_exit()
+        os._exit(128 + signal.SIGTERM)
+
+    signal.signal(signal.SIGTERM, _drain_and_exit)

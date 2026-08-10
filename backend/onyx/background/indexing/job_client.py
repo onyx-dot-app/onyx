@@ -16,7 +16,11 @@ from typing import Any, Literal, Optional
 from onyx.configs.constants import POSTGRES_CELERY_WORKER_INDEXING_CHILD_APP_NAME
 from onyx.db.engine.sql_engine import SqlEngine
 from onyx.utils.logger import setup_logger
-from onyx.utils.os_reaper import become_child_subreaper, reap_children_before_exit
+from onyx.utils.os_reaper import (
+    become_child_subreaper,
+    install_sigterm_drain,
+    reap_children_before_exit,
+)
 from shared_configs.configs import POSTGRES_DEFAULT_SCHEMA, TENANT_ID_PREFIX
 from shared_configs.contextvars import CURRENT_TENANT_ID_CONTEXTVAR
 
@@ -57,8 +61,10 @@ def _initializer(
 
     logger.info("Initializing spawned worker child process.")
 
-    # adopt orphans (e.g. Chromium helpers) instead of leaking zombies to PID 1
+    # adopt orphans (e.g. Chromium helpers) instead of leaking zombies to PID 1,
+    # and drain them even when a watchdog cancels this child with SIGTERM
     become_child_subreaper()
+    install_sigterm_drain()
 
     # 1. Get tenant_id from args or fallback to default
     tenant_id = POSTGRES_DEFAULT_SCHEMA

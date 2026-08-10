@@ -4,6 +4,7 @@ The scenario runs in an isolated subprocess so the subreaper flag and the
 waitpid(-1) drain never touch the pytest process: a child orphans a grandchild,
 which must re-parent to the harness (not PID 1) and be drained."""
 
+import os
 import subprocess
 import sys
 from pathlib import Path
@@ -111,6 +112,60 @@ def test_exit_drain_kills_and_reaps_running_orphan() -> None:
     )
     assert result.returncode == 0, result.stderr
     assert "ok" in result.stdout
+
+
+_SIGTERM_HARNESS = """
+import os
+import signal
+import sys
+import time
+
+from onyx.utils.os_reaper import (
+    _live_child_pids,
+    become_child_subreaper,
+    install_sigterm_drain,
+)
+
+assert become_child_subreaper()
+install_sigterm_drain()
+
+# orphan a long-running grandchild, print its pid for the outer test
+child_pid = os.fork()
+if child_pid == 0:
+    grandchild_pid = os.fork()
+    if grandchild_pid == 0:
+        time.sleep(60)
+        os._exit(0)
+    print(grandchild_pid, flush=True)
+    os._exit(0)
+
+os.waitpid(child_pid, 0)
+deadline = time.monotonic() + 10
+while not _live_child_pids() and time.monotonic() < deadline:
+    time.sleep(0.05)
+assert _live_child_pids(), "orphan never re-parented"
+
+os.kill(os.getpid(), signal.SIGTERM)  # watchdog cancellation
+time.sleep(30)  # never reached: the handler drains and exits 143
+"""
+
+
+@pytest.mark.skipif(
+    sys.platform != "linux", reason="prctl/waitpid semantics are Linux-only"
+)
+def test_sigterm_cancellation_drains_running_orphan() -> None:
+    result = subprocess.run(
+        [sys.executable, "-c", _SIGTERM_HARNESS],
+        capture_output=True,
+        text=True,
+        timeout=30,
+        env={"PYTHONPATH": str(_BACKEND_DIR)},
+    )
+    assert result.returncode == 143, result.stderr
+    orphan_pid = int(result.stdout.split()[0])
+    # the drain must have killed the orphan — not left it running for PID 1
+    with pytest.raises(OSError):
+        os.kill(orphan_pid, 0)
 
 
 def test_reap_exited_children_noop_without_children() -> None:
