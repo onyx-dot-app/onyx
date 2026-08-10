@@ -156,7 +156,8 @@ export function useComposerToolsState({
   );
   const sourceToolId = sourcesManaged ? (searchTool?.id ?? null) : null;
 
-  const { sources: connectorSources } = useConnectorSources();
+  const { sources: connectorSources, isLoading: connectorsLoading } =
+    useConnectorSources();
 
   // No declared `knowledge_sources` means "everything accessible", not "nothing".
   const agentSourceScope = useMemo(() => {
@@ -306,6 +307,21 @@ export function useComposerToolsState({
     ],
   );
 
+  /*
+   * A saved selection with everything switched off says "no internal search", but the filter can't
+   * carry that — an empty source list is the backend's "no filter at all". Until the catalogue and
+   * the preference record land (both cold on every launch), drop the tool instead, which is what
+   * the coupling settles on once they do. Otherwise the one state where the user asked for no
+   * search becomes the one that searches everything.
+   *
+   * Only while the catalogue is genuinely unknown: a workspace with no connectors at all never
+   * initializes, and there the filter is moot and search should still run.
+   */
+  const searchToolIdSuppressedByStorage =
+    connectorsLoading && !sourcesInitialized && storedSelection?.length === 0
+      ? sourceToolId
+      : null;
+
   // Picking a source is a statement about search, so it pins search for the next turn.
   const toggleSource = useCallback(
     (source: DocumentSource) => {
@@ -375,13 +391,17 @@ export function useComposerToolsState({
          * The FULL tool list, not the displayed rows: omitting the ones the menu hides (File
          * Reader, MCP) strips them server-side as soon as any tool is off.
          */
+        const offForThisSend =
+          searchToolIdSuppressedByStorage === null
+            ? disabledToolIds
+            : [...disabledToolIds, searchToolIdSuppressedByStorage];
         const allowedToolIds = effectiveAgent
-          ? computeAllowedToolIds(effectiveAgent.tools, disabledToolIds)
+          ? computeAllowedToolIds(effectiveAgent.tools, offForThisSend)
           : null;
         // A forced id that's filtered out, or belongs to another agent, fails the turn mid-stream.
         const forcedIsSendable =
           forcedToolId != null &&
-          !disabledToolIds.includes(forcedToolId) &&
+          !offForThisSend.includes(forcedToolId) &&
           (effectiveAgent?.tools.some((tool) => tool.id === forcedToolId) ??
             false);
 
@@ -398,7 +418,7 @@ export function useComposerToolsState({
           internalSearchFilters: buildInternalSearchFilters(
             sourcesInitialized
               ? sourceOptions.filter(isSourceEnabled)
-              : storedSelection,
+              : (storedSelection ?? NO_SOURCES),
           ),
         };
       },
@@ -417,6 +437,7 @@ export function useComposerToolsState({
       sourceOptions,
       sourcesInitialized,
       storedSelection,
+      searchToolIdSuppressedByStorage,
       enabledSourceCount,
       isSourceEnabled,
       toggleSource,

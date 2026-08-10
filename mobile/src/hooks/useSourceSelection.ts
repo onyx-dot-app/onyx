@@ -63,10 +63,10 @@ export interface SourceSelection {
   /*
    * What storage alone says is switched on. A send can beat the catalogue — neither connector
    * query persists, so every cold launch starts that way and a failed one stays that way — and
-   * sending nothing there would widen the search past what the user picked. Empty = never
-   * narrowed, which is the one case where "no filter" is the right answer.
+   * sending nothing there would widen the search past what the user picked. `null` = never
+   * narrowed, the one case where "no filter" is the right answer; `[]` = switched everything off.
    */
-  storedSelection: DocumentSource[];
+  storedSelection: DocumentSource[] | null;
   isSourceEnabled: (source: DocumentSource) => boolean;
   toggleSource: (source: DocumentSource) => void;
   setSources: (sources: DocumentSource[]) => void;

@@ -112,9 +112,17 @@ describe("enabledSourcesFromSnapshot", () => {
     ).toEqual(["notion", "jira"]);
   });
 
-  it("says nothing when the user has never narrowed anything", () => {
-    // Empty reads as "no filter" downstream, which is what "never narrowed" has to mean.
-    expect(enabledSourcesFromSnapshot(null)).toEqual([]);
+  it("tells a missing snapshot apart from one with everything off", () => {
+    /*
+     * Downstream these mean opposite things: nothing saved is "no filter, search everything",
+     * while everything off is "the user wants no internal search".
+     */
+    expect(enabledSourcesFromSnapshot(null)).toBeNull();
+    expect(
+      enabledSourcesFromSnapshot({
+        sourcePreferences: { notion: false, web: false },
+      }),
+    ).toEqual([]);
   });
 });
 

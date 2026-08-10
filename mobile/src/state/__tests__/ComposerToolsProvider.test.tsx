@@ -218,6 +218,8 @@ describe("useComposerToolsState", () => {
     mockDeepResearchAdminEnabled = true;
     apiFetchMock.mockReset();
     mockApi();
+    // Shared across tests, and a leaked snapshot changes what a cold send is allowed to do.
+    appStorage.clearAll();
     client = new QueryClient({
       defaultOptions: { queries: { retry: false, gcTime: 0 } },
     });
@@ -886,6 +888,49 @@ describe("useComposerToolsState — sources", () => {
     expect(warnSpy).not.toHaveBeenCalled();
 
     warnSpy.mockRestore();
+  });
+
+  it("keeps search off on a cold send when every saved source was switched off", async () => {
+    /*
+     * The preference record is cold on every launch too, so "search disabled" isn't known yet
+     * either. An empty source list is the backend's "no filter", so the intent has to be carried
+     * by dropping the tool — otherwise the one case where the user asked for no internal search
+     * becomes the one that searches everything.
+     */
+    appStorage.set(
+      "onyx.chat.source_preferences.https://example.test",
+      JSON.stringify({ sourcePreferences: { notion: false, web: false } }),
+    );
+    mockApi({
+      connectors: ["notion", "web"],
+      holdConnectors: true,
+      holdPreferences: true,
+    });
+    const { result } = renderTools({ agent: agent([searchTool, imageTool]) });
+    await waitFor(() => expect(result.current.actionTools).toHaveLength(2));
+
+    const options = result.current.resolveToolOptions();
+    expect(options.allowedToolIds).toEqual([2]);
+    expect(options.internalSearchFilters).toBeNull();
+  });
+
+  it("leaves search alone in a workspace that has no connectors at all", async () => {
+    /*
+     * An empty catalogue never initializes, so "not initialized" can't stand in for "unknown" —
+     * suppressing on it would drop search forever wherever nothing is connected, and there the
+     * saved selection describes sources this workspace doesn't have.
+     */
+    appStorage.set(
+      "onyx.chat.source_preferences.https://example.test",
+      JSON.stringify({ sourcePreferences: { notion: false, web: false } }),
+    );
+    mockApi({ connectors: [] });
+    const { result } = renderTools({ agent: agent([searchTool, imageTool]) });
+    await waitFor(() => expect(result.current.actionTools).toHaveLength(2));
+
+    await waitFor(() =>
+      expect(result.current.resolveToolOptions().allowedToolIds).toBeNull(),
+    );
   });
 
   it("sends no filter when the user has never narrowed the sources", async () => {
