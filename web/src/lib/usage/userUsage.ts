@@ -54,17 +54,3 @@ export function useUsageExport(range?: { from: Date; to: Date } | undefined) {
 
   return { usage: data, isLoading, error, refetch: mutate };
 }
-
-/** Clears a user's usage across active enforcement windows. */
-export async function resetUserUsage(userEmail: string): Promise<void> {
-  const response = await fetch(SWR_KEYS.adminUsageReset, {
-    method: "POST",
-    headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({ user_email: userEmail }),
-  });
-
-  if (!response.ok) {
-    const data = await response.json().catch(() => null);
-    throw new Error(data?.detail || data?.error_code || response.statusText);
-  }
-}

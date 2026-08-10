@@ -1,14 +1,14 @@
 import { expect, type Locator, type Page } from "@playwright/test";
 
-const RESET_ENDPOINT = "/api/admin/usage/reset";
-
 export class AdminUsagePage {
   readonly page: Page;
   readonly usageRows: Locator;
+  readonly userSearchInput: Locator;
 
   constructor(page: Page) {
     this.page = page;
-    this.usageRows = page.locator('[data-testid^="usage-row-"]');
+    this.usageRows = page.locator('tr[aria-label^="View usage details for "]');
+    this.userSearchInput = page.getByLabel("Search users by email");
   }
 
   async goto(): Promise<void> {
@@ -16,19 +16,15 @@ export class AdminUsagePage {
     await expect(this.usageRows.first()).toBeVisible({ timeout: 15_000 });
   }
 
-  async resetUser(email: string): Promise<void> {
-    const row = this.page.getByTestId(`usage-row-${email}`);
-    await expect(row).toBeVisible();
-    const responsePromise = this.page.waitForResponse(
-      (response) =>
-        response.url().includes(RESET_ENDPOINT) &&
-        response.request().method() === "POST"
-    );
-
-    await row.getByRole("button", { name: "Reset" }).click();
-    expect((await responsePromise).ok()).toBeTruthy();
-    await expect(this.page.getByText(`Reset usage for ${email}.`)).toBeVisible({
-      timeout: 10_000,
+  async expectUser(email: string): Promise<void> {
+    // The table only renders the first page (by spend) without filtering, so
+    // narrow to this user via search before asserting their row is visible.
+    await this.userSearchInput.fill(email);
+    // Clickable rows render role="button" (see opal Table's onRowClick
+    // handling), not role="row".
+    const row = this.page.getByRole("button", {
+      name: `View usage details for ${email}`,
     });
+    await expect(row).toBeVisible();
   }
 }
