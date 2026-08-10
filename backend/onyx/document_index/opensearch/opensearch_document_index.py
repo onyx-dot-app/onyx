@@ -303,6 +303,9 @@ class OpenSearchDocumentIndex(DocumentIndex):
         self._index_name: str = index_name
         self._tenant_state: TenantState = tenant_state
         self._client = OpenSearchIndexClient(index_name=self._index_name)
+        # True when the last verify skipped the mapping refresh because the
+        # index was write-blocked; such a verify must not be cached as done.
+        self._mapping_refresh_skipped: bool = False
 
         if (
             self._tenant_state.multitenant
@@ -312,7 +315,8 @@ class OpenSearchDocumentIndex(DocumentIndex):
             self.verify_and_create_index_if_necessary(
                 embedding_dim=embedding_dim, embedding_precision=embedding_precision
             )
-            _verified_index_names_for_current_process.add(index_name)
+            if not self._mapping_refresh_skipped:
+                _verified_index_names_for_current_process.add(index_name)
 
     def verify_and_create_index_if_necessary(
         self,
@@ -346,6 +350,7 @@ class OpenSearchDocumentIndex(DocumentIndex):
             self._index_name,
             embedding_dim,
         )
+        self._mapping_refresh_skipped = False
 
         with redis_shared_lock(
             lock_name=f"{OnyxRedisLocks.OPENSEARCH_VERIFY_INDEX_LOCK_PREFIX}:{self._index_name}",
@@ -378,6 +383,7 @@ class OpenSearchDocumentIndex(DocumentIndex):
                         # read_only_allow_delete block applied at the disk
                         # flood-stage watermark). It is still fully readable, so
                         # don't fail startup over a skipped mapping refresh.
+                        self._mapping_refresh_skipped = True
                         logger.error(
                             "Index %s exists but is write-blocked; skipping the mapping "
                             "refresh so startup can proceed. Search still works, but "
