@@ -260,6 +260,30 @@ test.describe("Permission gating — MANAGE_CONNECTORS", () => {
         page.getByLabel("admin-page-title").getByText("Add Connector")
       ).toBeVisible({ timeout: 10000 });
 
+      // Access type and groups live on the wizard's second step, so reaching
+      // /admin/add-connector says nothing about them. `web` has no credential
+      // template, so the wizard skips straight there.
+      await page.goto("/admin/connectors/web");
+      await page.waitForLoadState("networkidle");
+      await expect(page.getByText("Document Access")).toBeVisible({
+        timeout: 10000,
+      });
+
+      // Must be the picker, not "this Connector will be assigned to group X":
+      // the old code auto-assigned and hid the control from non-admins.
+      await expect(
+        page.getByText("Assign group access for this Connector")
+      ).toBeVisible({ timeout: 10000 });
+
+      // Drive's credential form used to render an empty fragment for non-admins
+      // — a blank modal, no error, no network call.
+      await page.goto("/admin/connectors/google-drive");
+      await page.waitForLoadState("networkidle");
+      await page.getByRole("button", { name: "Create New" }).click();
+      await expect(
+        page.getByText("Authenticate with Google Drive")
+      ).toBeVisible({ timeout: 10000 });
+
       // Phase 3: Revoke MANAGE_CONNECTORS — should redirect again
       await page.context().clearCookies();
       await loginAs(page, "admin");
@@ -299,6 +323,13 @@ test.describe("Permission gating — MANAGE_DOCUMENT_SETS", () => {
     const ccPairId = await adminClient.createFileConnector(
       connectorName,
       "public"
+    );
+    // Private and group-less is what the curator-era filter binned. A public
+    // connector stayed visible either way, so it couldn't detect filtering.
+    const privateConnectorName = `E2E DocSet Private ${Date.now()}`;
+    const privateCcPairId = await adminClient.createFileConnector(
+      privateConnectorName,
+      "private"
     );
 
     // Admin creates a second user group (user is already in fixture group;
@@ -358,6 +389,14 @@ test.describe("Permission gating — MANAGE_DOCUMENT_SETS", () => {
         timeout: 10000,
       });
 
+      // A global holder is org-wide, so this is selectable, not filtered out.
+      await expect(page.getByText(privateConnectorName)).toBeVisible({
+        timeout: 10000,
+      });
+      await expect(
+        page.getByText("Connectors not available", { exact: false })
+      ).toBeHidden();
+
       // Group selector loaded proves implied READ_USER_GROUPS
       await expect(
         page.getByText("Assign group access for this document set")
@@ -367,6 +406,15 @@ test.describe("Permission gating — MANAGE_DOCUMENT_SETS", () => {
           "Failed to load assign group access for this document set"
         )
       ).not.toBeVisible();
+
+      // Rendered only for a holder of this permission — its presence is the
+      // assertion that MANAGE_DOCUMENT_SETS is honoured, not just admin.
+      const publicToggle = page.locator("#checkbox-is_public");
+      await expect(publicToggle).toBeVisible({ timeout: 10000 });
+
+      // Document sets default to public, and a public set has no groups to
+      // scope, so the picker is disabled until this is unticked.
+      await publicToggle.click();
 
       // Open the group dropdown and verify the extra group is listed
       const groupSearchInput = page.getByTestId("groups-search-input");
@@ -393,6 +441,7 @@ test.describe("Permission gating — MANAGE_DOCUMENT_SETS", () => {
       await loginAs(page, "admin");
       const cleanupClient = new OnyxApiClient(page.request);
       await cleanupClient.deleteCCPair(ccPairId);
+      await cleanupClient.deleteCCPair(privateCcPairId);
       await cleanupClient.deleteUserGroup(extraGroupId);
     }
   });
