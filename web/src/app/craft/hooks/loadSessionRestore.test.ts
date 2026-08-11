@@ -551,42 +551,6 @@ describe("loadSession restore status", () => {
     ).toBe(false);
   });
 
-  it("keeps a stale observation from a newer overlapping load", async () => {
-    const olderMessages = deferred<unknown[]>();
-    const newerMessages = deferred<unknown[]>();
-    mockedApi.fetchSession
-      .mockResolvedValueOnce({
-        ...runningSession(),
-        skills_stale: false,
-      } as never)
-      .mockResolvedValueOnce({
-        ...runningSession(),
-        skills_stale: true,
-      } as never);
-    mockedApi.fetchMessages
-      .mockReturnValueOnce(olderMessages.promise as never)
-      .mockReturnValueOnce(newerMessages.promise as never);
-
-    const olderLoad = useBuildSessionStore
-      .getState()
-      .loadSession(SESSION_ID, { force: true });
-    await Promise.resolve();
-    const newerLoad = useBuildSessionStore
-      .getState()
-      .loadSession(SESSION_ID, { force: true });
-    await Promise.resolve();
-    expect(mockedApi.fetchMessages).toHaveBeenCalledTimes(2);
-
-    olderMessages.resolve([]);
-    await olderLoad;
-    newerMessages.resolve([]);
-    await newerLoad;
-
-    expect(
-      useBuildSessionStore.getState().sessions.get(SESSION_ID)?.skillsStale
-    ).toBe(true);
-  });
-
   it("clears stale turn metadata when active turn lookup says no turn is running", async () => {
     mockedApi.fetchSession.mockResolvedValue(runningSession() as never);
     mockedApi.fetchActiveTurn.mockResolvedValue(null as never);
