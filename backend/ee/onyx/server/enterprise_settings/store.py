@@ -2,6 +2,7 @@ import os
 from io import BytesIO
 from typing import IO, Any, cast
 
+import puremagic
 from fastapi import HTTPException, UploadFile
 
 from ee.onyx.server.enterprise_settings.models import (
@@ -90,12 +91,34 @@ def is_valid_file_type(filename: str) -> bool:
     return filename.endswith(valid_extensions)
 
 
-def guess_file_type(filename: str) -> str:
-    if filename.lower().endswith(".png"):
-        return "image/png"
-    elif filename.lower().endswith(".jpg") or filename.lower().endswith(".jpeg"):
-        return "image/jpeg"
-    return "application/octet-stream"
+# Readers sniff the stored bytes rather than trust the name or the upload
+# header, so the upload has to agree with them or a file accepted here is
+# rejected later. The PDF usage report is the strict reader: it can only draw
+# raster images, and silently falls back to the bundled mark otherwise.
+_RENDERABLE_LOGO_TYPES = ("image/png", "image/jpeg")
+
+# A logo is a wordmark, not an asset library. This bounds what gets buffered
+# into memory every time the usage report embeds it.
+_MAX_LOGO_BYTES = 5 * 1024 * 1024
+
+_LOGO_TYPE_ERROR = (
+    "Invalid file type- only .png, .jpg, and .jpeg files are allowed. "
+    "Vector formats such as SVG cannot be drawn into the PDF usage report."
+)
+
+
+def sniff_logo_type(content: bytes) -> str | None:
+    """The stored bytes' real type, or None when nothing can render it."""
+    try:
+        matches = puremagic.magic_string(content)
+    except Exception:
+        return None
+
+    for match in matches:
+        mime_type = cast(str, match.mime_type)
+        if mime_type in _RENDERABLE_LOGO_TYPES:
+            return mime_type
+    return None
 
 
 def upload_logo(file: UploadFile | str, is_logotype: bool = False) -> bool:
@@ -111,20 +134,39 @@ def upload_logo(file: UploadFile | str, is_logotype: bool = False) -> bool:
 
         with open(file, "rb") as file_handle:
             file_content = file_handle.read()
-        content = BytesIO(file_content)
         display_name = file
-        file_type = guess_file_type(file)
+
+        file_type_or_none = sniff_logo_type(file_content)
+        if file_type_or_none is None:
+            logger.error(_LOGO_TYPE_ERROR)
+            return False
+        file_type = file_type_or_none
 
     else:
         logger.notice("Uploading logo from uploaded file")
         if not file.filename or not is_valid_file_type(file.filename):
             raise HTTPException(
                 status_code=400,
-                detail="Invalid file type- only .png, .jpg, and .jpeg files are allowed",
+                detail=_LOGO_TYPE_ERROR,
             )
-        content = file.file
+
+        file_content = file.file.read(_MAX_LOGO_BYTES + 1)
+        if len(file_content) > _MAX_LOGO_BYTES:
+            raise HTTPException(
+                status_code=413,
+                detail=f"Logo must be under {_MAX_LOGO_BYTES // (1024 * 1024)} MB.",
+            )
+
         display_name = file.filename
-        file_type = file.content_type or "image/jpeg"
+
+        # An extension is a claim; the bytes are the fact. Readers sniff, so a
+        # mislabelled upload would be accepted here and dropped at render time.
+        file_type_or_none = sniff_logo_type(file_content)
+        if file_type_or_none is None:
+            raise HTTPException(status_code=400, detail=_LOGO_TYPE_ERROR)
+        file_type = file_type_or_none
+
+    content = BytesIO(file_content)
 
     file_store = get_default_file_store()
     file_store.save_file(
