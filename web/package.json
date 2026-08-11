@@ -12,6 +12,7 @@
     "dev:clean": "bun run clean && next dev",
     "clean": "rm -rf .next node_modules/.cache *.tsbuildinfo",
     "build": "next build",
+    "build:fast": "SKIP_TYPE_CHECK=1 next build",
     "start": "next start",
     "lint": "oxlint",
     "lint:fix": "oxlint --fix",

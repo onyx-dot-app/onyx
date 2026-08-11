@@ -7,6 +7,9 @@ const nextConfig = {
   productionBrowserSourceMaps: false,
   poweredByHeader: false,
   output: "standalone",
+  typescript: {
+    ignoreBuildErrors: process.env.SKIP_TYPE_CHECK === "1",
+  },
   transpilePackages: ["@onyx-ai/opal", "@onyx-ai/shared"],
   typedRoutes: true,
   // NOTE: `reactCompiler` is set per-phase in module.exports below — enabled for
