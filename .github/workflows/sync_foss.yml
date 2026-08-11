@@ -24,15 +24,6 @@ jobs:
         run: |
           sudo apt-get update && sudo apt-get install -y git-filter-repo
 
-      - name: Configure SSH for deploy key
-        env:
-          FOSS_REPO_DEPLOY_KEY: ${{ secrets.FOSS_REPO_DEPLOY_KEY }}
-        run: |
-          mkdir -p ~/.ssh
-          echo "$FOSS_REPO_DEPLOY_KEY" > ~/.ssh/id_ed25519
-          chmod 600 ~/.ssh/id_ed25519
-          ssh-keyscan github.com >> ~/.ssh/known_hosts
-
       - name: Set Git config
         run: |
           git config --global user.name "onyx-bot"
