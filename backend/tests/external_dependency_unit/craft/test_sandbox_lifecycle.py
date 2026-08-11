@@ -23,6 +23,7 @@ from sqlalchemy.orm import Session
 
 from onyx.db.enums import BuildSessionStatus, SandboxStatus
 from onyx.db.models import BuildSession, Sandbox, User
+from onyx.server.features.build.configs import SANDBOX_IDLE_TIMEOUT_SECONDS
 from onyx.server.features.build.db.sandbox import (
     create_snapshot__no_commit,
     get_running_sandboxes,
@@ -458,7 +459,9 @@ class TestIdleCleanupSelection:
 
         now = datetime.datetime.now(datetime.timezone.utc)
         idle_ids = {
-            s.id for s in get_running_sandboxes(db_session) if is_sandbox_idle(s, now)
+            s.id
+            for s in get_running_sandboxes(db_session)
+            if is_sandbox_idle(s, now, SANDBOX_IDLE_TIMEOUT_SECONDS)
         }
         assert row.id in idle_ids
 
@@ -477,7 +480,9 @@ class TestIdleCleanupSelection:
 
         now = datetime.datetime.now(datetime.timezone.utc)
         idle_ids = {
-            s.id for s in get_running_sandboxes(db_session) if is_sandbox_idle(s, now)
+            s.id
+            for s in get_running_sandboxes(db_session)
+            if is_sandbox_idle(s, now, SANDBOX_IDLE_TIMEOUT_SECONDS)
         }
         assert row.id not in idle_ids
 

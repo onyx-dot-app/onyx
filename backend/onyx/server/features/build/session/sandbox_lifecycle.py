@@ -762,20 +762,17 @@ def ensure_sandbox_ready(
 def is_sandbox_idle(
     sandbox: Sandbox,
     now: datetime,
-    timeout_seconds: int | None = None,
+    timeout_seconds: int,
 ) -> bool:
     """Idle = no heartbeat for the timeout (NULL heartbeat falls back to
     created_at so legacy/edge-case rows don't sit RUNNING forever).
 
     The timeout is a parameter because a sandbox left on a superseded image is
     reclaimed sooner than one on the current one; nothing else about reaping it
-    differs.
+    differs. ``reap_timeout_seconds`` is where it is chosen.
     """
     reference = sandbox.last_heartbeat or sandbox.created_at
-    timeout = (
-        SANDBOX_IDLE_TIMEOUT_SECONDS if timeout_seconds is None else timeout_seconds
-    )
-    return reference < now - timedelta(seconds=timeout)
+    return reference < now - timedelta(seconds=timeout_seconds)
 
 
 def reap_timeout_seconds(
@@ -868,7 +865,7 @@ def sleep_sandbox(
     sandbox: Sandbox,
     tenant_id: str,
     session_creation_lock: RedisLock,
-    idle_timeout_seconds: int | None = None,
+    idle_timeout_seconds: int,
 ) -> None:
     """Snapshot an idle ``RUNNING`` sandbox, terminate its pod, and mark it
     ``SLEEPING``. Commits on success; on abort the sandbox stays ``RUNNING``.

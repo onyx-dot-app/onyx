@@ -942,7 +942,23 @@ def test_sandbox_on_a_stale_image_is_reaped_on_the_shorter_timeout(
     assert refreshed_session.nextjs_port is None
 
 
-def test_sandbox_on_a_stale_image_still_in_use_is_left_alone(
+@pytest.mark.parametrize(
+    "provisioned,quiet_factor",
+    [
+        # Heartbeat refreshed while a turn streams: "quiet for N" is the same
+        # "nobody is using this" the reaper already trusts — no second gate.
+        pytest.param(_EARLIER_IMAGE, 0.5, id="stale-image-still-in-use"),
+        # No label (provisioned before this shipped) or unreadable: unknown
+        # counts as current, or the first sweep after deploy reaps the fleet.
+        pytest.param(None, 2, id="no-image-label"),
+        # Same quiet period, current image: the shorter timeout applies to
+        # being behind, not to being quiet.
+        pytest.param(_RUNNING_IMAGE, 2, id="current-image"),
+    ],
+)
+def test_sandbox_not_behind_or_still_in_use_is_left_alone(
+    provisioned: str | None,
+    quiet_factor: float,
     db_session: Session,
     test_user: User,  # noqa: ARG001
     stubbed_cleanup: StubSandboxManager,
@@ -950,65 +966,12 @@ def test_sandbox_on_a_stale_image_still_in_use_is_left_alone(
     short_stale_image_threshold: int,
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
-    """The heartbeat is refreshed while a turn streams, so "quiet for N" is the
-    same "nobody is using this" the reaper already trusts — no second gate."""
     user = make_user(db_session)
     sandbox = make_sandbox(db_session, user)
     _backdate_heartbeat(
-        db_session, sandbox, seconds_ago=short_stale_image_threshold // 2
+        db_session, sandbox, seconds_ago=int(short_stale_image_threshold * quiet_factor)
     )
-    _image(stubbed_cleanup, monkeypatch, provisioned=_EARLIER_IMAGE)
-    stubbed_cleanup.list_session_workspaces_returns = []
-
-    cleanup_idle_sandboxes_task.run(tenant_id=POSTGRES_DEFAULT_SCHEMA_STANDARD_VALUE)  # ty: ignore[invalid-argument-type]
-
-    db_session.expire_all()
-    refreshed = db_session.get(Sandbox, sandbox.id)
-    assert refreshed is not None and refreshed.status == SandboxStatus.RUNNING
-
-
-def test_sandbox_with_no_image_label_keeps_the_normal_timeout(
-    db_session: Session,
-    test_user: User,  # noqa: ARG001
-    stubbed_cleanup: StubSandboxManager,
-    short_idle_threshold: int,  # noqa: ARG001
-    short_stale_image_threshold: int,
-    monkeypatch: pytest.MonkeyPatch,
-) -> None:
-    """A pod provisioned before this shipped carries no image label, and one
-    the API cannot be read for reports none either. Both must count as current,
-    or the first sweep after deploy reaps the whole fleet."""
-    user = make_user(db_session)
-    sandbox = make_sandbox(db_session, user)
-    _backdate_heartbeat(
-        db_session, sandbox, seconds_ago=short_stale_image_threshold * 2
-    )
-    _image(stubbed_cleanup, monkeypatch, provisioned=None)
-    stubbed_cleanup.list_session_workspaces_returns = []
-
-    cleanup_idle_sandboxes_task.run(tenant_id=POSTGRES_DEFAULT_SCHEMA_STANDARD_VALUE)  # ty: ignore[invalid-argument-type]
-
-    db_session.expire_all()
-    refreshed = db_session.get(Sandbox, sandbox.id)
-    assert refreshed is not None and refreshed.status == SandboxStatus.RUNNING
-
-
-def test_sandbox_on_the_current_image_keeps_the_normal_timeout(
-    db_session: Session,
-    test_user: User,  # noqa: ARG001
-    stubbed_cleanup: StubSandboxManager,
-    short_idle_threshold: int,  # noqa: ARG001
-    short_stale_image_threshold: int,
-    monkeypatch: pytest.MonkeyPatch,
-) -> None:
-    """Same quiet period, current image: the shorter timeout applies to being
-    behind, not to being quiet."""
-    user = make_user(db_session)
-    sandbox = make_sandbox(db_session, user)
-    _backdate_heartbeat(
-        db_session, sandbox, seconds_ago=short_stale_image_threshold * 2
-    )
-    _image(stubbed_cleanup, monkeypatch, provisioned=_RUNNING_IMAGE)
+    _image(stubbed_cleanup, monkeypatch, provisioned=provisioned)
     stubbed_cleanup.list_session_workspaces_returns = []
 
     cleanup_idle_sandboxes_task.run(tenant_id=POSTGRES_DEFAULT_SCHEMA_STANDARD_VALUE)  # ty: ignore[invalid-argument-type]
