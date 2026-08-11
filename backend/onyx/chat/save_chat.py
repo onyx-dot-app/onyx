@@ -209,6 +209,8 @@ def save_chat_turn(
     )
     # Incognito keeps the row for tracking but never its text. Token count below
     # still comes from the real answer so usage and budgeting are unaffected.
+    # Tool calls, search docs, and citations are conversation-derived, so a
+    # content-free turn persists none of them.
     if persist_content:
         assistant_message.message = sanitized_message_text
         assistant_message.reasoning_tokens = (
@@ -217,6 +219,10 @@ def save_chat_turn(
     else:
         assistant_message.message = ""
         assistant_message.reasoning_tokens = None
+        tool_calls = []
+        citation_to_doc = {}
+        all_search_docs = {}
+        emitted_citations = set()
     assistant_message.is_clarification = is_clarification
 
     # Use pre-answer processing time (captured when MESSAGE_START was emitted)
