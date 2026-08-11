@@ -103,8 +103,10 @@ from onyx.server.features.build.sandbox.labels import (
     LABEL_PROVISIONING_ATTEMPT,
     LABEL_RELEASE,
     LABEL_SANDBOX_ID,
+    LABEL_SANDBOX_IMAGE,
     LABEL_TENANT_ID,
     current_release_label,
+    current_sandbox_image_identity,
 )
 from onyx.server.features.build.sandbox.models import (
     CraftLLMProviderConfig,
@@ -496,6 +498,8 @@ class KubernetesSandboxManager(SandboxManager):
         }
         if release := current_release_label():
             labels[LABEL_RELEASE] = release
+        if image_identity := current_sandbox_image_identity():
+            labels[LABEL_SANDBOX_IMAGE] = image_identity
 
         return client.V1Pod(
             api_version="v1",
@@ -577,11 +581,11 @@ class KubernetesSandboxManager(SandboxManager):
             f"apply the matching sandbox PodTemplate."
         )
 
-    def provisioned_release(self, sandbox_id: UUID) -> str | None:
-        """The release stamped on this sandbox's pod when it was created.
+    def provisioned_image_identity(self, sandbox_id: UUID) -> str | None:
+        """The image identity stamped on this sandbox's pod when it was created.
 
-        A pod is created once and never relabelled, so this is the release that
-        provisioned whatever is running now.
+        A pod is created once and never relabelled, so this describes whatever
+        is running now.
         """
         try:
             pod = self._core_api.read_namespaced_pod(
@@ -592,7 +596,7 @@ class KubernetesSandboxManager(SandboxManager):
             logger.warning("Could not read sandbox pod %s: %s", sandbox_id, e)
             return None
         labels = (pod.metadata.labels or {}) if pod.metadata else {}
-        return labels.get(LABEL_RELEASE)
+        return labels.get(LABEL_SANDBOX_IMAGE)
 
     def _create_sandbox_service(
         self,

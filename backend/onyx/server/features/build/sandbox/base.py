@@ -386,11 +386,11 @@ class SandboxManager(_ServeMixin, ABC):
         """
         ...
 
-    def provisioned_release(self, sandbox_id: UUID) -> str | None:  # noqa: ARG002
-        """The release that provisioned this sandbox, recorded at creation.
+    def provisioned_image_identity(self, sandbox_id: UUID) -> str | None:  # noqa: ARG002
+        """The sandbox image identity recorded when this sandbox was created.
 
-        Compared against the running release to decide whether the sandbox is
-        on the image that shipped with an earlier one. None means unknown,
+        Compared against the running identity to decide whether the sandbox is
+        on an image whose sources have since changed. None means unknown,
         which never counts as behind.
         """
         return None
