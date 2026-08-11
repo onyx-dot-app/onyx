@@ -919,6 +919,10 @@ def get_connector_status(
     )
     group_cc_pair_relationships_dict: dict[int, list[int]] = {}
     for relationship in group_cc_pair_relationships:
+        # is_current only — a detached pair keeps a stale row until the index sync
+        # deletes it, and the form reads this to decide which pairs a group may use.
+        if not relationship.is_current:
+            continue
         group_cc_pair_relationships_dict.setdefault(relationship.cc_pair_id, []).append(
             relationship.user_group_id
         )

@@ -103,19 +103,11 @@ async function updateAgentGroupSharing(
 }
 
 // ---------------------------------------------------------------------------
-// Document set sharing — managed from the document set side
+// Document set sharing
 // ---------------------------------------------------------------------------
 
-interface DocumentSetSummary {
-  id: number;
-  description: string;
-  cc_pair_summaries: { id: number }[];
-  federated_connector_summaries: { id: number }[];
-  is_public: boolean;
-  users: string[];
-  groups: number[];
-}
-
+// Written from the group's side: the document-set route needs MANAGE_DOCUMENT_SETS,
+// which a groups admin doesn't hold.
 async function updateDocSetGroupSharing(
   groupId: number,
   initialDocSetIds: number[],
@@ -124,71 +116,27 @@ async function updateDocSetGroupSharing(
   const initialSet = new Set(initialDocSetIds);
   const currentSet = new Set(currentDocSetIds);
 
-  const added = currentDocSetIds.filter((id) => !initialSet.has(id));
-  const removed = initialDocSetIds.filter((id) => !currentSet.has(id));
+  const added_document_set_ids = currentDocSetIds.filter(
+    (id) => !initialSet.has(id)
+  );
+  const removed_document_set_ids = initialDocSetIds.filter(
+    (id) => !currentSet.has(id)
+  );
 
-  if (added.length === 0 && removed.length === 0) return;
-
-  // Fetch all document sets to get their current state
-  const allRes = await fetch("/api/manage/document-set");
-  if (!allRes.ok) {
-    throw new Error("Failed to fetch document sets");
-  }
-  const allDocSets: DocumentSetSummary[] = await allRes.json();
-  const docSetMap = new Map(allDocSets.map((ds) => [ds.id, ds]));
-
-  for (const dsId of added) {
-    const ds = docSetMap.get(dsId);
-    if (!ds) {
-      throw new Error(`Document set ${dsId} not found`);
-    }
-    const updatedGroups = ds.groups.includes(groupId)
-      ? ds.groups
-      : [...ds.groups, groupId];
-    const res = await fetch("/api/manage/admin/document-set", {
-      method: "PATCH",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({
-        id: ds.id,
-        description: ds.description,
-        cc_pair_ids: ds.cc_pair_summaries.map((cc) => cc.id),
-        federated_connectors: ds.federated_connector_summaries.map((fc) => ({
-          federated_connector_id: fc.id,
-        })),
-        is_public: ds.is_public,
-        users: ds.users,
-        groups: updatedGroups,
-      }),
-    });
-    if (!res.ok) {
-      throw new Error(`Failed to add group to document set ${dsId}`);
-    }
+  if (
+    added_document_set_ids.length === 0 &&
+    removed_document_set_ids.length === 0
+  ) {
+    return;
   }
 
-  for (const dsId of removed) {
-    const ds = docSetMap.get(dsId);
-    if (!ds) {
-      throw new Error(`Document set ${dsId} not found`);
-    }
-    const updatedGroups = ds.groups.filter((id) => id !== groupId);
-    const res = await fetch("/api/manage/admin/document-set", {
-      method: "PATCH",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({
-        id: ds.id,
-        description: ds.description,
-        cc_pair_ids: ds.cc_pair_summaries.map((cc) => cc.id),
-        federated_connectors: ds.federated_connector_summaries.map((fc) => ({
-          federated_connector_id: fc.id,
-        })),
-        is_public: ds.is_public,
-        users: ds.users,
-        groups: updatedGroups,
-      }),
-    });
-    if (!res.ok) {
-      throw new Error(`Failed to remove group from document set ${dsId}`);
-    }
+  const res = await fetch(`${USER_GROUP_URL}/${groupId}/document-sets`, {
+    method: "PATCH",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ added_document_set_ids, removed_document_set_ids }),
+  });
+  if (!res.ok) {
+    throw await responseError(res, "Failed to update document set sharing");
   }
 }
 

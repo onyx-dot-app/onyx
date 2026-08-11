@@ -2,7 +2,7 @@ from uuid import UUID
 
 from sqlalchemy.orm import Session
 
-from onyx.auth.permissions import has_permission
+from onyx.auth.permissions import has_global_permission, has_permission
 from onyx.auth.scoped_permissions import assert_within_scope
 from onyx.db.enums import Permission, PermissionAuthority, PersonaSharePermission
 from onyx.db.models import Persona, Persona__UserGroup, User
@@ -86,6 +86,11 @@ def _assert_group_share_within_scope(
     in-txn, never the caller's, so a reassignment can't escape scope — and under the
     caller's row lock, so the write reconciles this same snapshot. Both the pre-call and
     current is_public must be private — sharing a public agent in would capture it."""
+    # A global groups admin administers every group, so group shares are theirs to set —
+    # same bypass _assert_group_update_within_scope takes for cc_pairs. Which agents they
+    # may touch is still gated by the caller's fetch.
+    if has_global_permission(acting_user, Permission.MANAGE_USER_GROUPS):
+        return
     current_shares = {
         row.user_group_id: row.permission
         for row in db_session.query(Persona__UserGroup)

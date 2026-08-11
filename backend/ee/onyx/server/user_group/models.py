@@ -135,6 +135,11 @@ class UpdateGroupAgentsRequest(BaseModel):
     removed_agent_ids: list[int]
 
 
+class UpdateGroupDocumentSetsRequest(BaseModel):
+    added_document_set_ids: list[int]
+    removed_document_set_ids: list[int]
+
+
 class SetGroupManagerRequest(BaseModel):
     user_id: UUID
     is_manager: bool

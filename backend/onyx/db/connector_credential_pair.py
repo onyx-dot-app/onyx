@@ -181,6 +181,11 @@ def _add_user_filters(
     if Permission.MANAGE_CONNECTORS in user_permissions:
         return stmt
 
+    # Reads: MANAGE_USER_GROUPS / MANAGE_DOCUMENT_SETS imply only READ_CONNECTORS, so
+    # without this the attach pickers hide private pairs they aren't a member of.
+    if not get_editable and Permission.READ_CONNECTORS in user_permissions:
+        return stmt
+
     if user.is_anonymous:
         return stmt.where(ConnectorCredentialPair.access_type == AccessType.PUBLIC)
 

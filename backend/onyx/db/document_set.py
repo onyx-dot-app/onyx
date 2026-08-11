@@ -130,6 +130,26 @@ def get_group_ids_for_document_set(
     )
 
 
+def get_group_ids_for_document_sets(
+    db_session: Session, document_set_ids: list[int]
+) -> dict[int, set[int]]:
+    """Batched ``get_group_ids_for_document_set``; every requested id gets an entry."""
+    groups_by_document_set: dict[int, set[int]] = {
+        document_set_id: set() for document_set_id in document_set_ids
+    }
+    if not document_set_ids:
+        return groups_by_document_set
+    rows = db_session.execute(
+        select(
+            DocumentSet__UserGroup.document_set_id,
+            DocumentSet__UserGroup.user_group_id,
+        ).where(DocumentSet__UserGroup.document_set_id.in_(document_set_ids))
+    )
+    for document_set_id, user_group_id in rows:
+        groups_by_document_set[document_set_id].add(user_group_id)
+    return groups_by_document_set
+
+
 def get_document_set_by_id(
     db_session: Session,
     document_set_id: int,
@@ -217,7 +237,7 @@ def make_doc_set_private(
         raise NotImplementedError("Onyx MIT does not support private Document Sets")
 
 
-def _check_if_cc_pairs_are_owned_by_groups(
+def check_if_cc_pairs_are_owned_by_groups(
     db_session: Session,
     cc_pair_ids: list[int],
     group_ids: list[int],
@@ -231,9 +251,12 @@ def _check_if_cc_pairs_are_owned_by_groups(
         cc_pair_ids=cc_pair_ids,
     )
 
+    # is_current only: a detached cc_pair keeps a stale row until the index sync deletes
+    # it, and counting those would admit a set whose connector the group just lost.
     group_cc_pair_relationships_set = {
         (relationship.cc_pair_id, relationship.user_group_id)
         for relationship in group_cc_pair_relationships
+        if relationship.is_current
     }
 
     missing_cc_pair_ids = []
@@ -268,7 +291,7 @@ def insert_document_set(
         raise ValueError("Cannot create a document set with no connectors")
 
     if not document_set_creation_request.is_public:
-        _check_if_cc_pairs_are_owned_by_groups(
+        check_if_cc_pairs_are_owned_by_groups(
             db_session=db_session,
             cc_pair_ids=document_set_creation_request.cc_pair_ids,
             group_ids=document_set_creation_request.groups or [],
@@ -348,7 +371,7 @@ def update_document_set(
         raise ValueError("Cannot update a document set with no connectors")
 
     if not document_set_update_request.is_public:
-        _check_if_cc_pairs_are_owned_by_groups(
+        check_if_cc_pairs_are_owned_by_groups(
             db_session=db_session,
             cc_pair_ids=document_set_update_request.cc_pair_ids,
             group_ids=document_set_update_request.groups,

@@ -2,6 +2,7 @@ from fastapi import APIRouter, Depends
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
 
+from ee.onyx.db.document_set import set_document_set_group_membership__no_commit
 from ee.onyx.db.persona import update_persona_access
 from ee.onyx.db.user_group import (
     add_users_to_user_group,
@@ -23,6 +24,7 @@ from ee.onyx.server.user_group.models import (
     MinimalUserGroupSnapshot,
     SetGroupManagerRequest,
     UpdateGroupAgentsRequest,
+    UpdateGroupDocumentSetsRequest,
     UserGroup,
     UserGroupCreate,
     UserGroupRename,
@@ -40,11 +42,18 @@ from onyx.auth.permissions import (
 )
 from onyx.auth.scoped_permissions import (
     assert_manages_group,
+    assert_within_scope,
     get_scoped_groups,
     manages_group,
 )
+from onyx.background.celery.tasks.beat_schedule import BEAT_EXPIRES_DEFAULT
+from onyx.background.celery.versioned_apps.client import app as client_app
 from onyx.configs.app_configs import DISABLE_VECTOR_DB
-from onyx.configs.constants import PUBLIC_API_TAGS
+from onyx.configs.constants import PUBLIC_API_TAGS, OnyxCeleryPriority, OnyxCeleryTask
+from onyx.db.document_set import (
+    get_document_sets_by_ids,
+    get_group_ids_for_document_sets,
+)
 from onyx.db.engine.sql_engine import get_session
 from onyx.db.enums import Permission, PermissionAuthority
 from onyx.db.models import User
@@ -53,6 +62,7 @@ from onyx.error_handling.error_codes import OnyxErrorCode
 from onyx.error_handling.exceptions import OnyxError
 from onyx.server.security.store import get_security_settings
 from onyx.utils.logger import setup_logger
+from shared_configs.contextvars import get_current_tenant_id
 
 logger = setup_logger()
 
@@ -324,9 +334,16 @@ def update_group_agents(
     # any other. Mirrors rename_user_group_endpoint and set_group_manager.
     assert_manages_group(user, db_session, group_id=user_group_id)
 
+    # A global groups admin shares any agent (READ_AGENTS resolves the whole org on the
+    # non-editable branch); a scoped manager stays pinned to their editable set.
+    get_editable = not has_global_permission(user, Permission.MANAGE_USER_GROUPS)
+
     for agent_id in request.added_agent_ids:
         persona = fetch_persona_by_id_for_user(
-            db_session=db_session, persona_id=agent_id, user=user
+            db_session=db_session,
+            persona_id=agent_id,
+            user=user,
+            get_editable=get_editable,
         )
         current_group_ids = [g.id for g in persona.groups]
         if user_group_id not in current_group_ids:
@@ -340,7 +357,10 @@ def update_group_agents(
 
     for agent_id in request.removed_agent_ids:
         persona = fetch_persona_by_id_for_user(
-            db_session=db_session, persona_id=agent_id, user=user
+            db_session=db_session,
+            persona_id=agent_id,
+            user=user,
+            get_editable=get_editable,
         )
         current_group_ids = [g.id for g in persona.groups]
         update_persona_access(
@@ -352,6 +372,87 @@ def update_group_agents(
         )
 
     db_session.commit()
+
+
+@router.patch("/admin/user-group/{user_group_id}/document-sets")
+def update_group_document_sets(
+    user_group_id: int,
+    request: UpdateGroupDocumentSetsRequest,
+    user: User = Depends(
+        require_permission(Permission.MANAGE_USER_GROUPS, allow_scope=True)
+    ),
+    db_session: Session = Depends(get_session),
+    tenant_id: str = Depends(get_current_tenant_id),
+) -> None:
+    """Share document sets with a group from the group's side — the document-set route is
+    gated on MANAGE_DOCUMENT_SETS, which a groups admin doesn't hold."""
+    # GATE 2: the group must be one the caller administers.
+    assert_manages_group(user, db_session, group_id=user_group_id)
+
+    attach_ids = set(request.added_document_set_ids)
+    detach_ids = set(request.removed_document_set_ids)
+    if attach_ids & detach_ids:
+        raise OnyxError(
+            OnyxErrorCode.INVALID_INPUT,
+            "A document set cannot be both added and removed.",
+        )
+    if not attach_ids and not detach_ids:
+        return
+
+    document_sets = {
+        document_set.id: document_set
+        for document_set in get_document_sets_by_ids(
+            db_session, list(attach_ids | detach_ids)
+        )
+    }
+    missing = sorted((attach_ids | detach_ids) - document_sets.keys())
+    if missing:
+        raise OnyxError(
+            OnyxErrorCode.DOCUMENT_SET_NOT_FOUND,
+            f"Document set(s) {missing} do not exist",
+        )
+
+    # A global groups admin shares any set; a scoped manager is held to private sets
+    # inside their managed groups.
+    if not has_global_permission(user, Permission.MANAGE_USER_GROUPS):
+        groups_by_document_set = get_group_ids_for_document_sets(
+            db_session, list(document_sets)
+        )
+        for document_set_id, document_set in document_sets.items():
+            current_group_ids = groups_by_document_set[document_set_id]
+            requested_group_ids = (
+                current_group_ids | {user_group_id}
+                if document_set_id in attach_ids
+                else current_group_ids - {user_group_id}
+            )
+            assert_within_scope(
+                user,
+                db_session,
+                permission=Permission.MANAGE_DOCUMENT_SETS,
+                current_group_ids=current_group_ids,
+                requested_group_ids=requested_group_ids,
+                is_non_public=not document_set.is_public,
+            )
+
+    try:
+        changed = set_document_set_group_membership__no_commit(
+            db_session=db_session,
+            user_group_id=user_group_id,
+            to_attach=[document_sets[ds_id] for ds_id in attach_ids],
+            to_detach=[document_sets[ds_id] for ds_id in detach_ids],
+        )
+    except ValueError as e:
+        raise OnyxError(OnyxErrorCode.INVALID_INPUT, str(e))
+
+    db_session.commit()
+
+    if changed and not DISABLE_VECTOR_DB:
+        client_app.send_task(
+            OnyxCeleryTask.CHECK_FOR_VESPA_SYNC_TASK,
+            kwargs={"tenant_id": tenant_id},
+            priority=OnyxCeleryPriority.HIGH,
+            expires=BEAT_EXPIRES_DEFAULT,
+        )
 
 
 @router.put("/admin/user-group/{user_group_id}/manager")

@@ -10,11 +10,21 @@ this file only covers endpoints that require the MANAGE token directly.
 
 import os
 from typing import Any
+from uuid import uuid4
 
 import pytest
 
-from onyx.db.enums import Permission
-from tests.integration.common_utils.test_models import DATestAPIKey, DATestUser
+from ee.onyx.server.user_group.models import UserGroup as UserGroupSnapshot
+from onyx.db.enums import AccessType, Permission
+from tests.integration.common_utils.managers.cc_pair import CCPairManager
+from tests.integration.common_utils.managers.document_set import DocumentSetManager
+from tests.integration.common_utils.managers.persona import PersonaManager
+from tests.integration.common_utils.managers.user_group import UserGroupManager
+from tests.integration.common_utils.test_models import (
+    DATestAPIKey,
+    DATestUser,
+    DATestUserGroup,
+)
 from tests.integration.tests.permissions._access_matrix import (
     USER_KINDS,
     Endpoint,
@@ -40,6 +50,16 @@ ENDPOINTS: list[Endpoint] = [
     ("GET", "/manage/admin/user-group/999999/permissions", None),
     ("POST", "/manage/admin/user-group", _CREATE_GROUP_BODY),
     ("DELETE", "/manage/admin/user-group/999999", None),
+    (
+        "PATCH",
+        "/manage/admin/user-group/999999/agents",
+        {"added_agent_ids": [], "removed_agent_ids": []},
+    ),
+    (
+        "PATCH",
+        "/manage/admin/user-group/999999/document-sets",
+        {"added_document_set_ids": [], "removed_document_set_ids": []},
+    ),
 ]
 
 
@@ -100,3 +120,124 @@ def test_set_permissions_requires_full_admin(
     headers, cookies = resolve_credentials(user_kind, request)
     resp = call_endpoint(method, path, body, headers, cookies)
     assert_response(resp, method, path, user_kind, expected)
+
+
+# ---------------------------------------------------------------------------
+# Sharing resources into a group. MANAGE_USER_GROUPS implies only the reads, while the
+# resource-side gates ask for MANAGE_AGENTS / MANAGE_DOCUMENT_SETS / MANAGE_CONNECTORS.
+# ---------------------------------------------------------------------------
+
+
+@pytest.fixture
+def target_group(permission_admin_user: DATestUser) -> DATestUserGroup:
+    """A group ``holder_user`` administers but does not belong to — global authority,
+    never membership. Uniquely named because each test mutates it."""
+    return UserGroupManager.create(
+        name=f"share-target-{uuid4()}",
+        user_performing_action=permission_admin_user,
+    )
+
+
+def _group_snapshot(
+    group_id: int, permission_admin_user: DATestUser
+) -> UserGroupSnapshot:
+    groups = UserGroupManager.get_all(user_performing_action=permission_admin_user)
+    return next(group for group in groups if group.id == group_id)
+
+
+def test_global_holder_shares_agent_it_does_not_own(
+    permission_admin_user: DATestUser,
+    holder_user: DATestUser,
+    target_group: DATestUserGroup,
+) -> None:
+    # Was refused as if scoped: editable-only lookup plus a MANAGE_AGENTS share gate.
+    agent = PersonaManager.create(
+        user_performing_action=permission_admin_user, is_public=False
+    )
+    resp = call_endpoint(
+        "PATCH",
+        f"/manage/admin/user-group/{target_group.id}/agents",
+        {"added_agent_ids": [agent.id], "removed_agent_ids": []},
+        holder_user.headers,
+        holder_user.cookies,
+    )
+    assert resp.status_code == 200, resp.text
+    snapshot = _group_snapshot(target_group.id, permission_admin_user)
+    assert agent.id in {persona.id for persona in snapshot.personas}
+
+
+def test_global_holder_removes_agent_it_does_not_own(
+    permission_admin_user: DATestUser,
+    holder_user: DATestUser,
+    target_group: DATestUserGroup,
+) -> None:
+    agent = PersonaManager.create(
+        user_performing_action=permission_admin_user,
+        is_public=False,
+        groups=[target_group.id],
+    )
+    resp = call_endpoint(
+        "PATCH",
+        f"/manage/admin/user-group/{target_group.id}/agents",
+        {"added_agent_ids": [], "removed_agent_ids": [agent.id]},
+        holder_user.headers,
+        holder_user.cookies,
+    )
+    assert resp.status_code == 200, resp.text
+    snapshot = _group_snapshot(target_group.id, permission_admin_user)
+    assert agent.id not in {persona.id for persona in snapshot.personas}
+
+
+def test_global_holder_sees_private_connector_in_picker(
+    permission_admin_user: DATestUser,
+    holder_user: DATestUser,
+    target_group: DATestUserGroup,
+) -> None:
+    # The cc_pair filter bypassed only for MANAGE_CONNECTORS, so private pairs the
+    # holder isn't a member of vanished from the picker.
+    cc_pair = CCPairManager.create_from_scratch(
+        user_performing_action=permission_admin_user,
+        access_type=AccessType.PRIVATE,
+        groups=[target_group.id],
+    )
+    resp = call_endpoint(
+        "GET",
+        "/manage/admin/connector/status",
+        None,
+        holder_user.headers,
+        holder_user.cookies,
+    )
+    assert resp.status_code == 200, resp.text
+    assert cc_pair.id in {row["cc_pair_id"] for row in resp.json()}
+
+
+def test_global_holder_shares_document_set(
+    permission_admin_user: DATestUser,
+    holder_user: DATestUser,
+    target_group: DATestUserGroup,
+) -> None:
+    # PUBLIC so check_if_cc_pairs_are_owned_by_groups passes without first attaching
+    # the connector to the group.
+    cc_pair = CCPairManager.create_from_scratch(
+        user_performing_action=permission_admin_user,
+        access_type=AccessType.PUBLIC,
+        groups=[],
+    )
+    doc_set = DocumentSetManager.create(
+        user_performing_action=permission_admin_user,
+        cc_pair_ids=[cc_pair.id],
+        is_public=False,
+    )
+    DocumentSetManager.wait_for_sync(
+        document_sets_to_check=[doc_set], user_performing_action=permission_admin_user
+    )
+    resp = call_endpoint(
+        "PATCH",
+        f"/manage/admin/user-group/{target_group.id}/document-sets",
+        {"added_document_set_ids": [doc_set.id], "removed_document_set_ids": []},
+        holder_user.headers,
+        holder_user.cookies,
+    )
+    assert resp.status_code == 200, resp.text
+    snapshot = _group_snapshot(target_group.id, permission_admin_user)
+    assert doc_set.id in {document_set.id for document_set in snapshot.document_sets}

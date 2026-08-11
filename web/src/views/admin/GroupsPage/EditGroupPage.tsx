@@ -624,6 +624,7 @@ function EditGroupPage({ groupId }: EditGroupPageProps) {
                 onDocSetIdsChange={setSelectedDocSetIds}
                 selectedAgentIds={selectedAgentIds}
                 onAgentIdsChange={setSelectedAgentIds}
+                attachedAgents={group?.personas}
               />
 
               <TokenLimitSection
