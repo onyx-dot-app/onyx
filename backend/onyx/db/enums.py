@@ -730,7 +730,8 @@ class IncognitoRecordMode(str, PyEnum):
     ``values_callable`` to persist the value rather than the default name.
     """
 
-    # Content persists as an ordinary chat. Only the user's own history hides it.
+    # Content persists as an ordinary chat, hidden only from the owner's own
+    # surfaces (history, search, project lists).
     FULL_HISTORY = "full_history"
     # No conversation content is written to Postgres. Usage is still metered.
     USAGE_ONLY = "usage_only"
@@ -747,11 +748,12 @@ class IncognitoRecordMode(str, PyEnum):
 
     @property
     def persists_content(self) -> bool:
-        """Whether chat_message rows may be written to Postgres at all.
+        """Whether conversation content may be written to chat_message rows.
 
-        False means never written, not written-and-hidden: deletion is not
-        atomic across WAL, replicas, and backups, so a write-then-remove
-        design could not honor the guarantee.
+        Content-free modes still write the rows, with empty text and real
+        token counts. False means content is never written, not
+        written-and-hidden: deletion is not atomic across WAL, replicas,
+        and backups.
         """
         return self is IncognitoRecordMode.FULL_HISTORY
 
@@ -775,3 +777,8 @@ class IncognitoRecordMode(str, PyEnum):
         for anything but a fully-recorded chat.
         """
         return self is IncognitoRecordMode.FULL_HISTORY
+
+
+def record_mode_persists_content(mode: IncognitoRecordMode | None) -> bool:
+    """None is an ordinary chat, which always persists content."""
+    return mode is None or mode.persists_content

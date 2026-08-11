@@ -9,8 +9,9 @@ The contract that enforcement points must honor: an incognito session must pin
 its mode on a metadata-only ``chat_session`` row at creation, and downstream
 code must read the pinned value, never the live admin setting, so a setting
 change cannot alter a session under way. Only FULL_HISTORY may write
-``chat_message`` rows. USAGE_ONLY must carry the live conversation outside
-Postgres for the length of the session.
+conversation content into ``chat_message`` rows. USAGE_ONLY writes
+content-free rows and must carry the live conversation outside Postgres
+for the length of the session.
 """
 
 from onyx.db.enums import IncognitoRecordMode

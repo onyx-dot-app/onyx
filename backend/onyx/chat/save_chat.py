@@ -209,12 +209,14 @@ def save_chat_turn(
     )
     # Incognito keeps the row for tracking but never its text. Token count below
     # still comes from the real answer so usage and budgeting are unaffected.
-    assistant_message.message = sanitized_message_text if persist_content else ""
-    assistant_message.reasoning_tokens = (
-        (sanitize_string(reasoning_tokens) if reasoning_tokens else reasoning_tokens)
-        if persist_content
-        else None
-    )
+    if persist_content:
+        assistant_message.message = sanitized_message_text
+        assistant_message.reasoning_tokens = (
+            sanitize_string(reasoning_tokens) if reasoning_tokens else reasoning_tokens
+        )
+    else:
+        assistant_message.message = ""
+        assistant_message.reasoning_tokens = None
     assistant_message.is_clarification = is_clarification
 
     # Use pre-answer processing time (captured when MESSAGE_START was emitted)

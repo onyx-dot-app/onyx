@@ -79,7 +79,7 @@ from onyx.db.chat import (
 )
 from onyx.db.document_set import filter_document_set_names_by_user_access
 from onyx.db.engine.sql_engine import get_session_with_current_tenant
-from onyx.db.enums import HookPoint
+from onyx.db.enums import HookPoint, record_mode_persists_content
 from onyx.db.memory import get_memories
 from onyx.db.models import ChatMessage, ChatSession, Persona, User, UserFile
 from onyx.db.projects import get_user_files_from_project
@@ -745,12 +745,9 @@ def build_chat_turn(
     if parent_message.message_type == MessageType.USER:
         user_message = parent_message
     else:
-        # New message — run the Query Processing hook before saving to DB.
-        # Skipped on regeneration: the message already exists and was accepted previously.
-        # Skip for empty/whitespace-only messages — no meaningful query to process,
-        # and SendMessageRequest.message has no min_length guard.
-        # The hook ships the raw query and user email to a customer endpoint, so
-        # an incognito mode that suppresses external egress must not run it.
+        # Runs only for new, non-blank messages: regeneration already processed
+        # this text, and SendMessageRequest.message has no min_length guard. The
+        # hook ships the query and user email out, so egress-suppressing modes skip it.
         mode = chat_session.incognito_record_mode
         if message_text.strip() and (mode is None or mode.fires_hooks):
             hook_result = execute_hook(
@@ -778,7 +775,7 @@ def build_chat_turn(
         # Incognito keeps the row for tracking (id, tokens, structure) but its
         # text lives in the ephemeral store, never in Postgres. Token count is
         # from the real text so usage and budgeting are unaffected.
-        keeps_content = mode is None or mode.persists_content
+        keeps_content = record_mode_persists_content(mode)
         user_message = create_new_chat_message(
             chat_session_id=chat_session.id,
             parent_message=parent_message,
@@ -970,10 +967,10 @@ def build_chat_turn(
     simple_chat_history = chat_history_result.simple_messages
 
     # Incognito rows are content-free, so earlier turns come from the store and
-    # the current message's text is restored onto convert()'s blank-row shape.
-    # Regeneration uses the store as-is, since it already holds the turn.
+    # the current message's text is restored onto convert_chat_history()'s
+    # blank-row shape. Regeneration uses the store as-is, it already holds the turn.
     incognito_mode = chat_session.incognito_record_mode
-    if incognito_mode is not None and not incognito_mode.persists_content:
+    if not record_mode_persists_content(incognito_mode):
         stored_messages = load_incognito_context(chat_session.id).messages
         is_new_user_message = parent_message.message_type != MessageType.USER
         if (
@@ -1410,7 +1407,7 @@ def _run_models(
                 )
                 if msg is not None:
                     mode = setup.incognito_record_mode
-                    if mode is not None and not mode.persists_content:
+                    if not record_mode_persists_content(mode):
                         # Provider errors can echo prompt fragments, so the
                         # durable row gets a generic marker. The live stream
                         # still carries the real error to the user.
@@ -1983,7 +1980,7 @@ def llm_loop_completion_handle(
         incognito_mode = (
             incognito_session.incognito_record_mode if incognito_session else None
         )
-        keeps_content = incognito_mode is None or incognito_mode.persists_content
+        keeps_content = record_mode_persists_content(incognito_mode)
 
         save_chat_turn(
             message_text=final_answer,

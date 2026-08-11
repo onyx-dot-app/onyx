@@ -187,15 +187,13 @@ class ChatTurnSetup:
     session that built them. The ORM objects still reachable from this dataclass
     (``persona``, ``reserved_messages``) are detached after ``build_chat_turn``
     returns. Downstream code must only read column attributes that were
-    eager-loaded during setup — do NOT access lazy-loaded relationships
+    eager-loaded during setup. Do NOT access lazy-loaded relationships
     (e.g. ``setup.persona.tools[i].some_lazy_field``) or SQLAlchemy will raise
     ``DetachedInstanceError`` at runtime. Closures stored here count: bind the
     ids they need, never the rows.
 
-    Session and user-message identity are carried as plain scalars rather than
-    ORM rows: the turn only ever needs their ids and the session's project, so
-    holding the rows offered no benefit and exposed the whole lazy-relationship
-    surface to that hazard."""
+    Session and user-message identity are carried as plain scalars: the turn
+    needs only their ids and the session's project id."""
 
     new_msg_req: SendMessageRequest
     chat_session_id: UUID

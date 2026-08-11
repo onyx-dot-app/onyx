@@ -3,19 +3,13 @@
 USAGE_ONLY must carry the live conversation outside Postgres, so it lives in
 Redis: one value per session, a sliding TTL that starts over on every save,
 and explicit teardown when the chat closes. Keys are tenant-prefixed by the
-Redis client. Redis may evict or expire the value mid-session, and a reader
-must treat that as the session having ended, never as an empty first turn.
+Redis client. Redis may evict or expire the value mid-session: an expired
+value loads as empty and the turn continues without earlier context.
 
 Concurrent turns on one session are possible (the chat processing fence is a
 status marker, not admission control), so save is a compare-and-set on a
 version. A lost save means a concurrent writer won, and the caller must not
 retry with the history it loaded.
-
-The value is ``<version>:<messages json>``. The version lives outside the
-JSON so the CAS script and Python never need to agree on JSON parsing, only
-on a digits-before-colon rule simple enough to implement identically on both
-sides. Any value not matching it reads as version 0 everywhere, so the next
-save overwrites it.
 """
 
 from uuid import UUID
@@ -33,8 +27,8 @@ logger = setup_logger()
 # Sliding: restarted on every save, so context survives while the page stays
 # active and dies within the hour once it goes idle or closes uncleanly.
 INCOGNITO_CONTEXT_TTL_SECONDS = 3600
-# Raw-storage caps. Token budgeting trims context further at prompt build;
-# these only bound what one session may hold in Redis.
+# Raw-storage caps. Token budgeting trims context further at prompt build.
+# These only bound what one session may hold in Redis.
 _MAX_CONTEXT_MESSAGES = 200
 _MAX_CONTEXT_BYTES = 1_000_000
 # 15 digits stay exact in a Lua double, and turn counts never approach it.
@@ -46,8 +40,9 @@ _MESSAGES_ADAPTER: TypeAdapter[list[ChatMessageSimple]] = TypeAdapter(
     list[ChatMessageSimple]
 )
 
-# Applies only when the stored version equals ARGV[1]. The prefix match below
-# is the whole grammar and mirrors _parse_version_prefix exactly.
+# Stored value grammar: ``<version>:<messages json>``. Lua and Python agree
+# only on the digits-before-colon prefix, mirrored by _parse_version_prefix.
+# Non-matching values read as version 0. Applies when stored version == ARGV[1].
 _CAS_SCRIPT = """
 local cur = redis.call('GET', KEYS[1])
 local cur_version = 0
@@ -100,9 +95,9 @@ def _parse_version_prefix(raw: bytes) -> tuple[int, bytes | None]:
 def load_incognito_context(chat_session_id: UUID) -> IncognitoContext:
     """The session's context, messages oldest first.
 
-    Empty messages mean nothing was written, or the value expired, or its
-    body failed to parse. The caller distinguishes those from the request: a
-    non-first turn with no context means the session ended.
+    Empty messages mean nothing was written, the value expired, or its body
+    failed to parse. The turn proceeds with whatever loads: missing context
+    is degraded recall, never an error.
     """
     raw = get_redis_client().get(_context_key(chat_session_id))
     if raw is None:
@@ -133,8 +128,8 @@ def save_incognito_context(chat_session_id: UUID, context: IncognitoContext) -> 
     False means a concurrent turn wrote first and this save was discarded.
 
     Images are stripped: file bytes do not round-trip JSON, and incognito
-    attachments only live within their own turn until ephemeral file storage
-    exists. Oldest messages fall off past the count and byte caps.
+    attachments only live within their own turn. Oldest messages fall off
+    past the count and byte caps.
     """
     trimmed = [
         message.model_copy(update={"image_files": None, "image_token_count": 0})
@@ -148,8 +143,8 @@ def save_incognito_context(chat_session_id: UUID, context: IncognitoContext) -> 
 
     result = get_redis_client().eval(
         _CAS_SCRIPT,
-        [_context_key(chat_session_id)],
-        [
+        keys=[_context_key(chat_session_id)],
+        args=[
             str(context.version).encode(),
             payload,
             str(INCOGNITO_CONTEXT_TTL_SECONDS).encode(),
@@ -162,7 +157,7 @@ def append_incognito_message(chat_session_id: UUID, message: ChatMessageSimple) 
     """Append one message to the session's live context, tolerating failure.
 
     A lost compare-and-set (a concurrent turn) or a Redis blip must degrade the
-    stored context, never crash a turn that has already streamed to the user.
+    stored context, never fail the turn.
     Worst case the next turn is missing this message, which the load contract
     treats as ordinary missing context rather than an error.
     """

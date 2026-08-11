@@ -3069,8 +3069,8 @@ class ChatSession(Base):
     # This chat created by OnyxBot
     onyxbot_flow: Mapped[bool] = mapped_column(Boolean, default=False)
     # Contract: pinned at creation so a later setting change cannot alter a
-    # live session. NULL is an ordinary chat. An incognito session's row must
-    # stay metadata-only, and only FULL_HISTORY may also write chat_message rows.
+    # live session. NULL is an ordinary chat. The session row stays metadata-
+    # only, and only FULL_HISTORY writes conversation content into messages.
     incognito_record_mode: Mapped[IncognitoRecordMode | None] = mapped_column(
         Enum(
             IncognitoRecordMode,

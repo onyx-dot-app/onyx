@@ -74,7 +74,7 @@ class TestModeIdentity:
     def test_exactly_two_modes(self) -> None:
         """Record-nothing is unrepresentable: usage metering feeds token rate
         limits, so a mode that skips it would be a quota-evasion route. The
-        admin dropdown's disabled option is feature-off, never a session mode."""
+        feature-off state is the availability setting, never a session mode."""
         assert len(list(IncognitoRecordMode)) == 2
 
 

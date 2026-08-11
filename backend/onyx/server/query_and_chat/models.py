@@ -79,8 +79,8 @@ class ChatSessionCreationRequest(BaseModel):
     persona_id: int = 0
     description: str | None = None
     project_id: int | None = None
-    # Start the session incognito. Honored only where the ephemeral store is
-    # available, otherwise ignored so the session is an ordinary chat.
+    # Start the session incognito. Refused with an error when incognito is
+    # unavailable, never silently downgraded to an ordinary chat.
     incognito: bool = False
 
 

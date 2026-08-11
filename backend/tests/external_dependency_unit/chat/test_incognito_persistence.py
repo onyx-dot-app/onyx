@@ -107,7 +107,7 @@ def test_save_chat_turn_persists_text_by_default(
 
 
 def test_turn_round_trips_through_the_store() -> None:
-    """A turn appends the user message then the answer; the next turn loads both
+    """A turn appends the user message then the answer. The next turn loads both
     in order so the model sees its own context."""
     session_id = uuid4()
     try:

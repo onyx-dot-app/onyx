@@ -61,7 +61,7 @@ from onyx.db.chat import (
 )
 from onyx.db.chat_search import search_chat_sessions
 from onyx.db.engine.sql_engine import get_session, get_session_with_current_tenant
-from onyx.db.enums import Permission
+from onyx.db.enums import Permission, record_mode_persists_content
 from onyx.db.feedback import create_chat_message_feedback, remove_chat_message_feedback
 from onyx.db.llm import fetch_default_chat_naming_model
 from onyx.db.models import ChatMessage, ChatSessionSharedStatus, Persona, User
@@ -80,6 +80,7 @@ from onyx.llm.models import (
 )
 from onyx.llm.override_models import LLMOverride
 from onyx.secondary_llm_flows.chat_session_naming import (
+    DEFAULT_CHAT_SESSION_NAME,
     generate_chat_session_name,
     get_fallback_chat_session_name,
 )
@@ -549,11 +550,8 @@ def rename_chat_session(
         # Auto-naming derives a title from the conversation and writes it to the
         # session row. A non-persisting incognito mode keeps no content in
         # Postgres, so it keeps the fallback name and skips the LLM call.
-        mode = chat_session.incognito_record_mode
-        if mode is not None and not mode.persists_content:
-            return RenameChatSessionResponse(
-                new_name=get_fallback_chat_session_name([])
-            )
+        if not record_mode_persists_content(chat_session.incognito_record_mode):
+            return RenameChatSessionResponse(new_name=DEFAULT_CHAT_SESSION_NAME)
         full_history = create_chat_history_chain(
             chat_session_id=chat_session_id,
             db_session=db_session,
