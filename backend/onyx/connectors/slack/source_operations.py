@@ -21,6 +21,7 @@ from typing import Any, Dict, Optional, cast
 from urllib.error import URLError
 from urllib.request import Request
 
+from pydantic import BaseModel, ConfigDict
 from redis.lock import Lock as RedisLock
 from slack_sdk import WebClient
 from slack_sdk.errors import SlackApiError as SlackApiError  # Re-export, see below.
@@ -404,15 +405,30 @@ def _response_data(response: SlackResponse) -> dict[str, Any]:
     return cast(dict[str, Any], response.data)
 
 
+class SlackSourceOperationsConfig(BaseModel):
+    """The slice of Slack connector config the gateway consumes.
+
+    Validated from the raw ``connector_specific_config`` dict the gateway is
+    constructed with. The rest of the connector config (channels, regex flags,
+    ...) is the connector's business, not the gateway's, hence extra keys are
+    ignored.
+    """
+
+    model_config = ConfigDict(extra="ignore")
+
+    use_redis: bool = True
+
+
 class SlackSourceOperations(SourceOperations):
     """All Slack remote interactions, one method per Slack API method.
 
     Two clients, both owned here:
     - The coordinated client (default): redis-synchronized rate limiting shared
       across every worker touching this credential, plus connection-error and
-      rate-limit retry handlers. ``connector_specific_config["use_redis"] is
-      False`` downgrades it to a bare client with the connection-error handler
-      only (dev/test escape hatch, mirrors the old connector flag).
+      rate-limit retry handlers. ``use_redis=False`` in the config
+      (``SlackSourceOperationsConfig``) downgrades it to a bare client with the
+      connection-error handler only (dev/test escape hatch, mirrors the old
+      connector flag).
     - The fast client (``fast=True`` operations): bare, ``timeout=1``, no
       retries. For synchronous user-facing paths (settings validation) where the
       coordinated client may block behind a rate-limited indexing job's backoff
@@ -451,11 +467,14 @@ class SlackSourceOperations(SourceOperations):
                     )
         return self._cached_fast_client
 
+    def _config(self) -> SlackSourceOperationsConfig:
+        return SlackSourceOperationsConfig.model_validate(
+            self.connector_specific_config or {}
+        )
+
     def _build_client(self) -> WebClient:
-        config = self.connector_specific_config or {}
-        use_redis = bool(config.get("use_redis", True))
         token = self._bot_token()
-        if not use_redis:
+        if not self._config().use_redis:
             return WebClient(
                 token=token,
                 retry_handlers=[_connection_error_retry_handler(_MAX_RETRIES)],

@@ -14,6 +14,7 @@ from onyx.connectors.capabilities import CredentialCapability
 from onyx.connectors.slack.source_operations import (
     OnyxSlackWebClient,
     SlackSourceOperations,
+    SlackSourceOperationsConfig,
 )
 from onyx.connectors.source_operations import (
     OperationConsumes,
@@ -149,6 +150,19 @@ def test_use_redis_false_builds_a_bare_client() -> None:
 
     # Postcondition.
     assert not isinstance(client, OnyxSlackWebClient)
+
+
+def test_gateway_config_consumes_its_slice_of_the_connector_config() -> None:
+    """
+    Verifies the raw connector config validates into the typed gateway config:
+    connector-only keys are ignored and coordination defaults to on.
+    """
+    # Under test.
+    client = _gateway({"use_redis": False, "channels": ["general"]})._client()
+
+    # Postcondition.
+    assert not isinstance(client, OnyxSlackWebClient)
+    assert SlackSourceOperationsConfig().use_redis is True
 
 
 def test_clients_are_memoized_and_fast_client_is_separate() -> None:
