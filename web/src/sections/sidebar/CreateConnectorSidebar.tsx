@@ -1,6 +1,6 @@
 "use client";
 
-import { Fragment } from "react";
+import { Fragment, ReactNode } from "react";
 import { useFormContext } from "@/components/context/FormContext";
 import { credentialTemplates } from "@/lib/connectors/credentials";
 import { Content } from "@opal/layouts";
@@ -36,13 +36,32 @@ function SelectionIcon({ selected }: SelectionIconProps) {
   );
 }
 
+interface SidebarShellProps {
+  children?: ReactNode;
+}
+
+/**
+ * Sidebar chrome shared by the create-connector flows. Use it directly for a
+ * flow that has no steps to show; otherwise use the default export.
+ */
+export function SidebarShell({ children }: SidebarShellProps) {
+  const { isAdmin } = useUser();
+
+  return (
+    <StepSidebar
+      buttonName={isAdmin ? "Admin Page" : "Curator Page"}
+      buttonIcon={SvgSettings}
+      buttonHref="/admin/add-connector"
+    >
+      {children}
+    </StepSidebar>
+  );
+}
+
 export default function Sidebar() {
   const { formStep, setFormStep, connector, allowAdvanced, allowCreate } =
     useFormContext();
   const noCredential = credentialTemplates[connector] == null;
-
-  const { isAdmin } = useUser();
-  const buttonName = isAdmin ? "Admin Page" : "Curator Page";
 
   const settingSteps = [
     ...(!noCredential ? ["Credential"] : []),
@@ -51,11 +70,7 @@ export default function Sidebar() {
   ];
 
   return (
-    <StepSidebar
-      buttonName={buttonName}
-      buttonIcon={SvgSettings}
-      buttonHref="/admin/add-connector"
-    >
+    <SidebarShell>
       <div className="relative mx-2 flex flex-col">
         {settingSteps.map((step, index) => {
           // The form numbers steps absolutely (0 = Credential, 1 = Connector,
@@ -116,6 +131,6 @@ export default function Sidebar() {
           );
         })}
       </div>
-    </StepSidebar>
+    </SidebarShell>
   );
 }

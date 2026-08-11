@@ -20,6 +20,10 @@ export interface AdminChromeProps {
   children: React.ReactNode;
 }
 
+// The create-connector page (`/admin/connectors/<connector>`) renders its own
+// sidebar. Routes below it do not.
+const CUSTOM_SIDEBAR_ROUTE = /^\/admin\/connectors\/[^/]+\/?$/;
+
 // Lets a page render its own sidebar into the chrome as a sibling of the main
 // content column — i.e. *outside* the scrollable region — so it stays pinned
 // while the page scrolls. The page keeps ownership (and React context) of the
@@ -48,7 +52,9 @@ export default function AdminChrome({ children }: AdminChromeProps) {
 
   // Certain admin panels have their own custom sidebar.
   // For those pages, we skip rendering the default `AdminSidebar` and let those individual pages render their own.
-  const hasCustomSidebar = pathname.startsWith("/admin/connectors");
+  // The OAuth callback / finalize interstitials below the create-connector page
+  // render no sidebar of their own, so they keep the default one.
+  const hasCustomSidebar = CUSTOM_SIDEBAR_ROUTE.test(pathname);
 
   let content = children;
   if (isVectorDbRequiredRoute(pathname)) {
@@ -90,7 +96,9 @@ export default function AdminChrome({ children }: AdminChromeProps) {
         )}
 
         <RootLayout.App data-main-container>
-          {isMobile && !hasCustomSidebar && (
+          {/* On mobile every sidebar is an off-screen overlay, so the main
+              column always needs a control to bring it back. */}
+          {isMobile && (
             <RootLayout.Header>
               <div className="h-full flex items-center px-4 py-2">
                 <Button
