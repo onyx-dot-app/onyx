@@ -5,6 +5,13 @@ MANAGE_BOTS protects the Slack-bot admin endpoints in
 and the Discord-bot admin endpoints in
 ``backend/onyx/server/manage/discord_bot/api.py`` (router prefix
 ``/manage/admin/discord-bot``).
+
+Bogus ids are fine: the gate runs before the handler, and none of these routes
+call Slack or Discord.
+
+The Discord ``/config`` and ``/service-api-key`` routes are absent on purpose —
+``_check_bot_config_api_access`` raises INSUFFICIENT_PERMISSIONS when the bot is
+env- or Cloud-managed, which the matrix would read as a gate denial.
 """
 
 import os
@@ -29,10 +36,48 @@ pytestmark = pytest.mark.skipif(
 
 PERMISSION = Permission.MANAGE_BOTS.value
 
+_SLACK_CHANNEL_BODY: dict[str, Any] = {
+    "slack_bot_id": 999999,
+    "channel_name": "perm-test-channel",
+    "persona_id": None,
+    "document_sets": [],
+    "enable_auto_filters": False,
+    "answer_validity_check_enabled": False,
+    "questionmark_prefilter_enabled": False,
+    "respond_tag_only": False,
+    "respond_to_bots": False,
+    "is_ephemeral": False,
+    "respond_member_group_list": [],
+    "follow_up_tags": [],
+    "show_continue_in_web_ui": False,
+}
+
+# Both bot surfaces, every method — a GET-only list would miss a mutating route
+# losing its gate.
 ENDPOINTS: list[Endpoint] = [
+    # Slack — channel configs
     ("GET", "/manage/admin/slack-app/channel", None),
+    ("POST", "/manage/admin/slack-app/channel", _SLACK_CHANNEL_BODY),
+    ("PATCH", "/manage/admin/slack-app/channel/999999", _SLACK_CHANNEL_BODY),
+    ("DELETE", "/manage/admin/slack-app/channel/999999", None),
+    # Slack — bots
     ("GET", "/manage/admin/slack-app/bots", None),
+    ("GET", "/manage/admin/slack-app/bots/999999", None),
+    ("GET", "/manage/admin/slack-app/bots/999999/config", None),
+    ("PATCH", "/manage/admin/slack-app/bots/999999", {"name": "perm-test-bot"}),
+    ("DELETE", "/manage/admin/slack-app/bots/999999", None),
+    # Discord — guilds and their channels
     ("GET", "/manage/admin/discord-bot/guilds", None),
+    ("POST", "/manage/admin/discord-bot/guilds", None),
+    ("GET", "/manage/admin/discord-bot/guilds/999999", None),
+    ("PATCH", "/manage/admin/discord-bot/guilds/999999", {"is_active": False}),
+    ("DELETE", "/manage/admin/discord-bot/guilds/999999", None),
+    ("GET", "/manage/admin/discord-bot/guilds/999999/channels", None),
+    (
+        "PATCH",
+        "/manage/admin/discord-bot/guilds/999999/channels/999999",
+        {"is_active": False},
+    ),
 ]
 
 
