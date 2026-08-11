@@ -105,12 +105,11 @@ export function ProjectFolderButton({ project }: ProjectFolderButtonProps) {
   });
 
   function getFolderIcon(): React.FunctionComponent<IconProps> {
+    if (isHoveringIcon) return SvgFolderPartialOpen;
     if (open) {
       return SvgFolderOpen;
     } else {
-      return isHoveringIcon && allowHoverEffect
-        ? SvgFolderPartialOpen
-        : SvgFolder;
+      return SvgFolder;
     }
   }
 
@@ -192,14 +191,17 @@ export function ProjectFolderButton({ project }: ProjectFolderButtonProps) {
         <Popover.Anchor>
           <SidebarTab
             icon={() => (
-              <Button
+              <div
+                className="p-0.5 cursor-pointer"
                 onMouseEnter={() => handleIconHover(true)}
                 onMouseLeave={() => handleIconHover(false)}
-                icon={getFolderIcon()}
-                prominence="tertiary"
-                size="sm"
                 onClick={noProp(handleIconClick)}
-              />
+              >
+                {React.createElement(getFolderIcon(), {
+                  size: 16,
+                  className: "text-text-03",
+                })}
+              </div>
             )}
             // Folded, the project's chats are hidden — and a project chat
             // appears nowhere else in the sidebar (Recents excludes them), so
