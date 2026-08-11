@@ -1,13 +1,14 @@
-"""Module with custom fields processing functions"""
+"""Shared helpers for the Jira connector"""
 
 import os
-from typing import Any, List
+from typing import Any
 from urllib.parse import urlparse
 
 from jira import JIRA
-from jira.resources import CustomFieldOption, Issue, User
+from jira.resources import Issue
 
 from onyx.connectors.cross_connector_utils.miscellaneous_utils import scoped_url
+from onyx.connectors.jira.adf import extract_text_from_adf
 from onyx.connectors.models import BasicExpertInfo
 from onyx.utils.logger import setup_logger
 
@@ -54,25 +55,6 @@ def best_effort_get_field_from_issue(jira_issue: Issue, field: str) -> Any:
         return jira_issue.raw["fields"][field]
     except Exception:
         return None
-
-
-def extract_text_from_adf(adf: dict | None) -> str:
-    """Extracts plain text from Atlassian Document Format:
-    https://developer.atlassian.com/cloud/jira/platform/apis/document/structure/
-    """
-    texts: list[str] = []
-
-    def _extract(node: dict) -> None:
-        if node.get("type") == "text":
-            text = node.get("text", "")
-            if text:
-                texts.append(text)
-        for child in node.get("content", []):
-            _extract(child)
-
-    if adf is not None:
-        _extract(adf)
-    return " ".join(texts)
 
 
 def build_jira_url(jira_base_url: str, issue_key: str) -> str:
@@ -156,83 +138,3 @@ def get_jira_project_key_from_issue(issue: Issue) -> str | None:
         return None
 
     return issue.fields.project.key
-
-
-class CustomFieldExtractor:
-    @staticmethod
-    def _process_custom_field_value(value: Any) -> str:
-        """
-        Process a custom field value to a string
-        """
-        try:
-            if isinstance(value, str):
-                return value
-            elif isinstance(value, CustomFieldOption):
-                return value.value
-            elif isinstance(value, User):
-                return value.displayName
-            elif isinstance(value, List):
-                return " ".join(
-                    [CustomFieldExtractor._process_custom_field_value(v) for v in value]
-                )
-            else:
-                return str(value)
-        except Exception as e:
-            logger.error("Error processing custom field value %s: %s", value, e)
-            return ""
-
-    @staticmethod
-    def get_issue_custom_fields(
-        jira: Issue, custom_fields: dict, max_value_length: int = 250
-    ) -> dict:
-        """
-        Process all custom fields of an issue to a dictionary of strings
-        :param jira: jira_issue, bug or similar
-        :param custom_fields: custom fields dictionary
-        :param max_value_length: maximum length of the value to be processed, if exceeded, it will be truncated
-        """
-
-        issue_custom_fields = {
-            custom_fields[key]: value
-            for key, value in jira.fields.__dict__.items()
-            if value and key in custom_fields.keys()
-        }
-
-        processed_fields = {}
-
-        if issue_custom_fields:
-            for key, value in issue_custom_fields.items():
-                processed = CustomFieldExtractor._process_custom_field_value(value)
-                # We need max length  parameter, because there are some plugins that often has very long description
-                # and there is just a technical information so we just avoid long values
-                if len(processed) < max_value_length:
-                    processed_fields[key] = processed
-
-        return processed_fields
-
-    @staticmethod
-    def get_all_custom_fields(jira_client: JIRA) -> dict:
-        """Get all custom fields from Jira"""
-        fields = jira_client.fields()
-        fields_dct = {
-            field["id"]: field["name"] for field in fields if field["custom"] is True
-        }
-        return fields_dct
-
-
-class CommonFieldExtractor:
-    @staticmethod
-    def get_issue_common_fields(jira: Issue) -> dict:
-        return {
-            "Priority": jira.fields.priority.name if jira.fields.priority else None,
-            "Reporter": (
-                jira.fields.reporter.displayName if jira.fields.reporter else None
-            ),
-            "Assignee": (
-                jira.fields.assignee.displayName if jira.fields.assignee else None
-            ),
-            "Status": jira.fields.status.name if jira.fields.status else None,
-            "Resolution": (
-                jira.fields.resolution.name if jira.fields.resolution else None
-            ),
-        }

@@ -95,6 +95,14 @@ def test_jira_connector_basic_scoped(
     _test_jira_connector_basic(jira_connector_scoped)
 
 
+def _normalize_whitespace(text: str | None) -> str:
+    """Collapse whitespace so the assertion covers the content of a description
+    without depending on how the remote issue happens to be split into ADF
+    blocks (a paragraph break renders as a newline, a line wrap as a space).
+    """
+    return " ".join((text or "").split())
+
+
 def _test_jira_connector_basic(jira_connector: JiraConnector) -> None:
     docs = load_all_from_connector(
         connector=jira_connector,
@@ -144,8 +152,8 @@ def _test_jira_connector_basic(jira_connector: JiraConnector) -> None:
     assert len(story.sections) == 1
     section = story.sections[0]
     assert (
-        section.text
-        == "This is a critical request for super-human answer quality in Onyx! We need magic!\n"
+        _normalize_whitespace(section.text)
+        == "This is a critical request for super-human answer quality in Onyx! We need magic!"
     )
     assert section.link == "https://danswerai.atlassian.net/browse/AS-3"
 
@@ -174,7 +182,7 @@ def _test_jira_connector_basic(jira_connector: JiraConnector) -> None:
 
     assert len(epic.sections) == 1
     section = epic.sections[0]
-    assert section.text == "example_text\n"
+    assert _normalize_whitespace(section.text) == "example_text"
     assert section.link == "https://danswerai.atlassian.net/browse/AS-4"
 
 
