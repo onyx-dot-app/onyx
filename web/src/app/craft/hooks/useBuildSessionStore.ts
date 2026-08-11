@@ -1506,6 +1506,11 @@ export const useBuildSessionStore = create<BuildSessionStore>()((set, get) => ({
 
     // Set as current and mark as loading
     setCurrentSession(sessionId);
+    const skillsStaleRevision =
+      get().sessions.get(sessionId)!.skillsStaleRevision;
+    const canApplySkillsStale = () =>
+      get().sessions.get(sessionId)?.skillsStaleRevision ===
+      skillsStaleRevision;
 
     try {
       // First fetch session to check sandbox status
@@ -1611,7 +1616,10 @@ export const useBuildSessionStore = create<BuildSessionStore>()((set, get) => ({
         sandbox,
         agentProvider: sessionData.agent_provider,
         agentModel: sessionData.agent_model,
-        skillsStale: sessionData.skills_stale,
+        ...(!needsRestore &&
+          canApplySkillsStale() && {
+            skillsStale: sessionData.skills_stale,
+          }),
         origin: sessionData.origin,
         activeTurnId: resolvedActiveTurnId,
         activeTurnIndex: resolvedActiveTurnIndex,
@@ -1647,7 +1655,9 @@ export const useBuildSessionStore = create<BuildSessionStore>()((set, get) => ({
           sandbox: sessionData.sandbox
             ? { ...sessionData.sandbox, status: "restoring" }
             : sessionData.sandbox,
-          skillsStale: sessionData.skills_stale,
+          ...(canApplySkillsStale() && {
+            skillsStale: sessionData.skills_stale,
+          }),
           webappNeedsRefresh:
             (get().sessions.get(sessionId)?.webappNeedsRefresh || 0) + 1,
         });

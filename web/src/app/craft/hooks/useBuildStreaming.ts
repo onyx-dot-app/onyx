@@ -957,6 +957,7 @@ export function useBuildStreaming() {
     ): Promise<void> => {
       const currentState = useBuildSessionStore.getState();
       const existingSession = currentState.sessions.get(sessionId);
+      const skillsStaleRevision = existingSession?.skillsStaleRevision;
 
       if (existingSession?.abortController) {
         existingSession.abortController.abort();
@@ -986,10 +987,16 @@ export function useBuildStreaming() {
           model,
           attachments
         );
+        const currentSession = useBuildSessionStore
+          .getState()
+          .sessions.get(sessionId);
         updateSessionData(sessionId, {
           activeTurnId: turn.turn_id,
           activeTurnIndex: turn.turn_index,
           activeTurnLocalOwner: true,
+          ...(currentSession?.skillsStaleRevision === skillsStaleRevision && {
+            skillsStale: false,
+          }),
         });
 
         await streamTurnEvents(sessionId, turn.turn_id, controller.signal);

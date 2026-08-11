@@ -499,6 +499,35 @@ describe("loadSession restore status", () => {
     ).toBe(true);
   });
 
+  it("rejects a load fetched before a newer stale-skill update", async () => {
+    let resolveMessages: (value: unknown[]) => void = () => {};
+    mockedApi.fetchSession.mockResolvedValue({
+      ...runningSession(),
+      skills_stale: true,
+    } as never);
+    mockedApi.fetchMessages.mockReturnValue(
+      new Promise((resolve) => {
+        resolveMessages = resolve;
+      }) as never
+    );
+
+    const load = useBuildSessionStore
+      .getState()
+      .loadSession(SESSION_ID, { force: true });
+    await Promise.resolve();
+    expect(mockedApi.fetchMessages).toHaveBeenCalled();
+
+    useBuildSessionStore
+      .getState()
+      .updateSessionData(SESSION_ID, { skillsStale: false });
+    resolveMessages([]);
+    await load;
+
+    expect(
+      useBuildSessionStore.getState().sessions.get(SESSION_ID)?.skillsStale
+    ).toBe(false);
+  });
+
   it("clears stale turn metadata when active turn lookup says no turn is running", async () => {
     mockedApi.fetchSession.mockResolvedValue(runningSession() as never);
     mockedApi.fetchActiveTurn.mockResolvedValue(null as never);
