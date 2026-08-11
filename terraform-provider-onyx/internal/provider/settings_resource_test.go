@@ -77,14 +77,20 @@ func snapshotSettingsFields(t *testing.T) func() {
 	autoScroll := before.AutoScroll
 
 	return func() {
-		current, err := c.GetSettings(context.Background())
-		if err != nil {
-			t.Logf("settings restore skipped: %v", err)
-			return
+		// PATCH merges only the sent fields, so restoring the two touched
+		// fields cannot disturb anything else. JSON null restores "unset".
+		var companyNameValue, autoScrollValue any
+		if companyName != nil {
+			companyNameValue = *companyName
 		}
-		current.CompanyName = companyName
-		current.AutoScroll = autoScroll
-		if err := c.PutSettings(context.Background(), *current); err != nil {
+		if autoScroll != nil {
+			autoScrollValue = *autoScroll
+		}
+		err := c.PatchSettings(context.Background(), map[string]any{
+			"company_name": companyNameValue,
+			"auto_scroll":  autoScrollValue,
+		})
+		if err != nil {
 			t.Logf("settings restore failed: %v", err)
 		}
 	}

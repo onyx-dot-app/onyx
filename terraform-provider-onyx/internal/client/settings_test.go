@@ -64,43 +64,34 @@ func TestGetSettings(t *testing.T) {
 	}
 }
 
-func TestPutSettingsSendsFullObject(t *testing.T) {
+func TestPatchSettingsSendsOnlyManagedFields(t *testing.T) {
 	c, captured := newTestServer(t, http.StatusOK, `null`)
 
-	// Round-trip: what GET returned must be re-sendable verbatim, since the
-	// backend PUT resets any omitted field to its Pydantic default.
-	getClient, _ := newTestServer(t, http.StatusOK, userSettingsJSON)
-	settings, err := getClient.GetSettings(context.Background())
+	// PATCH /admin/settings merges only the fields present in the body onto
+	// the stored settings. A sparse body is the whole point: fields the caller
+	// does not manage (including license-derived ones and fields added to the
+	// backend later) must be absent so the server leaves them untouched.
+	err := c.PatchSettings(context.Background(), map[string]any{
+		"company_name":        "ACME",
+		"invite_only_enabled": true,
+	})
 	if err != nil {
 		t.Fatal(err)
 	}
-
-	if err := c.PutSettings(context.Background(), *settings); err != nil {
-		t.Fatal(err)
-	}
-	if captured.Method != http.MethodPut || captured.Path != "/admin/settings" {
-		t.Errorf("got %s %s, want PUT /admin/settings", captured.Method, captured.Path)
+	if captured.Method != http.MethodPatch || captured.Path != "/admin/settings" {
+		t.Errorf("got %s %s, want PATCH /admin/settings", captured.Method, captured.Path)
 	}
 
 	body := bodyAsMap(t, captured.Body)
-	for _, field := range []string{
-		"maximum_chat_retention_days", "company_name", "company_description",
-		"gpu_enabled", "application_status", "anonymous_user_enabled",
-		"invite_only_enabled", "deep_research_enabled", "multi_model_chat_enabled",
-		"search_ui_enabled", "auto_detect_search_filters", "ee_features_enabled",
-		"tier", "temperature_override_enabled", "auto_scroll", "query_history_type",
-		"hide_query_history_from_admin_panel", "image_extraction_and_analysis_enabled",
-		"image_analysis_max_size_mb", "user_knowledge_enabled",
-		"user_file_max_upload_size_mb", "file_token_count_threshold_k",
-		"show_extra_connectors", "disable_default_assistant",
-		"craft_default_enabled", "craft_instructions", "seat_count", "used_seats",
-		"opensearch_indexing_enabled",
-	} {
-		if _, present := body[field]; !present {
-			t.Errorf("field %q missing from PUT body — omitted fields get reset server-side", field)
-		}
+	if len(body) != 2 {
+		t.Errorf("body must contain exactly the managed fields, got: %s", captured.Body)
 	}
-	if body["tier"] != "enterprise" || body["seat_count"] != float64(50) {
-		t.Errorf("license-derived fields must round-trip verbatim: %s", captured.Body)
+	if body["company_name"] != "ACME" || body["invite_only_enabled"] != true {
+		t.Errorf("unexpected body: %s", captured.Body)
+	}
+	for _, field := range []string{"tier", "ee_features_enabled", "gpu_enabled", "application_status"} {
+		if _, present := body[field]; present {
+			t.Errorf("read-only field %q must not be sent: %s", field, captured.Body)
+		}
 	}
 }

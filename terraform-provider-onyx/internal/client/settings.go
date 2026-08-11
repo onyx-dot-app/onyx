@@ -5,17 +5,12 @@ import (
 	"net/http"
 )
 
-// Settings mirrors Settings (backend/onyx/server/settings/models.py).
-//
-// PUT /admin/settings is a whole-object replace: any field left at its Go
-// zero/nil value is written as-is server-side (only the craft_* fields are
-// merged from the existing settings when omitted). Callers must therefore
-// always GET first and overlay changes onto the fresh response — never send
-// a partially-populated Settings.
+// Settings mirrors Settings (backend/onyx/server/settings/models.py). It is
+// used to decode GET responses only; writes go through PatchSettings with a
+// sparse body, so new backend fields can never be reset by this client.
 //
 // tier, ee_features_enabled, seat_count, used_seats, gpu_enabled and
-// application_status are license/deployment-derived; they are round-tripped
-// verbatim from GET so a PUT does not clobber them.
+// application_status are license/deployment-derived and read-only.
 type Settings struct {
 	MaximumChatRetentionDays          *float64 `json:"maximum_chat_retention_days"`
 	CompanyName                       *string  `json:"company_name"`
@@ -58,7 +53,10 @@ func (c *Client) GetSettings(ctx context.Context) (*Settings, error) {
 	return &settings, nil
 }
 
-// PutSettings replaces the workspace settings with the given object.
-func (c *Client) PutSettings(ctx context.Context, settings Settings) error {
-	return c.doJSON(ctx, http.MethodPut, "/admin/settings", settings, nil)
+// PatchSettings applies a partial update. PATCH /admin/settings merges only
+// the fields present in the body onto the stored settings (keyed off
+// Pydantic's model_fields_set), so callers send exactly the fields they
+// manage and nothing else.
+func (c *Client) PatchSettings(ctx context.Context, fields map[string]any) error {
+	return c.doJSON(ctx, http.MethodPatch, "/admin/settings", fields, nil)
 }

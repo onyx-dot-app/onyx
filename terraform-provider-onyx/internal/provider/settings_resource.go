@@ -213,79 +213,83 @@ func (r *settingsResource) Configure(_ context.Context, req resource.ConfigureRe
 	r.client = clientFromResourceConfigure(req, resp)
 }
 
-// overlay writes every non-null plan attribute onto a freshly-fetched
-// Settings, leaving everything else (including license-derived fields) as the
-// server returned it. This is what makes the whole-object PUT safe.
-func overlaySettings(plan settingsResourceModel, fresh *client.Settings) {
+// patchBodyFromPlan builds the sparse PATCH body: exactly the non-null
+// (managed) plan attributes. The backend merges only the fields present in
+// the body onto the stored settings, so unmanaged fields — including
+// license-derived ones and fields added to the backend later — are never
+// touched.
+func patchBodyFromPlan(plan settingsResourceModel) map[string]any {
+	body := map[string]any{}
 	if !plan.MaximumChatRetentionDays.IsNull() {
-		fresh.MaximumChatRetentionDays = plan.MaximumChatRetentionDays.ValueFloat64Pointer()
+		body["maximum_chat_retention_days"] = plan.MaximumChatRetentionDays.ValueFloat64()
 	}
 	if !plan.CompanyName.IsNull() {
-		fresh.CompanyName = plan.CompanyName.ValueStringPointer()
+		body["company_name"] = plan.CompanyName.ValueString()
 	}
 	if !plan.CompanyDescription.IsNull() {
-		fresh.CompanyDescription = plan.CompanyDescription.ValueStringPointer()
+		body["company_description"] = plan.CompanyDescription.ValueString()
 	}
 	if !plan.AnonymousUserEnabled.IsNull() {
-		fresh.AnonymousUserEnabled = plan.AnonymousUserEnabled.ValueBoolPointer()
+		body["anonymous_user_enabled"] = plan.AnonymousUserEnabled.ValueBool()
 	}
 	if !plan.InviteOnlyEnabled.IsNull() {
-		fresh.InviteOnlyEnabled = plan.InviteOnlyEnabled.ValueBool()
+		body["invite_only_enabled"] = plan.InviteOnlyEnabled.ValueBool()
 	}
 	if !plan.DeepResearchEnabled.IsNull() {
-		fresh.DeepResearchEnabled = plan.DeepResearchEnabled.ValueBoolPointer()
+		body["deep_research_enabled"] = plan.DeepResearchEnabled.ValueBool()
 	}
 	if !plan.MultiModelChatEnabled.IsNull() {
-		fresh.MultiModelChatEnabled = plan.MultiModelChatEnabled.ValueBoolPointer()
+		body["multi_model_chat_enabled"] = plan.MultiModelChatEnabled.ValueBool()
 	}
 	if !plan.SearchUIEnabled.IsNull() {
-		fresh.SearchUIEnabled = plan.SearchUIEnabled.ValueBoolPointer()
+		body["search_ui_enabled"] = plan.SearchUIEnabled.ValueBool()
 	}
 	if !plan.AutoDetectSearchFilters.IsNull() {
-		fresh.AutoDetectSearchFilters = plan.AutoDetectSearchFilters.ValueBoolPointer()
+		body["auto_detect_search_filters"] = plan.AutoDetectSearchFilters.ValueBool()
 	}
 	if !plan.TemperatureOverrideEnabled.IsNull() {
-		fresh.TemperatureOverrideEnabled = plan.TemperatureOverrideEnabled.ValueBoolPointer()
+		body["temperature_override_enabled"] = plan.TemperatureOverrideEnabled.ValueBool()
 	}
 	if !plan.AutoScroll.IsNull() {
-		fresh.AutoScroll = plan.AutoScroll.ValueBoolPointer()
+		body["auto_scroll"] = plan.AutoScroll.ValueBool()
 	}
 	if !plan.QueryHistoryType.IsNull() {
-		fresh.QueryHistoryType = plan.QueryHistoryType.ValueStringPointer()
+		body["query_history_type"] = plan.QueryHistoryType.ValueString()
 	}
 	if !plan.HideQueryHistoryFromAdminPanel.IsNull() {
-		fresh.HideQueryHistoryFromAdminPanel = plan.HideQueryHistoryFromAdminPanel.ValueBool()
+		body["hide_query_history_from_admin_panel"] = plan.HideQueryHistoryFromAdminPanel.ValueBool()
 	}
 	if !plan.ImageExtractionAndAnalysisEnabled.IsNull() {
-		fresh.ImageExtractionAndAnalysisEnabled = plan.ImageExtractionAndAnalysisEnabled.ValueBoolPointer()
+		body["image_extraction_and_analysis_enabled"] = plan.ImageExtractionAndAnalysisEnabled.ValueBool()
 	}
 	if !plan.ImageAnalysisMaxSizeMB.IsNull() {
-		fresh.ImageAnalysisMaxSizeMB = plan.ImageAnalysisMaxSizeMB.ValueInt64Pointer()
+		body["image_analysis_max_size_mb"] = plan.ImageAnalysisMaxSizeMB.ValueInt64()
 	}
 	if !plan.UserKnowledgeEnabled.IsNull() {
-		fresh.UserKnowledgeEnabled = plan.UserKnowledgeEnabled.ValueBoolPointer()
+		body["user_knowledge_enabled"] = plan.UserKnowledgeEnabled.ValueBool()
 	}
 	if !plan.UserFileMaxUploadSizeMB.IsNull() {
-		fresh.UserFileMaxUploadSizeMB = plan.UserFileMaxUploadSizeMB.ValueInt64Pointer()
+		body["user_file_max_upload_size_mb"] = plan.UserFileMaxUploadSizeMB.ValueInt64()
 	}
 	if !plan.FileTokenCountThresholdK.IsNull() {
-		fresh.FileTokenCountThresholdK = plan.FileTokenCountThresholdK.ValueInt64Pointer()
+		body["file_token_count_threshold_k"] = plan.FileTokenCountThresholdK.ValueInt64()
 	}
 	if !plan.ShowExtraConnectors.IsNull() {
-		fresh.ShowExtraConnectors = plan.ShowExtraConnectors.ValueBoolPointer()
+		body["show_extra_connectors"] = plan.ShowExtraConnectors.ValueBool()
 	}
 	if !plan.DisableDefaultAssistant.IsNull() {
-		fresh.DisableDefaultAssistant = plan.DisableDefaultAssistant.ValueBoolPointer()
+		body["disable_default_assistant"] = plan.DisableDefaultAssistant.ValueBool()
 	}
 	if !plan.CraftDefaultEnabled.IsNull() {
-		fresh.CraftDefaultEnabled = plan.CraftDefaultEnabled.ValueBool()
+		body["craft_default_enabled"] = plan.CraftDefaultEnabled.ValueBool()
 	}
 	if !plan.CraftInstructions.IsNull() {
-		fresh.CraftInstructions = plan.CraftInstructions.ValueStringPointer()
+		body["craft_instructions"] = plan.CraftInstructions.ValueString()
 	}
 	if !plan.OpenSearchIndexingEnabled.IsNull() {
-		fresh.OpenSearchIndexingEnabled = plan.OpenSearchIndexingEnabled.ValueBool()
+		body["opensearch_indexing_enabled"] = plan.OpenSearchIndexingEnabled.ValueBool()
 	}
+	return body
 }
 
 // refreshFromServer updates a model's attributes from the server: managed
@@ -370,16 +374,13 @@ func refreshSettingsModel(model *settingsResourceModel, server *client.Settings)
 	model.UsedSeats = types.Int64PointerValue(server.UsedSeats)
 }
 
-// apply implements both Create and Update: read-modify-write with the plan
-// overlaid on a fresh GET, then a final GET to populate computed attributes.
+// apply implements both Create and Update: PATCH the managed attributes,
+// then GET to populate computed attributes and confirm the applied values.
 func (r *settingsResource) apply(ctx context.Context, plan settingsResourceModel) (settingsResourceModel, error) {
-	fresh, err := r.client.GetSettings(ctx)
-	if err != nil {
-		return plan, err
-	}
-	overlaySettings(plan, fresh)
-	if err := r.client.PutSettings(ctx, *fresh); err != nil {
-		return plan, err
+	if body := patchBodyFromPlan(plan); len(body) > 0 {
+		if err := r.client.PatchSettings(ctx, body); err != nil {
+			return plan, err
+		}
 	}
 
 	applied, err := r.client.GetSettings(ctx)
