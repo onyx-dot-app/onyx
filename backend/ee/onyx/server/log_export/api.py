@@ -8,10 +8,7 @@ from fastapi import APIRouter, Depends
 from fastapi.responses import StreamingResponse
 from starlette.background import BackgroundTask
 
-from ee.onyx.server.log_export.collection import (
-    build_log_zip,
-    get_default_log_directories,
-)
+from ee.onyx.server.log_export.collection import get_default_log_directories
 from ee.onyx.server.log_export.models import (
     LogExportManifest,
     LogExportStartResponse,
@@ -46,24 +43,18 @@ logger = setup_logger()
 
 router = APIRouter()
 
-API_SERVER_SCOPE_NOTE = (
-    "Scope: this export contains log files from the api_server container only. "
-    "Logs from background workers and other services are not included; use "
-    "'docker logs <container>' or 'kubectl logs <pod>' to retrieve those."
-)
-
 
 class _ExpiringLock:
     """Non-blocking lock whose hold expires after a TTL.
 
-    Guards against leaked holds: release hooks tied to the response lifecycle
-    are skipped by Starlette on some exit paths (a body iterator raising, or
-    client disconnects under ASGI >= 2.4), so a plain ``threading.Lock`` could
-    stay held until process restart. Expiry bounds any such leak.
+    Guards against leaked holds: when no code path releases (nobody polls the
+    status endpoint, or the poll lands on another replica), a plain
+    ``threading.Lock`` would stay held until process restart. Expiry bounds any
+    such leak.
 
     ``try_acquire`` returns a token; ``release`` is a no-op unless the token
-    belongs to the current hold, so a stale holder (or a duplicate call from a
-    second cleanup hook) can never release a successor's hold.
+    belongs to the current hold, so a stale holder (or a duplicate release) can
+    never free a successor's hold.
     """
 
     def __init__(
@@ -95,79 +86,6 @@ class _ExpiringLock:
         """Returns whether an unexpired hold exists."""
         with self._mutex:
             return self._held_until is not None and self._clock() < self._held_until
-
-
-# Serializes exports process-wide: each one burns seconds of CPU on compression
-# and holds a temp file until streaming ends, and concurrent exports of the same
-# logs are pure waste. The TTL comfortably exceeds build time plus a slow
-# streaming session (nginx's ``proxy_read_timeout`` defaults to 300s of idle).
-_EXPORT_LOCK_TTL_SECONDS = 15 * 60
-_EXPORT_LOCK = _ExpiringLock(ttl_seconds=_EXPORT_LOCK_TTL_SECONDS)
-
-
-@router.get("/admin/log-export/download")
-def download_api_server_logs(
-    _: User = Depends(require_permission(Permission.FULL_ADMIN_PANEL_ACCESS)),
-) -> StreamingResponse:
-    if MULTI_TENANT:
-        raise OnyxError(
-            OnyxErrorCode.SINGLE_TENANT_ONLY,
-            "Log export is only available on self-hosted deployments.",
-        )
-
-    token = _EXPORT_LOCK.try_acquire()
-    if token is None:
-        raise OnyxError(
-            OnyxErrorCode.RATE_LIMITED,
-            "A log export is already in progress. Try again once it completes.",
-        )
-
-    handed_off = False
-    try:
-        # The archive is fully materialized before streaming, so its exact size
-        # is known and an explicit Content-Length can be sent.
-        built = build_log_zip(get_default_log_directories(), API_SERVER_SCOPE_NOTE)
-        zip_buffer = built.zip_buffer
-
-        def cleanup() -> None:
-            # Wired to both the generator's ``finally`` and the response
-            # background task because neither alone covers every exit path:
-            # Starlette skips background tasks when the body iterator raises
-            # (and on client disconnects under ASGI >= 2.4), while a generator
-            # ``finally`` never runs if the generator is closed before its first
-            # iteration. Double invocation is safe: ``close`` tolerates repeats
-            # and ``release`` ignores stale or duplicate tokens.
-            try:
-                zip_buffer.close()
-            finally:
-                _EXPORT_LOCK.release(token)
-
-        def iter_zip() -> Generator[bytes, None, None]:
-            try:
-                while chunk := zip_buffer.read(STANDARD_CHUNK_SIZE):
-                    yield chunk
-            finally:
-                cleanup()
-
-        timestamp = datetime.now(tz=timezone.utc).strftime("%Y-%m-%d_%H-%M-%S")
-        response = StreamingResponse(
-            content=iter_zip(),
-            media_type="application/zip",
-            headers={
-                "Content-Disposition": (
-                    f"attachment; filename=onyx_api_server_logs_{timestamp}.zip"
-                ),
-                "Content-Length": str(built.size_bytes),
-            },
-            background=BackgroundTask(cleanup),
-        )
-        handed_off = True
-        return response
-    finally:
-        # Once the response exists, its cleanup hooks own the release; until
-        # then, any exit (including BaseException) releases here.
-        if not handed_off:
-            _EXPORT_LOCK.release(token)
 
 
 API_SERVER_WORKER_NAME = "api_server"
@@ -302,8 +220,6 @@ def start_log_export(
             _ASYNC_EXPORT_LOCK.release(token)
 
 
-# Declared after the sync ``/admin/log-export/download`` route above so that
-# literal path keeps matching before ``{export_id}``.
 @router.get("/admin/log-export/{export_id}")
 def get_log_export_status(
     export_id: str,
@@ -352,8 +268,11 @@ def download_log_export(
 
     def cleanup() -> None:
         # Wired to both the generator's ``finally`` and the response background
-        # task, matching ``download_api_server_logs``; ``close`` tolerates
-        # repeats. No lock is involved here.
+        # task because neither alone covers every exit path: Starlette skips
+        # background tasks when the body iterator raises (and on client
+        # disconnects under ASGI >= 2.4), while a generator ``finally`` never
+        # runs if the generator is closed before its first iteration. Double
+        # invocation is safe: ``close`` tolerates repeats.
         zip_buffer.close()
 
     def iter_zip() -> Generator[bytes, None, None]:
