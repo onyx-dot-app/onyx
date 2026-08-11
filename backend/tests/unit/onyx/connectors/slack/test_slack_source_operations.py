@@ -80,6 +80,9 @@ def test_permission_class_variants_are_pinned() -> None:
     specs = SlackSourceOperations.operation_specs()
 
     # Postcondition.
+    # Deliberately asserted as strings: call sites use ``SlackChannelVariant``,
+    # but these are the wire-level names the spec stores and the coverage
+    # harness counts.
     for name in ("list_channels", "fetch_channel_history", "fetch_thread_replies"):
         assert specs[name].variants == ("public", "private")
     # ``conversations.info`` exists to discover the channel's privacy, so it

@@ -15,6 +15,7 @@ import random
 import threading
 import time
 from collections.abc import Callable, Generator
+from enum import Enum
 from http.client import IncompleteRead, RemoteDisconnected
 from typing import Any, Dict, Optional, cast
 from urllib.error import URLError
@@ -66,6 +67,18 @@ _MAX_RETRIES = 7  # Arbitrarily selected.
 _FAST_TIMEOUT = 1
 
 _TEMPORARILY_UNTESTED = "Not yet tested: checks land in the Slack capability checks PR."
+
+
+class SlackChannelVariant(str, Enum):
+    """Permission class of a channel-scoped operation call.
+
+    Reading private channels needs the ``groups:*`` scope family where public
+    channels need ``channels:*``; the variant classifies each call so coverage
+    is counted per permission class.
+    """
+
+    PUBLIC = "public"
+    PRIVATE = "private"
 
 
 class OnyxRedisSlackRetryHandler(BaseRetryHandler):
@@ -476,13 +489,13 @@ class SlackSourceOperations(SourceOperations):
             CredentialCapability.DOC_PERMISSION_SYNC,
         },
         consumes=OperationConsumes.CREDENTIAL,
-        variants=("public", "private"),
+        variants=(SlackChannelVariant.PUBLIC, SlackChannelVariant.PRIVATE),
         untested=_TEMPORARILY_UNTESTED,
     )
     def list_channels(
         self,
         *,
-        variant: str,
+        variant: SlackChannelVariant,
         channel_types: list[str],
         exclude_archived: bool | None = None,
         team_id: str | None = None,
@@ -548,13 +561,13 @@ class SlackSourceOperations(SourceOperations):
     @source_operation(
         capabilities={CredentialCapability.INDEXING},
         consumes=OperationConsumes.CREDENTIAL,
-        variants=("public", "private"),
+        variants=(SlackChannelVariant.PUBLIC, SlackChannelVariant.PRIVATE),
         untested=_TEMPORARILY_UNTESTED,
     )
     def fetch_channel_history(
         self,
         *,
-        variant: str,
+        variant: SlackChannelVariant,
         channel_id: str,
         oldest: str | None = None,
         latest: str | None = None,
@@ -577,11 +590,11 @@ class SlackSourceOperations(SourceOperations):
     @source_operation(
         capabilities={CredentialCapability.INDEXING},
         consumes=OperationConsumes.CREDENTIAL,
-        variants=("public", "private"),
+        variants=(SlackChannelVariant.PUBLIC, SlackChannelVariant.PRIVATE),
         untested=_TEMPORARILY_UNTESTED,
     )
     def fetch_thread_replies(
-        self, *, variant: str, channel_id: str, thread_ts: str
+        self, *, variant: SlackChannelVariant, channel_id: str, thread_ts: str
     ) -> Generator[dict[str, Any], None, None]:
         """``conversations.replies``, paginated. Variant as in history."""
         del variant  # Classification-only; the channel id carries the request.

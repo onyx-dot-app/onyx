@@ -52,6 +52,7 @@ from onyx.connectors.slack.access import get_channel_access
 from onyx.connectors.slack.models import ChannelType, MessageType, ThreadType
 from onyx.connectors.slack.source_operations import (
     SlackApiError,
+    SlackChannelVariant,
     SlackSourceOperations,
 )
 from onyx.connectors.slack.utils import (
@@ -94,7 +95,11 @@ def _collect_paginated_channels(
     channels: list[ChannelType] = []
     # The variant names the permission class of the call: any request that
     # includes private channels needs ``groups:read``.
-    variant = "private" if "private_channel" in channel_types else "public"
+    variant = (
+        SlackChannelVariant.PRIVATE
+        if "private_channel" in channel_types
+        else SlackChannelVariant.PUBLIC
+    )
     for result in slack_client.list_channels(
         variant=variant,
         # also get private channels the bot is added to
@@ -200,9 +205,13 @@ def get_channels_across_teams(
     return merged
 
 
-def _channel_history_variant(channel: ChannelType) -> str:
+def _channel_history_variant(channel: ChannelType) -> SlackChannelVariant:
     """The permission class of history/replies calls for this channel."""
-    return "private" if channel["is_private"] else "public"
+    return (
+        SlackChannelVariant.PRIVATE
+        if channel["is_private"]
+        else SlackChannelVariant.PUBLIC
+    )
 
 
 def get_channel_messages(
@@ -1416,7 +1425,7 @@ class SlackConnector(
             # 2) Minimal test to confirm listing channels works
             test_resp = next(
                 self.slack_client.list_channels(
-                    variant="public",
+                    variant=SlackChannelVariant.PUBLIC,
                     channel_types=["public_channel"],
                     limit=1,
                     fast=True,
