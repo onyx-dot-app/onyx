@@ -4,6 +4,7 @@ import uuid
 import zipfile
 from collections.abc import Iterable
 from datetime import datetime, timedelta, timezone
+from io import BytesIO
 
 from fastapi_users_db_sqlalchemy import UUID_ID
 from sqlalchemy import cast
@@ -19,6 +20,9 @@ from ee.onyx.server.reporting.usage_export_models import (
     UsageReportMetadata,
     UserSkeleton,
 )
+from ee.onyx.server.reporting.usage_report_branding import load_report_branding
+from ee.onyx.server.reporting.usage_report_data import build_usage_report_data
+from ee.onyx.server.reporting.usage_report_pdf import render_usage_report_pdf
 from onyx.configs.constants import FileOrigin
 from onyx.db.models import User
 from onyx.db.user_usage import UsageExportRow, iter_usage_export
@@ -184,6 +188,31 @@ def generate_usage_breakdown_report(
     return file_id
 
 
+def generate_usage_report_pdf(
+    db_session: Session,
+    file_store: FileStore,
+    report_id: str,
+    period: tuple[datetime, datetime] | None,
+    rows: list[UsageExportRow],
+) -> str:
+    """Render the review pack PDF and store it. Returns the file id."""
+    file_name = f"{report_id}_review_pack"
+
+    # The queried bounds are half-open; only a given period gets the extra day.
+    display_start, display_end = period if period else _normalize_period(None)
+
+    data = build_usage_report_data(db_session, rows, display_start, display_end)
+    branding = load_report_branding(file_store)
+    pdf_bytes = render_usage_report_pdf(data, branding)
+
+    return file_store.save_file(
+        content=BytesIO(pdf_bytes),
+        display_name=file_name,
+        file_origin=FileOrigin.GENERATED_REPORT,
+        file_type="application/pdf",
+    )
+
+
 def create_new_usage_report(
     db_session: Session,
     user_id: UUID_ID | None,  # None = auto-generated
@@ -204,11 +233,23 @@ def create_new_usage_report(
         intermediate_file_ids.append(users_file_id)
 
         query_start, query_end = normalized_period
-        usage_rows = iter_usage_export(db_session, query_start, query_end)
+        # The CSV and PDF must use the same rows so their totals reconcile.
+        usage_rows = list(iter_usage_export(db_session, query_start, query_end))
         usage_breakdown_file_id = generate_usage_breakdown_report(
             file_store, report_id, usage_rows
         )
         intermediate_file_ids.append(usage_breakdown_file_id)
+
+        # A render failure must not cost the admin their CSV export.
+        pdf_file_id: str | None = None
+        try:
+            pdf_file_id = generate_usage_report_pdf(
+                db_session, file_store, report_id, period, usage_rows
+            )
+        except Exception:
+            logger.exception("Failed to render usage report PDF; continuing without it")
+        else:
+            intermediate_file_ids.append(pdf_file_id)
 
         # Re-check just before writing the final report: the API-level check
         # happens before this (async) task runs, so a second request with the
@@ -238,6 +279,12 @@ def create_new_usage_report(
                     usage_breakdown_file_id, mode="b", use_tempfile=True
                 )
                 zip_file.writestr("usage_by_user.csv", usage_breakdown_tmpfile.read())
+
+                if pdf_file_id is not None:
+                    pdf_tmpfile = file_store.read_file(
+                        pdf_file_id, mode="b", use_tempfile=True
+                    )
+                    zip_file.writestr("usage_report.pdf", pdf_tmpfile.read())
 
             zip_buffer.seek(0)
 
