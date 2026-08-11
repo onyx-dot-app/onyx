@@ -144,8 +144,9 @@ func (r *llmProviderResource) Schema(_ context.Context, _ resource.SchemaRequest
 				Computed: true,
 				Default:  booldefault.StaticBool(false),
 				MarkdownDescription: "Onyx Auto mode: the model list is managed by Onyx. When enabled, " +
-					"the server owns `model_configurations`: Terraform stops drift-checking the list " +
-					"and server-managed models are never planned for removal.",
+					"the server owns `model_configurations`: Terraform stops drift-checking the list, " +
+					"and updates re-assert the server's current models instead of the configured ones, " +
+					"so registry-managed models are never removed.",
 			},
 			"groups": schema.SetAttribute{
 				ElementType:         types.Int64Type,
@@ -411,6 +412,25 @@ func (r *llmProviderResource) Update(ctx context.Context, req resource.UpdateReq
 		return
 	}
 
+	// Steady-state auto mode has no server-side model protection: the upsert
+	// applies whatever list it receives as a full replace, and only the
+	// *transition* into auto mode preserves existing models. Pass the server's
+	// current list through unchanged so an unrelated update (rename, key
+	// rotation) cannot delete registry-managed models or trip the
+	// default-model guard.
+	if plan.IsAutoMode.ValueBool() {
+		view, err := r.client.GetLLMProvider(ctx, id)
+		if err != nil {
+			resp.Diagnostics.AddError(
+				"Failed to read Onyx LLM provider before update",
+				"The provider is in auto mode, so its current model list must be carried "+
+					"through the update.\n\n"+err.Error(),
+			)
+			return
+		}
+		upsert.ModelConfigurations = modelConfigUpsertsFromViews(view.ModelConfigurations)
+	}
+
 	if _, err := r.client.UpsertLLMProvider(ctx, upsert, false); err != nil {
 		resp.Diagnostics.AddError("Failed to update Onyx LLM provider", err.Error())
 		return
@@ -418,6 +438,26 @@ func (r *llmProviderResource) Update(ctx context.Context, req resource.UpdateReq
 
 	plan.ID = state.ID
 	resp.Diagnostics.Append(resp.State.Set(ctx, plan)...)
+}
+
+// modelConfigUpsertsFromViews converts the server's current model list into
+// upsert entries, so an auto-mode update re-asserts server state verbatim.
+// (This mirrors what the admin UI sends and is the only non-destructive
+// option: the upsert API has no way to leave the model list untouched.)
+func modelConfigUpsertsFromViews(views []client.ModelConfigurationView) []client.ModelConfigurationUpsert {
+	out := make([]client.ModelConfigurationUpsert, 0, len(views))
+	for _, mc := range views {
+		out = append(out, client.ModelConfigurationUpsert{
+			Name:               mc.Name,
+			IsVisible:          mc.IsVisible,
+			MaxInputTokens:     mc.MaxInputTokens,
+			SupportsImageInput: &mc.SupportsImageInput,
+			SupportsReasoning:  &mc.SupportsReasoning,
+			DisplayName:        mc.DisplayName,
+			CustomDisplayName:  mc.CustomDisplayName,
+		})
+	}
+	return out
 }
 
 func (r *llmProviderResource) Delete(ctx context.Context, req resource.DeleteRequest, resp *resource.DeleteResponse) {
