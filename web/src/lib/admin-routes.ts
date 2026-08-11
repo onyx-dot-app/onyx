@@ -21,7 +21,6 @@ import {
   SvgOnyxOctagon,
   SvgPaintBrush,
   SvgPlug,
-  SvgProgressBars,
   SvgSearchMenu,
   SvgShield,
   SvgTerminal,
@@ -199,12 +198,6 @@ export const ADMIN_ROUTES = {
     icon: SvgUserKey,
     title: "Service Accounts",
     sidebarLabel: "Service Accounts",
-  },
-  TOKEN_RATE_LIMITS: {
-    path: "/admin/token-rate-limits",
-    icon: SvgProgressBars,
-    title: "Spending Limits",
-    sidebarLabel: "Spending Limits",
   },
   TRACING: {
     path: "/admin/tracing",

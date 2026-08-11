@@ -12,12 +12,12 @@ from sqlalchemy.engine import Engine
 from sqlalchemy.orm import Session, sessionmaker
 from sqlalchemy.pool import StaticPool
 
+from ee.onyx.server.token_rate_limits.api import router as token_rate_limit_router
 from onyx.auth.users import current_user
 from onyx.db.engine.sql_engine import get_session
 from onyx.db.enums import Permission
 from onyx.db.models import TokenRateLimit
 from onyx.error_handling.exceptions import register_onyx_exception_handlers
-from onyx.server.token_rate_limits.api import router as token_rate_limit_router
 
 
 class _StubUser:
