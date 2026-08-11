@@ -27,7 +27,9 @@ from onyx.configs.constants import DocumentSource
 from onyx.connectors.sharepoint.connector import (
     GRAPH_API_MAX_RETRIES,
     GRAPH_API_RETRYABLE_STATUSES,
+    LIST_ITEM_ID_PROPERTY,
     SHARED_DOCUMENTS_MAP_REVERSE,
+    SHAREPOINT_IDS_PROPERTY,
     sleep_and_retry,
 )
 from onyx.connectors.sharepoint.connector_utils import (
@@ -50,6 +52,7 @@ SHAREPOINT_GROUP_PRINCIPAL_TYPE = 8  # SharePoint site groups (local to the site
 MICROSOFT_DOMAIN = ".onmicrosoft"
 SHAREPOINT_GROUP_SCOPE_SEPARATOR = "::"
 GROUP_CACHE_KEY_SEPARATOR = ":"
+GET_SHAREPOINT_LIST_ITEM_ID_LABEL = "get_sharepoint_list_item_id"
 # PnP RoleType defines Guest=1 and RestrictedGuest=9:
 # https://github.com/pnp/pnpcore/blob/4e4f58fcac797f2957bfcd14fedcecd690dfe7ee/src/sdk/PnP.Core/Model/SharePoint/Core/Public/Enums/RoleType.cs
 LIMITED_ACCESS_ROLE_TYPES = frozenset({1, 9})
@@ -224,24 +227,20 @@ def _get_group_guid_from_identifier(
 
 def _get_sharepoint_list_item_id(drive_item: DriveItem) -> str | None:
     try:
-        # First try to get the list item directly from the drive item
+        properties = getattr(drive_item, "properties", None)
+        sharepoint_ids = properties.get(SHAREPOINT_IDS_PROPERTY) if properties else None
+        if isinstance(sharepoint_ids, dict):
+            if list_item_id := sharepoint_ids.get(LIST_ITEM_ID_PROPERTY):
+                return str(list_item_id)
+
         if hasattr(drive_item, "listItem"):
             list_item = drive_item.listItem
             if list_item:
-                # Load the list item properties to get the ID
-                sleep_and_retry(list_item.get(), "get_sharepoint_list_item_id")
+                sleep_and_retry(list_item.get(), GET_SHAREPOINT_LIST_ITEM_ID_LABEL)
                 if hasattr(list_item, "id") and list_item.id:
                     return str(list_item.id)
 
-        # The SharePoint list item ID is typically available in the sharepointIds property
-        sharepoint_ids = getattr(drive_item, "sharepoint_ids", None)
-        if sharepoint_ids and hasattr(sharepoint_ids, "listItemId"):
-            return sharepoint_ids.listItemId
-
-        # Alternative: try to get it from the properties
-        properties = getattr(drive_item, "properties", None)
         if properties:
-            # Sometimes the SharePoint list item ID is in the properties
             for prop_name, prop_value in properties.items():
                 if "listitemid" in prop_name.lower():
                     return str(prop_value)

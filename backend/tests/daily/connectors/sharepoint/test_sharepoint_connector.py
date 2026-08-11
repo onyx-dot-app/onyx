@@ -6,6 +6,9 @@ from unittest.mock import MagicMock, patch
 
 import pytest
 
+from ee.onyx.external_permissions.sharepoint.permission_utils import (
+    GET_SHAREPOINT_LIST_ITEM_ID_LABEL,
+)
 from onyx.access.models import ExternalAccess
 from onyx.configs.constants import DocumentSource
 from onyx.connectors.models import (
@@ -18,6 +21,7 @@ from onyx.connectors.models import (
 from onyx.connectors.sharepoint.connector import (
     SharepointAuthMethod,
     SharepointConnector,
+    sleep_and_retry,
 )
 from onyx.db.enums import HierarchyNodeType
 from tests.daily.connectors.utils import load_all_from_connector
@@ -631,9 +635,15 @@ def test_sharepoint_connector_hierarchy_node_permissions(
     )
     connector.load_credentials(sharepoint_cert_credentials)
 
-    with patch(
-        "onyx.connectors.sharepoint.connector.store_image_and_create_section",
-        mock_store_image,
+    with (
+        patch(
+            "onyx.connectors.sharepoint.connector.store_image_and_create_section",
+            mock_store_image,
+        ),
+        patch(
+            "ee.onyx.external_permissions.sharepoint.permission_utils.sleep_and_retry",
+            wraps=sleep_and_retry,
+        ) as mock_permission_retry,
     ):
         result = load_all_from_connector(
             connector,
@@ -641,6 +651,12 @@ def test_sharepoint_connector_hierarchy_node_permissions(
             end=time.time(),
             include_permissions=True,
         )
+
+    assert result.documents
+    assert not any(
+        call.args[1] == GET_SHAREPOINT_LIST_ITEM_ID_LABEL
+        for call in mock_permission_retry.call_args_list
+    )
 
     site_node = find_hierarchy_node(
         result.hierarchy_nodes,
