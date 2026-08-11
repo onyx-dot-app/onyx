@@ -19,11 +19,12 @@ from onyx.server.features.build.db.sandbox import (
     user_has_stale_active_session,
 )
 from onyx.server.features.build.sandbox.factory import get_sandbox_manager
+from onyx.server.features.build.sandbox.labels import current_sandbox_image_identity
 from onyx.server.features.build.session.locks import get_session_creation_lock
 from onyx.server.features.build.session.sandbox_lifecycle import (
     create_session_snapshot_keep_latest,
-    is_sandbox_idle,
     list_snapshotable_session_workspaces,
+    reap_timeout_seconds,
     sleep_sandbox,
 )
 
@@ -53,6 +54,13 @@ def cleanup_idle_sandboxes_task(self: Task, *, tenant_id: str) -> None:  # noqa:
     The reap itself is ``sleep_sandbox`` (sandbox lifecycle), which stays
     fail-closed: snapshot failure on a reachable pod keeps the sandbox
     RUNNING for retry next sweep.
+
+    A sandbox left on a superseded image is reaped on a shorter timeout, which
+    is the whole of image recycling: sleeping is what moves a sandbox onto the
+    current image, because its user's next request provisions a fresh one. Doing
+    it through the reap keeps one definition of "nobody is using this" and one
+    path that snapshots, clears ports, and marks sessions IDLE so the restore
+    flow repairs the workspace — including the dev server.
     """
     task_logger.info(f"cleanup_idle_sandboxes_task starting for tenant {tenant_id}")
 
@@ -84,19 +92,22 @@ def cleanup_idle_sandboxes_task(self: Task, *, tenant_id: str) -> None:  # noqa:
             snapshot_cutoff = now - datetime.timedelta(
                 seconds=SANDBOX_IDLE_TIMEOUT_SECONDS // SNAPSHOT_INTERVAL_DIVISOR
             )
+            image_identity = current_sandbox_image_identity()
 
             # Partition so idle sandboxes are reaped first (reclaiming pods
             # is time-sensitive) before the rest are background-snapshotted.
-            idle_sandboxes: list[Sandbox] = []
+            idle_sandboxes: list[tuple[Sandbox, int]] = []
             non_idle_sandboxes: list[Sandbox] = []
             for sandbox in running_sandboxes:
-                (
-                    idle_sandboxes
-                    if is_sandbox_idle(sandbox, now)
-                    else non_idle_sandboxes
-                ).append(sandbox)
+                timeout = reap_timeout_seconds(
+                    sandbox_manager, sandbox, now, image_identity
+                )
+                if timeout is None:
+                    non_idle_sandboxes.append(sandbox)
+                else:
+                    idle_sandboxes.append((sandbox, timeout))
 
-            for sandbox in idle_sandboxes:
+            for sandbox, idle_timeout in idle_sandboxes:
                 session_creation_lock = get_session_creation_lock(
                     redis_client, sandbox.user_id
                 )
@@ -107,6 +118,7 @@ def cleanup_idle_sandboxes_task(self: Task, *, tenant_id: str) -> None:  # noqa:
                         sandbox=sandbox,
                         tenant_id=tenant_id,
                         session_creation_lock=session_creation_lock,
+                        idle_timeout_seconds=idle_timeout,
                     )
                 except Exception as e:
                     task_logger.error(

@@ -34,7 +34,10 @@ from onyx.db.enums import SandboxStatus
 from onyx.db.models import Sandbox, User
 from onyx.db.users import fetch_user_by_id
 from onyx.file_store.file_store import get_default_file_store
-from onyx.server.features.build.configs import SANDBOX_IDLE_TIMEOUT_SECONDS
+from onyx.server.features.build.configs import (
+    SANDBOX_IDLE_TIMEOUT_SECONDS,
+    SANDBOX_STALE_IMAGE_IDLE_TIMEOUT_SECONDS,
+)
 from onyx.server.features.build.db.build_session import (
     clear_nextjs_ports_for_user,
     get_orphan_build_session_ids,
@@ -756,11 +759,60 @@ def ensure_sandbox_ready(
         observe_sandbox_ready(outcome, time.monotonic() - started_at)
 
 
-def is_sandbox_idle(sandbox: Sandbox, now: datetime) -> bool:
+def is_sandbox_idle(
+    sandbox: Sandbox,
+    now: datetime,
+    timeout_seconds: int,
+) -> bool:
     """Idle = no heartbeat for the timeout (NULL heartbeat falls back to
-    created_at so legacy/edge-case rows don't sit RUNNING forever)."""
+    created_at so legacy/edge-case rows don't sit RUNNING forever).
+
+    The timeout is a parameter because a sandbox left on a superseded image is
+    reclaimed sooner than one on the current one; nothing else about reaping it
+    differs. ``reap_timeout_seconds`` is where it is chosen.
+    """
     reference = sandbox.last_heartbeat or sandbox.created_at
-    return reference < now - timedelta(seconds=SANDBOX_IDLE_TIMEOUT_SECONDS)
+    return reference < now - timedelta(seconds=timeout_seconds)
+
+
+def reap_timeout_seconds(
+    sandbox_manager: SandboxManager,
+    sandbox: Sandbox,
+    now: datetime,
+    image_identity: str | None,
+) -> int | None:
+    """The timeout this sandbox has already outlived, or None if it is still in
+    use. ``sleep_sandbox`` re-checks against the same one it qualified under.
+
+    ``image_identity`` is the running sandbox image's content identity — not
+    its tag, which a release moves even when it re-tags an unchanged image. So
+    a deploy that changed nothing about the sandbox image recycles nothing.
+
+    Two clocks, and the shorter one costs a read of the sandbox — so it is only
+    consulted between them. Past the normal timeout the sandbox goes either way;
+    below the short one it stays either way. An ordinary sweep therefore
+    inspects nothing, and after a deploy only the sandboxes about to be
+    reclaimed.
+    """
+    if is_sandbox_idle(sandbox, now, SANDBOX_IDLE_TIMEOUT_SECONDS):
+        return SANDBOX_IDLE_TIMEOUT_SECONDS
+    if image_identity is None:
+        return None
+    if not is_sandbox_idle(sandbox, now, SANDBOX_STALE_IMAGE_IDLE_TIMEOUT_SECONDS):
+        return None
+
+    # Anything we cannot identify — unlabelled, or unreadable right now — keeps
+    # the normal timeout, because not being able to say is no reason to reclaim
+    # someone early.
+    try:
+        provisioned = sandbox_manager.provisioned_image_identity(sandbox.id)
+    except Exception:
+        logger.exception("Could not read the image of sandbox %s", sandbox.id)
+        return None
+
+    if provisioned is None or provisioned == image_identity:
+        return None
+    return SANDBOX_STALE_IMAGE_IDLE_TIMEOUT_SECONDS
 
 
 def list_snapshotable_session_workspaces(
@@ -813,6 +865,7 @@ def sleep_sandbox(
     sandbox: Sandbox,
     tenant_id: str,
     session_creation_lock: RedisLock,
+    idle_timeout_seconds: int,
 ) -> None:
     """Snapshot an idle ``RUNNING`` sandbox, terminate its pod, and mark it
     ``SLEEPING``. Commits on success; on abort the sandbox stays ``RUNNING``.
@@ -821,7 +874,9 @@ def sleep_sandbox(
     a reachable pod aborts the reap so the next sweep retries, while an
     unreachable pod is terminated anyway (its workspace is unrecoverable;
     never pin it RUNNING forever). Idleness is re-checked right before the
-    kill since snapshotting can take minutes.
+    kill since snapshotting can take minutes — against the same timeout the
+    caller reaped on, so a sandbox reaped early for its image is not held to
+    the longer one here.
     """
     sandbox_id = sandbox.id
 
@@ -947,7 +1002,7 @@ def sleep_sandbox(
         # the kill and capture the attempt number the sleep must still match.
         db_session.refresh(sandbox)
         if sandbox.status != SandboxStatus.RUNNING or not is_sandbox_idle(
-            sandbox, datetime.now(timezone.utc)
+            sandbox, datetime.now(timezone.utc), idle_timeout_seconds
         ):
             logger.info("Sandbox %s went active mid-sweep; skipping reap", sandbox_id)
             return
