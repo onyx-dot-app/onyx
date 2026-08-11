@@ -175,9 +175,6 @@ export const SWR_KEYS = {
   userGroupTokenRateLimit: (groupId: number) =>
     `/api/admin/token-rate-limits/user-group/${groupId}`,
 
-  // ── Usage Reports ─────────────────────────────────────────────────────────
-  usageReport: "/api/admin/usage-report",
-
   // ── Web Search ────────────────────────────────────────────────────────────
   webSearchContentProviders: "/api/admin/web-search/content-providers",
   webSearchSearchProviders: "/api/admin/web-search/search-providers",
