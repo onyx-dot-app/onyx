@@ -43,7 +43,7 @@ import {
   useCurrentAgent,
   usePinnedAgents,
 } from "@/lib/agents/hooks";
-import ProjectFolderButton from "@/sections/sidebar/ProjectFolderButton";
+import { ProjectFolderButton } from "@/lib/projects/components";
 import CreateProjectModal from "@/sections/modals/CreateProjectModal";
 import MoveCustomAgentChatModal from "@/sections/modals/MoveCustomAgentChatModal";
 import { useProjectsContext } from "@/providers/ProjectsContext";
