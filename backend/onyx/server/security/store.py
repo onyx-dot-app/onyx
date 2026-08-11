@@ -11,6 +11,7 @@ from onyx.cache.factory import get_cache_backend
 from onyx.configs import app_configs as _cfg
 from onyx.configs.constants import KV_PASSWORD_AUTH_ENABLED_KEY, OnyxRedisLocks
 from onyx.db.engine.sql_engine import get_session_with_current_tenant
+from onyx.db.enums import IncognitoRecordMode
 from onyx.db.security_settings import load_overrides as _db_load_overrides
 from onyx.db.security_settings import upsert_overrides as _db_upsert_overrides
 from onyx.db.sso_provider import fetch_sso_providers
@@ -20,6 +21,7 @@ from onyx.key_value_store.factory import get_kv_store
 from onyx.key_value_store.interface import KvKeyNotFoundError
 from onyx.server.security.models import (
     OPERATOR_LOCKED_FIELDS,
+    IncognitoAvailability,
     SecuritySettings,
     SecuritySettingsOverrides,
     SSRFProtectionLevel,
@@ -89,6 +91,9 @@ def _build_env_defaults() -> SecuritySettings:
     return SecuritySettings(
         user_directory_admin_only=_cfg.USER_DIRECTORY_ADMIN_ONLY,
         track_external_idp_expiry=_cfg.TRACK_EXTERNAL_IDP_EXPIRY,
+        # No env knob on purpose: incognito is off until an admin enables it.
+        incognito_availability=IncognitoAvailability.OFF,
+        incognito_record_mode=IncognitoRecordMode.USAGE_ONLY,
         ssrf_protection_level=_derive_ssrf_level_from_env(),
         mask_credential_prefix=_cfg.MASK_CREDENTIAL_PREFIX,
         llm_custom_config_env_injection=not MULTI_TENANT,

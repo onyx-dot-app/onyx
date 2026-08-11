@@ -105,6 +105,7 @@ def get_chat_sessions_by_user(
     project_id: int | None = None,
     only_non_project_chats: bool = False,
     include_failed_chats: bool = False,
+    include_full_history_incognito: bool = False,
 ) -> list[ChatSession]:
     stmt = (
         select(ChatSession)
@@ -113,8 +114,17 @@ def get_chat_sessions_by_user(
         .order_by(desc(ChatSession.time_updated))
     )
 
-    # Incognito sessions never appear in their owner's history.
-    stmt = stmt.where(ChatSession.incognito_record_mode.is_(None))
+    # Defaults to excluding so a new caller hides incognito rather than leaks
+    # it. The admin query-history surface opts back in to persisting modes
+    # only, since content-free sessions have nothing to show anywhere.
+    if include_full_history_incognito:
+        persisting = [m for m in IncognitoRecordMode if m.persists_content]
+        stmt = stmt.where(
+            ChatSession.incognito_record_mode.is_(None)
+            | ChatSession.incognito_record_mode.in_(persisting)
+        )
+    else:
+        stmt = stmt.where(ChatSession.incognito_record_mode.is_(None))
 
     if deleted is not None:
         stmt = stmt.where(ChatSession.deleted == deleted)

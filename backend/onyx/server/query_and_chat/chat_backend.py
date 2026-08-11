@@ -27,6 +27,7 @@ from onyx.chat.chat_utils import (
     create_chat_session_from_request,
     extract_headers,
 )
+from onyx.chat.incognito import incognito_allowed_for_user
 from onyx.chat.incognito_context import teardown_incognito_session
 from onyx.chat.models import ChatFullResponse, CreateChatSessionID
 from onyx.chat.process_message import (
@@ -634,6 +635,22 @@ def delete_chat_session_by_id(
         )
     except ValueError as e:
         raise HTTPException(status_code=400, detail=str(e))
+
+
+class IncognitoAvailabilityResponse(BaseModel):
+    available: bool
+
+
+@router.get("/incognito-availability")
+def get_incognito_availability(
+    user: User = Depends(require_permission(Permission.BASIC_ACCESS)),
+    db_session: Session = Depends(get_session),
+) -> IncognitoAvailabilityResponse:
+    """Whether the acting user may start an incognito chat, so the client can
+    hide the toggle. The create endpoint enforces the same rule regardless."""
+    return IncognitoAvailabilityResponse(
+        available=incognito_allowed_for_user(user, db_session)
+    )
 
 
 @router.post("/end-incognito-session/{session_id}")

@@ -8,8 +8,19 @@ from sqlalchemy.sql.expression import UnaryExpression, literal
 
 from ee.onyx.background.task_name_builders import QUERY_HISTORY_TASK_NAME_PREFIX
 from onyx.configs.constants import QAFeedbackType
+from onyx.db.enums import IncognitoRecordMode
 from onyx.db.models import ChatMessage, ChatMessageFeedback, ChatSession, TaskQueueState
 from onyx.db.tasks import get_all_tasks_with_prefix
+
+
+def _visible_in_query_history() -> ColumnElement:
+    """Content-free incognito sessions have no messages to show, so they stay
+    out of the history table and its exports. Persisting modes read like any
+    other chat and remain visible."""
+    persisting = [m for m in IncognitoRecordMode if m.persists_content]
+    return ChatSession.incognito_record_mode.is_(
+        None
+    ) | ChatSession.incognito_record_mode.in_(persisting)
 
 
 def _build_filter_conditions(
@@ -25,7 +36,7 @@ def _build_filter_conditions(
     feedback_filter: Feedback type to filter by
     Returns: List of filter conditions
     """
-    conditions = []
+    conditions = [_visible_in_query_history()]
 
     if start_time is not None:
         conditions.append(ChatSession.time_created >= start_time)
@@ -131,7 +142,8 @@ def fetch_chat_sessions_eagerly_by_time(
     message_order: UnaryExpression = asc(ChatMessage.id)
 
     filters: list[ColumnElement | BinaryExpression] = [
-        ChatSession.time_created.between(start, end)
+        _visible_in_query_history(),
+        ChatSession.time_created.between(start, end),
     ]
 
     if initial_time:

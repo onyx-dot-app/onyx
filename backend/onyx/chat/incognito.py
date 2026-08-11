@@ -14,17 +14,41 @@ content-free rows and must carry the live conversation outside Postgres
 for the length of the session.
 """
 
+from sqlalchemy.orm import Session
+
+from onyx.chat.incognito_context import incognito_context_available
 from onyx.db.enums import IncognitoRecordMode
+from onyx.db.incognito import user_in_incognito_enabled_group
+from onyx.db.models import User
 from onyx.file_store.models import FileDescriptor
+from onyx.server.security.models import IncognitoAvailability
+from onyx.server.security.store import get_security_settings
+
+
+def incognito_allowed_for_user(user: User, db_session: Session) -> bool:
+    """Whether this user may start an incognito chat.
+
+    Availability composes the deployment capability (the ephemeral store must
+    exist) with the admin's security setting, which defaults to off. Anonymous
+    users never qualify: they share an identity, have no memberships, and
+    cannot authenticate against the teardown endpoint.
+    """
+    if user.is_anonymous:
+        return False
+    if not incognito_context_available():
+        return False
+    availability = get_security_settings().incognito_availability
+    if availability is IncognitoAvailability.EVERYONE:
+        return True
+    if availability is IncognitoAvailability.GROUPS:
+        return user_in_incognito_enabled_group(db_session, user.id)
+    return False
 
 
 def resolve_incognito_record_mode() -> IncognitoRecordMode:
-    """The mode a new incognito session must pin.
-
-    The seam a workspace's record-mode setting must resolve through. Today it
-    returns the default unconditionally.
-    """
-    return IncognitoRecordMode.USAGE_ONLY
+    """The mode a new incognito session must pin: the workspace's admin
+    record-mode setting, usage_only by default."""
+    return get_security_settings().incognito_record_mode
 
 
 def content_free_file_descriptors(

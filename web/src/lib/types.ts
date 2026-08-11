@@ -543,7 +543,16 @@ export interface UserGroup {
   is_up_to_date: boolean;
   is_up_for_deletion: boolean;
   is_default: boolean;
+  // Members may start incognito chats while the workspace availability
+  // setting is groups-only.
+  incognito_enabled: boolean;
 }
+
+// Mirrors `IncognitoAvailability` in backend/onyx/server/security/models.py.
+export type IncognitoAvailability = "off" | "everyone" | "groups";
+
+// Mirrors `IncognitoRecordMode` in backend/onyx/db/enums.py.
+export type IncognitoRecordMode = "full_history" | "usage_only";
 
 export enum ValidSources {
   Web = "web",

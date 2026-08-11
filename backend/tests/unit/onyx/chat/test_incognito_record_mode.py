@@ -7,6 +7,7 @@ here is a policy regression.
 
 from collections.abc import Callable
 from typing import Any
+from unittest.mock import MagicMock, patch
 
 import pytest
 from sqlalchemy import Enum as SqlEnum
@@ -109,10 +110,13 @@ class TestStorageContract:
 
 
 class TestResolver:
-    def test_default_never_persists_content(self) -> None:
-        """A dropped admin setting must not silently start recording chats."""
-        assert resolve_incognito_record_mode() is IncognitoRecordMode.USAGE_ONLY
-        assert resolve_incognito_record_mode().persists_content is False
+    @pytest.mark.parametrize("mode", list(IncognitoRecordMode))
+    def test_resolves_to_the_admin_setting(self, mode: IncognitoRecordMode) -> None:
+        with patch(
+            "onyx.chat.incognito.get_security_settings",
+            return_value=MagicMock(incognito_record_mode=mode),
+        ):
+            assert resolve_incognito_record_mode() is mode
 
     def test_unknown_context_value_fails_closed(self) -> None:
         """A corrupt contextvar must never read as content-persisting."""

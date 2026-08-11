@@ -6,11 +6,16 @@ since a mocked session would happily return rows the SQL would have filtered.
 """
 
 from collections.abc import Generator
+from datetime import datetime, timedelta, timezone
 from uuid import UUID
 
 import pytest
 from sqlalchemy.orm import Session
 
+from ee.onyx.db.query_history import (
+    fetch_chat_sessions_eagerly_by_time,
+    get_page_of_chat_sessions,
+)
 from onyx.configs.constants import MessageType
 from onyx.db.chat import (
     create_chat_session,
@@ -65,7 +70,9 @@ def _make_session(
     return chat_session
 
 
-def _history_ids(db_session: Session, user_id: UUID) -> set[UUID]:
+def _history_ids(
+    db_session: Session, user_id: UUID, include_full_history_incognito: bool = False
+) -> set[UUID]:
     return {
         session.id
         for session in get_chat_sessions_by_user(
@@ -73,6 +80,7 @@ def _history_ids(db_session: Session, user_id: UUID) -> set[UUID]:
             deleted=None,
             db_session=db_session,
             include_failed_chats=True,
+            include_full_history_incognito=include_full_history_incognito,
         )
     }
 
@@ -88,6 +96,82 @@ def test_history_excludes_incognito_by_default(
     returned_ids = _history_ids(db_session, owner.id)
     assert ordinary.id in returned_ids
     assert incognito.id not in returned_ids
+
+
+def test_history_returns_incognito_when_opted_in(
+    db_session: Session, owner: User
+) -> None:
+    """The admin query-history surface reads through the same function."""
+    incognito = _make_session(
+        db_session, owner.id, "incognito chat", IncognitoRecordMode.FULL_HISTORY
+    )
+
+    assert incognito.id in _history_ids(
+        db_session, owner.id, include_full_history_incognito=True
+    )
+
+
+def test_opt_in_still_excludes_content_free_modes(
+    db_session: Session, owner: User
+) -> None:
+    """Content-free sessions have nothing to show on any surface."""
+    usage_only = _make_session(
+        db_session, owner.id, "usage only chat", IncognitoRecordMode.USAGE_ONLY
+    )
+
+    assert usage_only.id not in _history_ids(
+        db_session, owner.id, include_full_history_incognito=True
+    )
+
+
+def test_admin_query_history_page_hides_content_free_sessions(
+    db_session: Session, owner: User
+) -> None:
+    """The paginated history table showed these as blank rows."""
+    ordinary = _make_session(db_session, owner.id, "ordinary chat", None)
+    full_history = _make_session(
+        db_session, owner.id, "full history chat", IncognitoRecordMode.FULL_HISTORY
+    )
+    usage_only = _make_session(
+        db_session, owner.id, "usage only chat", IncognitoRecordMode.USAGE_ONLY
+    )
+
+    page_ids = {
+        session.id
+        for session in get_page_of_chat_sessions(
+            start_time=None,
+            end_time=None,
+            db_session=db_session,
+            page_num=0,
+            page_size=1000,
+        )
+    }
+    assert ordinary.id in page_ids
+    assert full_history.id in page_ids
+    assert usage_only.id not in page_ids
+
+
+def test_query_history_export_hides_content_free_sessions(
+    db_session: Session, owner: User
+) -> None:
+    ordinary = _make_session(db_session, owner.id, "ordinary chat", None)
+    usage_only = _make_session(
+        db_session, owner.id, "usage only chat", IncognitoRecordMode.USAGE_ONLY
+    )
+
+    window = timedelta(minutes=5)
+    now = datetime.now(timezone.utc)
+    export_ids = {
+        session.id
+        for session in fetch_chat_sessions_eagerly_by_time(
+            start=now - window,
+            end=now + window,
+            db_session=db_session,
+            limit=None,
+        )
+    }
+    assert ordinary.id in export_ids
+    assert usage_only.id not in export_ids
 
 
 def test_every_mode_is_excluded_from_history(db_session: Session, owner: User) -> None:

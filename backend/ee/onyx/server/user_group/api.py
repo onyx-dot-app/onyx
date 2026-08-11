@@ -12,6 +12,7 @@ from ee.onyx.db.user_group import (
     prepare_user_group_for_deletion,
     rename_user_group,
     set_group_permission__no_commit,
+    set_user_group_incognito,
     update_user_curator_relationship,
     update_user_group,
 )
@@ -25,6 +26,7 @@ from ee.onyx.server.user_group.models import (
     UpdateGroupAgentsRequest,
     UserGroup,
     UserGroupCreate,
+    UserGroupIncognitoUpdate,
     UserGroupRename,
     UserGroupUpdate,
 )
@@ -188,6 +190,28 @@ def rename_user_group_endpoint(
         if "not found" in msg.lower():
             raise OnyxError(OnyxErrorCode.NOT_FOUND, msg)
         raise OnyxError(OnyxErrorCode.CONFLICT, msg)
+
+
+@router.patch("/admin/user-group/{user_group_id}/incognito")
+def patch_user_group_incognito(
+    user_group_id: int,
+    update: UserGroupIncognitoUpdate,
+    _: User = Depends(require_permission(Permission.FULL_ADMIN_PANEL_ACCESS)),
+    db_session: Session = Depends(get_session),
+) -> UserGroup:
+    """Only meaningful while the security setting is groups-only, but always
+    storable so admins can stage membership before flipping the mode."""
+    try:
+        return UserGroup.from_model(
+            set_user_group_incognito(
+                db_session=db_session,
+                user_group_id=user_group_id,
+                enabled=update.enabled,
+            ),
+            mask_credential_prefix=get_security_settings().mask_credential_prefix,
+        )
+    except ValueError as e:
+        raise OnyxError(OnyxErrorCode.NOT_FOUND, str(e))
 
 
 @router.patch("/admin/user-group/{user_group_id}")

@@ -8,8 +8,10 @@ from fastapi.datastructures import Headers
 from pydantic import BaseModel
 from sqlalchemy.orm import Session
 
-from onyx.chat.incognito import resolve_incognito_record_mode
-from onyx.chat.incognito_context import incognito_context_available
+from onyx.chat.incognito import (
+    incognito_allowed_for_user,
+    resolve_incognito_record_mode,
+)
 from onyx.chat.models import (
     ChatHistoryResult,
     ChatLoadedFile,
@@ -190,11 +192,11 @@ def create_chat_session_from_request(
             raise ValueError("User does not have access to persona")
 
     # Pinned at creation so a later setting change cannot alter a live session.
-    # A refused request errors instead of degrading, otherwise a Redis outage
-    # would silently persist a chat the user believes is incognito.
+    # Availability decides server-side, never the client flag. A refusal
+    # errors: degrading would silently persist a believed-incognito chat.
     incognito_mode: IncognitoRecordMode | None = None
     if chat_session_request.incognito:
-        if not incognito_context_available():
+        if not incognito_allowed_for_user(user, db_session):
             raise OnyxError(
                 OnyxErrorCode.INSUFFICIENT_PERMISSIONS,
                 "Incognito chats are not available for this account right now.",

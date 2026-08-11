@@ -170,8 +170,14 @@ def admin_get_chat_sessions(
     )
 
     try:
+        # Full History incognito is recorded for the workspace and hidden only
+        # from its own owner, so query history must still return it.
         chat_sessions = get_chat_sessions_by_user(
-            user_id=user_id, deleted=False, db_session=db_session, limit=0
+            user_id=user_id,
+            deleted=False,
+            db_session=db_session,
+            limit=0,
+            include_full_history_incognito=True,
         )
 
     except ValueError:
