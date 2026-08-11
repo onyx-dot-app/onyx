@@ -5,12 +5,8 @@ import (
 	"net/http"
 )
 
-// Settings mirrors Settings (backend/onyx/server/settings/models.py). It is
-// used to decode GET responses only; writes go through PatchSettings with a
-// sparse body, so new backend fields can never be reset by this client.
-//
-// tier, ee_features_enabled, seat_count, used_seats, gpu_enabled and
-// application_status are license/deployment-derived and read-only.
+// Settings mirrors the backend model, for decoding GET responses only;
+// writes go through PatchSettings with a sparse body.
 type Settings struct {
 	MaximumChatRetentionDays          *float64 `json:"maximum_chat_retention_days"`
 	CompanyName                       *string  `json:"company_name"`
@@ -53,10 +49,8 @@ func (c *Client) GetSettings(ctx context.Context) (*Settings, error) {
 	return &settings, nil
 }
 
-// PatchSettings applies a partial update. PATCH /admin/settings merges only
-// the fields present in the body onto the stored settings (keyed off
-// Pydantic's model_fields_set), so callers send exactly the fields they
-// manage and nothing else.
+// PatchSettings applies a partial update: the backend merges only the fields
+// present in the body, so callers send exactly what they manage.
 func (c *Client) PatchSettings(ctx context.Context, fields map[string]any) error {
 	return c.doJSON(ctx, http.MethodPatch, "/admin/settings", fields, nil)
 }

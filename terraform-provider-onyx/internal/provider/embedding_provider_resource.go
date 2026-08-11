@@ -94,10 +94,8 @@ func (r *embeddingProviderResource) Configure(_ context.Context, req resource.Co
 	r.client = clientFromResourceConfigure(req, resp)
 }
 
-// upsertFromPlan builds the full-replace upsert body. Values always come from
-// the plan — NEVER from a GET response, whose api_key is masked: with no
-// api_key_changed-style flag on this endpoint, a masked value written back
-// would permanently corrupt the stored key.
+// upsertFromPlan builds the full-replace body from the plan only — a
+// GET-derived (masked) api_key written back would corrupt the stored key.
 func upsertFromPlan(plan embeddingProviderResourceModel) client.CloudEmbeddingProvider {
 	return client.CloudEmbeddingProvider{
 		ProviderType:   plan.ProviderType.ValueString(),
@@ -159,9 +157,7 @@ func (r *embeddingProviderResource) Update(ctx context.Context, req resource.Upd
 	}
 
 	if plan.APIKey.IsNull() && state.APIKey.IsNull() {
-		// No key in config or state (e.g. imported resource): the upsert
-		// below overwrites the stored key with null. Surface it rather than
-		// clearing silently.
+		// The upsert below overwrites the stored key with null; warn first.
 		resp.Diagnostics.AddWarning(
 			"Stored embedding API key may be cleared",
 			"onyx_embedding_provider has no api_key in configuration, and the Onyx API replaces all "+

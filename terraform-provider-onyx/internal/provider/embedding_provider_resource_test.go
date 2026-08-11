@@ -43,9 +43,8 @@ resource "onyx_embedding_provider" "test" {
 				ImportStateVerifyIgnore: []string{"api_key"},
 			},
 			{
-				// Rotate the key and set a URL; the update must send the new
-				// raw values (a masked write-back would corrupt the stored key
-				// — verified server-side below).
+				// Rotate the key; a masked write-back would corrupt it
+				// (verified server-side below).
 				Config: `
 resource "onyx_embedding_provider" "test" {
   provider_type = "voyage"
@@ -63,9 +62,8 @@ resource "onyx_embedding_provider" "test" {
 	})
 }
 
-// testAccCheckEmbeddingKeyNotMasked guards against the masked-value write-back
-// hazard: the server-side masked key must reflect a real stored value, not a
-// doubly-masked placeholder (mask characters written back as the key).
+// testAccCheckEmbeddingKeyNotMasked asserts the stored key is a real value,
+// not a masked placeholder that got written back.
 func testAccCheckEmbeddingKeyNotMasked(t *testing.T, providerType string) resource.TestCheckFunc {
 	return func(_ *terraform.State) error {
 		remote, err := testAccClient(t).GetEmbeddingProvider(context.Background(), providerType)

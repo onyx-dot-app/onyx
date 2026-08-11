@@ -1,7 +1,5 @@
-// terraform-provider-onyx manages Onyx application configuration (LLM
-// providers, API keys, workspace settings, ...) declaratively via the Onyx
-// admin API. It provisions what runs *inside* an Onyx deployment — for the
-// infrastructure that runs Onyx itself, see deployment/terraform.
+// terraform-provider-onyx manages Onyx application configuration via the
+// admin API (for the infrastructure under Onyx, see deployment/terraform).
 package main
 
 import (
@@ -13,8 +11,7 @@ import (
 	"github.com/onyx-dot-app/onyx/terraform-provider-onyx/internal/provider"
 )
 
-// Docs are generated from schema descriptions + examples/ into docs/.
-// Requires the terraform CLI on PATH.
+// Docs generate from schema descriptions + examples/ (needs terraform CLI).
 //go:generate go run github.com/hashicorp/terraform-plugin-docs/cmd/tfplugindocs@latest generate
 
 // version is set via ldflags on release builds.

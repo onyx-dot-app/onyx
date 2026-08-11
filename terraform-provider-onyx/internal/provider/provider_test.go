@@ -17,16 +17,10 @@ import (
 	"github.com/onyx-dot-app/onyx/terraform-provider-onyx/internal/client"
 )
 
-// Acceptance tests run against a live Onyx deployment and are gated twice:
-// the standard TF_ACC=1 (enforced by resource.Test) plus
-// ONYX_TF_ACC_SERVER_URL pointing at the deployment (e.g.
-// "http://localhost:8080" for a direct backend, with ONYX_TF_ACC_API_PREFIX
-// defaulting to "" accordingly).
-//
-// Authentication uses ONYX_TF_ACC_API_KEY when set; otherwise the harness
-// bootstraps one: it registers/logs in an admin user (on a fresh deployment
-// the first registered user becomes admin) and mints an admin API key,
-// mirroring backend/tests/integration/common_utils/managers/{user,api_key}.py.
+// Acceptance tests need TF_ACC=1 plus ONYX_TF_ACC_SERVER_URL (a live
+// deployment). Auth uses ONYX_TF_ACC_API_KEY when set; otherwise the harness
+// registers/logs in an admin (first registered user becomes admin) and mints
+// an admin API key, mirroring the backend integration-test managers.
 
 var testAccProtoV6ProviderFactories = map[string]func() (tfprotov6.ProviderServer, error){
 	"onyx": providerserver.NewProtocol6WithError(New("test")()),
@@ -100,9 +94,8 @@ func bootstrapAPIKey(serverURL, apiPrefix string) (string, error) {
 	cookieName := envOr("AUTH_COOKIE_NAME", "fastapiusersauth")
 	httpClient := &http.Client{Timeout: 30 * time.Second}
 
-	// Register the user; on a fresh deployment the first registered user is
-	// auto-promoted to admin. Failures (e.g. the user already exists) are
-	// ignored — login below is the real gate.
+	// Register (idempotent — failures like already-exists are ignored;
+	// login below is the real gate).
 	registerBody, _ := json.Marshal(map[string]string{
 		"email":    email,
 		"username": email,

@@ -66,6 +66,10 @@ and on Onyx Cloud the tenant is embedded in the key itself.
 - **`model_configurations` is the list of record.** Models omitted from it are removed
   server-side, and removing the model currently set as deployment default fails — repoint
   `onyx_llm_provider_default` first (references order this correctly).
+- **The model list read is the API's display view.** It hides obsolete models and dated
+  duplicates, so writes (including the auto-mode pass-through, which is also not atomic
+  with its read) cannot preserve rows the API hides. The admin UI round-trips the same
+  filtered view; a keep-models flag on the upsert API is the planned structural fix.
 
 ## Development
 

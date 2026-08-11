@@ -1,7 +1,5 @@
 // Package client is a minimal hand-written HTTP client for the Onyx admin
-// API, covering only the endpoints the Terraform provider manages. It mirrors
-// the auth conventions of cli/internal/api (which cannot be imported here due
-// to Go internal-package visibility).
+// API endpoints the Terraform provider manages.
 package client
 
 import (
@@ -21,9 +19,8 @@ type Client struct {
 	httpClient *http.Client
 }
 
-// NewClient builds a client from the server origin (e.g. "http://localhost:3000"),
-// an API prefix (usually "/api"; empty for direct backend access), and an
-// admin-role API key or unrestricted PAT.
+// NewClient builds a client from the server origin, an API prefix ("/api",
+// or empty for direct backend access), and an admin API key or PAT.
 func NewClient(serverURL string, apiPrefix string, apiKey string) *Client {
 	base := strings.TrimRight(serverURL, "/")
 	if p := strings.Trim(apiPrefix, "/"); p != "" {

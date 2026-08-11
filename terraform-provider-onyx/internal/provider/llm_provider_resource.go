@@ -316,15 +316,10 @@ func (r *llmProviderResource) Read(ctx context.Context, req resource.ReadRequest
 	resp.Diagnostics.Append(diags...)
 	state.Personas = personas
 
-	// api_key and custom_config are MASKED in the response; writing the
-	// masked placeholder into state would both show phantom drift and risk
-	// being sent back on a later update. Prior state (the configured real
-	// values) is carried forward instead — out-of-band rotation of these two
-	// fields is undetectable by design.
+	// api_key/custom_config are masked in responses; carry the real values
+	// forward from prior state and never let a masked placeholder in.
 
-	// Under auto mode the server owns the model list (it re-syncs from the
-	// model registry after every upsert). Keep prior state so Terraform
-	// neither adopts nor plans deletions of server-managed entries.
+	// Under auto mode the server owns the model list; keep prior state.
 	if !view.IsAutoMode {
 		state.ModelConfigurations = r.reconcileModelConfigurations(ctx, state.ModelConfigurations, view.ModelConfigurations, &resp.Diagnostics)
 		if resp.Diagnostics.HasError() {
@@ -334,14 +329,10 @@ func (r *llmProviderResource) Read(ctx context.Context, req resource.ReadRequest
 	resp.Diagnostics.Append(resp.State.Set(ctx, state)...)
 }
 
-// reconcileModelConfigurations refreshes model-list *membership* (by model
-// name) plus the persisted per-model fields (is_visible,
-// custom_display_name) from the server, so out-of-band changes to them show
-// as drift. The remaining per-model fields (max_input_tokens, supports_*,
-// display_name) are enriched server-side — the view returns resolved values,
-// not the stored overrides — so they are preserved from prior state to avoid
-// phantom drift. Entries only present server-side (import, out-of-band adds)
-// are populated from the view best-effort.
+// reconcileModelConfigurations refreshes membership (by name) and the
+// persisted fields (is_visible, custom_display_name); the other per-model
+// fields are server-enriched resolved values that would show phantom drift,
+// so prior state is kept for them.
 func (r *llmProviderResource) reconcileModelConfigurations(ctx context.Context, prior types.Set, remote []client.ModelConfigurationView, diags *diag.Diagnostics) types.Set {
 	var priorConfigs []modelConfigurationModel
 	if !prior.IsNull() && !prior.IsUnknown() {
@@ -399,11 +390,8 @@ func (r *llmProviderResource) Update(ctx context.Context, req resource.UpdateReq
 		return
 	}
 
-	// Terraform state holds the real (never masked) secret values, so they
-	// are resent with the changed flags on whenever a value exists. The
-	// *_changed=false path is only needed when both sides are null (nothing
-	// to send, keep whatever is stored — e.g. after an import that never
-	// managed the secret).
+	// State holds real (never masked) secrets, so resend them with the
+	// changed flags on whenever either side has a value.
 	apiKeyChanged := !plan.APIKey.IsNull() || !state.APIKey.IsNull()
 	customConfigChanged := !plan.CustomConfig.IsNull() || !state.CustomConfig.IsNull()
 
@@ -412,12 +400,10 @@ func (r *llmProviderResource) Update(ctx context.Context, req resource.UpdateReq
 		return
 	}
 
-	// Steady-state auto mode has no server-side model protection: the upsert
-	// applies whatever list it receives as a full replace, and only the
-	// *transition* into auto mode preserves existing models. Pass the server's
-	// current list through unchanged so an unrelated update (rename, key
-	// rotation) cannot delete registry-managed models or trip the
-	// default-model guard.
+	// Steady-state auto mode has no server-side model protection (only the
+	// transition preserves models), so re-assert the server's current list
+	// instead of the configured one. The read is the API's filtered display
+	// view and not atomic with the write — admin-UI parity, see README.
 	if plan.IsAutoMode.ValueBool() {
 		view, err := r.client.GetLLMProvider(ctx, id)
 		if err != nil {
@@ -440,10 +426,8 @@ func (r *llmProviderResource) Update(ctx context.Context, req resource.UpdateReq
 	resp.Diagnostics.Append(resp.State.Set(ctx, plan)...)
 }
 
-// modelConfigUpsertsFromViews converts the server's current model list into
-// upsert entries, so an auto-mode update re-asserts server state verbatim.
-// (This mirrors what the admin UI sends and is the only non-destructive
-// option: the upsert API has no way to leave the model list untouched.)
+// modelConfigUpsertsFromViews re-asserts the server's model list in upsert
+// form; the API has no way to leave the list untouched.
 func modelConfigUpsertsFromViews(views []client.ModelConfigurationView) []client.ModelConfigurationUpsert {
 	out := make([]client.ModelConfigurationUpsert, 0, len(views))
 	for _, mc := range views {

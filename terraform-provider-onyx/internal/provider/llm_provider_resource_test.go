@@ -45,11 +45,8 @@ resource "onyx_llm_provider" "test" {
 				ResourceName:      "onyx_llm_provider.test",
 				ImportState:       true,
 				ImportStateVerify: true,
-				// api_key is masked on read so the imported state has it null.
-				// model_configurations differ per-field after import: the API
-				// enriches models with computed values (max tokens, display
-				// name) that deliberately aren't refreshed into managed state.
-				// force_delete is provider-side only and unknowable on import.
+				// Unverifiable on import: api_key is masked, model_configurations
+				// carry server-enriched values, force_delete is client-side only.
 				ImportStateVerifyIgnore: []string{"api_key", "model_configurations", "force_delete"},
 			},
 			{

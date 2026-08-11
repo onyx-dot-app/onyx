@@ -200,8 +200,7 @@ func (r *apiKeyResource) Delete(ctx context.Context, req resource.DeleteRequest,
 	}
 
 	if err := r.client.DeleteAPIKey(ctx, id); err != nil && !client.IsNotFound(err) {
-		// The backend reports a missing key as a 400 ValueError, not a 404.
-		// Probe for existence so an out-of-band deletion doesn't wedge destroy.
+		// A missing key errors as 400, not 404; probe so destroy isn't wedged.
 		if _, getErr := r.client.GetAPIKey(ctx, id); client.IsNotFound(getErr) {
 			return
 		}

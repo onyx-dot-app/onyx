@@ -31,9 +31,8 @@ type ModelConfigurationView struct {
 	CustomDisplayName  *string `json:"custom_display_name"`
 }
 
-// LLMProviderUpsertRequest mirrors LLMProviderUpsertRequest. Fields are
-// deliberately not omitempty: the PUT is a full replace, so the request must
-// always assert the complete desired state.
+// LLMProviderUpsertRequest mirrors the backend model. No omitempty: the PUT
+// is a full replace and must assert complete desired state.
 type LLMProviderUpsertRequest struct {
 	ID                  *int64                     `json:"id"`
 	Name                *string                    `json:"name"`
@@ -104,9 +103,8 @@ func (c *Client) UpsertLLMProvider(ctx context.Context, req LLMProviderUpsertReq
 	return &view, nil
 }
 
-// ListLLMProviders returns all LLM providers plus the global default models.
-// include_image_gen=true is required: without it the API silently omits
-// image-generation providers, which Read would then treat as deleted.
+// ListLLMProviders returns all providers plus the global defaults.
+// include_image_gen=true, or image-gen providers read as deleted.
 func (c *Client) ListLLMProviders(ctx context.Context) (*LLMProviderList, error) {
 	var list LLMProviderList
 	if err := c.doJSON(ctx, http.MethodGet, "/admin/llm/provider?include_image_gen=true", nil, &list); err != nil {
@@ -156,9 +154,8 @@ func (c *Client) SetDefaultChatNamingModel(ctx context.Context, req DefaultModel
 	return c.doJSON(ctx, http.MethodPost, "/admin/llm/default-chat-naming", req, nil)
 }
 
-// ClearDefaultChatNamingModel clears the dedicated chat auto-naming model;
-// auto-naming falls back to the session's model. Text and vision defaults
-// have no equivalent unset endpoint.
+// ClearDefaultChatNamingModel clears the chat auto-naming model. Text and
+// vision defaults have no equivalent unset endpoint.
 func (c *Client) ClearDefaultChatNamingModel(ctx context.Context) error {
 	return c.doJSON(ctx, http.MethodDelete, "/admin/llm/default-chat-naming", nil, nil)
 }

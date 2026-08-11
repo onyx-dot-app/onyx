@@ -16,9 +16,8 @@ func TestAccLLMProviderDefaultResource(t *testing.T) {
 		ProtoV6ProviderFactories: testAccProtoV6ProviderFactories,
 		Steps: []resource.TestStep{
 			{
-				// force_delete is required on the provider: at destroy time it
-				// holds the deployment default (deletes are ordered after the
-				// default resource's no-op destroy).
+				// force_delete: at destroy time this provider still holds the
+				// deployment default.
 				Config: `
 resource "onyx_llm_provider" "for_default" {
   name          = "tf-acc-default-holder"

@@ -12,9 +12,8 @@ type APIKeyArgs struct {
 	Role string  `json:"role"`
 }
 
-// APIKeyDescriptor mirrors ApiKeyDescriptor (backend/onyx/auth/api_key.py).
-// APIKey (the plaintext credential) is only present in create/regenerate
-// responses — list responses always return null.
+// APIKeyDescriptor mirrors the backend model. APIKey (the plaintext
+// credential) is only present in create/regenerate responses.
 type APIKeyDescriptor struct {
 	APIKeyID      int64   `json:"api_key_id"`
 	APIKeyDisplay string  `json:"api_key_display"`

@@ -7,15 +7,9 @@ import (
 	"net/url"
 )
 
-// CloudEmbeddingProvider mirrors both CloudEmbeddingProvider and
-// CloudEmbeddingProviderCreationRequest (backend/onyx/server/manage/embedding/models.py),
-// which have identical fields. Keyed by provider_type (there is no numeric id).
-//
-// APIKey in GET responses is MASKED, and unlike the LLM-provider upsert there
-// is no api_key_changed flag: the backend overwrites every stored field with
-// the request body verbatim. A masked value written back would permanently
-// corrupt the stored key, so callers must never feed a GET response's APIKey
-// into UpsertEmbeddingProvider.
+// CloudEmbeddingProvider mirrors the backend models, keyed by provider_type.
+// GET masks APIKey and the upsert has no changed-flag guard, so a GET-derived
+// APIKey written back would permanently corrupt the stored key.
 type CloudEmbeddingProvider struct {
 	ProviderType   string  `json:"provider_type"`
 	APIKey         *string `json:"api_key"`
@@ -43,9 +37,8 @@ func (c *Client) ListEmbeddingProviders(ctx context.Context) ([]CloudEmbeddingPr
 	return providers, nil
 }
 
-// GetEmbeddingProvider finds a provider by provider_type. The API has no
-// get-by-id endpoint, so this scans the list; a missing provider returns an
-// *APIError with 404.
+// GetEmbeddingProvider scans the list (no get-by-id endpoint); missing
+// providers return a synthetic 404 *APIError.
 func (c *Client) GetEmbeddingProvider(ctx context.Context, providerType string) (*CloudEmbeddingProvider, error) {
 	providers, err := c.ListEmbeddingProviders(ctx)
 	if err != nil {

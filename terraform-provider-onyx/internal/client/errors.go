@@ -9,9 +9,8 @@ import (
 	"strings"
 )
 
-// APIError is a non-2xx response from the Onyx API. ErrorCode and Detail are
-// populated from the standard OnyxError JSON shape
-// {"error_code": "...", "detail": "..."} when present.
+// APIError is a non-2xx response, parsed from the OnyxError shape
+// {"error_code", "detail"} when present.
 type APIError struct {
 	StatusCode int
 	ErrorCode  string

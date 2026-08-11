@@ -67,10 +67,7 @@ func TestGetSettings(t *testing.T) {
 func TestPatchSettingsSendsOnlyManagedFields(t *testing.T) {
 	c, captured := newTestServer(t, http.StatusOK, `null`)
 
-	// PATCH /admin/settings merges only the fields present in the body onto
-	// the stored settings. A sparse body is the whole point: fields the caller
-	// does not manage (including license-derived ones and fields added to the
-	// backend later) must be absent so the server leaves them untouched.
+	// Unmanaged fields must be absent from the body or the server merges them.
 	err := c.PatchSettings(context.Background(), map[string]any{
 		"company_name":        "ACME",
 		"invite_only_enabled": true,

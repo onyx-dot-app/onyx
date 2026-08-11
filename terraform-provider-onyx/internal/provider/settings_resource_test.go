@@ -8,9 +8,8 @@ import (
 )
 
 func TestAccSettingsResource(t *testing.T) {
-	// The settings singleton is global deployment state and destroy is
-	// deliberately a no-op, so snapshot the fields this test touches and
-	// restore them afterwards.
+	// Destroy is a deliberate no-op on the global singleton, so snapshot and
+	// restore the fields this test touches.
 	var restore func()
 
 	resource.Test(t, resource.TestCase{
@@ -77,8 +76,7 @@ func snapshotSettingsFields(t *testing.T) func() {
 	autoScroll := before.AutoScroll
 
 	return func() {
-		// PATCH merges only the sent fields, so restoring the two touched
-		// fields cannot disturb anything else. JSON null restores "unset".
+		// PATCH merges only sent fields; JSON null restores "unset".
 		var companyNameValue, autoScrollValue any
 		if companyName != nil {
 			companyNameValue = *companyName
@@ -91,8 +89,7 @@ func snapshotSettingsFields(t *testing.T) func() {
 			"auto_scroll":  autoScrollValue,
 		})
 		if err != nil {
-			// A failed restore leaves the shared deployment modified for every
-			// later run — that is a real failure, not a footnote.
+			// A failed restore leaves the shared deployment modified.
 			t.Errorf("settings restore failed: %v", err)
 		}
 	}

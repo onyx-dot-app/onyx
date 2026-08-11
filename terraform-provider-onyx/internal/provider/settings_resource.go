@@ -56,9 +56,8 @@ type settingsResourceModel struct {
 	CraftDefaultEnabled               types.Bool    `tfsdk:"craft_default_enabled"`
 	CraftInstructions                 types.String  `tfsdk:"craft_instructions"`
 
-	// License/deployment/env-derived, read-only. The last three are
-	// overwritten from backend env vars on every read, so a configured value
-	// could never converge.
+	// Read-only: license-derived, or (the last three) overwritten from
+	// backend env vars on every read.
 	ApplicationStatus              types.String `tfsdk:"application_status"`
 	Tier                           types.String `tfsdk:"tier"`
 	EEFeaturesEnabled              types.Bool   `tfsdk:"ee_features_enabled"`
@@ -224,10 +223,7 @@ func (r *settingsResource) Configure(_ context.Context, req resource.ConfigureRe
 }
 
 // patchBodyFromPlan builds the sparse PATCH body: exactly the non-null
-// (managed) plan attributes. The backend merges only the fields present in
-// the body onto the stored settings, so unmanaged fields — including
-// license-derived ones and fields added to the backend later — are never
-// touched.
+// (managed) plan attributes, so unmanaged fields are never touched.
 func patchBodyFromPlan(plan settingsResourceModel) map[string]any {
 	body := map[string]any{}
 	if !plan.MaximumChatRetentionDays.IsNull() {
@@ -293,9 +289,8 @@ func patchBodyFromPlan(plan settingsResourceModel) map[string]any {
 	return body
 }
 
-// refreshFromServer updates a model's attributes from the server: managed
-// (non-null) writable attributes are refreshed for drift detection, unmanaged
-// ones stay null, and computed attributes are always refreshed.
+// refreshSettingsModel refreshes managed (non-null) attributes for drift
+// detection; unmanaged ones stay null, computed ones always refresh.
 func refreshSettingsModel(model *settingsResourceModel, server *client.Settings) {
 	if !model.MaximumChatRetentionDays.IsNull() {
 		model.MaximumChatRetentionDays = types.Float64PointerValue(server.MaximumChatRetentionDays)
