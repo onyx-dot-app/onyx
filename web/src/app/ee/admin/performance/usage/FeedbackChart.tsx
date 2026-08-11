@@ -25,14 +25,20 @@ export function FeedbackChart({
         <SvgSimpleLoader className="h-6 w-6" />
       </div>
     );
-  } else if (
-    !queryAnalyticsData ||
-    queryAnalyticsData[0] === undefined ||
-    queryAnalyticsError
-  ) {
+  } else if (!queryAnalyticsData || queryAnalyticsError) {
     chart = (
-      <div className="h-80 text-red-600 text-bold flex flex-col">
-        <p className="m-auto">Failed to fetch feedback data...</p>
+      <div className="h-80 flex flex-col items-center justify-center">
+        <Text font="main-ui-body" color="status-error-05">
+          Failed to fetch feedback data...
+        </Text>
+      </div>
+    );
+  } else if (queryAnalyticsData[0] === undefined) {
+    chart = (
+      <div className="h-80 flex flex-col items-center justify-center">
+        <Text font="main-ui-body" color="text-03">
+          No feedback in the selected time range
+        </Text>
       </div>
     );
   } else {

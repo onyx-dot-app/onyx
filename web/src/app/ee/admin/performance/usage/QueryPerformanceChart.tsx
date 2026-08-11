@@ -33,14 +33,23 @@ export function QueryPerformanceChart({
     );
   } else if (
     !queryAnalyticsData ||
-    queryAnalyticsData[0] === undefined ||
     !userAnalyticsData ||
     queryAnalyticsError ||
     userAnalyticsError
   ) {
     chart = (
-      <div className="h-80 text-red-600 text-bold flex flex-col">
-        <p className="m-auto">Failed to fetch query data...</p>
+      <div className="h-80 flex flex-col items-center justify-center">
+        <Text font="main-ui-body" color="status-error-05">
+          Failed to fetch query data...
+        </Text>
+      </div>
+    );
+  } else if (queryAnalyticsData[0] === undefined) {
+    chart = (
+      <div className="h-80 flex flex-col items-center justify-center">
+        <Text font="main-ui-body" color="text-03">
+          No queries in the selected time range
+        </Text>
       </div>
     );
   } else {

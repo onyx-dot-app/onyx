@@ -24,14 +24,20 @@ export function OnyxBotChart({
         <SvgSimpleLoader className="h-6 w-6" />
       </div>
     );
-  } else if (
-    !onyxBotAnalyticsData ||
-    onyxBotAnalyticsData[0] == undefined ||
-    onyxBotAnalyticsError
-  ) {
+  } else if (!onyxBotAnalyticsData || onyxBotAnalyticsError) {
     chart = (
-      <div className="h-80 text-red-600 text-bold flex flex-col">
-        <p className="m-auto">Failed to fetch feedback data...</p>
+      <div className="h-80 flex flex-col items-center justify-center">
+        <Text font="main-ui-body" color="status-error-05">
+          Failed to fetch OnyxBot data...
+        </Text>
+      </div>
+    );
+  } else if (onyxBotAnalyticsData[0] === undefined) {
+    chart = (
+      <div className="h-80 flex flex-col items-center justify-center">
+        <Text font="main-ui-body" color="text-03">
+          No OnyxBot activity in this workspace for the selected time range
+        </Text>
       </div>
     );
   } else {
