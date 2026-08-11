@@ -471,7 +471,7 @@ describe("loadSession restore status", () => {
     expect(session?.activeTurnLocalOwner).toBe(false);
   });
 
-  it("preserves stale-skill state while loading a pre-provisioned turn", async () => {
+  it("retains fetched stale-skill state during a pre-provisioned turn", async () => {
     mockedApi.fetchSession.mockResolvedValue({
       ...runningSession(),
       skills_stale: true,
@@ -496,7 +496,7 @@ describe("loadSession restore status", () => {
 
     expect(
       useBuildSessionStore.getState().sessions.get(SESSION_ID)?.skillsStale
-    ).toBe(false);
+    ).toBe(true);
   });
 
   it("clears stale turn metadata when active turn lookup says no turn is running", async () => {
