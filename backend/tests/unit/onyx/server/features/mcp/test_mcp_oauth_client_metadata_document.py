@@ -38,3 +38,23 @@ def test_mcp_oauth_client_metadata_document_is_public_and_cacheable(
         route for route in app.routes if getattr(route, "path", "") == METADATA_ROUTE
     )
     assert is_route_in_spec_list(metadata_route, PUBLIC_ENDPOINT_SPECS)
+
+
+@pytest.mark.parametrize(
+    ("web_domain", "expected_url"),
+    [
+        (
+            "https://onyx.example.com",
+            "https://onyx.example.com/api/mcp/oauth/client-metadata",
+        ),
+        ("http://localhost:3000", None),
+    ],
+)
+def test_mcp_oauth_client_metadata_url_requires_https(
+    monkeypatch: pytest.MonkeyPatch,
+    web_domain: str,
+    expected_url: str | None,
+) -> None:
+    monkeypatch.setattr(client_metadata, "WEB_DOMAIN", web_domain)
+
+    assert client_metadata.validated_mcp_oauth_client_metadata_url() == expected_url

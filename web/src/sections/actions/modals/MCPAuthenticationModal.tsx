@@ -684,14 +684,15 @@ export default function MCPAuthenticationModal({
                       {/* Info Text */}
                       <div className="flex flex-col gap-2">
                         <Text as="p" font="secondary-body" color="text-03">
-                          Client ID and secret are optional if the server
-                          connection supports Dynamic Client Registration (DCR).
+                          Client ID and secret are optional. During automatic
+                          discovery, Onyx uses a Client ID Metadata Document
+                          (CIMD) when supported and falls back to Dynamic Client
+                          Registration (DCR).
                         </Text>
                         <Text as="p" font="secondary-body" color="text-03">
-                          If your server does not support DCR, you need register
-                          your Onyx instance with the server provider to obtain
-                          these credentials first. Make sure to grant Onyx
-                          necessary scopes/permissions for your actions.
+                          If your server supports neither method, register your
+                          Onyx instance with the server provider first. Grant
+                          Onyx the necessary scopes for your actions.
                         </Text>
                         {/* Redirect URI */}
                         <div className="flex items-center gap-1 w-full">
