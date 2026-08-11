@@ -29,7 +29,6 @@ import { DRAG_TYPES } from "@/lib/sidebar/constants";
 import { useActiveProject } from "@/lib/projects/hooks";
 import type { Project } from "@/lib/projects/types";
 import { useProjectsContext } from "@/providers/ProjectsContext";
-import Truncated from "@/refresh-components/texts/Truncated";
 import ButtonRenaming from "@/refresh-components/buttons/ButtonRenaming";
 
 /**
@@ -239,7 +238,7 @@ export function ProjectFolderButton({ project }: ProjectFolderButtonProps) {
                 onClose={() => setIsEditing(false)}
               />
             ) : (
-              <Truncated text03>{project.name}</Truncated>
+              project.name
             )}
           </SidebarTab>
         </Popover.Anchor>
