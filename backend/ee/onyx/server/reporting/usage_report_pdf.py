@@ -158,8 +158,9 @@ def _logo_flowable(branding: ReportBranding) -> Flowable | None:
         reader = ImageReader(BytesIO(branding.logo))
         src_w, src_h = reader.getSize()
     except Exception:
-        logger.warning(
-            "Usage report could not render the configured logo", exc_info=True
+        logger.exception(
+            "Usage report could not render the configured logo for %s",
+            branding.application_name,
         )
         return None
     if not src_w or not src_h:

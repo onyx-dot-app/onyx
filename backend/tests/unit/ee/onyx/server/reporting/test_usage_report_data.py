@@ -275,7 +275,7 @@ def test_unreadable_logo_still_produces_a_pdf() -> None:
 
 
 def test_axis_labels_never_exceed_the_display_limit() -> None:
-    for day_count in (13, 23, 30):
-        days = [f"2026-07-{day:02}" for day in range(1, day_count + 1)]
+    for day_count in (0, 1, 12, 13, 23, 24, 25, 30, 365):
+        days = [f"2026-07-{day + 1:02d}" for day in range(day_count)]
 
         assert sum(bool(label) for label in _axis_labels(days)) <= 12

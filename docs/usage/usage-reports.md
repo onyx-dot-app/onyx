@@ -24,7 +24,7 @@ The raw CSV files are still a data dump. They have three problems:
 2. **It has no dimensions the admin budgets by.** No team, no agent, no source.
 3. **It joins badly.** `users.csv` has no email, so it cannot join to the other files.
 
-The raw export is still valuable. It is just the wrong and only artifact.
+The raw export is still valuable. It is just the wrong artifact for every job.
 
 ## The admin's job
 
