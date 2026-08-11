@@ -27,6 +27,7 @@ from onyx.chat.chat_utils import (
     create_chat_session_from_request,
     extract_headers,
 )
+from onyx.chat.incognito_context import teardown_incognito_session
 from onyx.chat.models import ChatFullResponse, CreateChatSessionID
 from onyx.chat.process_message import (
     gather_stream_full,
@@ -433,6 +434,7 @@ def get_chat_session(
         # Packets are now directly serialized as Packet Pydantic models
         packets=replay_packet_lists,
         current_run=current_run,
+        incognito=chat_session.incognito_record_mode is not None,
     )
 
 
@@ -450,6 +452,9 @@ def create_new_chat_session(
             user=user,
             db_session=db_session,
         )
+    except OnyxError:
+        # Carries its own status and detail (e.g. incognito refused).
+        raise
     except ValueError as e:
         # Project or persona access denied
         raise HTTPException(status_code=403, detail=str(e))
@@ -541,6 +546,14 @@ def rename_chat_session(
             db_session=db_session,
             eager_load_persona=True,
         )
+        # Auto-naming derives a title from the conversation and writes it to the
+        # session row. A non-persisting incognito mode keeps no content in
+        # Postgres, so it keeps the fallback name and skips the LLM call.
+        mode = chat_session.incognito_record_mode
+        if mode is not None and not mode.persists_content:
+            return RenameChatSessionResponse(
+                new_name=get_fallback_chat_session_name([])
+            )
         full_history = create_chat_history_chain(
             chat_session_id=chat_session_id,
             db_session=db_session,
@@ -625,6 +638,24 @@ def delete_chat_session_by_id(
         raise HTTPException(status_code=400, detail=str(e))
 
 
+@router.post("/end-incognito-session/{session_id}")
+def end_incognito_session(
+    session_id: UUID,
+    user: User = Depends(require_permission(Permission.BASIC_ACCESS)),
+    db_session: Session = Depends(get_session),
+) -> None:
+    """Drop an incognito session's live context the moment the chat closes.
+
+    The one-hour TTL is only the backstop for when this never arrives (a hard
+    tab close). Verifies ownership so one user cannot end another's session.
+    """
+    chat_session = get_chat_session_by_id(
+        chat_session_id=session_id, user_id=user.id, db_session=db_session
+    )
+    if chat_session.incognito_record_mode is not None:
+        teardown_incognito_session(session_id)
+
+
 # NOTE: This endpoint is extremely central to the application, any changes to it should be reviewed and approved by an experienced
 # team member. It is very important to 1. avoid bloat and 2. that this remains backwards compatible across versions.
 @router.post(
@@ -674,7 +705,12 @@ def handle_send_chat_message(
     Returns:
         StreamingResponse | ChatFullResponse: Either streams or returns complete response.
     """
-    logger.debug("Received new chat message: %s", chat_message_req.message)
+    # Session id only: the session's incognito mode isn't loaded yet, and a
+    # verbatim prompt in the debug log would be exactly the durable message
+    # log incognito must never leave behind.
+    logger.debug(
+        "Received new chat message for session %s", chat_message_req.chat_session_id
+    )
 
     tenant_id = get_current_tenant_id()
     mt_cloud_telemetry(

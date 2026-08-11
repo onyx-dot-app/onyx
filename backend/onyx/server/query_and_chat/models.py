@@ -79,6 +79,9 @@ class ChatSessionCreationRequest(BaseModel):
     persona_id: int = 0
     description: str | None = None
     project_id: int | None = None
+    # Start the session incognito. Honored only where the ephemeral store is
+    # available, otherwise ignored so the session is an ordinary chat.
+    incognito: bool = False
 
 
 class ChatFeedbackRequest(BaseModel):
@@ -274,6 +277,9 @@ class ChatSessionDetailResponse(BaseModel):
     # Set while a run is in flight and resumable: cursor-0 replay+tail is
     # available at /chat-session/{id}/resume-stream.
     current_run: CurrentRunInfo | None = None
+    # True for sessions pinned to an incognito record mode, so a reload can
+    # restore the incognito UI state.
+    incognito: bool = False
 
 
 class AdminSearchRequest(BaseModel):

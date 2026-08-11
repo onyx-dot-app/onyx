@@ -712,3 +712,66 @@ class SSOProviderType(str, PyEnum):
     GOOGLE_OAUTH = "GOOGLE_OAUTH"
     OIDC = "OIDC"
     SAML = "SAML"
+
+
+class IncognitoRecordMode(str, PyEnum):
+    """What a workspace retains from an incognito chat.
+
+    The user-facing contract is identical in both modes: the chat must never
+    appear in the owner's own history, memory writes must be refused, and
+    attachments must stay temporary. The mode governs only what the workspace
+    may record. Every mode must meter usage: the ledger rows carry no content,
+    and token rate limits read them, so incognito must never become a
+    quota-evasion route. Feature-off is deliberately not a member: disabling
+    incognito must be an admin-setting concern, never a mode pinned on a
+    session.
+
+    Values differ from member names here, so the column storing this passes
+    ``values_callable`` to persist the value rather than the default name.
+    """
+
+    # Content persists as an ordinary chat. Only the user's own history hides it.
+    FULL_HISTORY = "full_history"
+    # No conversation content is written to Postgres. Usage is still metered.
+    USAGE_ONLY = "usage_only"
+
+    @classmethod
+    def from_context_value(cls, value: str | None) -> "IncognitoRecordMode | None":
+        """None outside incognito. Unknown values fail closed to USAGE_ONLY."""
+        if value is None:
+            return None
+        try:
+            return cls(value)
+        except ValueError:
+            return cls.USAGE_ONLY
+
+    @property
+    def persists_content(self) -> bool:
+        """Whether chat_message rows may be written to Postgres at all.
+
+        False means never written, not written-and-hidden: deletion is not
+        atomic across WAL, replicas, and backups, so a write-then-remove
+        design could not honor the guarantee.
+        """
+        return self is IncognitoRecordMode.FULL_HISTORY
+
+    @property
+    def emits_external_traces(self) -> bool:
+        """Whether spans may reach external trace processors.
+
+        Redacting a payload still sends a request to a destination the trust
+        boundary denies, so suppression is total rather than scrubbed. Internal
+        spans always run: the usage ledger is a tracing processor consuming
+        them, so metering needs no egress.
+        """
+        return self is IncognitoRecordMode.FULL_HISTORY
+
+    @property
+    def fires_hooks(self) -> bool:
+        """Whether the query-processing hook may run.
+
+        The hook ships the raw query and the user's email to a customer-
+        configured endpoint before persistence, which the trust boundary denies
+        for anything but a fully-recorded chat.
+        """
+        return self is IncognitoRecordMode.FULL_HISTORY

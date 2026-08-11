@@ -176,6 +176,7 @@ def save_chat_turn(
     is_clarification: bool = False,
     emitted_citations: set[int] | None = None,
     pre_answer_processing_time: float | None = None,
+    persist_content: bool = True,
 ) -> None:
     """
     Save a chat turn by populating the assistant_message and creating related entities.
@@ -206,9 +207,13 @@ def save_chat_turn(
     sanitized_message_text = (
         sanitize_string(message_text) if message_text else message_text
     )
-    assistant_message.message = sanitized_message_text
+    # Incognito keeps the row for tracking but never its text. Token count below
+    # still comes from the real answer so usage and budgeting are unaffected.
+    assistant_message.message = sanitized_message_text if persist_content else ""
     assistant_message.reasoning_tokens = (
-        sanitize_string(reasoning_tokens) if reasoning_tokens else reasoning_tokens
+        (sanitize_string(reasoning_tokens) if reasoning_tokens else reasoning_tokens)
+        if persist_content
+        else None
     )
     assistant_message.is_clarification = is_clarification
 

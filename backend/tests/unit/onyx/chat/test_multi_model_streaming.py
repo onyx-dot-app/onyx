@@ -276,8 +276,9 @@ def _make_setup(n_models: int = 1) -> MagicMock:
     setup.available_files.chat_file_ids = []
     setup.forced_tool_id = None
     setup.simple_chat_history = []
-    setup.chat_session.id = uuid4()
-    setup.user_message.id = None
+    setup.chat_session_id = uuid4()
+    setup.chat_session_project_id = None
+    setup.user_message_id = None
     setup.custom_tool_additional_headers = None
     setup.mcp_headers = None
     return setup

@@ -12,6 +12,7 @@ from onyx.configs.chat_configs import HARD_DELETE_CHATS
 from onyx.configs.constants import MessageType
 from onyx.context.search.models import InferenceSection, SavedSearchDoc
 from onyx.context.search.models import SearchDoc as ServerSearchDoc
+from onyx.db.enums import IncognitoRecordMode
 from onyx.db.models import (
     ChatMessage,
     ChatMessage__SearchDoc,
@@ -111,6 +112,9 @@ def get_chat_sessions_by_user(
         .where(ChatSession.onyxbot_flow.is_(False))
         .order_by(desc(ChatSession.time_updated))
     )
+
+    # Incognito sessions never appear in their owner's history.
+    stmt = stmt.where(ChatSession.incognito_record_mode.is_(None))
 
     if deleted is not None:
         stmt = stmt.where(ChatSession.deleted == deleted)
@@ -215,6 +219,7 @@ def create_chat_session(
     onyxbot_flow: bool = False,
     slack_thread_id: str | None = None,
     project_id: int | None = None,
+    incognito_record_mode: IncognitoRecordMode | None = None,
 ) -> ChatSession:
     chat_session = ChatSession(
         user_id=user_id,
@@ -225,6 +230,7 @@ def create_chat_session(
         onyxbot_flow=onyxbot_flow,
         slack_thread_id=slack_thread_id,
         project_id=project_id,
+        incognito_record_mode=incognito_record_mode,
     )
 
     db_session.add(chat_session)
