@@ -32,7 +32,8 @@ export default function ApiKeyFormModal({
   apiKey,
 }: ApiKeyFormModalProps) {
   const isUpdate = apiKey !== undefined;
-  const { data: allGroups, isLoading: groupsLoading } = useGroups();
+  // A key's access is whatever groups it lands in, so Admin/Basic must be offered too.
+  const { data: allGroups, isLoading: groupsLoading } = useGroups(true);
 
   const [searchTerm, setSearchTerm] = useState("");
   const [popoverOpen, setPopoverOpen] = useState(false);

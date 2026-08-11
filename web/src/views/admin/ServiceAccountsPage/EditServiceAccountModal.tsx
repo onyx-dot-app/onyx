@@ -41,11 +41,12 @@ export default function EditServiceAccountModal({
   onClose,
   onMutate,
 }: EditServiceAccountModalProps) {
+  // Matches ApiKeyFormModal, or editing would silently drop a group it can't show.
   const {
     data: allGroups,
     isLoading: groupsLoading,
     refreshGroups,
-  } = useGroups();
+  } = useGroups(true);
   const [searchTerm, setSearchTerm] = useState("");
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [popoverOpen, setPopoverOpen] = useState(false);
