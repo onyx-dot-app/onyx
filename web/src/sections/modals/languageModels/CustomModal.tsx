@@ -18,6 +18,7 @@ import {
   DisplayNameField,
   ModelAccessField,
   ModalWrapper,
+  useApiBaseSubDescription,
 } from "@/sections/modals/languageModels/shared";
 import { useCustomProviderNames } from "@/lib/languageModels/hooks";
 import InputTypeInField from "@/refresh-components/form/InputTypeInField";
@@ -245,6 +246,7 @@ export default function CustomModal({
 }: LLMProviderFormProps) {
   const isOnboarding = variant === "onboarding";
   const { mutate } = useSWRConfig();
+  const apiBaseSubDescription = useApiBaseSubDescription();
 
   const onClose = () => onOpenChange?.(false);
 
@@ -393,7 +395,7 @@ export default function CustomModal({
         subDescription="Paste your API key if your model provider requires authentication."
       />
 
-      <APIBaseField optional />
+      <APIBaseField optional subDescription={apiBaseSubDescription} />
 
       <InputPadder>
         <InputVertical
