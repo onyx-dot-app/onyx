@@ -200,6 +200,11 @@ func (r *apiKeyResource) Delete(ctx context.Context, req resource.DeleteRequest,
 	}
 
 	if err := r.client.DeleteAPIKey(ctx, id); err != nil && !client.IsNotFound(err) {
+		// The backend reports a missing key as a 400 ValueError, not a 404.
+		// Probe for existence so an out-of-band deletion doesn't wedge destroy.
+		if _, getErr := r.client.GetAPIKey(ctx, id); client.IsNotFound(getErr) {
+			return
+		}
 		resp.Diagnostics.AddError("Failed to delete Onyx API key", err.Error())
 	}
 }

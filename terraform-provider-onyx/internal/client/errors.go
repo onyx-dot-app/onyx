@@ -36,8 +36,12 @@ func checkResponse(resp *http.Response) error {
 		return nil
 	}
 
-	body, _ := io.ReadAll(io.LimitReader(resp.Body, 64*1024))
+	body, readErr := io.ReadAll(io.LimitReader(resp.Body, 64*1024))
 	apiErr := &APIError{StatusCode: resp.StatusCode}
+	if readErr != nil && len(body) == 0 {
+		apiErr.Detail = "failed to read error response body: " + readErr.Error()
+		return apiErr
+	}
 
 	if isHTMLResponse(resp.Header.Get("Content-Type"), body) {
 		apiErr.Detail = "server returned HTML instead of JSON — check that the endpoint and api_prefix are correct"

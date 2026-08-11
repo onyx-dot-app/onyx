@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 
+	"github.com/hashicorp/terraform-plugin-framework-validators/int64validator"
 	"github.com/hashicorp/terraform-plugin-framework-validators/stringvalidator"
 	"github.com/hashicorp/terraform-plugin-framework/path"
 	"github.com/hashicorp/terraform-plugin-framework/resource"
@@ -46,25 +47,27 @@ type settingsResourceModel struct {
 	TemperatureOverrideEnabled        types.Bool    `tfsdk:"temperature_override_enabled"`
 	AutoScroll                        types.Bool    `tfsdk:"auto_scroll"`
 	QueryHistoryType                  types.String  `tfsdk:"query_history_type"`
-	HideQueryHistoryFromAdminPanel    types.Bool    `tfsdk:"hide_query_history_from_admin_panel"`
 	ImageExtractionAndAnalysisEnabled types.Bool    `tfsdk:"image_extraction_and_analysis_enabled"`
 	ImageAnalysisMaxSizeMB            types.Int64   `tfsdk:"image_analysis_max_size_mb"`
 	UserKnowledgeEnabled              types.Bool    `tfsdk:"user_knowledge_enabled"`
 	UserFileMaxUploadSizeMB           types.Int64   `tfsdk:"user_file_max_upload_size_mb"`
 	FileTokenCountThresholdK          types.Int64   `tfsdk:"file_token_count_threshold_k"`
-	ShowExtraConnectors               types.Bool    `tfsdk:"show_extra_connectors"`
 	DisableDefaultAssistant           types.Bool    `tfsdk:"disable_default_assistant"`
 	CraftDefaultEnabled               types.Bool    `tfsdk:"craft_default_enabled"`
 	CraftInstructions                 types.String  `tfsdk:"craft_instructions"`
-	OpenSearchIndexingEnabled         types.Bool    `tfsdk:"opensearch_indexing_enabled"`
 
-	// License/deployment-derived, read-only.
-	ApplicationStatus types.String `tfsdk:"application_status"`
-	Tier              types.String `tfsdk:"tier"`
-	EEFeaturesEnabled types.Bool   `tfsdk:"ee_features_enabled"`
-	GPUEnabled        types.Bool   `tfsdk:"gpu_enabled"`
-	SeatCount         types.Int64  `tfsdk:"seat_count"`
-	UsedSeats         types.Int64  `tfsdk:"used_seats"`
+	// License/deployment/env-derived, read-only. The last three are
+	// overwritten from backend env vars on every read, so a configured value
+	// could never converge.
+	ApplicationStatus              types.String `tfsdk:"application_status"`
+	Tier                           types.String `tfsdk:"tier"`
+	EEFeaturesEnabled              types.Bool   `tfsdk:"ee_features_enabled"`
+	GPUEnabled                     types.Bool   `tfsdk:"gpu_enabled"`
+	SeatCount                      types.Int64  `tfsdk:"seat_count"`
+	UsedSeats                      types.Int64  `tfsdk:"used_seats"`
+	HideQueryHistoryFromAdminPanel types.Bool   `tfsdk:"hide_query_history_from_admin_panel"`
+	ShowExtraConnectors            types.Bool   `tfsdk:"show_extra_connectors"`
+	OpenSearchIndexingEnabled      types.Bool   `tfsdk:"opensearch_indexing_enabled"`
 }
 
 func (r *settingsResource) Metadata(_ context.Context, req resource.MetadataRequest, resp *resource.MetadataResponse) {
@@ -134,10 +137,6 @@ func (r *settingsResource) Schema(_ context.Context, _ resource.SchemaRequest, r
 					stringvalidator.OneOf("disabled", "anonymized", "normal"),
 				},
 			},
-			"hide_query_history_from_admin_panel": schema.BoolAttribute{
-				Optional:            true,
-				MarkdownDescription: "Hide the query history page in the admin panel (recording stays on).",
-			},
 			"image_extraction_and_analysis_enabled": schema.BoolAttribute{
 				Optional:            true,
 				MarkdownDescription: "Extract and analyze images during indexing.",
@@ -151,16 +150,16 @@ func (r *settingsResource) Schema(_ context.Context, _ resource.SchemaRequest, r
 				MarkdownDescription: "Enable user-uploaded knowledge files.",
 			},
 			"user_file_max_upload_size_mb": schema.Int64Attribute{
-				Optional:            true,
-				MarkdownDescription: "Max user file upload size, in MB.",
+				Optional: true,
+				MarkdownDescription: "Max user file upload size, in MB. Must be at least 1 — the " +
+					"backend treats 0 as unset and substitutes the deployment default.",
+				Validators: []validator.Int64{
+					int64validator.AtLeast(1),
+				},
 			},
 			"file_token_count_threshold_k": schema.Int64Attribute{
 				Optional:            true,
 				MarkdownDescription: "File token threshold (thousands) before indexing instead of inlining.",
-			},
-			"show_extra_connectors": schema.BoolAttribute{
-				Optional:            true,
-				MarkdownDescription: "Show the extended connector catalog.",
 			},
 			"disable_default_assistant": schema.BoolAttribute{
 				Optional:            true,
@@ -176,10 +175,6 @@ func (r *settingsResource) Schema(_ context.Context, _ resource.SchemaRequest, r
 				Validators: []validator.String{
 					stringvalidator.LengthAtMost(4000),
 				},
-			},
-			"opensearch_indexing_enabled": schema.BoolAttribute{
-				Optional:            true,
-				MarkdownDescription: "OpenSearch migration flag; leave unmanaged unless you know you need it.",
 			},
 			"application_status": schema.StringAttribute{
 				Computed:            true,
@@ -204,6 +199,21 @@ func (r *settingsResource) Schema(_ context.Context, _ resource.SchemaRequest, r
 			"used_seats": schema.Int64Attribute{
 				Computed:            true,
 				MarkdownDescription: "Seats in use (read-only).",
+			},
+			"hide_query_history_from_admin_panel": schema.BoolAttribute{
+				Computed: true,
+				MarkdownDescription: "Whether the query history page is hidden in the admin panel. " +
+					"Read-only: controlled by the HIDE_QUERY_HISTORY_FROM_ADMIN_PANEL backend env var.",
+			},
+			"show_extra_connectors": schema.BoolAttribute{
+				Computed: true,
+				MarkdownDescription: "Whether the extended connector catalog is shown. Read-only: " +
+					"controlled by the SHOW_EXTRA_CONNECTORS backend env var.",
+			},
+			"opensearch_indexing_enabled": schema.BoolAttribute{
+				Computed: true,
+				MarkdownDescription: "OpenSearch migration flag. Read-only: controlled by the " +
+					"ENABLE_OPENSEARCH_INDEXING_FOR_ONYX backend env var.",
 			},
 		},
 	}
@@ -256,9 +266,6 @@ func patchBodyFromPlan(plan settingsResourceModel) map[string]any {
 	if !plan.QueryHistoryType.IsNull() {
 		body["query_history_type"] = plan.QueryHistoryType.ValueString()
 	}
-	if !plan.HideQueryHistoryFromAdminPanel.IsNull() {
-		body["hide_query_history_from_admin_panel"] = plan.HideQueryHistoryFromAdminPanel.ValueBool()
-	}
 	if !plan.ImageExtractionAndAnalysisEnabled.IsNull() {
 		body["image_extraction_and_analysis_enabled"] = plan.ImageExtractionAndAnalysisEnabled.ValueBool()
 	}
@@ -274,9 +281,6 @@ func patchBodyFromPlan(plan settingsResourceModel) map[string]any {
 	if !plan.FileTokenCountThresholdK.IsNull() {
 		body["file_token_count_threshold_k"] = plan.FileTokenCountThresholdK.ValueInt64()
 	}
-	if !plan.ShowExtraConnectors.IsNull() {
-		body["show_extra_connectors"] = plan.ShowExtraConnectors.ValueBool()
-	}
 	if !plan.DisableDefaultAssistant.IsNull() {
 		body["disable_default_assistant"] = plan.DisableDefaultAssistant.ValueBool()
 	}
@@ -285,9 +289,6 @@ func patchBodyFromPlan(plan settingsResourceModel) map[string]any {
 	}
 	if !plan.CraftInstructions.IsNull() {
 		body["craft_instructions"] = plan.CraftInstructions.ValueString()
-	}
-	if !plan.OpenSearchIndexingEnabled.IsNull() {
-		body["opensearch_indexing_enabled"] = plan.OpenSearchIndexingEnabled.ValueBool()
 	}
 	return body
 }
@@ -332,9 +333,6 @@ func refreshSettingsModel(model *settingsResourceModel, server *client.Settings)
 	if !model.QueryHistoryType.IsNull() {
 		model.QueryHistoryType = types.StringPointerValue(server.QueryHistoryType)
 	}
-	if !model.HideQueryHistoryFromAdminPanel.IsNull() {
-		model.HideQueryHistoryFromAdminPanel = types.BoolValue(server.HideQueryHistoryFromAdminPanel)
-	}
 	if !model.ImageExtractionAndAnalysisEnabled.IsNull() {
 		model.ImageExtractionAndAnalysisEnabled = types.BoolPointerValue(server.ImageExtractionAndAnalysisEnabled)
 	}
@@ -350,9 +348,6 @@ func refreshSettingsModel(model *settingsResourceModel, server *client.Settings)
 	if !model.FileTokenCountThresholdK.IsNull() {
 		model.FileTokenCountThresholdK = types.Int64PointerValue(server.FileTokenCountThresholdK)
 	}
-	if !model.ShowExtraConnectors.IsNull() {
-		model.ShowExtraConnectors = types.BoolPointerValue(server.ShowExtraConnectors)
-	}
 	if !model.DisableDefaultAssistant.IsNull() {
 		model.DisableDefaultAssistant = types.BoolPointerValue(server.DisableDefaultAssistant)
 	}
@@ -362,9 +357,6 @@ func refreshSettingsModel(model *settingsResourceModel, server *client.Settings)
 	if !model.CraftInstructions.IsNull() {
 		model.CraftInstructions = types.StringPointerValue(server.CraftInstructions)
 	}
-	if !model.OpenSearchIndexingEnabled.IsNull() {
-		model.OpenSearchIndexingEnabled = types.BoolValue(server.OpenSearchIndexingEnabled)
-	}
 
 	model.ApplicationStatus = types.StringValue(server.ApplicationStatus)
 	model.Tier = types.StringValue(server.Tier)
@@ -372,6 +364,9 @@ func refreshSettingsModel(model *settingsResourceModel, server *client.Settings)
 	model.GPUEnabled = types.BoolPointerValue(server.GPUEnabled)
 	model.SeatCount = types.Int64PointerValue(server.SeatCount)
 	model.UsedSeats = types.Int64PointerValue(server.UsedSeats)
+	model.HideQueryHistoryFromAdminPanel = types.BoolValue(server.HideQueryHistoryFromAdminPanel)
+	model.ShowExtraConnectors = types.BoolPointerValue(server.ShowExtraConnectors)
+	model.OpenSearchIndexingEnabled = types.BoolValue(server.OpenSearchIndexingEnabled)
 }
 
 // apply implements both Create and Update: PATCH the managed attributes,

@@ -57,9 +57,10 @@ var defaultModelAttrTypes = map[string]attr.Type{
 }
 
 type llmProvidersDataSourceModel struct {
-	Providers     types.List   `tfsdk:"providers"`
-	DefaultText   types.Object `tfsdk:"default_text"`
-	DefaultVision types.Object `tfsdk:"default_vision"`
+	Providers         types.List   `tfsdk:"providers"`
+	DefaultText       types.Object `tfsdk:"default_text"`
+	DefaultVision     types.Object `tfsdk:"default_vision"`
+	DefaultChatNaming types.Object `tfsdk:"default_chat_naming"`
 }
 
 func (d *llmProvidersDataSource) Metadata(_ context.Context, req datasource.MetadataRequest, resp *datasource.MetadataResponse) {
@@ -101,8 +102,9 @@ func (d *llmProvidersDataSource) Schema(_ context.Context, _ datasource.SchemaRe
 					},
 				},
 			},
-			"default_text":   defaultModelAttribute("text"),
-			"default_vision": defaultModelAttribute("vision"),
+			"default_text":        defaultModelAttribute("text"),
+			"default_vision":      defaultModelAttribute("vision"),
+			"default_chat_naming": defaultModelAttribute("chat auto-naming"),
 		},
 	}
 }
@@ -158,6 +160,7 @@ func (d *llmProvidersDataSource) Read(ctx context.Context, _ datasource.ReadRequ
 	model.Providers = providers
 	model.DefaultText = defaultModelObject(list.DefaultText, &resp.Diagnostics)
 	model.DefaultVision = defaultModelObject(list.DefaultVision, &resp.Diagnostics)
+	model.DefaultChatNaming = defaultModelObject(list.DefaultChatNaming, &resp.Diagnostics)
 	if resp.Diagnostics.HasError() {
 		return
 	}

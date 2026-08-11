@@ -25,9 +25,19 @@ output "default_model" {
 
 ### Read-Only
 
+- `default_chat_naming` (Attributes) The deployment default chat auto-naming model, or null if unset. (see [below for nested schema](#nestedatt--default_chat_naming))
 - `default_text` (Attributes) The deployment default text model, or null if unset. (see [below for nested schema](#nestedatt--default_text))
 - `default_vision` (Attributes) The deployment default vision model, or null if unset. (see [below for nested schema](#nestedatt--default_vision))
 - `providers` (Attributes List) (see [below for nested schema](#nestedatt--providers))
+
+<a id="nestedatt--default_chat_naming"></a>
+### Nested Schema for `default_chat_naming`
+
+Read-Only:
+
+- `model_name` (String)
+- `provider_id` (String)
+
 
 <a id="nestedatt--default_text"></a>
 ### Nested Schema for `default_text`

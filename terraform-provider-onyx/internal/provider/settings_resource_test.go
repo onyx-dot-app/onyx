@@ -91,7 +91,9 @@ func snapshotSettingsFields(t *testing.T) func() {
 			"auto_scroll":  autoScrollValue,
 		})
 		if err != nil {
-			t.Logf("settings restore failed: %v", err)
+			// A failed restore leaves the shared deployment modified for every
+			// later run — that is a real failure, not a footnote.
+			t.Errorf("settings restore failed: %v", err)
 		}
 	}
 }

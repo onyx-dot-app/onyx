@@ -255,6 +255,6 @@ func (r *llmProviderDefaultResource) ImportState(ctx context.Context, req resour
 		return
 	}
 	// The follow-up Read always refreshes provider_id/model_name from the
-	// server; only the vision pair stays null until configured.
+	// server; the vision and chat-naming pairs stay null until configured.
 	resource.ImportStatePassthroughID(ctx, path.Root("id"), req, resp)
 }

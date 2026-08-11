@@ -144,8 +144,8 @@ func (r *llmProviderResource) Schema(_ context.Context, _ resource.SchemaRequest
 				Computed: true,
 				Default:  booldefault.StaticBool(false),
 				MarkdownDescription: "Onyx Auto mode: the model list is managed by Onyx. When enabled, " +
-					"the server takes over `model_configurations`, so keeping it in Terraform is not " +
-					"recommended.",
+					"the server owns `model_configurations`: Terraform stops drift-checking the list " +
+					"and server-managed models are never planned for removal.",
 			},
 			"groups": schema.SetAttribute{
 				ElementType:         types.Int64Type,
@@ -321,20 +321,26 @@ func (r *llmProviderResource) Read(ctx context.Context, req resource.ReadRequest
 	// values) is carried forward instead — out-of-band rotation of these two
 	// fields is undetectable by design.
 
-	state.ModelConfigurations = r.reconcileModelConfigurations(ctx, state.ModelConfigurations, view.ModelConfigurations, &resp.Diagnostics)
-	if resp.Diagnostics.HasError() {
-		return
+	// Under auto mode the server owns the model list (it re-syncs from the
+	// model registry after every upsert). Keep prior state so Terraform
+	// neither adopts nor plans deletions of server-managed entries.
+	if !view.IsAutoMode {
+		state.ModelConfigurations = r.reconcileModelConfigurations(ctx, state.ModelConfigurations, view.ModelConfigurations, &resp.Diagnostics)
+		if resp.Diagnostics.HasError() {
+			return
+		}
 	}
 	resp.Diagnostics.Append(resp.State.Set(ctx, state)...)
 }
 
 // reconcileModelConfigurations refreshes model-list *membership* (by model
-// name) from the server while preserving the configured per-model fields of
-// models already in state. The view's per-model fields are derived server-side
-// (LiteLLM enrichments, computed display names) and don't round-trip, so
-// refreshing them for existing entries would show phantom drift. Entries only
-// present server-side (import, out-of-band adds) are populated from the view
-// best-effort.
+// name) plus the persisted per-model fields (is_visible,
+// custom_display_name) from the server, so out-of-band changes to them show
+// as drift. The remaining per-model fields (max_input_tokens, supports_*,
+// display_name) are enriched server-side — the view returns resolved values,
+// not the stored overrides — so they are preserved from prior state to avoid
+// phantom drift. Entries only present server-side (import, out-of-band adds)
+// are populated from the view best-effort.
 func (r *llmProviderResource) reconcileModelConfigurations(ctx context.Context, prior types.Set, remote []client.ModelConfigurationView, diags *diag.Diagnostics) types.Set {
 	var priorConfigs []modelConfigurationModel
 	if !prior.IsNull() && !prior.IsUnknown() {
@@ -352,7 +358,9 @@ func (r *llmProviderResource) reconcileModelConfigurations(ctx context.Context, 
 	var result []modelConfigurationModel
 	seen := map[string]bool{}
 	for _, mc := range priorConfigs {
-		if _, exists := remoteNames[mc.Name.ValueString()]; exists {
+		if remoteMC, exists := remoteNames[mc.Name.ValueString()]; exists {
+			mc.IsVisible = types.BoolValue(remoteMC.IsVisible)
+			mc.CustomDisplayName = types.StringPointerValue(remoteMC.CustomDisplayName)
 			result = append(result, mc)
 			seen[mc.Name.ValueString()] = true
 		}

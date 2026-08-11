@@ -37,18 +37,15 @@ resource "onyx_settings" "workspace" {
 - `deep_research_enabled` (Boolean) Enable the Deep Research feature.
 - `disable_default_assistant` (Boolean) Disable the built-in default assistant.
 - `file_token_count_threshold_k` (Number) File token threshold (thousands) before indexing instead of inlining.
-- `hide_query_history_from_admin_panel` (Boolean) Hide the query history page in the admin panel (recording stays on).
 - `image_analysis_max_size_mb` (Number) Max image size for analysis, in MB.
 - `image_extraction_and_analysis_enabled` (Boolean) Extract and analyze images during indexing.
 - `invite_only_enabled` (Boolean) Restrict registration to invited users.
 - `maximum_chat_retention_days` (Number) Days to retain chat history (Enterprise tier).
 - `multi_model_chat_enabled` (Boolean) Allow chatting with multiple models side by side.
-- `opensearch_indexing_enabled` (Boolean) OpenSearch migration flag; leave unmanaged unless you know you need it.
 - `query_history_type` (String) Query history mode: `disabled`, `anonymized`, or `normal`.
 - `search_ui_enabled` (Boolean) Enable Search Mode in the UI (Business+ tier).
-- `show_extra_connectors` (Boolean) Show the extended connector catalog.
 - `temperature_override_enabled` (Boolean) Let users override model temperature.
-- `user_file_max_upload_size_mb` (Number) Max user file upload size, in MB.
+- `user_file_max_upload_size_mb` (Number) Max user file upload size, in MB. Must be at least 1 — the backend treats 0 as unset and substitutes the deployment default.
 - `user_knowledge_enabled` (Boolean) Enable user-uploaded knowledge files.
 
 ### Read-Only
@@ -56,8 +53,11 @@ resource "onyx_settings" "workspace" {
 - `application_status` (String) License/billing status (read-only).
 - `ee_features_enabled` (Boolean) Whether EE features are unlocked by the license (read-only).
 - `gpu_enabled` (Boolean) Whether the deployment has GPU support (read-only).
+- `hide_query_history_from_admin_panel` (Boolean) Whether the query history page is hidden in the admin panel. Read-only: controlled by the HIDE_QUERY_HISTORY_FROM_ADMIN_PANEL backend env var.
 - `id` (String) Always `"settings"`.
+- `opensearch_indexing_enabled` (Boolean) OpenSearch migration flag. Read-only: controlled by the ENABLE_OPENSEARCH_INDEXING_FOR_ONYX backend env var.
 - `seat_count` (Number) Licensed seat count (read-only).
+- `show_extra_connectors` (Boolean) Whether the extended connector catalog is shown. Read-only: controlled by the SHOW_EXTRA_CONNECTORS backend env var.
 - `tier` (String) Resolved license tier: `community`, `business`, or `enterprise` (read-only).
 - `used_seats` (Number) Seats in use (read-only).
 

@@ -51,7 +51,7 @@ resource "onyx_llm_provider" "openai" {
 - `deployment_name` (String) Deployment name (Azure).
 - `force_delete` (Boolean) Allow destroying this provider even while it holds the deployment default model. Defaults to false, where such a destroy fails.
 - `groups` (Set of Number) User group ids the provider is restricted to (EE).
-- `is_auto_mode` (Boolean) Onyx Auto mode: the model list is managed by Onyx. When enabled, the server takes over `model_configurations`, so keeping it in Terraform is not recommended.
+- `is_auto_mode` (Boolean) Onyx Auto mode: the model list is managed by Onyx. When enabled, the server owns `model_configurations`: Terraform stops drift-checking the list and server-managed models are never planned for removal.
 - `is_public` (Boolean) Whether the provider is available to all users.
 - `name` (String) Display name for the provider configuration.
 - `personas` (Set of Number) Persona ids the provider is restricted to.

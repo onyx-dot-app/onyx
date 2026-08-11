@@ -20,6 +20,11 @@ terraform {
   }
 }
 
+variable "onyx_api_key" {
+  type      = string
+  sensitive = true
+}
+
 # Credentials can also come from ONYX_SERVER_URL / ONYX_API_KEY env vars.
 provider "onyx" {
   endpoint = "https://onyx.internal.example.com"

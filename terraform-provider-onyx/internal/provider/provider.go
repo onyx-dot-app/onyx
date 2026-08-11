@@ -8,6 +8,7 @@ import (
 	"os"
 
 	"github.com/hashicorp/terraform-plugin-framework/datasource"
+	"github.com/hashicorp/terraform-plugin-framework/path"
 	"github.com/hashicorp/terraform-plugin-framework/provider"
 	"github.com/hashicorp/terraform-plugin-framework/provider/schema"
 	"github.com/hashicorp/terraform-plugin-framework/resource"
@@ -69,6 +70,26 @@ func (p *onyxProvider) Schema(_ context.Context, _ provider.SchemaRequest, resp 
 func (p *onyxProvider) Configure(ctx context.Context, req provider.ConfigureRequest, resp *provider.ConfigureResponse) {
 	var config onyxProviderModel
 	resp.Diagnostics.Append(req.Config.Get(ctx, &config)...)
+	if resp.Diagnostics.HasError() {
+		return
+	}
+
+	// Values derived from not-yet-applied resources are unknown during plan;
+	// reject them instead of silently treating them as empty/known.
+	for name, value := range map[string]types.String{
+		"endpoint":   config.Endpoint,
+		"api_key":    config.APIKey,
+		"api_prefix": config.APIPrefix,
+	} {
+		if value.IsUnknown() {
+			resp.Diagnostics.AddAttributeError(
+				path.Root(name),
+				"Unknown provider configuration value",
+				fmt.Sprintf("The provider cannot be configured with an unknown %s. "+
+					"Apply the resource it derives from first, or set it via its environment variable.", name),
+			)
+		}
+	}
 	if resp.Diagnostics.HasError() {
 		return
 	}
