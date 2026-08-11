@@ -22,10 +22,8 @@ import type { PaddingVariants, WithoutStyles } from "@opal/types";
 // ============================================================================
 
 interface SelectedItemDisplay {
-  childrenRef: React.MutableRefObject<React.ReactNode>;
-  iconRef: React.MutableRefObject<
-    React.FunctionComponent<IconProps> | undefined
-  >;
+  children: React.ReactNode;
+  icon?: React.FunctionComponent<IconProps>;
 }
 
 interface InputSelectContextValue {
@@ -204,7 +202,6 @@ function InputSelectTrigger({
 }: InputSelectTriggerProps) {
   const { variant, selectedItemDisplay } = useInputSelectContext();
 
-  // Don't memoize - we need to read the latest ref values on every render
   let displayContent: React.ReactNode;
 
   if (!selectedItemDisplay) {
@@ -222,12 +219,12 @@ function InputSelectTrigger({
       </Text>
     );
   } else {
-    const Icon = selectedItemDisplay.iconRef.current;
+    const Icon = selectedItemDisplay.icon;
     displayContent = (
       <div className="flex flex-row items-center gap-2 flex-1 w-full">
         {Icon && <Icon className={cn("h-4 w-4", iconClasses[variant])} />}
         <Truncated className={cn(textClasses[variant])}>
-          {selectedItemDisplay.childrenRef.current}
+          {selectedItemDisplay.children}
         </Truncated>
       </div>
     );
@@ -353,21 +350,15 @@ function InputSelectItem({
   const { currentValue, setSelectedItemDisplay } = useInputSelectContext();
   const isSelected = value === currentValue;
 
-  // Use refs to hold latest children/icon - these are passed to the context
-  // so the trigger always reads current values without needing re-registration
-  const childrenRef = React.useRef(children);
-  const iconRef = React.useRef(icon);
-  childrenRef.current = children;
-  iconRef.current = icon;
-
-  // Only the selected item registers its display data
-  React.useEffect(() => {
+  React.useLayoutEffect(() => {
     if (!isSelected) return;
-    setSelectedItemDisplay({ childrenRef, iconRef });
+    setSelectedItemDisplay({ children, icon });
+  }, [children, icon, isSelected, setSelectedItemDisplay]);
 
-    // Clean up functions only need to return for items which are selected.
+  React.useLayoutEffect(() => {
+    if (!isSelected) return;
     return () => setSelectedItemDisplay(null);
-  }, [isSelected]);
+  }, [isSelected, setSelectedItemDisplay]);
 
   return (
     <SelectPrimitive.Item

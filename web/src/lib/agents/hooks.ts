@@ -268,8 +268,10 @@ export function useAgentController(
 
   const availableAgentsRef = useRef<MinimalAgent[]>(availableAgents);
   const defaultAgentIdRef = useRef<number | undefined>(defaultAgentId);
-  availableAgentsRef.current = availableAgents;
-  defaultAgentIdRef.current = defaultAgentId;
+  useEffect(() => {
+    availableAgentsRef.current = availableAgents;
+    defaultAgentIdRef.current = defaultAgentId;
+  }, [availableAgents, defaultAgentId]);
   const setSelectedAgentFromId = useCallback(
     (agentId: number | null | undefined) => {
       const latestAvailableAgents = availableAgentsRef.current;

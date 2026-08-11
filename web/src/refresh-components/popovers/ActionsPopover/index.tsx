@@ -79,6 +79,9 @@ const TOOL_DESCRIPTIONS: Record<string, string> = {
 
 const DEFAULT_TOOL_DESCRIPTION = "This action is not configured yet.";
 
+// Stable fallback so absent preferences never churn dependent callbacks.
+const NO_DISABLED_TOOLS: number[] = [];
+
 function getToolTooltip(
   tool: ToolSnapshot,
   isConfigured: boolean,
@@ -281,30 +284,43 @@ export default function ActionsPopover({
   const hasNoConnectors = ccPairs.length === 0;
 
   const agentPreference = agentPreferences?.[selectedAgent.id];
-  const disabledToolIds = agentPreference?.disabled_tool_ids || [];
-  const toggleToolForCurrentAgent = (toolId: number) => {
-    const disabled = disabledToolIds.includes(toolId);
-    setSpecificAgentPreferences(selectedAgent.id, {
-      disabled_tool_ids: disabled
-        ? disabledToolIds.filter((id) => id !== toolId)
-        : [...disabledToolIds, toolId],
-    });
+  const disabledToolIds =
+    agentPreference?.disabled_tool_ids || NO_DISABLED_TOOLS;
+  const toggleToolForCurrentAgent = useCallback(
+    (toolId: number) => {
+      const disabled = disabledToolIds.includes(toolId);
+      setSpecificAgentPreferences(selectedAgent.id, {
+        disabled_tool_ids: disabled
+          ? disabledToolIds.filter((id) => id !== toolId)
+          : [...disabledToolIds, toolId],
+      });
 
-    // If we're disabling a tool that is currently forced, remove it from forced tools
-    if (!disabled && forcedToolIds.includes(toolId)) {
-      setForcedToolIds(forcedToolIds.filter((id) => id !== toolId));
-    }
-  };
+      // If we're disabling a tool that is currently forced, remove it from forced tools
+      if (!disabled && forcedToolIds.includes(toolId)) {
+        setForcedToolIds(forcedToolIds.filter((id) => id !== toolId));
+      }
+    },
+    [
+      disabledToolIds,
+      selectedAgent.id,
+      setSpecificAgentPreferences,
+      forcedToolIds,
+      setForcedToolIds,
+    ]
+  );
 
-  const toggleForcedTool = (toolId: number) => {
-    if (forcedToolIds.includes(toolId)) {
-      // If clicking on already forced tool, unforce it
-      setForcedToolIds([]);
-    } else {
-      // If clicking on a new tool, replace any existing forced tools with just this one
-      setForcedToolIds([toolId]);
-    }
-  };
+  const toggleForcedTool = useCallback(
+    (toolId: number) => {
+      if (forcedToolIds.includes(toolId)) {
+        // If clicking on already forced tool, unforce it
+        setForcedToolIds([]);
+      } else {
+        // If clicking on a new tool, replace any existing forced tools with just this one
+        setForcedToolIds([toolId]);
+      }
+    },
+    [forcedToolIds, setForcedToolIds]
+  );
 
   // Get internal search tool reference for auto-pin logic
   const internalSearchTool = useMemo(

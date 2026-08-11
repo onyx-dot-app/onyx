@@ -97,6 +97,11 @@ export default function ExportLogsPage() {
   const [isStarting, setIsStarting] = useState(false);
   const [isDownloading, setIsDownloading] = useState(false);
   const downloadedExportIdRef = useRef<string | null>(null);
+  // Pending deferred revocation: cancelling the timer must also revoke the URL.
+  const pendingRevokeRef = useRef<{
+    timer: ReturnType<typeof setTimeout>;
+    url: string;
+  } | null>(null);
 
   const { data: status, error: statusError } = useSWR<LogExportStatus>(
     exportId === null ? null : SWR_KEYS.logExportStatus(exportId),
@@ -142,6 +147,16 @@ export default function ExportLogsPage() {
     setExportId(null);
   }, [statusError]);
 
+  useEffect(() => {
+    return () => {
+      if (pendingRevokeRef.current !== null) {
+        clearTimeout(pendingRevokeRef.current.timer);
+        URL.revokeObjectURL(pendingRevokeRef.current.url);
+        pendingRevokeRef.current = null;
+      }
+    };
+  }, []);
+
   const downloadBundle = useCallback(async (id: string): Promise<void> => {
     // Mark before any await: an attempt is in flight or succeeded, and only
     // failure re-arms the auto-download below. Owning this here keeps every
@@ -160,7 +175,18 @@ export default function ExportLogsPage() {
       downloadFile(extractFilename(response), { url });
       // Deferred like downloadFile's content mode: the click's download
       // dereferences the blob URL asynchronously.
-      setTimeout(() => URL.revokeObjectURL(url), 0);
+      if (pendingRevokeRef.current !== null) {
+        clearTimeout(pendingRevokeRef.current.timer);
+        URL.revokeObjectURL(pendingRevokeRef.current.url);
+      }
+      // Released on unmount and on replacement. The rule cannot trace the
+      // handle through the pendingRevokeRef object.
+      // oxlint-disable-next-line react-doctor/effect-needs-cleanup
+      const timer = setTimeout(() => {
+        URL.revokeObjectURL(url);
+        pendingRevokeRef.current = null;
+      }, 0);
+      pendingRevokeRef.current = { url, timer };
     } catch (error) {
       console.error("Error downloading log export:", error);
       toast.error("Failed to download the log export.");

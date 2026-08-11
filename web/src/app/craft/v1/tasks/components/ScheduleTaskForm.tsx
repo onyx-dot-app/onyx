@@ -146,27 +146,27 @@ export default function ScheduleTaskForm({
         router.push(connectionPath);
         return;
       }
-      setSkillPicker((prev) => {
-        if (!prev.open) return prev;
-        const replacement = `${pickerEntryPromptPrefix(entry)} `;
-        const newPrompt =
-          prompt.slice(0, prev.slashIndex) +
-          replacement +
-          prompt.slice(prev.slashIndex + 1 + prev.query.length);
-        setPrompt(newPrompt);
+      if (!skillPicker.open) return;
 
-        const cursorPos = prev.slashIndex + replacement.length;
-        const textarea = promptTextareaRef.current;
-        if (textarea) {
-          requestAnimationFrame(() => {
-            textarea.focus();
-            textarea.setSelectionRange(cursorPos, cursorPos);
-          });
-        }
-        return { ...prev, open: false };
-      });
+      const replacement = `${pickerEntryPromptPrefix(entry)} `;
+      const newPrompt =
+        prompt.slice(0, skillPicker.slashIndex) +
+        replacement +
+        prompt.slice(skillPicker.slashIndex + 1 + skillPicker.query.length);
+      setPrompt(newPrompt);
+
+      const cursorPos = skillPicker.slashIndex + replacement.length;
+      const textarea = promptTextareaRef.current;
+      if (textarea) {
+        requestAnimationFrame(() => {
+          textarea.focus();
+          textarea.setSelectionRange(cursorPos, cursorPos);
+        });
+      }
+
+      setSkillPicker((prev) => (prev.open ? { ...prev, open: false } : prev));
     },
-    [prompt, router]
+    [prompt, router, skillPicker]
   );
 
   const compiled = compileLocalPayloadToUtcCron(mode, payload);

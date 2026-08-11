@@ -206,6 +206,9 @@ export default function BuildChatPanel({
     turnId: string;
     timer: ReturnType<typeof setTimeout>;
   } | null>(null);
+  const nameSessionTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(
+    null
+  );
   const isPreProvisioning = useIsPreProvisioning();
   const isPreProvisioningFailed = useIsPreProvisioningFailed();
   const preProvisionedSessionId = usePreProvisionedSessionId();
@@ -536,7 +539,16 @@ export default function BuildChatPanel({
         // Schedule naming after delay (message will be saved by then)
         // Note: Don't call refreshSessionHistory() here - it would overwrite the
         // optimistic update from consumePreProvisionedSession() before the message is saved
-        setTimeout(() => nameBuildSession(newSessionId), 1000);
+        if (nameSessionTimeoutRef.current !== null) {
+          clearTimeout(nameSessionTimeoutRef.current);
+        }
+        // Session naming is a store action that must survive unmount. Firing
+        // before the 1s save window would name against an unsaved message.
+        // oxlint-disable-next-line react-doctor/effect-needs-cleanup
+        nameSessionTimeoutRef.current = setTimeout(() => {
+          nameSessionTimeoutRef.current = null;
+          nameBuildSession(newSessionId);
+        }, 1000);
 
         // Stream the response (uses session ID directly, not currentSessionId)
         await streamMessage(newSessionId, message, chosen, attachments);

@@ -218,7 +218,11 @@ const AppInputBar = React.memo(
     // Snapshot of message, read non-reactively in the restore effect so seeding
     // doesn't re-run on every keystroke.
     const messageRef = useRef(message);
-    messageRef.current = message;
+    const isRecordingRef = useRef(isRecording);
+
+    useEffect(() => {
+      messageRef.current = message;
+    }, [message]);
 
     useEffect(() => {
       draftSeededRef.current = false;
@@ -253,12 +257,12 @@ const AppInputBar = React.memo(
     }, [message, chatDraftLoaded, saveChatDraft]);
 
     const handleRecordingChange = useCallback((nextIsRecording: boolean) => {
-      setIsRecording((prevIsRecording) => {
-        if (!prevIsRecording && nextIsRecording) {
-          setRecordingCycleCount((count) => count + 1);
-        }
-        return nextIsRecording;
-      });
+      const wasRecording = isRecordingRef.current;
+      isRecordingRef.current = nextIsRecording;
+      if (!wasRecording && nextIsRecording) {
+        setRecordingCycleCount((count) => count + 1);
+      }
+      setIsRecording(nextIsRecording);
     }, []);
 
     // Wrapper for onSubmit that stops TTS first to prevent overlapping voices

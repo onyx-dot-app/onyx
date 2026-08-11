@@ -213,7 +213,9 @@ export default function BuildMessageList({
               initial={
                 opts.isCurrentStream ? { opacity: 0, y: -4, height: 0 } : false
               }
+              // oxlint-disable-next-line react-doctor/no-layout-property-animation -- height 0/auto must reflow the message list, transform cannot
               animate={{ opacity: 1, y: 0, height: "auto" }}
+              // oxlint-disable-next-line react-doctor/no-layout-property-animation -- height/marginTop collapse must reflow the message list, transform cannot
               exit={{ opacity: 0, y: -6, height: 0, marginTop: 0 }}
               transition={{ duration: 0.18, ease: [0.16, 1, 0.3, 1] }}
             >

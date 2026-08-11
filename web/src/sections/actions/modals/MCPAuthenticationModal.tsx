@@ -20,7 +20,7 @@ import {
   Text,
 } from "@opal/components";
 import { markdown } from "@opal/utils";
-import { Formik, Form } from "formik";
+import { Formik, Form, useFormikContext } from "formik";
 import * as Yup from "yup";
 import { useModal } from "@opal/components";
 import {
@@ -132,6 +132,26 @@ const validationSchema = Yup.object().shape({
   ),
 });
 
+const getTransportFromUrl = (url: string): MCPTransportType => {
+  const lowerUrl = url.toLowerCase();
+  if (lowerUrl.endsWith("sse")) {
+    return MCPTransportType.SSE;
+  }
+  return MCPTransportType.STREAMABLE_HTTP;
+};
+
+// Formik render props are plain callbacks, not components, so this effect
+// lives in its own child to keep hook order stable.
+function TransportAutoPopulate({ serverUrl }: { serverUrl?: string }) {
+  const { setFieldValue } = useFormikContext<MCPAuthFormValues>();
+  useEffect(() => {
+    if (serverUrl) {
+      setFieldValue("transport", getTransportFromUrl(serverUrl));
+    }
+  }, [serverUrl, setFieldValue]);
+  return null;
+}
+
 export default function MCPAuthenticationModal({
   mcpServer,
   skipOverlay = false,
@@ -177,18 +197,6 @@ export default function MCPAuthenticationModal({
       );
     }
   }, [fullServer]);
-
-  // Helper function to determine transport from URL
-  const getTransportFromUrl = (url: string): MCPTransportType => {
-    const lowerUrl = url.toLowerCase();
-    if (lowerUrl.endsWith("sse")) {
-      return MCPTransportType.SSE;
-    } else if (lowerUrl.endsWith("mcp")) {
-      return MCPTransportType.STREAMABLE_HTTP;
-    }
-    // Default to STREAMABLE_HTTP
-    return MCPTransportType.STREAMABLE_HTTP;
-  };
 
   const initialValues = useMemo<MCPAuthFormValues>(() => {
     if (!fullServer) {
@@ -521,16 +529,9 @@ export default function MCPAuthenticationModal({
             isValid,
             dirty,
           }) => {
-            // Auto-populate transport based on URL
-            useEffect(() => {
-              if (mcpServer?.server_url) {
-                const transport = getTransportFromUrl(mcpServer.server_url);
-                setFieldValue("transport", transport);
-              }
-            }, [mcpServer?.server_url, setFieldValue]);
-
             return (
               <Form className="flex flex-col h-full">
+                <TransportAutoPopulate serverUrl={mcpServer?.server_url} />
                 <Modal.Body>
                   <div className="flex flex-col gap-4 p-2">
                     {/* Authentication Type */}

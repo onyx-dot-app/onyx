@@ -13,7 +13,14 @@ import {
 } from "@/lib/types";
 import useSWR, { mutate, useSWRConfig } from "swr";
 import { errorHandlingFetcher } from "./fetcher";
-import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import {
+  useCallback,
+  useEffect,
+  useLayoutEffect,
+  useMemo,
+  useRef,
+  useState,
+} from "react";
 import { DateRangePickerValue } from "@/components/dateRangeSelectors/AdminDateRangeSelector";
 import { SourceMetadata } from "./search/interfaces";
 import {
@@ -106,7 +113,9 @@ export const useConnectorIndexingStatusWithPagination = (
 
   //ref to maintain the current source pages for the main request
   const sourcePagesRef = useRef(sourcePages);
-  sourcePagesRef.current = sourcePages;
+  useLayoutEffect(() => {
+    sourcePagesRef.current = sourcePages;
+  }, [sourcePages]);
 
   // Main request that includes current pagination state
   const mainRequest: IndexingStatusRequest = useMemo(
@@ -697,31 +706,28 @@ export function useLlmManager(
   }
 
   // Compute the resolved LLM synchronously so it's never one render behind.
-  // This replaces the old llmUpdate() effect for model resolution.
-  // Wrapped with a ref for referential stability — returns the same object
-  // when the resolved name/provider/modelName haven't actually changed,
-  // preventing unnecessary re-creation of downstream callbacks (e.g. onSubmit).
-  const prevLlmRef = useRef<LlmDescriptor>({
-    name: "",
-    provider: "",
-    modelName: "",
-  });
-  const currentLlm = useMemo((): LlmDescriptor => {
-    let resolved: LlmDescriptor;
-
+  // A second memo preserves object identity when the resolved fields stay the
+  // same, preventing unnecessary re-creation of downstream callbacks.
+  const resolvedCurrentLlm = useMemo((): LlmDescriptor => {
     if (llmProviders === undefined || llmProviders === null) {
-      resolved = manualLlm;
-    } else if (userHasManuallyOverriddenLLM) {
+      return manualLlm;
+    }
+
+    if (userHasManuallyOverriddenLLM) {
       // Manual override wins over session's `current_alternate_model`.
       // Cleared on cross-session navigation by the effect above.
-      resolved = manualLlm;
-    } else if (currentChatSession?.current_alternate_model) {
-      resolved = getValidLlmDescriptorForProviders(
+      return manualLlm;
+    }
+
+    if (currentChatSession?.current_alternate_model) {
+      return getValidLlmDescriptorForProviders(
         currentChatSession.current_alternate_model,
         llmProviders,
         defaultText
       );
-    } else if (liveAgent && liveAgent.id !== DEFAULT_AGENT_ID) {
+    }
+
+    if (liveAgent && liveAgent.id !== DEFAULT_AGENT_ID) {
       // Custom agent — its configured default takes precedence. When the agent
       // has no explicit default, fall to the global system default. The user's
       // personal preference is irrelevant in an agent-scoped chat.
@@ -729,42 +735,45 @@ export function useLlmManager(
         liveAgent,
         llmProviders
       );
-      resolved =
+      return (
         agentOverride ??
         getDefaultLlmDescriptor(llmProviders, defaultText) ??
-        manualLlm;
-    } else if (user?.preferences?.default_model) {
-      resolved = getValidLlmDescriptorForProviders(
+        manualLlm
+      );
+    }
+
+    if (user?.preferences?.default_model) {
+      return getValidLlmDescriptorForProviders(
         user.preferences.default_model,
         llmProviders,
         defaultText
       );
-    } else {
-      resolved =
-        getDefaultLlmDescriptor(llmProviders, defaultText) ?? manualLlm;
     }
 
-    const prev = prevLlmRef.current;
-    if (
-      prev.name === resolved.name &&
-      prev.provider === resolved.provider &&
-      prev.modelName === resolved.modelName &&
-      (prev.modelConfigurationId ?? null) ===
-        (resolved.modelConfigurationId ?? null)
-    ) {
-      return prev;
-    }
-    prevLlmRef.current = resolved;
-    return resolved;
+    return getDefaultLlmDescriptor(llmProviders, defaultText) ?? manualLlm;
   }, [
     llmProviders,
     defaultText,
-    currentChatSession,
+    currentChatSession?.current_alternate_model,
     userHasManuallyOverriddenLLM,
-    manualLlm,
+    manualLlm.name,
+    manualLlm.provider,
+    manualLlm.modelName,
+    manualLlm.modelConfigurationId,
+    liveAgent?.id,
     liveAgent?.default_model_configuration_id,
     user?.preferences?.default_model,
   ]);
+  const currentLlm = useMemo(
+    () => resolvedCurrentLlm,
+    [
+      resolvedCurrentLlm.name,
+      resolvedCurrentLlm.provider,
+      resolvedCurrentLlm.modelName,
+      // Normalized so undefined vs null cannot produce a fresh identity.
+      resolvedCurrentLlm.modelConfigurationId ?? null,
+    ]
+  );
 
   // Keep chatSession state in sync (used by temperature effect)
   useEffect(() => {

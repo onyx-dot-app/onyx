@@ -1,6 +1,13 @@
 "use client";
 
-import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import {
+  useCallback,
+  useEffect,
+  useLayoutEffect,
+  useMemo,
+  useRef,
+  useState,
+} from "react";
 import { useRouter } from "next/navigation";
 import { Route } from "next";
 import { track, AnalyticsEvent } from "@/lib/analytics/utils";
@@ -128,7 +135,12 @@ export default function NotificationsPopover({
   const sentinelRef = useRef<HTMLDivElement | null>(null);
   const loadMoreRef = useRef(loadMore);
   const lastLoadScrollTopRef = useRef<number | null>(null);
-  loadMoreRef.current = loadMore;
+
+  // Layout effect: an already-scheduled observer callback must not see the
+  // previous page's loadMore after commit.
+  useLayoutEffect(() => {
+    loadMoreRef.current = loadMore;
+  }, [loadMore]);
 
   // Track IDs dismissed during this session (before popover closes)
   const [sessionDismissedIds, setSessionDismissedIds] = useState<Set<number>>(

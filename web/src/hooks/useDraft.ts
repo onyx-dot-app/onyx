@@ -63,7 +63,10 @@ export function useDraft<T>({
   );
   const timerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const isEmptyRef = useRef(isEmpty);
-  isEmptyRef.current = isEmpty;
+
+  useEffect(() => {
+    isEmptyRef.current = isEmpty;
+  }, [isEmpty]);
 
   useEffect(() => {
     const storage = getStorage();
@@ -122,7 +125,7 @@ export function useDraft<T>({
 
   const loaded = entry !== null && entry.key === key;
   const draft = loaded ? entry.draft : null;
-  const hasDraft = draft !== null && !isEmptyRef.current(draft);
+  const hasDraft = draft !== null && !isEmpty(draft);
 
   return { draft, loaded, hasDraft, save, clear };
 }

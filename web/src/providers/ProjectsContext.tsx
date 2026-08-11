@@ -145,6 +145,7 @@ export function ProjectsProvider({ children }: ProjectsProviderProps) {
   const [currentMessageFiles, setCurrentMessageFiles] = useState<ProjectFile[]>(
     []
   );
+  const currentMessageFilesRef = useRef<ProjectFile[]>([]);
   const pollIntervalRef = useRef<number | null>(null);
   const isPollingRef = useRef<boolean>(false);
   const [lastFailedFiles, setLastFailedFiles] = useState<ProjectFile[]>([]);
@@ -527,8 +528,12 @@ export function ProjectsProvider({ children }: ProjectsProviderProps) {
     []
   );
 
+  useEffect(() => {
+    currentMessageFilesRef.current = currentMessageFiles;
+  }, [currentMessageFiles]);
+
   // Sync SWR-fetched recent files into local state. On first arrival, seed
-  // allRecentFiles as well; subsequent updates only touch recentFiles so the
+  // allRecentFiles as well. Subsequent updates only touch recentFiles so the
   // merge effect below can non-destructively apply them to allRecentFiles.
   useEffect(() => {
     if (!recentFilesData) return;
@@ -575,19 +580,32 @@ export function ProjectsProvider({ children }: ProjectsProviderProps) {
         // Build maps for quick lookup
         const statusById = new Map(statuses.map((f) => [f.id, f]));
 
-        // Update currentMessageFiles inline based on polled statuses
+        // Newly-failed detection uses the last committed snapshot.
+        // setLastFailedFiles (it drives the failure toast downstream) must
+        // stay outside the state updater.
+        const currentMessageFilesSnapshot = currentMessageFilesRef.current;
+        const newlyFailedLocal: ProjectFile[] = [];
+        for (const f of currentMessageFilesSnapshot) {
+          const latest = statusById.get(f.id);
+          if (
+            latest &&
+            String(latest.status).toLowerCase() === "failed" &&
+            String(f.status).toLowerCase() !== "failed"
+          ) {
+            newlyFailedLocal.push(latest);
+          }
+        }
+
+        // Merge statuses into whatever the files are now. A snapshot here
+        // would clobber adds/removes that landed during the fetch.
         setCurrentMessageFiles((prev) => {
           let changed = false;
           const next: ProjectFile[] = [];
-          const newlyFailedLocal: ProjectFile[] = [];
           for (const f of prev) {
             const latest = statusById.get(f.id);
             if (latest) {
               const latestStatus = String(latest.status).toLowerCase();
               if (latestStatus === "failed") {
-                if (String(f.status).toLowerCase() !== "failed") {
-                  newlyFailedLocal.push(latest);
-                }
                 changed = true;
                 continue;
               }
@@ -603,11 +621,11 @@ export function ProjectsProvider({ children }: ProjectsProviderProps) {
             }
             next.push(f);
           }
-          if (newlyFailedLocal.length > 0) {
-            setLastFailedFiles(newlyFailedLocal);
-          }
-          return changed || next.length !== prev.length ? next : prev;
+          return changed ? next : prev;
         });
+        if (newlyFailedLocal.length > 0) {
+          setLastFailedFiles(newlyFailedLocal);
+        }
 
         // Update currentProjectDetails.files with latest statuses
         setCurrentProjectDetails((prev) => {

@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useRef } from "react";
+import { useEffect, useRef, useState } from "react";
 import { usePathname } from "next/navigation";
 import useSWR from "swr";
 import { SWR_KEYS } from "@/lib/swr-keys";
@@ -79,29 +79,35 @@ export function useSessionWatcher(): SessionWatcherResult {
 
   const { user, mutateUser, userError } = useCurrentUser();
   const expiryTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
-  const hasSeenAuthenticatedUserRef = useRef(false);
-  const sessionEndReasonRef = useRef<SessionEndReason | null>(null);
+  const [hasSeenAuthenticatedUserState, setHasSeenAuthenticatedUserState] =
+    useState(false);
+  const [sessionEndReasonState, setSessionEndReasonState] =
+    useState<SessionEndReason | null>(null);
 
   // Entering login/logout is a session boundary: forget the prior session so a
   // lingering 403 can't resurface the "logged out" modal on the login page.
-  if (inAuthFlow) {
-    hasSeenAuthenticatedUserRef.current = false;
-  } else if (user) {
-    hasSeenAuthenticatedUserRef.current = true;
+  const hasSeenAuthenticatedUser = inAuthFlow
+    ? false
+    : user
+      ? true
+      : hasSeenAuthenticatedUserState;
+  if (hasSeenAuthenticatedUserState !== hasSeenAuthenticatedUser) {
+    setHasSeenAuthenticatedUserState(hasSeenAuthenticatedUser);
   }
 
   const sessionEnded =
-    !inAuthFlow &&
-    userError?.status === 403 &&
-    hasSeenAuthenticatedUserRef.current;
+    !inAuthFlow && userError?.status === 403 && hasSeenAuthenticatedUser;
 
   // Latch the first 403's reason: a later refetch can reclassify (e.g. EXPIRED
   // becomes UNRECOGNIZED once the server-side grace window lapses) and must
   // not flip the modal copy while it is up.
-  if (!sessionEnded) {
-    sessionEndReasonRef.current = null;
-  } else if (sessionEndReasonRef.current === null) {
-    sessionEndReasonRef.current = parseSessionEndReason(userError);
+  const sessionEndReason = !sessionEnded
+    ? null
+    : sessionEndReasonState === null
+      ? parseSessionEndReason(userError)
+      : sessionEndReasonState;
+  if (sessionEndReasonState !== sessionEndReason) {
+    setSessionEndReasonState(sessionEndReason);
   }
 
   useEffect(() => {
@@ -127,12 +133,12 @@ export function useSessionWatcher(): SessionWatcherResult {
 
   useEffect(() => {
     if (inAuthFlow) return;
-    if (userError?.status === 403 && hasSeenAuthenticatedUserRef.current) {
+    if (userError?.status === 403 && hasSeenAuthenticatedUser) {
       logout();
     }
-  }, [inAuthFlow, userError]);
+  }, [inAuthFlow, userError, hasSeenAuthenticatedUser]);
 
-  return { sessionEnded, sessionEndReason: sessionEndReasonRef.current };
+  return { sessionEnded, sessionEndReason };
 }
 
 export function useIsMultiTenant(): boolean | null {
