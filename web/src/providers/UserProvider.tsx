@@ -27,9 +27,7 @@ import {
 } from "@/lib/users/svc";
 import { useTheme } from "next-themes";
 
-// Bounded self-heal for /api/me auth failures (401/402/403), which SWR's
-// onErrorRetry skips but which are usually transient token-refresh races
-// right after SSR validated the session. SWR's backoff owns other errors.
+// Auth failures skip SWR's retry but are usually transient refresh races. SWR's backoff owns the rest.
 const ME_RETRY_DELAYS_MS = [2_000, 5_000, 15_000];
 
 interface UserContextType {
@@ -107,8 +105,6 @@ export function UserProvider({ children }: { children: React.ReactNode }) {
     setUpToDateUser(mergeUserPreferences(fetchedUser ?? null));
   }, [fetchedUser, mergeUserPreferences]);
 
-  // A spent budget stops reporting loading, so a failed /api/me cannot
-  // hold consumers in a loading state forever.
   const [meRetriesExhausted, setMeRetriesExhausted] = useState(false);
 
   const meRetryCountRef = useRef(0);
@@ -119,14 +115,10 @@ export function UserProvider({ children }: { children: React.ReactNode }) {
       return;
     }
     if (!isAuthStatusError(userError)) {
-      // A new non-auth failure hands the key back to SWR's backoff, so an
-      // earlier spent auth budget must not keep reporting resolved.
       setMeRetriesExhausted(false);
       return;
     }
-    // Each failed revalidation yields a fresh error instance, and that
-    // identity change advances the schedule. The count only advances when a
-    // timer fires, so StrictMode's double-invoke cannot burn an attempt.
+    // Fresh error identity per failure advances the schedule. The count moves in the timer, so StrictMode is safe.
     const attempt = meRetryCountRef.current;
     const delay = ME_RETRY_DELAYS_MS[attempt];
     if (delay === undefined) {
@@ -140,8 +132,6 @@ export function UserProvider({ children }: { children: React.ReactNode }) {
     return () => clearTimeout(timeoutId);
   }, [userError, mutateUser]);
 
-  // Still waiting on /api/me (first fetch, SWR backoff, or bounded auth
-  // retry), or the one-render gap before the merge effect lands the user.
   const awaitingMe = fetchedUser === undefined && !meRetriesExhausted;
   const mergePending = fetchedUser != null && upToDateUser === null;
   const isUserLoading = awaitingMe || mergePending;

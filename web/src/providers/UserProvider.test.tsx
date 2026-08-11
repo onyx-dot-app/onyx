@@ -1,8 +1,6 @@
-// Guards the /api/me resolution contract: an unresolved fetch must read as
-// loading (never signed out), and a failed auth fetch self-heals with bounded retries.
+// Guards the /api/me contract: unresolved reads as loading and failed auth fetches self-heal.
 import { act, render, screen } from "@tests/setup/test-utils";
-// Relative import required: jest's moduleNameMapper swaps the @/ specifier for
-// the global UserProvider stub, and this suite must exercise the real one.
+// Relative import: jest's moduleNameMapper swaps the @/ path for the global stub.
 import { UserProvider, useUser } from "./UserProvider";
 import { FetchError } from "@/lib/fetcher";
 import { useCurrentUser } from "@/lib/users/hooks";
@@ -46,8 +44,7 @@ function Probe() {
   return <span>{user ? user.email : "signed-out"}</span>;
 }
 
-// Factory, not a constant: an identical element reference would let React
-// bail out of the re-render these tests depend on.
+// Factory: an identical element reference would let React skip the re-render.
 function probeTree() {
   return (
     <UserProvider>
@@ -128,7 +125,7 @@ describe("UserProvider /api/me retry", () => {
     rerender(probeTree());
     act(() => jest.advanceTimersByTime(120_000));
     expect(mutateUser).toHaveBeenCalledTimes(3);
-    // Budget spent: reports signed-out instead of loading forever.
+    // Budget spent: signed-out, not loading forever.
     expect(screen.getByText("signed-out")).toBeInTheDocument();
   });
 
@@ -142,7 +139,6 @@ describe("UserProvider /api/me retry", () => {
     renderProbe();
     act(() => jest.advanceTimersByTime(120_000));
     expect(mutateUser).not.toHaveBeenCalled();
-    // Still treated as loading while SWR's own backoff keeps trying.
     expect(screen.getByText("loading")).toBeInTheDocument();
   });
 

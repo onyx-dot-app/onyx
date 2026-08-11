@@ -1,12 +1,10 @@
-// Guards the account chip's loading contract: skeleton while the user is
-// unresolved, "Anonymous" only for a resolved signed-out user.
+// The chip shows a skeleton while unresolved and "Anonymous" only when resolved signed-out.
 import { render, screen } from "@tests/setup/test-utils";
-import AccountPopover from "./AccountPopover";
+import AccountPopover from "@/sections/sidebar/AccountPopover";
 import { useUser } from "@/providers/UserProvider";
 import { User } from "@/lib/types";
 
-// Factory mock so the loading branch is drivable. The global stub pins
-// isUserLoading to false.
+// Factory mock: the global stub pins isUserLoading false.
 jest.mock("@/providers/UserProvider", () => ({ useUser: jest.fn() }));
 jest.mock("next/navigation", () => ({
   useRouter: () => ({ push: jest.fn() }),
@@ -45,7 +43,6 @@ it("shows a skeleton instead of Anonymous while the user is unresolved", () => {
   setUser(null, true);
   render(<AccountPopover />);
   expect(screen.queryByText("Anonymous")).not.toBeInTheDocument();
-  // The trigger button is replaced entirely, not rendered empty.
   expect(screen.queryByRole("button")).not.toBeInTheDocument();
 });
 
