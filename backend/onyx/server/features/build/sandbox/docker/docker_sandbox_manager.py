@@ -118,7 +118,9 @@ from onyx.server.features.build.sandbox.labels import (
     LABEL_K8S_MANAGED_BY_ONYX,
     LABEL_PROVISIONING_ATTEMPT,
     LABEL_SANDBOX_ID,
+    LABEL_SANDBOX_IMAGE,
     LABEL_TENANT_ID,
+    provenance_labels,
 )
 from onyx.server.features.build.sandbox.models import (
     CraftLLMProviderConfig,
@@ -379,6 +381,7 @@ def build_sandbox_labels(
         labels["com.docker.compose.project"] = compose_project
     if provisioning_attempt_number is not None:
         labels[LABEL_PROVISIONING_ATTEMPT] = str(provisioning_attempt_number)
+    labels.update(provenance_labels())
     return labels
 
 
@@ -1052,6 +1055,17 @@ class DockerSandboxManager(SandboxManager):
             return False
         state = (container.attrs or {}).get("State") or {}
         return state.get("Status") == "running"
+
+    def provisioned_image_identity(self, sandbox_id: UUID) -> str | None:
+        """The image identity stamped on this sandbox's container at creation."""
+        try:
+            container = self._get_container(sandbox_id)
+        except APIError as e:
+            logger.warning("Could not inspect sandbox %s: %s", sandbox_id, e)
+            return None
+        if container is None:
+            return None
+        return (container.labels or {}).get(LABEL_SANDBOX_IMAGE)
 
     def _build_agents_md(
         self,

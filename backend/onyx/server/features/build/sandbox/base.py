@@ -386,6 +386,15 @@ class SandboxManager(_ServeMixin, ABC):
         """
         ...
 
+    def provisioned_image_identity(self, sandbox_id: UUID) -> str | None:  # noqa: ARG002
+        """The sandbox image identity recorded when this sandbox was created.
+
+        Compared against the running identity to decide whether the sandbox is
+        on an image whose sources have since changed. None means unknown,
+        which never counts as behind.
+        """
+        return None
+
     def send_message(
         self,
         sandbox_id: UUID,

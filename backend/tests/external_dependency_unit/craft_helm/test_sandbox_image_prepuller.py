@@ -172,35 +172,48 @@ def test_prepuller_scheduling_matches_the_sandbox_pod() -> None:
     assert prepuller["tolerations"] == sandbox["tolerations"]
 
 
-def test_prepuller_stays_running_to_pin_layers() -> None:
-    """The kubelet only exempts images referenced by a *running* pod from image
-    GC, so a one-shot pull would leave the layers evictable.
+def test_prepuller_rolls_once_per_release() -> None:
+    """The rollout *is* the image check.
 
-    The command must also be portable: `sleep infinity` is a GNU coreutils
-    extension that dies on busybox/alpine, and a CrashLooping prepuller unpins
-    the image silently.
+    The sandbox image ships with the application, so it can only change at an
+    upgrade — and on the default deployment (`global.version: latest`) the image
+    ref is byte-identical across releases, so nothing in this DaemonSet's spec
+    would otherwise change and the pods would never be replaced. The
+    release-revision annotation is what makes every upgrade roll them.
+    """
+    pod_template = _prepuller()["spec"]["template"]
+    annotations = pod_template["metadata"]["annotations"]
+
+    assert "onyx.app/release-revision" in annotations
+
+
+def test_prepuller_stays_running_between_releases() -> None:
+    """It must not exit: the kubelet only exempts images a running pod
+    references from image GC, so an exiting prepuller can lose the very image it
+    exists to hold. Also portable — `sleep infinity` is a GNU coreutils
+    extension that dies on busybox/alpine.
     """
     container = _prepuller_pod_spec()["containers"][0]
     assert container["command"] == ["sh", "-c", "while :; do sleep 86400; done"]
 
 
-def test_prepuller_pull_policy_matches_the_sandbox_pod() -> None:
-    """Pinning the prepuller to IfNotPresent while the sandbox pods run Always
-    is the tag drift this template exists to prevent, just one level down: on a
-    mutable tag the sandboxes fetch the new digest and the prepuller holds the
-    old one resident and GC-exempt, with nothing to restart it."""
-    args = ["--set", "configMap.SANDBOX_IMAGE_PULL_POLICY=Always"]
-    prepuller = _prepuller_pod_spec(args)["containers"][0]
-    sandbox = yaml.safe_load(_render(_PODTEMPLATE_TEMPLATE, args))["template"]["spec"]
+def test_prepuller_identity_stays_stable() -> None:
+    """The component label is the DaemonSet's own selector and the NetworkPolicy
+    target; renaming either half silently detaches one from the other."""
+    pod_template = _prepuller()["spec"]["template"]
 
-    assert prepuller["imagePullPolicy"] == "Always"
-    assert {c["imagePullPolicy"] for c in sandbox["containers"]} == {"Always"}
+    assert (
+        pod_template["metadata"]["labels"]["app.kubernetes.io/component"]
+        == "sandbox-image-prepuller"
+    )
+    assert [c["name"] for c in pod_template["spec"]["containers"]] == ["prepuller"]
 
 
-def test_prepuller_pull_policy_defaults_to_if_not_present() -> None:
-    """The chart default must not re-pull on every restart."""
-    container = _prepuller_pod_spec()["containers"][0]
-    assert container["imagePullPolicy"] == "IfNotPresent"
+def test_sandbox_pod_pull_policy_defaults_to_if_not_present() -> None:
+    """Sandbox pods keep the conservative default — they are created from a ref
+    the api-server already resolved, so re-pulling on every start buys nothing."""
+    sandbox = yaml.safe_load(_render(_PODTEMPLATE_TEMPLATE))["template"]["spec"]
+    assert {c["imagePullPolicy"] for c in sandbox["containers"]} == {"IfNotPresent"}
 
 
 def test_prepuller_requests_ephemeral_storage() -> None:

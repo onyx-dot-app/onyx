@@ -43,6 +43,12 @@ spec:
         sandbox NetworkPolicies, and this pod is not a sandbox. */}}
         app.kubernetes.io/component: sandbox-image-prepuller
         admission.datadoghq.com/enabled: "false"
+      {{- /* Rolls this DaemonSet once per release, which is the only time the
+      sandbox image can change (it ships with the application). With the pull
+      policy below, the replacement pods re-resolve the tag and refresh what
+      each node holds — so nothing has to poll a registry on a timer. */}}
+      annotations:
+        onyx.app/release-revision: {{ .Release.Revision | quote }}
     spec:
       {{- /* Same placement as the sandbox pods, or the wrong nodes get warmed. */}}
       nodeSelector:
@@ -69,9 +75,12 @@ spec:
       containers:
         - name: prepuller
           image: {{ $image }}
-          {{- /* Shared with the sandbox pods: pinning this to IfNotPresent
-          would hold a stale digest on a mutable tag. */}}
-          imagePullPolicy: {{ $pullPolicy }}
+          {{- /* Always, deliberately not the shared $pullPolicy: a kubelet
+          re-resolves a tag only when it starts a container, and on a mutable
+          tag IfNotPresent would leave every node pinned to the digest it first
+          saw. Paired with the release annotation above, this is what puts the
+          new image on each node at upgrade. */}}
+          imagePullPolicy: Always
           {{- /* Portable idle loop, not `sleep infinity` (a GNU coreutils
           extension that dies on busybox/alpine). The pod must stay running:
           kubelet only exempts images a running pod references from image GC. */}}
