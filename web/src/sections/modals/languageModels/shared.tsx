@@ -125,7 +125,7 @@ export function APIKeyField({
  * `host.docker.internal`.
  */
 export const CONTAINERIZED_HOST_NOTE =
-  "With Onyx running in a container, `host.docker.internal` acts like `localhost` inside the container.";
+  "With Onyx running in a container, use `host.docker.internal` in place of `localhost` to reach a service on your host.";
 
 /**
  * Builds the API Base URL `subDescription` for self-hosted and custom
