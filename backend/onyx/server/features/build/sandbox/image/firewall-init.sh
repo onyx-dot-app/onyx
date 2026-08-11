@@ -23,8 +23,11 @@ CA_SRC="${SANDBOX_PROXY_CA_BUNDLE_SRC:-/sandbox-ca/ca.crt}"
 CA_DST="${SANDBOX_PROXY_CA_BUNDLE_DST:-/etc/ssl/sandbox/ca-bundle.crt}"
 
 # Resolved once in step_apply_iptables before the lockdown closes DNS, then
-# reused in step_self_verify.
+# reused in step_self_verify. FAMILY is "inet" (IPv4) or "inet6" (IPv6) — the
+# proxy's address family, which decides whether the allow rule goes in iptables
+# or ip6tables (IPv6-only clusters give the proxy Service an IPv6 ClusterIP).
 PROXY_IP=""
+FAMILY=""
 
 case "$SANDBOX_PROXY_BOOTSTRAP_MODE" in
     initcontainer|entrypoint) ;;
@@ -59,34 +62,47 @@ step_install_ca() {
 
 
 step_apply_iptables() {
+    # Resolve the proxy to a single IP and note its family. IPv6-only clusters
+    # give the proxy Service an IPv6 ClusterIP, so an IPv4-only lookup returns
+    # nothing — try v4 then v6. The getent calls live in the `elif` conditions
+    # so a not-found (exit 2) doesn't trip `set -e` mid-resolution.
     if [[ "$SANDBOX_PROXY_HOST" =~ ^[0-9]+\.[0-9]+\.[0-9]+\.[0-9]+$ ]]; then
-        PROXY_IP="$SANDBOX_PROXY_HOST"
+        PROXY_IP="$SANDBOX_PROXY_HOST"; FAMILY="inet"
+    elif [[ "$SANDBOX_PROXY_HOST" == *:* ]]; then
+        PROXY_IP="$SANDBOX_PROXY_HOST"; FAMILY="inet6"
+    elif PROXY_IP="$(getent ahostsv4 "$SANDBOX_PROXY_HOST" | awk '{print $1; exit}')" \
+            && [[ -n "$PROXY_IP" ]]; then
+        FAMILY="inet"
+    elif PROXY_IP="$(getent ahostsv6 "$SANDBOX_PROXY_HOST" | awk '{print $1; exit}')" \
+            && [[ -n "$PROXY_IP" ]]; then
+        FAMILY="inet6"
     else
-        # `ahostsv4` (not `hosts`) so we only get AF_INET answers. The iptables
-        # rule below is IPv4-only -- a dual-stack resolver that returns the AAAA
-        # first (e.g. Docker Desktop's host.docker.internal) would make the
-        # `iptables -d <ipv6>` call fail with "host/network not found" and the
-        # init would die mid-bootstrap.
-        PROXY_IP="$(getent ahostsv4 "$SANDBOX_PROXY_HOST" | awk '{print $1; exit}')"
-        [[ -n "$PROXY_IP" ]] || die "could not resolve proxy host $SANDBOX_PROXY_HOST to an IPv4 address"
+        die "could not resolve proxy host $SANDBOX_PROXY_HOST to an IPv4 or IPv6 address"
     fi
-    log "resolved proxy ip=$PROXY_IP"
+    log "resolved proxy ip=$PROXY_IP family=$FAMILY"
 
-    iptables -F OUTPUT
-    iptables -P OUTPUT DROP
-    iptables -P INPUT ACCEPT
-    iptables -P FORWARD DROP
+    # Default-DROP egress on BOTH families; the unused family stays fully closed.
+    local ipt
+    for ipt in iptables ip6tables; do
+        "$ipt" -F OUTPUT
+        "$ipt" -P OUTPUT DROP
+        "$ipt" -P INPUT ACCEPT
+        "$ipt" -P FORWARD DROP
+        "$ipt" -A OUTPUT -o lo -j ACCEPT
+        "$ipt" -A OUTPUT -m conntrack --ctstate ESTABLISHED,RELATED -j ACCEPT
+    done
 
-    iptables -A OUTPUT -o lo -j ACCEPT
-    iptables -A OUTPUT -m conntrack --ctstate ESTABLISHED,RELATED -j ACCEPT
-    iptables -A OUTPUT -p tcp -d "$PROXY_IP" --dport "$SANDBOX_PROXY_PORT" -j ACCEPT
+    # Allow only the proxy, on its own family.
+    if [[ "$FAMILY" == "inet" ]]; then
+        iptables -A OUTPUT -p tcp -d "$PROXY_IP" --dport "$SANDBOX_PROXY_PORT" -j ACCEPT
+    else
+        ip6tables -A OUTPUT -p tcp -d "$PROXY_IP" --dport "$SANDBOX_PROXY_PORT" -j ACCEPT
+    fi
+
     iptables -A OUTPUT -j REJECT --reject-with icmp-admin-prohibited
+    ip6tables -A OUTPUT -j REJECT --reject-with icmp6-adm-prohibited
 
-    # IPv6 lockdown is mandatory; partial lockdown = security regression.
-    ip6tables -F OUTPUT
-    ip6tables -P OUTPUT DROP
-
-    log "iptables egress lockdown installed (allow ${PROXY_IP}:${SANDBOX_PROXY_PORT})"
+    log "iptables egress lockdown installed (allow ${PROXY_IP}:${SANDBOX_PROXY_PORT} on ${FAMILY})"
 }
 
 
@@ -98,22 +114,34 @@ step_apply_iptables() {
 step_self_verify() {
     # Inspecting the chain (not probing the network): a network probe can't
     # distinguish "lockdown working" from "no internet" — fail-open.
-    log "self-verify: inspecting iptables OUTPUT chain"
-    local rules
-    rules="$(iptables -S OUTPUT)"
+    log "self-verify: inspecting iptables OUTPUT chains"
 
-    grep -qE "^-P OUTPUT DROP$" <<<"$rules" \
-        || die "self-verify: OUTPUT default policy is not DROP"
-    # iptables normalises single IPs to /32; accept the bare form too.
-    grep -qE "^-A OUTPUT .*-d ${PROXY_IP//./\\.}(/32)?[[:space:]].*--dport ${SANDBOX_PROXY_PORT}[[:space:]].*-j ACCEPT$" <<<"$rules" \
-        || die "self-verify: no ACCEPT rule for ${PROXY_IP}:${SANDBOX_PROXY_PORT}"
-    grep -qE "^-A OUTPUT -m conntrack --ctstate (RELATED,ESTABLISHED|ESTABLISHED,RELATED) -j ACCEPT$" <<<"$rules" \
-        || die "self-verify: no conntrack ESTABLISHED/RELATED rule"
-
+    # Both families must default-DROP egress; partial lockdown = regression.
+    grep -qE "^-P OUTPUT DROP$" <(iptables -S OUTPUT) \
+        || die "self-verify: iptables OUTPUT default policy is not DROP"
     grep -qE "^-P OUTPUT DROP$" <(ip6tables -S OUTPUT) \
         || die "self-verify: ip6tables OUTPUT default policy is not DROP"
 
-    log "self-verify: iptables OUTPUT chain looks correct"
+    # The proxy ACCEPT + conntrack rules live on the proxy's family chain.
+    local ipt="iptables"
+    [[ "$FAMILY" == "inet6" ]] && ipt="ip6tables"
+    local rules
+    rules="$("$ipt" -S OUTPUT)"
+
+    if [[ "$FAMILY" == "inet" ]]; then
+        # iptables normalises single IPs to /32; accept the bare form too.
+        grep -qE -- "^-A OUTPUT .*-d ${PROXY_IP//./\\.}(/32)?[[:space:]].*--dport ${SANDBOX_PROXY_PORT}[[:space:]].*-j ACCEPT$" <<<"$rules" \
+            || die "self-verify: no ACCEPT rule for ${PROXY_IP}:${SANDBOX_PROXY_PORT}"
+    else
+        # ip6tables normalises IPv6 addresses (compression/expansion), so match
+        # on the port + ACCEPT — there is only one allow rule.
+        grep -qE -- "--dport ${SANDBOX_PROXY_PORT}[[:space:]].*-j ACCEPT$" <<<"$rules" \
+            || die "self-verify: no ACCEPT rule for the proxy port ${SANDBOX_PROXY_PORT} on ${FAMILY}"
+    fi
+    grep -qE "^-A OUTPUT -m conntrack --ctstate (RELATED,ESTABLISHED|ESTABLISHED,RELATED) -j ACCEPT$" <<<"$rules" \
+        || die "self-verify: no conntrack ESTABLISHED/RELATED rule on ${FAMILY}"
+
+    log "self-verify: iptables OUTPUT chains look correct"
 }
 
 

@@ -9,6 +9,11 @@
 set -euo pipefail
 
 OPENCODE_PORT=4096
+# Bind host for opencode serve. Defaults to :: so the api-server can reach it
+# over IPv6 on IPv6-only clusters (a "::" socket also accepts IPv4-mapped
+# connections on Linux). Override with OPENCODE_SERVE_HOSTNAME=0.0.0.0 for
+# IPv4-only hosts.
+OPENCODE_SERVE_HOSTNAME="${OPENCODE_SERVE_HOSTNAME:-::}"
 export XDG_DATA_HOME="${OPENCODE_DATA_HOME:-/workspace/.opencode-data}"
 mkdir -p "$XDG_DATA_HOME"
 
@@ -56,9 +61,9 @@ backoff=1
 max_backoff=30
 
 while true; do
-    echo "[entrypoint] starting opencode serve on 0.0.0.0:$OPENCODE_PORT (XDG_DATA_HOME=$XDG_DATA_HOME)"
+    echo "[entrypoint] starting opencode serve on ${OPENCODE_SERVE_HOSTNAME}:$OPENCODE_PORT (XDG_DATA_HOME=$XDG_DATA_HOME)"
     set +e
-    opencode serve --hostname 0.0.0.0 --port "$OPENCODE_PORT" --print-logs &
+    opencode serve --hostname "$OPENCODE_SERVE_HOSTNAME" --port "$OPENCODE_PORT" --print-logs &
     child_pid=$!
     wait "$child_pid"
     exit_code=$?
