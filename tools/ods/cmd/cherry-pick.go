@@ -390,7 +390,7 @@ func cherryPickToRelease(commitSHAs, commitMessages []string, branchSuffix, vers
 
 	// Fetch the release branch
 	log.Infof("Fetching release branch: %s", releaseBranch)
-	if err := git.RunCommand("fetch", "--prune", "--quiet", "origin", releaseBranch); err != nil {
+	if err := git.RunCommand("fetch", "--prune", "--quiet", "origin", releaseBranchRefspec(releaseBranch)); err != nil {
 		return "", fmt.Errorf("failed to fetch release branch %s: %w", releaseBranch, err)
 	}
 
@@ -577,6 +577,14 @@ func extractPRNumbers(commitMsg string) []string {
 // deliberately excluded.
 var releaseBranchPattern = regexp.MustCompile(`^release/v(\d+)\.(\d+)$`)
 
+// releaseBranchRefspec returns a forced fetch refspec that creates or updates
+// the origin/<releaseBranch> tracking ref even in clones whose configured fetch
+// refspec does not cover release branches (e.g. single-branch clones), where a
+// plain "git fetch origin <branch>" only writes FETCH_HEAD.
+func releaseBranchRefspec(releaseBranch string) string {
+	return fmt.Sprintf("+refs/heads/%s:refs/remotes/origin/%s", releaseBranch, releaseBranch)
+}
+
 // releaseVersion is the parsed version of a "release/vX.Y" branch.
 type releaseVersion struct {
 	major int
@@ -673,7 +681,7 @@ func findTargetReleaseVersion(commitSHA string) (string, error) {
 	for _, version := range versions {
 		releaseBranch := fmt.Sprintf("release/%s", version)
 		// Fetch so the ancestry check runs against the branch's current tip.
-		if err := git.RunCommand("fetch", "--quiet", "origin", releaseBranch); err != nil {
+		if err := git.RunCommand("fetch", "--quiet", "origin", releaseBranchRefspec(releaseBranch)); err != nil {
 			return "", fmt.Errorf("failed to fetch %s: %w", releaseBranch, err)
 		}
 		contained, err := git.IsAncestor(commitSHA, fmt.Sprintf("origin/%s", releaseBranch))

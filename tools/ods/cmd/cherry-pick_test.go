@@ -81,6 +81,11 @@ func setupReleaseBranchRepo(t *testing.T) (preCutSHA, cutSHA, postCutSHA string)
 	gitIn(t, work, "config", "user.name", "Test")
 	gitIn(t, work, "config", "commit.gpgsign", "false")
 	gitIn(t, work, "remote", "add", "origin", origin)
+	// Narrow the fetch refspec to main only, like a single-branch clone, so the
+	// tests also pin that detection fetches release branches with an explicit
+	// refspec (a plain "git fetch origin <branch>" would only write FETCH_HEAD
+	// here and never create origin/release/vX.Y).
+	gitIn(t, work, "config", "remote.origin.fetch", "+refs/heads/main:refs/remotes/origin/main")
 
 	preCutSHA = commitIn(t, work, "a.txt")
 	gitIn(t, work, "branch", "release/v4.4", preCutSHA)
