@@ -39,6 +39,7 @@ from onyx.chat.compression import (
     get_compression_params,
 )
 from onyx.chat.emitter import Emitter
+from onyx.chat.incognito import content_free_file_descriptors
 from onyx.chat.incognito_context import append_incognito_message, load_incognito_context
 from onyx.chat.llm_loop import EmptyLLMResponseError, run_llm_loop
 from onyx.chat.models import (
@@ -782,7 +783,11 @@ def build_chat_turn(
             message=message_text if keeps_content else "",
             token_count=user_token_count,
             message_type=MessageType.USER,
-            files=new_msg_req.file_descriptors,
+            files=(
+                new_msg_req.file_descriptors
+                if keeps_content
+                else content_free_file_descriptors(new_msg_req.file_descriptors)
+            ),
             db_session=db_session,
             commit=True,
         )

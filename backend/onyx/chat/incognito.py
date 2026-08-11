@@ -15,6 +15,7 @@ for the length of the session.
 """
 
 from onyx.db.enums import IncognitoRecordMode
+from onyx.file_store.models import FileDescriptor
 
 
 def resolve_incognito_record_mode() -> IncognitoRecordMode:
@@ -24,3 +25,17 @@ def resolve_incognito_record_mode() -> IncognitoRecordMode:
     returns the default unconditionally.
     """
     return IncognitoRecordMode.USAGE_ONLY
+
+
+def content_free_file_descriptors(
+    file_descriptors: list[FileDescriptor],
+) -> list[FileDescriptor]:
+    """Descriptors safe to persist for a content-free turn. Linkage ids and
+    type survive for the file-reader tool and teardown. The content-derived
+    filename does not."""
+    return [
+        FileDescriptor(
+            id=fd["id"], type=fd["type"], user_file_id=fd.get("user_file_id")
+        )
+        for fd in file_descriptors
+    ]

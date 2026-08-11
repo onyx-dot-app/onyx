@@ -12,9 +12,13 @@ import pytest
 from sqlalchemy import Enum as SqlEnum
 from sqlalchemy.dialects import postgresql
 
-from onyx.chat.incognito import resolve_incognito_record_mode
+from onyx.chat.incognito import (
+    content_free_file_descriptors,
+    resolve_incognito_record_mode,
+)
 from onyx.db.enums import IncognitoRecordMode
 from onyx.db.models import ChatSession
+from onyx.file_store.models import ChatFileType, FileDescriptor
 
 
 def _mode_column_type() -> SqlEnum:
@@ -115,3 +119,24 @@ class TestResolver:
         resolved = IncognitoRecordMode.from_context_value("garbage")
         assert resolved is IncognitoRecordMode.USAGE_ONLY
         assert IncognitoRecordMode.from_context_value(None) is None
+
+
+class TestContentFreeFileDescriptors:
+    """The persisted descriptor of a content-free turn keeps linkage, never
+    the filename."""
+
+    def test_strips_name_and_keeps_linkage(self) -> None:
+        scrubbed = content_free_file_descriptors(
+            [
+                FileDescriptor(
+                    id="file-1",
+                    type=ChatFileType.DOC,
+                    name="acquisition_target.pdf",
+                    user_file_id="uf-1",
+                )
+            ]
+        )
+        assert scrubbed == [
+            FileDescriptor(id="file-1", type=ChatFileType.DOC, user_file_id="uf-1")
+        ]
+        assert "name" not in scrubbed[0]
