@@ -361,7 +361,7 @@ function Header() {
         isMobile) &&
         !appFocus.isSharedChat() && (
           <RootLayout.Header>
-            <div className="w-full h-full flex flex-row flex-wrap justify-center items-start p-2">
+            <div className="w-full h-full flex flex-row flex-wrap justify-center items-start p-2 sm:px-4">
               {/*
           Left:
           - (mobile) sidebar toggle
