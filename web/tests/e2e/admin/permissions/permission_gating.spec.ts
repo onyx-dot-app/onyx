@@ -513,6 +513,26 @@ test.describe("Permission gating — MANAGE_ACTIONS", () => {
         timeout: 10000,
       });
 
+      // The Add-MCP-Server modal hosts the shared group selector, the same
+      // component that hid its Public toggle from non-admins on other forms.
+      await page.getByRole("button", { name: "Add MCP Server" }).click();
+      await expect(page.getByText("MCP Server URL")).toBeVisible({
+        timeout: 10000,
+      });
+
+      // Rendered only for a holder of this permission.
+      const mcpPublicToggle = page.locator("#checkbox-is_public");
+      await expect(mcpPublicToggle).toBeVisible({ timeout: 10000 });
+
+      // MCP servers default to public, so the picker is disabled until unticked.
+      await mcpPublicToggle.click();
+      await expect(
+        page.getByText("Assign group access for this MCP server")
+      ).toBeVisible({ timeout: 10000 });
+      await expect(page.getByTestId("groups-search-input")).toBeVisible({
+        timeout: 10000,
+      });
+
       // Phase 3: Revoke MANAGE_ACTIONS — should redirect again
       await page.context().clearCookies();
       await loginAs(page, "admin");

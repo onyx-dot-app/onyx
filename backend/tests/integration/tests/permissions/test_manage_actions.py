@@ -36,11 +36,37 @@ _VALIDATE_TOOL_BODY: dict[str, Any] = {
     },
 }
 
+_OAUTH_CONFIG_BODY: dict[str, Any] = {
+    "name": "perm-test-oauth",
+    "authorization_url": "https://example.com/authorize",
+    "token_url": "https://example.com/token",
+    "client_id": "client-id",
+    "client_secret": "client-secret",
+}
+
+# MANAGE_ACTIONS spans three route clusters — custom tools, OAuth configs and
+# MCP servers. Sampled across all of them, and across every method, because a
+# GET-only list would miss a mutating route losing its gate.
 ENDPOINTS: list[Endpoint] = [
-    ("GET", "/admin/mcp/server/999999/tools", None),
-    ("GET", "/admin/mcp/servers/999999", None),
+    # custom tools
+    ("POST", "/admin/tool/custom", _VALIDATE_TOOL_BODY),
+    ("PUT", "/admin/tool/custom/999999", _VALIDATE_TOOL_BODY),
     ("DELETE", "/admin/tool/custom/999999", None),
+    ("PATCH", "/admin/tool/status", {"tool_ids": [999999], "enabled": True}),
     ("POST", "/admin/tool/custom/validate", _VALIDATE_TOOL_BODY),
+    # OAuth configs
+    ("POST", "/admin/oauth-config/create", _OAUTH_CONFIG_BODY),
+    ("GET", "/admin/oauth-config/999999", None),
+    ("PUT", "/admin/oauth-config/999999", _OAUTH_CONFIG_BODY),
+    ("DELETE", "/admin/oauth-config/999999", None),
+    # MCP servers
+    ("GET", "/admin/mcp/servers", None),
+    ("GET", "/admin/mcp/tools", None),
+    ("GET", "/admin/mcp/servers/999999", None),
+    ("GET", "/admin/mcp/server/999999/tools", None),
+    ("GET", "/admin/mcp/server/999999/db-tools", None),
+    ("PATCH", "/admin/mcp/server/999999/status", {"is_active": False}),
+    ("DELETE", "/admin/mcp/server/999999", None),
 ]
 
 
