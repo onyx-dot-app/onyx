@@ -82,12 +82,15 @@ IMPLIED_PERMISSIONS: dict[str, set[str]] = {
 # Permissions that cannot be toggled via the group-permission API.
 # BASIC_ACCESS is always granted, FULL_ADMIN_PANEL_ACCESS is too broad,
 # and implied permissions (READ_* and the API-surface scopes) are never
-# stored directly.
+# stored directly. MANAGE_SKILLS is the old curator role: a scoped manager
+# resolves it from the bundle below, an admin from the full-admin short-circuit,
+# so nothing grants it — and there is no global curator to grant it to.
 NON_TOGGLEABLE_PERMISSIONS: frozenset[Permission] = frozenset(
     {
         Permission.BASIC_ACCESS,
         Permission.FULL_ADMIN_PANEL_ACCESS,
         Permission.CRAFT_SANDBOX,
+        Permission.MANAGE_SKILLS,
     }
     | Permission.IMPLIED
 )
@@ -210,13 +213,6 @@ PERMISSION_REGISTRY: list[PermissionRegistryEntry] = [
         display_name="Manage Agents",
         description="View and update all public and shared agents in the organization.",
         permissions=[Permission.MANAGE_AGENTS],
-        group=2,
-    ),
-    PermissionRegistryEntry(
-        id="manage_skills",
-        display_name="Manage Skills",
-        description="Add and update skills that agents can use.",
-        permissions=[Permission.MANAGE_SKILLS],
         group=2,
     ),
     # Group 3 — Monitoring & Tokens

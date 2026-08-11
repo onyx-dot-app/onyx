@@ -594,9 +594,10 @@ class TestApiSurfaceScopeRegistration:
     def test_implied_set_matches_spec(self) -> None:
         assert {p.value for p in Permission.IMPLIED} == self.EXPECTED_IMPLIED
 
-    def test_non_toggleable_is_implied_plus_basic_admin_and_craft(self) -> None:
+    def test_non_toggleable_is_implied_plus_basic_admin_craft_and_skills(self) -> None:
+        # manage:skills is the curator role — resolved, never granted.
         assert {p.value for p in NON_TOGGLEABLE_PERMISSIONS} == (
-            self.EXPECTED_IMPLIED | {"basic", "admin", "craft_sandbox"}
+            self.EXPECTED_IMPLIED | {"basic", "admin", "craft_sandbox", "manage:skills"}
         )
 
     def test_implication_edges_match_spec(self) -> None:
