@@ -13,6 +13,7 @@ from ee.onyx.external_permissions.sharepoint.permission_utils import (
     GroupsResult,
     _enumerate_ad_groups_paginated,
     _get_azuread_groups,
+    _get_sharepoint_list_item_id,
     _has_only_limited_access,
     _is_public_item,
     _iter_graph_collection,
@@ -24,7 +25,10 @@ from ee.onyx.external_permissions.sharepoint.permission_utils import (
 )
 from onyx.access.models import ExternalAccess
 from onyx.background.indexing.checkpointing_utils import check_checkpoint_size
-from onyx.connectors.sharepoint.connector import SharepointConnectorCheckpoint
+from onyx.connectors.sharepoint.connector import (
+    DriveItemData,
+    SharepointConnectorCheckpoint,
+)
 from onyx.connectors.sharepoint.connector_utils import (
     SharepointGroup,
     SharepointPermissionCache,
@@ -68,6 +72,22 @@ def _make_sharepoint_group(name: str) -> SharepointGroup:
         login_name=name,
         principal_type=SHAREPOINT_GROUP_PRINCIPAL_TYPE,
     )
+
+
+@patch(f"{MODULE}.sleep_and_retry")
+def test_sharepoint_ids_avoid_list_item_lookup(mock_sleep_and_retry: MagicMock) -> None:
+    drive_item = DriveItemData.from_graph_json(
+        {
+            "id": "drive-item-id",
+            "name": "document.pdf",
+            "webUrl": "https://tenant.sharepoint.com/document.pdf",
+            "parentReference": {"driveId": "drive-id"},
+            "sharepointIds": {"listItemId": "42"},
+        }
+    ).to_sdk_driveitem(MagicMock())
+
+    assert _get_sharepoint_list_item_id(drive_item) == "42"
+    mock_sleep_and_retry.assert_not_called()
 
 
 @patch(f"{MODULE}._get_azuread_groups")

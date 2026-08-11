@@ -156,6 +156,38 @@ DEFAULT_SHAREPOINT_DOMAIN_SUFFIX = "sharepoint.com"
 GRAPH_API_BASE = f"{DEFAULT_GRAPH_API_HOST}/v1.0"
 GRAPH_API_MAX_RETRIES = 5
 GRAPH_API_RETRYABLE_STATUSES = frozenset({429, 500, 502, 503, 504})
+SHAREPOINT_IDS_PROPERTY = "sharepointIds"
+LIST_ITEM_ID_PROPERTY = "listItemId"
+DRIVE_ITEM_ID_PROPERTY = "id"
+DRIVE_ITEM_NAME_PROPERTY = "name"
+DRIVE_ITEM_WEB_URL_PROPERTY = "webUrl"
+DRIVE_ITEM_SIZE_PROPERTY = "size"
+DRIVE_ITEM_FILE_PROPERTY = "file"
+DRIVE_ITEM_CREATED_DATETIME_PROPERTY = "createdDateTime"
+DRIVE_ITEM_LAST_MODIFIED_DATETIME_PROPERTY = "lastModifiedDateTime"
+DRIVE_ITEM_LAST_MODIFIED_BY_PROPERTY = "lastModifiedBy"
+DRIVE_ITEM_PARENT_REFERENCE_PROPERTY = "parentReference"
+DRIVE_ITEM_FOLDER_PROPERTY = "folder"
+DRIVE_ITEM_DELETED_PROPERTY = "deleted"
+DRIVE_ITEM_DOWNLOAD_URL_PROPERTY = "@microsoft.graph.downloadUrl"
+DRIVE_ITEM_DOWNLOAD_URL_SELECT = "content.downloadUrl"
+DRIVE_ITEM_SELECT_FIELDS = ",".join(
+    (
+        DRIVE_ITEM_ID_PROPERTY,
+        DRIVE_ITEM_NAME_PROPERTY,
+        DRIVE_ITEM_WEB_URL_PROPERTY,
+        DRIVE_ITEM_SIZE_PROPERTY,
+        DRIVE_ITEM_FILE_PROPERTY,
+        DRIVE_ITEM_CREATED_DATETIME_PROPERTY,
+        DRIVE_ITEM_LAST_MODIFIED_DATETIME_PROPERTY,
+        DRIVE_ITEM_LAST_MODIFIED_BY_PROPERTY,
+        DRIVE_ITEM_PARENT_REFERENCE_PROPERTY,
+        SHAREPOINT_IDS_PROPERTY,
+        DRIVE_ITEM_FOLDER_PROPERTY,
+        DRIVE_ITEM_DELETED_PROPERTY,
+        DRIVE_ITEM_DOWNLOAD_URL_SELECT,
+    )
+)
 
 # Cap how many configured sites the perm-sync RoleAssignments probe checks at
 # validation time. Each probe is one HTTP round-trip, so we trade exhaustive
@@ -183,29 +215,33 @@ class DriveItemData(BaseModel):
     last_modified_by_email: str | None = None
     parent_reference_path: str | None = None
     drive_id: str | None = None
+    list_item_id: str | None = None
 
     @classmethod
     def from_graph_json(cls, item: dict[str, Any]) -> "DriveItemData":
-        last_mod_raw = item.get("lastModifiedDateTime")
+        last_mod_raw = item.get(DRIVE_ITEM_LAST_MODIFIED_DATETIME_PROPERTY)
         last_mod: datetime | None = None
         if isinstance(last_mod_raw, str):
             last_mod = datetime.fromisoformat(last_mod_raw.replace("Z", "+00:00"))
 
-        created_raw = item.get("createdDateTime")
+        created_raw = item.get(DRIVE_ITEM_CREATED_DATETIME_PROPERTY)
         created: datetime | None = None
         if isinstance(created_raw, str):
             created = datetime.fromisoformat(created_raw.replace("Z", "+00:00"))
 
-        last_modified_by = item.get("lastModifiedBy", {}).get("user", {})
-        parent_ref = item.get("parentReference", {})
+        last_modified_by = item.get(DRIVE_ITEM_LAST_MODIFIED_BY_PROPERTY, {}).get(
+            "user", {}
+        )
+        parent_ref = item.get(DRIVE_ITEM_PARENT_REFERENCE_PROPERTY, {})
+        sharepoint_ids = item.get(SHAREPOINT_IDS_PROPERTY) or {}
 
         return cls(
-            id=item["id"],
-            name=item.get("name", ""),
-            web_url=item.get("webUrl", ""),
-            size=item.get("size"),
-            mime_type=item.get("file", {}).get("mimeType"),
-            download_url=item.get("@microsoft.graph.downloadUrl"),
+            id=item[DRIVE_ITEM_ID_PROPERTY],
+            name=item.get(DRIVE_ITEM_NAME_PROPERTY, ""),
+            web_url=item.get(DRIVE_ITEM_WEB_URL_PROPERTY, ""),
+            size=item.get(DRIVE_ITEM_SIZE_PROPERTY),
+            mime_type=item.get(DRIVE_ITEM_FILE_PROPERTY, {}).get("mimeType"),
+            download_url=item.get(DRIVE_ITEM_DOWNLOAD_URL_PROPERTY),
             created_datetime=created,
             last_modified_datetime=last_mod,
             last_modified_by_display_name=last_modified_by.get("displayName"),
@@ -215,6 +251,7 @@ class DriveItemData(BaseModel):
             ),
             parent_reference_path=parent_ref.get("path"),
             drive_id=parent_ref.get("driveId"),
+            list_item_id=sharepoint_ids.get(LIST_ITEM_ID_PROPERTY),
         )
 
     def to_sdk_driveitem(self, graph_client: GraphClient) -> DriveItem:
@@ -227,6 +264,11 @@ class DriveItemData(BaseModel):
         )
         item = DriveItem(graph_client, path)
         item.set_property("id", self.id)
+        if self.list_item_id:
+            item.set_property(
+                SHAREPOINT_IDS_PROPERTY,
+                {LIST_ITEM_ID_PROPERTY: self.list_item_id},
+            )
         return item
 
 
@@ -2050,15 +2092,20 @@ class SharepointConnector(
 
         while folder_queue:
             page_url: str | None = folder_queue.popleft()
-            params: dict[str, str] | None = {"$top": str(page_size)}
+            params: dict[str, str] | None = {
+                "$top": str(page_size),
+                "$select": DRIVE_ITEM_SELECT_FIELDS,
+            }
 
             while page_url:
                 data = self._graph_api_get_json(page_url, params)
                 params = None  # nextLink already embeds query params
 
                 for item in data.get("value", []):
-                    if "folder" in item:
-                        child_url = f"{base}/items/{item['id']}/children"
+                    if DRIVE_ITEM_FOLDER_PROPERTY in item:
+                        child_url = (
+                            f"{base}/items/{item[DRIVE_ITEM_ID_PROPERTY]}/children"
+                        )
                         folder_queue.append(child_url)
                         continue
 
@@ -2069,7 +2116,7 @@ class SharepointConnector(
                     # NOTE: We are now including items without a lastModifiedDateTime,
                     # and respecting when only one of start or end is set.
                     if start is not None or end is not None:
-                        raw_ts = item.get("lastModifiedDateTime")
+                        raw_ts = item.get(DRIVE_ITEM_LAST_MODIFIED_DATETIME_PROPERTY)
                         if raw_ts:
                             mod_dt = datetime.fromisoformat(
                                 raw_ts.replace("Z", "+00:00")
@@ -2130,7 +2177,10 @@ class SharepointConnector(
         restarts with a full delta enumeration.
         """
         page_url: str | None = initial_url
-        params: dict[str, str] | None = {"$top": str(page_size)}
+        params: dict[str, str] | None = {
+            "$top": str(page_size),
+            "$select": DRIVE_ITEM_SELECT_FIELDS,
+        }
 
         while page_url:
             try:
@@ -2158,11 +2208,14 @@ class SharepointConnector(
             params = None  # nextLink/deltaLink already embed query params
 
             for item in data.get("value", []):
-                if "folder" in item or "deleted" in item:
+                if (
+                    DRIVE_ITEM_FOLDER_PROPERTY in item
+                    or DRIVE_ITEM_DELETED_PROPERTY in item
+                ):
                     continue
 
                 if start is not None or end is not None:
-                    raw_ts = item.get("lastModifiedDateTime")
+                    raw_ts = item.get(DRIVE_ITEM_LAST_MODIFIED_DATETIME_PROPERTY)
                     if raw_ts:
                         mod_dt = datetime.fromisoformat(raw_ts.replace("Z", "+00:00"))
                         if start is not None and mod_dt < start:
@@ -2184,12 +2237,14 @@ class SharepointConnector(
     ) -> str:
         """Build the initial delta API URL with query parameters embedded.
 
-        Embeds ``$top`` (and optionally a timestamp ``token``) directly in the
-        URL so that the returned string is fully self-contained and can be
-        stored in a checkpoint without needing a separate params dict.
+        Embeds ``$top``, ``$select``, and optionally ``token`` so the URL can be
+        stored in a checkpoint without a separate params dict.
         """
         base_url = f"{self.graph_api_base}/drives/{drive_id}/root/delta"
-        params = [f"$top={page_size}"]
+        params = [
+            f"$top={page_size}",
+            f"$select={DRIVE_ITEM_SELECT_FIELDS}",
+        ]
         if start is not None and start > _EPOCH:
             token = quote(start.isoformat(timespec="seconds"))
             params.append(f"token={token}")
@@ -2220,16 +2275,22 @@ class SharepointConnector(
                     "Delta token expired (410 Gone) for drive '%s'. Will restart with full delta enumeration.",
                     drive_id,
                 )
-                full_url = f"{self.graph_api_base}/drives/{drive_id}/root/delta?$top={page_size}"
+                full_url = (
+                    f"{self.graph_api_base}/drives/{drive_id}/root/delta?"
+                    f"$top={page_size}&$select={DRIVE_ITEM_SELECT_FIELDS}"
+                )
                 return [], full_url
             raise
 
         items: list[DriveItemData] = []
         for item in data.get("value", []):
-            if "folder" in item or "deleted" in item:
+            if (
+                DRIVE_ITEM_FOLDER_PROPERTY in item
+                or DRIVE_ITEM_DELETED_PROPERTY in item
+            ):
                 continue
             if start is not None or end is not None:
-                raw_ts = item.get("lastModifiedDateTime")
+                raw_ts = item.get(DRIVE_ITEM_LAST_MODIFIED_DATETIME_PROPERTY)
                 if raw_ts:
                     mod_dt = datetime.fromisoformat(raw_ts.replace("Z", "+00:00"))
                     if start is not None and mod_dt < start:
