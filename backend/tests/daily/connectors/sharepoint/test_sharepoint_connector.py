@@ -21,6 +21,7 @@ from onyx.connectors.models import (
 from onyx.connectors.sharepoint.connector import (
     SharepointAuthMethod,
     SharepointConnector,
+    _download_via_graph_api,
     sleep_and_retry,
 )
 from onyx.db.enums import HierarchyNodeType
@@ -644,6 +645,10 @@ def test_sharepoint_connector_hierarchy_node_permissions(
             "ee.onyx.external_permissions.sharepoint.permission_utils.sleep_and_retry",
             wraps=sleep_and_retry,
         ) as mock_permission_retry,
+        patch(
+            "onyx.connectors.sharepoint.connector._download_via_graph_api",
+            wraps=_download_via_graph_api,
+        ) as mock_graph_content_download,
     ):
         result = load_all_from_connector(
             connector,
@@ -657,6 +662,7 @@ def test_sharepoint_connector_hierarchy_node_permissions(
         call.args[1] == GET_SHAREPOINT_LIST_ITEM_ID_LABEL
         for call in mock_permission_retry.call_args_list
     )
+    mock_graph_content_download.assert_not_called()
 
     site_node = find_hierarchy_node(
         result.hierarchy_nodes,

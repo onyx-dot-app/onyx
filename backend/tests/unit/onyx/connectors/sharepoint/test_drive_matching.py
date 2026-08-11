@@ -9,6 +9,7 @@ import pytest
 
 from onyx.connectors.models import Document, DocumentSource, TextSection
 from onyx.connectors.sharepoint.connector import (
+    DRIVE_ITEM_DOWNLOAD_URL_SELECT,
     DRIVE_ITEM_SELECT_FIELDS,
     SHARED_DOCUMENTS_MAP,
     DriveItemData,
@@ -473,6 +474,7 @@ def test_iter_drive_items_delta_uses_timestamp_token(
     assert len(captured_urls) == 1
     assert "token=2025-06-01T00%3A00%3A00%2B00%3A00" in captured_urls[0]
     assert captured_params == [{"$top": "200", "$select": DRIVE_ITEM_SELECT_FIELDS}]
+    assert DRIVE_ITEM_DOWNLOAD_URL_SELECT in DRIVE_ITEM_SELECT_FIELDS.split(",")
 
 
 def test_iter_drive_items_delta_full_crawl_when_no_start(
