@@ -155,37 +155,27 @@ export default function PerUserUsagePanel({
       {header}
 
       <Card border="solid" rounding="lg" padding="sm">
-        <div className="flex flex-wrap gap-2">
-          <div className="basis-1/2 lg:basis-1/4">
-            <SummaryMetric
-              label="Workspace spend"
-              value={formatCost(totalCostCents)}
-              detail="Across all listed users"
-            />
-          </div>
-          <div className="basis-1/2 lg:basis-1/4">
-            <SummaryMetric
-              label="Total tokens"
-              value={formatTokens(totalTokens)}
-              detail="Input (including cache reads) and output"
-            />
-          </div>
-          <div className="basis-1/2 lg:basis-1/4">
-            <SummaryMetric
-              label="Active users"
-              value={activeUsers.toLocaleString()}
-              detail={`${users.length.toLocaleString()} users with records`}
-            />
-          </div>
-          <div className="basis-1/2 lg:basis-1/4">
-            <SummaryMetric
-              label="Top spender"
-              value={
-                topSpender ? formatCost(topSpender.totals.cost_cents) : "—"
-              }
-              detail={topSpender?.email ?? "No spend recorded"}
-            />
-          </div>
+        <div className="grid grid-cols-2 gap-2 lg:grid-cols-4">
+          <SummaryMetric
+            label="Workspace spend"
+            value={formatCost(totalCostCents)}
+            detail="Across all listed users"
+          />
+          <SummaryMetric
+            label="Total tokens"
+            value={formatTokens(totalTokens)}
+            detail="Input (including cache reads) and output"
+          />
+          <SummaryMetric
+            label="Active users"
+            value={activeUsers.toLocaleString()}
+            detail={`${users.length.toLocaleString()} users with records`}
+          />
+          <SummaryMetric
+            label="Top spender"
+            value={topSpender ? formatCost(topSpender.totals.cost_cents) : "—"}
+            detail={topSpender?.email ?? "No spend recorded"}
+          />
         </div>
       </Card>
 

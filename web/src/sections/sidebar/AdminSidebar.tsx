@@ -146,6 +146,7 @@ function buildItems(
       add(SECTIONS.USAGE, ADMIN_ROUTES.TRACING);
     }
     addGated(SECTIONS.USAGE, ADMIN_ROUTES.USAGE, Tier.BUSINESS);
+    addGated(SECTIONS.USAGE, ADMIN_ROUTES.WORKSPACE_ANALYTICS, Tier.BUSINESS);
     if (
       settings?.query_history_type !== "disabled" &&
       !settings?.hide_query_history_from_admin_panel
