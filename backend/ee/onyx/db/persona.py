@@ -106,14 +106,15 @@ def _assert_group_share_within_scope(
         raise OnyxError(
             OnyxErrorCode.PERSONA_NOT_FOUND, f"Persona {persona_id} does not exist"
         )
-    # Unchanged shares aren't a mutation either — the editor round-trips current groups on
-    # every save, so otherwise a plain owner couldn't edit an agent someone else
-    # group-shared. Levels count, not just ids. Exempt when there's no scoped authority to
-    # abuse, or when the actor owns the agent — publishing is can_delete_persona's call.
+    owns_agent = can_delete_persona(acting_user, persona, db_session)
+    # Scope governs which groups an agent reaches, not the level within them; adding or
+    # removing a group still falls through to the gate.
+    if owns_agent and set(current_shares) == set(desired_group_shares):
+        return
+    # Untouched shares aren't a mutation: the editor round-trips current groups on save.
     if current_shares == desired_group_shares and (
         has_permission(acting_user, Permission.MANAGE_AGENTS)
         is not PermissionAuthority.SCOPED
-        or can_delete_persona(acting_user, persona, db_session)
     ):
         return
     assert_within_scope(

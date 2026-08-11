@@ -6,11 +6,18 @@ Covers the service-account API-key admin endpoints in
 
 import os
 from typing import Any
+from uuid import uuid4
 
 import pytest
 
 from onyx.db.enums import Permission
-from tests.integration.common_utils.test_models import DATestAPIKey, DATestUser
+from tests.integration.common_utils.managers.user_group import UserGroupManager
+from tests.integration.common_utils.permission_state import effective_permissions
+from tests.integration.common_utils.test_models import (
+    DATestAPIKey,
+    DATestUser,
+    DATestUserGroup,
+)
 from tests.integration.tests.permissions._access_matrix import (
     USER_KINDS,
     Endpoint,
@@ -64,3 +71,55 @@ def test_access_matrix(
     headers, cookies = resolve_credentials(user_kind, request)
     resp = call_endpoint(method, path, body, headers, cookies)
     assert_response(resp, method, path, user_kind, expected)
+
+
+# ---------------------------------------------------------------------------
+# Group assignment: a key's access is whatever its groups grant, so the picker lists
+# every group and those grants must actually reach the key.
+# ---------------------------------------------------------------------------
+
+
+def test_holder_sees_default_groups(holder_user: DATestUser) -> None:
+    # Everywhere else passes include_default as an admin, never as a plain holder.
+    groups = UserGroupManager.get_all(
+        user_performing_action=holder_user, include_default=True
+    )
+    names = {group.name for group in groups}
+    assert {"Admin", "Basic"} <= names, names
+
+
+def test_service_account_inherits_its_groups_permissions(
+    permission_admin_user: DATestUser,
+    holder_user: DATestUser,
+) -> None:
+    granting_group: DATestUserGroup = UserGroupManager.create(
+        name=f"svc-acct-grant-{uuid4()}",
+        user_performing_action=permission_admin_user,
+    )
+    UserGroupManager.set_permissions(
+        user_group=granting_group,
+        permissions=[Permission.MANAGE_LLMS.value],
+        user_performing_action=permission_admin_user,
+    ).raise_for_status()
+
+    resp = call_endpoint(
+        "POST",
+        "/admin/api-key",
+        {"name": f"perm-test-key-{uuid4()}", "group_ids": [granting_group.id]},
+        holder_user.headers,
+        holder_user.cookies,
+    )
+    assert resp.status_code == 200, resp.text
+    created = resp.json()
+
+    assert Permission.MANAGE_LLMS.value in effective_permissions(created["user_id"])
+
+    # The whole chain, not just the projection: the key opens a route its creator can't.
+    key_headers = {"Authorization": f"Bearer {created['api_key']}"}
+    assert_response(
+        call_endpoint("GET", "/admin/llm/provider", None, key_headers, None),
+        "GET",
+        "/admin/llm/provider",
+        "service_account_in_granting_group",
+        "allowed",
+    )

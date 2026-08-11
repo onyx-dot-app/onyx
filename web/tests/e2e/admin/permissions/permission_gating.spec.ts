@@ -623,6 +623,19 @@ test.describe("Permission gating — MANAGE_SERVICE_ACCOUNT_API_KEYS", () => {
         timeout: 10000,
       });
 
+      // Defaults too (include_default) — hiding them would make those levels
+      // ungrantable to a key.
+      await expect(
+        page.getByText("Admin", { exact: true }).first()
+      ).toBeVisible({
+        timeout: 10000,
+      });
+      await expect(
+        page.getByText("Basic", { exact: true }).first()
+      ).toBeVisible({
+        timeout: 10000,
+      });
+
       // Phase 3: Revoke MANAGE_SERVICE_ACCOUNT_API_KEYS — should redirect again
       await page.context().clearCookies();
       await loginAs(page, "admin");
