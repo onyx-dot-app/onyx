@@ -12,7 +12,7 @@ from onyx.utils.variable_functionality import (
 
 
 def get_channel_access(
-    source_operations: SlackSourceOperations,
+    slack_client: SlackSourceOperations,
     channel: ChannelType,
     user_cache: dict[str, BasicExpertInfo | None],
     team_id_to_user_emails: dict[str, set[str]] | None = None,
@@ -42,5 +42,5 @@ def get_channel_access(
     )
 
     return ee_get_channel_access(
-        source_operations, channel, user_cache, team_id_to_user_emails
+        slack_client, channel, user_cache, team_id_to_user_emails
     )

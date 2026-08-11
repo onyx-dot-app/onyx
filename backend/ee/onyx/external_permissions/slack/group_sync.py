@@ -17,28 +17,28 @@ logger = setup_logger()
 
 
 def _get_slack_group_ids(
-    source_operations: SlackSourceOperations,
+    slack_client: SlackSourceOperations,
 ) -> list[str]:
     group_ids = []
-    for result in source_operations.list_usergroups():
+    for result in slack_client.list_usergroups():
         for group in result.get("usergroups", []):
             group_ids.append(group.get("id"))
     return group_ids
 
 
 def _get_slack_group_members_email(
-    source_operations: SlackSourceOperations,
+    slack_client: SlackSourceOperations,
     group_name: str,
     user_id_to_email_map: dict[str, str],
 ) -> list[str]:
     group_member_emails = []
-    for result in source_operations.list_usergroup_members(usergroup_id=group_name):
+    for result in slack_client.list_usergroup_members(usergroup_id=group_name):
         for member_id in result.get("users", []):
             member_email = user_id_to_email_map.get(member_id)
             if not member_email:
                 # If the user is an external user, they wont get returned from the
                 # conversations_members call so we need to make a separate call to users_info
-                member_info = source_operations.fetch_user_info(member_id)
+                member_info = slack_client.fetch_user_info(member_id)
                 member_email = member_info["user"]["profile"].get("email")
                 if not member_email:
                     # If no email is found, we skip the user
@@ -60,14 +60,14 @@ def slack_group_sync(
     provider = build_db_credentials_provider(
         DocumentSource.SLACK, cc_pair.credential.id
     )
-    source_operations = SlackSourceOperations(credentials_provider=provider)
+    slack_client = SlackSourceOperations(credentials_provider=provider)
 
-    user_id_to_email_map = fetch_user_id_to_email_map(source_operations)
+    user_id_to_email_map = fetch_user_id_to_email_map(slack_client)
 
     onyx_groups: list[ExternalUserGroup] = []
-    for group_name in _get_slack_group_ids(source_operations):
+    for group_name in _get_slack_group_ids(slack_client):
         group_member_emails = _get_slack_group_members_email(
-            source_operations=source_operations,
+            slack_client=slack_client,
             group_name=group_name,
             user_id_to_email_map=user_id_to_email_map,
         )

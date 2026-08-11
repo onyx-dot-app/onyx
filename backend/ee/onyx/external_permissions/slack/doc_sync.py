@@ -83,7 +83,7 @@ def _filter_channels_for_permissions(
 
 
 def _fetch_channel_permissions(
-    source_operations: SlackSourceOperations,
+    slack_client: SlackSourceOperations,
     workspace_permissions: ExternalAccess,  # noqa: ARG001
     user_id_to_email_map: dict[str, str],
     team_ids: list[str] | None = None,
@@ -96,25 +96,25 @@ def _fetch_channel_permissions(
     channel_permissions = {}
     if team_ids:
         public_channels = get_channels_across_teams(
-            source_operations=source_operations,
+            slack_client=slack_client,
             team_ids=team_ids,
             get_public=True,
             get_private=False,
         )
         private_channels = get_channels_across_teams(
-            source_operations=source_operations,
+            slack_client=slack_client,
             team_ids=team_ids,
             get_public=False,
             get_private=True,
         )
     else:
         public_channels = get_channels(
-            source_operations=source_operations,
+            slack_client=slack_client,
             get_public=True,
             get_private=False,
         )
         private_channels = get_channels(
-            source_operations=source_operations,
+            slack_client=slack_client,
             get_public=False,
             get_private=True,
         )
@@ -138,7 +138,7 @@ def _fetch_channel_permissions(
             continue
         if team_id_to_user_emails:
             channel_permissions[channel_id] = get_channel_access(
-                source_operations=source_operations,
+                slack_client=slack_client,
                 channel=channel,
                 user_cache={},
                 team_id_to_user_emails=team_id_to_user_emails,
@@ -154,7 +154,7 @@ def _fetch_channel_permissions(
     for channel_id in private_channel_ids:
         # Collect all member ids for the channel pagination calls
         member_ids = []
-        for result in source_operations.list_channel_members(channel_id=channel_id):
+        for result in slack_client.list_channel_members(channel_id=channel_id):
             member_ids.extend(result.get("members", []))
 
         # Collect all member emails for the channel
@@ -166,7 +166,7 @@ def _fetch_channel_permissions(
                 # If the user is an external user, they wont get returned from the
                 # conversations_members call so we need to make a separate call to users_info
                 # and add them to the user_id_to_email_map
-                member_info = source_operations.fetch_user_info(member_id)
+                member_info = slack_client.fetch_user_info(member_id)
                 member_email = member_info["user"]["profile"].get("email")
                 if not member_email:
                     # If no email is found, we skip the user
@@ -246,33 +246,31 @@ def slack_doc_sync(
     )
     slack_connector = SlackConnector(**cc_pair.connector.connector_specific_config)
     slack_connector.set_credentials_provider(provider)
-    source_operations = slack_connector.source_operations
-    assert source_operations is not None, "set_credentials_provider builds the gateway."
+    slack_client = slack_connector.slack_client
+    assert slack_client is not None, "set_credentials_provider builds the gateway."
 
     grid_team_ids: list[str] | None = None
     try:
-        auth_response = source_operations.check_auth()
+        auth_response = slack_client.check_auth()
         if auth_response.get("enterprise_id"):
-            grid_team_ids = list_grid_team_ids(source_operations)
+            grid_team_ids = list_grid_team_ids(slack_client)
     except Exception as e:
         logger.warning("Slack Grid detection during perm sync failed: %s", e)
 
     team_id_to_user_emails: dict[str, set[str]] | None = None
     if grid_team_ids:
         try:
-            team_id_to_user_emails = fetch_team_user_emails(
-                source_operations, grid_team_ids
-            )
+            team_id_to_user_emails = fetch_team_user_emails(slack_client, grid_team_ids)
         except Exception as e:
             # Without per-team users, Grid public-channel scoping degrades to
             # is_public via the empty-union fallback. Keep perm-sync running.
             logger.warning("fetch_team_user_emails failed on Grid org: %s", e)
             team_id_to_user_emails = None
         user_id_to_email_map = fetch_user_id_to_email_map(
-            source_operations, team_ids=grid_team_ids
+            slack_client, team_ids=grid_team_ids
         )
     else:
-        user_id_to_email_map = fetch_user_id_to_email_map(source_operations)
+        user_id_to_email_map = fetch_user_id_to_email_map(slack_client)
     if not user_id_to_email_map:
         raise ValueError(
             "No user id to email map found. Please check to make sure that your Slack bot token has the `users:read.email` scope"
@@ -282,7 +280,7 @@ def slack_doc_sync(
         user_id_to_email_map=user_id_to_email_map,
     )
     channel_permissions = _fetch_channel_permissions(
-        source_operations=source_operations,
+        slack_client=slack_client,
         workspace_permissions=workspace_permissions,
         user_id_to_email_map=user_id_to_email_map,
         team_ids=grid_team_ids,

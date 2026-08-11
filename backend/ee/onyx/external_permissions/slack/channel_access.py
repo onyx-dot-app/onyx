@@ -6,7 +6,7 @@ from onyx.connectors.slack.utils import expert_info_from_slack_id
 
 
 def get_channel_access(
-    source_operations: SlackSourceOperations,
+    slack_client: SlackSourceOperations,
     channel: ChannelType,
     user_cache: dict[str, BasicExpertInfo | None],
     team_id_to_user_emails: dict[str, set[str]] | None = None,
@@ -41,14 +41,14 @@ def get_channel_access(
     channel_id = channel["id"]
 
     member_ids = []
-    for result in source_operations.list_channel_members(channel_id=channel_id):
+    for result in slack_client.list_channel_members(channel_id=channel_id):
         member_ids.extend(result.get("members", []))
 
     member_emails = set()
     for member_id in member_ids:
         user_info = expert_info_from_slack_id(
             user_id=member_id,
-            fetch_user_info=source_operations.fetch_user_info,
+            fetch_user_info=slack_client.fetch_user_info,
             user_cache=user_cache,
         )
         if user_info and user_info.email:

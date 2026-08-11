@@ -46,9 +46,9 @@ def _set_credentials(connector: SlackConnector) -> tuple[MagicMock, MagicMock]:
     provider.get_provider_key.return_value = "18"
 
     connector.set_credentials_provider(provider)
-    assert connector.source_operations is not None
-    connector.source_operations._cached_client = client
-    connector.source_operations._cached_fast_client = fast_client
+    assert connector.slack_client is not None
+    connector.slack_client._cached_client = client
+    connector.slack_client._cached_fast_client = fast_client
 
     return client, fast_client
 

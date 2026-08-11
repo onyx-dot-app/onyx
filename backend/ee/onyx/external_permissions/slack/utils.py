@@ -5,7 +5,7 @@ from onyx.connectors.slack.utils import (
 
 
 def fetch_user_id_to_email_map(
-    source_operations: SlackSourceOperations,
+    slack_client: SlackSourceOperations,
     team_ids: list[str] | None = None,
 ) -> dict[str, str]:
     """On Grid org installs, ``users.list`` requires a ``team_id``; iterate
@@ -13,7 +13,7 @@ def fetch_user_id_to_email_map(
     user_id_to_email_map: dict[str, str] = {}
     team_iter: list[str | None] = list(team_ids) if team_ids else [None]
     for tid in team_iter:
-        for user_info in source_operations.list_users(team_id=tid):
+        for user_info in slack_client.list_users(team_id=tid):
             for user in user_info.get("members", []):
                 email = user.get("profile", {}).get("email")
                 if email:
@@ -22,9 +22,9 @@ def fetch_user_id_to_email_map(
 
 
 def fetch_team_user_emails(
-    source_operations: SlackSourceOperations,
+    slack_client: SlackSourceOperations,
     team_ids: list[str],
 ) -> dict[str, set[str]]:
     """Re-export of ``onyx.connectors.slack.utils.fetch_team_user_emails`` for
     callers that already import it from this EE module."""
-    return _fetch_team_user_emails(source_operations, team_ids)
+    return _fetch_team_user_emails(slack_client, team_ids)

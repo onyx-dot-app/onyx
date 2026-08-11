@@ -86,7 +86,7 @@ class SlackCheckpoint(ConnectorCheckpoint):
 
 
 def _collect_paginated_channels(
-    source_operations: SlackSourceOperations,
+    slack_client: SlackSourceOperations,
     exclude_archived: bool,
     channel_types: list[str],
     team_id: str | None = None,
@@ -95,7 +95,7 @@ def _collect_paginated_channels(
     # The variant names the permission class of the call: any request that
     # includes private channels needs ``groups:read``.
     variant = "private" if "private_channel" in channel_types else "public"
-    for result in source_operations.list_channels(
+    for result in slack_client.list_channels(
         variant=variant,
         # also get private channels the bot is added to
         channel_types=channel_types,
@@ -108,7 +108,7 @@ def _collect_paginated_channels(
 
 
 def get_channels(
-    source_operations: SlackSourceOperations,
+    slack_client: SlackSourceOperations,
     exclude_archived: bool = True,
     get_public: bool = True,
     get_private: bool = True,
@@ -124,7 +124,7 @@ def get_channels(
     # Try fetching both public and private channels first:
     try:
         channels = _collect_paginated_channels(
-            source_operations=source_operations,
+            slack_client=slack_client,
             exclude_archived=exclude_archived,
             channel_types=channel_types,
             team_id=team_id,
@@ -138,7 +138,7 @@ def get_channels(
         logger.warning(msg + " Trying again with public channels only.")
         channel_types = ["public_channel"]
         channels = _collect_paginated_channels(
-            source_operations=source_operations,
+            slack_client=slack_client,
             exclude_archived=exclude_archived,
             channel_types=channel_types,
             team_id=team_id,
@@ -146,10 +146,10 @@ def get_channels(
     return channels
 
 
-def list_grid_team_ids(source_operations: SlackSourceOperations) -> list[str]:
+def list_grid_team_ids(slack_client: SlackSourceOperations) -> list[str]:
     """Return Grid org team IDs via ``auth.teams.list`` (needs ``team:read``)."""
     team_ids: list[str] = []
-    for result in source_operations.list_teams():
+    for result in slack_client.list_teams():
         for team in result.get("teams", []):
             team_id = team.get("id")
             if team_id:
@@ -157,12 +157,10 @@ def list_grid_team_ids(source_operations: SlackSourceOperations) -> list[str]:
     return team_ids
 
 
-def fetch_team_url(
-    source_operations: SlackSourceOperations, team_id: str
-) -> str | None:
+def fetch_team_url(slack_client: SlackSourceOperations, team_id: str) -> str | None:
     """Fetch a workspace URL for a given Grid team id via ``team.info``."""
     try:
-        response = source_operations.fetch_team_info(team_id=team_id)
+        response = slack_client.fetch_team_info(team_id=team_id)
     except SlackApiError as e:
         logger.warning(
             "team_info failed for team_id=%s: %s", team_id, e.response.get("error", "")
@@ -174,7 +172,7 @@ def fetch_team_url(
 
 
 def get_channels_across_teams(
-    source_operations: SlackSourceOperations,
+    slack_client: SlackSourceOperations,
     team_ids: list[str],
     exclude_archived: bool = True,
     get_public: bool = True,
@@ -185,7 +183,7 @@ def get_channels_across_teams(
     merged: list[ChannelType] = []
     for team_id in team_ids:
         per_team = get_channels(
-            source_operations=source_operations,
+            slack_client=slack_client,
             exclude_archived=exclude_archived,
             get_public=get_public,
             get_private=get_private,
@@ -208,7 +206,7 @@ def _channel_history_variant(channel: ChannelType) -> str:
 
 
 def get_channel_messages(
-    source_operations: SlackSourceOperations,
+    slack_client: SlackSourceOperations,
     channel: ChannelType,
     oldest: str | None = None,
     latest: str | None = None,
@@ -217,10 +215,10 @@ def get_channel_messages(
     """Get all messages in a channel"""
     # join so that the bot can access messages
     if not channel["is_member"]:
-        source_operations.join_channel(channel_id=channel["id"])
+        slack_client.join_channel(channel_id=channel["id"])
         logger.info("Successfully joined '%s'", channel["name"])
 
-    for result in source_operations.fetch_channel_history(
+    for result in slack_client.fetch_channel_history(
         variant=_channel_history_variant(channel),
         channel_id=channel["id"],
         oldest=oldest,
@@ -235,11 +233,11 @@ def get_channel_messages(
 
 
 def get_thread(
-    source_operations: SlackSourceOperations, channel: ChannelType, thread_id: str
+    slack_client: SlackSourceOperations, channel: ChannelType, thread_id: str
 ) -> ThreadType:
     """Get all messages in a thread"""
     threads: list[MessageType] = []
-    for result in source_operations.fetch_thread_replies(
+    for result in slack_client.fetch_thread_replies(
         variant=_channel_history_variant(channel),
         channel_id=channel["id"],
         thread_ts=thread_id,
@@ -277,7 +275,7 @@ def thread_to_doc(
     channel: ChannelType,
     thread: ThreadType,
     slack_cleaner: SlackTextCleaner,
-    source_operations: SlackSourceOperations,
+    slack_client: SlackSourceOperations,
     user_cache: dict[str, BasicExpertInfo | None],
     channel_access: ExternalAccess | None,
     team_id_to_url: dict[str, str] | None = None,
@@ -287,7 +285,7 @@ def thread_to_doc(
 
     initial_sender_expert_info = expert_info_from_slack_id(
         user_id=thread[0].get("user"),
-        fetch_user_info=source_operations.fetch_user_info,
+        fetch_user_info=slack_client.fetch_user_info,
         user_cache=user_cache,
     )
     initial_sender_name = (
@@ -302,7 +300,7 @@ def thread_to_doc(
         experts = [
             expert_info_from_slack_id(
                 user_id=sender_id,
-                fetch_user_info=source_operations.fetch_user_info,
+                fetch_user_info=slack_client.fetch_user_info,
                 user_cache=user_cache,
             )
             for sender_id in all_sender_ids
@@ -329,7 +327,7 @@ def thread_to_doc(
             TextSection(
                 link=get_message_link(
                     event=m,
-                    source_operations=source_operations,
+                    slack_client=slack_client,
                     channel_id=channel_id,
                     team_id=channel_team,
                     team_id_to_url=team_id_to_url,
@@ -508,12 +506,12 @@ def _channel_to_hierarchy_node(
 
 
 def _get_channel_by_id(
-    source_operations: SlackSourceOperations, channel_id: str
+    slack_client: SlackSourceOperations, channel_id: str
 ) -> ChannelType:
     """Get a channel by its ID.
 
     Args:
-        source_operations: The Slack source-operations gateway
+        slack_client: The Slack source-operations gateway
         channel_id: The ID of the channel to fetch
 
     Returns:
@@ -522,13 +520,13 @@ def _get_channel_by_id(
     Raises:
         SlackApiError: If the channel cannot be fetched
     """
-    response = source_operations.fetch_channel_info(channel_id=channel_id)
+    response = slack_client.fetch_channel_info(channel_id=channel_id)
     return cast(ChannelType, response["channel"])
 
 
 def _get_messages(
     channel: ChannelType,
-    source_operations: SlackSourceOperations,
+    slack_client: SlackSourceOperations,
     oldest: str | None = None,
     latest: str | None = None,
     limit: int = _SLACK_LIMIT,
@@ -538,7 +536,7 @@ def _get_messages(
     # have to be in the channel in order to read messages
     if not channel["is_member"]:
         try:
-            source_operations.join_channel(channel_id=channel["id"])
+            slack_client.join_channel(channel_id=channel["id"])
         except SlackApiError as e:
             if e.response["error"] == "is_archived":
                 logger.warning("Channel %s is archived. Skipping.", channel["name"])
@@ -551,7 +549,7 @@ def _get_messages(
     # Single page: the gateway paginator is lazy, so taking one yield makes
     # exactly one request, and the page still carries the cursor metadata.
     response = next(
-        source_operations.fetch_channel_history(
+        slack_client.fetch_channel_history(
             variant=_channel_history_variant(channel),
             channel_id=channel["id"],
             oldest=oldest,
@@ -571,7 +569,7 @@ def _get_messages(
 
 def _message_to_doc(
     message: MessageType,
-    source_operations: SlackSourceOperations,
+    slack_client: SlackSourceOperations,
     channel: ChannelType,
     slack_cleaner: SlackTextCleaner,
     user_cache: dict[str, BasicExpertInfo | None],
@@ -598,7 +596,7 @@ def _message_to_doc(
             return None, None
 
         thread = get_thread(
-            source_operations=source_operations, channel=channel, thread_id=thread_ts
+            slack_client=slack_client, channel=channel, thread_id=thread_ts
         )
 
         # we'll just set and use the last filter reason if
@@ -625,7 +623,7 @@ def _message_to_doc(
         channel=channel,
         thread=filtered_thread,
         slack_cleaner=slack_cleaner,
-        source_operations=source_operations,
+        slack_client=slack_client,
         user_cache=user_cache,
         channel_access=channel_access,
         team_id_to_url=team_id_to_url,
@@ -634,7 +632,7 @@ def _message_to_doc(
 
 
 def _get_all_doc_ids(
-    source_operations: SlackSourceOperations,
+    slack_client: SlackSourceOperations,
     channels_to_include: list[str] | None = None,
     include_regex_enabled: bool = False,
     channels_to_exclude: list[str] | None = None,
@@ -658,10 +656,10 @@ def _get_all_doc_ids(
 
     if team_ids:
         all_channels = get_channels_across_teams(
-            source_operations=source_operations, team_ids=team_ids
+            slack_client=slack_client, team_ids=team_ids
         )
     else:
-        all_channels = get_channels(source_operations)
+        all_channels = get_channels(slack_client)
     filtered_channels = filter_channels(
         all_channels,
         channels_to_include,
@@ -676,7 +674,7 @@ def _get_all_doc_ids(
         # NOTE: external_access is a frozen object, so it's okay to safe to use a single
         # instance for all documents in the channel
         external_access = get_channel_access(
-            source_operations=source_operations,
+            slack_client=slack_client,
             channel=channel,
             user_cache=user_cache,
             team_id_to_user_emails=team_id_to_user_emails,
@@ -693,7 +691,7 @@ def _get_all_doc_ids(
         ]
 
         channel_message_batches = get_channel_messages(
-            source_operations=source_operations,
+            slack_client=slack_client,
             channel=channel,
             callback=callback,
             oldest=str(start) if start else None,  # 0.0 -> None intentionally
@@ -743,7 +741,7 @@ class ProcessedSlackMessage(BaseModel):
 
 def _process_message(
     message: MessageType,
-    source_operations: SlackSourceOperations,
+    slack_client: SlackSourceOperations,
     channel: ChannelType,
     slack_cleaner: SlackTextCleaner,
     user_cache: dict[str, BasicExpertInfo | None],
@@ -764,7 +762,7 @@ def _process_message(
 
         doc, filter_reason = _message_to_doc(
             message=message,
-            source_operations=source_operations,
+            slack_client=slack_client,
             channel=channel,
             slack_cleaner=slack_cleaner,
             user_cache=user_cache,
@@ -792,7 +790,7 @@ def _process_message(
                     ),
                     document_link=get_message_link(
                         message,
-                        source_operations,
+                        slack_client,
                         channel["id"],
                         team_id=_channel_team_id(channel),
                         team_id_to_url=team_id_to_url,
@@ -860,7 +858,7 @@ class SlackConnector(
         )
         self.batch_size = batch_size
         self.num_threads = num_threads
-        self.source_operations: SlackSourceOperations | None = None
+        self.slack_client: SlackSourceOperations | None = None
         # just used for efficiency
         self.text_cleaner: SlackTextCleaner | None = None
         self.user_cache: dict[str, BasicExpertInfo | None] = {}
@@ -948,12 +946,12 @@ class SlackConnector(
         # The gateway owns client construction (coordinated + fast) and builds
         # lazily on first operation, so the credential decrypt happens at first
         # remote call rather than here.
-        self.source_operations = SlackSourceOperations(
+        self.slack_client = SlackSourceOperations(
             credentials_provider=credentials_provider,
             connector_specific_config={"use_redis": self.use_redis},
         )
         self.text_cleaner = SlackTextCleaner(
-            fetch_user_info=self.source_operations.fetch_user_info
+            fetch_user_info=self.slack_client.fetch_user_info
         )
         self.credentials_provider = credentials_provider
 
@@ -976,14 +974,14 @@ class SlackConnector(
             return
 
         with self._workspace_metadata_lock:
-            if self._workspace_metadata is not None or self.source_operations is None:
+            if self._workspace_metadata is not None or self.slack_client is None:
                 return
             self._workspace_metadata = self._resolve_workspace_metadata(
-                self.source_operations
+                self.slack_client
             )
 
     def _resolve_workspace_metadata(
-        self, source_operations: SlackSourceOperations
+        self, slack_client: SlackSourceOperations
     ) -> _WorkspaceMetadata:
         """Fails closed: nothing is cached and the index attempt surfaces the error.
 
@@ -992,18 +990,18 @@ class SlackConnector(
         is empty. Swallowing a failure here would silently widen
         workspace-scoped permissions, so only cosmetic lookups may degrade.
         """
-        auth_response = source_operations.check_auth()
+        auth_response = slack_client.check_auth()
 
         url = auth_response.get("url")
         if not auth_response.get("enterprise_id"):
             return _WorkspaceMetadata(url=url)
 
-        team_ids = list_grid_team_ids(source_operations)
+        team_ids = list_grid_team_ids(slack_client)
         team_id_to_url = (
-            self._fetch_team_urls(source_operations, team_ids) if team_ids else {}
+            self._fetch_team_urls(slack_client, team_ids) if team_ids else {}
         )
         team_id_to_user_emails = (
-            fetch_team_user_emails(source_operations, team_ids) if team_ids else {}
+            fetch_team_user_emails(slack_client, team_ids) if team_ids else {}
         )
 
         logger.info(
@@ -1022,12 +1020,12 @@ class SlackConnector(
 
     @staticmethod
     def _fetch_team_urls(
-        source_operations: SlackSourceOperations, team_ids: list[str]
+        slack_client: SlackSourceOperations, team_ids: list[str]
     ) -> dict[str, str]:
         team_id_to_url: dict[str, str] = {}
         with ThreadPoolExecutor(max_workers=min(8, len(team_ids))) as executor:
             futures = {
-                executor.submit(fetch_team_url, source_operations, tid): tid
+                executor.submit(fetch_team_url, slack_client, tid): tid
                 for tid in team_ids
             }
             for future in as_completed(futures):
@@ -1048,13 +1046,13 @@ class SlackConnector(
         end: SecondsSinceUnixEpoch | None = None,
         callback: IndexingHeartbeatInterface | None = None,
     ) -> GenerateSlimDocumentOutput:
-        if self.source_operations is None:
+        if self.slack_client is None:
             raise ConnectorMissingCredentialError("Slack")
 
         self._ensure_workspace_metadata()
 
         return _get_all_doc_ids(
-            source_operations=self.source_operations,
+            slack_client=self.slack_client,
             channels_to_include=self.channels,
             include_regex_enabled=self.channel_regex_enabled,
             channels_to_exclude=self.exclude_channels,
@@ -1090,7 +1088,7 @@ class SlackConnector(
         """
         num_channels_remaining = 0
 
-        if self.source_operations is None or self.text_cleaner is None:
+        if self.slack_client is None or self.text_cleaner is None:
             raise ConnectorMissingCredentialError("Slack")
 
         self._ensure_workspace_metadata()
@@ -1103,10 +1101,10 @@ class SlackConnector(
             grid_team_ids = self.grid_team_ids
             if grid_team_ids:
                 raw_channels = get_channels_across_teams(
-                    source_operations=self.source_operations, team_ids=grid_team_ids
+                    slack_client=self.slack_client, team_ids=grid_team_ids
                 )
             else:
-                raw_channels = get_channels(self.source_operations)
+                raw_channels = get_channels(self.slack_client)
             filtered_channels = filter_channels(
                 raw_channels,
                 self.channels,
@@ -1130,7 +1128,7 @@ class SlackConnector(
                 # checkpoint.current_channel is guaranteed to be non-None here since we just assigned it
                 assert checkpoint.current_channel is not None
                 channel_access = get_channel_access(
-                    source_operations=self.source_operations,
+                    slack_client=self.slack_client,
                     channel=checkpoint.current_channel,
                     user_cache=self.user_cache,
                     team_id_to_user_emails=(self.grid_team_id_to_user_emails),
@@ -1191,7 +1189,7 @@ class SlackConnector(
             )
 
             message_batch, has_more_in_channel = _get_messages(
-                channel, self.source_operations, oldest, latest
+                channel, self.slack_client, oldest, latest
             )
 
             logger.info(
@@ -1222,7 +1220,7 @@ class SlackConnector(
                             current_context.run,
                             _process_message,
                             message=message,
-                            source_operations=self.source_operations,
+                            slack_client=self.slack_client,
                             channel=channel,
                             slack_cleaner=self.text_cleaner,
                             user_cache=self.user_cache,
@@ -1325,13 +1323,11 @@ class SlackConnector(
                 )
 
                 if new_channel_id:
-                    new_channel = _get_channel_by_id(
-                        self.source_operations, new_channel_id
-                    )
+                    new_channel = _get_channel_by_id(self.slack_client, new_channel_id)
                     checkpoint.current_channel = new_channel
                     if include_permissions:
                         channel_access = get_channel_access(
-                            source_operations=self.source_operations,
+                            slack_client=self.slack_client,
                             channel=new_channel,
                             user_cache=self.user_cache,
                             team_id_to_user_emails=(self.grid_team_id_to_user_emails),
@@ -1403,14 +1399,14 @@ class SlackConnector(
         if self.exclude_channel_regex_enabled:
             _validate_channel_regexes(self.exclude_channels, "excluded channel")
 
-        if self.source_operations is None:
+        if self.slack_client is None:
             raise ConnectorMissingCredentialError("Slack credentials not loaded.")
 
         try:
             # 1) Validate connection to workspace. ``fast=True``: validation is
             # a synchronous user-facing path, so it must not serialize on the
             # coordinated client's shared rate-limit lock.
-            auth_response = self.source_operations.check_auth(fast=True)
+            auth_response = self.slack_client.check_auth(fast=True)
             if not auth_response.get("ok", False):
                 error_msg = auth_response.get(
                     "error", "Unknown error from Slack auth_test"
@@ -1419,7 +1415,7 @@ class SlackConnector(
 
             # 2) Minimal test to confirm listing channels works
             test_resp = next(
-                self.source_operations.list_channels(
+                self.slack_client.list_channels(
                     variant="public",
                     channel_types=["public_channel"],
                     limit=1,
@@ -1443,13 +1439,11 @@ class SlackConnector(
             # 3) Grid: verify team:read, and the users scopes that public-channel
             # ACLs depend on, so a missing scope fails here instead of at index time.
             if auth_response.get("enterprise_id"):
-                teams_response = next(
-                    self.source_operations.list_teams(limit=1, fast=True)
-                )
+                teams_response = next(self.slack_client.list_teams(limit=1, fast=True))
                 teams = teams_response.get("teams", [])
                 if teams:
                     next(
-                        self.source_operations.list_users(
+                        self.slack_client.list_users(
                             team_id=teams[0]["id"], limit=1, fast=True
                         )
                     )
@@ -1460,7 +1454,7 @@ class SlackConnector(
 
             # if self.channels and not self.channel_regex_enabled:
             #     accessible_channels = get_channels(
-            #         source_operations=self.source_operations,
+            #         slack_client=self.slack_client,
             #         exclude_archived=True,
             #         get_public=True,
             #         get_private=True,

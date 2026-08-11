@@ -64,50 +64,48 @@ def _msg(ts: str, thread_ts: str | None = None) -> MessageType:
 
 class TestListGridTeamIds:
     def test_returns_team_ids_from_paginated_response(self) -> None:
-        source_operations = MagicMock()
-        source_operations.list_teams.return_value = iter(
+        slack_client = MagicMock()
+        slack_client.list_teams.return_value = iter(
             [
                 {"teams": [{"id": "T1"}, {"id": "T2"}]},
                 {"teams": [{"id": "T3"}]},
             ]
         )
-        assert list_grid_team_ids(source_operations) == ["T1", "T2", "T3"]
+        assert list_grid_team_ids(slack_client) == ["T1", "T2", "T3"]
 
     def test_skips_teams_without_id(self) -> None:
-        source_operations = MagicMock()
-        source_operations.list_teams.return_value = iter(
+        slack_client = MagicMock()
+        slack_client.list_teams.return_value = iter(
             [{"teams": [{"id": "T1"}, {"name": "no-id-team"}, {"id": ""}]}]
         )
-        assert list_grid_team_ids(source_operations) == ["T1"]
+        assert list_grid_team_ids(slack_client) == ["T1"]
 
     def test_empty_response_returns_empty_list(self) -> None:
-        source_operations = MagicMock()
-        source_operations.list_teams.return_value = iter([{"teams": []}])
-        assert list_grid_team_ids(source_operations) == []
+        slack_client = MagicMock()
+        slack_client.list_teams.return_value = iter([{"teams": []}])
+        assert list_grid_team_ids(slack_client) == []
 
 
 class TestFetchTeamUrl:
     def test_returns_url_from_team_info(self) -> None:
-        source_operations = MagicMock()
-        source_operations.fetch_team_info.return_value = {
+        slack_client = MagicMock()
+        slack_client.fetch_team_info.return_value = {
             "team": {"id": "T1", "url": "https://acme.slack.com/"}
         }
-        assert fetch_team_url(source_operations, "T1") == "https://acme.slack.com/"
-        source_operations.fetch_team_info.assert_called_once_with(team_id="T1")
+        assert fetch_team_url(slack_client, "T1") == "https://acme.slack.com/"
+        slack_client.fetch_team_info.assert_called_once_with(team_id="T1")
 
     def test_returns_none_when_slack_api_errors(self) -> None:
-        source_operations = MagicMock()
+        slack_client = MagicMock()
         err_response = MagicMock()
         err_response.get.return_value = "team_not_found"
-        source_operations.fetch_team_info.side_effect = SlackApiError(
-            "boom", err_response
-        )
-        assert fetch_team_url(source_operations, "T_BAD") is None
+        slack_client.fetch_team_info.side_effect = SlackApiError("boom", err_response)
+        assert fetch_team_url(slack_client, "T_BAD") is None
 
     def test_returns_none_when_url_missing(self) -> None:
-        source_operations = MagicMock()
-        source_operations.fetch_team_info.return_value = {"team": {}}
-        assert fetch_team_url(source_operations, "T1") is None
+        slack_client = MagicMock()
+        slack_client.fetch_team_info.return_value = {"team": {}}
+        assert fetch_team_url(slack_client, "T1") is None
 
 
 class TestGetChannelsAcrossTeams:
@@ -219,7 +217,7 @@ class TestGetMessageLinkTeamAware:
     def test_uses_per_team_url_when_provided(self) -> None:
         link = get_message_link(
             event=_msg("1700000000.000100"),
-            source_operations=MagicMock(),
+            slack_client=MagicMock(),
             channel_id="C1",
             team_id="T1",
             team_id_to_url={"T1": "https://team-one.slack.com"},
@@ -233,7 +231,7 @@ class TestGetMessageLinkTeamAware:
         ):
             link = get_message_link(
                 event=_msg("1700000000.000100"),
-                source_operations=MagicMock(),
+                slack_client=MagicMock(),
                 channel_id="C1",
                 team_id="T1",
                 team_id_to_url=None,
@@ -243,7 +241,7 @@ class TestGetMessageLinkTeamAware:
     def test_thread_ts_appended_when_present(self) -> None:
         link = get_message_link(
             event=_msg("1700000001.000200", thread_ts="1700000000.000100"),
-            source_operations=MagicMock(),
+            slack_client=MagicMock(),
             channel_id="C1",
             team_id="T1",
             team_id_to_url={"T1": "https://team-one.slack.com"},

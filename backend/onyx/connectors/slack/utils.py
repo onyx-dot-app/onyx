@@ -39,17 +39,17 @@ def _defang_mentions(text: str) -> str:
 
 
 @lru_cache()
-def get_base_url(source_operations: SlackSourceOperations) -> str:
+def get_base_url(slack_client: SlackSourceOperations) -> str:
     """Retrieve and cache the base URL of the Slack workspace for a gateway.
 
     Cached per gateway instance (one credential each), replacing the old
     per-token cache.
     """
-    return cast(str, source_operations.check_auth()["url"])
+    return cast(str, slack_client.check_auth()["url"])
 
 
 def fetch_team_user_emails(
-    source_operations: SlackSourceOperations,
+    slack_client: SlackSourceOperations,
     team_ids: list[str],
 ) -> dict[str, set[str]]:
     """Per-workspace user email sets. Used to scope public-channel access on
@@ -58,7 +58,7 @@ def fetch_team_user_emails(
     result: dict[str, set[str]] = {}
     for tid in team_ids:
         emails: set[str] = set()
-        for user_info in source_operations.list_users(team_id=tid):
+        for user_info in slack_client.list_users(team_id=tid):
             for user in user_info.get("members", []):
                 email = user.get("profile", {}).get("email")
                 if email:
@@ -69,7 +69,7 @@ def fetch_team_user_emails(
 
 def get_message_link(
     event: MessageType,
-    source_operations: SlackSourceOperations,
+    slack_client: SlackSourceOperations,
     channel_id: str,
     team_id: str | None = None,
     team_id_to_url: dict[str, str] | None = None,
@@ -82,7 +82,7 @@ def get_message_link(
     if team_id and team_id_to_url is not None:
         base_url = team_id_to_url.get(team_id)
     if not base_url:
-        base_url = get_base_url(source_operations)
+        base_url = get_base_url(slack_client)
 
     link = f"{base_url.rstrip('/')}/archives/{channel_id}/p{message_ts_without_dot}" + (
         f"?thread_ts={thread_ts}" if thread_ts else ""
