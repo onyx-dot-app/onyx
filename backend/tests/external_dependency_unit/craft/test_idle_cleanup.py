@@ -879,19 +879,23 @@ def short_stale_image_threshold(monkeypatch: pytest.MonkeyPatch) -> int:
     return threshold
 
 
-_RUNNING_RELEASE = "2.0.0"
-_EARLIER_RELEASE = "1.0.0"
+_RUNNING_IMAGE = "ctx-aaaaaaaaaaaaaaaaaaaa"
+_EARLIER_IMAGE = "ctx-bbbbbbbbbbbbbbbbbbbb"
 
 
-def _release(
+def _image(
     stub: StubSandboxManager,
     monkeypatch: pytest.MonkeyPatch,
     *,
     provisioned: str | None,
 ) -> None:
-    """Run as ``_RUNNING_RELEASE``, with the sandbox stamped ``provisioned``."""
-    monkeypatch.setattr(tasks_module, "current_release_label", lambda: _RUNNING_RELEASE)
-    monkeypatch.setattr(stub, "provisioned_release", lambda _sandbox_id: provisioned)
+    """Run on ``_RUNNING_IMAGE``, with the sandbox stamped ``provisioned``."""
+    monkeypatch.setattr(
+        tasks_module, "current_sandbox_image_identity", lambda: _RUNNING_IMAGE
+    )
+    monkeypatch.setattr(
+        stub, "provisioned_image_identity", lambda _sandbox_id: provisioned
+    )
 
 
 def test_sandbox_on_a_stale_image_is_reaped_on_the_shorter_timeout(
@@ -920,14 +924,14 @@ def test_sandbox_on_a_stale_image_is_reaped_on_the_shorter_timeout(
     _backdate_heartbeat(
         db_session, sandbox, seconds_ago=short_stale_image_threshold * 2
     )
-    _release(stubbed_cleanup, monkeypatch, provisioned=_EARLIER_RELEASE)
+    _image(stubbed_cleanup, monkeypatch, provisioned=_EARLIER_IMAGE)
     stubbed_cleanup.list_session_workspaces_returns = [session_row.id]
     stubbed_cleanup.create_snapshot_returns = SnapshotResult(
         storage_path=f"snapshots/{session_row.id}.tar.gz", size_bytes=1
     )
     stubbed_cleanup.terminate_silent = True
 
-    cleanup_idle_sandboxes_task.run(tenant_id=POSTGRES_DEFAULT_SCHEMA_STANDARD_VALUE)
+    cleanup_idle_sandboxes_task.run(tenant_id=POSTGRES_DEFAULT_SCHEMA_STANDARD_VALUE)  # ty: ignore[invalid-argument-type]
 
     db_session.expire_all()
     refreshed = db_session.get(Sandbox, sandbox.id)
@@ -953,17 +957,17 @@ def test_sandbox_on_a_stale_image_still_in_use_is_left_alone(
     _backdate_heartbeat(
         db_session, sandbox, seconds_ago=short_stale_image_threshold // 2
     )
-    _release(stubbed_cleanup, monkeypatch, provisioned=_EARLIER_RELEASE)
+    _image(stubbed_cleanup, monkeypatch, provisioned=_EARLIER_IMAGE)
     stubbed_cleanup.list_session_workspaces_returns = []
 
-    cleanup_idle_sandboxes_task.run(tenant_id=POSTGRES_DEFAULT_SCHEMA_STANDARD_VALUE)
+    cleanup_idle_sandboxes_task.run(tenant_id=POSTGRES_DEFAULT_SCHEMA_STANDARD_VALUE)  # ty: ignore[invalid-argument-type]
 
     db_session.expire_all()
     refreshed = db_session.get(Sandbox, sandbox.id)
     assert refreshed is not None and refreshed.status == SandboxStatus.RUNNING
 
 
-def test_sandbox_with_no_release_label_keeps_the_normal_timeout(
+def test_sandbox_with_no_image_label_keeps_the_normal_timeout(
     db_session: Session,
     test_user: User,  # noqa: ARG001
     stubbed_cleanup: StubSandboxManager,
@@ -971,7 +975,7 @@ def test_sandbox_with_no_release_label_keeps_the_normal_timeout(
     short_stale_image_threshold: int,
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
-    """A pod provisioned before this shipped carries no release label, and one
+    """A pod provisioned before this shipped carries no image label, and one
     the API cannot be read for reports none either. Both must count as current,
     or the first sweep after deploy reaps the whole fleet."""
     user = make_user(db_session)
@@ -979,10 +983,10 @@ def test_sandbox_with_no_release_label_keeps_the_normal_timeout(
     _backdate_heartbeat(
         db_session, sandbox, seconds_ago=short_stale_image_threshold * 2
     )
-    _release(stubbed_cleanup, monkeypatch, provisioned=None)
+    _image(stubbed_cleanup, monkeypatch, provisioned=None)
     stubbed_cleanup.list_session_workspaces_returns = []
 
-    cleanup_idle_sandboxes_task.run(tenant_id=POSTGRES_DEFAULT_SCHEMA_STANDARD_VALUE)
+    cleanup_idle_sandboxes_task.run(tenant_id=POSTGRES_DEFAULT_SCHEMA_STANDARD_VALUE)  # ty: ignore[invalid-argument-type]
 
     db_session.expire_all()
     refreshed = db_session.get(Sandbox, sandbox.id)
@@ -1004,10 +1008,10 @@ def test_sandbox_on_the_current_image_keeps_the_normal_timeout(
     _backdate_heartbeat(
         db_session, sandbox, seconds_ago=short_stale_image_threshold * 2
     )
-    _release(stubbed_cleanup, monkeypatch, provisioned=_RUNNING_RELEASE)
+    _image(stubbed_cleanup, monkeypatch, provisioned=_RUNNING_IMAGE)
     stubbed_cleanup.list_session_workspaces_returns = []
 
-    cleanup_idle_sandboxes_task.run(tenant_id=POSTGRES_DEFAULT_SCHEMA_STANDARD_VALUE)
+    cleanup_idle_sandboxes_task.run(tenant_id=POSTGRES_DEFAULT_SCHEMA_STANDARD_VALUE)  # ty: ignore[invalid-argument-type]
 
     db_session.expire_all()
     refreshed = db_session.get(Sandbox, sandbox.id)

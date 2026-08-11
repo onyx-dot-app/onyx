@@ -19,7 +19,7 @@ from onyx.server.features.build.db.sandbox import (
     user_has_stale_active_session,
 )
 from onyx.server.features.build.sandbox.factory import get_sandbox_manager
-from onyx.server.features.build.sandbox.labels import current_release_label
+from onyx.server.features.build.sandbox.labels import current_sandbox_image_identity
 from onyx.server.features.build.session.locks import get_session_creation_lock
 from onyx.server.features.build.session.sandbox_lifecycle import (
     create_session_snapshot_keep_latest,
@@ -92,14 +92,16 @@ def cleanup_idle_sandboxes_task(self: Task, *, tenant_id: str) -> None:  # noqa:
             snapshot_cutoff = now - datetime.timedelta(
                 seconds=SANDBOX_IDLE_TIMEOUT_SECONDS // SNAPSHOT_INTERVAL_DIVISOR
             )
-            release = current_release_label()
+            image_identity = current_sandbox_image_identity()
 
             # Partition so idle sandboxes are reaped first (reclaiming pods
             # is time-sensitive) before the rest are background-snapshotted.
             idle_sandboxes: list[tuple[Sandbox, int]] = []
             non_idle_sandboxes: list[Sandbox] = []
             for sandbox in running_sandboxes:
-                timeout = reap_timeout_seconds(sandbox_manager, sandbox, now, release)
+                timeout = reap_timeout_seconds(
+                    sandbox_manager, sandbox, now, image_identity
+                )
                 if timeout is None:
                     non_idle_sandboxes.append(sandbox)
                 else:

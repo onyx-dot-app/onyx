@@ -782,10 +782,14 @@ def reap_timeout_seconds(
     sandbox_manager: SandboxManager,
     sandbox: Sandbox,
     now: datetime,
-    release: str | None,
+    image_identity: str | None,
 ) -> int | None:
     """The timeout this sandbox has already outlived, or None if it is still in
     use. ``sleep_sandbox`` re-checks against the same one it qualified under.
+
+    ``image_identity`` is the running sandbox image's content identity — not
+    its tag, which a release moves even when it re-tags an unchanged image. So
+    a deploy that changed nothing about the sandbox image recycles nothing.
 
     Two clocks, and the shorter one costs a read of the sandbox — so it is only
     consulted between them. Past the normal timeout the sandbox goes either way;
@@ -795,22 +799,21 @@ def reap_timeout_seconds(
     """
     if is_sandbox_idle(sandbox, now, SANDBOX_IDLE_TIMEOUT_SECONDS):
         return SANDBOX_IDLE_TIMEOUT_SECONDS
-    if release is None:
+    if image_identity is None:
         return None
     if not is_sandbox_idle(sandbox, now, SANDBOX_STALE_IMAGE_IDLE_TIMEOUT_SECONDS):
         return None
 
-    # Sandbox images ship with the application, so one provisioned by an earlier
-    # release is on the image that shipped with it. Anything we cannot identify
-    # — unlabelled, or unreadable right now — keeps the normal timeout, because
-    # not being able to say is no reason to reclaim someone early.
+    # Anything we cannot identify — unlabelled, or unreadable right now — keeps
+    # the normal timeout, because not being able to say is no reason to reclaim
+    # someone early.
     try:
-        provisioned = sandbox_manager.provisioned_release(sandbox.id)
+        provisioned = sandbox_manager.provisioned_image_identity(sandbox.id)
     except Exception:
-        logger.exception("Could not read the release of sandbox %s", sandbox.id)
+        logger.exception("Could not read the image of sandbox %s", sandbox.id)
         return None
 
-    if provisioned is None or provisioned == release:
+    if provisioned is None or provisioned == image_identity:
         return None
     return SANDBOX_STALE_IMAGE_IDLE_TIMEOUT_SECONDS
 
