@@ -2,6 +2,7 @@ import csv
 import tempfile
 import uuid
 import zipfile
+from collections.abc import Iterable
 from datetime import datetime, timedelta, timezone
 
 from fastapi_users_db_sqlalchemy import UUID_ID
@@ -20,11 +21,14 @@ from ee.onyx.server.reporting.usage_export_models import (
 )
 from onyx.configs.constants import FileOrigin
 from onyx.db.models import User
-from onyx.db.user_usage import UsageExportRow, get_usage_export
+from onyx.db.user_usage import UsageExportRow, iter_usage_export
 from onyx.db.users import get_all_users
 from onyx.file_store.constants import MAX_IN_MEMORY_SIZE
 from onyx.file_store.file_store import FileStore, get_default_file_store
 from onyx.utils.csv_utils import sanitize_csv_cell_or_none
+from onyx.utils.logger import setup_logger
+
+logger = setup_logger()
 
 
 def _normalize_period(
@@ -133,7 +137,7 @@ def generate_user_report(
 def generate_usage_breakdown_report(
     file_store: FileStore,
     report_id: str,
-    rows: list[UsageExportRow],
+    rows: Iterable[UsageExportRow],
 ) -> str:
     file_name = f"{report_id}_usage_by_user"
 
@@ -190,58 +194,70 @@ def create_new_usage_report(
     report_id = report_id or str(uuid.uuid4())
     file_store = get_default_file_store()
 
-    messages_file_id = generate_chat_messages_report(
-        db_session, file_store, report_id, period
-    )
-    users_file_id = generate_user_report(db_session, file_store, report_id)
-
-    query_start, query_end = _normalize_period(period)
-    usage_rows = get_usage_export(db_session, query_start, query_end)
-
-    usage_breakdown_file_id = generate_usage_breakdown_report(
-        file_store, report_id, usage_rows
-    )
-
-    # Re-check just before writing the final report: the API-level check
-    # happens before this (async) task runs, so a second request with the
-    # same client-supplied report_id can slip past it while this task is
-    # still generating the first report.
-    if usage_report_id_in_use(db_session, uuid.UUID(report_id)):
-        raise ValueError(f"report_id {report_id} is already in use")
-
-    with tempfile.SpooledTemporaryFile(max_size=MAX_IN_MEMORY_SIZE) as zip_buffer:
-        with zipfile.ZipFile(zip_buffer, "a", zipfile.ZIP_DEFLATED) as zip_file:
-            # write messages
-            chat_messages_tmpfile = file_store.read_file(
-                messages_file_id, mode="b", use_tempfile=True
-            )
-            zip_file.writestr(
-                "chat_messages.csv",
-                chat_messages_tmpfile.read(),
-            )
-
-            # write users
-            users_tmpfile = file_store.read_file(
-                users_file_id, mode="b", use_tempfile=True
-            )
-            zip_file.writestr("users.csv", users_tmpfile.read())
-
-            usage_breakdown_tmpfile = file_store.read_file(
-                usage_breakdown_file_id, mode="b", use_tempfile=True
-            )
-            zip_file.writestr("usage_by_user.csv", usage_breakdown_tmpfile.read())
-
-        zip_buffer.seek(0)
-
-        # store zip blob to file_store
-        report_name = f"{datetime.now(tz=timezone.utc).strftime('%Y-%m-%d')}_{report_id}_usage_report.zip"
-        file_store.save_file(
-            content=zip_buffer,
-            display_name=report_name,
-            file_origin=FileOrigin.GENERATED_REPORT,
-            file_type="application/zip",
-            file_id=report_name,
+    intermediate_file_ids: list[str] = []
+    try:
+        messages_file_id = generate_chat_messages_report(
+            db_session, file_store, report_id, period
         )
+        intermediate_file_ids.append(messages_file_id)
+        users_file_id = generate_user_report(db_session, file_store, report_id)
+        intermediate_file_ids.append(users_file_id)
+
+        query_start, query_end = _normalize_period(period)
+        usage_rows = iter_usage_export(db_session, query_start, query_end)
+        usage_breakdown_file_id = generate_usage_breakdown_report(
+            file_store, report_id, usage_rows
+        )
+        intermediate_file_ids.append(usage_breakdown_file_id)
+
+        # Re-check just before writing the final report: the API-level check
+        # happens before this (async) task runs, so a second request with the
+        # same client-supplied report_id can slip past it while this task is
+        # still generating the first report.
+        if usage_report_id_in_use(db_session, uuid.UUID(report_id)):
+            raise ValueError(f"report_id {report_id} is already in use")
+
+        with tempfile.SpooledTemporaryFile(max_size=MAX_IN_MEMORY_SIZE) as zip_buffer:
+            with zipfile.ZipFile(zip_buffer, "a", zipfile.ZIP_DEFLATED) as zip_file:
+                # write messages
+                chat_messages_tmpfile = file_store.read_file(
+                    messages_file_id, mode="b", use_tempfile=True
+                )
+                zip_file.writestr(
+                    "chat_messages.csv",
+                    chat_messages_tmpfile.read(),
+                )
+
+                # write users
+                users_tmpfile = file_store.read_file(
+                    users_file_id, mode="b", use_tempfile=True
+                )
+                zip_file.writestr("users.csv", users_tmpfile.read())
+
+                usage_breakdown_tmpfile = file_store.read_file(
+                    usage_breakdown_file_id, mode="b", use_tempfile=True
+                )
+                zip_file.writestr("usage_by_user.csv", usage_breakdown_tmpfile.read())
+
+            zip_buffer.seek(0)
+
+            # store zip blob to file_store
+            report_name = f"{datetime.now(tz=timezone.utc).strftime('%Y-%m-%d')}_{report_id}_usage_report.zip"
+            file_store.save_file(
+                content=zip_buffer,
+                display_name=report_name,
+                file_origin=FileOrigin.GENERATED_REPORT,
+                file_type="application/zip",
+                file_id=report_name,
+            )
+    finally:
+        for file_id in intermediate_file_ids:
+            try:
+                file_store.delete_file(file_id, error_on_missing=False)
+            except Exception:
+                logger.exception(
+                    "Failed to delete temporary usage report file %s", file_id
+                )
 
     # add report after zip file is written
     new_report = write_usage_report(db_session, report_name, user_id, period)
