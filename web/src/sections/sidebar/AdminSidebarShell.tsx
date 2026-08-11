@@ -1,8 +1,8 @@
 "use client";
 
 import { ReactNode } from "react";
-import { SidebarLayouts } from "@opal/layouts";
-import { SidebarTab } from "@opal/components";
+import { SidebarLayouts, useSidebarState } from "@opal/layouts";
+import { Divider, SidebarTab } from "@opal/components";
 import type { IconFunctionComponent } from "@opal/types";
 import { renderSidebarLogo } from "@/lib/sidebar/utils";
 import { useShowLogoWhenFolded } from "@/lib/sidebar/hooks";
@@ -37,21 +37,31 @@ export default function AdminSidebarShell({
   children,
 }: AdminSidebarShellProps) {
   const showLogoWhenFolded = useShowLogoWhenFolded();
+  const { folded } = useSidebarState();
 
   return (
     <SidebarLayouts.Root>
       <SidebarLayouts.Header
         renderAppLogo={renderSidebarLogo}
         showLogoWhenFolded={showLogoWhenFolded}
-      >
-        <SidebarTab icon={back.icon} href={back.href}>
-          {back.label}
-        </SidebarTab>
-      </SidebarLayouts.Header>
+      />
 
       <SidebarLayouts.Body scrollKey={scrollKey}>
         {children}
       </SidebarLayouts.Body>
+
+      {/* The way out sits at the bottom, like "Exit Admin Panel" in `AdminSidebar`. */}
+      <SidebarLayouts.Footer>
+        {!folded && <Divider paddingPerpendicular="sm" />}
+        <SidebarTab
+          icon={back.icon}
+          href={back.href}
+          variant="sidebar-light"
+          folded={folded}
+        >
+          {back.label}
+        </SidebarTab>
+      </SidebarLayouts.Footer>
     </SidebarLayouts.Root>
   );
 }
