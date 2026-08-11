@@ -14,6 +14,7 @@ from onyx.db.users import get_all_users
 TOP_USER_LIMIT = 10
 TOP_ENTRY_LIMIT = 8
 DORMANT_USER_LIMIT = 25
+UNLABELED_FLOW = "other"
 
 
 class NamedSpend(BaseModel):
@@ -112,7 +113,7 @@ def build_usage_report_data(
         for bucket, key in (
             (by_user, row.email),
             (by_model, row.model),
-            (by_flow, row.flow),
+            (by_flow, row.flow or UNLABELED_FLOW),
         ):
             entry = bucket.get(key)
             if entry is None:

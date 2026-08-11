@@ -15,6 +15,7 @@ from ee.onyx.server.reporting.usage_report_data import (
     build_usage_report_data,
 )
 from ee.onyx.server.reporting.usage_report_pdf import (
+    _axis_labels,
     _display_name,
     render_usage_report_pdf,
 )
@@ -28,11 +29,16 @@ PERIOD_START = datetime(2026, 7, 1, tzinfo=timezone.utc)
 PERIOD_END = datetime(2026, 7, 31, tzinfo=timezone.utc)
 
 
-def _row(email: str, cost: float = 10.0, day: str = "2026-07-01") -> UsageExportRow:
+def _row(
+    email: str,
+    cost: float = 10.0,
+    day: str = "2026-07-01",
+    flow: str = "chat",
+) -> UsageExportRow:
     return UsageExportRow(
         email=email,
         model="gpt-5",
-        flow="chat",
+        flow=flow,
         provider="openai",
         day=day,
         input_tokens=100,
@@ -102,6 +108,14 @@ def test_api_key_usage_is_not_an_active_user() -> None:
 
     assert data.active_users == 1
     assert data.active_users <= data.licensed_users
+
+
+def test_unlabeled_flow_is_grouped_as_other() -> None:
+    data = _build([_row("a@x.com", flow="")], [_user("a@x.com")])
+
+    assert [(entry.name, entry.cost_cents) for entry in data.by_flow] == [
+        ("other", 10.0)
+    ]
 
 
 def test_service_accounts_do_not_hold_a_seat() -> None:
@@ -258,3 +272,10 @@ def test_unreadable_logo_still_produces_a_pdf() -> None:
     for logo in (b"not-an-image", b""):
         branding = ReportBranding(application_name="Acme", logo=logo)
         assert render_usage_report_pdf(data, branding).startswith(b"%PDF-")
+
+
+def test_axis_labels_never_exceed_the_display_limit() -> None:
+    for day_count in (13, 23, 30):
+        days = [f"2026-07-{day:02}" for day in range(1, day_count + 1)]
+
+        assert sum(bool(label) for label in _axis_labels(days)) <= 12

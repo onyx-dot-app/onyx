@@ -9,15 +9,16 @@ the number.
 
 ## Where we are today
 
-`create_new_usage_report` builds a zip with three CSVs:
+`create_new_usage_report` builds a zip with three CSVs and a PDF review pack:
 
 | File                 | Contents                                                                              |
 | -------------------- | ------------------------------------------------------------------------------------- |
 | `chat_messages.csv`  | One row per message: session, user, flow, time, agent, email, tokens, model            |
 | `users.csv`          | `user_id`, `is_active`                                                                  |
 | `usage_by_user.csv`  | Per user, per day, per model/flow/provider: tokens, cache reads, cost                   |
+| `usage_report.pdf`   | Summary of spend, adoption, seats, and usage attribution                                |
 
-This is a data dump, not a report. It has three problems:
+The raw CSV files are still a data dump. They have three problems:
 
 1. **It answers no question.** The admin must build every pivot.
 2. **It has no dimensions the admin budgets by.** No team, no agent, no source.
@@ -265,7 +266,8 @@ Ordered by value per unit of work. The first two are independent of each other.
 2. **Knowledge gap report.** The differentiated artifact.
 3. **Team and agent dimensions** on the cost breakdown. Unblocks chargeback.
 4. **Summary, manifest, and README** on the export.
-5. **PDF review pack.** Needs the aggregates from steps 1 to 3 to exist first.
-   Define the typed aggregate object here, because the pulse reuses it.
+5. **Extend the PDF review pack.** The shipped pack summarizes spend and
+   adoption by person, model, and flow. Add the missing dimensions from steps
+   1 to 3 as they become available.
 6. **Scheduled pulse** to email or Slack. The Celery beat already exists, and
-   the aggregate object from step 5 supplies the content.
+   the existing typed aggregate object supplies the content.

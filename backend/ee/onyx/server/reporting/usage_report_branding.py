@@ -74,6 +74,8 @@ def load_report_branding(file_store: FileStore) -> ReportBranding:
         try:
             logo = _FALLBACK_LOGO.read_bytes()
         except OSError:
-            logger.warning("Usage report could not read the fallback logo")
+            logger.warning(
+                "Usage report could not read the fallback logo", exc_info=True
+            )
 
     return ReportBranding(application_name=name, logo=logo)

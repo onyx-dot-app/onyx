@@ -38,6 +38,9 @@ from ee.onyx.server.reporting.usage_report_data import (
 )
 from onyx.configs.constants import DANSWER_API_KEY_PREFIX, UNNAMED_KEY_PLACEHOLDER
 from onyx.db.api_key import is_api_key_email_address
+from onyx.utils.logger import setup_logger
+
+logger = setup_logger()
 
 _INK = colors.HexColor("#1c1c1c")  # onyx-ink-95
 _ACCENT = colors.HexColor("#286df8")  # action-selection-05 / blue-50
@@ -155,6 +158,9 @@ def _logo_flowable(branding: ReportBranding) -> Flowable | None:
         reader = ImageReader(BytesIO(branding.logo))
         src_w, src_h = reader.getSize()
     except Exception:
+        logger.warning(
+            "Usage report could not render the configured logo", exc_info=True
+        )
         return None
     if not src_w or not src_h:
         return None
@@ -315,7 +321,7 @@ def _table(rows: list[list[str]], col_widths: list[float]) -> Table:
 
 def _axis_labels(days: list[str]) -> list[str]:
     """Keep at most `_MAX_AXIS_LABELS` ticks, blanking the rest."""
-    step = max(1, len(days) // _MAX_AXIS_LABELS)
+    step = max(1, (len(days) + _MAX_AXIS_LABELS - 1) // _MAX_AXIS_LABELS)
     # Drop the year: the period is already stated on the cover.
     return [day[5:] if index % step == 0 else "" for index, day in enumerate(days)]
 
