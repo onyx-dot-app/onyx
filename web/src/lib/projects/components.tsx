@@ -105,7 +105,7 @@ export function ProjectFolderButton({ project }: ProjectFolderButtonProps) {
   });
 
   function getFolderIcon(): React.FunctionComponent<IconProps> {
-    if (isHoveringIcon) return SvgFolderPartialOpen;
+    if (isHoveringIcon && allowHoverEffect) return SvgFolderPartialOpen;
     if (open) {
       return SvgFolderOpen;
     } else {
