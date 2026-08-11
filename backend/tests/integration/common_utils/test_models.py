@@ -189,7 +189,7 @@ class DATestChatMessage(BaseModel):
 class DATestChatSession(BaseModel):
     id: UUID
     persona_id: int
-    description: str
+    description: str | None
 
 
 class DAQueryHistoryEntry(DATestChatSession):
