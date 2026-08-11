@@ -1,7 +1,5 @@
-import copy
 from collections.abc import Generator
-from datetime import datetime
-from datetime import timezone
+from datetime import datetime, timezone
 from typing import Any
 
 import requests
@@ -10,17 +8,21 @@ from typing_extensions import override
 
 from onyx.configs.app_configs import JIRA_SLIM_PAGE_SIZE
 from onyx.configs.constants import DocumentSource
-from onyx.connectors.interfaces import CheckpointedConnectorWithPermSync
-from onyx.connectors.interfaces import GenerateSlimDocumentOutput
-from onyx.connectors.interfaces import SecondsSinceUnixEpoch
-from onyx.connectors.interfaces import IndexingHeartbeatInterface
-from onyx.connectors.models import ConnectorCheckpoint
-from onyx.connectors.models import ConnectorFailure
-from onyx.connectors.models import ConnectorMissingCredentialError
-from onyx.connectors.models import Document
-from onyx.connectors.models import DocumentFailure
-from onyx.connectors.models import SlimDocument
-from onyx.connectors.models import TextSection
+from onyx.connectors.interfaces import (
+    CheckpointedConnectorWithPermSync,
+    GenerateSlimDocumentOutput,
+    IndexingHeartbeatInterface,
+    SecondsSinceUnixEpoch,
+)
+from onyx.connectors.models import (
+    ConnectorCheckpoint,
+    ConnectorFailure,
+    ConnectorMissingCredentialError,
+    Document,
+    DocumentFailure,
+    SlimDocument,
+    TextSection,
+)
 from onyx.utils.logger import setup_logger
 
 logger = setup_logger()
@@ -47,7 +49,7 @@ class JiraServiceManagementConnector(
         self.auth = HTTPBasicAuth(self.jira_user_email, self.jira_api_token)
         self.headers = {
             "Accept": "application/json",
-            "X-ExperimentalApi": "opt-in"  # Required for certain advanced JSM service desk endpoints
+            "X-ExperimentalApi": "opt-in",  # Required for certain advanced JSM service desk endpoints
         }
 
     @property
@@ -83,7 +85,7 @@ class JiraServiceManagementConnector(
                     break
                 start += len(values)
             except Exception as e:
-                logger.error(f"Error discovering JSM service desks: {e}")
+                logger.error("Error discovering JSM service desks: %s", e)
                 break
 
         return service_desks
@@ -98,7 +100,6 @@ class JiraServiceManagementConnector(
 
         # Use JSM-specific request filtering
         while True:
-            # Service desk filtering combined with update-time filtering if checkpoint exists
             jql = f"serviceDesk = {service_desk_id}"
             if start_time > 0:
                 dt = datetime.fromtimestamp(start_time, tz=timezone.utc)
@@ -128,7 +129,7 @@ class JiraServiceManagementConnector(
                     
                 start += len(values)
             except Exception as e:
-                logger.error(f"Failed to fetch requests for service desk {service_desk_id}: {e}")
+                logger.error("Failed to fetch requests for service desk %s: %s", service_desk_id, e)
                 raise e
 
     @override
@@ -159,7 +160,7 @@ class JiraServiceManagementConnector(
                             perm_sync_data={"service_desk_id": sd_id},
                         )
             except Exception as e:
-                logger.error(f"Fatal iteration failure on service desk {sd_id}: {e}")
+                logger.error("Fatal iteration failure on service desk %s: %s", sd_id, e)
                 yield ConnectorFailure(
                     failed_document_id=f"jsm_desk_{sd_id}",
                     failure_message=str(e),
@@ -192,7 +193,7 @@ class JiraServiceManagementConnector(
                     break
                 start += len(values)
             except Exception as e:
-                logger.warning(f"Could not pull comments for JSM ticket {issue_key}: {e}")
+                logger.warning("Could not pull comments for JSM ticket %s: %s", issue_key, e)
                 break
 
         return comments
@@ -254,7 +255,7 @@ class JiraServiceManagementConnector(
                     doc_updated_at=doc_date,
                 )
             except Exception as e:
-                logger.error(f"Failed parsing details for JSM ticket {issue_key}: {e}")
+                logger.error("Failed parsing details for JSM ticket %s: %s", issue_key, e)
                 yield DocumentFailure(
                     failed_document_id=issue_key,
                     failure_message=str(e),
