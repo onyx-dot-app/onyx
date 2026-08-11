@@ -57,8 +57,9 @@ and on Onyx Cloud the tenant is embedded in the key itself.
   rotating them out-of-band (e.g. in the admin UI) is invisible to `terraform plan`. The
   configured value is authoritative and is re-asserted on the next apply.
 - **`onyx_settings` and `onyx_llm_provider_default` don't really delete.** Onyx has no
-  reset-settings or unset-default API; destroy removes them from state with a warning and
-  leaves the live values alone.
+  reset-settings API and no unset API for the text/vision defaults; destroy removes them
+  from state with a warning and leaves the live values alone. The chat-naming default is
+  the exception: it has an unset API and is cleared on destroy when managed.
 - **`onyx_embedding_provider` updates replace all fields.** Keep `api_key` in
   configuration — an update applied without it clears the stored key (the API has no
   keep-stored-key flag). The currently-active embedding provider also cannot be deleted.

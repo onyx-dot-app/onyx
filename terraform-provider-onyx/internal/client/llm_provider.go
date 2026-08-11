@@ -78,9 +78,10 @@ type DefaultModel struct {
 
 // LLMProviderList mirrors LLMProviderResponse[LLMProviderView].
 type LLMProviderList struct {
-	Providers     []LLMProviderView `json:"providers"`
-	DefaultText   *DefaultModel     `json:"default_text"`
-	DefaultVision *DefaultModel     `json:"default_vision"`
+	Providers         []LLMProviderView `json:"providers"`
+	DefaultText       *DefaultModel     `json:"default_text"`
+	DefaultVision     *DefaultModel     `json:"default_vision"`
+	DefaultChatNaming *DefaultModel     `json:"default_chat_naming"`
 }
 
 // UpsertLLMProvider creates (isCreation=true) or updates an LLM provider.
@@ -104,9 +105,11 @@ func (c *Client) UpsertLLMProvider(ctx context.Context, req LLMProviderUpsertReq
 }
 
 // ListLLMProviders returns all LLM providers plus the global default models.
+// include_image_gen=true is required: without it the API silently omits
+// image-generation providers, which Read would then treat as deleted.
 func (c *Client) ListLLMProviders(ctx context.Context) (*LLMProviderList, error) {
 	var list LLMProviderList
-	if err := c.doJSON(ctx, http.MethodGet, "/admin/llm/provider", nil, &list); err != nil {
+	if err := c.doJSON(ctx, http.MethodGet, "/admin/llm/provider?include_image_gen=true", nil, &list); err != nil {
 		return nil, err
 	}
 	return &list, nil
@@ -146,4 +149,16 @@ func (c *Client) SetDefaultLLMModel(ctx context.Context, req DefaultModel) error
 // SetDefaultVisionModel sets the global default vision model.
 func (c *Client) SetDefaultVisionModel(ctx context.Context, req DefaultModel) error {
 	return c.doJSON(ctx, http.MethodPost, "/admin/llm/default-vision", req, nil)
+}
+
+// SetDefaultChatNamingModel sets the dedicated chat auto-naming model.
+func (c *Client) SetDefaultChatNamingModel(ctx context.Context, req DefaultModel) error {
+	return c.doJSON(ctx, http.MethodPost, "/admin/llm/default-chat-naming", req, nil)
+}
+
+// ClearDefaultChatNamingModel clears the dedicated chat auto-naming model;
+// auto-naming falls back to the session's model. Text and vision defaults
+// have no equivalent unset endpoint.
+func (c *Client) ClearDefaultChatNamingModel(ctx context.Context) error {
+	return c.doJSON(ctx, http.MethodDelete, "/admin/llm/default-chat-naming", nil, nil)
 }

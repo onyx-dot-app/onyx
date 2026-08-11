@@ -32,7 +32,8 @@ const llmProviderListJSON = `{
 		}]
 	}],
 	"default_text": {"provider_id": 3, "model_name": "gpt-5-mini"},
-	"default_vision": null
+	"default_vision": null,
+	"default_chat_naming": {"provider_id": 3, "model_name": "gpt-5-nano"}
 }`
 
 func TestUpsertLLMProviderCreate(t *testing.T) {
@@ -118,8 +119,10 @@ func TestGetLLMProvider(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if captured.Method != http.MethodGet || captured.Path != "/admin/llm/provider" {
-		t.Errorf("got %s %s, want GET /admin/llm/provider", captured.Method, captured.Path)
+	// include_image_gen=true is load-bearing: without it image-generation
+	// providers are missing from the list and Read treats them as deleted.
+	if captured.Method != http.MethodGet || captured.Path != "/admin/llm/provider?include_image_gen=true" {
+		t.Errorf("got %s %s, want GET /admin/llm/provider?include_image_gen=true", captured.Method, captured.Path)
 	}
 	if view.Provider != "openai" || len(view.ModelConfigurations) != 1 {
 		t.Errorf("unexpected view: %+v", view)
@@ -141,6 +144,9 @@ func TestListLLMProvidersDefaults(t *testing.T) {
 	}
 	if list.DefaultVision != nil {
 		t.Errorf("default_vision should be nil, got %+v", list.DefaultVision)
+	}
+	if list.DefaultChatNaming == nil || list.DefaultChatNaming.ModelName != "gpt-5-nano" {
+		t.Errorf("unexpected default_chat_naming: %+v", list.DefaultChatNaming)
 	}
 }
 
@@ -175,5 +181,25 @@ func TestSetDefaultVisionModel(t *testing.T) {
 	}
 	if captured.Path != "/admin/llm/default-vision" {
 		t.Errorf("got path %s, want /admin/llm/default-vision", captured.Path)
+	}
+}
+
+func TestSetDefaultChatNamingModel(t *testing.T) {
+	c, captured := newTestServer(t, http.StatusOK, `null`)
+	if err := c.SetDefaultChatNamingModel(context.Background(), DefaultModel{ProviderID: 3, ModelName: "gpt-5-nano"}); err != nil {
+		t.Fatal(err)
+	}
+	if captured.Method != http.MethodPost || captured.Path != "/admin/llm/default-chat-naming" {
+		t.Errorf("got %s %s, want POST /admin/llm/default-chat-naming", captured.Method, captured.Path)
+	}
+}
+
+func TestClearDefaultChatNamingModel(t *testing.T) {
+	c, captured := newTestServer(t, http.StatusOK, `null`)
+	if err := c.ClearDefaultChatNamingModel(context.Background()); err != nil {
+		t.Fatal(err)
+	}
+	if captured.Method != http.MethodDelete || captured.Path != "/admin/llm/default-chat-naming" {
+		t.Errorf("got %s %s, want DELETE /admin/llm/default-chat-naming", captured.Method, captured.Path)
 	}
 }

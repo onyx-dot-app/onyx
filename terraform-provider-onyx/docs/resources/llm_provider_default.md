@@ -3,12 +3,12 @@
 page_title: "onyx_llm_provider_default Resource - terraform-provider-onyx"
 subcategory: ""
 description: |-
-  The deployment-wide default LLM model — a singleton pointer at one provider + model pair (plus an optional vision default). Managing it as its own resource lets depends_on ordering repoint the default before the provider holding it is deleted or shrunk. Onyx has no unset-default API, so destroying this resource only removes it from state.
+  The deployment-wide default LLM model — a singleton pointer at one provider + model pair (plus optional vision and chat auto-naming defaults). Managing it as its own resource lets depends_on ordering repoint the default before the provider holding it is deleted or shrunk. Onyx has no unset API for the text and vision defaults, so destroying this resource leaves them in place; the chat-naming default is cleared when managed.
 ---
 
 # onyx_llm_provider_default (Resource)
 
-The deployment-wide default LLM model — a singleton pointer at one provider + model pair (plus an optional vision default). Managing it as its own resource lets `depends_on` ordering repoint the default before the provider holding it is deleted or shrunk. Onyx has no unset-default API, so destroying this resource only removes it from state.
+The deployment-wide default LLM model — a singleton pointer at one provider + model pair (plus optional vision and chat auto-naming defaults). Managing it as its own resource lets `depends_on` ordering repoint the default before the provider holding it is deleted or shrunk. Onyx has no unset API for the text and vision defaults, so destroying this resource leaves them in place; the chat-naming default is cleared when managed.
 
 ## Example Usage
 
@@ -35,6 +35,8 @@ resource "onyx_llm_provider_default" "this" {
 
 ### Optional
 
+- `chat_naming_model_name` (String) Dedicated chat auto-naming model name.
+- `chat_naming_provider_id` (String) Provider id for the dedicated chat auto-naming model. Unset, auto-naming uses the session's model. Removing the pair clears the server value.
 - `vision_model_name` (String) Default vision model name.
 - `vision_provider_id` (String) Provider id for the default vision model.
 
