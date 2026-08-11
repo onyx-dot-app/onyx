@@ -19,7 +19,7 @@ annotations:
     - kind: added
       description: PostgreSQL TLS can now be configured with postgresTls, which
         mounts a CA certificate and sets verified POSTGRES_SSL* defaults across
-        Onyx workloads. Craft's sandbox proxy now trusts customCACerts for
+        Onyx backend workloads. Craft's sandbox proxy now trusts customCACerts for
         outbound HTTPS while retaining the public CA bundle.
     - kind: fixed
       description: Route /scim to the api server in ingress mode (ingress.enabled=true).

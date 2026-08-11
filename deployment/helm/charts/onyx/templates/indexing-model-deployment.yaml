@@ -97,7 +97,7 @@ spec:
         {{- with include "onyx.modelServer.volumeMountsWithCA" (dict "ctx" . "volumeMounts" .Values.indexCapability.volumeMounts) }}
         {{- . | nindent 8 }}
         {{- end }}
-      {{- with include "onyx.volumesWithCA" (dict "ctx" . "volumes" .Values.indexCapability.volumes) }}
+      {{- with include "onyx.modelServer.volumesWithCA" (dict "ctx" . "volumes" .Values.indexCapability.volumes) }}
       {{- . | nindent 6 }}
       {{- end }}
 {{- end }}

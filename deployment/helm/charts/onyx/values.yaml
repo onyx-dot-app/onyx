@@ -49,9 +49,9 @@ customCACerts:
   configMapName: ""
 
 # -- TLS verification for PostgreSQL connections.
-# When enabled, the chart mounts one CA certificate into every Onyx workload
-# and configures the backend's libpq-compatible POSTGRES_SSL* settings. The
-# certificate source must already exist in the release namespace.
+# When enabled, the chart mounts one CA certificate into each backend workload
+# that connects to PostgreSQL and configures libpq-compatible POSTGRES_SSL*
+# settings. The certificate source must already exist in the release namespace.
 postgresTls:
   enabled: false
   # verify-ca validates the server certificate without requiring POSTGRES_HOST

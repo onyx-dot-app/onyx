@@ -428,6 +428,24 @@ volumeMounts:
 {{- end }}
 
 {{/*
+Render a volumes block combining pod-specific volumes with the model-server
+custom-CA volume. Usage: include "onyx.modelServer.volumesWithCA" (dict "ctx" . "volumes" <list>)
+*/}}
+{{- define "onyx.modelServer.volumesWithCA" -}}
+{{- $ca := include "onyx.customCACerts.volume" .ctx -}}
+{{- $existing := .volumes -}}
+{{- if or $ca $existing -}}
+volumes:
+{{- if $existing }}
+{{ toYaml $existing | nindent 2 }}
+{{- end }}
+{{- if $ca }}
+{{ $ca | nindent 2 }}
+{{- end }}
+{{- end -}}
+{{- end }}
+
+{{/*
 Render a volumeMounts block combining pod-specific mounts with the custom CA
 mount. Usage: include "onyx.volumeMountsWithCA" (dict "ctx" . "volumeMounts" <list>)
 */}}
