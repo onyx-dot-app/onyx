@@ -140,7 +140,7 @@
     "oxlint-plugin-react-doctor": "0.9.11",
     "stats.js": "^0.17.0",
     "storybook": "10.5.0",
-    "tailwindcss": "^4.3.0",
+    "tailwindcss": "^4.3.3",
     "ts-unused-exports": "^11.0.1",
     "tsup": "^8.5.1",
     "typescript": "^5.9.3",
