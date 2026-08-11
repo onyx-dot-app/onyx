@@ -4,7 +4,7 @@ A window rollup: rows accumulate in place per (user, window,
 model, flow, provider), not an append-only per-call ledger."""
 
 from collections import defaultdict
-from collections.abc import Sequence
+from collections.abc import Iterator, Sequence
 from datetime import datetime, timedelta
 from math import ceil
 from typing import Any, cast
@@ -210,12 +210,11 @@ def get_user_usage_by_day_and_model(
     ]
 
 
-def get_usage_export(
-    db_session: Session,
+def _get_usage_export_query(
     start: datetime,
     end: datetime,
     model: str | None = None,
-) -> list[UsageExportRow]:
+) -> Any:
     utc_day = func.date(func.timezone("UTC", UserUsage.window_start))
     # Deleted users/API keys leave user_id NULL but keep their spend. An inner
     # join would hide that spend here while the tenant-wide totals still count
@@ -254,10 +253,22 @@ def get_usage_export(
     if model is not None:
         query = query.where(UserUsage.model == model)
 
-    rows = db_session.execute(query).all()
+    return query
 
-    return [
-        UsageExportRow(
+
+def iter_usage_export(
+    db_session: Session,
+    start: datetime,
+    end: datetime,
+    model: str | None = None,
+) -> Iterator[UsageExportRow]:
+    result = db_session.execute(
+        _get_usage_export_query(start, end, model).execution_options(
+            stream_results=True
+        )
+    ).yield_per(1000)
+    for email, mdl, flow, provider, day, in_tok, out_tok, cache_tok, cost in result:
+        yield UsageExportRow(
             email=str(email),
             model=mdl,
             flow=flow,
@@ -268,8 +279,15 @@ def get_usage_export(
             cache_read_tokens=int(cache_tok or 0),
             cost_cents=float(cost or 0.0),
         )
-        for email, mdl, flow, provider, day, in_tok, out_tok, cache_tok, cost in rows
-    ]
+
+
+def get_usage_export(
+    db_session: Session,
+    start: datetime,
+    end: datetime,
+    model: str | None = None,
+) -> list[UsageExportRow]:
+    return list(iter_usage_export(db_session, start, end, model))
 
 
 def get_usage_reset_window_start(
