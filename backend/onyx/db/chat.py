@@ -7,6 +7,7 @@ from fastapi import HTTPException
 from sqlalchemy import Row, delete, desc, func, nullsfirst, or_, select, update
 from sqlalchemy.exc import MultipleResultsFound
 from sqlalchemy.orm import Session, joinedload, selectinload
+from sqlalchemy.sql.expression import ColumnElement
 
 from onyx.configs.chat_configs import HARD_DELETE_CHATS
 from onyx.configs.constants import MessageType
@@ -94,6 +95,15 @@ def get_chat_sessions_by_slack_thread_id(
     return db_session.scalars(stmt).all()
 
 
+def content_persisting_sessions_filter() -> ColumnElement[bool]:
+    """Ordinary chats plus incognito modes that persist content. Content-free
+    sessions have no message content to show on any history surface."""
+    persisting = [m for m in IncognitoRecordMode if m.persists_content]
+    return ChatSession.incognito_record_mode.is_(
+        None
+    ) | ChatSession.incognito_record_mode.in_(persisting)
+
+
 # Retrieves chat sessions by user
 # Chat sessions do not include onyxbot flows
 def get_chat_sessions_by_user(
@@ -115,14 +125,10 @@ def get_chat_sessions_by_user(
     )
 
     # Defaults to excluding so a new caller hides incognito rather than leaks
-    # it. The admin query-history surface opts back in to persisting modes
-    # only, since content-free sessions have nothing to show anywhere.
+    # it. Opting in still returns persisting modes only: content-free sessions
+    # have no message content to show.
     if include_full_history_incognito:
-        persisting = [m for m in IncognitoRecordMode if m.persists_content]
-        stmt = stmt.where(
-            ChatSession.incognito_record_mode.is_(None)
-            | ChatSession.incognito_record_mode.in_(persisting)
-        )
+        stmt = stmt.where(content_persisting_sessions_filter())
     else:
         stmt = stmt.where(ChatSession.incognito_record_mode.is_(None))
 

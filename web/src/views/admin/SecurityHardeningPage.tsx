@@ -38,7 +38,7 @@ type SSRFProtectionLevel =
 // Read shape: the effective, env-merged settings returned by GET /admin/security.
 // Every field is concrete — the backend never returns null here (see
 // `SecuritySettings` in backend/onyx/server/security/models.py).
-interface SecuritySettings {
+export interface SecuritySettings {
   user_directory_admin_only: boolean;
   incognito_availability: IncognitoAvailability;
   incognito_record_mode: IncognitoRecordMode;
@@ -437,11 +437,12 @@ export default function SecurityHardeningPage() {
                 <div className="w-60">
                   <InputSelect
                     value={draft.incognito_availability}
-                    onValueChange={(value) =>
-                      void saveSettings({
+                    onValueChange={async (value) => {
+                      await saveSettings({
                         incognito_availability: value as IncognitoAvailability,
-                      }).then(() => mutate(SWR_KEYS.incognitoAvailability))
-                    }
+                      });
+                      await mutate(SWR_KEYS.incognitoAvailability);
+                    }}
                   >
                     <InputSelect.Trigger />
                     <InputSelect.Content>

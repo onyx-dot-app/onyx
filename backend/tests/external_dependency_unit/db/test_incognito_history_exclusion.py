@@ -101,7 +101,7 @@ def test_history_excludes_incognito_by_default(
 def test_history_returns_incognito_when_opted_in(
     db_session: Session, owner: User
 ) -> None:
-    """The admin query-history surface reads through the same function."""
+    """Opting in returns full-history incognito sessions."""
     incognito = _make_session(
         db_session, owner.id, "incognito chat", IncognitoRecordMode.FULL_HISTORY
     )
@@ -127,7 +127,7 @@ def test_opt_in_still_excludes_content_free_modes(
 def test_admin_query_history_page_hides_content_free_sessions(
     db_session: Session, owner: User
 ) -> None:
-    """The paginated history table showed these as blank rows."""
+    """Content-free sessions must not appear as blank rows in the table."""
     ordinary = _make_session(db_session, owner.id, "ordinary chat", None)
     full_history = _make_session(
         db_session, owner.id, "full history chat", IncognitoRecordMode.FULL_HISTORY

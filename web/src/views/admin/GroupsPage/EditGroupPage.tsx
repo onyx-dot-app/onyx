@@ -23,7 +23,8 @@ import { InputTypeIn } from "@opal/components";
 import Text from "@/refresh-components/texts/Text";
 import { ConfirmationModalLayout } from "@opal/layouts";
 import { errorHandlingFetcher, skipRetryOnAuthError } from "@/lib/fetcher";
-import type { IncognitoAvailability, UserGroup } from "@/lib/types";
+import type { UserGroup } from "@/lib/types";
+import type { SecuritySettings } from "@/views/admin/SecurityHardeningPage";
 import { useSettings } from "@/lib/settings/hooks";
 import { Tier } from "@/lib/settings/types";
 import { tierAtLeast } from "@/lib/tiers";
@@ -95,9 +96,9 @@ function EditGroupPage({ groupId }: EditGroupPageProps) {
   // The per-group incognito flag only matters under groups-only availability,
   // so the field stays hidden in every other mode. Curators cannot read the
   // security settings, so a 403 leaves the field hidden without retry churn.
-  const { data: securitySettings } = useSWR<{
-    incognito_availability: IncognitoAvailability;
-  }>(SWR_KEYS.adminSecuritySettings, errorHandlingFetcher, {
+  const { data: securitySettings } = useSWR<
+    Pick<SecuritySettings, "incognito_availability">
+  >(SWR_KEYS.adminSecuritySettings, errorHandlingFetcher, {
     onErrorRetry: skipRetryOnAuthError,
   });
   const showIncognitoField =
