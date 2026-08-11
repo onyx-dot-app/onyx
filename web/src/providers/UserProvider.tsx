@@ -16,6 +16,7 @@ import {
   ThemePreference,
 } from "@/lib/types";
 import { usePostHog } from "posthog-js/react";
+import { isAuthStatusError } from "@/lib/fetcher";
 import { useSettings } from "@/lib/settings/hooks";
 import { useCurrentUser } from "@/lib/users/hooks";
 import { useAuthTypeMetadata, useTokenRefresh } from "@/lib/auth/hooks";
@@ -26,8 +27,15 @@ import {
 } from "@/lib/users/svc";
 import { useTheme } from "next-themes";
 
+// Bounded self-heal for /api/me auth failures (401/402/403), which SWR's
+// onErrorRetry skips but which are usually transient token-refresh races
+// right after SSR validated the session. SWR's backoff owns other errors.
+const ME_RETRY_DELAYS_MS = [2_000, 5_000, 15_000];
+
 interface UserContextType {
   user: User | null;
+  /** True while the user is still resolving. A null `user` means signed out only once this is false. */
+  isUserLoading: boolean;
   isAdmin: boolean;
   isCurator: boolean;
   refreshUser: () => Promise<void>;
@@ -61,7 +69,7 @@ interface UserContextType {
 const UserContext = createContext<UserContextType | undefined>(undefined);
 
 export function UserProvider({ children }: { children: React.ReactNode }) {
-  const { user: fetchedUser, mutateUser } = useCurrentUser();
+  const { user: fetchedUser, mutateUser, userError } = useCurrentUser();
   const { authTypeMetadata, isLoading: authTypeMetadataLoading } =
     useAuthTypeMetadata();
   const updatedSettingsData = useSettings();
@@ -98,6 +106,45 @@ export function UserProvider({ children }: { children: React.ReactNode }) {
   useEffect(() => {
     setUpToDateUser(mergeUserPreferences(fetchedUser ?? null));
   }, [fetchedUser, mergeUserPreferences]);
+
+  // A spent budget stops reporting loading, so a failed /api/me cannot
+  // hold consumers in a loading state forever.
+  const [meRetriesExhausted, setMeRetriesExhausted] = useState(false);
+
+  const meRetryCountRef = useRef(0);
+  useEffect(() => {
+    if (!userError) {
+      meRetryCountRef.current = 0;
+      setMeRetriesExhausted(false);
+      return;
+    }
+    if (!isAuthStatusError(userError)) {
+      // A new non-auth failure hands the key back to SWR's backoff, so an
+      // earlier spent auth budget must not keep reporting resolved.
+      setMeRetriesExhausted(false);
+      return;
+    }
+    // Each failed revalidation yields a fresh error instance, and that
+    // identity change advances the schedule. The count only advances when a
+    // timer fires, so StrictMode's double-invoke cannot burn an attempt.
+    const attempt = meRetryCountRef.current;
+    const delay = ME_RETRY_DELAYS_MS[attempt];
+    if (delay === undefined) {
+      setMeRetriesExhausted(true);
+      return;
+    }
+    const timeoutId = setTimeout(() => {
+      meRetryCountRef.current = attempt + 1;
+      void mutateUser();
+    }, delay);
+    return () => clearTimeout(timeoutId);
+  }, [userError, mutateUser]);
+
+  // Still waiting on /api/me (first fetch, SWR backoff, or bounded auth
+  // retry), or the one-render gap before the merge effect lands the user.
+  const awaitingMe = fetchedUser === undefined && !meRetriesExhausted;
+  const mergePending = fetchedUser != null && upToDateUser === null;
+  const isUserLoading = awaitingMe || mergePending;
 
   useEffect(() => {
     if (!posthog) return;
@@ -539,6 +586,7 @@ export function UserProvider({ children }: { children: React.ReactNode }) {
     <UserContext.Provider
       value={{
         user: upToDateUser,
+        isUserLoading,
         refreshUser,
         authTypeMetadata,
         updateUserAutoScroll,

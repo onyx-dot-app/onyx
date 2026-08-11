@@ -30,6 +30,7 @@ import useAppFocus from "@/hooks/useAppFocus";
 import useScreenSize from "@/hooks/useScreenSize";
 import { useSettings } from "@/lib/settings/hooks";
 import UserAvatar from "@/refresh-components/avatars/UserAvatar";
+import SidebarTabSkeleton from "@/refresh-components/skeletons/SidebarTabSkeleton";
 import { useNotificationSummary } from "@/hooks/useNotifications";
 import { SvgOnyxLogo } from "@opal/logos";
 import { markdown } from "@opal/utils";
@@ -198,7 +199,7 @@ export default function AccountPopover({
   const [popupState, setPopupState] = useState<
     "Settings" | "Notifications" | undefined
   >(undefined);
-  const { user } = useUser();
+  const { user, isUserLoading } = useUser();
   const appFocus = useAppFocus();
   const { isMobile } = useScreenSize();
   const { vectorDbEnabled } = useSettings();
@@ -221,6 +222,10 @@ export default function AccountPopover({
       setPopupState(undefined);
     }
   };
+
+  if (isUserLoading) {
+    return <SidebarTabSkeleton folded={folded} />;
+  }
 
   return (
     <Popover open={!!popupState} onOpenChange={handlePopoverOpen}>
