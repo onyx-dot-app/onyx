@@ -544,6 +544,11 @@ export function VoiceModeProvider({ children }: { children: React.ReactNode }) {
       }
       if (event.data instanceof Blob) {
         const arrayBuffer = await event.data.arrayBuffer();
+        // Re-check after the await: a supersede during decoding must not
+        // append this socket's audio to the replacement stream.
+        if (connectAttemptRef.current !== pendingWsConnection.id) {
+          return;
+        }
         handleAudioData(arrayBuffer);
       } else if (typeof event.data === "string") {
         try {
