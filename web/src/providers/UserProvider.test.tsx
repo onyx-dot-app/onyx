@@ -137,9 +137,16 @@ describe("UserProvider /api/me retry", () => {
       mutateUser,
     });
     renderProbe();
-    act(() => jest.advanceTimersByTime(120_000));
+    act(() => jest.advanceTimersByTime(29_000));
     expect(mutateUser).not.toHaveBeenCalled();
     expect(screen.getByText("loading")).toBeInTheDocument();
+  });
+
+  it("stops reporting loading once a non-auth failure outlives the deadline", () => {
+    setCurrentUser({ userError: new FetchError("boom", 500, null) });
+    renderProbe();
+    act(() => jest.advanceTimersByTime(31_000));
+    expect(screen.getByText("signed-out")).toBeInTheDocument();
   });
 
   it("resets the retry budget after a successful fetch", () => {

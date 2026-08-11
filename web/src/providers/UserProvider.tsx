@@ -30,6 +30,9 @@ import { useTheme } from "next-themes";
 // Auth failures skip SWR's retry but are usually transient refresh races. SWR's backoff owns the rest.
 const ME_RETRY_DELAYS_MS = [2_000, 5_000, 15_000];
 
+// Ceiling on reporting loading for a failing /api/me, so the account menu always comes back.
+const ME_LOADING_DEADLINE_MS = 30_000;
+
 interface UserContextType {
   user: User | null;
   /** True while the user is still resolving. A null `user` means signed out only once this is false. */
@@ -108,15 +111,28 @@ export function UserProvider({ children }: { children: React.ReactNode }) {
   const [meRetriesExhausted, setMeRetriesExhausted] = useState(false);
 
   const meRetryCountRef = useRef(0);
+  const meFirstErrorAtRef = useRef<number | null>(null);
   useEffect(() => {
     if (!userError) {
       meRetryCountRef.current = 0;
+      meFirstErrorAtRef.current = null;
       setMeRetriesExhausted(false);
       return;
     }
+    meFirstErrorAtRef.current ??= Date.now();
     if (!isAuthStatusError(userError)) {
-      setMeRetriesExhausted(false);
-      return;
+      // SWR's backoff owns non-auth retries. Bound only how long we report loading.
+      const remaining =
+        ME_LOADING_DEADLINE_MS - (Date.now() - meFirstErrorAtRef.current);
+      if (remaining <= 0) {
+        setMeRetriesExhausted(true);
+        return;
+      }
+      const deadlineId = setTimeout(
+        () => setMeRetriesExhausted(true),
+        remaining
+      );
+      return () => clearTimeout(deadlineId);
     }
     // Fresh error identity per failure advances the schedule. The count moves in the timer, so StrictMode is safe.
     const attempt = meRetryCountRef.current;
