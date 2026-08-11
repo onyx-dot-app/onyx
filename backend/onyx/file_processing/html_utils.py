@@ -18,6 +18,9 @@ from onyx.utils.logger import setup_logger
 logger = setup_logger()
 
 MINTLIFY_UNWANTED = ["sticky", "hidden"]
+_ANCHOR_ELEMENT = "a"
+_HREF_ATTRIBUTE = "href"
+_TABLE_ELEMENT = "table"
 
 
 @dataclass
@@ -54,6 +57,20 @@ def format_element_text(element_text: str, link_href: str | None) -> str:
     return f"[{element_text_no_newlines}]({link_href})"
 
 
+def _get_ancestor_link_href(
+    element: bs4.element.PageElement, in_table: bool
+) -> str | None:
+    if in_table:
+        return None
+
+    link = element.find_parent(_ANCHOR_ELEMENT)
+    if not link:
+        return None
+
+    href = link.get(_HREF_ATTRIBUTE)
+    return href[0] if isinstance(href, list) else href
+
+
 def parse_html_with_trafilatura(html_content: str) -> str:
     """Parse HTML content using trafilatura."""
     import trafilatura
@@ -84,15 +101,14 @@ def format_document_soup(
     text = ""
     list_element_start = False
     verbatim_output = 0
-    in_table = False
     last_added_newline = False
-    link_href: str | None = None
 
     for e in document.descendants:
         verbatim_output -= 1
         if isinstance(e, bs4.element.NavigableString):
             if isinstance(e, (bs4.element.Comment, bs4.element.Doctype)):
                 continue
+            in_table = e.find_parent(_TABLE_ELEMENT) is not None
             element_text = e.text
             if in_table:
                 # Tables are represented in natural language with rows separated by newlines
@@ -110,7 +126,9 @@ def format_document_soup(
                 content_to_add = (
                     element_text
                     if verbatim_output > 0
-                    else format_element_text(element_text, link_href)
+                    else format_element_text(
+                        element_text, _get_ancestor_link_href(e, in_table)
+                    )
                 )
 
                 # Don't join separate elements without any spacing
@@ -123,28 +141,16 @@ def format_document_soup(
 
                 list_element_start = False
         elif isinstance(e, bs4.element.Tag):
-            # table is standard HTML element
-            if e.name == "table":
-                in_table = True
+            in_table = e.find_parent(_TABLE_ELEMENT) is not None
             # tr is for rows
-            elif e.name == "tr" and in_table:
+            if e.name == "tr" and in_table:
                 text += "\n"
             # td for data cell, th for header
             elif e.name in ["td", "th"] and in_table:
                 text += table_cell_separator
-            elif e.name == "/table":
-                in_table = False
             elif in_table:
                 # don't handle other cases while in table
                 pass
-            elif e.name == "a":
-                href_value = e.get("href", None)
-                # mostly for typing, having multiple hrefs is not valid HTML
-                link_href = (
-                    href_value[0] if isinstance(href_value, list) else href_value
-                )
-            elif e.name == "/a":
-                link_href = None
             elif e.name in ["p", "div"]:
                 if not list_element_start:
                     text += "\n"
