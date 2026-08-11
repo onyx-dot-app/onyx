@@ -114,9 +114,10 @@ _GATE_BY_DETAIL_PREFIX: list[tuple[str, Gate]] = [
     ("Group managers can only act", Gate.GATE_2),
     ("This action is restricted to administrators", Gate.ADMIN_ONLY),
     (_LIMITED_USER_DETAIL, Gate.LIMITED_USER),
-    # Handler-level ownership checks reusing INSUFFICIENT_PERMISSIONS — listed so the
-    # fallback below doesn't file them as GATE 1. The caller cleared every gate.
+    # Handler-level checks reusing INSUFFICIENT_PERMISSIONS — listed so the fallback
+    # below doesn't file them as GATE 1. The caller cleared every gate.
     ("You can only delete agents you created", Gate.NOT_A_GATE),
+    ("Query history has been disabled", Gate.NOT_A_GATE),
 ]
 
 

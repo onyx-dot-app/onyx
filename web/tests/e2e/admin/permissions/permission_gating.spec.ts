@@ -798,6 +798,9 @@ test.describe("Permission gating — READ_QUERY_HISTORY", () => {
         page.getByLabel("admin-page-title").getByText("Query History")
       ).toBeVisible({ timeout: 10000 });
 
+      // The table fetches separately, so reaching the page isn't evidence it loaded.
+      await expect(page.getByText("Error fetching query history")).toBeHidden();
+
       // Phase 3: Revoke READ_QUERY_HISTORY — should redirect again
       await page.context().clearCookies();
       await loginAs(page, "admin");
