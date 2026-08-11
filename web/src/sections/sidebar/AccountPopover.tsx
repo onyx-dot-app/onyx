@@ -30,6 +30,7 @@ import useAppFocus from "@/hooks/useAppFocus";
 import useScreenSize from "@/hooks/useScreenSize";
 import { useSettings } from "@/lib/settings/hooks";
 import UserAvatar from "@/refresh-components/avatars/UserAvatar";
+import SidebarTabSkeleton from "@/refresh-components/skeletons/SidebarTabSkeleton";
 import { useNotificationSummary } from "@/hooks/useNotifications";
 import { SvgOnyxLogo } from "@opal/logos";
 import { markdown } from "@opal/utils";
@@ -45,7 +46,7 @@ function SettingsPopover({
   onOpenNotifications,
   undismissedCount,
 }: SettingsPopoverProps) {
-  const { user } = useUser();
+  const { user, userResolution } = useUser();
   const settings = useSettings();
   const enterpriseSettings = settings.enterprise;
   const router = useRouter();
@@ -90,7 +91,14 @@ function SettingsPopover({
     <PopoverMenu>
       {[
         <div key="user-email" className="p-2">
-          <Content sizePreset="main-ui" title={getUserEmail(user)} />
+          <Content
+            sizePreset="main-ui"
+            title={
+              userResolution === "unavailable"
+                ? "Profile unavailable"
+                : getUserEmail(user)
+            }
+          />
         </div>,
         null,
         <div key="user-settings" data-testid="Settings/user-settings">
@@ -198,13 +206,14 @@ export default function AccountPopover({
   const [popupState, setPopupState] = useState<
     "Settings" | "Notifications" | undefined
   >(undefined);
-  const { user } = useUser();
+  const { user, userResolution } = useUser();
   const appFocus = useAppFocus();
   const { isMobile } = useScreenSize();
   const { vectorDbEnabled } = useSettings();
   const { undismissedCount, refresh: refreshNotificationSummary } =
     useNotificationSummary();
-  const userDisplayName = getUserDisplayName(user);
+  const userDisplayName =
+    userResolution === "unavailable" ? "Account" : getUserDisplayName(user);
 
   const handlePopoverOpen = (state: boolean) => {
     if (state) {
@@ -221,6 +230,9 @@ export default function AccountPopover({
       setPopupState(undefined);
     }
   };
+  if (userResolution === "loading") {
+    return <SidebarTabSkeleton folded={folded} />;
+  }
 
   return (
     <Popover open={!!popupState} onOpenChange={handlePopoverOpen}>
