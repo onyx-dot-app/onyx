@@ -5,7 +5,7 @@ import { useFormContext } from "@/components/context/FormContext";
 import { credentialTemplates } from "@/lib/connectors/credentials";
 import { Content } from "@opal/layouts";
 import { cn } from "@opal/utils";
-import StepSidebar from "@/sections/sidebar/StepSidebarWrapper";
+import AdminSidebarShell from "@/sections/sidebar/AdminSidebarShell";
 import { useUser } from "@/providers/UserProvider";
 import { SvgSettings } from "@opal/icons";
 
@@ -36,29 +36,34 @@ function SelectionIcon({ selected }: SelectionIconProps) {
   );
 }
 
-interface SidebarShellProps {
+interface CreateConnectorSidebarShellProps {
   children?: ReactNode;
 }
 
 /**
- * Sidebar chrome shared by the create-connector flows. Use it directly for a
- * flow that has no steps to show; otherwise use the default export.
+ * Sidebar shared by the create-connector flows. Use it directly for a flow
+ * that has no steps to show; otherwise use the default export.
  */
-export function SidebarShell({ children }: SidebarShellProps) {
+export function CreateConnectorSidebarShell({
+  children,
+}: CreateConnectorSidebarShellProps) {
   const { isAdmin } = useUser();
 
   return (
-    <StepSidebar
-      buttonName={isAdmin ? "Admin Page" : "Curator Page"}
-      buttonIcon={SvgSettings}
-      buttonHref="/admin/add-connector"
+    <AdminSidebarShell
+      back={{
+        label: isAdmin ? "Admin Page" : "Curator Page",
+        href: "/admin/add-connector",
+        icon: SvgSettings,
+      }}
+      scrollKey="create-connector"
     >
       {children}
-    </StepSidebar>
+    </AdminSidebarShell>
   );
 }
 
-export default function Sidebar() {
+export default function CreateConnectorSidebar() {
   const { formStep, setFormStep, connector, allowAdvanced, allowCreate } =
     useFormContext();
   const noCredential = credentialTemplates[connector] == null;
@@ -70,7 +75,7 @@ export default function Sidebar() {
   ];
 
   return (
-    <SidebarShell>
+    <CreateConnectorSidebarShell>
       <div className="relative mx-2 flex flex-col">
         {settingSteps.map((step, index) => {
           // The form numbers steps absolutely (0 = Credential, 1 = Connector,
@@ -131,6 +136,6 @@ export default function Sidebar() {
           );
         })}
       </div>
-    </SidebarShell>
+    </CreateConnectorSidebarShell>
   );
 }

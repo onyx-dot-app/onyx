@@ -8,8 +8,8 @@ import {
 } from "@/lib/types";
 import AddConnector from "./AddConnectorPage";
 import { FormProvider } from "@/components/context/FormContext";
-import Sidebar, {
-  SidebarShell,
+import CreateConnectorSidebar, {
+  CreateConnectorSidebarShell,
 } from "@/sections/sidebar/CreateConnectorSidebar";
 import { AdminCustomSidebarPortal } from "@/layouts/chromes/AdminChrome";
 import { HeaderTitle } from "@/components/header/HeaderTitle";
@@ -45,7 +45,7 @@ export default function ConnectorWrapper({
     return (
       <FormProvider connector={connector}>
         <AdminCustomSidebarPortal>
-          <Sidebar />
+          <CreateConnectorSidebar />
         </AdminCustomSidebarPortal>
         <div className="mt-12 w-full max-w-3xl mx-auto">
           <div className="mx-auto flex flex-col gap-y-2">
@@ -78,7 +78,7 @@ export default function ConnectorWrapper({
     return (
       <>
         <AdminCustomSidebarPortal>
-          <SidebarShell />
+          <CreateConnectorSidebarShell />
         </AdminCustomSidebarPortal>
         <div className="flex justify-center w-full h-full">
           <div className="mt-12 w-full max-w-4xl mx-auto">
@@ -93,7 +93,7 @@ export default function ConnectorWrapper({
   return (
     <FormProvider connector={connector}>
       <AdminCustomSidebarPortal>
-        <Sidebar />
+        <CreateConnectorSidebar />
       </AdminCustomSidebarPortal>
       <div className="mt-12 w-full max-w-3xl mx-auto">
         <AddConnector connector={connector} />
