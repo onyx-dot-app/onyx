@@ -1611,7 +1611,9 @@ export const useBuildSessionStore = create<BuildSessionStore>()((set, get) => ({
         sandbox,
         agentProvider: sessionData.agent_provider,
         agentModel: sessionData.agent_model,
-        skillsStale: sessionData.skills_stale,
+        // Persisted loads reconcile stale state. Optimistic welcome loads keep
+        // their live local state until the turn settles.
+        ...(useDbMessages && { skillsStale: sessionData.skills_stale }),
         origin: sessionData.origin,
         activeTurnId: resolvedActiveTurnId,
         activeTurnIndex: resolvedActiveTurnIndex,

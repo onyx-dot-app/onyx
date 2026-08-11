@@ -22,7 +22,9 @@ function sleepingSession(): unknown {
   };
 }
 
-function runningSession(nextjsPort: number | null = null): unknown {
+function runningSession(
+  nextjsPort: number | null = null
+): Record<string, unknown> {
   return {
     id: SESSION_ID,
     status: "active",
@@ -469,6 +471,34 @@ describe("loadSession restore status", () => {
     expect(session?.activeTurnLocalOwner).toBe(false);
   });
 
+  it("preserves stale-skill state while loading a pre-provisioned turn", async () => {
+    mockedApi.fetchSession.mockResolvedValue({
+      ...runningSession(),
+      skills_stale: true,
+    } as never);
+    useBuildSessionStore.getState().createSession(SESSION_ID, {
+      status: "running",
+      messages: [
+        {
+          id: "local-user",
+          type: "user",
+          content: "hello",
+          timestamp: new Date(),
+        },
+      ],
+      skillsStale: false,
+      isLoaded: false,
+    });
+
+    await useBuildSessionStore
+      .getState()
+      .loadSession(SESSION_ID, { force: true });
+
+    expect(
+      useBuildSessionStore.getState().sessions.get(SESSION_ID)?.skillsStale
+    ).toBe(false);
+  });
+
   it("clears stale turn metadata when active turn lookup says no turn is running", async () => {
     mockedApi.fetchSession.mockResolvedValue(runningSession() as never);
     mockedApi.fetchActiveTurn.mockResolvedValue(null as never);
@@ -566,6 +596,22 @@ describe("loadSession preferPersisted (interrupt reconciliation)", () => {
     expect(session?.streamItems).toEqual([]);
     expect(session?.activeTurnId).toBeNull();
     expect(session?.activeTurnLocalOwner).toBe(false);
+  });
+
+  it("reconciles stale skills when an interrupted turn settles", async () => {
+    seedInterruptedSession();
+    mockedApi.fetchSession.mockResolvedValue({
+      ...runningSession(),
+      skills_stale: true,
+    } as never);
+
+    await useBuildSessionStore
+      .getState()
+      .loadSession(SESSION_ID, { force: true, preferPersisted: true });
+
+    expect(
+      useBuildSessionStore.getState().sessions.get(SESSION_ID)?.skillsStale
+    ).toBe(true);
   });
 
   it("keeps the stale local transcript without preferPersisted (the bug)", async () => {
