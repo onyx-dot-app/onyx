@@ -1616,10 +1616,8 @@ export const useBuildSessionStore = create<BuildSessionStore>()((set, get) => ({
         sandbox,
         agentProvider: sessionData.agent_provider,
         agentModel: sessionData.agent_model,
-        ...(!needsRestore &&
-          canApplySkillsStale() && {
-            skillsStale: sessionData.skills_stale,
-          }),
+        ...(sessionData.skills_stale &&
+          canApplySkillsStale() && { skillsStale: true }),
         origin: sessionData.origin,
         activeTurnId: resolvedActiveTurnId,
         activeTurnIndex: resolvedActiveTurnIndex,
@@ -1634,6 +1632,8 @@ export const useBuildSessionStore = create<BuildSessionStore>()((set, get) => ({
       });
 
       if (needsRestore) {
+        const skillsStaleRevisionBeforeRestore =
+          get().sessions.get(sessionId)?.skillsStaleRevision;
         try {
           sessionData = await restoreSession(sessionId);
         } catch (restoreErr) {
@@ -1655,7 +1655,8 @@ export const useBuildSessionStore = create<BuildSessionStore>()((set, get) => ({
           sandbox: sessionData.sandbox
             ? { ...sessionData.sandbox, status: "restoring" }
             : sessionData.sandbox,
-          ...(canApplySkillsStale() && {
+          ...(get().sessions.get(sessionId)?.skillsStaleRevision ===
+            skillsStaleRevisionBeforeRestore && {
             skillsStale: sessionData.skills_stale,
           }),
           webappNeedsRefresh:

@@ -12,10 +12,11 @@ const SESSION_ID = "11111111-1111-1111-1111-111111111111";
 
 // Minimal DetailedSessionResponse shapes — loadSession only reads status,
 // session_loaded_in_sandbox, nextjs_port, and sandbox.status.
-function sleepingSession(): unknown {
+function sleepingSession(): Record<string, unknown> {
   return {
     id: SESSION_ID,
     status: "idle",
+    skills_stale: false,
     nextjs_port: null,
     session_loaded_in_sandbox: false,
     sandbox: { id: "sb1", status: "sleeping" },
@@ -28,6 +29,7 @@ function runningSession(
   return {
     id: SESSION_ID,
     status: "active",
+    skills_stale: false,
     nextjs_port: nextjsPort,
     session_loaded_in_sandbox: true,
     sandbox: { id: "sb1", status: "running" },
@@ -36,6 +38,14 @@ function runningSession(
 
 function webappInfo(has_webapp: boolean | null, ready: boolean): unknown {
   return { has_webapp, webapp_url: null, status: "running", ready };
+}
+
+function deferred<T>(): { promise: Promise<T>; resolve: (value: T) => void } {
+  let resolve: (value: T) => void = () => {};
+  const promise = new Promise<T>((resolvePromise) => {
+    resolve = resolvePromise;
+  });
+  return { promise, resolve };
 }
 
 describe("loadSession restore status", () => {
@@ -86,6 +96,23 @@ describe("loadSession restore status", () => {
 
     const session = useBuildSessionStore.getState().sessions.get(SESSION_ID);
     expect(session?.sandbox?.status).toBe("failed");
+  });
+
+  it("clears stale skills after a successful session restore", async () => {
+    mockedApi.fetchSession.mockResolvedValue({
+      ...sleepingSession(),
+      skills_stale: true,
+    } as never);
+    mockedApi.restoreSession.mockResolvedValue({
+      ...runningSession(),
+      skills_stale: false,
+    } as never);
+
+    await useBuildSessionStore.getState().loadSession(SESSION_ID);
+
+    expect(
+      useBuildSessionStore.getState().sessions.get(SESSION_ID)?.skillsStale
+    ).toBe(false);
   });
 
   it("waits for the webapp before flipping to running, then shows running", async () => {
@@ -500,16 +527,12 @@ describe("loadSession restore status", () => {
   });
 
   it("rejects a load fetched before a newer stale-skill update", async () => {
-    let resolveMessages: (value: unknown[]) => void = () => {};
+    const messages = deferred<unknown[]>();
     mockedApi.fetchSession.mockResolvedValue({
       ...runningSession(),
       skills_stale: true,
     } as never);
-    mockedApi.fetchMessages.mockReturnValue(
-      new Promise((resolve) => {
-        resolveMessages = resolve;
-      }) as never
-    );
+    mockedApi.fetchMessages.mockReturnValue(messages.promise as never);
 
     const load = useBuildSessionStore
       .getState()
@@ -520,12 +543,48 @@ describe("loadSession restore status", () => {
     useBuildSessionStore
       .getState()
       .updateSessionData(SESSION_ID, { skillsStale: false });
-    resolveMessages([]);
+    messages.resolve([]);
     await load;
 
     expect(
       useBuildSessionStore.getState().sessions.get(SESSION_ID)?.skillsStale
     ).toBe(false);
+  });
+
+  it("keeps a stale observation from a newer overlapping load", async () => {
+    const olderMessages = deferred<unknown[]>();
+    const newerMessages = deferred<unknown[]>();
+    mockedApi.fetchSession
+      .mockResolvedValueOnce({
+        ...runningSession(),
+        skills_stale: false,
+      } as never)
+      .mockResolvedValueOnce({
+        ...runningSession(),
+        skills_stale: true,
+      } as never);
+    mockedApi.fetchMessages
+      .mockReturnValueOnce(olderMessages.promise as never)
+      .mockReturnValueOnce(newerMessages.promise as never);
+
+    const olderLoad = useBuildSessionStore
+      .getState()
+      .loadSession(SESSION_ID, { force: true });
+    await Promise.resolve();
+    const newerLoad = useBuildSessionStore
+      .getState()
+      .loadSession(SESSION_ID, { force: true });
+    await Promise.resolve();
+    expect(mockedApi.fetchMessages).toHaveBeenCalledTimes(2);
+
+    olderMessages.resolve([]);
+    await olderLoad;
+    newerMessages.resolve([]);
+    await newerLoad;
+
+    expect(
+      useBuildSessionStore.getState().sessions.get(SESSION_ID)?.skillsStale
+    ).toBe(true);
   });
 
   it("clears stale turn metadata when active turn lookup says no turn is running", async () => {
