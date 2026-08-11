@@ -61,7 +61,7 @@ backend = [
     "httpx-oauth==0.15.1",
     "jira==3.10.5",
     "kubernetes==31.0.0",
-    "trafilatura==1.12.2",
+    "trafilatura==2.2.0",
     "langchain-core==1.3.3",
     "lxml==6.1.1",
     # NOTE: Do not update without understanding the patching behavior in
