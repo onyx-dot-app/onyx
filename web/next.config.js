@@ -7,10 +7,6 @@ const nextConfig = {
   productionBrowserSourceMaps: false,
   poweredByHeader: false,
   output: "standalone",
-  // Type checking is already enforced by the `typescript-check` pre-commit hook
-  // (`bun run types:check`, using the faster typescript@7 compiler), so re-checking
-  // during `next build` is redundant there and just slows down production builds.
-  // Set SKIP_TYPE_CHECK=1 to skip it (e.g. in the production Docker build).
   typescript: {
     ignoreBuildErrors: process.env.SKIP_TYPE_CHECK === "1",
   },
