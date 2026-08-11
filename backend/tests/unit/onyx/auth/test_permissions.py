@@ -84,13 +84,14 @@ class TestResolveEffectivePermissions:
         assert resolve_effective_permissions({"add:agents"}) == {"add:agents"}
 
     def test_manage_agents_implies_add_and_reads(self) -> None:
-        """manage:agents implies add:agents, read:agents, and read:document_sets."""
+        """manage:agents implies add:agents and the reads, analytics included."""
         result = resolve_effective_permissions({"manage:agents"})
         assert result == {
             "manage:agents",
             "add:agents",
             "read:agents",
             "read:document_sets",
+            "read:agent_analytics",
         }
 
     def test_manage_connectors_chain(self) -> None:

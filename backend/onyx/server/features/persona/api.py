@@ -707,7 +707,9 @@ def get_persona(
             ),
             # share tracks the share guard (get_editable), broader than edit's scope gate
             can_share=is_editable,
-            can_view_stats=can_view_persona_stats(user, persona),
+            can_view_stats=can_view_persona_stats(
+                user, persona, db_session, user_group_ids=user_group_ids
+            ),
             can_delete=can_delete_persona(
                 user, persona, db_session, user_group_ids=user_group_ids
             ),

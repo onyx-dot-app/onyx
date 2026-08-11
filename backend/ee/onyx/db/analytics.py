@@ -2,12 +2,10 @@ import datetime
 from collections.abc import Sequence
 from uuid import UUID
 
-from sqlalchemy import Date, and_, case, cast, func, or_, select
+from sqlalchemy import Date, case, cast, func, or_, select
 from sqlalchemy.orm import Session
 
-from onyx.auth.permissions import has_global_permission
 from onyx.configs.constants import MessageType
-from onyx.db.enums import Permission
 from onyx.db.models import (
     ChatMessage,
     ChatMessageFeedback,
@@ -15,6 +13,7 @@ from onyx.db.models import (
     Persona,
     User,
 )
+from onyx.db.persona import can_view_persona_stats
 
 
 def fetch_query_analytics(
@@ -330,18 +329,12 @@ def fetch_assistant_unique_users_total(
     return result if result else 0
 
 
-# Users can view assistant stats if they created the persona,
-# or if they are an admin
 def user_can_view_assistant_stats(
     db_session: Session, user: User, assistant_id: int
 ) -> bool:
-    if has_global_permission(user, Permission.FULL_ADMIN_PANEL_ACCESS):
-        return True
-
-    # Check if the user created the persona
-    stmt = select(Persona).where(
-        and_(Persona.id == assistant_id, Persona.user_id == user.id)
-    )
-
-    persona = db_session.execute(stmt).scalar_one_or_none()
-    return persona is not None
+    """GATE 2 for agent analytics. Delegates to the MIT projection so the UI affordance
+    and the route gate can't drift (pinned by the contract test)."""
+    persona = db_session.scalar(select(Persona).where(Persona.id == assistant_id))
+    if persona is None:
+        return False
+    return can_view_persona_stats(user, persona, db_session)

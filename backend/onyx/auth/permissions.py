@@ -33,6 +33,9 @@ IMPLIED_PERMISSIONS: dict[str, set[str]] = {
         Permission.ADD_AGENTS.value,
         Permission.READ_AGENTS.value,
         Permission.READ_DOCUMENT_SETS.value,
+        # Managing every agent includes reading their analytics; GATE 2 narrows
+        # everyone else to their own.
+        Permission.READ_AGENT_ANALYTICS.value,
     },
     Permission.MANAGE_DOCUMENT_SETS.value: {
         Permission.READ_DOCUMENT_SETS.value,

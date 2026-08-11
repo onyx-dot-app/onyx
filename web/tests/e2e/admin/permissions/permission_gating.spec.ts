@@ -2,6 +2,7 @@ import { test, expect } from "./fixtures";
 import { Permission } from "@/lib/types";
 import { apiLogin, loginAs } from "@tests/e2e/utils/auth";
 import { OnyxApiClient } from "@tests/e2e/utils/onyxApiClient";
+import { AdminAgentsPage } from "@tests/e2e/pages/AdminAgentsPage";
 
 test.describe("Permission gating — ADD_AGENTS", () => {
   test("New Agent button is disabled without ADD_AGENTS and enabled after granting it", async ({
@@ -101,6 +102,17 @@ test.describe("Permission gating — MANAGE_AGENTS", () => {
         timeout: 10000,
       });
       await expect(page.getByText(agentName)).toBeVisible();
+
+      // Row controls come from the server-stamped affordance map; a wrong projection
+      // empties the overflow menu instead of erroring, so assert the items.
+      const agentsPage = new AdminAgentsPage(page);
+      await expect(agentsPage.editButton(agentId)).toBeVisible({
+        timeout: 10000,
+      });
+      await agentsPage.expectActions(agentId, {
+        visible: ["Share", "Stats", "Delete"],
+        hidden: [],
+      });
 
       // Phase 3: Revoke MANAGE_AGENTS — should redirect again
       await page.context().clearCookies();

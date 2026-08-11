@@ -29,7 +29,25 @@ pytestmark = pytest.mark.skipif(
 
 PERMISSION = Permission.ADD_AGENTS.value
 
+# Private with no groups — the personal-agent shape an ADD_AGENTS-only holder may
+# create. Public or grouped would drag in publish / scope gates.
+_CREATE_AGENT_BODY: dict[str, Any] = {
+    "name": "perm-test-agent",
+    "description": "perm-test agent",
+    "system_prompt": "",
+    "task_prompt": "",
+    "datetime_aware": False,
+    "is_public": False,
+    "document_set_ids": [],
+    "tool_ids": [],
+    "users": [],
+    "groups": [],
+    "label_ids": [],
+    "user_file_ids": [],
+}
+
 ENDPOINTS: list[Endpoint] = [
+    ("POST", "/persona", _CREATE_AGENT_BODY),
     ("DELETE", "/persona/999999", None),
 ]
 

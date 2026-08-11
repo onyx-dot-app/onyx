@@ -481,9 +481,9 @@ def test_persona_projection_matches_gates(db_session: Session) -> None:
             is_owner=can_delete_persona(actor, persona, db_session),
         ) == (not edit_guard_raises(actor)), actor.email
         # view_stats == the real owner-or-admin stats gate
-        assert can_view_persona_stats(actor, persona) == user_can_view_assistant_stats(
-            db_session, actor, persona.id
-        ), actor.email
+        assert can_view_persona_stats(
+            actor, persona, db_session
+        ) == user_can_view_assistant_stats(db_session, actor, persona.id), actor.email
         # delete == the real delete handler's ownership gate (get_persona_by_id is_for_edit)
         try:
             get_persona_by_id(persona_id=persona.id, user=actor, db_session=db_session)
@@ -520,7 +520,7 @@ def test_persona_projection_matches_gates(db_session: Session) -> None:
             in_scope, persona, db_session, is_editable=in_scope_editable
         ),
         can_share=in_scope_editable,
-        can_view_stats=can_view_persona_stats(in_scope, persona),
+        can_view_stats=can_view_persona_stats(in_scope, persona, db_session),
         can_delete=can_delete_persona(in_scope, persona, db_session),
         holds_add_agents=has_permission(in_scope, Permission.ADD_AGENTS)
         is not PermissionAuthority.NONE,
@@ -713,7 +713,7 @@ def test_persona_share_projection_tracks_share_guard_not_edit(
     tags = persona_permissions(
         can_edit=can_edit,
         can_share=is_editable,
-        can_view_stats=can_view_persona_stats(editor, persona),
+        can_view_stats=can_view_persona_stats(editor, persona, db_session),
         can_delete=can_delete_persona(editor, persona, db_session),
         holds_add_agents=has_permission(editor, Permission.ADD_AGENTS)
         is not PermissionAuthority.NONE,
@@ -758,7 +758,7 @@ def test_persona_edit_share_editable_without_add_agents(
     tags = persona_permissions(
         can_edit=can_edit_persona(editor, persona, db_session, is_editable=is_editable),
         can_share=is_editable,
-        can_view_stats=can_view_persona_stats(editor, persona),
+        can_view_stats=can_view_persona_stats(editor, persona, db_session),
         can_delete=can_delete_persona(editor, persona, db_session),
         holds_add_agents=holds_add_agents,
         is_manage_agents_admin=has_global_permission(editor, Permission.MANAGE_AGENTS),
@@ -791,7 +791,7 @@ def test_persona_publish_projection_is_owner_not_add_agents(
     tags = persona_permissions(
         can_edit=can_edit_persona(owner, persona, db_session, is_editable=is_editable),
         can_share=is_editable,
-        can_view_stats=can_view_persona_stats(owner, persona),
+        can_view_stats=can_view_persona_stats(owner, persona, db_session),
         can_delete=can_delete_persona(owner, persona, db_session),
         holds_add_agents=holds_add_agents,
         is_manage_agents_admin=has_global_permission(owner, Permission.MANAGE_AGENTS),

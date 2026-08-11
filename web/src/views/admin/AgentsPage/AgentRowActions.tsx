@@ -93,7 +93,10 @@ export default function AgentRowActions({
         <ShareAgentModal agentId={agent.id} />
       </shareModal.Provider>
 
-      <div className="flex items-center gap-0.5">
+      <div
+        className="flex items-center gap-0.5"
+        data-testid={`agent-row-actions-${agent.id}`}
+      >
         {/* TODO(@raunakab): abstract a more standardized way of doing this
             appear-on-hover animation. Making Hoverable more extensible
             (e.g. supporting table row groups) would let us use it here
@@ -160,7 +163,11 @@ export default function AgentRowActions({
               )}
             >
               <Popover.Trigger asChild>
-                <Button prominence="tertiary" icon={SvgMoreHorizontal} />
+                <Button
+                  prominence="tertiary"
+                  icon={SvgMoreHorizontal}
+                  aria-label="Agent actions"
+                />
               </Popover.Trigger>
             </div>
             <Popover.Content align="end" width="sm">

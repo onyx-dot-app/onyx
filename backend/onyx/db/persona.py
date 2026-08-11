@@ -481,12 +481,19 @@ def is_persona_editable_by_user(
     return db_session.scalars(stmt).one_or_none() is not None
 
 
-def can_view_persona_stats(user: User, persona: Persona) -> bool:
-    """Owner-or-full-admin — mirrors ee ``user_can_view_assistant_stats`` (pinned by the
-    contract test). Stats are EE-only but the gate itself is trivially MIT-computable."""
-    return has_global_permission(user, Permission.FULL_ADMIN_PANEL_ACCESS) or (
-        persona.user_id == user.id
-    )
+def can_view_persona_stats(
+    user: User,
+    persona: Persona,
+    db_session: Session,
+    *,
+    user_group_ids: set[int] | None = None,
+) -> bool:
+    """READ_AGENT_ANALYTICS plus ownership — a global MANAGE_AGENTS holder implies both,
+    so reads any agent. Mirrors ee ``user_can_view_assistant_stats`` (pinned by the
+    contract test); EE-only, but the gate is trivially MIT-computable."""
+    if not has_global_permission(user, Permission.READ_AGENT_ANALYTICS):
+        return False
+    return can_delete_persona(user, persona, db_session, user_group_ids=user_group_ids)
 
 
 def can_delete_persona(
@@ -569,7 +576,9 @@ def stamp_persona_permissions(
             ),
             # share tracks the share guard (get_editable), broader than edit's scope gate
             can_share=is_editable,
-            can_view_stats=can_view_persona_stats(user, persona),
+            can_view_stats=can_view_persona_stats(
+                user, persona, db_session, user_group_ids=user_group_ids
+            ),
             can_delete=can_delete_persona(
                 user, persona, db_session, user_group_ids=user_group_ids
             ),

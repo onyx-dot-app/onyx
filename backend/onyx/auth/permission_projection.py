@@ -71,7 +71,8 @@ def persona_permissions(
     broader editable decision the share guard enforces (get_editable, no scope AND). ``publish``
     (make org-wide public, via the share route's is_owner_or_admin gate) is owner-or-admin — no
     ADD_AGENTS. ``delete`` ANDs ``holds_add_agents``: its route gates on ADD_AGENTS at GATE 1
-    (allow_scope), so an owner lacking it is 403'd there. ``view_stats`` is owner-or-full-admin.
+    (allow_scope), so an owner lacking it is 403'd there. ``view_stats`` needs
+    READ_AGENT_ANALYTICS plus ownership — a global MANAGE_AGENTS holder implies both.
     ``feature``/``list`` need global MANAGE_AGENTS (which implies ADD_AGENTS) and ``reorder`` full
     admin."""
     result: PersonaPermissions = {
