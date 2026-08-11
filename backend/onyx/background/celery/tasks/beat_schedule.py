@@ -210,6 +210,20 @@ beat_task_templates: list[dict] = [
             "work_gated": True,
         },
     },
+    # hourly tick; the task itself enforces a once-per-day cadence
+    {
+        "name": "emit-deployment-snapshot-telemetry",
+        "task": OnyxCeleryTask.EMIT_DEPLOYMENT_SNAPSHOT_TELEMETRY,
+        "schedule": timedelta(hours=1),
+        "options": {
+            "priority": OnyxCeleryPriority.LOW,
+            "expires": BEAT_EXPIRES_DEFAULT,
+            "queue": OnyxCeleryQueues.MONITORING,
+            # POCs are exactly the tenants most likely to be gated, and this is
+            # how we see how they're going.
+            "skip_gated": False,
+        },
+    },
 ]
 
 # Mirror set_is_ee_based_on_env_variable(): EE features are active when either

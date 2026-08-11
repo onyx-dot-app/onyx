@@ -48,6 +48,7 @@ class RecordType(str, Enum):
     PERMISSION_SYNC_PROGRESS = "permission_sync_progress"
     PERMISSION_SYNC_COMPLETE = "permission_sync_complete"
     INDEX_ATTEMPT_STATUS = "index_attempt_status"
+    DEPLOYMENT_SNAPSHOT = "deployment_snapshot"
 
 
 def _get_or_generate_customer_id_mt(tenant_id: str) -> str:
