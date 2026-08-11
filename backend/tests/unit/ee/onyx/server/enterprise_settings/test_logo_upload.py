@@ -1,9 +1,4 @@
-"""Logo uploads must agree with the readers that sniff the stored bytes.
-
-An extension check accepted an SVG named `.png` and stored the browser's
-Content-Type, so the PDF usage report later sniffed the real type, rejected it,
-and silently shipped the bundled mark instead.
-"""
+"""Logo uploads must match the readers that render the stored bytes."""
 
 from io import BytesIO
 from unittest.mock import MagicMock, mock_open, patch
@@ -56,19 +51,18 @@ def _upload(
 def test_sniffs_the_real_type() -> None:
     assert sniff_logo_type(_png()) == "image/png"
     assert sniff_logo_type(_jpeg()) == "image/jpeg"
-    assert sniff_logo_type(_SVG) == "image/svg+xml"
+    assert sniff_logo_type(_SVG) is None
     assert sniff_logo_type(b"not-an-image") is None
     assert sniff_logo_type(b"") is None
     assert sniff_logo_type(b"\x89PNG\r\n\x1a\n" + b"\x00" * 100) is None
 
 
-def test_an_svg_named_png_is_stored_as_an_svg() -> None:
-    """The name is a claim, the bytes are the fact. SVG is allowed: the web UI
-    draws it, and the PDF report sets a wordmark rather than another company's
-    mark."""
-    store = _upload(_SVG, "logo.png")
+def test_an_svg_named_png_is_rejected() -> None:
+    """All logo readers, including email rendering, require raster images."""
+    with pytest.raises(OnyxError) as caught:
+        _upload(_SVG, "logo.png")
 
-    assert store.save_file.call_args.kwargs["file_type"] == "image/svg+xml"
+    assert caught.value.status_code == 400
 
 
 def test_bytes_that_are_not_an_image_are_rejected() -> None:
@@ -98,6 +92,22 @@ def test_a_seeded_logo_path_is_validated_too() -> None:
                 assert upload_logo(file="seeded.png") is False
             with patch("builtins.open", mock_open(read_data=_png())):
                 assert upload_logo(file="seeded.png") is True
+
+
+def test_an_oversized_seeded_logo_is_rejected() -> None:
+    store = MagicMock()
+    with patch(
+        "ee.onyx.server.enterprise_settings.store.get_default_file_store",
+        return_value=store,
+    ):
+        with patch("os.path.isfile", return_value=True):
+            with patch(
+                "builtins.open",
+                mock_open(read_data=b"x" * (_MAX_LOGO_BYTES + 1)),
+            ):
+                assert upload_logo(file="seeded.png") is False
+
+    assert not store.save_file.called
 
 
 def test_the_stored_type_comes_from_the_bytes_not_the_header() -> None:

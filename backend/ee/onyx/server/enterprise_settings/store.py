@@ -1,5 +1,4 @@
 import os
-import re
 from io import BytesIO
 from typing import IO, Any, cast
 
@@ -91,51 +90,32 @@ def store_analytics_script(analytics_script_upload: AnalyticsScriptUpload) -> No
 
 
 def is_valid_file_type(filename: str) -> bool:
-    valid_extensions = (".png", ".jpg", ".jpeg", ".svg")
+    valid_extensions = (".png", ".jpg", ".jpeg")
     return filename.lower().endswith(valid_extensions)
 
 
 # Readers sniff the stored bytes rather than trust the name or the upload
 # header, so the upload has to agree with them or a file accepted here is
-# stored under a type no reader recognises. SVG is accepted because the web UI
-# draws it; the PDF report cannot, and sets the application name as a wordmark
-# instead of drawing someone else's mark.
+# stored under a type no reader recognises. Logos are also embedded in email,
+# where every reader uses Pillow, so accept only raster image types.
 _RASTER_LOGO_TYPES = ("image/png", "image/jpeg")
-_SVG_LOGO_TYPE = "image/svg+xml"
 
 # A logo is a wordmark, not an asset library. This bounds what gets buffered
 # into memory every time the usage report embeds it.
 _MAX_LOGO_BYTES = 5 * 1024 * 1024
 
-_LOGO_TYPE_ERROR = (
-    "Invalid file type- only .png, .jpg, .jpeg, and .svg files are allowed. "
-    "An SVG renders everywhere except the PDF usage report, which falls back "
-    "to your application name."
-)
-
-# puremagic misses SVG whenever an exporter emits an XML declaration, a
-# doctype, or a leading comment, so the root element is checked directly.
-_XML_PROLOGUE = re.compile(
-    r"^(?:\s|<\?[^>]*\?>|<!--.*?-->|<!DOCTYPE[^>]*>)+", re.IGNORECASE | re.DOTALL
-)
-
-
-def _is_svg(content: bytes) -> bool:
-    head = content[:4096].decode("utf-8", errors="ignore").lstrip("\ufeff").lstrip()
-    while True:
-        without_prologue = _XML_PROLOGUE.sub("", head, count=1).lstrip()
-        if without_prologue == head:
-            break
-        head = without_prologue
-    return head.lower().startswith("<svg")
+_LOGO_TYPE_ERROR = "Invalid file type- only .png, .jpg, and .jpeg files are allowed."
 
 
 def sniff_logo_type(content: bytes) -> str | None:
     """The stored bytes' real type, or None when nothing can render it."""
     try:
         matches = puremagic.magic_string(content)
+    except puremagic.PureError:
+        return None
     except Exception:
-        matches = []
+        logger.exception("Failed to sniff logo MIME type")
+        return None
 
     for match in matches:
         mime_type = cast(str, match.mime_type)
@@ -147,9 +127,7 @@ def sniff_logo_type(content: bytes) -> str | None:
                 return None
             return mime_type
 
-    # SVG has no decode check to run: the web UI draws it and the PDF sets the
-    # application name as a wordmark instead.
-    return _SVG_LOGO_TYPE if _is_svg(content) else None
+    return None
 
 
 def upload_logo(file: UploadFile | str, is_logotype: bool = False) -> bool:
@@ -164,7 +142,10 @@ def upload_logo(file: UploadFile | str, is_logotype: bool = False) -> bool:
             return False
 
         with open(file, "rb") as file_handle:
-            file_content = file_handle.read()
+            file_content = file_handle.read(_MAX_LOGO_BYTES + 1)
+        if len(file_content) > _MAX_LOGO_BYTES:
+            logger.error("Logo must be under %d MB.", _MAX_LOGO_BYTES // (1024 * 1024))
+            return False
         display_name = file
 
         file_type_or_none = sniff_logo_type(file_content)
