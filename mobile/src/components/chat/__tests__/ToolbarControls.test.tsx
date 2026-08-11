@@ -7,9 +7,10 @@ import {
   ComposerToolsProvider,
   type ComposerTools,
 } from "@/state/ComposerToolsProvider";
+import { makeComposerTools } from "@/state/__tests__/fixtures";
 
-// The provider reaches MMKV via the settings/preferences APIs, which jest can't load; this suite
-// only needs the context.
+// These reach MMKV, which jest can't load; the suite only needs the context the provider supplies.
+jest.mock("@/state/storage");
 jest.mock("@/api/settings", () => ({ useWorkspaceSettings: jest.fn() }));
 jest.mock("@/hooks/useAgentPreferences", () => ({
   useAgentPreferences: jest.fn(),
@@ -30,24 +31,10 @@ const searchTool: ToolSnapshot = {
 };
 
 function renderControls(overrides: Partial<ComposerTools> = {}) {
-  const value: ComposerTools = {
+  const value: ComposerTools = makeComposerTools({
     showDeepResearch: true,
-    deepResearchEnabled: false,
-    toggleDeepResearch: jest.fn(),
-    actionTools: [],
-    forcedToolId: null,
-    toggleForcedTool: jest.fn(),
-    disabledToolIds: [],
-    toggleToolEnabled: jest.fn(),
-    notePendingSend: jest.fn(),
-    resolveToolOptions: () => ({
-      deepResearch: false,
-      allowedToolIds: null,
-      forcedToolId: null,
-      internalSearchFilters: null,
-    }),
     ...overrides,
-  };
+  });
   render(
     <ComposerToolsProvider value={value}>
       <ToolbarControls />
