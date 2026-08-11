@@ -1,5 +1,4 @@
 import re
-from uuid import UUID
 
 from onyx import __version__
 from onyx.utils.logger import setup_logger
@@ -36,6 +35,9 @@ def current_release_label() -> str | None:
     None disables the comparison rather than failing a provision: a version we
     cannot express is a reason to leave sandboxes alone, not to stop creating
     them.
+
+    Local builds carry a constant version ("Development", "0.0.0-dev") — a
+    legal value that always compares equal, so recycling is inert in local dev.
     """
     if _LABEL_VALUE.match(__version__):
         return __version__
@@ -51,19 +53,3 @@ def current_release_label() -> str | None:
 # onto every sandbox container it creates.
 LABEL_DOCKER_COMPONENT = "onyx.app/component"
 LABEL_DOCKER_COMPONENT_SANDBOX = "craft-sandbox"
-
-
-def parse_sandbox_id(raw: str | None) -> UUID | None:
-    """The sandbox a labelled resource belongs to, or None if it names none.
-
-    Both backends scan their fleet by this label, and neither can do anything
-    with a resource it cannot tie to a sandbox — so an unparseable value is
-    dropped rather than raised, and never fails the surrounding scan.
-    """
-    if not raw:
-        return None
-    try:
-        return UUID(raw)
-    except ValueError:
-        logger.warning("Sandbox resource carries an unparseable id label %r", raw)
-        return None

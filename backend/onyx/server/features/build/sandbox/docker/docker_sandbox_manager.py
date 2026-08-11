@@ -381,8 +381,7 @@ def build_sandbox_labels(
         labels["com.docker.compose.project"] = compose_project
     if provisioning_attempt_number is not None:
         labels[LABEL_PROVISIONING_ATTEMPT] = str(provisioning_attempt_number)
-    release = current_release_label()
-    if release is not None:
+    if release := current_release_label():
         labels[LABEL_RELEASE] = release
     return labels
 

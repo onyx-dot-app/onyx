@@ -494,8 +494,7 @@ class KubernetesSandboxManager(SandboxManager):
             LABEL_TENANT_ID: tenant_id,
             LABEL_PROVISIONING_ATTEMPT: str(provisioning_attempt_number),
         }
-        release = current_release_label()
-        if release is not None:
+        if release := current_release_label():
             labels[LABEL_RELEASE] = release
 
         return client.V1Pod(
