@@ -80,16 +80,27 @@ def current_sandbox_image_identity() -> str | None:
     digest = hashlib.sha256()
     for path in sorted(_IMAGE_CONTEXT_DIR.rglob("*")):
         # Runtime artifacts (bytecode) are not part of the build context.
-        if "__pycache__" in path.parts or path.suffix == ".pyc":
-            continue
-        if not path.is_file():
+        if not path.is_file() or "__pycache__" in path.parts or path.suffix == ".pyc":
             continue
         rel = path.relative_to(_IMAGE_CONTEXT_DIR).as_posix()
         exec_bit = "x" if path.stat().st_mode & 0o100 else "-"
         digest.update(f"{rel}\0{exec_bit}\0".encode())
         digest.update(path.read_bytes())
-        digest.update(b"\0")
     return f"ctx-{digest.hexdigest()[:20]}"
+
+
+def provenance_labels() -> dict[str, str]:
+    """What every sandbox is stamped with at creation, for both backends.
+
+    A value that cannot be expressed is skipped rather than failing the
+    provision — one place encodes that policy, so the backends cannot drift.
+    """
+    labels: dict[str, str] = {}
+    if release := current_release_label():
+        labels[LABEL_RELEASE] = release
+    if image_identity := current_sandbox_image_identity():
+        labels[LABEL_SANDBOX_IMAGE] = image_identity
+    return labels
 
 
 # Docker-backend equivalents of the K8s component label. The proxy's

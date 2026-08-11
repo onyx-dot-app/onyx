@@ -23,7 +23,6 @@ from kubernetes import client
 from kubernetes.client.rest import ApiException
 
 import onyx.server.features.build.sandbox.docker.docker_sandbox_manager as dsm
-import onyx.server.features.build.sandbox.kubernetes.kubernetes_sandbox_manager as ksm
 import onyx.server.features.build.sandbox.labels as labels_module
 from onyx.server.features.build.sandbox.kubernetes.kubernetes_sandbox_manager import (
     KubernetesSandboxManager,
@@ -65,21 +64,28 @@ def test_only_a_legal_label_value_is_used(version: str, expected: str | None) ->
 # --- the image identity -----------------------------------------------------
 
 
+@pytest.fixture(autouse=True)
+def _fresh_identity_cache() -> Iterator[None]:
+    """No test sees another's (or the real checkout's) cached identity."""
+    current_sandbox_image_identity.cache_clear()
+    yield
+    current_sandbox_image_identity.cache_clear()
+
+
 @pytest.fixture
-def image_context(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> Iterator[Path]:
-    """A fake sandbox image build context, with the cache cleared around it."""
+def image_context(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> Path:
+    """A fake sandbox image build context."""
     context = tmp_path / "image"
     context.mkdir()
     (context / "Dockerfile").write_text("FROM scratch\n")
     (context / "entrypoint.sh").write_text("#!/bin/sh\n")
     (context / "entrypoint.sh").chmod(0o644)
     monkeypatch.setattr(labels_module, "_IMAGE_CONTEXT_DIR", context)
-    current_sandbox_image_identity.cache_clear()
-    yield context
-    current_sandbox_image_identity.cache_clear()
+    return context
 
 
 def _identity() -> str | None:
+    """Re-read the identity (the cache would otherwise hide context edits)."""
     current_sandbox_image_identity.cache_clear()
     return current_sandbox_image_identity()
 
@@ -118,7 +124,7 @@ def test_a_chmod_alone_changes_the_identity(image_context: Path) -> None:
 
 
 def test_runtime_bytecode_is_not_part_of_the_context(image_context: Path) -> None:
-    """The hash must see what CI hashes: sources, not what running them left."""
+    """Sources only — not the artifacts that running them leaves behind."""
     before = _identity()
 
     pycache = image_context / "sandbox_daemon" / "__pycache__"
@@ -135,17 +141,12 @@ def test_a_missing_context_turns_the_comparison_off(
     monkeypatch.setattr(labels_module, "_IMAGE_CONTEXT_DIR", tmp_path / "absent")
 
     assert _identity() is None
-    current_sandbox_image_identity.cache_clear()
 
 
 def test_the_real_context_produces_an_identity() -> None:
     """Both sides go through this one function against the shipped files; it
     must not come back None on a real checkout."""
-    current_sandbox_image_identity.cache_clear()
-    try:
-        identity = current_sandbox_image_identity()
-    finally:
-        current_sandbox_image_identity.cache_clear()
+    identity = current_sandbox_image_identity()
 
     assert identity is not None
     assert identity.startswith("ctx-")
@@ -212,7 +213,9 @@ def test_k8s_stamps_the_identity_and_the_release_on_the_pod_it_creates() -> None
 
     with (
         patch.object(labels_module, "__version__", "1.2.3"),
-        patch.object(ksm, "current_sandbox_image_identity", return_value=IDENTITY),
+        patch.object(
+            labels_module, "current_sandbox_image_identity", return_value=IDENTITY
+        ),
         patch.object(KubernetesSandboxManager, "_overlay_dynamic_fields"),
     ):
         pod = mgr._create_sandbox_pod(str(uuid4()), "tenant", 1)
@@ -234,12 +237,11 @@ def _docker() -> tuple[dsm.DockerSandboxManager, MagicMock]:
 
 def _container(labels: dict[str, str] | None) -> MagicMock:
     container = MagicMock()
-    container.attrs = {"Config": {"Labels": labels}}
+    container.labels = labels
     return container
 
 
 def test_docker_reads_the_identity_off_the_container() -> None:
-    """``inspect`` nests labels under Config, unlike the ``list`` shape."""
     mgr, docker = _docker()
     docker.containers.get.return_value = _container({LABEL_SANDBOX_IMAGE: IDENTITY})
 
@@ -272,7 +274,9 @@ def test_docker_stamps_the_identity_and_the_release_on_the_container_it_creates(
 ):
     with (
         patch.object(labels_module, "__version__", "1.2.3"),
-        patch.object(dsm, "current_sandbox_image_identity", return_value=IDENTITY),
+        patch.object(
+            labels_module, "current_sandbox_image_identity", return_value=IDENTITY
+        ),
     ):
         labels = dsm.build_sandbox_labels(
             sandbox_id=SANDBOX_A,

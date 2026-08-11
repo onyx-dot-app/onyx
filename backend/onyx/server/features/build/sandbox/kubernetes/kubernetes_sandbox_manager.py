@@ -101,12 +101,10 @@ from onyx.server.features.build.sandbox.labels import (
     LABEL_K8S_MANAGED_BY,
     LABEL_K8S_MANAGED_BY_ONYX,
     LABEL_PROVISIONING_ATTEMPT,
-    LABEL_RELEASE,
     LABEL_SANDBOX_ID,
     LABEL_SANDBOX_IMAGE,
     LABEL_TENANT_ID,
-    current_release_label,
-    current_sandbox_image_identity,
+    provenance_labels,
 )
 from onyx.server.features.build.sandbox.models import (
     CraftLLMProviderConfig,
@@ -495,11 +493,8 @@ class KubernetesSandboxManager(SandboxManager):
             LABEL_SANDBOX_ID: sandbox_id,
             LABEL_TENANT_ID: tenant_id,
             LABEL_PROVISIONING_ATTEMPT: str(provisioning_attempt_number),
+            **provenance_labels(),
         }
-        if release := current_release_label():
-            labels[LABEL_RELEASE] = release
-        if image_identity := current_sandbox_image_identity():
-            labels[LABEL_SANDBOX_IMAGE] = image_identity
 
         return client.V1Pod(
             api_version="v1",
