@@ -38,6 +38,7 @@ from onyx.onyxbot.slack.handlers.handle_regular_answer import handle_regular_ans
 from onyx.onyxbot.slack.models import SlackMessageInfo
 from onyx.onyxbot.slack.utils import (
     TenantSocketModeClient,
+    bot_user_info_fetcher,
     build_feedback_id,
     decompose_action_id,
     fetch_group_ids_from_names,
@@ -129,7 +130,9 @@ def handle_generate_answer_button(
     message_ts = req.payload["message"]["ts"]
     thread_ts = req.payload["container"].get("thread_ts", None)
     user_id = req.payload["user"]["id"]
-    expert_info = expert_info_from_slack_id(user_id, client.web_client, user_cache={})
+    expert_info = expert_info_from_slack_id(
+        user_id, bot_user_info_fetcher(client.web_client), user_cache={}
+    )
     email = expert_info.email if expert_info else None
 
     if not thread_ts:
@@ -372,7 +375,7 @@ def handle_slack_feedback(
 
     # Get Onyx user from Slack ID
     expert_info = expert_info_from_slack_id(
-        user_id_to_post_confirmation, client, user_cache={}
+        user_id_to_post_confirmation, bot_user_info_fetcher(client), user_cache={}
     )
     email = expert_info.email if expert_info else None
 
