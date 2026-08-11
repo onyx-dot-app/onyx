@@ -9,14 +9,17 @@ from io import BytesIO
 from unittest.mock import MagicMock, mock_open, patch
 
 import pytest
-from fastapi import HTTPException, UploadFile
+from fastapi import UploadFile
 from PIL import Image
+from starlette.datastructures import Headers
 
 from ee.onyx.server.enterprise_settings.store import (
     _MAX_LOGO_BYTES,
     sniff_logo_type,
     upload_logo,
 )
+from onyx.error_handling.error_codes import OnyxErrorCode
+from onyx.error_handling.exceptions import OnyxError
 
 _SVG = b'<svg xmlns="http://www.w3.org/2000/svg"><rect/></svg>'
 
@@ -33,8 +36,14 @@ def _jpeg() -> bytes:
     return buffer.getvalue()
 
 
-def _upload(content: bytes, filename: str) -> MagicMock:
-    upload = UploadFile(file=BytesIO(content), filename=filename)
+def _upload(
+    content: bytes, filename: str, content_type: str | None = None
+) -> MagicMock:
+    upload = UploadFile(
+        file=BytesIO(content),
+        filename=filename,
+        headers=Headers({"content-type": content_type}) if content_type else None,
+    )
     store = MagicMock()
     with patch(
         "ee.onyx.server.enterprise_settings.store.get_default_file_store",
@@ -47,23 +56,32 @@ def _upload(content: bytes, filename: str) -> MagicMock:
 def test_sniffs_the_real_type() -> None:
     assert sniff_logo_type(_png()) == "image/png"
     assert sniff_logo_type(_jpeg()) == "image/jpeg"
-    assert sniff_logo_type(_SVG) is None
+    assert sniff_logo_type(_SVG) == "image/svg+xml"
     assert sniff_logo_type(b"not-an-image") is None
     assert sniff_logo_type(b"") is None
+    assert sniff_logo_type(b"\x89PNG\r\n\x1a\n" + b"\x00" * 100) is None
 
 
-def test_an_svg_disguised_as_png_is_rejected() -> None:
-    """The bug: this passed the extension check and failed at render time."""
-    with pytest.raises(HTTPException) as caught:
-        _upload(_SVG, "logo.png")
+def test_an_svg_named_png_is_stored_as_an_svg() -> None:
+    """The name is a claim, the bytes are the fact. SVG is allowed: the web UI
+    draws it, and the PDF report sets a wordmark rather than another company's
+    mark."""
+    store = _upload(_SVG, "logo.png")
 
-    assert caught.value.status_code == 400
-    assert "SVG" in caught.value.detail
+    assert store.save_file.call_args.kwargs["file_type"] == "image/svg+xml"
 
 
 def test_bytes_that_are_not_an_image_are_rejected() -> None:
-    with pytest.raises(HTTPException) as caught:
+    with pytest.raises(OnyxError) as caught:
         _upload(b"still not an image", "logo.jpg")
+
+    assert caught.value.status_code == 400
+
+
+def test_a_truncated_png_is_rejected() -> None:
+    """Magic bytes alone aren't renderability; PIL must decode the file."""
+    with pytest.raises(OnyxError) as caught:
+        _upload(b"\x89PNG\r\n\x1a\n" + b"\x00" * 100, "logo.png")
 
     assert caught.value.status_code == 400
 
@@ -76,23 +94,24 @@ def test_a_seeded_logo_path_is_validated_too() -> None:
         return_value=store,
     ):
         with patch("os.path.isfile", return_value=True):
-            with patch("builtins.open", mock_open(read_data=_SVG)):
+            with patch("builtins.open", mock_open(read_data=b"not an image")):
                 assert upload_logo(file="seeded.png") is False
             with patch("builtins.open", mock_open(read_data=_png())):
                 assert upload_logo(file="seeded.png") is True
 
 
 def test_the_stored_type_comes_from_the_bytes_not_the_header() -> None:
-    store = _upload(_png(), "logo.png")
+    store = _upload(_png(), "logo.png", content_type="image/jpeg")
 
     assert store.save_file.call_args.kwargs["file_type"] == "image/png"
 
 
 def test_an_oversized_logo_is_rejected() -> None:
-    with pytest.raises(HTTPException) as caught:
+    with pytest.raises(OnyxError) as caught:
         _upload(b"\x89PNG" + b"\x00" * (_MAX_LOGO_BYTES + 1), "logo.png")
 
     assert caught.value.status_code == 413
+    assert caught.value.error_code == OnyxErrorCode.PAYLOAD_TOO_LARGE
 
 
 def test_a_real_png_is_accepted() -> None:

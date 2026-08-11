@@ -1,9 +1,11 @@
 import os
+import re
 from io import BytesIO
 from typing import IO, Any, cast
 
 import puremagic
-from fastapi import HTTPException, UploadFile
+from fastapi import UploadFile
+from PIL import Image
 
 from ee.onyx.server.enterprise_settings.models import (
     AnalyticsScriptUpload,
@@ -15,6 +17,8 @@ from onyx.configs.constants import (
     ONYX_DEFAULT_APPLICATION_NAME,
     FileOrigin,
 )
+from onyx.error_handling.error_codes import OnyxErrorCode
+from onyx.error_handling.exceptions import OnyxError
 from onyx.file_store.file_store import get_default_file_store
 from onyx.key_value_store.factory import get_kv_store
 from onyx.key_value_store.interface import KvKeyNotFoundError
@@ -87,24 +91,43 @@ def store_analytics_script(analytics_script_upload: AnalyticsScriptUpload) -> No
 
 
 def is_valid_file_type(filename: str) -> bool:
-    valid_extensions = (".png", ".jpg", ".jpeg")
-    return filename.endswith(valid_extensions)
+    valid_extensions = (".png", ".jpg", ".jpeg", ".svg")
+    return filename.lower().endswith(valid_extensions)
 
 
 # Readers sniff the stored bytes rather than trust the name or the upload
 # header, so the upload has to agree with them or a file accepted here is
-# rejected later. The PDF usage report is the strict reader: it can only draw
-# raster images, and silently falls back to the bundled mark otherwise.
-_RENDERABLE_LOGO_TYPES = ("image/png", "image/jpeg")
+# stored under a type no reader recognises. SVG is accepted because the web UI
+# draws it; the PDF report cannot, and sets the application name as a wordmark
+# instead of drawing someone else's mark.
+_RASTER_LOGO_TYPES = ("image/png", "image/jpeg")
+_SVG_LOGO_TYPE = "image/svg+xml"
 
 # A logo is a wordmark, not an asset library. This bounds what gets buffered
 # into memory every time the usage report embeds it.
 _MAX_LOGO_BYTES = 5 * 1024 * 1024
 
 _LOGO_TYPE_ERROR = (
-    "Invalid file type- only .png, .jpg, and .jpeg files are allowed. "
-    "Vector formats such as SVG cannot be drawn into the PDF usage report."
+    "Invalid file type- only .png, .jpg, .jpeg, and .svg files are allowed. "
+    "An SVG renders everywhere except the PDF usage report, which falls back "
+    "to your application name."
 )
+
+# puremagic misses SVG whenever an exporter emits an XML declaration, a
+# doctype, or a leading comment, so the root element is checked directly.
+_XML_PROLOGUE = re.compile(
+    r"^(?:\s|<\?[^>]*\?>|<!--.*?-->|<!DOCTYPE[^>]*>)+", re.IGNORECASE | re.DOTALL
+)
+
+
+def _is_svg(content: bytes) -> bool:
+    head = content[:4096].decode("utf-8", errors="ignore").lstrip("\ufeff").lstrip()
+    while True:
+        without_prologue = _XML_PROLOGUE.sub("", head, count=1).lstrip()
+        if without_prologue == head:
+            break
+        head = without_prologue
+    return head.lower().startswith("<svg")
 
 
 def sniff_logo_type(content: bytes) -> str | None:
@@ -112,13 +135,21 @@ def sniff_logo_type(content: bytes) -> str | None:
     try:
         matches = puremagic.magic_string(content)
     except Exception:
-        return None
+        matches = []
 
     for match in matches:
         mime_type = cast(str, match.mime_type)
-        if mime_type in _RENDERABLE_LOGO_TYPES:
+        if mime_type in _RASTER_LOGO_TYPES:
+            try:
+                with Image.open(BytesIO(content)) as image:
+                    image.verify()
+            except Exception:
+                return None
             return mime_type
-    return None
+
+    # SVG has no decode check to run: the web UI draws it and the PDF sets the
+    # application name as a wordmark instead.
+    return _SVG_LOGO_TYPE if _is_svg(content) else None
 
 
 def upload_logo(file: UploadFile | str, is_logotype: bool = False) -> bool:
@@ -145,16 +176,13 @@ def upload_logo(file: UploadFile | str, is_logotype: bool = False) -> bool:
     else:
         logger.notice("Uploading logo from uploaded file")
         if not file.filename or not is_valid_file_type(file.filename):
-            raise HTTPException(
-                status_code=400,
-                detail=_LOGO_TYPE_ERROR,
-            )
+            raise OnyxError(OnyxErrorCode.INVALID_INPUT, _LOGO_TYPE_ERROR)
 
         file_content = file.file.read(_MAX_LOGO_BYTES + 1)
         if len(file_content) > _MAX_LOGO_BYTES:
-            raise HTTPException(
-                status_code=413,
-                detail=f"Logo must be under {_MAX_LOGO_BYTES // (1024 * 1024)} MB.",
+            raise OnyxError(
+                OnyxErrorCode.PAYLOAD_TOO_LARGE,
+                f"Logo must be under {_MAX_LOGO_BYTES // (1024 * 1024)} MB.",
             )
 
         display_name = file.filename
@@ -163,7 +191,7 @@ def upload_logo(file: UploadFile | str, is_logotype: bool = False) -> bool:
         # mislabelled upload would be accepted here and dropped at render time.
         file_type_or_none = sniff_logo_type(file_content)
         if file_type_or_none is None:
-            raise HTTPException(status_code=400, detail=_LOGO_TYPE_ERROR)
+            raise OnyxError(OnyxErrorCode.INVALID_INPUT, _LOGO_TYPE_ERROR)
         file_type = file_type_or_none
 
     content = BytesIO(file_content)
