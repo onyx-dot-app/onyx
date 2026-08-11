@@ -1506,6 +1506,11 @@ export const useBuildSessionStore = create<BuildSessionStore>()((set, get) => ({
 
     // Set as current and mark as loading
     setCurrentSession(sessionId);
+    const skillsStaleRevision =
+      get().sessions.get(sessionId)!.skillsStaleRevision;
+    const canApplySkillsStale = () =>
+      get().sessions.get(sessionId)?.skillsStaleRevision ===
+      skillsStaleRevision;
 
     try {
       // First fetch session to check sandbox status
@@ -1611,9 +1616,8 @@ export const useBuildSessionStore = create<BuildSessionStore>()((set, get) => ({
         sandbox,
         agentProvider: sessionData.agent_provider,
         agentModel: sessionData.agent_model,
-        // Persisted loads reconcile stale state. Optimistic welcome loads keep
-        // their live local state until the turn settles.
-        ...(useDbMessages && { skillsStale: sessionData.skills_stale }),
+        ...(sessionData.skills_stale &&
+          canApplySkillsStale() && { skillsStale: true }),
         origin: sessionData.origin,
         activeTurnId: resolvedActiveTurnId,
         activeTurnIndex: resolvedActiveTurnIndex,
@@ -1628,6 +1632,8 @@ export const useBuildSessionStore = create<BuildSessionStore>()((set, get) => ({
       });
 
       if (needsRestore) {
+        const skillsStaleRevisionBeforeRestore =
+          get().sessions.get(sessionId)?.skillsStaleRevision;
         try {
           sessionData = await restoreSession(sessionId);
         } catch (restoreErr) {
@@ -1649,7 +1655,10 @@ export const useBuildSessionStore = create<BuildSessionStore>()((set, get) => ({
           sandbox: sessionData.sandbox
             ? { ...sessionData.sandbox, status: "restoring" }
             : sessionData.sandbox,
-          skillsStale: sessionData.skills_stale,
+          ...(get().sessions.get(sessionId)?.skillsStaleRevision ===
+            skillsStaleRevisionBeforeRestore && {
+            skillsStale: sessionData.skills_stale,
+          }),
           webappNeedsRefresh:
             (get().sessions.get(sessionId)?.webappNeedsRefresh || 0) + 1,
         });
