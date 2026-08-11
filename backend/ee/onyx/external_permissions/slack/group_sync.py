@@ -19,10 +19,12 @@ logger = setup_logger()
 def _get_slack_group_ids(
     slack_client: SlackSourceOperations,
 ) -> list[str]:
-    group_ids = []
+    group_ids: list[str] = []
     for result in slack_client.list_usergroups():
-        for group in result.get("usergroups", []):
-            group_ids.append(group.get("id"))
+        for group in result.usergroups:
+            group_id = group.get("id")
+            if group_id:
+                group_ids.append(group_id)
     return group_ids
 
 
@@ -33,13 +35,13 @@ def _get_slack_group_members_email(
 ) -> list[str]:
     group_member_emails = []
     for result in slack_client.list_usergroup_members(usergroup_id=group_name):
-        for member_id in result.get("users", []):
+        for member_id in result.users:
             member_email = user_id_to_email_map.get(member_id)
             if not member_email:
                 # If the user is an external user, they wont get returned from the
                 # conversations_members call so we need to make a separate call to users_info
                 member_info = slack_client.fetch_user_info(member_id)
-                member_email = member_info["user"]["profile"].get("email")
+                member_email = member_info.user["profile"].get("email")
                 if not member_email:
                     # If no email is found, we skip the user
                     continue

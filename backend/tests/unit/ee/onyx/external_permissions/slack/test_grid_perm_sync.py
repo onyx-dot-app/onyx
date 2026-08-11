@@ -18,6 +18,10 @@ from ee.onyx.external_permissions.slack.utils import (
 from onyx.access.models import ExternalAccess
 from onyx.connectors.models import SlimDocument
 from onyx.connectors.slack.models import ChannelType
+from onyx.connectors.slack.source_operations import (
+    SlackChannelMembersPage,
+    SlackUsersPage,
+)
 
 
 def _channel(channel_id: str, **overrides: Any) -> ChannelType:
@@ -55,7 +59,7 @@ class TestFetchUserIdToEmailMap:
     def test_non_grid_calls_users_list_without_team_id(self) -> None:
         slack_client = MagicMock()
         slack_client.list_users.return_value = iter(
-            [{"members": [{"id": "U1", "profile": {"email": "u1@x.com"}}]}]
+            [SlackUsersPage(members=[{"id": "U1", "profile": {"email": "u1@x.com"}}])]
         )
         result = fetch_user_id_to_email_map(slack_client)
         assert result == {"U1": "u1@x.com"}
@@ -66,8 +70,20 @@ class TestFetchUserIdToEmailMap:
     def test_grid_iterates_each_team_with_team_id(self) -> None:
         slack_client = MagicMock()
         slack_client.list_users.side_effect = [
-            iter([{"members": [{"id": "U1", "profile": {"email": "u1@x.com"}}]}]),
-            iter([{"members": [{"id": "U2", "profile": {"email": "u2@x.com"}}]}]),
+            iter(
+                [
+                    SlackUsersPage(
+                        members=[{"id": "U1", "profile": {"email": "u1@x.com"}}]
+                    )
+                ]
+            ),
+            iter(
+                [
+                    SlackUsersPage(
+                        members=[{"id": "U2", "profile": {"email": "u2@x.com"}}]
+                    )
+                ]
+            ),
         ]
         result = fetch_user_id_to_email_map(slack_client, team_ids=["T1", "T2"])
         assert result == {"U1": "u1@x.com", "U2": "u2@x.com"}
@@ -80,15 +96,21 @@ class TestFetchTeamUserEmails:
     def test_returns_per_team_email_sets(self) -> None:
         slack_client = MagicMock()
         slack_client.list_users.side_effect = [
-            iter([{"members": [{"id": "U1", "profile": {"email": "u1@x.com"}}]}]),
             iter(
                 [
-                    {
-                        "members": [
+                    SlackUsersPage(
+                        members=[{"id": "U1", "profile": {"email": "u1@x.com"}}]
+                    )
+                ]
+            ),
+            iter(
+                [
+                    SlackUsersPage(
+                        members=[
                             {"id": "U2", "profile": {"email": "u2@x.com"}},
                             {"id": "U3", "profile": {"email": "u3@x.com"}},
                         ]
-                    }
+                    )
                 ]
             ),
         ]
@@ -99,12 +121,12 @@ class TestFetchTeamUserEmails:
         slack_client = MagicMock()
         slack_client.list_users.return_value = iter(
             [
-                {
-                    "members": [
+                SlackUsersPage(
+                    members=[
                         {"id": "U1", "profile": {"email": "u1@x.com"}},
                         {"id": "U2", "profile": {}},
                     ]
-                }
+                )
             ]
         )
         assert fetch_team_user_emails(slack_client, ["T1"]) == {"T1": {"u1@x.com"}}
@@ -246,7 +268,9 @@ class TestFetchChannelPermissionsGrid:
             "ee.onyx.external_permissions.slack.doc_sync.get_channels"
         ) as mock_get:
             mock_get.side_effect = [[], [included, excluded]]  # public, private
-            slack_client.list_channel_members.return_value = iter([{"members": ["U1"]}])
+            slack_client.list_channel_members.return_value = iter(
+                [SlackChannelMembersPage(members=["U1"])]
+            )
             workspace_perm = _fetch_workspace_permissions({"U1": "u1@x.com"})
             result = _fetch_channel_permissions(
                 slack_client=slack_client,
@@ -270,7 +294,9 @@ class TestFetchChannelPermissionsGrid:
             "ee.onyx.external_permissions.slack.doc_sync.get_channels"
         ) as mock_get:
             mock_get.side_effect = [[], [included]]  # public, private
-            slack_client.list_channel_members.return_value = iter([{"members": ["U1"]}])
+            slack_client.list_channel_members.return_value = iter(
+                [SlackChannelMembersPage(members=["U1"])]
+            )
             workspace_perm = _fetch_workspace_permissions({"U1": "u1@x.com"})
             result = _fetch_channel_permissions(
                 slack_client=slack_client,
@@ -295,7 +321,9 @@ class TestFetchChannelPermissionsGrid:
             "ee.onyx.external_permissions.slack.doc_sync.get_channels_across_teams"
         ) as mock_get:
             mock_get.side_effect = [[], [included, excluded]]  # public, private
-            slack_client.list_channel_members.return_value = iter([{"members": ["U1"]}])
+            slack_client.list_channel_members.return_value = iter(
+                [SlackChannelMembersPage(members=["U1"])]
+            )
             workspace_perm = _fetch_workspace_permissions({"U1": "u1@x.com"})
             result = _fetch_channel_permissions(
                 slack_client=slack_client,
@@ -400,7 +428,7 @@ class TestEEGetChannelAccessGrid:
             "ee.onyx.external_permissions.slack.channel_access.expert_info_from_slack_id"
         ) as mock_expert:
             slack_client.list_channel_members.return_value = iter(
-                [{"members": ["U1", "U2"]}]
+                [SlackChannelMembersPage(members=["U1", "U2"])]
             )
             mock_expert.side_effect = lambda user_id, fetch_user_info, user_cache: (  # noqa: ARG005
                 MagicMock(email=f"{user_id.lower()}@x.com") if user_id else None

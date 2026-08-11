@@ -1,22 +1,22 @@
 import re
 from collections.abc import Callable
 from functools import lru_cache
-from typing import Any, cast
 
 from onyx.connectors.models import BasicExpertInfo
 from onyx.connectors.slack.models import MessageType
 from onyx.connectors.slack.source_operations import (
     SlackApiError,
     SlackSourceOperations,
+    SlackUserInfoResponse,
 )
 from onyx.utils.logger import setup_logger
 
 logger = setup_logger()
 
-# Resolves one Slack user id to a plain ``users.info`` payload. The gateway's
-# ``fetch_user_info`` operation satisfies this; onyxbot (which keeps its own
-# bot-app WebClient and no gateway) passes an adapter over that client.
-FetchUserInfo = Callable[[str], dict[str, Any]]
+# Resolves one Slack user id to a validated ``users.info`` payload. The
+# gateway's ``fetch_user_info`` operation satisfies this; onyxbot (which keeps
+# its own bot-app WebClient and no gateway) passes an adapter over that client.
+FetchUserInfo = Callable[[str], SlackUserInfoResponse]
 
 # Skips an @ preceded by a word character, where a zero-width space would
 # split an address rather than defang a mention
@@ -45,7 +45,10 @@ def get_base_url(slack_client: SlackSourceOperations) -> str:
     Cached per gateway instance (one credential each), replacing the old
     per-token cache.
     """
-    return cast(str, slack_client.check_auth()["url"])
+    url = slack_client.check_auth().url
+    if not url:
+        raise RuntimeError("auth.test response contained no workspace url.")
+    return url
 
 
 def fetch_team_user_emails(
@@ -59,7 +62,7 @@ def fetch_team_user_emails(
     for tid in team_ids:
         emails: set[str] = set()
         for user_info in slack_client.list_users(team_id=tid):
-            for user in user_info.get("members", []):
+            for user in user_info.members:
                 email = user.get("profile", {}).get("email")
                 if email:
                     emails.add(email)
@@ -103,11 +106,11 @@ def expert_info_from_slack_id(
 
     response = fetch_user_info(user_id)
 
-    if not response["ok"]:
+    if not response.ok:
         user_cache[user_id] = None
         return None
 
-    user: dict = cast(dict[Any, dict], response).get("user", {})
+    user = response.user
     profile = user.get("profile", {})
 
     expert = BasicExpertInfo(
@@ -137,8 +140,8 @@ class SlackTextCleaner:
                 response = self._fetch_user_info(user_id)
                 # prefer display name if set, since that is what is shown in Slack
                 self._id_to_name_map[user_id] = (
-                    response["user"]["profile"]["display_name"]
-                    or response["user"]["profile"]["real_name"]
+                    response.user["profile"]["display_name"]
+                    or response.user["profile"]["real_name"]
                 )
             except SlackApiError as e:
                 # Common per-message condition: user was deleted, workspace

@@ -42,7 +42,7 @@ def get_channel_access(
 
     member_ids = []
     for result in slack_client.list_channel_members(channel_id=channel_id):
-        member_ids.extend(result.get("members", []))
+        member_ids.extend(result.members)
 
     member_emails = set()
     for member_id in member_ids:

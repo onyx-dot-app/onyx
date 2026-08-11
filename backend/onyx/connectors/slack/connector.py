@@ -107,7 +107,7 @@ def _collect_paginated_channels(
         exclude_archived=exclude_archived,
         team_id=team_id,
     ):
-        channels.extend(result["channels"])
+        channels.extend(cast(list[ChannelType], result.channels))
 
     return channels
 
@@ -155,7 +155,7 @@ def list_grid_team_ids(slack_client: SlackSourceOperations) -> list[str]:
     """Return Grid org team IDs via ``auth.teams.list`` (needs ``team:read``)."""
     team_ids: list[str] = []
     for result in slack_client.list_teams():
-        for team in result.get("teams", []):
+        for team in result.teams:
             team_id = team.get("id")
             if team_id:
                 team_ids.append(team_id)
@@ -171,7 +171,7 @@ def fetch_team_url(slack_client: SlackSourceOperations, team_id: str) -> str | N
             "team_info failed for team_id=%s: %s", team_id, e.response.get("error", "")
         )
         return None
-    team = cast(dict[str, Any], response.get("team", {}))
+    team = response.team
     url = team.get("url")
     return cast(str, url) if isinstance(url, str) else None
 
@@ -238,7 +238,7 @@ def get_channel_messages(
                 raise RuntimeError("get_channel_messages: Stop signal detected")
 
             callback.progress("get_channel_messages", 0)
-        yield cast(list[MessageType], result["messages"])
+        yield cast(list[MessageType], result.messages)
 
 
 def get_thread(
@@ -251,7 +251,7 @@ def get_thread(
         channel_id=channel["id"],
         thread_ts=thread_id,
     ):
-        threads.extend(result["messages"])
+        threads.extend(cast(list[MessageType], result.messages))
     return threads
 
 
@@ -530,7 +530,7 @@ def _get_channel_by_id(
         SlackApiError: If the channel cannot be fetched
     """
     response = slack_client.fetch_channel_info(channel_id=channel_id)
-    return cast(ChannelType, response["channel"])
+    return cast(ChannelType, response.channel)
 
 
 def _get_messages(
@@ -567,11 +567,9 @@ def _get_messages(
         )
     )
 
-    messages = cast(list[MessageType], response.get("messages", []))
+    messages = cast(list[MessageType], response.messages)
 
-    cursor = cast(dict[str, Any], response.get("response_metadata", {})).get(
-        "next_cursor", ""
-    )
+    cursor = response.response_metadata.next_cursor
     has_more = bool(cursor)
     return messages, has_more
 
@@ -1001,8 +999,8 @@ class SlackConnector(
         """
         auth_response = slack_client.check_auth()
 
-        url = auth_response.get("url")
-        if not auth_response.get("enterprise_id"):
+        url = auth_response.url
+        if not auth_response.enterprise_id:
             return _WorkspaceMetadata(url=url)
 
         team_ids = list_grid_team_ids(slack_client)
@@ -1416,10 +1414,8 @@ class SlackConnector(
             # a synchronous user-facing path, so it must not serialize on the
             # coordinated client's shared rate-limit lock.
             auth_response = self.slack_client.check_auth(fast=True)
-            if not auth_response.get("ok", False):
-                error_msg = auth_response.get(
-                    "error", "Unknown error from Slack auth_test"
-                )
+            if not auth_response.ok:
+                error_msg = auth_response.error or "Unknown error from Slack auth_test"
                 raise ConnectorValidationError(f"Failed Slack auth_test: {error_msg}")
 
             # 2) Minimal test to confirm listing channels works
@@ -1431,8 +1427,8 @@ class SlackConnector(
                     fast=True,
                 )
             )
-            if not test_resp.get("ok", False):
-                error_msg = test_resp.get("error", "Unknown error from Slack")
+            if not test_resp.ok:
+                error_msg = test_resp.error or "Unknown error from Slack"
                 if error_msg == "invalid_auth":
                     raise ConnectorValidationError(
                         f"Invalid Slack bot token ({error_msg})."
@@ -1447,9 +1443,9 @@ class SlackConnector(
 
             # 3) Grid: verify team:read, and the users scopes that public-channel
             # ACLs depend on, so a missing scope fails here instead of at index time.
-            if auth_response.get("enterprise_id"):
+            if auth_response.enterprise_id:
                 teams_response = next(self.slack_client.list_teams(limit=1, fast=True))
-                teams = teams_response.get("teams", [])
+                teams = teams_response.teams
                 if teams:
                     next(
                         self.slack_client.list_users(

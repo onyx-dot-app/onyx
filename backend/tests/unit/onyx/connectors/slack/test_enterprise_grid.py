@@ -21,6 +21,10 @@ from onyx.connectors.slack.connector import (
     list_grid_team_ids,
 )
 from onyx.connectors.slack.models import ChannelType, MessageType
+from onyx.connectors.slack.source_operations import (
+    SlackTeamInfoResponse,
+    SlackTeamsPage,
+)
 from onyx.connectors.slack.utils import get_message_link
 
 
@@ -67,8 +71,8 @@ class TestListGridTeamIds:
         slack_client = MagicMock()
         slack_client.list_teams.return_value = iter(
             [
-                {"teams": [{"id": "T1"}, {"id": "T2"}]},
-                {"teams": [{"id": "T3"}]},
+                SlackTeamsPage(teams=[{"id": "T1"}, {"id": "T2"}]),
+                SlackTeamsPage(teams=[{"id": "T3"}]),
             ]
         )
         assert list_grid_team_ids(slack_client) == ["T1", "T2", "T3"]
@@ -76,22 +80,22 @@ class TestListGridTeamIds:
     def test_skips_teams_without_id(self) -> None:
         slack_client = MagicMock()
         slack_client.list_teams.return_value = iter(
-            [{"teams": [{"id": "T1"}, {"name": "no-id-team"}, {"id": ""}]}]
+            [SlackTeamsPage(teams=[{"id": "T1"}, {"name": "no-id-team"}, {"id": ""}])]
         )
         assert list_grid_team_ids(slack_client) == ["T1"]
 
     def test_empty_response_returns_empty_list(self) -> None:
         slack_client = MagicMock()
-        slack_client.list_teams.return_value = iter([{"teams": []}])
+        slack_client.list_teams.return_value = iter([SlackTeamsPage(teams=[])])
         assert list_grid_team_ids(slack_client) == []
 
 
 class TestFetchTeamUrl:
     def test_returns_url_from_team_info(self) -> None:
         slack_client = MagicMock()
-        slack_client.fetch_team_info.return_value = {
-            "team": {"id": "T1", "url": "https://acme.slack.com/"}
-        }
+        slack_client.fetch_team_info.return_value = SlackTeamInfoResponse(
+            team={"id": "T1", "url": "https://acme.slack.com/"}
+        )
         assert fetch_team_url(slack_client, "T1") == "https://acme.slack.com/"
         slack_client.fetch_team_info.assert_called_once_with(team_id="T1")
 
@@ -104,7 +108,7 @@ class TestFetchTeamUrl:
 
     def test_returns_none_when_url_missing(self) -> None:
         slack_client = MagicMock()
-        slack_client.fetch_team_info.return_value = {"team": {}}
+        slack_client.fetch_team_info.return_value = SlackTeamInfoResponse(team={})
         assert fetch_team_url(slack_client, "T1") is None
 
 

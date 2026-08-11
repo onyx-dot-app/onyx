@@ -14,10 +14,11 @@ def fetch_user_id_to_email_map(
     team_iter: list[str | None] = list(team_ids) if team_ids else [None]
     for tid in team_iter:
         for user_info in slack_client.list_users(team_id=tid):
-            for user in user_info.get("members", []):
+            for user in user_info.members:
+                user_id = user.get("id")
                 email = user.get("profile", {}).get("email")
-                if email:
-                    user_id_to_email_map[user.get("id")] = email
+                if user_id and email:
+                    user_id_to_email_map[user_id] = email
     return user_id_to_email_map
 
 

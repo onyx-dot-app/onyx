@@ -155,7 +155,7 @@ def _fetch_channel_permissions(
         # Collect all member ids for the channel pagination calls
         member_ids = []
         for result in slack_client.list_channel_members(channel_id=channel_id):
-            member_ids.extend(result.get("members", []))
+            member_ids.extend(result.members)
 
         # Collect all member emails for the channel
         member_emails = set()
@@ -167,7 +167,7 @@ def _fetch_channel_permissions(
                 # conversations_members call so we need to make a separate call to users_info
                 # and add them to the user_id_to_email_map
                 member_info = slack_client.fetch_user_info(member_id)
-                member_email = member_info["user"]["profile"].get("email")
+                member_email = member_info.user["profile"].get("email")
                 if not member_email:
                     # If no email is found, we skip the user
                     continue
@@ -252,7 +252,7 @@ def slack_doc_sync(
     grid_team_ids: list[str] | None = None
     try:
         auth_response = slack_client.check_auth()
-        if auth_response.get("enterprise_id"):
+        if auth_response.enterprise_id:
             grid_team_ids = list_grid_team_ids(slack_client)
     except Exception as e:
         logger.warning("Slack Grid detection during perm sync failed: %s", e)

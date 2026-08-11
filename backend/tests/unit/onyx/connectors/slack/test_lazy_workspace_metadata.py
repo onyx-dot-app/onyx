@@ -78,7 +78,9 @@ class TestLazyResolution:
     def test_validation_never_touches_the_coordinated_client(self) -> None:
         connector, client, fast_client = _connector()
         fast_client.auth_test.return_value = _slack_response({"ok": True})
-        fast_client.conversations_list.return_value = _slack_response({"ok": True})
+        fast_client.conversations_list.return_value = _slack_response(
+            {"ok": True, "channels": []}
+        )
 
         connector.validate_connector_settings()
 
@@ -211,10 +213,13 @@ class TestLazyGridResolution:
         fast_client.auth_test.return_value = _slack_response(
             {"ok": True, "enterprise_id": "E1"}
         )
-        fast_client.conversations_list.return_value = _slack_response({"ok": True})
+        fast_client.conversations_list.return_value = _slack_response(
+            {"ok": True, "channels": []}
+        )
         fast_client.auth_teams_list.return_value = _slack_response(
             {"teams": [{"id": "T1"}]}
         )
+        fast_client.users_list.return_value = _slack_response({"members": []})
 
         connector.validate_connector_settings()
 
@@ -228,7 +233,9 @@ class TestLazyGridResolution:
         fast_client.auth_test.return_value = _slack_response(
             {"ok": True, "enterprise_id": "E1"}
         )
-        fast_client.conversations_list.return_value = _slack_response({"ok": True})
+        fast_client.conversations_list.return_value = _slack_response(
+            {"ok": True, "channels": []}
+        )
         fast_client.auth_teams_list.return_value = _slack_response(
             {"teams": [{"id": "T1"}]}
         )
@@ -245,7 +252,9 @@ class TestLazyGridResolution:
     def test_validation_skips_users_probe_off_grid(self) -> None:
         connector, _, fast_client = _connector()
         fast_client.auth_test.return_value = _slack_response({"ok": True})
-        fast_client.conversations_list.return_value = _slack_response({"ok": True})
+        fast_client.conversations_list.return_value = _slack_response(
+            {"ok": True, "channels": []}
+        )
 
         connector.validate_connector_settings()
 

@@ -4,7 +4,8 @@ This is the single file in ``onyx/connectors/slack/`` and
 ``ee/onyx/external_permissions/slack/`` allowed to import ``slack_sdk`` (the
 import-fence test enforces it). It owns client construction -- one
 redis-coordinated path shared by indexing, perm-sync, and capability checks --
-and exposes each Slack API method as a stamped operation returning plain data.
+and exposes each Slack API method as a stamped operation returning its payload
+validated into a plain-data model.
 
 Transport internals (``OnyxSlackWebClient``, ``OnyxRedisSlackRetryHandler``)
 were absorbed from their former sibling modules: they subclass slack_sdk types,
@@ -17,11 +18,11 @@ import time
 from collections.abc import Callable, Generator
 from enum import Enum
 from http.client import IncompleteRead, RemoteDisconnected
-from typing import Any, Dict, Optional, cast
+from typing import Any, Dict, Optional, TypeVar, cast
 from urllib.error import URLError
 from urllib.request import Request
 
-from pydantic import BaseModel, ConfigDict
+from pydantic import BaseModel, ConfigDict, Field
 from redis.lock import Lock as RedisLock
 from slack_sdk import WebClient
 from slack_sdk.errors import SlackApiError as SlackApiError  # Re-export, see below.
@@ -373,15 +374,105 @@ def make_slack_web_client(
     return client
 
 
+class SlackResponseModel(BaseModel):
+    """Base for validated Slack payloads.
+
+    Unknown fields are ignored, and each declared field mirrors exactly what
+    call sites read: required where the pre-gateway code indexed into the
+    payload, defaulted where it used ``.get`` -- so validation surfaces shape
+    problems at the operation boundary without inventing new failure modes. Deep
+    objects (channels, messages, users) stay open dicts: consumers type them via
+    the existing TypedDicts and read fields the models don't know.
+    """
+
+    model_config = ConfigDict(extra="ignore")
+
+
+class SlackResponseMetadata(SlackResponseModel):
+    """Cursor envelope on paginated responses."""
+
+    next_cursor: str = ""
+
+
+class SlackPage(SlackResponseModel):
+    """Envelope shared by all paginated Slack responses."""
+
+    ok: bool = False
+    error: str | None = None
+    response_metadata: SlackResponseMetadata = Field(
+        default_factory=SlackResponseMetadata
+    )
+
+
+class SlackChannelsPage(SlackPage):
+    channels: list[dict[str, Any]]
+
+
+class SlackTeamsPage(SlackPage):
+    teams: list[dict[str, Any]] = []
+
+
+class SlackHistoryPage(SlackPage):
+    # Tolerant default: the checkpoint indexing path treats missing messages as
+    # end-of-channel rather than an error.
+    messages: list[dict[str, Any]] = []
+
+
+class SlackUsersPage(SlackPage):
+    members: list[dict[str, Any]] = []
+
+
+class SlackChannelMembersPage(SlackPage):
+    # ``conversations.members`` returns member ids, not user objects.
+    members: list[str] = []
+
+
+class SlackUsergroupsPage(SlackPage):
+    usergroups: list[dict[str, Any]] = []
+
+
+class SlackUsergroupMembersPage(SlackPage):
+    users: list[str] = []
+
+
+class SlackAuthTestResponse(SlackResponseModel):
+    ok: bool = False
+    error: str | None = None
+    url: str | None = None
+    enterprise_id: str | None = None
+
+
+class SlackOkResponse(SlackResponseModel):
+    ok: bool = False
+
+
+class SlackTeamInfoResponse(SlackResponseModel):
+    team: dict[str, Any] = {}
+
+
+class SlackChannelInfoResponse(SlackResponseModel):
+    channel: dict[str, Any]
+
+
+class SlackUserInfoResponse(SlackResponseModel):
+    ok: bool = False
+    user: dict[str, Any] = {}
+
+
+_PageT = TypeVar("_PageT", bound=SlackPage)
+_ResponseT = TypeVar("_ResponseT", bound=SlackResponseModel)
+
+
 def _paginate(
     call: Callable[..., SlackResponse],
+    page_model: type[_PageT],
     limit: int | None = None,
     **kwargs: Any,
-) -> Generator[dict[str, Any], None, None]:
-    """Handles cursor pagination; yields each validated page as a plain dict.
+) -> Generator[_PageT, None, None]:
+    """Handles cursor pagination; yields each page validated into its model.
 
-    Single-page callers take ``next(...)`` and read
-    ``response_metadata.next_cursor`` themselves -- pages are lazy, so no second
+    Single-page callers take ``next(...)`` and read the page's
+    ``response_metadata`` cursor themselves -- pages are lazy, so no second
     request fires.
     """
     cursor: str | None = None
@@ -393,16 +484,15 @@ def _paginate(
             **kwargs,
         )
         response.validate()
-        yield cast(dict[str, Any], response.data)
-        cursor = cast(dict[str, Any], response.get("response_metadata", {})).get(
-            "next_cursor", ""
-        )
+        page = page_model.model_validate(response.data)
+        yield page
+        cursor = page.response_metadata.next_cursor
         has_more = bool(cursor)
 
 
-def _response_data(response: SlackResponse) -> dict[str, Any]:
-    """Extracts the plain payload; operations never return live SDK objects."""
-    return cast(dict[str, Any], response.data)
+def _validated(response: SlackResponse, model: type[_ResponseT]) -> _ResponseT:
+    """Validates the payload; operations never return live SDK objects."""
+    return model.model_validate(response.data)
 
 
 class SlackSourceOperationsConfig(BaseModel):
@@ -498,9 +588,9 @@ class SlackSourceOperations(SourceOperations):
         consumes=OperationConsumes.CREDENTIAL,
         untested=_TEMPORARILY_UNTESTED,
     )
-    def check_auth(self, *, fast: bool = False) -> dict[str, Any]:
+    def check_auth(self, *, fast: bool = False) -> SlackAuthTestResponse:
         """``auth.test``: token validity, workspace url, Grid enterprise id."""
-        return _response_data(self._client_for(fast).auth_test())
+        return _validated(self._client_for(fast).auth_test(), SlackAuthTestResponse)
 
     @source_operation(
         capabilities={
@@ -520,7 +610,7 @@ class SlackSourceOperations(SourceOperations):
         team_id: str | None = None,
         limit: int | None = None,
         fast: bool = False,
-    ) -> Generator[dict[str, Any], None, None]:
+    ) -> Generator[SlackChannelsPage, None, None]:
         """``conversations.list``, paginated.
 
         The variant names the permission class: a call whose ``channel_types``
@@ -534,7 +624,10 @@ class SlackSourceOperations(SourceOperations):
         if team_id is not None:
             kwargs["team_id"] = team_id
         return _paginate(
-            self._client_for(fast).conversations_list, limit=limit, **kwargs
+            self._client_for(fast).conversations_list,
+            SlackChannelsPage,
+            limit=limit,
+            **kwargs,
         )
 
     @source_operation(
@@ -547,11 +640,13 @@ class SlackSourceOperations(SourceOperations):
     )
     def list_teams(
         self, *, limit: int | None = None, fast: bool = False
-    ) -> Generator[dict[str, Any], None, None]:
+    ) -> Generator[SlackTeamsPage, None, None]:
         """
         ``auth.teams.list``, paginated: Grid org workspaces (``team:read``).
         """
-        return _paginate(self._client_for(fast).auth_teams_list, limit=limit)
+        return _paginate(
+            self._client_for(fast).auth_teams_list, SlackTeamsPage, limit=limit
+        )
 
     @source_operation(
         capabilities={CredentialCapability.INDEXING},
@@ -559,9 +654,9 @@ class SlackSourceOperations(SourceOperations):
         untested="Production degrades gracefully: a failed team.info only costs "
         "the workspace URL on Grid message links.",
     )
-    def fetch_team_info(self, *, team_id: str) -> dict[str, Any]:
+    def fetch_team_info(self, *, team_id: str) -> SlackTeamInfoResponse:
         """``team.info`` for one Grid workspace."""
-        return _response_data(self._client().team_info(team=team_id))
+        return _validated(self._client().team_info(team=team_id), SlackTeamInfoResponse)
 
     @source_operation(
         capabilities={CredentialCapability.INDEXING},
@@ -569,13 +664,15 @@ class SlackSourceOperations(SourceOperations):
         untested="Side effect: joins the bot to the channel; probing it would "
         "mutate workspace state.",
     )
-    def join_channel(self, *, channel_id: str) -> dict[str, Any]:
+    def join_channel(self, *, channel_id: str) -> SlackOkResponse:
         """``conversations.join``: the bot must be a member to read messages.
 
         Only works for public channels; private-channel membership requires an
         invite, so joining one raises a ``SlackApiError``.
         """
-        return _response_data(self._client().conversations_join(channel=channel_id))
+        return _validated(
+            self._client().conversations_join(channel=channel_id), SlackOkResponse
+        )
 
     @source_operation(
         capabilities={CredentialCapability.INDEXING},
@@ -591,7 +688,7 @@ class SlackSourceOperations(SourceOperations):
         oldest: str | None = None,
         latest: str | None = None,
         limit: int | None = None,
-    ) -> Generator[dict[str, Any], None, None]:
+    ) -> Generator[SlackHistoryPage, None, None]:
         """``conversations.history``, paginated.
 
         The variant is the channel's privacy (``channels:history`` vs
@@ -600,6 +697,7 @@ class SlackSourceOperations(SourceOperations):
         del variant  # Classification-only; the channel id carries the request.
         return _paginate(
             self._client().conversations_history,
+            SlackHistoryPage,
             limit=limit,
             channel=channel_id,
             oldest=oldest,
@@ -614,11 +712,14 @@ class SlackSourceOperations(SourceOperations):
     )
     def fetch_thread_replies(
         self, *, variant: SlackChannelVariant, channel_id: str, thread_ts: str
-    ) -> Generator[dict[str, Any], None, None]:
+    ) -> Generator[SlackHistoryPage, None, None]:
         """``conversations.replies``, paginated. Variant as in history."""
         del variant  # Classification-only; the channel id carries the request.
         return _paginate(
-            self._client().conversations_replies, channel=channel_id, ts=thread_ts
+            self._client().conversations_replies,
+            SlackHistoryPage,
+            channel=channel_id,
+            ts=thread_ts,
         )
 
     @source_operation(
@@ -626,12 +727,15 @@ class SlackSourceOperations(SourceOperations):
         consumes=OperationConsumes.CREDENTIAL,
         untested=_TEMPORARILY_UNTESTED,
     )
-    def fetch_channel_info(self, *, channel_id: str) -> dict[str, Any]:
+    def fetch_channel_info(self, *, channel_id: str) -> SlackChannelInfoResponse:
         """
         ``conversations.info``. No variants: the call exists to discover the
         channel (including its privacy), so it cannot classify itself.
         """
-        return _response_data(self._client().conversations_info(channel=channel_id))
+        return _validated(
+            self._client().conversations_info(channel=channel_id),
+            SlackChannelInfoResponse,
+        )
 
     @source_operation(
         capabilities={
@@ -642,13 +746,15 @@ class SlackSourceOperations(SourceOperations):
         consumes=OperationConsumes.CREDENTIAL,
         untested=_TEMPORARILY_UNTESTED,
     )
-    def fetch_user_info(self, user_id: str) -> dict[str, Any]:
+    def fetch_user_info(self, user_id: str) -> SlackUserInfoResponse:
         """
         ``users.info``. Positional ``user_id`` on purpose: the bound method
         doubles as the ``FetchUserInfo`` callable that user-resolving helpers
         (shared with onyxbot) take injected.
         """
-        return _response_data(self._client().users_info(user=user_id))
+        return _validated(
+            self._client().users_info(user=user_id), SlackUserInfoResponse
+        )
 
     @source_operation(
         capabilities={
@@ -664,14 +770,16 @@ class SlackSourceOperations(SourceOperations):
         team_id: str | None = None,
         limit: int | None = None,
         fast: bool = False,
-    ) -> Generator[dict[str, Any], None, None]:
+    ) -> Generator[SlackUsersPage, None, None]:
         """
         ``users.list``, paginated; ``team_id`` scopes to one Grid workspace.
         """
         kwargs: dict[str, Any] = {}
         if team_id is not None:
             kwargs["team_id"] = team_id
-        return _paginate(self._client_for(fast).users_list, limit=limit, **kwargs)
+        return _paginate(
+            self._client_for(fast).users_list, SlackUsersPage, limit=limit, **kwargs
+        )
 
     @source_operation(
         capabilities={CredentialCapability.DOC_PERMISSION_SYNC},
@@ -680,9 +788,13 @@ class SlackSourceOperations(SourceOperations):
     )
     def list_channel_members(
         self, *, channel_id: str
-    ) -> Generator[dict[str, Any], None, None]:
+    ) -> Generator[SlackChannelMembersPage, None, None]:
         """``conversations.members``, paginated."""
-        return _paginate(self._client().conversations_members, channel=channel_id)
+        return _paginate(
+            self._client().conversations_members,
+            SlackChannelMembersPage,
+            channel=channel_id,
+        )
 
     @source_operation(
         capabilities={CredentialCapability.EXTERNAL_GROUP_SYNC},
@@ -690,9 +802,9 @@ class SlackSourceOperations(SourceOperations):
         untested="Dormant by design: Slack group sync is unused (channel access "
         "resolves usergroups to individual users).",
     )
-    def list_usergroups(self) -> Generator[dict[str, Any], None, None]:
+    def list_usergroups(self) -> Generator[SlackUsergroupsPage, None, None]:
         """``usergroups.list``, paginated."""
-        return _paginate(self._client().usergroups_list)
+        return _paginate(self._client().usergroups_list, SlackUsergroupsPage)
 
     @source_operation(
         capabilities={CredentialCapability.EXTERNAL_GROUP_SYNC},
@@ -702,6 +814,10 @@ class SlackSourceOperations(SourceOperations):
     )
     def list_usergroup_members(
         self, *, usergroup_id: str
-    ) -> Generator[dict[str, Any], None, None]:
+    ) -> Generator[SlackUsergroupMembersPage, None, None]:
         """``usergroups.users.list``, paginated."""
-        return _paginate(self._client().usergroups_users_list, usergroup=usergroup_id)
+        return _paginate(
+            self._client().usergroups_users_list,
+            SlackUsergroupMembersPage,
+            usergroup=usergroup_id,
+        )
