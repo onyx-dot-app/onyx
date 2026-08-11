@@ -68,6 +68,7 @@ import { useTierAtLeast } from "@/hooks/useTierAtLeast";
 import { Tier } from "@/lib/settings/types";
 import { useAppDocumentTitle, useCustomFooterContent } from "@/lib/app/hooks";
 import { useFullWidthChat } from "@/providers/FullWidthChatProvider";
+import { ActiveProjectBreadcrumb } from "@/lib/projects/components";
 
 // ---------------------------------------------------------------------------
 // Header
@@ -360,13 +361,14 @@ function Header() {
         isMobile) &&
         !appFocus.isSharedChat() && (
           <RootLayout.Header>
-            <div className="w-full h-full flex flex-row flex-wrap justify-center items-start p-2 sm:px-4">
+            <div className="w-full h-full flex flex-row flex-wrap justify-center items-start p-2">
               {/*
           Left:
           - (mobile) sidebar toggle
+          - project breadcrumb
           - app-mode (for Unified S+C [EE gated])
         */}
-              <div className="flex-1 flex flex-row items-center gap-2">
+              <div className="flex-1 min-w-0 flex flex-row items-center gap-2">
                 {isMobile && (
                   <Button
                     prominence="internal"
@@ -375,6 +377,7 @@ function Header() {
                     onClick={() => setFolded(false)}
                   />
                 )}
+                <ActiveProjectBreadcrumb />
                 {businessTier &&
                   isSearchModeAvailable &&
                   appFocus.isNewSession() &&
