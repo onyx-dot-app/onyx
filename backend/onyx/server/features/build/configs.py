@@ -110,8 +110,7 @@ SANDBOX_PROXY_HEALTHZ_PORT = int(os.environ.get("SANDBOX_PROXY_HEALTHZ_PORT", "8
 # The Helm chart writes it into the proxy's writable confdir because the proxy
 # container intentionally runs non-root with a read-only root filesystem.
 SANDBOX_PROXY_SSL_VERIFY_UPSTREAM_TRUSTED_CA = (
-    os.environ.get("SANDBOX_PROXY_SSL_VERIFY_UPSTREAM_TRUSTED_CA", "").strip()
-    or None
+    os.environ.get("SANDBOX_PROXY_SSL_VERIFY_UPSTREAM_TRUSTED_CA", "").strip() or None
 )
 
 # The CA Secret lives here; the CA ConfigMap is projected into SANDBOX_NAMESPACE
