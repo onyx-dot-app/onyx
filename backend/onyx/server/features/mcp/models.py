@@ -1,11 +1,11 @@
 import datetime
 import re
 from enum import Enum
-from typing import Any, List, NotRequired, Optional, TypedDict
+from typing import Any, List, Literal, NotRequired, Optional, TypedDict
 from uuid import UUID
 
 from mcp.types import Tool as MCPLibTool
-from pydantic import BaseModel, Field, model_validator
+from pydantic import AnyUrl, BaseModel, Field, model_validator
 
 from onyx.db.enums import (
     EndpointPolicy,
@@ -539,6 +539,15 @@ class MCPOAuthCallbackResponse(BaseModel):
     server_id: int
     server_name: str
     redirect_url: str
+
+
+class MCPOAuthClientMetadataDocument(BaseModel):
+    client_id: AnyUrl
+    client_name: str
+    redirect_uris: list[AnyUrl]
+    grant_types: list[Literal["authorization_code", "refresh_token"]]
+    response_types: list[Literal["code"]]
+    token_endpoint_auth_method: Literal["none"]
 
 
 class MCPDynamicClientRegistrationRequest(BaseModel):
