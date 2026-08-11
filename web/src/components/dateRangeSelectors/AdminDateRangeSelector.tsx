@@ -88,7 +88,7 @@ export const AdminDateRangeSelector = memo(function AdminDateRangeSelector({
 
   return (
     <div
-      className="inline-flex max-w-full items-center overflow-x-auto rounded-12 border border-border-02 bg-background-tint-03 p-0.5"
+      className="inline-flex max-w-full shrink-0 items-center overflow-x-auto rounded-12 border border-border-02 bg-background-tint-03 p-0.5"
       role="group"
       aria-label="Date range"
       data-testid="admin-date-range-selector"
