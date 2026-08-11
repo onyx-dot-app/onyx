@@ -56,7 +56,9 @@ class JiraServiceManagementConnector(
     def source(self) -> DocumentSource:
         return DocumentSource.JIRA_SERVICE_MANAGEMENT
 
-    def load_credentials(self, credentials: dict[str, Any]) -> "JiraServiceManagementConnector":
+    def load_credentials(
+        self, credentials: dict[str, Any]
+    ) -> "JiraServiceManagementConnector":
         return JiraServiceManagementConnector(**credentials)
 
     def _get_service_desks(self) -> list[str]:
@@ -72,10 +74,12 @@ class JiraServiceManagementConnector(
         while True:
             params = {"start": start, "limit": limit}
             try:
-                response = requests.get(url, auth=self.auth, headers=self.headers, params=params)
+                response = requests.get(
+                    url, auth=self.auth, headers=self.headers, params=params
+                )
                 response.raise_for_status()
                 data = response.json()
-                
+
                 values = data.get("values", [])
                 for sd in values:
                     if "id" in sd:
@@ -104,32 +108,32 @@ class JiraServiceManagementConnector(
             if start_time > 0:
                 dt = datetime.fromtimestamp(start_time, tz=timezone.utc)
                 jql += f" AND updated >= '{dt.strftime('%Y-%m-%d %H:%M')}'"
-            
+
             jql += " ORDER BY updated ASC"
 
-            payload = {
-                "jql": jql,
-                "start": start,
-                "limit": limit
-            }
+            payload = {"jql": jql, "start": start, "limit": limit}
 
             try:
-                response = requests.post(url, auth=self.auth, headers=self.headers, json=payload)
+                response = requests.post(
+                    url, auth=self.auth, headers=self.headers, json=payload
+                )
                 response.raise_for_status()
                 data = response.json()
-                
+
                 values = data.get("values", [])
                 if not values:
                     break
 
                 yield values
-                
+
                 if data.get("isLastPage", True) or len(values) < limit:
                     break
-                    
+
                 start += len(values)
             except Exception as e:
-                logger.error("Failed to fetch requests for service desk %s: %s", service_desk_id, e)
+                logger.error(
+                    "Failed to fetch requests for service desk %s: %s", service_desk_id, e
+                )
                 raise e
 
     @override
@@ -149,7 +153,7 @@ class JiraServiceManagementConnector(
                         # Extract timestamp verification fields safely
                         created_data = req.get("createdDate", {})
                         epoch_ms = created_data.get("epochMillis")
-                        
+
                         if epoch_ms:
                             updated_ts = int(epoch_ms / 1000)
                             if updated_ts > end:
@@ -177,7 +181,9 @@ class JiraServiceManagementConnector(
         while True:
             params = {"start": start, "limit": limit}
             try:
-                response = requests.get(url, auth=self.auth, headers=self.headers, params=params)
+                response = requests.get(
+                    url, auth=self.auth, headers=self.headers, params=params
+                )
                 if response.status_code == 404:
                     break
                 response.raise_for_status()
@@ -193,7 +199,9 @@ class JiraServiceManagementConnector(
                     break
                 start += len(values)
             except Exception as e:
-                logger.warning("Could not pull comments for JSM ticket %s: %s", issue_key, e)
+                logger.warning(
+                    "Could not pull comments for JSM ticket %s: %s", issue_key, e
+                )
                 break
 
         return comments
@@ -221,9 +229,11 @@ class JiraServiceManagementConnector(
                 # Extract request properties
                 summary = req_data.get("summary", "")
                 description = req_data.get("description", "")
-                
+
                 sections = []
-                browse_link = f"{self.jira_url}/servicedesk/customer/portal/all/{issue_key}"
+                browse_link = (
+                    f"{self.jira_url}/servicedesk/customer/portal/all/{issue_key}"
+                )
 
                 if description:
                     sections.append(TextSection(text=description, link=browse_link))
@@ -247,15 +257,23 @@ class JiraServiceManagementConnector(
                     sections=sections,
                     source=self.source,
                     metadata={
-                        "service_desk_id": str(slim_doc.perm_sync_data.get("service_desk_id", "unknown")),
-                        "status": req_data.get("currentStatus", {}).get("status", "Unknown"),
-                        "request_type": req_data.get("requestType", {}).get("name", "Generic"),
+                        "service_desk_id": str(
+                            slim_doc.perm_sync_data.get("service_desk_id", "unknown")
+                        ),
+                        "status": req_data.get("currentStatus", {}).get(
+                            "status", "Unknown"
+                        ),
+                        "request_type": req_data.get("requestType", {}).get(
+                            "name", "Generic"
+                        ),
                     },
                     title=f"[{issue_key}] {summary}",
                     doc_updated_at=doc_date,
                 )
             except Exception as e:
-                logger.error("Failed parsing details for JSM ticket %s: %s", issue_key, e)
+                logger.error(
+                    "Failed parsing details for JSM ticket %s: %s", issue_key, e
+                )
                 yield DocumentFailure(
                     failed_document_id=issue_key,
                     failure_message=str(e),
