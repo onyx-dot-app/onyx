@@ -46,7 +46,8 @@ const StringPairListInput: React.FC<StringPairListInputProps> = ({
   // Stable per-row keys so removing a middle row doesn't shift native input
   // state (focus/autofill) onto the row that takes its index. Index keys would;
   // content-derived keys would remount the row on every keystroke. New rows are
-  // seeded here; the remove handler splices so each id stays with its row.
+  // seeded here, and the remove handler drops the key at that index so each id
+  // stays with its row.
   const [rowKeys, setRowKeys] = React.useState<{
     keys: number[];
     nextKey: number;
@@ -157,10 +158,6 @@ const StringPairListInput: React.FC<StringPairListInputProps> = ({
               prominence="secondary"
               type="button"
               onClick={() => {
-                setRowKeys((prev) => ({
-                  keys: [...prev.keys, prev.nextKey],
-                  nextKey: prev.nextKey + 1,
-                }));
                 arrayHelpers.push({ [leftKey]: "", [rightKey]: "" });
               }}
             >

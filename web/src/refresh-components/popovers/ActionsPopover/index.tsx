@@ -79,6 +79,9 @@ const TOOL_DESCRIPTIONS: Record<string, string> = {
 
 const DEFAULT_TOOL_DESCRIPTION = "This action is not configured yet.";
 
+// Stable fallback so absent preferences never churn dependent callbacks.
+const NO_DISABLED_TOOLS: number[] = [];
+
 function getToolTooltip(
   tool: ToolSnapshot,
   isConfigured: boolean,
@@ -281,10 +284,8 @@ export default function ActionsPopover({
   const hasNoConnectors = ccPairs.length === 0;
 
   const agentPreference = agentPreferences?.[selectedAgent.id];
-  const disabledToolIds = useMemo(
-    () => agentPreference?.disabled_tool_ids || [],
-    [agentPreference?.disabled_tool_ids]
-  );
+  const disabledToolIds =
+    agentPreference?.disabled_tool_ids || NO_DISABLED_TOOLS;
   const toggleToolForCurrentAgent = useCallback(
     (toolId: number) => {
       const disabled = disabledToolIds.includes(toolId);

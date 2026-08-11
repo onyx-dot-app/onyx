@@ -1,6 +1,13 @@
 "use client";
 
-import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import {
+  useCallback,
+  useEffect,
+  useLayoutEffect,
+  useMemo,
+  useRef,
+  useState,
+} from "react";
 import { useRouter } from "next/navigation";
 import { Route } from "next";
 import { track, AnalyticsEvent } from "@/lib/analytics/utils";
@@ -129,7 +136,9 @@ export default function NotificationsPopover({
   const loadMoreRef = useRef(loadMore);
   const lastLoadScrollTopRef = useRef<number | null>(null);
 
-  useEffect(() => {
+  // Layout effect: an already-scheduled observer callback must not see the
+  // previous page's loadMore after commit.
+  useLayoutEffect(() => {
     loadMoreRef.current = loadMore;
   }, [loadMore]);
 

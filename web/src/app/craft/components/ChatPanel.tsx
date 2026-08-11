@@ -542,8 +542,8 @@ export default function BuildChatPanel({
         if (nameSessionTimeoutRef.current !== null) {
           clearTimeout(nameSessionTimeoutRef.current);
         }
-        // Store-level persistence that must survive unmount. Firing before
-        // the 1s save window would name against an unsaved message.
+        // Session naming is a store action that must survive unmount. Firing
+        // before the 1s save window would name against an unsaved message.
         // oxlint-disable-next-line react-doctor/effect-needs-cleanup
         nameSessionTimeoutRef.current = setTimeout(() => {
           nameSessionTimeoutRef.current = null;

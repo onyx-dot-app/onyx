@@ -706,7 +706,6 @@ export function useLlmManager(
   }
 
   // Compute the resolved LLM synchronously so it's never one render behind.
-  // This replaces the old llmUpdate() effect for model resolution.
   // A second memo preserves object identity when the resolved fields stay the
   // same, preventing unnecessary re-creation of downstream callbacks.
   const resolvedCurrentLlm = useMemo((): LlmDescriptor => {
@@ -771,7 +770,8 @@ export function useLlmManager(
       resolvedCurrentLlm.name,
       resolvedCurrentLlm.provider,
       resolvedCurrentLlm.modelName,
-      resolvedCurrentLlm.modelConfigurationId,
+      // Normalized so undefined vs null cannot produce a fresh identity.
+      resolvedCurrentLlm.modelConfigurationId ?? null,
     ]
   );
 

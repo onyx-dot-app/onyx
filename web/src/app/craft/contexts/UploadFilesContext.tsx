@@ -714,9 +714,9 @@ export function UploadFilesProvider({ children }: UploadFilesProviderProps) {
         return;
       }
 
-      const nextFiles = currentFiles.filter((f) => f.id !== fileId);
-      currentMessageFilesRef.current = nextFiles;
-      setCurrentMessageFiles(nextFiles);
+      // Functional update keeps concurrent same-batch changes. The ref syncs
+      // from state in its own effect.
+      setCurrentMessageFiles((prev) => prev.filter((f) => f.id !== fileId));
 
       // After state update, trigger backend deletion if needed
       // Use setTimeout to ensure state update has completed

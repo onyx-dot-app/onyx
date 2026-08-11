@@ -41,7 +41,7 @@ function DocxPreview({ fileUrl, onLoad }: DocxPreviewProps) {
 
   useEffect(() => {
     onLoadRef.current = onLoad;
-  });
+  }, [onLoad]);
 
   useEffect(() => {
     async function loadDocument() {

@@ -50,7 +50,7 @@ function Waveform({
 
   useEffect(() => {
     audioLevelRef.current = audioLevel;
-  });
+  }, [audioLevel]);
 
   // ─── Speaking variant bars ─────────────────────────────────────────────────
   const speakingBars = useMemo(() => {

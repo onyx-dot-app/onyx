@@ -59,7 +59,7 @@ interface PacingState {
   nodeId: string | null;
 }
 
-function createInitialPacingState(): PacingState {
+function createInitialPacingState(nodeId: string): PacingState {
   return {
     revealedStepKeys: new Set(),
     lastRevealedPacketType: null,
@@ -67,13 +67,6 @@ function createInitialPacingState(): PacingState {
     pacingTimer: null,
     toolPacingComplete: false,
     stopPacketSeen: false,
-    nodeId: null,
-  };
-}
-
-function createInitialPacingStateForNode(nodeId: string): PacingState {
-  return {
-    ...createInitialPacingState(),
     nodeId,
   };
 }
@@ -108,9 +101,7 @@ export function usePacedTurnGroups(
   const nodeIdStr = String(nodeId);
 
   // Ref-based pacing state (no re-renders)
-  const stateRef = useRef<PacingState>(
-    createInitialPacingStateForNode(nodeIdStr)
-  );
+  const stateRef = useRef<PacingState>(createInitialPacingState(nodeIdStr));
 
   // Track previous finalAnswerComing to detect tool-after-message transitions
   const prevFinalAnswerComingRef = useRef(finalAnswerComing);
@@ -124,7 +115,7 @@ export function usePacedTurnGroups(
   const [revealTrigger, setRevealTrigger] = useState(0);
   const [timerTrigger, setTimerTrigger] = useState(0);
   const resetState = useMemo(
-    () => createInitialPacingStateForNode(nodeIdStr),
+    () => createInitialPacingState(nodeIdStr),
     [nodeIdStr]
   );
   const hasNodeChanged = stateRef.current.nodeId !== nodeIdStr;

@@ -111,7 +111,6 @@ export const ReasoningRenderer: MessageRenderer<
   const [reasoningStartTime, setReasoningStartTime] = useState<number | null>(
     null
   );
-  const timeoutRef = useRef<NodeJS.Timeout | null>(null);
   const completionHandledRef = useRef(false);
 
   // Track when reasoning starts
@@ -142,28 +141,13 @@ export const ReasoningRenderer: MessageRenderer<
     const minimumThinkingDuration = animate ? THINKING_MIN_DURATION_MS : 0;
 
     if (elapsedTime >= minimumThinkingDuration) {
-      // Enough time has passed, complete immediately
       complete();
       return;
     }
 
-    // Not enough time has passed, delay completion
     const remainingTime = minimumThinkingDuration - elapsedTime;
-    const timeout = setTimeout(() => {
-      if (timeoutRef.current === timeout) {
-        timeoutRef.current = null;
-      }
-      complete();
-    }, remainingTime);
-
-    timeoutRef.current = timeout;
-
-    return () => {
-      clearTimeout(timeout);
-      if (timeoutRef.current === timeout) {
-        timeoutRef.current = null;
-      }
-    };
+    const timeout = setTimeout(complete, remainingTime);
+    return () => clearTimeout(timeout);
   }, [hasEnd, reasoningStartTime, animate, onComplete]);
 
   // Markdown renderer callback for ExpandableTextDisplay

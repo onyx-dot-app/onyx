@@ -528,13 +528,13 @@ export function ProjectsProvider({ children }: ProjectsProviderProps) {
     []
   );
 
-  // Sync SWR-fetched recent files into local state. On first arrival, seed
-  // allRecentFiles as well; subsequent updates only touch recentFiles so the
-  // merge effect below can non-destructively apply them to allRecentFiles.
   useEffect(() => {
     currentMessageFilesRef.current = currentMessageFiles;
   }, [currentMessageFiles]);
 
+  // Sync SWR-fetched recent files into local state. On first arrival, seed
+  // allRecentFiles as well. Subsequent updates only touch recentFiles so the
+  // merge effect below can non-destructively apply them to allRecentFiles.
   useEffect(() => {
     if (!recentFilesData) return;
     setRecentFiles(recentFilesData);
@@ -580,8 +580,9 @@ export function ProjectsProvider({ children }: ProjectsProviderProps) {
         // Build maps for quick lookup
         const statusById = new Map(statuses.map((f) => [f.id, f]));
 
-        // Newly-failed detection uses the last committed snapshot. The toast
-        // side effect must stay outside the state updater.
+        // Newly-failed detection uses the last committed snapshot.
+        // setLastFailedFiles (it drives the failure toast downstream) must
+        // stay outside the state updater.
         const currentMessageFilesSnapshot = currentMessageFilesRef.current;
         const newlyFailedLocal: ProjectFile[] = [];
         for (const f of currentMessageFilesSnapshot) {

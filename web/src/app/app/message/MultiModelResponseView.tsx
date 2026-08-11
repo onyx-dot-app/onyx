@@ -150,10 +150,6 @@ export default function MultiModelResponseView({
     return () => ro.disconnect();
   }, [trackContainerEl]);
 
-  const preferredPanelRef = useCallback((el: HTMLDivElement | null) => {
-    setPreferredPanelEl(el);
-  }, []);
-
   useLayoutEffect(() => {
     if (!preferredPanelEl) {
       setPreferredPanelHeight(null);
@@ -565,7 +561,7 @@ export default function MultiModelResponseView({
                   } else {
                     panelElsRef.current.delete(r.modelIndex);
                   }
-                  if (isPref) preferredPanelRef(el);
+                  if (isPref) setPreferredPanelEl(el);
                 }}
                 style={{
                   width: `${selectionEntered ? finalW : startW}px`,

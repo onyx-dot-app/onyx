@@ -225,10 +225,6 @@ const AppInputBar = React.memo(
     }, [message]);
 
     useEffect(() => {
-      isRecordingRef.current = isRecording;
-    }, [isRecording]);
-
-    useEffect(() => {
       draftSeededRef.current = false;
       // Clear the previous session's leftover text instead of leaking it into
       // this one.

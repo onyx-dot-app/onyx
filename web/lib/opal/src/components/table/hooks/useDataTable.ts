@@ -455,8 +455,10 @@ export default function useDataTable<TData extends RowData>(
     table.toggleAllPageRowsSelected(selected);
   };
 
-  // In server-side mode, these only operate on the loaded page data because
-  // TanStack cannot select rows it has not loaded.
+  // TODO (@raunakab): In server-side mode, these only operate on the loaded
+  // page data, not all rows across all pages. TanStack can't select rows it
+  // doesn't have. Fixing this requires a server-side callback (e.g.
+  // `onSelectAll`) and a `totalItems`-aware selection model.
   const toggleAllRowsSelected = (selected: boolean) => {
     table.toggleAllRowsSelected(selected);
   };

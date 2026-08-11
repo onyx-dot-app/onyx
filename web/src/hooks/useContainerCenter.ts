@@ -91,7 +91,7 @@ export default function useContainerCenter(): ContainerCenter {
     });
 
     return () => {
-      mutationObserver?.disconnect();
+      mutationObserver.disconnect();
     };
   }, [pathname]);
 
@@ -105,7 +105,6 @@ export default function useContainerCenter(): ContainerCenter {
     resizeObserver.observe(container);
 
     return () => {
-      resizeObserver.unobserve(container);
       resizeObserver.disconnect();
     };
   }, [container]);

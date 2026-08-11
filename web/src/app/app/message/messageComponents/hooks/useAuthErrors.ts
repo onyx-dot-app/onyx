@@ -11,8 +11,8 @@ interface AuthError {
 }
 
 export function useAuthErrors(rawPackets: Packet[]): AuthError[] {
-  // Keyed on the packet array so typewriter-frame renders between batches
-  // reuse the same result identity instead of rescanning.
+  // Keyed on the packet array so re-renders between packet batches reuse
+  // the same result identity instead of rescanning.
   return useMemo(() => computeAuthErrors(rawPackets), [rawPackets]);
 }
 

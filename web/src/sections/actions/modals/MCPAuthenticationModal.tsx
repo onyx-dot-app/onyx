@@ -132,15 +132,11 @@ const validationSchema = Yup.object().shape({
   ),
 });
 
-// Helper function to determine transport from URL
 const getTransportFromUrl = (url: string): MCPTransportType => {
   const lowerUrl = url.toLowerCase();
   if (lowerUrl.endsWith("sse")) {
     return MCPTransportType.SSE;
-  } else if (lowerUrl.endsWith("mcp")) {
-    return MCPTransportType.STREAMABLE_HTTP;
   }
-  // Default to STREAMABLE_HTTP
   return MCPTransportType.STREAMABLE_HTTP;
 };
 
