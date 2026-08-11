@@ -4,7 +4,6 @@ import { Dispatch, SetStateAction, useMemo, useState } from "react";
 import { useSWRConfig } from "swr";
 import { useFormikContext } from "formik";
 import { InputDivider, InputVertical, toast } from "@opal/layouts";
-import { markdown } from "@opal/utils";
 import PasswordInputTypeInField from "@/refresh-components/form/PasswordInputTypeInField";
 import {
   LLMProviderFormProps,
@@ -20,11 +19,11 @@ import {
 import { submitProvider } from "@/sections/modals/languageModels/svc";
 import { LLMProviderConfiguredSource } from "@/lib/analytics/utils";
 import {
-  CONTAINERIZED_HOST_NOTE,
   ModelSelectionField,
   DisplayNameField,
   ModelAccessField,
   ModalWrapper,
+  useApiBaseSubDescription,
 } from "@/sections/modals/languageModels/shared";
 import { fetchOllamaModels } from "@/lib/languageModels/svc";
 import { Card, Tabs } from "@opal/components";
@@ -56,7 +55,9 @@ function OllamaModalInternals({
   setTab,
 }: OllamaModalInternalsProps) {
   const formikProps = useFormikContext<OllamaModalValues>();
-  const settings = useSettings();
+  const apiBaseSubDescription = useApiBaseSubDescription(
+    "The base URL for your Ollama instance."
+  );
 
   const isFetchDisabled = useMemo(
     () =>
@@ -104,13 +105,7 @@ function OllamaModalInternals({
               <InputVertical
                 withLabel="api_base"
                 title="API Base URL"
-                subDescription={
-                  settings.is_containerized
-                    ? markdown(
-                        `The base URL for your Ollama instance. ${CONTAINERIZED_HOST_NOTE}`
-                      )
-                    : "The base URL for your Ollama instance."
-                }
+                subDescription={apiBaseSubDescription}
               >
                 <InputTypeInField
                   name="api_base"

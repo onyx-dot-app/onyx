@@ -55,6 +55,7 @@ import useUsers from "@/hooks/useUsers";
 import { UserRole } from "@/lib/types";
 import { Modal } from "@opal/components";
 import { getProvider } from "@/lib/languageModels";
+import { useSettings } from "@/lib/settings/hooks";
 
 // ─── DisplayNameField ────────────────────────────────────────────────────────
 
@@ -124,7 +125,27 @@ export function APIKeyField({
  * `host.docker.internal`.
  */
 export const CONTAINERIZED_HOST_NOTE =
-  "With Onyx running in a container, `host.docker.internal` acts like `localhost` inside the container.";
+  "With Onyx running in a container, use `host.docker.internal` in place of `localhost` to reach a service on your host.";
+
+/**
+ * Builds the API Base URL `subDescription` for self-hosted and custom
+ * providers. These point at a service on the admin's own machine, which
+ * `localhost` does not reach from inside a container — so when Onyx is
+ * containerized, {@link CONTAINERIZED_HOST_NOTE} goes between `description`
+ * and `suffix`.
+ */
+export function useApiBaseSubDescription(
+  description?: string,
+  suffix?: string
+): RichStr | undefined {
+  const settings = useSettings();
+  const sentences = [
+    description,
+    settings.is_containerized ? CONTAINERIZED_HOST_NOTE : undefined,
+    suffix,
+  ].filter((sentence) => sentence !== undefined);
+  return sentences.length > 0 ? markdown(sentences.join(" ")) : undefined;
+}
 
 export interface APIBaseFieldProps {
   optional?: boolean;
