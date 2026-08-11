@@ -48,10 +48,9 @@ def generate_chat_messages_report(
     db_session: Session,
     file_store: FileStore,
     report_id: str,
-    period: tuple[datetime, datetime] | None,
+    period: tuple[datetime, datetime],
 ) -> str:
     file_name = f"{report_id}_chat_sessions"
-    period = _normalize_period(period)
 
     with tempfile.SpooledTemporaryFile(
         max_size=MAX_IN_MEMORY_SIZE, mode="w+"
@@ -193,17 +192,18 @@ def create_new_usage_report(
 ) -> UsageReportMetadata:
     report_id = report_id or str(uuid.uuid4())
     file_store = get_default_file_store()
+    normalized_period = _normalize_period(period)
 
     intermediate_file_ids: list[str] = []
     try:
         messages_file_id = generate_chat_messages_report(
-            db_session, file_store, report_id, period
+            db_session, file_store, report_id, normalized_period
         )
         intermediate_file_ids.append(messages_file_id)
         users_file_id = generate_user_report(db_session, file_store, report_id)
         intermediate_file_ids.append(users_file_id)
 
-        query_start, query_end = _normalize_period(period)
+        query_start, query_end = normalized_period
         usage_rows = iter_usage_export(db_session, query_start, query_end)
         usage_breakdown_file_id = generate_usage_breakdown_report(
             file_store, report_id, usage_rows
