@@ -37,12 +37,9 @@ function setCurrentUser(overrides: Partial<ReturnType<typeof useCurrentUser>>) {
 }
 
 function Probe() {
-  const { user, isUserLoading, isUserUnavailable } = useUser();
-  if (isUserLoading) {
-    return <span>loading</span>;
-  }
-  if (isUserUnavailable) {
-    return <span>unavailable</span>;
+  const { user, userResolution } = useUser();
+  if (userResolution !== "resolved") {
+    return <span>{userResolution}</span>;
   }
   return <span>{user ? user.email : "signed-out"}</span>;
 }

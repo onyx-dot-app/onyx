@@ -46,7 +46,7 @@ function SettingsPopover({
   onOpenNotifications,
   undismissedCount,
 }: SettingsPopoverProps) {
-  const { user, isUserUnavailable } = useUser();
+  const { user, userResolution } = useUser();
   const settings = useSettings();
   const enterpriseSettings = settings.enterprise;
   const router = useRouter();
@@ -94,7 +94,9 @@ function SettingsPopover({
           <Content
             sizePreset="main-ui"
             title={
-              isUserUnavailable ? "Profile unavailable" : getUserEmail(user)
+              userResolution === "unavailable"
+                ? "Profile unavailable"
+                : getUserEmail(user)
             }
           />
         </div>,
@@ -204,15 +206,14 @@ export default function AccountPopover({
   const [popupState, setPopupState] = useState<
     "Settings" | "Notifications" | undefined
   >(undefined);
-  const { user, isUserLoading, isUserUnavailable } = useUser();
+  const { user, userResolution } = useUser();
   const appFocus = useAppFocus();
   const { isMobile } = useScreenSize();
   const { vectorDbEnabled } = useSettings();
   const { undismissedCount, refresh: refreshNotificationSummary } =
     useNotificationSummary();
-  const userDisplayName = isUserUnavailable
-    ? "Account"
-    : getUserDisplayName(user);
+  const userDisplayName =
+    userResolution === "unavailable" ? "Account" : getUserDisplayName(user);
 
   const handlePopoverOpen = (state: boolean) => {
     if (state) {
@@ -229,8 +230,7 @@ export default function AccountPopover({
       setPopupState(undefined);
     }
   };
-
-  if (isUserLoading) {
+  if (userResolution === "loading") {
     return <SidebarTabSkeleton folded={folded} />;
   }
 

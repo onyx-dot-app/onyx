@@ -33,12 +33,12 @@ const ME_RETRY_DELAYS_MS = [2_000, 5_000, 15_000];
 // Ceiling on reporting loading for a failing /api/me, so the account menu always comes back.
 const ME_LOADING_DEADLINE_MS = 30_000;
 
+/** Only "resolved" lets a null user mean signed out. "unavailable" means /api/me keeps failing for a possibly valid session. */
+export type UserResolution = "loading" | "unavailable" | "resolved";
+
 interface UserContextType {
   user: User | null;
-  /** True while the user is still resolving. A null `user` means signed out only once this is false. */
-  isUserLoading: boolean;
-  /** True when /api/me keeps failing: the session may be valid, the identity is just unknown. */
-  isUserUnavailable: boolean;
+  userResolution: UserResolution;
   isAdmin: boolean;
   isCurator: boolean;
   refreshUser: () => Promise<void>;
@@ -152,9 +152,12 @@ export function UserProvider({ children }: { children: React.ReactNode }) {
 
   const awaitingMe = fetchedUser === undefined && !meRetriesExhausted;
   const mergePending = fetchedUser != null && upToDateUser === null;
-  const isUserLoading = awaitingMe || mergePending;
-  // Unresolved is not signed out: /api/me never returned, so no identity claim is honest.
-  const isUserUnavailable = meRetriesExhausted && fetchedUser === undefined;
+  const userResolution: UserResolution =
+    awaitingMe || mergePending
+      ? "loading"
+      : fetchedUser === undefined
+        ? "unavailable"
+        : "resolved";
 
   useEffect(() => {
     if (!posthog) return;
@@ -596,8 +599,7 @@ export function UserProvider({ children }: { children: React.ReactNode }) {
     <UserContext.Provider
       value={{
         user: upToDateUser,
-        isUserLoading,
-        isUserUnavailable,
+        userResolution,
         refreshUser,
         authTypeMetadata,
         updateUserAutoScroll,

@@ -4,7 +4,7 @@ import AccountPopover from "@/sections/sidebar/AccountPopover";
 import { useUser } from "@/providers/UserProvider";
 import { User } from "@/lib/types";
 
-// Factory mock: the global stub pins isUserLoading false.
+// Factory mock: the global stub pins userResolution to "resolved".
 jest.mock("@/providers/UserProvider", () => ({ useUser: jest.fn() }));
 jest.mock("next/navigation", () => ({
   useRouter: () => ({ push: jest.fn() }),
@@ -34,32 +34,30 @@ const mockedUseUser = jest.mocked(useUser);
 
 function setUser(
   user: User | null,
-  isUserLoading: boolean,
-  isUserUnavailable = false
+  userResolution: "loading" | "unavailable" | "resolved"
 ) {
   mockedUseUser.mockReturnValue({
     user,
-    isUserLoading,
-    isUserUnavailable,
+    userResolution,
   } as ReturnType<typeof useUser>);
 }
 
 it("shows a skeleton instead of Anonymous while the user is unresolved", () => {
-  setUser(null, true);
+  setUser(null, "loading");
   render(<AccountPopover />);
   expect(screen.queryByText("Anonymous")).not.toBeInTheDocument();
   expect(screen.queryByRole("button")).not.toBeInTheDocument();
 });
 
 it("shows a neutral label, not Anonymous, when the user is unavailable", () => {
-  setUser(null, false, true);
+  setUser(null, "unavailable");
   render(<AccountPopover />);
   expect(screen.getByText("Account")).toBeInTheDocument();
   expect(screen.queryByText("Anonymous")).not.toBeInTheDocument();
 });
 
 it("shows Anonymous for a resolved signed-out user", () => {
-  setUser(null, false);
+  setUser(null, "resolved");
   render(<AccountPopover />);
   expect(screen.getByText("Anonymous")).toBeInTheDocument();
 });
@@ -71,7 +69,7 @@ it("shows the user's name once resolved", () => {
       email: "john@example.com",
       personalization: { name: "John" },
     } as unknown as User,
-    false
+    "resolved"
   );
   render(<AccountPopover />);
   expect(screen.getByText("John")).toBeInTheDocument();
