@@ -32,10 +32,15 @@ jest.mock("@/hooks/useNotifications", () => ({
 
 const mockedUseUser = jest.mocked(useUser);
 
-function setUser(user: User | null, isUserLoading: boolean) {
+function setUser(
+  user: User | null,
+  isUserLoading: boolean,
+  isUserUnavailable = false
+) {
   mockedUseUser.mockReturnValue({
     user,
     isUserLoading,
+    isUserUnavailable,
   } as ReturnType<typeof useUser>);
 }
 
@@ -44,6 +49,13 @@ it("shows a skeleton instead of Anonymous while the user is unresolved", () => {
   render(<AccountPopover />);
   expect(screen.queryByText("Anonymous")).not.toBeInTheDocument();
   expect(screen.queryByRole("button")).not.toBeInTheDocument();
+});
+
+it("shows a neutral label, not Anonymous, when the user is unavailable", () => {
+  setUser(null, false, true);
+  render(<AccountPopover />);
+  expect(screen.getByText("Account")).toBeInTheDocument();
+  expect(screen.queryByText("Anonymous")).not.toBeInTheDocument();
 });
 
 it("shows Anonymous for a resolved signed-out user", () => {

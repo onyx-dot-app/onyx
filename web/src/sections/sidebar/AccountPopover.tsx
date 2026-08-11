@@ -46,7 +46,7 @@ function SettingsPopover({
   onOpenNotifications,
   undismissedCount,
 }: SettingsPopoverProps) {
-  const { user } = useUser();
+  const { user, isUserUnavailable } = useUser();
   const settings = useSettings();
   const enterpriseSettings = settings.enterprise;
   const router = useRouter();
@@ -91,7 +91,12 @@ function SettingsPopover({
     <PopoverMenu>
       {[
         <div key="user-email" className="p-2">
-          <Content sizePreset="main-ui" title={getUserEmail(user)} />
+          <Content
+            sizePreset="main-ui"
+            title={
+              isUserUnavailable ? "Profile unavailable" : getUserEmail(user)
+            }
+          />
         </div>,
         null,
         <div key="user-settings" data-testid="Settings/user-settings">
@@ -199,13 +204,15 @@ export default function AccountPopover({
   const [popupState, setPopupState] = useState<
     "Settings" | "Notifications" | undefined
   >(undefined);
-  const { user, isUserLoading } = useUser();
+  const { user, isUserLoading, isUserUnavailable } = useUser();
   const appFocus = useAppFocus();
   const { isMobile } = useScreenSize();
   const { vectorDbEnabled } = useSettings();
   const { undismissedCount, refresh: refreshNotificationSummary } =
     useNotificationSummary();
-  const userDisplayName = getUserDisplayName(user);
+  const userDisplayName = isUserUnavailable
+    ? "Account"
+    : getUserDisplayName(user);
 
   const handlePopoverOpen = (state: boolean) => {
     if (state) {

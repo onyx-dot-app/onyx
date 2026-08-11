@@ -37,9 +37,12 @@ function setCurrentUser(overrides: Partial<ReturnType<typeof useCurrentUser>>) {
 }
 
 function Probe() {
-  const { user, isUserLoading } = useUser();
+  const { user, isUserLoading, isUserUnavailable } = useUser();
   if (isUserLoading) {
     return <span>loading</span>;
+  }
+  if (isUserUnavailable) {
+    return <span>unavailable</span>;
   }
   return <span>{user ? user.email : "signed-out"}</span>;
 }
@@ -103,7 +106,7 @@ describe("UserProvider /api/me retry", () => {
     jest.useRealTimers();
   });
 
-  it("retries an auth failure on a backoff schedule, then falls back to signed-out", () => {
+  it("retries an auth failure on a backoff schedule, then reports unavailable", () => {
     const mutateUser = jest.fn();
 
     setCurrentUser({ userError: authError("fail 1"), mutateUser });
@@ -125,8 +128,8 @@ describe("UserProvider /api/me retry", () => {
     rerender(probeTree());
     act(() => jest.advanceTimersByTime(120_000));
     expect(mutateUser).toHaveBeenCalledTimes(3);
-    // Budget spent: signed-out, not loading forever.
-    expect(screen.getByText("signed-out")).toBeInTheDocument();
+    // Budget spent: unavailable, never a false signed-out claim.
+    expect(screen.getByText("unavailable")).toBeInTheDocument();
   });
 
   it("does not schedule retries for non-auth failures (SWR owns those)", () => {
@@ -142,11 +145,11 @@ describe("UserProvider /api/me retry", () => {
     expect(screen.getByText("loading")).toBeInTheDocument();
   });
 
-  it("stops reporting loading once a non-auth failure outlives the deadline", () => {
+  it("reports unavailable once a non-auth failure outlives the deadline", () => {
     setCurrentUser({ userError: new FetchError("boom", 500, null) });
     renderProbe();
     act(() => jest.advanceTimersByTime(31_000));
-    expect(screen.getByText("signed-out")).toBeInTheDocument();
+    expect(screen.getByText("unavailable")).toBeInTheDocument();
   });
 
   it("resets the retry budget after a successful fetch", () => {

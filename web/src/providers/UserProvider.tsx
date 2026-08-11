@@ -37,6 +37,8 @@ interface UserContextType {
   user: User | null;
   /** True while the user is still resolving. A null `user` means signed out only once this is false. */
   isUserLoading: boolean;
+  /** True when /api/me keeps failing: the session may be valid, the identity is just unknown. */
+  isUserUnavailable: boolean;
   isAdmin: boolean;
   isCurator: boolean;
   refreshUser: () => Promise<void>;
@@ -151,6 +153,8 @@ export function UserProvider({ children }: { children: React.ReactNode }) {
   const awaitingMe = fetchedUser === undefined && !meRetriesExhausted;
   const mergePending = fetchedUser != null && upToDateUser === null;
   const isUserLoading = awaitingMe || mergePending;
+  // Unresolved is not signed out: /api/me never returned, so no identity claim is honest.
+  const isUserUnavailable = meRetriesExhausted && fetchedUser === undefined;
 
   useEffect(() => {
     if (!posthog) return;
@@ -593,6 +597,7 @@ export function UserProvider({ children }: { children: React.ReactNode }) {
       value={{
         user: upToDateUser,
         isUserLoading,
+        isUserUnavailable,
         refreshUser,
         authTypeMetadata,
         updateUserAutoScroll,

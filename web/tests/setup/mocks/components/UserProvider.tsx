@@ -20,6 +20,7 @@ import React, { createContext, useContext } from "react";
 interface UserContextType {
   user: any;
   isUserLoading: boolean;
+  isUserUnavailable: boolean;
   isAdmin: boolean;
   isCurator: boolean;
   refreshUser: () => Promise<void>;
@@ -38,6 +39,7 @@ interface UserContextType {
 const mockUserContext: UserContextType = {
   user: null,
   isUserLoading: false,
+  isUserUnavailable: false,
   isAdmin: false,
   isCurator: false,
   refreshUser: async () => {},
