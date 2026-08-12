@@ -170,7 +170,9 @@ export function PersonaMessagesChart({ timeRange }: PersonaMessagesChartProps) {
       description="Messages and unique users per day for the selected agent"
       timeRange={timeRange}
       state={
-        selectedPersonaId === undefined
+        // The picker is only usable once the agent list resolves, so its
+        // loading and error states outrank the "pick an agent" prompt.
+        selectedPersonaId === undefined && !agentsLoading && !agentsError
           ? { status: "empty", message: "Select an agent to view analytics." }
           : resolveChartState({
               isLoading:
