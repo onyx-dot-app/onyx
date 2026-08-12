@@ -1,9 +1,11 @@
 "use client";
 
 import { AdminDateRangeSelector } from "@/components/dateRangeSelectors/AdminDateRangeSelector";
-import { OnyxBotChart } from "@/app/ee/admin/performance/usage/OnyxBotChart";
-import { FeedbackChart } from "@/app/ee/admin/performance/usage/FeedbackChart";
-import { QueryPerformanceChart } from "@/app/ee/admin/performance/usage/QueryPerformanceChart";
+import {
+  FeedbackChart,
+  SlackChannelChart,
+  UsageChart,
+} from "@/app/ee/admin/performance/usage/AnalyticsCharts";
 import { PersonaMessagesChart } from "@/app/ee/admin/performance/usage/PersonaMessagesChart";
 import { useTimeRange } from "@/app/ee/admin/performance/lib";
 import UsageReports from "@/app/ee/admin/performance/usage/UsageReports";
@@ -37,9 +39,9 @@ export default function WorkspaceAnalyticsPage() {
             onValueChange={(value) => setTimeRange(value as any)}
           />
         </Section>
-        <QueryPerformanceChart timeRange={timeRange} />
+        <UsageChart timeRange={timeRange} />
         <FeedbackChart timeRange={timeRange} />
-        <OnyxBotChart timeRange={timeRange} />
+        <SlackChannelChart timeRange={timeRange} />
         <PersonaMessagesChart
           availablePersonas={agents}
           agentsError={agentsError}
