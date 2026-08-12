@@ -71,7 +71,7 @@ def create_user_files(
     id_to_temp_id: dict[str, str] = {}
     # Pair returned storage paths with the same set of acceptable files we uploaded
     for file_path, file in zip(
-        upload_response.file_paths, categorized_files.acceptable
+        upload_response.file_paths, categorized_files.acceptable, strict=True
     ):
         new_id = uuid.uuid4()
         new_temp_id = (

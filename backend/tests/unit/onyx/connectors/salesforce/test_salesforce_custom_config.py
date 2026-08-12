@@ -85,7 +85,9 @@ def test_validation() -> None:
     for i, invalid_config in enumerate(invalid_configs):
         try:
             _validate_custom_query_config(invalid_config)
-            assert False, f"Should have raised ValueError for invalid_config[{i}]"
+            raise AssertionError(
+                f"Should have raised ValueError for invalid_config[{i}]"
+            )
         except ValueError:
             print(f"✅ Correctly rejected invalid config {i}")
 

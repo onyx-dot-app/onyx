@@ -329,7 +329,7 @@ def kg_clustering(
     # Cluster and transfer grounded entities sequentially
     start_time = time.monotonic()
     i_batch = 0
-    for i_batch, untransferred_grounded_entities in enumerate(
+    for i_batch, untransferred_grounded_entities in enumerate(  # noqa: B007
         _get_batch_untransferred_grounded_entities(
             batch_size=processing_chunk_batch_size
         )
@@ -367,7 +367,7 @@ def kg_clustering(
     # Transfer the relationship types (no need to do in parallel as there's only a few)
     start_time = time.monotonic()
     i_batch = 0
-    for i_batch, relationship_types in enumerate(
+    for i_batch, relationship_types in enumerate(  # noqa: B007
         _get_batch_untransferred_relationship_types(
             batch_size=processing_chunk_batch_size
         )
@@ -390,7 +390,7 @@ def kg_clustering(
     # Transfer the relationships in parallel
     start_time = time.monotonic()
     i_batch = 0
-    for i_batch, relationships in enumerate(
+    for i_batch, relationships in enumerate(  # noqa: B007
         _get_batch_untransferred_relationships(batch_size=processing_chunk_batch_size)
     ):
         run_functions_tuples_in_parallel(
@@ -413,7 +413,7 @@ def kg_clustering(
     # Update vespa for each document
     start_time = time.monotonic()
     i_batch = 0
-    for i_batch, documents in enumerate(
+    for i_batch, documents in enumerate(  # noqa: B007
         _get_batch_kg_processed_documents(batch_size=processing_chunk_batch_size)
     ):
         batch_update_requests = run_functions_tuples_in_parallel(
@@ -422,7 +422,9 @@ def kg_clustering(
                 for document in documents
             ]
         )
-        for update_requests, document in zip(batch_update_requests, documents):
+        for update_requests, document in zip(
+            batch_update_requests, documents, strict=True
+        ):
             try:
                 update_kg_chunks_vespa_info(update_requests, index_name, tenant_id)
             except Exception as e:

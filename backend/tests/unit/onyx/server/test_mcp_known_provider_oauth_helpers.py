@@ -529,8 +529,9 @@ def test_proactive_refresh_targets_configured_endpoint_and_persists(
         for record in caplog.records
         if record.getMessage() == "mcp_oauth.refresh.persisted"
     )
-    assert getattr(persisted_record, "refresh_attempt_id") == getattr(
-        started_record, "refresh_attempt_id"
+    assert getattr(persisted_record, "refresh_attempt_id") == getattr(  # noqa: B009
+        started_record,
+        "refresh_attempt_id",  # noqa: B009
     )
 
     caplog.clear()

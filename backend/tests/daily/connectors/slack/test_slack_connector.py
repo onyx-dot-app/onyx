@@ -121,7 +121,7 @@ def test_indexing_channels_that_dont_exist(
         ValueError,
         match=r"Channel '.*' not found in workspace.*",
     ):
-        load_all_from_connector(
+        _ = load_all_from_connector(
             connector=slack_connector,
             start=0.0,
             end=time.time(),

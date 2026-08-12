@@ -408,6 +408,7 @@ def kg_extraction(
                 for document_id, result in zip(
                     documents_to_process,
                     run_functions_tuples_in_parallel(batch_deep_extraction_func_calls),
+                    strict=True,
                 )
             }
 

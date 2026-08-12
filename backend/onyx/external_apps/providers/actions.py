@@ -74,12 +74,16 @@ def path_matches(template: str, path: str) -> bool:
         # Wildcard must swallow >=1 segment and reject empties (`//`), like `{name}`.
         if not tail or not all(tail):
             return False
-        return all(_segment_matches(e, a) for e, a in zip(prefix, actual_segments))
+        return all(
+            _segment_matches(e, a)
+            for e, a in zip(prefix, actual_segments, strict=False)
+        )
 
     if len(expected_segments) != len(actual_segments):
         return False
     return all(
-        _segment_matches(e, a) for e, a in zip(expected_segments, actual_segments)
+        _segment_matches(e, a)
+        for e, a in zip(expected_segments, actual_segments, strict=True)
     )
 
 

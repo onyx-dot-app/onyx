@@ -377,9 +377,7 @@ _DISALLOWED_MSG_SUBTYPES = {
     "group_leave",
     "group_archive",
     "group_unarchive",
-    "channel_leave",
     "channel_name",
-    "channel_join",
 }
 
 

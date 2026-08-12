@@ -26,12 +26,15 @@ from shared_configs.contextvars import (
 
 logging.addLevelName(logging.INFO + 5, "NOTICE")
 
+# The shared default dicts are only ever read, never mutated in place: writers
+# copy, update, then `set()` a new dict.
 pruning_ctx: contextvars.ContextVar[dict[str, Any]] = contextvars.ContextVar(
-    "pruning_ctx", default=dict()
+    "pruning_ctx",
+    default=dict(),  # noqa: B039
 )
 
 doc_permission_sync_ctx: contextvars.ContextVar[dict[str, Any]] = (
-    contextvars.ContextVar("doc_permission_sync_ctx", default=dict())
+    contextvars.ContextVar("doc_permission_sync_ctx", default=dict())  # noqa: B039
 )
 
 

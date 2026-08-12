@@ -346,7 +346,7 @@ class SearchAnswerAnalyzer:
         plt.grid(axis="y", alpha=0.3)
 
         # add value labels on top of each bar
-        for bar, count in zip(bars, counts):
+        for bar, count in zip(bars, counts, strict=True):
             if count > 0:
                 plt.text(
                     bar.get_x() + bar.get_width() / 2,

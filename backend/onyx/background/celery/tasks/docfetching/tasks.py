@@ -564,7 +564,7 @@ def docfetching_proxy_task(
                     )
                 finally:
                     job.release()
-                    break
+                break
 
             # log the memory usage for tracking down memory leaks / connector-specific memory issues
             pid = job.process.pid

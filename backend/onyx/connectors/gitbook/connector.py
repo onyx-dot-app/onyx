@@ -146,7 +146,7 @@ def _extract_text_from_document(document: dict[str, Any]) -> str:
                 records.items(), key=lambda x: x[1].get("orderIndex", "")
             )
 
-            for record_id, record_data in sorted_records:
+            for _record_id, record_data in sorted_records:
                 values = record_data.get("values", {})
                 row_cells = []
                 for col_id in columns:

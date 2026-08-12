@@ -305,7 +305,7 @@ def _resolve_urls_to_document_ids(
 def _estimate_result_chars(result: dict[str, Any]) -> int:
     """Estimate character count from document fields in a result dict."""
     total = 0
-    for key, value in result.items():
+    for _key, value in result.items():
         if value is not None:
             total += len(str(value))
     return total

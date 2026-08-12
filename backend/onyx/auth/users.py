@@ -1884,12 +1884,12 @@ class FastAPIUserWithRefreshRouter(FastAPIUsers[models.UP, models.ID]):
 
                 # Check if strategy supports refreshing
                 supports_refresh = hasattr(strategy, "refresh_token") and callable(
-                    getattr(strategy, "refresh_token")
+                    getattr(strategy, "refresh_token")  # noqa: B009
                 )
 
                 if supports_refresh:
                     try:
-                        refresh_method = getattr(strategy, "refresh_token")
+                        refresh_method = getattr(strategy, "refresh_token")  # noqa: B009
                         new_token = await refresh_method(token, user)
                         logger.info(
                             "Successfully refreshed session token for user %s",
