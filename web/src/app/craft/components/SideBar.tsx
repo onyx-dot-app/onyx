@@ -212,7 +212,8 @@ function BuildSessionButton({
       >
         <Popover.Anchor>
           <SidebarTab
-            onClick={onLoad}
+            /* While renaming, drop the click target so the input stays usable. */
+            onClick={renaming ? undefined : onLoad}
             selected={isActive}
             rightChildren={rightMenu}
           >
