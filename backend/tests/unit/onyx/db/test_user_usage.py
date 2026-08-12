@@ -177,6 +177,31 @@ class TestRecordUserUsage:
         compiled = stmt.compile(dialect=postgresql.dialect())
         assert compiled.params["provider"] == ""
 
+    def test_incognito_dimension_reaches_the_upsert(self) -> None:
+        """The flag must land in both the inserted row and the conflict target,
+        or incognito spend would silently merge into regular rows."""
+        mock_session = MagicMock()
+        window = datetime.datetime(2026, 6, 1, tzinfo=datetime.timezone.utc)
+
+        record_user_usage(
+            mock_session,
+            user_id=str(uuid4()),
+            model="model-a",
+            flow="CHAT",
+            provider="openai",
+            input_tokens=10,
+            output_tokens=5,
+            cache_read_tokens=0,
+            cost_cents=0.1,
+            window_start=window,
+            incognito=True,
+        )
+
+        stmt = mock_session.execute.call_args[0][0]
+        compiled = stmt.compile(dialect=postgresql.dialect())
+        assert compiled.params["incognito"] is True
+        assert "incognito" in str(compiled).split("ON CONFLICT")[1]
+
     def test_user_deletion_retains_usage_row_with_null_user_id(self) -> None:
         engine: Engine = create_engine("sqlite://")
 

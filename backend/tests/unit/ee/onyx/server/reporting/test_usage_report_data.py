@@ -34,12 +34,14 @@ def _row(
     cost: float = 10.0,
     day: str = "2026-07-01",
     flow: str = "chat",
+    incognito: bool = False,
 ) -> UsageExportRow:
     return UsageExportRow(
         email=email,
         model="gpt-5",
         flow=flow,
         provider="openai",
+        incognito=incognito,
         day=day,
         input_tokens=100,
         output_tokens=50,

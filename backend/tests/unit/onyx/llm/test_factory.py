@@ -1,8 +1,25 @@
-from unittest.mock import patch
+from functools import partial
+from unittest.mock import MagicMock, patch
 
+from onyx.chat.incognito import (
+    BIFROST_DISABLE_CONTENT_LOGGING_HEADER,
+    incognito_llm_extra_headers,
+    incognito_llm_request_policy,
+)
+from onyx.db.enums import IncognitoRecordMode
 from onyx.llm.constants import LlmProviderNames
-from onyx.llm.factory import _build_provider_extra_headers, get_llm, llm_from_provider
-from onyx.llm.well_known_providers.constants import LM_STUDIO_API_KEY_CONFIG_KEY
+from onyx.llm.factory import (
+    _build_provider_extra_headers,
+    get_default_llm,
+    get_llm,
+    get_llm_for_persona,
+    llm_from_provider,
+)
+from onyx.llm.interfaces import LlmRequestPolicy
+from onyx.llm.well_known_providers.constants import (
+    BIFROST_PROVIDER_NAME,
+    LM_STUDIO_API_KEY_CONFIG_KEY,
+)
 from onyx.server.manage.llm.models import LLMProviderView, ModelConfigurationView
 
 
@@ -154,3 +171,178 @@ def test_llm_from_provider_never_sets_ollama_num_ctx_for_non_ollama_provider() -
         kwargs = mock_get_llm.call_args.kwargs
         assert kwargs["max_input_tokens"] == 16384
         assert kwargs["model_kwargs"] == {}
+
+
+def test_get_llm_policy_headers_win_over_every_other_source() -> None:
+    """Policy headers must be the final merge. The request and deployment-env
+    sources set the same header to false here."""
+    policy = incognito_llm_extra_headers(
+        IncognitoRecordMode.USAGE_ONLY, BIFROST_PROVIDER_NAME
+    )
+    header = BIFROST_DISABLE_CONTENT_LOGGING_HEADER
+    with (
+        patch("onyx.llm.factory.LitellmLLM") as mock_litellm_llm,
+        patch("onyx.utils.headers.LITELLM_EXTRA_HEADERS", {header: "false"}),
+    ):
+        get_llm(
+            provider=BIFROST_PROVIDER_NAME,
+            model="gpt-4o",
+            deployment_name=None,
+            max_input_tokens=4096,
+            additional_headers={header: "false"},
+            policy_headers=policy,
+        )
+
+        kwargs = mock_litellm_llm.call_args.kwargs
+        assert kwargs["extra_headers"][header] == "true"
+
+
+def test_get_llm_without_policy_headers_keeps_the_existing_merge() -> None:
+    with patch("onyx.llm.factory.LitellmLLM") as mock_litellm_llm:
+        get_llm(
+            provider="openai",
+            model="gpt-4o",
+            deployment_name=None,
+            max_input_tokens=4096,
+            additional_headers={"x-request-scoped": "a"},
+        )
+
+        kwargs = mock_litellm_llm.call_args.kwargs
+        assert kwargs["extra_headers"] == {"x-request-scoped": "a"}
+
+
+def test_llm_from_provider_resolves_policy_headers_for_the_winning_provider() -> None:
+    """The caller hands policy as a provider-keyed function because persona
+    resolution decides the provider inside the factory."""
+    provider = _build_provider_view(
+        provider=BIFROST_PROVIDER_NAME,
+        max_input_tokens=4096,
+    )
+
+    with patch("onyx.llm.factory.get_llm") as mock_get_llm:
+        llm_from_provider(
+            model_name="gpt-4o",
+            llm_provider=provider,
+            policy_fn=partial(
+                incognito_llm_request_policy, IncognitoRecordMode.USAGE_ONLY
+            ),
+        )
+
+        kwargs = mock_get_llm.call_args.kwargs
+        assert kwargs["policy_headers"] == {
+            BIFROST_DISABLE_CONTENT_LOGGING_HEADER: "true"
+        }
+
+
+def test_llm_from_provider_without_policy_fn_passes_none() -> None:
+    provider = _build_provider_view(
+        provider=BIFROST_PROVIDER_NAME,
+        max_input_tokens=4096,
+    )
+
+    with patch("onyx.llm.factory.get_llm") as mock_get_llm:
+        llm_from_provider(model_name="gpt-4o", llm_provider=provider)
+
+        assert mock_get_llm.call_args.kwargs["policy_headers"] is None
+
+
+def _sentinel_policy_fn(_provider: str) -> LlmRequestPolicy:
+    return LlmRequestPolicy()
+
+
+class TestPolicyFnForwarding:
+    """Every exit of the persona chain must forward the policy function.
+
+    A dropped forward is a silent policy loss on a fallback path, invisible to
+    the precedence test, which only guards the final merge inside get_llm.
+    """
+
+    def test_no_persona_exit_forwards(self) -> None:
+        with patch("onyx.llm.factory.get_default_llm") as mock_default:
+            get_llm_for_persona(
+                persona=None,
+                user=MagicMock(),
+                policy_fn=_sentinel_policy_fn,
+            )
+            assert mock_default.call_args.kwargs["policy_fn"] is _sentinel_policy_fn
+
+    def test_unconfigured_persona_exit_forwards(self) -> None:
+        persona = MagicMock()
+        persona.default_model_configuration_id = None
+        with patch("onyx.llm.factory.get_default_llm") as mock_default:
+            get_llm_for_persona(
+                persona=persona,
+                user=MagicMock(),
+                policy_fn=_sentinel_policy_fn,
+            )
+            assert mock_default.call_args.kwargs["policy_fn"] is _sentinel_policy_fn
+
+    def test_failed_resolution_exit_forwards(self) -> None:
+        persona = MagicMock()
+        persona.default_model_configuration_id = 123
+        with (
+            patch("onyx.llm.factory.get_session_with_current_tenant"),
+            patch("onyx.llm.factory._resolve_provider_and_model", return_value=None),
+            patch("onyx.llm.factory.get_default_llm") as mock_default,
+        ):
+            get_llm_for_persona(
+                persona=persona,
+                user=MagicMock(),
+                policy_fn=_sentinel_policy_fn,
+            )
+            assert mock_default.call_args.kwargs["policy_fn"] is _sentinel_policy_fn
+
+    def test_access_denied_exit_forwards(self) -> None:
+        persona = MagicMock()
+        persona.default_model_configuration_id = 123
+        with (
+            patch("onyx.llm.factory.get_session_with_current_tenant"),
+            patch(
+                "onyx.llm.factory._resolve_provider_and_model",
+                return_value=(MagicMock(), "some-model"),
+            ),
+            patch("onyx.llm.factory.fetch_user_group_ids", return_value=[]),
+            patch("onyx.llm.factory.can_user_access_llm_provider", return_value=False),
+            patch("onyx.llm.factory.get_default_llm") as mock_default,
+        ):
+            get_llm_for_persona(
+                persona=persona,
+                user=MagicMock(),
+                policy_fn=_sentinel_policy_fn,
+            )
+            assert mock_default.call_args.kwargs["policy_fn"] is _sentinel_policy_fn
+
+    def test_resolved_provider_exit_forwards(self) -> None:
+        persona = MagicMock()
+        persona.default_model_configuration_id = 123
+        with (
+            patch("onyx.llm.factory.get_session_with_current_tenant"),
+            patch(
+                "onyx.llm.factory._resolve_provider_and_model",
+                return_value=(MagicMock(), "some-model"),
+            ),
+            patch("onyx.llm.factory.fetch_user_group_ids", return_value=[]),
+            patch("onyx.llm.factory.can_user_access_llm_provider", return_value=True),
+            patch("onyx.llm.factory.LLMProviderView"),
+            patch("onyx.llm.factory.llm_from_provider") as mock_from_provider,
+        ):
+            get_llm_for_persona(
+                persona=persona,
+                user=MagicMock(),
+                policy_fn=_sentinel_policy_fn,
+            )
+            assert (
+                mock_from_provider.call_args.kwargs["policy_fn"] is _sentinel_policy_fn
+            )
+
+    def test_get_default_llm_forwards(self) -> None:
+        with (
+            patch("onyx.llm.factory.get_session_with_current_tenant"),
+            patch("onyx.llm.factory.fetch_default_llm_model", return_value=MagicMock()),
+            patch("onyx.llm.factory.LLMProviderView"),
+            patch("onyx.llm.factory.llm_from_provider") as mock_from_provider,
+        ):
+            get_default_llm(policy_fn=_sentinel_policy_fn)
+            assert (
+                mock_from_provider.call_args.kwargs["policy_fn"] is _sentinel_policy_fn
+            )

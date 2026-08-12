@@ -14,6 +14,7 @@ content-free rows and must carry the live conversation outside Postgres
 for the length of the session.
 """
 
+from typing import Any
 from uuid import UUID
 
 from sqlalchemy.orm import Session
@@ -34,6 +35,9 @@ from onyx.db.incognito import (
 from onyx.db.models import User
 from onyx.file_store.file_store import get_default_file_store
 from onyx.file_store.models import FileDescriptor
+from onyx.llm.constants import LlmProviderNames
+from onyx.llm.interfaces import LlmRequestPolicy
+from onyx.llm.well_known_providers.constants import BIFROST_PROVIDER_NAME
 from onyx.server.security.models import IncognitoAvailability
 from onyx.server.security.store import get_security_settings, load_effective_uncached
 from onyx.utils.logger import setup_logger
@@ -74,6 +78,18 @@ def incognito_allowed_for_user(
     return False
 
 
+# Bifrost's per-request switch for keeping content out of its gateway log.
+# Honored only when the gateway enables allow_per_request_content_storage_override.
+# Ignored otherwise, so this stays best effort from Onyx's side.
+BIFROST_DISABLE_CONTENT_LOGGING_HEADER = "x-bf-disable-content-logging"
+# Portkey "DO NOT TRACK": request/response content stays out of its logs,
+# token/cost stats still record.
+PORTKEY_DEBUG_HEADER = "x-portkey-debug"
+# LiteLLM proxy per-request redaction: content stripped from its logs while
+# spend rows still write, which incognito usage metering requires.
+LITELLM_PROXY_REDACTION_HEADER = "x-litellm-enable-message-redaction"
+
+
 def resolve_incognito_record_mode() -> IncognitoRecordMode:
     """The mode a new incognito session must pin: the workspace's admin
     record-mode setting, usage_only by default.
@@ -105,6 +121,71 @@ def sweep_stale_incognito_user_files(db_session: Session) -> int:
             continue
         marked += len(mark_incognito_user_files_deleting(db_session, session_id))
     return marked
+
+
+def incognito_llm_extra_headers(
+    mode: IncognitoRecordMode | None,
+    provider: str | None,
+) -> dict[str, str]:
+    """Headers an LLM request must carry under this recording mode.
+
+    Only Bifrost honors a per-request retention switch. FULL_HISTORY sends
+    nothing: the workspace chose to record content, and the gateway log is the
+    workspace's own infrastructure.
+
+    Pass the result as ``get_llm``'s ``policy_headers`` so it outranks request,
+    deployment-env, and provider header sources. Merged anywhere earlier, a
+    deployment-wide header could silently re-enable gateway content logging.
+    """
+    if record_mode_persists_content(mode):
+        return {}
+    if provider == BIFROST_PROVIDER_NAME:
+        return {BIFROST_DISABLE_CONTENT_LOGGING_HEADER: "true"}
+    if provider == LlmProviderNames.PORTKEY.value:
+        return {PORTKEY_DEBUG_HEADER: "false"}
+    if provider == LlmProviderNames.LITELLM_PROXY.value:
+        return {LITELLM_PROXY_REDACTION_HEADER: "true"}
+    return {}
+
+
+def incognito_llm_extra_body(
+    mode: IncognitoRecordMode | None,
+    provider: str | None,
+) -> dict[str, Any]:
+    """Request-body params a content-free turn must carry, by provider.
+
+    Merged last into model kwargs for the same reason the headers are: a
+    deployment-wide param must not re-enable provider-side retention.
+    """
+    if record_mode_persists_content(mode):
+        return {}
+    # OpenAI Responses API stores by default for 30 days, and Chat Completions
+    # accepts the same param. Azure's stored-completions opt-in stays off.
+    if provider in (
+        LlmProviderNames.OPENAI.value,
+        LlmProviderNames.AZURE.value,
+    ):
+        return {"store": False}
+    # Routes only to OpenRouter endpoints that do not retain user data.
+    if provider == LlmProviderNames.OPENROUTER.value:
+        return {"extra_body": {"provider": {"data_collection": "deny"}}}
+    return {}
+
+
+def incognito_llm_request_policy(
+    mode: IncognitoRecordMode | None,
+    provider: str | None,
+) -> LlmRequestPolicy:
+    """The per-provider retention suppression a turn under this mode carries.
+
+    Providers with no per-request option (Anthropic, Google, Vertex, Mistral,
+    Bedrock, Nebius, local servers) get an empty policy: their retention is an
+    account or deployment concern, which the incognito disclaimer covers.
+    """
+    return LlmRequestPolicy(
+        headers=incognito_llm_extra_headers(mode, provider),
+        model_kwargs=incognito_llm_extra_body(mode, provider),
+    )
 
 
 def content_free_file_descriptors(
