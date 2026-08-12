@@ -30,6 +30,27 @@ import { Card } from "@opal/components";
 | `borderColor` | `StatusVariants` | `"default"` | Status-palette border color (needs `border` ≠ `"none"`) |
 | `ref` | `React.Ref<HTMLDivElement>` | — | Ref forwarded to the root div |
 | `children` | `React.ReactNode` | — | Card content |
+| `data-*` | `string \| boolean` | — | Forwarded to the root. See below. |
+
+### `data-*` attributes
+
+Any `data-*` prop is forwarded to the card's root element, so an application can
+label a card for tests or analytics:
+
+```tsx
+<Card data-card>…</Card>
+```
+
+A card owns how it looks, not what the surrounding app calls it — `data-*` is the
+app's namespace, and silently dropping it is worse than either forwarding or
+rejecting it. Only `data-*` is picked up. `className` and `style` stay out, so the
+card's appearance is still its own; behavioural props such as `onClick` are a
+deliberate API decision rather than something inherited by a rest spread (use
+`SelectCard` for an interactive card).
+
+The card's own `data-background`, `data-border`, `data-shadow`, and
+`data-opal-status-border` are written after the forwarded attributes, so a caller
+cannot repurpose them to drive the stylesheet.
 
 ### Padding scale
 
