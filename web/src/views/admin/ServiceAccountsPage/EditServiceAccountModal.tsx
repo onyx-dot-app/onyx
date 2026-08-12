@@ -197,8 +197,8 @@ export default function EditServiceAccountModal({
         <Modal.Body twoTone>
           <Section padding={0} height="auto" alignItems="stretch">
             <Section
-              gap={0.5}
-              padding={0.25}
+              gap={2}
+              padding={1}
               height={joinedGroups.length === 0 && !popoverOpen ? "auto" : 14.5}
               alignItems="stretch"
               justifyContent="start"

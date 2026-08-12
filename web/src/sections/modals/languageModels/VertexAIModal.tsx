@@ -79,7 +79,7 @@ function VertexAIModalInternals({
   return (
     <>
       <InputPadder>
-        <Section gap={1}>
+        <Section gap={4}>
           {showAuthMethodSelector && (
             <InputVertical
               withLabel={FIELD_VERTEX_AUTH_METHOD}

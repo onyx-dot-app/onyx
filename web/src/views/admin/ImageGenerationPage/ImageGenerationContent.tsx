@@ -290,7 +290,7 @@ export default function ImageGenerationContent() {
                     `**${disconnectProvider.title}** is currently the default image generation model. Session history will be preserved.`
                   )}
                 </Text>
-                <Section alignItems="start" gap={0.25}>
+                <Section alignItems="start" gap={1}>
                   <Text as="p" color="text-04">
                     Set New Default
                   </Text>

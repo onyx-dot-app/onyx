@@ -42,7 +42,7 @@ function GroupCard({ group }: GroupCardProps) {
   }
 
   return (
-    <Card padding={0.5} data-card>
+    <Card padding={2} data-card>
       <ContentAction
         icon={isAdmin ? SvgUserManage : SvgUsers}
         title={group.name}

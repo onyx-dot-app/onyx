@@ -293,7 +293,7 @@ export function ModelAccessField() {
 
       {!isPublic && (
         <Card background="light" border="none" padding="sm">
-          <Section gap={0.5}>
+          <Section gap={2}>
             <InputComboBox
               placeholder="Add groups and agents"
               value=""
@@ -675,7 +675,7 @@ export function ModelSelectionField({
 
   return (
     <Card background="light" border="none" padding="sm">
-      <Section gap={0.5}>
+      <Section gap={2}>
         <InputHorizontal
           title="Models"
           description="Select models to make available for this provider."
@@ -700,7 +700,7 @@ export function ModelSelectionField({
             padding="sm"
           />
         ) : (
-          <Section gap={0.25} alignItems="stretch">
+          <Section gap={1} alignItems="stretch">
             {(() => {
               const baseModels = isAutoMode ? visibleModels : models;
               // Sort alphabetically by id for providers that ship rich model
@@ -760,7 +760,7 @@ export function ModelSelectionField({
         )}
 
         {onAddModel && !isAutoMode && (
-          <Section flexDirection="row" gap={0.5}>
+          <Section flexDirection="row" gap={2}>
             <div className="flex-1">
               <InputTypeIn
                 placeholder="Enter model name"
@@ -930,7 +930,7 @@ function ModalWrapperInner({
             description={description}
             onClose={onClose}
           />
-          <Modal.Body padding={0.5} gap={0}>
+          <Modal.Body padding={2} gap={0}>
             {children}
           </Modal.Body>
           <Modal.Footer>

@@ -35,7 +35,7 @@ function GroupsList({ groups, searchQuery }: GroupsListProps) {
   const customGroups = filtered.filter((g) => !isBuiltInGroup(g));
 
   return (
-    <Section flexDirection="column" gap={0.5}>
+    <Section flexDirection="column" gap={2}>
       {builtInGroups.map((group) => (
         <GroupCard key={group.id} group={group} />
       ))}

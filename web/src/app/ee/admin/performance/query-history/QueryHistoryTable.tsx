@@ -101,7 +101,7 @@ function SelectFeedbackType({
   onValueChange: (value: Feedback | "all") => void;
 }) {
   return (
-    <Section alignItems="start" gap={0.25}>
+    <Section alignItems="start" gap={1}>
       <Text as="p" className="font-medium">
         Feedback Type
       </Text>

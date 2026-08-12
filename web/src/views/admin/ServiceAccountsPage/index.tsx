@@ -444,7 +444,7 @@ export default function ServiceAccountsPage() {
             </Button>
           }
         >
-          <Section alignItems="start" gap={0.5}>
+          <Section alignItems="start" gap={2}>
             <Text as="p" color="text-03">
               {markdown(
                 `Any application using the API key of account *${

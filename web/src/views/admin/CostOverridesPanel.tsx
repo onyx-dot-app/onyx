@@ -122,7 +122,7 @@ function OverrideForm({ existing, onDone }: OverrideFormProps) {
   return (
     <Card border="solid" rounding="lg">
       <GeneralLayouts.Section
-        gap={0.75}
+        gap={3}
         height="fit"
         alignItems="stretch"
         justifyContent="start"
@@ -302,7 +302,7 @@ export default function CostOverridesPanel() {
 
   return (
     <GeneralLayouts.Section
-      gap={0.75}
+      gap={3}
       height="fit"
       alignItems="stretch"
       justifyContent="start"

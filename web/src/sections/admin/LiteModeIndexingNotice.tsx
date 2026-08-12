@@ -12,7 +12,7 @@ const DEPLOYMENT_DOCS_URL = `${DOCS_BASE_URL}/deployment/getting_started/quickst
  */
 export default function LiteModeIndexingNotice() {
   return (
-    <Section padding={2}>
+    <Section padding={8}>
       <IllustrationContent
         illustration={SvgUnPlugged}
         title="Indexing is unavailable in Lite mode"

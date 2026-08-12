@@ -458,12 +458,7 @@ function CommandMenuHeader({
     <div className="shrink-0">
       {/* Top row: Search icon, filters, close button */}
       <div className="px-3 pt-3 flex flex-row justify-between items-center">
-        <Section
-          flexDirection="row"
-          justifyContent="start"
-          gap={0.5}
-          width="fit"
-        >
+        <Section flexDirection="row" justifyContent="start" gap={2} width="fit">
           {/* Standalone search icon */}
           <SvgSearch className="w-6 h-6 stroke-text-04" />
           {filters.map((filter) => (
@@ -745,12 +740,7 @@ function CommandMenuAction({
 function CommandMenuFooter({ leftActions }: CommandMenuFooterProps) {
   return (
     <div className="shrink-0">
-      <Section
-        flexDirection="row"
-        justifyContent="start"
-        gap={1}
-        padding={0.75}
-      >
+      <Section flexDirection="row" justifyContent="start" gap={4} padding={3}>
         {leftActions}
       </Section>
     </div>

@@ -86,8 +86,8 @@ function MemoryItem({
           "bg-action-selection-01 hover:bg-action-selection-01 border-action-selection-05 duration-700"
       )}
     >
-      <Section gap={0.25} alignItems="start">
-        <Section flexDirection="row" alignItems="start" gap={0.5}>
+      <Section gap={1} alignItems="start">
+        <Section flexDirection="row" alignItems="start" gap={2}>
           <InputTextArea
             ref={textareaRef}
             placeholder="Type or paste in a personal note or memory"
@@ -269,7 +269,7 @@ export default function MemoriesModal({
           description="Let Onyx reference these stored notes and memories in chats."
           onClose={close}
         >
-          <Section flexDirection="row" gap={0.5}>
+          <Section flexDirection="row" gap={2}>
             <InputTypeIn
               placeholder="Search..."
               value={searchQuery}
@@ -292,9 +292,9 @@ export default function MemoriesModal({
           </Section>
         </Modal.Header>
 
-        <Modal.Body padding={0.5}>
+        <Modal.Body padding={2}>
           {filteredMemories.length === 0 ? (
-            <Section alignItems="center" padding={2}>
+            <Section alignItems="center" padding={8}>
               <Text secondaryBody text03>
                 {searchQuery.trim()
                   ? "No memories match your search."
@@ -302,7 +302,7 @@ export default function MemoriesModal({
               </Text>
             </Section>
           ) : (
-            <Section gap={0.5}>
+            <Section gap={2}>
               {filteredMemories.map(({ memory, originalIndex }) => (
                 <Fragment key={memory.id}>
                   <MemoryItem

@@ -178,7 +178,7 @@ export default function UserFilesModal({
         >
           <Modal.Header icon={SvgFiles} title={title} description={description}>
             {/* Search bar section */}
-            <Section flexDirection="row" gap={0.5}>
+            <Section flexDirection="row" gap={2}>
               <InputTypeIn
                 ref={searchInputRef}
                 placeholder="Search files..."
@@ -205,7 +205,7 @@ export default function UserFilesModal({
 
           <Modal.Body
             padding={filtered.length === 0 ? 0.5 : 0}
-            gap={0.5}
+            gap={2}
             alignItems="center"
           >
             {/* File display section */}
@@ -263,7 +263,7 @@ export default function UserFilesModal({
           <Modal.Footer>
             {/* Left side: file count and controls */}
             {onPickRecent && (
-              <Section flexDirection="row" justifyContent="start" gap={0.5}>
+              <Section flexDirection="row" justifyContent="start" gap={2}>
                 <Text as="p" text03>
                   {selectedCount} {selectedCount === 1 ? "file" : "files"}{" "}
                   selected

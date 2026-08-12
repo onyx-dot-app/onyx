@@ -88,7 +88,7 @@ function HierarchyBreadcrumb({
       flexDirection="row"
       justifyContent="start"
       alignItems="center"
-      gap={0.25}
+      gap={1}
       height="auto"
     >
       {/* Root source link */}
@@ -719,7 +719,7 @@ export default function SourceHierarchyBrowser({
   // Render loading state
   if (isLoadingNodes) {
     return (
-      <GeneralLayouts.Section height="auto" padding={1}>
+      <GeneralLayouts.Section height="auto" padding={4}>
         <Text text03 secondaryBody>
           Loading folders...
         </Text>
@@ -730,7 +730,7 @@ export default function SourceHierarchyBrowser({
   // Render error state
   if (nodesError) {
     return (
-      <GeneralLayouts.Section height="auto" padding={1}>
+      <GeneralLayouts.Section height="auto" padding={4}>
         <Text text03 secondaryBody>
           {nodesError}
         </Text>
@@ -745,7 +745,7 @@ export default function SourceHierarchyBrowser({
         flexDirection="row"
         justifyContent="start"
         alignItems="center"
-        gap={0.5}
+        gap={2}
         height="auto"
       >
         <GeneralLayouts.Section height="auto" width="fit">
@@ -903,7 +903,7 @@ export default function SourceHierarchyBrowser({
         className="overflow-y-auto max-h-80"
       >
         {filteredItems.length === 0 && !isLoadingDocuments ? (
-          <GeneralLayouts.Section height="auto" padding={1}>
+          <GeneralLayouts.Section height="auto" padding={4}>
             <Text text03 secondaryBody>
               {path.length === 0
                 ? "Select a folder to browse documents."
@@ -935,7 +935,7 @@ export default function SourceHierarchyBrowser({
                         flexDirection="row"
                         justifyContent="start"
                         alignItems="center"
-                        gap={0.25}
+                        gap={1}
                         height="auto"
                       >
                         <GeneralLayouts.Section
@@ -996,7 +996,7 @@ export default function SourceHierarchyBrowser({
 
             {/* Loading more indicator */}
             {isLoadingDocuments && documents.length > 0 && (
-              <GeneralLayouts.Section height="auto" padding={0.5}>
+              <GeneralLayouts.Section height="auto" padding={2}>
                 <Text text03 secondaryBody>
                   Loading more...
                 </Text>
@@ -1014,7 +1014,7 @@ export default function SourceHierarchyBrowser({
             flexDirection="row"
             justifyContent="start"
             alignItems="center"
-            gap={0.5}
+            gap={2}
             height="auto"
           >
             <Text text03 secondaryBody>

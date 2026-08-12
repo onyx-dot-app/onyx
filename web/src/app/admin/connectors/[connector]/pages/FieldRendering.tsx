@@ -45,7 +45,7 @@ const TabsField: FC<TabsFieldProps> = ({
       : tabField.description;
 
   return (
-    <GeneralLayouts.Section gap={0.5} alignItems="start">
+    <GeneralLayouts.Section gap={2} alignItems="start">
       {tabField.label && (
         <Content
           title={resolvedLabel ?? ""}
@@ -86,7 +86,7 @@ const TabsField: FC<TabsFieldProps> = ({
           </Tabs.List>
           {tabField.tabs.map((tab) => (
             <Tabs.Content key={tab.value} value={tab.value}>
-              <GeneralLayouts.Section gap={0.75} alignItems="start">
+              <GeneralLayouts.Section gap={3} alignItems="start">
                 {tab.fields.map((subField) => {
                   // Check visibility condition first
                   if (
@@ -224,7 +224,7 @@ export const RenderField: FC<RenderFieldProps> = ({
           flexDirection="row"
           justifyContent="start"
           alignItems="start"
-          gap={0.5}
+          gap={2}
         >
           <CheckboxField
             name={field.name}

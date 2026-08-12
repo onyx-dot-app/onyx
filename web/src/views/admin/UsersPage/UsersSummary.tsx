@@ -65,7 +65,7 @@ function StatCell({ value, label, onFilter }: StatCellProps) {
 
 function ScimCard() {
   return (
-    <Card gap={0.5} padding={0.75}>
+    <Card gap={2} padding={3}>
       <ContentAction
         icon={SvgUserSync}
         title="SCIM Sync"
@@ -113,7 +113,7 @@ export default function UsersSummary({
   const showRequests = requests !== null && requests > 0;
 
   const statsCard = (
-    <Card padding={0.5}>
+    <Card padding={2}>
       <Section flexDirection="row" gap={0}>
         <StatCell
           value={activeUsers}
@@ -148,7 +148,7 @@ export default function UsersSummary({
         flexDirection="row"
         justifyContent="start"
         alignItems="stretch"
-        gap={0.5}
+        gap={2}
       >
         {statsCard}
         {rightCard}

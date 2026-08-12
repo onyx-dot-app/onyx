@@ -39,8 +39,8 @@ function ErrorLogRow({
         flexDirection="column"
         justifyContent="start"
         alignItems="start"
-        gap={0.25}
-        padding={0.25}
+        gap={1}
+        padding={1}
         height="fit"
       >
         <Section
@@ -221,8 +221,8 @@ export default function HookStatusPopover({
                   ? 20
                   : 12.5
             }
-            padding={0.125}
-            gap={0.25}
+            padding={0.5}
+            gap={1}
           >
             {isLoading ? (
               <Section justifyContent="center">
@@ -256,8 +256,8 @@ export default function HookStatusPopover({
                       flexDirection="column"
                       justifyContent="start"
                       alignItems="start"
-                      gap={0.25}
-                      padding={0.25}
+                      gap={1}
+                      padding={1}
                       height="fit"
                     >
                       {topErrors.map((log, idx) => (
@@ -314,8 +314,8 @@ export default function HookStatusPopover({
                   flexDirection="column"
                   justifyContent="start"
                   alignItems="start"
-                  gap={0.25}
-                  padding={0.25}
+                  gap={1}
+                  padding={1}
                   height="fit"
                 >
                   {recentErrors.slice(0, 3).map((log, idx) => (

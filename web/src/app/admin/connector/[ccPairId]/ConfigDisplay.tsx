@@ -56,7 +56,7 @@ function ConfigItem({ label, value, onEdit }: ConfigItemProps) {
       return (
         <Section
           flexDirection="row"
-          gap={0.25}
+          gap={1}
           justifyContent="end"
           alignItems="center"
           height="fit"
@@ -70,7 +70,7 @@ function ConfigItem({ label, value, onEdit }: ConfigItemProps) {
       );
     } else if (typeof value === "object" && value !== null) {
       return (
-        <Section gap={0.25} alignItems="end" height="fit">
+        <Section gap={1} alignItems="end" height="fit">
           {Object.entries(value).map(([key, val]) => (
             <Text key={key} secondaryBody text03 className="wrap-break-word">
               <Text mainContentEmphasis text03>
@@ -100,7 +100,7 @@ function ConfigItem({ label, value, onEdit }: ConfigItemProps) {
       flexDirection="row"
       justifyContent="between"
       alignItems="center"
-      gap={1}
+      gap={4}
     >
       <Section alignItems="start">
         <Text mainUiBody text04>
@@ -111,7 +111,7 @@ function ConfigItem({ label, value, onEdit }: ConfigItemProps) {
         flexDirection="row"
         justifyContent="end"
         alignItems="center"
-        gap={0.5}
+        gap={2}
       >
         {renderValue()}
 

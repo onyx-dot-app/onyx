@@ -246,7 +246,7 @@ export default function AccountPopover({
             )}
             rightChildren={
               undismissedCount ? (
-                <Section padding={0.5}>
+                <Section padding={2}>
                   <SvgNotificationBubble count={undismissedCount} />
                 </Section>
               ) : undefined

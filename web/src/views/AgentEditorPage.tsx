@@ -333,14 +333,14 @@ function MCPServerCard({
   if (isLoading) {
     cardContent = (
       <div className="flex flex-col gap-2 p-2">
-        <GeneralLayouts.Section padding={1}>
+        <GeneralLayouts.Section padding={4}>
           <SvgSimpleLoader />
         </GeneralLayouts.Section>
       </div>
     );
   } else if (hasTools) {
     cardContent = (
-      <GeneralLayouts.Section gap={0.5} padding={0.5} alignItems="stretch">
+      <GeneralLayouts.Section gap={2} padding={2} alignItems="stretch">
         {filteredTools.map((tool) => {
           const toolDisabled =
             !tool.isAvailable ||
@@ -385,7 +385,7 @@ function MCPServerCard({
       >
         <CardLayout.Header
           bottomChildren={
-            <GeneralLayouts.Section flexDirection="row" gap={0.5}>
+            <GeneralLayouts.Section flexDirection="row" gap={2}>
               <InputTypeIn
                 placeholder="Search tools..."
                 variant="internal"
@@ -416,7 +416,7 @@ function MCPServerCard({
               rightChildren={
                 <GeneralLayouts.Section
                   flexDirection="row"
-                  gap={0.5}
+                  gap={2}
                   alignItems="start"
                 >
                   <EnabledCount
@@ -471,7 +471,7 @@ function AgentStarterMessages() {
   return (
     <FieldArray name="starter_messages">
       {(arrayHelpers) => (
-        <GeneralLayouts.Section gap={0.5}>
+        <GeneralLayouts.Section gap={2}>
           {Array.from({ length: visibleCount }, (_, i) => (
             <InputTypeInElementField
               key={`starter_messages.${i}`}
@@ -1304,7 +1304,7 @@ export default function AgentEditorPage({
                       }
                       onClose={() => deleteAgentModal.toggle(false)}
                     >
-                      <GeneralLayouts.Section alignItems="start" gap={0.5}>
+                      <GeneralLayouts.Section alignItems="start" gap={2}>
                         <Text>
                           Anyone using this agent will no longer be able to
                           access it. Deletion cannot be undone.
@@ -1373,7 +1373,7 @@ export default function AgentEditorPage({
 
                       <GeneralLayouts.Section
                         flexDirection="row"
-                        gap={2.5}
+                        gap={10}
                         alignItems="start"
                       >
                         <GeneralLayouts.Section>
@@ -1491,7 +1491,7 @@ export default function AgentEditorPage({
                       />
 
                       <GeneralLayouts.Section
-                        gap={0.5}
+                        gap={2}
                         alignItems="stretch"
                         height="auto"
                       >
@@ -1539,7 +1539,7 @@ export default function AgentEditorPage({
                               </>
                             )}
                             <GeneralLayouts.Section
-                              gap={0.25}
+                              gap={1}
                               alignItems="stretch"
                             >
                               <InputChipField
@@ -1591,10 +1591,7 @@ export default function AgentEditorPage({
                           description="Tools and capabilities available for this agent to use."
                         />
                         <SimpleCollapsible.Content>
-                          <GeneralLayouts.Section
-                            gap={0.5}
-                            alignItems="stretch"
-                          >
+                          <GeneralLayouts.Section gap={2} alignItems="stretch">
                             <Disabled
                               disabled={!isImageGenerationAvailable}
                               tooltip={imageGenerationDisabledTooltip}
@@ -1692,7 +1689,7 @@ export default function AgentEditorPage({
                               {/* MCP tools */}
                               {mcpServersWithVisibleTools.length > 0 && (
                                 <GeneralLayouts.Section
-                                  gap={0.5}
+                                  gap={2}
                                   alignItems="stretch"
                                 >
                                   {mcpServersWithVisibleTools.map(
@@ -1710,7 +1707,7 @@ export default function AgentEditorPage({
 
                               {/* OpenAPI tools */}
                               {openApiTools.length > 0 && (
-                                <GeneralLayouts.Section gap={0.5}>
+                                <GeneralLayouts.Section gap={2}>
                                   {openApiTools.map((tool) => (
                                     <OpenApiToolCard
                                       key={tool.id}
@@ -1780,7 +1777,7 @@ export default function AgentEditorPage({
                               </GeneralLayouts.Section>
                             </Card>
 
-                            <GeneralLayouts.Section gap={0.25}>
+                            <GeneralLayouts.Section gap={1}>
                               <InputVertical
                                 withLabel="reminders"
                                 title="Reminders"

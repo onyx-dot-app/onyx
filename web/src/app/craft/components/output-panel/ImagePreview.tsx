@@ -34,7 +34,7 @@ export default function ImagePreview({ src, fileName }: ImagePreviewProps) {
         height="full"
         alignItems="center"
         justifyContent="center"
-        padding={2}
+        padding={8}
       >
         <SvgImage size={48} className="stroke-text-02" />
         <Text font="heading-h3" color="text-03">

@@ -43,7 +43,7 @@ export default function WelcomeMessage({
         data-testid="onyx-logo"
         flexDirection="column"
         alignItems="start"
-        gap={0.5}
+        gap={2}
         width="fit"
       >
         <Logo folded size={32} />
@@ -58,7 +58,7 @@ export default function WelcomeMessage({
         data-testid="agent-name-display"
         flexDirection="column"
         alignItems="start"
-        gap={0.5}
+        gap={2}
         width="fit"
       >
         <AgentAvatar agent={agent} size={36} />

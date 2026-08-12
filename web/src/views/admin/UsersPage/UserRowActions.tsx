@@ -211,7 +211,7 @@ export default function UserRowActions({
         </Popover.Trigger>
         <Popover.Content align="end" width="sm">
           <Section
-            gap={0.5}
+            gap={2}
             height="auto"
             alignItems="stretch"
             justifyContent="start"

@@ -121,12 +121,7 @@ export function IndexAttemptsTable({
                     : "-"}
                 </TableCell>
                 <TableCell>
-                  <Section
-                    alignItems="start"
-                    width="fit"
-                    height="fit"
-                    gap={0.25}
-                  >
+                  <Section alignItems="start" width="fit" height="fit" gap={1}>
                     <IndexAttemptStatus
                       status={indexAttempt.status || "not_started"}
                     />
@@ -137,7 +132,7 @@ export function IndexAttemptsTable({
                         alignItems="center"
                         width="fit"
                         height="fit"
-                        gap={0.25}
+                        gap={1}
                         // Stack above the row-wide trace overlay button so
                         // the metrics button stays clickable on rows with
                         // a full exception trace.

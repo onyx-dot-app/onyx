@@ -54,7 +54,7 @@ export default function AdminChrome({ children }: AdminChromeProps) {
   if (isVectorDbRequiredRoute(pathname)) {
     if (isLoading) {
       content = (
-        <Section padding={2}>
+        <Section padding={8}>
           <SvgSimpleLoader className="h-6 w-6" />
         </Section>
       );

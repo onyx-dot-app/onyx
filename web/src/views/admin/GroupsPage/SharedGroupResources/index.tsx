@@ -270,7 +270,7 @@ function SharedGroupResources({
       <SimpleCollapsible.Content>
         <Card>
           <Section
-            gap={1}
+            gap={4}
             height="auto"
             alignItems="stretch"
             justifyContent="start"
@@ -278,13 +278,13 @@ function SharedGroupResources({
           >
             {/* Connectors & Document Sets */}
             <Section
-              gap={0.5}
+              gap={2}
               height="auto"
               alignItems="stretch"
               justifyContent="start"
             >
               <Section
-                gap={0.25}
+                gap={1}
                 height="auto"
                 alignItems="stretch"
                 justifyContent="start"
@@ -303,7 +303,7 @@ function SharedGroupResources({
                 <Section
                   flexDirection="row"
                   wrap
-                  gap={0.25}
+                  gap={1}
                   height="auto"
                   alignItems="start"
                   justifyContent="start"
@@ -345,13 +345,13 @@ function SharedGroupResources({
 
             {/* Agents */}
             <Section
-              gap={0.5}
+              gap={2}
               height="auto"
               alignItems="stretch"
               justifyContent="start"
             >
               <Section
-                gap={0.25}
+                gap={1}
                 height="auto"
                 alignItems="stretch"
                 justifyContent="start"
@@ -370,7 +370,7 @@ function SharedGroupResources({
                 <Section
                   flexDirection="row"
                   wrap
-                  gap={0.25}
+                  gap={1}
                   height="auto"
                   alignItems="start"
                   justifyContent="start"

@@ -105,14 +105,14 @@ export const FileReaderToolRenderer: MessageRenderer<
       supportsCollapsible: true,
       timelineLayout: "timeline",
       content: (
-        <Section gap={0.5} alignItems="start" height="fit">
+        <Section gap={2} alignItems="start" height="fit">
           {state.fileName ? (
             <>
               <Section
                 flexDirection="row"
                 alignItems="center"
                 justifyContent="start"
-                gap={0.5}
+                gap={2}
                 height="fit"
               >
                 <Text as="span" mainUiAction text02>
@@ -127,7 +127,7 @@ export const FileReaderToolRenderer: MessageRenderer<
                 </Text>
               </Section>
               {hasPreview && (
-                <Card variant="secondary" padding={0.5} gap={0.25}>
+                <Card variant="secondary" padding={2} gap={1}>
                   <Text as="span" secondaryMono text04>
                     {state.previewStart}
                     {state.previewEnd && "\u2026"}
