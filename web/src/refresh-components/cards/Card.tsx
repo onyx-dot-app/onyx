@@ -23,20 +23,20 @@
  * import { Card } from "@/refresh-components/cards";
  *
  * // Basic usage (primary variant)
- * <Card>
+ * <Card border="solid" rounding="lg"><Section alignItems="start" height="fit">
  *   <h2>Card Title</h2>
  *   <p>Card content goes here</p>
- * </Card>
+ * </Section></Card>
  *
  * // Secondary variant for nested content
- * <Card variant="secondary">
+ * <Card background="none" border="solid" rounding="lg"><Section alignItems="start" height="fit">
  *   <div>Less prominent content</div>
- * </Card>
+ * </Section></Card>
  *
  * // Tertiary variant for empty states
- * <Card variant="tertiary">
+ * <Card background="none" border="dashed" rounding="lg"><Section alignItems="start" height="fit">
  *   <div>No items yet</div>
- * </Card>
+ * </Section></Card>
  * ```
  */
 

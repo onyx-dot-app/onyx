@@ -3,14 +3,13 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import useSWR from "swr";
 import { ContentAction, SettingsLayouts, toast } from "@opal/layouts";
-import { Button, MessageCard, Text } from "@opal/components";
+import { Button, Card, MessageCard, Text } from "@opal/components";
 import { SvgDownload } from "@opal/icons";
 import { ADMIN_ROUTES } from "@/lib/admin-routes";
 import { downloadFile } from "@/lib/download";
 import { errorHandlingFetcher, FetchError } from "@/lib/fetcher";
 import { SWR_KEYS } from "@/lib/swr-keys";
 import { Section } from "@/layouts/general-layouts";
-import Card from "@/refresh-components/cards/Card";
 
 const route = ADMIN_ROUTES.EXPORT_LOGS;
 
@@ -328,52 +327,56 @@ export default function ExportLogsPage() {
           title="Logs may contain sensitive data"
           description="Log files can include user emails, document titles, search queries, and error payloads. Review the contents before sharing them outside your organization."
         />
-        <Card>
-          <ContentAction
-            sizePreset="main-ui"
-            variant="section"
-            icon={SvgDownload}
-            title="Export logs"
-            description="Collects log files from the API server and background workers into a single zip. The download starts automatically once collection finishes."
-            rightChildren={
-              <Button
-                icon={SvgDownload}
-                onClick={handleExport}
-                disabled={isStarting || isCollecting || isDownloading}
-              >
-                {buttonLabel}
-              </Button>
-            }
-          />
+        <Card border="solid" rounding="lg">
+          <Section alignItems="start" height="fit">
+            <ContentAction
+              sizePreset="main-ui"
+              variant="section"
+              icon={SvgDownload}
+              title="Export logs"
+              description="Collects log files from the API server and background workers into a single zip. The download starts automatically once collection finishes."
+              rightChildren={
+                <Button
+                  icon={SvgDownload}
+                  onClick={handleExport}
+                  disabled={isStarting || isCollecting || isDownloading}
+                >
+                  {buttonLabel}
+                </Button>
+              }
+            />
+          </Section>
         </Card>
         {exportId !== null && (
-          <Card>
-            {workerRows.length === 0 ? (
-              <Text font="main-ui-body" color="text-02">
-                Starting collection...
-              </Text>
-            ) : (
-              workerRows.map((row) => (
-                <WorkerStatusRow
-                  key={row.workerName}
-                  workerName={row.workerName}
-                  label={row.label}
-                  pending={row.pending}
-                />
-              ))
-            )}
-            {status?.state === "ready" && (
-              <Section flexDirection="row" justifyContent="end" height="fit">
-                <Button
-                  prominence="secondary"
-                  icon={SvgDownload}
-                  onClick={() => void downloadBundle(status.export_id)}
-                  disabled={isDownloading}
-                >
-                  Download
-                </Button>
-              </Section>
-            )}
+          <Card border="solid" rounding="lg">
+            <Section alignItems="start" height="fit">
+              {workerRows.length === 0 ? (
+                <Text font="main-ui-body" color="text-02">
+                  Starting collection...
+                </Text>
+              ) : (
+                workerRows.map((row) => (
+                  <WorkerStatusRow
+                    key={row.workerName}
+                    workerName={row.workerName}
+                    label={row.label}
+                    pending={row.pending}
+                  />
+                ))
+              )}
+              {status?.state === "ready" && (
+                <Section flexDirection="row" justifyContent="end" height="fit">
+                  <Button
+                    prominence="secondary"
+                    icon={SvgDownload}
+                    onClick={() => void downloadBundle(status.export_id)}
+                    disabled={isDownloading}
+                  >
+                    Download
+                  </Button>
+                </Section>
+              )}
+            </Section>
           </Card>
         )}
       </SettingsLayouts.Body>

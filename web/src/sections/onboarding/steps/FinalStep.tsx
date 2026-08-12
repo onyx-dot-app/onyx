@@ -1,13 +1,12 @@
 import React from "react";
 import Link from "next/link";
 import type { Route } from "next";
-import { Button } from "@opal/components";
+import { Button, Card } from "@opal/components";
 import { FINAL_SETUP_CONFIG } from "@/sections/onboarding/constants";
 import { FinalStepItemProps } from "@/interfaces/onboarding";
 import { SvgExternalLink } from "@opal/icons";
 import { Section } from "@/layouts/general-layouts";
 import { ContentAction } from "@opal/layouts";
-import { Card } from "@/refresh-components/cards";
 
 const FinalStepItem = React.memo(
   ({
@@ -23,22 +22,24 @@ const FinalStepItem = React.memo(
       : {};
 
     return (
-      <Card padding={1} variant="secondary">
-        <ContentAction
-          icon={Icon}
-          title={title}
-          description={description}
-          sizePreset="main-ui"
-          variant="section"
-          padding={1}
-          rightChildren={
-            <Link href={buttonHref as Route} {...linkProps}>
-              <Button prominence="tertiary" rightIcon={SvgExternalLink}>
-                {buttonText}
-              </Button>
-            </Link>
-          }
-        />
+      <Card background="none" border="solid" padding={1} rounding="lg">
+        <Section alignItems="start" height="fit">
+          <ContentAction
+            icon={Icon}
+            title={title}
+            description={description}
+            sizePreset="main-ui"
+            variant="section"
+            padding={1}
+            rightChildren={
+              <Link href={buttonHref as Route} {...linkProps}>
+                <Button prominence="tertiary" rightIcon={SvgExternalLink}>
+                  {buttonText}
+                </Button>
+              </Link>
+            }
+          />
+        </Section>
       </Card>
     );
   }

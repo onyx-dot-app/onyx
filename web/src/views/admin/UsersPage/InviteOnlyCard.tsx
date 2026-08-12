@@ -2,9 +2,8 @@
 
 import { useCallback } from "react";
 import { mutate } from "swr";
-import { ContentAction, toast } from "@opal/layouts";
-import Card from "@/refresh-components/cards/Card";
-import { Switch } from "@opal/components";
+import { ContentAction, Section, toast } from "@opal/layouts";
+import { Card, Switch } from "@opal/components";
 import { useSettings } from "@/lib/settings/hooks";
 import { SWR_KEYS } from "@/lib/swr-keys";
 import { Settings } from "@/lib/settings/types";
@@ -43,22 +42,24 @@ export default function InviteOnlyCard() {
   );
 
   return (
-    <Card gap={2} padding={3}>
-      <ContentAction
-        title="Restrict Open Sign-Up"
-        description="New users must be invited to join this workspace."
-        sizePreset="main-ui"
-        variant="section"
-        padding={0}
-        rightChildren={
-          <Switch
-            checked={settings.invite_only_enabled ?? false}
-            onCheckedChange={(checked) =>
-              void saveSettings({ invite_only_enabled: checked })
-            }
-          />
-        }
-      />
+    <Card border="solid" padding={3} rounding="lg">
+      <Section alignItems="start" height="fit" gap={2}>
+        <ContentAction
+          title="Restrict Open Sign-Up"
+          description="New users must be invited to join this workspace."
+          sizePreset="main-ui"
+          variant="section"
+          padding={0}
+          rightChildren={
+            <Switch
+              checked={settings.invite_only_enabled ?? false}
+              onCheckedChange={(checked) =>
+                void saveSettings({ invite_only_enabled: checked })
+              }
+            />
+          }
+        />
+      </Section>
     </Card>
   );
 }
