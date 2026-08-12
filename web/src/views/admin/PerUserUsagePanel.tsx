@@ -25,7 +25,9 @@ function SummaryMetric({
   detail: string;
 }) {
   return (
-    <div className="flex min-w-0 flex-col gap-0.5 px-3 py-2 first:pl-0 last:pr-0">
+    // basis + flex-1 rather than a fixed fraction: fractions plus the row gap
+    // overflow and wrap the last metric onto its own line.
+    <div className="flex min-w-0 flex-1 basis-40 flex-col gap-0.5 px-3 py-2 first:pl-0 last:pr-0">
       <Text font="secondary-body" color="text-03">
         {label}
       </Text>
@@ -155,38 +157,36 @@ export default function PerUserUsagePanel({
       {header}
 
       <Card border="solid" rounding="lg" padding={2}>
-        <div className="flex flex-wrap gap-2">
-          <div className="basis-1/2 lg:basis-1/4">
-            <SummaryMetric
-              label="Workspace spend"
-              value={formatCost(totalCostCents)}
-              detail="Across all listed users"
-            />
-          </div>
-          <div className="basis-1/2 lg:basis-1/4">
-            <SummaryMetric
-              label="Total tokens"
-              value={formatTokens(totalTokens)}
-              detail="Input (including cache reads) and output"
-            />
-          </div>
-          <div className="basis-1/2 lg:basis-1/4">
-            <SummaryMetric
-              label="Active users"
-              value={activeUsers.toLocaleString()}
-              detail={`${users.length.toLocaleString()} users with records`}
-            />
-          </div>
-          <div className="basis-1/2 lg:basis-1/4">
-            <SummaryMetric
-              label="Top spender"
-              value={
-                topSpender ? formatCost(topSpender.totals.cost_cents) : "—"
-              }
-              detail={topSpender?.email ?? "No spend recorded"}
-            />
-          </div>
-        </div>
+        <Section
+          flexDirection="row"
+          justifyContent="start"
+          alignItems="start"
+          gap={0.5}
+          wrap
+          width="full"
+          height="fit"
+        >
+          <SummaryMetric
+            label="Workspace spend"
+            value={formatCost(totalCostCents)}
+            detail="Across all listed users"
+          />
+          <SummaryMetric
+            label="Total tokens"
+            value={formatTokens(totalTokens)}
+            detail="Input (including cache reads) and output"
+          />
+          <SummaryMetric
+            label="Active users"
+            value={activeUsers.toLocaleString()}
+            detail={`${users.length.toLocaleString()} users with records`}
+          />
+          <SummaryMetric
+            label="Top spender"
+            value={topSpender ? formatCost(topSpender.totals.cost_cents) : "—"}
+            detail={topSpender?.email ?? "No spend recorded"}
+          />
+        </Section>
       </Card>
 
       <Section

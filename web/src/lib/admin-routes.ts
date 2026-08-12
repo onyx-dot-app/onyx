@@ -20,6 +20,7 @@ import {
   SvgMcp,
   SvgOnyxOctagon,
   SvgPaintBrush,
+  SvgPieChart,
   SvgPlug,
   SvgSearchMenu,
   SvgShield,
@@ -207,9 +208,15 @@ export const ADMIN_ROUTES = {
   },
   USAGE: {
     path: "/admin/performance/usage",
+    icon: SvgPieChart,
+    title: "Usage",
+    sidebarLabel: "Usage",
+  },
+  WORKSPACE_ANALYTICS: {
+    path: "/admin/performance/analytics",
     icon: SvgActivity,
-    title: "Usage Statistics",
-    sidebarLabel: "Usage Statistics",
+    title: "Analytics",
+    sidebarLabel: "Analytics",
   },
   QUERY_HISTORY: {
     path: "/admin/performance/query-history",
