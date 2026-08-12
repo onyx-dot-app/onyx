@@ -1,5 +1,3 @@
-"use client";
-
 import React from "react";
 import { Card, Text } from "@opal/components";
 import { Section } from "@opal/layouts";
