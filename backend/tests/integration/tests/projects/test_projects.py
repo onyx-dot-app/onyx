@@ -2,6 +2,7 @@ from typing import List
 
 import httpx
 import pytest
+import sqlalchemy.exc
 
 from onyx.db.engine.sql_engine import get_session_with_current_tenant
 from onyx.db.models import UserFile
@@ -223,7 +224,9 @@ def test_projects_flow(
         )
 
     long_name = "a" * 1000
-    with pytest.raises(httpx.HTTPStatusError):
+    # The endpoint does not check the name length, so Postgres rejects the insert
+    # and the test client re-raises the server exception.
+    with pytest.raises(sqlalchemy.exc.DataError):
         ProjectManager.create(
             name=long_name,
             user_performing_action=basic_user,
