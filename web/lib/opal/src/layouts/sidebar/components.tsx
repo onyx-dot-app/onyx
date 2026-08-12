@@ -63,9 +63,17 @@ function SidebarRoot({ foldable = false, children }: SidebarRootProps) {
   // a sidebar (and inside a non-foldable one) never collapse.
   const effectiveFolded = (isMobile || isSmallScreen || foldable) && folded;
 
+  // The same value in two forms: context for the parts that need JS (the
+  // folded-only tooltip), and `data-folded` for the parts CSS can do on its
+  // own. The attribute lets descendants restyle without re-rendering.
   const inner = (
     <SidebarFoldedContext.Provider value={effectiveFolded}>
-      <div className="opal-sidebar-root__inner">{children}</div>
+      <div
+        className="opal-sidebar-root__inner"
+        data-folded={String(effectiveFolded)}
+      >
+        {children}
+      </div>
     </SidebarFoldedContext.Provider>
   );
 
@@ -247,7 +255,6 @@ interface SidebarBodyProps {
 }
 
 function SidebarBody({ scrollKey, children }: SidebarBodyProps) {
-  const { folded } = useSidebarState();
   const scrollRef = useRef<HTMLDivElement>(null);
   const pathname = usePathname();
 
@@ -283,9 +290,10 @@ function SidebarBody({ scrollKey, children }: SidebarBodyProps) {
       containerClassName="opal-sidebar-body"
       className="opal-sidebar-body__scroll"
     >
-      <div className="opal-sidebar-body__content" data-folded={String(folded)}>
-        {children}
-      </div>
+      {/* Hidden while folded — see styles.css. The fold state comes from the
+          `data-folded` attribute on the root, so folding re-renders nothing
+          here. */}
+      <div className="opal-sidebar-body__content">{children}</div>
       <div className="opal-sidebar-body__spacer" />
     </ShadowDiv>
   );

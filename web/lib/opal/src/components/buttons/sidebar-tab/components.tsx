@@ -1,12 +1,13 @@
 "use client";
 
+import "@opal/components/buttons/sidebar-tab/styles.css";
 import React from "react";
 import type { ButtonType, IconFunctionComponent, RichStr } from "@opal/types";
 import type { Route } from "next";
 import { Interactive, type InteractiveStatefulVariant } from "@opal/core";
 import { ContentAction } from "@opal/layouts";
 import { useSidebarFolded } from "@opal/layouts/sidebar/context";
-import { Text, Tooltip } from "@opal/components";
+import { Tooltip } from "@opal/components";
 import Link from "next/link";
 
 // ---------------------------------------------------------------------------
@@ -15,8 +16,12 @@ import Link from "next/link";
 
 interface SidebarTabProps {
   /**
-   * Collapses the label, showing only the icon. Defaults to the enclosing
-   * sidebar's fold state, so tabs inside a sidebar never need to pass this.
+   * Collapses the label, showing only the icon.
+   *
+   * Leave this unset inside a sidebar: the enclosing `SidebarRoot` publishes
+   * its fold state as a `data-folded` attribute, and CSS collapses the label.
+   * Set it only to override that — outside a sidebar, in Storybook, or in a
+   * skeleton.
    */
   folded?: boolean;
 
@@ -52,6 +57,50 @@ interface SidebarTabProps {
 }
 
 // ---------------------------------------------------------------------------
+// FoldedTooltip
+// ---------------------------------------------------------------------------
+
+interface FoldedTooltipProps {
+  /** Label to show while the tab is folded. */
+  label: string | RichStr;
+
+  /** Explicit fold state. Falls back to the enclosing sidebar's. */
+  folded?: boolean;
+
+  children: React.ReactElement;
+}
+
+/**
+ * Shows `label` on hover, but only while the tab is folded.
+ *
+ * This is the one part of the folded look that CSS cannot express, so it is
+ * split out: this component subscribes to the fold state, and the tab does
+ * not. On a fold toggle React re-renders this wrapper alone — `children` is
+ * the same element it received before, so the tab below it never re-renders.
+ *
+ * The tooltip stays mounted and is gated by `open` instead of being added and
+ * removed. Changing the tree shape on a fold would remount the tab and cut the
+ * label's fade short.
+ */
+function FoldedTooltip({ label, folded, children }: FoldedTooltipProps) {
+  const foldedFromSidebar = useSidebarFolded();
+  const [hovered, setHovered] = React.useState(false);
+
+  const effectiveFolded = folded ?? foldedFromSidebar;
+
+  return (
+    <Tooltip
+      tooltip={label}
+      side="right"
+      open={effectiveFolded && hovered}
+      onOpenChange={setHovered}
+    >
+      {children}
+    </Tooltip>
+  );
+}
+
+// ---------------------------------------------------------------------------
 // SidebarTab
 // ---------------------------------------------------------------------------
 
@@ -61,9 +110,12 @@ interface SidebarTabProps {
  * Uses `sidebar-heavy` (default) or `sidebar-light` (via `variant`) variants
  * for color styling. Supports an overlay `Link` for client-side navigation,
  * `rightChildren` for inline actions, and folded mode with an auto-tooltip.
+ *
+ * The label and `rightChildren` always render. The folded state hides them in
+ * CSS — see `styles.css` — so folding a sidebar re-renders no tabs.
  */
 function SidebarTab({
-  folded: foldedProp,
+  folded,
   selected,
   variant = "sidebar-heavy",
   nested,
@@ -77,9 +129,6 @@ function SidebarTab({
   tooltip,
   children,
 }: SidebarTabProps) {
-  const foldedFromSidebar = useSidebarFolded();
-  const folded = foldedProp ?? foldedFromSidebar;
-
   const Icon =
     icon ??
     (nested
@@ -94,8 +143,16 @@ function SidebarTab({
     <div className="w-0 group-hover/SidebarTab:w-6" />
   );
 
+  // A folded tab hides its label, and neither the overlay Link nor the button
+  // holds text of its own, so name them explicitly. Without this a folded tab
+  // is an unnamed control.
+  const label = typeof children === "string" ? children : undefined;
+
   const content = (
-    <div className="relative">
+    <div
+      className="opal-sidebar-tab"
+      data-folded={folded === undefined ? undefined : String(folded)}
+    >
       <Interactive.Stateful
         variant={variant}
         state={selected ? "selected" : "empty"}
@@ -104,26 +161,33 @@ function SidebarTab({
         type="button"
         group="group/SidebarTab"
       >
-        <Interactive.Container rounding="sm" size="lg" width="full" type={type}>
+        <Interactive.Container
+          rounding="sm"
+          size="lg"
+          width="full"
+          type={type}
+          // Only when `type` makes this a real button — `aria-label` on a
+          // plain div names nothing.
+          aria-label={type ? label : undefined}
+        >
           {href && !disabled && (
             <Link
               href={href as Route}
               scroll={false}
               className="absolute z-99 inset-0 rounded-08"
               tabIndex={-1}
+              aria-label={label}
             />
           )}
 
-          {!folded && rightChildren && (
-            <div className="absolute z-100 right-1.5 top-0 bottom-0 flex flex-col justify-center items-center pointer-events-auto">
-              {rightChildren}
-            </div>
+          {rightChildren && (
+            <div className="opal-sidebar-tab__actions">{rightChildren}</div>
           )}
 
           {typeof children === "string" ? (
             <ContentAction
               icon={Icon ?? undefined}
-              title={folded ? "" : children}
+              title={children}
               sizePreset="main-ui"
               variant="body"
               color="interactive"
@@ -148,25 +212,22 @@ function SidebarTab({
     </div>
   );
 
-  if (typeof children !== "string") {
-    if (tooltip) {
-      return (
-        <Tooltip tooltip={tooltip} side="right">
-          {content}
-        </Tooltip>
-      );
-    }
-    return content;
-  }
-  const resolvedTooltip = tooltip ?? (folded ? children : undefined);
-  if (resolvedTooltip) {
+  if (tooltip) {
     return (
-      <Tooltip tooltip={resolvedTooltip} side="right">
+      <Tooltip tooltip={tooltip} side="right">
         {content}
       </Tooltip>
     );
   }
-  return content;
+
+  // Only a string label can stand in as its own tooltip.
+  if (label === undefined) return content;
+
+  return (
+    <FoldedTooltip label={label} folded={folded}>
+      {content}
+    </FoldedTooltip>
+  );
 }
 
 export { SidebarTab, type SidebarTabProps };
