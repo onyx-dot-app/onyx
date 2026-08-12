@@ -3,13 +3,15 @@
 import { useEffect, useMemo, useState } from "react";
 import { Section } from "@/layouts/general-layouts";
 import { Content } from "@opal/layouts";
-import { Text, EmptyMessageCard, Divider } from "@opal/components";
+import { Button, Text, EmptyMessageCard, Divider } from "@opal/components";
 import {
   SvgBarChart,
   SvgWallet,
   SvgCreditCard,
   SvgSimpleLoader,
+  SvgChevronDown,
   SvgChevronRight,
+  SvgChevronUp,
 } from "@opal/icons";
 import Card from "@/refresh-components/cards/Card";
 import {
@@ -39,17 +41,37 @@ interface WindowCostSectionProps {
   rows: UsagePerDayByModel[];
 }
 
+const COLLAPSED_USAGE_ROW_COUNT = 3;
+
 function WindowCostSection({ windowCostCents, rows }: WindowCostSectionProps) {
-  // Drives the relative bar widths in the breakdown.
-  const maxRowCost = rows.reduce(
-    (max, row) => Math.max(max, row.cost_cents),
-    0
-  );
+  const [showAll, setShowAll] = useState(false);
   const hasCache = rows.some((row) => row.cache_read_tokens > 0);
-  const sortedRows = useMemo(
-    () => [...rows].sort((a, b) => b.cost_cents - a.cost_cents),
-    [rows]
-  );
+  const modelRows = useMemo(() => {
+    const byModel = new Map<string, Omit<UsagePerDayByModel, "day">>();
+    for (const row of rows) {
+      const model = byModel.get(row.model) ?? {
+        model: row.model,
+        input_tokens: 0,
+        output_tokens: 0,
+        cache_read_tokens: 0,
+        cost_cents: 0,
+      };
+      model.input_tokens += row.input_tokens;
+      model.output_tokens += row.output_tokens;
+      model.cache_read_tokens += row.cache_read_tokens;
+      model.cost_cents += row.cost_cents;
+      byModel.set(row.model, model);
+    }
+    return Array.from(byModel.values()).sort(
+      (a, b) => b.cost_cents - a.cost_cents
+    );
+  }, [rows]);
+  const maxModelCost = modelRows[0]?.cost_cents ?? 0;
+  const isExpandable = modelRows.length > COLLAPSED_USAGE_ROW_COUNT;
+  const displayedRows = showAll
+    ? modelRows
+    : modelRows.slice(0, COLLAPSED_USAGE_ROW_COUNT + 1);
+  const hiddenRowCount = modelRows.length - COLLAPSED_USAGE_ROW_COUNT;
 
   return (
     <Section gap={0.75} justifyContent="start">
@@ -70,55 +92,88 @@ function WindowCostSection({ windowCostCents, rows }: WindowCostSectionProps) {
         />
       ) : (
         <Card>
-          {sortedRows.map((row, index) => (
-            <div key={`${row.day}-${row.model}`}>
-              {index > 0 && <Divider />}
-              <Section gap={0.5} alignItems="start" justifyContent="start">
-                <Section
-                  flexDirection="row"
-                  justifyContent="between"
-                  alignItems="center"
-                  width="full"
-                  gap={1}
-                >
-                  <Section gap={0} alignItems="start" justifyContent="start">
-                    <Text font="main-ui-action" color="text-03">
-                      {row.model}
-                    </Text>
-                    <Text font="secondary-body" color="text-01">
-                      {row.day}
+          {displayedRows.map((row, index) => {
+            const isPreview = !showAll && index === COLLAPSED_USAGE_ROW_COUNT;
+
+            return (
+              <div
+                key={row.model}
+                data-testid={isPreview ? "usage-model-preview" : undefined}
+                aria-hidden={isPreview || undefined}
+                className={cn(
+                  isPreview &&
+                    "max-h-10 overflow-hidden [mask-image:linear-gradient(to_bottom,black_5%,transparent_75%)]"
+                )}
+              >
+                {index > 0 && <Divider />}
+                <Section gap={0.5} alignItems="start" justifyContent="start">
+                  <Section
+                    flexDirection="row"
+                    justifyContent="between"
+                    alignItems="center"
+                    width="full"
+                    gap={1}
+                  >
+                    <Section gap={0} alignItems="start" justifyContent="start">
+                      <Text font="main-ui-action" color="text-03">
+                        {row.model}
+                      </Text>
+                    </Section>
+                    <Text font="main-ui-action" color="text-03" nowrap>
+                      {formatDollars(row.cost_cents)}
                     </Text>
                   </Section>
-                  <Text font="main-ui-action" color="text-03" nowrap>
-                    {formatDollars(row.cost_cents)}
+
+                  {/* Cost bar — proportional to the priciest row in the window. */}
+                  <div className="w-full h-1.5 rounded-full bg-background-neutral-03 overflow-hidden">
+                    <div
+                      className="h-full rounded-full bg-theme-primary-05"
+                      style={{
+                        width:
+                          maxModelCost > 0
+                            ? `${Math.max(2, (row.cost_cents / maxModelCost) * 100)}%`
+                            : "0%",
+                      }}
+                    />
+                  </div>
+
+                  <Text font="secondary-body" color="text-03">
+                    {`${formatTokens(row.input_tokens)} in · ${formatTokens(
+                      row.output_tokens
+                    )} out${
+                      hasCache
+                        ? ` · ${formatTokens(row.cache_read_tokens)} cache`
+                        : ""
+                    }`}
                   </Text>
                 </Section>
-
-                {/* Cost bar — proportional to the priciest row in the window. */}
-                <div className="w-full h-1.5 rounded-full bg-background-neutral-03 overflow-hidden">
-                  <div
-                    className="h-full rounded-full bg-theme-primary-05"
-                    style={{
-                      width:
-                        maxRowCost > 0
-                          ? `${Math.max(2, (row.cost_cents / maxRowCost) * 100)}%`
-                          : "0%",
-                    }}
-                  />
-                </div>
-
-                <Text font="secondary-body" color="text-03">
-                  {`${formatTokens(row.input_tokens)} in · ${formatTokens(
-                    row.output_tokens
-                  )} out${
-                    hasCache
-                      ? ` · ${formatTokens(row.cache_read_tokens)} cache`
-                      : ""
-                  }`}
-                </Text>
-              </Section>
+              </div>
+            );
+          })}
+          {isExpandable && (
+            <div
+              data-testid="usage-models-expander"
+              className={cn(
+                "relative z-10 -mx-4 -mb-4 flex self-stretch justify-center pb-1 pt-1",
+                showAll ? "mt-1" : "-mt-8"
+              )}
+            >
+              <Button
+                prominence="tertiary"
+                size="2xs"
+                rightIcon={showAll ? SvgChevronUp : SvgChevronDown}
+                aria-expanded={showAll}
+                aria-label={
+                  showAll
+                    ? "Show fewer models"
+                    : `Show ${hiddenRowCount} more models`
+                }
+                onClick={() => setShowAll((value) => !value)}
+              >
+                {showAll ? "Show less" : `Show ${hiddenRowCount} more`}
+              </Button>
             </div>
-          ))}
+          )}
         </Card>
       )}
     </Section>

@@ -4,7 +4,7 @@ import React, { useMemo, useState } from "react";
 import { Card, MessageCard, Text } from "@opal/components";
 import { SvgX } from "@opal/icons";
 import { PageLoader, Section } from "@opal/layouts";
-import type { DateRange } from "@/components/dateRangeSelectors/DateRangePicker";
+import type { DateRange } from "@/refresh-components/DateRangePicker";
 import { formatCalendarDay } from "@/lib/dateUtils";
 import { useUsageExport } from "@/lib/usage/userUsage";
 import { formatCost, formatTokens } from "@/lib/utils";
@@ -148,7 +148,7 @@ export default function PerUserUsagePanel({
     >
       {header}
 
-      <Card border="solid" rounding="lg" padding="fit">
+      <Card border="solid" rounding="lg" padding={0}>
         <div className="grid grid-cols-2 lg:grid-cols-4">
           <div className="border-b border-border-02 lg:border-b-0">
             <SummaryMetric
@@ -207,7 +207,7 @@ export default function PerUserUsagePanel({
         </Section>
 
         {users.length === 0 ? (
-          <Card border="solid" rounding="lg" padding="sm">
+          <Card border="solid" rounding="lg" padding={3}>
             <Text font="main-ui-body" color="text-03">
               No usage recorded for this period.
             </Text>
