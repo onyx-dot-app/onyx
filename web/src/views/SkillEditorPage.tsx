@@ -551,7 +551,7 @@ export default function SkillEditorPage({
               {isCreating && !creationDraft && (
                 <>
                   <Section gap={2} alignItems="stretch" height="auto">
-                    <Card border="solid" rounding="lg" padding="sm">
+                    <Card border="solid" rounding="lg" padding={2}>
                       <Section gap={2} alignItems="stretch" height="auto">
                         <Content
                           title="Have an existing skill?"
@@ -575,7 +575,7 @@ export default function SkillEditorPage({
                     </Card>
                   </Section>
 
-                  <Divider paddingParallel="fit" paddingPerpendicular="fit" />
+                  <Divider paddingParallel={0} paddingPerpendicular={0} />
                 </>
               )}
 
@@ -641,7 +641,7 @@ export default function SkillEditorPage({
                 </InputVertical>
               </Section>
 
-              <Divider paddingParallel="fit" paddingPerpendicular="fit" />
+              <Divider paddingParallel={0} paddingPerpendicular={0} />
 
               <Section alignItems="stretch">
                 <div className="flex w-full items-start justify-between gap-2">
@@ -657,7 +657,7 @@ export default function SkillEditorPage({
                   />
                 </div>
 
-                <Card border="solid" rounding="lg" padding="sm">
+                <Card border="solid" rounding="lg" padding={2}>
                   {instructionsDisplayMode === "raw" ? (
                     <InputTextArea
                       id="instructions_markdown"
@@ -680,7 +680,7 @@ export default function SkillEditorPage({
                 </Card>
               </Section>
 
-              <Divider paddingParallel="fit" paddingPerpendicular="fit" />
+              <Divider paddingParallel={0} paddingPerpendicular={0} />
 
               <Section gap={2} alignItems="stretch" height="auto">
                 <Content
@@ -727,7 +727,7 @@ export default function SkillEditorPage({
 
               {skill && (
                 <>
-                  <Divider paddingParallel="fit" paddingPerpendicular="fit" />
+                  <Divider paddingParallel={0} paddingPerpendicular={0} />
 
                   <Section gap={2} alignItems="stretch" height="auto">
                     <Content
@@ -801,10 +801,7 @@ export default function SkillEditorPage({
 
                   {canManageSkill && (
                     <>
-                      <Divider
-                        paddingParallel="fit"
-                        paddingPerpendicular="fit"
-                      />
+                      <Divider paddingParallel={0} paddingPerpendicular={0} />
 
                       <Card border="solid" rounding="lg">
                         <Section>

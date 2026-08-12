@@ -113,7 +113,7 @@ function CreateGroupPage() {
           />
         </Section>
 
-        <Divider paddingParallel="fit" paddingPerpendicular="fit" />
+        <Divider paddingParallel={0} paddingPerpendicular={0} />
 
         {/* Members table */}
         {isLoading && <SvgSimpleLoader />}

@@ -68,10 +68,7 @@ function ResourcePopover({
                         <Text secondaryBody text03 className="shrink-0">
                           {section.label}
                         </Text>
-                        <Divider
-                          paddingParallel="fit"
-                          paddingPerpendicular="fit"
-                        />
+                        <Divider paddingParallel={0} paddingPerpendicular={0} />
                       </Section>
                     )}
                     <Section

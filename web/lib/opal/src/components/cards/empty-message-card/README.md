@@ -13,7 +13,7 @@ A pre-configured Card for empty states. Renders a transparent card with a dashed
 | `sizePreset` | `"secondary" \| "main-ui"`   | `"secondary"` | Controls layout and text sizing    |
 | `icon`       | `IconFunctionComponent`       | `SvgEmpty`    | Icon displayed alongside the title |
 | `title`      | `string \| RichStr`           | —             | Primary message text (required)    |
-| `padding`    | `PaddingVariants`             | `"md"`        | Padding preset for the card        |
+| `padding`    | `Spacing`             | `4`           | Padding, as a spacing step (`N / 4` rem) |
 | `ref`        | `React.Ref<HTMLDivElement>`   | —             | Ref forwarded to the root div      |
 
 ### `sizePreset="main-ui"` only
@@ -45,5 +45,5 @@ import { SvgSparkle, SvgFileText, SvgActions } from "@opal/icons";
 />
 
 // Custom padding
-<EmptyMessageCard padding="xs" icon={SvgFileText} title="No documents available." />
+<EmptyMessageCard padding={1} icon={SvgFileText} title="No documents available." />
 ```

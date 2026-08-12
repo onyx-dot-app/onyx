@@ -619,7 +619,7 @@ export default function MCPAuthenticationModal({
                         }}
                       />
                     </FormField>
-                    <Divider paddingPerpendicular="fit" />
+                    <Divider paddingPerpendicular={0} />
                   </div>
 
                   {/* OAuth Section */}

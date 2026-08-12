@@ -92,7 +92,7 @@ function OllamaModalInternals({
 
   return (
     <>
-      <Card background="light" border="none" padding="sm">
+      <Card background="light" border="none" padding={2}>
         <Tabs value={tab} onValueChange={(value) => setTab(value as Tab)}>
           <Tabs.List>
             <Tabs.Trigger value={Tab.TAB_SELF_HOSTED}>

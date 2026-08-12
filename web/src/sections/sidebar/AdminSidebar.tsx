@@ -302,7 +302,7 @@ export default function AdminSidebar() {
 
         {disabledGroups.length > 0 && (
           <>
-            <Divider paddingPerpendicular="fit" />
+            <Divider paddingPerpendicular={0} />
             {/* Empty div here just to add spacing (via the `gap` property on `SidebarLayouts.Body`) */}
             <div />
           </>
@@ -330,7 +330,7 @@ export default function AdminSidebar() {
       </SidebarLayouts.Body>
 
       <SidebarLayouts.Footer>
-        {!folded && <Divider paddingPerpendicular="sm" />}
+        {!folded && <Divider paddingPerpendicular={2} />}
         <SidebarTab
           icon={SvgX}
           href={pathname?.startsWith("/admin/craft") ? "/craft/v1" : "/app"}

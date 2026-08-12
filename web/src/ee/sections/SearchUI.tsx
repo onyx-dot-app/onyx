@@ -312,7 +312,7 @@ export default function SearchUI({ onDocumentClick }: SearchResultsProps) {
             </Popover>
           </div>
 
-          <Divider paddingParallel="fit" paddingPerpendicular="fit" />
+          <Divider paddingParallel={0} paddingPerpendicular={0} />
         </div>
 
         {!showEmpty && (
@@ -323,7 +323,7 @@ export default function SearchUI({ onDocumentClick }: SearchResultsProps) {
               </Text>
             </Section>
 
-            <Divider paddingParallel="fit" paddingPerpendicular="fit" />
+            <Divider paddingParallel={0} paddingPerpendicular={0} />
           </div>
         )}
       </div>

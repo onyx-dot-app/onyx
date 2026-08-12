@@ -250,7 +250,7 @@ export default function HookStatusPopover({
 
                 {topErrors.length > 0 ? (
                   <>
-                    <Divider paddingPerpendicular="fit" />
+                    <Divider paddingPerpendicular={0} />
 
                     <Section
                       flexDirection="column"
@@ -270,7 +270,7 @@ export default function HookStatusPopover({
                     </Section>
                   </>
                 ) : (
-                  <Divider paddingPerpendicular="fit" />
+                  <Divider paddingPerpendicular={0} />
                 )}
 
                 <LineItem
@@ -307,7 +307,7 @@ export default function HookStatusPopover({
                   />
                 </div>
 
-                <Divider paddingPerpendicular="fit" />
+                <Divider paddingPerpendicular={0} />
 
                 {/* Log rows — at most 3, timestamp first then error message */}
                 <Section
@@ -352,7 +352,7 @@ export default function HookStatusPopover({
                   />
                 </div>
 
-                <Divider paddingPerpendicular="fit" />
+                <Divider paddingPerpendicular={0} />
 
                 {/* View Older Errors */}
                 <LineItem

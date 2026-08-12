@@ -175,7 +175,7 @@ export default function AddMCPServerModal({
                   />
                 </InputVertical>
 
-                <Divider paddingParallel="fit" paddingPerpendicular="fit" />
+                <Divider paddingParallel={0} paddingPerpendicular={0} />
 
                 <InputVertical
                   withLabel="server_url"
@@ -188,7 +188,7 @@ export default function AddMCPServerModal({
                   />
                 </InputVertical>
 
-                <Divider paddingParallel="fit" paddingPerpendicular="fit" />
+                <Divider paddingParallel={0} paddingPerpendicular={0} />
 
                 {/* Access control: who can add this server's tools to agents.
                     Self-gates on tier/role; no-op when groups are unavailable. */}

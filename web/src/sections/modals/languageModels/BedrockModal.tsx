@@ -180,7 +180,7 @@ function BedrockModalInternals({
       </InputPadder>
 
       {authMethod === AUTH_METHOD_ACCESS_KEY && (
-        <Card background="light" border="none" padding="sm">
+        <Card background="light" border="none" padding={2}>
           <Section gap={4}>
             <InputVertical
               withLabel={FIELD_AWS_ACCESS_KEY_ID}
@@ -214,7 +214,7 @@ function BedrockModalInternals({
       )}
 
       {authMethod === AUTH_METHOD_LONG_TERM_API_KEY && (
-        <Card background="light" border="none" padding="sm">
+        <Card background="light" border="none" padding={2}>
           <Section gap={2}>
             <InputVertical
               withLabel={FIELD_AWS_BEARER_TOKEN_BEDROCK}

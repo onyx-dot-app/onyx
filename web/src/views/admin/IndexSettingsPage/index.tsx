@@ -393,7 +393,7 @@ function ProviderGroup({
           <SelectCard
             state="filled"
             rounding="md"
-            padding="sm"
+            padding={2}
             onClick={() => providerCreationModal.toggle(true)}
           >
             <ContentAction
@@ -521,7 +521,7 @@ function EmbeddingModelCard({
     <SelectCard
       state={cardState}
       rounding="md"
-      padding="xs"
+      padding={1}
       onClick={isClickable ? onSelect : undefined}
     >
       <GeneralLayouts.Section flexDirection="row" alignItems="start">
@@ -959,7 +959,7 @@ export default function IndexSettingsPage() {
                       // Non-port reindex has no PortAttempt progress → the original banner.
                       <MessageCard
                         variant="warning"
-                        headerPadding="sm"
+                        headerPadding={2}
                         title="Re-indexing in progress"
                         description={markdown(
                           `Switching to **${secondarySearchSettings?.model_name}**. Existing documents are being re-embedded — this may take hours or days depending on corpus size. The previous model continues to serve queries until the switchover completes.`
@@ -994,7 +994,7 @@ export default function IndexSettingsPage() {
                         variant={
                           contextualRagModelMissing ? "error" : statusVariant
                         }
-                        headerPadding="sm"
+                        headerPadding={2}
                         title={
                           contextualRagModelMissing
                             ? "Select a Contextual Retrieval LLM"
@@ -1091,7 +1091,7 @@ export default function IndexSettingsPage() {
 
                         {NEXT_PUBLIC_CLOUD_ENABLED ? (
                           <CloudDisabled>
-                            <Card border="solid" rounding="lg" padding="sm">
+                            <Card border="solid" rounding="lg" padding={2}>
                               <GeneralLayouts.Section padding={2}>
                                 <Content
                                   icon={SvgVector}
@@ -1116,7 +1116,7 @@ export default function IndexSettingsPage() {
                                 border="solid"
                                 borderColor={statusVariant}
                                 rounding="lg"
-                                padding={viewAllModelsOpen ? "fit" : "sm"}
+                                padding={viewAllModelsOpen ? 0 : 2}
                                 expandedContent={
                                   <>
                                     <Tabs.Content value={MODEL_TAB_CLOUD}>
@@ -1269,7 +1269,7 @@ export default function IndexSettingsPage() {
                                             <SelectCard
                                               state="filled"
                                               rounding="md"
-                                              padding="sm"
+                                              padding={2}
                                               onClick={() =>
                                                 customModelModal.toggle(true)
                                               }
@@ -1443,10 +1443,7 @@ export default function IndexSettingsPage() {
                         )}
                       </GeneralLayouts.Section>
 
-                      <Divider
-                        paddingParallel="fit"
-                        paddingPerpendicular="fit"
-                      />
+                      <Divider paddingParallel={0} paddingPerpendicular={0} />
 
                       {/* ── Retrieval Optimization ── */}
                       <GeneralLayouts.Section
@@ -1544,10 +1541,7 @@ export default function IndexSettingsPage() {
                         </CloudDisabled>
                       </GeneralLayouts.Section>
 
-                      <Divider
-                        paddingParallel="fit"
-                        paddingPerpendicular="fit"
-                      />
+                      <Divider paddingParallel={0} paddingPerpendicular={0} />
 
                       {/* ── Image Processing ── */}
                       <GeneralLayouts.Section

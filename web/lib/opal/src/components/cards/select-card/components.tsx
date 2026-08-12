@@ -1,10 +1,6 @@
 import "@opal/components/cards/select-card/styles.css";
-import type {
-  BorderVariants,
-  PaddingVariants,
-  RoundingVariants,
-} from "@opal/types";
-import { paddingVariants, cardRoundingVariants } from "@opal/shared";
+import type { BorderVariants, Spacing, RoundingVariants } from "@opal/types";
+import { cardRoundingVariants, spacingToRem } from "@opal/shared";
 import { cn } from "@opal/utils";
 import { Interactive, type InteractiveStatefulProps } from "@opal/core";
 
@@ -14,20 +10,13 @@ import { Interactive, type InteractiveStatefulProps } from "@opal/core";
 
 type SelectCardProps = Omit<InteractiveStatefulProps, "variant"> & {
   /**
-   * Padding preset.
+   * Padding.
    *
-   * | Value   | Class   |
-   * |---------|---------|
-   * | `"lg"`  | `p-6`   |
-   * | `"md"`  | `p-4`   |
-   * | `"sm"`  | `p-2`   |
-   * | `"xs"`  | `p-1`   |
-   * | `"2xs"` | `p-0.5` |
-   * | `"fit"` | `p-0`   |
+   * A spacing step: `N` is `N / 4` rem, so `4` is `1rem`.
    *
-   * @default "md"
+   * @default 4
    */
-  padding?: PaddingVariants;
+  padding?: Spacing;
 
   /**
    * Border-radius preset.
@@ -86,21 +75,22 @@ type SelectCardProps = Omit<InteractiveStatefulProps, "variant"> & {
  * ```
  */
 function SelectCard({
-  padding: paddingProp = "md",
+  padding: paddingProp = 4,
   rounding: roundingProp = "md",
   border = "solid",
   ref,
   children,
   ...statefulProps
 }: SelectCardProps) {
-  const padding = paddingVariants[paddingProp];
+  const paddingStyle = { padding: spacingToRem(paddingProp) };
   const rounding = cardRoundingVariants[roundingProp];
 
   return (
     <Interactive.Stateful {...statefulProps} variant="select-card">
       <div
         ref={ref}
-        className={cn("opal-select-card", padding, rounding)}
+        className={cn("opal-select-card", rounding)}
+        style={paddingStyle}
         data-border={border}
       >
         {children}

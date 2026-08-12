@@ -176,7 +176,7 @@ function UnconnectedHookCard({ spec, onConnect }: UnconnectedHookCardProps) {
   const Icon = getHookPointIcon(spec.hook_point);
 
   return (
-    <SelectCard state="empty" padding="sm" rounding="lg" onClick={onConnect}>
+    <SelectCard state="empty" padding={2} rounding="lg" onClick={onConnect}>
       <div className="w-full flex flex-row">
         <div className="flex-1 p-2">
           <Content
@@ -342,7 +342,7 @@ function ConnectedHookCard({
 
       <Hoverable.Root group="connected-hook-card">
         {/* TODO(@raunakab): Modify the background colour (by using `SelectCard disabled={...}` [when it lands]) to indicate when the card is "disconnected". */}
-        <SelectCard state="filled" padding="sm" rounding="lg" onClick={onEdit}>
+        <SelectCard state="filled" padding={2} rounding="lg" onClick={onEdit}>
           <div className="w-full flex flex-row">
             <div className="flex-1 p-2">
               <Content

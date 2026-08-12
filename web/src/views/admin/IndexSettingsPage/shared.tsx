@@ -170,7 +170,7 @@ export function ModelSpecFields({
         subDescription={modelNameSubDescription}
       />
 
-      <Divider paddingParallel="fit" paddingPerpendicular="fit" />
+      <Divider paddingParallel={0} paddingPerpendicular={0} />
 
       <TextField
         name="modelDim"

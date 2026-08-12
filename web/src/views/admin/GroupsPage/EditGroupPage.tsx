@@ -395,7 +395,7 @@ function EditGroupPage({ groupId }: EditGroupPageProps) {
                 />
               </Section>
 
-              <Divider paddingParallel="fit" paddingPerpendicular="fit" />
+              <Divider paddingParallel={0} paddingPerpendicular={0} />
 
               {/* Members table */}
               <Section

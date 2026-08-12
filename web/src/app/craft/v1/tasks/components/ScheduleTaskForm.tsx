@@ -377,7 +377,7 @@ export default function ScheduleTaskForm({
           </InputVertical>
         </GeneralLayouts.Section>
 
-        <Divider paddingParallel="fit" paddingPerpendicular="fit" />
+        <Divider paddingParallel={0} paddingPerpendicular={0} />
 
         <GeneralLayouts.Section>
           <InputVertical title="Schedule">
@@ -391,7 +391,7 @@ export default function ScheduleTaskForm({
           </InputVertical>
         </GeneralLayouts.Section>
 
-        <Divider paddingParallel="fit" paddingPerpendicular="fit" />
+        <Divider paddingParallel={0} paddingPerpendicular={0} />
 
         <GeneralLayouts.Section>
           <InputVertical

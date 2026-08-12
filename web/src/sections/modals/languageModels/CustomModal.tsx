@@ -166,7 +166,7 @@ function ModelConfigurationList() {
           ))}
         </div>
       ) : (
-        <EmptyMessageCard title="No models added yet." padding="sm" />
+        <EmptyMessageCard title="No models added yet." padding={2} />
       )}
 
       <Button
@@ -442,7 +442,7 @@ export default function CustomModal({
           />
         </InputPadder>
 
-        <Card padding="sm">
+        <Card padding={2}>
           <ModelConfigurationList />
         </Card>
       </Section>

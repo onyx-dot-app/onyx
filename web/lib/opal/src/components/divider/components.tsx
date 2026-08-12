@@ -2,16 +2,12 @@
 
 import "@opal/components/divider/styles.css";
 import { useState, useCallback } from "react";
-import type {
-  OrientationVariants,
-  PaddingVariants,
-  RichStr,
-} from "@opal/types";
+import type { OrientationVariants, Spacing, RichStr } from "@opal/types";
 import { Button, Text } from "@opal/components";
 import { SvgChevronRight } from "@opal/icons";
 import { Interactive } from "@opal/core";
 import { cn } from "@opal/utils";
-import { paddingXVariants, paddingYVariants } from "@opal/shared";
+import { spacingToRem } from "@opal/shared";
 
 // ---------------------------------------------------------------------------
 // Types
@@ -38,10 +34,10 @@ type DividerBareProps = Omit<
 > & {
   /** Orientation of the line. Default: `"horizontal"`. */
   orientation?: OrientationVariants;
-  /** Padding along the line direction. Default: `"sm"` (0.5rem). */
-  paddingParallel?: PaddingVariants;
-  /** Padding perpendicular to the line. Default: `"xs"` (0.25rem). */
-  paddingPerpendicular?: PaddingVariants;
+  /** Padding along the line direction, as a spacing step. Default: `2` (0.5rem). */
+  paddingParallel?: Spacing;
+  /** Padding perpendicular to the line, as a spacing step. Default: `1` (0.25rem). */
+  paddingPerpendicular?: Spacing;
 };
 
 /** Line with a title to the left. */
@@ -93,19 +89,19 @@ function Divider(props: DividerProps) {
     title,
     description,
     orientation = "horizontal",
-    paddingParallel = "sm",
-    paddingPerpendicular = "xs",
+    paddingParallel = 2,
+    paddingPerpendicular = 1,
   } = props;
 
   if (orientation === "vertical") {
     return (
       <div
         ref={ref}
-        className={cn(
-          "opal-divider-vertical",
-          paddingXVariants[paddingPerpendicular],
-          paddingYVariants[paddingParallel]
-        )}
+        className="opal-divider-vertical"
+        style={{
+          paddingInline: spacingToRem(paddingPerpendicular),
+          paddingBlock: spacingToRem(paddingParallel),
+        }}
       >
         <div className="opal-divider-line-vertical" />
       </div>
@@ -115,11 +111,11 @@ function Divider(props: DividerProps) {
   return (
     <div
       ref={ref}
-      className={cn(
-        "opal-divider",
-        paddingXVariants[paddingParallel],
-        paddingYVariants[paddingPerpendicular]
-      )}
+      className="opal-divider"
+      style={{
+        paddingInline: spacingToRem(paddingParallel),
+        paddingBlock: spacingToRem(paddingPerpendicular),
+      }}
     >
       <div className="opal-divider-row">
         {title && (
