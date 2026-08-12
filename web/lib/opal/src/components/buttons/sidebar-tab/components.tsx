@@ -5,7 +5,7 @@ import type { ButtonType, IconFunctionComponent, RichStr } from "@opal/types";
 import type { Route } from "next";
 import { Interactive, type InteractiveStatefulVariant } from "@opal/core";
 import { ContentAction } from "@opal/layouts";
-import { useSidebarFolded } from "@opal/layouts/root/components";
+import { useSidebarFolded } from "@opal/layouts/sidebar/context";
 import { Text, Tooltip } from "@opal/components";
 import Link from "next/link";
 
