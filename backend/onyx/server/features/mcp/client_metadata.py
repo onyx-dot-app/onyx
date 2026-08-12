@@ -1,4 +1,5 @@
 from fastapi import APIRouter, Response
+from mcp.client.auth.utils import is_valid_client_metadata_url
 from pydantic import AnyUrl
 
 from onyx.configs.app_configs import WEB_DOMAIN
@@ -24,6 +25,11 @@ def mcp_oauth_redirect_uri() -> str:
 
 def mcp_oauth_client_metadata_url() -> str:
     return f"{WEB_DOMAIN.rstrip('/')}{MCP_OAUTH_CLIENT_METADATA_PUBLIC_PATH}"
+
+
+def validated_mcp_oauth_client_metadata_url() -> str | None:
+    metadata_url = mcp_oauth_client_metadata_url()
+    return metadata_url if is_valid_client_metadata_url(metadata_url) else None
 
 
 def build_mcp_oauth_client_metadata() -> MCPOAuthClientMetadataDocument:
