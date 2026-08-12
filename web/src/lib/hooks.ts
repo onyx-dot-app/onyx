@@ -21,7 +21,7 @@ import {
   useRef,
   useState,
 } from "react";
-import { DateRangePickerValue } from "@/components/dateRangeSelectors/AdminDateRangeSelector";
+import { DateRangePickerValue } from "@/components/dateRangeSelectors/DateRangePicker";
 import { SourceMetadata } from "./search/interfaces";
 import {
   getProviderOverrideForAgent,

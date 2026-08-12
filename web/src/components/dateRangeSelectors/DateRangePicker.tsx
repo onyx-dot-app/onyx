@@ -53,7 +53,7 @@ function rangesMatch(left: DateRange, right: DateRange): boolean {
 
 type SelectorSize = "md" | "sm";
 
-export const AdminDateRangeSelector = memo(function AdminDateRangeSelector({
+export const DateRangePicker = memo(function DateRangePicker({
   value,
   onValueChange,
   size = "md",

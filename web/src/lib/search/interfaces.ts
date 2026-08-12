@@ -1,4 +1,4 @@
-import { DateRangePickerValue } from "@/components/dateRangeSelectors/AdminDateRangeSelector";
+import { DateRangePickerValue } from "@/components/dateRangeSelectors/DateRangePicker";
 import { Tag, ValidSources } from "../types";
 import { Agent } from "@/lib/agents/types";
 
