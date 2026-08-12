@@ -205,6 +205,8 @@ admin_usage_router = APIRouter(prefix="/admin/usage", tags=PUBLIC_API_TAGS)
 @user_usage_router.get("")
 def get_my_usage(
     days: Annotated[int | None, Query(ge=1, le=3_650)] = None,
+    start: date | None = None,
+    end: date | None = None,
     user: User = Depends(current_user),
     db_session: Session = Depends(get_session),
 ) -> UserUsageResponse:
@@ -212,11 +214,21 @@ def get_my_usage(
     now = datetime.now(timezone.utc)
     window_start = get_window_start(now, period_seconds=USAGE_LIMIT_WINDOW_SECONDS)
 
-    since = now - timedelta(days=days) if days else window_start
+    if start is not None or end is not None:
+        end_date = end or now.date()
+        inclusive_days = days or _DEFAULT_USAGE_RANGE_INCLUSIVE_DAYS
+        start_date = start or _start_for_inclusive_range(end_date, inclusive_days)
+        since, until = _date_range_to_utc_bounds(start_date, end_date)
+    elif days is not None:
+        since = now - timedelta(days=days)
+        until = now
+    else:
+        since = window_start
+        until = now
     user_id = str(user.id)
 
     per_day = get_user_usage_by_day_and_model(
-        db_session, user_id, since=since, until=now
+        db_session, user_id, since=since, until=until
     )
     window_cost_cents = get_user_cost_cents_since(db_session, user_id, window_start)
 

@@ -55,6 +55,12 @@ export function getXYearsAgo(yearsAgo: number) {
   return yearsAgoDate;
 }
 
+export function formatDateForApiParam(date: Date): string {
+  const month = String(date.getMonth() + 1).padStart(2, "0");
+  const day = String(date.getDate()).padStart(2, "0");
+  return `${date.getFullYear()}-${month}-${day}`;
+}
+
 export function normalizeDate(date: Date): Date {
   const normalizedDate = new Date(date);
   normalizedDate.setHours(0, 0, 0, 0);

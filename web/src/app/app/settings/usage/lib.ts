@@ -3,6 +3,8 @@
 import useSWR from "swr";
 import { errorHandlingFetcher, skipRetryOnAuthError } from "@/lib/fetcher";
 import { SWR_KEYS } from "@/lib/swr-keys";
+import { formatDateForApiParam } from "@/lib/dateUtils";
+import { buildApiPath } from "@/lib/urlBuilder";
 
 export interface UsagePerDayByModel {
   day: string; // "YYYY-MM-DD"
@@ -33,13 +35,14 @@ export interface UserUsageResponse {
   available_model_prices: ModelPrice[];
 }
 
-export function useUserUsage(days: number) {
-  return useSWR<UserUsageResponse>(
-    SWR_KEYS.userUsage(days),
-    errorHandlingFetcher,
-    {
-      revalidateOnFocus: false,
-      onErrorRetry: skipRetryOnAuthError,
-    }
-  );
+export function useUserUsage(range: { from: Date; to: Date } | undefined) {
+  const url = buildApiPath(SWR_KEYS.userUsage, {
+    start: range?.from ? formatDateForApiParam(range.from) : undefined,
+    end: range?.to ? formatDateForApiParam(range.to) : undefined,
+  });
+
+  return useSWR<UserUsageResponse>(url, errorHandlingFetcher, {
+    revalidateOnFocus: false,
+    onErrorRetry: skipRetryOnAuthError,
+  });
 }
