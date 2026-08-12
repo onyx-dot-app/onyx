@@ -38,7 +38,7 @@ def _prune(value: Any) -> Any:
 
 def _seg(value: str) -> str:
     """URL-encode a single path segment (ids and A1 ranges may contain special
-    chars; `:` in a range stays encoded, which the API accepts)."""
+    chars)."""
     return urllib.parse.quote(value, safe="")
 
 

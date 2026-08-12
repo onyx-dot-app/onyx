@@ -1,9 +1,7 @@
 """add sheets and slides hosts to google drive external apps
 
-Existing ``google_drive`` external-app rows carry the upstream URL patterns
-snapshotted at creation, so the Sheets and Slides hosts added to
-``onyx/external_apps/providers/google_drive.py`` must be appended to rows that
-predate them. New rows get the full list from the provider descriptor.
+``upstream_url_patterns`` is snapshotted onto app rows at creation, so rows
+that predate the Sheets/Slides hosts need them appended.
 
 Revision ID: 3350a25df58e
 Revises: c7f1a9d4e206

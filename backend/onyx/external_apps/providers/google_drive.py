@@ -16,11 +16,9 @@ from shared_configs.configs import MULTI_TENANT
 # Google Drive API v3. Reads (GET) live under `/drive/v3/...`; content uploads
 # use the separate `/upload/drive/v3/...` host path, so both prefixes appear in
 # the upstream patterns and the catalog. The Google Docs, Sheets, and Slides
-# APIs are separate hosts (`docs.googleapis.com/v1/documents/...`,
-# `sheets.googleapis.com/v4/spreadsheets/...`,
-# `slides.googleapis.com/v1/presentations/...`) all authorized by the same
-# `auth/drive` scope. Reads default to ALWAYS; every mutation defaults to ASK
-# so the egress approval gate prompts the user before it runs.
+# APIs live on their own hosts, all authorized by the same `auth/drive` scope.
+# Reads default to ALWAYS; every mutation defaults to ASK so the egress
+# approval gate prompts the user before it runs.
 class GoogleDriveAction(ExternalAppAction):
     """Strongly-typed catalog ids for the Google Drive provider."""
 
@@ -47,9 +45,8 @@ _UPLOAD_FILES = "/upload/drive/v3/files"
 _UPLOAD_ITEM = f"{_UPLOAD_FILES}/{{fileId}}"
 _DOCS = "/v1/documents"
 _DOC_ITEM = f"{_DOCS}/{{documentId}}"
-# Google's `:verb` suffixes (`ID:batchUpdate`, `RANGE:append`) share the path
-# segment with the resource id, so a `{name}` placeholder in the last position
-# matches both the plain id and its verb forms.
+# Google's `:verb` suffixes (`ID:batchUpdate`, `RANGE:append`) share a path
+# segment with the resource id, so a trailing `{name}` placeholder matches both.
 _SHEETS = "/v4/spreadsheets"
 _SHEET_ITEM = f"{_SHEETS}/{{spreadsheetId}}"
 _SHEET_VALUES = f"{_SHEET_ITEM}/values/{{range}}"
@@ -166,10 +163,8 @@ _ENDPOINTS: list[EndpointSpec] = [
             "to a Google Sheet via the Sheets API."
         ),
         matches=(
-            # `{spreadsheetId}` also matches `ID:batchUpdate`.
             RestRoute(method="POST", path=_SHEET_ITEM),
             RestRoute(method="PUT", path=_SHEET_VALUES),
-            # `{range}` also matches `RANGE:append` / `RANGE:clear`.
             RestRoute(method="POST", path=_SHEET_VALUES),
         ),
     ),
@@ -198,7 +193,6 @@ _ENDPOINTS: list[EndpointSpec] = [
             "Apply edits (add slides, insert or replace text, restyle) to a "
             "Google Slides presentation via the Slides API."
         ),
-        # `{presentationId}` also matches `ID:batchUpdate`.
         matches=(RestRoute(method="POST", path=_SLIDE_ITEM),),
     ),
 ]
