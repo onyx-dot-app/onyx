@@ -124,7 +124,7 @@ from onyx.file_store.models import FileDescriptor
 from onyx.kg.models import KGEntityTypeAttributes, KGStage
 from onyx.llm.models import ReasoningEffort
 from onyx.llm.override_models import LLMOverride, PromptOverride
-from onyx.server.security.models import SSRFProtectionLevel
+from onyx.server.security.models import IncognitoAvailability, SSRFProtectionLevel
 from onyx.tools.tool_implementations.web_search.models import WebContentProviderConfig
 from onyx.utils.encryption import decrypt_bytes_to_string, encrypt_string_to_bytes
 from onyx.utils.headers import HeaderItemDict
@@ -4608,6 +4608,27 @@ class SecuritySettings(Base):
     track_external_idp_expiry: Mapped[bool | None] = mapped_column(
         Boolean, nullable=True, default=None
     )
+    # Stored as the IncognitoAvailability value (e.g. "groups"). None falls
+    # back to the off-by-default env behavior.
+    incognito_availability: Mapped[IncognitoAvailability | None] = mapped_column(
+        Enum(
+            IncognitoAvailability,
+            native_enum=False,
+            values_callable=lambda x: [e.value for e in x],
+        ),
+        nullable=True,
+        default=None,
+    )
+    # What new incognito sessions pin. None falls back to usage_only.
+    incognito_record_mode: Mapped[IncognitoRecordMode | None] = mapped_column(
+        Enum(
+            IncognitoRecordMode,
+            native_enum=False,
+            values_callable=lambda x: [e.value for e in x],
+        ),
+        nullable=True,
+        default=None,
+    )
     # Stored as the SSRFProtectionLevel value (e.g. "validate_all"); None falls
     # back to the level derived from the legacy SSRF env vars.
     ssrf_protection_level: Mapped[SSRFProtectionLevel | None] = mapped_column(
@@ -5015,6 +5036,12 @@ class UserGroup(Base):
     )
     # whether this is a default group (e.g. "Basic", "Admins") that cannot be deleted
     is_default: Mapped[bool] = mapped_column(Boolean, nullable=False, default=False)
+
+    # Members may start incognito chats when the workspace availability mode
+    # is groups-only. Ignored under the other modes.
+    incognito_enabled: Mapped[bool] = mapped_column(
+        Boolean, nullable=False, default=False
+    )
 
     # Last time a user updated this user group
     time_last_modified_by_user: Mapped[datetime.datetime] = mapped_column(
@@ -6430,24 +6457,31 @@ class ScheduledTask(Base):
         back_populates="task",
         cascade="all, delete-orphan",
     )
-    pre_approved_apps: Mapped[list["ScheduledTaskPreApprovedApp"]] = relationship(
-        "ScheduledTaskPreApprovedApp",
+    pre_approved_targets: Mapped[list["ScheduledTaskPreApprovedTarget"]] = relationship(
+        "ScheduledTaskPreApprovedTarget",
         back_populates="task",
         cascade="all, delete-orphan",
-        order_by="ScheduledTaskPreApprovedApp.id",
+        order_by="ScheduledTaskPreApprovedTarget.id",
     )
 
     @property
     def pre_approved_external_app_ids(self) -> list[int]:
-        """Granted external-app ids in grant order. MCP-server grants are
-        excluded — their target ids live in a different id space, and this
-        property backs the API's external-app-id field (the gate reads all
-        grants regardless of kind via ``get_running_scheduled_run_grants``).
-        Set via ``onyx.db.scheduled_task.set_pre_approved_apps``."""
+        """Granted external-app ids. MCP-server grants are excluded because
+        their target ids live in a different id space."""
         return [
             grant.gated_app.external_app_id
-            for grant in self.pre_approved_apps
+            for grant in self.pre_approved_targets
             if grant.gated_app.external_app_id is not None
+        ]
+
+    @property
+    def pre_approved_mcp_server_ids(self) -> list[int]:
+        """Granted MCP-server ids. External-app grants are excluded because
+        their target ids live in a different id space."""
+        return [
+            grant.gated_app.mcp_server_id
+            for grant in self.pre_approved_targets
+            if grant.gated_app.mcp_server_id is not None
         ]
 
     __table_args__ = (
@@ -6540,7 +6574,7 @@ class ScheduledTaskRun(Base):
     )
 
 
-class ScheduledTaskPreApprovedApp(Base):
+class ScheduledTaskPreApprovedTarget(Base):
     """One (task, target) pre-approval grant: the matched target's ASK-gated
     actions skip the approval park for the task's RUNNING runs.
 
@@ -6550,6 +6584,7 @@ class ScheduledTaskPreApprovedApp(Base):
     index serves the per-task lookup.
     """
 
+    # The table name predates MCP support. Keep it to avoid a schema-only rename.
     __tablename__ = "scheduled_task_pre_approved_app"
 
     id: Mapped[int] = mapped_column(Integer, primary_key=True)
@@ -6568,11 +6603,10 @@ class ScheduledTaskPreApprovedApp(Base):
     )
 
     task: Mapped[ScheduledTask] = relationship(
-        "ScheduledTask", back_populates="pre_approved_apps"
+        "ScheduledTask", back_populates="pre_approved_targets"
     )
-    # selectin: pre_approved_external_app_ids and set_pre_approved_apps read
-    # gated_app for every grant, so batch them in one SELECT rather than one
-    # per grant.
+    # selectin: the pre-approved target-id properties read gated_app for every
+    # grant, so batch them in one SELECT rather than one per grant.
     gated_app: Mapped["GatedApp"] = relationship("GatedApp", lazy="selectin")
 
     __table_args__ = (

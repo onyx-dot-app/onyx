@@ -114,7 +114,7 @@ def trim_pcm16_silence(audio: bytes) -> bytes:
 
     speech_frame_indices = [
         idx
-        for idx, frame_rms in zip(frame_offsets, frame_rms_values)
+        for idx, frame_rms in zip(frame_offsets, frame_rms_values, strict=True)
         if frame_rms >= threshold
     ]
     if not speech_frame_indices:

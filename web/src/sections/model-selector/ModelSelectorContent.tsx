@@ -240,16 +240,16 @@ function SettingRow({
         alignItems="stretch"
         height="auto"
         gap={0}
-        padding={0.375}
+        padding={1.5}
         className="rounded-08"
       >
         <Section
           flexDirection="row"
           justifyContent="between"
           height="auto"
-          gap={0.5}
+          gap={2}
         >
-          <Section flexDirection="row" width="fit" height="auto" gap={0.5}>
+          <Section flexDirection="row" width="fit" height="auto" gap={2}>
             <Section width={1.25} height={1.25} className="text-text-04">
               <Icon size={16} />
             </Section>
@@ -622,7 +622,7 @@ export default function ModelSelectorContent({
   }
 
   return (
-    <Section gap={0.5}>
+    <Section gap={2}>
       <InputTypeIn
         searchIcon
         variant="internal"
@@ -665,11 +665,7 @@ export default function ModelSelectorContent({
                 ]
               : groupedOptions.length === 1
                 ? [
-                    <Section
-                      key="single-provider"
-                      gap={0.25}
-                      alignItems="stretch"
-                    >
+                    <Section key="single-provider" gap={1} alignItems="stretch">
                       {groupedOptions[0]!.options.map(renderModelItem)}
                     </Section>,
                   ]
@@ -723,7 +719,7 @@ export default function ModelSelectorContent({
                         </CollapsibleTrigger>
 
                         <CollapsibleContent>
-                          <Section gap={0.25} alignItems="stretch">
+                          <Section gap={1} alignItems="stretch">
                             {group.options.map(renderModelItem)}
                           </Section>
                         </CollapsibleContent>

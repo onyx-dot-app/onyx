@@ -947,7 +947,7 @@ def build_chat_turn(
             user_message_id=user_message.id,
             responses=[
                 ModelResponseSlot(message_id=m.id, model_name=name)
-                for m, name in zip(reserved_messages, model_display_names)
+                for m, name in zip(reserved_messages, model_display_names, strict=True)
             ],
         )
     else:

@@ -112,7 +112,7 @@ export default function ActionLineItem({
         strikethrough={disabled}
         icon={Icon}
         rightChildren={
-          <Section gap={0.25} flexDirection="row">
+          <Section gap={1} flexDirection="row">
             {!isUnavailable && tool?.oauth_config_id && toolAuthStatus && (
               <Button
                 icon={SvgKey}

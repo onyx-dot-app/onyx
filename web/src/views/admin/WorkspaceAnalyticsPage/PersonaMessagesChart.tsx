@@ -16,7 +16,7 @@ import {
   chartSeries,
   resolveChartState,
 } from "@/sections/usage/AnalyticsChart";
-import { DateRangePickerValue } from "@/refresh-components/AdminDateRangeSelector";
+import { DateRangePickerValue } from "@/refresh-components/DateRangePicker";
 import { Agent } from "@/lib/agents/types";
 
 interface PersonaPickerProps {

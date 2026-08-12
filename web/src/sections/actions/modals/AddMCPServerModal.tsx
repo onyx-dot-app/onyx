@@ -206,12 +206,12 @@ export default function AddMCPServerModal({
                       flexDirection="row"
                       justifyContent="between"
                       alignItems="start"
-                      gap={1}
+                      gap={4}
                     >
-                      <Section gap={0.25} alignItems="start">
+                      <Section gap={1} alignItems="start">
                         <Section
                           flexDirection="row"
-                          gap={0.5}
+                          gap={2}
                           alignItems="center"
                           width="fit"
                         >
@@ -228,7 +228,7 @@ export default function AddMCPServerModal({
                       </Section>
                       <Section
                         flexDirection="row"
-                        gap={0.5}
+                        gap={2}
                         alignItems="center"
                         width="fit"
                       >

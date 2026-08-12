@@ -15,6 +15,7 @@ import type {
   ExtremaSizeVariants,
   PaddingVariants,
   RoundingVariants,
+  Spacing,
 } from "@opal/types";
 
 /**
@@ -147,6 +148,16 @@ const paddingYVariants: Record<PaddingVariants, string> = {
   fit: "py-0",
 };
 
+/**
+ * Converts a spacing step to a CSS length: `N` is `N / 4` rem.
+ *
+ * Kept as a function rather than a class lookup so the scale stays open —
+ * Tailwind cannot build a class name from a runtime value, but arithmetic can.
+ */
+function spacingToRem(spacing: Spacing): string {
+  return `${spacing / 4}rem`;
+}
+
 const cardRoundingVariants: Record<RoundingVariants, string> = {
   xl: "rounded-20",
   lg: "rounded-16",
@@ -176,7 +187,9 @@ export {
   type ContainerSizeVariants,
   type OverridableExtremaSizeVariants,
   type SizeVariants,
+  type Spacing,
   containerSizeVariants,
+  spacingToRem,
   paddingVariants,
   paddingXVariants,
   paddingYVariants,

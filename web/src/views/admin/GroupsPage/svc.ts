@@ -63,6 +63,23 @@ async function updateGroup(
   }
 }
 
+async function setGroupIncognito(
+  groupId: number,
+  enabled: boolean
+): Promise<void> {
+  const res = await fetch(`${USER_GROUP_URL}/${groupId}/incognito`, {
+    method: "PATCH",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ enabled }),
+  });
+  if (!res.ok) {
+    const detail = await res.json().catch(() => null);
+    throw new Error(
+      detail?.detail ?? `Failed to update incognito access: ${res.statusText}`
+    );
+  }
+}
+
 async function deleteGroup(groupId: number): Promise<void> {
   const res = await fetch(`${USER_GROUP_URL}/${groupId}`, {
     method: "DELETE",
@@ -311,6 +328,7 @@ export {
   renameGroup,
   createGroup,
   updateGroup,
+  setGroupIncognito,
   deleteGroup,
   updateAgentGroupSharing,
   updateDocSetGroupSharing,

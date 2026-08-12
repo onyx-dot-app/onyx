@@ -84,7 +84,7 @@ export default function PptxPreview({
         height="full"
         alignItems="center"
         justifyContent="center"
-        padding={2}
+        padding={8}
       >
         <Text font="secondary-body" color="text-03">
           Converting presentation...
@@ -99,7 +99,7 @@ export default function PptxPreview({
         height="full"
         alignItems="center"
         justifyContent="center"
-        padding={2}
+        padding={8}
       >
         <SvgFileText size={48} className="stroke-text-02" />
         <Text font="heading-h3" color="text-03">
@@ -120,7 +120,7 @@ export default function PptxPreview({
         height="full"
         alignItems="center"
         justifyContent="center"
-        padding={2}
+        padding={8}
       >
         <SvgFileText size={48} className="stroke-text-02" />
         <Text font="secondary-body" color="text-03">

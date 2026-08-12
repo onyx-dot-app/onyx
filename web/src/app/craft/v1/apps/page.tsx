@@ -444,7 +444,7 @@ function ConnectableCard({
             description={statusLine(app, needsSkillSetup)}
             descriptionMaxLines={1}
             rightChildren={
-              <Section flexDirection="row" width="fit" height="fit" gap={0.5}>
+              <Section flexDirection="row" width="fit" height="fit" gap={2}>
                 {app.authenticated ? (
                   <>
                     {/* Only the problem state gets a glyph — "Connected" in the

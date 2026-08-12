@@ -1,15 +1,22 @@
-# Registry prefix for the bun binary source below. Defaults to Docker Hub; CI overrides it to
-# the ECR pull-through cache to dodge rate limits. Applies only to `bun_source` -- the DHI Node
-# bases come from dhi.io, a separate registry not served by the cache (see the FROM lines below).
+# Registry prefix for the base images below. Defaults to Docker Hub; CI overrides it to the
+# ECR pull-through cache to dodge rate limits. It only applies to the default images -- the
+# DHI overrides below carry their own registry (dhi.io), which the cache does not serve.
 ARG BASE_IMAGE_REGISTRY=docker.io
 
+# Node bases. The defaults are the public Debian slim images, so a plain `docker build` needs
+# no extra registry access. CI overrides both with the matching Docker Hardened Images from
+# dhi.io, which need a Docker account with DHI catalog access.
+# Refresh a digest with: docker buildx imagetools inspect <image reference>
+ARG NODE_BUILDER_IMAGE=${BASE_IMAGE_REGISTRY}/library/node:24-trixie-slim@sha256:0711b541c1c33a8a530ac4f0d391baa9a15b3d804695b1b24a47daa5fb60e74d
+ARG NODE_RUNTIME_IMAGE=${BASE_IMAGE_REGISTRY}/library/node:24-trixie-slim@sha256:0711b541c1c33a8a530ac4f0d391baa9a15b3d804695b1b24a47daa5fb60e74d
+
 # bun binary source, in its own stage because buildx only expands the registry ARG in a FROM,
-# not in `COPY --from=`. Use the glibc (Debian) build so it runs on the glibc DHI node images.
+# not in `COPY --from=`. Use the glibc (Debian) build so it runs on the glibc node images.
 FROM ${BASE_IMAGE_REGISTRY}/oven/bun:1@sha256:e10577f0db68676a7024391c6e5cb4b879ebd17188ab750cf10024a6d700e5c4 AS bun_source
 
-# Build stage. The DHI "-dev" variant runs as root and ships a shell, apt, and npm/npx.
-# Refresh the digest with: docker buildx imagetools inspect dhi.io/node:24-debian13-dev
-FROM dhi.io/node:24-debian13-dev@sha256:25a83f18150669e9ce3c9437327add4d75ae4ea26cbdb5e8747b66d3b74a567a AS builder
+# Build stage. Needs a root user plus a shell and npm/npx, which both the default slim image
+# and the DHI "-dev" variant provide.
+FROM ${NODE_BUILDER_IMAGE} AS builder
 COPY --from=bun_source /usr/local/bin/bun /usr/local/bin/bun
 COPY --from=bun_source /usr/local/bin/bunx /usr/local/bin/bunx
 WORKDIR /app
@@ -100,10 +107,10 @@ RUN --mount=type=secret,id=sentry_auth_token \
     fi && \
     NODE_OPTIONS="${NODE_OPTIONS}" npx next build
 
-# Runtime stage. The DHI runtime variant is near-distroless: no shell or package manager, runs
-# as the non-root `node` user (uid 1000) with WORKDIR /app pre-set.
-# Refresh the digest with: docker buildx imagetools inspect dhi.io/node:24-debian13
-FROM dhi.io/node:24-debian13@sha256:805278f24c1146c6d3c96577b6256f8f97c43196fff88315fe3291a1ce118ddd AS runner
+# Runtime stage. Runs as the non-root `node` user (uid 1000), which both the default slim
+# image and the DHI runtime variant ship. The DHI variant is near-distroless: no shell or
+# package manager, so keep this stage free of RUN instructions.
+FROM ${NODE_RUNTIME_IMAGE} AS runner
 
 LABEL com.onyx.maintainer="founders@onyx.app"
 LABEL com.onyx.description="This image is the web/frontend container of Onyx which \
@@ -192,6 +199,10 @@ ENV ONYX_VERSION=${ONYX_VERSION}
 # Docker auto-sets HOSTNAME to the container ID, which makes Next bind to that
 # name only — breaking loopback healthchecks. Force 0.0.0.0 instead.
 ENV HOSTNAME="0.0.0.0"
+
+# Don't run production as root. The DHI runtime already defaults to this user; the default
+# slim image does not.
+USER node
 
 # The DHI runtime image sets no default ENTRYPOINT, so invoke node explicitly.
 CMD ["node", "server.js"]

@@ -535,14 +535,13 @@ jobs:
           username: ${{ env.DOCKER_USERNAME }}
           password: ${{ env.DOCKER_TOKEN }}
 
-      # web/Dockerfile pulls its hardened Node base from dhi.io, authenticated with the same
-      # Docker account credentials (the account must have access to the DHI catalog).
-      - name: Login to Docker Hardened Images (dhi.io)
-        uses: docker/login-action@c99871dec2022cc055c062a10cc1a1310835ceb4
+      # web/Dockerfile defaults to the public Node bases. Release builds ship on the
+      # hardened DHI equivalents, passed as build args below.
+      - name: Resolve Docker Hardened Image bases
+        uses: ./.github/actions/dhi-base-images
         with:
-          registry: dhi.io
-          username: ${{ env.DOCKER_USERNAME }}
-          password: ${{ env.DOCKER_TOKEN }}
+          docker-username: ${{ env.DOCKER_USERNAME }}
+          docker-token: ${{ env.DOCKER_TOKEN }}
 
       - name: Build and push AMD64
         id: build
@@ -554,6 +553,7 @@ jobs:
           labels: ${{ steps.meta.outputs.labels }}
           build-args: |
             ONYX_VERSION=${{ github.ref_name }}
+            ${{ env.DHI_NODE_BUILD_ARGS }}
             NODE_OPTIONS=--max-old-space-size=8192
           cache-from: |
             type=registry,ref=${{ env.REGISTRY_IMAGE }}:edge
@@ -617,14 +617,13 @@ jobs:
           username: ${{ env.DOCKER_USERNAME }}
           password: ${{ env.DOCKER_TOKEN }}
 
-      # web/Dockerfile pulls its hardened Node base from dhi.io, authenticated with the same
-      # Docker account credentials (the account must have access to the DHI catalog).
-      - name: Login to Docker Hardened Images (dhi.io)
-        uses: docker/login-action@c99871dec2022cc055c062a10cc1a1310835ceb4
+      # web/Dockerfile defaults to the public Node bases. Release builds ship on the
+      # hardened DHI equivalents, passed as build args below.
+      - name: Resolve Docker Hardened Image bases
+        uses: ./.github/actions/dhi-base-images
         with:
-          registry: dhi.io
-          username: ${{ env.DOCKER_USERNAME }}
-          password: ${{ env.DOCKER_TOKEN }}
+          docker-username: ${{ env.DOCKER_USERNAME }}
+          docker-token: ${{ env.DOCKER_TOKEN }}
 
       - name: Build and push ARM64
         id: build
@@ -636,6 +635,7 @@ jobs:
           labels: ${{ steps.meta.outputs.labels }}
           build-args: |
             ONYX_VERSION=${{ github.ref_name }}
+            ${{ env.DHI_NODE_BUILD_ARGS }}
             NODE_OPTIONS=--max-old-space-size=8192
           cache-from: |
             type=registry,ref=${{ env.REGISTRY_IMAGE }}:edge
@@ -791,14 +791,13 @@ jobs:
           username: ${{ env.DOCKER_USERNAME }}
           password: ${{ env.DOCKER_TOKEN }}
 
-      # web/Dockerfile pulls its hardened Node base from dhi.io, authenticated with the same
-      # Docker account credentials (the account must have access to the DHI catalog).
-      - name: Login to Docker Hardened Images (dhi.io)
-        uses: docker/login-action@c99871dec2022cc055c062a10cc1a1310835ceb4
+      # web/Dockerfile defaults to the public Node bases. Release builds ship on the
+      # hardened DHI equivalents, passed as build args below.
+      - name: Resolve Docker Hardened Image bases
+        uses: ./.github/actions/dhi-base-images
         with:
-          registry: dhi.io
-          username: ${{ env.DOCKER_USERNAME }}
-          password: ${{ env.DOCKER_TOKEN }}
+          docker-username: ${{ env.DOCKER_USERNAME }}
+          docker-token: ${{ env.DOCKER_TOKEN }}
 
       - name: Build and push AMD64
         id: build
@@ -810,6 +809,7 @@ jobs:
           labels: ${{ steps.meta.outputs.labels }}
           build-args: |
             ONYX_VERSION=${{ github.ref_name }}
+            ${{ env.DHI_NODE_BUILD_ARGS }}
             NEXT_PUBLIC_CLOUD_ENABLED=true
             WEB_FRAME_PROTECTION_ENABLED=false
             NEXT_PUBLIC_POSTHOG_KEY=${{ secrets.POSTHOG_KEY }}
@@ -884,14 +884,13 @@ jobs:
           username: ${{ env.DOCKER_USERNAME }}
           password: ${{ env.DOCKER_TOKEN }}
 
-      # web/Dockerfile pulls its hardened Node base from dhi.io, authenticated with the same
-      # Docker account credentials (the account must have access to the DHI catalog).
-      - name: Login to Docker Hardened Images (dhi.io)
-        uses: docker/login-action@c99871dec2022cc055c062a10cc1a1310835ceb4
+      # web/Dockerfile defaults to the public Node bases. Release builds ship on the
+      # hardened DHI equivalents, passed as build args below.
+      - name: Resolve Docker Hardened Image bases
+        uses: ./.github/actions/dhi-base-images
         with:
-          registry: dhi.io
-          username: ${{ env.DOCKER_USERNAME }}
-          password: ${{ env.DOCKER_TOKEN }}
+          docker-username: ${{ env.DOCKER_USERNAME }}
+          docker-token: ${{ env.DOCKER_TOKEN }}
 
       - name: Build and push ARM64
         id: build
@@ -903,6 +902,7 @@ jobs:
           labels: ${{ steps.meta.outputs.labels }}
           build-args: |
             ONYX_VERSION=${{ github.ref_name }}
+            ${{ env.DHI_NODE_BUILD_ARGS }}
             NEXT_PUBLIC_CLOUD_ENABLED=true
             WEB_FRAME_PROTECTION_ENABLED=false
             NEXT_PUBLIC_POSTHOG_KEY=${{ secrets.POSTHOG_KEY }}
@@ -1351,14 +1351,13 @@ jobs:
           username: ${{ env.DOCKER_USERNAME }}
           password: ${{ env.DOCKER_TOKEN }}
 
-      # Dockerfile.model_server pulls its hardened Python base from dhi.io, authenticated
-      # with the same Docker account credentials (the account must have DHI catalog access).
-      - name: Login to Docker Hardened Images (dhi.io)
-        uses: docker/login-action@c99871dec2022cc055c062a10cc1a1310835ceb4
+      # Dockerfile.model_server defaults to the public Python bases. Release builds ship
+      # on the hardened DHI equivalents, passed as build args below.
+      - name: Resolve Docker Hardened Image bases
+        uses: ./.github/actions/dhi-base-images
         with:
-          registry: dhi.io
-          username: ${{ env.DOCKER_USERNAME }}
-          password: ${{ env.DOCKER_TOKEN }}
+          docker-username: ${{ env.DOCKER_USERNAME }}
+          docker-token: ${{ env.DOCKER_TOKEN }}
 
       - name: Build and push AMD64
         id: build
@@ -1372,6 +1371,7 @@ jobs:
           labels: ${{ steps.meta.outputs.labels }}
           build-args: |
             ONYX_VERSION=${{ github.ref_name }}
+            ${{ env.DHI_PYTHON_BUILD_ARGS }}
           cache-from: |
             type=registry,ref=${{ env.REGISTRY_IMAGE }}:edge
             type=registry,ref=${{ env.REGISTRY_IMAGE }}:latest
@@ -1437,14 +1437,13 @@ jobs:
           username: ${{ env.DOCKER_USERNAME }}
           password: ${{ env.DOCKER_TOKEN }}
 
-      # Dockerfile.model_server pulls its hardened Python base from dhi.io, authenticated
-      # with the same Docker account credentials (the account must have DHI catalog access).
-      - name: Login to Docker Hardened Images (dhi.io)
-        uses: docker/login-action@c99871dec2022cc055c062a10cc1a1310835ceb4
+      # Dockerfile.model_server defaults to the public Python bases. Release builds ship
+      # on the hardened DHI equivalents, passed as build args below.
+      - name: Resolve Docker Hardened Image bases
+        uses: ./.github/actions/dhi-base-images
         with:
-          registry: dhi.io
-          username: ${{ env.DOCKER_USERNAME }}
-          password: ${{ env.DOCKER_TOKEN }}
+          docker-username: ${{ env.DOCKER_USERNAME }}
+          docker-token: ${{ env.DOCKER_TOKEN }}
 
       - name: Build and push ARM64
         id: build
@@ -1458,6 +1457,7 @@ jobs:
           labels: ${{ steps.meta.outputs.labels }}
           build-args: |
             ONYX_VERSION=${{ github.ref_name }}
+            ${{ env.DHI_PYTHON_BUILD_ARGS }}
           cache-from: |
             type=registry,ref=${{ env.REGISTRY_IMAGE }}:edge
             type=registry,ref=${{ env.REGISTRY_IMAGE }}:latest

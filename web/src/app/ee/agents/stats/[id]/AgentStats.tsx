@@ -4,9 +4,9 @@ import { useEffect, useState, useMemo } from "react";
 import { Card, Text } from "@opal/components";
 import { Section } from "@opal/layouts";
 import {
-  AdminDateRangeSelector,
+  DateRangePicker,
   DateRange,
-} from "@/refresh-components/AdminDateRangeSelector";
+} from "@/refresh-components/DateRangePicker";
 import { useAgents } from "@/lib/agents/hooks";
 import AgentAvatar from "@/refresh-components/avatars/AgentAvatar";
 import {
@@ -136,7 +136,7 @@ export function AgentStats({ agentId }: AgentStatsProps) {
       {/* sm:flex-row / sm:items-center / sm:justify-between have no Section equivalent, kept as a raw div */}
       <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
         <Text font="heading-h2">Agent Analytics</Text>
-        <AdminDateRangeSelector
+        <DateRangePicker
           value={dateRange}
           onValueChange={setDateRange}
         />

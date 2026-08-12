@@ -221,7 +221,7 @@ export default function PreviewModal({
               <SvgSimpleLoader className="h-8 w-8" />
             </Section>
           ) : loadError ? (
-            <Section padding={1}>
+            <Section padding={4}>
               <Text text03 mainUiBody>
                 {loadError}
               </Text>

@@ -62,7 +62,7 @@ function ViewerMCPServerCard({ server, tools }: ViewerMCPServerCardProps) {
         tools.length > 0 ? (
           <div className="flex flex-col gap-2 p-2">
             {tools.map((tool) => (
-              <Section key={tool.id} padding={0.25}>
+              <Section key={tool.id} padding={1}>
                 <Content
                   title={tool.display_name}
                   description={tool.description}
@@ -282,7 +282,7 @@ export default function AgentViewerModal({ agent }: AgentViewerModalProps) {
 
           {/* Knowledge */}
           <Divider paddingParallel="fit" paddingPerpendicular="fit" />
-          <Section gap={0.5} alignItems="start">
+          <Section gap={2} alignItems="start">
             <Content
               title="Knowledge"
               sizePreset="main-content"
@@ -290,7 +290,7 @@ export default function AgentViewerModal({ agent }: AgentViewerModalProps) {
             />
             {hasKnowledge ? (
               <Section
-                gap={0.5}
+                gap={2}
                 flexDirection="row"
                 justifyContent="start"
                 wrap
@@ -315,7 +315,7 @@ export default function AgentViewerModal({ agent }: AgentViewerModalProps) {
             <SimpleCollapsible.Header title="Actions & Tools" />
             <SimpleCollapsible.Content>
               {hasActions ? (
-                <Section gap={0.5} alignItems="start">
+                <Section gap={2} alignItems="start">
                   {mcpServersWithTools.map(({ server, tools }) => (
                     <ViewerMCPServerCard
                       key={server.id}
@@ -338,7 +338,7 @@ export default function AgentViewerModal({ agent }: AgentViewerModalProps) {
           <SimpleCollapsible>
             <SimpleCollapsible.Header title="More Info" />
             <SimpleCollapsible.Content>
-              <Section gap={0.5} alignItems="start">
+              <Section gap={2} alignItems="start">
                 {agent.system_prompt && (
                   <Content
                     title="Instructions"

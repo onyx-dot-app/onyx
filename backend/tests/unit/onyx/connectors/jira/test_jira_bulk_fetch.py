@@ -104,7 +104,7 @@ def test_bulk_fetch_non_json_error_propagates() -> None:
 
     try:
         bulk_fetch_issues(client, ["1"])
-        assert False, "Expected ValueError to propagate"
+        raise AssertionError("Expected ValueError to propagate")
     except ValueError:
         pass
 

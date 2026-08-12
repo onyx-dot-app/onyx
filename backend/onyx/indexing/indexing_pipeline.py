@@ -847,7 +847,7 @@ def process_image_sections(documents: list[Document]) -> list[IndexingDocument]:
             max_workers=MAX_IMAGE_WORKERS,
         )
 
-        for p, result in zip(pending, results):
+        for p, result in zip(pending, results, strict=True):
             p.section.text = result or "[Error processing image]"
 
     return indexed_documents

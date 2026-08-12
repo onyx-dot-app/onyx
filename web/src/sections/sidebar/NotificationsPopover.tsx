@@ -72,7 +72,7 @@ function NotificationItem({
         onClick={onClick}
         rightChildren={
           <Section justifyContent="start">
-            <Section height="fit" gap={0.5} flexDirection="row">
+            <Section height="fit" gap={2} flexDirection="row">
               <Text font="secondary-body" color="text-02">
                 {timeAgo(notification.first_shown) ?? ""}
               </Text>
@@ -298,8 +298,8 @@ export default function NotificationsPopover({
 
   return (
     <Section gap={0} justifyContent="start" alignItems="stretch">
-      <Section flexDirection="row" padding={0.325}>
-        <Section flexDirection="row" gap={0.25} justifyContent="start">
+      <Section flexDirection="row" padding={1.5}>
+        <Section flexDirection="row" gap={1} justifyContent="start">
           <Button
             icon={SvgChevronLeft}
             size="sm"
@@ -309,7 +309,7 @@ export default function NotificationsPopover({
           <Text color="text-02">Notifications</Text>
         </Section>
 
-        <Section flexDirection="row" gap={0.25} justifyContent="end">
+        <Section flexDirection="row" gap={1} justifyContent="end">
           {undismissedCount !== 0 && (
             <span className="text-action-selection-05 font-secondary-body">
               {`${undismissedCount} unread`}

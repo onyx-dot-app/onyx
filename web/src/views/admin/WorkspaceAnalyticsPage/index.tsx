@@ -1,6 +1,6 @@
 "use client";
 
-import { AdminDateRangeSelector } from "@/refresh-components/AdminDateRangeSelector";
+import { DateRangePicker } from "@/refresh-components/DateRangePicker";
 import { useTimeRange } from "@/lib/usage/hooks";
 import {
   FeedbackChart,
@@ -28,7 +28,7 @@ export default function WorkspaceAnalyticsPage() {
       />
       <SettingsLayouts.Body>
         <Section flexDirection="row" justifyContent="end" height="fit">
-          <AdminDateRangeSelector
+          <DateRangePicker
             value={timeRange}
             onValueChange={(range) =>
               setTimeRange((previous) =>

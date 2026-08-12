@@ -326,7 +326,7 @@ class MockLLM(LLM, MockLLMController):
         if not self.stream_controller:
             return
 
-        for idx, item in enumerate(self.stream_controller):
+        for _idx, item in enumerate(self.stream_controller):
             yield ModelResponseStream(
                 id="chatcmp-123",
                 created="1",

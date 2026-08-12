@@ -42,7 +42,7 @@ function BillingOption({
     >
       <Section
         flexDirection="row"
-        gap={0.5}
+        gap={2}
         height="fit"
         justifyContent="between"
         alignItems="start"
@@ -69,7 +69,7 @@ function BillingOption({
         {badge && (
           <Section
             flexDirection="row"
-            gap={0.25}
+            gap={1}
             alignItems="center"
             justifyContent="end"
             width="fit"
@@ -160,13 +160,13 @@ export default function CheckoutView({ onAdjustPlan }: CheckoutViewProps) {
         flexDirection="row"
         justifyContent="between"
         alignItems="start"
-        padding={1}
+        padding={4}
         height="auto"
       >
         <Section
           flexDirection="column"
           alignItems="start"
-          gap={0.25}
+          gap={1}
           height="auto"
           width="fit"
         >
@@ -185,8 +185,8 @@ export default function CheckoutView({ onAdjustPlan }: CheckoutViewProps) {
         <Section
           flexDirection="column"
           alignItems="stretch"
-          gap={1}
-          padding={1}
+          gap={4}
+          padding={4}
           height="auto"
         >
           {/* Billing Cycle */}
@@ -197,7 +197,7 @@ export default function CheckoutView({ onAdjustPlan }: CheckoutViewProps) {
           >
             <Section
               flexDirection="row"
-              gap={0.25}
+              gap={1}
               width="fit"
               height="auto"
               justifyContent="start"
@@ -244,7 +244,7 @@ export default function CheckoutView({ onAdjustPlan }: CheckoutViewProps) {
         flexDirection="row"
         alignItems="center"
         justifyContent="between"
-        padding={1}
+        padding={4}
         height="auto"
       >
         {error ? (

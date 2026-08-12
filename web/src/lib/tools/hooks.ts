@@ -8,9 +8,9 @@ import type { MCPServersResponse } from "@/lib/tools/interfaces";
 /** MCP servers an admin made available to Craft, with this user's connection
  * state (`craft_connected`). Distinct from `useMcpServers`, which reads the
  * admin-wide listing. */
-export function useCraftMcpServers() {
+export function useCraftMcpServers(enabled: boolean = true) {
   const { data, error, isLoading } = useSWR<MCPServersResponse>(
-    SWR_KEYS.mcpServersCraft,
+    enabled ? SWR_KEYS.mcpServersCraft : null,
     errorHandlingFetcher,
     // The Apps page re-reads this after every connect/disconnect; holding the
     // previous list keeps the tab from flashing empty on revalidation.

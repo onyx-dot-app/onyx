@@ -1233,7 +1233,7 @@ def slack_retrieval(
         access_token=access_token,
         team_id=team_id,
     )
-    for slack_message, thread_text in zip(slack_messages, thread_texts):
+    for slack_message, thread_text in zip(slack_messages, thread_texts, strict=True):
         slack_message.text = thread_text
 
     # get the highlighted texts from shortest to longest

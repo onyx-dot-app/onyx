@@ -82,7 +82,7 @@ export function WebSearchDisconnectModal({
         </Button>
       }
     >
-      <Section alignItems="start" gap={0.5}>
+      <Section alignItems="start" gap={2}>
         {isSearch ? (
           <>
             <Text color="text-03">

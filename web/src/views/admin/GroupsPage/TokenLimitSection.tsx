@@ -128,7 +128,7 @@ function TokenLimitSection({
         <Disabled disabled={disabled} tooltip={disabledTooltip}>
           <Card>
             <Section
-              gap={0.5}
+              gap={2}
               height="auto"
               alignItems="stretch"
               justifyContent="start"

@@ -109,7 +109,7 @@ export default function TokenRateLimitsPanel({
   return (
     <Section alignItems="stretch" justifyContent="start" height="auto">
       {embedded ? (
-        <Section gap={0.25} alignItems="start" justifyContent="start">
+        <Section gap={1} alignItems="start" justifyContent="start">
           <Text font="heading-h3">Manage spending limits</Text>
           <Text font="secondary-body" color="text-03">
             Set guardrails for workspace, user, and group usage. Limits can be

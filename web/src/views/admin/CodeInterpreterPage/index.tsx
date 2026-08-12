@@ -57,8 +57,8 @@ function CheckingStatus() {
       flexDirection="row"
       justifyContent="end"
       alignItems="center"
-      gap={0.25}
-      padding={0.5}
+      gap={1}
+      padding={2}
     >
       <Text mainUiAction text03>
         Checking...
@@ -91,8 +91,8 @@ function ConnectionStatus({
       flexDirection="row"
       justifyContent="end"
       alignItems="center"
-      gap={0.25}
-      padding={0.5}
+      gap={1}
+      padding={2}
     >
       <Text mainUiAction text03>
         {label}
@@ -194,7 +194,7 @@ export default function CodeInterpreterPage() {
                         <Section
                           flexDirection="row"
                           justifyContent="end"
-                          gap={0.25}
+                          gap={1}
                         >
                           <Disabled disabled={isLoading}>
                             <Hoverable.Item group="code-interpreter/Card">

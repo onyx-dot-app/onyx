@@ -156,11 +156,7 @@ export default function ProviderCard({
                 ) : undefined}
                 {(onDisconnect || onEdit) && (
                   <div className="px-1 pb-1">
-                    <Section
-                      flexDirection="row"
-                      justifyContent="end"
-                      gap={0.25}
-                    >
+                    <Section flexDirection="row" justifyContent="end" gap={1}>
                       {onDisconnect && (
                         <Hoverable.Item
                           group="ProviderCard"

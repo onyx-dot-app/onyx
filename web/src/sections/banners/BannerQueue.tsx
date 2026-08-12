@@ -101,8 +101,8 @@ export default function BannerQueue() {
         alignItems="stretch"
         justifyContent="start"
         height="fit"
-        gap={0.25}
-        padding={0.25}
+        gap={1}
+        padding={1}
         className="rounded-12 border border-border-01 bg-background-neutral-00 shadow-box"
       >
         <Section
@@ -110,8 +110,8 @@ export default function BannerQueue() {
           alignItems="center"
           justifyContent="start"
           height="fit"
-          gap={0.25}
-          padding={0.375}
+          gap={1}
+          padding={1.5}
           className={cn("rounded-08", styles.headerBg)}
         >
           <Icon className={cn("h-5 w-5 shrink-0 p-0.5", styles.iconClass)} />
@@ -154,8 +154,8 @@ export default function BannerQueue() {
           alignItems="stretch"
           justifyContent="start"
           height="fit"
-          gap={0.25}
-          padding={0.5}
+          gap={1}
+          padding={2}
           className="rounded-08 bg-background-tint-01"
         >
           {current.description && (

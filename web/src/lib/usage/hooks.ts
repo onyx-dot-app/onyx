@@ -19,7 +19,7 @@ import {
 import {
   DateRangePickerValue,
   THIRTY_DAYS,
-} from "@/refresh-components/AdminDateRangeSelector";
+} from "@/refresh-components/DateRangePicker";
 
 export function useTimeRange() {
   return useState<DateRangePickerValue>({

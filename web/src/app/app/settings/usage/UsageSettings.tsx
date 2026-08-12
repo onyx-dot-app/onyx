@@ -50,7 +50,7 @@ function WindowCostSection({ windowCostCents, rows }: WindowCostSectionProps) {
   );
 
   return (
-    <Section gap={0.75} justifyContent="start">
+    <Section gap={3} justifyContent="start">
       <Content
         icon={SvgBarChart}
         title="Usage this period"
@@ -71,13 +71,13 @@ function WindowCostSection({ windowCostCents, rows }: WindowCostSectionProps) {
           {sortedRows.map((row, index) => (
             <div key={`${row.day}-${row.model}`}>
               {index > 0 && <Divider />}
-              <Section gap={0.5} alignItems="start" justifyContent="start">
+              <Section gap={2} alignItems="start" justifyContent="start">
                 <Section
                   flexDirection="row"
                   justifyContent="between"
                   alignItems="center"
                   width="full"
-                  gap={1}
+                  gap={4}
                 >
                   <Section gap={0} alignItems="start" justifyContent="start">
                     <Text font="main-ui-action" color="text-03">
@@ -183,7 +183,7 @@ function ModelPriceSection({ prices, defaultPrice }: ModelPriceSectionProps) {
   }
 
   return (
-    <Section gap={0.75} justifyContent="start">
+    <Section gap={3} justifyContent="start">
       <Content
         icon={SvgCreditCard}
         title="Model prices"
@@ -198,7 +198,7 @@ function ModelPriceSection({ prices, defaultPrice }: ModelPriceSectionProps) {
             Prices unavailable
           </Text>
         ) : (
-          <Section gap={0.25} alignItems="stretch" justifyContent="start">
+          <Section gap={1} alignItems="stretch" justifyContent="start">
             {groups.map(({ provider, models }) => {
               const open = expanded.has(provider);
               return (
@@ -289,7 +289,7 @@ function BudgetSection({
     hasBudget && budgetCents > 0 ? Math.min(1, spent / budgetCents) : 0;
 
   return (
-    <Section gap={0.75} justifyContent="start">
+    <Section gap={3} justifyContent="start">
       <Content
         icon={SvgWallet}
         title="Budget"
@@ -299,13 +299,13 @@ function BudgetSection({
       />
       <Card>
         {hasBudget ? (
-          <Section gap={0.5} alignItems="start" justifyContent="start">
+          <Section gap={2} alignItems="start" justifyContent="start">
             <Section
               flexDirection="row"
               justifyContent="between"
               alignItems="center"
               width="full"
-              gap={1}
+              gap={4}
             >
               <Text font="main-ui-body" color="text-03">
                 {`${formatDollars(remaining)} remaining`}
@@ -349,14 +349,14 @@ export default function UsageSettings() {
   }, [error]);
 
   return (
-    <Section gap={2}>
-      <Section gap={0.75} justifyContent="start">
+    <Section gap={8}>
+      <Section gap={3} justifyContent="start">
         <Section
           flexDirection="row"
           justifyContent="between"
           alignItems="center"
           width="full"
-          gap={1}
+          gap={4}
         >
           <Content title="Usage" sizePreset="main-content" variant="section" />
           <div className="min-w-32">
@@ -391,7 +391,7 @@ export default function UsageSettings() {
             description="Something went wrong fetching your usage. Try again in a moment."
           />
         ) : (
-          <Section gap={2}>
+          <Section gap={8}>
             <WindowCostSection
               windowCostCents={data.window_cost_cents}
               rows={data.per_day_by_model}

@@ -103,7 +103,7 @@ def _unwrap_nested_exception(error: Exception) -> Exception:
             candidate = cause
         elif (
             hasattr(current, "args")
-            and len(getattr(current, "args")) == 1
+            and len(current.args) == 1
             and isinstance(current.args[0], Exception)
         ):
             candidate = current.args[0]

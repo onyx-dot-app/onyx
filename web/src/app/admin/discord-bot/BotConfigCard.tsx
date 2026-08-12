@@ -109,7 +109,7 @@ export function BotConfigCard() {
       )}
       <Card>
         <Section flexDirection="row" justifyContent="between">
-          <Section flexDirection="row" gap={0.5} width="fit">
+          <Section flexDirection="row" gap={2} width="fit">
             <Text mainContentEmphasis text05>
               Bot Token
             </Text>
@@ -137,7 +137,7 @@ export function BotConfigCard() {
         </Section>
 
         {isConfigured ? (
-          <Section flexDirection="column" alignItems="start" gap={0.5}>
+          <Section flexDirection="column" alignItems="start" gap={2}>
             <Text text03 secondaryBody>
               Your Discord bot token is configured.
               {botConfig?.created_at && (
@@ -152,12 +152,12 @@ export function BotConfigCard() {
             </Text>
           </Section>
         ) : (
-          <Section flexDirection="column" alignItems="start" gap={0.75}>
+          <Section flexDirection="column" alignItems="start" gap={3}>
             <Text text03 secondaryBody>
               Enter your Discord bot token to enable the bot. You can get this
               from the Discord Developer Portal.
             </Text>
-            <Section flexDirection="row" alignItems="end" gap={0.5}>
+            <Section flexDirection="row" alignItems="end" gap={2}>
               <PasswordInputTypeIn
                 value={botToken}
                 onChange={(e) => setBotToken(e.target.value)}

@@ -550,9 +550,9 @@ export default function SkillEditorPage({
 
               {isCreating && !creationDraft && (
                 <>
-                  <Section gap={0.5} alignItems="stretch" height="auto">
+                  <Section gap={2} alignItems="stretch" height="auto">
                     <Card border="solid" rounding="lg" padding="sm">
-                      <Section gap={0.5} alignItems="stretch" height="auto">
+                      <Section gap={2} alignItems="stretch" height="auto">
                         <Content
                           title="Have an existing skill?"
                           description="Import a SKILL.md, ZIP, or skill folder to prefill the form and include its files."
@@ -682,7 +682,7 @@ export default function SkillEditorPage({
 
               <Divider paddingParallel="fit" paddingPerpendicular="fit" />
 
-              <Section gap={0.5} alignItems="stretch" height="auto">
+              <Section gap={2} alignItems="stretch" height="auto">
                 <Content
                   title="Supporting files"
                   description="Add references, scripts, assets, or other files used by this skill. ZIP files are unpacked automatically."
@@ -729,7 +729,7 @@ export default function SkillEditorPage({
                 <>
                   <Divider paddingParallel="fit" paddingPerpendicular="fit" />
 
-                  <Section gap={0.5} alignItems="stretch" height="auto">
+                  <Section gap={2} alignItems="stretch" height="auto">
                     <Content
                       title="Management"
                       description="Control who can use this skill."

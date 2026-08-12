@@ -33,12 +33,7 @@ function AttachmentItemLayout({
   rightChildren,
 }: AttachmentItemLayoutProps) {
   return (
-    <Section
-      flexDirection="row"
-      justifyContent="start"
-      gap={0.25}
-      padding={0.25}
-    >
+    <Section flexDirection="row" justifyContent="start" gap={1} padding={1}>
       <div className={cn("h-9 aspect-square rounded-08 shrink-0")}>
         <Section>
           <div
@@ -53,7 +48,7 @@ function AttachmentItemLayout({
         flexDirection="row"
         justifyContent="between"
         alignItems="center"
-        gap={1.5}
+        gap={6}
         className="min-w-0"
       >
         <div data-testid="attachment-item-title" className="flex-1 min-w-0">

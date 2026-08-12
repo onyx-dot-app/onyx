@@ -1,6 +1,6 @@
 "use client";
 
-import { AdminDateRangeSelector } from "@/refresh-components/AdminDateRangeSelector";
+import { DateRangePicker } from "@/refresh-components/DateRangePicker";
 import { useTimeRange } from "@/lib/usage/hooks";
 import PerUserUsagePanel from "@/views/admin/PerUserUsagePanel";
 import { ADMIN_ROUTES } from "@/lib/admin-routes";
@@ -25,7 +25,7 @@ export default function UsagePage() {
         <PerUserUsagePanel
           timeRange={timeRange}
           headerRight={
-            <AdminDateRangeSelector
+            <DateRangePicker
               value={timeRange}
               onValueChange={(value) => setTimeRange(value as any)}
             />

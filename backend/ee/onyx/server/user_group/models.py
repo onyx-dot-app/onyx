@@ -25,6 +25,8 @@ class UserGroup(BaseModel):
     is_up_to_date: bool
     is_up_for_deletion: bool
     is_default: bool
+    # Members may start incognito chats when availability is groups-only.
+    incognito_enabled: bool
 
     @classmethod
     def from_model(
@@ -87,6 +89,7 @@ class UserGroup(BaseModel):
             is_up_to_date=user_group_model.is_up_to_date,
             is_up_for_deletion=user_group_model.is_up_for_deletion,
             is_default=user_group_model.is_default,
+            incognito_enabled=user_group_model.incognito_enabled,
         )
 
 
@@ -113,6 +116,10 @@ class UserGroupCreate(BaseModel):
 class UserGroupUpdate(BaseModel):
     user_ids: list[UUID]
     cc_pair_ids: list[int]
+
+
+class UserGroupIncognitoUpdate(BaseModel):
+    enabled: bool
 
 
 class AddUsersToUserGroupRequest(BaseModel):

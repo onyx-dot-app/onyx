@@ -2,6 +2,7 @@ package git
 
 import (
 	"encoding/json"
+	"errors"
 	"fmt"
 	"os"
 	"os/exec"
@@ -116,6 +117,39 @@ func RestoreStash(result *StashResult) {
 		log.Warnf("Failed to restore stashed changes (may have conflicts): %v", err)
 		log.Info("Your changes are still in the stash. Run 'git stash pop' to restore them manually.")
 	}
+}
+
+// IsAncestor reports whether ancestor is an ancestor of (or equal to)
+// descendant. Both arguments may be any commit-ish.
+func IsAncestor(ancestor, descendant string) (bool, error) {
+	cmd := exec.Command("git", "merge-base", "--is-ancestor", ancestor, descendant)
+	var stderr strings.Builder
+	cmd.Stderr = &stderr
+	err := cmd.Run()
+	if err == nil {
+		return true, nil
+	}
+	// Exit code 1 is the documented "not an ancestor" result; anything else
+	// (e.g. an unknown revision) is a real error.
+	var exitErr *exec.ExitError
+	if errors.As(err, &exitErr) && exitErr.ExitCode() == 1 {
+		return false, nil
+	}
+	if diagnostic := strings.TrimSpace(stderr.String()); diagnostic != "" {
+		return false, fmt.Errorf("git merge-base --is-ancestor %s %s failed: %w: %s", ancestor, descendant, err, diagnostic)
+	}
+	return false, fmt.Errorf("git merge-base --is-ancestor %s %s failed: %w", ancestor, descendant, err)
+}
+
+// IsShallowRepository reports whether the current repository is a shallow
+// clone.
+func IsShallowRepository() (bool, error) {
+	cmd := exec.Command("git", "rev-parse", "--is-shallow-repository")
+	output, err := cmd.Output()
+	if err != nil {
+		return false, fmt.Errorf("git rev-parse --is-shallow-repository failed: %w", err)
+	}
+	return strings.TrimSpace(string(output)) == "true", nil
 }
 
 // CommitExistsOnBranch checks if a commit exists on a branch

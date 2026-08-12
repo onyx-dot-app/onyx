@@ -86,7 +86,7 @@ export default function LicenseActivationCard({
   // License status view (when license exists and not editing)
   if (hasLicense && !showInput) {
     return (
-      <Card padding={1} alignItems="stretch">
+      <Card padding={4} alignItems="stretch">
         <Section
           flexDirection="row"
           justifyContent="between"
@@ -96,7 +96,7 @@ export default function LicenseActivationCard({
           <Section
             flexDirection="column"
             alignItems="start"
-            gap={0.5}
+            gap={2}
             height="auto"
             width="auto"
           >
@@ -118,7 +118,7 @@ export default function LicenseActivationCard({
               )}
             </Text>
           </Section>
-          <Section flexDirection="row" gap={0.5} height="auto" width="auto">
+          <Section flexDirection="row" gap={2} height="auto" width="auto">
             <Button prominence="secondary" onClick={() => setShowInput(true)}>
               Update Key
             </Button>
@@ -137,7 +137,7 @@ export default function LicenseActivationCard({
   return (
     <Card padding={0} alignItems="stretch" gap={0}>
       {/* Header */}
-      <Section flexDirection="column" alignItems="stretch" gap={0} padding={1}>
+      <Section flexDirection="column" alignItems="stretch" gap={0} padding={4}>
         <Section
           flexDirection="row"
           justifyContent="between"
@@ -164,8 +164,8 @@ export default function LicenseActivationCard({
         <Section
           flexDirection="column"
           alignItems="stretch"
-          gap={0.5}
-          padding={1}
+          gap={2}
+          padding={4}
         >
           {success && (
             <div className="billing-success-message">
@@ -197,7 +197,7 @@ export default function LicenseActivationCard({
                 flexDirection="row"
                 alignItems="center"
                 justifyContent="start"
-                gap={0.25}
+                gap={1}
                 height="auto"
               >
                 <div className="billing-error-icon">
@@ -221,7 +221,7 @@ export default function LicenseActivationCard({
       </div>
 
       {/* Footer */}
-      <Section flexDirection="row" justifyContent="end" padding={1}>
+      <Section flexDirection="row" justifyContent="end" padding={4}>
         <Button
           disabled={isActivating || !licenseKey.trim() || success}
           onClick={handleActivate}

@@ -64,7 +64,7 @@ export default function StageMetricsPanel({
   }
 
   return (
-    <Section alignItems="start" height="fit" width="full" gap={0.75}>
+    <Section alignItems="start" height="fit" width="full" gap={3}>
       <BatchTotalHeader batchTotal={batchTotal} />
       <PerBatchSection
         perBatchStages={perBatchStages}

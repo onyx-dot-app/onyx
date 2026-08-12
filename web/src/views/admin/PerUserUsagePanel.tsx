@@ -4,7 +4,7 @@ import React, { useMemo, useState } from "react";
 import { Card, MessageCard, Text } from "@opal/components";
 import { SvgX } from "@opal/icons";
 import { PageLoader, Section } from "@opal/layouts";
-import type { DateRange } from "@/refresh-components/AdminDateRangeSelector";
+import type { DateRange } from "@/refresh-components/DateRangePicker";
 import { formatCalendarDay } from "@/lib/dateUtils";
 import { useUsageExport } from "@/lib/usage/userUsage";
 import { formatCost, formatTokens } from "@/lib/utils";
@@ -95,7 +95,7 @@ export default function PerUserUsagePanel({
         flexDirection="column"
         justifyContent="start"
         alignItems="stretch"
-        gap={0.125}
+        gap={0.5}
         width="full"
         height="fit"
       >
@@ -116,7 +116,7 @@ export default function PerUserUsagePanel({
         flexDirection="column"
         justifyContent="start"
         alignItems="stretch"
-        gap={1}
+        gap={4}
         width="full"
         height="fit"
       >
@@ -131,7 +131,7 @@ export default function PerUserUsagePanel({
         flexDirection="column"
         justifyContent="start"
         alignItems="stretch"
-        gap={1}
+        gap={4}
         width="full"
         height="fit"
       >
@@ -150,7 +150,7 @@ export default function PerUserUsagePanel({
       flexDirection="column"
       justifyContent="start"
       alignItems="stretch"
-      gap={1}
+      gap={4}
       width="full"
       height="fit"
     >
@@ -193,7 +193,7 @@ export default function PerUserUsagePanel({
         flexDirection="column"
         justifyContent="start"
         alignItems="stretch"
-        gap={0.5}
+        gap={2}
         width="full"
         height="fit"
       >
@@ -201,7 +201,7 @@ export default function PerUserUsagePanel({
           flexDirection="column"
           justifyContent="start"
           alignItems="stretch"
-          gap={0.125}
+          gap={0.5}
           width="full"
           height="fit"
         >

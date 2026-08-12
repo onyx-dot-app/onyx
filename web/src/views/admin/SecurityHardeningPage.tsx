@@ -23,35 +23,14 @@ import {
 import { Card, Switch } from "@opal/components";
 import { markdown } from "@opal/utils";
 import type { RichStr } from "@opal/types";
+import type {
+  IncognitoAvailability,
+  IncognitoRecordMode,
+  SecuritySettings,
+  SSRFProtectionLevel,
+} from "@/lib/types";
 
 const route = ADMIN_ROUTES.SECURITY_HARDENING;
-
-// Outbound-request validation policy. Mirrors `SSRFProtectionLevel`
-// in backend/onyx/server/security/models.py.
-type SSRFProtectionLevel =
-  | "validate_all"
-  | "validate_llm"
-  | "allow_private_network"
-  | "disabled";
-
-// Read shape: the effective, env-merged settings returned by GET /admin/security.
-// Every field is concrete — the backend never returns null here (see
-// `SecuritySettings` in backend/onyx/server/security/models.py).
-interface SecuritySettings {
-  user_directory_admin_only: boolean;
-  track_external_idp_expiry: boolean;
-  ssrf_protection_level: SSRFProtectionLevel;
-  mask_credential_prefix: boolean;
-  llm_custom_config_env_injection: boolean;
-  valid_email_domains: string[];
-  password_min_length: number;
-  password_max_length: number;
-  password_require_uppercase: boolean;
-  password_require_lowercase: boolean;
-  password_require_digit: boolean;
-  password_require_special_char: boolean;
-  password_auth_enabled: boolean;
-}
 
 // Write shape: a partial patch. The backend treats only the keys present in the
 // PUT body as explicit overrides; absent keys keep their stored value, while an
@@ -420,6 +399,84 @@ export default function SecurityHardeningPage() {
                         description="Only admins can see the full user list."
                       >
                         Visible to Admins Only
+                      </InputSelect.Item>
+                    </InputSelect.Content>
+                  </InputSelect>
+                </div>
+              </InputHorizontal>
+
+              <InputHorizontal
+                title="Incognito Chats"
+                description="Incognito chats never appear in their owner's history. Group access is configured per group under Groups."
+                withLabel
+              >
+                <div className="w-60">
+                  <InputSelect
+                    value={draft.incognito_availability}
+                    onValueChange={async (value) => {
+                      await saveSettings({
+                        incognito_availability: value as IncognitoAvailability,
+                      });
+                      await mutate(SWR_KEYS.incognitoAvailability);
+                    }}
+                  >
+                    <InputSelect.Trigger />
+                    <InputSelect.Content>
+                      <InputSelect.Item
+                        value="off"
+                        wrapDescription
+                        description="No one can start incognito chats."
+                      >
+                        Off
+                      </InputSelect.Item>
+                      <InputSelect.Item
+                        value="everyone"
+                        wrapDescription
+                        description="Anyone signed in can start incognito chats."
+                      >
+                        Everyone
+                      </InputSelect.Item>
+                      <InputSelect.Item
+                        value="groups"
+                        wrapDescription
+                        description="Only members of groups with incognito access enabled."
+                      >
+                        Designated Groups
+                      </InputSelect.Item>
+                    </InputSelect.Content>
+                  </InputSelect>
+                </div>
+              </InputHorizontal>
+
+              <InputHorizontal
+                title="Incognito Chat Records"
+                description="What the workspace keeps from incognito chats. New sessions pin the mode active when they start."
+                withLabel
+              >
+                <div className="w-60">
+                  <InputSelect
+                    value={draft.incognito_record_mode}
+                    onValueChange={(value) =>
+                      void saveSettings({
+                        incognito_record_mode: value as IncognitoRecordMode,
+                      })
+                    }
+                  >
+                    <InputSelect.Trigger />
+                    <InputSelect.Content>
+                      <InputSelect.Item
+                        value="usage_only"
+                        wrapDescription
+                        description="No message content is stored. Token usage is still tracked, and these chats do not appear in query history."
+                      >
+                        Usage Only
+                      </InputSelect.Item>
+                      <InputSelect.Item
+                        value="full_history"
+                        wrapDescription
+                        description="Recorded like any other chat: query history, usage, and tracing. Hidden only from the owner's own history."
+                      >
+                        Full History
                       </InputSelect.Item>
                     </InputSelect.Content>
                   </InputSelect>

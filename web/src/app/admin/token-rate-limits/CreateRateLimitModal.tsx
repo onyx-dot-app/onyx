@@ -502,7 +502,7 @@ export default function CreateRateLimitModal({
             return (
               <Form className="flex min-h-0 flex-1 flex-col overflow-hidden">
                 <Modal.Body>
-                  <Section alignItems="stretch" height="auto" gap={1}>
+                  <Section alignItems="stretch" height="auto" gap={4}>
                     {!forSpecificScope && (
                       <InputVertical
                         title="Applies to"

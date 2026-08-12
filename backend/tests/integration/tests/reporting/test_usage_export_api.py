@@ -433,7 +433,7 @@ class TestUsageExportAPI:
 
         # Generate multiple reports concurrently
         num_reports = 3
-        for i in range(num_reports):
+        for _i in range(num_reports):
             response = client.post(
                 f"{API_SERVER_URL}/admin/usage-report",
                 json={},
