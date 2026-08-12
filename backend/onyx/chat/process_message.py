@@ -39,6 +39,14 @@ from onyx.chat.compression import (
     get_compression_params,
 )
 from onyx.chat.emitter import Emitter
+from onyx.chat.incognito import (
+    content_free_file_descriptors,
+)
+from onyx.chat.incognito_context import (
+    append_incognito_message,
+    incognito_session_ended,
+    load_incognito_context,
+)
 from onyx.chat.llm_loop import EmptyLLMResponseError, run_llm_loop
 from onyx.chat.models import (
     AnswerStream,
@@ -78,9 +86,9 @@ from onyx.db.chat import (
 )
 from onyx.db.document_set import filter_document_set_names_by_user_access
 from onyx.db.engine.sql_engine import get_session_with_current_tenant
-from onyx.db.enums import HookPoint
+from onyx.db.enums import HookPoint, record_mode_persists_content
 from onyx.db.memory import get_memories
-from onyx.db.models import ChatMessage, Persona, User, UserFile
+from onyx.db.models import ChatMessage, ChatSession, Persona, User, UserFile
 from onyx.db.projects import get_user_files_from_project
 from onyx.db.tools import get_tools
 from onyx.deep_research.dr_loop import run_deep_research_llm_loop
@@ -142,7 +150,11 @@ from onyx.tools.tool_constructor import (
 from onyx.utils.logger import setup_logger
 from onyx.utils.telemetry import mt_cloud_telemetry
 from onyx.utils.timing import log_function_time
-from shared_configs.contextvars import get_current_tenant_id
+from shared_configs.contextvars import (
+    CURRENT_CONTENT_FREE_SESSION_ID_CONTEXTVAR,
+    CURRENT_INCOGNITO_RECORD_MODE_CONTEXTVAR,
+    get_current_tenant_id,
+)
 
 logger = setup_logger()
 ERROR_TYPE_CANCELLED = "cancelled"
@@ -626,7 +638,10 @@ def build_chat_turn(
             user=user,
             db_session=db_session,
         )
-        yield CreateChatSessionID(chat_session_id=chat_session.id)
+        yield CreateChatSessionID(
+            chat_session_id=chat_session.id,
+            incognito=chat_session.incognito_record_mode is not None,
+        )
         chat_session = get_chat_session_by_id(
             chat_session_id=chat_session.id,
             user_id=user_id,
@@ -741,11 +756,11 @@ def build_chat_turn(
     if parent_message.message_type == MessageType.USER:
         user_message = parent_message
     else:
-        # New message — run the Query Processing hook before saving to DB.
-        # Skipped on regeneration: the message already exists and was accepted previously.
-        # Skip for empty/whitespace-only messages — no meaningful query to process,
-        # and SendMessageRequest.message has no min_length guard.
-        if message_text.strip():
+        # Runs only for new, non-blank messages: regeneration already processed
+        # this text, and SendMessageRequest.message has no min_length guard. The
+        # hook ships the query and user email out, so egress-suppressing modes skip it.
+        mode = chat_session.incognito_record_mode
+        if message_text.strip() and (mode is None or mode.fires_hooks):
             hook_result = execute_hook(
                 db_session=db_session,
                 hook_point=HookPoint.QUERY_PROCESSING,
@@ -767,13 +782,22 @@ def build_chat_turn(
         # assistant/summary rows in save_chat.py) so budget math sums a single
         # unit even after mid-session model switches.
         default_tokenizer = get_tokenizer(None, None)
+        user_token_count = len(default_tokenizer.encode(message_text))
+        # Incognito keeps the row for tracking (id, tokens, structure) but its
+        # text lives in the ephemeral store, never in Postgres. Token count is
+        # from the real text so usage and budgeting are unaffected.
+        keeps_content = record_mode_persists_content(mode)
         user_message = create_new_chat_message(
             chat_session_id=chat_session.id,
             parent_message=parent_message,
-            message=message_text,
-            token_count=len(default_tokenizer.encode(message_text)),
+            message=message_text if keeps_content else "",
+            token_count=user_token_count,
             message_type=MessageType.USER,
-            files=new_msg_req.file_descriptors,
+            files=(
+                new_msg_req.file_descriptors
+                if keeps_content
+                else content_free_file_descriptors(new_msg_req.file_descriptors)
+            ),
             db_session=db_session,
             commit=True,
         )
@@ -957,6 +981,26 @@ def build_chat_turn(
     )
     simple_chat_history = chat_history_result.simple_messages
 
+    # Incognito rows are content-free, so earlier turns come from the store and
+    # the current message's text is restored onto convert_chat_history()'s
+    # blank-row shape. Regeneration uses the store as-is, it already holds the turn.
+    incognito_mode = chat_session.incognito_record_mode
+    if not record_mode_persists_content(incognito_mode):
+        stored_messages = load_incognito_context(chat_session.id).messages
+        is_new_user_message = parent_message.message_type != MessageType.USER
+        if (
+            is_new_user_message
+            and simple_chat_history
+            and simple_chat_history[-1].message_type == MessageType.USER
+        ):
+            current_user = simple_chat_history[-1].model_copy(
+                update={"message": new_msg_req.message}
+            )
+            simple_chat_history = stored_messages + [current_user]
+            append_incognito_message(chat_session.id, current_user)
+        else:
+            simple_chat_history = stored_messages
+
     # Metadata for every text file injected into the history. After context-window
     # truncation drops older messages, the LLM loop compares surviving file_id tags
     # against this map to discover "forgotten" files and provide their metadata to
@@ -991,8 +1035,12 @@ def build_chat_turn(
     cache = get_cache_backend()
     reset_cancel_status(chat_session.id, cache)
 
+    # Bind the id, not the row: this closure is stored on ChatTurnSetup and
+    # would otherwise keep a detached ChatSession reachable for the whole turn.
+    chat_session_id = chat_session.id
+
     def check_is_connected() -> bool:
-        return check_stop_signal(chat_session.id, cache)
+        return check_stop_signal(chat_session_id, cache)
 
     set_processing_status(
         chat_session_id=chat_session.id,
@@ -1012,9 +1060,11 @@ def build_chat_turn(
 
     return ChatTurnSetup(
         new_msg_req=new_msg_req,
-        chat_session=chat_session,
+        chat_session_id=chat_session.id,
+        chat_session_project_id=chat_session.project_id,
+        incognito_record_mode=chat_session.incognito_record_mode,
         persona=persona,
-        user_message=user_message,
+        user_message_id=user_message.id,
         user_identity=user_identity,
         llms=llms,
         model_display_names=model_display_names,
@@ -1247,7 +1297,7 @@ def _run_models(
         # "processing", whatever happened to the request generator.
         try:
             set_processing_status(
-                chat_session_id=setup.chat_session.id,
+                chat_session_id=setup.chat_session_id,
                 cache=setup.cache,
                 value=False,
             )
@@ -1287,8 +1337,8 @@ def _run_models(
                     auto_detect_filters=auto_detect_search_filters,
                 ),
                 custom_tool_config=CustomToolConfig(
-                    chat_session_id=setup.chat_session.id,
-                    message_id=setup.user_message.id,
+                    chat_session_id=setup.chat_session_id,
+                    message_id=setup.user_message_id,
                     additional_headers=setup.custom_tool_additional_headers,
                     mcp_headers=setup.mcp_headers,
                 ),
@@ -1312,7 +1362,7 @@ def _run_models(
 
             # Per-thread copy: run_llm_loop mutates simple_chat_history in-place.
             if n_models == 1 and setup.new_msg_req.deep_research:
-                if setup.chat_session.project_id:
+                if setup.chat_session_project_id:
                     raise RuntimeError("Deep research is not supported for projects")
                 run_deep_research_llm_loop(
                     emitter=model_emitter,
@@ -1325,7 +1375,7 @@ def _run_models(
                     reasoning_effort=setup.reasoning_effort,
                     skip_clarification=setup.skip_clarification,
                     user_identity=setup.user_identity,
-                    chat_session_id=str(setup.chat_session.id),
+                    chat_session_id=str(setup.chat_session_id),
                     all_injected_file_metadata=setup.all_injected_file_metadata,
                 )
             else:
@@ -1342,7 +1392,7 @@ def _run_models(
                     token_counter=get_llm_token_counter(model_llm),
                     forced_tool_id=setup.forced_tool_id,
                     user_identity=setup.user_identity,
-                    chat_session_id=str(setup.chat_session.id),
+                    chat_session_id=str(setup.chat_session_id),
                     chat_files=setup.chat_files_for_tools,
                     reasoning_effort=setup.reasoning_effort,
                     include_citations=setup.new_msg_req.include_citations,
@@ -1371,18 +1421,33 @@ def _run_models(
                     ChatMessage, setup.reserved_messages[model_idx].id
                 )
                 if msg is not None:
-                    info = model_error_info[model_idx]
-                    detail = (
-                        info.message
-                        if info is not None
-                        else "model encountered an error during generation."
-                    )
-                    error_text = "Error from %s: %s" % (
-                        setup.model_display_names[model_idx],
-                        detail,
-                    )
+                    mode = setup.incognito_record_mode
+                    if not record_mode_persists_content(mode):
+                        # Provider errors can echo prompt fragments, so the
+                        # durable row gets a generic marker. The live stream
+                        # still carries the real error to the user.
+                        error_text = "The model encountered an error."
+                    else:
+                        info = model_error_info[model_idx]
+                        detail = (
+                            info.message
+                            if info is not None
+                            else "model encountered an error during generation."
+                        )
+                        error_text = "Error from %s: %s" % (
+                            setup.model_display_names[model_idx],
+                            detail,
+                        )
                     msg.message = error_text
                     msg.error = error_text
+                    # The reservation's placeholder count must not survive:
+                    # rows carry the real output count, zero when none emitted.
+                    partial_answer = state_containers[model_idx].get_answer_tokens()
+                    msg.token_count = (
+                        len(get_tokenizer(None, None).encode(partial_answer))
+                        if partial_answer
+                        else 0
+                    )
                     save_db_session.commit()
         except Exception:
             logger.exception(
@@ -1416,7 +1481,7 @@ def _run_models(
                     last_fence_refresh = now
                     try:
                         set_processing_status(
-                            chat_session_id=setup.chat_session.id,
+                            chat_session_id=setup.chat_session_id,
                             cache=setup.cache,
                             value=True,
                             run_id=setup.processing_run_id,
@@ -1554,7 +1619,7 @@ def _run_models(
                 # the writer thread keeps draining to completion in the background.
                 logger.info(
                     "chat stream reader detached; writer continues for session %s",
-                    setup.chat_session.id,
+                    setup.chat_session_id,
                 )
 
     return _read_stream()
@@ -1610,6 +1675,7 @@ def _stream_chat_turn(
         )
 
     mock_response_token: Token[str | None] | None = None
+    incognito_mode_flag_set = False
     setup: ChatTurnSetup | None = None
     pre_run_packets: list[AnswerStreamPart] = []
     run_started = False
@@ -1677,10 +1743,29 @@ def _stream_chat_turn(
         assert setup is not None, (
             "build_chat_turn must complete before _run_models is called"
         )
+        # Read at trace start, by the memory gate, and by interaction logging.
+        # Cleared with a plain set: a Token reset raises when this generator's
+        # frames resume under a different context.
+        if setup.incognito_record_mode is not None:
+            CURRENT_INCOGNITO_RECORD_MODE_CONTEXTVAR.set(
+                setup.incognito_record_mode.value
+            )
+            incognito_mode_flag_set = True
+        content_free = not record_mode_persists_content(setup.incognito_record_mode)
+        if content_free:
+            # Set for the whole turn so a blob any tool saves carries the
+            # session on its record, which is what teardown deletes by.
+            CURRENT_CONTENT_FREE_SESSION_ID_CONTEXTVAR.set(str(setup.chat_session_id))
         stream_buffer = StreamBufferWriter(
             cache=setup.cache,
-            chat_session_id=setup.chat_session.id,
+            chat_session_id=setup.chat_session_id,
             run_id=setup.processing_run_id,
+            delete_on_done=content_free,
+            session_ended=(
+                (lambda: incognito_session_ended(setup.chat_session_id))
+                if content_free
+                else None
+            ),
         )
         for pre_run_packet in pre_run_packets:
             stream_buffer.append_line(get_json_line(pre_run_packet.model_dump()))
@@ -1769,12 +1854,15 @@ def _stream_chat_turn(
     finally:
         if mock_response_token is not None:
             reset_llm_mock_response(mock_response_token)
+        if incognito_mode_flag_set:
+            CURRENT_INCOGNITO_RECORD_MODE_CONTEXTVAR.set(None)
+            CURRENT_CONTENT_FREE_SESSION_ID_CONTEXTVAR.set(None)
         try:
             # Once _run_models started, its writer thread owns the fence — the
             # run may still be in flight after this generator is closed.
             if setup is not None and not run_started:
                 set_processing_status(
-                    chat_session_id=setup.chat_session.id,
+                    chat_session_id=setup.chat_session_id,
                     cache=setup.cache,
                     value=False,
                 )
@@ -1923,6 +2011,12 @@ def llm_loop_completion_handle(
                 "ChatMessage %d not found during completion" % assistant_message_id
             )
 
+        incognito_session = db_session.get(ChatSession, chat_session_id)
+        incognito_mode = (
+            incognito_session.incognito_record_mode if incognito_session else None
+        )
+        keeps_content = record_mode_persists_content(incognito_mode)
+
         save_chat_turn(
             message_text=final_answer,
             reasoning_tokens=reasoning_tokens,
@@ -1934,7 +2028,21 @@ def llm_loop_completion_handle(
             is_clarification=is_clarification,
             emitted_citations=emitted_citations,
             pre_answer_processing_time=pre_answer_processing_time,
+            persist_content=keeps_content,
         )
+
+        # Incognito: the answer lives only in the ephemeral store, and
+        # compression is skipped since a summary is a durable content row.
+        if not keeps_content:
+            append_incognito_message(
+                chat_session_id,
+                ChatMessageSimple(
+                    message=final_answer,
+                    token_count=attached_message.token_count,
+                    message_type=MessageType.ASSISTANT,
+                ),
+            )
+            return
 
         updated_chat_history = create_chat_history_chain(
             chat_session_id=chat_session_id,
@@ -2090,6 +2198,7 @@ def gather_stream_full(
     message_id: int | None = None
     top_documents: list[SearchDoc] = []
     chat_session_id: UUID | None = None
+    incognito = False
 
     for packet in packets:
         if isinstance(packet, Packet):
@@ -2109,6 +2218,7 @@ def gather_stream_full(
             message_id = packet.reserved_assistant_message_id
         elif isinstance(packet, CreateChatSessionID):
             chat_session_id = packet.chat_session_id
+            incognito = packet.incognito
 
     if message_id is None:
         raise ValueError("Message ID is required")
@@ -2141,5 +2251,6 @@ def gather_stream_full(
         citation_info=citations,
         message_id=message_id,
         chat_session_id=chat_session_id,
+        incognito=incognito,
         error_msg=error_msg,
     )

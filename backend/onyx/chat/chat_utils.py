@@ -8,6 +8,8 @@ from fastapi.datastructures import Headers
 from pydantic import BaseModel
 from sqlalchemy.orm import Session
 
+from onyx.chat.incognito import resolve_incognito_record_mode
+from onyx.chat.incognito_context import incognito_context_available
 from onyx.chat.models import (
     ChatHistoryResult,
     ChatLoadedFile,
@@ -28,7 +30,7 @@ from onyx.db.chat import (
     get_chat_messages_by_session,
     get_or_create_root_message,
 )
-from onyx.db.enums import UserFileStatus
+from onyx.db.enums import IncognitoRecordMode, UserFileStatus
 from onyx.db.file_record import FileRecordNotFoundError
 from onyx.db.kg_config import (
     get_kg_config_settings,
@@ -39,6 +41,8 @@ from onyx.db.models import SearchDoc as DbSearchDoc
 from onyx.db.persona import user_can_access_persona
 from onyx.db.projects import check_project_ownership
 from onyx.db.user_file import get_user_file_by_id
+from onyx.error_handling.error_codes import OnyxErrorCode
+from onyx.error_handling.exceptions import OnyxError
 from onyx.file_processing.extract_file_text import extract_file_text
 from onyx.file_store.file_store import get_default_file_store
 from onyx.file_store.models import ChatFileType, FileDescriptor
@@ -185,12 +189,25 @@ def create_chat_session_from_request(
         ):
             raise ValueError("User does not have access to persona")
 
+    # Pinned at creation. A deployment without the Redis cache backend cannot
+    # hold incognito context, so the request is refused rather than downgraded
+    # into a chat the user believes is incognito.
+    incognito_mode: IncognitoRecordMode | None = None
+    if chat_session_request.incognito:
+        if not incognito_context_available():
+            raise OnyxError(
+                OnyxErrorCode.DEPLOYMENT_UNSUPPORTED,
+                "Incognito chat is not supported on this deployment.",
+            )
+        incognito_mode = resolve_incognito_record_mode()
+
     return create_chat_session(
         db_session=db_session,
         description=chat_session_request.description or "",
         user_id=user.id,
         persona_id=chat_session_request.persona_id,
         project_id=chat_session_request.project_id,
+        incognito_record_mode=incognito_mode,
     )
 
 

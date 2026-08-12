@@ -37,6 +37,9 @@ class CustomToolResponse(BaseModel):
 
 class CreateChatSessionID(BaseModel):
     chat_session_id: UUID
+    # Echoes the pinned mode so the client can verify the server honored an
+    # incognito request. A server that omits it did not.
+    incognito: bool = False
 
 
 AnswerStreamPart = (
@@ -93,6 +96,9 @@ class ChatFullResponse(BaseModel):
     # Metadata
     message_id: int
     chat_session_id: UUID | None = None
+    # Echoes the pinned mode for newly-created sessions, like the streaming
+    # packet does. A server that omits it did not honor an incognito request.
+    incognito: bool = False
     error_msg: str | None = None
 
 

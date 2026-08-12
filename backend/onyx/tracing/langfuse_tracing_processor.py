@@ -20,6 +20,7 @@ from onyx.tracing.framework.span_data import (
 )
 from onyx.tracing.framework.spans import Span
 from onyx.tracing.framework.traces import Trace
+from onyx.tracing.incognito import suppresses_external_traces
 
 logger = logging.getLogger(__name__)
 
@@ -64,6 +65,8 @@ class LangfuseTracingProcessor(TracingProcessor):
         self._langfuse_span_ids: dict[
             str, str
         ] = {}  # framework_span_id -> langfuse_span.id
+        # Membership decides every later callback, immune to mid-trace changes.
+        self._suppressed_traces: set[str] = set()
 
     def _get_client(self) -> Langfuse:
         """Get or create Langfuse client."""
@@ -125,6 +128,10 @@ class LangfuseTracingProcessor(TracingProcessor):
 
     def on_trace_start(self, trace: Trace) -> None:
         """Called when a trace is started."""
+        if suppresses_external_traces():
+            with self._lock:
+                self._suppressed_traces.add(trace.trace_id)
+            return
         try:
             client = self._get_client()
             trace_meta = trace.export() or {}
@@ -162,6 +169,10 @@ class LangfuseTracingProcessor(TracingProcessor):
 
     def on_trace_end(self, trace: Trace) -> None:
         """Called when a trace is finished."""
+        with self._lock:
+            if trace.trace_id in self._suppressed_traces:
+                self._suppressed_traces.discard(trace.trace_id)
+                return
         try:
             with self._lock:
                 langfuse_span = self._trace_spans.pop(trace.trace_id, None)
@@ -191,6 +202,9 @@ class LangfuseTracingProcessor(TracingProcessor):
         agents run in parallel threads, and calling methods on span objects created
         in other threads can cause OpenTelemetry context issues.
         """
+        with self._lock:
+            if span.trace_id in self._suppressed_traces:
+                return
         try:
             data = span.span_data
             # Declare as Any since different code paths return different observation types

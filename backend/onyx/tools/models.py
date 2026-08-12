@@ -274,6 +274,8 @@ class ToolCallInfo(BaseModel):
     search_docs: list[SearchDoc] | None = None
     generated_images: list[GeneratedImage] | None = None
     generated_files: list[PythonExecutionFile] | None = None
+    # File-store ids of blobs custom tools saved during the call.
+    generated_file_ids: list[str] | None = None
 
 
 CHAT_SESSION_ID_PLACEHOLDER = "CHAT_SESSION_ID"

@@ -95,10 +95,12 @@ class UserProjectSnapshot(BaseModel):
             created_at=model.created_at,
             user_id=model.user_id,
             instructions=model.instructions,
+            # A project lists its sessions by title, so an incognito chat would
+            # surface here the same way it would in the sidebar.
             chat_sessions=[
                 ChatSessionDetails.from_model(chat)
                 for chat in model.chat_sessions
-                if not chat.deleted
+                if not chat.deleted and chat.incognito_record_mode is None
             ],
         )
 

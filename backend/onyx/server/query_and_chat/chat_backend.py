@@ -27,6 +27,8 @@ from onyx.chat.chat_utils import (
     create_chat_session_from_request,
     extract_headers,
 )
+from onyx.chat.incognito import delete_incognito_generated_files
+from onyx.chat.incognito_context import teardown_incognito_session
 from onyx.chat.models import ChatFullResponse, CreateChatSessionID
 from onyx.chat.process_message import (
     gather_stream_full,
@@ -53,6 +55,7 @@ from onyx.db.chat import (
     get_chat_messages_by_session,
     get_chat_session_by_id,
     get_chat_sessions_by_user,
+    get_incognito_session_ids_for_user,
     set_as_latest_chat_message,
     set_preferred_response,
     translate_db_message_to_chat_message_detail,
@@ -60,7 +63,7 @@ from onyx.db.chat import (
 )
 from onyx.db.chat_search import search_chat_sessions
 from onyx.db.engine.sql_engine import get_session, get_session_with_current_tenant
-from onyx.db.enums import Permission
+from onyx.db.enums import Permission, record_mode_persists_content
 from onyx.db.feedback import create_chat_message_feedback, remove_chat_message_feedback
 from onyx.db.llm import fetch_default_chat_naming_model
 from onyx.db.models import ChatMessage, ChatSessionSharedStatus, Persona, User
@@ -79,6 +82,7 @@ from onyx.llm.models import (
 )
 from onyx.llm.override_models import LLMOverride
 from onyx.secondary_llm_flows.chat_session_naming import (
+    DEFAULT_CHAT_SESSION_NAME,
     generate_chat_session_name,
     get_fallback_chat_session_name,
 )
@@ -199,6 +203,8 @@ def get_user_chat_sessions(
             project_id=project_id,
             only_non_project_chats=only_non_project_chats,
             include_failed_chats=include_failed_chats,
+            # The owner's own history is the one surface incognito hides from.
+            exclude_incognito=True,
             limit=page_size + 1,
             before=before_dt,
         )
@@ -433,6 +439,7 @@ def get_chat_session(
         # Packets are now directly serialized as Packet Pydantic models
         packets=replay_packet_lists,
         current_run=current_run,
+        incognito=chat_session.incognito_record_mode is not None,
     )
 
 
@@ -450,6 +457,9 @@ def create_new_chat_session(
             user=user,
             db_session=db_session,
         )
+    except OnyxError:
+        # Carries its own status and detail (e.g. incognito refused).
+        raise
     except ValueError as e:
         # Project or persona access denied
         raise HTTPException(status_code=403, detail=str(e))
@@ -457,7 +467,10 @@ def create_new_chat_session(
         logger.exception(e)
         raise HTTPException(status_code=400, detail="Invalid Persona provided.")
 
-    return CreateChatSessionID(chat_session_id=new_chat_session.id)
+    return CreateChatSessionID(
+        chat_session_id=new_chat_session.id,
+        incognito=new_chat_session.incognito_record_mode is not None,
+    )
 
 
 def _generate_or_fallback_chat_session_name(
@@ -541,6 +554,11 @@ def rename_chat_session(
             db_session=db_session,
             eager_load_persona=True,
         )
+        # Auto-naming derives a title from the conversation and writes it to the
+        # session row. A non-persisting incognito mode keeps no content in
+        # Postgres, so it keeps the fallback name and skips the LLM call.
+        if not record_mode_persists_content(chat_session.incognito_record_mode):
+            return RenameChatSessionResponse(new_name=DEFAULT_CHAT_SESSION_NAME)
         full_history = create_chat_history_chain(
             chat_session_id=chat_session_id,
             db_session=db_session,
@@ -594,15 +612,37 @@ def patch_chat_session(
     return None
 
 
+def _teardown_incognito_after_delete(chat_session_id: UUID) -> None:
+    """The rows are already gone, so a failed teardown is logged rather than
+    failing a delete the caller cannot retry. The context TTL is the backstop."""
+    try:
+        teardown_incognito_session(chat_session_id)
+    except Exception:
+        logger.exception("Incognito teardown failed for session %s", chat_session_id)
+
+
 @router.delete("/delete-all-chat-sessions", tags=PUBLIC_API_TAGS)
 def delete_all_chat_sessions(
     user: User = Depends(require_permission(Permission.BASIC_ACCESS)),
     db_session: Session = Depends(get_session),
 ) -> None:
+    incognito_session_ids = get_incognito_session_ids_for_user(user.id, db_session)
+    # Blobs first, and nothing is deleted while any remain: their ids live on
+    # the rows this is about to drop, so the other order strands them.
+    if not all(
+        delete_incognito_generated_files(incognito_id, db_session)
+        for incognito_id in incognito_session_ids
+    ):
+        raise OnyxError(
+            OnyxErrorCode.SERVICE_UNAVAILABLE,
+            "Some generated files could not be deleted yet. Try again shortly.",
+        )
     try:
         delete_all_chat_sessions_for_user(user=user, db_session=db_session)
     except ValueError as e:
         raise HTTPException(status_code=400, detail=str(e))
+    for incognito_id in incognito_session_ids:
+        _teardown_incognito_after_delete(incognito_id)
 
 
 @router.delete("/delete-chat-session/{session_id}", tags=PUBLIC_API_TAGS)
@@ -614,6 +654,17 @@ def delete_chat_session_by_id(
 ) -> None:
     user_id = user.id
     try:
+        session = get_chat_session_by_id(
+            chat_session_id=session_id, user_id=user_id, db_session=db_session
+        )
+        is_incognito = session.incognito_record_mode is not None
+        if is_incognito and not delete_incognito_generated_files(
+            session_id, db_session
+        ):
+            raise OnyxError(
+                OnyxErrorCode.SERVICE_UNAVAILABLE,
+                "Some generated files could not be deleted yet. Try again shortly.",
+            )
         # Use the provided hard_delete parameter if specified, otherwise use the default config
         actual_hard_delete = (
             hard_delete if hard_delete is not None else HARD_DELETE_CHATS
@@ -623,6 +674,31 @@ def delete_chat_session_by_id(
         )
     except ValueError as e:
         raise HTTPException(status_code=400, detail=str(e))
+    if is_incognito:
+        _teardown_incognito_after_delete(session_id)
+
+
+@router.post("/end-incognito-session/{session_id}", tags=PUBLIC_API_TAGS)
+def end_incognito_session(
+    session_id: UUID,
+    user: User = Depends(require_permission(Permission.BASIC_ACCESS)),
+    db_session: Session = Depends(get_session),
+) -> None:
+    """Drop an incognito session's live context the moment the chat closes.
+
+    The context TTL is only the backstop for when this never arrives, such as
+    a hard tab close.
+    """
+    chat_session = get_chat_session_by_id(
+        chat_session_id=session_id, user_id=user.id, db_session=db_session
+    )
+    if chat_session.incognito_record_mode is not None:
+        teardown_incognito_session(session_id)
+        if not delete_incognito_generated_files(session_id, db_session):
+            raise OnyxError(
+                OnyxErrorCode.SERVICE_UNAVAILABLE,
+                "Some generated files could not be deleted yet and will be retried.",
+            )
 
 
 # NOTE: This endpoint is extremely central to the application, any changes to it should be reviewed and approved by an experienced
@@ -674,7 +750,12 @@ def handle_send_chat_message(
     Returns:
         StreamingResponse | ChatFullResponse: Either streams or returns complete response.
     """
-    logger.debug("Received new chat message: %s", chat_message_req.message)
+    # Session id only: the session's incognito mode isn't loaded yet, and a
+    # verbatim prompt in the debug log would be exactly the durable message
+    # log incognito must never leave behind.
+    logger.debug(
+        "Received new chat message for session %s", chat_message_req.chat_session_id
+    )
 
     tenant_id = get_current_tenant_id()
     mt_cloud_telemetry(

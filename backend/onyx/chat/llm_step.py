@@ -9,6 +9,7 @@ from typing import Any, cast
 from onyx.chat.chat_state import ChatStateContainer
 from onyx.chat.citation_processor import DynamicCitationProcessor
 from onyx.chat.emitter import Emitter
+from onyx.chat.incognito import current_turn_persists_content
 from onyx.chat.models import ChatMessageSimple, LlmStepResult
 from onyx.chat.tool_call_args_streaming import maybe_emit_argument_delta
 from onyx.configs.app_configs import (
@@ -1155,7 +1156,7 @@ def run_llm_step_pkt_generator(
     llm_msg_history = translate_history_to_llm_format(history, llm.config)
     has_reasoned = False
 
-    if LOG_ONYX_MODEL_INTERACTIONS:
+    if LOG_ONYX_MODEL_INTERACTIONS and current_turn_persists_content():
         logger.debug(
             "Message history:\n%s",
             _format_message_history_for_logging(llm_msg_history),
@@ -1521,7 +1522,7 @@ def run_llm_step_pkt_generator(
 
     # Note: Content (AgentResponseDelta) doesn't need an explicit end packet - OverallStop handles it
     # Tool calls are handled by tool execution code and emit their own packets (e.g., SectionEnd)
-    if LOG_ONYX_MODEL_INTERACTIONS:
+    if LOG_ONYX_MODEL_INTERACTIONS and current_turn_persists_content():
         logger.debug("Accumulated reasoning: %s", accumulated_reasoning)
         logger.debug("Accumulated answer: %s", accumulated_answer)
 
