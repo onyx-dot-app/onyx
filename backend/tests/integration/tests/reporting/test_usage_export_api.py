@@ -290,6 +290,13 @@ class TestUsageExportAPI:
             assert "chat_messages.csv" in file_names
             assert "users.csv" in file_names
             assert "usage_by_user.csv" in file_names
+            assert "usage_report.pdf" in file_names
+
+            with zip_file.open("usage_report.pdf") as pdf_file:
+                pdf_bytes = pdf_file.read()
+            assert pdf_bytes.startswith(b"%PDF-")
+            assert len(pdf_bytes) > 1000
+
             # Verify usage_by_user.csv has the expected columns. The seeded
             # chat history doesn't record UserUsage rows, so there's no data
             # to assert on, just the header shape.
