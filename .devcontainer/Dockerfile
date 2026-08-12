@@ -37,6 +37,7 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
   libxmlsec1-dev \
   make \
   neovim \
+  nginx \
   openssh-client \
   pkg-config \
   postgresql-client \
