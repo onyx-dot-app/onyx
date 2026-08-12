@@ -94,14 +94,8 @@ def is_valid_file_type(filename: str) -> bool:
     return filename.lower().endswith(valid_extensions)
 
 
-# Readers sniff the stored bytes rather than trust the name or the upload
-# header, so the upload has to agree with them or a file accepted here is
-# stored under a type no reader recognises. Logos are also embedded in email,
-# where every reader uses Pillow, so accept only raster image types.
 _RASTER_LOGO_TYPES = ("image/png", "image/jpeg")
 
-# A logo is a wordmark, not an asset library. This bounds what gets buffered
-# into memory every time the usage report embeds it.
 _MAX_LOGO_BYTES = 5 * 1024 * 1024
 
 _LOGO_TYPE_ERROR = "Invalid file type- only .png, .jpg, and .jpeg files are allowed."
@@ -168,8 +162,6 @@ def upload_logo(file: UploadFile | str, is_logotype: bool = False) -> bool:
 
         display_name = file.filename
 
-        # An extension is a claim; the bytes are the fact. Readers sniff, so a
-        # mislabelled upload would be accepted here and dropped at render time.
         file_type_or_none = sniff_logo_type(file_content)
         if file_type_or_none is None:
             raise OnyxError(OnyxErrorCode.INVALID_INPUT, _LOGO_TYPE_ERROR)

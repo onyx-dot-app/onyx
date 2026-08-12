@@ -1,5 +1,3 @@
-"""Logo uploads must match the readers that render the stored bytes."""
-
 from io import BytesIO
 from unittest.mock import MagicMock, mock_open, patch
 
@@ -58,7 +56,6 @@ def test_sniffs_the_real_type() -> None:
 
 
 def test_an_svg_named_png_is_rejected() -> None:
-    """All logo readers, including email rendering, require raster images."""
     with pytest.raises(OnyxError) as caught:
         _upload(_SVG, "logo.png")
 
@@ -73,7 +70,6 @@ def test_bytes_that_are_not_an_image_are_rejected() -> None:
 
 
 def test_a_truncated_png_is_rejected() -> None:
-    """Magic bytes alone aren't renderability; PIL must decode the file."""
     with pytest.raises(OnyxError) as caught:
         _upload(b"\x89PNG\r\n\x1a\n" + b"\x00" * 100, "logo.png")
 
@@ -81,7 +77,6 @@ def test_a_truncated_png_is_rejected() -> None:
 
 
 def test_a_seeded_logo_path_is_validated_too() -> None:
-    """`seeding.py` uploads by path, so that branch sniffs bytes as well."""
     store = MagicMock()
     with patch(
         "ee.onyx.server.enterprise_settings.store.get_default_file_store",
