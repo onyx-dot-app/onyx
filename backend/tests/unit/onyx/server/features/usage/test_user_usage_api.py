@@ -336,6 +336,7 @@ def test_custom_date_range_uses_inclusive_calendar_bounds(
         "model-a",
         "model-b",
     ]
+    assert body["window_cost_cents"] == pytest.approx(3.0)
 
 
 def test_custom_date_range_rejects_start_after_end(db_session: Session) -> None:
@@ -343,6 +344,26 @@ def test_custom_date_range_rejects_start_after_end(db_session: Session) -> None:
 
     resp = TestClient(_make_app(db_session, _StubUser(caller))).get(
         "/user/usage", params={"start": "2026-07-04", "end": "2026-07-03"}
+    )
+
+    assert resp.status_code == 400
+    assert resp.json()["error_code"] == "INVALID_INPUT"
+
+
+@pytest.mark.parametrize(
+    "params",
+    [
+        {"end": "9999-12-31"},
+        {"end": "0001-01-01"},
+    ],
+)
+def test_custom_date_range_rejects_unsupported_bounds(
+    db_session: Session, params: dict[str, str]
+) -> None:
+    caller = str(uuid4())
+
+    resp = TestClient(_make_app(db_session, _StubUser(caller))).get(
+        "/user/usage", params=params
     )
 
     assert resp.status_code == 400
