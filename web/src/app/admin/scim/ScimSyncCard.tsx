@@ -65,7 +65,7 @@ export default function ScimSyncCard({
 
       {hasToken && (
         <>
-          <Divider paddingParallel="fit" paddingPerpendicular="fit" />
+          <Divider paddingParallel={0} paddingPerpendicular={0} />
 
           <Section
             flexDirection="row"

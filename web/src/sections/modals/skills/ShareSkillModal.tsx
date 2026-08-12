@@ -404,7 +404,7 @@ export default function ShareSkillModal({
           </Text>
         )}
 
-        <Divider paddingParallel="fit" paddingPerpendicular="fit" />
+        <Divider paddingParallel={0} paddingPerpendicular={0} />
 
         {skill.owner ? (
           <ShareAccessRow

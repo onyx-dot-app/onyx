@@ -41,7 +41,7 @@ function GroupsList({ groups, searchQuery }: GroupsListProps) {
       ))}
 
       {builtInGroups.length > 0 && customGroups.length > 0 && (
-        <Divider paddingPerpendicular="sm" paddingParallel="fit" />
+        <Divider paddingPerpendicular={2} paddingParallel={0} />
       )}
 
       {customGroups.map((group) => (

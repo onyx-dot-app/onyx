@@ -276,7 +276,7 @@ export function KnowledgeSearchResultsPanel({
           </TableLayouts.TableCell>
         </TableLayouts.TableRow>
 
-        <Divider paddingParallel="fit" paddingPerpendicular="fit" />
+        <Divider paddingParallel={0} paddingPerpendicular={0} />
 
         <div className="overflow-y-auto max-h-80">
           {allResults.map((entry) => {

@@ -147,7 +147,7 @@ function SettingsHeader({
       {divider ? (
         <>
           <Spacer rem={1.5} />
-          <Divider paddingParallel="md" paddingPerpendicular="fit" />
+          <Divider paddingParallel={4} paddingPerpendicular={0} />
         </>
       ) : (
         <Spacer rem={0.5} />

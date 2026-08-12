@@ -176,7 +176,7 @@ function ExistingProviderCard({
       >
         <SelectCard
           state="filled"
-          padding="sm"
+          padding={2}
           rounding="lg"
           onClick={() => setIsOpen(true)}
         >
@@ -241,7 +241,7 @@ function NewProviderCard({
   return (
     <SelectCard
       state="empty"
-      padding="sm"
+      padding={2}
       rounding="lg"
       onClick={() => setIsOpen(true)}
     >
@@ -294,7 +294,7 @@ function NewCustomProviderCard({
 
       <SelectCard
         state="empty"
-        padding="sm"
+        padding={2}
         rounding="lg"
         onClick={() => setIsOpen(true)}
       >
@@ -457,7 +457,7 @@ export default function LanguageModelsPage() {
               </div>
             </GeneralLayouts.Section>
 
-            <Divider paddingParallel="fit" paddingPerpendicular="fit" />
+            <Divider paddingParallel={0} paddingPerpendicular={0} />
           </>
         )}
 
@@ -466,7 +466,7 @@ export default function LanguageModelsPage() {
           <MessageCard
             title="New LLM configuration temporarily unavailable."
             description="Existing LLM providers can still be used and updated."
-            headerPadding="xs"
+            headerPadding={1}
           />
         )}
 
@@ -511,7 +511,7 @@ export default function LanguageModelsPage() {
           </div>
         </Disabled>
 
-        <Divider paddingParallel="fit" paddingPerpendicular="fit" />
+        <Divider paddingParallel={0} paddingPerpendicular={0} />
 
         {/* ── Cost Overrides — negotiated per-model rates for usage costing ── */}
         <CostOverridesPanel />

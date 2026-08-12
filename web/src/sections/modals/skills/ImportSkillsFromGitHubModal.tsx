@@ -264,7 +264,7 @@ export function ImportSkillsFromGitHubModalView({
               {result.imported.length > 0 && (
                 <section className="flex flex-col gap-1.5">
                   <Text font="main-ui-action">Imported</Text>
-                  <Card border="solid" rounding="sm" padding="fit">
+                  <Card border="solid" rounding="sm" padding={0}>
                     <div className="divide-y divide-border-01">
                       {result.imported.map((item) => (
                         <div
@@ -297,7 +297,7 @@ export function ImportSkillsFromGitHubModalView({
               {resultNotImported.length > 0 && (
                 <section className="flex flex-col gap-1.5">
                   <Text font="main-ui-action">Not imported</Text>
-                  <Card border="solid" rounding="sm" padding="fit">
+                  <Card border="solid" rounding="sm" padding={0}>
                     <div className="divide-y divide-border-01">
                       {resultNotImported.map((item) => (
                         <div
@@ -376,7 +376,7 @@ export function ImportSkillsFromGitHubModalView({
                       {`${selectedPaths.length} of ${importablePaths.length} importable ${importablePaths.length === 1 ? "skill" : "skills"} selected`}
                     </Text>
                   </div>
-                  <Card border="solid" rounding="sm" padding="fit">
+                  <Card border="solid" rounding="sm" padding={0}>
                     <div className="max-h-80 divide-y divide-border-01 overflow-y-auto overscroll-contain">
                       {preview.skills.map((skill) => {
                         const unavailable = skill.unavailable_reason !== null;

@@ -14,7 +14,7 @@ Default behavior — a plain container.
 ```tsx
 import { Card } from "@opal/components";
 
-<Card padding="md" border="solid">
+<Card padding={4} border="solid">
   <p>Hello</p>
 </Card>
 ```
@@ -23,7 +23,7 @@ import { Card } from "@opal/components";
 
 | Prop | Type | Default | Description |
 |------|------|---------|-------------|
-| `padding` | `PaddingVariants` | `"md"` | Padding preset |
+| `padding` | `Spacing` | `"md"` | Padding preset |
 | `rounding` | `RoundingVariants` | `"md"` | Border-radius preset |
 | `background` | `"none" \| "light" \| "heavy"` | `"light"` | Background fill intensity |
 | `border` | `"none" \| "dashed" \| "solid"` | `"none"` | Border style |
@@ -113,7 +113,7 @@ Because Card doesn't own the trigger, it also doesn't generate IDs or ARIA attri
 
 ```ts
 type CardBaseProps = {
-  padding?: PaddingVariants;
+  padding?: Spacing;
   rounding?: RoundingVariants;
   background?: "none" | "light" | "heavy";
   border?: "none" | "dashed" | "solid";

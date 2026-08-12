@@ -285,7 +285,7 @@ function InputErrorText({
 // ---------------------------------------------------------------------------
 
 function InputDivider() {
-  return <Divider paddingParallel="sm" paddingPerpendicular="sm" />;
+  return <Divider paddingParallel={2} paddingPerpendicular={2} />;
 }
 
 // ---------------------------------------------------------------------------

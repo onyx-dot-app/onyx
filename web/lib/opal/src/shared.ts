@@ -13,7 +13,6 @@ import type {
   OverridableExtremaSizeVariants,
   ContainerSizeVariants,
   ExtremaSizeVariants,
-  PaddingVariants,
   RoundingVariants,
   Spacing,
 } from "@opal/types";
@@ -121,33 +120,6 @@ const heightVariants: Record<ExtremaSizeVariants, string> = {
 //   - SelectCard    (padding, rounding)
 // ---------------------------------------------------------------------------
 
-const paddingVariants: Record<PaddingVariants, string> = {
-  lg: "p-6",
-  md: "p-4",
-  sm: "p-2",
-  xs: "p-1",
-  "2xs": "p-0.5",
-  fit: "p-0",
-};
-
-const paddingXVariants: Record<PaddingVariants, string> = {
-  lg: "px-6",
-  md: "px-4",
-  sm: "px-2",
-  xs: "px-1",
-  "2xs": "px-0.5",
-  fit: "px-0",
-};
-
-const paddingYVariants: Record<PaddingVariants, string> = {
-  lg: "py-6",
-  md: "py-4",
-  sm: "py-2",
-  xs: "py-1",
-  "2xs": "py-0.5",
-  fit: "py-0",
-};
-
 /**
  * Converts a spacing step to a CSS length: `N` is `N / 4` rem.
  *
@@ -190,9 +162,6 @@ export {
   type Spacing,
   containerSizeVariants,
   spacingToRem,
-  paddingVariants,
-  paddingXVariants,
-  paddingYVariants,
   cardRoundingVariants,
   cardTopRoundingVariants,
   cardBottomRoundingVariants,

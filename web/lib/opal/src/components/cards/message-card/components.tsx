@@ -3,11 +3,11 @@ import "@opal/components/cards/message-card/styles.css";
 import { cn } from "@opal/utils";
 import type {
   IconFunctionComponent,
-  PaddingVariants,
+  Spacing,
   RichStr,
   StatusVariants,
 } from "@opal/types";
-import { paddingVariants } from "@opal/shared";
+import { spacingToRem } from "@opal/shared";
 import { ContentAction } from "@opal/layouts";
 import { Button, Divider } from "@opal/components";
 import {
@@ -40,10 +40,10 @@ interface MessageCardBaseProps {
   titleMaxLines?: number;
 
   /** Padding preset. @default "sm" */
-  padding?: Extract<PaddingVariants, "sm" | "xs">;
+  padding?: Spacing;
 
   /** Padding around the header Content area. @default "fit" */
-  headerPadding?: PaddingVariants;
+  headerPadding?: Spacing;
 
   /**
    * Content rendered below a divider, under the main content area.
@@ -130,8 +130,8 @@ function MessageCard({
   title,
   description,
   titleMaxLines,
-  padding = "sm",
-  headerPadding = "fit",
+  padding = 2,
+  headerPadding = 0,
   bottomChildren,
   rightChildren,
   onClose,
@@ -154,12 +154,13 @@ function MessageCard({
 
   return (
     <div
-      className={cn("opal-message-card", paddingVariants[padding])}
+      className="opal-message-card"
+      style={{ padding: spacingToRem(padding) }}
       data-variant={variant}
       data-opal-status-border={variant}
       ref={ref}
     >
-      <div className={paddingVariants[headerPadding]}>
+      <div style={{ padding: spacingToRem(headerPadding) }}>
         <ContentAction
           icon={(props) => (
             <Icon {...props} className={cn(props.className, iconClass)} />
@@ -176,7 +177,7 @@ function MessageCard({
 
       {bottomChildren && (
         <>
-          <Divider paddingParallel="sm" paddingPerpendicular="xs" />
+          <Divider paddingParallel={2} paddingPerpendicular={1} />
           {bottomChildren}
         </>
       )}

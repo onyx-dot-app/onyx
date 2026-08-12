@@ -38,7 +38,7 @@ Inherits **all** props from `InteractiveStatefulProps` (except `variant`, which 
 
 | Prop | Type | Default | Description |
 |---|---|---|---|
-| `padding` | `PaddingVariants` | `"md"` | Padding preset |
+| `padding` | `Spacing` | `"md"` | Padding preset |
 | `rounding` | `RoundingVariants` | `"md"` | Border-radius preset |
 | `border` | `BorderVariants` | `"solid"` | Border style (`"none"` \| `"dashed"` \| `"solid"`) |
 | `ref` | `React.Ref<HTMLDivElement>` | — | Ref forwarded to the root div |

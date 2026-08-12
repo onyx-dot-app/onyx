@@ -3,17 +3,17 @@ import "@opal/components/cards/card/styles.css";
 import type {
   BackgroundVariants,
   BorderVariants,
-  PaddingVariants,
+  Spacing,
   RoundingVariants,
   ShadowVariants,
   SizeVariants,
   StatusVariants,
 } from "@opal/types";
 import {
-  paddingVariants,
   cardRoundingVariants,
   cardTopRoundingVariants,
   cardBottomRoundingVariants,
+  spacingToRem,
 } from "@opal/shared";
 import { cn } from "@opal/utils";
 
@@ -43,7 +43,7 @@ type CardBaseProps = {
    *
    * @default "md"
    */
-  padding?: PaddingVariants;
+  padding?: Spacing;
 
   /**
    * Border-radius preset.
@@ -182,7 +182,7 @@ type CardProps = CardPlainProps | CardExpandableProps;
  *
  * @example Plain
  * ```tsx
- * <Card padding="md" border="solid">
+ * <Card padding={4} border="solid">
  *   <p>Hello</p>
  * </Card>
  * ```
@@ -202,7 +202,7 @@ type CardProps = CardPlainProps | CardExpandableProps;
  */
 function Card(props: CardProps) {
   const {
-    padding: paddingProp = "md",
+    padding: paddingProp = 4,
     rounding: roundingProp = "md",
     background = "light",
     border = "none",
@@ -212,14 +212,15 @@ function Card(props: CardProps) {
     children,
   } = props;
 
-  const padding = paddingVariants[paddingProp];
+  const paddingStyle = { padding: spacingToRem(paddingProp) };
 
   // Plain mode — unchanged behavior
   if (!props.expandable) {
     return (
       <div
         ref={ref}
-        className={cn("opal-card", padding, cardRoundingVariants[roundingProp])}
+        className={cn("opal-card", cardRoundingVariants[roundingProp])}
+        style={paddingStyle}
         data-background={background}
         data-border={border}
         data-opal-status-border={borderColor}
@@ -244,7 +245,8 @@ function Card(props: CardProps) {
   return (
     <div ref={ref} className="opal-card-expandable" data-shadow={shadow}>
       <div
-        className={cn("opal-card-expandable-header", padding, headerRounding)}
+        className={cn("opal-card-expandable-header", headerRounding)}
+        style={paddingStyle}
         data-background={background}
         data-border={border}
         data-opal-status-border={borderColor}

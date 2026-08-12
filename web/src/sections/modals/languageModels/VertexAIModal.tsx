@@ -139,7 +139,7 @@ function VertexAIModalInternals({
               title="Onyx will use the pod's ambient Google Cloud credentials (via google.auth.default). Ensure the Kubernetes ServiceAccount is bound to a GCP Service Account with access to Vertex AI."
             />
           </InputPadder>
-          <Card background="light" border="none" padding="sm">
+          <Card background="light" border="none" padding={2}>
             <InputVertical
               withLabel={FIELD_VERTEX_PROJECT}
               title="GCP Project ID"

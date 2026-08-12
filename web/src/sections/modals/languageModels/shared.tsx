@@ -292,7 +292,7 @@ export function ModelAccessField() {
       </InputPadder>
 
       {!isPublic && (
-        <Card background="light" border="none" padding="sm">
+        <Card background="light" border="none" padding={2}>
           <Section gap={2}>
             <InputComboBox
               placeholder="Add groups and agents"
@@ -304,7 +304,7 @@ export function ModelAccessField() {
               searchIcon
             />
 
-            <Card background="heavy" border="none" padding="sm">
+            <Card background="heavy" border="none" padding={2}>
               <ContentAction
                 icon={SvgUserManage}
                 title="Admin"
@@ -328,7 +328,7 @@ export function ModelAccessField() {
                   const memberCount = group?.users.length ?? 0;
                   return (
                     <div key={`group-${id}`} className="min-w-0">
-                      <Card background="heavy" border="none" padding="sm">
+                      <Card background="heavy" border="none" padding={2}>
                         <ContentAction
                           icon={SvgUsers}
                           title={group?.name ?? `Group ${id}`}
@@ -363,7 +363,7 @@ export function ModelAccessField() {
                   const agent = agentMap.get(id);
                   return (
                     <div key={`agent-${id}`} className="min-w-0">
-                      <Card background="heavy" border="none" padding="sm">
+                      <Card background="heavy" border="none" padding={2}>
                         <ContentAction
                           icon={
                             agent
@@ -674,7 +674,7 @@ export function ModelSelectionField({
   const visibleModels = models.filter((m) => m.is_visible);
 
   return (
-    <Card background="light" border="none" padding="sm">
+    <Card background="light" border="none" padding={2}>
       <Section gap={2}>
         <InputHorizontal
           title="Models"
@@ -697,7 +697,7 @@ export function ModelSelectionField({
         {models.length === 0 ? (
           <EmptyMessageCard
             title={emptyMessage ?? "No models available."}
-            padding="sm"
+            padding={2}
           />
         ) : (
           <Section gap={1} alignItems="stretch">

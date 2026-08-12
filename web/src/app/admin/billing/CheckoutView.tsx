@@ -218,7 +218,7 @@ export default function CheckoutView({ onAdjustPlan }: CheckoutViewProps) {
             </Section>
           </InputHorizontal>
 
-          <Divider paddingParallel="fit" paddingPerpendicular="fit" />
+          <Divider paddingParallel={0} paddingPerpendicular={0} />
 
           {/* Seats */}
           <InputHorizontal

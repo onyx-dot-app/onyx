@@ -15,8 +15,8 @@ A plain line with no title or description.
 | Prop | Type | Default | Description |
 |---|---|---|---|
 | `orientation` | `"horizontal" \| "vertical"` | `"horizontal"` | Direction of the line |
-| `paddingParallel` | `PaddingVariants` | `"sm"` | Padding along the line direction (0.5rem) |
-| `paddingPerpendicular` | `PaddingVariants` | `"xs"` | Padding perpendicular to the line (0.25rem) |
+| `paddingParallel` | `Spacing` | `2` | Padding along the line direction (0.5rem) |
+| `paddingPerpendicular` | `Spacing` | `1` | Padding perpendicular to the line (0.25rem) |
 
 ### Titled divider
 
@@ -53,10 +53,10 @@ import { Divider } from "@opal/components";
 <Divider orientation="vertical" />
 
 // No padding
-<Divider paddingParallel="fit" paddingPerpendicular="fit" />
+<Divider paddingParallel={0} paddingPerpendicular={0} />
 
 // Custom padding
-<Divider paddingParallel="lg" paddingPerpendicular="sm" />
+<Divider paddingParallel={6} paddingPerpendicular={2} />
 
 // With title
 <Divider title="Advanced" />

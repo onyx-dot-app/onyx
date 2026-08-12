@@ -63,7 +63,7 @@ function PrivacyOption({
   return (
     <SelectCard
       state={selected ? "filled" : "empty"}
-      padding="sm"
+      padding={2}
       rounding="sm"
       border="none"
       onClick={onClick}

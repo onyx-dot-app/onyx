@@ -248,7 +248,7 @@ function OverrideRow({ override }: OverrideRowProps) {
 
   return (
     <Hoverable.Root group="OverrideRow">
-      <Card border="solid" rounding="lg" padding="sm">
+      <Card border="solid" rounding="lg" padding={2}>
         <div className="flex flex-row items-center justify-between gap-2 p-2">
           <div className="flex flex-col gap-0.5 min-w-0">
             <Text font="main-ui-action" color="text-04" nowrap>

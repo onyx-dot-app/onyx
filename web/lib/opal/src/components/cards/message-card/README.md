@@ -15,7 +15,7 @@ and border colors.
 | `title` | `string \| RichStr` | — | Main title text |
 | `description` | `string \| RichStr` | — | Description below the title |
 | `padding` | `"sm" \| "xs"` | `"sm"` | Padding preset for the outer card |
-| `headerPadding` | `PaddingVariants` | `"fit"` | Padding around the header Content area. `"fit"` → no padding; `"sm"` → `p-2`. |
+| `headerPadding` | `Spacing` | `"fit"` | Padding around the header Content area. `"fit"` → no padding; `"sm"` → `p-2`. |
 | `bottomChildren` | `ReactNode` | — | Content below a divider, under the main content |
 | `rightChildren` | `ReactNode` | — | Content on the right side. Mutually exclusive with `onClose`. |
 | `onClose` | `() => void` | — | Close button callback. When omitted, no close button is rendered. |
