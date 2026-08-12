@@ -109,7 +109,7 @@ function PersonaPicker({
 
 interface PersonaMessagesChartProps {
   availablePersonas: Agent[];
-  agentsError?: unknown;
+  agentsError?: Error;
   agentsLoading?: boolean;
   timeRange: DateRangePickerValue;
 }
