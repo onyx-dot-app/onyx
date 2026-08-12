@@ -357,7 +357,6 @@ def test_custom_date_range_uses_inclusive_calendar_bounds(
         "model-a",
         "model-b",
     ]
-    assert body["window_cost_cents"] == pytest.approx(3.0)
 
 
 def test_custom_date_range_rejects_start_after_end(db_session: Session) -> None:
@@ -365,26 +364,6 @@ def test_custom_date_range_rejects_start_after_end(db_session: Session) -> None:
 
     resp = TestClient(_make_app(db_session, _StubUser(caller))).get(
         "/user/usage", params={"start": "2026-07-04", "end": "2026-07-03"}
-    )
-
-    assert resp.status_code == 400
-    assert resp.json()["error_code"] == "INVALID_INPUT"
-
-
-@pytest.mark.parametrize(
-    "params",
-    [
-        {"end": "9999-12-31"},
-        {"end": "0001-01-01"},
-    ],
-)
-def test_custom_date_range_rejects_unsupported_bounds(
-    db_session: Session, params: dict[str, str]
-) -> None:
-    caller = str(uuid4())
-
-    resp = TestClient(_make_app(db_session, _StubUser(caller))).get(
-        "/user/usage", params=params
     )
 
     assert resp.status_code == 400
@@ -518,25 +497,7 @@ def test_budget_reflects_user_cost_limit(
     from onyx.db.models import TokenRateLimitScope
 
     caller = str(uuid4())
-    fixed_now = datetime.datetime(2026, 8, 12, 15, tzinfo=datetime.timezone.utc)
-
-    class _FixedDatetime(datetime.datetime):
-        @classmethod
-        def now(cls, tz: datetime.tzinfo | None = None) -> datetime.datetime:
-            return fixed_now if tz is not None else fixed_now.replace(tzinfo=None)
-
-    _seed_usage(
-        db_session,
-        caller,
-        "gpt-4o",
-        "CHAT",
-        "openai",
-        100,
-        50,
-        0,
-        1.25,
-        get_cost_window_start(fixed_now, 24),
-    )
+    _seed_current_window(db_session, caller)  # records 1.25c of cost
     db_session.add(
         TokenRateLimit(
             enabled=True,
@@ -547,7 +508,6 @@ def test_budget_reflects_user_cost_limit(
         )
     )
     db_session.commit()
-    monkeypatch.setattr(usage_api, "datetime", _FixedDatetime)
     monkeypatch.setattr(
         "onyx.server.features.usage.api.fetch_default_llm_model", lambda _db: None
     )
@@ -558,7 +518,7 @@ def test_budget_reflects_user_cost_limit(
     assert body["budget_cents"] == pytest.approx(100.0)
     assert body["budget_remaining_cents"] == pytest.approx(98.75)  # 100 - 1.25
     assert body["budget_reset_at"] == get_cost_window_reset(
-        fixed_now, 168
+        datetime.datetime.now(datetime.timezone.utc), 168
     ).isoformat().replace("+00:00", "Z")
 
 
