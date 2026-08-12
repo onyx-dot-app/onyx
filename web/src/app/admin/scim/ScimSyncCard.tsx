@@ -34,7 +34,7 @@ export default function ScimSyncCard({
   onRegenerate,
 }: ScimSyncCardProps) {
   return (
-    <Card gap={0.75}>
+    <Card gap={3}>
       <ContentAction
         title="SCIM Sync"
         description="Connect your identity provider to import and sync users and groups."
@@ -71,7 +71,7 @@ export default function ScimSyncCard({
             flexDirection="row"
             justifyContent="between"
             alignItems="end"
-            gap={1}
+            gap={4}
           >
             <Section alignItems="start" gap={0} width="fit">
               {isConnected ? (

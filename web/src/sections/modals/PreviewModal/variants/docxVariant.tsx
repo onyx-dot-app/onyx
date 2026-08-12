@@ -107,7 +107,7 @@ function DocxPreview({ fileUrl, onLoad }: DocxPreviewProps) {
 
   if (error) {
     return (
-      <Section justifyContent="center" alignItems="center" padding={1.5}>
+      <Section justifyContent="center" alignItems="center" padding={6}>
         <Text text03 mainUiBody>
           {error}
         </Text>
@@ -160,7 +160,7 @@ export const docxVariant: PreviewVariant = {
     if (isLegacyDoc(ctx.fileName)) {
       lastDocxResult = null;
       return (
-        <Section justifyContent="center" alignItems="center" padding={1.5}>
+        <Section justifyContent="center" alignItems="center" padding={6}>
           <Text text03 mainUiBody>
             Legacy .doc format cannot be previewed. Download the file to view
             it.

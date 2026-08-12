@@ -182,7 +182,7 @@ export default function ShareChatSessionModal({
             justifyContent="start"
             alignItems="stretch"
             height="auto"
-            gap={0.25}
+            gap={1}
           >
             <PrivacyOption
               icon={SvgLock}

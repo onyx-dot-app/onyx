@@ -93,7 +93,7 @@ export default function PerUserUsagePanel({
         flexDirection="column"
         justifyContent="start"
         alignItems="stretch"
-        gap={0.125}
+        gap={0.5}
         width="full"
         height="fit"
       >
@@ -114,7 +114,7 @@ export default function PerUserUsagePanel({
         flexDirection="column"
         justifyContent="start"
         alignItems="stretch"
-        gap={1}
+        gap={4}
         width="full"
         height="fit"
       >
@@ -129,7 +129,7 @@ export default function PerUserUsagePanel({
         flexDirection="column"
         justifyContent="start"
         alignItems="stretch"
-        gap={1}
+        gap={4}
         width="full"
         height="fit"
       >
@@ -148,7 +148,7 @@ export default function PerUserUsagePanel({
       flexDirection="column"
       justifyContent="start"
       alignItems="stretch"
-      gap={1}
+      gap={4}
       width="full"
       height="fit"
     >
@@ -193,7 +193,7 @@ export default function PerUserUsagePanel({
         flexDirection="column"
         justifyContent="start"
         alignItems="stretch"
-        gap={0.5}
+        gap={2}
         width="full"
         height="fit"
       >
@@ -201,7 +201,7 @@ export default function PerUserUsagePanel({
           flexDirection="column"
           justifyContent="start"
           alignItems="stretch"
-          gap={0.125}
+          gap={0.5}
           width="full"
           height="fit"
         >

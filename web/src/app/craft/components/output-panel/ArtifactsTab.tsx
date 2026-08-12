@@ -143,7 +143,7 @@ export default function ArtifactsTab({
         height="full"
         alignItems="center"
         justifyContent="center"
-        padding={2}
+        padding={8}
       >
         <SvgFiles size={48} className="stroke-text-02" />
         <Text font="heading-h3" color="text-03">

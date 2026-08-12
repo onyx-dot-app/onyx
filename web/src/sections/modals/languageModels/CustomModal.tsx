@@ -408,7 +408,7 @@ export default function CustomModal({
       </InputPadder>
 
       <InputPadder>
-        <Section gap={0.75}>
+        <Section gap={3}>
           <Content
             title="Environment Variables"
             description={markdown(
@@ -431,7 +431,7 @@ export default function CustomModal({
       )}
 
       <InputDivider />
-      <Section gap={0.5}>
+      <Section gap={2}>
         <InputPadder>
           <Content
             title="Models"

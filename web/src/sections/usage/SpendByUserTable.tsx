@@ -186,7 +186,7 @@ export default function SpendByUserTable({
       flexDirection="column"
       justifyContent="start"
       alignItems="stretch"
-      gap={0.5}
+      gap={2}
       width="full"
       height="fit"
     >

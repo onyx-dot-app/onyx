@@ -66,7 +66,7 @@ export interface CardProps extends SectionProps {
 
 export default function Card({
   variant = "primary",
-  padding = 1,
+  padding = 4,
   className,
   ref,
   ...props

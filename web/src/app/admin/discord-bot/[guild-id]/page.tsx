@@ -101,7 +101,7 @@ function GuildDetailContent({
                 justifyContent="end"
                 alignItems="center"
                 width="fit"
-                gap={0.5}
+                gap={2}
               >
                 <Button
                   disabled={disabled}

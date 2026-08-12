@@ -26,7 +26,7 @@ export default function PerBatchSection({
     );
   }
   return (
-    <Section alignItems="start" height="fit" width="full" gap={0.75}>
+    <Section alignItems="start" height="fit" width="full" gap={3}>
       <SortToggle sortMode={sortMode} onChange={onSortModeChange} />
       <PerBatchTable perBatchStages={perBatchStages} sortMode={sortMode} />
     </Section>

@@ -361,7 +361,7 @@ export default function AgentKnowledgePane({
 
       case "add":
         return (
-          <GeneralLayouts.Section gap={0.5} alignItems="stretch" height="auto">
+          <GeneralLayouts.Section gap={2} alignItems="stretch" height="auto">
             {vectorDbEnabled && (
               <KnowledgeSearchBar
                 query={searchQuery}
@@ -516,7 +516,7 @@ export default function AgentKnowledgePane({
   ]);
 
   return (
-    <GeneralLayouts.Section gap={0.5} alignItems="stretch" height="auto">
+    <GeneralLayouts.Section gap={2} alignItems="stretch" height="auto">
       <Content
         title="Knowledge"
         description="Add specific connectors and documents for this agent to use to inform its responses."
@@ -525,7 +525,7 @@ export default function AgentKnowledgePane({
       />
 
       <Card>
-        <GeneralLayouts.Section gap={0.5} alignItems="stretch" height="auto">
+        <GeneralLayouts.Section gap={2} alignItems="stretch" height="auto">
           <InputHorizontal
             title="Use Knowledge"
             description="Let this agent reference these documents to inform its responses."

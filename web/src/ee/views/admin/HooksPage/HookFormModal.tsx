@@ -382,7 +382,7 @@ export default function HookFormModal({
                       alignItems="center"
                       justifyContent="start"
                       height="fit"
-                      gap={1}
+                      gap={4}
                       className="px-0.5"
                     >
                       <div className="p-0.5 shrink-0">

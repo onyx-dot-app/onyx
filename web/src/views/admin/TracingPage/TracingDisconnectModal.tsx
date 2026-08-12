@@ -56,7 +56,7 @@ export function TracingDisconnectModal({
         </Button>
       }
     >
-      <Section alignItems="start" gap={0.5}>
+      <Section alignItems="start" gap={2}>
         <Text color="text-03">
           {markdown(
             `LLM call traces will no longer be sent to **${target.label}**. Traces already sent are unaffected.`

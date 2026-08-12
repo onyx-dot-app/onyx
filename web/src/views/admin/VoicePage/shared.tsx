@@ -253,7 +253,7 @@ export function VoiceProviderSetupModal({
                 onClose={onClose}
               />
               <Modal.Body>
-                <Section gap={1} alignItems="stretch">
+                <Section gap={4} alignItems="stretch">
                   {providerType === "azure" && (
                     <InputVertical
                       title="Target URI"
@@ -439,7 +439,7 @@ export function VoiceDisconnectModal({
         </Button>
       }
     >
-      <Section alignItems="start" gap={0.5}>
+      <Section alignItems="start" gap={2}>
         <Text color="text-03">
           {markdown(
             `**${disconnectTarget.providerLabel}** models will no longer be used for speech-to-text or text-to-speech, and it will no longer be your default. Session history will be preserved.`

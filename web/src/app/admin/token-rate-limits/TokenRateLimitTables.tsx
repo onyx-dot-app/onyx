@@ -135,7 +135,7 @@ export const TokenRateLimitTable = ({
   };
 
   return (
-    <Section alignItems="stretch" height="auto" gap={0.5}>
+    <Section alignItems="stretch" height="auto" gap={2}>
       {!hideHeading && description && (
         <Text font="secondary-body" color="text-03" as="p">
           {description}

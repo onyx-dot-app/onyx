@@ -4,7 +4,12 @@ import "@opal/components/tabs/styles.css";
 import React, { useRef, useState, useEffect, useMemo } from "react";
 import * as TabsPrimitive from "@radix-ui/react-tabs";
 import { mergeRefs } from "@opal/utils";
-import { IconFunctionComponent, type WithoutStyles } from "@opal/types";
+import {
+  IconFunctionComponent,
+  type Spacing,
+  type WithoutStyles,
+} from "@opal/types";
+import { spacingToRem } from "@opal/shared";
 import { SvgChevronLeft, SvgChevronRight } from "@opal/icons";
 import { Tooltip, Text, Button } from "@opal/components";
 import {
@@ -283,15 +288,15 @@ function TabsTrigger({
 interface TabsContentProps extends WithoutStyles<
   React.ComponentProps<typeof TabsPrimitive.Content>
 > {
-  /** Additional inner padding in rem. @default 0 */
-  padding?: number;
+  /** Additional inner padding, as a {@link Spacing} step (`N / 4` rem). @default 0 */
+  padding?: Spacing;
 }
 
 function TabsContent({ padding, children, ...props }: TabsContentProps) {
   return (
     <TabsPrimitive.Content {...props} className="w-full pt-4">
       {padding ? (
-        <div style={{ padding: `${padding}rem` }}>{children}</div>
+        <div style={{ padding: spacingToRem(padding) }}>{children}</div>
       ) : (
         children
       )}

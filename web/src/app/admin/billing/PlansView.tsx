@@ -106,16 +106,11 @@ function PlanCard({
       <Section
         flexDirection="column"
         alignItems="stretch"
-        padding={1}
+        padding={4}
         height="fit"
       >
         {/* Title */}
-        <Section
-          flexDirection="column"
-          alignItems="start"
-          gap={0.25}
-          width="full"
-        >
+        <Section flexDirection="column" alignItems="start" gap={1} width="full">
           <Icon size={24} />
           <Text headingH3 text04>
             {title}
@@ -127,7 +122,7 @@ function PlanCard({
           flexDirection="row"
           justifyContent="start"
           alignItems="center"
-          gap={0.5}
+          gap={2}
           height="auto"
         >
           {pricing && (
@@ -188,8 +183,8 @@ function PlanCard({
           flexDirection="column"
           alignItems="start"
           justifyContent="start"
-          gap={1}
-          padding={1}
+          gap={4}
+          padding={4}
         >
           <Text mainUiBody text03>
             {featuresPrefix}
@@ -197,7 +192,7 @@ function PlanCard({
           <Section
             flexDirection="column"
             alignItems="start"
-            gap={0.5}
+            gap={2}
             height="auto"
           >
             {features.map((feature) => (
@@ -206,7 +201,7 @@ function PlanCard({
                 flexDirection="row"
                 alignItems="start"
                 justifyContent="start"
-                gap={0.25}
+                gap={1}
                 width="fit"
                 height="auto"
               >

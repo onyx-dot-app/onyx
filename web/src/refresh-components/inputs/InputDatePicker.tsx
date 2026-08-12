@@ -76,8 +76,8 @@ export default function InputDatePicker({
         </Button>
       </Popover.Trigger>
       <Popover.Content>
-        <Section padding={0.25}>
-          <Section flexDirection="row" gap={0.5}>
+        <Section padding={1}>
+          <Section flexDirection="row" gap={2}>
             <InputSelect
               value={`${extractYear(displayedMonth)}`}
               onValueChange={(value) => {

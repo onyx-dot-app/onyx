@@ -97,7 +97,7 @@ export default function SkillPreviewModal({
           )}
 
           {preview && !isLoading && !error && (
-            <Section gap={1} alignItems="stretch">
+            <Section gap={4} alignItems="stretch">
               {displayedUnavailableReason && (
                 <MessageCard
                   variant="warning"
@@ -119,7 +119,7 @@ export default function SkillPreviewModal({
                 ))}
               </div>
 
-              <Section gap={0.25} alignItems="stretch">
+              <Section gap={1} alignItems="stretch">
                 <div className="flex items-center justify-between gap-2">
                   <Text font="main-ui-action" color="text-05">
                     Instructions

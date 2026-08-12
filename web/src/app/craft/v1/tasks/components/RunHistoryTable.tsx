@@ -274,7 +274,7 @@ export default function RunHistoryTable({ taskId }: RunHistoryTableProps) {
 
   if (error) {
     return (
-      <Section gap={0.5}>
+      <Section gap={2}>
         <Text font="main-ui-body" color="text-03">
           Failed to load run history.
         </Text>
@@ -302,7 +302,7 @@ export default function RunHistoryTable({ taskId }: RunHistoryTableProps) {
   }
 
   return (
-    <Section gap={0.5} alignItems="stretch">
+    <Section gap={2} alignItems="stretch">
       <Table
         data={allRuns}
         columns={columns}

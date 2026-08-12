@@ -316,7 +316,7 @@ function EditGroupPage({ groupId }: EditGroupPageProps) {
   }
 
   const headerActions = (
-    <Section flexDirection="row" gap={0.5} width="auto" height="auto">
+    <Section flexDirection="row" gap={2} width="auto" height="auto">
       <Button
         prominence="secondary"
         onClick={() => router.push("/admin/groups")}
@@ -360,7 +360,7 @@ function EditGroupPage({ groupId }: EditGroupPageProps) {
             <>
               {/* Group Name */}
               <Section
-                gap={0.5}
+                gap={2}
                 height="auto"
                 alignItems="stretch"
                 justifyContent="start"
@@ -379,14 +379,14 @@ function EditGroupPage({ groupId }: EditGroupPageProps) {
 
               {/* Members table */}
               <Section
-                gap={0.75}
+                gap={3}
                 height="auto"
                 alignItems="stretch"
                 justifyContent="start"
               >
                 <Section
                   flexDirection="row"
-                  gap={0.5}
+                  gap={2}
                   height="auto"
                   alignItems="center"
                   justifyContent="start"

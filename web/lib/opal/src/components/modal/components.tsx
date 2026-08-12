@@ -359,13 +359,13 @@ function ModalHeader({
   );
 
   return (
-    <Section ref={ref} padding={0.5} alignItems="start" height="fit" {...props}>
+    <Section ref={ref} padding={2} alignItems="start" height="fit" {...props}>
       <Section
         flexDirection="row"
         justifyContent="between"
         alignItems="start"
         gap={0}
-        padding={0.5}
+        padding={2}
       >
         <div className="opal-modal-header-content">
           <div className="opal-modal-header-close">{closeButton}</div>
@@ -416,7 +416,7 @@ function ModalBody({
       className="opal-modal-body"
       {...(twoTone && { "data-two-tone": "" })}
     >
-      <Section height="auto" padding={1} gap={1} alignItems="start" {...props}>
+      <Section height="auto" padding={4} gap={4} alignItems="start" {...props}>
         {children}
       </Section>
     </div>
@@ -433,8 +433,8 @@ function ModalFooter({ ref, ...props }: ModalFooterProps) {
       ref={ref}
       flexDirection="row"
       justifyContent="end"
-      gap={0.5}
-      padding={1}
+      gap={2}
+      padding={4}
       height="fit"
       {...props}
     />
@@ -469,7 +469,7 @@ function BasicModalFooter({ left, cancel, submit }: BasicModalFooterProps) {
     <>
       {left && <Section alignItems="start">{left}</Section>}
       {(cancel || submit) && (
-        <Section flexDirection="row" justifyContent="end" gap={0.5}>
+        <Section flexDirection="row" justifyContent="end" gap={2}>
           {cancel}
           {submit}
         </Section>

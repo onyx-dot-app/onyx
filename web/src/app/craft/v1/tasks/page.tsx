@@ -209,7 +209,7 @@ export default function ScheduledTasksListPage() {
             <SvgSimpleLoader className="h-6 w-6" />
           </div>
         ) : error ? (
-          <Section gap={0.5}>
+          <Section gap={2}>
             <Text font="main-ui-body" color="text-03">
               Failed to load scheduled tasks.
             </Text>

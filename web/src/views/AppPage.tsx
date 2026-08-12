@@ -855,7 +855,7 @@ export default function AppPage({ firstMessage }: ChatPageProps) {
                       <Section
                         flexDirection="column"
                         alignItems="center"
-                        gap={1}
+                        gap={4}
                       >
                         <IllustrationContent
                           illustration={

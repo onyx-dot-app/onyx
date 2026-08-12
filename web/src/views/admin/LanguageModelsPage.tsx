@@ -144,7 +144,7 @@ function ExistingProviderCard({
             </Button>
           }
         >
-          <Section alignItems="start" gap={0.5}>
+          <Section alignItems="start" gap={2}>
             {isDefault && !isLastProvider ? (
               <Text font="main-ui-body" color="text-03">
                 Cannot delete the default provider. Select another provider as
@@ -434,7 +434,7 @@ export default function LanguageModelsPage() {
         {hasProviders && (
           <>
             <GeneralLayouts.Section
-              gap={0.75}
+              gap={3}
               height="fit"
               alignItems="stretch"
               justifyContent="start"
@@ -476,7 +476,7 @@ export default function LanguageModelsPage() {
             {PROVIDER_GROUPS.map((group) => (
               <GeneralLayouts.Section
                 key={group.title}
-                gap={0.75}
+                gap={3}
                 height="fit"
                 alignItems="stretch"
                 justifyContent="start"

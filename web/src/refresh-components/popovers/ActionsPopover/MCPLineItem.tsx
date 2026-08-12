@@ -102,7 +102,7 @@ export default function MCPLineItem({
       strikethrough={allToolsDisabled}
       selected={isActive}
       rightChildren={
-        <Section gap={0.25} flexDirection="row">
+        <Section gap={1} flexDirection="row">
           {isAuthenticated &&
             tools.length > 0 &&
             enabledTools.length > 0 &&

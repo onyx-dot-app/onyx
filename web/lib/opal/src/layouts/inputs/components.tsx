@@ -120,7 +120,7 @@ function Vertical({
   );
 
   const content = (
-    <Section ref={ref} gap={0.25} alignItems="start">
+    <Section ref={ref} gap={1} alignItems="start">
       {titleRow}
       {children}
       {fieldName && <FormikInputError name={fieldName} />}
@@ -182,7 +182,7 @@ function Horizontal({
     typeof withLabelProp === "string" ? withLabelProp : undefined;
 
   const content = (
-    <Section ref={ref} gap={0.25} alignItems="start">
+    <Section ref={ref} gap={1} alignItems="start">
       <ContentAction
         icon={icon}
         title={title}

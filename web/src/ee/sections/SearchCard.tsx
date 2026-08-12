@@ -57,13 +57,13 @@ export default function SearchCard({
   return (
     <Interactive.Stateless onClick={handleClick} prominence="secondary">
       <Interactive.Container size="fit" width="full">
-        <Section alignItems="start" gap={0} padding={0.25}>
+        <Section alignItems="start" gap={0} padding={1}>
           {/* Title Row */}
           <Section
             flexDirection="row"
             justifyContent="start"
-            gap={0.25}
-            padding={0.25}
+            gap={1}
+            padding={1}
           >
             {isWebSource && document.link ? (
               <WebResultIcon url={document.link} size={18} />
@@ -78,9 +78,9 @@ export default function SearchCard({
 
           {/* Body Row */}
           <div className="px-1 pb-1">
-            <Section alignItems="start" gap={0.25}>
+            <Section alignItems="start" gap={1}>
               {/* Metadata */}
-              <Section flexDirection="row" justifyContent="start" gap={0.25}>
+              <Section flexDirection="row" justifyContent="start" gap={1}>
                 {(document.primary_owners ?? []).map((owner, index) => (
                   <Chip key={index}>{owner}</Chip>
                 ))}

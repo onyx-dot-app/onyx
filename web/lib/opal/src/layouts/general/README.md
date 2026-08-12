@@ -4,7 +4,10 @@
 
 A flexbox container primitive for grouping related content. Configurable direction, alignment,
 spacing, and dimensions. Defaults to a full-width / full-height column with centered children
-and a 1rem gap.
+and a gap of `4` (1rem).
+
+`gap` and `padding` are spacing steps, not raw lengths: `N` is `N / 4` rem, the same scale
+Tailwind uses. So `gap={2}` is the same distance as `gap-2`.
 
 ## Props
 
@@ -15,8 +18,8 @@ and a 1rem gap.
 | `alignItems`     | `"start" \| "center" \| "end" \| "stretch"` | `"center"` | Cross-axis alignment         |
 | `width`          | `"auto" \| "fit" \| "full" \| number`       | `"full"`   | Width. `number` = rem.       |
 | `height`         | `"auto" \| "fit" \| "full" \| number`       | `"full"`   | Height. `number` = rem.      |
-| `gap`            | `number`                                    | `1`        | Gap between children, in rem |
-| `padding`        | `number`                                    | `0`        | Padding, in rem              |
+| `gap`            | `Spacing`                                   | `4`        | Gap between children, as a spacing step (`N / 4` rem) |
+| `padding`        | `Spacing`                                   | `0`        | Padding, as a spacing step (`N / 4` rem)              |
 | `wrap`           | `boolean`                                   | `false`    | Enables `flex-wrap`          |
 | `dbg`            | `boolean`                                   | `false`    | Adds a red debug border      |
 | `className`      | `string`                                    | —          | Additional classes           |
@@ -40,7 +43,7 @@ import { Section } from "@opal/layouts";
 </Section>
 
 // Tighter gap, custom width
-<Section gap={0.5} width="fit">
+<Section gap={2} width="fit">
   <Tag>One</Tag>
   <Tag>Two</Tag>
 </Section>

@@ -58,8 +58,8 @@ function MemoryTagWithTooltip({
             <Section
               flexDirection="column"
               alignItems="start"
-              padding={0.25}
-              gap={0.25}
+              padding={1}
+              gap={1}
               height="auto"
             >
               <div className="p-1">
