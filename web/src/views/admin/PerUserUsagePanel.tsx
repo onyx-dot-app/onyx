@@ -25,7 +25,9 @@ function SummaryMetric({
   detail: string;
 }) {
   return (
-    <div className="flex min-w-0 flex-col gap-0.5 px-3 py-2 first:pl-0 last:pr-0">
+    // basis + flex-1 rather than a fixed fraction: fractions plus the row gap
+    // overflow and wrap the last metric onto its own line.
+    <div className="flex min-w-0 flex-1 basis-40 flex-col gap-0.5 px-3 py-2 first:pl-0 last:pr-0">
       <Text font="secondary-body" color="text-03">
         {label}
       </Text>
@@ -155,7 +157,15 @@ export default function PerUserUsagePanel({
       {header}
 
       <Card border="solid" rounding="lg" padding="sm">
-        <div className="grid grid-cols-2 gap-2 lg:grid-cols-4">
+        <Section
+          flexDirection="row"
+          justifyContent="start"
+          alignItems="start"
+          gap={0.5}
+          wrap
+          width="full"
+          height="fit"
+        >
           <SummaryMetric
             label="Workspace spend"
             value={formatCost(totalCostCents)}
@@ -176,7 +186,7 @@ export default function PerUserUsagePanel({
             value={topSpender ? formatCost(topSpender.totals.cost_cents) : "—"}
             detail={topSpender?.email ?? "No spend recorded"}
           />
-        </div>
+        </Section>
       </Card>
 
       <Section
