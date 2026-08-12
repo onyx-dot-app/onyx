@@ -134,7 +134,6 @@ export function PersonaMessagesChart({
     error: personaUniqueUsersError,
   } = usePersonaUniqueUsers(selectedPersonaId, timeRange);
 
-  // The fallback card is generic; keep the underlying failure diagnosable.
   useEffect(() => {
     if (agentsError) {
       console.error("Failed to fetch admin agents:", agentsError);

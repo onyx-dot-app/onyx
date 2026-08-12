@@ -22,10 +22,6 @@ export interface ChartSeries {
   valueForDate: (date: string) => number;
 }
 
-/**
- * Erases the entry type of one analytics endpoint so charts can combine series
- * that come from different endpoints.
- */
 export function chartSeries<T extends { date: string }>(
   label: string,
   data: T[] | undefined,
@@ -55,7 +51,6 @@ interface AnalyticsChartProps {
   emptyMessage: string;
   isLoading?: boolean;
   error?: unknown;
-  /** Shown instead of the chart when the caller needs a selection first. */
   prompt?: string;
   headerChildren?: React.ReactNode;
   stacked?: boolean;

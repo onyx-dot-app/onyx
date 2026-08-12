@@ -42,8 +42,6 @@ interface AreaChartProps {
   stacked?: boolean;
 }
 
-// The chart itself, without any card chrome, so callers can place it inside
-// their own container (e.g. an Opal Card).
 export function AreaChartBody({
   data = [],
   categories = [],

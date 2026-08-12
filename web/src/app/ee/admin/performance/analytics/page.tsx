@@ -37,7 +37,6 @@ export default function WorkspaceAnalyticsPage() {
           <AdminDateRangeSelector
             value={timeRange}
             onValueChange={(range) =>
-              // The selector owns from/to; selectValue stays with the page.
               setTimeRange((previous) =>
                 range
                   ? { ...range, selectValue: previous.selectValue }

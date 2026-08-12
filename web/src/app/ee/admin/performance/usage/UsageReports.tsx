@@ -133,7 +133,6 @@ interface PeriodMenuItemProps {
   icon?: IconFunctionComponent;
 }
 
-// Every row in the period menu carries the same presentation.
 function PeriodMenuItem({ title, onClick, icon }: PeriodMenuItemProps) {
   return (
     <LineItemButton
@@ -333,8 +332,6 @@ export default function UsageReports() {
 
   async function requestReport(period: ReportPeriod): Promise<void> {
     setRequesting(true);
-    // Navigating away aborts the request, so the catch below can tell a real
-    // failure from an unmount instead of consulting an isMounted flag.
     const abort = new AbortController();
     abortRef.current = abort;
     try {
@@ -370,8 +367,6 @@ export default function UsageReports() {
         reportTimeoutRef.current = null;
       }, REPORT_TIMEOUT_MS);
     } catch (error) {
-      // An abort means the admin left the page; a failure notice belongs on
-      // this page, not on whatever page they landed on.
       if (abort.signal.aborted) return;
       console.error("Failed to start usage report generation:", error);
       const message = error instanceof Error ? error.message : "unknown error";
@@ -381,16 +376,13 @@ export default function UsageReports() {
       if (!abort.signal.aborted) setRequesting(false);
     }
 
-    // Best-effort list refresh: generation already succeeded, so a failed
-    // revalidation must not surface as "failed to start report generation".
-    // Polling picks the new report up regardless.
+    // Generation already succeeded, so a failed revalidation must not surface
+    // as "failed to start report generation".
     void mutate().catch((error: unknown) => {
       console.error("Failed to refresh the usage report list:", error);
     });
   }
 
-  // Newest first by time_created rather than by list order, which the API does
-  // not promise.
   const orderedReports = useMemo(
     () =>
       [...(reports ?? [])].sort(
