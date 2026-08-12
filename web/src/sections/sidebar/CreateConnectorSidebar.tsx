@@ -3,11 +3,12 @@
 import { Fragment, ReactNode } from "react";
 import { useFormContext } from "@/components/context/FormContext";
 import { credentialTemplates } from "@/lib/connectors/credentials";
-import { Content } from "@opal/layouts";
+import { Content, SidebarLayouts, useSidebarState } from "@opal/layouts";
+import { Divider, SidebarTab } from "@opal/components";
 import { cn } from "@opal/utils";
-import AdminSidebarShell from "@/sections/sidebar/AdminSidebarShell";
-import { useUser } from "@/providers/UserProvider";
-import { SvgSettings } from "@opal/icons";
+import { SvgX } from "@opal/icons";
+import { renderSidebarLogo } from "@/lib/sidebar/utils";
+import { useShowLogoWhenFolded } from "@/lib/sidebar/hooks";
 
 // Fixed height of each step row (px). A uniform row height lets the connecting
 // rail line up deterministically with every dot regardless of step count.
@@ -43,23 +44,40 @@ interface CreateConnectorSidebarShellProps {
 /**
  * Sidebar shared by the create-connector flows. Use it directly for a flow
  * that has no steps to show; otherwise use the default export.
+ *
+ * It replaces `AdminSidebar`, so it must offer its own way back to the admin
+ * panel. Without one the user is stranded.
  */
 export function CreateConnectorSidebarShell({
   children,
 }: CreateConnectorSidebarShellProps) {
-  const { isAdmin } = useUser();
+  const showLogoWhenFolded = useShowLogoWhenFolded();
+  const { folded } = useSidebarState();
 
   return (
-    <AdminSidebarShell
-      back={{
-        label: isAdmin ? "Admin Page" : "Curator Page",
-        href: "/admin/add-connector",
-        icon: SvgSettings,
-      }}
-      scrollKey="create-connector"
-    >
-      {children}
-    </AdminSidebarShell>
+    <SidebarLayouts.Root>
+      <SidebarLayouts.Header
+        renderAppLogo={renderSidebarLogo}
+        showLogoWhenFolded={showLogoWhenFolded}
+      />
+
+      <SidebarLayouts.Body scrollKey="create-connector">
+        {children}
+      </SidebarLayouts.Body>
+
+      {/* The way out sits at the bottom, like "Exit Admin Panel" in `AdminSidebar`. */}
+      <SidebarLayouts.Footer>
+        {!folded && <Divider paddingPerpendicular={2} />}
+        <SidebarTab
+          icon={SvgX}
+          href="/admin/add-connector"
+          variant="sidebar-light"
+          folded={folded}
+        >
+          Exit Connector Setup
+        </SidebarTab>
+      </SidebarLayouts.Footer>
+    </SidebarLayouts.Root>
   );
 }
 
