@@ -34,12 +34,17 @@ export async function createProject(name: string): Promise<Project> {
 export async function uploadFiles(
   files: File[],
   projectId?: number | null,
-  tempIdMap?: Map<string, string>
+  tempIdMap?: Map<string, string>,
+  incognitoSessionId?: string | null
 ): Promise<CategorizedFiles> {
   const formData = new FormData();
   files.forEach((file) => formData.append("files", file));
   if (projectId !== undefined && projectId !== null) {
     formData.append("project_id", String(projectId));
+  }
+  // Names the session before it exists, so the server owns the privacy call.
+  if (incognitoSessionId) {
+    formData.append("incognito_session_id", incognitoSessionId);
   }
   if (tempIdMap !== undefined && tempIdMap !== null) {
     formData.append(

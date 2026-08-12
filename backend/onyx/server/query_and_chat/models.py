@@ -82,6 +82,9 @@ class ChatSessionCreationRequest(BaseModel):
     # Start the session incognito. Refused with an error when incognito is
     # unavailable, never silently downgraded to an ordinary chat.
     incognito: bool = False
+    # The id the client already used when uploading, so this session owns those
+    # files. Ignored unless incognito.
+    incognito_session_id: UUID | None = None
 
 
 class ChatFeedbackRequest(BaseModel):

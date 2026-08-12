@@ -29,6 +29,7 @@ import {
   useCurrentMessageHistory,
 } from "@/app/app/stores/useChatSessionStore";
 import { useForcedTools } from "@/lib/hooks/useForcedTools";
+import { useIncognito } from "@/providers/IncognitoProvider";
 import type { ProjectFile } from "@/lib/projects/types";
 import {
   getSessionProjectTokenCount,
@@ -125,6 +126,7 @@ export default function useChatSessionController({
   const currentChatHistory = useCurrentMessageHistory();
   const chatSessions = useChatSessionStore((state) => state.sessions);
   const { setForcedToolIds } = useForcedTools();
+  const { setIncognitoEnabled, setIncognitoSessionId } = useIncognito();
 
   // Fetch chat messages for the chat session
   useEffect(() => {
@@ -235,6 +237,12 @@ export default function useChatSessionController({
 
       const session = await response.json();
       const chatSession = session as BackendChatSession;
+      // Restore the incognito UI state on reload of a live incognito session.
+      // The id must come back too, or a later upload would be sent with none
+      // and land as an ordinary indexed file.
+      const isIncognito = chatSession.incognito ?? false;
+      setIncognitoEnabled(isIncognito);
+      setIncognitoSessionId(isIncognito ? chatSession.chat_session_id : null);
       setSelectedAgentFromId(chatSession.persona_id);
 
       // Ensure the current session is set to the actual session ID from the response

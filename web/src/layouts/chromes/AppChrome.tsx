@@ -23,7 +23,7 @@ import {
 } from "@/lib/sidebar/utils";
 import { handleMoveOperation } from "@/lib/sidebar/svc";
 import { LOCAL_STORAGE_KEYS } from "@/lib/sidebar/constants";
-import { deleteChatSession } from "@/app/app/services/lib";
+import { deleteChatSession, endIncognitoSession } from "@/app/app/services/lib";
 import {
   exportChatSession,
   ChatExportFormat,
@@ -50,6 +50,7 @@ import {
   SvgChevronLeft,
   SvgDownload,
   SvgFileText,
+  SvgEyeOff,
   SvgFitWidth,
   SvgFolderIn,
   SvgFullWidth,
@@ -59,6 +60,7 @@ import {
   SvgShare,
   SvgSidebar,
   SvgTrash,
+  SvgX,
 } from "@opal/icons";
 import { useIsSearchModeAvailable, useSettings } from "@/lib/settings/hooks";
 import type { AppMode } from "@/providers/QueryControllerProvider";
@@ -68,6 +70,7 @@ import { useTierAtLeast } from "@/hooks/useTierAtLeast";
 import { Tier } from "@/lib/settings/types";
 import { useAppDocumentTitle, useCustomFooterContent } from "@/lib/app/hooks";
 import { useFullWidthChat } from "@/providers/FullWidthChatProvider";
+import { useIncognito } from "@/providers/IncognitoProvider";
 
 // ---------------------------------------------------------------------------
 // Header
@@ -82,6 +85,13 @@ function Header() {
   const { isMobile } = useScreenSize();
   const { setFolded } = useSidebarState();
   const { fullWidthChat, toggleFullWidthChat } = useFullWidthChat();
+  const {
+    incognitoAvailable,
+    incognitoEnabled,
+    incognitoLocked,
+    toggleIncognito,
+    setIncognitoEnabled,
+  } = useIncognito();
   const [showShareModal, setShowShareModal] = useState(false);
   const [deleteModalOpen, setDeleteModalOpen] = useState(false);
   const [showMoveCustomAgentModal, setShowMoveCustomAgentModal] =
@@ -100,9 +110,14 @@ function Header() {
     fetchProjects,
     refreshCurrentProjectDetails,
     currentProjectId,
+    setCurrentMessageFiles,
   } = useProjectsContext();
-  const { currentChatSession, refreshChatSessions, removeSession } =
-    useChatSessions();
+  const {
+    currentChatSession,
+    currentChatSessionId,
+    refreshChatSessions,
+    removeSession,
+  } = useChatSessions();
   const router = useRouter();
 
   const customHeaderContent = settings.enterprise?.custom_header_content;
@@ -202,6 +217,39 @@ function Header() {
       setPopoverOpen(false);
     }
   }, []);
+
+  // Incognito stays on until teardown returns, so the composer cannot submit
+  // into a session being torn down. The server deletes that session's uploads
+  // itself, including any that landed late.
+  const handleExitIncognito = useCallback(async () => {
+    const sessionId = currentChatSessionId;
+    if (sessionId) {
+      let tornDown = false;
+      try {
+        tornDown = await endIncognitoSession(sessionId);
+      } catch (error) {
+        console.error("Failed to end incognito session:", error);
+      }
+      // Stay put on failure. Dropping the id is what would strand the context
+      // and uploads, and the user can retry from here.
+      if (!tornDown) {
+        showErrorNotification("Could not end the incognito chat. Try again.");
+        return;
+      }
+      removeSession(sessionId);
+    }
+    setIncognitoEnabled(false);
+    setCurrentMessageFiles([]);
+    if (sessionId) {
+      router.replace("/app");
+    }
+  }, [
+    currentChatSessionId,
+    setIncognitoEnabled,
+    setCurrentMessageFiles,
+    removeSession,
+    router,
+  ]);
 
   const handleExport = useCallback(
     async (format: ChatExportFormat) => {
@@ -375,8 +423,20 @@ function Header() {
                     onClick={() => setFolded(false)}
                   />
                 )}
+                {incognitoEnabled &&
+                  (appFocus.isChat() || appFocus.isNewSession()) && (
+                    <OpenButton
+                      disabled
+                      icon={SvgEyeOff}
+                      aria-label="Incognito chat"
+                      data-testid="incognito-chat-pill"
+                    >
+                      Incognito Chat
+                    </OpenButton>
+                  )}
                 {businessTier &&
                   isSearchModeAvailable &&
+                  !incognitoEnabled &&
                   appFocus.isNewSession() &&
                   state.phase === "idle" && (
                     <Popover
@@ -457,21 +517,25 @@ function Header() {
           - more-options buttons
         */}
               <div className="flex flex-1 justify-end items-center">
-                {appFocus.isChat() && currentChatSession && (
+                {(appFocus.isChat() || appFocus.isNewSession()) && (
                   <FrostedDiv className="flex shrink flex-row items-center">
-                    <Button
-                      icon={SvgShare}
-                      prominence="tertiary"
-                      interaction={showShareModal ? "hover" : "rest"}
-                      responsiveHideText
-                      onClick={() => setShowShareModal(true)}
-                      aria-label="share-chat-button"
-                    >
-                      Share
-                    </Button>
-                    {/* Below md the reading-width cap never applies (chat is
-                        always full width), so the toggle has nothing to do. */}
-                    <span className="hidden md:flex">
+                    {incognitoAvailable && !incognitoEnabled && (
+                      <Button
+                        icon={SvgEyeOff}
+                        prominence="tertiary"
+                        onClick={toggleIncognito}
+                        disabled={incognitoLocked}
+                        aria-label="Start incognito chat"
+                        tooltip={
+                          incognitoLocked
+                            ? "Incognito can only be set before the chat starts"
+                            : "Incognito Chat"
+                        }
+                      />
+                    )}
+                    {/* On mobile widths the reading-width cap never applies
+                        (chat is always full width), so the toggle is hidden. */}
+                    {!isMobile && (
                       <Button
                         icon={fullWidthChat ? SvgFitWidth : SvgFullWidth}
                         prominence="tertiary"
@@ -480,30 +544,55 @@ function Header() {
                         aria-label="Toggle full width chat"
                         aria-pressed={fullWidthChat}
                       />
-                    </span>
-                    <SimplePopover
-                      trigger={
-                        <Button
-                          icon={SvgMoreHorizontal}
-                          prominence="tertiary"
-                          interaction={popoverOpen ? "hover" : "rest"}
-                        />
-                      }
-                      onOpenChange={(state) => {
-                        setPopoverOpen(state);
-                        if (!state) {
-                          setShowMoveOptions(false);
-                          setShowExportOptions(false);
-                          setSearchTerm("");
-                        }
-                      }}
-                      side="bottom"
-                      align="end"
-                    >
-                      <PopoverMenu>{popoverItems}</PopoverMenu>
-                    </SimplePopover>
+                    )}
+                    {incognitoEnabled && (
+                      <Button
+                        icon={SvgX}
+                        prominence="tertiary"
+                        onClick={() => void handleExitIncognito()}
+                        aria-label="Exit incognito chat"
+                        tooltip="Exit Incognito Chat"
+                      />
+                    )}
                   </FrostedDiv>
                 )}
+                {appFocus.isChat() &&
+                  currentChatSession &&
+                  !incognitoEnabled && (
+                    <FrostedDiv className="flex shrink flex-row items-center">
+                      <Button
+                        icon={SvgShare}
+                        prominence="tertiary"
+                        interaction={showShareModal ? "hover" : "rest"}
+                        responsiveHideText
+                        onClick={() => setShowShareModal(true)}
+                        aria-label="share-chat-button"
+                      >
+                        Share
+                      </Button>
+                      <SimplePopover
+                        trigger={
+                          <Button
+                            icon={SvgMoreHorizontal}
+                            prominence="tertiary"
+                            interaction={popoverOpen ? "hover" : "rest"}
+                          />
+                        }
+                        onOpenChange={(state) => {
+                          setPopoverOpen(state);
+                          if (!state) {
+                            setShowMoveOptions(false);
+                            setShowExportOptions(false);
+                            setSearchTerm("");
+                          }
+                        }}
+                        side="bottom"
+                        align="end"
+                      >
+                        <PopoverMenu>{popoverItems}</PopoverMenu>
+                      </SimplePopover>
+                    </FrostedDiv>
+                  )}
               </div>
             </div>
           </RootLayout.Header>

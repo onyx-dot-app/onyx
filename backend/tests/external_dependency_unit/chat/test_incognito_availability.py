@@ -51,15 +51,16 @@ def _make_group(db_session: Session, user: User, incognito_enabled: bool) -> Non
 def _workspace(
     mode: IncognitoAvailability, store_available: bool = True
 ) -> Iterator[None]:
+    """Both settings readers return the same mode, so a test that does not care
+    which one is used passes either way."""
+    settings = MagicMock(incognito_availability=mode)
     with (
         patch(
             "onyx.chat.incognito.incognito_context_available",
             return_value=store_available,
         ),
-        patch(
-            "onyx.chat.incognito.get_security_settings",
-            return_value=MagicMock(incognito_availability=mode),
-        ),
+        patch("onyx.chat.incognito.get_security_settings", return_value=settings),
+        patch("onyx.chat.incognito.load_effective_uncached", return_value=settings),
     ):
         yield
 
@@ -102,3 +103,25 @@ def test_anonymous_user_is_refused(db_session: Session) -> None:
     anonymous = MagicMock(is_anonymous=True)
     with _workspace(IncognitoAvailability.EVERYONE):
         assert not incognito_allowed_for_user(anonymous, db_session)
+
+
+def test_enforcement_reads_past_the_settings_cache(
+    db_session: Session, owner: User
+) -> None:
+    """Cache invalidation is process-local, so a second api_server would keep
+    authorizing against a revoked setting for the cache TTL."""
+    with (
+        patch("onyx.chat.incognito.incognito_context_available", return_value=True),
+        patch(
+            "onyx.chat.incognito.get_security_settings",
+            return_value=MagicMock(
+                incognito_availability=IncognitoAvailability.EVERYONE
+            ),
+        ),
+        patch(
+            "onyx.chat.incognito.load_effective_uncached",
+            return_value=MagicMock(incognito_availability=IncognitoAvailability.OFF),
+        ),
+    ):
+        assert incognito_allowed_for_user(owner, db_session)
+        assert not incognito_allowed_for_user(owner, db_session, cached=False)
