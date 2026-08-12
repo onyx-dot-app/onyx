@@ -86,6 +86,12 @@ from onyx.server.features.mcp.client import (
     discover_mcp_tools,
     log_exception_group,
 )
+from onyx.server.features.mcp.client_metadata import (
+    mcp_oauth_redirect_uri,
+)
+from onyx.server.features.mcp.client_metadata import (
+    router as client_metadata_router,
+)
 from onyx.server.features.mcp.models import (
     MCPApiKeyResponse,
     MCPAuthTemplate,
@@ -560,6 +566,7 @@ def _upsert_user_template_config(
 
 
 router = APIRouter(prefix="/mcp")
+router.include_router(client_metadata_router)
 admin_router = APIRouter(prefix="/admin/mcp")
 
 HEADER_SUBSTITUTIONS: Literal["header_substitutions"] = "header_substitutions"
@@ -619,13 +626,6 @@ def make_pkce_pair() -> tuple[str, str]:
     verifier = b64url(token_urlsafe(64).encode())
     challenge = b64url(hashlib.sha256(verifier.encode("ascii")).digest())
     return verifier, challenge
-
-
-MCP_OAUTH_CALLBACK_PATH = "/mcp/oauth/callback"
-
-
-def _mcp_oauth_redirect_uri() -> str:
-    return f"{WEB_DOMAIN}{MCP_OAUTH_CALLBACK_PATH}"
 
 
 def _mcp_known_provider_flow_params(
@@ -871,7 +871,7 @@ async def _connect_oauth(
 
         oauth_url = build_oauth_authorization_url(
             _mcp_known_provider_flow_params(mcp_server, client_info),
-            _mcp_oauth_redirect_uri(),
+            mcp_oauth_redirect_uri(),
             state,
             code_challenge=code_challenge,
             resource=(
@@ -991,7 +991,7 @@ async def process_oauth_callback(
             token_payload = exchange_oauth_code_for_token(
                 _mcp_known_provider_flow_params(mcp_server, client_info),
                 code,
-                _mcp_oauth_redirect_uri(),
+                mcp_oauth_redirect_uri(),
                 code_verifier=state_data.code_verifier,
             )
         except (SSRFException, ValueError) as e:

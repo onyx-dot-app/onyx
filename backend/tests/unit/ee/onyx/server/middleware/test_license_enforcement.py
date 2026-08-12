@@ -51,6 +51,7 @@ class TestPathAllowlist:
         """Subpaths of allowed prefixes should also be allowed."""
         assert _is_path_allowed("/auth/callback/google") is True
         assert _is_path_allowed("/admin/billing/checkout") is True
+        assert _is_path_allowed("/mcp/oauth/client-metadata") is True
 
     def test_custom_api_prefix_allowlist(self, monkeypatch: pytest.MonkeyPatch) -> None:
         monkeypatch.setattr(api_prefix, "APP_API_PREFIX", "v2")
