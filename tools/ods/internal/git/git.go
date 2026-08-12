@@ -64,6 +64,21 @@ func RunCommandVerboseOnError(args ...string) error {
 	return nil
 }
 
+// PushTag pushes a tag to origin, optionally with --force. Pre-push hooks are
+// skipped unless verify is true: a tag points at a commit that already passed
+// CI, and the hooks run over the whole delta since the previous tag, which is
+// slow and unrelated to the push.
+func PushTag(tag string, force, verify bool) error {
+	args := []string{"push"}
+	if !verify {
+		args = append(args, "--no-verify")
+	}
+	if force {
+		args = append(args, "-f")
+	}
+	return RunCommand(append(args, "origin", tag)...)
+}
+
 // GetCommitMessage gets the first line of a commit message
 func GetCommitMessage(commitSHA string) (string, error) {
 	cmd := exec.Command("git", "log", "-1", "--format=%s", commitSHA)
