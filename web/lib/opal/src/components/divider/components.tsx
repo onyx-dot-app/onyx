@@ -34,9 +34,9 @@ type DividerBareProps = Omit<
 > & {
   /** Orientation of the line. Default: `"horizontal"`. */
   orientation?: OrientationVariants;
-  /** Padding along the line direction. Default: `"sm"` (0.5rem). */
+  /** Padding along the line direction, as a spacing step. Default: `2` (0.5rem). */
   paddingParallel?: Spacing;
-  /** Padding perpendicular to the line. Default: `"xs"` (0.25rem). */
+  /** Padding perpendicular to the line, as a spacing step. Default: `1` (0.25rem). */
   paddingPerpendicular?: Spacing;
 };
 

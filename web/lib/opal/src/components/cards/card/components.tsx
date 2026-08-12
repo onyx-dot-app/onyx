@@ -26,22 +26,15 @@ import { cn } from "@opal/utils";
  */
 type CardBaseProps = {
   /**
-   * Padding preset.
+   * Padding.
    *
-   * | Value   | Class   |
-   * |---------|---------|
-   * | `"lg"`  | `p-6`   |
-   * | `"md"`  | `p-4`   |
-   * | `"sm"`  | `p-2`   |
-   * | `"xs"`  | `p-1`   |
-   * | `"2xs"` | `p-0.5` |
-   * | `"fit"` | `p-0`   |
+   * A spacing step: `N` is `N / 4` rem, so `4` is `1rem`.
    *
    * In expandable mode, applied **only** to the header region. The
    * `expandedContent` slot has no intrinsic padding — callers own any padding
    * inside the content they pass in.
    *
-   * @default "md"
+   * @default 4
    */
   padding?: Spacing;
 

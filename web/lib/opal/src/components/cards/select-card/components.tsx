@@ -10,18 +10,11 @@ import { Interactive, type InteractiveStatefulProps } from "@opal/core";
 
 type SelectCardProps = Omit<InteractiveStatefulProps, "variant"> & {
   /**
-   * Padding preset.
+   * Padding.
    *
-   * | Value   | Class   |
-   * |---------|---------|
-   * | `"lg"`  | `p-6`   |
-   * | `"md"`  | `p-4`   |
-   * | `"sm"`  | `p-2`   |
-   * | `"xs"`  | `p-1`   |
-   * | `"2xs"` | `p-0.5` |
-   * | `"fit"` | `p-0`   |
+   * A spacing step: `N` is `N / 4` rem, so `4` is `1rem`.
    *
-   * @default "md"
+   * @default 4
    */
   padding?: Spacing;
 

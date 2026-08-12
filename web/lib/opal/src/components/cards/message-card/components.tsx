@@ -39,10 +39,10 @@ interface MessageCardBaseProps {
   /** Clamp the title to N lines with ellipsis. Default: `1`. Pass `undefined` to wrap freely. */
   titleMaxLines?: number;
 
-  /** Padding preset. @default "sm" */
+  /** Padding, as a spacing step (`N / 4` rem). @default 2 */
   padding?: Spacing;
 
-  /** Padding around the header Content area. @default "fit" */
+  /** Padding around the header Content area, as a spacing step. @default 0 */
   headerPadding?: Spacing;
 
   /**
