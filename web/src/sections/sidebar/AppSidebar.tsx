@@ -487,127 +487,93 @@ export default function AppSidebar() {
   const defaultAppMode =
     (user?.preferences?.default_app_mode?.toLowerCase() as "chat" | "search") ??
     "chat";
-  const newSessionButton = useMemo(() => {
-    const href =
-      combinedSettingsData?.disable_default_assistant && currentAgent
-        ? `/app?agentId=${currentAgent.id}`
-        : "/app";
-    return (
-      <div data-testid="AppSidebar/new-session">
-        <SidebarTab
-          icon={SvgEditBig}
-          folded={folded}
-          href={href}
-          selected={activeSidebarTab.isNewSession()}
-          onClick={() => {
-            if (!activeSidebarTab.isNewSession()) return;
-            setAppMode(defaultAppMode);
-            reset();
-          }}
-        >
-          New Session
-        </SidebarTab>
-      </div>
-    );
-  }, [
-    folded,
-    activeSidebarTab,
-    combinedSettingsData,
-    currentAgent,
-    defaultAppMode,
-  ]);
-
-  const buildButton = useMemo(
-    () => (
-      <div data-testid="AppSidebar/build">
-        <SidebarTab
-          icon={SvgDevKit}
-          folded={folded}
-          href={CRAFT_PATH}
-          onClick={() => track(AnalyticsEvent.CLICKED_CRAFT_IN_SIDEBAR)}
-        >
-          Craft
-        </SidebarTab>
-      </div>
-    ),
-    [folded]
-  );
-
-  const searchChatsButton = useMemo(
-    () => (
-      <ChatSearchCommandMenu
-        trigger={
-          <SidebarTab icon={SvgSearchMenu} folded={folded}>
-            Search Chats
-          </SidebarTab>
-        }
-      />
-    ),
-    [folded]
-  );
-  const moreAgentsButton = useMemo(
-    () => (
-      <div data-testid="AppSidebar/more-agents">
-        <SidebarTab
-          icon={
-            folded || visibleAgents.length === 0
-              ? SvgOnyxOctagon
-              : SvgMoreHorizontal
-          }
-          href="/app/agents"
-          folded={folded}
-          selected={activeSidebarTab.isMoreAgents()}
-          variant={folded ? "sidebar-heavy" : "sidebar-light"}
-        >
-          {visibleAgents.length === 0 ? "Explore Agents" : "More Agents"}
-        </SidebarTab>
-      </div>
-    ),
-    [folded, activeSidebarTab, visibleAgents]
-  );
-  const newProjectButton = useMemo(
-    () => (
+  const newSessionHref =
+    combinedSettingsData?.disable_default_assistant && currentAgent
+      ? `/app?agentId=${currentAgent.id}`
+      : "/app";
+  const newSessionButton = (
+    <div data-testid="AppSidebar/new-session">
       <SidebarTab
-        icon={SvgFolderPlus}
-        onClick={() => createProjectModal.toggle(true)}
-        selected={createProjectModal.isOpen}
-        folded={folded}
+        icon={SvgEditBig}
+        href={newSessionHref}
+        selected={activeSidebarTab.isNewSession()}
+        onClick={() => {
+          if (!activeSidebarTab.isNewSession()) return;
+          setAppMode(defaultAppMode);
+          reset();
+        }}
+      >
+        New Session
+      </SidebarTab>
+    </div>
+  );
+
+  const buildButton = (
+    <div data-testid="AppSidebar/build">
+      <SidebarTab
+        icon={SvgDevKit}
+        href={CRAFT_PATH}
+        onClick={() => track(AnalyticsEvent.CLICKED_CRAFT_IN_SIDEBAR)}
+      >
+        Craft
+      </SidebarTab>
+    </div>
+  );
+
+  const searchChatsButton = (
+    <ChatSearchCommandMenu
+      trigger={<SidebarTab icon={SvgSearchMenu}>Search Chats</SidebarTab>}
+    />
+  );
+
+  const moreAgentsButton = (
+    <div data-testid="AppSidebar/more-agents">
+      <SidebarTab
+        icon={
+          folded || visibleAgents.length === 0
+            ? SvgOnyxOctagon
+            : SvgMoreHorizontal
+        }
+        href="/app/agents"
+        selected={activeSidebarTab.isMoreAgents()}
         variant={folded ? "sidebar-heavy" : "sidebar-light"}
       >
-        New Project
+        {visibleAgents.length === 0 ? "Explore Agents" : "More Agents"}
       </SidebarTab>
-    ),
-    [folded, createProjectModal.toggle, createProjectModal.isOpen]
+    </div>
   );
+
+  const newProjectButton = (
+    <SidebarTab
+      icon={SvgFolderPlus}
+      onClick={() => createProjectModal.toggle(true)}
+      selected={createProjectModal.isOpen}
+      variant={folded ? "sidebar-heavy" : "sidebar-light"}
+    >
+      New Project
+    </SidebarTab>
+  );
+
   const handleShowBuildIntro = useCallback(() => {
     setShowIntroAnimation(true);
   }, []);
 
-  const settingsButton = useMemo(
-    () => (
-      <div>
-        {(isAdmin || isCurator) && (
-          <SidebarTab
-            href={
-              isCurator
-                ? "/admin/agents"
-                : "/admin/configuration/language-models"
-            }
-            icon={SvgSettings}
-            folded={folded}
-          >
-            {isAdmin ? "Admin Panel" : "Curator Panel"}
-          </SidebarTab>
-        )}
-        <AccountPopover
-          folded={folded}
-          onShowBuildIntro={
-            isOnyxCraftEnabled ? handleShowBuildIntro : undefined
+  const settingsButton = (
+    <div>
+      {(isAdmin || isCurator) && (
+        <SidebarTab
+          href={
+            isCurator ? "/admin/agents" : "/admin/configuration/language-models"
           }
-        />
-      </div>
-    ),
-    [folded, isAdmin, isCurator, handleShowBuildIntro, isOnyxCraftEnabled]
+          icon={SvgSettings}
+        >
+          {isAdmin ? "Admin Panel" : "Curator Panel"}
+        </SidebarTab>
+      )}
+      <AccountPopover
+        onShowBuildIntro={isOnyxCraftEnabled ? handleShowBuildIntro : undefined}
+      />
+    </div>
   );
 
   return (

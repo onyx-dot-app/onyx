@@ -1,6 +1,6 @@
 "use client";
 
-import { memo, useMemo, useCallback, useState, useEffect, useRef } from "react";
+import { memo, useCallback, useState, useEffect, useRef } from "react";
 import type { Route } from "next";
 import { useRouter, usePathname } from "next/navigation";
 import { useBuildContext } from "@/app/craft/contexts/BuildContext";
@@ -307,79 +307,54 @@ const MemoizedBuildSidebarInner = memo(() => {
     [requestNavigation, router, returnToMainAgent]
   );
 
-  const newBuildButton = useMemo(
-    () => (
-      <SidebarTab icon={SvgEditBig} folded={folded} onClick={handleNewBuild}>
-        Start Crafting
-      </SidebarTab>
-    ),
-    [folded, handleNewBuild]
+  const newBuildButton = (
+    <SidebarTab icon={SvgEditBig} onClick={handleNewBuild}>
+      Start Crafting
+    </SidebarTab>
   );
 
-  const scheduledTasksPanel = useMemo(
-    () => (
-      <SidebarTab
-        icon={SvgClock}
-        folded={folded}
-        onClick={() => navigate(CRAFT_TASKS_PATH)}
-        selected={pathname.startsWith(CRAFT_TASKS_PATH)}
-      >
-        Scheduled Tasks
-      </SidebarTab>
-    ),
-    [folded, navigate, pathname]
+  const scheduledTasksPanel = (
+    <SidebarTab
+      icon={SvgClock}
+      onClick={() => navigate(CRAFT_TASKS_PATH)}
+      selected={pathname.startsWith(CRAFT_TASKS_PATH)}
+    >
+      Scheduled Tasks
+    </SidebarTab>
   );
 
-  const appsTab = useMemo(
-    () => (
-      <SidebarTab
-        icon={SvgPlug}
-        folded={folded}
-        onClick={() => navigate(CRAFT_APPS_PATH)}
-        selected={pathname.startsWith(CRAFT_APPS_PATH)}
-      >
-        Apps
-      </SidebarTab>
-    ),
-    [folded, navigate, pathname]
+  const appsTab = (
+    <SidebarTab
+      icon={SvgPlug}
+      onClick={() => navigate(CRAFT_APPS_PATH)}
+      selected={pathname.startsWith(CRAFT_APPS_PATH)}
+    >
+      Apps
+    </SidebarTab>
   );
 
-  const skillsPanel = useMemo(
-    () => (
-      <SidebarTab
-        icon={SvgBlocks}
-        folded={folded}
-        onClick={() => navigate(CRAFT_SKILLS_PATH)}
-        selected={pathname.startsWith(CRAFT_SKILLS_PATH)}
-      >
-        Skills
-      </SidebarTab>
-    ),
-    [folded, navigate, pathname]
+  const skillsPanel = (
+    <SidebarTab
+      icon={SvgBlocks}
+      onClick={() => navigate(CRAFT_SKILLS_PATH)}
+      selected={pathname.startsWith(CRAFT_SKILLS_PATH)}
+    >
+      Skills
+    </SidebarTab>
   );
 
-  const backToChatButton = useMemo(
-    () => (
-      <SidebarTab
-        icon={SvgArrowLeft}
-        folded={folded}
-        onClick={() => navigate("/app")}
-      >
-        Back to Chat
-      </SidebarTab>
-    ),
-    [folded, navigate]
+  const backToChatButton = (
+    <SidebarTab icon={SvgArrowLeft} onClick={() => navigate("/app")}>
+      Back to Chat
+    </SidebarTab>
   );
 
-  const footer = useMemo(
-    () => (
-      <div>
-        {backToChatButton}
-        <OpencodeDebugLogsButton folded={folded} />
-        <AccountPopover folded={folded} />
-      </div>
-    ),
-    [folded, backToChatButton]
+  const footer = (
+    <div>
+      {backToChatButton}
+      <OpencodeDebugLogsButton folded={folded} />
+      <AccountPopover />
+    </div>
   );
 
   const showLogoWhenFolded = useShowLogoWhenFolded();

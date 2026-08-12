@@ -103,6 +103,15 @@ export function useSidebarState(): SidebarStateContextType {
   return context;
 }
 
+/**
+ * Fold state for components that render inside a sidebar but must also work
+ * outside one (Storybook, isolated tests). Returns `false` with no provider,
+ * so callers never have to thread `folded` down as a prop.
+ */
+export function useSidebarFolded(): boolean {
+  return useContext(SidebarStateContext)?.folded ?? false;
+}
+
 // ---------------------------------------------------------------------------
 // Root — flex container
 // ---------------------------------------------------------------------------
