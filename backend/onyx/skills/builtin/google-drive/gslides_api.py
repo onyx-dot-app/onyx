@@ -26,12 +26,10 @@ _DEFAULT_GET_FIELDS = (
     "text(textElements(textRun(content)))),"
     "table(rows,columns),image(contentUrl)))"
 )
-# For plain-text extraction: shape text plus table cell text, nothing else.
-_TEXT_FIELDS = (
-    "title,slides(objectId,pageElements(objectId,"
-    "shape(text(textElements(textRun(content)))),"
-    "table(tableRows(tableCells(text(textElements(textRun(content))))))))"
-)
+# For plain-text extraction: full pageElements, because grouped elements nest
+# arbitrarily deep and the fields syntax can't express that recursion. Only
+# the extracted text is emitted, so the larger payload never reaches the LLM.
+_TEXT_FIELDS = "title,slides(objectId,pageElements)"
 
 
 def _prune(value: Any) -> Any:
@@ -88,7 +86,8 @@ def _text_runs(text: dict[str, Any]) -> str:
 
 
 def _element_text(element: dict[str, Any]) -> str:
-    """Plain text of one page element: shape text plus any table cell text."""
+    """Plain text of one page element: shape text, table cell text, and
+    grouped children (recursive)."""
     parts: list[str] = []
     shape_text = element.get("shape", {}).get("text")
     if shape_text:
@@ -97,11 +96,15 @@ def _element_text(element: dict[str, Any]) -> str:
         for cell in row.get("tableCells", []):
             if cell.get("text"):
                 parts.append(_text_runs(cell["text"]))
+    for child in element.get("elementGroup", {}).get("children", []):
+        parts.append(_element_text(child))
     return "".join(parts)
 
 
 def _load_json_arg(inline: str | None, file_path: str | None, what: str) -> Any:
     """A JSON payload given inline or via --file (exactly one required)."""
+    if inline and file_path:
+        raise ValueError(f"pass {what} inline or via --file, not both")
     raw = inline
     if file_path:
         with open(file_path, encoding="utf-8") as fh:
@@ -225,7 +228,9 @@ def _dispatch(a: argparse.Namespace) -> dict[str, Any]:
             {"createSlide": {"slideLayoutReference": {"predefinedLayout": a.layout}}}
         ]
         data = _batch_update(a.presentation_id, requests)
-        return {"ok": True, "data": data}
+        replies = data.get("replies") or [{}]
+        object_id = replies[0].get("createSlide", {}).get("objectId")
+        return {"ok": True, "objectId": object_id, "data": data}
 
     if a.cmd == "insert-text":
         requests = [
@@ -258,7 +263,7 @@ def _dispatch(a: argparse.Namespace) -> dict[str, Any]:
     # batch-update
     requests = _load_json_arg(a.requests_json, a.requests_file, "requests")
     if not isinstance(requests, list):
-        return {"ok": False, "error": "requests_not_array"}
+        raise ValueError("requests must be a JSON array of request objects")
     data = _batch_update(a.presentation_id, requests)
     return {"ok": True, "data": data}
 

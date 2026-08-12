@@ -16,7 +16,8 @@ from shared_configs.configs import MULTI_TENANT
 # Google Drive API v3. Reads (GET) live under `/drive/v3/...`; content uploads
 # use the separate `/upload/drive/v3/...` host path, so both prefixes appear in
 # the upstream patterns and the catalog. The Google Docs, Sheets, and Slides
-# APIs live on their own hosts, all authorized by the same `auth/drive` scope.
+# APIs live on their own hosts, covered by the single `auth/drive` scope
+# self-hosted and by per-API sensitive scopes on cloud (see `_CLOUD_SCOPE`).
 # Reads default to ALWAYS; every mutation defaults to ASK so the egress
 # approval gate prompts the user before it runs.
 class GoogleDriveAction(ExternalAppAction):

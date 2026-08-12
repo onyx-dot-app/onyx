@@ -65,6 +65,8 @@ def _req_json(
 
 def _load_json_arg(inline: str | None, file_path: str | None, what: str) -> Any:
     """A JSON payload given inline or via --file (exactly one required)."""
+    if inline and file_path:
+        raise ValueError(f"pass {what} inline or via --file, not both")
     raw = inline
     if file_path:
         with open(file_path, encoding="utf-8") as fh:
@@ -216,7 +218,7 @@ def _dispatch(a: argparse.Namespace) -> dict[str, Any]:
     # batch-update
     requests = _load_json_arg(a.requests_json, a.requests_file, "requests")
     if not isinstance(requests, list):
-        return {"ok": False, "error": "requests_not_array"}
+        raise ValueError("requests must be a JSON array of request objects")
     data = _req_json(
         f"spreadsheets/{_seg(a.spreadsheet_id)}:batchUpdate",
         method="POST",
