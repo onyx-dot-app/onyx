@@ -1,41 +1,128 @@
-import SvgSimpleLoader from "@opal/icons/simple-loader";
-import { X, Search } from "lucide-react";
+"use client";
+
+import React, { useEffect, useMemo, useState } from "react";
 import {
-  getDatesList,
+  InputTypeIn,
+  LineItemButton,
+  Popover,
+  PopoverMenu,
+  SelectButton,
+  Text,
+} from "@opal/components";
+import { SvgOnyxOctagon } from "@opal/icons";
+import { Section } from "@opal/layouts";
+import {
   usePersonaMessages,
   usePersonaUniqueUsers,
-} from "../lib";
-import { DateRangePickerValue } from "@/components/dateRangeSelectors/AdminDateRangeSelector";
-import { Text } from "@opal/components";
-import Title from "@/components/ui/title";
-import CardSection from "@/components/admin/CardSection";
-import { AreaChartDisplay } from "@/components/ui/areaChart";
+} from "@/app/ee/admin/performance/lib";
 import {
-  Select,
-  SelectContent,
-  SelectItem,
-  SelectTrigger,
-  SelectValue,
-} from "@/components/ui/select";
-import { useState, useMemo, useEffect } from "react";
+  AnalyticsChart,
+  chartSeries,
+} from "@/app/ee/admin/performance/usage/AnalyticsChart";
+import { DateRangePickerValue } from "@/components/dateRangeSelectors/AdminDateRangeSelector";
 import { Agent } from "@/lib/agents/types";
+
+interface PersonaPickerProps {
+  agents: Agent[];
+  selectedAgent: Agent | undefined;
+  onSelect: (agentId: number) => void;
+}
+
+function PersonaPicker({
+  agents,
+  selectedAgent,
+  onSelect,
+}: PersonaPickerProps) {
+  const [open, setOpen] = useState(false);
+  const [search, setSearch] = useState("");
+
+  const matches = useMemo(() => {
+    const query = search.trim().toLowerCase();
+    if (query === "") return agents;
+    return agents.filter((agent) => agent.name.toLowerCase().includes(query));
+  }, [agents, search]);
+
+  return (
+    <Popover
+      open={open}
+      onOpenChange={(nextOpen) => {
+        setOpen(nextOpen);
+        if (!nextOpen) setSearch("");
+      }}
+    >
+      <Popover.Trigger asChild>
+        <SelectButton
+          icon={SvgOnyxOctagon}
+          state="empty"
+          variant="select-input"
+        >
+          {selectedAgent?.name ?? "Select an agent to display"}
+        </SelectButton>
+      </Popover.Trigger>
+      <Popover.Content align="start">
+        <PopoverMenu>
+          {[
+            <InputTypeIn
+              key="agent-search"
+              placeholder="Search agents..."
+              variant="internal"
+              searchIcon
+              value={search}
+              onChange={(event) => setSearch(event.target.value)}
+            />,
+            ...matches.map((agent) => (
+              <Popover.Close asChild key={agent.id}>
+                <LineItemButton
+                  sizePreset="main-ui"
+                  rounding="sm"
+                  selectVariant="select-heavy"
+                  icon={SvgOnyxOctagon}
+                  title={agent.name}
+                  state={selectedAgent?.id === agent.id ? "selected" : "empty"}
+                  onClick={() => onSelect(agent.id)}
+                />
+              </Popover.Close>
+            )),
+            ...(matches.length === 0
+              ? [
+                  <Section
+                    key="no-matches"
+                    flexDirection="row"
+                    justifyContent="center"
+                    alignItems="center"
+                    padding={0.5}
+                    width="full"
+                    height="fit"
+                  >
+                    <Text font="secondary-body" color="text-03">
+                      No agents match that search
+                    </Text>
+                  </Section>,
+                ]
+              : []),
+          ]}
+        </PopoverMenu>
+      </Popover.Content>
+    </Popover>
+  );
+}
+
+interface PersonaMessagesChartProps {
+  availablePersonas: Agent[];
+  agentsError?: unknown;
+  agentsLoading?: boolean;
+  timeRange: DateRangePickerValue;
+}
 
 export function PersonaMessagesChart({
   availablePersonas,
   agentsError,
   agentsLoading,
   timeRange,
-}: {
-  availablePersonas: Agent[];
-  agentsError?: unknown;
-  agentsLoading?: boolean;
-  timeRange: DateRangePickerValue;
-}) {
+}: PersonaMessagesChartProps) {
   const [selectedPersonaId, setSelectedPersonaId] = useState<
     number | undefined
   >(undefined);
-  const [searchQuery, setSearchQuery] = useState("");
-  const [highlightedIndex, setHighlightedIndex] = useState(-1);
 
   const {
     data: personaMessagesData,
@@ -48,11 +135,6 @@ export function PersonaMessagesChart({
     isLoading: isPersonaUniqueUsersLoading,
     error: personaUniqueUsersError,
   } = usePersonaUniqueUsers(selectedPersonaId, timeRange);
-
-  const isLoading =
-    agentsLoading || isPersonaMessagesLoading || isPersonaUniqueUsersLoading;
-  const hasError =
-    agentsError || personaMessagesError || personaUniqueUsersError;
 
   // The fallback card is generic; keep the underlying failure diagnosable.
   useEffect(() => {
@@ -70,189 +152,50 @@ export function PersonaMessagesChart({
     }
   }, [agentsError, personaMessagesError, personaUniqueUsersError]);
 
-  const filteredPersonaList = useMemo(() => {
-    if (!availablePersonas) return [];
-    return availablePersonas.filter((persona) =>
-      persona.name.toLowerCase().includes(searchQuery.toLowerCase())
-    );
-  }, [availablePersonas, searchQuery]);
-
-  const handleKeyDown = (e: React.KeyboardEvent) => {
-    e.stopPropagation();
-
-    switch (e.key) {
-      case "ArrowDown":
-        e.preventDefault();
-        setHighlightedIndex((prev) =>
-          prev < filteredPersonaList.length - 1 ? prev + 1 : prev
-        );
-        break;
-      case "ArrowUp":
-        e.preventDefault();
-        setHighlightedIndex((prev) => (prev > 0 ? prev - 1 : prev));
-        break;
-      case "Enter":
-        if (
-          highlightedIndex >= 0 &&
-          highlightedIndex < filteredPersonaList.length
-        ) {
-          const filteredPersona = filteredPersonaList[highlightedIndex];
-          if (filteredPersona !== undefined) {
-            setSelectedPersonaId(filteredPersona.id);
-            setSearchQuery("");
-            setHighlightedIndex(-1);
-          }
-        }
-        break;
-      case "Escape":
-        setSearchQuery("");
-        setHighlightedIndex(-1);
-        break;
-    }
-  };
-
-  // Reset highlight when search query changes
-  useEffect(() => {
-    setHighlightedIndex(-1);
-  }, [searchQuery]);
-
-  const chartData = useMemo(() => {
-    if (
-      !personaMessagesData?.length ||
-      !personaUniqueUsersData?.length ||
-      selectedPersonaId === undefined
-    ) {
-      return null;
-    }
-
-    const initialDate =
-      timeRange.from ||
-      new Date(
-        Math.min(
-          ...personaMessagesData.map((entry) => new Date(entry.date).getTime())
-        )
-      );
-    const dateRange = getDatesList(initialDate, timeRange.to);
-
-    // Create maps for messages and unique users data
-    const messagesMap = new Map(
-      personaMessagesData.map((entry) => [entry.date, entry])
-    );
-    const uniqueUsersMap = new Map(
-      personaUniqueUsersData.map((entry) => [entry.date, entry])
-    );
-
-    return dateRange.map((dateStr) => {
-      const messageData = messagesMap.get(dateStr);
-      const uniqueUserData = uniqueUsersMap.get(dateStr);
-      return {
-        Day: dateStr,
-        Messages: messageData?.total_messages || 0,
-        "Unique Users": uniqueUserData?.unique_users || 0,
-      };
-    });
-  }, [
-    personaMessagesData,
-    personaUniqueUsersData,
-    timeRange.from,
-    timeRange.to,
-    selectedPersonaId,
-  ]);
-
-  let content;
-  if (isLoading) {
-    content = (
-      <div className="h-80 flex flex-col items-center justify-center">
-        <SvgSimpleLoader className="h-6 w-6" />
-      </div>
-    );
-  } else if (!availablePersonas || hasError) {
-    content = (
-      <div className="h-80 text-red-600 text-bold flex flex-col">
-        <p className="m-auto">Failed to fetch data...</p>
-      </div>
-    );
-  } else if (selectedPersonaId === undefined) {
-    content = (
-      <div className="h-80 text-text-500 flex flex-col">
-        <p className="m-auto">Select an agent to view analytics</p>
-      </div>
-    );
-  } else if (!personaMessagesData?.length) {
-    content = (
-      <div className="h-80 text-text-500 flex flex-col">
-        <p className="m-auto">
-          No data found for selected agent in the specified time range
-        </p>
-      </div>
-    );
-  } else if (chartData) {
-    content = (
-      <AreaChartDisplay
-        className="mt-4"
-        data={chartData}
-        categories={["Messages", "Unique Users"]}
-        index="Day"
-        colors={["indigo", "fuchsia"]}
-        yAxisWidth={60}
-      />
-    );
-  }
+  const agents = availablePersonas ?? [];
+  const selectedAgent = agents.find((agent) => agent.id === selectedPersonaId);
 
   return (
-    <CardSection>
-      <Title>Agent Analytics</Title>
-      <div className="flex flex-col gap-4">
-        <Text as="p">
-          Messages and unique users per day for the selected agent
-        </Text>
-        <div className="flex items-center gap-4">
-          <Select
-            value={selectedPersonaId?.toString() ?? ""}
-            onValueChange={(value) => {
-              setSelectedPersonaId(parseInt(value));
-            }}
-          >
-            <SelectTrigger className="flex w-full max-w-xs">
-              <SelectValue placeholder="Select an agent to display" />
-            </SelectTrigger>
-            <SelectContent>
-              <div className="flex items-center px-2 pb-2 sticky top-0 bg-background border-b">
-                <Search className="h-4 w-4 mr-2 shrink-0 opacity-50" />
-                <input
-                  className="flex h-8 w-full rounded-xs bg-transparent py-3 text-sm outline-hidden placeholder:text-muted-foreground disabled:cursor-not-allowed disabled:opacity-50"
-                  placeholder="Search agents..."
-                  value={searchQuery}
-                  onChange={(e) => setSearchQuery(e.target.value)}
-                  onClick={(e) => e.stopPropagation()}
-                  onMouseDown={(e) => e.stopPropagation()}
-                  onKeyDown={handleKeyDown}
-                />
-                {searchQuery && (
-                  <X
-                    className="h-4 w-4 shrink-0 opacity-50 cursor-pointer hover:opacity-100"
-                    onClick={() => {
-                      setSearchQuery("");
-                      setHighlightedIndex(-1);
-                    }}
-                  />
-                )}
-              </div>
-              {filteredPersonaList.map((persona, index) => (
-                <SelectItem
-                  key={persona.id}
-                  value={persona.id.toString()}
-                  className={`${highlightedIndex === index ? "hover" : ""}`}
-                  onMouseEnter={() => setHighlightedIndex(index)}
-                >
-                  {persona.name}
-                </SelectItem>
-              ))}
-            </SelectContent>
-          </Select>
-        </div>
-      </div>
-      {content}
-    </CardSection>
+    <AnalyticsChart
+      title="Agent Analytics"
+      description="Messages and unique users per day for the selected agent"
+      timeRange={timeRange}
+      isLoading={
+        agentsLoading || isPersonaMessagesLoading || isPersonaUniqueUsersLoading
+      }
+      error={agentsError || personaMessagesError || personaUniqueUsersError}
+      errorMessage="Failed to fetch agent data..."
+      emptyMessage="No data found for selected agent in the specified time range"
+      {...(selectedPersonaId === undefined && {
+        prompt: "Select an agent to view analytics",
+      })}
+      headerChildren={
+        <Section
+          flexDirection="row"
+          justifyContent="start"
+          alignItems="center"
+          width="full"
+          height="fit"
+        >
+          <PersonaPicker
+            agents={agents}
+            selectedAgent={selectedAgent}
+            onSelect={setSelectedPersonaId}
+          />
+        </Section>
+      }
+      series={[
+        chartSeries(
+          "Messages",
+          personaMessagesData,
+          (entry) => entry.total_messages
+        ),
+        chartSeries(
+          "Unique Users",
+          personaUniqueUsersData,
+          (entry) => entry.unique_users
+        ),
+      ]}
+    />
   );
 }
