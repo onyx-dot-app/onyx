@@ -17,6 +17,7 @@ import { Disabled, Hoverable, Interactive } from "@opal/core";
 import { SvgSidebar } from "@opal/icons";
 import type { IconFunctionComponent, RichStr } from "@opal/types";
 import { useSidebarState } from "@opal/layouts/root/components";
+import { SidebarFoldedContext } from "@opal/layouts/sidebar/context";
 import useScreenSize from "@opal/hooks/useScreenSize";
 
 // ---------------------------------------------------------------------------
@@ -56,7 +57,17 @@ function SidebarRoot({ foldable = false, children }: SidebarRootProps) {
   }, [isMobile, isSmallScreen, foldable, setFolded]);
 
   const foldedAttr = String(folded);
-  const inner = <div className="opal-sidebar-root__inner">{children}</div>;
+
+  // The overlays always fold; a desktop column only folds when `foldable`.
+  // Tabs read this derived value, not the app-wide raw state, so tabs outside
+  // a sidebar (and inside a non-foldable one) never collapse.
+  const effectiveFolded = (isMobile || isSmallScreen || foldable) && folded;
+
+  const inner = (
+    <SidebarFoldedContext.Provider value={effectiveFolded}>
+      <div className="opal-sidebar-root__inner">{children}</div>
+    </SidebarFoldedContext.Provider>
+  );
 
   if (isMobile) {
     return (

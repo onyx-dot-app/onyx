@@ -261,7 +261,6 @@ export default function AdminSidebar() {
         {folded ? (
           <SidebarTab
             icon={SvgSearch}
-            folded
             onClick={() => {
               setFolded(false);
               setFocusSearch(true);
@@ -335,11 +334,10 @@ export default function AdminSidebar() {
           icon={SvgX}
           href={pathname?.startsWith("/admin/craft") ? "/craft/v1" : "/app"}
           variant="sidebar-light"
-          folded={folded}
         >
           Exit Admin Panel
         </SidebarTab>
-        <AccountPopover folded={folded} />
+        <AccountPopover />
       </SidebarLayouts.Footer>
     </SidebarLayouts.Root>
   );

@@ -5,6 +5,7 @@ import type { ButtonType, IconFunctionComponent, RichStr } from "@opal/types";
 import type { Route } from "next";
 import { Interactive, type InteractiveStatefulVariant } from "@opal/core";
 import { ContentAction } from "@opal/layouts";
+import { useSidebarFolded } from "@opal/layouts/sidebar/context";
 import { Text, Tooltip } from "@opal/components";
 import Link from "next/link";
 
@@ -13,7 +14,10 @@ import Link from "next/link";
 // ---------------------------------------------------------------------------
 
 interface SidebarTabProps {
-  /** Collapses the label, showing only the icon. */
+  /**
+   * Collapses the label, showing only the icon. Defaults to the enclosing
+   * sidebar's fold state, so tabs inside a sidebar never need to pass this.
+   */
   folded?: boolean;
 
   /** Marks this tab as the currently active/selected item. */
@@ -59,7 +63,7 @@ interface SidebarTabProps {
  * `rightChildren` for inline actions, and folded mode with an auto-tooltip.
  */
 function SidebarTab({
-  folded,
+  folded: foldedProp,
   selected,
   variant = "sidebar-heavy",
   nested,
@@ -73,6 +77,9 @@ function SidebarTab({
   tooltip,
   children,
 }: SidebarTabProps) {
+  const foldedFromSidebar = useSidebarFolded();
+  const folded = foldedProp ?? foldedFromSidebar;
+
   const Icon =
     icon ??
     (nested
