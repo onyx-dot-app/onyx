@@ -6,11 +6,17 @@ since a mocked session would happily return rows the SQL would have filtered.
 """
 
 from collections.abc import Generator
+from datetime import datetime, timedelta, timezone
 from uuid import UUID
 
 import pytest
 from sqlalchemy.orm import Session
 
+from ee.onyx.db.query_history import (
+    fetch_chat_sessions_eagerly_by_time,
+    fetch_persisting_chat_session_by_id,
+    get_page_of_chat_sessions,
+)
 from onyx.configs.constants import MessageType
 from onyx.db.chat import (
     create_chat_session,
@@ -65,8 +71,12 @@ def _make_session(
     return chat_session
 
 
-def _history_ids(db_session: Session, user_id: UUID) -> set[UUID]:
-    """The owner's own history, which is the call site that opts out."""
+def _sessions_by_user(
+    db_session: Session,
+    user_id: UUID,
+    exclude_incognito: bool = False,
+    exclude_content_free: bool = False,
+) -> set[UUID]:
     return {
         session.id
         for session in get_chat_sessions_by_user(
@@ -74,9 +84,118 @@ def _history_ids(db_session: Session, user_id: UUID) -> set[UUID]:
             deleted=None,
             db_session=db_session,
             include_failed_chats=True,
-            exclude_incognito=True,
+            exclude_incognito=exclude_incognito,
+            exclude_content_free=exclude_content_free,
         )
     }
+
+
+def _history_ids(db_session: Session, user_id: UUID) -> set[UUID]:
+    """The owner's own history, which is the call site that opts out."""
+    return _sessions_by_user(db_session, user_id, exclude_incognito=True)
+
+
+def test_history_excludes_incognito_by_default(
+    db_session: Session, owner: User
+) -> None:
+    ordinary = _make_session(db_session, owner.id, "ordinary chat", None)
+    incognito = _make_session(
+        db_session, owner.id, "incognito chat", IncognitoRecordMode.FULL_HISTORY
+    )
+
+    returned_ids = _history_ids(db_session, owner.id)
+    assert ordinary.id in returned_ids
+    assert incognito.id not in returned_ids
+
+
+def test_workspace_surface_keeps_full_history_and_drops_content_free(
+    db_session: Session, owner: User
+) -> None:
+    """The exclusion the query-history endpoint uses, which is the weaker one:
+    a full-history session is recorded for the workspace and only its owner is
+    kept from seeing it."""
+    full_history = _make_session(
+        db_session, owner.id, "full history chat", IncognitoRecordMode.FULL_HISTORY
+    )
+    usage_only = _make_session(
+        db_session, owner.id, "usage only chat", IncognitoRecordMode.USAGE_ONLY
+    )
+
+    returned_ids = _sessions_by_user(db_session, owner.id, exclude_content_free=True)
+    assert full_history.id in returned_ids
+    assert usage_only.id not in returned_ids
+
+
+def test_admin_query_history_page_hides_content_free_sessions(
+    db_session: Session, owner: User
+) -> None:
+    """Content-free sessions must not appear as blank rows in the table."""
+    ordinary = _make_session(db_session, owner.id, "ordinary chat", None)
+    full_history = _make_session(
+        db_session, owner.id, "full history chat", IncognitoRecordMode.FULL_HISTORY
+    )
+    usage_only = _make_session(
+        db_session, owner.id, "usage only chat", IncognitoRecordMode.USAGE_ONLY
+    )
+
+    page_ids = {
+        session.id
+        for session in get_page_of_chat_sessions(
+            start_time=None,
+            end_time=None,
+            db_session=db_session,
+            page_num=0,
+            page_size=1000,
+        )
+    }
+    assert ordinary.id in page_ids
+    assert full_history.id in page_ids
+    assert usage_only.id not in page_ids
+
+
+def test_query_history_export_hides_content_free_sessions(
+    db_session: Session, owner: User
+) -> None:
+    ordinary = _make_session(db_session, owner.id, "ordinary chat", None)
+    usage_only = _make_session(
+        db_session, owner.id, "usage only chat", IncognitoRecordMode.USAGE_ONLY
+    )
+
+    window = timedelta(minutes=5)
+    now = datetime.now(timezone.utc)
+    export_ids = {
+        session.id
+        for session in fetch_chat_sessions_eagerly_by_time(
+            start=now - window,
+            end=now + window,
+            db_session=db_session,
+            limit=None,
+        )
+    }
+    assert ordinary.id in export_ids
+    assert usage_only.id not in export_ids
+
+
+def test_query_history_detail_hides_content_free_sessions(
+    db_session: Session, owner: User
+) -> None:
+    """Knowing the id must not be a way around the list filter: the detail
+    route is the one surface that takes an id straight from the caller."""
+    ordinary = _make_session(db_session, owner.id, "ordinary chat", None)
+    full_history = _make_session(
+        db_session, owner.id, "full history chat", IncognitoRecordMode.FULL_HISTORY
+    )
+    usage_only = _make_session(
+        db_session, owner.id, "usage only chat", IncognitoRecordMode.USAGE_ONLY
+    )
+
+    for visible in (ordinary, full_history):
+        assert fetch_persisting_chat_session_by_id(visible.id, db_session).id == (
+            visible.id
+        )
+
+    with pytest.raises(ValueError):
+        fetch_persisting_chat_session_by_id(usage_only.id, db_session)
 
 
 def test_every_mode_is_excluded_from_history(db_session: Session, owner: User) -> None:
@@ -93,6 +212,23 @@ def test_every_mode_is_excluded_from_history(db_session: Session, owner: User) -
     returned_ids = _history_ids(db_session, owner.id)
     for mode, chat_session in sessions.items():
         assert chat_session.id not in returned_ids, f"{mode.value} leaked"
+
+
+def test_search_excludes_incognito_without_a_query(
+    db_session: Session, owner: User
+) -> None:
+    ordinary = _make_session(db_session, owner.id, "quarterly revenue notes", None)
+    incognito = _make_session(
+        db_session,
+        owner.id,
+        "quarterly revenue secrets",
+        IncognitoRecordMode.FULL_HISTORY,
+    )
+
+    sessions, _ = search_chat_sessions(user_id=owner.id, db_session=db_session)
+    returned_ids = {session.id for session in sessions}
+    assert ordinary.id in returned_ids
+    assert incognito.id not in returned_ids
 
 
 def test_search_excludes_incognito_matching_the_query(

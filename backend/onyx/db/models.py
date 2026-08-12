@@ -124,7 +124,7 @@ from onyx.file_store.models import FileDescriptor
 from onyx.kg.models import KGEntityTypeAttributes, KGStage
 from onyx.llm.models import ReasoningEffort
 from onyx.llm.override_models import LLMOverride, PromptOverride
-from onyx.server.security.models import SSRFProtectionLevel
+from onyx.server.security.models import IncognitoAvailability, SSRFProtectionLevel
 from onyx.tools.tool_implementations.web_search.models import WebContentProviderConfig
 from onyx.utils.encryption import decrypt_bytes_to_string, encrypt_string_to_bytes
 from onyx.utils.headers import HeaderItemDict
@@ -4608,6 +4608,27 @@ class SecuritySettings(Base):
     track_external_idp_expiry: Mapped[bool | None] = mapped_column(
         Boolean, nullable=True, default=None
     )
+    # Stored as the IncognitoAvailability value (e.g. "groups"). None falls
+    # back to the off-by-default env behavior.
+    incognito_availability: Mapped[IncognitoAvailability | None] = mapped_column(
+        Enum(
+            IncognitoAvailability,
+            native_enum=False,
+            values_callable=lambda x: [e.value for e in x],
+        ),
+        nullable=True,
+        default=None,
+    )
+    # What new incognito sessions pin. None falls back to usage_only.
+    incognito_record_mode: Mapped[IncognitoRecordMode | None] = mapped_column(
+        Enum(
+            IncognitoRecordMode,
+            native_enum=False,
+            values_callable=lambda x: [e.value for e in x],
+        ),
+        nullable=True,
+        default=None,
+    )
     # Stored as the SSRFProtectionLevel value (e.g. "validate_all"); None falls
     # back to the level derived from the legacy SSRF env vars.
     ssrf_protection_level: Mapped[SSRFProtectionLevel | None] = mapped_column(
@@ -5015,6 +5036,12 @@ class UserGroup(Base):
     )
     # whether this is a default group (e.g. "Basic", "Admins") that cannot be deleted
     is_default: Mapped[bool] = mapped_column(Boolean, nullable=False, default=False)
+
+    # Members may start incognito chats when the workspace availability mode
+    # is groups-only. Ignored under the other modes.
+    incognito_enabled: Mapped[bool] = mapped_column(
+        Boolean, nullable=False, default=False
+    )
 
     # Last time a user updated this user group
     time_last_modified_by_user: Mapped[datetime.datetime] = mapped_column(

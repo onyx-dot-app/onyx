@@ -4,7 +4,7 @@ import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
 import useSWR, { useSWRConfig } from "swr";
 import useGroupMemberCandidates from "./useGroupMemberCandidates";
-import { Table, Button, Divider } from "@opal/components";
+import { Table, Button, Divider, Switch } from "@opal/components";
 import { IllustrationContent, InputHorizontal, toast } from "@opal/layouts";
 import {
   SvgUsers,
@@ -23,7 +23,7 @@ import { InputTypeIn } from "@opal/components";
 import Text from "@/refresh-components/texts/Text";
 import { ConfirmationModalLayout } from "@opal/layouts";
 import { errorHandlingFetcher, skipRetryOnAuthError } from "@/lib/fetcher";
-import type { UserGroup } from "@/lib/types";
+import type { SecuritySettings, UserGroup } from "@/lib/types";
 import { useSettings } from "@/lib/settings/hooks";
 import { Tier } from "@/lib/settings/types";
 import { tierAtLeast } from "@/lib/tiers";
@@ -32,6 +32,7 @@ import { baseColumns, memberTableColumns, tc, PAGE_SIZE } from "./shared";
 import {
   renameGroup,
   updateGroup,
+  setGroupIncognito,
   deleteGroup,
   updateAgentGroupSharing,
   updateDocSetGroupSharing,
@@ -91,6 +92,17 @@ function EditGroupPage({ groupId }: EditGroupPageProps) {
     onErrorRetry: skipRetryOnAuthError,
   });
 
+  // The flag only does anything under designated-groups availability, so the
+  // field stays off the page entirely elsewhere. Curators get a 403 reading
+  // security settings, which also leaves it hidden.
+  const { data: securitySettings } = useSWR<
+    Pick<SecuritySettings, "incognito_availability">
+  >(SWR_KEYS.adminSecuritySettings, errorHandlingFetcher, {
+    onErrorRetry: skipRetryOnAuthError,
+  });
+  const showIncognitoField =
+    securitySettings?.incognito_availability === "groups";
+
   // Form state
   const [groupName, setGroupName] = useState("");
   const [selectedUserIds, setSelectedUserIds] = useState<string[]>([]);
@@ -109,6 +121,7 @@ function EditGroupPage({ groupId }: EditGroupPageProps) {
       costBudgetDollars: null,
     },
   ]);
+  const [incognitoEnabled, setIncognitoEnabled] = useState(false);
   const [showDeleteModal, setShowDeleteModal] = useState(false);
   const [isDeleting, setIsDeleting] = useState(false);
   const [initialized, setInitialized] = useState(false);
@@ -138,6 +151,7 @@ function EditGroupPage({ groupId }: EditGroupPageProps) {
       const agentIds = group.personas.map((p) => p.id);
       setSelectedAgentIds(agentIds);
       initialAgentIdsRef.current = agentIds;
+      setIncognitoEnabled(group.incognito_enabled);
       setInitialized(true);
     }
   }, [group, initialized]);
@@ -245,6 +259,10 @@ function EditGroupPage({ groupId }: EditGroupPageProps) {
       // Update members and cc_pairs
       await updateGroup(groupId, selectedUserIds, selectedCcPairIds);
 
+      if (group && incognitoEnabled !== group.incognito_enabled) {
+        await setGroupIncognito(groupId, incognitoEnabled);
+      }
+
       // Update agent sharing (add/remove this group from changed agents)
       await updateAgentGroupSharing(
         groupId,
@@ -270,6 +288,8 @@ function EditGroupPage({ groupId }: EditGroupPageProps) {
 
       mutate(SWR_KEYS.adminUserGroups);
       mutate(SWR_KEYS.userGroupTokenRateLimit(groupId));
+      // Membership and the incognito flag both feed chat availability.
+      mutate(SWR_KEYS.incognitoAvailability);
       toast.success(`Group "${trimmed}" updated`);
       router.push("/admin/groups");
     } catch (e) {
@@ -473,6 +493,21 @@ function EditGroupPage({ groupId }: EditGroupPageProps) {
                 disabled={!isEnterpriseTier}
                 disabledTooltip={tokenLimitsDisabledTooltip}
               />
+
+              {showIncognitoField && (
+                <Card>
+                  <InputHorizontal
+                    title="Incognito Chats"
+                    description="Members of this group may start incognito chats."
+                    withLabel
+                  >
+                    <Switch
+                      checked={incognitoEnabled}
+                      onCheckedChange={setIncognitoEnabled}
+                    />
+                  </InputHorizontal>
+                </Card>
+              )}
 
               {/* Delete This Group */}
               <Card>

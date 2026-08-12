@@ -1,5 +1,6 @@
 from collections.abc import Sequence
 from datetime import datetime
+from uuid import UUID
 
 from sqlalchemy import BinaryExpression, ColumnElement, asc, desc, distinct
 from sqlalchemy.orm import Session, contains_eager, joinedload
@@ -8,6 +9,7 @@ from sqlalchemy.sql.expression import UnaryExpression, literal
 
 from ee.onyx.background.task_name_builders import QUERY_HISTORY_TASK_NAME_PREFIX
 from onyx.configs.constants import QAFeedbackType
+from onyx.db.chat import content_persisting_sessions_filter
 from onyx.db.models import ChatMessage, ChatMessageFeedback, ChatSession, TaskQueueState
 from onyx.db.tasks import get_all_tasks_with_prefix
 
@@ -25,7 +27,7 @@ def _build_filter_conditions(
     feedback_filter: Feedback type to filter by
     Returns: List of filter conditions
     """
-    conditions = []
+    conditions = [content_persisting_sessions_filter()]
 
     if start_time is not None:
         conditions.append(ChatSession.time_created >= start_time)
@@ -118,6 +120,27 @@ def get_page_of_chat_sessions(
     return db_session.scalars(stmt).unique().all()
 
 
+def fetch_persisting_chat_session_by_id(
+    chat_session_id: UUID,
+    db_session: Session,
+) -> ChatSession:
+    """The admin detail read, filtered like the list and the export it belongs to.
+
+    A content-free session is absent rather than refused: whether one exists is
+    itself metadata the workspace chose not to keep. Deleted sessions stay
+    visible, which is what the detail view is for.
+    """
+    chat_session = db_session.scalar(
+        select(ChatSession).where(
+            ChatSession.id == chat_session_id,
+            content_persisting_sessions_filter(),
+        )
+    )
+    if chat_session is None:
+        raise ValueError(f"Chat session with id '{chat_session_id}' does not exist.")
+    return chat_session
+
+
 def fetch_chat_sessions_eagerly_by_time(
     start: datetime,
     end: datetime,
@@ -131,7 +154,8 @@ def fetch_chat_sessions_eagerly_by_time(
     message_order: UnaryExpression = asc(ChatMessage.id)
 
     filters: list[ColumnElement | BinaryExpression] = [
-        ChatSession.time_created.between(start, end)
+        content_persisting_sessions_filter(),
+        ChatSession.time_created.between(start, end),
     ]
 
     if initial_time:

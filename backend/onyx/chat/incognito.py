@@ -18,10 +18,15 @@ from uuid import UUID
 
 from sqlalchemy.orm import Session
 
+from onyx.chat.incognito_context import incognito_context_available
 from onyx.db.enums import IncognitoRecordMode, record_mode_persists_content
 from onyx.db.file_record import get_incognito_file_ids
+from onyx.db.incognito import user_in_incognito_enabled_group
+from onyx.db.models import User
 from onyx.file_store.file_store import get_default_file_store
 from onyx.file_store.models import FileDescriptor
+from onyx.server.security.models import IncognitoAvailability
+from onyx.server.security.store import get_security_settings, load_effective_uncached
 from onyx.utils.logger import setup_logger
 from shared_configs.contextvars import get_current_incognito_record_mode
 
@@ -33,13 +38,36 @@ def current_turn_persists_content() -> bool:
     return record_mode_persists_content(mode)
 
 
-def resolve_incognito_record_mode() -> IncognitoRecordMode:
-    """The mode a new incognito session must pin.
+def incognito_allowed_for_user(user: User, db_session: Session) -> bool:
+    """Whether this user may start an incognito chat.
 
-    The seam a workspace's record-mode setting must resolve through. Today it
-    returns the default unconditionally.
+    Availability composes the deployment capability (the ephemeral store must
+    exist) with the admin's security setting, which defaults to off. Anonymous
+    users never qualify: they share an identity, have no memberships, and
+    cannot authenticate against the teardown endpoint.
     """
-    return IncognitoRecordMode.USAGE_ONLY
+    if user.is_anonymous:
+        return False
+    if not incognito_context_available():
+        return False
+    availability = get_security_settings().incognito_availability
+    if availability is IncognitoAvailability.EVERYONE:
+        return True
+    if availability is IncognitoAvailability.GROUPS:
+        return user_in_incognito_enabled_group(db_session, user.id)
+    return False
+
+
+def resolve_incognito_record_mode() -> IncognitoRecordMode:
+    """The mode a new incognito session must pin: the workspace's admin
+    record-mode setting, usage_only by default.
+
+    Reads past the settings cache. Cache invalidation is process-local, so a
+    second api_server can hold the pre-save mode for the cache TTL, and this
+    read decides for the whole life of the session: pinning a stale
+    full_history would persist content the admin has already disallowed.
+    """
+    return load_effective_uncached().incognito_record_mode
 
 
 def content_free_file_descriptors(

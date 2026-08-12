@@ -4,6 +4,8 @@ from typing import NamedTuple
 from pydantic import BaseModel, ConfigDict, Field, field_validator, model_validator
 from typing_extensions import Self
 
+from onyx.db.enums import IncognitoRecordMode
+
 
 class SSRFProtectionLevel(str, Enum):
     """How aggressively outbound HTTP requests are validated against private /
@@ -93,6 +95,16 @@ def _tenant_editable() -> dict[str, bool]:
     return {_OPERATOR_LOCKED_MARKER: False}
 
 
+class IncognitoAvailability(str, Enum):
+    """Who may start incognito chats. Secure default is OFF: the feature is
+    invisible until an admin turns it on."""
+
+    OFF = "off"
+    EVERYONE = "everyone"
+    # Only members of user groups whose incognito_enabled flag is set.
+    GROUPS = "groups"
+
+
 class SecuritySettingsOverrides(BaseModel):
     """Wire/storage shape. Absent / None on any field means "use env default"."""
 
@@ -105,6 +117,12 @@ class SecuritySettingsOverrides(BaseModel):
         default=None, json_schema_extra=_tenant_editable()
     )
     track_external_idp_expiry: bool | None = Field(
+        default=None, json_schema_extra=_tenant_editable()
+    )
+    incognito_availability: IncognitoAvailability | None = Field(
+        default=None, json_schema_extra=_tenant_editable()
+    )
+    incognito_record_mode: IncognitoRecordMode | None = Field(
         default=None, json_schema_extra=_tenant_editable()
     )
     ssrf_protection_level: SSRFProtectionLevel | None = Field(
@@ -188,6 +206,8 @@ class SecuritySettings(BaseModel):
 
     user_directory_admin_only: bool
     track_external_idp_expiry: bool
+    incognito_availability: IncognitoAvailability
+    incognito_record_mode: IncognitoRecordMode
     ssrf_protection_level: SSRFProtectionLevel
     mask_credential_prefix: bool
     llm_custom_config_env_injection: bool
