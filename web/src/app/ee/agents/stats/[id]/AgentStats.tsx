@@ -6,7 +6,7 @@ import { useEffect, useState, useMemo } from "react";
 import {
   AdminDateRangeSelector,
   DateRange,
-} from "@/components/dateRangeSelectors/AdminDateRangeSelector";
+} from "@/refresh-components/AdminDateRangeSelector";
 import { useAgents } from "@/lib/agents/hooks";
 import AgentAvatar from "@/refresh-components/avatars/AgentAvatar";
 import { Card, CardContent, CardHeader } from "@/components/ui/card";

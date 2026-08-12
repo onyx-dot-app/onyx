@@ -1,6 +1,6 @@
 "use client";
 
-import { AdminDateRangeSelector } from "@/components/dateRangeSelectors/AdminDateRangeSelector";
+import { AdminDateRangeSelector } from "@/refresh-components/AdminDateRangeSelector";
 import { useTimeRange } from "@/app/ee/admin/performance/lib";
 import PerUserUsagePanel from "@/views/admin/PerUserUsagePanel";
 import { ADMIN_ROUTES } from "@/lib/admin-routes";

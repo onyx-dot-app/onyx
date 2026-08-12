@@ -5,7 +5,7 @@ import {
   OnyxDocument,
   SourceMetadata,
 } from "./interfaces";
-import { DateRangePickerValue } from "@/components/dateRangeSelectors/AdminDateRangeSelector";
+import { DateRangePickerValue } from "@/refresh-components/AdminDateRangeSelector";
 
 export const buildFilters = (
   sources: SourceMetadata[],

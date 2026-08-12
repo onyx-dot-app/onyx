@@ -1,6 +1,6 @@
 import { render, screen } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
-import { AdminDateRangeSelector } from "@/components/dateRangeSelectors/AdminDateRangeSelector";
+import { AdminDateRangeSelector } from "@/refresh-components/AdminDateRangeSelector";
 
 describe("AdminDateRangeSelector", () => {
   beforeEach(() => {

@@ -3,10 +3,10 @@ import type { Meta, StoryObj } from "@storybook/react-vite";
 import {
   AdminDateRangeSelector,
   type DateRange,
-} from "@/components/dateRangeSelectors/AdminDateRangeSelector";
+} from "@/refresh-components/AdminDateRangeSelector";
 
 const meta: Meta<typeof AdminDateRangeSelector> = {
-  title: "components/AdminDateRangeSelector",
+  title: "refresh-components/AdminDateRangeSelector",
   component: AdminDateRangeSelector,
   tags: ["autodocs"],
   parameters: {

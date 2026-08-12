@@ -9,7 +9,7 @@ import {
   resolveChartState,
   useLoggedChartError,
 } from "@/views/admin/WorkspaceAnalyticsPage/AnalyticsChart";
-import { DateRangePickerValue } from "@/components/dateRangeSelectors/AdminDateRangeSelector";
+import { DateRangePickerValue } from "@/refresh-components/AdminDateRangeSelector";
 
 interface TimeRangeProps {
   timeRange: DateRangePickerValue;
