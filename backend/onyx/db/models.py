@@ -83,6 +83,7 @@ from onyx.db.enums import (
     HierarchyNodeType,
     HookFailStrategy,
     HookPoint,
+    IncognitoRecordMode,
     IndexingMode,
     IndexingStatus,
     IndexModelStatus,
@@ -3067,6 +3068,18 @@ class ChatSession(Base):
     description: Mapped[str | None] = mapped_column(Text, nullable=True)
     # This chat created by OnyxBot
     onyxbot_flow: Mapped[bool] = mapped_column(Boolean, default=False)
+    # Pinned at creation, so a later setting change cannot alter a live
+    # session. NULL is an ordinary chat and records normally. Of the incognito
+    # modes only FULL_HISTORY writes conversation content into messages.
+    incognito_record_mode: Mapped[IncognitoRecordMode | None] = mapped_column(
+        Enum(
+            IncognitoRecordMode,
+            native_enum=False,
+            values_callable=lambda x: [e.value for e in x],
+        ),
+        nullable=True,
+        default=None,
+    )
     # Only ever set to True if system is set to not hard-delete chats
     deleted: Mapped[bool] = mapped_column(Boolean, default=False)
     # controls whether or not this conversation is viewable by others
