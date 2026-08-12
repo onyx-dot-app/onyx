@@ -17,8 +17,10 @@ import type { WithoutStyles } from "@opal/types";
 
 // ---------------------------------------------------------------------------
 // Sidebar state — raw fold state + setter, owned here as the single source
-// of truth. SidebarRoot (in sidebar/components.tsx) derives contentFolded
-// and provides RootLayoutFoldedContext from this.
+// of truth. SidebarRoot (in sidebar/components.tsx) derives the effective
+// fold state from this and provides it via SidebarFoldedContext. Components
+// inside a sidebar should read that (`useSidebarFolded`) rather than the raw
+// state here, which is app-wide and true even outside a sidebar.
 // ---------------------------------------------------------------------------
 
 export interface SidebarStateContextType {
