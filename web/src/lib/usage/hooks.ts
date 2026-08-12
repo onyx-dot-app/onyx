@@ -7,7 +7,6 @@ import { buildApiPath } from "@/lib/urlBuilder";
 import {
   convertDateToEndOfDay,
   convertDateToStartOfDay,
-  getXDaysAgo,
 } from "@/lib/dateUtils";
 import {
   OnyxBotAnalytics,
@@ -17,14 +16,14 @@ import {
   UserAnalytics,
 } from "@/lib/usage/interfaces";
 import {
-  DateRangePickerValue,
   THIRTY_DAYS,
+  type DateRangePickerValue,
+  rangeForInclusiveDays,
 } from "@/refresh-components/DateRangePicker";
 
 export function useTimeRange() {
   return useState<DateRangePickerValue>({
-    to: new Date(),
-    from: getXDaysAgo(30),
+    ...rangeForInclusiveDays(30),
     selectValue: THIRTY_DAYS,
   });
 }

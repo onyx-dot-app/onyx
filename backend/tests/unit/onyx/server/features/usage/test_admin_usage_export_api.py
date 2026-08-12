@@ -247,6 +247,18 @@ class TestGetUsageExportHelper:
 
 
 class TestExportEndpoint:
+    def test_default_range_covers_thirty_calendar_days(
+        self, db_session: Session
+    ) -> None:
+        client = TestClient(_make_app(db_session, _ADMIN))
+
+        body = client.get("/admin/usage/export").json()
+
+        start = datetime.date.fromisoformat(body["start"])
+        end = datetime.date.fromisoformat(body["end"])
+        # Inclusive endpoints differ by 29 days when the range has 30 dates.
+        assert (end - start).days == 29
+
     def test_nested_per_user_with_totals(self, db_session: Session) -> None:
         _seed_two_users(db_session)
         client = TestClient(_make_app(db_session, _ADMIN))

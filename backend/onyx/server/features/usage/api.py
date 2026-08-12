@@ -60,8 +60,25 @@ from onyx.server.features.usage.models import (
 from onyx.utils.datetime import get_window_start
 from shared_configs.configs import USAGE_LIMIT_WINDOW_SECONDS
 
-# Default trailing range for the export when no start is given.
-_DEFAULT_EXPORT_DAYS = 30
+# Default trailing range when no start is given.
+_DEFAULT_USAGE_RANGE_INCLUSIVE_DAYS = 30
+
+
+def _start_for_inclusive_range(end_date: date, inclusive_days: int) -> date:
+    return end_date - timedelta(days=inclusive_days - 1)
+
+
+def _date_range_to_utc_bounds(
+    start_date: date, end_date: date
+) -> tuple[datetime, datetime]:
+    if start_date > end_date:
+        raise OnyxError(OnyxErrorCode.INVALID_INPUT, "start must not be after end")
+
+    start_dt = datetime.combine(start_date, time.min, tzinfo=timezone.utc)
+    end_dt = datetime.combine(end_date, time.min, tzinfo=timezone.utc) + timedelta(
+        days=1
+    )
+    return start_dt, end_dt
 
 
 def _used_from_buckets(
@@ -260,15 +277,10 @@ def export_usage(
 ) -> UsageExportResponse:
     """Company-wide daily usage export by email."""
     end_date = end or datetime.now(timezone.utc).date()
-    start_date = start or (end_date - timedelta(days=_DEFAULT_EXPORT_DAYS))
-    if start_date > end_date:
-        raise OnyxError(OnyxErrorCode.INVALID_INPUT, "start must not be after end")
-
-    # Half-open over the full end day so windows starting on `end` are included.
-    start_dt = datetime.combine(start_date, time.min, tzinfo=timezone.utc)
-    end_dt = datetime.combine(end_date, time.min, tzinfo=timezone.utc) + timedelta(
-        days=1
+    start_date = start or _start_for_inclusive_range(
+        end_date, _DEFAULT_USAGE_RANGE_INCLUSIVE_DAYS
     )
+    start_dt, end_dt = _date_range_to_utc_bounds(start_date, end_date)
 
     # TODO(evan-onyx): this might need to be done in a background task
     rows = get_usage_export(db_session, start=start_dt, end=end_dt, model=model)

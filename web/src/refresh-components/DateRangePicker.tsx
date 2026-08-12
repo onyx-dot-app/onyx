@@ -3,7 +3,7 @@ import { endOfDay, format, isSameDay, startOfDay, subDays } from "date-fns";
 import { Calendar, Popover, SelectButton } from "@opal/components";
 import { SvgCalendar } from "@opal/icons";
 
-export const THIRTY_DAYS = "30d";
+export const THIRTY_DAYS = "1M";
 
 export type DateRangePickerValue = DateRange & {
   selectValue: string;
@@ -25,19 +25,25 @@ type DraftDateRange =
 
 interface DatePreset {
   label: string;
-  daysAgo: number;
+  inclusiveDays: number;
 }
 
 const PRESETS: DatePreset[] = [
-  { label: "1D", daysAgo: 0 },
-  { label: "7D", daysAgo: 6 },
-  { label: "1M", daysAgo: 30 },
-  { label: "3M", daysAgo: 90 },
+  { label: "1D", inclusiveDays: 1 },
+  { label: "7D", inclusiveDays: 7 },
+  { label: "1M", inclusiveDays: 30 },
+  { label: "3M", inclusiveDays: 90 },
 ];
 
-function rangeForPreset(preset: DatePreset): Exclude<DateRange, undefined> {
+export function rangeForInclusiveDays(
+  inclusiveDays: number
+): Exclude<DateRange, undefined> {
   const to = endOfDay(new Date());
-  return { from: startOfDay(subDays(to, preset.daysAgo)), to };
+  return { from: startOfDay(subDays(to, inclusiveDays - 1)), to };
+}
+
+function rangeForPreset(preset: DatePreset): Exclude<DateRange, undefined> {
+  return rangeForInclusiveDays(preset.inclusiveDays);
 }
 
 function rangesMatch(left: DateRange, right: DateRange): boolean {
