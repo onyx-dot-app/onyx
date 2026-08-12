@@ -3,16 +3,13 @@ import { Card, EmptyMessageCard, MessageCard, Text } from "@opal/components";
 import { SvgX } from "@opal/icons";
 import { PageLoader, Section } from "@opal/layouts";
 import type { RichStr } from "@opal/types";
-import { AreaChartBody } from "@/components/ui/areaChart";
+import AreaChart from "@/refresh-components/AreaChart";
 import { getDatesList } from "@/app/ee/admin/performance/lib";
 import { DateRangePickerValue } from "@/components/dateRangeSelectors/AdminDateRangeSelector";
 import {
   ChartSeries,
   ChartState,
 } from "@/views/admin/WorkspaceAnalyticsPage/interfaces";
-
-// Resolved through var() so the series follow the active theme.
-const SERIES_COLORS = ["var(--theme-purple-05)", "var(--theme-magenta-05)"];
 
 const CHART_BODY_HEIGHT = 20;
 
@@ -115,7 +112,7 @@ function ChartBody({
   );
 
   return (
-    <AreaChartBody
+    <AreaChart
       data={dateRange.map((date) =>
         state.series.reduce<Record<string, string | number>>(
           (row, entry) => {
@@ -127,7 +124,6 @@ function ChartBody({
       )}
       categories={state.series.map((entry) => entry.label)}
       index="Day"
-      colors={SERIES_COLORS}
       yAxisWidth={60}
       stacked={stacked}
       allowDecimals={allowDecimals}

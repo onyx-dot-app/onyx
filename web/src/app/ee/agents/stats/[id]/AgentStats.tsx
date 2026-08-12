@@ -10,7 +10,7 @@ import {
 import { useAgents } from "@/lib/agents/hooks";
 import AgentAvatar from "@/refresh-components/avatars/AgentAvatar";
 import { Card, CardContent, CardHeader } from "@/components/ui/card";
-import { AreaChartDisplay } from "@/components/ui/areaChart";
+import AreaChart from "@/refresh-components/AreaChart";
 
 type AgentDailyUsageEntry = {
   date: string;
@@ -131,12 +131,10 @@ export function AgentStats({ agentId }: { agentId: number }) {
     );
   } else if (chartData) {
     content = (
-      <AreaChartDisplay
-        className="mt-4"
+      <AreaChart
         data={chartData}
         categories={["Messages", "Unique Users"]}
         index="Day"
-        colors={["#4A4A4A", "#A0A0A0"]}
         yAxisWidth={60}
       />
     );

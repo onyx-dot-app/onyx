@@ -10,22 +10,20 @@ import {
   XAxis,
   YAxis,
 } from "recharts";
-
 import { cn } from "@opal/utils";
 
-import {
-  Card,
-  CardContent,
-  CardDescription,
-  CardHeader,
-  CardTitle,
-} from "@/components/ui/card";
+// Resolved through var() so series follow the active theme. Recharts writes
+// these to SVG presentation attributes, where var() still resolves.
+const DEFAULT_COLORS = [
+  "var(--theme-purple-05)",
+  "var(--theme-magenta-05)",
+] as const;
 
-interface AreaChartProps {
+export interface AreaChartProps {
   data?: Array<Record<string, string | number>>;
   categories?: string[];
   index?: string;
-  colors?: string[];
+  colors?: readonly string[];
   showXAxis?: boolean;
   showYAxis?: boolean;
   yAxisWidth?: number;
@@ -35,18 +33,19 @@ interface AreaChartProps {
   connectNulls?: boolean;
   allowDecimals?: boolean;
   className?: string;
-  title?: string;
-  description?: string;
   xAxisFormatter?: (value: string) => string;
   yAxisFormatter?: (value: number) => string;
   stacked?: boolean;
 }
 
-export function AreaChartBody({
+/**
+ * Area chart with no surrounding chrome, so callers own the card and heading.
+ */
+export default function AreaChart({
   data = [],
   categories = [],
   index,
-  colors = ["indigo", "fuchsia"],
+  colors = DEFAULT_COLORS,
   showXAxis = true,
   showYAxis = true,
   yAxisWidth = 56,
@@ -57,20 +56,15 @@ export function AreaChartBody({
   allowDecimals = true,
   className,
   xAxisFormatter = (dateStr: string) => dateStr,
-  yAxisFormatter = (number: number) => number.toString(),
+  yAxisFormatter = (value: number) => value.toString(),
   stacked = false,
-}: Omit<AreaChartProps, "title" | "description">) {
+}: AreaChartProps) {
   return (
     <div className={cn("h-[350px] w-full", className)}>
       <ResponsiveContainer width="100%" height="100%">
         <ReChartsAreaChart
           data={data}
-          margin={{
-            top: 10,
-            right: 30,
-            left: 0,
-            bottom: 0,
-          }}
+          margin={{ top: 10, right: 30, left: 0, bottom: 0 }}
         >
           {showGridLines && <CartesianGrid strokeDasharray="3 3" />}
           {showXAxis && (
@@ -108,24 +102,5 @@ export function AreaChartBody({
         </ReChartsAreaChart>
       </ResponsiveContainer>
     </div>
-  );
-}
-
-export function AreaChartDisplay({
-  className,
-  title,
-  description,
-  ...bodyProps
-}: AreaChartProps) {
-  return (
-    <Card className={className}>
-      <CardHeader>
-        {title && <CardTitle>{title}</CardTitle>}
-        {description && <CardDescription>{description}</CardDescription>}
-      </CardHeader>
-      <CardContent>
-        <AreaChartBody {...bodyProps} />
-      </CardContent>
-    </Card>
   );
 }
