@@ -179,6 +179,22 @@ def _extract_text_from_document(document: dict[str, Any]) -> str:
     return markdown
 
 
+def _parse_page_timestamp(raw: str | None) -> datetime | None:
+    if not raw:
+        return None
+    parsed = datetime.fromisoformat(raw)
+    if parsed.tzinfo is None:
+        return parsed.replace(tzinfo=timezone.utc)
+    return parsed.astimezone(timezone.utc)
+
+
+def _page_last_modified(page: dict[str, Any]) -> datetime | None:
+    """updatedAt only exists once a page has been edited; fall back to createdAt."""
+    return _parse_page_timestamp(page.get("updatedAt")) or _parse_page_timestamp(
+        page.get("createdAt")
+    )
+
+
 def _convert_page_to_document(
     client: GitbookApiClient, space_id: str, page: dict[str, Any]
 ) -> Document:
@@ -195,13 +211,8 @@ def _convert_page_to_document(
         ],
         source=DocumentSource.GITBOOK,
         semantic_identifier=page.get("title", ""),
-        doc_updated_at=datetime.fromisoformat(page["updatedAt"]).replace(
-            tzinfo=timezone.utc
-        ),
-        # NOTE: doc_created_at population not yet verified against live data
-        doc_created_at=datetime.fromisoformat(page["createdAt"]).replace(
-            tzinfo=timezone.utc
-        ),
+        doc_updated_at=_page_last_modified(page),
+        doc_created_at=_parse_page_timestamp(page.get("createdAt")),
         metadata={
             "path": page.get("path", ""),
             "type": page.get("type", ""),
@@ -250,16 +261,15 @@ class GitbookConnector(LoadConnector, PollConnector):
             while pages:
                 page = pages.pop(0)
 
-                updated_at_raw = page.get("updatedAt")
-                if updated_at_raw is None:
-                    # if updatedAt is not present, that means the page has never been edited
-                    continue
+                # always traverse children, even if this page falls outside the window
+                pages.extend(page.get("pages", []))
 
-                updated_at = datetime.fromisoformat(updated_at_raw)
-                if start and updated_at < start:
-                    continue
-                if end and updated_at > end:
-                    continue
+                last_modified = _page_last_modified(page)
+                if last_modified is not None:
+                    if start and last_modified < start:
+                        continue
+                    if end and last_modified > end:
+                        continue
 
                 current_batch.append(
                     _convert_page_to_document(self.client, self.space_id, page)
@@ -268,8 +278,6 @@ class GitbookConnector(LoadConnector, PollConnector):
                 if len(current_batch) >= self.batch_size:
                     yield current_batch
                     current_batch = []
-
-                pages.extend(page.get("pages", []))
 
             if current_batch:
                 yield current_batch
