@@ -120,6 +120,7 @@ jobs:
               - '.github/workflows/pr-playwright-tests.yml'
               - '.github/actions/setup-test-license/**'
               - '.github/actions/login-ecr-pullthrough-cache/**'
+              - '.github/actions/dhi-base-images/**'
             airgap:
               - 'backend/Dockerfile'
               - 'backend/Dockerfile.model_server'
@@ -147,6 +148,7 @@ jobs:
               - '.github/workflows/pr-playwright-tests.yml'
               - '.github/actions/build-model-server-image/**'
               - '.github/actions/login-ecr-pullthrough-cache/**'
+              - '.github/actions/dhi-base-images/**'
             mcp_oauth:
               - 'backend/onyx/server/features/mcp/**'
               - 'backend/tests/integration/mock_services/mcp_test_server/**'
@@ -216,8 +218,7 @@ jobs:
           push: true
           build-args: |
             BASE_IMAGE_REGISTRY=${{ env.BASE_IMAGE_REGISTRY }}
-            NODE_BUILDER_IMAGE=${{ env.DHI_NODE_BUILDER_IMAGE }}
-            NODE_RUNTIME_IMAGE=${{ env.DHI_NODE_RUNTIME_IMAGE }}
+            ${{ env.DHI_NODE_BUILD_ARGS }}
             SKIP_TYPE_CHECK=1
           cache-from: |
             type=registry,ref=${{ env.RUNS_ON_ECR_CACHE }}:web-cache-${{ github.event.pull_request.head.sha || github.sha }}

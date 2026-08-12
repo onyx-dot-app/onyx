@@ -553,8 +553,7 @@ jobs:
           labels: ${{ steps.meta.outputs.labels }}
           build-args: |
             ONYX_VERSION=${{ github.ref_name }}
-            NODE_BUILDER_IMAGE=${{ env.DHI_NODE_BUILDER_IMAGE }}
-            NODE_RUNTIME_IMAGE=${{ env.DHI_NODE_RUNTIME_IMAGE }}
+            ${{ env.DHI_NODE_BUILD_ARGS }}
             NODE_OPTIONS=--max-old-space-size=8192
           cache-from: |
             type=registry,ref=${{ env.REGISTRY_IMAGE }}:edge
@@ -636,8 +635,7 @@ jobs:
           labels: ${{ steps.meta.outputs.labels }}
           build-args: |
             ONYX_VERSION=${{ github.ref_name }}
-            NODE_BUILDER_IMAGE=${{ env.DHI_NODE_BUILDER_IMAGE }}
-            NODE_RUNTIME_IMAGE=${{ env.DHI_NODE_RUNTIME_IMAGE }}
+            ${{ env.DHI_NODE_BUILD_ARGS }}
             NODE_OPTIONS=--max-old-space-size=8192
           cache-from: |
             type=registry,ref=${{ env.REGISTRY_IMAGE }}:edge
@@ -811,8 +809,7 @@ jobs:
           labels: ${{ steps.meta.outputs.labels }}
           build-args: |
             ONYX_VERSION=${{ github.ref_name }}
-            NODE_BUILDER_IMAGE=${{ env.DHI_NODE_BUILDER_IMAGE }}
-            NODE_RUNTIME_IMAGE=${{ env.DHI_NODE_RUNTIME_IMAGE }}
+            ${{ env.DHI_NODE_BUILD_ARGS }}
             NEXT_PUBLIC_CLOUD_ENABLED=true
             WEB_FRAME_PROTECTION_ENABLED=false
             NEXT_PUBLIC_POSTHOG_KEY=${{ secrets.POSTHOG_KEY }}
@@ -905,8 +902,7 @@ jobs:
           labels: ${{ steps.meta.outputs.labels }}
           build-args: |
             ONYX_VERSION=${{ github.ref_name }}
-            NODE_BUILDER_IMAGE=${{ env.DHI_NODE_BUILDER_IMAGE }}
-            NODE_RUNTIME_IMAGE=${{ env.DHI_NODE_RUNTIME_IMAGE }}
+            ${{ env.DHI_NODE_BUILD_ARGS }}
             NEXT_PUBLIC_CLOUD_ENABLED=true
             WEB_FRAME_PROTECTION_ENABLED=false
             NEXT_PUBLIC_POSTHOG_KEY=${{ secrets.POSTHOG_KEY }}
@@ -1375,8 +1371,7 @@ jobs:
           labels: ${{ steps.meta.outputs.labels }}
           build-args: |
             ONYX_VERSION=${{ github.ref_name }}
-            PYTHON_BUILDER_IMAGE=${{ env.DHI_PYTHON_BUILDER_IMAGE }}
-            PYTHON_RUNTIME_IMAGE=${{ env.DHI_PYTHON_RUNTIME_IMAGE }}
+            ${{ env.DHI_PYTHON_BUILD_ARGS }}
           cache-from: |
             type=registry,ref=${{ env.REGISTRY_IMAGE }}:edge
             type=registry,ref=${{ env.REGISTRY_IMAGE }}:latest
@@ -1462,8 +1457,7 @@ jobs:
           labels: ${{ steps.meta.outputs.labels }}
           build-args: |
             ONYX_VERSION=${{ github.ref_name }}
-            PYTHON_BUILDER_IMAGE=${{ env.DHI_PYTHON_BUILDER_IMAGE }}
-            PYTHON_RUNTIME_IMAGE=${{ env.DHI_PYTHON_RUNTIME_IMAGE }}
+            ${{ env.DHI_PYTHON_BUILD_ARGS }}
           cache-from: |
             type=registry,ref=${{ env.REGISTRY_IMAGE }}:edge
             type=registry,ref=${{ env.REGISTRY_IMAGE }}:latest
