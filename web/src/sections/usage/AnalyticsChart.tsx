@@ -176,20 +176,23 @@ export function AnalyticsChart({
         width="full"
         height="fit"
       >
-        <Section
-          flexDirection="column"
-          justifyContent="start"
-          alignItems="stretch"
-          gap={0.125}
-          width="full"
-          height="fit"
-        >
-          <Text font="heading-h3">{title}</Text>
-          <Text font="secondary-body" color="text-03">
-            {description}
-          </Text>
-        </Section>
-        {headerChildren}
+        {/* sm:flex-row / sm:items-center / sm:justify-between have no Section equivalent, kept as a raw div */}
+        <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
+          <Section
+            flexDirection="column"
+            justifyContent="start"
+            alignItems="stretch"
+            gap={0.125}
+            width="full"
+            height="fit"
+          >
+            <Text font="heading-h3">{title}</Text>
+            <Text font="secondary-body" color="text-03">
+              {description}
+            </Text>
+          </Section>
+          {headerChildren}
+        </div>
         <ChartBody
           state={state}
           timeRange={timeRange}

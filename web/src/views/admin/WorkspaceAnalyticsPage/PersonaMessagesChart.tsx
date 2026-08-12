@@ -185,19 +185,11 @@ export function PersonaMessagesChart({ timeRange }: PersonaMessagesChartProps) {
             })
       }
       headerChildren={
-        <Section
-          flexDirection="row"
-          justifyContent="start"
-          alignItems="center"
-          width="full"
-          height="fit"
-        >
-          <PersonaPicker
-            agents={agents}
-            selectedAgent={selectedAgent}
-            onSelect={setSelectedPersonaId}
-          />
-        </Section>
+        <PersonaPicker
+          agents={agents}
+          selectedAgent={selectedAgent}
+          onSelect={setSelectedPersonaId}
+        />
       }
     />
   );
