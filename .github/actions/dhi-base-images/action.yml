@@ -1,0 +1,33 @@
+name: "Docker Hardened Image bases"
+description: >-
+  Logs in to dhi.io and exports the pinned Docker Hardened Image (DHI) base image
+  references that CI passes to web/Dockerfile and backend/Dockerfile.model_server.
+  Both Dockerfiles default to public Docker Hub images; only CI builds ship on DHI.
+inputs:
+  docker-username:
+    description: "Docker Hub username (the account must have DHI catalog access)"
+    required: true
+  docker-token:
+    description: "Docker Hub token"
+    required: true
+runs:
+  using: "composite"
+  steps:
+    - name: Login to Docker Hardened Images (dhi.io)
+      uses: docker/login-action@c99871dec2022cc055c062a10cc1a1310835ceb4
+      with:
+        registry: dhi.io
+        username: ${{ inputs.docker-username }}
+        password: ${{ inputs.docker-token }}
+
+    # Single source of truth for the DHI digests. Refresh one with:
+    # docker buildx imagetools inspect <image reference>
+    - name: Export DHI base image references
+      shell: bash
+      run: |
+        {
+          echo "DHI_NODE_BUILDER_IMAGE=dhi.io/node:24-debian13-dev@sha256:25a83f18150669e9ce3c9437327add4d75ae4ea26cbdb5e8747b66d3b74a567a"
+          echo "DHI_NODE_RUNTIME_IMAGE=dhi.io/node:24-debian13@sha256:805278f24c1146c6d3c96577b6256f8f97c43196fff88315fe3291a1ce118ddd"
+          echo "DHI_PYTHON_BUILDER_IMAGE=dhi.io/python:3.13-debian13-dev@sha256:7933d16e50454c39bca6e935027166d5e5b05c6c03383dc2f58e8fe6e2440b7d"
+          echo "DHI_PYTHON_RUNTIME_IMAGE=dhi.io/python:3.13-debian13@sha256:05827957dafc7b83633d56f24d9281525d3546a1d600eef90385c7212d3def5e"
+        } >> "$GITHUB_ENV"
