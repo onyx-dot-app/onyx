@@ -1550,6 +1550,11 @@ def update_connector_from_model(
     except ValueError as e:
         raise HTTPException(status_code=400, detail=str(e))
 
+    # TODO(andrei, evan): Unlike the creation flows, this update path never
+    # re-runs ``validate_ccpair_for_user`` / ``validate_connector_settings``,
+    # so a bad config edit (e.g. a malformed Slack channel regex) is saved
+    # silently and only fails at the next indexing attempt. Add
+    # creation-parity validation of the updated config here.
     updated_connector = update_connector(connector_id, connector_base, db_session)
     if updated_connector is None:
         raise HTTPException(
