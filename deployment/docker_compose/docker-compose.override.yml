@@ -1,0 +1,58 @@
+services:
+  relational_db:
+    volumes:
+      - ${POSTGRES_DATA_DIR:-./../../data/postgres}:/var/lib/postgresql/data
+
+  opensearch:
+    volumes:
+      - ${OPENSEARCH_DATA_DIR:-./../../data/opensearch}:/usr/share/opensearch/data
+
+  api_server:
+    volumes:
+      - ../../backend:/app/backend
+
+  inference_model_server:
+    volumes:
+      - ../../model_server:/app/model_server
+
+  web_server:
+    build:
+      context: ../../web
+      dockerfile: Dockerfile
+      args:
+        - NEXT_PUBLIC_ENABLE_PAID_ENTERPRISE_EDITION_FEATURES=true
+        - NEXT_PUBLIC_ENABLE_PAID_EE_FEATURES=true
+    environment:
+      - NODE_ENV=development
+      - NEXT_PUBLIC_ENABLE_PAID_ENTERPRISE_EDITION_FEATURES=true
+      - NEXT_PUBLIC_ENABLE_PAID_EE_FEATURES=true
+    volumes:
+      - ../../web/src:/app/src
+      - ../../web/public:/app/public
+      - /app/node_modules
+
+  # searxng:
+  #   image: searxng/searxng:latest
+  #   container_name: searxng
+  #   ports:
+  #     - "${SEARXNG_PORT:-8888}:8080"
+  #   volumes:
+  #     - ${SEARXNG_DATA_DIR:-./../../data/searxng}:/etc/searxng
+  #   environment:
+  #     - SEARXNG_BASE_URL=${SEARXNG_BASE_URL:-http://localhost:8888/}
+  #   restart: unless-stopped
+
+  # langfuse:
+  #   image: langfuse/langfuse:2
+  #   container_name: langfuse
+  #   ports:
+  #     - "${LANGFUSE_PORT:-3002}:3000"
+  #   environment:
+  #     - DATABASE_URL=${LANGFUSE_DATABASE_URL}
+  #     - NEXTAUTH_SECRET=${LANGFUSE_NEXTAUTH_SECRET}
+  #     - SALT=${LANGFUSE_SALT}
+  #     - NEXTAUTH_URL=${LANGFUSE_NEXTAUTH_URL}
+  #     - TELEMETRY_ENABLED=${LANGFUSE_TELEMETRY_ENABLED}
+  #   depends_on:
+  #     - relational_db
+  #   restart: unless-stopped

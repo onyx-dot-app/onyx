@@ -7,7 +7,7 @@ ARG BASE_IMAGE_REGISTRY=docker.io
 # Build stage. The DHI "-dev" variant runs as root and ships a shell, apt, and
 # build tooling -- everything needed to install the wheels.
 # Refresh the digest with: docker buildx imagetools inspect dhi.io/python:3.13-debian13-dev
-FROM dhi.io/python:3.13-debian13-dev@sha256:7933d16e50454c39bca6e935027166d5e5b05c6c03383dc2f58e8fe6e2440b7d AS builder
+FROM python:3.13-slim-bookworm AS builder
 
 ENV ONYX_RUNNING_IN_DOCKER="true" \
     HF_HOME=/app/.cache/huggingface \
@@ -59,7 +59,7 @@ SentenceTransformer(model_name_or_path='nomic-ai/nomic-embed-text-v1', trust_rem
 # manager, runs non-root. We run as the `onyx` user (UID 1001, carried over from
 # the previous image; see USER below) and chown everything the runtime writes to it.
 # Refresh the digest with: docker buildx imagetools inspect dhi.io/python:3.13-debian13
-FROM dhi.io/python:3.13-debian13@sha256:05827957dafc7b83633d56f24d9281525d3546a1d600eef90385c7212d3def5e AS final
+FROM python:3.13-slim-bookworm AS final
 
 LABEL com.danswer.maintainer="founders@onyx.app"
 LABEL com.danswer.description="This image is for the Onyx model server which runs all of the \

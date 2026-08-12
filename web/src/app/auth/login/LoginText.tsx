@@ -9,10 +9,7 @@ export default function LoginText() {
   return (
     <div className="w-full flex flex-col ">
       <Text as="p" headingH2 text05>
-        Welcome to {appName}
-      </Text>
-      <Text as="p" text03 mainUiMuted>
-        Your open source AI platform for work
+        Welcome to BEL AI
       </Text>
     </div>
   );

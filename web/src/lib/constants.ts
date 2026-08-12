@@ -49,8 +49,7 @@ export const SERVER_SIDE_ONLY__PAID_ENTERPRISE_FEATURES_ENABLED =
 // build-time
 // TODO: consider moving this to an API call so that the api_server
 // can be the single source of truth
-export const EE_ENABLED =
-  process.env.NEXT_PUBLIC_ENABLE_PAID_EE_FEATURES?.toLowerCase() === "true";
+export const EE_ENABLED = true;
 
 export const CUSTOM_ANALYTICS_ENABLED = process.env.CUSTOM_ANALYTICS_SECRET_KEY
   ? true

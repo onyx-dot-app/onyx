@@ -68,3 +68,4 @@ plans
 .claude/scheduled_tasks.lock
 .claude/worktrees/
 !.claude/settings.json
+/data/

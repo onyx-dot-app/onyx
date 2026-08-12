@@ -9,7 +9,7 @@ FROM ${BASE_IMAGE_REGISTRY}/oven/bun:1@sha256:e10577f0db68676a7024391c6e5cb4b879
 
 # Build stage. The DHI "-dev" variant runs as root and ships a shell, apt, and npm/npx.
 # Refresh the digest with: docker buildx imagetools inspect dhi.io/node:24-debian13-dev
-FROM dhi.io/node:24-debian13-dev@sha256:25a83f18150669e9ce3c9437327add4d75ae4ea26cbdb5e8747b66d3b74a567a AS builder
+FROM node:24-slim AS builder
 COPY --from=bun_source /usr/local/bin/bun /usr/local/bin/bun
 COPY --from=bun_source /usr/local/bin/bunx /usr/local/bin/bunx
 WORKDIR /app
@@ -93,21 +93,21 @@ ARG NODE_OPTIONS
 # Use NODE_OPTIONS in the build command
 RUN --mount=type=secret,id=sentry_auth_token \
     if [ -f /run/secrets/sentry_auth_token ]; then \
-        export SENTRY_AUTH_TOKEN="$(cat /run/secrets/sentry_auth_token)"; \
+    export SENTRY_AUTH_TOKEN="$(cat /run/secrets/sentry_auth_token)"; \
     fi && \
     NODE_OPTIONS="${NODE_OPTIONS}" npx next build
 
 # Runtime stage. The DHI runtime variant is near-distroless: no shell or package manager, runs
 # as the non-root `node` user (uid 1000) with WORKDIR /app pre-set.
 # Refresh the digest with: docker buildx imagetools inspect dhi.io/node:24-debian13
-FROM dhi.io/node:24-debian13@sha256:805278f24c1146c6d3c96577b6256f8f97c43196fff88315fe3291a1ce118ddd AS runner
+FROM node:24-slim AS runner
 
 LABEL com.onyx.maintainer="founders@onyx.app"
 LABEL com.onyx.description="This image is the web/frontend container of Onyx which \
-contains code for both the Community and Enterprise editions of Onyx. If you do not \
-have a contract or agreement with DanswerAI, you are not permitted to use the Enterprise \
-Edition features outside of personal development or testing purposes. Please reach out to \
-founders@onyx.app for more information. Please visit https://github.com/onyx-dot-app/onyx"
+    contains code for both the Community and Enterprise editions of Onyx. If you do not \
+    have a contract or agreement with DanswerAI, you are not permitted to use the Enterprise \
+    Edition features outside of personal development or testing purposes. Please reach out to \
+    founders@onyx.app for more information. Please visit https://github.com/onyx-dot-app/onyx"
 
 WORKDIR /app
 
