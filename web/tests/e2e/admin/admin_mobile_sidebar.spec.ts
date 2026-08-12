@@ -15,17 +15,20 @@ const ADMIN_PAGES = [
 ];
 
 for (const { name, path } of ADMIN_PAGES) {
-  test(`Folded sidebar can be re-opened on ${name} – mobile`, async ({
+  test(`Sidebar starts folded and can be re-opened on ${name} – mobile`, async ({
     page,
   }) => {
     const adminChrome = new AdminChromePage(page);
 
+    // The sidebar is an overlay on mobile, so it must not cover the page.
     await adminChrome.goto(path);
-    await adminChrome.closeSidebar();
     await adminChrome.expectSidebarFolded();
 
     await adminChrome.expectOpenSidebarButtonVisible();
     await adminChrome.openSidebar();
     await adminChrome.expectSidebarUnfolded();
+
+    await adminChrome.closeSidebar();
+    await adminChrome.expectSidebarFolded();
   });
 }
