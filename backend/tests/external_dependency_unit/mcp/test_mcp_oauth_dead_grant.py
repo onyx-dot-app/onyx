@@ -1,5 +1,5 @@
 """OAuth MCP grants that can never refresh must read as unauthenticated (ext-dep):
-`is_authenticated` semantics, Craft config exclusion, and the persisted token
+`user_can_authenticate` semantics, Craft config exclusion, and the persisted token
 discard on an `invalid_grant` refresh response, against a real DB."""
 
 from __future__ import annotations
@@ -18,9 +18,7 @@ from onyx.db.enums import (
     MCPTransport,
 )
 from onyx.db.mcp import (
-    can_resolve_mcp_credentials,
     create_mcp_server__no_commit,
-    extract_connection_data,
     get_user_connection_config,
     update_mcp_server__no_commit,
     upsert_user_connection_config,
@@ -28,6 +26,10 @@ from onyx.db.mcp import (
 from onyx.db.models import MCPServer, User
 from onyx.server.features.build.sandbox.util.mcp_config import (
     resolve_craft_mcp_servers,
+)
+from onyx.server.features.mcp.credentials import (
+    extract_connection_data,
+    user_can_authenticate,
 )
 from onyx.server.features.mcp.models import MCPConnectionData
 from onyx.server.features.mcp.oauth import (
@@ -94,7 +96,7 @@ def test_expired_token_with_refresh_token_is_authenticated(
         expires_at=time.time() - 60,
         refresh_token="refresh-token",
     )
-    assert can_resolve_mcp_credentials(server, user, db_session)
+    assert user_can_authenticate(server, user, db_session)
 
 
 def test_dead_grant_is_not_authenticated_and_excluded_from_craft(
@@ -112,13 +114,13 @@ def test_dead_grant_is_not_authenticated_and_excluded_from_craft(
     _store_grant(
         db_session, server, user, expires_at=time.time() + 3600, refresh_token=None
     )
-    assert can_resolve_mcp_credentials(server, user, db_session)
+    assert user_can_authenticate(server, user, db_session)
     assert server.id in craft_server_ids()
 
     _store_grant(
         db_session, server, user, expires_at=time.time() - 60, refresh_token=None
     )
-    assert not can_resolve_mcp_credentials(server, user, db_session)
+    assert not user_can_authenticate(server, user, db_session)
     assert server.id not in craft_server_ids()
 
 
@@ -167,4 +169,4 @@ def test_invalid_grant_refresh_discards_persisted_tokens(
     assert "tokens" not in config_value
     assert "token_expires_at" not in config_value
     assert "Authorization" not in config_value.get("headers", {})
-    assert not can_resolve_mcp_credentials(server, user, db_session)
+    assert not user_can_authenticate(server, user, db_session)

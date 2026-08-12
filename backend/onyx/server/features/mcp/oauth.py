@@ -37,7 +37,6 @@ from onyx.cache.locks import cache_shared_lock
 from onyx.db.engine.sql_engine import get_session_with_current_tenant
 from onyx.db.enums import MCPOAuthProviderMode, MCPTransport
 from onyx.db.mcp import (
-    extract_connection_data,
     get_connection_config_by_id,
     update_connection_config,
 )
@@ -50,10 +49,13 @@ from onyx.server.features.mcp.client_metadata import (
     mcp_oauth_redirect_uri,
     validated_mcp_oauth_client_metadata_url,
 )
+from onyx.server.features.mcp.credentials import (
+    extract_connection_data,
+    mcp_token_expired,
+)
 from onyx.server.features.mcp.models import (
     DENYLISTED_MCP_HEADERS,
     MCPOAuthKeys,
-    mcp_token_expired,
     merge_mcp_headers,
 )
 from onyx.server.features.mcp.ssrf import (
@@ -230,7 +232,7 @@ async def connect_auto_discovery_oauth(
     admin_config_id: int | None,
     connection_headers: dict[str, str],
     transport: MCPTransport,
-    is_authenticated: bool,
+    credentials_usable: bool,
     force_reauthentication: bool = False,
 ) -> str | None:
     redirect_future = asyncio.get_running_loop().create_future()
@@ -249,7 +251,7 @@ async def connect_auto_discovery_oauth(
         load_stored_tokens=not force_reauthentication,
     )
 
-    use_authenticated_connection = is_authenticated and not force_reauthentication
+    use_authenticated_connection = credentials_usable and not force_reauthentication
     oauth_connection_headers = (
         {
             key: value

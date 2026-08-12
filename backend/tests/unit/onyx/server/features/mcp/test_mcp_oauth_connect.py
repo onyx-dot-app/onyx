@@ -142,7 +142,7 @@ def _setup_coordinator(
 def _connect(
     server: SimpleNamespace,
     *,
-    is_authenticated: bool = False,
+    credentials_usable: bool = False,
     connection_headers: dict[str, str] | None = None,
     force_reauthentication: bool = False,
 ) -> str | None:
@@ -155,7 +155,7 @@ def _connect(
             admin_config_id=100,
             connection_headers=connection_headers or {},
             transport=server.transport,
-            is_authenticated=is_authenticated,
+            credentials_usable=credentials_usable,
             force_reauthentication=force_reauthentication,
         )
     )
@@ -199,7 +199,7 @@ def test_forced_reauthentication_skips_authenticated_fast_path(
     assert (
         _connect(
             server,
-            is_authenticated=True,
+            credentials_usable=True,
             connection_headers={
                 "Authorization": "Bearer current-token",
                 "X-Gateway-Tenant": "tenant-1",
@@ -385,9 +385,7 @@ def _setup_api_connection(
         api, "extract_connection_data", lambda *_args, **_kwargs: stored_data
     )
     monkeypatch.setattr(api, "update_connection_config", update_connection_config)
-    monkeypatch.setattr(
-        api, "can_resolve_mcp_credentials", lambda *_args, **_kwargs: True
-    )
+    monkeypatch.setattr(api, "user_can_authenticate", lambda *_args, **_kwargs: True)
     return server, user, update_connection_config
 
 

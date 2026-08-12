@@ -17,13 +17,14 @@ from onyx.db.enums import (
     MCPAuthenticationType,
     MCPTransport,
 )
-from onyx.db.mcp import extract_connection_data, get_user_connection_config
+from onyx.db.mcp import get_user_connection_config
 from onyx.db.models import User
 from onyx.server.features.mcp.api import (
     HEADER_SUBSTITUTIONS,
     _upsert_mcp_server,
     save_user_credentials,
 )
+from onyx.server.features.mcp.credentials import extract_connection_data
 from onyx.server.features.mcp.models import (
     MCPAuthTemplate,
     MCPToolCreateRequest,

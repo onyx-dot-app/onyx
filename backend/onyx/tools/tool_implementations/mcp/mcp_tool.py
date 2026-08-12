@@ -6,9 +6,9 @@ from mcp.client.auth import OAuthClientProvider
 
 from onyx.chat.emitter import Emitter
 from onyx.db.enums import MCPAuthenticationType, MCPTransport
-from onyx.db.mcp import ResolvedMCPCredentials
 from onyx.db.models import MCPConnectionConfig, MCPServer
 from onyx.server.features.mcp.client import call_mcp_tool
+from onyx.server.features.mcp.credentials import ResolvedMCPCredentials
 from onyx.server.features.mcp.models import (
     DENYLISTED_MCP_HEADERS,
     merge_mcp_headers,
@@ -179,7 +179,7 @@ class MCPTool(Tool[None]):
             # Extra request headers can stand in for missing credentials, but
             # not for a dead OAuth grant — its stale bearer wins the header
             # merge, so the call can only fail upstream.
-            if not credentials.is_authenticated() and (
+            if not credentials.can_authenticate() and (
                 credentials.needs_reauth() or not self._additional_headers
             ):
                 auth_error_msg = (

@@ -48,24 +48,20 @@ from onyx.db.gated_app import (
 )
 from onyx.db.mcp import (
     affected_user_ids_for_mcp_server,
-    can_resolve_mcp_credentials,
     create_connection_config,
     create_mcp_server__no_commit,
     delete_all_user_connection_configs_for_server_no_commit,
     delete_connection_config,
     delete_mcp_server,
     delete_user_connection_configs_for_server,
-    extract_connection_data,
     get_all_mcp_servers,
     get_all_mcp_tools_for_server,
     get_craft_enabled_mcp_servers,
-    get_mcp_auth_template,
     get_mcp_server_by_id,
     get_mcp_servers_accessible_to_user,
     get_mcp_servers_for_persona,
     get_user_connection_config,
     get_user_connection_configs,
-    resolve_mcp_credentials,
     update_connection_config,
     update_connection_config__no_commit,
     update_mcp_server__no_commit,
@@ -92,6 +88,14 @@ from onyx.server.features.mcp.client_metadata import (
 from onyx.server.features.mcp.client_metadata import (
     router as client_metadata_router,
 )
+from onyx.server.features.mcp.credentials import (
+    extract_connection_data,
+    get_mcp_auth_template,
+    mcp_token_expired,
+    requires_user_authentication,
+    resolve_mcp_credentials,
+    user_can_authenticate,
+)
 from onyx.server.features.mcp.models import (
     MCPApiKeyResponse,
     MCPAuthTemplate,
@@ -111,7 +115,6 @@ from onyx.server.features.mcp.models import (
     MCPUserOAuthConnectRequest,
     MCPUserOAuthConnectResponse,
     contains_mcp_placeholder,
-    mcp_token_expired,
     merge_mcp_headers,
 )
 from onyx.server.features.mcp.oauth import (
@@ -771,10 +774,10 @@ async def _connect_oauth(
         and not request.oauth_client_id_changed
         and not request.oauth_client_secret_changed
     )
-    is_authenticated = bool(
+    credentials_usable = bool(
         oauth_credentials_unchanged
         and not mcp_token_expired(existing_user_data)
-        and can_resolve_mcp_credentials(
+        and user_can_authenticate(
             mcp_server,
             user,
             db,
@@ -898,7 +901,7 @@ async def _connect_oauth(
             admin_config_id=mcp_server.admin_connection_config_id,
             connection_headers=connection_config_dict.get("headers", {}),
             transport=mcp_server.transport,
-            is_authenticated=is_authenticated,
+            credentials_usable=credentials_usable,
             force_reauthentication=request.force_reauthentication,
         )
     except OnyxError:
@@ -1192,7 +1195,7 @@ def save_user_credentials(
         message=validation_message,
         server_id=request.server_id,
         server_name=mcp_server.name,
-        authenticated=resolved.is_authenticated(),
+        authenticated=resolved.can_authenticate(),
         validation_tested=validation_tested,
     )
 
@@ -1297,7 +1300,7 @@ def _db_mcp_server_to_api_mcp_server(
         else get_user_connection_config(db_server.id, email, db)
     )
     if request_user is not None:
-        user_authenticated = can_resolve_mcp_credentials(
+        user_authenticated = user_can_authenticate(
             db_server,
             request_user,
             db,
@@ -1466,7 +1469,7 @@ def get_craft_mcp_servers_for_user(
             db_server,
             db,
             request_user=user,
-            craft_connected=can_resolve_mcp_credentials(
+            craft_connected=user_can_authenticate(
                 db_server, user, db, user_configs=user_configs
             ),
             user_configs=user_configs,
@@ -1631,7 +1634,7 @@ def _list_mcp_tools_by_id(
         )
 
     credentials = resolve_mcp_credentials(mcp_server, user, db)
-    if not credentials.is_authenticated():
+    if not credentials.can_authenticate():
         raise OnyxError(
             OnyxErrorCode.UNAUTHENTICATED,
             "This MCP server is not configured for the current user.",
@@ -2391,9 +2394,8 @@ def upsert_mcp_server(
             oauth_token_endpoint=mcp_server.oauth_token_endpoint,
             oauth_scopes_override=mcp_server.oauth_scopes_override,
             oauth_additional_auth_params=mcp_server.oauth_additional_auth_params,
-            is_authenticated=(
-                mcp_server.auth_type == MCPAuthenticationType.NONE.value
-                or request.auth_performer == MCPAuthenticationPerformer.ADMIN
+            is_authenticated=not requires_user_authentication(
+                mcp_server.auth_type, request.auth_performer
             ),
         )
 
