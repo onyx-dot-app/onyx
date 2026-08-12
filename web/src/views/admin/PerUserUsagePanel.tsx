@@ -4,7 +4,7 @@ import React, { useMemo, useState } from "react";
 import { Card, MessageCard, Text } from "@opal/components";
 import { SvgX } from "@opal/icons";
 import { PageLoader, Section } from "@opal/layouts";
-import type { DateRange } from "@/components/dateRangeSelectors/AdminDateRangeSelector";
+import type { DateRange } from "@/refresh-components/DateRangePicker";
 import { formatCalendarDay } from "@/lib/dateUtils";
 import { useUsageExport } from "@/lib/usage/userUsage";
 import { formatCost, formatTokens } from "@/lib/utils";

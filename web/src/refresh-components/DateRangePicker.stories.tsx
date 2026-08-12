@@ -1,13 +1,13 @@
 import { useState } from "react";
 import type { Meta, StoryObj } from "@storybook/react-vite";
 import {
-  AdminDateRangeSelector,
+  DateRangePicker,
   type DateRange,
-} from "@/components/dateRangeSelectors/AdminDateRangeSelector";
+} from "@/refresh-components/DateRangePicker";
 
-const meta: Meta<typeof AdminDateRangeSelector> = {
-  title: "components/AdminDateRangeSelector",
-  component: AdminDateRangeSelector,
+const meta: Meta<typeof DateRangePicker> = {
+  title: "components/DateRangePicker",
+  component: DateRangePicker,
   tags: ["autodocs"],
   parameters: {
     layout: "centered",
@@ -22,12 +22,12 @@ const meta: Meta<typeof AdminDateRangeSelector> = {
 };
 
 export default meta;
-type Story = StoryObj<typeof AdminDateRangeSelector>;
+type Story = StoryObj<typeof DateRangePicker>;
 
 function ControlledRange({ initialValue }: { initialValue: DateRange }) {
   const [value, setValue] = useState<DateRange>(initialValue);
 
-  return <AdminDateRangeSelector value={value} onValueChange={setValue} />;
+  return <DateRangePicker value={value} onValueChange={setValue} />;
 }
 
 export const Default: Story = {

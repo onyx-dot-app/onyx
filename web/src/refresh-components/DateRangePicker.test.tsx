@@ -1,8 +1,8 @@
 import { render, screen } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
-import { AdminDateRangeSelector } from "@/components/dateRangeSelectors/AdminDateRangeSelector";
+import { DateRangePicker } from "@/refresh-components/DateRangePicker";
 
-describe("AdminDateRangeSelector", () => {
+describe("DateRangePicker", () => {
   beforeEach(() => {
     jest.useFakeTimers();
     jest.setSystemTime(new Date(2026, 7, 4, 12));
@@ -17,7 +17,7 @@ describe("AdminDateRangeSelector", () => {
     const onValueChange = jest.fn();
 
     render(
-      <AdminDateRangeSelector
+      <DateRangePicker
         value={{
           from: new Date(2026, 6, 5),
           to: new Date(2026, 7, 4),
@@ -55,7 +55,7 @@ describe("AdminDateRangeSelector", () => {
     const onValueChange = jest.fn();
 
     render(
-      <AdminDateRangeSelector
+      <DateRangePicker
         value={{
           from: new Date(2026, 6, 5),
           to: new Date(2026, 7, 4),
@@ -76,7 +76,7 @@ describe("AdminDateRangeSelector", () => {
     const user = userEvent.setup({ advanceTimers: jest.advanceTimersByTime });
 
     render(
-      <AdminDateRangeSelector
+      <DateRangePicker
         value={{
           from: new Date(2026, 6, 10),
           to: new Date(2026, 6, 15),

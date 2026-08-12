@@ -4,9 +4,9 @@ import SvgSimpleLoader from "@opal/icons/simple-loader";
 import { getDatesList } from "@/app/ee/admin/performance/lib";
 import { useEffect, useState, useMemo } from "react";
 import {
-  AdminDateRangeSelector,
+  DateRangePicker,
   DateRange,
-} from "@/components/dateRangeSelectors/AdminDateRangeSelector";
+} from "@/refresh-components/DateRangePicker";
 import { useAgents } from "@/lib/agents/hooks";
 import AgentAvatar from "@/refresh-components/avatars/AgentAvatar";
 import { Card, CardContent, CardHeader } from "@/components/ui/card";
@@ -146,10 +146,7 @@ export function AgentStats({ agentId }: { agentId: number }) {
     <Card className="w-full">
       <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
         <p className="text-base font-normal text-2xl">Agent Analytics</p>
-        <AdminDateRangeSelector
-          value={dateRange}
-          onValueChange={setDateRange}
-        />
+        <DateRangePicker value={dateRange} onValueChange={setDateRange} />
       </CardHeader>
       <CardContent>
         <div className="grid grid-cols-1 md:grid-cols-2 gap-4 mb-6">
