@@ -1,6 +1,6 @@
 "use client";
 
-import { DateRangePicker } from "@/components/dateRangeSelectors/DateRangePicker";
+import { DateRangePicker } from "@/refresh-components/DateRangePicker";
 import { useTimeRange } from "@/app/ee/admin/performance/lib";
 import PerUserUsagePanel from "@/views/admin/PerUserUsagePanel";
 import { ADMIN_ROUTES } from "@/lib/admin-routes";

@@ -1,6 +1,6 @@
 import { render, screen } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
-import { DateRangePicker } from "@/components/dateRangeSelectors/DateRangePicker";
+import { DateRangePicker } from "@/refresh-components/DateRangePicker";
 
 describe("DateRangePicker", () => {
   beforeEach(() => {

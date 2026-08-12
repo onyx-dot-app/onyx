@@ -1,4 +1,4 @@
-import React, { memo, useState } from "react";
+import { memo, useState } from "react";
 import { endOfDay, format, isSameDay, startOfDay, subDays } from "date-fns";
 import { Calendar, Popover, SelectButton } from "@opal/components";
 import { SvgCalendar } from "@opal/icons";
