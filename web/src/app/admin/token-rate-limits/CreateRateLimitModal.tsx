@@ -134,7 +134,7 @@ function ScopeOption({
         variant="section"
         icon={option.icon}
         title={option.title}
-        padding="fit"
+        padding={0}
         color="interactive"
         center
         rightChildren={

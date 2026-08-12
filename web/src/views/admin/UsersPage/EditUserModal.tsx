@@ -301,7 +301,7 @@ export default function EditUserModal({
                   description="This controls their general permissions."
                   sizePreset="main-ui"
                   variant="section"
-                  padding="fit"
+                  padding={0}
                   rightChildren={
                     <InputSelect
                       value={selectedRole}

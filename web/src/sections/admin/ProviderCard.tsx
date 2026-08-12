@@ -119,7 +119,7 @@ export default function ProviderCard({
           icon={icon}
           title={title}
           description={description}
-          padding="lg"
+          padding={2}
           rightChildren={
             isDisconnected && onConnect ? (
               <Button

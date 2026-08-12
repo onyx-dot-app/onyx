@@ -398,7 +398,7 @@ function InputSelectItem({
           titleMaxLines={1}
           description={description}
           descriptionMaxLines={wrapDescription ? undefined : 1}
-          padding="fit"
+          padding={0}
           width="full"
         />
       </div>

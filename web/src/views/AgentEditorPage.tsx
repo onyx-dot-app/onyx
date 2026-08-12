@@ -354,7 +354,7 @@ function MCPServerCard({
                   description={tool.description}
                   sizePreset="main-ui"
                   variant="section"
-                  padding="fit"
+                  padding={0}
                   rightChildren={
                     <SwitchField
                       name={`${serverFieldName}.tool_${tool.id}`}
@@ -412,7 +412,7 @@ function MCPServerCard({
               description={server.description}
               sizePreset="main-ui"
               variant="section"
-              padding="fit"
+              padding={0}
               rightChildren={
                 <GeneralLayouts.Section
                   flexDirection="row"

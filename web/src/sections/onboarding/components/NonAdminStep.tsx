@@ -73,7 +73,7 @@ export default function NonAdminStep() {
             sizePreset="main-ui"
             variant="body"
             color="muted"
-            padding="fit"
+            padding={0}
             rightChildren={
               <Button
                 prominence="tertiary"

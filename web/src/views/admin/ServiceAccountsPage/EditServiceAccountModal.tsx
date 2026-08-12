@@ -308,7 +308,7 @@ export default function EditServiceAccountModal({
               description="This controls the service account's general permissions."
               sizePreset="main-ui"
               variant="section"
-              padding="fit"
+              padding={0}
               rightChildren={
                 <InputSelect
                   value={selectedRole}

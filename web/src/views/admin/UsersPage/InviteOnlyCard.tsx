@@ -49,7 +49,7 @@ export default function InviteOnlyCard() {
         description="New users must be invited to join this workspace."
         sizePreset="main-ui"
         variant="section"
-        padding="fit"
+        padding={0}
         rightChildren={
           <Switch
             checked={settings.invite_only_enabled ?? false}

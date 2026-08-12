@@ -401,7 +401,7 @@ function ProviderGroup({
               sizePreset="secondary"
               variant="body"
               color="muted"
-              padding="md"
+              padding={1}
               rightChildren={
                 <Button
                   prominence="tertiary"
@@ -1279,7 +1279,7 @@ export default function IndexSettingsPage() {
                                                 sizePreset="secondary"
                                                 variant="body"
                                                 color="muted"
-                                                padding="md"
+                                                padding={1}
                                                 rightChildren={
                                                   <Button
                                                     prominence="tertiary"

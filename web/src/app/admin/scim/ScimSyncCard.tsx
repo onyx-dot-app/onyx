@@ -40,7 +40,7 @@ export default function ScimSyncCard({
         description="Connect your identity provider to import and sync users and groups."
         sizePreset="main-ui"
         variant="section"
-        padding="fit"
+        padding={0}
         rightChildren={
           hasToken ? (
             <Button

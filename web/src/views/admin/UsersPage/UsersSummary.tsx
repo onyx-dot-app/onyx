@@ -72,7 +72,7 @@ function ScimCard() {
         description="Users are synced from your identity provider."
         sizePreset="main-ui"
         variant="section"
-        padding="fit"
+        padding={0}
         rightChildren={
           <Link href={ADMIN_ROUTES.SCIM.path}>
             <Button prominence="tertiary" rightIcon={SvgArrowUpRight} size="sm">

@@ -135,7 +135,7 @@ const LLMStep = memo(
               description="Onyx supports both self-hosted models and popular providers."
               sizePreset="main-ui"
               variant="section"
-              padding="lg"
+              padding={2}
               rightChildren={
                 <Button
                   disabled={disabled}

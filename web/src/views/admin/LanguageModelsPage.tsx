@@ -186,7 +186,7 @@ function ExistingProviderCard({
             description={companyName}
             sizePreset="main-ui"
             variant="section"
-            padding="lg"
+            padding={2}
             tag={isDefault ? { title: "Default", color: "blue" } : undefined}
             rightChildren={
               <div className="flex flex-row">
@@ -251,7 +251,7 @@ function NewProviderCard({
         description={companyName}
         sizePreset="main-ui"
         variant="section"
-        padding="lg"
+        padding={2}
         rightChildren={
           <Button
             rightIcon={SvgArrowExchange}
@@ -304,7 +304,7 @@ function NewCustomProviderCard({
           description={companyName}
           sizePreset="main-ui"
           variant="section"
-          padding="lg"
+          padding={2}
           rightChildren={
             <Button
               rightIcon={SvgArrowExchange}

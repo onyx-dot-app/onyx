@@ -75,7 +75,7 @@ function PrivacyOption({
         icon={Icon}
         title={title}
         description={description}
-        padding="fit"
+        padding={0}
         color="interactive"
         rightChildren={
           selected ? (

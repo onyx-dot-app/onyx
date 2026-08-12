@@ -81,7 +81,7 @@ function ViewerMCPServerCard({ server, tools }: ViewerMCPServerCardProps) {
         description={server.description}
         sizePreset="main-ui"
         variant="section"
-        padding="lg"
+        padding={2}
         rightChildren={
           <Button
             prominence="internal"

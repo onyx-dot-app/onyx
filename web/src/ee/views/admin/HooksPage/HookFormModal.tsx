@@ -270,7 +270,7 @@ export default function HookFormModal({
                   <ContentAction
                     sizePreset="main-ui"
                     variant="section"
-                    padding="fit"
+                    padding={0}
                     title={hookPointDisplayName}
                     description={hookPointDescription}
                     rightChildren={

@@ -186,7 +186,7 @@ function MCPServerCard({
             description={server.description}
             sizePreset="main-ui"
             variant="section"
-            padding="fit"
+            padding={0}
             rightChildren={
               <Tooltip tooltip={authTooltip} side="top">
                 <Switch

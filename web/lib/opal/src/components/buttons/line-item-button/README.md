@@ -9,7 +9,7 @@ A composite component that wraps `Interactive.Stateful > Interactive.Container >
 ```
 Interactive.Stateful         <- selectVariant, state, interaction, onClick, href, ref
   └─ Interactive.Container   <- width, rounding
-       └─ ContentAction      <- withInteractive, padding="lg"
+       └─ ContentAction      <- withInteractive, padding={2}
             ├─ Content       <- icon, title, description, sizePreset, variant, ...
             └─ rightChildren
 ```
