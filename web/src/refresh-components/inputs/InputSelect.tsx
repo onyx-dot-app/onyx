@@ -14,8 +14,8 @@ import {
 } from "@/refresh-components/inputs/styles";
 import Truncated from "@/refresh-components/texts/Truncated";
 import { SvgChevronDownSmall } from "@opal/icons";
-import { Divider } from "@opal/components";
-import type { Spacing, WithoutStyles } from "@opal/types";
+import { Divider, type DividerSpacing } from "@opal/components";
+import type { WithoutStyles } from "@opal/types";
 
 // ============================================================================
 // Context
@@ -439,8 +439,8 @@ function InputSelectLabel({
 }
 
 interface InputSelectSeparatorProps {
-  paddingParallel?: Spacing;
-  paddingPerpendicular?: Spacing;
+  paddingParallel?: DividerSpacing;
+  paddingPerpendicular?: DividerSpacing;
 }
 
 function InputSelectSeparator({

@@ -2,7 +2,7 @@
 
 import "@opal/components/divider/styles.css";
 import { useState, useCallback } from "react";
-import type { OrientationVariants, Spacing, RichStr } from "@opal/types";
+import type { OrientationVariants, RichStr } from "@opal/types";
 import { Button, Text } from "@opal/components";
 import { SvgChevronRight } from "@opal/icons";
 import { Interactive } from "@opal/core";
@@ -27,6 +27,15 @@ interface DividerSharedProps {
   children?: never;
 }
 
+/**
+ * The insets a divider offers, as spacing steps (`N / 4` rem).
+ *
+ * A closed set rather than an open number: a divider's inset is a shared rhythm
+ * across the surfaces it separates, so an arbitrary step would only ever put one
+ * divider out of step with the rest.
+ */
+type DividerSpacing = 0 | 0.5 | 1 | 2 | 4 | 6;
+
 /** Plain line — no title, no description. */
 type DividerBareProps = Omit<
   DividerSharedProps,
@@ -35,9 +44,9 @@ type DividerBareProps = Omit<
   /** Orientation of the line. Default: `"horizontal"`. */
   orientation?: OrientationVariants;
   /** Padding along the line direction, as a spacing step. Default: `2` (0.5rem). */
-  paddingParallel?: Spacing;
+  paddingParallel?: DividerSpacing;
   /** Padding perpendicular to the line, as a spacing step. Default: `1` (0.25rem). */
-  paddingPerpendicular?: Spacing;
+  paddingPerpendicular?: DividerSpacing;
 };
 
 /** Line with a title to the left. */
@@ -192,4 +201,4 @@ function FoldableDivider({
   );
 }
 
-export { Divider, type DividerProps };
+export { Divider, type DividerProps, type DividerSpacing };
