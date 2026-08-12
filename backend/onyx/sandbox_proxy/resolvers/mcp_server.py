@@ -47,10 +47,8 @@ from onyx.sandbox_proxy.resolvers.mcp_matching import (
     normalized_request_path,
     parse_target,
 )
-from onyx.server.features.mcp.oauth import (
-    mcp_token_expired,
-    refresh_mcp_oauth_token_if_expired,
-)
+from onyx.server.features.mcp.models import mcp_token_expired
+from onyx.server.features.mcp.oauth import refresh_mcp_oauth_token_if_expired
 from onyx.utils.credential_audit import emit_credential_access
 from onyx.utils.logger import setup_logger
 from shared_configs.contextvars import CURRENT_TENANT_ID_CONTEXTVAR

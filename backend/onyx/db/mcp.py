@@ -34,6 +34,7 @@ from onyx.server.features.mcp.models import (
     MCPAuthTemplate,
     MCPConnectionData,
     MCPOAuthKeys,
+    mcp_oauth_reauth_required,
     merge_mcp_headers,
 )
 from onyx.utils.logger import setup_logger
@@ -517,8 +518,11 @@ class ResolvedMCPCredentials(BaseModel):
         if self.auth_type == MCPAuthenticationType.PT_OAUTH:
             return bool(self.user_oauth_token) and self._has_required_substitutions()
         if self.auth_type == MCPAuthenticationType.OAUTH:
+            # A dead grant must read as unauthenticated so the UI prompts a
+            # reconnect and Craft configs exclude the server.
             return (
                 bool(self._generated_auth_headers())
+                and not mcp_oauth_reauth_required(self._config_data())
                 and self._has_required_substitutions()
             )
         return bool(self._configured_headers()) and self._has_required_substitutions()
