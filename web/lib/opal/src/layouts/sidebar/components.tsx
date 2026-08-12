@@ -45,16 +45,24 @@ interface SidebarRootProps {
 }
 
 function SidebarRoot({ foldable = false, children }: SidebarRootProps) {
-  const { isMobile, isSmallScreen } = useScreenSize();
+  const { isMobile, isSmallScreen, isMounted } = useScreenSize();
   const { folded, setFolded } = useSidebarState();
 
   const closeSidebar = useCallback(() => setFolded(true), [setFolded]);
 
   useEffect(() => {
-    if (!isMobile && !isSmallScreen && !foldable) {
+    // Before mount the screen size reports desktop. Act on the real size only,
+    // or every mount unfolds the overlay on mobile and small screens.
+    if (!isMounted) return;
+
+    if (isMobile || isSmallScreen) {
+      // The overlay hides the page behind it, so it starts closed.
+      setFolded(true);
+    } else if (!foldable) {
+      // A non-foldable desktop sidebar is a column that is always open.
       setFolded(false);
     }
-  }, [isMobile, isSmallScreen, foldable, setFolded]);
+  }, [isMounted, isMobile, isSmallScreen, foldable, setFolded]);
 
   const foldedAttr = String(folded);
 

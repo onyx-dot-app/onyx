@@ -8,7 +8,9 @@ import {
 } from "@/lib/types";
 import AddConnector from "./AddConnectorPage";
 import { FormProvider } from "@/components/context/FormContext";
-import Sidebar from "@/sections/sidebar/CreateConnectorSidebar";
+import CreateConnectorSidebar, {
+  CreateConnectorSidebarShell,
+} from "@/sections/sidebar/CreateConnectorSidebar";
 import { AdminCustomSidebarPortal } from "@/layouts/chromes/AdminChrome";
 import { HeaderTitle } from "@/components/header/HeaderTitle";
 import Button from "@/refresh-components/buttons/Button";
@@ -43,7 +45,7 @@ export default function ConnectorWrapper({
     return (
       <FormProvider connector={connector}>
         <AdminCustomSidebarPortal>
-          <Sidebar />
+          <CreateConnectorSidebar />
         </AdminCustomSidebarPortal>
         <div className="mt-12 w-full max-w-3xl mx-auto">
           <div className="mx-auto flex flex-col gap-y-2">
@@ -70,14 +72,20 @@ export default function ConnectorWrapper({
   // Only show federated form if explicitly requested via URL parameter
   const showFederatedForm = mode === "federated" && supportsFederated;
 
-  // For federated form, use the specialized form without FormProvider
+  // For federated form, use the specialized form without FormProvider.
+  // That form is a single page, so its sidebar shows no steps.
   if (showFederatedForm) {
     return (
-      <div className="flex justify-center w-full h-full">
-        <div className="mt-12 w-full max-w-4xl mx-auto">
-          <FederatedConnectorForm connector={connector} />
+      <>
+        <AdminCustomSidebarPortal>
+          <CreateConnectorSidebarShell />
+        </AdminCustomSidebarPortal>
+        <div className="flex justify-center w-full h-full">
+          <div className="mt-12 w-full max-w-4xl mx-auto">
+            <FederatedConnectorForm connector={connector} />
+          </div>
         </div>
-      </div>
+      </>
     );
   }
 
@@ -85,7 +93,7 @@ export default function ConnectorWrapper({
   return (
     <FormProvider connector={connector}>
       <AdminCustomSidebarPortal>
-        <Sidebar />
+        <CreateConnectorSidebar />
       </AdminCustomSidebarPortal>
       <div className="mt-12 w-full max-w-3xl mx-auto">
         <AddConnector connector={connector} />
