@@ -136,10 +136,7 @@ export function AgentStats({ agentId }: AgentStatsProps) {
       {/* sm:flex-row / sm:items-center / sm:justify-between have no Section equivalent, kept as a raw div */}
       <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
         <Text font="heading-h2">Agent Analytics</Text>
-        <DateRangePicker
-          value={dateRange}
-          onValueChange={setDateRange}
-        />
+        <DateRangePicker value={dateRange} onValueChange={setDateRange} />
       </div>
 
       <Section
