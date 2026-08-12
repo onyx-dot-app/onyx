@@ -14,7 +14,7 @@ and border colors.
 | `icon` | `IconFunctionComponent` | per variant | Override the default variant icon |
 | `title` | `string \| RichStr` | — | Main title text |
 | `description` | `string \| RichStr` | — | Description below the title |
-| `padding` | `Spacing` | `2` | Padding around the outer card, as a spacing step (`N / 4` rem) |
+| `padding` | `1 \| 2` | `2` | Padding around the outer card, as a spacing step (`N / 4` rem). Narrowed to two densities. |
 | `headerPadding` | `Spacing` | `0` | Padding around the header Content area, as a spacing step (`N / 4` rem) |
 | `bottomChildren` | `ReactNode` | — | Content below a divider, under the main content |
 | `rightChildren` | `ReactNode` | — | Content on the right side. Mutually exclusive with `onClose`. |
