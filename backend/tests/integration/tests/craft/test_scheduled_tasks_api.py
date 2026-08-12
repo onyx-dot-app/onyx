@@ -17,7 +17,8 @@ from onyx.db.enums import (
     ScheduledTaskStatus,
     ScheduledTaskTriggerSource,
 )
-from onyx.db.models import MCPServer, ScheduledTask, ScheduledTaskRun
+from onyx.db.mcp import create_mcp_server__no_commit, update_mcp_server__no_commit
+from onyx.db.models import ScheduledTask, ScheduledTaskRun
 from shared_configs.configs import POSTGRES_DEFAULT_SCHEMA_STANDARD_VALUE
 from shared_configs.contextvars import CURRENT_TENANT_ID_CONTEXTVAR
 from tests.integration.common_utils.constants import API_SERVER_URL
@@ -140,16 +141,23 @@ def _get_runs_for_task(task_id: UUID) -> list[ScheduledTaskRun]:
 
 def _create_mcp_server(owner: str, *, available_in_craft: bool) -> int:
     with get_session_with_current_tenant() as db_session:
-        server = MCPServer(
-            owner=owner,
+        server = create_mcp_server__no_commit(
+            owner_email=owner,
             name=f"scheduled-task-mcp-{uuid4().hex[:8]}",
+            description=None,
             server_url="https://example.com/mcp",
-            available_in_craft=available_in_craft,
+            auth_type=None,
+            transport=None,
+            auth_performer=None,
+            db_session=db_session,
             is_public=True,
         )
-        db_session.add(server)
+        update_mcp_server__no_commit(
+            server_id=server.id,
+            db_session=db_session,
+            available_in_craft=available_in_craft,
+        )
         db_session.commit()
-        db_session.refresh(server)
         return server.id
 
 
@@ -222,9 +230,11 @@ def test_patch_retains_and_removes_existing_unavailable_mcp_pre_approval(
     task_id = UUID(create_response.json()["id"])
 
     with get_session_with_current_tenant() as db_session:
-        server = db_session.get(MCPServer, server_id)
-        assert server is not None
-        server.available_in_craft = False
+        update_mcp_server__no_commit(
+            server_id=server_id,
+            db_session=db_session,
+            available_in_craft=False,
+        )
         db_session.commit()
 
     retain_response = _patch_task(
