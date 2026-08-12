@@ -26,11 +26,11 @@ export interface ModelPrice {
 export interface UserUsageResponse {
   per_day_by_model: UsagePerDayByModel[];
   window_cost_cents: number;
-  // The user's cost budget, what's left, and its window in hours (for the
-  // "per week/day/hour" label). All null when no cost limit applies.
+  // The user's cost budget, remaining allowance, and next fixed reset.
   budget_cents: number | null;
   budget_remaining_cents: number | null;
   budget_period_hours: number | null;
+  budget_reset_at: string | null;
   selected_model_price: ModelPrice | null;
   available_model_prices: ModelPrice[];
 }

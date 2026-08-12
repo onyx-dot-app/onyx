@@ -3,7 +3,9 @@
 import { useMemo } from "react";
 import { Button, Modal, ProgressBar, Text, Tooltip } from "@opal/components";
 import { Section } from "@opal/layouts";
+import type { IconFunctionComponent } from "@opal/types";
 import { formatCalendarDay } from "@/lib/dateUtils";
+import { getModelIcon } from "@/lib/languageModels";
 import type { UsageExportUser } from "@/lib/usage/userUsage";
 import { formatCost, formatTokens } from "@/lib/utils";
 
@@ -81,9 +83,15 @@ interface BreakdownListProps {
   title: string;
   slices: BreakdownSlice[];
   totalCostCents: number;
+  getIcon?: (slice: BreakdownSlice) => IconFunctionComponent;
 }
 
-function BreakdownList({ title, slices, totalCostCents }: BreakdownListProps) {
+function BreakdownList({
+  title,
+  slices,
+  totalCostCents,
+  getIcon,
+}: BreakdownListProps) {
   if (slices.length === 0) return null;
   return (
     <Section
@@ -108,6 +116,7 @@ function BreakdownList({ title, slices, totalCostCents }: BreakdownListProps) {
         {slices.map((slice) => {
           const share =
             totalCostCents > 0 ? slice.cost_cents / totalCostCents : 0;
+          const Icon = getIcon?.(slice);
           return (
             <Section
               key={slice.label}
@@ -120,10 +129,13 @@ function BreakdownList({ title, slices, totalCostCents }: BreakdownListProps) {
             >
               {/* items-baseline has no Section equivalent, kept as a raw div */}
               <div className="flex items-baseline justify-between gap-3">
-                <span className="min-w-0 truncate">
-                  <Text font="main-ui-body" color="text-05" nowrap>
-                    {slice.label}
-                  </Text>
+                <span className="flex min-w-0 items-center gap-1.5">
+                  {Icon && <Icon size={16} className="shrink-0" />}
+                  <span className="min-w-0 truncate">
+                    <Text font="main-ui-body" color="text-05" nowrap>
+                      {slice.label}
+                    </Text>
+                  </span>
                 </span>
                 <span className="shrink-0 tabular-nums">
                   <Text font="main-ui-body" color="text-05">
@@ -290,6 +302,7 @@ export default function UserUsageDetailModal({
               title="By model"
               slices={byModel}
               totalCostCents={totals.cost_cents}
+              getIcon={(slice) => getModelIcon("", slice.label)}
             />
             <BreakdownList
               title="By flow"
@@ -300,6 +313,7 @@ export default function UserUsageDetailModal({
               title="By provider"
               slices={byProvider}
               totalCostCents={totals.cost_cents}
+              getIcon={(slice) => getModelIcon(slice.label)}
             />
 
             {byModel.length === 0 && (

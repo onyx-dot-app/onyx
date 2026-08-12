@@ -538,6 +538,9 @@ def test_budget_reflects_user_cost_limit(
     )
     assert body["budget_cents"] == pytest.approx(100.0)
     assert body["budget_remaining_cents"] == pytest.approx(98.75)  # 100 - 1.25
+    assert body["budget_reset_at"] == get_cost_window_reset(
+        datetime.datetime.now(datetime.timezone.utc), 168
+    ).isoformat().replace("+00:00", "Z")
 
 
 def test_budget_reflects_global_cost_limit(
