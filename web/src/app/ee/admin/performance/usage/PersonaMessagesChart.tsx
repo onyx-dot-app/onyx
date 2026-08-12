@@ -13,6 +13,7 @@ import {
   usePersonaMessages,
   usePersonaUniqueUsers,
 } from "@/app/ee/admin/performance/lib";
+import { useAdminAgents } from "@/lib/agents/hooks";
 import {
   AnalyticsChart,
   chartSeries,
@@ -106,21 +107,19 @@ function PersonaPicker({
 }
 
 interface PersonaMessagesChartProps {
-  availablePersonas: Agent[];
-  agentsError?: Error;
-  agentsLoading?: boolean;
   timeRange: DateRangePickerValue;
 }
 
-export function PersonaMessagesChart({
-  availablePersonas,
-  agentsError,
-  agentsLoading,
-  timeRange,
-}: PersonaMessagesChartProps) {
+export function PersonaMessagesChart({ timeRange }: PersonaMessagesChartProps) {
   const [selectedPersonaId, setSelectedPersonaId] = useState<
     number | undefined
   >(undefined);
+
+  const {
+    agents,
+    error: agentsError,
+    isLoading: agentsLoading,
+  } = useAdminAgents();
 
   const {
     data: personaMessagesData,
@@ -149,7 +148,6 @@ export function PersonaMessagesChart({
     }
   }, [agentsError, personaMessagesError, personaUniqueUsersError]);
 
-  const agents = availablePersonas ?? [];
   const selectedAgent = agents.find((agent) => agent.id === selectedPersonaId);
 
   return (
