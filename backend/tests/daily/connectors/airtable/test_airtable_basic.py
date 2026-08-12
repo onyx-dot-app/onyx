@@ -185,7 +185,7 @@ def compare_documents(
             f"Number of sections mismatch for document {doc_id}"
         )
         for i, (actual_section, expected_section) in enumerate(
-            zip(actual.sections, expected.sections)
+            zip(actual.sections, expected.sections, strict=True)
         ):
             assert actual_section.text == expected_section.text, (
                 f"Section {i} text mismatch for document {doc_id}"

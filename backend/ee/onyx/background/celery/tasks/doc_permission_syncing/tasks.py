@@ -414,7 +414,7 @@ def connector_permission_sync_generator_task(
 
     LoggerContextVars.reset()
 
-    doc_permission_sync_ctx_dict = doc_permission_sync_ctx.get()
+    doc_permission_sync_ctx_dict = dict(doc_permission_sync_ctx.get())
     doc_permission_sync_ctx_dict["cc_pair_id"] = cc_pair_id
     doc_permission_sync_ctx_dict["request_id"] = self.request.id
     doc_permission_sync_ctx.set(doc_permission_sync_ctx_dict)

@@ -28,8 +28,10 @@ class UserFileSnapshot(BaseModel):
 
     @classmethod
     def from_model(
-        cls, model: UserFile, temp_id_map: dict[str, str] = {}
+        cls, model: UserFile, temp_id_map: dict[str, str] | None = None
     ) -> "UserFileSnapshot":
+        if temp_id_map is None:
+            temp_id_map = {}
         return cls(
             id=model.id,
             temp_id=temp_id_map.get(str(model.id)),

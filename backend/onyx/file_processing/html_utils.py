@@ -200,7 +200,7 @@ def web_html_cleanup(
         [
             tag.extract()
             for tag in soup.find_all(
-                class_=lambda x: x and undesired_element in x.split()
+                class_=lambda x, cls=undesired_element: x and cls in x.split()
             )
         ]
 

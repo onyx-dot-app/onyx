@@ -197,7 +197,7 @@ class TestDocPermissionSyncAttempt:
 
         # Create multiple attempts
         attempt_ids = []
-        for i in range(5):
+        for _ in range(5):
             attempt_id = create_doc_permission_sync_attempt(cc_pair.id, db_session)
             attempt_ids.append(attempt_id)
 

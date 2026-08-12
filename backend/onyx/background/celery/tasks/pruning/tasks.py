@@ -496,7 +496,7 @@ def connector_pruning_generator_task(
 
     LoggerContextVars.reset()
 
-    pruning_ctx_dict = pruning_ctx.get()
+    pruning_ctx_dict = dict(pruning_ctx.get())
     pruning_ctx_dict["cc_pair_id"] = cc_pair_id
     pruning_ctx_dict["request_id"] = self.request.id
     pruning_ctx.set(pruning_ctx_dict)

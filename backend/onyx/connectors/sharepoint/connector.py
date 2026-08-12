@@ -1273,9 +1273,9 @@ class SharepointConnector(
     def __init__(
         self,
         batch_size: int = INDEX_BATCH_SIZE,
-        sites: list[str] = [],
-        excluded_sites: list[str] = [],
-        excluded_paths: list[str] = [],
+        sites: list[str] | None = None,
+        excluded_sites: list[str] | None = None,
+        excluded_paths: list[str] | None = None,
         include_site_pages: bool = True,
         include_site_documents: bool = True,
         treat_sharing_link_as_public: bool = False,
@@ -1283,6 +1283,12 @@ class SharepointConnector(
         graph_api_host: str = DEFAULT_GRAPH_API_HOST,
         sharepoint_domain_suffix: str = DEFAULT_SHAREPOINT_DOMAIN_SUFFIX,
     ) -> None:
+        if excluded_paths is None:
+            excluded_paths = []
+        if excluded_sites is None:
+            excluded_sites = []
+        if sites is None:
+            sites = []
         self.batch_size = batch_size
         self.sites = list(sites)
         self.excluded_sites = [s for p in excluded_sites if (s := p.strip())]
@@ -1377,7 +1383,7 @@ class SharepointConnector(
         )
         unauthorized_sites: list[str] = [
             site_url
-            for site_url, authorized in zip(sites_to_probe, results)
+            for site_url, authorized in zip(sites_to_probe, results, strict=True)
             if authorized is False
         ]
 
@@ -3687,7 +3693,7 @@ if __name__ == "__main__":
 
     # Run the connector
     while checkpoint.has_more:
-        for doc_batch, hierarchy_node_batch, failure, next_checkpoint in runner.run(
+        for doc_batch, _hierarchy_node_batch, failure, next_checkpoint in runner.run(
             checkpoint
         ):
             if doc_batch:

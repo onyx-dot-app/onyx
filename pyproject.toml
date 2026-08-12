@@ -287,9 +287,24 @@ ignore = [
     # Tracked in kanban ticket #491 — to be removed once existing violations are
     # cleaned up:
     "S113", # request-without-timeout (~463 existing violations).
+    # flake8-bugbear (B) rule deferred — to be removed once existing violations
+    # are cleaned up:
+    "B904", # raise-without-from-inside-except (~465 existing violations).
 ]
 # G004: f-strings in logging break Sentry's message-pattern grouping.
-select = ["ARG", "E", "F", "G004", "I", "S", "W"]
+select = ["ARG", "B", "E", "F", "G004", "I", "S", "W"]
+
+[tool.ruff.lint.flake8-bugbear]
+# FastAPI dependency-injection markers are the intended way to write these
+# defaults, so B008 must not flag them.
+extend-immutable-calls = [
+    "fastapi.Body",
+    "fastapi.Depends",
+    "fastapi.File",
+    "fastapi.Form",
+    "fastapi.Query",
+    "onyx.auth.permissions.require_permission",
+]
 
 [tool.ruff.lint.isort]
 known-first-party = ["onyx", "ee", "tests", "shared_configs", "model_server"]

@@ -240,8 +240,8 @@ class ChatMessageDetail(BaseModel):
         self, *args: list, **kwargs: dict[str, Any]
     ) -> dict[str, Any]:
         initial_dict = super().model_dump(
-            mode="json",
             *args,
+            mode="json",
             **kwargs,  # ty: ignore[invalid-argument-type]
         )
         initial_dict["time_sent"] = self.time_sent.isoformat()
