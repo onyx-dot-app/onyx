@@ -6439,11 +6439,8 @@ class ScheduledTask(Base):
 
     @property
     def pre_approved_external_app_ids(self) -> list[int]:
-        """Granted external-app ids in grant order. MCP-server grants are
-        excluded — their target ids live in a different id space, and this
-        property backs the API's external-app-id field (the gate reads all
-        grants regardless of kind via ``get_live_scheduled_run_grants``).
-        Set through the scheduled-task database operations."""
+        """Granted external-app ids. MCP-server grants are excluded because
+        their target ids live in a different id space."""
         return [
             grant.gated_app.external_app_id
             for grant in self.pre_approved_targets
@@ -6452,8 +6449,8 @@ class ScheduledTask(Base):
 
     @property
     def pre_approved_mcp_server_ids(self) -> list[int]:
-        """Granted MCP-server ids in grant order. External-app grants are
-        excluded because their target ids live in a different id space."""
+        """Granted MCP-server ids. External-app grants are excluded because
+        their target ids live in a different id space."""
         return [
             grant.gated_app.mcp_server_id
             for grant in self.pre_approved_targets

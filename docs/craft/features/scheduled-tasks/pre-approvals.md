@@ -162,10 +162,10 @@ pre-decided inserts go through `insert_action_approval` in
 
 - `ScheduledTaskCreate` / `ScheduledTaskPatch` gain
   `pre_approved_app_ids: list[int]`; `ScheduledTaskDetail` returns it.
-  The write path validates ids via `_validated_app_ids` and dedupes
-  (order-preserving) — existence only; a credential / ≥1-`ASK` filter is
-  editor-side advisory, since a grant on a no-`ASK` app is inert and
-  never consulted.
+  The write path validates ids via `_validate_app_ids` and stores each grant
+  once. Grant order has no meaning. Validation checks existence only; a
+  credential / ≥1-`ASK` filter is editor-side advisory because a grant on a
+  no-`ASK` app is inert and never consulted.
 - New `NotificationType.SCHEDULED_TASK_PRE_APPROVED_ACTION`, emitted
   per `(run, app)` on the first unattended forward so chatty tasks
   don't flood the bell. Dedup rides `create_notification`'s existing
@@ -256,7 +256,7 @@ The grant-source seam means future modes drop in as new
   - Grant patch semantics: a prompt edit preserves grants, supplied
     `pre_approved_app_ids` replaces the set, and re-submitting an existing
     grant is idempotent (no unique-key collision).
-  - Create persistence + `_validated_app_ids` dedupe and unknown-id
+  - Create persistence, duplicate grant normalization, and unknown-id
     rejection.
 - **Unit** (gate, stubbed DB):
   `backend/tests/unit/sandbox_proxy/test_gate.py`

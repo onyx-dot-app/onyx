@@ -128,7 +128,7 @@ def _replace_pre_approved_targets(
             gated_app_id=get_or_create_gated_app_id(db_session, kind, target_id)
         )
         for kind, target_ids in replacements.items()
-        for target_id in dict.fromkeys(target_ids)
+        for target_id in set(target_ids)
     ]
     retained_grants = [
         grant

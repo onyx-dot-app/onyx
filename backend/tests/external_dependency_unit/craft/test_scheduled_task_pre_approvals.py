@@ -383,23 +383,23 @@ def test_mcp_grants_survive_external_app_replacement(
     }
 
 
-def test_create_persists_grants(
+def test_create_stores_each_grant_once(
     db_session: Session,
     tenant_context: None,  # noqa: ARG001
 ) -> None:
     user = make_user(db_session)
     app_a, app_b = _make_app(db_session), _make_app(db_session)
     server_id = _make_mcp_server(db_session, user)
-    assert app_a < app_b  # ids autoincrement, so the higher id is created last
-    # Insertion order is preserved (not sorted): pass the higher id first.
     task = _seed_task(
         db_session,
         user,
-        pre_approved_external_app_ids=[app_b, app_a],
-        pre_approved_mcp_server_ids=[server_id],
+        pre_approved_external_app_ids=[app_b, app_a, app_b],
+        pre_approved_mcp_server_ids=[server_id, server_id],
     )
-    assert task.pre_approved_external_app_ids == [app_b, app_a]
-    assert task.pre_approved_mcp_server_ids == [server_id]
+    assert set(task.pre_approved_external_app_ids) == {app_a, app_b}
+    assert len(task.pre_approved_external_app_ids) == 2
+    assert set(task.pre_approved_mcp_server_ids) == {server_id}
+    assert len(task.pre_approved_mcp_server_ids) == 1
 
     bare = _seed_task(db_session, user)
     assert bare.pre_approved_external_app_ids == []
@@ -473,14 +473,12 @@ def test_deleting_app_nulls_action_approval_fk(
 # ---------------------------------------------------------------------------
 
 
-def test_validated_app_ids_rejects_unknown_and_dedupes(
+def test_validate_app_ids_accepts_known_duplicates_and_reports_unknown_ids_once(
     db_session: Session,
     tenant_context: None,  # noqa: ARG001
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
-    """Dedupe is order-preserving; any id outside the tenant's apps raises
-    INVALID_INPUT. Apps are stubbed — only the validation logic is under
-    test, not ``get_external_apps``'s SQL."""
+    """Duplicates are valid, but unknown ids raise INVALID_INPUT."""
 
     class _App:
         def __init__(self, app_id: int) -> None:
@@ -492,9 +490,10 @@ def test_validated_app_ids_rejects_unknown_and_dedupes(
         lambda _db: [_App(7), _App(9)],
     )
 
-    assert scheduled_tasks_api._validated_app_ids(db_session, []) == []
-    assert scheduled_tasks_api._validated_app_ids(db_session, [9, 7, 9]) == [9, 7]
+    scheduled_tasks_api._validate_app_ids(db_session, [])
+    scheduled_tasks_api._validate_app_ids(db_session, [9, 7, 9])
 
     with pytest.raises(OnyxError) as exc_info:
-        scheduled_tasks_api._validated_app_ids(db_session, [7, 123])
+        scheduled_tasks_api._validate_app_ids(db_session, [456, 7, 123, 456])
     assert exc_info.value.error_code == OnyxErrorCode.INVALID_INPUT
+    assert exc_info.value.detail == "Unknown external app id(s): [123, 456]"
