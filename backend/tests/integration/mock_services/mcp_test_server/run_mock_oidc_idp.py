@@ -90,6 +90,11 @@ class MockOidcStatus(BaseModel):
     last_client_id: str | None
 
 
+class NoRedirectHandler(urllib.request.HTTPRedirectHandler):
+    def redirect_request(self, *_args: Any, **_kwargs: Any) -> None:
+        return None
+
+
 def _b64url_uint(value: int) -> str:
     raw = value.to_bytes((value.bit_length() + 7) // 8, "big")
     return base64.urlsafe_b64encode(raw).rstrip(b"=").decode("ascii")
@@ -143,6 +148,7 @@ class MockOidc:
         ssl_context = ssl.create_default_context(cafile=self.client_metadata_ca_file)
         opener = urllib.request.build_opener(
             urllib.request.ProxyHandler({}),
+            NoRedirectHandler(),
             urllib.request.HTTPSHandler(context=ssl_context),
         )
         with opener.open(client_id, timeout=10) as response:

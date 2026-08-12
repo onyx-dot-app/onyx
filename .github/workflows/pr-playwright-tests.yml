@@ -771,7 +771,7 @@ jobs:
           MCP_TEST_APP_BASE: https://host.docker.internal:3443
           NODE_EXTRA_CA_CERTS: ${{ github.workspace }}/deployment/data/sslcerts/mcp-cimd-ca.crt
         run: >
-          bunx playwright test
+          bun run playwright
           tests/e2e/mcp/mcp_oauth_cimd_flow.spec.ts
           --project mcp-cimd
 
