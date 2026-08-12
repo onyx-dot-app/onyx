@@ -190,15 +190,26 @@ def cimd_https_endpoint(
     )
     log_path = directory / "nginx.log"
     log_file = log_path.open("wb")
-    process = subprocess.Popen(
-        [NGINX_COMMAND, "-c", str(config_path), "-g", "daemon off;"],
-        stdout=log_file,
-        stderr=subprocess.STDOUT,
-    )
+    try:
+        process = subprocess.Popen(
+            [NGINX_COMMAND, "-c", str(config_path), "-g", "daemon off;"],
+            stdout=log_file,
+            stderr=subprocess.STDOUT,
+        )
+    except OSError as error:
+        log_file.close()
+        raise RuntimeError(f"Failed to start Nginx: {error}") from error
 
     old_web_domain = client_metadata.WEB_DOMAIN
     try:
-        _wait_for_port(public_host, https_port, process)
+        try:
+            _wait_for_port(public_host, https_port, process)
+        except (RuntimeError, TimeoutError) as error:
+            log_file.flush()
+            logs = log_path.read_text(encoding="utf-8", errors="replace")
+            raise RuntimeError(
+                f"Nginx failed during startup: {error}\n{logs}"
+            ) from error
         origin = f"https://{public_host}:{https_port}"
         setattr(client_metadata, "WEB_DOMAIN", origin)
 
