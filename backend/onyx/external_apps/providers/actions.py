@@ -119,3 +119,12 @@ class EndpointSpec(BaseModel):
     # Set when the action needs a scope only a self-hosted deployment requests,
     # which drops it from the cloud catalog (``registry.get_endpoint_catalog``).
     requires_self_hosted_scope: bool = False
+    # The OAuth scopes an account must have granted for this action to work at
+    # all. Only worth declaring for actions whose scope is *optional* in the
+    # authorize request (e.g. HubSpot writes via ``optional_scope``), because
+    # those diverge per user: a read-only account connects successfully but
+    # can't write. Consumers compare it against the user's persisted
+    # ``granted_scopes`` to stop advertising actions the grant won't authorize
+    # (see ``onyx.skills.rendering``). Left empty for scopes every connected
+    # user necessarily has, where the check would be pure overhead.
+    required_scopes: tuple[str, ...] = ()

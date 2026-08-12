@@ -51,6 +51,32 @@ class HubspotAction(ExternalAppAction):
     DEALS_WRITE = "hubspot.deals.write"
 
 
+# `oauth` is mandatory for the auth-code flow; the reads cover the CRM objects
+# this provider catalogs. Every HubSpot tier can grant these.
+_REQUIRED_SCOPES = [
+    "oauth",
+    "crm.objects.owners.read",
+    "crm.objects.contacts.read",
+    "crm.objects.companies.read",
+    "crm.objects.deals.read",
+]
+
+# Optional, read-only/free tiers can't grant writes, and HubSpot
+# fails the whole authorize page on any ungrantable required scope. As optional
+# scopes it drops what the account lacks, so everyone can still connect — which
+# is why each write action declares its scope as ``required_scopes`` below:
+# whether the user actually has it varies per account.
+_CONTACTS_WRITE_SCOPE = "crm.objects.contacts.write"
+_COMPANIES_WRITE_SCOPE = "crm.objects.companies.write"
+_DEALS_WRITE_SCOPE = "crm.objects.deals.write"
+
+_OPTIONAL_WRITE_SCOPES = [
+    _CONTACTS_WRITE_SCOPE,
+    _COMPANIES_WRITE_SCOPE,
+    _DEALS_WRITE_SCOPE,
+]
+
+
 # HubSpot's CRM is a path-addressed JSON REST API rooted at
 # https://api.hubapi.com; the action is the HTTP method + path template. A
 # `{name}` segment matches one path segment (an object id). CRM search is a
@@ -117,6 +143,7 @@ _ENDPOINTS: list[EndpointSpec] = [
             RestRoute(method="POST", path="/crm/v3/objects/contacts"),
             RestRoute(method="PATCH", path="/crm/v3/objects/contacts/{contact_id}"),
         ),
+        required_scopes=(_CONTACTS_WRITE_SCOPE,),
     ),
     EndpointSpec(
         id=HubspotAction.COMPANIES_WRITE,
@@ -126,6 +153,7 @@ _ENDPOINTS: list[EndpointSpec] = [
             RestRoute(method="POST", path="/crm/v3/objects/companies"),
             RestRoute(method="PATCH", path="/crm/v3/objects/companies/{company_id}"),
         ),
+        required_scopes=(_COMPANIES_WRITE_SCOPE,),
     ),
     EndpointSpec(
         id=HubspotAction.DEALS_WRITE,
@@ -135,27 +163,8 @@ _ENDPOINTS: list[EndpointSpec] = [
             RestRoute(method="POST", path="/crm/v3/objects/deals"),
             RestRoute(method="PATCH", path="/crm/v3/objects/deals/{deal_id}"),
         ),
+        required_scopes=(_DEALS_WRITE_SCOPE,),
     ),
-]
-
-
-# `oauth` is mandatory for the auth-code flow; the reads cover the CRM objects
-# this provider catalogs. Every HubSpot tier can grant these.
-_REQUIRED_SCOPES = [
-    "oauth",
-    "crm.objects.owners.read",
-    "crm.objects.contacts.read",
-    "crm.objects.companies.read",
-    "crm.objects.deals.read",
-]
-
-# Optional, read-only/free tiers can't grant writes, and HubSpot
-# fails the whole authorize page on any ungrantable required scope. As optional
-# scopes it drops what the account lacks, so everyone can still connect.
-_OPTIONAL_WRITE_SCOPES = [
-    "crm.objects.contacts.write",
-    "crm.objects.companies.write",
-    "crm.objects.deals.write",
 ]
 
 
