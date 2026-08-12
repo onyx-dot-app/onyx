@@ -60,6 +60,8 @@ env:
   SANDBOX_TURN_TIMEOUT_SECONDS: "120"
   KIND_REGISTRY_NAME: "kind-registry"
   KIND_REGISTRY_PORT: "5001"
+  KIND_VERSION: "v0.31.0"
+  KUBECTL_VERSION: "v1.35.0"
 
   # The pytest process runs on the runner, so it reaches chart-managed
   # Postgres/Redis through kubectl port-forwards.
@@ -159,6 +161,121 @@ jobs:
           fi
           echo "test-files=[${entries%,}]" >> "$GITHUB_OUTPUT"
 
+  prepare-craft-assets:
+    name: Prepare Craft test assets
+    needs: changes
+    if: needs.changes.outputs.craft_k8s == 'true'
+    runs-on:
+      - runs-on
+      - runner=2cpu-linux-x64
+      - spot=false
+      - ${{ format('run-id={0}-craft-k8s-tools', github.run_id) }}
+    timeout-minutes: 10
+    permissions:
+      contents: read
+    steps:
+      - uses: runs-on/action@4e5f72399b6b17f2e79c511c1b38a315a64d22dc
+
+      - name: Checkout code
+        uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # ratchet:actions/checkout@v6
+        with:
+          persist-credentials: false
+
+      # The run-scoped key prevents pull-request code from poisoning caches used
+      # by other runs. Test shards restore the completed cache after this job.
+      - name: Restore kind tools
+        id: kind-tools-cache
+        uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # zizmor: ignore[cache-poisoning]
+        with:
+          path: ${{ runner.tool_cache }}/kind/${{ env.KIND_VERSION }}/amd64
+          key: craft-kind-tools-${{ runner.os }}-${{ runner.arch }}-${{ env.KIND_VERSION }}-${{ env.KUBECTL_VERSION }}-${{ github.run_id }}
+
+      - name: Download and verify kind tools
+        if: steps.kind-tools-cache.outputs.cache-hit != 'true'
+        run: |
+          set -euo pipefail
+
+          download() {
+            curl --fail --location --silent --show-error \
+              --retry 5 --retry-delay 2 --retry-all-errors \
+              --output "$2" "$1"
+          }
+
+          cache_dir="${RUNNER_TOOL_CACHE}/kind/${KIND_VERSION}/amd64"
+          kind_dir="${cache_dir}/kind/bin"
+          kubectl_dir="${cache_dir}/kubectl/bin"
+          mkdir -p "${kind_dir}" "${kubectl_dir}"
+
+          kind_filename="kind-linux-amd64"
+          kind_url="https://github.com/kubernetes-sigs/kind/releases/download/${KIND_VERSION}"
+          download "${kind_url}/${kind_filename}" "${kind_dir}/${kind_filename}"
+          download "${kind_url}/${kind_filename}.sha256sum" "${kind_dir}/${kind_filename}.sha256sum"
+          (
+            cd "${kind_dir}"
+            grep "${kind_filename}" "${kind_filename}.sha256sum" | sha256sum --check -
+            mv "${kind_filename}" kind
+            rm "${kind_filename}.sha256sum"
+            chmod +x kind
+          )
+
+          kubectl_url="https://dl.k8s.io/release/${KUBECTL_VERSION}/bin/linux/amd64"
+          download "${kubectl_url}/kubectl" "${kubectl_dir}/kubectl"
+          download "${kubectl_url}/kubectl.sha256" "${kubectl_dir}/kubectl.sha256"
+          (
+            cd "${kubectl_dir}"
+            echo "$(cat kubectl.sha256)  kubectl" | sha256sum --check -
+            rm kubectl.sha256
+            chmod +x kubectl
+          )
+
+      - name: Restore Helm chart dependencies
+        id: helm-dependencies-cache
+        uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # zizmor: ignore[cache-poisoning]
+        with:
+          path: deployment/helm/charts/onyx/charts
+          key: craft-helm-dependencies-${{ hashFiles('deployment/helm/charts/onyx/Chart.yaml', 'deployment/helm/charts/onyx/Chart.lock') }}-${{ github.run_id }}
+
+      - name: Download Helm chart dependencies
+        if: steps.helm-dependencies-cache.outputs.cache-hit != 'true'
+        run: |
+          set -euo pipefail
+
+          retry() {
+            local attempt
+            for attempt in 1 2 3 4 5; do
+              if "$@"; then
+                return 0
+              fi
+              if [ "${attempt}" -eq 5 ]; then
+                return 1
+              fi
+              echo "Command failed (attempt ${attempt}/5); retrying ..."
+              sleep $((attempt * 5))
+            done
+          }
+
+          retry helm repo add --force-update ingress-nginx https://kubernetes.github.io/ingress-nginx
+          retry helm repo add --force-update opensearch https://opensearch-project.github.io/helm-charts
+          retry helm repo add --force-update cloudnative-pg https://cloudnative-pg.github.io/charts
+          retry helm repo add --force-update ot-container-kit https://ot-container-kit.github.io/helm-charts
+          retry helm repo add --force-update minio https://charts.min.io/
+          retry helm repo add --force-update code-interpreter https://onyx-dot-app.github.io/python-sandbox/
+          retry helm repo update
+          if ! retry helm dependency build --skip-refresh deployment/helm/charts/onyx; then
+            echo "helm dependency build failed; pulling disabled code-interpreter dependency directly"
+            code_interpreter_version=$(awk '
+              $1 == "-" && $2 == "name:" && $3 == "code-interpreter" { found = 1 }
+              found && $1 == "version:" { print $2; exit }
+            ' deployment/helm/charts/onyx/Chart.yaml)
+            test -n "${code_interpreter_version}"
+            retry helm pull code-interpreter/code-interpreter \
+              --version "${code_interpreter_version}" \
+              --destination deployment/helm/charts/onyx/charts
+          fi
+          helm dependency list deployment/helm/charts/onyx
+          helm dependency list deployment/helm/charts/onyx \
+            | awk 'NR > 1 && NF && $4 != "ok" { bad = 1 } END { exit bad }'
+
   build-images:
     # Build both images in parallel (one matrix leg each) and push to the shared
     # ECR repo so each test shard pulls prebuilt images instead of cold-building.
@@ -229,7 +346,7 @@ jobs:
 
   craft-k8s-tests:
     name: craft-k8s (${{ matrix.test-file.name }})
-    needs: [changes, discover-test-files, build-images]
+    needs: [changes, discover-test-files, prepare-craft-assets, build-images]
     if: needs.changes.outputs.craft_k8s == 'true'
     # spot=false: this is a long lane (full kind cluster per shard); on-demand
     # avoids mid-run spot reclamation. Matches the compose lane.
@@ -275,6 +392,20 @@ jobs:
             backend/requirements/dev.txt
             backend/requirements/ee.txt
 
+      - name: Restore kind tools
+        uses: actions/cache/restore@55cc8345863c7cc4c66a329aec7e433d2d1c52a9
+        with:
+          path: ${{ runner.tool_cache }}/kind/${{ env.KIND_VERSION }}/amd64
+          key: craft-kind-tools-${{ runner.os }}-${{ runner.arch }}-${{ env.KIND_VERSION }}-${{ env.KUBECTL_VERSION }}-${{ github.run_id }}
+          fail-on-cache-miss: true
+
+      - name: Restore Helm chart dependencies
+        uses: actions/cache/restore@55cc8345863c7cc4c66a329aec7e433d2d1c52a9
+        with:
+          path: deployment/helm/charts/onyx/charts
+          key: craft-helm-dependencies-${{ hashFiles('deployment/helm/charts/onyx/Chart.yaml', 'deployment/helm/charts/onyx/Chart.lock') }}-${{ github.run_id }}
+          fail-on-cache-miss: true
+
       - name: Log in to ECR pull-through cache
         uses: ./.github/actions/login-ecr-pullthrough-cache
         with:
@@ -318,6 +449,8 @@ jobs:
       - name: Create kind cluster
         uses: helm/kind-action@ef37e7f390d99f746eb8b610417061a60e82a6cc # ratchet:helm/kind-action@v1.14.0
         with:
+          version: ${{ env.KIND_VERSION }}
+          kubectl_version: ${{ env.KUBECTL_VERSION }}
           cluster_name: onyx-craft-ci
           node_image: kindest/node:v1.33.1
           config: ${{ runner.temp }}/kind-config.yaml
@@ -337,28 +470,8 @@ jobs:
       - name: Label kind node for sandbox workload
         run: kubectl label node onyx-craft-ci-control-plane onyx.app/workload=sandbox
 
-      # `helm upgrade --install` validates Chart.yaml dependencies up front.
-      # Add the repos and build deps before installing the CI release.
-      - name: Build helm chart dependencies
+      - name: Validate Helm chart dependencies
         run: |
-          helm repo add ingress-nginx https://kubernetes.github.io/ingress-nginx
-          helm repo add opensearch https://opensearch-project.github.io/helm-charts
-          helm repo add cloudnative-pg https://cloudnative-pg.github.io/charts
-          helm repo add ot-container-kit https://ot-container-kit.github.io/helm-charts
-          helm repo add minio https://charts.min.io/
-          helm repo add code-interpreter https://onyx-dot-app.github.io/python-sandbox/
-          helm repo update
-          if ! helm dependency build deployment/helm/charts/onyx; then
-            echo "helm dependency build failed; pulling disabled code-interpreter dependency directly"
-            code_interpreter_version=$(awk '
-              $1 == "-" && $2 == "name:" && $3 == "code-interpreter" { found = 1 }
-              found && $1 == "version:" { print $2; exit }
-            ' deployment/helm/charts/onyx/Chart.yaml)
-            test -n "${code_interpreter_version}"
-            helm pull code-interpreter/code-interpreter \
-              --version "${code_interpreter_version}" \
-              --destination deployment/helm/charts/onyx/charts
-          fi
           helm dependency list deployment/helm/charts/onyx
           helm dependency list deployment/helm/charts/onyx \
             | awk 'NR > 1 && NF && $4 != "ok" { bad = 1 } END { exit bad }'
