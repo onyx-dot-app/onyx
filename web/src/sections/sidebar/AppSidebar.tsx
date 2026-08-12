@@ -43,7 +43,10 @@ import {
   useCurrentAgent,
   usePinnedAgents,
 } from "@/lib/agents/hooks";
-import { ProjectFolderButton } from "@/lib/projects/components";
+import {
+  FoldedProjectsPopover,
+  ProjectFolderButton,
+} from "@/lib/projects/components";
 import CreateProjectModal from "@/sections/modals/CreateProjectModal";
 import MoveCustomAgentChatModal from "@/sections/modals/MoveCustomAgentChatModal";
 import { useProjectsContext } from "@/providers/ProjectsContext";
@@ -565,19 +568,20 @@ export default function AppSidebar() {
     ),
     [folded, activeSidebarTab, visibleAgents]
   );
+  // Only the unfolded empty state uses this — folded, the sidebar shows
+  // `FoldedProjectsPopover` instead.
   const newProjectButton = useMemo(
     () => (
       <SidebarTab
         icon={SvgFolderPlus}
         onClick={() => createProjectModal.toggle(true)}
         selected={createProjectModal.isOpen}
-        folded={folded}
-        variant={folded ? "sidebar-heavy" : "sidebar-light"}
+        variant="sidebar-light"
       >
         New Project
       </SidebarTab>
     ),
-    [folded, createProjectModal.toggle, createProjectModal.isOpen]
+    [createProjectModal.toggle, createProjectModal.isOpen]
   );
   const handleShowBuildIntro = useCallback(() => {
     setShowIntroAnimation(true);
@@ -681,7 +685,7 @@ export default function AppSidebar() {
           {searchChatsButton}
           {isOnyxCraftEnabled && buildButton}
           {folded && moreAgentsButton}
-          {folded && newProjectButton}
+          <FoldedProjectsPopover />
         </SidebarLayouts.Header>
 
         <SidebarLayouts.Body scrollKey="app-sidebar">

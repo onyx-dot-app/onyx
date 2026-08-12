@@ -1,33 +1,38 @@
 "use client";
 
-import React, { useEffect, useState } from "react";
+import { useEffect, useState } from "react";
 import { useDroppable } from "@dnd-kit/core";
 import {
   Button,
+  Divider,
+  InputTypeIn,
   LineItemButton,
   Popover,
   PopoverMenu,
   SidebarTab,
   Text,
+  useCreateModal,
 } from "@opal/components";
-import { ConfirmationModalLayout } from "@opal/layouts";
+import { ConfirmationModalLayout, useSidebarState } from "@opal/layouts";
 import { cn } from "@opal/utils";
-import type { IconProps } from "@opal/types";
+import type { IconFunctionComponent } from "@opal/types";
 import {
   SvgEdit,
   SvgFolder,
   SvgFolderOpen,
   SvgFolderPartialOpen,
+  SvgFolderPlus,
   SvgMoreHorizontal,
   SvgTrash,
 } from "@opal/icons";
 import ChatButton from "@/sections/sidebar/ChatButton";
+import CreateProjectModal from "@/sections/modals/CreateProjectModal";
 import { useAppRouter } from "@/hooks/appNavigation";
 import useAppFocus from "@/hooks/useAppFocus";
 import { noProp } from "@/lib/utils";
 import { DRAG_TYPES } from "@/lib/sidebar/constants";
-import { useActiveProject } from "@/lib/projects/hooks";
-import type { Project } from "@/lib/projects/types";
+import { useActiveProject, useProjectSearch } from "@/lib/projects/hooks";
+import type { Project, ProjectSearchMatch } from "@/lib/projects/types";
 import { useProjectsContext } from "@/providers/ProjectsContext";
 import ButtonRenaming from "@/refresh-components/buttons/ButtonRenaming";
 
@@ -66,6 +71,52 @@ export function ActiveProjectBreadcrumb() {
 }
 
 /**
+ * The folder glyph for a project row: open or closed by fold state, previewing
+ * the partial-open folder on hover, and toggling the fold on click without
+ * letting the click reach the row underneath.
+ *
+ * After a click the preview stays off until the pointer leaves, so the icon does
+ * not preview the state the user just left.
+ *
+ * Shared by both project rows so the glyph cannot drift between them. The state
+ * lives here and the returned render function is stateless on purpose:
+ * `SidebarTab` reconciles `icon` by function identity, so a stateful component
+ * would remount whenever `open` changed and reset the preview mid-hover.
+ */
+function useFolderIcon(
+  open: boolean,
+  onToggle: () => void
+): IconFunctionComponent {
+  const [hovering, setHovering] = useState(false);
+  const [previewEnabled, setPreviewEnabled] = useState(true);
+
+  const Glyph =
+    hovering && previewEnabled
+      ? SvgFolderPartialOpen
+      : open
+        ? SvgFolderOpen
+        : SvgFolder;
+
+  return () => (
+    <div
+      data-testid="ProjectFolderIcon"
+      className="p-0.5 cursor-pointer"
+      onMouseEnter={() => setHovering(true)}
+      onMouseLeave={() => {
+        setHovering(false);
+        setPreviewEnabled(true);
+      }}
+      onClick={noProp(() => {
+        setPreviewEnabled(false);
+        onToggle();
+      })}
+    >
+      <Glyph size={16} className="text-text-03" />
+    </div>
+  );
+}
+
+/**
  * A project's sidebar row: the folder tab itself plus, when unfolded, the
  * project's chats. Doubles as a drop target for dragging a chat into it.
  */
@@ -83,8 +134,7 @@ export function ProjectFolderButton({ project }: ProjectFolderButtonProps) {
   const { renameProject, deleteProject } = useProjectsContext();
   const [isEditing, setIsEditing] = useState(false);
   const [popoverOpen, setPopoverOpen] = useState(false);
-  const [isHoveringIcon, setIsHoveringIcon] = useState(false);
-  const [allowHoverEffect, setAllowHoverEffect] = useState(true);
+  const folderIcon = useFolderIcon(open, () => setOpen((prev) => !prev));
 
   // Unfold whichever project the user moves into, so its chats are visible on
   // arrival. Only ever opens — folding it again while still inside the project
@@ -102,28 +152,6 @@ export function ProjectFolderButton({ project }: ProjectFolderButtonProps) {
       project,
     },
   });
-
-  function getFolderIcon(): React.FunctionComponent<IconProps> {
-    if (isHoveringIcon && allowHoverEffect) return SvgFolderPartialOpen;
-    if (open) {
-      return SvgFolderOpen;
-    } else {
-      return SvgFolder;
-    }
-  }
-
-  function handleIconClick() {
-    setOpen((prev) => !prev);
-    setAllowHoverEffect(false);
-  }
-
-  function handleIconHover(hovering: boolean) {
-    setIsHoveringIcon(hovering);
-    // Re-enable hover effects when cursor leaves the icon
-    if (!hovering) {
-      setAllowHoverEffect(true);
-    }
-  }
 
   function handleTextClick() {
     route({ projectId: project.id });
@@ -189,19 +217,7 @@ export function ProjectFolderButton({ project }: ProjectFolderButtonProps) {
       <Popover onOpenChange={setPopoverOpen}>
         <Popover.Anchor>
           <SidebarTab
-            icon={() => (
-              <div
-                className="p-0.5 cursor-pointer"
-                onMouseEnter={() => handleIconHover(true)}
-                onMouseLeave={() => handleIconHover(false)}
-                onClick={noProp(handleIconClick)}
-              >
-                {React.createElement(getFolderIcon(), {
-                  size: 16,
-                  className: "text-text-03",
-                })}
-              </div>
-            )}
+            icon={folderIcon}
             // Folded, the project's chats are hidden — and a project chat
             // appears nowhere else in the sidebar (Recents excludes them), so
             // the folder itself has to carry the "you are here" mark.
@@ -255,5 +271,186 @@ export function ProjectFolderButton({ project }: ProjectFolderButtonProps) {
           />
         ))}
     </div>
+  );
+}
+
+/**
+ * A project row inside the folded sidebar's Projects popover: the folder tab
+ * and, when open, the project's chats.
+ *
+ * Deliberately narrower than `ProjectFolderButton` — the popover navigates, it
+ * does not manage. There is no drop target, because a popover has nothing to
+ * drag from, and no rename or delete menu.
+ */
+interface ProjectPopoverRowProps {
+  match: ProjectSearchMatch;
+  onNavigate: () => void;
+}
+
+function ProjectPopoverRow({ match, onNavigate }: ProjectPopoverRowProps) {
+  const route = useAppRouter();
+  const appFocus = useAppFocus();
+  const activeProject = useActiveProject();
+  const isActiveProject = activeProject?.id === match.project.id;
+  const [open, setOpen] = useState(isActiveProject);
+  const folderIcon = useFolderIcon(open, () => setOpen((prev) => !prev));
+
+  // Unfold the project the user is inside, and any project listed because one
+  // of its chats matched the search — otherwise the reason it is listed stays
+  // hidden. Only ever opens, so folding it by hand sticks.
+  useEffect(() => {
+    if (isActiveProject || match.chatMatched) setOpen(true);
+  }, [isActiveProject, match.chatMatched]);
+
+  function handleClick() {
+    // Navigation closes the popover on its own, but re-selecting the project
+    // you are already inside leaves the URL alone.
+    onNavigate();
+    route({ projectId: match.project.id });
+  }
+
+  return (
+    <div data-testid="ProjectsPopover/row">
+      <SidebarTab
+        icon={folderIcon}
+        // Same rule as the sidebar: while the chats are hidden, the folder
+        // carries the "you are here" mark for them.
+        selected={isActiveProject && (appFocus.isProject() || !open)}
+        onClick={noProp(handleClick)}
+      >
+        {match.project.name}
+      </SidebarTab>
+
+      {open &&
+        (match.chatSessions.length > 0 ? (
+          match.chatSessions.map((chatSession) => (
+            <ChatButton
+              key={chatSession.id}
+              chatSession={chatSession}
+              project={match.project}
+            />
+          ))
+        ) : (
+          <div className="pl-8 py-1">
+            <Text font="secondary-body" color="text-03">
+              No chats yet
+            </Text>
+          </div>
+        ))}
+    </div>
+  );
+}
+
+/**
+ * The folded sidebar's Projects entry.
+ *
+ * Folded, the sidebar has no room for the projects tree, and a project's chats
+ * are reachable nowhere else — Recents excludes them. So the tab hands the whole
+ * tree to a popover: search, new project, and every project with its chats.
+ *
+ * Resolves the sidebar's fold state itself and renders nothing when unfolded, so
+ * callers can mount it unconditionally.
+ */
+export function FoldedProjectsPopover() {
+  const { folded } = useSidebarState();
+  const appFocus = useAppFocus();
+  const [open, setOpen] = useState(false);
+  const [query, setQuery] = useState("");
+  const matches = useProjectSearch(query);
+  const createProjectModal = useCreateModal();
+
+  // Any navigation means the popover has done its job. Folding a project's
+  // chats never touches the URL, so the folder icon leaves the popover open.
+  useEffect(() => setOpen(false), [appFocus]);
+
+  function handleOpenChange(nextOpen: boolean) {
+    setOpen(nextOpen);
+    // Every opening starts from a clean slate.
+    if (!nextOpen) setQuery("");
+  }
+
+  function handleNewProject() {
+    // The modal traps focus, so the popover has to go first.
+    setOpen(false);
+    createProjectModal.toggle(true);
+  }
+
+  if (!folded) return null;
+
+  return (
+    <>
+      {/* A sibling of the popover on purpose: creating a project closes the
+          popover, and a modal mounted inside it would unmount with it. */}
+      <createProjectModal.Provider>
+        <CreateProjectModal />
+      </createProjectModal.Provider>
+
+      <Popover open={open} onOpenChange={handleOpenChange}>
+        <Popover.Trigger asChild>
+          {/* `SidebarTab` does not forward refs, so Radix anchors to this div. */}
+          <div data-testid="AppSidebar/projects">
+            <SidebarTab
+              icon={SvgFolder}
+              type="button"
+              folded
+              selected={open || appFocus.isProject()}
+            >
+              Projects
+            </SidebarTab>
+          </div>
+        </Popover.Trigger>
+
+        <Popover.Content
+          data-testid="ProjectsPopover"
+          side="right"
+          align="start"
+          width="xl"
+        >
+          <div className="flex flex-col gap-1">
+            <InputTypeIn
+              data-testid="ProjectsPopover/search"
+              searchIcon
+              clearButton
+              autoFocus
+              variant="internal"
+              placeholder="Search projects and chats"
+              value={query}
+              onChange={(event) => setQuery(event.target.value)}
+            />
+
+            <LineItemButton
+              data-testid="ProjectsPopover/new-project"
+              sizePreset="main-ui"
+              rounding="sm"
+              icon={SvgFolderPlus}
+              title="New Project"
+              onClick={handleNewProject}
+            />
+          </div>
+
+          <Divider />
+
+          <PopoverMenu>
+            {matches.length === 0
+              ? [
+                  <div key="empty" className="p-2">
+                    <Text font="secondary-body" color="text-03">
+                      {query.trim()
+                        ? "No matching projects or chats"
+                        : "No projects yet"}
+                    </Text>
+                  </div>,
+                ]
+              : matches.map((match) => (
+                  <ProjectPopoverRow
+                    key={match.project.id}
+                    match={match}
+                    onNavigate={() => setOpen(false)}
+                  />
+                ))}
+          </PopoverMenu>
+        </Popover.Content>
+      </Popover>
+    </>
   );
 }
