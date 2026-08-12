@@ -17,7 +17,8 @@ import { useAdminAgents } from "@/lib/agents/hooks";
 import {
   AnalyticsChart,
   chartSeries,
-} from "@/app/ee/admin/performance/usage/AnalyticsChart";
+  resolveChartState,
+} from "@/views/admin/WorkspaceAnalyticsPage/AnalyticsChart";
 import { DateRangePickerValue } from "@/components/dateRangeSelectors/AdminDateRangeSelector";
 import { Agent } from "@/lib/agents/types";
 
@@ -150,20 +151,40 @@ export function PersonaMessagesChart({ timeRange }: PersonaMessagesChartProps) {
 
   const selectedAgent = agents.find((agent) => agent.id === selectedPersonaId);
 
+  const series = [
+    chartSeries(
+      "Messages",
+      personaMessagesData,
+      (entry) => entry.total_messages
+    ),
+    chartSeries(
+      "Unique Users",
+      personaUniqueUsersData,
+      (entry) => entry.unique_users
+    ),
+  ];
+
   return (
     <AnalyticsChart
       title="Agent Analytics"
       description="Messages and unique users per day for the selected agent"
       timeRange={timeRange}
-      isLoading={
-        agentsLoading || isPersonaMessagesLoading || isPersonaUniqueUsersLoading
+      state={
+        selectedPersonaId === undefined
+          ? { status: "empty", message: "Select an agent to view analytics." }
+          : resolveChartState({
+              isLoading:
+                agentsLoading ||
+                isPersonaMessagesLoading ||
+                isPersonaUniqueUsersLoading,
+              error:
+                agentsError || personaMessagesError || personaUniqueUsersError,
+              errorMessage: "Failed to fetch agent data.",
+              emptyMessage:
+                "No data found for the selected agent in this time range.",
+              series,
+            })
       }
-      error={agentsError || personaMessagesError || personaUniqueUsersError}
-      errorMessage="Failed to fetch agent data..."
-      emptyMessage="No data found for selected agent in the specified time range"
-      {...(selectedPersonaId === undefined && {
-        prompt: "Select an agent to view analytics",
-      })}
       headerChildren={
         <Section
           flexDirection="row"
@@ -179,18 +200,6 @@ export function PersonaMessagesChart({ timeRange }: PersonaMessagesChartProps) {
           />
         </Section>
       }
-      series={[
-        chartSeries(
-          "Messages",
-          personaMessagesData,
-          (entry) => entry.total_messages
-        ),
-        chartSeries(
-          "Unique Users",
-          personaUniqueUsersData,
-          (entry) => entry.unique_users
-        ),
-      ]}
     />
   );
 }
