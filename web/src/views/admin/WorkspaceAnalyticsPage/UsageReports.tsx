@@ -25,12 +25,15 @@ import { humanReadableFormat, humanReadableFormatWithTime } from "@opal/time";
 import type { IconFunctionComponent, RichStr } from "@opal/types";
 import { errorHandlingFetcher } from "@/lib/fetcher";
 import { SWR_KEYS } from "@/lib/swr-keys";
-import { UsageReport } from "./types";
-
-interface ReportPeriod {
-  label: string;
-  range?: { from: Date; to: Date };
-}
+import { UsageReport } from "@/app/ee/admin/performance/usage/types";
+import {
+  PendingReport,
+  ReportPeriod,
+} from "@/views/admin/WorkspaceAnalyticsPage/interfaces";
+import {
+  generateUsageReport,
+  usageReportDownloadUrl,
+} from "@/views/admin/WorkspaceAnalyticsPage/svc";
 
 const PRESET_DAYS: { label: string; days: number }[] = [
   { label: "Today", days: 1 },
@@ -119,7 +122,7 @@ function ReportRow({ report, justArrived }: ReportRowProps) {
             icon={SvgDownload}
             tooltip="Download ZIP"
             aria-label={`Download report for ${periodLabel(report)}`}
-            href={`/api/admin/usage-report/${report.report_name}`}
+            href={usageReportDownloadUrl(report.report_name)}
           />
         }
       />
@@ -264,12 +267,6 @@ function GenerateReportMenu({
   );
 }
 
-interface PendingReport {
-  id: string;
-  label: string;
-  slow: boolean;
-}
-
 export default function UsageReports() {
   const [page, setPage] = useState(1);
   const [requesting, setRequesting] = useState(false);
@@ -335,21 +332,7 @@ export default function UsageReports() {
     const abort = new AbortController();
     abortRef.current = abort;
     try {
-      const reportId = crypto.randomUUID();
-      const res = await fetch("/api/admin/usage-report", {
-        method: "POST",
-        credentials: "include",
-        signal: abort.signal,
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          period_from: period.range ? period.range.from.toISOString() : null,
-          period_to: period.range ? period.range.to.toISOString() : null,
-          report_id: reportId,
-        }),
-      });
-      if (!res.ok) {
-        throw Error(`Received an error: ${res.statusText}`);
-      }
+      const reportId = await generateUsageReport(period, abort.signal);
       setPendingReport({ id: reportId, label: period.label, slow: false });
       setArrivedReportName(null);
       slowTimerRef.current = setTimeout(
