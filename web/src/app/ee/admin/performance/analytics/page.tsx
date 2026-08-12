@@ -36,7 +36,14 @@ export default function WorkspaceAnalyticsPage() {
         <Section flexDirection="row" justifyContent="end" height="fit">
           <AdminDateRangeSelector
             value={timeRange}
-            onValueChange={(value) => setTimeRange(value as any)}
+            onValueChange={(range) =>
+              // The selector owns from/to; selectValue stays with the page.
+              setTimeRange((previous) =>
+                range
+                  ? { ...range, selectValue: previous.selectValue }
+                  : previous
+              )
+            }
           />
         </Section>
         <UsageChart timeRange={timeRange} />
