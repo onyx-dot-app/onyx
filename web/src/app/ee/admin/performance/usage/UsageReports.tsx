@@ -1,6 +1,6 @@
 "use client";
 
-import React, { useEffect, useRef, useState } from "react";
+import React, { useEffect, useMemo, useRef, useState } from "react";
 import { format, startOfDay, subDays } from "date-fns";
 import useSWR from "swr";
 import {
@@ -22,6 +22,7 @@ import {
   SvgX,
 } from "@opal/icons";
 import { humanReadableFormat, humanReadableFormatWithTime } from "@opal/time";
+import type { IconFunctionComponent } from "@opal/types";
 import { errorHandlingFetcher } from "@/lib/fetcher";
 import { SWR_KEYS } from "@/lib/swr-keys";
 import { UsageReport } from "./types";
@@ -126,6 +127,29 @@ function ReportRow({ report, justArrived }: ReportRowProps) {
   );
 }
 
+interface PeriodMenuItemProps {
+  title: string;
+  onClick: () => void;
+  icon?: IconFunctionComponent;
+}
+
+// Every row in the period menu carries the same presentation.
+function PeriodMenuItem({ title, onClick, icon }: PeriodMenuItemProps) {
+  return (
+    <LineItemButton
+      title={title}
+      onClick={onClick}
+      {...(icon && { icon })}
+      rounding="md"
+      selectVariant="select-heavy"
+      sizePreset="main-ui"
+      state="empty"
+      variant="section"
+      width="full"
+    />
+  );
+}
+
 interface GenerateReportMenuProps {
   disabled: boolean;
   pending: boolean;
@@ -169,48 +193,32 @@ function GenerateReportMenu({
         width={view === "presets" ? "lg" : "fit"}
       >
         {view === "presets" ? (
+          // Children must stay a flat array: Popover.Menu filters over it and
+          // renders each `null` as a divider.
           <Popover.Menu>
             {[
               ...PRESET_DAYS.map((preset) => (
                 <Popover.Close asChild key={preset.label}>
-                  <LineItemButton
+                  <PeriodMenuItem
                     title={preset.label}
                     onClick={() =>
                       onGenerate(presetPeriod(preset.label, preset.days))
                     }
-                    rounding="md"
-                    selectVariant="select-heavy"
-                    sizePreset="main-ui"
-                    state="empty"
-                    variant="section"
-                    width="full"
                   />
                 </Popover.Close>
               )),
               <Popover.Close asChild key="all-time">
-                <LineItemButton
+                <PeriodMenuItem
                   title="All time"
                   onClick={() => onGenerate({ label: "All time" })}
-                  rounding="md"
-                  selectVariant="select-heavy"
-                  sizePreset="main-ui"
-                  state="empty"
-                  variant="section"
-                  width="full"
                 />
               </Popover.Close>,
               null,
-              <LineItemButton
+              <PeriodMenuItem
                 key="custom"
                 icon={SvgCalendar}
                 title="Custom period…"
                 onClick={() => setView("calendar")}
-                rounding="md"
-                selectVariant="select-heavy"
-                sizePreset="main-ui"
-                state="empty"
-                variant="section"
-                width="full"
               />,
             ]}
           </Popover.Menu>
@@ -257,21 +265,26 @@ function GenerateReportMenu({
   );
 }
 
+interface PendingReport {
+  id: string;
+  label: string;
+  slow: boolean;
+}
+
 export default function UsageReports() {
   const [page, setPage] = useState(1);
   const [requesting, setRequesting] = useState(false);
-  const [pendingSince, setPendingSince] = useState<number | null>(null);
-  const [pendingLabel, setPendingLabel] = useState<string>("");
-  const [pendingSlow, setPendingSlow] = useState(false);
+  const [pendingReport, setPendingReport] = useState<PendingReport | null>(
+    null
+  );
   const [arrivedReportName, setArrivedReportName] = useState<string | null>(
     null
   );
-  const [pendingReportId, setPendingReportId] = useState<string | null>(null);
   const slowTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const reportTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
-  const mountedRef = useRef(true);
+  const abortRef = useRef<AbortController | null>(null);
 
-  const pending = pendingSince !== null;
+  const pending = pendingReport !== null;
   const {
     data: reports,
     error: listError,
@@ -285,45 +298,51 @@ export default function UsageReports() {
     if (listError) console.error("Failed to load usage reports:", listError);
   }, [listError]);
 
+  function clearPendingTimers() {
+    if (slowTimerRef.current) {
+      clearTimeout(slowTimerRef.current);
+      slowTimerRef.current = null;
+    }
+    if (reportTimeoutRef.current) {
+      clearTimeout(reportTimeoutRef.current);
+      reportTimeoutRef.current = null;
+    }
+  }
+
   useEffect(() => {
-    if (!reports || !pendingReportId) return;
+    if (!reports || !pendingReport) return;
     const completed = reports.find((report) =>
-      report.report_name.includes(pendingReportId)
+      report.report_name.includes(pendingReport.id)
     );
-    if (completed && pending) {
-      setPendingSince(null);
-      setPendingReportId(null);
-      setPendingSlow(false);
+    if (completed) {
+      setPendingReport(null);
       setArrivedReportName(completed.report_name);
       setPage(1);
       toast.success("Usage report ready.");
-      if (slowTimerRef.current) {
-        clearTimeout(slowTimerRef.current);
-        slowTimerRef.current = null;
-      }
-      if (reportTimeoutRef.current) {
-        clearTimeout(reportTimeoutRef.current);
-        reportTimeoutRef.current = null;
-      }
+      clearPendingTimers();
     }
-  }, [reports, pending, pendingReportId]);
+  }, [reports, pendingReport]);
 
-  useEffect(() => {
-    mountedRef.current = true;
-    return () => {
-      mountedRef.current = false;
-      if (slowTimerRef.current) clearTimeout(slowTimerRef.current);
-      if (reportTimeoutRef.current) clearTimeout(reportTimeoutRef.current);
-    };
-  }, []);
+  useEffect(
+    () => () => {
+      clearPendingTimers();
+      abortRef.current?.abort();
+    },
+    []
+  );
 
   async function requestReport(period: ReportPeriod): Promise<void> {
     setRequesting(true);
+    // Navigating away aborts the request, so the catch below can tell a real
+    // failure from an unmount instead of consulting an isMounted flag.
+    const abort = new AbortController();
+    abortRef.current = abort;
     try {
       const reportId = crypto.randomUUID();
       const res = await fetch("/api/admin/usage-report", {
         method: "POST",
         credentials: "include",
+        signal: abort.signal,
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
           period_from: period.range ? period.range.from.toISOString() : null,
@@ -334,41 +353,32 @@ export default function UsageReports() {
       if (!res.ok) {
         throw Error(`Received an error: ${res.statusText}`);
       }
-      // The request outlives the component if the admin navigates away
-      // mid-flight; the cleanup effect has already run, so scheduling timers
-      // here would fire a stray "taking too long" toast on another page.
-      if (!mountedRef.current) return;
-      setPendingSince(Date.now());
-      setPendingReportId(reportId);
-      setPendingLabel(period.label);
-      setPendingSlow(false);
+      setPendingReport({ id: reportId, label: period.label, slow: false });
       setArrivedReportName(null);
       slowTimerRef.current = setTimeout(
-        () => setPendingSlow(true),
+        () =>
+          setPendingReport((current) =>
+            current ? { ...current, slow: true } : current
+          ),
         SLOW_REPORT_AFTER_MS
       );
       reportTimeoutRef.current = setTimeout(() => {
-        setPendingSince(null);
-        setPendingReportId(null);
-        setPendingSlow(false);
+        setPendingReport(null);
         toast.error(
           "Report generation is taking too long. Try again or check back later."
         );
         reportTimeoutRef.current = null;
       }, REPORT_TIMEOUT_MS);
     } catch (error) {
-      // Always log, but only toast if the admin is still on this page: a
-      // request aborted by navigating away must not surface as a failure
-      // notice on whatever page they landed on.
+      // An abort means the admin left the page; a failure notice belongs on
+      // this page, not on whatever page they landed on.
+      if (abort.signal.aborted) return;
       console.error("Failed to start usage report generation:", error);
-      if (mountedRef.current) {
-        const message =
-          error instanceof Error ? error.message : "unknown error";
-        toast.error(`Failed to start report generation: ${message}`);
-      }
+      const message = error instanceof Error ? error.message : "unknown error";
+      toast.error(`Failed to start report generation: ${message}`);
       return;
     } finally {
-      if (mountedRef.current) setRequesting(false);
+      if (!abort.signal.aborted) setRequesting(false);
     }
 
     // Best-effort list refresh: generation already succeeded, so a failed
@@ -379,7 +389,17 @@ export default function UsageReports() {
     });
   }
 
-  const orderedReports = reports ? [...reports].reverse() : [];
+  // Newest first by time_created rather than by list order, which the API does
+  // not promise.
+  const orderedReports = useMemo(
+    () =>
+      [...(reports ?? [])].sort(
+        (left, right) =>
+          new Date(right.time_created).getTime() -
+          new Date(left.time_created).getTime()
+      ),
+    [reports]
+  );
   const totalPages = Math.max(1, Math.ceil(orderedReports.length / PAGE_SIZE));
   const pageReports = orderedReports.slice(
     PAGE_SIZE * (page - 1),
@@ -436,7 +456,10 @@ export default function UsageReports() {
           height="fit"
         >
           {pending && page === 1 && (
-            <PendingReportRow rangeLabel={pendingLabel} slow={pendingSlow} />
+            <PendingReportRow
+              rangeLabel={pendingReport.label}
+              slow={pendingReport.slow}
+            />
           )}
           {orderedReports.length === 0 && !pending ? (
             <div className="rounded-12 border border-dashed border-border-02 p-4">
