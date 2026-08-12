@@ -1,7 +1,7 @@
 "use client";
 
 import SvgSimpleLoader from "@opal/icons/simple-loader";
-import { getDatesList } from "@/app/ee/admin/performance/lib";
+import { getDatesList } from "@/lib/usage/utils";
 import { useEffect, useState, useMemo } from "react";
 import {
   AdminDateRangeSelector,

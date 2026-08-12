@@ -2,7 +2,7 @@ import {
   useOnyxBotAnalytics,
   useQueryAnalytics,
   useUserAnalytics,
-} from "@/app/ee/admin/performance/lib";
+} from "@/lib/usage/hooks";
 import {
   AnalyticsChart,
   chartSeries,

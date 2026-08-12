@@ -1,7 +1,7 @@
 "use client";
 
 import { AdminDateRangeSelector } from "@/refresh-components/AdminDateRangeSelector";
-import { useTimeRange } from "@/app/ee/admin/performance/lib";
+import { useTimeRange } from "@/lib/usage/hooks";
 import {
   FeedbackChart,
   SlackChannelChart,

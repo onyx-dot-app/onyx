@@ -4,7 +4,7 @@ import { SvgX } from "@opal/icons";
 import { PageLoader, Section } from "@opal/layouts";
 import type { RichStr } from "@opal/types";
 import AreaChart from "@/refresh-components/AreaChart";
-import { getDatesList } from "@/app/ee/admin/performance/lib";
+import { getDatesList } from "@/lib/usage/utils";
 import { DateRangePickerValue } from "@/refresh-components/AdminDateRangeSelector";
 import {
   ChartSeries,

@@ -9,10 +9,7 @@ import {
 } from "@opal/components";
 import { SvgOnyxOctagon } from "@opal/icons";
 import { Section } from "@opal/layouts";
-import {
-  usePersonaMessages,
-  usePersonaUniqueUsers,
-} from "@/app/ee/admin/performance/lib";
+import { usePersonaMessages, usePersonaUniqueUsers } from "@/lib/usage/hooks";
 import { useAdminAgents } from "@/lib/agents/hooks";
 import {
   AnalyticsChart,
