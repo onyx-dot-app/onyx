@@ -8,11 +8,16 @@ import { cn } from "@opal/utils";
 import type {
   IconFunctionComponent,
   InputVariants,
-  Spacing,
   RichStr,
   WithoutStyles,
 } from "@opal/types";
-import { Divider, InputTypeIn, Text, Tooltip } from "@opal/components";
+import {
+  Divider,
+  type DividerSpacing,
+  InputTypeIn,
+  Text,
+  Tooltip,
+} from "@opal/components";
 import { toPlainString } from "@opal/components/text/InlineMarkdown";
 import { ContentAction } from "@opal/layouts";
 import { SvgChevronDownSmall } from "@opal/icons";
@@ -398,7 +403,7 @@ function InputSelectItem({
           titleMaxLines={1}
           description={description}
           descriptionMaxLines={wrapDescription ? undefined : 1}
-          padding="fit"
+          padding={0}
           width="full"
         />
       </div>
@@ -434,8 +439,8 @@ function InputSelectLabel({
 }
 
 interface InputSelectSeparatorProps {
-  paddingParallel?: Spacing;
-  paddingPerpendicular?: Spacing;
+  paddingParallel?: DividerSpacing;
+  paddingPerpendicular?: DividerSpacing;
 }
 
 function InputSelectSeparator({

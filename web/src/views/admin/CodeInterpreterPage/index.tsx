@@ -182,7 +182,7 @@ export default function CodeInterpreterPage() {
                   icon={SvgTerminal}
                   title="Code Interpreter"
                   description="Built-in Python runtime"
-                  padding="lg"
+                  padding={2}
                   rightChildren={
                     <Section alignItems="end" gap={0}>
                       <ConnectionStatus
@@ -236,7 +236,7 @@ export default function CodeInterpreterPage() {
               icon={SvgTerminal}
               title="Code Interpreter (Disconnected)"
               description="Built-in Python runtime"
-              padding="lg"
+              padding={2}
               rightChildren={
                 isReconnecting ? (
                   <CheckingStatus />

@@ -692,7 +692,7 @@ export default function ModelSelectorContent({
                                   color="muted"
                                   icon={group.Icon}
                                   title={group.displayName}
-                                  padding="fit"
+                                  padding={0}
                                   rightChildren={
                                     <Section>
                                       <Button

@@ -436,7 +436,7 @@ function ConnectableCard({
           <ContentAction
             sizePreset="main-ui"
             variant="section"
-            padding="fit"
+            padding={0}
             center
             icon={Logo}
             title={app.name}

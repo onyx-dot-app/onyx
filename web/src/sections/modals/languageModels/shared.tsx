@@ -318,7 +318,7 @@ export function ModelAccessField() {
                     Always shared
                   </Text>
                 }
-                padding="fit"
+                padding={0}
               />
             </Card>
             {selectedGroupIds.length > 0 && (
@@ -346,7 +346,7 @@ export function ModelAccessField() {
                               type="button"
                             />
                           }
-                          padding="fit"
+                          padding={0}
                         />
                       </Card>
                     </div>
@@ -383,7 +383,7 @@ export function ModelAccessField() {
                               type="button"
                             />
                           }
-                          padding="fit"
+                          padding={0}
                         />
                       </Card>
                     </div>
@@ -584,7 +584,7 @@ function ModelRow({
               rightChildren={modelRightChildren(model)}
               editable
               onTitleChange={(newTitle) => onRename(newTitle || undefined)}
-              padding="fit"
+              padding={0}
             />
           </div>
         </Interactive.Container>

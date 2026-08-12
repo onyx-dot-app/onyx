@@ -71,7 +71,7 @@ function MemoryTagWithTooltip({
                 icon={SvgAddLines}
                 title={operationLabel}
                 sizePreset="secondary"
-                padding="sm"
+                padding={1}
                 variant="body"
                 color="muted"
                 rightChildren={

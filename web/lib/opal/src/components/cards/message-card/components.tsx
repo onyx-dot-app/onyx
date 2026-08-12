@@ -175,7 +175,7 @@ function MessageCard({
           titleMaxLines={titleMaxLines}
           sizePreset="main-ui"
           variant="section"
-          padding="md"
+          padding={1}
           rightChildren={right}
         />
       </div>

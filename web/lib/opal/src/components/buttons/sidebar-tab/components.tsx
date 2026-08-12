@@ -212,7 +212,7 @@ function SidebarTab({
               variant="body"
               color="interactive"
               width="full"
-              padding="fit"
+              padding={0}
               rightChildren={truncationSpacer}
               titleMaxLines={1}
             />

@@ -1927,7 +1927,7 @@ function FederatedConnectorCard({
           }
           sizePreset="main-content"
           variant="section"
-          padding="sm"
+          padding={1}
           rightChildren={
             connector.has_oauth_token ? (
               <Button

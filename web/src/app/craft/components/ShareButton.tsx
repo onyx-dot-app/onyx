@@ -135,7 +135,7 @@ export default function ShareButton({
                     description={opt.description}
                     sizePreset="main-ui"
                     variant="section"
-                    padding="sm"
+                    padding={1}
                   />
                 </div>
               ))}

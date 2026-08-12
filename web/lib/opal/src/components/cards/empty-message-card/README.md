@@ -13,7 +13,7 @@ A pre-configured Card for empty states. Renders a transparent card with a dashed
 | `sizePreset` | `"secondary" \| "main-ui"`   | `"secondary"` | Controls layout and text sizing    |
 | `icon`       | `IconFunctionComponent`       | `SvgEmpty`    | Icon displayed alongside the title |
 | `title`      | `string \| RichStr`           | —             | Primary message text (required)    |
-| `padding`    | `Spacing`             | `4`           | Padding, as a spacing step (`N / 4` rem) |
+| `padding`    | `0 \| 0.5 \| 1 \| 2 \| 4 \| 6` | `4` | Padding, as a spacing step (`N / 4` rem). Closed set. |
 | `ref`        | `React.Ref<HTMLDivElement>`   | —             | Ref forwarded to the root div      |
 
 ### `sizePreset="main-ui"` only

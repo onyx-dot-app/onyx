@@ -15,8 +15,8 @@ A plain line with no title or description.
 | Prop | Type | Default | Description |
 |---|---|---|---|
 | `orientation` | `"horizontal" \| "vertical"` | `"horizontal"` | Direction of the line |
-| `paddingParallel` | `Spacing` | `2` | Padding along the line direction (0.5rem) |
-| `paddingPerpendicular` | `Spacing` | `1` | Padding perpendicular to the line (0.25rem) |
+| `paddingParallel` | `0 \| 0.5 \| 1 \| 2 \| 4 \| 6` | `2` | Inset along the line direction, as a spacing step (`N / 4` rem) |
+| `paddingPerpendicular` | `0 \| 0.5 \| 1 \| 2 \| 4 \| 6` | `1` | Inset perpendicular to the line, as a spacing step (`N / 4` rem) |
 
 ### Titled divider
 

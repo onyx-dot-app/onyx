@@ -100,7 +100,7 @@ function Vertical({
       sizePreset="main-ui"
       variant="section"
       width="full"
-      padding="fit"
+      padding={0}
       rightChildren={
         <Text font="secondary-body" color="text-03" as="p">
           {topRight}
@@ -192,7 +192,7 @@ function Horizontal({
         sizePreset="main-ui"
         variant="section"
         width="full"
-        padding="fit"
+        padding={0}
         center={center}
         responsive={responsive}
         fillRight={fillInput}
