@@ -4,7 +4,9 @@ import { useEffect, useState } from "react";
 import { useDroppable } from "@dnd-kit/core";
 import {
   Button,
+  Card,
   Divider,
+  EmptyMessageCard,
   InputTypeIn,
   LineItemButton,
   Popover,
@@ -13,7 +15,11 @@ import {
   Text,
   useCreateModal,
 } from "@opal/components";
-import { ConfirmationModalLayout, useSidebarState } from "@opal/layouts";
+import {
+  ConfirmationModalLayout,
+  Section,
+  useSidebarState,
+} from "@opal/layouts";
 import { cn } from "@opal/utils";
 import type { IconFunctionComponent } from "@opal/types";
 import {
@@ -298,9 +304,9 @@ function ProjectPopoverRow({ match, onNavigate }: ProjectPopoverRowProps) {
   // Unfold the project the user is inside, and any project listed because one
   // of its chats matched the search — otherwise the reason it is listed stays
   // hidden. Only ever opens, so folding it by hand sticks.
-  useEffect(() => {
-    if (isActiveProject || match.chatMatched) setOpen(true);
-  }, [isActiveProject, match.chatMatched]);
+  // useEffect(() => {
+  //   if (isActiveProject || match.chatMatched) setOpen(true);
+  // }, [isActiveProject, match.chatMatched]);
 
   function handleClick() {
     // Navigation closes the popover on its own, but re-selecting the project
@@ -310,32 +316,23 @@ function ProjectPopoverRow({ match, onNavigate }: ProjectPopoverRowProps) {
   }
 
   return (
-    <div data-testid="ProjectsPopover/row">
-      <SidebarTab
+    <div data-testid="ProjectsPopover/row" className="flex flex-col gap-1">
+      <LineItemButton
         icon={folderIcon}
-        // Same rule as the sidebar: while the chats are hidden, the folder
-        // carries the "you are here" mark for them.
-        selected={isActiveProject && (appFocus.isProject() || !open)}
+        title={match.project.name}
         onClick={noProp(handleClick)}
-      >
-        {match.project.name}
-      </SidebarTab>
-
+        sizePreset="main-ui"
+        rounding="sm"
+      />
       {open &&
-        (match.chatSessions.length > 0 ? (
-          match.chatSessions.map((chatSession) => (
-            <ChatButton
-              key={chatSession.id}
-              chatSession={chatSession}
-              project={match.project}
-            />
-          ))
-        ) : (
-          <div className="pl-8 py-1">
-            <Text font="secondary-body" color="text-03">
-              No chats yet
-            </Text>
-          </div>
+        match.chatSessions.map((chatSession) => (
+          <LineItemButton
+            key={chatSession.id}
+            icon={() => <div className="w-5" />}
+            title={chatSession.name}
+            sizePreset="main-ui"
+            rounding="sm"
+          />
         ))}
     </div>
   );
@@ -404,42 +401,37 @@ export function FoldedProjectsPopover() {
           data-testid="ProjectsPopover"
           side="right"
           align="start"
-          width="xl"
+          width="lg"
         >
-          <div className="flex flex-col gap-1">
+          <Section flexDirection="row" padding={0} gap={0}>
             <InputTypeIn
               data-testid="ProjectsPopover/search"
               searchIcon
               clearButton
               autoFocus
               variant="internal"
-              placeholder="Search projects and chats"
+              placeholder="Search projects..."
               value={query}
               onChange={(event) => setQuery(event.target.value)}
+              rightChildren={
+                <Button
+                  icon={SvgFolderPlus}
+                  prominence="internal"
+                  size="sm"
+                  onClick={noProp(handleNewProject)}
+                />
+              }
             />
-
-            <LineItemButton
-              data-testid="ProjectsPopover/new-project"
-              sizePreset="main-ui"
-              rounding="sm"
-              icon={SvgFolderPlus}
-              title="New Project"
-              onClick={handleNewProject}
-            />
-          </div>
-
-          <Divider />
+          </Section>
 
           <PopoverMenu>
             {matches.length === 0
               ? [
-                  <div key="empty" className="p-2">
-                    <Text font="secondary-body" color="text-03">
-                      {query.trim()
-                        ? "No matching projects or chats"
-                        : "No projects yet"}
-                    </Text>
-                  </div>,
+                  <EmptyMessageCard
+                    key="empty"
+                    title="No projects found"
+                    padding="sm"
+                  />,
                 ]
               : matches.map((match) => (
                   <ProjectPopoverRow
