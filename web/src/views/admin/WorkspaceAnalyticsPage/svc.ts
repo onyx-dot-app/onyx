@@ -27,7 +27,10 @@ export async function generateUsageReport(
     }),
   });
   if (!res.ok) {
-    const detail = await res.json().catch(() => null);
+    const detail = await res.json().catch((parseError: unknown) => {
+      console.error("Usage report error response was not JSON:", parseError);
+      return null;
+    });
     throw new Error(
       detail?.detail ?? `Failed to start report generation: ${res.statusText}`
     );
