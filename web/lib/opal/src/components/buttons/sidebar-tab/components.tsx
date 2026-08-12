@@ -153,9 +153,11 @@ function SidebarTab({
   /* The click target is an overlay that covers the whole row: a `Link` when
   `href` is set, a `button` otherwise. It stays a sibling of the content so that
   `rightChildren` and interactive icons remain valid nested controls. The focus
-  outline is inset because the container clips its overflow. */
+  outline is inset because the container clips its overflow. `cursor-pointer` is
+  explicit because the UA stylesheet gives `button` a default cursor, which wins
+  over the value inherited from `.interactive`. */
   const overlayClassName =
-    "absolute z-99 inset-0 rounded-08 outline-border-04 outline-offset-[-2px] focus-visible:outline-2";
+    "absolute z-99 inset-0 rounded-08 cursor-pointer outline-border-04 outline-offset-[-2px] focus-visible:outline-2";
   // A folded tab hides its label, and the overlay holds no text of its own, so
   // name it explicitly. Without this a folded tab is an unnamed control.
   const label = typeof children === "string" ? children : undefined;
