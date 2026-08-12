@@ -59,15 +59,20 @@ export const useOnyxBotAnalytics = (timeRange: DateRangePickerValue) => {
   };
 };
 
+// Local calendar day, not the UTC one: toISOString() on a local-midnight Date
+// shifts the whole series back a day for users at positive UTC offsets.
+function toCalendarDay(date: Date): string {
+  const month = `${date.getMonth() + 1}`.padStart(2, "0");
+  const day = `${date.getDate()}`.padStart(2, "0");
+  return `${date.getFullYear()}-${month}-${day}`;
+}
+
+// endDate keeps its default for AgentStats, which charts up to "now".
 export function getDatesList(startDate: Date, endDate = new Date()): string[] {
   const datesList: string[] = [];
-  const lastDate = new Date(endDate);
 
-  for (let d = new Date(startDate); d <= lastDate; d.setDate(d.getDate() + 1)) {
-    const dateStr = d.toISOString().split("T")[0]; // convert date object to 'YYYY-MM-DD' format
-    if (dateStr !== undefined) {
-      datesList.push(dateStr);
-    }
+  for (let d = new Date(startDate); d <= endDate; d.setDate(d.getDate() + 1)) {
+    datesList.push(toCalendarDay(d));
   }
 
   return datesList;
