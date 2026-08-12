@@ -31,6 +31,8 @@ from onyx.db.projects import (
     get_project_token_count,
     upload_files_to_user_files_with_indexing,
 )
+from onyx.error_handling.error_codes import OnyxErrorCode
+from onyx.error_handling.exceptions import OnyxError
 from onyx.server.features.projects.models import (
     CategorizedFilesSnapshot,
     ChatSessionRequest,
@@ -45,6 +47,19 @@ logger = setup_logger()
 
 
 router = APIRouter(prefix="/user/projects")
+
+# `user_project.name` and `user_project.description` are both varchar(255). Longer
+# values make Postgres reject the write, which surfaces as a 500.
+_MAX_PROJECT_FIELD_LENGTH = 255
+
+
+def _validate_project_field_length(value: str, field_name: str) -> None:
+    if len(value) > _MAX_PROJECT_FIELD_LENGTH:
+        raise OnyxError(
+            OnyxErrorCode.INVALID_INPUT,
+            f"Project {field_name} cannot be longer than "
+            f"{_MAX_PROJECT_FIELD_LENGTH} characters",
+        )
 
 
 class UserFileDeleteResult(BaseModel):
@@ -119,6 +134,7 @@ def create_project(
 ) -> UserProjectSnapshot:
     if name == "":
         raise HTTPException(status_code=400, detail="Project name cannot be empty")
+    _validate_project_field_length(name, "name")
     user_id = user.id
     project = UserProject(name=name, user_id=user_id)
     db_session.add(project)
@@ -405,8 +421,10 @@ def update_project(
         raise HTTPException(status_code=404, detail="Project not found")
 
     if body.name is not None:
+        _validate_project_field_length(body.name, "name")
         project.name = body.name
     if body.description is not None:
+        _validate_project_field_length(body.description, "description")
         project.description = body.description
 
     db_session.commit()
