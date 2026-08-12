@@ -41,7 +41,7 @@ export default defineConfig({
         viewport: { width: 1280, height: 720 },
         storageState: "admin_auth.json",
       },
-      grepInvert: [/@exclusive/, /@lite/],
+      grepInvert: [/@exclusive/, /@lite/, /@mcp-cimd/],
     },
     {
       // this suite runs independently and serially + slower
@@ -64,6 +64,17 @@ export default defineConfig({
         storageState: "admin_auth.json",
       },
       grep: /@lite/,
+    },
+    {
+      name: "mcp-cimd",
+      use: {
+        ...devices["Desktop Chrome"],
+        viewport: { width: 1280, height: 720 },
+        storageState: "admin_auth.json",
+        ignoreHTTPSErrors: true,
+      },
+      grep: /@mcp-cimd/,
+      workers: 1,
     },
   ],
 });
