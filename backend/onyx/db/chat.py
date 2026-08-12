@@ -7,6 +7,7 @@ from fastapi import HTTPException
 from sqlalchemy import Row, delete, desc, func, nullsfirst, or_, select, update
 from sqlalchemy.exc import MultipleResultsFound
 from sqlalchemy.orm import Session, joinedload, selectinload
+from sqlalchemy.sql.expression import ColumnElement
 
 from onyx.configs.chat_configs import HARD_DELETE_CHATS
 from onyx.configs.constants import MessageType
@@ -107,6 +108,15 @@ def get_incognito_session_ids_for_user(
     )
 
 
+def content_persisting_sessions_filter() -> ColumnElement[bool]:
+    """Ordinary chats plus incognito modes that persist content. Content-free
+    sessions have no message content to show on any history surface."""
+    persisting = [m for m in IncognitoRecordMode if m.persists_content]
+    return ChatSession.incognito_record_mode.is_(
+        None
+    ) | ChatSession.incognito_record_mode.in_(persisting)
+
+
 # Retrieves chat sessions by user
 # Chat sessions do not include onyxbot flows
 def get_chat_sessions_by_user(
@@ -119,6 +129,7 @@ def get_chat_sessions_by_user(
     only_non_project_chats: bool = False,
     include_failed_chats: bool = False,
     exclude_incognito: bool = False,
+    exclude_content_free: bool = False,
 ) -> list[ChatSession]:
     stmt = (
         select(ChatSession)
@@ -127,8 +138,14 @@ def get_chat_sessions_by_user(
         .order_by(desc(ChatSession.time_updated))
     )
 
+    # The two exclusions are independent because the surfaces differ: the owner
+    # sees none of their incognito sessions, while a workspace surface keeps the
+    # full-history ones and drops only those with no content to show.
     if exclude_incognito:
         stmt = stmt.where(ChatSession.incognito_record_mode.is_(None))
+
+    if exclude_content_free:
+        stmt = stmt.where(content_persisting_sessions_filter())
 
     if deleted is not None:
         stmt = stmt.where(ChatSession.deleted == deleted)

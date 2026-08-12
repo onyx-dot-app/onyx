@@ -543,6 +543,43 @@ export interface UserGroup {
   is_up_to_date: boolean;
   is_up_for_deletion: boolean;
   is_default: boolean;
+  // Members may start incognito chats while the workspace availability
+  // setting is groups-only.
+  incognito_enabled: boolean;
+}
+
+// Mirrors `IncognitoAvailability` in backend/onyx/server/security/models.py.
+export type IncognitoAvailability = "off" | "everyone" | "groups";
+
+// Mirrors `IncognitoRecordMode` in backend/onyx/db/enums.py.
+export type IncognitoRecordMode = "full_history" | "usage_only";
+
+// Mirrors `SSRFProtectionLevel` in backend/onyx/server/security/models.py.
+export type SSRFProtectionLevel =
+  | "validate_all"
+  | "validate_llm"
+  | "allow_private_network"
+  | "disabled";
+
+// Read shape of GET /admin/security: effective, env-merged settings. Every
+// field is concrete, the backend never returns null here (see
+// `SecuritySettings` in backend/onyx/server/security/models.py).
+export interface SecuritySettings {
+  user_directory_admin_only: boolean;
+  incognito_availability: IncognitoAvailability;
+  incognito_record_mode: IncognitoRecordMode;
+  track_external_idp_expiry: boolean;
+  ssrf_protection_level: SSRFProtectionLevel;
+  mask_credential_prefix: boolean;
+  llm_custom_config_env_injection: boolean;
+  valid_email_domains: string[];
+  password_min_length: number;
+  password_max_length: number;
+  password_require_uppercase: boolean;
+  password_require_lowercase: boolean;
+  password_require_digit: boolean;
+  password_require_special_char: boolean;
+  password_auth_enabled: boolean;
 }
 
 export enum ValidSources {
