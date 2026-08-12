@@ -45,6 +45,11 @@ interface SidebarTabProps {
 
   onClick?: React.MouseEventHandler<HTMLElement>;
   href?: string;
+
+  /**
+   * HTML button type for the click target. Ignored when `href` is set.
+   * @default "button"
+   */
   type?: ButtonType;
   icon?: IconFunctionComponent;
   children?: React.ReactNode;
@@ -108,8 +113,10 @@ function FoldedTooltip({ label, folded, children }: FoldedTooltipProps) {
  * Sidebar navigation tab built on `Interactive.Stateful` > `Interactive.Container`.
  *
  * Uses `sidebar-heavy` (default) or `sidebar-light` (via `variant`) variants
- * for color styling. Supports an overlay `Link` for client-side navigation,
- * `rightChildren` for inline actions, and folded mode with an auto-tooltip.
+ * for color styling. The click target is an overlay control — a `Link` when
+ * `href` is set, a `button` when only `onClick` is set — so both paths are
+ * keyboard focusable. Supports `rightChildren` for inline actions, and folded
+ * mode with an auto-tooltip.
  *
  * The label and `rightChildren` always render. The folded state hides them in
  * CSS — see `styles.css` — so folding a sidebar re-renders no tabs.
@@ -138,15 +145,45 @@ function SidebarTab({
       : null);
 
   // The `rightChildren` node is absolutely positioned to sit on top of the
-  // overlay Link. A zero-width spacer reserves truncation space for the title.
+  // overlay control. A zero-width spacer reserves truncation space for the title.
   const truncationSpacer = rightChildren && (
     <div className="w-0 group-hover/SidebarTab:w-6" />
   );
 
-  // A folded tab hides its label, and neither the overlay Link nor the button
-  // holds text of its own, so name them explicitly. Without this a folded tab
-  // is an unnamed control.
+  /* The click target is an overlay that covers the whole row: a `Link` when
+  `href` is set, a `button` otherwise. It stays a sibling of the content so that
+  `rightChildren` and interactive icons remain valid nested controls. The focus
+  outline is inset because the container clips its overflow. `cursor-pointer` is
+  explicit because the UA stylesheet gives `button` a default cursor, which wins
+  over the value inherited from `.interactive`. */
+  const overlayClassName =
+    "absolute z-99 inset-0 rounded-08 cursor-pointer outline-border-04 outline-offset-[-2px] focus-visible:outline-2";
+  /* The overlay holds no text of its own, and a folded tab hides its label, so
+  name the overlay explicitly. String children name it directly. Other content
+  (truncated or animated titles) names it through the element that renders the
+  title. */
   const label = typeof children === "string" ? children : undefined;
+  const labelId = React.useId();
+  const labelProps =
+    label !== undefined
+      ? { "aria-label": label }
+      : { "aria-labelledby": labelId };
+  const overlay = disabled ? null : href ? (
+    <Link
+      href={href as Route}
+      scroll={false}
+      onClick={onClick}
+      {...labelProps}
+      className={overlayClassName}
+    />
+  ) : onClick ? (
+    <button
+      type={type ?? "button"}
+      onClick={onClick}
+      {...labelProps}
+      className={overlayClassName}
+    />
+  ) : null;
 
   const content = (
     <div
@@ -157,28 +194,11 @@ function SidebarTab({
         variant={variant}
         state={selected ? "selected" : "empty"}
         disabled={disabled}
-        onClick={onClick}
         type="button"
         group="group/SidebarTab"
       >
-        <Interactive.Container
-          rounding="sm"
-          size="lg"
-          width="full"
-          type={type}
-          // Only when `type` makes this a real button — `aria-label` on a
-          // plain div names nothing.
-          aria-label={type ? label : undefined}
-        >
-          {href && !disabled && (
-            <Link
-              href={href as Route}
-              scroll={false}
-              className="absolute z-99 inset-0 rounded-08"
-              tabIndex={-1}
-              aria-label={label}
-            />
-          )}
+        <Interactive.Container rounding="sm" size="lg" width="full">
+          {overlay}
 
           {rightChildren && (
             <div className="opal-sidebar-tab__actions">{rightChildren}</div>
@@ -197,9 +217,13 @@ function SidebarTab({
               titleMaxLines={1}
             />
           ) : (
-            <div className="flex flex-row items-center gap-2 w-full">
+            <div
+              id={labelId}
+              className="flex flex-row items-center gap-2 w-full"
+            >
               {Icon && (
-                <div className="flex items-center justify-center p-0.5">
+                /* Sits above the overlay so an interactive icon stays clickable. */
+                <div className="relative z-100 flex items-center justify-center p-0.5">
                   <Icon className="h-4 w-4 text-text-03" />
                 </div>
               )}

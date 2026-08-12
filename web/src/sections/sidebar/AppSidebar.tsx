@@ -522,7 +522,11 @@ export default function AppSidebar() {
 
   const searchChatsButton = (
     <ChatSearchCommandMenu
-      trigger={<SidebarTab icon={SvgSearchMenu}>Search Chats</SidebarTab>}
+      trigger={(open) => (
+        <SidebarTab icon={SvgSearchMenu} onClick={open}>
+          Search Chats
+        </SidebarTab>
+      )}
     />
   );
 

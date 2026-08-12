@@ -433,8 +433,13 @@ const ChatButton = memo(
       >
         <Popover.Anchor>
           <SidebarTab
-            href={isDragging ? undefined : `/app?chatId=${chatSession.id}`}
-            onClick={handleClick}
+            /* While renaming, drop the click target so the input stays usable. */
+            href={
+              isDragging || renaming
+                ? undefined
+                : `/app?chatId=${chatSession.id}`
+            }
+            onClick={renaming ? undefined : handleClick}
             selected={active}
             rightChildren={rightMenu}
             nested={!!project}
