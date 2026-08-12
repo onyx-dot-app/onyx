@@ -518,7 +518,25 @@ def test_budget_reflects_user_cost_limit(
     from onyx.db.models import TokenRateLimitScope
 
     caller = str(uuid4())
-    _seed_current_window(db_session, caller)  # records 1.25c of cost
+    fixed_now = datetime.datetime(2026, 8, 12, 15, tzinfo=datetime.timezone.utc)
+
+    class _FixedDatetime(datetime.datetime):
+        @classmethod
+        def now(cls, tz: datetime.tzinfo | None = None) -> datetime.datetime:
+            return fixed_now if tz is not None else fixed_now.replace(tzinfo=None)
+
+    _seed_usage(
+        db_session,
+        caller,
+        "gpt-4o",
+        "CHAT",
+        "openai",
+        100,
+        50,
+        0,
+        1.25,
+        get_cost_window_start(fixed_now, 24),
+    )
     db_session.add(
         TokenRateLimit(
             enabled=True,
@@ -529,6 +547,7 @@ def test_budget_reflects_user_cost_limit(
         )
     )
     db_session.commit()
+    monkeypatch.setattr(usage_api, "datetime", _FixedDatetime)
     monkeypatch.setattr(
         "onyx.server.features.usage.api.fetch_default_llm_model", lambda _db: None
     )
@@ -539,7 +558,7 @@ def test_budget_reflects_user_cost_limit(
     assert body["budget_cents"] == pytest.approx(100.0)
     assert body["budget_remaining_cents"] == pytest.approx(98.75)  # 100 - 1.25
     assert body["budget_reset_at"] == get_cost_window_reset(
-        datetime.datetime.now(datetime.timezone.utc), 168
+        fixed_now, 168
     ).isoformat().replace("+00:00", "Z")
 
 
