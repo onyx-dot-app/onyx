@@ -372,6 +372,13 @@ jobs:
               RUN_CMD="bash tests/integration/tests/gateway_clients/run_with_server.sh"
             fi
 
+            TEST_INFRA_ARGS=""
+            if [ "${{ matrix.test-dir.path }}" = "tests/mcp_oauth" ]; then
+              TEST_INFRA_ARGS="-v /var/run/docker.sock:/var/run/docker.sock"
+              TEST_INFRA_ARGS="$TEST_INFRA_ARGS --add-host host.docker.internal:host-gateway"
+              TEST_INFRA_ARGS="$TEST_INFRA_ARGS -e MCP_CIMD_NGINX_IMAGE=${RUNS_ON_ECR_CACHE}/library/nginx:1.25.5-alpine"
+            fi
+
             # Mount CLI binary into the container if it exists (CLI tests only)
             CLI_VOLUME=""
             if [ -f "${{ github.workspace }}/onyx-cli-test" ]; then
@@ -385,6 +392,7 @@ jobs:
               -v ${{ github.workspace }}:/workspace \
               -w /workspace/backend \
               $CLI_VOLUME \
+              $TEST_INFRA_ARGS \
               -e INTEGRATION_TESTS_MODE=true \
               -e POSTGRES_HOST=relational_db \
               -e POSTGRES_USER=postgres \
