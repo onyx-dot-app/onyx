@@ -8,7 +8,7 @@ import {
   chartSeries,
   resolveChartState,
   useLoggedChartError,
-} from "@/views/admin/WorkspaceAnalyticsPage/AnalyticsChart";
+} from "@/sections/usage/AnalyticsChart";
 import { DateRangePickerValue } from "@/refresh-components/AdminDateRangeSelector";
 
 interface TimeRangeProps {

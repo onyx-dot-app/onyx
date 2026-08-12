@@ -5,11 +5,8 @@ import { PageLoader, Section } from "@opal/layouts";
 import type { RichStr } from "@opal/types";
 import AreaChart from "@/refresh-components/AreaChart";
 import { getDatesList } from "@/lib/usage/utils";
-import { DateRangePickerValue } from "@/refresh-components/AdminDateRangeSelector";
-import {
-  ChartSeries,
-  ChartState,
-} from "@/views/admin/WorkspaceAnalyticsPage/interfaces";
+import { DateRange } from "@/refresh-components/AdminDateRangeSelector";
+import { ChartSeries, ChartState } from "@/sections/usage/interfaces";
 
 const CHART_BODY_HEIGHT = 20;
 
@@ -78,7 +75,7 @@ export function resolveChartState({
 
 interface ChartBodyProps {
   state: ChartState;
-  timeRange: DateRangePickerValue;
+  timeRange: DateRange;
   stacked: boolean;
   allowDecimals: boolean;
   xAxisFormatter: (value: string) => string;
@@ -120,8 +117,8 @@ function ChartBody({
     .filter((date): date is string => date !== undefined)
     .sort()[0];
   const dateRange = getDatesList(
-    timeRange.from ?? new Date(earliest ?? Date.now()),
-    timeRange.to
+    timeRange?.from ?? new Date(earliest ?? Date.now()),
+    timeRange?.to
   );
 
   return (
@@ -149,7 +146,7 @@ function ChartBody({
 interface AnalyticsChartProps {
   title: string | RichStr;
   description: string | RichStr;
-  timeRange: DateRangePickerValue;
+  timeRange: DateRange;
   state: ChartState;
   headerChildren?: React.ReactNode;
   stacked?: boolean;

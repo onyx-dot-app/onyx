@@ -15,7 +15,7 @@ import {
   AnalyticsChart,
   chartSeries,
   resolveChartState,
-} from "@/views/admin/WorkspaceAnalyticsPage/AnalyticsChart";
+} from "@/sections/usage/AnalyticsChart";
 import { DateRangePickerValue } from "@/refresh-components/AdminDateRangeSelector";
 import { Agent } from "@/lib/agents/types";
 
