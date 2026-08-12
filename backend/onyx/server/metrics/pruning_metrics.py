@@ -69,3 +69,18 @@ def inc_pruning_rate_limit_error(connector_type: str) -> None:
         PRUNING_RATE_LIMIT_ERRORS.labels(connector_type=connector_type).inc()
     except Exception:
         logger.debug("Failed to record pruning rate limit error", exc_info=True)
+
+
+def inc_pruning_rate_limit_error_if_detected(
+    error_str: str, connector_type: str
+) -> bool:
+    """Best-effort rate limit detection — connectors surface rate limits
+    inconsistently (HTTP 429, SDK-specific exception types).
+    TODO(Bo): replace with a standard ConnectorRateLimitError raised by all
+    connectors, making this check precise.
+    """
+    lowered = error_str.lower()
+    if "rate limit" in lowered or "ratelimit" in lowered or "429" in error_str:
+        inc_pruning_rate_limit_error(connector_type)
+        return True
+    return False
