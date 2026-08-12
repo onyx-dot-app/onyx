@@ -16,6 +16,7 @@ from onyx.db.token_limit import fetch_all_global_token_rate_limits
 from onyx.db.user_usage import (
     TokenUsageBucket,
     earliest_window_reset,
+    get_cost_window_reset,
     get_cost_window_start,
     get_token_window_start,
     get_total_cost_cents_buckets_since,
@@ -86,9 +87,9 @@ def _user_is_rate_limited_by_global() -> None:
             rl for rl in global_rate_limits if rl.cost_budget_cents is not None
         ]
         if cost_limits:
-            cost_cutoff = get_cost_window_start(
-                datetime.now(timezone.utc),
-                max(rl.period_hours for rl in cost_limits),
+            now = datetime.now(timezone.utc)
+            cost_cutoff = min(
+                get_cost_window_start(now, rl.period_hours) for rl in cost_limits
             )
             cost_buckets = get_total_cost_cents_buckets_since(db_session, cost_cutoff)
             cost_reset = _cost_budget_reset(global_rate_limits, cost_buckets)
@@ -166,11 +167,7 @@ def _cost_budget_reset(
     rate_limits: Sequence[TokenRateLimit],
     cost_buckets: Sequence[tuple[datetime, float]],
 ) -> datetime | None:
-    """The latest exact reset among the exceeded cost budgets, or None.
-
-    Mirrors `_token_budget_reset`. Cost windows contain whole UTC-day buckets;
-    rows without a cost_budget_cents are cost-exempt.
-    """
+    """The latest fixed reset among the exceeded cost budgets, or None."""
     now = datetime.now(timezone.utc)
     resets: list[datetime] = []
     for rate_limit in rate_limits:
@@ -183,11 +180,7 @@ def _cost_budget_reset(
             cents for window_start, cents in cost_buckets if window_start >= cutoff
         )
         if cost >= budget:
-            resets.append(
-                earliest_window_reset(
-                    now, rate_limit.period_hours, cost_buckets, budget
-                )
-            )
+            resets.append(get_cost_window_reset(now, rate_limit.period_hours))
 
     return max(resets) if resets else None
 

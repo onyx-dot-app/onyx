@@ -27,6 +27,7 @@ from onyx.db.models import (
     User__UserGroup,
     UserUsage,
 )
+from onyx.db.user_usage import get_cost_window_reset, get_cost_window_start
 from onyx.error_handling.exceptions import register_onyx_exception_handlers
 from onyx.llm import cost_overrides
 from onyx.llm.cost import ModelPrice, get_model_price_per_million
@@ -46,6 +47,26 @@ def _compile_jsonb_sqlite(_element: object, _compiler: object, **_kw: object) ->
 class _StubUser:
     def __init__(self, user_id: str) -> None:
         self.id = user_id
+
+
+@pytest.mark.parametrize(
+    ("period_hours", "start", "reset"),
+    [
+        (24, datetime.datetime(2026, 8, 12), datetime.datetime(2026, 8, 13)),
+        (168, datetime.datetime(2026, 8, 10), datetime.datetime(2026, 8, 17)),
+        (720, datetime.datetime(2026, 8, 1), datetime.datetime(2026, 9, 1)),
+    ],
+)
+def test_cost_budgets_use_fixed_utc_calendar_periods(
+    period_hours: int, start: datetime.datetime, reset: datetime.datetime
+) -> None:
+    now = datetime.datetime(2026, 8, 12, 15, tzinfo=datetime.timezone.utc)
+    assert get_cost_window_start(now, period_hours) == start.replace(
+        tzinfo=datetime.timezone.utc
+    )
+    assert get_cost_window_reset(now, period_hours) == reset.replace(
+        tzinfo=datetime.timezone.utc
+    )
 
 
 @pytest.fixture

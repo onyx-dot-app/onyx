@@ -86,6 +86,7 @@ class EffectiveCostBudget(BaseModel):
     budget_cents: float
     remaining_cents: float
     period_hours: int
+    reset_at: datetime
 
 
 class UserUsageResponse(BaseModel):
@@ -95,5 +96,6 @@ class UserUsageResponse(BaseModel):
     budget_cents: float | None
     budget_remaining_cents: float | None
     budget_period_hours: int | None = None
+    budget_reset_at: datetime | None = None
     selected_model_price: ModelPrice | None
     available_model_prices: list[ModelPrice] = Field(default_factory=list)

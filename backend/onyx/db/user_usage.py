@@ -25,6 +25,7 @@ USER_USAGE_BUCKET_SECONDS = 24 * 60 * 60
 USER_USAGE_BUCKET_HOURS = USER_USAGE_BUCKET_SECONDS // (60 * 60)
 TOKEN_BUDGET_PERIOD_ERROR = "Token budget periods must be whole UTC days"
 COST_BUDGET_PERIOD_ERROR = "Cost budget periods must be whole UTC days"
+COST_BUDGET_PERIOD_HOURS = {24, 168, 720}
 # Not email-shaped on purpose: it can never collide with a real address.
 DELETED_USER_EXPORT_EMAIL = "(deleted user)"
 _CONFLICT_COLS = ["user_id", "window_start", "model", "flow", "provider", "incognito"]
@@ -51,21 +52,20 @@ def get_token_window_start(now: datetime, period_hours: int) -> datetime:
 
 def _get_cost_period_seconds(period_hours: int) -> int:
     period_seconds = period_hours * 60 * 60
-    if (
-        period_seconds < USER_USAGE_BUCKET_SECONDS
-        or period_seconds % USER_USAGE_BUCKET_SECONDS
-    ):
-        raise ValueError(COST_BUDGET_PERIOD_ERROR)
+    if period_hours not in COST_BUDGET_PERIOD_HOURS:
+        raise ValueError("Cost budget periods must be daily, weekly, or monthly")
     return period_seconds
 
 
 def get_cost_window_start(now: datetime, period_hours: int) -> datetime:
-    """Start of the UTC-day buckets in a cost-budget window."""
-    period_seconds = _get_cost_period_seconds(period_hours)
+    """Start of the current fixed UTC cost-budget period."""
+    _get_cost_period_seconds(period_hours)
     current_bucket = get_window_start(now, USER_USAGE_BUCKET_SECONDS)
-    return current_bucket - timedelta(
-        seconds=period_seconds - USER_USAGE_BUCKET_SECONDS
-    )
+    if period_hours == 24:
+        return current_bucket
+    if period_hours == 168:
+        return current_bucket - timedelta(days=current_bucket.weekday())
+    return current_bucket.replace(day=1)
 
 
 def get_token_window_reset(now: datetime, period_hours: int) -> datetime:
@@ -75,9 +75,14 @@ def get_token_window_reset(now: datetime, period_hours: int) -> datetime:
 
 
 def get_cost_window_reset(now: datetime, period_hours: int) -> datetime:
-    period_seconds = _get_cost_period_seconds(period_hours)
-    current_bucket = get_window_start(now, USER_USAGE_BUCKET_SECONDS)
-    return current_bucket + timedelta(seconds=period_seconds)
+    window_start = get_cost_window_start(now, period_hours)
+    if period_hours == 24:
+        return window_start + timedelta(days=1)
+    if period_hours == 168:
+        return window_start + timedelta(days=7)
+    if window_start.month == 12:
+        return window_start.replace(year=window_start.year + 1, month=1)
+    return window_start.replace(month=window_start.month + 1)
 
 
 def earliest_window_reset(
