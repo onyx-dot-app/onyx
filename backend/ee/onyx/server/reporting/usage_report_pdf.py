@@ -300,16 +300,20 @@ def _table(rows: list[list[str]], col_widths: list[float]) -> Table:
     table.setStyle(
         TableStyle(
             [
+                # Header and body typography.
                 ("FONTNAME", (0, 0), (-1, 0), "Helvetica-Bold"),
                 ("FONTNAME", (0, 1), (-1, -1), "Helvetica"),
                 ("FONTSIZE", (0, 0), (-1, -1), 9),
                 ("TEXTCOLOR", (0, 0), (-1, 0), _INK),
                 ("TEXTCOLOR", (0, 1), (-1, -1), _BODY),
                 ("TEXTCOLOR", (0, 1), (0, -1), _INK),
+                # Text columns left-align; numeric columns right-align.
                 ("ALIGN", (1, 0), (-1, -1), "RIGHT"),
                 ("ALIGN", (0, 0), (0, -1), "LEFT"),
+                # Separate the header and each body row.
                 ("LINEBELOW", (0, 0), (-1, 0), 1, _INK),
                 ("LINEBELOW", (0, 1), (-1, -2), 0.5, _HAIRLINE),
+                # Keep rows readable without changing column width.
                 ("TOPPADDING", (0, 0), (-1, -1), 7),
                 ("BOTTOMPADDING", (0, 0), (-1, -1), 7),
                 ("LEFTPADDING", (0, 0), (-1, -1), 0),
