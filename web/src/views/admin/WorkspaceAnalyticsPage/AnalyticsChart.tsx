@@ -13,11 +13,24 @@ import {
 
 const CHART_BODY_HEIGHT = 20;
 
+// "YYYY-MM-DD" parses as UTC midnight, which renders a day early west of UTC,
+// so build the Date from the parts instead.
 function formatDay(dateStr: string): string {
-  return new Date(dateStr).toLocaleDateString("en-US", {
+  const [year, month, day] = dateStr.split("-").map(Number);
+  if (year === undefined || month === undefined || day === undefined) {
+    return dateStr;
+  }
+  return new Date(year, month - 1, day).toLocaleDateString("en-US", {
     month: "short",
     day: "numeric",
   });
+}
+
+/** Keeps the underlying failure in the console when a chart shows its error card. */
+export function useLoggedChartError(label: string, error: unknown): void {
+  React.useEffect(() => {
+    if (error) console.error(`${label} analytics request failed:`, error);
+  }, [label, error]);
 }
 
 export function chartSeries<T extends { date: string }>(

@@ -7,6 +7,7 @@ import {
   AnalyticsChart,
   chartSeries,
   resolveChartState,
+  useLoggedChartError,
 } from "@/views/admin/WorkspaceAnalyticsPage/AnalyticsChart";
 import { DateRangePickerValue } from "@/components/dateRangeSelectors/AdminDateRangeSelector";
 
@@ -25,6 +26,9 @@ export function UsageChart({ timeRange }: TimeRangeProps) {
   const queryAnalytics = useQueryAnalytics(timeRange);
   const userAnalytics = useUserAnalytics(timeRange);
 
+  useLoggedChartError("Query", queryAnalytics.error);
+  useLoggedChartError("Active user", userAnalytics.error);
+
   return (
     <AnalyticsChart
       title="Usage"
@@ -33,7 +37,8 @@ export function UsageChart({ timeRange }: TimeRangeProps) {
       state={resolveChartState({
         isLoading: queryAnalytics.isLoading || userAnalytics.isLoading,
         error: queryAnalytics.error || userAnalytics.error,
-        errorMessage: "Failed to fetch query data.",
+        // Either endpoint can be the one that failed, so stay source-neutral.
+        errorMessage: "Failed to fetch usage data.",
         emptyMessage: "No queries in the selected time range.",
         series: [
           chartSeries("Queries", queryAnalytics.data, (e) => e.total_queries),
@@ -52,6 +57,8 @@ export function UsageChart({ timeRange }: TimeRangeProps) {
 
 export function FeedbackChart({ timeRange }: TimeRangeProps) {
   const { data, isLoading, error } = useQueryAnalytics(timeRange);
+
+  useLoggedChartError("Feedback", error);
 
   return (
     <AnalyticsChart
@@ -74,6 +81,8 @@ export function FeedbackChart({ timeRange }: TimeRangeProps) {
 
 export function SlackChannelChart({ timeRange }: TimeRangeProps) {
   const { data, isLoading, error } = useOnyxBotAnalytics(timeRange);
+
+  useLoggedChartError("OnyxBot", error);
 
   return (
     <AnalyticsChart
