@@ -2,20 +2,17 @@
 
 from __future__ import annotations
 
-import io
+import ipaddress
 import os
 import socket
 import subprocess
 import sys
-import tarfile
 import threading
 import time
 from collections.abc import Generator
 from datetime import UTC, datetime, timedelta
 from pathlib import Path
-from uuid import uuid4
 
-import docker
 import httpx
 import pytest
 import uvicorn
@@ -23,9 +20,6 @@ from cryptography import x509
 from cryptography.hazmat.primitives import hashes, serialization
 from cryptography.hazmat.primitives.asymmetric import rsa
 from cryptography.x509.oid import NameOID
-from docker.client import DockerClient
-from docker.errors import NotFound
-from docker.models.containers import Container
 from fastapi.testclient import TestClient
 
 from onyx.server.features.mcp import client_metadata
@@ -34,9 +28,7 @@ from tests.integration.common_utils.cimd_oauth import (
     CimdOAuthTestServices,
 )
 
-NGINX_IMAGE = os.getenv("MCP_CIMD_NGINX_IMAGE", "nginx:1.25.5-alpine")
-DOCKER_NETWORK = "onyx_default"
-NGINX_HTTPS_PORT = "443/tcp"
+NGINX_COMMAND = "nginx"
 STARTUP_TIMEOUT_SECONDS = 30.0
 
 MOCK_SERVER_DIR = (
@@ -82,30 +74,6 @@ def _stop_process(process: subprocess.Popen[bytes]) -> None:
         process.wait(timeout=5)
 
 
-def _docker_network(client: DockerClient) -> str | None:
-    try:
-        client.networks.get(DOCKER_NETWORK)
-    except NotFound:
-        return None
-    return DOCKER_NETWORK
-
-
-def _copy_to_container(
-    container: Container,
-    destination: str,
-    files: dict[str, bytes],
-) -> None:
-    archive_buffer = io.BytesIO()
-    with tarfile.open(fileobj=archive_buffer, mode="w") as archive:
-        for filename, content in files.items():
-            info = tarfile.TarInfo(filename)
-            info.size = len(content)
-            archive.addfile(info, io.BytesIO(content))
-    archive_buffer.seek(0)
-    if not container.put_archive(destination, archive_buffer.read()):
-        raise RuntimeError(f"Failed to copy files into {container.name}")
-
-
 def _write_certificate(directory: Path, hostname: str) -> tuple[Path, Path]:
     key = rsa.generate_private_key(public_exponent=65537, key_size=2048)
     subject = x509.Name([x509.NameAttribute(NameOID.COMMON_NAME, hostname)])
@@ -121,9 +89,8 @@ def _write_certificate(directory: Path, hostname: str) -> tuple[Path, Path]:
         .add_extension(
             x509.SubjectAlternativeName(
                 [
-                    x509.DNSName(hostname),
+                    x509.IPAddress(ipaddress.ip_address(hostname)),
                     x509.DNSName("localhost"),
-                    x509.DNSName("host.docker.internal"),
                 ]
             ),
             critical=False,
@@ -148,18 +115,27 @@ def _write_certificate(directory: Path, hostname: str) -> tuple[Path, Path]:
     return certificate_path, key_path
 
 
-def _nginx_config(upstream_host: str, upstream_port: int) -> str:
+def _nginx_config(
+    directory: Path,
+    https_port: int,
+    certificate_path: Path,
+    key_path: Path,
+    upstream_port: int,
+) -> str:
     return f"""
+pid {directory / "nginx.pid"};
+error_log stderr notice;
 events {{}}
 http {{
+    access_log off;
     server {{
-        listen 443 ssl;
-        ssl_certificate /etc/nginx/mcp-cimd.crt;
-        ssl_certificate_key /etc/nginx/mcp-cimd.key;
+        listen 127.0.0.1:{https_port} ssl;
+        ssl_certificate {certificate_path};
+        ssl_certificate_key {key_path};
 
         location /api/ {{
             rewrite ^/api/(.*)$ /$1 break;
-            proxy_pass http://{upstream_host}:{upstream_port};
+            proxy_pass http://127.0.0.1:{upstream_port};
             proxy_set_header Host $host;
         }}
     }}
@@ -197,45 +173,33 @@ def cimd_https_endpoint(
     cimd_api_server: int,
     tmp_path_factory: pytest.TempPathFactory,
 ) -> Generator[CimdHttpsEndpoint, None, None]:
-    in_test_container = os.getenv("TEST_WEB_HOSTNAME") == "test-runner"
-    public_host = "host.docker.internal" if in_test_container else "localhost"
-    upstream_host = "test-runner" if in_test_container else "host.docker.internal"
+    public_host = "127.0.0.1"
+    https_port = _available_port()
     directory = tmp_path_factory.mktemp("mcp-cimd-tls")
     certificate_path, key_path = _write_certificate(directory, public_host)
     config_path = directory / "nginx.conf"
     config_path.write_text(
-        _nginx_config(upstream_host, cimd_api_server),
+        _nginx_config(
+            directory,
+            https_port,
+            certificate_path,
+            key_path,
+            cimd_api_server,
+        ),
         encoding="utf-8",
     )
+    log_path = directory / "nginx.log"
+    log_file = log_path.open("wb")
+    process = subprocess.Popen(
+        [NGINX_COMMAND, "-c", str(config_path), "-g", "daemon off;"],
+        stdout=log_file,
+        stderr=subprocess.STDOUT,
+    )
 
-    docker_client = docker.from_env()
-    container: Container | None = None
     old_web_domain = client_metadata.WEB_DOMAIN
     try:
-        container = docker_client.containers.create(
-            NGINX_IMAGE,
-            name=f"mcp-cimd-nginx-{uuid4().hex[:12]}",
-            ports={NGINX_HTTPS_PORT: None},
-            extra_hosts={"host.docker.internal": "host-gateway"},
-            network=_docker_network(docker_client),
-        )
-        _copy_to_container(
-            container,
-            "/etc/nginx",
-            {
-                "nginx.conf": config_path.read_bytes(),
-                "mcp-cimd.crt": certificate_path.read_bytes(),
-                "mcp-cimd.key": key_path.read_bytes(),
-            },
-        )
-        container.start()
-        container.reload()
-
-        port_bindings = container.attrs["NetworkSettings"]["Ports"][NGINX_HTTPS_PORT]
-        if not port_bindings:
-            raise RuntimeError("Nginx HTTPS port was not published")
-        host_port = str(port_bindings[0]["HostPort"])
-        origin = f"https://{public_host}:{host_port}"
+        _wait_for_port(public_host, https_port, process)
+        origin = f"https://{public_host}:{https_port}"
         setattr(client_metadata, "WEB_DOMAIN", origin)
 
         metadata_url = f"{origin}/api/mcp/oauth/client-metadata"
@@ -252,15 +216,15 @@ def cimd_https_endpoint(
             except httpx.HTTPError:
                 time.sleep(0.1)
         else:
-            logs = container.logs().decode(errors="replace")
+            log_file.flush()
+            logs = log_path.read_text(encoding="utf-8", errors="replace")
             raise RuntimeError(f"CIMD HTTPS endpoint did not start:\n{logs}")
 
         yield CimdHttpsEndpoint(origin=origin, ca_file=certificate_path)
     finally:
         setattr(client_metadata, "WEB_DOMAIN", old_web_domain)
-        if container is not None:
-            container.remove(force=True)
-        docker_client.close()
+        _stop_process(process)
+        log_file.close()
 
 
 @pytest.fixture(scope="module")
