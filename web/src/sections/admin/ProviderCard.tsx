@@ -100,7 +100,7 @@ export default function ProviderCard({
     >
       <SelectCard
         state={STATUS_TO_STATE[status]}
-        padding="sm"
+        padding={2}
         rounding="lg"
         aria-label={ariaLabel}
         onClick={

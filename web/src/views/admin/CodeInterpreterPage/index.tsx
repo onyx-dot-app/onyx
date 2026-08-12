@@ -174,7 +174,7 @@ export default function CodeInterpreterPage() {
             group="code-interpreter/Card"
             interaction={showDisconnectModal ? "hover" : "rest"}
           >
-            <SelectCard state="filled" padding="sm" rounding="lg">
+            <SelectCard state="filled" padding={2} rounding="lg">
               <Card.Header>
                 <ContentAction
                   sizePreset="main-ui"
@@ -226,7 +226,7 @@ export default function CodeInterpreterPage() {
         ) : (
           <SelectCard
             state="empty"
-            padding="sm"
+            padding={2}
             rounding="lg"
             onClick={() => handleToggle(true)}
           >
@@ -264,7 +264,7 @@ export default function CodeInterpreterPage() {
             onMouseLeave={() => handleErrorHover(false)}
           >
             <div className="w-[15rem]">
-              <SelectCard state="filled" padding="sm" rounding="lg">
+              <SelectCard state="filled" padding={2} rounding="lg">
                 <Content
                   icon={(props) => (
                     <SvgXOctagon

@@ -128,7 +128,7 @@ function MCPServerCard({
       expanded={expanded}
       border="solid"
       rounding="lg"
-      padding="sm"
+      padding={2}
       expandedContent={
         hasContent ? (
           <Section gap={2} padding={2}>
@@ -1051,7 +1051,7 @@ export default function ChatPreferencesPage() {
             </Section>
           </Card>
 
-          <Divider paddingParallel="fit" paddingPerpendicular="fit" />
+          <Divider paddingParallel={0} paddingPerpendicular={0} />
 
           {/* Team Context */}
           <Section gap={4}>
@@ -1112,7 +1112,7 @@ export default function ChatPreferencesPage() {
             </Button>
           </InputHorizontal>
 
-          <Divider paddingParallel="fit" paddingPerpendicular="fit" />
+          <Divider paddingParallel={0} paddingPerpendicular={0} />
 
           <Disabled disabled={s.disable_default_assistant ?? false}>
             <div>
@@ -1148,7 +1148,7 @@ export default function ChatPreferencesPage() {
                             const meta = getSourceMetadata(source);
                             return (
                               <div key={source} className="w-40">
-                                <Card padding="sm" border="solid">
+                                <Card padding={2} border="solid">
                                   <Content
                                     icon={meta.icon}
                                     title={meta.displayName}
@@ -1324,10 +1324,7 @@ export default function ChatPreferencesPage() {
                     {/* Separator between built-in tools and MCP/OpenAPI tools */}
                     {(mcpServersWithTools.length > 0 ||
                       openApiTools.length > 0) && (
-                      <Divider
-                        paddingPerpendicular="sm"
-                        paddingParallel="fit"
-                      />
+                      <Divider paddingPerpendicular={2} paddingParallel={0} />
                     )}
 
                     {/* MCP Servers & OpenAPI Tools */}
@@ -1366,7 +1363,7 @@ export default function ChatPreferencesPage() {
             </div>
           </Disabled>
 
-          <Divider paddingParallel="fit" paddingPerpendicular="fit" />
+          <Divider paddingParallel={0} paddingPerpendicular={0} />
 
           {/* Advanced Options */}
           <SimpleCollapsible defaultOpen={false}>
@@ -1600,7 +1597,7 @@ export default function ChatPreferencesPage() {
                     <MessageCard
                       title="Modify with caution."
                       description="System prompt affects all chats, agents, and projects. Significant changes may degrade response quality."
-                      padding="xs"
+                      padding={1}
                     />
                   </Modal.Body>
                   <Modal.Footer>

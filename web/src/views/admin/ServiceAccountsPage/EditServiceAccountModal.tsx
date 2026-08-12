@@ -301,7 +301,7 @@ export default function EditServiceAccountModal({
               </ShadowDiv>
             </Section>
 
-            <Divider paddingParallel="fit" paddingPerpendicular="fit" />
+            <Divider paddingParallel={0} paddingPerpendicular={0} />
 
             <ContentAction
               title="Account Role"

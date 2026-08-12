@@ -347,7 +347,7 @@ function MCPServerCard({
             !getFieldMeta<boolean>(`${serverFieldName}.enabled`).value;
           return (
             <Disabled key={tool.id} disabled={toolDisabled}>
-              <Card border="solid" rounding="md" padding="sm">
+              <Card border="solid" rounding="md" padding={2}>
                 <ContentAction
                   icon={tool.icon ?? SvgSliders}
                   title={tool.name}
@@ -380,7 +380,7 @@ function MCPServerCard({
         expanded={!isFolded}
         border="solid"
         rounding="lg"
-        padding="sm"
+        padding={2}
         expandedContent={cardContent}
       >
         <CardLayout.Header
@@ -1406,10 +1406,7 @@ export default function AgentEditorPage({
                         </GeneralLayouts.Section>
                       </GeneralLayouts.Section>
 
-                      <Divider
-                        paddingParallel="fit"
-                        paddingPerpendicular="fit"
-                      />
+                      <Divider paddingParallel={0} paddingPerpendicular={0} />
 
                       <GeneralLayouts.Section>
                         <InputVertical
@@ -1437,10 +1434,7 @@ export default function AgentEditorPage({
                         </InputVertical>
                       </GeneralLayouts.Section>
 
-                      <Divider
-                        paddingParallel="fit"
-                        paddingPerpendicular="fit"
-                      />
+                      <Divider paddingParallel={0} paddingPerpendicular={0} />
 
                       <AgentKnowledgePane
                         enableKnowledge={values.enable_knowledge}
@@ -1485,10 +1479,7 @@ export default function AgentEditorPage({
                         vectorDbEnabled={vectorDbEnabled}
                       />
 
-                      <Divider
-                        paddingParallel="fit"
-                        paddingPerpendicular="fit"
-                      />
+                      <Divider paddingParallel={0} paddingPerpendicular={0} />
 
                       <GeneralLayouts.Section
                         gap={2}
@@ -1580,10 +1571,7 @@ export default function AgentEditorPage({
                         </Card>
                       </GeneralLayouts.Section>
 
-                      <Divider
-                        paddingParallel="fit"
-                        paddingPerpendicular="fit"
-                      />
+                      <Divider paddingParallel={0} paddingPerpendicular={0} />
 
                       <SimpleCollapsible>
                         <SimpleCollapsible.Header
@@ -1681,8 +1669,8 @@ export default function AgentEditorPage({
                               {(mcpServersWithVisibleTools.length > 0 ||
                                 openApiTools.length > 0) && (
                                 <Divider
-                                  paddingPerpendicular="xs"
-                                  paddingParallel="fit"
+                                  paddingPerpendicular={1}
+                                  paddingParallel={0}
                                 />
                               )}
 
@@ -1721,10 +1709,7 @@ export default function AgentEditorPage({
                         </SimpleCollapsible.Content>
                       </SimpleCollapsible>
 
-                      <Divider
-                        paddingParallel="fit"
-                        paddingPerpendicular="fit"
-                      />
+                      <Divider paddingParallel={0} paddingPerpendicular={0} />
 
                       <SimpleCollapsible>
                         <SimpleCollapsible.Header
@@ -1806,8 +1791,8 @@ export default function AgentEditorPage({
                       {existingAgent && (
                         <>
                           <Divider
-                            paddingParallel="fit"
-                            paddingPerpendicular="fit"
+                            paddingParallel={0}
+                            paddingPerpendicular={0}
                           />
 
                           <Card border="solid" rounding="lg">

@@ -91,7 +91,7 @@ export function KnowledgeTable<T>({
         ))}
       </TableLayouts.TableRow>
 
-      <Divider paddingParallel="fit" paddingPerpendicular="fit" />
+      <Divider paddingParallel={0} paddingPerpendicular={0} />
 
       {items.length === 0 ? (
         <GeneralLayouts.Section height="auto" padding={4}>

@@ -156,7 +156,7 @@ export default function PerUserUsagePanel({
     >
       {header}
 
-      <Card border="solid" rounding="lg" padding="sm">
+      <Card border="solid" rounding="lg" padding={2}>
         <Section
           flexDirection="row"
           justifyContent="start"
@@ -212,7 +212,7 @@ export default function PerUserUsagePanel({
         </Section>
 
         {users.length === 0 ? (
-          <Card border="solid" rounding="lg" padding="sm">
+          <Card border="solid" rounding="lg" padding={2}>
             <Text font="main-ui-body" color="text-03">
               No usage recorded for this period.
             </Text>

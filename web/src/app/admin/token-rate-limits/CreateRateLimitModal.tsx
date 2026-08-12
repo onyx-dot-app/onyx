@@ -112,7 +112,7 @@ function ScopeOption({
   return (
     <SelectCard
       state={selected ? "selected" : "empty"}
-      padding="sm"
+      padding={2}
       rounding="sm"
       role="radio"
       aria-checked={selected}

@@ -90,7 +90,7 @@ export default function UserRowActions({
               Deactivate User
             </LineItem>
           </Disabled>
-          <Divider paddingPerpendicular="md" />
+          <Divider paddingPerpendicular={4} />
           <Text as="p" secondaryBody text03 className="px-3 py-1">
             This is a synced SCIM user managed by your identity provider.
           </Text>
@@ -150,7 +150,7 @@ export default function UserRowActions({
             >
               Reset Password
             </LineItem>
-            <Divider paddingPerpendicular="md" />
+            <Divider paddingPerpendicular={4} />
             <LineItem
               danger
               icon={SvgUserX}
@@ -178,14 +178,14 @@ export default function UserRowActions({
             >
               Reset Password
             </LineItem>
-            <Divider paddingPerpendicular="md" />
+            <Divider paddingPerpendicular={4} />
             <LineItem
               icon={SvgUserPlus}
               onClick={() => openModal(Modal.ACTIVATE)}
             >
               Activate User
             </LineItem>
-            <Divider paddingPerpendicular="md" />
+            <Divider paddingPerpendicular={4} />
             <LineItem
               danger
               icon={SvgUserX}

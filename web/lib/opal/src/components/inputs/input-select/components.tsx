@@ -8,7 +8,7 @@ import { cn } from "@opal/utils";
 import type {
   IconFunctionComponent,
   InputVariants,
-  PaddingVariants,
+  Spacing,
   RichStr,
   WithoutStyles,
 } from "@opal/types";
@@ -434,8 +434,8 @@ function InputSelectLabel({
 }
 
 interface InputSelectSeparatorProps {
-  paddingParallel?: PaddingVariants;
-  paddingPerpendicular?: PaddingVariants;
+  paddingParallel?: Spacing;
+  paddingPerpendicular?: Spacing;
 }
 
 function InputSelectSeparator({

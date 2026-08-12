@@ -894,7 +894,7 @@ export default function SourceHierarchyBrowser({
         </TableLayouts.TableCell>
       </TableLayouts.TableRow>
 
-      <OpalDivider paddingParallel="fit" paddingPerpendicular="fit" />
+      <OpalDivider paddingParallel={0} paddingPerpendicular={0} />
 
       {/* Scrollable table body */}
       <div

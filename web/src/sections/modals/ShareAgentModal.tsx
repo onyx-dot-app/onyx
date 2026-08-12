@@ -568,7 +568,7 @@ export default function ShareAgentModal({
           }
         />
 
-        <Divider paddingParallel="fit" paddingPerpendicular="fit" />
+        <Divider paddingParallel={0} paddingPerpendicular={0} />
 
         {/* Admins always appear and always hold edit access (ENG-4175);
             on vacant agents this row carries the transfer affordance */}

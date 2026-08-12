@@ -57,7 +57,7 @@ function ViewerMCPServerCard({ server, tools }: ViewerMCPServerCardProps) {
       expanded={expanded}
       border="solid"
       rounding="lg"
-      padding="sm"
+      padding={2}
       expandedContent={
         tools.length > 0 ? (
           <div className="flex flex-col gap-2 p-2">
@@ -102,7 +102,7 @@ function ViewerMCPServerCard({ server, tools }: ViewerMCPServerCardProps) {
  */
 function ViewerOpenApiToolCard({ tool }: { tool: ToolSnapshot }) {
   return (
-    <Card border="solid" rounding="lg" padding="md">
+    <Card border="solid" rounding="lg" padding={4}>
       <Content
         icon={SvgActions}
         title={tool.display_name}
@@ -281,7 +281,7 @@ export default function AgentViewerModal({ agent }: AgentViewerModalProps) {
           {agent.description && <Text text03>{agent.description}</Text>}
 
           {/* Knowledge */}
-          <Divider paddingParallel="fit" paddingPerpendicular="fit" />
+          <Divider paddingParallel={0} paddingPerpendicular={0} />
           <Section gap={2} alignItems="start">
             <Content
               title="Knowledge"
@@ -334,7 +334,7 @@ export default function AgentViewerModal({ agent }: AgentViewerModalProps) {
           </SimpleCollapsible>
 
           {/* More Info (Collapsible) */}
-          <Divider paddingParallel="fit" paddingPerpendicular="fit" />
+          <Divider paddingParallel={0} paddingPerpendicular={0} />
           <SimpleCollapsible>
             <SimpleCollapsible.Header title="More Info" />
             <SimpleCollapsible.Content>
@@ -378,7 +378,7 @@ export default function AgentViewerModal({ agent }: AgentViewerModalProps) {
           {/* Prompt Reminders */}
           {agent.task_prompt && (
             <>
-              <Divider paddingParallel="fit" paddingPerpendicular="fit" />
+              <Divider paddingParallel={0} paddingPerpendicular={0} />
               <Content
                 title="Prompt Reminders"
                 description={agent.task_prompt}
@@ -391,7 +391,7 @@ export default function AgentViewerModal({ agent }: AgentViewerModalProps) {
           {/* Conversation Starters */}
           {agent.starter_messages && agent.starter_messages.length > 0 && (
             <>
-              <Divider paddingParallel="fit" paddingPerpendicular="fit" />
+              <Divider paddingParallel={0} paddingPerpendicular={0} />
               <Content
                 title="Conversation Starters"
                 sizePreset="main-content"

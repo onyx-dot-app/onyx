@@ -228,7 +228,7 @@ export function AdvancedConfigDisplay({
             />
           </div>
           {index < items.length - 1 && (
-            <Divider paddingParallel="fit" paddingPerpendicular="fit" />
+            <Divider paddingParallel={0} paddingPerpendicular={0} />
           )}
         </div>
       ))}
@@ -257,7 +257,7 @@ export function ConfigDisplay({
             />
           </div>
           {index < entries.length - 1 && (
-            <Divider paddingParallel="fit" paddingPerpendicular="fit" />
+            <Divider paddingParallel={0} paddingPerpendicular={0} />
           )}
         </div>
       ))}

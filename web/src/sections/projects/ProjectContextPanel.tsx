@@ -134,7 +134,7 @@ export default function ProjectContextPanel({
           }}
         />
 
-        <Divider paddingParallel="fit" paddingPerpendicular="fit" />
+        <Divider paddingParallel={0} paddingPerpendicular={0} />
 
         <ContentAction
           sizePreset="main-ui"

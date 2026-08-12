@@ -123,7 +123,7 @@ function ToastContainer({ errorAppendix }: ToastContainerProps) {
               variant={t.level ?? "info"}
               title={truncatedTitle}
               description={buildDescription(t, errorAppendix)}
-              padding="xs"
+              padding={1}
               onClose={t.dismissible ? () => handleClose(t.id) : undefined}
               bottomChildren={
                 isExpanded ? <ExpandedDetails message={t.message} /> : undefined
