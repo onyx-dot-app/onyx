@@ -6,6 +6,7 @@ from braintrust import NOOP_SPAN
 
 from onyx.llm.cost import compute_cost_cents
 from onyx.tracing.flows import IMAGE_FLOWS
+from onyx.tracing.incognito import suppresses_external_traces
 
 from .framework.processor_interface import TracingProcessor
 from .framework.span_data import (
@@ -72,8 +73,16 @@ class BraintrustTracingProcessor(TracingProcessor):
         self._last_output: Dict[str, Any] = {}
         self._trace_metadata: Dict[str, Dict[str, Any]] = {}
         self._span_names: Dict[str, str] = {}
+        # Traces suppressed at start. Membership decides every later callback,
+        # so an incognito flag change mid-trace cannot mismatch start/end state.
+        self._suppressed_traces: set[str] = set()
 
     def on_trace_start(self, trace: Trace) -> None:
+        # Incognito turns must leave no content in external tracing, so the
+        # whole trace is dropped, spans included.
+        if suppresses_external_traces():
+            self._suppressed_traces.add(trace.trace_id)
+            return
         trace_meta = trace.export() or {}
         metadata = trace_meta.get("metadata") or {}
         if metadata:
@@ -102,6 +111,9 @@ class BraintrustTracingProcessor(TracingProcessor):
         self._span_names[trace.trace_id] = trace.name
 
     def on_trace_end(self, trace: Trace) -> None:
+        if trace.trace_id in self._suppressed_traces:
+            self._suppressed_traces.discard(trace.trace_id)
+            return
         span: Any = self._spans.pop(trace.trace_id)
         self._trace_metadata.pop(trace.trace_id, None)
         self._span_names.pop(trace.trace_id, None)
@@ -227,6 +239,8 @@ class BraintrustTracingProcessor(TracingProcessor):
             return {}
 
     def on_span_start(self, span: Span[SpanData]) -> None:
+        if span.trace_id in self._suppressed_traces:
+            return
         parent: Any = (
             self._spans[span.parent_id]
             if span.parent_id is not None
@@ -253,6 +267,8 @@ class BraintrustTracingProcessor(TracingProcessor):
         created_span.set_current()
 
     def on_span_end(self, span: Span[SpanData]) -> None:
+        if span.trace_id in self._suppressed_traces:
+            return
         s: Any = self._spans.pop(span.span_id)
         self._span_names.pop(span.span_id, None)
         event = dict(error=span.error, **self._log_data(span))

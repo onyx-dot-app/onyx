@@ -16,6 +16,10 @@ from onyx.background.celery.celery_redis import (
 )
 from onyx.background.celery.celery_utils import httpx_init_vespa_pool
 from onyx.background.celery.tasks.shared.RetryDocumentIndex import RetryDocumentIndex
+from onyx.cache.factory import get_cache_backend
+from onyx.chat.chat_processing_checker import is_chat_session_processing
+from onyx.chat.incognito import delete_incognito_generated_files
+from onyx.chat.incognito_context import incognito_session_ended
 from onyx.configs.app_configs import (
     DISABLE_VECTOR_DB,
     MANAGED_VESPA,
@@ -29,6 +33,7 @@ from onyx.configs.constants import (
     CELERY_USER_FILE_PROCESSING_TASK_EXPIRES,
     CELERY_USER_FILE_PROJECT_SYNC_LOCK_TIMEOUT,
     CELERY_USER_FILE_PROJECT_SYNC_TASK_EXPIRES,
+    INCOGNITO_FILE_CLEANUP_BATCH,
     USER_FILE_DELETE_MAX_QUEUE_DEPTH,
     USER_FILE_PROCESSING_MAX_QUEUE_DEPTH,
     USER_FILE_PROJECT_SYNC_MAX_QUEUE_DEPTH,
@@ -42,6 +47,7 @@ from onyx.connectors.file.connector import LocalFileConnector
 from onyx.connectors.models import Document, HierarchyNode
 from onyx.db.engine.sql_engine import get_session_with_current_tenant
 from onyx.db.enums import UserFileStatus
+from onyx.db.file_record import get_session_ids_with_incognito_files
 from onyx.db.models import SearchSettings, UserFile
 from onyx.db.port_attempt import port_backfill_has_pending_work
 from onyx.db.port_orphan_candidate import record_port_orphan_candidates_for_user_file
@@ -1196,3 +1202,47 @@ def process_single_user_file_project_sync(
     project_sync_user_file_impl(
         user_file_id=user_file_id, tenant_id=tenant_id, redis_locking=True
     )
+
+
+@shared_task(  # ty: ignore[invalid-argument-type]
+    name=OnyxCeleryTask.CHECK_FOR_INCOGNITO_FILE_CLEANUP,
+    soft_time_limit=300,
+    bind=True,
+    ignore_result=True,
+)
+def check_for_incognito_file_cleanup(self: Task, *, tenant_id: str) -> None:  # noqa: ARG001
+    """Retry deletion of tool-generated blobs whose teardown pass failed.
+
+    A blob's own record carries the session that produced it, and deleting the
+    blob deletes the record, so anything still stamped is what a store failure
+    left behind."""
+    redis_client = get_redis_client(tenant_id=tenant_id)
+    lock: RedisLock = redis_client.lock(
+        OnyxRedisLocks.INCOGNITO_FILE_CLEANUP_BEAT_LOCK,
+        timeout=CELERY_GENERIC_BEAT_LOCK_TIMEOUT,
+    )
+    if not lock.acquire(blocking=False):
+        return
+    try:
+        with get_session_with_current_tenant() as db_session:
+            cache = get_cache_backend()
+            for raw_id in get_session_ids_with_incognito_files(
+                db_session, limit=INCOGNITO_FILE_CLEANUP_BATCH
+            ):
+                session_id = UUID(raw_id)
+                # A turn in flight owns its files, and an evicted context reads
+                # as ended, so the processing fence decides, not the context.
+                if is_chat_session_processing(session_id, cache):
+                    continue
+                if not incognito_session_ended(session_id):
+                    continue
+                try:
+                    delete_incognito_generated_files(session_id, db_session)
+                except Exception:
+                    # One unreachable blob must not strand every session behind it.
+                    task_logger.exception(
+                        "Incognito file cleanup failed for session %s", session_id
+                    )
+    finally:
+        if lock.owned():
+            lock.release()

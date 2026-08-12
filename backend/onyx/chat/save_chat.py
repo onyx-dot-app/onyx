@@ -176,6 +176,7 @@ def save_chat_turn(
     is_clarification: bool = False,
     emitted_citations: set[int] | None = None,
     pre_answer_processing_time: float | None = None,
+    persist_content: bool = True,
 ) -> None:
     """
     Save a chat turn by populating the assistant_message and creating related entities.
@@ -206,10 +207,20 @@ def save_chat_turn(
     sanitized_message_text = (
         sanitize_string(message_text) if message_text else message_text
     )
-    assistant_message.message = sanitized_message_text
-    assistant_message.reasoning_tokens = (
-        sanitize_string(reasoning_tokens) if reasoning_tokens else reasoning_tokens
-    )
+    # A content-free turn keeps the row and its token count, which comes from
+    # the real answer, but none of the conversation-derived parts.
+    if persist_content:
+        assistant_message.message = sanitized_message_text
+        assistant_message.reasoning_tokens = (
+            sanitize_string(reasoning_tokens) if reasoning_tokens else reasoning_tokens
+        )
+    else:
+        assistant_message.message = ""
+        assistant_message.reasoning_tokens = None
+        tool_calls = []
+        citation_to_doc = {}
+        all_search_docs = {}
+        emitted_citations = set()
     assistant_message.is_clarification = is_clarification
 
     # Use pre-answer processing time (captured when MESSAGE_START was emitted)

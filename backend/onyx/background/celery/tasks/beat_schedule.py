@@ -50,6 +50,18 @@ beat_task_templates: list[dict] = [
         },
     },
     {
+        "name": "check-for-incognito-file-cleanup",
+        "task": OnyxCeleryTask.CHECK_FOR_INCOGNITO_FILE_CLEANUP,
+        "schedule": timedelta(minutes=10),
+        "options": {
+            "priority": OnyxCeleryPriority.LOW,
+            "expires": BEAT_EXPIRES_DEFAULT,
+            # Run on gated tenants too, their registries hold blob handles.
+            "skip_gated": False,
+            "work_gated": True,
+        },
+    },
+    {
         "name": "check-for-user-file-project-sync",
         "task": OnyxCeleryTask.CHECK_FOR_USER_FILE_PROJECT_SYNC,
         "schedule": timedelta(seconds=20),
