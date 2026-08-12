@@ -100,5 +100,6 @@ function toFormInitial(detail: ScheduledTaskDetail): ScheduleTaskFormInitial {
     mode,
     payload,
     preApprovedAppIds: detail.pre_approved_app_ids,
+    preApprovedMcpServerIds: detail.pre_approved_mcp_server_ids,
   };
 }

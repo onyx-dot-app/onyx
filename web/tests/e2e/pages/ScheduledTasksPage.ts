@@ -2,10 +2,11 @@
  * Page Object Model for the Onyx Craft Scheduled Tasks surface
  * (/craft/v1/tasks, /craft/v1/tasks/new, /craft/v1/tasks/[id]).
  *
- * Encapsulates all locators and interactions so specs remain declarative.
+ * Keeps locators and interactions out of declarative specs.
  */
 
 import { type Page, type Locator, expect } from "@playwright/test";
+import { appFixture, mcpServerFixture } from "@/lib/skills/__fixtures__/picker";
 
 const TASKS_LIST_PATH = "/craft/v1/tasks";
 const NEW_TASK_PATH = "/craft/v1/tasks/new";
@@ -25,6 +26,9 @@ export class ScheduledTasksPage {
   readonly intervalEveryInput: Locator;
   readonly intervalUnitTrigger: Locator;
   readonly saveAndRunNowButton: Locator;
+  readonly preApprovalPicker: Locator;
+  readonly appsGroup: Locator;
+  readonly mcpServersGroup: Locator;
 
   constructor(page: Page) {
     this.page = page;
@@ -39,6 +43,9 @@ export class ScheduledTasksPage {
     // on the new-task form.
     this.intervalUnitTrigger = page.getByRole("combobox").first();
     this.saveAndRunNowButton = page.getByTestId("save-and-run-now");
+    this.preApprovalPicker = page.getByTestId("pre-approval-picker");
+    this.appsGroup = page.getByRole("region", { name: "Apps" });
+    this.mcpServersGroup = page.getByRole("region", { name: "MCP servers" });
   }
 
   // ---------------------------------------------------------------------------
@@ -125,6 +132,100 @@ export class ScheduledTasksPage {
    */
   async saveAndRunNow(): Promise<void> {
     await this.saveAndRunNowButton.click();
+  }
+
+  async mockPreApprovalOptions(): Promise<void> {
+    await this.page.route("**/api/build/apps", async (route) => {
+      await route.fulfill({
+        json: [
+          appFixture({
+            id: 11,
+            name: "Acme CRM",
+            app_type: "CUSTOM",
+          }),
+          appFixture({
+            id: 12,
+            name: "Acme Support",
+            app_type: "CUSTOM",
+          }),
+        ],
+      });
+    });
+    await this.page.route("**/api/mcp/servers/craft", async (route) => {
+      await route.fulfill({
+        json: {
+          mcp_servers: [
+            mcpServerFixture({
+              id: 22,
+              name: "Acme MCP",
+              server_url: "https://mcp.example.com/mcp",
+            }),
+          ],
+        },
+      });
+    });
+  }
+
+  async expectResponsivePreApprovalLayout(): Promise<void> {
+    await expect(this.preApprovalPicker).toBeVisible();
+    await expect(this.appsGroup).toBeVisible();
+    await expect(this.mcpServersGroup).toBeVisible();
+    await this.expectPreApprovalGroupsFillContainer();
+
+    const appOptions = this.appsGroup.getByTestId(/^pre-approval-app-/);
+    await expect(appOptions).toHaveCount(2);
+    await expect
+      .poll(async () => {
+        const [first, second] = await Promise.all([
+          appOptions.nth(0).boundingBox(),
+          appOptions.nth(1).boundingBox(),
+        ]);
+        return Boolean(
+          first &&
+          second &&
+          Math.abs(first.y - second.y) <= 1 &&
+          second.x > first.x
+        );
+      })
+      .toBe(true);
+
+    await this.page.setViewportSize({ width: 390, height: 844 });
+    await this.expectPreApprovalGroupsFillContainer();
+    await expect
+      .poll(async () => {
+        const [first, second] = await Promise.all([
+          appOptions.nth(0).boundingBox(),
+          appOptions.nth(1).boundingBox(),
+        ]);
+        return Boolean(
+          first &&
+          second &&
+          Math.abs(first.x - second.x) <= 1 &&
+          second.y > first.y
+        );
+      })
+      .toBe(true);
+  }
+
+  private async expectPreApprovalGroupsFillContainer(): Promise<void> {
+    const container = this.preApprovalPicker.locator("..");
+    await expect
+      .poll(async () => {
+        const [containerBox, pickerBox, appsBox, mcpBox] = await Promise.all([
+          container.boundingBox(),
+          this.preApprovalPicker.boundingBox(),
+          this.appsGroup.boundingBox(),
+          this.mcpServersGroup.boundingBox(),
+        ]);
+        if (!containerBox || !pickerBox || !appsBox || !mcpBox) return false;
+
+        return (
+          Math.abs(containerBox.width - pickerBox.width) <= 1 &&
+          Math.abs(pickerBox.width - appsBox.width) <= 1 &&
+          Math.abs(pickerBox.width - mcpBox.width) <= 1
+        );
+      })
+      .toBe(true);
   }
 
   // ---------------------------------------------------------------------------

@@ -2,6 +2,7 @@
 
 import { useCallback, useMemo, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
+import { useSWRConfig } from "swr";
 import {
   Button,
   Divider,
@@ -42,6 +43,7 @@ import {
   updateScheduledTask,
 } from "@/app/craft/v1/tasks/api";
 import { TASKS_PATH, taskDetailPath } from "@/app/craft/v1/tasks/constants";
+import { SWR_KEYS } from "@/lib/swr-keys";
 
 export interface ScheduleTaskFormInitial {
   /** ``null`` for create. */
@@ -51,6 +53,7 @@ export interface ScheduleTaskFormInitial {
   mode: EditorMode;
   payload: EditorPayload;
   preApprovedAppIds: number[];
+  preApprovedMcpServerIds: number[];
 }
 
 interface ScheduleTaskFormProps {
@@ -73,6 +76,7 @@ export default function ScheduleTaskForm({
   onBack,
 }: ScheduleTaskFormProps) {
   const router = useRouter();
+  const { mutate } = useSWRConfig();
   const [name, setName] = useState(initial.name);
   const [prompt, setPrompt] = useState(initial.prompt);
   const [mode, setMode] = useState<EditorMode>(initial.mode);
@@ -80,6 +84,9 @@ export default function ScheduleTaskForm({
   const [preApprovedAppIds, setPreApprovedAppIds] = useState<number[]>(
     initial.preApprovedAppIds
   );
+  const [preApprovedMcpServerIds, setPreApprovedMcpServerIds] = useState<
+    number[]
+  >(initial.preApprovedMcpServerIds);
   const [saving, setSaving] = useState(false);
   const [nameTouched, setNameTouched] = useState(false);
   const [promptTouched, setPromptTouched] = useState(false);
@@ -206,11 +213,16 @@ export default function ScheduleTaskForm({
             editor_mode: mode,
             editor_payload: storagePayload,
             pre_approved_app_ids: preApprovedAppIds,
+            pre_approved_mcp_server_ids: preApprovedMcpServerIds,
           };
           const updated: ScheduledTaskDetail = await updateScheduledTask(
             initial.taskId,
             body
           );
+          await mutate(SWR_KEYS.scheduledTask(updated.id), updated, {
+            revalidate: false,
+          });
+          await mutate(SWR_KEYS.scheduledTasks);
           toast.success("Scheduled task updated.");
           router.push(taskDetailPath(updated.id));
         } else {
@@ -221,8 +233,10 @@ export default function ScheduleTaskForm({
             editor_payload: storagePayload,
             run_immediately: runImmediately,
             pre_approved_app_ids: preApprovedAppIds,
+            pre_approved_mcp_server_ids: preApprovedMcpServerIds,
           };
           await createScheduledTask(body);
+          await mutate(SWR_KEYS.scheduledTasks);
           toast.success(
             runImmediately
               ? "Scheduled task created and queued."
@@ -243,8 +257,10 @@ export default function ScheduleTaskForm({
       isEdit,
       initial.taskId,
       mode,
+      mutate,
       payload,
       preApprovedAppIds,
+      preApprovedMcpServerIds,
       router,
       trimmedName,
       trimmedPrompt,
@@ -379,12 +395,14 @@ export default function ScheduleTaskForm({
 
         <GeneralLayouts.Section>
           <InputVertical
-            title="Pre-approved apps"
-            description="Selected apps can act without pausing for approval while this task runs on its own. Note: an app you don't pre-approve will pause mid-run to ask for your approval. The run may stall or fail if you do not approve an action request."
+            title="Pre-approved apps and MCP servers"
+            description="Craft can use selected apps and MCP servers without pausing when this task runs unattended. Other approval requests pause the run and can cause it to fail."
           >
             <PreApprovalPicker
-              selectedIds={preApprovedAppIds}
-              onChange={setPreApprovedAppIds}
+              selectedAppIds={preApprovedAppIds}
+              selectedMcpServerIds={preApprovedMcpServerIds}
+              onAppChange={setPreApprovedAppIds}
+              onMcpServerChange={setPreApprovedMcpServerIds}
             />
           </InputVertical>
         </GeneralLayouts.Section>
@@ -401,5 +419,6 @@ export function defaultFormInitial(): ScheduleTaskFormInitial {
     mode: "interval",
     payload: { unit: "hours", every: 1 },
     preApprovedAppIds: [],
+    preApprovedMcpServerIds: [],
   };
 }
