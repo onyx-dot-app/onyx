@@ -28,9 +28,33 @@ import { Card } from "@opal/components";
 | `background` | `"none" \| "light" \| "heavy"` | `"light"` | Background fill intensity |
 | `border` | `"none" \| "dashed" \| "solid"` | `"none"` | Border style |
 | `borderColor` | `StatusVariants` | `"default"` | Status-palette border color (needs `border` ≠ `"none"`) |
+| `disabled` | `boolean` | `false` | Dims the card and shows a not-allowed cursor. Visual only — see below. |
 | `ref` | `React.Ref<HTMLDivElement>` | — | Ref forwarded to the root div |
 | `children` | `React.ReactNode` | — | Card content |
 | `data-*` | `string \| boolean` | — | Forwarded to the root. See below. |
+
+### `disabled`
+
+`disabled` dims the card and gives it a not-allowed cursor. It is **visual only** —
+children stay interactive, because a card is a container and suppressing what it
+holds is a stronger claim than dimming it:
+
+```tsx
+<Card disabled>…</Card>
+```
+
+Compose `Disabled` from `@opal/core` when clicks should be blocked as well, or
+when you want a tooltip explaining why:
+
+```tsx
+<Disabled disabled tooltip="Connect the app first">
+  <Card disabled>…</Card>
+</Disabled>
+```
+
+It is a boolean rather than a variant value, so it stacks with `background` and
+`border` instead of replacing them — a disabled card can still be transparent
+with a dashed border.
 
 ### `data-*` attributes
 

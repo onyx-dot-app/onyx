@@ -99,6 +99,20 @@ type CardBaseProps = {
    */
   shadow?: ShadowVariants;
 
+  /**
+   * Marks the card unavailable: dimmed, with a not-allowed cursor.
+   *
+   * Visual only. Children stay interactive, because a card is a container and
+   * suppressing its contents is a stronger claim than dimming them — compose
+   * `Disabled` from `@opal/core` when clicks should be blocked too.
+   *
+   * A boolean rather than a variant, so it stacks with `background` and
+   * `border` instead of replacing them.
+   *
+   * @default false
+   */
+  disabled?: boolean;
+
   /** Ref forwarded to the root `<div>`. */
   ref?: React.Ref<HTMLDivElement>;
 
@@ -216,6 +230,7 @@ function Card(props: CardProps) {
     border = "none",
     borderColor = "default",
     shadow = "none",
+    disabled = false,
     ref,
     children,
   } = props;
@@ -234,6 +249,7 @@ function Card(props: CardProps) {
         data-border={border}
         data-opal-status-border={borderColor}
         data-shadow={shadow}
+        data-disabled={disabled || undefined}
       >
         {children}
       </div>
@@ -261,6 +277,7 @@ function Card(props: CardProps) {
       <div
         className={cn("opal-card-expandable-header", headerRounding)}
         style={paddingStyle}
+        data-disabled={disabled || undefined}
         data-background={background}
         data-border={border}
         data-opal-status-border={borderColor}

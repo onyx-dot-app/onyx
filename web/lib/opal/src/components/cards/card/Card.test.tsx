@@ -61,3 +61,52 @@ describe("Card data attributes", () => {
     expect(card?.getAttribute("style")).not.toContain("999");
   });
 });
+
+describe("Card disabled", () => {
+  it("marks the root when disabled", () => {
+    render(
+      <Card disabled>
+        <p>Body</p>
+      </Card>
+    );
+    expect(screen.getByText("Body").parentElement).toHaveAttribute(
+      "data-disabled"
+    );
+  });
+
+  it("omits the attribute entirely when not disabled", () => {
+    render(
+      <Card>
+        <p>Body</p>
+      </Card>
+    );
+    // Absent rather than data-disabled="false", so a bare [data-disabled]
+    // selector works.
+    expect(screen.getByText("Body").parentElement).not.toHaveAttribute(
+      "data-disabled"
+    );
+  });
+
+  it("stacks with background and border rather than replacing them", () => {
+    render(
+      <Card disabled background="none" border="dashed">
+        <p>Body</p>
+      </Card>
+    );
+    const card = screen.getByText("Body").parentElement;
+    expect(card).toHaveAttribute("data-disabled");
+    expect(card).toHaveAttribute("data-background", "none");
+    expect(card).toHaveAttribute("data-border", "dashed");
+  });
+
+  it("marks the header in expandable mode", () => {
+    render(
+      <Card expandable expandedContent={<p>More</p>} disabled>
+        <p>Header</p>
+      </Card>
+    );
+    expect(
+      document.querySelector(".opal-card-expandable-header[data-disabled]")
+    ).toBeInTheDocument();
+  });
+});
