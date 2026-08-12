@@ -200,7 +200,7 @@ def cimd_https_endpoint(
         log_file.close()
         raise RuntimeError(f"Failed to start Nginx: {error}") from error
 
-    old_web_domain = client_metadata.WEB_DOMAIN
+    web_domain_patch = pytest.MonkeyPatch()
     try:
         try:
             _wait_for_port(public_host, https_port, process)
@@ -211,7 +211,7 @@ def cimd_https_endpoint(
                 f"Nginx failed during startup: {error}\n{logs}"
             ) from error
         origin = f"https://{public_host}:{https_port}"
-        setattr(client_metadata, "WEB_DOMAIN", origin)
+        web_domain_patch.setattr(client_metadata, "WEB_DOMAIN", origin)
 
         metadata_url = f"{origin}/api/mcp/oauth/client-metadata"
         deadline = time.monotonic() + STARTUP_TIMEOUT_SECONDS
@@ -233,7 +233,7 @@ def cimd_https_endpoint(
 
         yield CimdHttpsEndpoint(origin=origin, ca_file=certificate_path)
     finally:
-        setattr(client_metadata, "WEB_DOMAIN", old_web_domain)
+        web_domain_patch.undo()
         _stop_process(process)
         log_file.close()
 
