@@ -18,7 +18,7 @@ The row renders as a focusable `<div role="button">` (with Enter/Space activatio
 native `<button>`, so interactive `rightChildren` such as action buttons don't produce invalid
 button-in-button nesting. With `href` it renders an anchor instead.
 
-`padding` is hardcoded to `"lg"` and `withInteractive` is always `true`. These are not exposed as props.
+`padding` is hardcoded to `2` and `withInteractive` is always `true`. These are not exposed as props.
 
 ## Props
 

@@ -74,9 +74,10 @@ function routesToContentMd(props: {
  * A row layout that pairs a {@link Content} block with optional right-side
  * action children (e.g. buttons, badges).
  *
- * The `Content` area receives padding controlled by `padding`, using
- * the same size scale as `Interactive.Container` and `Button`. The
- * `rightChildren` wrapper stretches to the full height of the row.
+ * The `Content` area receives padding controlled by `padding`, whose four steps
+ * are the paddings `Interactive.Container` applies at its size presets — so a row
+ * lines up with an adjacent button. The `rightChildren` wrapper stretches to the
+ * full height of the row.
  *
  * @example
  * ```tsx
