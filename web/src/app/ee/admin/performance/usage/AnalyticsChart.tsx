@@ -1,6 +1,7 @@
 import React from "react";
 import { Card, Text } from "@opal/components";
 import { Section } from "@opal/layouts";
+import type { RichStr } from "@opal/types";
 import SvgSimpleLoader from "@opal/icons/simple-loader";
 import { AreaChartBody } from "@/components/ui/areaChart";
 import { getDatesList } from "@/app/ee/admin/performance/lib";
@@ -43,15 +44,15 @@ export function chartSeries<T extends { date: string }>(
 }
 
 interface AnalyticsChartProps {
-  title: string;
-  description: string;
+  title: string | RichStr;
+  description: string | RichStr;
   timeRange: DateRangePickerValue;
   series: ChartSeries[];
-  errorMessage: string;
-  emptyMessage: string;
+  errorMessage: string | RichStr;
+  emptyMessage: string | RichStr;
   isLoading?: boolean;
   error?: unknown;
-  prompt?: string;
+  prompt?: string | RichStr;
   headerChildren?: React.ReactNode;
   stacked?: boolean;
   allowDecimals?: boolean;
@@ -59,13 +60,12 @@ interface AnalyticsChartProps {
   yAxisFormatter?: (value: number) => string;
 }
 
-function Placeholder({
-  message,
-  variant,
-}: {
-  message: string;
+interface PlaceholderProps {
+  message: string | RichStr;
   variant: "error" | "neutral";
-}) {
+}
+
+function Placeholder({ message, variant }: PlaceholderProps) {
   return (
     <Section
       flexDirection="column"

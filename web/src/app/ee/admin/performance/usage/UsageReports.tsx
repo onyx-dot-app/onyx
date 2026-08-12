@@ -22,7 +22,7 @@ import {
   SvgX,
 } from "@opal/icons";
 import { humanReadableFormat, humanReadableFormatWithTime } from "@opal/time";
-import type { IconFunctionComponent } from "@opal/types";
+import type { IconFunctionComponent, RichStr } from "@opal/types";
 import { errorHandlingFetcher } from "@/lib/fetcher";
 import { SWR_KEYS } from "@/lib/swr-keys";
 import { UsageReport } from "./types";
@@ -128,7 +128,7 @@ function ReportRow({ report, justArrived }: ReportRowProps) {
 }
 
 interface PeriodMenuItemProps {
-  title: string;
+  title: string | RichStr;
   onClick: () => void;
   icon?: IconFunctionComponent;
 }
