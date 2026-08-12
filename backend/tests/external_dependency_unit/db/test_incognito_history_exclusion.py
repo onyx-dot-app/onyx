@@ -23,6 +23,7 @@ from onyx.db.chat import (
     create_new_chat_message,
     get_chat_sessions_by_user,
     get_or_create_root_message,
+    update_chat_session,
 )
 from onyx.db.chat_search import search_chat_sessions
 from onyx.db.enums import IncognitoRecordMode
@@ -153,9 +154,12 @@ def test_admin_query_history_page_hides_content_free_sessions(
     assert usage_only.id not in page_ids
 
 
-def test_query_history_export_hides_content_free_sessions(
+def test_usage_report_still_meters_content_free_sessions(
     db_session: Session, owner: User
 ) -> None:
+    """The usage report carries token counts and no message content, so every
+    mode belongs in it. Dropping content-free sessions here would make
+    incognito a way around token rate limits."""
     ordinary = _make_session(db_session, owner.id, "ordinary chat", None)
     usage_only = _make_session(
         db_session, owner.id, "usage only chat", IncognitoRecordMode.USAGE_ONLY
@@ -163,7 +167,7 @@ def test_query_history_export_hides_content_free_sessions(
 
     window = timedelta(minutes=5)
     now = datetime.now(timezone.utc)
-    export_ids = {
+    metered_ids = {
         session.id
         for session in fetch_chat_sessions_eagerly_by_time(
             start=now - window,
@@ -172,8 +176,8 @@ def test_query_history_export_hides_content_free_sessions(
             limit=None,
         )
     }
-    assert ordinary.id in export_ids
-    assert usage_only.id not in export_ids
+    assert ordinary.id in metered_ids
+    assert usage_only.id in metered_ids
 
 
 def test_query_history_detail_hides_content_free_sessions(
@@ -196,6 +200,28 @@ def test_query_history_detail_hides_content_free_sessions(
 
     with pytest.raises(ValueError):
         fetch_persisting_chat_session_by_id(usage_only.id, db_session)
+
+
+def test_rename_cannot_store_a_title_on_a_content_free_session(
+    db_session: Session, owner: User
+) -> None:
+    """A title is caller-supplied conversation content, so no caller may put
+    one on a content-free session. Guarded in the db layer because auto-naming,
+    manual rename, and the patch endpoint all write through it."""
+    usage_only = _make_session(db_session, owner.id, "", IncognitoRecordMode.USAGE_ONLY)
+    full_history = _make_session(
+        db_session, owner.id, "", IncognitoRecordMode.FULL_HISTORY
+    )
+
+    for chat_session, expected in ((usage_only, ""), (full_history, "a real title")):
+        update_chat_session(
+            db_session=db_session,
+            user_id=owner.id,
+            chat_session_id=chat_session.id,
+            description="a real title",
+        )
+        db_session.refresh(chat_session)
+        assert chat_session.description == expected
 
 
 def test_every_mode_is_excluded_from_history(db_session: Session, owner: User) -> None:

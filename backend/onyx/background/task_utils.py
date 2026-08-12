@@ -163,6 +163,7 @@ def drain_delete_loop(tenant_id: str) -> None:
     from onyx.background.celery.tasks.user_file_processing.tasks import (
         delete_user_file_impl,
     )
+    from onyx.chat.incognito import sweep_stale_incognito_user_files
     from onyx.db.engine.sql_engine import get_session_with_current_tenant
 
     failed: set[UUID] = set()
@@ -180,6 +181,16 @@ def drain_delete_loop(tenant_id: str) -> None:
         except Exception:
             logger.exception("Failed to delete user file %s", file_id)
             failed.add(file_id)
+
+    # Last, and never fatal: this loop is the whole delete path on lite
+    # deployments, so a sweep that cannot reach Redis must not hold up ordinary
+    # deletion. What it queues is picked up on the next pass.
+    try:
+        with get_session_with_current_tenant() as session:
+            if sweep_stale_incognito_user_files(session):
+                session.commit()
+    except Exception:
+        logger.exception("Stale incognito sweep failed")
 
 
 def drain_project_sync_loop(tenant_id: str) -> None:

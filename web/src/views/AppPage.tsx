@@ -1,7 +1,10 @@
 "use client";
 
 import { redirect, useRouter, useSearchParams } from "next/navigation";
-import { personaIncludesRetrieval } from "@/app/app/services/lib";
+import {
+  endIncognitoSession,
+  personaIncludesRetrieval,
+} from "@/app/app/services/lib";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { SEARCH_PARAM_NAMES } from "@/app/app/services/searchParams";
 import { Section } from "@/layouts/general-layouts";
@@ -35,6 +38,7 @@ import MultiModelSelector from "@/sections/model-selector/MultiModelSelector";
 import { useAgentController } from "@/lib/agents/hooks";
 import useChatSessionController from "@/hooks/useChatSessionController";
 import useDeepResearchToggle from "@/hooks/useDeepResearchToggle";
+import { useIncognito } from "@/providers/IncognitoProvider";
 import { useIsDefaultAgent } from "@/lib/agents/hooks";
 import AgentDescription from "@/app/app/components/AgentDescription";
 import {
@@ -224,6 +228,16 @@ export default function AppPage({ firstMessage }: ChatPageProps) {
     chatSessionId: currentChatSessionId,
     agentId: selectedAgent?.id,
   });
+
+  // Incognito lives in context so the top-bar toggle and this page stay in
+  // sync. This page owns the derived lock, the teardown on leaving a session,
+  // and the unload beacon.
+  const {
+    incognitoEnabled,
+    incognitoEnabledRef,
+    setIncognitoEnabled,
+    setIncognitoLocked,
+  } = useIncognito();
   const deepResearchEnabledForCurrentWorkflow =
     currentProjectId === null && deepResearchEnabled;
 
@@ -364,6 +378,48 @@ export default function AppPage({ firstMessage }: ChatPageProps) {
   const messageHistory = useCurrentMessageHistory();
   const messageTree = useCurrentMessageTree();
 
+  // The mode pins on creation, so lock the toggle whenever a session exists,
+  // even an empty one: submitting would reuse it with its pinned mode.
+  useEffect(() => {
+    setIncognitoLocked(
+      messageHistory.length > 0 || currentChatSessionId !== null
+    );
+  }, [messageHistory.length, currentChatSessionId, setIncognitoLocked]);
+
+  // Leaving an incognito session tears it down, whether the user goes to a
+  // fresh chat or straight into another one. Only the id changing tells us
+  // this happened, since incognito sessions never enter the sessions list.
+  const prevSessionIdForIncognito = useRef(currentChatSessionId);
+  useEffect(() => {
+    const previous = prevSessionIdForIncognito.current;
+    prevSessionIdForIncognito.current = currentChatSessionId;
+    if (!previous || previous === currentChatSessionId) return;
+    if (!incognitoEnabledRef.current) return;
+    // Incognito must clear either way: the user is now in a different chat and
+    // the badge would lie. A failure has no client retry path from here, so the
+    // orphan sweep is what eventually deletes the context and its uploads.
+    void endIncognitoSession(previous).then((tornDown) => {
+      if (!tornDown) {
+        console.error(
+          `Incognito teardown failed for ${previous}; leaving it to the server sweep`
+        );
+      }
+    });
+    setIncognitoEnabled(false);
+  }, [currentChatSessionId, setIncognitoEnabled]);
+
+  // Best-effort teardown when the tab closes over a live incognito session.
+  // sendBeacon survives unload where fetch would be cancelled.
+  useEffect(() => {
+    if (!incognitoEnabled || !currentChatSessionId) return;
+    const sessionId = currentChatSessionId;
+    const handlePageHide = () => {
+      navigator.sendBeacon(`/api/chat/end-incognito-session/${sessionId}`);
+    };
+    window.addEventListener("pagehide", handlePageHide);
+    return () => window.removeEventListener("pagehide", handlePageHide);
+  }, [incognitoEnabled, currentChatSessionId]);
+
   // Block input when the last turn is multi-model and the user hasn't
   // selected a preferred response yet. Without a selection, it's ambiguous
   // which model's response should be used as context for the next message.
@@ -408,10 +464,11 @@ export default function AppPage({ firstMessage }: ChatPageProps) {
 
   const { fullWidthChat } = useFullWidthChat();
 
-  // Full-width only takes effect inside an actual conversation, not the
-  // new-session view (where only the input bar is shown).
+  // Full-width applies in a conversation and on the new-session view, where
+  // it widens the greeting row and the composer.
   const fullWidthActive =
-    fullWidthChat && appFocus.isChat() && !!currentChatSessionId;
+    fullWidthChat &&
+    ((appFocus.isChat() && !!currentChatSessionId) || appFocus.isNewSession());
 
   // Auto-fold sidebar when a multi-model message is submitted.
   // Stays collapsed until the user exits multi-model mode (removes models).
@@ -604,6 +661,12 @@ export default function AppPage({ firstMessage }: ChatPageProps) {
     if (!isNewSession && isSearch) resetInputBar();
   }, [isNewSession, defaultAppMode, isSearch, resetInputBar, setAppMode]);
 
+  // Declared after the default-mode reset so incognito wins the same commit:
+  // search mode has its own persistence and no incognito safeguards.
+  useEffect(() => {
+    if (incognitoEnabled) setAppMode("chat");
+  }, [incognitoEnabled, setAppMode]);
+
   const handleSearchDocumentClick = useCallback(
     (doc: MinimalOnyxDocument) => setPresentingDocument(doc),
     []
@@ -631,6 +694,13 @@ export default function AppPage({ firstMessage }: ChatPageProps) {
         return;
       }
 
+      // Incognito always routes to chat: the search path runs its own
+      // persistence and none of the incognito safeguards.
+      if (incognitoEnabledRef.current) {
+        onChat(message);
+        return;
+      }
+
       // For new sessions, let the query controller handle routing.
       // resetInputBar is called inside onChat for chat-routed queries.
       // For search-routed queries, the input bar is intentionally kept
@@ -641,6 +711,7 @@ export default function AppPage({ firstMessage }: ChatPageProps) {
       currentChatSessionId,
       submitQuery,
       onChat,
+      incognitoEnabledRef,
       resetInputBar,
       onSubmit,
       currentMessageFiles,
@@ -905,7 +976,10 @@ export default function AppPage({ firstMessage }: ChatPageProps) {
                       flexDirection="row"
                       justifyContent="between"
                       alignItems="end"
-                      className="max-w-(--app-page-main-content-width)"
+                      className={cn(
+                        !fullWidthActive &&
+                          "max-w-(--app-page-main-content-width)"
+                      )}
                     >
                       <WelcomeMessage
                         agent={liveAgent}

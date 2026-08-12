@@ -409,8 +409,9 @@ export default function SecurityHardeningPage() {
                 title="Incognito Chats"
                 description="Incognito chats never appear in their owner's history. Group access is configured per group under Groups."
                 withLabel
+                responsive
               >
-                <div className="w-60">
+                <div className="w-full sm:w-60">
                   <InputSelect
                     value={draft.incognito_availability}
                     onValueChange={async (value) => {
@@ -452,8 +453,9 @@ export default function SecurityHardeningPage() {
                 title="Incognito Chat Records"
                 description="What the workspace keeps from incognito chats. New sessions pin the mode active when they start."
                 withLabel
+                responsive
               >
-                <div className="w-60">
+                <div className="w-full sm:w-60">
                   <InputSelect
                     value={draft.incognito_record_mode}
                     onValueChange={(value) =>

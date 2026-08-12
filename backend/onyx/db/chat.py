@@ -13,7 +13,7 @@ from onyx.configs.chat_configs import HARD_DELETE_CHATS
 from onyx.configs.constants import MessageType
 from onyx.context.search.models import InferenceSection, SavedSearchDoc
 from onyx.context.search.models import SearchDoc as ServerSearchDoc
-from onyx.db.enums import IncognitoRecordMode
+from onyx.db.enums import IncognitoRecordMode, record_mode_persists_content
 from onyx.db.models import (
     ChatMessage,
     ChatMessage__SearchDoc,
@@ -251,8 +251,12 @@ def create_chat_session(
     slack_thread_id: str | None = None,
     project_id: int | None = None,
     incognito_record_mode: IncognitoRecordMode | None = None,
+    session_id: UUID | None = None,
 ) -> ChatSession:
     chat_session = ChatSession(
+        # Caller-supplied only for incognito, where uploads name the session
+        # before it exists so the server can verify them.
+        **({"id": session_id} if session_id is not None else {}),
         user_id=user_id,
         persona_id=persona_id,
         description=description,
@@ -328,7 +332,12 @@ def update_chat_session(
     if chat_session.deleted:
         raise ValueError("Trying to rename a deleted chat session")
 
-    if description is not None:
+    # A title is conversation-derived, so a content-free session never stores
+    # one. Enforced here rather than at each caller: auto-naming, manual
+    # rename, and the patch endpoint all write through this.
+    if description is not None and record_mode_persists_content(
+        chat_session.incognito_record_mode
+    ):
         chat_session.description = description
     if sharing_status is not None:
         chat_session.shared_status = sharing_status

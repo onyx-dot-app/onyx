@@ -259,10 +259,6 @@ function EditGroupPage({ groupId }: EditGroupPageProps) {
       // Update members and cc_pairs
       await updateGroup(groupId, selectedUserIds, selectedCcPairIds);
 
-      if (group && incognitoEnabled !== group.incognito_enabled) {
-        await setGroupIncognito(groupId, incognitoEnabled);
-      }
-
       // Update agent sharing (add/remove this group from changed agents)
       await updateAgentGroupSharing(
         groupId,
@@ -280,6 +276,12 @@ function EditGroupPage({ groupId }: EditGroupPageProps) {
       // Save token rate limits (create/update/delete) — Enterprise-only
       if (isEnterpriseTier) {
         await saveTokenLimits(groupId, tokenLimits, tokenRateLimits ?? []);
+      }
+
+      // Last: granting incognito access must not outlive a save that then
+      // fails, which would report an error while members already had it.
+      if (group && incognitoEnabled !== group.incognito_enabled) {
+        await setGroupIncognito(groupId, incognitoEnabled);
       }
 
       // Update refs so subsequent saves diff correctly

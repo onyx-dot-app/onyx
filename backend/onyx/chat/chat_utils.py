@@ -33,7 +33,11 @@ from onyx.db.chat import (
     get_chat_messages_by_session,
     get_or_create_root_message,
 )
-from onyx.db.enums import IncognitoRecordMode, UserFileStatus
+from onyx.db.enums import (
+    IncognitoRecordMode,
+    UserFileStatus,
+    record_mode_persists_content,
+)
 from onyx.db.file_record import FileRecordNotFoundError
 from onyx.db.kg_config import (
     get_kg_config_settings,
@@ -205,21 +209,33 @@ def create_chat_session_from_request(
                 OnyxErrorCode.DEPLOYMENT_UNSUPPORTED,
                 "Incognito chat is not supported on this deployment.",
             )
-        if not incognito_allowed_for_user(user, db_session):
+        if not incognito_allowed_for_user(user, db_session, cached=False):
             raise OnyxError(
                 OnyxErrorCode.UNAUTHORIZED,
                 "Incognito chat is not enabled for this user.",
             )
         incognito_mode = resolve_incognito_record_mode()
 
-    return create_chat_session(
+    # A caller-supplied title is conversation-derived, so a content-free
+    # session stores none of it.
+    description = (
+        chat_session_request.description or ""
+        if record_mode_persists_content(incognito_mode)
+        else ""
+    )
+
+    chat_session = create_chat_session(
         db_session=db_session,
-        description=chat_session_request.description or "",
+        description=description,
         user_id=user.id,
         persona_id=chat_session_request.persona_id,
         project_id=chat_session_request.project_id,
         incognito_record_mode=incognito_mode,
+        session_id=(
+            chat_session_request.incognito_session_id if incognito_mode else None
+        ),
     )
+    return chat_session
 
 
 def create_chat_history_chain(

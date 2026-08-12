@@ -178,6 +178,7 @@ export default function MultiModelSelector({
               icon={SvgPlusCircle}
               size="sm"
               tooltip="Add Model"
+              aria-label="Add Model"
               onClick={(e: React.MouseEvent) => {
                 if (noModelsToSelect) return;
                 anchorRef.current = e.currentTarget as HTMLElement;

@@ -18,7 +18,10 @@ from onyx.background.celery.celery_utils import httpx_init_vespa_pool
 from onyx.background.celery.tasks.shared.RetryDocumentIndex import RetryDocumentIndex
 from onyx.cache.factory import get_cache_backend
 from onyx.chat.chat_processing_checker import is_chat_session_processing
-from onyx.chat.incognito import delete_incognito_generated_files
+from onyx.chat.incognito import (
+    delete_incognito_generated_files,
+    sweep_stale_incognito_user_files,
+)
 from onyx.chat.incognito_context import incognito_session_ended
 from onyx.configs.app_configs import (
     DISABLE_VECTOR_DB,
@@ -577,6 +580,10 @@ def _supply_user_file_to_secondary(user_file_id: str, tenant_id: str) -> bool:
         user_file = db_session.get(UserFile, _as_uuid(user_file_id))
         file_id = user_file.file_id if user_file is not None else None
         file_name = user_file.name if user_file is not None else None
+        incognito = user_file is not None and user_file.incognito
+    # Incognito files never enter any index, so the flag clears with no write.
+    if incognito:
+        return True
     if secondary is None or file_id is None:
         return False
 
@@ -674,6 +681,7 @@ def process_user_file_impl(
 
             file_id = uf.file_id
             file_name = uf.name
+            skip_search_index = uf.incognito
         # DB connection returned to pool here; file I/O and indexing run without it.
 
         try:
@@ -681,7 +689,9 @@ def process_user_file_impl(
                 user_file_id, file_id, file_name, tenant_id
             )
             try:
-                if DISABLE_VECTOR_DB:
+                # Incognito uploads get text extraction for chat use but never
+                # enter the search index.
+                if DISABLE_VECTOR_DB or skip_search_index:
                     _process_user_file_without_vector_db(
                         user_file_id=user_file_id,
                         documents=documents,
@@ -800,6 +810,15 @@ def check_for_user_file_delete(self: Task, *, tenant_id: str) -> None:
             return None
 
         with get_session_with_current_tenant() as db_session:
+            # Orphaned incognito uploads (teardown never arrived) join the
+            # DELETING pool here so the standard machinery below cleans them.
+            stale_incognito = sweep_stale_incognito_user_files(db_session)
+            if stale_incognito:
+                db_session.commit()
+                task_logger.info(
+                    f"check_for_user_file_delete - Queued {stale_incognito} "
+                    f"stale incognito files for tenant={tenant_id}"
+                )
             user_file_ids = (
                 db_session.execute(
                     select(UserFile.id).where(
@@ -943,17 +962,26 @@ def delete_user_file_impl(
                 )
 
         file_store = get_default_file_store()
+        blob_deleted = True
         try:
-            file_store.delete_file(file_id)
+            file_store.delete_file(file_id, error_on_missing=False)
             file_store.delete_file(
-                user_file_id_to_plaintext_file_name(_as_uuid(user_file_id))
+                user_file_id_to_plaintext_file_name(_as_uuid(user_file_id)),
+                error_on_missing=False,
             )
         except Exception as e:
+            blob_deleted = False
             task_logger.exception(
                 f"delete_user_file_impl - Error deleting file id={user_file_id} - {e.__class__.__name__}"
             )
 
-        # Phase 3: short write session — remove the DB record
+        # Phase 3: short write session, removing the DB record. The row is the
+        # only handle a retry has on the blob, so a refused delete keeps it.
+        if not blob_deleted:
+            task_logger.warning(
+                f"delete_user_file_impl - Keeping row id={user_file_id} for retry"
+            )
+            return
         with get_session_with_current_tenant() as db_session:
             user_file = db_session.get(UserFile, _as_uuid(user_file_id))
             if user_file is not None:

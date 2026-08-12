@@ -5395,7 +5395,6 @@ class UserDocument(str, Enum):
 
 class UserFile(Base):
     __tablename__ = "user_file"
-
     id: Mapped[UUID] = mapped_column(PGUUID(as_uuid=True), primary_key=True)
     user_id: Mapped[UUID | None] = mapped_column(ForeignKey("user.id"), nullable=False)
     assistants: Mapped[list["Persona"]] = relationship(
@@ -5417,6 +5416,17 @@ class UserFile(Base):
         Enum(UserFileStatus, native_enum=False, name="userfilestatus"),
         nullable=False,
         default=UserFileStatus.PROCESSING,
+    )
+    # Privacy is decided when the file is uploaded, from the toggle state, so
+    # an attachment made before the session exists is already private.
+    incognito: Mapped[bool] = mapped_column(
+        Boolean, nullable=False, default=False, server_default=text("false")
+    )
+    # Which session cleans it up. NULL until the session is created on the
+    # first message and adopts it. No foreign key: the session row is deleted
+    # first and these must outlive it to be swept.
+    incognito_session_id: Mapped[UUID | None] = mapped_column(
+        PGUUID(as_uuid=True), nullable=True, default=None
     )
     needs_project_sync: Mapped[bool] = mapped_column(
         Boolean, nullable=False, default=False
@@ -5449,6 +5459,15 @@ class UserFile(Base):
     )
 
     __table_args__ = (
+        # Declared here as well as in the migration so autogenerate does not
+        # read it as a stray index and propose dropping it.
+        Index(
+            "ix_user_file_incognito_sweep",
+            "incognito_session_id",
+            "status",
+            "last_accessed_at",
+            postgresql_where=text("incognito"),
+        ),
         Index(
             "ix_user_file_secondary_reconcile_pending",
             "id",

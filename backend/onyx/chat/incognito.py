@@ -18,10 +18,19 @@ from uuid import UUID
 
 from sqlalchemy.orm import Session
 
-from onyx.chat.incognito_context import incognito_context_available
+from onyx.chat.incognito_context import (
+    incognito_context_available,
+    incognito_session_ended,
+)
 from onyx.db.enums import IncognitoRecordMode, record_mode_persists_content
 from onyx.db.file_record import get_incognito_file_ids
-from onyx.db.incognito import user_in_incognito_enabled_group
+from onyx.db.incognito import (
+    is_content_persisting_session,
+    mark_incognito_user_files_deleting,
+    mark_unadopted_incognito_files_deleting,
+    stale_incognito_session_ids,
+    user_in_incognito_enabled_group,
+)
 from onyx.db.models import User
 from onyx.file_store.file_store import get_default_file_store
 from onyx.file_store.models import FileDescriptor
@@ -38,19 +47,26 @@ def current_turn_persists_content() -> bool:
     return record_mode_persists_content(mode)
 
 
-def incognito_allowed_for_user(user: User, db_session: Session) -> bool:
+def incognito_allowed_for_user(
+    user: User, db_session: Session, *, cached: bool = True
+) -> bool:
     """Whether this user may start an incognito chat.
 
     Availability composes the deployment capability (the ephemeral store must
     exist) with the admin's security setting, which defaults to off. Anonymous
     users never qualify: they share an identity, have no memberships, and
     cannot authenticate against the teardown endpoint.
+
+    ``cached`` must be False wherever this decides an action rather than an
+    affordance. Cache invalidation is process-local, so a second api_server can
+    authorize against a revoked setting for the cache TTL.
     """
     if user.is_anonymous:
         return False
     if not incognito_context_available():
         return False
-    availability = get_security_settings().incognito_availability
+    settings = get_security_settings() if cached else load_effective_uncached()
+    availability = settings.incognito_availability
     if availability is IncognitoAvailability.EVERYONE:
         return True
     if availability is IncognitoAvailability.GROUPS:
@@ -68,6 +84,27 @@ def resolve_incognito_record_mode() -> IncognitoRecordMode:
     full_history would persist content the admin has already disallowed.
     """
     return load_effective_uncached().incognito_record_mode
+
+
+def sweep_stale_incognito_user_files(db_session: Session) -> int:
+    """Queue uploads of dead incognito sessions for deletion. Caller commits.
+
+    Covers both shapes: uploads no session ever adopted, and uploads whose
+    session is gone. A session whose live context is still present is skipped
+    however old its files are, so a chat left open past the orphan window keeps
+    its attachments. Shared by the Celery beat task and the lite deployment
+    poller, which have no scheduler in common.
+    """
+    marked = mark_unadopted_incognito_files_deleting(db_session)
+    for session_id in stale_incognito_session_ids(db_session):
+        # Full-history sessions never create a Redis context, so liveness would
+        # read them as ended and delete a live chat's attachments.
+        if is_content_persisting_session(db_session, session_id):
+            continue
+        if not incognito_session_ended(session_id):
+            continue
+        marked += len(mark_incognito_user_files_deleting(db_session, session_id))
+    return marked
 
 
 def content_free_file_descriptors(

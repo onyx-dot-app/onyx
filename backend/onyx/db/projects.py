@@ -60,6 +60,7 @@ def create_user_files(
     db_session: Session,
     link_url: str | None = None,
     temp_id_map: dict[str, str] | None = None,
+    incognito_session_id: UUID | None = None,
 ) -> CategorizedFilesResult:
     # Categorize the files
     categorized_files = categorize_uploaded_files(files, db_session)
@@ -92,12 +93,15 @@ def create_user_files(
             content_type=file.content_type,
             file_type=file.content_type,
             status=UserFileStatus.SKIPPED if should_skip else UserFileStatus.PROCESSING,
+            incognito=incognito_session_id is not None,
+            incognito_session_id=incognito_session_id,
             last_accessed_at=datetime.datetime.now(datetime.timezone.utc),
         )
         # Persist the UserFile first to satisfy FK constraints for association table
         db_session.add(new_file)
         db_session.flush()
-        if project_id:
+        # Incognito uploads may use a project as context but never join it.
+        if project_id and incognito_session_id is None:
             project_to_user_file = Project__UserFile(
                 project_id=project_id,
                 user_file_id=new_file.id,
@@ -120,6 +124,7 @@ def upload_files_to_user_files_with_indexing(
     temp_id_map: dict[str, str] | None,
     db_session: Session,
     background_tasks: BackgroundTasks | None = None,
+    incognito_session_id: UUID | None = None,
 ) -> CategorizedFilesResult:
     if project_id is not None and user is not None:
         if not check_project_ownership(project_id, user.id, db_session):
@@ -131,6 +136,7 @@ def upload_files_to_user_files_with_indexing(
         user,
         db_session,
         temp_id_map=temp_id_map,
+        incognito_session_id=incognito_session_id,
     )
     user_files = categorized_files_result.user_files
     rejected_files = categorized_files_result.rejected_files

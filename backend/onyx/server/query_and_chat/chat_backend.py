@@ -47,7 +47,15 @@ from onyx.configs.chat_configs import (
     CHAT_RESUME_POLL_INTERVAL_S,
     HARD_DELETE_CHATS,
 )
-from onyx.configs.constants import PUBLIC_API_TAGS, MessageType, MilestoneRecordType
+from onyx.configs.constants import (
+    CELERY_USER_FILE_DELETE_TASK_EXPIRES,
+    PUBLIC_API_TAGS,
+    MessageType,
+    MilestoneRecordType,
+    OnyxCeleryPriority,
+    OnyxCeleryQueues,
+    OnyxCeleryTask,
+)
 from onyx.configs.model_configs import LITELLM_PASS_THROUGH_HEADERS
 from onyx.db.chat import (
     add_chats_to_session_from_slack_thread,
@@ -68,6 +76,10 @@ from onyx.db.chat_search import search_chat_sessions
 from onyx.db.engine.sql_engine import get_session, get_session_with_current_tenant
 from onyx.db.enums import Permission, record_mode_persists_content
 from onyx.db.feedback import create_chat_message_feedback, remove_chat_message_feedback
+from onyx.db.incognito import (
+    is_incognito_teardown_target,
+    mark_incognito_user_files_deleting,
+)
 from onyx.db.llm import fetch_default_chat_naming_model
 from onyx.db.models import ChatMessage, ChatSessionSharedStatus, Persona, User
 from onyx.db.persona import get_persona_by_id
@@ -541,13 +553,15 @@ def rename_chat_session(
 
     if name:
         with get_session_with_current_tenant() as db_session:
-            update_chat_session(
+            chat_session = update_chat_session(
                 db_session=db_session,
                 user_id=user_id,
                 chat_session_id=chat_session_id,
                 description=name,
             )
-        return RenameChatSessionResponse(new_name=name)
+        # Echo what was stored: a content-free session drops the title, and
+        # reporting the requested one would show a rename that did not happen.
+        return RenameChatSessionResponse(new_name=chat_session.description or "")
 
     # Close the read session before the LLM's multi-second generation window.
     with get_session_with_current_tenant() as db_session:
@@ -615,9 +629,19 @@ def patch_chat_session(
     return None
 
 
-def _teardown_incognito_after_delete(chat_session_id: UUID) -> None:
+def _teardown_incognito_after_delete(
+    chat_session_id: UUID, user_id: UUID, db_session: Session
+) -> None:
     """The rows are already gone, so a failed teardown is logged rather than
-    failing a delete the caller cannot retry. The context TTL is the backstop."""
+    failing a delete the caller cannot retry. The context TTL is the backstop.
+
+    Uploads are queued here too, so deleting a chat cleans up the same things
+    the dedicated teardown endpoint does."""
+    try:
+        mark_incognito_user_files_deleting(db_session, chat_session_id, user_id)
+        db_session.commit()
+    except Exception:
+        logger.exception("Incognito file cleanup failed for %s", chat_session_id)
     try:
         teardown_incognito_session(chat_session_id)
     except Exception:
@@ -645,7 +669,7 @@ def delete_all_chat_sessions(
     except ValueError as e:
         raise HTTPException(status_code=400, detail=str(e))
     for incognito_id in incognito_session_ids:
-        _teardown_incognito_after_delete(incognito_id)
+        _teardown_incognito_after_delete(incognito_id, user.id, db_session)
 
 
 @router.delete("/delete-chat-session/{session_id}", tags=PUBLIC_API_TAGS)
@@ -678,7 +702,7 @@ def delete_chat_session_by_id(
     except ValueError as e:
         raise HTTPException(status_code=400, detail=str(e))
     if is_incognito:
-        _teardown_incognito_after_delete(session_id)
+        _teardown_incognito_after_delete(session_id, user.id, db_session)
 
 
 class IncognitoAvailabilityResponse(BaseModel):
@@ -706,18 +730,39 @@ def end_incognito_session(
     """Drop an incognito session's live context the moment the chat closes.
 
     The context TTL is only the backstop for when this never arrives, such as
-    a hard tab close.
+    a hard tab close. Uploads are found by session id, so one still in flight
+    when the user leaves, or one attached before any message created the
+    session, is queued for deletion just the same.
     """
-    chat_session = get_chat_session_by_id(
-        chat_session_id=session_id, user_id=user.id, db_session=db_session
-    )
-    if chat_session.incognito_record_mode is not None:
-        teardown_incognito_session(session_id)
-        if not delete_incognito_generated_files(session_id, db_session):
-            raise OnyxError(
-                OnyxErrorCode.SERVICE_UNAVAILABLE,
-                "Some generated files could not be deleted yet and will be retried.",
+    if not is_incognito_teardown_target(db_session, session_id, user.id):
+        return
+    # Durable file marking runs before the Redis teardown: the beacon is
+    # one-shot, so a failure after this point still leaves the files queued
+    # for deletion rather than stored but hidden.
+    deletable_ids = mark_incognito_user_files_deleting(db_session, session_id, user.id)
+    db_session.commit()
+    teardown_incognito_session(session_id)
+
+    if deletable_ids:
+        from onyx.background.celery.versioned_apps.client import app as client_app
+
+        tenant_id = get_current_tenant_id()
+        for user_file_id in deletable_ids:
+            client_app.send_task(
+                OnyxCeleryTask.DELETE_SINGLE_USER_FILE,
+                kwargs={"user_file_id": str(user_file_id), "tenant_id": tenant_id},
+                queue=OnyxCeleryQueues.USER_FILE_DELETE,
+                priority=OnyxCeleryPriority.HIGH,
+                expires=CELERY_USER_FILE_DELETE_TASK_EXPIRES,
             )
+
+    # Last, so a store that refuses a blob cannot strand the queued uploads:
+    # this raises to tell the client the sweep will retry.
+    if not delete_incognito_generated_files(session_id, db_session):
+        raise OnyxError(
+            OnyxErrorCode.SERVICE_UNAVAILABLE,
+            "Some generated files could not be deleted yet and will be retried.",
+        )
 
 
 # NOTE: This endpoint is extremely central to the application, any changes to it should be reviewed and approved by an experienced
