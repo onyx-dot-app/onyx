@@ -158,22 +158,29 @@ function SidebarTab({
   over the value inherited from `.interactive`. */
   const overlayClassName =
     "absolute z-99 inset-0 rounded-08 cursor-pointer outline-border-04 outline-offset-[-2px] focus-visible:outline-2";
-  // A folded tab hides its label, and the overlay holds no text of its own, so
-  // name it explicitly. Without this a folded tab is an unnamed control.
+  /* The overlay holds no text of its own, and a folded tab hides its label, so
+  name the overlay explicitly. String children name it directly. Other content
+  (truncated or animated titles) names it through the element that renders the
+  title. */
   const label = typeof children === "string" ? children : undefined;
+  const labelId = React.useId();
+  const labelProps =
+    label !== undefined
+      ? { "aria-label": label }
+      : { "aria-labelledby": labelId };
   const overlay = disabled ? null : href ? (
     <Link
       href={href as Route}
       scroll={false}
       onClick={onClick}
-      aria-label={label}
+      {...labelProps}
       className={overlayClassName}
     />
   ) : onClick ? (
     <button
       type={type ?? "button"}
       onClick={onClick}
-      aria-label={label}
+      {...labelProps}
       className={overlayClassName}
     />
   ) : null;
@@ -210,7 +217,10 @@ function SidebarTab({
               titleMaxLines={1}
             />
           ) : (
-            <div className="flex flex-row items-center gap-2 w-full">
+            <div
+              id={labelId}
+              className="flex flex-row items-center gap-2 w-full"
+            >
               {Icon && (
                 /* Sits above the overlay so an interactive icon stays clickable. */
                 <div className="relative z-100 flex items-center justify-center p-0.5">
