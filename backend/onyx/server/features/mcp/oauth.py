@@ -677,12 +677,25 @@ class OnyxTokenStorage(TokenStorage):
             r.rpush(key_tokens(str(self.alt_config_id)), tokens.model_dump_json())
             r.expire(key_tokens(str(self.alt_config_id)), OAUTH_WAIT_SECONDS)
 
-    async def discard_persisted_tokens(self) -> None:
+    async def discard_persisted_tokens(
+        self, redeemed_refresh_token: str | None
+    ) -> bool:
         """Drop the persisted grant (tokens, expiry, Authorization header) so
-        the connection reads as unauthenticated until the user reconnects."""
+        the connection reads as unauthenticated until the user reconnects.
+
+        No-ops when the stored refresh token no longer matches
+        ``redeemed_refresh_token``: a concurrent refresh or reconnect already
+        replaced the grant, and the replacement must survive. Returns whether
+        the grant was discarded."""
         with get_session_with_current_tenant() as db_session:
             config = self._ensure_connection_config(db_session)
             config_data = extract_connection_data(config)
+            stored_tokens = config_data.get(MCPOAuthKeys.TOKENS.value) or {}
+            if (
+                redeemed_refresh_token is None
+                or stored_tokens.get("refresh_token") != redeemed_refresh_token
+            ):
+                return False
             config_data.pop(MCPOAuthKeys.TOKENS.value, None)
             config_data.pop(MCPOAuthKeys.TOKEN_EXPIRES_AT.value, None)
             config_data["headers"] = {
@@ -691,6 +704,7 @@ class OnyxTokenStorage(TokenStorage):
                 if key.lower() != "authorization"
             }
             update_connection_config(config.id, db_session, config_data)
+            return True
 
     async def get_client_info(self) -> OAuthClientInformationFull | None:
         with get_session_with_current_tenant() as db_session:
@@ -768,6 +782,9 @@ class OnyxOAuthClientProvider(OAuthClientProvider):
         self.refresh_log_context = refresh_log_context
         self.refresh_attempt_id: str | None = None
         self.token_expiry_before_refresh: float | None = None
+        # The refresh token the in-flight refresh attempt redeemed; guards the
+        # invalid_grant discard against wiping a concurrently stored grant.
+        self.redeemed_refresh_token: str | None = None
 
     def _refresh_log_fields(self, **fields: Any) -> dict[str, Any]:
         log_fields: dict[str, Any] = {
@@ -781,6 +798,10 @@ class OnyxOAuthClientProvider(OAuthClientProvider):
     async def _refresh_token(self) -> httpx.Request:
         self.refresh_attempt_id = uuid4().hex
         self.token_expiry_before_refresh = self.context.token_expiry_time
+        current_tokens = self.context.current_tokens
+        self.redeemed_refresh_token = (
+            current_tokens.refresh_token if current_tokens else None
+        )
 
         request = await super()._refresh_token()
         logger.info(
@@ -835,8 +856,12 @@ class OnyxOAuthClientProvider(OAuthClientProvider):
             # reads as unauthenticated instead of retrying forever.
             storage = self.context.storage
             if oauth_error == "invalid_grant" and isinstance(storage, OnyxTokenStorage):
-                await storage.discard_persisted_tokens()
-                logger.warning("mcp_oauth.tokens_discarded", extra=response_fields)
+                if await storage.discard_persisted_tokens(self.redeemed_refresh_token):
+                    logger.warning("mcp_oauth.tokens_discarded", extra=response_fields)
+                else:
+                    logger.info(
+                        "mcp_oauth.tokens_discard_skipped_stale", extra=response_fields
+                    )
             return False
 
         try:

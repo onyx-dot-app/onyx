@@ -122,6 +122,14 @@ def test_dead_grant_is_not_authenticated_and_excluded_from_craft(
     assert server.id not in craft_server_ids()
 
 
+def _invalid_grant_response() -> httpx.Response:
+    return httpx.Response(
+        status_code=400,
+        json={"error": "invalid_grant"},
+        request=httpx.Request("POST", "https://oauth2.example.com/token"),
+    )
+
+
 def test_invalid_grant_refresh_discards_persisted_tokens(
     db_session: Session,
     tenant_context: None,  # noqa: ARG001
@@ -139,13 +147,19 @@ def test_invalid_grant_refresh_discards_persisted_tokens(
     provider = make_oauth_provider(
         server, str(user.id), UNUSED_RETURN_PATH, config_id, None
     )
-    response = httpx.Response(
-        status_code=400,
-        json={"error": "invalid_grant"},
-        request=httpx.Request("POST", "https://oauth2.example.com/token"),
-    )
-    assert asyncio.run(provider._handle_refresh_response(response)) is False
 
+    # A stale attempt (its refresh token was already rotated away by a
+    # concurrent refresh or reconnect) must not wipe the stored grant.
+    provider.redeemed_refresh_token = "rotated-away-refresh-token"
+    assert not asyncio.run(provider._handle_refresh_response(_invalid_grant_response()))
+    db_session.expire_all()
+    config = get_user_connection_config(server.id, user.email, db_session)
+    assert config is not None
+    assert "tokens" in extract_connection_data(config, apply_mask=False)
+
+    # The attempt that redeemed the stored refresh token discards the grant.
+    provider.redeemed_refresh_token = "revoked-refresh-token"
+    assert not asyncio.run(provider._handle_refresh_response(_invalid_grant_response()))
     db_session.expire_all()
     config = get_user_connection_config(server.id, user.email, db_session)
     assert config is not None
