@@ -204,7 +204,7 @@ export default function UserFilesModal({
           </Modal.Header>
 
           <Modal.Body
-            padding={filtered.length === 0 ? 0.5 : 0}
+            padding={filtered.length === 0 ? 2 : 0}
             gap={2}
             alignItems="center"
           >
