@@ -16,14 +16,12 @@ import { useCallback, useState } from "react";
 const route = ADMIN_ROUTES.QUERY_HISTORY;
 
 export default function QueryHistoryPage() {
-  const [dateRange, setDateRange] = useState<DateRange>(() =>
-    rangeForInclusiveDays(30)
-  );
+  const initialRange = rangeForInclusiveDays(30);
+  const [dateRange, setDateRange] = useState<DateRange>(initialRange);
   const [filters, setFilters] = useState<QueryHistoryFilters>(() => {
-    const range = rangeForInclusiveDays(30);
     return {
-      start_time: range.from.toISOString(),
-      end_time: range.to.toISOString(),
+      start_time: initialRange.from.toISOString(),
+      end_time: initialRange.to.toISOString(),
     };
   });
 
