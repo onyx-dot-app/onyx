@@ -6,10 +6,10 @@ Each function here answers exactly one, with the consumer noted:
 - ``ResolvedMCPCredentials.can_authenticate`` — are the effective credentials
   usable for a call right now (lazy refresh still allowed)? Consumed by the
   tool runtime, the sandbox proxy, and the API status fields.
+- ``ResolvedMCPCredentials.needs_reauth`` — is the stored OAuth grant dead
+  (expired with no refresh token), so the user must reconnect?
 - ``mcp_token_expired`` — is the stored OAuth access token past its expiry
   (regardless of whether a refresh token could revive it)? Drives refresh.
-- ``mcp_oauth_reauth_required`` — is the stored OAuth grant dead (expired with
-  no refresh token), so the user must reconnect?
 - ``requires_user_authentication`` — does the server's shape require a per-user
   credential at all, or is it usable from admin/none config alone?
 - ``user_can_authenticate`` — resolves the user's credentials and reports
@@ -65,16 +65,6 @@ def mcp_token_expired(config_data: MCPConnectionData) -> bool:
     """True iff the stored access token is past its persisted expiry."""
     expires_at = config_data.get(MCPOAuthKeys.TOKEN_EXPIRES_AT.value)
     return expires_at is not None and float(expires_at) <= time.time()
-
-
-def mcp_oauth_reauth_required(config_data: MCPConnectionData) -> bool:
-    """True when the stored OAuth grant can never authenticate again on its
-    own: the access token is expired and there is no refresh token to redeem.
-    Such a config must not count as authenticated — the user has to reconnect."""
-    if not mcp_token_expired(config_data):
-        return False
-    tokens = config_data.get(MCPOAuthKeys.TOKENS.value) or {}
-    return not tokens.get("refresh_token")
 
 
 def requires_user_authentication(
@@ -178,12 +168,17 @@ class ResolvedMCPCredentials(BaseModel):
         return headers
 
     def needs_reauth(self) -> bool:
-        """The stored OAuth grant is dead (expired, no refresh token); only a
-        user reconnect can restore it. Its bearer header still takes precedence
-        in ``build_headers``, so no caller-supplied header can work around it."""
-        return self.auth_type == MCPAuthenticationType.OAUTH and (
-            mcp_oauth_reauth_required(self._config_data())
-        )
+        """The stored OAuth grant is dead: the access token is expired and
+        there is no refresh token to redeem, so only a user reconnect can
+        restore it. Its bearer header still takes precedence in
+        ``build_headers``, so no caller-supplied header can work around it."""
+        if self.auth_type != MCPAuthenticationType.OAUTH:
+            return False
+        config_data = self._config_data()
+        if not mcp_token_expired(config_data):
+            return False
+        tokens = config_data.get(MCPOAuthKeys.TOKENS.value) or {}
+        return not tokens.get("refresh_token")
 
     def can_authenticate(self) -> bool:
         """Whether these credentials can authenticate a call now (lazy refresh
