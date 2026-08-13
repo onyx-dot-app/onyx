@@ -160,16 +160,15 @@ export class IndexSettingsPage {
   }
 
   async stageContextualModel(displayName: string): Promise<void> {
-    await this.page
+    const contextualModelField = this.page
+      .locator("label")
+      .filter({ hasText: "Contextual Retrieval LLM" });
+    await contextualModelField
       .getByTestId("llm-popover-trigger")
-      .first()
       .getByRole("button")
       .click();
-    await this.page
-      .getByPlaceholder("Search models...")
-      .last()
-      .fill(displayName);
-    await this.page.getByText(displayName, { exact: true }).last().click();
+    await this.page.getByPlaceholder("Search models...").fill(displayName);
+    await this.page.getByText(displayName, { exact: true }).click();
   }
 
   async expectContextualModelActions(): Promise<void> {

@@ -1188,10 +1188,12 @@ export default function IndexSettingsPage() {
                                   flexDirection="row"
                                   gap={2}
                                   height="fit"
+                                  className="flex-1 min-w-0"
                                 >
                                   <GeneralLayouts.Section
                                     height="fit"
                                     alignItems="stretch"
+                                    className="flex-1 min-w-0"
                                   >
                                     {switchoverStrategySelect}
                                   </GeneralLayouts.Section>
