@@ -29,7 +29,7 @@ logger = setup_logger()
 
 
 class JiraServiceManagementConnector(
-    CheckpointedConnectorWithPermSync[ConnectorCheckpoint, SecondsSinceUnixEpoch]
+    CheckpointedConnectorWithPermSync[ConnectorCheckpoint]
 ):
     def __init__(self, **kwargs: Any) -> None:
         self.jira_url = kwargs.get("jira_url", "").strip().rstrip("/")
@@ -145,6 +145,7 @@ class JiraServiceManagementConnector(
         for sd_id in service_desks:
             try:
                 for request_batch in self._get_customer_requests(sd_id, start):
+                    slim_batch: list[SlimDocument] = []
                     for req in request_batch:
                         req_key = req.get("issueKey")
                         if not req_key:
@@ -159,10 +160,14 @@ class JiraServiceManagementConnector(
                             if updated_ts > end:
                                 continue
 
-                        yield SlimDocument(
-                            id=req_key,
-                            perm_sync_data={"service_desk_id": sd_id},
+                        slim_batch.append(
+                            SlimDocument(
+                                id=req_key,
+                                perm_sync_data={"service_desk_id": sd_id},
+                            )
                         )
+                    if slim_batch:
+                        yield slim_batch
             except Exception as e:
                 logger.error("Fatal iteration failure on service desk %s: %s", sd_id, e)
                 yield ConnectorFailure(
@@ -211,7 +216,8 @@ class JiraServiceManagementConnector(
         self,
         slim_docs: list[SlimDocument],
         heartbeat_interface: IndexingHeartbeatInterface,
-    ) -> Generator[Document | DocumentFailure, None, None]:
+    ) -> Generator[list[Document] | DocumentFailure, None, None]:
+        doc_batch: list[Document] = []
         for slim_doc in slim_docs:
             if heartbeat_interface.should_stop():
                 break
@@ -252,23 +258,25 @@ class JiraServiceManagementConnector(
                     else datetime.now(timezone.utc)
                 )
 
-                yield Document(
-                    id=issue_key,
-                    sections=sections,
-                    source=self.source,
-                    metadata={
-                        "service_desk_id": str(
-                            slim_doc.perm_sync_data.get("service_desk_id", "unknown")
-                        ),
-                        "status": req_data.get("currentStatus", {}).get(
-                            "status", "Unknown"
-                        ),
-                        "request_type": req_data.get("requestType", {}).get(
-                            "name", "Generic"
-                        ),
-                    },
-                    title=f"[{issue_key}] {summary}",
-                    doc_updated_at=doc_date,
+                doc_batch.append(
+                    Document(
+                        id=issue_key,
+                        sections=sections,
+                        source=self.source,
+                        metadata={
+                            "service_desk_id": str(
+                                slim_doc.perm_sync_data.get("service_desk_id", "unknown")
+                            ),
+                            "status": req_data.get("currentStatus", {}).get(
+                                "status", "Unknown"
+                            ),
+                            "request_type": req_data.get("requestType", {}).get(
+                                "name", "Generic"
+                            ),
+                        },
+                        title=f"[{issue_key}] {summary}",
+                        doc_updated_at=doc_date,
+                    )
                 )
             except Exception as e:
                 logger.error(
@@ -279,3 +287,18 @@ class JiraServiceManagementConnector(
                     failure_message=str(e),
                     exception=e,
                 )
+        if doc_batch:
+            yield doc_batch
+
+    @override
+    def load_from_ids(
+        self, document_ids: list[str]
+    ) -> Generator[list[Document] | DocumentFailure, None, None]:
+        slim_docs = [SlimDocument(id=doc_id, perm_sync_data={}) for doc_id in document_ids]
+        yield from self.retrieve_docs(slim_docs, IndexingHeartbeatInterface())
+
+    @override
+    def load_from_checkpoint(
+        self, checkpoint: ConnectorCheckpoint
+    ) -> Generator[list[Document] | ConnectorFailure, None, None]:
+        yield []
