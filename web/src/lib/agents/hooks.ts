@@ -185,33 +185,6 @@ export function usePinnedAgents() {
 // ── Agent resolution ──────────────────────────────────────────────────────────
 
 /**
- * The agent named by where the user is: the open chat's agent, or the URL's
- * `agentId`. `undefined` when neither names one, which is the plain
- * new-session case.
- *
- * The two are disjoint in practice. `AGENT_ID` is stripped from the URL the
- * moment a chat opens (`PARAMS_TO_SKIP` in `app/app/services/lib.tsx`), so a
- * session and a URL agent never coexist under normal navigation. The session
- * is preferred anyway, for a hand-written URL carrying both: the messages
- * already on screen came from the session's agent, and resolving to the URL's
- * would mislabel them.
- */
-function useAddressedAgentId(): number | undefined {
-  const searchParams = useSearchParams();
-  const { currentChatSession } = useChatSessions();
-
-  const urlAgentIdRaw = searchParams?.get(SEARCH_PARAM_NAMES.AGENT_ID);
-  const sessionAgentId = currentChatSession?.persona_id;
-
-  return useMemo(() => {
-    if (sessionAgentId !== undefined && sessionAgentId !== null) {
-      return sessionAgentId;
-    }
-    return urlAgentIdRaw ? parseInt(urlAgentIdRaw) : undefined;
-  }, [sessionAgentId, urlAgentIdRaw]);
-}
-
-/**
  * The agent this chat is running on. There is no agent-less chat — every
  * message is sent against one, and a plain chat is the Assistant, sent
  * explicitly as `personaId: 0`. So this answers whenever any agent is
@@ -220,7 +193,12 @@ function useAddressedAgentId(): number | undefined {
  *
  * Resolution, first match wins:
  *
- * 1. the agent the location names — the open session's, or the URL's
+ * 1. the agent the location names — the open session's, or the URL's. These
+ *    are disjoint in practice: `AGENT_ID` is stripped from the URL the moment
+ *    a chat opens (`PARAMS_TO_SKIP` in `app/app/services/lib.tsx`). The session
+ *    wins anyway, for a hand-written URL carrying both — the messages already
+ *    on screen came from the session's agent, and the URL's would mislabel
+ *    them.
  * 2. the Assistant, when eligible — the plain-chat default
  * 3. the first pinned agent, which for a user with no pins of their own is the
  *    first *featured* agent. This is what "Set featured agents to help new
@@ -247,8 +225,12 @@ export function useActiveAgent(): MinimalAgent | undefined {
   const { agents } = useAgents();
   const { pinnedAgents } = usePinnedAgents();
   const settings = useSettings();
-  const addressedAgentId = useAddressedAgentId();
+  const searchParams = useSearchParams();
+  const { currentChatSession } = useChatSessions();
+
   const assistantDisabled = settings.disable_default_assistant ?? false;
+  const urlAgentIdRaw = searchParams?.get(SEARCH_PARAM_NAMES.AGENT_ID);
+  const sessionAgentId = currentChatSession?.persona_id;
 
   return useMemo(() => {
     // The constraint leaves the candidate set before anything is resolved, so
@@ -257,17 +239,19 @@ export function useActiveAgent(): MinimalAgent | undefined {
       ? agents.filter((agent) => agent.id !== DEFAULT_AGENT_ID)
       : agents;
 
-    const addressed = eligible.find((a) => a.id === addressedAgentId);
-    if (addressed) return addressed;
+    const namedId =
+      sessionAgentId ?? (urlAgentIdRaw ? parseInt(urlAgentIdRaw) : undefined);
+    const named = eligible.find((agent) => agent.id === namedId);
+    if (named) return named;
 
-    const assistant = eligible.find((a) => a.id === DEFAULT_AGENT_ID);
+    const assistant = eligible.find((agent) => agent.id === DEFAULT_AGENT_ID);
     if (assistant) return assistant;
 
     const pinned = pinnedAgents.find((pinnedAgent) =>
-      eligible.some((a) => a.id === pinnedAgent.id)
+      eligible.some((agent) => agent.id === pinnedAgent.id)
     );
     return pinned ?? eligible[0];
-  }, [agents, assistantDisabled, pinnedAgents, addressedAgentId]);
+  }, [agents, assistantDisabled, pinnedAgents, sessionAgentId, urlAgentIdRaw]);
 }
 
 /**
