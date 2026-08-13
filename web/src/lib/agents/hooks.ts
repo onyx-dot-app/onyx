@@ -22,10 +22,6 @@ import { useSearchParams } from "next/navigation";
 import { SEARCH_PARAM_NAMES } from "@/app/app/services/searchParams";
 import { DEFAULT_AGENT_ID } from "@/lib/constants";
 import { useSettings } from "@/lib/settings/hooks";
-import {
-  AgentEditorMCPServer,
-  MCPServersResponse,
-} from "@/lib/tools/interfaces";
 import useChatSessions from "@/hooks/useChatSessions";
 import { buildUpdateAgentPreferenceUrl } from "./utils";
 
@@ -319,9 +315,9 @@ export function useAgentPreferences() {
   };
 }
 
-// ── Labels ────────────────────────────────────────────────────────────────────
+// ── Agent Labels ──────────────────────────────────────────────────────────────
 
-export function useLabels() {
+export function useAgentLabels() {
   const { mutate } = useSWRConfig();
   const { data: labels, error } = useSWR<AgentLabel[]>(
     SWR_KEYS.agentLabels,
@@ -397,54 +393,5 @@ export function useLabels() {
     createLabel,
     updateLabel,
     deleteLabel,
-  };
-}
-
-// ── MCP servers for agent editor ──────────────────────────────────────────────
-
-/** Every MCP server the current user can reach. */
-export function useMcpServers() {
-  const {
-    data: mcpData,
-    error,
-    isLoading,
-    mutate: mutateMcpServers,
-  } = useSWR<MCPServersResponse>(SWR_KEYS.mcpServers, errorHandlingFetcher);
-
-  return {
-    mcpData: mcpData ?? null,
-    isLoading,
-    error,
-    mutateMcpServers,
-  };
-}
-
-export function useMcpServersForAgent(agentId: number | undefined) {
-  const accessible = useMcpServers();
-  const {
-    data: attachedData,
-    error: attachedError,
-    isLoading: attachedIsLoading,
-  } = useSWR<MCPServersResponse>(
-    agentId ? SWR_KEYS.agentMcpServers(agentId) : null,
-    errorHandlingFetcher
-  );
-
-  const mcpServers = useMemo<AgentEditorMCPServer[]>(() => {
-    const accessibleServers = accessible.mcpData?.mcp_servers ?? [];
-    const accessibleIds = new Set(accessibleServers.map((server) => server.id));
-    return [
-      ...accessibleServers.map((server) => ({ ...server, can_attach: true })),
-      ...(attachedData?.mcp_servers ?? [])
-        .filter((server) => !accessibleIds.has(server.id))
-        .map((server) => ({ ...server, can_attach: false })),
-    ];
-  }, [accessible.mcpData, attachedData]);
-
-  return {
-    mcpServers,
-    isLoading:
-      accessible.isLoading || (agentId !== undefined && attachedIsLoading),
-    error: accessible.error || attachedError,
   };
 }

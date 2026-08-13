@@ -65,7 +65,7 @@ import {
 import { Modal } from "@opal/components";
 import GenericConfirmModal from "@/sections/modals/GenericConfirmModal";
 import { Switch } from "@opal/components";
-import { useMcpServers } from "@/lib/agents/hooks";
+import { useMcpServers } from "@/lib/tools/hooks";
 import useOpenApiTools from "@/hooks/useOpenApiTools";
 import { getActionIcon } from "@/lib/tools/mcpUtils";
 import { Disabled, Hoverable } from "@opal/core";

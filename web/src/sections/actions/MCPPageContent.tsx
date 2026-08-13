@@ -27,7 +27,7 @@ import {
 } from "@/lib/tools/mcpService";
 import { useSearchParams } from "next/navigation";
 import { useRouter } from "next/navigation";
-import useMcpServers from "@/hooks/useMcpServers";
+import { useAdminMcpServers } from "@/lib/tools/hooks";
 
 export default function MCPPageContent() {
   // Data fetching
@@ -35,7 +35,7 @@ export default function MCPPageContent() {
     mcpData,
     isLoading: isMcpLoading,
     mutateMcpServers,
-  } = useMcpServers();
+  } = useAdminMcpServers();
 
   // Modal management
   const authModal = useCreateModal();
