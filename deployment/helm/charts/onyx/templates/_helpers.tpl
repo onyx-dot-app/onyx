@@ -31,17 +31,26 @@ Create chart name and version as used by the chart label.
 {{- end }}
 
 {{/*
-Build a child resource name as `<fullname>-<suffix>`, truncated to 63 chars to
+Build a child resource name as `<fullname>-<suffix>`, capped at 63 chars to
 satisfy the Kubernetes DNS-1123 label limit that applies to Services, Pods,
-Deployments, HPAs, etc. Always use this instead of
+Deployments, HPAs, etc. Names that fit are used as-is. Longer names are
+truncated and get a short hash of the full name, so two suffixes that share a
+prefix (e.g. celery-worker-docfetching / celery-worker-docprocessing) cannot
+collapse onto the same truncated name. The result is deterministic, so every
+caller that passes the same suffix renders the same name and cross-references
+stay consistent. Always use this instead of
   {{ include "onyx.fullname" . }}-<suffix>
-so that long release names cannot push a rendered name over 63 chars.
 Callers must pass `(list . "<suffix>")`.
 */}}
 {{- define "onyx.resourceName" -}}
 {{- $ctx := index . 0 -}}
 {{- $suffix := index . 1 -}}
-{{- printf "%s-%s" (include "onyx.fullname" $ctx) $suffix | trunc 63 | trimSuffix "-" -}}
+{{- $name := printf "%s-%s" (include "onyx.fullname" $ctx) $suffix -}}
+{{- if gt (len $name) 63 -}}
+{{- printf "%s-%s" ($name | trunc 54 | trimSuffix "-") (sha256sum $name | trunc 8) -}}
+{{- else -}}
+{{- $name -}}
+{{- end -}}
 {{- end }}
 
 {{/*

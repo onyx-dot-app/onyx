@@ -17,12 +17,13 @@ annotations:
       image: docker.io/onyxdotapp/onyx-backend:latest
   artifacthub.io/changes: |
     - kind: fixed
-      description: Truncate all child resource names to the 63-character Kubernetes
+      description: Cap all child resource names at the 63-character Kubernetes
         limit. Most templates built names as `<fullname>-<suffix>` without truncation,
         so long release names made the install fail (for example the Service
         `<fullname>-celery-worker-heavy-metrics`). Every name now goes through the
-        `onyx.resourceName` helper. Rendered names do not change for release names
-        short enough to stay under the limit.
+        `onyx.resourceName` helper, which truncates over-limit names and appends a
+        short hash so sibling resources with a shared suffix prefix cannot collide.
+        Rendered names do not change for names already under the limit.
 dependencies:
   # Helm uses the first condition path that exists: `postgresqlOperator.enabled`
   # is unset by default, so this falls through to `postgresql.enabled`. Set it
