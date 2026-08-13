@@ -114,6 +114,19 @@ def _cached_token_endpoint(config_url: str) -> tuple[bool, Optional[str]]:
     return True, endpoint
 
 
+async def _revalidate_cached_endpoint(endpoint: Optional[str]) -> Optional[str]:
+    """Re-check a cached endpoint against the live SSRF setting, so tightening
+    the setting is not bypassed for the endpoint's remaining cache TTL."""
+    if endpoint is None:
+        return None
+    try:
+        await run_in_threadpool(validate_idp_url, endpoint, field="token_endpoint")
+    except UnsafeSSOUrl as e:
+        logger.warning("Cached token endpoint now fails SSRF policy: %s", e)
+        return None
+    return endpoint
+
+
 async def _get_oidc_token_endpoint(config_url: str) -> Optional[str]:
     """Resolve token_endpoint from an OIDC discovery document. The per-URL
     lock + double check coalesce concurrent fetches into one request.
@@ -133,13 +146,13 @@ async def _get_oidc_token_endpoint(config_url: str) -> Optional[str]:
         return None
     hit, cached = _cached_token_endpoint(config_url)
     if hit:
-        return cached
+        return await _revalidate_cached_endpoint(cached)
     async with await _get_discovery_lock(config_url):
         # Re-check inside the lock — another coroutine may have populated
         # the cache while we were waiting to acquire it.
         hit, cached = _cached_token_endpoint(config_url)
         if hit:
-            return cached
+            return await _revalidate_cached_endpoint(cached)
         token_endpoint: Optional[str] = None
         try:
             async with httpx.AsyncClient() as client:

@@ -6,11 +6,13 @@ check to that guard, and honor the SSRF Protection setting. A private IdP is
 reachable only when the operator relaxes that setting.
 """
 
+import time
 from contextlib import AbstractContextManager
 from unittest.mock import MagicMock, patch
 
 import pytest
 
+from onyx.auth import oauth_refresher
 from onyx.auth.oauth_refresher import _get_oidc_token_endpoint
 from onyx.auth.sso_url_guard import UnsafeSSOUrl, validate_idp_url
 from onyx.server.security.models import SSRFProtectionLevel
@@ -63,3 +65,19 @@ async def test_refresh_declines_a_private_discovery_url() -> None:
             await _get_oidc_token_endpoint(f"https://169.254.169.254{_CONFIG_PATH}")
             is None
         )
+
+
+@pytest.mark.asyncio
+async def test_refresh_rechecks_a_cached_endpoint_when_policy_tightens() -> None:
+    """A token endpoint cached under a looser setting is re-validated on the next
+    refresh, so tightening the SSRF Protection setting is not bypassed."""
+    config_url = f"https://8.8.8.8{_CONFIG_PATH}"
+    oauth_refresher._OIDC_TOKEN_ENDPOINT_CACHE[config_url] = (
+        "https://10.0.0.1/token",
+        time.monotonic(),
+    )
+    try:
+        with _at_level(SSRFProtectionLevel.VALIDATE_ALL):
+            assert await _get_oidc_token_endpoint(config_url) is None
+    finally:
+        oauth_refresher._OIDC_TOKEN_ENDPOINT_CACHE.pop(config_url, None)
