@@ -226,24 +226,26 @@ export default function LineItem({
     props.onKeyUp?.(e);
   };
 
-  const content = (
-    <div
-      ref={ref}
-      role={interactive ? "button" : undefined}
-      tabIndex={interactive ? 0 : undefined}
-      aria-disabled={disabled || undefined}
-      className={cn(
-        "flex flex-row w-full items-start p-2 rounded-08 group/LineItem gap-2",
-        children && description ? "items-start" : "items-center",
-        interactive && (disabled ? "cursor-not-allowed" : "cursor-pointer"),
-        buttonClassNames[variant][emphasisKey]
-      )}
-      data-selected={selected}
-      {...props}
-      onClick={handleClick}
-      onKeyDown={handleKeyDown}
-      onKeyUp={handleKeyUp}
-    >
+  const rowClassName = cn(
+    "flex flex-row w-full items-start p-2 rounded-08 group/LineItem gap-2",
+    children && description ? "items-start" : "items-center",
+    interactive && (disabled ? "cursor-not-allowed" : "cursor-pointer"),
+    buttonClassNames[variant][emphasisKey]
+  );
+
+  const rowProps = {
+    ref,
+    "aria-disabled": disabled || undefined,
+    className: rowClassName,
+    "data-selected": selected,
+    ...props,
+    onClick: handleClick,
+    onKeyDown: handleKeyDown,
+    onKeyUp: handleKeyUp,
+  };
+
+  const body = (
+    <>
       {Icon && (
         <div
           className={cn(
@@ -302,6 +304,18 @@ export default function LineItem({
           </Section>
         ) : null}
       </Section>
+    </>
+  );
+
+  // A non-interactive row sits inside another interactive primitive, which
+  // already carries the semantics and the keyboard handling.
+  const content = interactive ? (
+    <div role="button" tabIndex={0} {...rowProps}>
+      {body}
+    </div>
+  ) : (
+    <div role="presentation" {...rowProps}>
+      {body}
     </div>
   );
 

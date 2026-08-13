@@ -83,23 +83,29 @@ export const InMessageImage = memo(function InMessageImage({
             <div className="absolute inset-0 bg-background-tint-02 animate-pulse rounded-lg" />
           )}
 
-          <img
-            width={1200}
-            height={1200}
-            alt="Chat Message Image"
-            onLoad={() => {
-              loadedImages.add(fileId);
-              setImageLoaded(true);
-            }}
-            className={cn(
-              "object-contain object-left overflow-hidden rounded-lg w-full h-full transition-opacity duration-300 cursor-pointer",
-              shapeImageClasses,
-              imageLoaded ? "opacity-100" : "opacity-0"
-            )}
+          <button
+            type="button"
+            className="w-full h-full"
+            aria-label="View the full image"
             onClick={() => setFullImageShowing(true)}
-            src={buildImgUrl(fileId)}
-            loading="lazy"
-          />
+          >
+            <img
+              width={1200}
+              height={1200}
+              alt="Chat attachment"
+              onLoad={() => {
+                loadedImages.add(fileId);
+                setImageLoaded(true);
+              }}
+              className={cn(
+                "object-contain object-left overflow-hidden rounded-lg w-full h-full transition-opacity duration-300 cursor-pointer",
+                shapeImageClasses,
+                imageLoaded ? "opacity-100" : "opacity-0"
+              )}
+              src={buildImgUrl(fileId)}
+              loading="lazy"
+            />
+          </button>
 
           {/* Download button - appears on hover */}
           <div className="absolute bottom-2 right-2 z-10">

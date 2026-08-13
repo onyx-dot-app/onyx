@@ -10,7 +10,7 @@ import SvgXOctagon from "@opal/icons/x-octagon";
 import type { IconFunctionComponent, RichStr } from "@opal/types";
 import { toPlainString } from "@opal/components/text/InlineMarkdown";
 import { cn } from "@opal/utils";
-import { useRef, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 
 // ---------------------------------------------------------------------------
 // Types
@@ -157,6 +157,11 @@ function ContentMd({
   const [editValue, setEditValue] = useState(toPlainString(title));
   const inputRef = useRef<HTMLInputElement>(null);
 
+  // Move focus to the edit input as soon as editing starts.
+  useEffect(() => {
+    if (editing) inputRef.current?.focus();
+  }, [editing]);
+
   const config = CONTENT_MD_PRESETS[sizePreset];
 
   function startEditing() {
@@ -221,7 +226,6 @@ function ContentMd({
                 value={editValue}
                 onChange={(e) => setEditValue(e.target.value)}
                 size={1}
-                autoFocus
                 onFocus={(e) => e.currentTarget.select()}
                 onBlur={commit}
                 onKeyDown={(e) => {

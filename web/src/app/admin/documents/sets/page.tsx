@@ -123,7 +123,8 @@ const EditRow = ({
             : undefined
         }
       >
-        <div
+        <button
+          type="button"
           className={`
               text-text-darker font-medium my-auto p-1 hover:bg-accent-background flex items-center select-none
               ${documentSet.is_up_to_date ? "cursor-pointer" : "cursor-default"}
@@ -137,7 +138,7 @@ const EditRow = ({
         >
           <FiEdit2 className="mr-2 shrink-0" />
           <span className="font-medium">{documentSet.name}</span>
-        </div>
+        </button>
       </Tooltip>
     </div>
   );

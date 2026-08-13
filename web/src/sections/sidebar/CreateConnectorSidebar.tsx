@@ -130,17 +130,15 @@ export default function CreateConnectorSidebar() {
                   }}
                 />
               )}
-              <div
+              <button
+                type="button"
+                disabled={!allowed}
                 className={cn(
                   "flex items-center",
                   allowed ? "cursor-pointer" : "cursor-not-allowed"
                 )}
                 style={{ height: STEP_ROW_PX }}
-                onClick={() => {
-                  if (allowed) {
-                    setFormStep(stepValue);
-                  }
-                }}
+                onClick={() => setFormStep(stepValue)}
               >
                 <Content
                   sizePreset="main-ui"
@@ -149,7 +147,7 @@ export default function CreateConnectorSidebar() {
                   title={step}
                   color={selected === "future" ? "muted" : "default"}
                 />
-              </div>
+              </button>
             </Fragment>
           );
         })}

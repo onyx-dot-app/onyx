@@ -28,7 +28,7 @@ export const CheckboxField: React.FC<CheckboxFieldProps> = ({
 }) => {
   const [field, , helpers] = useField<boolean>({ name, type: "checkbox" });
 
-  const handleClick = (e: React.MouseEvent<HTMLLabelElement>) => {
+  const handleClick = (e: React.MouseEvent<HTMLDivElement>) => {
     e.preventDefault();
     const next = !field.value;
     helpers.setValue(next);
@@ -50,12 +50,12 @@ export const CheckboxField: React.FC<CheckboxFieldProps> = ({
         disabled={disabled}
         {...props}
       />
-      <div className="flex flex-col">
+      {/* Pointer convenience only — the checkbox is keyboard reachable. */}
+      <div className="flex flex-col" role="presentation" onClick={handleClick}>
         <label
           id={labelId}
           htmlFor={name}
           className="flex flex-col cursor-pointer"
-          onClick={handleClick}
         >
           <span
             className={cn(

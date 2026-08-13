@@ -119,6 +119,7 @@ function InputTags({
   return (
     <div
       ref={rootRef}
+      role="presentation"
       className="opal-input opal-input-tags"
       data-variant={disabled ? "disabled" : variant}
       onKeyDown={handleRootKeyDown}

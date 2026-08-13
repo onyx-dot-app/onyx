@@ -1,6 +1,7 @@
 "use client";
 
 import { useState } from "react";
+import useFocusOnMount from "@opal/hooks/useFocusOnMount";
 import { Formik, Form } from "formik";
 import * as Yup from "yup";
 import { Modal } from "@opal/components";
@@ -51,6 +52,7 @@ export default function AddMCPServerModal({
 }: AddMCPServerModalProps) {
   const { isOpen, toggle } = useModal();
   const [isSubmitting, setIsSubmitting] = useState(false);
+  const focusOnMount = useFocusOnMount<HTMLInputElement>();
 
   // Use activeServer from props
   const server = activeServer;
@@ -159,7 +161,7 @@ export default function AddMCPServerModal({
                   <InputTypeInField
                     name="name"
                     placeholder="Name your MCP server"
-                    autoFocus
+                    ref={focusOnMount}
                   />
                 </InputVertical>
 

@@ -203,9 +203,8 @@ function InputTime({
         data-variant={variant}
         role="group"
         aria-label="Time"
-        onBlur={handleRootBlur}
       >
-        <div className="opal-input-segmented-content">
+        <div className="opal-input-segmented-content" onBlur={handleRootBlur}>
           {segmentParts.map((part, i) => (
             <React.Fragment key={part}>
               {i > 0 && separator}

@@ -19,6 +19,7 @@ import { Connector } from "@/lib/connectors/connectors";
 import { HorizontalFilters } from "@/components/filters/SourceSelector";
 import { InputTypeIn } from "@opal/components";
 import SvgSimpleLoader from "@opal/icons/simple-loader";
+import { clickOnKeyDown } from "@opal/utils";
 
 const DocumentDisplay = ({
   document,
@@ -27,6 +28,18 @@ const DocumentDisplay = ({
   document: OnyxDocument;
   refresh: () => void;
 }) => {
+  async function toggleHidden() {
+    const response = await updateHiddenStatus(
+      document.document_id,
+      !document.hidden
+    );
+    if (response.ok) {
+      refresh();
+    } else {
+      toast.error(`Failed to update document - ${getErrorMsg(response)}`);
+    }
+  }
+
   return (
     <div
       key={document.document_id}
@@ -59,19 +72,11 @@ const DocumentDisplay = ({
           />
         </div>
         <div
-          onClick={async () => {
-            const response = await updateHiddenStatus(
-              document.document_id,
-              !document.hidden
-            );
-            if (response.ok) {
-              refresh();
-            } else {
-              toast.error(
-                `Failed to update document - ${getErrorMsg(response)}`
-              );
-            }
-          }}
+          role="button"
+          tabIndex={0}
+          aria-label={document.hidden ? "Unhide document" : "Hide document"}
+          onKeyDown={clickOnKeyDown(() => void toggleHidden())}
+          onClick={() => void toggleHidden()}
           className="px-1 py-0.5 bg-accent-background-hovered hover:bg-accent-background rounded-sm flex cursor-pointer select-none"
         >
           <div className="my-auto">
@@ -179,7 +184,6 @@ export function Explorer({
               event.preventDefault();
             }
           }}
-          role="textarea"
         />
 
         <HorizontalFilters

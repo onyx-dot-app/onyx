@@ -111,7 +111,8 @@ function CheckboxInner(
         ref={inputRef}
         id={id}
         type="checkbox"
-        role="presentation"
+        aria-hidden="true"
+        tabIndex={-1}
         className="opal-checkbox-input"
         checked={checked}
         disabled={disabled}

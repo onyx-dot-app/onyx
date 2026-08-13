@@ -41,7 +41,8 @@ export const CodeBlock = memo(function CodeBlock({
   }, [codeText]);
 
   const CopyButton = () => (
-    <div
+    <button
+      type="button"
       className="ml-auto cursor-pointer select-none"
       onMouseDown={handleCopy}
     >
@@ -60,7 +61,7 @@ export const CodeBlock = memo(function CodeBlock({
           </Text>
         </div>
       )}
-    </div>
+    </button>
   );
 
   if (typeof children === "string" && !language) {

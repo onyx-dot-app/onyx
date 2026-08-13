@@ -175,7 +175,10 @@ export default function SkillCard({
             </div>
             <div className="p-0.5 pr-1.5 flex items-center gap-1">
               {item.can_toggle && (
-                <div onClick={(event) => event.stopPropagation()}>
+                <div
+                  role="presentation"
+                  onClick={(event) => event.stopPropagation()}
+                >
                   <Switch
                     checked={item.enabled}
                     onCheckedChange={handleEnabledChange}

@@ -28,12 +28,17 @@ export function InputBarPreviewImage({ fileId }: { fileId: string }) {
           h-6
       `}
       >
-        <img
-          alt="preview"
+        <button
+          type="button"
+          aria-label="View the full image"
           onClick={() => setFullImageShowing(true)}
-          className="h-6 w-6 object-cover rounded-lg bg-background cursor-pointer"
-          src={buildImgUrl(fileId)}
-        />
+        >
+          <img
+            alt="preview"
+            className="h-6 w-6 object-cover rounded-lg bg-background cursor-pointer"
+            src={buildImgUrl(fileId)}
+          />
+        </button>
       </div>
     </>
   );

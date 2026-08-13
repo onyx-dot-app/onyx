@@ -1,7 +1,7 @@
 "use client";
 
 import React from "react";
-import { cn } from "@opal/utils";
+import { cn, clickOnKeyDown } from "@opal/utils";
 import { SvgChevronRight, SvgChevronDown, SvgInfoSmall } from "@opal/icons";
 import Text from "@/refresh-components/texts/Text";
 import type { IconProps } from "@opal/types";
@@ -108,36 +108,17 @@ export default function Divider({
   }
 
   // Title divider with optional features
-  return (
-    <div
-      ref={ref}
-      role={foldable ? "button" : "separator"}
-      aria-expanded={foldable ? expanded : undefined}
-      tabIndex={foldable ? 0 : undefined}
-      data-selected={isHighlighted ? "true" : undefined}
-      onClick={foldable ? handleClick : undefined}
-      onKeyDown={
-        foldable
-          ? (e) => {
-              if (e.key === "Enter" || e.key === " ") {
-                e.preventDefault();
-                handleClick();
-              }
-            }
-          : undefined
-      }
-      className={cn(
-        "w-full mt-1 py-0.5 rounded-08",
-        foldable && "group/divider cursor-pointer",
-        foldable && !expanded && "hover:bg-background-tint-02",
-        foldable && !expanded && isHighlighted && "bg-background-tint-02",
-        foldable &&
-          expanded &&
-          "bg-background-tint-01 hover:bg-background-tint-02",
-        className
-      )}
-      {...props}
-    >
+  const titleClassName = cn(
+    "w-full mt-1 py-0.5 rounded-08",
+    foldable && "group/divider cursor-pointer",
+    foldable && !expanded && "hover:bg-background-tint-02",
+    foldable && !expanded && isHighlighted && "bg-background-tint-02",
+    foldable && expanded && "bg-background-tint-01 hover:bg-background-tint-02",
+    className
+  );
+
+  const titleBody = (
+    <>
       {/* Title line */}
       <div
         className={cn(
@@ -260,6 +241,36 @@ export default function Divider({
           </Truncated>
         </div>
       )}
+    </>
+  );
+
+  if (!foldable) {
+    return (
+      <div
+        ref={ref}
+        role="separator"
+        data-selected={isHighlighted ? "true" : undefined}
+        className={titleClassName}
+        {...props}
+      >
+        {titleBody}
+      </div>
+    );
+  }
+
+  return (
+    <div
+      ref={ref}
+      role="button"
+      aria-expanded={expanded}
+      tabIndex={0}
+      data-selected={isHighlighted ? "true" : undefined}
+      onClick={handleClick}
+      onKeyDown={clickOnKeyDown(handleClick)}
+      className={titleClassName}
+      {...props}
+    >
+      {titleBody}
     </div>
   );
 }

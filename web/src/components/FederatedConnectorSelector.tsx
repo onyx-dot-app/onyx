@@ -171,9 +171,11 @@ export const FederatedConnectorSelector = ({
             ) : (
               <div>
                 {filteredUnselectedConnectors.map((connector) => (
-                  <div
+                  <button
+                    type="button"
                     key={connector.id}
-                    className="flex items-center justify-between py-2 px-3 cursor-pointer hover:bg-background-neutral-01 text-xs"
+                    aria-label={connector.name}
+                    className="w-full flex items-center justify-between py-2 px-3 cursor-pointer hover:bg-background-neutral-01 text-xs"
                     onClick={() => selectConnector(connector.id)}
                   >
                     <div className="flex items-center truncate mr-2">
@@ -187,7 +189,7 @@ export const FederatedConnectorSelector = ({
                       </div>
                       <span className="font-medium">{connector.name}</span>
                     </div>
-                  </div>
+                  </button>
                 ))}
               </div>
             )}

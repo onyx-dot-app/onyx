@@ -388,7 +388,10 @@ const InputComboBox = ({
           rightChildren={
             <>
               {rightChildren && (
+                // Propagation guard only — the children keep their own
+                // semantics.
                 <div
+                  role="presentation"
                   className="flex items-center"
                   onPointerDown={(e) => {
                     e.stopPropagation();

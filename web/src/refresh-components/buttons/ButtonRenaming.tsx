@@ -1,6 +1,7 @@
 "use client";
 
 import React, { useState } from "react";
+import useFocusOnMount from "@opal/hooks/useFocusOnMount";
 import { handleEnterPress, useEscapePress } from "@/lib/typingUtils";
 import { UNNAMED_CHAT } from "@/lib/constants";
 import { cn } from "@opal/utils";
@@ -21,6 +22,8 @@ export default function ButtonRenaming({
   const [renamingValue, setRenamingValue] = useState(
     initialName || UNNAMED_CHAT
   );
+
+  const focusOnMount = useFocusOnMount<HTMLInputElement>();
 
   useEscapePress(onClose, true);
 
@@ -52,7 +55,7 @@ export default function ButtonRenaming({
       )}
       onChange={(event) => setRenamingValue(event.target.value)}
       onKeyDown={handleEnterPress(() => submitRename())}
-      autoFocus
+      ref={focusOnMount}
     />
   );
 }

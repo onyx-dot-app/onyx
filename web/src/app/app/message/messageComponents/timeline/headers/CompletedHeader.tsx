@@ -10,6 +10,7 @@ import { Section } from "@/layouts/general-layouts";
 import { ContentAction } from "@opal/layouts";
 import { formatDurationSeconds } from "@opal/time";
 import { noProp } from "@/lib/utils";
+import { clickOnKeyDown } from "@opal/utils";
 import MemoriesModal from "@/refresh-components/modals/MemoriesModal";
 import { useCreateModal } from "@opal/components";
 
@@ -167,8 +168,13 @@ export const CompletedHeader = React.memo(function CompletedHeader({
       : null;
 
   return (
+    // The row holds its own expand button, so it stays a div with button
+    // semantics rather than a <button> wrapping a <button>.
     <div
       role="button"
+      tabIndex={0}
+      aria-label="Toggle timeline"
+      onKeyDown={clickOnKeyDown(onToggle)}
       onClick={onToggle}
       className="flex items-center justify-between w-full"
     >

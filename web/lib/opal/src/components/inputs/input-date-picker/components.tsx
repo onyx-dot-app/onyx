@@ -182,9 +182,8 @@ function InputDatePicker({
           data-variant={variant}
           role="group"
           aria-label="Date"
-          onBlur={handleRootBlur}
         >
-          <div className="opal-input-segmented-content">
+          <div className="opal-input-segmented-content" onBlur={handleRootBlur}>
             {SEGMENT_FIELDS.map((field, i) => (
               <React.Fragment key={field.part}>
                 {i > 0 && separator}

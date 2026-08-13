@@ -8,6 +8,7 @@ import React, {
   useRef,
   useMemo,
 } from "react";
+import useFocusOnMount from "@opal/hooks/useFocusOnMount";
 import * as DialogPrimitive from "@radix-ui/react-dialog";
 import * as VisuallyHidden from "@radix-ui/react-visually-hidden";
 import useContainerCenter from "@/hooks/useContainerCenter";
@@ -439,6 +440,8 @@ function CommandMenuHeader({
   onClose,
   onEmptyBackspace,
 }: CommandMenuHeaderProps) {
+  const focusOnMount = useFocusOnMount<HTMLInputElement>();
+
   // Prevent default for arrow/enter keys so they don't move cursor or submit forms
   // The actual handling happens in Root's centralized handler via event bubbling
   const handleInputKeyDown = useCallback(
@@ -493,7 +496,7 @@ function CommandMenuHeader({
           value={value}
           onChange={(e) => onValueChange?.(e.target.value)}
           onKeyDown={handleInputKeyDown}
-          autoFocus
+          ref={focusOnMount}
         />
       </div>
     </div>
@@ -531,6 +534,7 @@ function CommandMenuList({ children, emptyMessage }: CommandMenuListProps) {
   return (
     <ScrollIndicatorDiv
       role="listbox"
+      tabIndex={-1}
       aria-label="Command menu options"
       className="p-1 gap-1 max-h-[60vh] bg-background-tint-01"
       backgroundColor="var(--background-tint-01)"
