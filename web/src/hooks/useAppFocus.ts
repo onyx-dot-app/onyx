@@ -68,7 +68,7 @@ export default function useAppFocus(): AppFocus {
   const searchParams = useSearchParams();
 
   const chatId = searchParams.get(SEARCH_PARAM_NAMES.CHAT_ID);
-  const agentId = searchParams.get(SEARCH_PARAM_NAMES.PERSONA_ID);
+  const agentId = searchParams.get(SEARCH_PARAM_NAMES.AGENT_ID);
   const projectId = searchParams.get(SEARCH_PARAM_NAMES.PROJECT_ID);
 
   // Memoize on the values that determine which AppFocus is constructed.

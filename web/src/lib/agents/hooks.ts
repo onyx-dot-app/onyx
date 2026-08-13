@@ -20,7 +20,6 @@ import { pinAgents } from "@/lib/agents/svc";
 import { useUser } from "@/providers/UserProvider";
 import { useSearchParams } from "next/navigation";
 import { SEARCH_PARAM_NAMES } from "@/app/app/services/searchParams";
-import { ChatSession } from "@/app/app/interfaces";
 import { DEFAULT_AGENT_ID } from "@/lib/constants";
 import { useSettings } from "@/lib/settings/hooks";
 import {
@@ -183,130 +182,102 @@ export function usePinnedAgents() {
   };
 }
 
-// ── Current agent (URL param or chat session) ─────────────────────────────────
+// ── Agent resolution ──────────────────────────────────────────────────────────
 
 /**
- * Resolves the active agent from the URL search param, falling back to the
- * agent attached to the current chat session. Returns null when neither is
- * available or the agent list hasn't loaded yet.
+ * The id the user has actually landed on: the open chat's agent, or the one
+ * named by the URL. `undefined` when neither applies, which is the plain
+ * new-session case.
+ *
+ * The two inputs are disjoint in practice. `AGENT_ID` is stripped from the URL
+ * the moment a chat opens (`PARAMS_TO_SKIP` in `app/app/services/lib.tsx`), so
+ * a session and a URL agent never coexist under normal navigation. The session
+ * is preferred anyway, for the case of a hand-written URL carrying both: the
+ * messages already on screen came from the session's agent, and resolving to
+ * the URL's would mislabel them.
  */
-export function useCurrentAgent(): MinimalAgent | null {
-  const { agents } = useAgents();
+function useResolvedAgentId(): number | undefined {
   const searchParams = useSearchParams();
-  const agentIdRaw = searchParams?.get(SEARCH_PARAM_NAMES.PERSONA_ID);
   const { currentChatSession } = useChatSessions();
 
+  const urlAgentIdRaw = searchParams?.get(SEARCH_PARAM_NAMES.AGENT_ID);
+  const sessionAgentId = currentChatSession?.persona_id;
+
   return useMemo(() => {
-    if (agents.length === 0) return null;
-    const agentId = agentIdRaw
-      ? parseInt(agentIdRaw)
-      : currentChatSession?.persona_id;
-    if (!agentId) return null;
-    return agents.find((a) => a.id === agentId) ?? null;
-  }, [agents, agentIdRaw, currentChatSession?.persona_id]);
+    if (sessionAgentId !== undefined && sessionAgentId !== null) {
+      return sessionAgentId;
+    }
+    return urlAgentIdRaw ? parseInt(urlAgentIdRaw) : undefined;
+  }, [sessionAgentId, urlAgentIdRaw]);
 }
 
-// ── Agent controller (chat UI selection) ──────────────────────────────────────
+/**
+ * The agent the user explicitly landed on, or null when they did not pick one.
+ *
+ * Use this to answer "is this agent the one in view" — highlighting a sidebar
+ * entry, showing starter messages. For the agent a message would actually run
+ * on, use {@link useLiveAgent}, which never returns null.
+ */
+export function useSelectedAgent(): MinimalAgent | null {
+  const { agents } = useAgents();
+  const agentId = useResolvedAgentId();
+
+  return useMemo(() => {
+    if (agentId === undefined) return null;
+    return agents.find((a) => a.id === agentId) ?? null;
+  }, [agents, agentId]);
+}
 
 /**
- * The agent a new message will use, resolved by priority: the open session's
- * agent → the URL's `personaId` → the built-in default → first pinned → first
- * available. When `disable_default_assistant` is on, the built-in default
- * (id=0) is skipped in the fallback chain.
+ * The agent a new message will use: the selected one, or the Assistant, or
+ * whatever else is available. Unlike {@link useSelectedAgent} this always
+ * answers, because every message is sent against some agent — a plain chat
+ * runs on the Assistant (id 0), sent explicitly as `personaId: 0`.
+ *
+ * `disable_default_assistant` excludes the Assistant from the fallback, so an
+ * install with no other agent resolves to `undefined` and the caller shows its
+ * no-agent state rather than silently using the agent the admin disabled.
  *
  * This is a derivation, not state. Every input is shared — the URL, the open
- * session, and the SWR-backed agent lists — so two callers always agree, and
- * the answer re-resolves on navigation.
- *
- * It used to hold the choice in `useState`, latched by a one-shot effect the
- * first time agents loaded. That made it path-dependent, so callers had to
- * write the new agent back in on every navigation and session load, and the
- * value could not be read anywhere but the component that owned it.
+ * session, the SWR-backed agent list — so two callers always agree, and the
+ * answer re-resolves on navigation.
  */
-export function useAgentController(
-  selectedChatSession: ChatSession | null | undefined
-) {
-  const searchParams = useSearchParams();
-  const { agents: availableAgents } = useAgents();
-  const { pinnedAgents } = usePinnedAgents();
+export function useLiveAgent(): MinimalAgent | undefined {
+  const selectedAgent = useSelectedAgent();
+  const { agents } = useAgents();
   const settings = useSettings();
-  const disableDefaultAssistant = settings.disable_default_assistant ?? false;
+  const assistantDisabled = settings.disable_default_assistant ?? false;
 
-  const urlAgentIdRaw = searchParams?.get(SEARCH_PARAM_NAMES.PERSONA_ID);
-  const urlAgentId = urlAgentIdRaw ? parseInt(urlAgentIdRaw) : undefined;
-  const existingChatSessionAgentId = selectedChatSession?.persona_id;
-
-  const liveAgent: MinimalAgent | undefined = useMemo(() => {
-    // The session wins over the URL: an open chat is pinned to the agent it
-    // was created with. An id that matches no available agent falls through,
-    // which is how a deleted or inaccessible agent degrades.
-    const chosen =
-      existingChatSessionAgentId !== undefined
-        ? availableAgents.find((a) => a.id === existingChatSessionAgentId)
-        : urlAgentId !== undefined
-          ? availableAgents.find((a) => a.id === urlAgentId)
-          : undefined;
-    if (chosen) return chosen;
-
-    if (disableDefaultAssistant) {
-      const nonDefaultPinned = pinnedAgents.filter((a) => a.id !== 0);
-      const nonDefaultAvailable = availableAgents.filter((a) => a.id !== 0);
-      return (
-        nonDefaultPinned[0] || nonDefaultAvailable[0] || availableAgents[0]
-      );
+  return useMemo(() => {
+    // A selected id that matches no available agent falls through to the
+    // fallback, which is how a deleted or inaccessible agent degrades.
+    if (selectedAgent) return selectedAgent;
+    if (assistantDisabled) {
+      return agents.find((a) => a.id !== DEFAULT_AGENT_ID);
     }
-    const unifiedAgent = availableAgents.find((a) => a.id === 0);
-    if (unifiedAgent) return unifiedAgent;
-    return pinnedAgents[0] || availableAgents[0];
-  }, [
-    existingChatSessionAgentId,
-    urlAgentId,
-    availableAgents,
-    pinnedAgents,
-    disableDefaultAssistant,
-  ]);
-
-  return { liveAgent };
+    return agents.find((a) => a.id === DEFAULT_AGENT_ID) ?? agents[0];
+  }, [selectedAgent, agents, assistantDisabled]);
 }
 
 // ── Default agent detection ───────────────────────────────────────────────────
 
 /**
- * Returns true when the session is using the built-in default agent (id=0).
- * Accounts for the URL param, the existing session's agent, and the
- * `disable_default_assistant` setting which forces a non-default agent.
+ * Whether the chat is running on the Assistant (id 0) rather than a chosen
+ * agent. This is the "no particular agent" case, which the UI treats as plain
+ * chat — no agent description, a generic greeting.
+ *
+ * Loading counts as the Assistant: it is what an unresolved chat will almost
+ * always settle on, and assuming otherwise flashes a named-agent layout for an
+ * agent that is not there yet.
  */
-export function useIsDefaultAgent(
-  liveAgent: MinimalAgent | undefined,
-  existingChatSessionId: string | null,
-  selectedChatSession: ChatSession | undefined,
-  disableDefaultAssistant: boolean
-) {
-  const searchParams = useSearchParams();
-  const urlAssistantId = searchParams?.get(SEARCH_PARAM_NAMES.PERSONA_ID);
+export function useIsDefaultAgent(): boolean {
+  const liveAgent = useLiveAgent();
+  const settings = useSettings();
 
-  return useMemo(() => {
-    if (disableDefaultAssistant) return false;
-    if (
-      urlAssistantId !== null &&
-      urlAssistantId !== DEFAULT_AGENT_ID.toString()
-    )
-      return false;
-    if (
-      existingChatSessionId &&
-      selectedChatSession?.persona_id !== DEFAULT_AGENT_ID
-    )
-      return false;
-    if (liveAgent !== undefined && liveAgent.id !== DEFAULT_AGENT_ID)
-      return false;
-    return true;
-  }, [
-    disableDefaultAssistant,
-    urlAssistantId,
-    existingChatSessionId,
-    selectedChatSession?.persona_id,
-    liveAgent?.id,
-  ]);
+  // With the Assistant disabled it is never the answer, even before the agent
+  // list resolves.
+  if (settings.disable_default_assistant) return false;
+  return liveAgent === undefined || liveAgent.id === DEFAULT_AGENT_ID;
 }
 
 // ── Agent preferences ─────────────────────────────────────────────────────────

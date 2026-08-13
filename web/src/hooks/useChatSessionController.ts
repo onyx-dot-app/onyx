@@ -487,7 +487,7 @@ export default function useChatSessionController({
     }
   }, [
     existingChatSessionId,
-    searchParams?.get(SEARCH_PARAM_NAMES.PERSONA_ID),
+    searchParams?.get(SEARCH_PARAM_NAMES.AGENT_ID),
     // Note: We're intentionally not including all dependencies to avoid infinite loops
     // This effect should only run when existingChatSessionId or persona ID changes
   ]);

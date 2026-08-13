@@ -20,7 +20,7 @@ export function useAppRouter() {
       if (chatSessionId)
         finalParams.push(`${SEARCH_PARAM_NAMES.CHAT_ID}=${chatSessionId}`);
       else if (agentId)
-        finalParams.push(`${SEARCH_PARAM_NAMES.PERSONA_ID}=${agentId}`);
+        finalParams.push(`${SEARCH_PARAM_NAMES.AGENT_ID}=${agentId}`);
       else if (projectId)
         finalParams.push(`${SEARCH_PARAM_NAMES.PROJECT_ID}=${projectId}`);
 

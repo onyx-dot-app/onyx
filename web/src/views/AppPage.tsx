@@ -35,7 +35,7 @@ import DocumentsSidebar from "@/sections/document-sidebar/DocumentsSidebar";
 import useChatController from "@/hooks/useChatController";
 import useMultiModelChat from "@/hooks/useMultiModelChat";
 import MultiModelSelector from "@/sections/model-selector/MultiModelSelector";
-import { useAgentController } from "@/lib/agents/hooks";
+import { useLiveAgent } from "@/lib/agents/hooks";
 import useChatSessionController from "@/hooks/useChatSessionController";
 import useDeepResearchToggle from "@/hooks/useDeepResearchToggle";
 import { useIncognito } from "@/providers/IncognitoProvider";
@@ -212,7 +212,7 @@ export default function AppPage({ firstMessage }: ChatPageProps) {
     }
   }
 
-  const { liveAgent } = useAgentController(currentChatSession);
+  const liveAgent = useLiveAgent();
 
   // An explicit agent pick supersedes project context — the two cannot both
   // scope a new chat. This used to ride on the agent-selection callback, but
@@ -220,7 +220,7 @@ export default function AppPage({ firstMessage }: ChatPageProps) {
   useEffect(() => {
     const params = new URLSearchParams(searchParams?.toString() || "");
     if (
-      params.has(SEARCH_PARAM_NAMES.PERSONA_ID) &&
+      params.has(SEARCH_PARAM_NAMES.AGENT_ID) &&
       params.has(SEARCH_PARAM_NAMES.PROJECT_ID)
     ) {
       params.delete(SEARCH_PARAM_NAMES.PROJECT_ID);
@@ -321,12 +321,7 @@ export default function AppPage({ firstMessage }: ChatPageProps) {
 
   const filterManager = useFilters();
 
-  const isDefaultAgent = useIsDefaultAgent(
-    liveAgent,
-    currentChatSessionId,
-    currentChatSession ?? undefined,
-    disable_default_assistant ?? false
-  );
+  const isDefaultAgent = useIsDefaultAgent();
 
   const scrollContainerRef = useRef<ChatScrollContainerHandle>(null);
   const [showScrollButton, setShowScrollButton] = useState(false);

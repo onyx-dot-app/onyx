@@ -6,7 +6,8 @@ import useSWR from "swr";
 import { errorHandlingFetcher } from "@/lib/fetcher";
 import { SWR_KEYS } from "@/lib/swr-keys";
 import { isAuthPath } from "@/lib/auth/paths";
-import { useCurrentAgent } from "@/lib/agents/hooks";
+import { useSelectedAgent } from "@/lib/agents/hooks";
+import { DEFAULT_AGENT_ID } from "@/lib/constants";
 import {
   LLMProviderDescriptor,
   LLMProviderName,
@@ -149,14 +150,21 @@ export function useLLMProviders(agentId?: number) {
 }
 
 /**
- * Resolves the active agent via `useCurrentAgent` and fetches that agent's
+ * Resolves the active agent via `useSelectedAgent` and fetches that agent's
  * LLM providers via `useLLMProviders`. User-facing model UIs (chat model
  * selectors, popovers) consistently need exactly this pairing, so this hook
  * keeps the resolution in one place instead of repeating it at each call site.
  */
 export function useCurrentAgentLLMProviders() {
-  const currentAgent = useCurrentAgent();
-  return useLLMProviders(currentAgent?.id);
+  const selectedAgent = useSelectedAgent();
+  // The Assistant is every install's baseline, so its models are the unscoped
+  // provider list. Scoping the fetch to id 0 would ask a narrower question than
+  // the model pickers mean.
+  const agentId =
+    selectedAgent && selectedAgent.id !== DEFAULT_AGENT_ID
+      ? selectedAgent.id
+      : undefined;
+  return useLLMProviders(agentId);
 }
 
 /**
