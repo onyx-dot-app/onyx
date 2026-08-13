@@ -47,7 +47,7 @@ function LogRow({ log, group }: { log: HookExecutionRecord; group: string }) {
         flexDirection="row"
         justifyContent="start"
         alignItems="start"
-        gap={0.5}
+        gap={2}
         height="fit"
         className="py-2"
       >
@@ -157,7 +157,7 @@ export default function HookLogsModal({ hook, spec }: HookLogsModalProps) {
           flexDirection="row"
           justifyContent="between"
           alignItems="center"
-          padding={0.5}
+          padding={2}
           className="bg-background-tint-01"
         >
           <Text font="main-ui-body" color="text-03">
@@ -167,8 +167,8 @@ export default function HookLogsModal({ hook, spec }: HookLogsModalProps) {
             flexDirection="row"
             alignItems="center"
             width="fit"
-            gap={0.25}
-            padding={0.25}
+            gap={1}
+            padding={1}
             className="rounded-xl bg-background-tint-00"
           >
             <CopyButton size="sm" tooltip="Copy" getCopyText={getLogsText} />

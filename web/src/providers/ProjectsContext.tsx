@@ -46,6 +46,7 @@ import { ChatFileType } from "@/app/app/interfaces";
 import { toast } from "@opal/layouts";
 import { useProjects } from "@/lib/projects/hooks";
 import { useSettings } from "@/lib/settings/hooks";
+import { useIncognitoOptional } from "@/providers/IncognitoProvider";
 
 export type { Project, ProjectFile } from "@/lib/projects/types";
 
@@ -134,6 +135,14 @@ interface ProjectsProviderProps {
 export function ProjectsProvider({ children }: ProjectsProviderProps) {
   // Use SWR hook for projects list - no more SSR initial data
   const { projects, refreshProjects } = useProjects();
+  // Uploads made in an incognito chat are tied to its session so the server
+  // deletes them at teardown. Optional: falls back to disabled when no
+  // IncognitoProvider is mounted above.
+  const incognitoCtx = useIncognitoOptional();
+  const incognitoUploadsEnabled = incognitoCtx?.incognitoEnabled ?? false;
+  const incognitoSessionId = incognitoUploadsEnabled
+    ? (incognitoCtx?.incognitoSessionId ?? null)
+    : null;
   const [recentFiles, setRecentFiles] = useState<ProjectFile[]>([]);
   const [currentProjectDetails, setCurrentProjectDetails] =
     useState<ProjectDetails | null>(null);
@@ -379,12 +388,14 @@ export function ProjectsProvider({ children }: ProjectsProviderProps) {
         createOptimisticFile(f, projectId)
       );
       const tempIdMap = getTempIdMap(validFiles, optimisticFiles);
-      setAllRecentFiles((prev) => [...optimisticFiles, ...prev]);
-      if (projectId) {
+      if (!incognitoUploadsEnabled) {
+        setAllRecentFiles((prev) => [...optimisticFiles, ...prev]);
+      }
+      if (projectId && !incognitoUploadsEnabled) {
         setAllCurrentProjectFiles((prev) => [...optimisticFiles, ...prev]);
         projectToUploadFilesMapRef.current.set(projectId, optimisticFiles);
       }
-      svcUploadFiles(validFiles, projectId, tempIdMap)
+      svcUploadFiles(validFiles, projectId, tempIdMap, incognitoSessionId)
         .then((uploaded) => {
           const uploadedFiles = uploaded.user_files || [];
           const tempIdToUploadedFileMap = new Map(
@@ -485,6 +496,8 @@ export function ProjectsProvider({ children }: ProjectsProviderProps) {
       refreshRecentFiles,
       removeOptimisticFilesByTempIds,
       userFileMaxUploadSizeMb,
+      incognitoUploadsEnabled,
+      incognitoUploadsEnabled,
     ]
   );
 
@@ -493,7 +506,12 @@ export function ProjectsProvider({ children }: ProjectsProviderProps) {
       files: File[],
       projectId?: number | null
     ): Promise<CategorizedFiles> => {
-      const uploaded: CategorizedFiles = await svcUploadFiles(files, projectId);
+      const uploaded: CategorizedFiles = await svcUploadFiles(
+        files,
+        projectId,
+        undefined,
+        incognitoSessionId
+      );
       const uploadedFiles = uploaded.user_files || [];
       // Track these uploaded file IDs for targeted polling
       if (uploadedFiles.length > 0) {
@@ -511,7 +529,13 @@ export function ProjectsProvider({ children }: ProjectsProviderProps) {
       await refreshRecentFiles();
       return uploaded;
     },
-    [currentProjectId, refreshCurrentProjectDetails, refreshRecentFiles]
+    [
+      currentProjectId,
+      refreshCurrentProjectDetails,
+      refreshRecentFiles,
+      incognitoUploadsEnabled,
+      incognitoUploadsEnabled,
+    ]
   );
 
   const getFilesInProject = useCallback(
@@ -575,7 +599,21 @@ export function ProjectsProvider({ children }: ProjectsProviderProps) {
       isPollingRef.current = true;
       try {
         const statuses = await svcGetUserFileStatuses(ids);
-        if (!statuses || statuses.length === 0) return;
+        if (!statuses) return;
+        if (statuses.length === 0) {
+          // The server reports none of the REQUESTED files: they were deleted
+          // (e.g. incognito teardown). Drop only those, not ids registered
+          // while this request was in flight.
+          const requested = new Set(ids);
+          setTrackedUploadIds((prev) => {
+            const remaining = new Set<string>();
+            prev.forEach((id) => {
+              if (!requested.has(id)) remaining.add(id);
+            });
+            return remaining;
+          });
+          return;
+        }
 
         // Build maps for quick lookup
         const statusById = new Map(statuses.map((f) => [f.id, f]));
@@ -682,6 +720,13 @@ export function ProjectsProvider({ children }: ProjectsProviderProps) {
           } else if (s === "failed") {
             remaining.delete(f.id);
             newlyFailed.push(f);
+          }
+        }
+        // Requested ids the server no longer reports are deleted files: stop
+        // tracking them. Ids registered after this request went out stay.
+        for (const id of ids) {
+          if (!statusById.has(id)) {
+            remaining.delete(id);
           }
         }
         if (newlyFailed.length > 0) {

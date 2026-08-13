@@ -189,8 +189,8 @@ export default function EditUserModal({
         <Modal.Body twoTone>
           <Section padding={0} height="auto" alignItems="stretch">
             <Section
-              gap={0.5}
-              padding={0.25}
+              gap={2}
+              padding={1}
               height={joinedGroups.length === 0 && !popoverOpen ? "auto" : 14.5}
               alignItems="stretch"
               justifyContent="start"
@@ -294,14 +294,14 @@ export default function EditUserModal({
             </Section>
             {user.role && (
               <>
-                <Divider paddingParallel="fit" paddingPerpendicular="fit" />
+                <Divider paddingParallel={0} paddingPerpendicular={0} />
 
                 <ContentAction
                   title="User Role"
                   description="This controls their general permissions."
                   sizePreset="main-ui"
                   variant="section"
-                  padding="fit"
+                  padding={0}
                   rightChildren={
                     <InputSelect
                       value={selectedRole}

@@ -20,8 +20,8 @@ import {
   SvgMcp,
   SvgOnyxOctagon,
   SvgPaintBrush,
+  SvgPieChart,
   SvgPlug,
-  SvgProgressBars,
   SvgSearchMenu,
   SvgShield,
   SvgTerminal,
@@ -200,12 +200,6 @@ export const ADMIN_ROUTES = {
     title: "Service Accounts",
     sidebarLabel: "Service Accounts",
   },
-  TOKEN_RATE_LIMITS: {
-    path: "/admin/token-rate-limits",
-    icon: SvgProgressBars,
-    title: "Spending Limits",
-    sidebarLabel: "Spending Limits",
-  },
   TRACING: {
     path: "/admin/tracing",
     icon: SvgBarChart,
@@ -214,9 +208,15 @@ export const ADMIN_ROUTES = {
   },
   USAGE: {
     path: "/admin/performance/usage",
+    icon: SvgPieChart,
+    title: "Usage",
+    sidebarLabel: "Usage",
+  },
+  WORKSPACE_ANALYTICS: {
+    path: "/admin/performance/analytics",
     icon: SvgActivity,
-    title: "Usage Statistics",
-    sidebarLabel: "Usage Statistics",
+    title: "Analytics",
+    sidebarLabel: "Analytics",
   },
   QUERY_HISTORY: {
     path: "/admin/performance/query-history",

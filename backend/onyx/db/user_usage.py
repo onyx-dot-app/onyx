@@ -1,10 +1,10 @@
 """Daily per-user LLM usage rollup for cost/token attribution.
 
 A window rollup: rows accumulate in place per (user, window,
-model, flow, provider), not an append-only per-call ledger."""
+model, flow, provider, incognito), not an append-only per-call ledger."""
 
 from collections import defaultdict
-from collections.abc import Sequence
+from collections.abc import Iterator, Sequence
 from datetime import datetime, timedelta
 from math import ceil
 from typing import Any, cast
@@ -27,7 +27,7 @@ TOKEN_BUDGET_PERIOD_ERROR = "Token budget periods must be whole UTC days"
 COST_BUDGET_PERIOD_ERROR = "Cost budget periods must be whole UTC days"
 # Not email-shaped on purpose: it can never collide with a real address.
 DELETED_USER_EXPORT_EMAIL = "(deleted user)"
-_CONFLICT_COLS = ["user_id", "window_start", "model", "flow", "provider"]
+_CONFLICT_COLS = ["user_id", "window_start", "model", "flow", "provider", "incognito"]
 
 
 class TokenUsageBucket(BaseModel):
@@ -123,6 +123,7 @@ class UsageExportRow(BaseModel):
     model: str
     flow: str
     provider: str
+    incognito: bool
     day: str  # YYYY-MM-DD
     input_tokens: int
     output_tokens: int
@@ -141,6 +142,7 @@ def record_user_usage(
     cache_read_tokens: int,
     cost_cents: float,
     window_start: datetime,
+    incognito: bool = False,
 ) -> None:
     """Atomically accumulate into the ledger (Postgres upsert). Caller commits."""
     # Store "" rather than NULL for a missing provider so the dedup unique index
@@ -152,6 +154,7 @@ def record_user_usage(
         model=model,
         flow=flow,
         provider=provider,
+        incognito=incognito,
         input_tokens=input_tokens,
         output_tokens=output_tokens,
         cache_read_tokens=cache_read_tokens,
@@ -210,12 +213,11 @@ def get_user_usage_by_day_and_model(
     ]
 
 
-def get_usage_export(
-    db_session: Session,
+def _get_usage_export_query(
     start: datetime,
     end: datetime,
     model: str | None = None,
-) -> list[UsageExportRow]:
+) -> Any:
     utc_day = func.date(func.timezone("UTC", UserUsage.window_start))
     # Deleted users/API keys leave user_id NULL but keep their spend. An inner
     # join would hide that spend here while the tenant-wide totals still count
@@ -227,6 +229,7 @@ def get_usage_export(
             UserUsage.model,
             UserUsage.flow,
             UserUsage.provider,
+            UserUsage.incognito,
             utc_day.label("day"),
             func.sum(UserUsage.input_tokens),
             func.sum(UserUsage.output_tokens),
@@ -241,7 +244,12 @@ def get_usage_export(
             UserUsage.window_start < end,
         )
         .group_by(
-            email_label, UserUsage.model, UserUsage.flow, UserUsage.provider, utc_day
+            email_label,
+            UserUsage.model,
+            UserUsage.flow,
+            UserUsage.provider,
+            UserUsage.incognito,
+            utc_day,
         )
         .order_by(
             email_label,
@@ -249,27 +257,59 @@ def get_usage_export(
             UserUsage.model,
             UserUsage.flow,
             UserUsage.provider,
+            UserUsage.incognito,
         )
     )
     if model is not None:
         query = query.where(UserUsage.model == model)
 
-    rows = db_session.execute(query).all()
+    return query
 
-    return [
-        UsageExportRow(
+
+def iter_usage_export(
+    db_session: Session,
+    start: datetime,
+    end: datetime,
+    model: str | None = None,
+) -> Iterator[UsageExportRow]:
+    result = db_session.execute(
+        _get_usage_export_query(start, end, model).execution_options(
+            stream_results=True
+        )
+    ).yield_per(1000)
+    for (
+        email,
+        mdl,
+        flow,
+        provider,
+        incognito,
+        day,
+        in_tok,
+        out_tok,
+        cache_tok,
+        cost,
+    ) in result:
+        yield UsageExportRow(
             email=str(email),
             model=mdl,
             flow=flow,
             provider=provider,
+            incognito=bool(incognito),
             day=str(day),
             input_tokens=int(in_tok or 0),
             output_tokens=int(out_tok or 0),
             cache_read_tokens=int(cache_tok or 0),
             cost_cents=float(cost or 0.0),
         )
-        for email, mdl, flow, provider, day, in_tok, out_tok, cache_tok, cost in rows
-    ]
+
+
+def get_usage_export(
+    db_session: Session,
+    start: datetime,
+    end: datetime,
+    model: str | None = None,
+) -> list[UsageExportRow]:
+    return list(iter_usage_export(db_session, start, end, model))
 
 
 def get_usage_reset_window_start(

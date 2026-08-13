@@ -9,6 +9,8 @@ import pytest
 
 from onyx.connectors.models import Document, DocumentSource, TextSection
 from onyx.connectors.sharepoint.connector import (
+    DRIVE_ITEM_DOWNLOAD_URL_SELECT,
+    DRIVE_ITEM_SELECT_FIELDS,
     SHARED_DOCUMENTS_MAP,
     DriveItemData,
     SharepointConnector,
@@ -435,13 +437,15 @@ def test_iter_drive_items_delta_uses_timestamp_token(
     connector = SharepointConnector()
 
     captured_urls: list[str] = []
+    captured_params: list[dict[str, str] | None] = []
 
     def fake_graph_api_get_json(
         self: SharepointConnector,  # noqa: ARG001
         url: str,
-        params: dict[str, str] | None = None,  # noqa: ARG001
+        params: dict[str, str] | None = None,
     ) -> dict[str, Any]:
         captured_urls.append(url)
+        captured_params.append(params)
         return {
             "value": [
                 {
@@ -469,6 +473,8 @@ def test_iter_drive_items_delta_uses_timestamp_token(
     assert items[0].id == "file-1"
     assert len(captured_urls) == 1
     assert "token=2025-06-01T00%3A00%3A00%2B00%3A00" in captured_urls[0]
+    assert captured_params == [{"$top": "200", "$select": DRIVE_ITEM_SELECT_FIELDS}]
+    assert DRIVE_ITEM_DOWNLOAD_URL_SELECT in DRIVE_ITEM_SELECT_FIELDS.split(",")
 
 
 def test_iter_drive_items_delta_full_crawl_when_no_start(

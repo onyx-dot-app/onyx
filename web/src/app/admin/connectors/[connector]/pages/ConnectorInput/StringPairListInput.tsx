@@ -79,13 +79,13 @@ const StringPairListInput: React.FC<StringPairListInputProps> = ({
       <FieldArray
         name={name}
         render={(arrayHelpers: ArrayHelpers) => (
-          <Section gap={0.5} alignItems="start" width="full">
+          <Section gap={2} alignItems="start" width="full">
             {pairs.length > 0 && (
               <Section
                 flexDirection="row"
                 justifyContent="start"
                 alignItems="center"
-                gap={0.25}
+                gap={1}
                 width="full"
               >
                 <Section width="full" alignItems="start" gap={0}>
@@ -108,7 +108,7 @@ const StringPairListInput: React.FC<StringPairListInputProps> = ({
             {pairs.map((_, index) => (
               <Section
                 key={rowKeys.keys[index]}
-                gap={0.25}
+                gap={1}
                 alignItems="start"
                 width="full"
               >
@@ -116,7 +116,7 @@ const StringPairListInput: React.FC<StringPairListInputProps> = ({
                   flexDirection="row"
                   justifyContent="start"
                   alignItems="center"
-                  gap={0.25}
+                  gap={1}
                   width="full"
                 >
                   <InputTypeInField

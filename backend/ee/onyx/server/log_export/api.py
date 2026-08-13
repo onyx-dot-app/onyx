@@ -26,6 +26,8 @@ from ee.onyx.server.log_export.storage import (
 from onyx import __version__
 from onyx.auth.permissions import require_permission
 from onyx.background.celery.versioned_apps.client import app as client_app
+from onyx.cache.interface import CacheBackendType
+from onyx.configs.app_configs import CACHE_BACKEND
 from onyx.configs.constants import (
     OnyxCeleryPriority,
     OnyxCeleryQueues,
@@ -137,9 +139,9 @@ def start_log_export(
     Starts an export: fans out one collector task per worker type, collects the
     api_server's logs inline, and returns the export ID to poll.
 
-    Fan-out failures (e.g. deployments with no broker or workers, like the
-    onyx-lite overlay) degrade the export to just the api_server's logs instead
-    of failing.
+    The fan-out is skipped on deployments that have no celery broker (the
+    onyx-lite overlay); a failing broker degrades the export to the workers
+    already enqueued instead of failing it.
     """
     if MULTI_TENANT:
         raise OnyxError(
@@ -165,33 +167,44 @@ def start_log_export(
 
         # Fan out before the inline collection below so workers get the full
         # window before ``expires=`` discards their tasks, and their collection
-        # overlaps the api_server's.
+        # overlaps the api_server's. When redis is absent by design (the
+        # onyx-lite overlay), there is no broker behind ``send_task`` and no
+        # workers to collect from, so the fan-out is skipped outright
+        # (``maybe_schedule_license_reclaim`` applies the same rule); a broker
+        # that exists but is down degrades per-send below instead.
         enqueued_worker_names: list[str] = []
-        for worker_name, queue in WORKER_COLLECT_QUEUES.items():
-            try:
-                client_app.send_task(
-                    OnyxCeleryTask.EXPORT_LOGS_COLLECT_TASK,
-                    priority=OnyxCeleryPriority.HIGHEST,
-                    queue=queue,
-                    expires=deadline,
-                    kwargs={
-                        "export_id": export_id,
-                        "worker_name": worker_name,
-                    },
-                )
-            except Exception as e:
-                # All sends share one broker, so the first failure means the
-                # rest would fail too. Only the workers already enqueued are
-                # awaited.
-                logger.warning(
-                    "Log export fan-out failed while enqueueing %s; continuing "
-                    "with %s: %s",
-                    worker_name,
-                    enqueued_worker_names,
-                    e,
-                )
-                break
-            enqueued_worker_names.append(worker_name)
+        if CACHE_BACKEND != CacheBackendType.REDIS:
+            logger.info(
+                "Log export fan-out skipped: this deployment has no celery "
+                "broker (CACHE_BACKEND=%s).",
+                CACHE_BACKEND.value,
+            )
+        else:
+            for worker_name, queue in WORKER_COLLECT_QUEUES.items():
+                try:
+                    client_app.send_task(
+                        OnyxCeleryTask.EXPORT_LOGS_COLLECT_TASK,
+                        priority=OnyxCeleryPriority.HIGHEST,
+                        queue=queue,
+                        expires=deadline,
+                        kwargs={
+                            "export_id": export_id,
+                            "worker_name": worker_name,
+                        },
+                    )
+                except Exception as e:
+                    # All sends share one broker, so the first failure means the
+                    # rest would fail too. Only the workers already enqueued are
+                    # awaited.
+                    logger.warning(
+                        "Log export fan-out failed while enqueueing %s; "
+                        "continuing with %s: %s",
+                        worker_name,
+                        enqueued_worker_names,
+                        e,
+                    )
+                    break
+                enqueued_worker_names.append(worker_name)
 
         manifest = LogExportManifest(
             export_id=export_id,

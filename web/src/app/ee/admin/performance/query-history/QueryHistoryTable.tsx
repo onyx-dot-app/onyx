@@ -16,8 +16,8 @@ import { Dispatch, SetStateAction, useCallback, useState } from "react";
 import { Feedback, TaskStatus } from "@/lib/types";
 import {
   DateRange,
-  AdminDateRangeSelector,
-} from "@/components/dateRangeSelectors/AdminDateRangeSelector";
+  DateRangePicker,
+} from "@/refresh-components/DateRangePicker";
 import { PageSelector } from "@/components/PageSelector";
 import Link from "next/link";
 import type { Route } from "next";
@@ -101,7 +101,7 @@ function SelectFeedbackType({
   onValueChange: (value: Feedback | "all") => void;
 }) {
   return (
-    <Section alignItems="start" gap={0.25}>
+    <Section alignItems="start" gap={1}>
       <Text as="p" className="font-medium">
         Feedback Type
       </Text>
@@ -316,7 +316,7 @@ export function QueryHistoryTable() {
               }}
             />
 
-            <AdminDateRangeSelector
+            <DateRangePicker
               value={dateRange}
               onValueChange={onTimeRangeChange}
             />

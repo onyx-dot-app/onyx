@@ -20,7 +20,7 @@ export default function CraftLlmLockedState() {
         description="Onyx Craft needs a model provider, and only admins can set one up. Ask your admin to connect Anthropic, OpenAI, or OpenRouter."
         sizePreset="main-ui"
         variant="section"
-        padding="lg"
+        padding={2}
         rightChildren={
           <Button prominence="tertiary" href="/app">
             Back to Chat

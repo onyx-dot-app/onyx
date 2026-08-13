@@ -119,6 +119,20 @@ _KWARG_ERROR_ALIASES: dict[str, tuple[str, ...]] = {
 }
 
 
+def _merge_under(base: dict[str, Any], override: dict[str, Any]) -> dict[str, Any]:
+    """Fill *base* in beneath *override*, recursing so an override key that
+    holds a dict keeps the siblings *base* declared under it. Leaves in
+    *override* always win."""
+    merged = dict(base)
+    for key, value in override.items():
+        existing = merged.get(key)
+        if isinstance(existing, dict) and isinstance(value, dict):
+            merged[key] = _merge_under(existing, value)
+        else:
+            merged[key] = value
+    return merged
+
+
 def _rejection_names_strippable_kwargs(error: Exception, strippable: set[str]) -> bool:
     """True when the 400's message names a kwarg a later attempt would drop.
     Unrelated 400s (context length, malformed input) must not be retried."""
@@ -557,10 +571,17 @@ class LitellmLLM(LLM):
         # This is needed for Ollama to do proper function calling
         if model_provider == LlmProviderNames.OLLAMA_CHAT and api_base is not None:
             model_kwargs["api_base"] = api_base
+        # Deployment config merges under anything already in model_kwargs, so a
+        # policy-supplied value wins. Incognito retention flags live here, and
+        # replacing the dict would silently re-enable provider logging.
         if extra_headers:
-            model_kwargs.update({"extra_headers": extra_headers})
+            model_kwargs["extra_headers"] = _merge_under(
+                extra_headers, model_kwargs.get("extra_headers") or {}
+            )
         if extra_body:
-            model_kwargs.update({"extra_body": extra_body})
+            model_kwargs["extra_body"] = _merge_under(
+                extra_body, model_kwargs.get("extra_body") or {}
+            )
 
         self._model_kwargs = model_kwargs
 

@@ -1341,6 +1341,8 @@ def get_recent_files(
         .filter(UserFile.user_id == user_id)
         .filter(UserFile.status != UserFileStatus.FAILED)
         .filter(UserFile.status != UserFileStatus.DELETING)
+        # Incognito uploads live only inside their session, never in recents.
+        .filter(UserFile.incognito.is_(False))
         .order_by(UserFile.last_accessed_at.desc())
         .all()
     )

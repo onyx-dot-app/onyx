@@ -1,7 +1,7 @@
 "use client";
 
-import { AdminDateRangeSelector } from "@/components/dateRangeSelectors/AdminDateRangeSelector";
-import { useTimeRange } from "@/app/ee/admin/performance/lib";
+import { DateRangePicker } from "@/refresh-components/DateRangePicker";
+import { useTimeRange } from "@/lib/usage/hooks";
 import PerUserUsagePanel from "@/views/admin/PerUserUsagePanel";
 import { ADMIN_ROUTES } from "@/lib/admin-routes";
 import { Divider } from "@opal/components";
@@ -25,7 +25,7 @@ export default function UsagePage() {
         <PerUserUsagePanel
           timeRange={timeRange}
           headerRight={
-            <AdminDateRangeSelector
+            <DateRangePicker
               value={timeRange}
               onValueChange={(value) => setTimeRange(value as any)}
             />

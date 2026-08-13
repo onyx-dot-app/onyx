@@ -90,7 +90,7 @@ function BreakdownList({ title, slices, totalCostCents }: BreakdownListProps) {
       flexDirection="column"
       justifyContent="start"
       alignItems="stretch"
-      gap={0.5}
+      gap={2}
       width="full"
       height="fit"
     >
@@ -101,7 +101,7 @@ function BreakdownList({ title, slices, totalCostCents }: BreakdownListProps) {
         flexDirection="column"
         justifyContent="start"
         alignItems="stretch"
-        gap={0.625}
+        gap={2.5}
         width="full"
         height="fit"
       >
@@ -114,7 +114,7 @@ function BreakdownList({ title, slices, totalCostCents }: BreakdownListProps) {
               flexDirection="column"
               justifyContent="start"
               alignItems="stretch"
-              gap={0.25}
+              gap={1}
               width="full"
               height="fit"
             >
@@ -157,7 +157,7 @@ function DailySpendStrip({ days }: { days: DailySpend[] }) {
       flexDirection="column"
       justifyContent="start"
       alignItems="stretch"
-      gap={0.25}
+      gap={1}
       width="full"
       height="fit"
     >
@@ -175,7 +175,7 @@ function DailySpendStrip({ days }: { days: DailySpend[] }) {
         flexDirection="row"
         justifyContent="start"
         alignItems="end"
-        gap={0.125}
+        gap={0.5}
         width="full"
         height={3.5}
       >
@@ -260,7 +260,7 @@ export default function UserUsageDetailModal({
           onClose={() => onOpenChange(false)}
         />
         <Modal.Body>
-          <Section alignItems="stretch" height="auto" gap={1.5}>
+          <Section alignItems="stretch" height="auto" gap={6}>
             <div className="flex flex-wrap gap-2">
               <div className="basis-1/2 sm:basis-1/4">
                 <StatCell label="Spend" value={formatCost(totals.cost_cents)} />

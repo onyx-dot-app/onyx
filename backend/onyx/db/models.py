@@ -83,6 +83,7 @@ from onyx.db.enums import (
     HierarchyNodeType,
     HookFailStrategy,
     HookPoint,
+    IncognitoRecordMode,
     IndexingMode,
     IndexingStatus,
     IndexModelStatus,
@@ -123,7 +124,7 @@ from onyx.file_store.models import FileDescriptor
 from onyx.kg.models import KGEntityTypeAttributes, KGStage
 from onyx.llm.models import ReasoningEffort
 from onyx.llm.override_models import LLMOverride, PromptOverride
-from onyx.server.security.models import SSRFProtectionLevel
+from onyx.server.security.models import IncognitoAvailability, SSRFProtectionLevel
 from onyx.tools.tool_implementations.web_search.models import WebContentProviderConfig
 from onyx.utils.encryption import decrypt_bytes_to_string, encrypt_string_to_bytes
 from onyx.utils.headers import HeaderItemDict
@@ -3067,6 +3068,18 @@ class ChatSession(Base):
     description: Mapped[str | None] = mapped_column(Text, nullable=True)
     # This chat created by OnyxBot
     onyxbot_flow: Mapped[bool] = mapped_column(Boolean, default=False)
+    # Pinned at creation, so a later setting change cannot alter a live
+    # session. NULL is an ordinary chat and records normally. Of the incognito
+    # modes only FULL_HISTORY writes conversation content into messages.
+    incognito_record_mode: Mapped[IncognitoRecordMode | None] = mapped_column(
+        Enum(
+            IncognitoRecordMode,
+            native_enum=False,
+            values_callable=lambda x: [e.value for e in x],
+        ),
+        nullable=True,
+        default=None,
+    )
     # Only ever set to True if system is set to not hard-delete chats
     deleted: Mapped[bool] = mapped_column(Boolean, default=False)
     # controls whether or not this conversation is viewable by others
@@ -4595,6 +4608,27 @@ class SecuritySettings(Base):
     track_external_idp_expiry: Mapped[bool | None] = mapped_column(
         Boolean, nullable=True, default=None
     )
+    # Stored as the IncognitoAvailability value (e.g. "groups"). None falls
+    # back to the off-by-default env behavior.
+    incognito_availability: Mapped[IncognitoAvailability | None] = mapped_column(
+        Enum(
+            IncognitoAvailability,
+            native_enum=False,
+            values_callable=lambda x: [e.value for e in x],
+        ),
+        nullable=True,
+        default=None,
+    )
+    # What new incognito sessions pin. None falls back to usage_only.
+    incognito_record_mode: Mapped[IncognitoRecordMode | None] = mapped_column(
+        Enum(
+            IncognitoRecordMode,
+            native_enum=False,
+            values_callable=lambda x: [e.value for e in x],
+        ),
+        nullable=True,
+        default=None,
+    )
     # Stored as the SSRFProtectionLevel value (e.g. "validate_all"); None falls
     # back to the level derived from the legacy SSRF env vars.
     ssrf_protection_level: Mapped[SSRFProtectionLevel | None] = mapped_column(
@@ -5003,6 +5037,12 @@ class UserGroup(Base):
     # whether this is a default group (e.g. "Basic", "Admins") that cannot be deleted
     is_default: Mapped[bool] = mapped_column(Boolean, nullable=False, default=False)
 
+    # Members may start incognito chats when the workspace availability mode
+    # is groups-only. Ignored under the other modes.
+    incognito_enabled: Mapped[bool] = mapped_column(
+        Boolean, nullable=False, default=False
+    )
+
     # Last time a user updated this user group
     time_last_modified_by_user: Mapped[datetime.datetime] = mapped_column(
         DateTime(timezone=True), server_default=func.now()
@@ -5355,7 +5395,6 @@ class UserDocument(str, Enum):
 
 class UserFile(Base):
     __tablename__ = "user_file"
-
     id: Mapped[UUID] = mapped_column(PGUUID(as_uuid=True), primary_key=True)
     user_id: Mapped[UUID | None] = mapped_column(ForeignKey("user.id"), nullable=False)
     assistants: Mapped[list["Persona"]] = relationship(
@@ -5377,6 +5416,17 @@ class UserFile(Base):
         Enum(UserFileStatus, native_enum=False, name="userfilestatus"),
         nullable=False,
         default=UserFileStatus.PROCESSING,
+    )
+    # Privacy is decided when the file is uploaded, from the toggle state, so
+    # an attachment made before the session exists is already private.
+    incognito: Mapped[bool] = mapped_column(
+        Boolean, nullable=False, default=False, server_default=text("false")
+    )
+    # Which session cleans it up. NULL until the session is created on the
+    # first message and adopts it. No foreign key: the session row is deleted
+    # first and these must outlive it to be swept.
+    incognito_session_id: Mapped[UUID | None] = mapped_column(
+        PGUUID(as_uuid=True), nullable=True, default=None
     )
     needs_project_sync: Mapped[bool] = mapped_column(
         Boolean, nullable=False, default=False
@@ -5409,6 +5459,15 @@ class UserFile(Base):
     )
 
     __table_args__ = (
+        # Declared here as well as in the migration so autogenerate does not
+        # read it as a stray index and propose dropping it.
+        Index(
+            "ix_user_file_incognito_sweep",
+            "incognito_session_id",
+            "status",
+            "last_accessed_at",
+            postgresql_where=text("incognito"),
+        ),
         Index(
             "ix_user_file_secondary_reconcile_pending",
             "id",
@@ -5939,7 +5998,8 @@ class UserUsage(Base):
     """
     Daily per-user LLM usage rollup for cost/token attribution and budget checks.
 
-    One accumulating row per (user, window, model, flow, provider), not per call.
+    One accumulating row per (user, window, model, flow, provider, incognito),
+    not per call.
     """
 
     __tablename__ = "user_usage"
@@ -5960,6 +6020,11 @@ class UserUsage(Base):
     # '' not NULL: unique index dedups pre-PG15 without NULLS NOT DISTINCT.
     provider: Mapped[str] = mapped_column(
         String, nullable=False, default="", server_default=""
+    )
+    # Incognito-turn spend accumulates in its own rows so reporting can label
+    # it. Budget readers sum across both values.
+    incognito: Mapped[bool] = mapped_column(
+        Boolean, nullable=False, default=False, server_default=text("false")
     )
 
     input_tokens: Mapped[int] = mapped_column(BigInteger, nullable=False)
@@ -5992,6 +6057,7 @@ class UserUsage(Base):
             "model",
             "flow",
             "provider",
+            "incognito",
             unique=True,
         ),
     )
@@ -6417,24 +6483,31 @@ class ScheduledTask(Base):
         back_populates="task",
         cascade="all, delete-orphan",
     )
-    pre_approved_apps: Mapped[list["ScheduledTaskPreApprovedApp"]] = relationship(
-        "ScheduledTaskPreApprovedApp",
+    pre_approved_targets: Mapped[list["ScheduledTaskPreApprovedTarget"]] = relationship(
+        "ScheduledTaskPreApprovedTarget",
         back_populates="task",
         cascade="all, delete-orphan",
-        order_by="ScheduledTaskPreApprovedApp.id",
+        order_by="ScheduledTaskPreApprovedTarget.id",
     )
 
     @property
     def pre_approved_external_app_ids(self) -> list[int]:
-        """Granted external-app ids in grant order. MCP-server grants are
-        excluded — their target ids live in a different id space, and this
-        property backs the API's external-app-id field (the gate reads all
-        grants regardless of kind via ``get_running_scheduled_run_grants``).
-        Set via ``onyx.db.scheduled_task.set_pre_approved_apps``."""
+        """Granted external-app ids. MCP-server grants are excluded because
+        their target ids live in a different id space."""
         return [
             grant.gated_app.external_app_id
-            for grant in self.pre_approved_apps
+            for grant in self.pre_approved_targets
             if grant.gated_app.external_app_id is not None
+        ]
+
+    @property
+    def pre_approved_mcp_server_ids(self) -> list[int]:
+        """Granted MCP-server ids. External-app grants are excluded because
+        their target ids live in a different id space."""
+        return [
+            grant.gated_app.mcp_server_id
+            for grant in self.pre_approved_targets
+            if grant.gated_app.mcp_server_id is not None
         ]
 
     __table_args__ = (
@@ -6527,7 +6600,7 @@ class ScheduledTaskRun(Base):
     )
 
 
-class ScheduledTaskPreApprovedApp(Base):
+class ScheduledTaskPreApprovedTarget(Base):
     """One (task, target) pre-approval grant: the matched target's ASK-gated
     actions skip the approval park for the task's RUNNING runs.
 
@@ -6537,6 +6610,7 @@ class ScheduledTaskPreApprovedApp(Base):
     index serves the per-task lookup.
     """
 
+    # The table name predates MCP support. Keep it to avoid a schema-only rename.
     __tablename__ = "scheduled_task_pre_approved_app"
 
     id: Mapped[int] = mapped_column(Integer, primary_key=True)
@@ -6555,11 +6629,10 @@ class ScheduledTaskPreApprovedApp(Base):
     )
 
     task: Mapped[ScheduledTask] = relationship(
-        "ScheduledTask", back_populates="pre_approved_apps"
+        "ScheduledTask", back_populates="pre_approved_targets"
     )
-    # selectin: pre_approved_external_app_ids and set_pre_approved_apps read
-    # gated_app for every grant, so batch them in one SELECT rather than one
-    # per grant.
+    # selectin: the pre-approved target-id properties read gated_app for every
+    # grant, so batch them in one SELECT rather than one per grant.
     gated_app: Mapped["GatedApp"] = relationship("GatedApp", lazy="selectin")
 
     __table_args__ = (

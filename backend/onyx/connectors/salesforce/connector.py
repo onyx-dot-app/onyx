@@ -217,9 +217,11 @@ class SalesforceConnector(LoadConnector, PollConnector, SlimConnectorWithPermSyn
     def __init__(
         self,
         batch_size: int = INDEX_BATCH_SIZE,
-        requested_objects: list[str] = [],
+        requested_objects: list[str] | None = None,
         custom_query_config: str | None = None,
     ) -> None:
+        if requested_objects is None:
+            requested_objects = []
         self.batch_size = batch_size
         self._sf_client: OnyxSalesforce | None = None
 
@@ -379,7 +381,7 @@ class SalesforceConnector(LoadConnector, PollConnector, SlimConnectorWithPermSyn
 
                 with open(csv_path, "r", newline="", encoding="utf-8") as f:
                     reader = csv.DictReader(f)
-                    for row in reader:
+                    for _row in reader:
                         num_records += 1
 
                 new_ids = sf_db.update_from_csv(
@@ -592,7 +594,7 @@ class SalesforceConnector(LoadConnector, PollConnector, SlimConnectorWithPermSyn
                     num_records = 0
                     with open(csv_path, "r", newline="", encoding="utf-8") as f:
                         reader = csv.DictReader(f)
-                        for row in reader:
+                        for _row in reader:
                             num_records += 1
 
                     logger.debug(

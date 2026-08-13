@@ -289,6 +289,36 @@ class TestUsageExportAPI:
             file_names = zip_file.namelist()
             assert "chat_messages.csv" in file_names
             assert "users.csv" in file_names
+            assert "usage_by_user.csv" in file_names
+            assert "usage_report.pdf" in file_names
+
+            with zip_file.open("usage_report.pdf") as pdf_file:
+                pdf_bytes = pdf_file.read()
+            assert pdf_bytes.startswith(b"%PDF-")
+            assert len(pdf_bytes) > 1000
+
+            # Verify usage_by_user.csv has the expected columns. The seeded
+            # chat history doesn't record UserUsage rows, so there's no data
+            # to assert on, just the header shape.
+            with zip_file.open("usage_by_user.csv") as csv_file:
+                csv_content = csv_file.read().decode("utf-8")
+                csv_reader = csv.DictReader(StringIO(csv_content))
+                expected_columns = {
+                    "user_email",
+                    "day",
+                    "model",
+                    "flow",
+                    "provider",
+                    "incognito",
+                    "input_tokens",
+                    "output_tokens",
+                    "cache_read_tokens",
+                    "cost_cents",
+                }
+                actual_columns = set(csv_reader.fieldnames or [])
+                assert expected_columns == actual_columns, (
+                    f"Expected columns {expected_columns}, but got {actual_columns}"
+                )
 
             # Verify chat_messages.csv has the expected columns
             with zip_file.open("chat_messages.csv") as csv_file:
@@ -404,7 +434,7 @@ class TestUsageExportAPI:
 
         # Generate multiple reports concurrently
         num_reports = 3
-        for i in range(num_reports):
+        for _i in range(num_reports):
             response = client.post(
                 f"{API_SERVER_URL}/admin/usage-report",
                 json={},

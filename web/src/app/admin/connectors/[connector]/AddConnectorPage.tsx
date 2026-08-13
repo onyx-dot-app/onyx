@@ -562,7 +562,7 @@ export default function AddConnector({
                   <Section
                     flexDirection="row"
                     justifyContent="start"
-                    gap={1}
+                    gap={4}
                     className="mt-6"
                   >
                     {/* Button to pop up a form to manually enter credentials */}

@@ -146,7 +146,7 @@ function buildItems(
       add(SECTIONS.USAGE, ADMIN_ROUTES.TRACING);
     }
     addGated(SECTIONS.USAGE, ADMIN_ROUTES.USAGE, Tier.BUSINESS);
-    addGated(SECTIONS.USAGE, ADMIN_ROUTES.TOKEN_RATE_LIMITS, Tier.ENTERPRISE);
+    addGated(SECTIONS.USAGE, ADMIN_ROUTES.WORKSPACE_ANALYTICS, Tier.BUSINESS);
     if (
       settings?.query_history_type !== "disabled" &&
       !settings?.hide_query_history_from_admin_panel
@@ -262,7 +262,6 @@ export default function AdminSidebar() {
         {folded ? (
           <SidebarTab
             icon={SvgSearch}
-            folded
             onClick={() => {
               setFolded(false);
               setFocusSearch(true);
@@ -303,7 +302,7 @@ export default function AdminSidebar() {
 
         {disabledGroups.length > 0 && (
           <>
-            <Divider paddingPerpendicular="fit" />
+            <Divider paddingPerpendicular={0} />
             {/* Empty div here just to add spacing (via the `gap` property on `SidebarLayouts.Body`) */}
             <div />
           </>
@@ -331,16 +330,15 @@ export default function AdminSidebar() {
       </SidebarLayouts.Body>
 
       <SidebarLayouts.Footer>
-        {!folded && <Divider paddingPerpendicular="sm" />}
+        {!folded && <Divider paddingPerpendicular={2} />}
         <SidebarTab
           icon={SvgX}
           href={pathname?.startsWith("/admin/craft") ? "/craft/v1" : "/app"}
           variant="sidebar-light"
-          folded={folded}
         >
           Exit Admin Panel
         </SidebarTab>
-        <AccountPopover folded={folded} />
+        <AccountPopover />
       </SidebarLayouts.Footer>
     </SidebarLayouts.Root>
   );

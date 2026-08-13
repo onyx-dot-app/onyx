@@ -58,7 +58,7 @@ function ResourcePopover({
                     {section.label && (
                       <Section
                         flexDirection="row"
-                        gap={0.25}
+                        gap={1}
                         padding={0}
                         height="auto"
                         alignItems="center"
@@ -68,14 +68,11 @@ function ResourcePopover({
                         <Text secondaryBody text03 className="shrink-0">
                           {section.label}
                         </Text>
-                        <Divider
-                          paddingParallel="fit"
-                          paddingPerpendicular="fit"
-                        />
+                        <Divider paddingParallel={0} paddingPerpendicular={0} />
                       </Section>
                     )}
                     <Section
-                      gap={0.25}
+                      gap={1}
                       alignItems="stretch"
                       justifyContent="start"
                     >

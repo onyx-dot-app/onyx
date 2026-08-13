@@ -5,7 +5,7 @@ home: https://www.onyx.app/
 sources:
   - "https://github.com/onyx-dot-app/onyx"
 type: application
-version: 0.8.13
+version: 0.8.14
 appVersion: latest
 annotations:
   category: Productivity
@@ -16,6 +16,11 @@ annotations:
     - name: background
       image: docker.io/onyxdotapp/onyx-backend:latest
   artifacthub.io/changes: |
+    - kind: added
+      description: PostgreSQL TLS can now be configured with postgresTls, which
+        mounts a CA certificate and sets verified POSTGRES_SSL* defaults across
+        Onyx backend workloads. Craft's sandbox proxy now trusts customCACerts for
+        outbound HTTPS while retaining the public CA bundle.
     - kind: fixed
       description: Route /scim to the api server in ingress mode (ingress.enabled=true).
         The ingress templates only routed /api to the api server, so SCIM requests fell

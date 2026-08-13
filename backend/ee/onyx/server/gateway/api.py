@@ -1246,7 +1246,7 @@ def _anthropic_stream_worker(
                     tc for tc in finalized_tool_calls or [] if tc.function.name
                 ]
                 for tool_index, (tool_block, tool_call) in enumerate(
-                    zip(tool_blocks, named_tool_calls), start=next_index
+                    zip(tool_blocks, named_tool_calls, strict=True), start=next_index
                 ):
                     emit(
                         AnthropicContentBlockStartEvent.create(

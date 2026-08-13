@@ -299,7 +299,7 @@ function SubscriptionCard({
         alignItems="start"
         height="auto"
       >
-        <Section gap={0.25} alignItems="start" height="auto" width="auto">
+        <Section gap={1} alignItems="start" height="auto" width="auto">
           <PlanIcon className="w-5 h-5" />
           <Text headingH3Muted text04>
             {planName}
@@ -310,7 +310,7 @@ function SubscriptionCard({
         </Section>
         <Section
           flexDirection="column"
-          gap={0.25}
+          gap={1}
           alignItems="end"
           height="auto"
           width="fit"
@@ -339,7 +339,7 @@ function SubscriptionCard({
           ) : (
             <Section
               flexDirection="row"
-              gap={0.5}
+              gap={2}
               alignItems="end"
               height="auto"
               width="auto"
@@ -484,7 +484,7 @@ function SeatsCard({
           flexDirection="row"
           justifyContent="between"
           alignItems="start"
-          padding={1}
+          padding={4}
           height="auto"
         >
           <Content
@@ -506,8 +506,8 @@ function SeatsCard({
           <Section
             flexDirection="column"
             alignItems="stretch"
-            gap={0.25}
-            padding={1}
+            gap={1}
+            padding={4}
             height="auto"
           >
             <InputVertical title="Seats" withLabel>
@@ -547,7 +547,7 @@ function SeatsCard({
           flexDirection="row"
           alignItems="center"
           justifyContent="between"
-          padding={1}
+          padding={4}
           height="auto"
         >
           {isAdding ? (
@@ -595,7 +595,7 @@ function SeatsCard({
         alignItems="center"
         height="auto"
       >
-        <Section gap={0.25} alignItems="start" height="auto" width="auto">
+        <Section gap={1} alignItems="start" height="auto" width="auto">
           <Text mainContentMuted text04>
             {totalSeats} Seats
           </Text>
@@ -606,7 +606,7 @@ function SeatsCard({
         </Section>
         <Section
           flexDirection="row"
-          gap={0.5}
+          gap={2}
           justifyContent="end"
           height="auto"
           width="auto"
@@ -660,12 +660,7 @@ function PaymentSection({ billing }: { billing: BillingInformation }) {
     <div className="billing-payment-section">
       <Section alignItems="start" height="auto" width="full">
         <Text mainContentEmphasis>Payment</Text>
-        <Section
-          flexDirection="row"
-          gap={0.5}
-          alignItems="stretch"
-          height="auto"
-        >
+        <Section flexDirection="row" gap={2} alignItems="stretch" height="auto">
           <Card className="billing-payment-card">
             <Section
               flexDirection="row"
@@ -748,7 +743,7 @@ export default function BillingDetailsView({
     isAirGapped || hasStripeError || isManualLicenseOnly;
 
   return (
-    <Section gap={1} height="auto" width="full">
+    <Section gap={4} height="auto" width="full">
       {/* Renewal fetched on arrival while expired. The page renders regardless:
           billing is the one route a lapsed instance must always reach. */}
       {isGraceSyncing && (

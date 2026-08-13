@@ -54,7 +54,7 @@ function LimitRow({ limit, isAdmin, onToggle, onDelete }: LimitRowProps) {
             ? { title: limit.group_name }
             : undefined
         }
-        padding="md"
+        padding={1}
         center
         rightChildren={
           <div className="flex items-center gap-2">
@@ -135,7 +135,7 @@ export const TokenRateLimitTable = ({
   };
 
   return (
-    <Section alignItems="stretch" height="auto" gap={0.5}>
+    <Section alignItems="stretch" height="auto" gap={2}>
       {!hideHeading && description && (
         <Text font="secondary-body" color="text-03" as="p">
           {description}

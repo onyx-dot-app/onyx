@@ -33,7 +33,6 @@ from sqlalchemy.orm import Session
 
 from onyx.cache.interface import CacheLockAcquisitionError
 from onyx.cache.locks import cache_shared_lock
-from onyx.configs.app_configs import WEB_DOMAIN
 from onyx.db.engine.sql_engine import get_session_with_current_tenant
 from onyx.db.enums import MCPOAuthProviderMode, MCPTransport
 from onyx.db.mcp import (
@@ -46,6 +45,10 @@ from onyx.error_handling.error_codes import OnyxErrorCode
 from onyx.error_handling.exceptions import OnyxError
 from onyx.redis.redis_pool import get_redis_client
 from onyx.server.features.mcp.client import initialize_mcp_client
+from onyx.server.features.mcp.client_metadata import (
+    mcp_oauth_redirect_uri,
+    validated_mcp_oauth_client_metadata_url,
+)
 from onyx.server.features.mcp.models import (
     DENYLISTED_MCP_HEADERS,
     MCPConnectionData,
@@ -911,12 +914,17 @@ def make_oauth_provider(
         refresh_log_context,
         load_stored_tokens=load_stored_tokens,
     )
+    client_metadata_url = (
+        validated_mcp_oauth_client_metadata_url()
+        if mcp_server.oauth_provider_mode is MCPOAuthProviderMode.AUTO_DISCOVERY
+        else None
+    )
     provider = OnyxOAuthClientProvider(
         refresh_log_context=refresh_log_context,
         server_url=mcp_server.server_url,
         client_metadata=OAuthClientMetadata(
             client_name=f"Onyx - {mcp_server.name}",
-            redirect_uris=[AnyUrl(f"{WEB_DOMAIN}/mcp/oauth/callback")],
+            redirect_uris=[AnyUrl(mcp_oauth_redirect_uri())],
             grant_types=["authorization_code", "refresh_token"],
             response_types=["code"],
             scope=REQUESTED_SCOPE,  # TODO(evan): do we need to pass this in? maybe make configurable
@@ -925,6 +933,7 @@ def make_oauth_provider(
         storage=storage,
         redirect_handler=redirect_handler,
         callback_handler=callback_handler,
+        client_metadata_url=client_metadata_url,
     )
 
     # A fresh provider per tool call starts with an empty context, so the SDK

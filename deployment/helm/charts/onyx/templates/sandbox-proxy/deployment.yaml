@@ -60,6 +60,42 @@ spec:
                     app.kubernetes.io/component: sandbox-proxy
         {{- end }}
       {{- end }}
+      {{- if include "onyx.customCACerts.enabled" . }}
+      # The proxy is intentionally non-root with a read-only root filesystem,
+      # so it cannot run update-ca-certificates like the other backend pods.
+      # Build an additive bundle in its writable confdir instead: replacing the
+      # image bundle with only private roots would break normal public HTTPS.
+      initContainers:
+        - name: build-upstream-ca-bundle
+          image: "{{ .Values.celery_shared.image.repository }}:{{ .Values.celery_shared.image.tag | default .Values.global.version }}"
+          imagePullPolicy: {{ .Values.global.pullPolicy }}
+          command:
+            - /bin/sh
+            - -ec
+            - |
+              cp /etc/ssl/certs/ca-certificates.crt /var/run/sandbox-proxy/upstream-ca-bundle.crt
+              # Secret/ConfigMap mounts expose top-level keys as symlinks. Keep
+              # the search shallow so the backing hidden data directory is not
+              # included again, and print each PEM with a trailing newline.
+              find /usr/local/share/ca-certificates -maxdepth 1 \( -type f -o -type l \) -name '*.crt' -exec awk '1' {} + >> /var/run/sandbox-proxy/upstream-ca-bundle.crt
+              chmod 0444 /var/run/sandbox-proxy/upstream-ca-bundle.crt
+          securityContext:
+            allowPrivilegeEscalation: false
+            readOnlyRootFilesystem: true
+            runAsNonRoot: true
+            runAsUser: {{ .Values.sandboxProxy.runAsUser }}
+            seccompProfile:
+              type: RuntimeDefault
+            capabilities:
+              drop:
+                - ALL
+          volumeMounts:
+            - name: confdir
+              mountPath: /var/run/sandbox-proxy
+            {{- with include "onyx.customCACerts.volumeMount" . }}
+            {{- . | nindent 12 }}
+            {{- end }}
+      {{- end }}
       containers:
         - name: sandbox-proxy
           image: "{{ .Values.celery_shared.image.repository }}:{{ .Values.celery_shared.image.tag | default .Values.global.version }}"
@@ -90,6 +126,10 @@ spec:
               value: {{ $proxyPort | quote }}
             - name: SANDBOX_PROXY_HEALTHZ_PORT
               value: {{ $healthzPort | quote }}
+            {{- if include "onyx.customCACerts.enabled" . }}
+            - name: SANDBOX_PROXY_SSL_VERIFY_UPSTREAM_TRUSTED_CA
+              value: /var/run/sandbox-proxy/upstream-ca-bundle.crt
+            {{- end }}
             {{- include "onyx.envSecrets" . | nindent 12}}
           envFrom:
             - configMapRef:
@@ -133,10 +173,19 @@ spec:
             # one writable mount on an otherwise read-only root.
             - name: confdir
               mountPath: /var/run/sandbox-proxy
+            {{- with include "onyx.postgresTls.volumeMount" . }}
+            {{- . | nindent 12 }}
+            {{- end }}
       volumes:
         - name: confdir
           emptyDir:
             sizeLimit: {{ .Values.sandboxProxy.confdirSizeLimit }}
+        {{- with include "onyx.customCACerts.volume" . }}
+        {{- . | nindent 8 }}
+        {{- end }}
+        {{- with include "onyx.postgresTls.volume" . }}
+        {{- . | nindent 8 }}
+        {{- end }}
       {{- with .Values.sandboxProxy.nodeSelector }}
       nodeSelector:
         {{- toYaml . | nindent 8 }}

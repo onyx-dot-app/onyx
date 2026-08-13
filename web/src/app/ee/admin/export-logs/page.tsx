@@ -3,20 +3,22 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import useSWR from "swr";
 import { ContentAction, SettingsLayouts, toast } from "@opal/layouts";
-import { Button, MessageCard, Text } from "@opal/components";
+import { Button, Card, MessageCard, Text } from "@opal/components";
 import { SvgDownload } from "@opal/icons";
 import { ADMIN_ROUTES } from "@/lib/admin-routes";
 import { downloadFile } from "@/lib/download";
 import { errorHandlingFetcher, FetchError } from "@/lib/fetcher";
 import { SWR_KEYS } from "@/lib/swr-keys";
 import { Section } from "@/layouts/general-layouts";
-import Card from "@/refresh-components/cards/Card";
 
 const route = ADMIN_ROUTES.EXPORT_LOGS;
 
 const DESCRIPTION =
   "Download a zip of server log files to attach to an Onyx support thread.";
 const EXPORT_URL = "/api/admin/log-export";
+const EXPORT_ID_QUERY_PARAM = "export";
+// Export ids are uuid4().hex values; anything else found in the URL is noise.
+const EXPORT_ID_PATTERN = /^[0-9a-f]{32}$/;
 const FALLBACK_FILENAME = "onyx_logs.zip";
 const POLL_INTERVAL_MS = 2_000;
 // Give up on a poll that fails this many times in a row (~30s at the poll
@@ -50,6 +52,18 @@ function extractFilename(response: Response): string {
   const disposition = response.headers.get("Content-Disposition");
   const match = disposition?.match(/filename=([^;]+)/);
   return match?.[1]?.trim() ?? FALLBACK_FILENAME;
+}
+
+// Mirrors the export id into the URL (shallow, no navigation) so a refresh or
+// shared tab can re-attach to the export.
+function writeExportIdToUrl(exportId: string | null): void {
+  const url = new URL(window.location.href);
+  if (exportId === null) {
+    url.searchParams.delete(EXPORT_ID_QUERY_PARAM);
+  } else {
+    url.searchParams.set(EXPORT_ID_QUERY_PARAM, exportId);
+  }
+  window.history.replaceState({}, "", url.toString());
 }
 
 function receiptLabel(receipt: LogExportReceipt): string {
@@ -97,11 +111,31 @@ export default function ExportLogsPage() {
   const [isStarting, setIsStarting] = useState(false);
   const [isDownloading, setIsDownloading] = useState(false);
   const downloadedExportIdRef = useRef<string | null>(null);
+  // The export eligible for auto-download: one this tab started or watched
+  // collecting. A page that loads onto an already-finished export (restored
+  // URL) only offers the manual button, so page loads never trigger downloads.
+  const armedExportIdRef = useRef<string | null>(null);
   // Pending deferred revocation: cancelling the timer must also revoke the URL.
   const pendingRevokeRef = useRef<{
     timer: ReturnType<typeof setTimeout>;
     url: string;
   } | null>(null);
+
+  // Re-attach to an in-flight export after a refresh or navigation; the id is
+  // mirrored into the URL when an export starts. Malformed ids are scrubbed.
+  useEffect(() => {
+    const fromUrl = new URL(window.location.href).searchParams.get(
+      EXPORT_ID_QUERY_PARAM
+    );
+    if (fromUrl === null) {
+      return;
+    }
+    if (EXPORT_ID_PATTERN.test(fromUrl)) {
+      setExportId(fromUrl);
+    } else {
+      writeExportIdToUrl(null);
+    }
+  }, []);
 
   const { data: status, error: statusError } = useSWR<LogExportStatus>(
     exportId === null ? null : SWR_KEYS.logExportStatus(exportId),
@@ -133,7 +167,11 @@ export default function ExportLogsPage() {
       statusError.status >= 400 &&
       statusError.status < 500;
     if (isTerminal4xx) {
-      toast.error("Lost access to the running export. Start a new one.");
+      // An id restored from the URL can be stale (export already swept, or
+      // never real); it has no status yet, so scrub it without a toast.
+      if (status !== undefined) {
+        toast.error("Lost access to the running export. Start a new one.");
+      }
     } else if (
       consecutivePollFailuresRef.current >= MAX_CONSECUTIVE_POLL_FAILURES
     ) {
@@ -144,8 +182,9 @@ export default function ExportLogsPage() {
       return;
     }
     consecutivePollFailuresRef.current = 0;
+    writeExportIdToUrl(null);
     setExportId(null);
-  }, [statusError]);
+  }, [status, statusError]);
 
   useEffect(() => {
     return () => {
@@ -198,11 +237,19 @@ export default function ExportLogsPage() {
     }
   }, []);
 
-  // Download exactly once per export, as soon as it is ready.
+  // Download exactly once per export, as soon as it is ready. Arming happens
+  // while the export is still collecting (or at start, in handleExport), so
+  // attaching to an already-finished export never auto-fires.
   useEffect(() => {
+    if (exportId === null || status === undefined) {
+      return;
+    }
+    if (status.state === "collecting") {
+      armedExportIdRef.current = exportId;
+      return;
+    }
     if (
-      exportId === null ||
-      status?.state !== "ready" ||
+      armedExportIdRef.current !== exportId ||
       downloadedExportIdRef.current === exportId
     ) {
       return;
@@ -224,7 +271,9 @@ export default function ExportLogsPage() {
         );
       }
       const body: { export_id: string } = await response.json();
+      armedExportIdRef.current = body.export_id;
       setExportId(body.export_id);
+      writeExportIdToUrl(body.export_id);
     } catch (error) {
       console.error("Error starting log export:", error);
       toast.error("Failed to start the log export.");
@@ -278,52 +327,56 @@ export default function ExportLogsPage() {
           title="Logs may contain sensitive data"
           description="Log files can include user emails, document titles, search queries, and error payloads. Review the contents before sharing them outside your organization."
         />
-        <Card>
-          <ContentAction
-            sizePreset="main-ui"
-            variant="section"
-            icon={SvgDownload}
-            title="Export logs"
-            description="Collects log files from the API server and background workers into a single zip. The download starts automatically once collection finishes."
-            rightChildren={
-              <Button
-                icon={SvgDownload}
-                onClick={handleExport}
-                disabled={isStarting || isCollecting || isDownloading}
-              >
-                {buttonLabel}
-              </Button>
-            }
-          />
+        <Card border="solid" rounding="lg">
+          <Section alignItems="start" height="fit">
+            <ContentAction
+              sizePreset="main-ui"
+              variant="section"
+              icon={SvgDownload}
+              title="Export logs"
+              description="Collects log files from the API server and background workers into a single zip. The download starts automatically once collection finishes."
+              rightChildren={
+                <Button
+                  icon={SvgDownload}
+                  onClick={handleExport}
+                  disabled={isStarting || isCollecting || isDownloading}
+                >
+                  {buttonLabel}
+                </Button>
+              }
+            />
+          </Section>
         </Card>
         {exportId !== null && (
-          <Card>
-            {workerRows.length === 0 ? (
-              <Text font="main-ui-body" color="text-02">
-                Starting collection...
-              </Text>
-            ) : (
-              workerRows.map((row) => (
-                <WorkerStatusRow
-                  key={row.workerName}
-                  workerName={row.workerName}
-                  label={row.label}
-                  pending={row.pending}
-                />
-              ))
-            )}
-            {status?.state === "ready" && (
-              <Section flexDirection="row" justifyContent="end" height="fit">
-                <Button
-                  prominence="secondary"
-                  icon={SvgDownload}
-                  onClick={() => void downloadBundle(status.export_id)}
-                  disabled={isDownloading}
-                >
-                  Download
-                </Button>
-              </Section>
-            )}
+          <Card border="solid" rounding="lg">
+            <Section alignItems="start" height="fit">
+              {workerRows.length === 0 ? (
+                <Text font="main-ui-body" color="text-02">
+                  Starting collection...
+                </Text>
+              ) : (
+                workerRows.map((row) => (
+                  <WorkerStatusRow
+                    key={row.workerName}
+                    workerName={row.workerName}
+                    label={row.label}
+                    pending={row.pending}
+                  />
+                ))
+              )}
+              {status?.state === "ready" && (
+                <Section flexDirection="row" justifyContent="end" height="fit">
+                  <Button
+                    prominence="secondary"
+                    icon={SvgDownload}
+                    onClick={() => void downloadBundle(status.export_id)}
+                    disabled={isDownloading}
+                  >
+                    Download
+                  </Button>
+                </Section>
+              )}
+            </Section>
           </Card>
         )}
       </SettingsLayouts.Body>

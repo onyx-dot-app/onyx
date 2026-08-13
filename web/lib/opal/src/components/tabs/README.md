@@ -109,7 +109,7 @@ When tabs overflow the available width, show navigation arrows:
 ### Content padding
 
 ```tsx
-<Tabs.Content value="tab" padding={0.5}>
+<Tabs.Content value="tab" padding={2}>
   Padded content
 </Tabs.Content>
 ```
@@ -150,4 +150,4 @@ Forwards all [Radix Tabs.Root](https://www.radix-ui.com/docs/primitives/componen
 | Prop | Type | Default | Description |
 |---|---|---|---|
 | `value` | `string` | **required** | Must match a `Tabs.Trigger` value |
-| `padding` | `number` | `0` | Additional inner padding in rem units |
+| `padding` | `Spacing` | `0` | Additional inner padding, as a spacing step (`N / 4` rem) |

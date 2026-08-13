@@ -1,13 +1,18 @@
-# Registry prefix retained for parity with the other Dockerfiles and so the
-# BASE_IMAGE_REGISTRY build-arg (passed by docker-bake.hcl / CI) stays valid.
-# The hardened Python bases below come from dhi.io -- a separate registry not
-# served by the ECR pull-through cache -- so they intentionally bypass this ARG.
+# Registry prefix for the base images below. Defaults to Docker Hub; CI overrides it to
+# the ECR pull-through cache to dodge rate limits. It only applies to the default images
+# -- the DHI overrides below carry their own registry (dhi.io), which the cache does not serve.
 ARG BASE_IMAGE_REGISTRY=docker.io
 
-# Build stage. The DHI "-dev" variant runs as root and ships a shell, apt, and
-# build tooling -- everything needed to install the wheels.
-# Refresh the digest with: docker buildx imagetools inspect dhi.io/python:3.13-debian13-dev
-FROM dhi.io/python:3.13-debian13-dev@sha256:7933d16e50454c39bca6e935027166d5e5b05c6c03383dc2f58e8fe6e2440b7d AS builder
+# Python bases. The defaults are the public slim images, so a plain `docker build` needs no
+# extra registry access. CI overrides both with the matching Docker Hardened Images from
+# dhi.io, which need a Docker account with DHI catalog access.
+# Refresh a digest with: docker buildx imagetools inspect <image reference>
+ARG PYTHON_BUILDER_IMAGE=${BASE_IMAGE_REGISTRY}/library/python:3.13-slim@sha256:b04b5d7233d2ad9c379e22ea8927cd1378cd15c60d4ef876c065b25ea8fb3bf3
+ARG PYTHON_RUNTIME_IMAGE=${BASE_IMAGE_REGISTRY}/library/python:3.13-slim@sha256:b04b5d7233d2ad9c379e22ea8927cd1378cd15c60d4ef876c065b25ea8fb3bf3
+
+# Build stage. Needs a root user plus a shell and build tooling to install the wheels,
+# which both the default slim image and the DHI "-dev" variant provide.
+FROM ${PYTHON_BUILDER_IMAGE} AS builder
 
 ENV ONYX_RUNNING_IN_DOCKER="true" \
     HF_HOME=/app/.cache/huggingface \
@@ -19,11 +24,11 @@ ENV ONYX_RUNNING_IN_DOCKER="true" \
 COPY --from=ghcr.io/astral-sh/uv:0.11.25@sha256:1e3808aa9023d0980e7c15b1fa7c1ac16ff35925780cf5c459858b2d693f01a9 /uv /uvx /bin/
 
 # Install into a self-contained venv rather than the system site-packages. The
-# venv lives at a fixed path we control (/app/.venv), so the distroless runtime
-# stage can copy it wholesale without depending on the base image's Python layout.
+# venv lives at a fixed path we control (/app/.venv), so the runtime stage can
+# copy it wholesale without depending on the base image's Python layout.
 RUN uv venv /app/.venv --python 3.13
 
-# Pre-create the runtime writable dirs here (the distroless runtime has no shell
+# Pre-create the runtime writable dirs here (the DHI runtime has no shell
 # to mkdir). Left empty in this stage; the model download happens downstream.
 RUN mkdir -p /app/.cache/huggingface /var/log/onyx
 
@@ -31,7 +36,7 @@ RUN mkdir -p /app/.cache/huggingface /var/log/onyx
 # pin `-u onyx` / `user: onyx` keep resolving and their 1001-owned volumes stay
 # writable. The DHI "-dev" image ships a shell but not the `shadow` tools
 # (groupadd/useradd), so write the passwd/group entries directly; they're copied
-# into the distroless runtime below.
+# into the runtime stage below.
 RUN printf 'onyx:x:1001:\n' >> /etc/group && \
     printf 'onyx:x:1001:1001::/home/onyx:/usr/sbin/nologin\n' >> /etc/passwd
 
@@ -55,11 +60,11 @@ FROM builder AS embedding-models
 RUN python -c "from sentence_transformers import SentenceTransformer; \
 SentenceTransformer(model_name_or_path='nomic-ai/nomic-embed-text-v1', trust_remote_code=False);"
 
-# Runtime stage. The DHI runtime variant is near-distroless: no shell or package
-# manager, runs non-root. We run as the `onyx` user (UID 1001, carried over from
-# the previous image; see USER below) and chown everything the runtime writes to it.
-# Refresh the digest with: docker buildx imagetools inspect dhi.io/python:3.13-debian13
-FROM dhi.io/python:3.13-debian13@sha256:05827957dafc7b83633d56f24d9281525d3546a1d600eef90385c7212d3def5e AS final
+# Runtime stage. We run as the `onyx` user (UID 1001, carried over from the previous
+# image; see USER below) and chown everything the runtime writes to it. The DHI runtime
+# variant is near-distroless: no shell or package manager, so keep this stage free of
+# RUN instructions.
+FROM ${PYTHON_RUNTIME_IMAGE} AS final
 
 LABEL com.danswer.maintainer="founders@onyx.app"
 LABEL com.danswer.description="This image is for the Onyx model server which runs all of the \
@@ -76,7 +81,7 @@ ENV ONYX_RUNNING_IN_DOCKER="true" \
     VIRTUAL_ENV=/app/.venv \
     PATH="/app/.venv/bin:$PATH"
 
-# Bring the `onyx` user (1001) into the distroless runtime. The -dev builder's
+# Bring the `onyx` user (1001) into the runtime stage. The -dev builder's
 # passwd/group are a superset of the runtime's, so copying them preserves the
 # base's own entries while adding `onyx`, letting `USER onyx` and any runtime
 # `-u onyx` override resolve the name.

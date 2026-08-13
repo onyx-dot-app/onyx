@@ -24,7 +24,7 @@ import {
   SvgUser,
   SvgNotificationBubble,
 } from "@opal/icons";
-import { Content, toast } from "@opal/layouts";
+import { Content, toast, useSidebarFolded } from "@opal/layouts";
 import { Section } from "@/layouts/general-layouts";
 import useAppFocus from "@/hooks/useAppFocus";
 import useScreenSize from "@/hooks/useScreenSize";
@@ -195,14 +195,11 @@ function SettingsPopover({
 }
 
 export interface SettingsProps {
-  folded?: boolean;
   onShowBuildIntro?: () => void;
 }
 
-export default function AccountPopover({
-  folded,
-  onShowBuildIntro,
-}: SettingsProps) {
+export default function AccountPopover({ onShowBuildIntro }: SettingsProps) {
+  const folded = useSidebarFolded();
   const [popupState, setPopupState] = useState<
     "Settings" | "Notifications" | undefined
   >(undefined);
@@ -246,14 +243,13 @@ export default function AccountPopover({
             )}
             rightChildren={
               undismissedCount ? (
-                <Section padding={0.5}>
+                <Section padding={2}>
                   <SvgNotificationBubble count={undismissedCount} />
                 </Section>
               ) : undefined
             }
             type="button"
             selected={!!popupState || appFocus.isUserSettings()}
-            folded={folded}
           >
             {userDisplayName}
           </SidebarTab>

@@ -144,7 +144,7 @@ function ExistingProviderCard({
             </Button>
           }
         >
-          <Section alignItems="start" gap={0.5}>
+          <Section alignItems="start" gap={2}>
             {isDefault && !isLastProvider ? (
               <Text font="main-ui-body" color="text-03">
                 Cannot delete the default provider. Select another provider as
@@ -176,7 +176,7 @@ function ExistingProviderCard({
       >
         <SelectCard
           state="filled"
-          padding="sm"
+          padding={2}
           rounding="lg"
           onClick={() => setIsOpen(true)}
         >
@@ -186,7 +186,7 @@ function ExistingProviderCard({
             description={companyName}
             sizePreset="main-ui"
             variant="section"
-            padding="lg"
+            padding={2}
             tag={isDefault ? { title: "Default", color: "blue" } : undefined}
             rightChildren={
               <div className="flex flex-row">
@@ -241,7 +241,7 @@ function NewProviderCard({
   return (
     <SelectCard
       state="empty"
-      padding="sm"
+      padding={2}
       rounding="lg"
       onClick={() => setIsOpen(true)}
     >
@@ -251,7 +251,7 @@ function NewProviderCard({
         description={companyName}
         sizePreset="main-ui"
         variant="section"
-        padding="lg"
+        padding={2}
         rightChildren={
           <Button
             rightIcon={SvgArrowExchange}
@@ -294,7 +294,7 @@ function NewCustomProviderCard({
 
       <SelectCard
         state="empty"
-        padding="sm"
+        padding={2}
         rounding="lg"
         onClick={() => setIsOpen(true)}
       >
@@ -304,7 +304,7 @@ function NewCustomProviderCard({
           description={companyName}
           sizePreset="main-ui"
           variant="section"
-          padding="lg"
+          padding={2}
           rightChildren={
             <Button
               rightIcon={SvgArrowExchange}
@@ -434,7 +434,7 @@ export default function LanguageModelsPage() {
         {hasProviders && (
           <>
             <GeneralLayouts.Section
-              gap={0.75}
+              gap={3}
               height="fit"
               alignItems="stretch"
               justifyContent="start"
@@ -457,7 +457,7 @@ export default function LanguageModelsPage() {
               </div>
             </GeneralLayouts.Section>
 
-            <Divider paddingParallel="fit" paddingPerpendicular="fit" />
+            <Divider paddingParallel={0} paddingPerpendicular={0} />
           </>
         )}
 
@@ -466,7 +466,7 @@ export default function LanguageModelsPage() {
           <MessageCard
             title="New LLM configuration temporarily unavailable."
             description="Existing LLM providers can still be used and updated."
-            headerPadding="xs"
+            headerPadding={1}
           />
         )}
 
@@ -476,7 +476,7 @@ export default function LanguageModelsPage() {
             {PROVIDER_GROUPS.map((group) => (
               <GeneralLayouts.Section
                 key={group.title}
-                gap={0.75}
+                gap={3}
                 height="fit"
                 alignItems="stretch"
                 justifyContent="start"
@@ -511,7 +511,7 @@ export default function LanguageModelsPage() {
           </div>
         </Disabled>
 
-        <Divider paddingParallel="fit" paddingPerpendicular="fit" />
+        <Divider paddingParallel={0} paddingPerpendicular={0} />
 
         {/* ── Cost Overrides — negotiated per-model rates for usage costing ── */}
         <CostOverridesPanel />

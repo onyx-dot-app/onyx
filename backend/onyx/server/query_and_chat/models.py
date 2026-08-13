@@ -79,6 +79,12 @@ class ChatSessionCreationRequest(BaseModel):
     persona_id: int = 0
     description: str | None = None
     project_id: int | None = None
+    # Start the session incognito. Refused with an error when incognito is
+    # unavailable, never silently downgraded to an ordinary chat.
+    incognito: bool = False
+    # The id the client already used when uploading, so this session owns those
+    # files. Ignored unless incognito.
+    incognito_session_id: UUID | None = None
 
 
 class ChatFeedbackRequest(BaseModel):
@@ -237,8 +243,8 @@ class ChatMessageDetail(BaseModel):
         self, *args: list, **kwargs: dict[str, Any]
     ) -> dict[str, Any]:
         initial_dict = super().model_dump(
-            mode="json",
             *args,
+            mode="json",
             **kwargs,  # ty: ignore[invalid-argument-type]
         )
         initial_dict["time_sent"] = self.time_sent.isoformat()
@@ -274,6 +280,9 @@ class ChatSessionDetailResponse(BaseModel):
     # Set while a run is in flight and resumable: cursor-0 replay+tail is
     # available at /chat-session/{id}/resume-stream.
     current_run: CurrentRunInfo | None = None
+    # True for sessions pinned to an incognito record mode, so a reload can
+    # restore the incognito UI state.
+    incognito: bool = False
 
 
 class AdminSearchRequest(BaseModel):

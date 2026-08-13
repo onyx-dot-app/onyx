@@ -4,7 +4,7 @@ import React, { useMemo, useState } from "react";
 import { Card, MessageCard, Text } from "@opal/components";
 import { SvgX } from "@opal/icons";
 import { PageLoader, Section } from "@opal/layouts";
-import type { DateRange } from "@/components/dateRangeSelectors/AdminDateRangeSelector";
+import type { DateRange } from "@/refresh-components/DateRangePicker";
 import { formatCalendarDay } from "@/lib/dateUtils";
 import { useUsageExport } from "@/lib/usage/userUsage";
 import { formatCost, formatTokens } from "@/lib/utils";
@@ -25,7 +25,9 @@ function SummaryMetric({
   detail: string;
 }) {
   return (
-    <div className="flex min-w-0 flex-col gap-0.5 px-3 py-2 first:pl-0 last:pr-0">
+    // basis + flex-1 rather than a fixed fraction: fractions plus the row gap
+    // overflow and wrap the last metric onto its own line.
+    <div className="flex min-w-0 flex-1 basis-40 flex-col gap-0.5 px-3 py-2 first:pl-0 last:pr-0">
       <Text font="secondary-body" color="text-03">
         {label}
       </Text>
@@ -93,7 +95,7 @@ export default function PerUserUsagePanel({
         flexDirection="column"
         justifyContent="start"
         alignItems="stretch"
-        gap={0.125}
+        gap={0.5}
         width="full"
         height="fit"
       >
@@ -114,7 +116,7 @@ export default function PerUserUsagePanel({
         flexDirection="column"
         justifyContent="start"
         alignItems="stretch"
-        gap={1}
+        gap={4}
         width="full"
         height="fit"
       >
@@ -129,7 +131,7 @@ export default function PerUserUsagePanel({
         flexDirection="column"
         justifyContent="start"
         alignItems="stretch"
-        gap={1}
+        gap={4}
         width="full"
         height="fit"
       >
@@ -148,52 +150,50 @@ export default function PerUserUsagePanel({
       flexDirection="column"
       justifyContent="start"
       alignItems="stretch"
-      gap={1}
+      gap={4}
       width="full"
       height="fit"
     >
       {header}
 
-      <Card border="solid" rounding="lg" padding="sm">
-        <div className="flex flex-wrap gap-2">
-          <div className="basis-1/2 lg:basis-1/4">
-            <SummaryMetric
-              label="Workspace spend"
-              value={formatCost(totalCostCents)}
-              detail="Across all listed users"
-            />
-          </div>
-          <div className="basis-1/2 lg:basis-1/4">
-            <SummaryMetric
-              label="Total tokens"
-              value={formatTokens(totalTokens)}
-              detail="Input (including cache reads) and output"
-            />
-          </div>
-          <div className="basis-1/2 lg:basis-1/4">
-            <SummaryMetric
-              label="Active users"
-              value={activeUsers.toLocaleString()}
-              detail={`${users.length.toLocaleString()} users with records`}
-            />
-          </div>
-          <div className="basis-1/2 lg:basis-1/4">
-            <SummaryMetric
-              label="Top spender"
-              value={
-                topSpender ? formatCost(topSpender.totals.cost_cents) : "—"
-              }
-              detail={topSpender?.email ?? "No spend recorded"}
-            />
-          </div>
-        </div>
+      <Card border="solid" rounding="lg" padding={2}>
+        <Section
+          flexDirection="row"
+          justifyContent="start"
+          alignItems="start"
+          gap={0.5}
+          wrap
+          width="full"
+          height="fit"
+        >
+          <SummaryMetric
+            label="Workspace spend"
+            value={formatCost(totalCostCents)}
+            detail="Across all listed users"
+          />
+          <SummaryMetric
+            label="Total tokens"
+            value={formatTokens(totalTokens)}
+            detail="Input (including cache reads) and output"
+          />
+          <SummaryMetric
+            label="Active users"
+            value={activeUsers.toLocaleString()}
+            detail={`${users.length.toLocaleString()} users with records`}
+          />
+          <SummaryMetric
+            label="Top spender"
+            value={topSpender ? formatCost(topSpender.totals.cost_cents) : "—"}
+            detail={topSpender?.email ?? "No spend recorded"}
+          />
+        </Section>
       </Card>
 
       <Section
         flexDirection="column"
         justifyContent="start"
         alignItems="stretch"
-        gap={0.5}
+        gap={2}
         width="full"
         height="fit"
       >
@@ -201,7 +201,7 @@ export default function PerUserUsagePanel({
           flexDirection="column"
           justifyContent="start"
           alignItems="stretch"
-          gap={0.125}
+          gap={0.5}
           width="full"
           height="fit"
         >
@@ -212,7 +212,7 @@ export default function PerUserUsagePanel({
         </Section>
 
         {users.length === 0 ? (
-          <Card border="solid" rounding="lg" padding="sm">
+          <Card border="solid" rounding="lg" padding={2}>
             <Text font="main-ui-body" color="text-03">
               No usage recorded for this period.
             </Text>

@@ -23,8 +23,8 @@ import {
   SvgUnplug,
 } from "@opal/icons";
 import { getSourceMetadata } from "@/lib/sources";
-import Card from "@/refresh-components/cards/Card";
 import {
+  Card,
   InputTextArea,
   InputTypeIn,
   PasswordInputTypeIn,
@@ -284,7 +284,7 @@ function PATModal({
         </Button>
       }
     >
-      <Section gap={1}>
+      <Section gap={4}>
         <InputVertical title="Token Name" withLabel>
           <InputTypeIn
             placeholder="Name your token"
@@ -452,7 +452,7 @@ function GeneralSettings() {
             </Button>
           }
         >
-          <Section gap={0.5} alignItems="start">
+          <Section gap={2} alignItems="start">
             <Text color="text-05">
               All your chat sessions and history will be permanently deleted.
               Deletion cannot be undone.
@@ -464,202 +464,208 @@ function GeneralSettings() {
         </ConfirmationModalLayout>
       )}
 
-      <Section gap={2}>
-        <Section gap={0.75}>
+      <Section gap={8}>
+        <Section gap={3}>
           <Content
             title="Profile"
             sizePreset="main-content"
             variant="section"
             width="full"
           />
-          <Card>
-            <InputHorizontal
-              title="Full Name"
-              description="We'll display this name in the app."
-              center
-              withLabel
-              responsive
-            >
-              <InputTypeIn
-                placeholder="Your name"
-                value={personalizationValues.name}
-                onChange={(e) =>
-                  updatePersonalizationField("name", e.target.value)
-                }
-                onKeyDown={(e) => {
-                  if (e.key === "Enter") {
-                    e.currentTarget.blur();
+          <Card border="solid" rounding="lg">
+            <Section alignItems="start" height="fit">
+              <InputHorizontal
+                title="Full Name"
+                description="We'll display this name in the app."
+                center
+                withLabel
+                responsive
+              >
+                <InputTypeIn
+                  placeholder="Your name"
+                  value={personalizationValues.name}
+                  onChange={(e) =>
+                    updatePersonalizationField("name", e.target.value)
                   }
-                }}
-                onBlur={() => {
-                  // Only save if the value has changed
-                  if (personalizationValues.name !== initialNameRef.current) {
-                    void handleSavePersonalization();
-                    initialNameRef.current = personalizationValues.name;
+                  onKeyDown={(e) => {
+                    if (e.key === "Enter") {
+                      e.currentTarget.blur();
+                    }
+                  }}
+                  onBlur={() => {
+                    // Only save if the value has changed
+                    if (personalizationValues.name !== initialNameRef.current) {
+                      void handleSavePersonalization();
+                      initialNameRef.current = personalizationValues.name;
+                    }
+                  }}
+                />
+              </InputHorizontal>
+              <InputHorizontal
+                title="Work Role"
+                description="Share your role to better tailor responses."
+                center
+                withLabel
+                responsive
+              >
+                <InputTypeIn
+                  placeholder="Your role"
+                  value={personalizationValues.role}
+                  onChange={(e) =>
+                    updatePersonalizationField("role", e.target.value)
                   }
-                }}
-              />
-            </InputHorizontal>
-            <InputHorizontal
-              title="Work Role"
-              description="Share your role to better tailor responses."
-              center
-              withLabel
-              responsive
-            >
-              <InputTypeIn
-                placeholder="Your role"
-                value={personalizationValues.role}
-                onChange={(e) =>
-                  updatePersonalizationField("role", e.target.value)
-                }
-                onKeyDown={(e) => {
-                  if (e.key === "Enter") {
-                    e.currentTarget.blur();
-                  }
-                }}
-                onBlur={() => {
-                  // Only save if the value has changed
-                  if (personalizationValues.role !== initialRoleRef.current) {
-                    void handleSavePersonalization();
-                    initialRoleRef.current = personalizationValues.role;
-                  }
-                }}
-              />
-            </InputHorizontal>
+                  onKeyDown={(e) => {
+                    if (e.key === "Enter") {
+                      e.currentTarget.blur();
+                    }
+                  }}
+                  onBlur={() => {
+                    // Only save if the value has changed
+                    if (personalizationValues.role !== initialRoleRef.current) {
+                      void handleSavePersonalization();
+                      initialRoleRef.current = personalizationValues.role;
+                    }
+                  }}
+                />
+              </InputHorizontal>
+            </Section>
           </Card>
         </Section>
 
-        <Section gap={0.75}>
+        <Section gap={3}>
           <Content
             title="Appearance"
             sizePreset="main-content"
             variant="section"
             width="full"
           />
-          <Card>
-            <InputHorizontal
-              title="Color Mode"
-              description="Select your preferred color mode for the UI."
-              center
-              withLabel
-            >
-              <InputSelect
-                value={theme}
-                onValueChange={(value) => {
-                  setTheme(value);
-                  updateUserThemePreference(value as ThemePreference);
-                }}
+          <Card border="solid" rounding="lg">
+            <Section alignItems="start" height="fit">
+              <InputHorizontal
+                title="Color Mode"
+                description="Select your preferred color mode for the UI."
+                center
+                withLabel
               >
-                <InputSelect.Trigger />
-                <InputSelect.Content>
-                  <InputSelect.Item
-                    value={ThemePreference.SYSTEM}
-                    icon={() => (
-                      <ColorSwatch
-                        light={systemTheme === "light"}
-                        dark={systemTheme === "dark"}
-                      />
-                    )}
-                    description={
-                      systemTheme
-                        ? systemTheme.charAt(0).toUpperCase() +
-                          systemTheme.slice(1)
-                        : undefined
-                    }
-                  >
-                    Auto
-                  </InputSelect.Item>
-                  <InputSelect.Separator />
-                  <InputSelect.Item
-                    value={ThemePreference.LIGHT}
-                    icon={() => <ColorSwatch light />}
-                  >
-                    Light
-                  </InputSelect.Item>
-                  <InputSelect.Item
-                    value={ThemePreference.DARK}
-                    icon={() => <ColorSwatch dark />}
-                  >
-                    Dark
-                  </InputSelect.Item>
-                </InputSelect.Content>
-              </InputSelect>
-            </InputHorizontal>
-            <InputVertical title="Chat Background">
-              <div className="flex flex-wrap gap-2">
-                {CHAT_BACKGROUND_OPTIONS.map((bg) => {
-                  const currentBackgroundId =
-                    user?.preferences?.chat_background ?? "none";
-                  const isSelected = currentBackgroundId === bg.id;
-                  const isNone = bg.src === CHAT_BACKGROUND_NONE;
-
-                  return (
-                    <button
-                      key={bg.id}
-                      onClick={() => applyBackground(bg)}
-                      className="relative overflow-hidden rounded-lg transition-all w-[90px] h-[68px] cursor-pointer border-none p-0 bg-transparent group"
-                      title={bg.label}
-                      aria-label={`${bg.label} background${
-                        isSelected ? " (selected)" : ""
-                      }`}
-                    >
-                      {isNone ? (
-                        <div className="absolute inset-0 bg-background flex items-center justify-center">
-                          <span className="text-xs text-text-02">None</span>
-                        </div>
-                      ) : (
-                        <div
-                          className="absolute inset-0 bg-cover bg-center transition-transform duration-300 group-hover:scale-105"
-                          style={{ backgroundImage: `url(${bg.thumbnail})` }}
+                <InputSelect
+                  value={theme}
+                  onValueChange={(value) => {
+                    setTheme(value);
+                    updateUserThemePreference(value as ThemePreference);
+                  }}
+                >
+                  <InputSelect.Trigger />
+                  <InputSelect.Content>
+                    <InputSelect.Item
+                      value={ThemePreference.SYSTEM}
+                      icon={() => (
+                        <ColorSwatch
+                          light={systemTheme === "light"}
+                          dark={systemTheme === "dark"}
                         />
                       )}
-                      <div
-                        className={cn(
-                          "absolute inset-0 transition-all rounded-lg",
-                          isSelected
-                            ? "ring-2 ring-inset ring-theme-primary-05"
-                            : "ring-1 ring-inset ring-border-02 group-hover:ring-border-03"
+                      description={
+                        systemTheme
+                          ? systemTheme.charAt(0).toUpperCase() +
+                            systemTheme.slice(1)
+                          : undefined
+                      }
+                    >
+                      Auto
+                    </InputSelect.Item>
+                    <InputSelect.Separator />
+                    <InputSelect.Item
+                      value={ThemePreference.LIGHT}
+                      icon={() => <ColorSwatch light />}
+                    >
+                      Light
+                    </InputSelect.Item>
+                    <InputSelect.Item
+                      value={ThemePreference.DARK}
+                      icon={() => <ColorSwatch dark />}
+                    >
+                      Dark
+                    </InputSelect.Item>
+                  </InputSelect.Content>
+                </InputSelect>
+              </InputHorizontal>
+              <InputVertical title="Chat Background">
+                <div className="flex flex-wrap gap-2">
+                  {CHAT_BACKGROUND_OPTIONS.map((bg) => {
+                    const currentBackgroundId =
+                      user?.preferences?.chat_background ?? "none";
+                    const isSelected = currentBackgroundId === bg.id;
+                    const isNone = bg.src === CHAT_BACKGROUND_NONE;
+
+                    return (
+                      <button
+                        key={bg.id}
+                        onClick={() => applyBackground(bg)}
+                        className="relative overflow-hidden rounded-lg transition-all w-[90px] h-[68px] cursor-pointer border-none p-0 bg-transparent group"
+                        title={bg.label}
+                        aria-label={`${bg.label} background${
+                          isSelected ? " (selected)" : ""
+                        }`}
+                      >
+                        {isNone ? (
+                          <div className="absolute inset-0 bg-background flex items-center justify-center">
+                            <span className="text-xs text-text-02">None</span>
+                          </div>
+                        ) : (
+                          <div
+                            className="absolute inset-0 bg-cover bg-center transition-transform duration-300 group-hover:scale-105"
+                            style={{ backgroundImage: `url(${bg.thumbnail})` }}
+                          />
                         )}
-                      />
-                      {isSelected && (
-                        <div className="absolute top-1.5 right-1.5 w-4 h-4 rounded-full bg-theme-primary-05 flex items-center justify-center">
-                          <SvgCheck className="w-2.5 h-2.5 stroke-text-inverted-05" />
-                        </div>
-                      )}
-                    </button>
-                  );
-                })}
-              </div>
-            </InputVertical>
+                        <div
+                          className={cn(
+                            "absolute inset-0 transition-all rounded-lg",
+                            isSelected
+                              ? "ring-2 ring-inset ring-theme-primary-05"
+                              : "ring-1 ring-inset ring-border-02 group-hover:ring-border-03"
+                          )}
+                        />
+                        {isSelected && (
+                          <div className="absolute top-1.5 right-1.5 w-4 h-4 rounded-full bg-theme-primary-05 flex items-center justify-center">
+                            <SvgCheck className="w-2.5 h-2.5 stroke-text-inverted-05" />
+                          </div>
+                        )}
+                      </button>
+                    );
+                  })}
+                </div>
+              </InputVertical>
+            </Section>
           </Card>
         </Section>
 
-        <Divider paddingParallel="fit" paddingPerpendicular="fit" />
+        <Divider paddingParallel={0} paddingPerpendicular={0} />
 
-        <Section gap={0.75}>
+        <Section gap={3}>
           <Content
             title="Danger Zone"
             sizePreset="main-content"
             variant="section"
             width="full"
           />
-          <Card>
-            <InputHorizontal
-              title="Delete All Chats"
-              description="Permanently delete all your chat sessions."
-              center
-            >
-              <Button
-                variant="danger"
-                prominence="secondary"
-                onClick={() => setShowDeleteConfirmation(true)}
-                icon={SvgTrash}
-                interaction={showDeleteConfirmation ? "hover" : "rest"}
+          <Card border="solid" rounding="lg">
+            <Section alignItems="start" height="fit">
+              <InputHorizontal
+                title="Delete All Chats"
+                description="Permanently delete all your chat sessions."
+                center
               >
-                Delete All Chats
-              </Button>
-            </InputHorizontal>
+                <Button
+                  variant="danger"
+                  prominence="secondary"
+                  onClick={() => setShowDeleteConfirmation(true)}
+                  icon={SvgTrash}
+                  interaction={showDeleteConfirmation ? "hover" : "rest"}
+                >
+                  Delete All Chats
+                </Button>
+              </InputHorizontal>
+            </Section>
           </Card>
         </Section>
       </Section>
@@ -867,7 +873,7 @@ function PromptShortcuts() {
   return (
     <>
       {shortcuts.length > 0 && (
-        <Section gap={0.75}>
+        <Section gap={3}>
           {shortcuts.map((shortcut, index) => {
             const isEmpty = !shortcut.prompt.trim() && !shortcut.content.trim();
             const isExisting = !shortcut.isNew;
@@ -1028,129 +1034,131 @@ function ChatPreferencesSettings() {
   );
 
   return (
-    <Section gap={2}>
-      <Section gap={0.75}>
+    <Section gap={8}>
+      <Section gap={3}>
         <Content
           title="Chats"
           sizePreset="main-content"
           variant="section"
           width="full"
         />
-        <Card>
-          <InputHorizontal
-            title="Default Model"
-            description="This model will be used by Onyx by default in your chats."
-            withLabel
-          >
-            <ModelSelector
-              value={
-                user?.preferences?.default_model
-                  ? findModelConfigId(
-                      llmManager.llmProviders,
-                      llmManager.currentLlm.provider,
-                      llmManager.currentLlm.modelName
-                    )
-                  : null
-              }
-              onChange={(opt) => {
-                if (opt.modelConfigurationId === null) {
-                  void updateUserDefaultModel(null);
-                } else {
-                  llmManager.updateCurrentLlm({
-                    name: opt.name,
-                    provider: opt.provider,
-                    modelName: opt.modelName,
-                    modelConfigurationId: opt.modelConfigurationId,
-                  });
-                  void updateUserDefaultModel(
-                    structureValue(
-                      opt.name,
-                      opt.provider,
-                      opt.modelName,
-                      opt.modelConfigurationId
-                    )
-                  );
-                }
-              }}
-              temperatureManager={llmManager}
-              includeGlobalDefault
-              side="bottom"
-            />
-          </InputHorizontal>
-
-          <InputHorizontal
-            title="Chat Auto-scroll"
-            description="Automatically scroll to new content as chat generates response."
-            withLabel
-          >
-            <Switch
-              checked={user?.preferences.auto_scroll}
-              onCheckedChange={(checked) => {
-                updateUserAutoScroll(checked);
-              }}
-            />
-          </InputHorizontal>
-
-          <InputHorizontal
-            title="Smooth Streaming"
-            description="Animate streamed responses character-by-character. Disable to render chunks as they arrive."
-            withLabel
-          >
-            <Switch
-              checked={smoothStreamingEnabled}
-              onCheckedChange={setSmoothStreamingEnabled}
-            />
-          </InputHorizontal>
-
-          <InputHorizontal
-            title="Collapse Large Pastes"
-            description="When pasting text longer than 3 lines or 200 characters, collapse it into a compact tile instead of inserting it inline. Click the tile to view or edit the full text."
-            withLabel
-          >
-            <Switch
-              checked={user?.preferences?.paste_as_tile ?? false}
-              onCheckedChange={(checked) => {
-                updateUserPasteAsTile(checked);
-              }}
-            />
-          </InputHorizontal>
-
-          {businessTier && (
-            <Tooltip
-              tooltip={
-                searchUiEnabled
-                  ? undefined
-                  : "Search UI is disabled and can only be enabled by an admin."
-              }
-              side="top"
+        <Card border="solid" rounding="lg">
+          <Section alignItems="start" height="fit">
+            <InputHorizontal
+              title="Default Model"
+              description="This model will be used by Onyx by default in your chats."
+              withLabel
             >
-              <InputHorizontal
-                title="Default App Mode"
-                description="Choose whether new sessions start in Search or Chat mode."
-                center
-                disabled={!searchUiEnabled}
-                withLabel
+              <ModelSelector
+                value={
+                  user?.preferences?.default_model
+                    ? findModelConfigId(
+                        llmManager.llmProviders,
+                        llmManager.currentLlm.provider,
+                        llmManager.currentLlm.modelName
+                      )
+                    : null
+                }
+                onChange={(opt) => {
+                  if (opt.modelConfigurationId === null) {
+                    void updateUserDefaultModel(null);
+                  } else {
+                    llmManager.updateCurrentLlm({
+                      name: opt.name,
+                      provider: opt.provider,
+                      modelName: opt.modelName,
+                      modelConfigurationId: opt.modelConfigurationId,
+                    });
+                    void updateUserDefaultModel(
+                      structureValue(
+                        opt.name,
+                        opt.provider,
+                        opt.modelName,
+                        opt.modelConfigurationId
+                      )
+                    );
+                  }
+                }}
+                temperatureManager={llmManager}
+                includeGlobalDefault
+                side="bottom"
+              />
+            </InputHorizontal>
+
+            <InputHorizontal
+              title="Chat Auto-scroll"
+              description="Automatically scroll to new content as chat generates response."
+              withLabel
+            >
+              <Switch
+                checked={user?.preferences.auto_scroll}
+                onCheckedChange={(checked) => {
+                  updateUserAutoScroll(checked);
+                }}
+              />
+            </InputHorizontal>
+
+            <InputHorizontal
+              title="Smooth Streaming"
+              description="Animate streamed responses character-by-character. Disable to render chunks as they arrive."
+              withLabel
+            >
+              <Switch
+                checked={smoothStreamingEnabled}
+                onCheckedChange={setSmoothStreamingEnabled}
+              />
+            </InputHorizontal>
+
+            <InputHorizontal
+              title="Collapse Large Pastes"
+              description="When pasting text longer than 3 lines or 200 characters, collapse it into a compact tile instead of inserting it inline. Click the tile to view or edit the full text."
+              withLabel
+            >
+              <Switch
+                checked={user?.preferences?.paste_as_tile ?? false}
+                onCheckedChange={(checked) => {
+                  updateUserPasteAsTile(checked);
+                }}
+              />
+            </InputHorizontal>
+
+            {businessTier && (
+              <Tooltip
+                tooltip={
+                  searchUiEnabled
+                    ? undefined
+                    : "Search UI is disabled and can only be enabled by an admin."
+                }
+                side="top"
               >
-                <InputSelect
-                  value={user?.preferences.default_app_mode ?? "CHAT"}
-                  onValueChange={(value) => {
-                    void updateUserDefaultAppMode(value as "CHAT" | "SEARCH");
-                  }}
+                <InputHorizontal
+                  title="Default App Mode"
+                  description="Choose whether new sessions start in Search or Chat mode."
+                  center
                   disabled={!searchUiEnabled}
+                  withLabel
                 >
-                  <InputSelect.Trigger />
-                  <InputSelect.Content>
-                    <InputSelect.Item value="CHAT">Chat</InputSelect.Item>
-                    <InputSelect.Item value="SEARCH">Search</InputSelect.Item>
-                  </InputSelect.Content>
-                </InputSelect>
-              </InputHorizontal>
-            </Tooltip>
-          )}
+                  <InputSelect
+                    value={user?.preferences.default_app_mode ?? "CHAT"}
+                    onValueChange={(value) => {
+                      void updateUserDefaultAppMode(value as "CHAT" | "SEARCH");
+                    }}
+                    disabled={!searchUiEnabled}
+                  >
+                    <InputSelect.Trigger />
+                    <InputSelect.Content>
+                      <InputSelect.Item value="CHAT">Chat</InputSelect.Item>
+                      <InputSelect.Item value="SEARCH">Search</InputSelect.Item>
+                    </InputSelect.Content>
+                  </InputSelect>
+                </InputHorizontal>
+              </Tooltip>
+            )}
+          </Section>
         </Card>
       </Section>
 
-      <Section gap={0.75}>
+      <Section gap={3}>
         <InputVertical
           title="Personal Preferences"
           description="Provide your custom preferences in natural language."
@@ -1177,135 +1185,141 @@ function ChatPreferencesSettings() {
           variant="section"
           width="full"
         />
-        <Card>
-          <InputHorizontal
-            title="Reference Stored Memories"
-            description="Let Onyx reference stored memories in chats."
-            withLabel
-          >
-            <Switch
-              checked={personalizationValues.use_memories}
-              onCheckedChange={(checked) => {
-                toggleUseMemories(checked);
-                void handleSavePersonalization({ use_memories: checked });
-              }}
-            />
-          </InputHorizontal>
-          <InputHorizontal
-            title="Update Memories"
-            description="Let Onyx generate and update stored memories."
-            withLabel
-          >
-            <Switch
-              checked={personalizationValues.enable_memory_tool}
-              onCheckedChange={(checked) => {
-                toggleEnableMemoryTool(checked);
-                void handleSavePersonalization({
-                  enable_memory_tool: checked,
-                });
-              }}
-            />
-          </InputHorizontal>
+        <Card border="solid" rounding="lg">
+          <Section alignItems="start" height="fit">
+            <InputHorizontal
+              title="Reference Stored Memories"
+              description="Let Onyx reference stored memories in chats."
+              withLabel
+            >
+              <Switch
+                checked={personalizationValues.use_memories}
+                onCheckedChange={(checked) => {
+                  toggleUseMemories(checked);
+                  void handleSavePersonalization({ use_memories: checked });
+                }}
+              />
+            </InputHorizontal>
+            <InputHorizontal
+              title="Update Memories"
+              description="Let Onyx generate and update stored memories."
+              withLabel
+            >
+              <Switch
+                checked={personalizationValues.enable_memory_tool}
+                onCheckedChange={(checked) => {
+                  toggleEnableMemoryTool(checked);
+                  void handleSavePersonalization({
+                    enable_memory_tool: checked,
+                  });
+                }}
+              />
+            </InputHorizontal>
 
-          {(personalizationValues.use_memories ||
-            personalizationValues.enable_memory_tool ||
-            personalizationValues.memories.length > 0) && (
-            <Memories
-              memories={personalizationValues.memories}
-              onSaveMemories={handleSaveMemories}
-            />
-          )}
+            {(personalizationValues.use_memories ||
+              personalizationValues.enable_memory_tool ||
+              personalizationValues.memories.length > 0) && (
+              <Memories
+                memories={personalizationValues.memories}
+                onSaveMemories={handleSaveMemories}
+              />
+            )}
+          </Section>
         </Card>
       </Section>
 
-      <Section gap={0.75}>
+      <Section gap={3}>
         <Content
           title="Prompt Shortcuts"
           sizePreset="main-content"
           variant="section"
           width="full"
         />
-        <Card>
-          <InputHorizontal
-            title="Use Prompt Shortcuts"
-            description="Enable shortcuts to quickly insert common prompts."
-            withLabel
-          >
-            <Switch
-              checked={user?.preferences?.shortcut_enabled}
-              onCheckedChange={(checked) => {
-                updateUserShortcuts(checked);
-              }}
-            />
-          </InputHorizontal>
+        <Card border="solid" rounding="lg">
+          <Section alignItems="start" height="fit">
+            <InputHorizontal
+              title="Use Prompt Shortcuts"
+              description="Enable shortcuts to quickly insert common prompts."
+              withLabel
+            >
+              <Switch
+                checked={user?.preferences?.shortcut_enabled}
+                onCheckedChange={(checked) => {
+                  updateUserShortcuts(checked);
+                }}
+              />
+            </InputHorizontal>
 
-          {user?.preferences?.shortcut_enabled && <PromptShortcuts />}
+            {user?.preferences?.shortcut_enabled && <PromptShortcuts />}
+          </Section>
         </Card>
       </Section>
 
-      <Section gap={0.75}>
+      <Section gap={3}>
         <Content
           title="Voice"
           sizePreset="main-content"
           variant="section"
           width="full"
         />
-        <Card>
-          <InputHorizontal
-            title="Auto-Send on Pause"
-            description="Automatically send voice input when you stop speaking."
-            withLabel
-          >
-            <Switch
-              checked={user?.preferences.voice_auto_send ?? false}
-              onCheckedChange={(checked) => {
-                void saveVoiceSettings({ auto_send: checked });
-              }}
-            />
-          </InputHorizontal>
-
-          <InputHorizontal
-            title="Auto-Playback"
-            description="Automatically play voice responses."
-            withLabel
-          >
-            <Switch
-              checked={user?.preferences.voice_auto_playback ?? false}
-              onCheckedChange={(checked) => {
-                void saveVoiceSettings({ auto_playback: checked });
-              }}
-            />
-          </InputHorizontal>
-
-          <InputHorizontal
-            title="Playback Speed"
-            description="Adjust the speed of voice playback."
-            withLabel
-          >
-            <div className="flex items-center gap-3">
-              <input
-                type="range"
-                min="0.5"
-                max="2"
-                step="0.1"
-                value={draftVoicePlaybackSpeed}
-                onChange={(e) => {
-                  setDraftVoicePlaybackSpeed(parseFloat(e.target.value));
+        <Card border="solid" rounding="lg">
+          <Section alignItems="start" height="fit">
+            <InputHorizontal
+              title="Auto-Send on Pause"
+              description="Automatically send voice input when you stop speaking."
+              withLabel
+            >
+              <Switch
+                checked={user?.preferences.voice_auto_send ?? false}
+                onCheckedChange={(checked) => {
+                  void saveVoiceSettings({ auto_send: checked });
                 }}
-                onMouseUp={commitVoicePlaybackSpeed}
-                onTouchEnd={commitVoicePlaybackSpeed}
-                onKeyUp={(e) => {
-                  if (e.key === "ArrowLeft" || e.key === "ArrowRight") {
-                    commitVoicePlaybackSpeed();
-                  }
-                }}
-                className="w-24 h-2 rounded-lg appearance-none cursor-pointer bg-background-neutral-02"
               />
-              <span className="text-sm text-text-02 w-10">
-                {draftVoicePlaybackSpeed.toFixed(1)}x
-              </span>
-            </div>
-          </InputHorizontal>
+            </InputHorizontal>
+
+            <InputHorizontal
+              title="Auto-Playback"
+              description="Automatically play voice responses."
+              withLabel
+            >
+              <Switch
+                checked={user?.preferences.voice_auto_playback ?? false}
+                onCheckedChange={(checked) => {
+                  void saveVoiceSettings({ auto_playback: checked });
+                }}
+              />
+            </InputHorizontal>
+
+            <InputHorizontal
+              title="Playback Speed"
+              description="Adjust the speed of voice playback."
+              withLabel
+            >
+              <div className="flex items-center gap-3">
+                <input
+                  type="range"
+                  min="0.5"
+                  max="2"
+                  step="0.1"
+                  value={draftVoicePlaybackSpeed}
+                  onChange={(e) => {
+                    setDraftVoicePlaybackSpeed(parseFloat(e.target.value));
+                  }}
+                  onMouseUp={commitVoicePlaybackSpeed}
+                  onTouchEnd={commitVoicePlaybackSpeed}
+                  onKeyUp={(e) => {
+                    if (e.key === "ArrowLeft" || e.key === "ArrowRight") {
+                      commitVoicePlaybackSpeed();
+                    }
+                  }}
+                  className="w-24 h-2 rounded-lg appearance-none cursor-pointer bg-background-neutral-02"
+                />
+                <span className="text-sm text-text-02 w-10">
+                  {draftVoicePlaybackSpeed.toFixed(1)}x
+                </span>
+              </div>
+            </InputHorizontal>
+          </Section>
         </Card>
       </Section>
     </Section>
@@ -1559,7 +1573,7 @@ function AccountsAccessSettings() {
             </Button>
           }
         >
-          <Section gap={0.5} alignItems="start">
+          <Section gap={2} alignItems="start">
             <Text color="text-05">
               {`Any application using the token ${tokenToDelete.name} (${tokenToDelete.token_display}) will lose access to Onyx. This action cannot be undone.`}
             </Text>
@@ -1616,8 +1630,8 @@ function AccountsAccessSettings() {
                   setShowPasswordModal(false);
                 }}
               >
-                <Section gap={1}>
-                  <Section gap={0.25} alignItems="start">
+                <Section gap={4}>
+                  <Section gap={1} alignItems="start">
                     <InputVertical
                       withLabel="currentPassword"
                       title="Current Password"
@@ -1633,7 +1647,7 @@ function AccountsAccessSettings() {
                       />
                     </InputVertical>
                   </Section>
-                  <Section gap={0.25} alignItems="start">
+                  <Section gap={1} alignItems="start">
                     <InputVertical withLabel="newPassword" title="New Password">
                       <PasswordInputTypeIn
                         name="newPassword"
@@ -1644,7 +1658,7 @@ function AccountsAccessSettings() {
                       />
                     </InputVertical>
                   </Section>
-                  <Section gap={0.25} alignItems="start">
+                  <Section gap={1} alignItems="start">
                     <InputVertical
                       withLabel="confirmPassword"
                       title="Confirm New Password"
@@ -1667,44 +1681,46 @@ function AccountsAccessSettings() {
         </Formik>
       )}
 
-      <Section gap={2}>
-        <Section gap={0.75}>
+      <Section gap={8}>
+        <Section gap={3}>
           <Content
             title="Accounts"
             sizePreset="main-content"
             variant="section"
             width="full"
           />
-          <Card>
-            <InputHorizontal
-              title="Email"
-              description="Your account email address."
-              center
-            >
-              <Text color="text-05">{user?.email ?? "anonymous"}</Text>
-            </InputHorizontal>
-
-            {showPasswordSection && (
+          <Card border="solid" rounding="lg">
+            <Section alignItems="start" height="fit">
               <InputHorizontal
-                title="Password"
-                description="Update your account password."
+                title="Email"
+                description="Your account email address."
                 center
               >
-                <Button
-                  prominence="secondary"
-                  icon={SvgLock}
-                  onClick={() => setShowPasswordModal(true)}
-                  interaction={showPasswordModal ? "hover" : "rest"}
-                >
-                  Change Password
-                </Button>
+                <Text color="text-05">{user?.email ?? "anonymous"}</Text>
               </InputHorizontal>
-            )}
+
+              {showPasswordSection && (
+                <InputHorizontal
+                  title="Password"
+                  description="Update your account password."
+                  center
+                >
+                  <Button
+                    prominence="secondary"
+                    icon={SvgLock}
+                    onClick={() => setShowPasswordModal(true)}
+                    interaction={showPasswordModal ? "hover" : "rest"}
+                  >
+                    Change Password
+                  </Button>
+                </InputHorizontal>
+              )}
+            </Section>
           </Card>
         </Section>
 
         {showTokensSection && (
-          <Section gap={0.75}>
+          <Section gap={3}>
             <Content
               title="Access Tokens"
               sizePreset="main-content"
@@ -1712,117 +1728,121 @@ function AccountsAccessSettings() {
               width="full"
             />
             {canCreateTokens ? (
-              <Card padding={0.25}>
-                <Section gap={0}>
-                  <Section flexDirection="row" padding={0.25} gap={0.5}>
-                    {pats.length === 0 ? (
-                      <Section
-                        padding={0.5}
-                        alignItems="start"
-                        data-testid="access-token-list-status"
-                      >
-                        <Text font="secondary-body" color="text-03">
-                          {isLoading
-                            ? "Loading tokens..."
-                            : "No access tokens created."}
-                        </Text>
-                      </Section>
-                    ) : (
-                      <InputTypeIn
-                        placeholder="Search..."
-                        value={query}
-                        onChange={(e) => setQuery(e.target.value)}
-                        searchIcon
-                        variant="internal"
-                      />
-                    )}
-                    <div className="shrink-0">
-                      <Button
-                        rightIcon={SvgPlusCircle}
-                        prominence="internal"
-                        interaction={showCreateModal ? "active" : "rest"}
-                        onClick={() => setShowCreateModal(true)}
-                      >
-                        New Access Token
-                      </Button>
-                    </div>
-                  </Section>
+              <Card border="solid" padding={1} rounding="lg">
+                <Section alignItems="start" height="fit">
+                  <Section gap={0}>
+                    <Section flexDirection="row" padding={1} gap={2}>
+                      {pats.length === 0 ? (
+                        <Section
+                          padding={2}
+                          alignItems="start"
+                          data-testid="access-token-list-status"
+                        >
+                          <Text font="secondary-body" color="text-03">
+                            {isLoading
+                              ? "Loading tokens..."
+                              : "No access tokens created."}
+                          </Text>
+                        </Section>
+                      ) : (
+                        <InputTypeIn
+                          placeholder="Search..."
+                          value={query}
+                          onChange={(e) => setQuery(e.target.value)}
+                          searchIcon
+                          variant="internal"
+                        />
+                      )}
+                      <div className="shrink-0">
+                        <Button
+                          rightIcon={SvgPlusCircle}
+                          prominence="internal"
+                          interaction={showCreateModal ? "active" : "rest"}
+                          onClick={() => setShowCreateModal(true)}
+                        >
+                          New Access Token
+                        </Button>
+                      </div>
+                    </Section>
 
-                  <Section gap={0.25}>
-                    {filteredPats.map((pat) => {
-                      const now = new Date();
-                      const createdDate = new Date(pat.created_at);
-                      const daysSinceCreation = Math.floor(
-                        (now.getTime() - createdDate.getTime()) /
-                          (1000 * 60 * 60 * 24)
-                      );
-
-                      let expiryText = "Never expires";
-                      if (pat.expires_at) {
-                        const expiresDate = new Date(pat.expires_at);
-                        const daysUntilExpiry = Math.ceil(
-                          (expiresDate.getTime() - now.getTime()) /
+                    <Section gap={1}>
+                      {filteredPats.map((pat) => {
+                        const now = new Date();
+                        const createdDate = new Date(pat.created_at);
+                        const daysSinceCreation = Math.floor(
+                          (now.getTime() - createdDate.getTime()) /
                             (1000 * 60 * 60 * 24)
                         );
-                        expiryText = `Expires in ${daysUntilExpiry} day${
-                          daysUntilExpiry === 1 ? "" : "s"
-                        }`;
-                      }
 
-                      const scopeText =
-                        pat.scopes === null
-                          ? "Full access"
-                          : pat.scopes
-                              .map((scope) => scopeLabels.get(scope) ?? scope)
-                              .join(", ");
+                        let expiryText = "Never expires";
+                        if (pat.expires_at) {
+                          const expiresDate = new Date(pat.expires_at);
+                          const daysUntilExpiry = Math.ceil(
+                            (expiresDate.getTime() - now.getTime()) /
+                              (1000 * 60 * 60 * 24)
+                          );
+                          expiryText = `Expires in ${daysUntilExpiry} day${
+                            daysUntilExpiry === 1 ? "" : "s"
+                          }`;
+                        }
 
-                      const createdText =
-                        daysSinceCreation === 0
-                          ? "Created today"
-                          : `Created ${daysSinceCreation} day${
-                              daysSinceCreation === 1 ? "" : "s"
-                            } ago`;
+                        const scopeText =
+                          pat.scopes === null
+                            ? "Full access"
+                            : pat.scopes
+                                .map((scope) => scopeLabels.get(scope) ?? scope)
+                                .join(", ");
 
-                      const middleText = `${createdText} - ${expiryText} - ${scopeText}`;
+                        const createdText =
+                          daysSinceCreation === 0
+                            ? "Created today"
+                            : `Created ${daysSinceCreation} day${
+                                daysSinceCreation === 1 ? "" : "s"
+                              } ago`;
 
-                      return (
-                        <Interactive.Container
-                          key={pat.id}
-                          size="fit"
-                          width="full"
-                        >
-                          <div className="w-full bg-background-tint-01">
-                            <AttachmentItemLayout
-                              icon={SvgKey}
-                              title={pat.name}
-                              description={pat.token_display}
-                              middleText={middleText}
-                              rightChildren={
-                                <Button
-                                  icon={SvgTrash}
-                                  onClick={() => setTokenToDelete(pat)}
-                                  prominence="tertiary"
-                                  size="sm"
-                                  aria-label={`Delete token ${pat.name}`}
-                                />
-                              }
-                            />
-                          </div>
-                        </Interactive.Container>
-                      );
-                    })}
+                        const middleText = `${createdText} - ${expiryText} - ${scopeText}`;
+
+                        return (
+                          <Interactive.Container
+                            key={pat.id}
+                            size="fit"
+                            width="full"
+                          >
+                            <div className="w-full bg-background-tint-01">
+                              <AttachmentItemLayout
+                                icon={SvgKey}
+                                title={pat.name}
+                                description={pat.token_display}
+                                middleText={middleText}
+                                rightChildren={
+                                  <Button
+                                    icon={SvgTrash}
+                                    onClick={() => setTokenToDelete(pat)}
+                                    prominence="tertiary"
+                                    size="sm"
+                                    aria-label={`Delete token ${pat.name}`}
+                                  />
+                                }
+                              />
+                            </div>
+                          </Interactive.Container>
+                        );
+                      })}
+                    </Section>
                   </Section>
                 </Section>
               </Card>
             ) : (
-              <Card>
-                <Section flexDirection="row" justifyContent="between">
-                  <Text font="secondary-body" color="text-03">
-                    Access tokens require an active paid subscription.
-                  </Text>
-                  <Button prominence="secondary" href="/admin/billing">
-                    Upgrade Plan
-                  </Button>
+              <Card border="solid" rounding="lg">
+                <Section alignItems="start" height="fit">
+                  <Section flexDirection="row" justifyContent="between">
+                    <Text font="secondary-body" color="text-03">
+                      Access tokens require an active paid subscription.
+                    </Text>
+                    <Button prominence="secondary" href="/admin/billing">
+                      Upgrade Plan
+                    </Button>
+                  </Section>
                 </Section>
               </Card>
             )}
@@ -1842,14 +1862,16 @@ function IndexedConnectorCard({ source, isActive }: IndexedConnectorCardProps) {
   const sourceMetadata = getSourceMetadata(source);
 
   return (
-    <Card>
-      <Content
-        icon={sourceMetadata.icon}
-        title={sourceMetadata.displayName}
-        description={isActive ? "Connected" : "Paused"}
-        sizePreset="main-content"
-        variant="section"
-      />
+    <Card border="solid" rounding="lg">
+      <Section alignItems="start" height="fit">
+        <Content
+          icon={sourceMetadata.icon}
+          title={sourceMetadata.displayName}
+          description={isActive ? "Connected" : "Paused"}
+          sizePreset="main-content"
+          variant="section"
+        />
+      </Section>
     </Card>
   );
 }
@@ -1907,7 +1929,7 @@ function FederatedConnectorCard({
             </Button>
           }
         >
-          <Section gap={0.5} alignItems="start">
+          <Section gap={2} alignItems="start">
             <Text color="text-05">
               {`Onyx will no longer be able to access or search content from your ${sourceMetadata.displayName} account.`}
             </Text>
@@ -1918,37 +1940,39 @@ function FederatedConnectorCard({
         </ConfirmationModalLayout>
       )}
 
-      <Card padding={0.5}>
-        <ContentAction
-          icon={sourceMetadata.icon}
-          title={sourceMetadata.displayName}
-          description={
-            connector.has_oauth_token ? "Connected" : "Not connected"
-          }
-          sizePreset="main-content"
-          variant="section"
-          padding="sm"
-          rightChildren={
-            connector.has_oauth_token ? (
-              <Button
-                disabled={isDisconnecting}
-                icon={SvgUnplug}
-                prominence="tertiary"
-                size="sm"
-                onClick={() => setShowDisconnectConfirmation(true)}
-              />
-            ) : connector.authorize_url ? (
-              <Button
-                prominence="internal"
-                href={connector.authorize_url}
-                target="_blank"
-                rightIcon={SvgArrowExchange}
-              >
-                Connect
-              </Button>
-            ) : undefined
-          }
-        />
+      <Card border="solid" padding={2} rounding="lg">
+        <Section alignItems="start" height="fit">
+          <ContentAction
+            icon={sourceMetadata.icon}
+            title={sourceMetadata.displayName}
+            description={
+              connector.has_oauth_token ? "Connected" : "Not connected"
+            }
+            sizePreset="main-content"
+            variant="section"
+            padding={1}
+            rightChildren={
+              connector.has_oauth_token ? (
+                <Button
+                  disabled={isDisconnecting}
+                  icon={SvgUnplug}
+                  prominence="tertiary"
+                  size="sm"
+                  onClick={() => setShowDisconnectConfirmation(true)}
+                />
+              ) : connector.authorize_url ? (
+                <Button
+                  prominence="internal"
+                  href={connector.authorize_url}
+                  target="_blank"
+                  rightIcon={SvgArrowExchange}
+                >
+                  Connect
+                </Button>
+              ) : undefined
+            }
+          />
+        </Section>
       </Card>
     </>
   );
@@ -1994,8 +2018,8 @@ function ConnectorsSettings() {
     Object.keys(groupedConnectors).length > 0 || federatedConnectors.length > 0;
 
   return (
-    <Section gap={2}>
-      <Section gap={0.75} justifyContent="start">
+    <Section gap={8}>
+      <Section gap={3} justifyContent="start">
         <Content
           title="Connectors"
           sizePreset="main-content"

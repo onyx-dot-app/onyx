@@ -54,7 +54,7 @@ export default function Layout({ children }: LayoutProps) {
           flexDirection="column"
           justifyContent="start"
           alignItems="stretch"
-          gap={1.5}
+          gap={6}
           className="sm:flex-row sm:items-start"
         >
           {/* Narrow screens: dropdown navigation above the tab content */}

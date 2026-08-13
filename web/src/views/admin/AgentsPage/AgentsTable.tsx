@@ -144,14 +144,14 @@ export default function AgentsTable() {
 
   return (
     <div className="flex flex-col">
-      <Section gap={0.5}>
+      <Section gap={2}>
         <InputTypeIn
           value={searchTerm}
           onChange={(e) => setSearchTerm(e.target.value)}
           placeholder="Search agents..."
           searchIcon
         />
-        <Section gap={0.25} flexDirection="row" justifyContent="start">
+        <Section gap={1} flexDirection="row" justifyContent="start">
           {filterBar}
         </Section>
       </Section>

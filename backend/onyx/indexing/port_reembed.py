@@ -300,7 +300,7 @@ def re_embed_chunks(
     ]
     doc_aware_chunks = [
         _stored_chunk_to_doc_aware(chunk, embed_input)
-        for chunk, embed_input in zip(stored_chunks, embed_inputs)
+        for chunk, embed_input in zip(stored_chunks, embed_inputs, strict=True)
     ]
     embedded = embedder.embed_chunks(doc_aware_chunks)
     # Pair each stored chunk with its OWN vector by identity, not list position.
@@ -312,7 +312,7 @@ def re_embed_chunks(
             content_vector=index_chunk.embeddings.full_embedding,
             title_vector=index_chunk.title_embedding,
         )
-        for stored, index_chunk in zip(stored_chunks, matched)
+        for stored, index_chunk in zip(stored_chunks, matched, strict=True)
     ]
 
 
@@ -341,7 +341,8 @@ def _reconstruct_source_document(
     contextual LLM to regenerate summaries — see the module docstring on the
     accepted imprecision of concatenating overlapping chunks."""
     ordered = sorted(
-        zip(stored_chunks, bare_contents), key=lambda pair: pair[0].chunk_index
+        zip(stored_chunks, bare_contents, strict=True),
+        key=lambda pair: pair[0].chunk_index,
     )
     doc_text = " ".join(bare for _, bare in ordered if bare)
     first = stored_chunks[0]
@@ -384,7 +385,7 @@ def _augmentation_reembed(
     pairs_by_doc: dict[str, list[tuple[DocumentChunkWithoutVectors, str]]] = (
         defaultdict(list)
     )
-    for chunk, bare in zip(stored_chunks, bare_contents):
+    for chunk, bare in zip(stored_chunks, bare_contents, strict=True):
         pairs_by_doc[chunk.document_id].append((chunk, bare))
     source_documents = {
         doc_id: _reconstruct_source_document(
@@ -417,7 +418,7 @@ def _augmentation_reembed(
             large_chunk_id=None,
             large_chunk_reference_ids=[],
         )
-        for chunk, bare in zip(stored_chunks, bare_contents)
+        for chunk, bare in zip(stored_chunks, bare_contents, strict=True)
     ]
 
     if future_rag_on:
@@ -441,7 +442,9 @@ def _augmentation_reembed(
     matched = _match_embeddings_by_identity(stored_chunks, embedded)
 
     results: list[DocumentChunk] = []
-    for stored, doc_aware, index_chunk in zip(stored_chunks, doc_aware_chunks, matched):
+    for stored, doc_aware, index_chunk in zip(
+        stored_chunks, doc_aware_chunks, matched, strict=True
+    ):
         fields = dict(stored)
         # The stored (BM25) content, rebuilt under FUTURE enrichment.
         fields["content"] = generate_enriched_content_for_chunk_text(doc_aware)

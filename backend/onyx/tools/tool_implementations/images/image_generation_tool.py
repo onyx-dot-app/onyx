@@ -400,7 +400,7 @@ class ImageGenerationTool(Tool[None]):
                 revised_prompt=img.revised_prompt,
                 shape=shape.value,
             )
-            for img, file_id in zip(image_generation_responses, file_ids)
+            for img, file_id in zip(image_generation_responses, file_ids, strict=True)
         ]
 
         # Emit final packet with generated images

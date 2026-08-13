@@ -165,7 +165,7 @@ const Popover = Object.assign(PopoverRoot, {
 // ============================================================================
 
 function SeparatorHelper() {
-  return <Divider paddingPerpendicular="fit" />;
+  return <Divider paddingPerpendicular={0} />;
 }
 
 /**

@@ -62,7 +62,7 @@ export default function ScimModal({
             </Button>
           }
         >
-          <Section alignItems="start" gap={0.5}>
+          <Section alignItems="start" gap={2}>
             <Text as="p" text03>
               Your current SCIM token will be revoked and a new token will be
               generated. You will need to update the token on your identity

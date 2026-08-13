@@ -128,10 +128,10 @@ function MCPServerCard({
       expanded={expanded}
       border="solid"
       rounding="lg"
-      padding="sm"
+      padding={2}
       expandedContent={
         hasContent ? (
-          <Section gap={0.5} padding={0.5}>
+          <Section gap={2} padding={2}>
             {filteredTools.map((tool) => (
               <Card key={tool.id} border="solid" rounding="md">
                 <InputHorizontal
@@ -159,7 +159,7 @@ function MCPServerCard({
       <CardLayout.Header
         bottomChildren={
           tools.length > 0 ? (
-            <Section flexDirection="row" gap={0.5}>
+            <Section flexDirection="row" gap={2}>
               <InputTypeIn
                 placeholder="Search tools..."
                 variant="internal"
@@ -186,7 +186,7 @@ function MCPServerCard({
             description={server.description}
             sizePreset="main-ui"
             variant="section"
-            padding="fit"
+            padding={0}
             rightChildren={
               <Tooltip tooltip={authTooltip} side="top">
                 <Switch
@@ -586,7 +586,7 @@ function RetentionField({ value, disabled, onSave }: RetentionFieldProps) {
               disabled ? "disabled" : customInvalid ? "error" : undefined
             }
             rightChildren={
-              <Section flexDirection="row" gap={0.125} width="fit" height="fit">
+              <Section flexDirection="row" gap={0.5} width="fit" height="fit">
                 <Button
                   icon={SvgRevert}
                   tooltip="Restore Default"
@@ -1051,10 +1051,10 @@ export default function ChatPreferencesPage() {
             </Section>
           </Card>
 
-          <Divider paddingParallel="fit" paddingPerpendicular="fit" />
+          <Divider paddingParallel={0} paddingPerpendicular={0} />
 
           {/* Team Context */}
-          <Section gap={1}>
+          <Section gap={4}>
             <InputVertical
               title="Team Name"
               subDescription="This is added to all chat sessions as additional context to provide a richer/customized experience."
@@ -1112,13 +1112,13 @@ export default function ChatPreferencesPage() {
             </Button>
           </InputHorizontal>
 
-          <Divider paddingParallel="fit" paddingPerpendicular="fit" />
+          <Divider paddingParallel={0} paddingPerpendicular={0} />
 
           <Disabled disabled={s.disable_default_assistant ?? false}>
             <div>
-              <Section gap={1.5}>
+              <Section gap={6}>
                 {/* Connectors */}
-                <Section gap={0.75}>
+                <Section gap={3}>
                   <Content
                     title="Connectors"
                     sizePreset="main-content"
@@ -1129,7 +1129,7 @@ export default function ChatPreferencesPage() {
                     flexDirection="row"
                     justifyContent="between"
                     alignItems="center"
-                    gap={0.25}
+                    gap={1}
                   >
                     {uniqueSources.length === 0 ? (
                       <EmptyMessageCard
@@ -1142,13 +1142,13 @@ export default function ChatPreferencesPage() {
                           flexDirection="row"
                           justifyContent="start"
                           alignItems="center"
-                          gap={0.25}
+                          gap={1}
                         >
                           {uniqueSources.slice(0, 3).map((source) => {
                             const meta = getSourceMetadata(source);
                             return (
                               <div key={source} className="w-40">
-                                <Card padding="sm" border="solid">
+                                <Card padding={2} border="solid">
                                   <Content
                                     icon={meta.icon}
                                     title={meta.displayName}
@@ -1179,7 +1179,7 @@ export default function ChatPreferencesPage() {
                     description="Tools and capabilities available for chat to use. This does not apply to agents."
                   />
                   <SimpleCollapsible.Content>
-                    <Section gap={0.5} alignItems="stretch">
+                    <Section gap={2} alignItems="stretch">
                       {vectorDbEnabled && searchTool && (
                         <Card border="solid" rounding="lg">
                           <InputHorizontal
@@ -1324,14 +1324,11 @@ export default function ChatPreferencesPage() {
                     {/* Separator between built-in tools and MCP/OpenAPI tools */}
                     {(mcpServersWithTools.length > 0 ||
                       openApiTools.length > 0) && (
-                      <Divider
-                        paddingPerpendicular="sm"
-                        paddingParallel="fit"
-                      />
+                      <Divider paddingPerpendicular={2} paddingParallel={0} />
                     )}
 
                     {/* MCP Servers & OpenAPI Tools */}
-                    <Section gap={0.5}>
+                    <Section gap={2}>
                       {mcpServersWithTools.map(({ server, tools }) => (
                         <MCPServerCard
                           key={server.id}
@@ -1366,13 +1363,13 @@ export default function ChatPreferencesPage() {
             </div>
           </Disabled>
 
-          <Divider paddingParallel="fit" paddingPerpendicular="fit" />
+          <Divider paddingParallel={0} paddingPerpendicular={0} />
 
           {/* Advanced Options */}
           <SimpleCollapsible defaultOpen={false}>
             <SimpleCollapsible.Header title="Advanced Options" />
             <SimpleCollapsible.Content>
-              <Section gap={1}>
+              <Section gap={4}>
                 <Card border="solid" rounding="lg">
                   <Section alignItems="stretch">
                     <Disabled
@@ -1568,7 +1565,7 @@ export default function ChatPreferencesPage() {
                     onClose={() => setSystemPromptModalOpen(false)}
                   />
                   <Modal.Body>
-                    <Section gap={0.25} alignItems="start">
+                    <Section gap={1} alignItems="start">
                       <Hoverable.Root group="systemPromptRestore" width="full">
                         <InputTextAreaField
                           name="system_prompt"
@@ -1600,7 +1597,7 @@ export default function ChatPreferencesPage() {
                     <MessageCard
                       title="Modify with caution."
                       description="System prompt affects all chats, agents, and projects. Significant changes may degrade response quality."
-                      padding="xs"
+                      padding={1}
                     />
                   </Modal.Body>
                   <Modal.Footer>

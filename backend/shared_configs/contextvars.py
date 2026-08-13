@@ -36,6 +36,19 @@ CURRENT_USER_ID_CONTEXTVAR: contextvars.ContextVar[str | None] = contextvars.Con
     "current_user_id", default=None
 )
 
+# IncognitoRecordMode value of the streaming turn's session, None outside
+# incognito. A plain string keeps this layer free of onyx imports.
+CURRENT_INCOGNITO_RECORD_MODE_CONTEXTVAR: contextvars.ContextVar[str | None] = (
+    contextvars.ContextVar("current_incognito_record_mode", default=None)
+)
+
+# Session id of a content-free turn, and only of a content-free turn: a blob
+# saved while this is set is conversation-derived and must die with the
+# session, so the file store stamps it on the record at creation.
+CURRENT_CONTENT_FREE_SESSION_ID_CONTEXTVAR: contextvars.ContextVar[str | None] = (
+    contextvars.ContextVar("current_content_free_session_id", default=None)
+)
+
 
 class UsageCredentialIdentity(NamedTuple):
     credential_type: UsageCredentialType
@@ -69,6 +82,11 @@ def get_current_tenant_id() -> str:
 def get_current_user_id() -> str | None:
     """Requesting user's id, or None outside a per-request context."""
     return CURRENT_USER_ID_CONTEXTVAR.get()
+
+
+def get_current_incognito_record_mode() -> str | None:
+    """The incognito record-mode value of the current turn, None outside one."""
+    return CURRENT_INCOGNITO_RECORD_MODE_CONTEXTVAR.get()
 
 
 def get_current_usage_credential() -> UsageCredentialIdentity | None:

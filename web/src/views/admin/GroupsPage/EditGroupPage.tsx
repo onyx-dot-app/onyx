@@ -4,7 +4,7 @@ import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
 import useSWR, { useSWRConfig } from "swr";
 import useGroupMemberCandidates from "./useGroupMemberCandidates";
-import { Table, Button, Divider } from "@opal/components";
+import { Button, Card, Divider, Switch, Table } from "@opal/components";
 import { IllustrationContent, InputHorizontal, toast } from "@opal/layouts";
 import {
   SvgUsers,
@@ -15,7 +15,6 @@ import {
 } from "@opal/icons";
 import { markdown } from "@opal/utils";
 import IconButton from "@/refresh-components/buttons/IconButton";
-import Card from "@/refresh-components/cards/Card";
 import SvgNoResult from "@opal/illustrations/no-result";
 import { SettingsLayouts } from "@opal/layouts";
 import { Section } from "@/layouts/general-layouts";
@@ -23,7 +22,7 @@ import { InputTypeIn } from "@opal/components";
 import Text from "@/refresh-components/texts/Text";
 import { ConfirmationModalLayout } from "@opal/layouts";
 import { errorHandlingFetcher, skipRetryOnAuthError } from "@/lib/fetcher";
-import type { UserGroup } from "@/lib/types";
+import type { SecuritySettings, UserGroup } from "@/lib/types";
 import { useSettings } from "@/lib/settings/hooks";
 import { Tier } from "@/lib/settings/types";
 import { tierAtLeast } from "@/lib/tiers";
@@ -32,6 +31,7 @@ import { baseColumns, memberTableColumns, tc, PAGE_SIZE } from "./shared";
 import {
   renameGroup,
   updateGroup,
+  setGroupIncognito,
   deleteGroup,
   updateAgentGroupSharing,
   updateDocSetGroupSharing,
@@ -91,6 +91,17 @@ function EditGroupPage({ groupId }: EditGroupPageProps) {
     onErrorRetry: skipRetryOnAuthError,
   });
 
+  // The flag only does anything under designated-groups availability, so the
+  // field stays off the page entirely elsewhere. Curators get a 403 reading
+  // security settings, which also leaves it hidden.
+  const { data: securitySettings } = useSWR<
+    Pick<SecuritySettings, "incognito_availability">
+  >(SWR_KEYS.adminSecuritySettings, errorHandlingFetcher, {
+    onErrorRetry: skipRetryOnAuthError,
+  });
+  const showIncognitoField =
+    securitySettings?.incognito_availability === "groups";
+
   // Form state
   const [groupName, setGroupName] = useState("");
   const [selectedUserIds, setSelectedUserIds] = useState<string[]>([]);
@@ -109,6 +120,7 @@ function EditGroupPage({ groupId }: EditGroupPageProps) {
       costBudgetDollars: null,
     },
   ]);
+  const [incognitoEnabled, setIncognitoEnabled] = useState(false);
   const [showDeleteModal, setShowDeleteModal] = useState(false);
   const [isDeleting, setIsDeleting] = useState(false);
   const [initialized, setInitialized] = useState(false);
@@ -138,6 +150,7 @@ function EditGroupPage({ groupId }: EditGroupPageProps) {
       const agentIds = group.personas.map((p) => p.id);
       setSelectedAgentIds(agentIds);
       initialAgentIdsRef.current = agentIds;
+      setIncognitoEnabled(group.incognito_enabled);
       setInitialized(true);
     }
   }, [group, initialized]);
@@ -264,12 +277,20 @@ function EditGroupPage({ groupId }: EditGroupPageProps) {
         await saveTokenLimits(groupId, tokenLimits, tokenRateLimits ?? []);
       }
 
+      // Last: granting incognito access must not outlive a save that then
+      // fails, which would report an error while members already had it.
+      if (group && incognitoEnabled !== group.incognito_enabled) {
+        await setGroupIncognito(groupId, incognitoEnabled);
+      }
+
       // Update refs so subsequent saves diff correctly
       initialAgentIdsRef.current = selectedAgentIds;
       initialDocSetIdsRef.current = selectedDocSetIds;
 
       mutate(SWR_KEYS.adminUserGroups);
       mutate(SWR_KEYS.userGroupTokenRateLimit(groupId));
+      // Membership and the incognito flag both feed chat availability.
+      mutate(SWR_KEYS.incognitoAvailability);
       toast.success(`Group "${trimmed}" updated`);
       router.push("/admin/groups");
     } catch (e) {
@@ -316,7 +337,7 @@ function EditGroupPage({ groupId }: EditGroupPageProps) {
   }
 
   const headerActions = (
-    <Section flexDirection="row" gap={0.5} width="auto" height="auto">
+    <Section flexDirection="row" gap={2} width="auto" height="auto">
       <Button
         prominence="secondary"
         onClick={() => router.push("/admin/groups")}
@@ -360,7 +381,7 @@ function EditGroupPage({ groupId }: EditGroupPageProps) {
             <>
               {/* Group Name */}
               <Section
-                gap={0.5}
+                gap={2}
                 height="auto"
                 alignItems="stretch"
                 justifyContent="start"
@@ -375,18 +396,18 @@ function EditGroupPage({ groupId }: EditGroupPageProps) {
                 />
               </Section>
 
-              <Divider paddingParallel="fit" paddingPerpendicular="fit" />
+              <Divider paddingParallel={0} paddingPerpendicular={0} />
 
               {/* Members table */}
               <Section
-                gap={0.75}
+                gap={3}
                 height="auto"
                 alignItems="stretch"
                 justifyContent="start"
               >
                 <Section
                   flexDirection="row"
-                  gap={0.5}
+                  gap={2}
                   height="auto"
                   alignItems="center"
                   justifyContent="start"
@@ -474,22 +495,41 @@ function EditGroupPage({ groupId }: EditGroupPageProps) {
                 disabledTooltip={tokenLimitsDisabledTooltip}
               />
 
+              {showIncognitoField && (
+                <Card border="solid" rounding="lg">
+                  <Section alignItems="start" height="fit">
+                    <InputHorizontal
+                      title="Incognito Chats"
+                      description="Members of this group may start incognito chats."
+                      withLabel
+                    >
+                      <Switch
+                        checked={incognitoEnabled}
+                        onCheckedChange={setIncognitoEnabled}
+                      />
+                    </InputHorizontal>
+                  </Section>
+                </Card>
+              )}
+
               {/* Delete This Group */}
-              <Card>
-                <InputHorizontal
-                  title="Delete This Group"
-                  description="Members will lose access to any resources shared with this group."
-                  center
-                >
-                  <Button
-                    variant="danger"
-                    prominence="secondary"
-                    icon={SvgTrash}
-                    onClick={() => setShowDeleteModal(true)}
+              <Card border="solid" rounding="lg">
+                <Section alignItems="start" height="fit">
+                  <InputHorizontal
+                    title="Delete This Group"
+                    description="Members will lose access to any resources shared with this group."
+                    center
                   >
-                    Delete Group
-                  </Button>
-                </InputHorizontal>
+                    <Button
+                      variant="danger"
+                      prominence="secondary"
+                      icon={SvgTrash}
+                      onClick={() => setShowDeleteModal(true)}
+                    >
+                      Delete Group
+                    </Button>
+                  </InputHorizontal>
+                </Section>
               </Card>
             </>
           )}

@@ -186,12 +186,12 @@ async def _get_tenant_id_from_request(
         # and fall back to the wrong tenant. Fall back only on the normal path.
         if sys.exc_info()[0] is None:
             if tenant_id:
-                return tenant_id
+                return tenant_id  # noqa: B012
 
             # As a final step, check for explicit tenant_id cookie
             tenant_id_cookie = request.cookies.get(TENANT_ID_COOKIE_NAME)
             if tenant_id_cookie and is_valid_schema_name(tenant_id_cookie):
-                return tenant_id_cookie
+                return tenant_id_cookie  # noqa: B012
 
             # If we've reached this point, return the default schema
-            return POSTGRES_DEFAULT_SCHEMA
+            return POSTGRES_DEFAULT_SCHEMA  # noqa: B012

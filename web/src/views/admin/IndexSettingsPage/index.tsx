@@ -342,7 +342,7 @@ function ProviderGroup({
         />
       </providerCreationModal.Provider>
 
-      <GeneralLayouts.Section gap={0.25}>
+      <GeneralLayouts.Section gap={1}>
         <div className="px-1 pt-1 w-full h-(--height-line-h1-headline)">
           <GeneralLayouts.Section flexDirection="row" gap={0}>
             <Spacer orientation="horizontal" rem={0.675} />
@@ -361,11 +361,7 @@ function ProviderGroup({
               />
 
               {isCloud && isConfigured ? (
-                <GeneralLayouts.Section
-                  flexDirection="row"
-                  gap={0.25}
-                  width="fit"
-                >
+                <GeneralLayouts.Section flexDirection="row" gap={1} width="fit">
                   <Button
                     icon={SvgUnplug}
                     prominence="tertiary"
@@ -397,7 +393,7 @@ function ProviderGroup({
           <SelectCard
             state="filled"
             rounding="md"
-            padding="sm"
+            padding={2}
             onClick={() => providerCreationModal.toggle(true)}
           >
             <ContentAction
@@ -405,7 +401,7 @@ function ProviderGroup({
               sizePreset="secondary"
               variant="body"
               color="muted"
-              padding="md"
+              padding={1}
               rightChildren={
                 <Button
                   prominence="tertiary"
@@ -525,11 +521,11 @@ function EmbeddingModelCard({
     <SelectCard
       state={cardState}
       rounding="md"
-      padding="xs"
+      padding={1}
       onClick={isClickable ? onSelect : undefined}
     >
       <GeneralLayouts.Section flexDirection="row" alignItems="start">
-        <GeneralLayouts.Section gap={0} padding={0.5} alignItems="start">
+        <GeneralLayouts.Section gap={0} padding={2} alignItems="start">
           <Content
             icon={provider.icon}
             title={model.modelName}
@@ -963,7 +959,7 @@ export default function IndexSettingsPage() {
                       // Non-port reindex has no PortAttempt progress → the original banner.
                       <MessageCard
                         variant="warning"
-                        headerPadding="sm"
+                        headerPadding={2}
                         title="Re-indexing in progress"
                         description={markdown(
                           `Switching to **${secondarySearchSettings?.model_name}**. Existing documents are being re-embedded — this may take hours or days depending on corpus size. The previous model continues to serve queries until the switchover completes.`
@@ -971,9 +967,9 @@ export default function IndexSettingsPage() {
                         bottomChildren={
                           <GeneralLayouts.Section
                             flexDirection="row"
-                            gap={0.5}
+                            gap={2}
                             justifyContent="end"
-                            padding={0.5}
+                            padding={2}
                           >
                             <Button
                               icon={SvgExternalLink}
@@ -998,7 +994,7 @@ export default function IndexSettingsPage() {
                         variant={
                           contextualRagModelMissing ? "error" : statusVariant
                         }
-                        headerPadding="sm"
+                        headerPadding={2}
                         title={
                           contextualRagModelMissing
                             ? "Select a Contextual Retrieval LLM"
@@ -1081,7 +1077,7 @@ export default function IndexSettingsPage() {
                     <div className="flex w-full flex-col gap-8">
                       {/* ── Embedding Model ── */}
                       <GeneralLayouts.Section
-                        gap={0.75}
+                        gap={3}
                         height="fit"
                         alignItems="stretch"
                         justifyContent="start"
@@ -1095,8 +1091,8 @@ export default function IndexSettingsPage() {
 
                         {NEXT_PUBLIC_CLOUD_ENABLED ? (
                           <CloudDisabled>
-                            <Card border="solid" rounding="lg" padding="sm">
-                              <GeneralLayouts.Section padding={0.5}>
+                            <Card border="solid" rounding="lg" padding={2}>
+                              <GeneralLayouts.Section padding={2}>
                                 <Content
                                   icon={SvgVector}
                                   title="Embedding model and settings are managed by Onyx Cloud."
@@ -1120,14 +1116,14 @@ export default function IndexSettingsPage() {
                                 border="solid"
                                 borderColor={statusVariant}
                                 rounding="lg"
-                                padding={viewAllModelsOpen ? "fit" : "sm"}
+                                padding={viewAllModelsOpen ? 0 : 2}
                                 expandedContent={
                                   <>
                                     <Tabs.Content value={MODEL_TAB_CLOUD}>
                                       {filteredCloudProviders.length > 0 ? (
                                         <GeneralLayouts.Section
-                                          gap={0.5}
-                                          padding={0.5}
+                                          gap={2}
+                                          padding={2}
                                         >
                                           {filteredCloudProviders.map(
                                             (provider) => (
@@ -1204,8 +1200,8 @@ export default function IndexSettingsPage() {
                                       {filteredSelfHostedProviders.length >
                                       0 ? (
                                         <GeneralLayouts.Section
-                                          gap={0.5}
-                                          padding={0.5}
+                                          gap={2}
+                                          padding={2}
                                         >
                                           {filteredSelfHostedProviders.map(
                                             (shProvider) => (
@@ -1250,7 +1246,7 @@ export default function IndexSettingsPage() {
                                             )
                                           )}
 
-                                          <GeneralLayouts.Section gap={0.25}>
+                                          <GeneralLayouts.Section gap={1}>
                                             <div className="px-1 pt-1 w-full h-(--height-line-h1-headline)">
                                               <GeneralLayouts.Section
                                                 flexDirection="row"
@@ -1273,7 +1269,7 @@ export default function IndexSettingsPage() {
                                             <SelectCard
                                               state="filled"
                                               rounding="md"
-                                              padding="sm"
+                                              padding={2}
                                               onClick={() =>
                                                 customModelModal.toggle(true)
                                               }
@@ -1283,7 +1279,7 @@ export default function IndexSettingsPage() {
                                                 sizePreset="secondary"
                                                 variant="body"
                                                 color="muted"
-                                                padding="md"
+                                                padding={1}
                                                 rightChildren={
                                                   <Button
                                                     prominence="tertiary"
@@ -1373,7 +1369,7 @@ export default function IndexSettingsPage() {
                                 ) : (
                                   <div className="flex flex-row items-start w-full">
                                     <GeneralLayouts.Section
-                                      padding={0.5}
+                                      padding={2}
                                       gap={0}
                                       alignItems="start"
                                     >
@@ -1447,14 +1443,11 @@ export default function IndexSettingsPage() {
                         )}
                       </GeneralLayouts.Section>
 
-                      <Divider
-                        paddingParallel="fit"
-                        paddingPerpendicular="fit"
-                      />
+                      <Divider paddingParallel={0} paddingPerpendicular={0} />
 
                       {/* ── Retrieval Optimization ── */}
                       <GeneralLayouts.Section
-                        gap={0.75}
+                        gap={3}
                         height="fit"
                         alignItems="stretch"
                         justifyContent="start"
@@ -1548,14 +1541,11 @@ export default function IndexSettingsPage() {
                         </CloudDisabled>
                       </GeneralLayouts.Section>
 
-                      <Divider
-                        paddingParallel="fit"
-                        paddingPerpendicular="fit"
-                      />
+                      <Divider paddingParallel={0} paddingPerpendicular={0} />
 
                       {/* ── Image Processing ── */}
                       <GeneralLayouts.Section
-                        gap={0.75}
+                        gap={3}
                         height="fit"
                         alignItems="stretch"
                         justifyContent="start"

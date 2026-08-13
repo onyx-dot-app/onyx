@@ -15,6 +15,8 @@ from pydantic import BaseModel
 from sqlalchemy.orm import Session
 
 from onyx.auth.permissions import require_permission
+from onyx.chat.incognito import incognito_allowed_for_user
+from onyx.chat.incognito_context import incognito_session_ended
 from onyx.configs.app_configs import DISABLE_VECTOR_DB
 from onyx.configs.constants import (
     PUBLIC_API_TAGS,
@@ -25,12 +27,15 @@ from onyx.configs.constants import (
 )
 from onyx.db.engine.sql_engine import get_session
 from onyx.db.enums import Permission, UserFileStatus
+from onyx.db.incognito import mark_incognito_user_files_deleting
 from onyx.db.models import ChatSession, Project__UserFile, User, UserFile, UserProject
 from onyx.db.persona import get_personas_by_ids
 from onyx.db.projects import (
     get_project_token_count,
     upload_files_to_user_files_with_indexing,
 )
+from onyx.error_handling.error_codes import OnyxErrorCode
+from onyx.error_handling.exceptions import OnyxError
 from onyx.server.features.projects.models import (
     CategorizedFilesSnapshot,
     ChatSessionRequest,
@@ -45,6 +50,19 @@ logger = setup_logger()
 
 
 router = APIRouter(prefix="/user/projects")
+
+# `user_project.name` and `user_project.description` are both varchar(255). Longer
+# values make Postgres reject the write, which surfaces as a 500.
+_MAX_PROJECT_FIELD_LENGTH = 255
+
+
+def _validate_project_field_length(value: str, field_name: str) -> None:
+    if len(value) > _MAX_PROJECT_FIELD_LENGTH:
+        raise OnyxError(
+            OnyxErrorCode.INVALID_INPUT,
+            f"Project {field_name} cannot be longer than "
+            f"{_MAX_PROJECT_FIELD_LENGTH} characters",
+        )
 
 
 class UserFileDeleteResult(BaseModel):
@@ -119,6 +137,7 @@ def create_project(
 ) -> UserProjectSnapshot:
     if name == "":
         raise HTTPException(status_code=400, detail="Project name cannot be empty")
+    _validate_project_field_length(name, "name")
     user_id = user.id
     project = UserProject(name=name, user_id=user_id)
     db_session.add(project)
@@ -132,9 +151,26 @@ def upload_user_files(
     files: list[UploadFile] = File(...),
     project_id: int | None = Form(None),
     temp_id_map: str | None = Form(None),  # JSON string mapping hashed key -> temp_id
+    incognito_session_id: UUID | None = Form(None),
     user: User = Depends(require_permission(Permission.BASIC_ACCESS)),
     db_session: Session = Depends(get_session),
 ) -> CategorizedFilesSnapshot:
+    # The file names its session before that session exists, so it is private
+    # from the moment it lands and the id is what teardown finds it by.
+    if incognito_session_id is not None:
+        if not incognito_allowed_for_user(user, db_session, cached=False):
+            raise OnyxError(
+                OnyxErrorCode.UNAUTHORIZED,
+                "Incognito chat is not enabled for this user.",
+            )
+        # Teardown marks the rows that exist when it runs, so an upload landing
+        # after it would otherwise sit until the orphan sweep. The tombstone is
+        # durable, which makes this the point where that race is settled.
+        if incognito_session_ended(incognito_session_id):
+            raise OnyxError(
+                OnyxErrorCode.INVALID_INPUT,
+                "This incognito chat has ended.",
+            )
     try:
         parsed_temp_id_map: dict[str, str] | None = None
         if temp_id_map:
@@ -156,7 +192,19 @@ def upload_user_files(
             temp_id_map=parsed_temp_id_map,
             db_session=db_session,
             background_tasks=bg_tasks if DISABLE_VECTOR_DB else None,
+            incognito_session_id=incognito_session_id,
         )
+
+        # Re-check after the rows exist. The tombstone is monotonic, so a
+        # teardown that landed during the upload is caught here even though the
+        # pre-check passed, which is what the marking query alone would miss.
+        if incognito_session_id is not None and incognito_session_ended(
+            incognito_session_id
+        ):
+            mark_incognito_user_files_deleting(
+                db_session, incognito_session_id, user.id
+            )
+            db_session.commit()
 
         return CategorizedFilesSnapshot.from_result(categorized_files_result)
 
@@ -405,8 +453,10 @@ def update_project(
         raise HTTPException(status_code=404, detail="Project not found")
 
     if body.name is not None:
+        _validate_project_field_length(body.name, "name")
         project.name = body.name
     if body.description is not None:
+        _validate_project_field_length(body.description, "description")
         project.description = body.description
 
     db_session.commit()

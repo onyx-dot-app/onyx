@@ -228,7 +228,8 @@ export function ProjectFolderButton({ project }: ProjectFolderButtonProps) {
             // appears nowhere else in the sidebar (Recents excludes them), so
             // the folder itself has to carry the "you are here" mark.
             selected={isActiveProject && (activeSidebar.isProject() || !open)}
-            onClick={noProp(handleTextClick)}
+            /* While renaming, drop the click target so the input stays usable. */
+            onClick={isEditing ? undefined : noProp(handleTextClick)}
             rightChildren={
               <>
                 <Popover.Trigger asChild onClick={noProp()}>
@@ -430,7 +431,7 @@ export function FoldedProjectsPopover() {
                   <EmptyMessageCard
                     key="empty"
                     title="No projects found"
-                    padding="sm"
+                    padding={2}
                   />,
                 ]
               : matches.map((match) => (

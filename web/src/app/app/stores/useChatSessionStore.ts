@@ -41,6 +41,8 @@ interface ChatSessionData {
   isLoaded: boolean;
   description?: string;
   personaId?: number;
+  // Pinned at creation server-side, so it outlives the live UI toggle.
+  incognito?: boolean;
 
   // Streaming duration tracking
   streamingStartTime?: number;
@@ -613,6 +615,7 @@ export const useChatSessionStore = create<ChatSessionStore>()((set, get) => ({
       isLoaded: true,
       description: backendSession?.description,
       personaId: backendSession?.persona_id,
+      incognito: backendSession?.incognito ?? false,
     };
 
     const existingSession = get().sessions.get(sessionId);

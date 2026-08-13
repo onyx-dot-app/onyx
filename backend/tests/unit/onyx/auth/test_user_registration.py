@@ -66,8 +66,8 @@ class _AsyncSessionContextManager:
 
 
 def _mock_user_manager_methods(user_manager: UserManager) -> None:
-    setattr(user_manager, "validate_password", AsyncMock())
-    setattr(user_manager, "_assign_default_pinned_assistants", AsyncMock())
+    user_manager.validate_password = AsyncMock()
+    user_manager._assign_default_pinned_assistants = AsyncMock()
 
 
 class TestDisposableEmailValidation:
@@ -593,11 +593,9 @@ class TestOAuthDottedGmail:
 
         user_manager = UserManager(MagicMock())
         _mock_user_manager_methods(user_manager)
-        setattr(user_manager, "on_after_register", AsyncMock())
-        setattr(
-            user_manager,
-            "get_by_oauth_account",
-            AsyncMock(side_effect=exceptions.UserNotExists()),
+        user_manager.on_after_register = AsyncMock()
+        user_manager.get_by_oauth_account = AsyncMock(
+            side_effect=exceptions.UserNotExists()
         )
 
         created_user = MagicMock(id="test-id", email=dotted_email)
@@ -657,11 +655,9 @@ class TestOAuthNoAutoLinkExemptions:
     def _manager_with_existing(existing_user: MagicMock) -> UserManager:
         user_manager = UserManager(MagicMock())
         _mock_user_manager_methods(user_manager)
-        setattr(user_manager, "on_after_register", AsyncMock())
-        setattr(
-            user_manager,
-            "get_by_oauth_account",
-            AsyncMock(side_effect=exceptions.UserNotExists()),
+        user_manager.on_after_register = AsyncMock()
+        user_manager.get_by_oauth_account = AsyncMock(
+            side_effect=exceptions.UserNotExists()
         )
         mock_user_db = MagicMock()
         mock_user_db.get_by_email = AsyncMock(return_value=existing_user)

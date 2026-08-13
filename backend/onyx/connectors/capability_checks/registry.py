@@ -4,13 +4,16 @@ from onyx.connectors.capability_checks.models import (
     CapabilityCheckContext,
     CredentialCapability,
 )
+from onyx.connectors.slack.capability_checks import build_slack_indexing_checks
 from onyx.connectors.source_operations import get_source_operations_class
 from onyx.utils.variable_functionality import fetch_ee_implementation_or_noop
 
 # INDEXING checks per source. Checks must be enumerable without an instantiated
 # connector, hence a registry module rather than a ``BaseConnector`` method.
-# Empty at framework stage: per-connector work registers named checks here.
-_INDEXING_CHECKS_BY_SOURCE: dict[DocumentSource, list[CapabilityCheck]] = {}
+# Per-connector work registers named checks here.
+_INDEXING_CHECKS_BY_SOURCE: dict[DocumentSource, list[CapabilityCheck]] = {
+    DocumentSource.SLACK: build_slack_indexing_checks(),
+}
 
 
 class _ConnectorSettingsFallbackCheck(CapabilityCheck):

@@ -195,6 +195,7 @@ def get_user_file_ids_for_user_batch(
     stmt = select(UserFile.id).where(
         UserFile.user_id == user_id,
         UserFile.status == UserFileStatus.COMPLETED,
+        UserFile.incognito.is_(False),
     )
     if after_id is not None:
         stmt = stmt.where(UserFile.id > UUID(after_id))

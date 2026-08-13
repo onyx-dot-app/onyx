@@ -163,7 +163,7 @@ export default function SSOProvidersPage() {
                     description={provider.redirect_uri}
                     sizePreset="main-ui"
                     variant="section"
-                    padding="md"
+                    padding={1}
                     rightChildren={
                       <div
                         className={cn(

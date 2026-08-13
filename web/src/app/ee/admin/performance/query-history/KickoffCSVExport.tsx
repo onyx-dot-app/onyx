@@ -1,7 +1,7 @@
 import { toast } from "@opal/layouts";
 import Button from "@/refresh-components/buttons/Button";
 import { useRef, useState } from "react";
-import { DateRange } from "../../../../../components/dateRangeSelectors/AdminDateRangeSelector";
+import type { DateRange } from "@/refresh-components/DateRangePicker";
 import { withRequestId, withDateRange } from "./utils";
 import {
   CHECK_QUERY_HISTORY_EXPORT_STATUS_URL,

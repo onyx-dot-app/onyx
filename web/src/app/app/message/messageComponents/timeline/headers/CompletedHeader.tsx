@@ -58,8 +58,8 @@ function MemoryTagWithTooltip({
             <Section
               flexDirection="column"
               alignItems="start"
-              padding={0.25}
-              gap={0.25}
+              padding={1}
+              gap={1}
               height="auto"
             >
               <div className="p-1">
@@ -71,7 +71,7 @@ function MemoryTagWithTooltip({
                 icon={SvgAddLines}
                 title={operationLabel}
                 sizePreset="secondary"
-                padding="sm"
+                padding={1}
                 variant="body"
                 color="muted"
                 rightChildren={
