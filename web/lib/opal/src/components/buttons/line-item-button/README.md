@@ -9,7 +9,7 @@ A composite component that wraps `Interactive.Stateful > Interactive.Container >
 ```
 Interactive.Stateful         <- selectVariant, state, interaction, onClick, href, ref
   └─ Interactive.Container   <- width, rounding
-       └─ ContentAction      <- withInteractive, padding={2}
+       └─ ContentAction      <- withInteractive, padding
             ├─ Content       <- icon, title, description, sizePreset, variant, ...
             └─ rightChildren
 ```
@@ -18,7 +18,9 @@ The row renders as a focusable `<div role="button">` (with Enter/Space activatio
 native `<button>`, so interactive `rightChildren` such as action buttons don't produce invalid
 button-in-button nesting. With `href` it renders an anchor instead.
 
-`padding` is hardcoded to `2` and `withInteractive` is always `true`. These are not exposed as props.
+`withInteractive` is always `true` and is not exposed. `padding` is forwarded to the inner
+`ContentAction`, defaulting to `0` so a row hugs its content — the surrounding `p-1.5` already
+supplies the row's own inset.
 
 ## Props
 
@@ -41,6 +43,7 @@ button-in-button nesting. With `href` it renders an anchor instead.
 |------|------|---------|-------------|
 | `rounding` | `InteractiveContainerRoundingVariant` | `"md"` | Corner rounding preset (height is content-driven) |
 | `width` | `WidthVariant` | `"full"` | Container width |
+| `padding` | `Spacing` | `0` | Padding around the inner `ContentAction`, as a spacing step (`N / 4` rem) |
 | `tooltip` | `string` | — | Tooltip text shown on hover |
 | `tooltipSide` | `TooltipSide` | `"top"` | Tooltip side |
 
