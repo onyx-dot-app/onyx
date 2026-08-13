@@ -143,13 +143,25 @@ def _create_oauth_config(user: DATestUser) -> int:
     return int(resp.json()["id"])
 
 
-def _create_mcp_server(user: DATestUser) -> int:
-    """Create an MCP server as ``user`` (must succeed); returns its id."""
-    body = {
+def _mcp_body(*, is_public: bool, groups: list[int]) -> dict[str, Any]:
+    return {
         "name": f"mcp-{uuid4()}",
         "description": "escalation test",
         "server_url": "https://example.com/mcp",
+        "is_public": is_public,
+        "groups": groups,
     }
+
+
+def _create_mcp_server(
+    user: DATestUser, *, is_public: bool = True, groups: list[int] | None = None
+) -> int:
+    """Create an MCP server as ``user`` (must succeed); returns its id.
+
+    is_public defaults True on the request model, which a scoped manager may never
+    set — so a manager has to pass its own group explicitly.
+    """
+    body = _mcp_body(is_public=is_public, groups=groups or [])
     resp = call_endpoint("POST", "/admin/mcp/server", body, user.headers, user.cookies)
     assert resp.status_code == 200, resp.text
     return int(resp.json()["id"])
@@ -546,12 +558,39 @@ def test_manager_cannot_repoint_own_action_at_unowned_oauth_config(
 
 
 # MCP servers: owner-or-admin gating (not group-scoped like skills/agents).
-def test_manager_creates_mcp_server(env: _ScopedEnv) -> None:
-    _create_mcp_server(env.manager)
+def test_manager_creates_private_mcp_server_in_managed_group(
+    env: _ScopedEnv,
+) -> None:
+    _create_mcp_server(env.manager, is_public=False, groups=[env.managed_group.id])
+
+
+def test_manager_cannot_create_public_mcp_server(env: _ScopedEnv) -> None:
+    """Same rule as connectors and document sets: never widen to public."""
+    _assert_manager(
+        env,
+        "POST",
+        "/admin/mcp/server",
+        "denied",
+        _mcp_body(is_public=True, groups=[]),
+    )
+
+
+def test_manager_cannot_create_mcp_server_in_unmanaged_group(
+    env: _ScopedEnv,
+) -> None:
+    _assert_manager(
+        env,
+        "POST",
+        "/admin/mcp/server",
+        "denied",
+        _mcp_body(is_public=False, groups=[env.other_group.id]),
+    )
 
 
 def test_manager_deletes_own_mcp_server(env: _ScopedEnv) -> None:
-    server_id = _create_mcp_server(env.manager)
+    server_id = _create_mcp_server(
+        env.manager, is_public=False, groups=[env.managed_group.id]
+    )
     _assert_manager(env, "DELETE", f"/admin/mcp/server/{server_id}", "allowed")
 
 
@@ -636,3 +675,56 @@ def test_manager_cannot_delete_token_limit_on_unmanaged_group(env: _ScopedEnv) -
     _assert_manager(
         env, "DELETE", _group_limit_path(env.other_group.id, limit_id), "denied"
     )
+
+
+def test_manager_action_listing_scoped_to_own_and_agent_connected(
+    env: _ScopedEnv,
+) -> None:
+    """An action carries no group, so an agent is the only path from a group to one.
+    The listing returned every action in the tenant before this was scoped."""
+    own = _create_custom_tool(env.manager)
+    connected = _create_custom_tool(env.admin)
+    unconnected = _create_custom_tool(env.admin)
+    elsewhere = _create_custom_tool(env.admin)
+
+    PersonaManager.create(
+        user_performing_action=env.admin,
+        is_public=False,
+        groups=[env.managed_group.id],
+        tool_ids=[connected],
+    )
+    PersonaManager.create(
+        user_performing_action=env.admin,
+        is_public=False,
+        groups=[env.other_group.id],
+        tool_ids=[elsewhere],
+    )
+
+    listed = {
+        tool["id"]
+        for tool in _assert_manager(env, "GET", "/tool/openapi", "allowed").json()
+    }
+    assert {own, connected} <= listed
+    assert not ({unconnected, elsewhere} & listed), "unreachable action leaked"
+
+    admin_resp = call_endpoint(
+        "GET", "/tool/openapi", None, env.admin.headers, env.admin.cookies
+    )
+    admin_listed = {tool["id"] for tool in admin_resp.json()}
+    assert {own, connected, unconnected, elsewhere} <= admin_listed
+
+
+def test_manager_reads_action_by_id_only_when_reachable(env: _ScopedEnv) -> None:
+    """The by-id route bound its user to ``_``, so any caller could read an action's
+    full schema and custom headers. It must answer exactly like the listing."""
+    connected = _create_custom_tool(env.admin)
+    unconnected = _create_custom_tool(env.admin)
+    PersonaManager.create(
+        user_performing_action=env.admin,
+        is_public=False,
+        groups=[env.managed_group.id],
+        tool_ids=[connected],
+    )
+
+    _assert_manager(env, "GET", f"/tool/{connected}", "allowed")
+    _assert_manager(env, "GET", f"/tool/{unconnected}", "denied")

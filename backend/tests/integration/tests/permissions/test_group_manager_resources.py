@@ -2,9 +2,10 @@
 
 A scoped group manager may only create/edit non-PUBLIC resources (PRIVATE or SYNC
 connectors; PRIVATE document sets) whose every group is one they manage; they can
-never widen to PUBLIC, capture another group's resource by reassignment, act
-outside their managed scope, or DELETE (admin-only). Global holders (admins)
-bypass GATE 2. Managers are seeded by flipping ``User__UserGroup.is_manager``
+never widen to PUBLIC, capture another group's resource by reassignment, or act
+outside their managed scope. DELETE is admin-only except for a resource in no group
+that they created — shared with nobody, so its creator isn't stranded. Global holders
+(admins) bypass GATE 2. Managers are seeded by flipping ``User__UserGroup.is_manager``
 directly (no manager-creation helper exists yet).
 
 Allowed actions go through the shared Manager classes (which assert real success);
@@ -29,7 +30,11 @@ from tests.integration.common_utils.managers.credential import CredentialManager
 from tests.integration.common_utils.managers.document_set import DocumentSetManager
 from tests.integration.common_utils.managers.user import UserManager
 from tests.integration.common_utils.managers.user_group import UserGroupManager
-from tests.integration.common_utils.test_models import DATestUser, DATestUserGroup
+from tests.integration.common_utils.test_models import (
+    DATestDocumentSet,
+    DATestUser,
+    DATestUserGroup,
+)
 from tests.integration.tests.permissions._access_matrix import (
     assert_response,
     call_endpoint,
@@ -75,6 +80,12 @@ def env(reset: None, admin_user: DATestUser) -> _ScopedEnv:  # noqa: ARG001
     other_group = UserGroupManager.create(
         name="unmanaged", user_performing_action=admin_user
     )
+    # a freshly created group is still syncing, and every edit route 404s until it
+    # settles — start each test from a settled state rather than racing it
+    UserGroupManager.wait_for_sync(
+        user_performing_action=admin_user,
+        user_groups_to_check=[managed_group, other_group],
+    )
     _promote_to_manager(manager.id, managed_group.id)
     return _ScopedEnv(admin_user, manager, managed_group, other_group)
 
@@ -114,6 +125,57 @@ def _doc_set_body(
     if doc_set_id is not None:
         body["id"] = doc_set_id
     return body
+
+
+def _detach_cc_pair_from_group(group: DATestUserGroup, admin: DATestUser) -> None:
+    """Drop every cc_pair off a group and wait out the sync.
+
+    The only route to a manager-owned groupless connector: creating one directly is
+    refused (no managed scope in zero groups), so it has to start in a group and lose
+    it. Attaching the connector already left the group syncing, and an edit is refused
+    (404) while is_up_to_date is False — so both waits are load-bearing.
+    """
+    UserGroupManager.wait_for_sync(
+        user_performing_action=admin, user_groups_to_check=[group]
+    )
+    group.cc_pair_ids = []
+    UserGroupManager.edit(group, user_performing_action=admin)
+    UserGroupManager.wait_for_sync(
+        user_performing_action=admin, user_groups_to_check=[group]
+    )
+
+
+def _create_synced_doc_set(
+    env: _ScopedEnv, *, groups: list[int], cc_pair_ids: list[int]
+) -> DATestDocumentSet:
+    """Create a document set and wait until it is done syncing.
+
+    update_document_set refuses to touch a set whose is_up_to_date is False, and the
+    create response reports True before the sync has run.
+    """
+    doc_set = DocumentSetManager.create(
+        user_performing_action=env.manager,
+        is_public=False,
+        groups=groups,
+        cc_pair_ids=cc_pair_ids,
+    )
+    DocumentSetManager.wait_for_sync(
+        user_performing_action=env.manager, document_sets_to_check=[doc_set]
+    )
+    return doc_set
+
+
+def _patch_doc_set_ok(
+    env: _ScopedEnv, body: dict[str, Any], doc_set: DATestDocumentSet
+) -> None:
+    """PATCH expecting success, then wait out the sync it starts — see above."""
+    resp = call_endpoint(
+        "PATCH", _DOC_SET_PATH, body, env.manager.headers, env.manager.cookies
+    )
+    assert resp.status_code == 200, resp.text
+    DocumentSetManager.wait_for_sync(
+        user_performing_action=env.manager, document_sets_to_check=[doc_set]
+    )
 
 
 def test_admin_creates_public_cc_pair_bypasses_gate(env: _ScopedEnv) -> None:
@@ -227,11 +289,8 @@ def test_manager_cannot_capture_doc_set_by_reassign(env: _ScopedEnv) -> None:
         access_type=AccessType.PRIVATE,
         groups=[env.managed_group.id],
     )
-    doc_set = DocumentSetManager.create(
-        user_performing_action=env.manager,
-        is_public=False,
-        groups=[env.managed_group.id],
-        cc_pair_ids=[cc_pair.id],
+    doc_set = _create_synced_doc_set(
+        env, groups=[env.managed_group.id], cc_pair_ids=[cc_pair.id]
     )
     # current ∪ requested must be ⊆ managed — adding an unmanaged group is rejected.
     resp = call_endpoint(
@@ -255,11 +314,8 @@ def test_manager_edits_doc_set_within_managed_group(env: _ScopedEnv) -> None:
         access_type=AccessType.PRIVATE,
         groups=[env.managed_group.id],
     )
-    doc_set = DocumentSetManager.create(
-        user_performing_action=env.manager,
-        is_public=False,
-        groups=[env.managed_group.id],
-        cc_pair_ids=[cc_pair.id],
+    doc_set = _create_synced_doc_set(
+        env, groups=[env.managed_group.id], cc_pair_ids=[cc_pair.id]
     )
     DocumentSetManager.edit(doc_set, user_performing_action=env.manager)
 
@@ -272,21 +328,15 @@ def test_manager_edits_own_groupless_doc_set(env: _ScopedEnv) -> None:
         access_type=AccessType.PRIVATE,
         groups=[env.managed_group.id],
     )
-    doc_set = DocumentSetManager.create(
-        user_performing_action=env.manager,
-        is_public=False,
-        groups=[env.managed_group.id],
-        cc_pair_ids=[cc_pair.id],
+    doc_set = _create_synced_doc_set(
+        env, groups=[env.managed_group.id], cc_pair_ids=[cc_pair.id]
     )
     body = _doc_set_body(
         is_public=False, groups=[], cc_pair_ids=[cc_pair.id], doc_set_id=doc_set.id
     )
     # first call detaches (scope gate, current groups still managed); second edits it
     # in place with no groups left, which only the creator path admits
-    detach = call_endpoint(
-        "PATCH", _DOC_SET_PATH, body, env.manager.headers, env.manager.cookies
-    )
-    assert detach.status_code == 200, detach.text
+    _patch_doc_set_ok(env, body, doc_set)
 
     body["name"] = f"ds-renamed-{uuid4()}"
     in_place = call_endpoint(
@@ -302,21 +352,13 @@ def test_manager_cannot_publish_own_groupless_doc_set(env: _ScopedEnv) -> None:
         access_type=AccessType.PRIVATE,
         groups=[env.managed_group.id],
     )
-    doc_set = DocumentSetManager.create(
-        user_performing_action=env.manager,
-        is_public=False,
-        groups=[env.managed_group.id],
-        cc_pair_ids=[cc_pair.id],
+    doc_set = _create_synced_doc_set(
+        env, groups=[env.managed_group.id], cc_pair_ids=[cc_pair.id]
     )
     detach = _doc_set_body(
         is_public=False, groups=[], cc_pair_ids=[cc_pair.id], doc_set_id=doc_set.id
     )
-    assert (
-        call_endpoint(
-            "PATCH", _DOC_SET_PATH, detach, env.manager.headers, env.manager.cookies
-        ).status_code
-        == 200
-    )
+    _patch_doc_set_ok(env, detach, doc_set)
 
     publish = _doc_set_body(
         is_public=True, groups=[], cc_pair_ids=[cc_pair.id], doc_set_id=doc_set.id
@@ -336,21 +378,13 @@ def test_manager_cannot_attach_unmanaged_group_to_groupless_doc_set(
         access_type=AccessType.PRIVATE,
         groups=[env.managed_group.id],
     )
-    doc_set = DocumentSetManager.create(
-        user_performing_action=env.manager,
-        is_public=False,
-        groups=[env.managed_group.id],
-        cc_pair_ids=[cc_pair.id],
+    doc_set = _create_synced_doc_set(
+        env, groups=[env.managed_group.id], cc_pair_ids=[cc_pair.id]
     )
     detach = _doc_set_body(
         is_public=False, groups=[], cc_pair_ids=[cc_pair.id], doc_set_id=doc_set.id
     )
-    assert (
-        call_endpoint(
-            "PATCH", _DOC_SET_PATH, detach, env.manager.headers, env.manager.cookies
-        ).status_code
-        == 200
-    )
+    _patch_doc_set_ok(env, detach, doc_set)
 
     capture = _doc_set_body(
         is_public=False,
@@ -371,21 +405,13 @@ def test_manager_deletes_own_groupless_doc_set(env: _ScopedEnv) -> None:
         access_type=AccessType.PRIVATE,
         groups=[env.managed_group.id],
     )
-    doc_set = DocumentSetManager.create(
-        user_performing_action=env.manager,
-        is_public=False,
-        groups=[env.managed_group.id],
-        cc_pair_ids=[cc_pair.id],
+    doc_set = _create_synced_doc_set(
+        env, groups=[env.managed_group.id], cc_pair_ids=[cc_pair.id]
     )
     detach = _doc_set_body(
         is_public=False, groups=[], cc_pair_ids=[cc_pair.id], doc_set_id=doc_set.id
     )
-    assert (
-        call_endpoint(
-            "PATCH", _DOC_SET_PATH, detach, env.manager.headers, env.manager.cookies
-        ).status_code
-        == 200
-    )
+    _patch_doc_set_ok(env, detach, doc_set)
 
     resp = call_endpoint(
         "DELETE",
@@ -403,11 +429,8 @@ def test_manager_cannot_delete_doc_set(env: _ScopedEnv) -> None:
         access_type=AccessType.PRIVATE,
         groups=[env.managed_group.id],
     )
-    doc_set = DocumentSetManager.create(
-        user_performing_action=env.manager,
-        is_public=False,
-        groups=[env.managed_group.id],
-        cc_pair_ids=[cc_pair.id],
+    doc_set = _create_synced_doc_set(
+        env, groups=[env.managed_group.id], cc_pair_ids=[cc_pair.id]
     )
     # Owns it, but it is still shared into a group — delete stays admin-only.
     path = f"{_DOC_SET_PATH}/{doc_set.id}"
@@ -533,9 +556,6 @@ def test_plain_member_cannot_create_doc_set(env: _ScopedEnv) -> None:
 
 
 def test_admin_cc_pair_detail_carries_permissions_map(env: _ScopedEnv) -> None:
-    # The connector read route is GLOBAL-only (no allow_scope), so a scoped manager
-    # can't reach it; this covers the admin wire format (the manager distinction is
-    # proven in the projection contract test).
     cc_pair = CCPairManager.create_from_scratch(
         user_performing_action=env.admin,
         access_type=AccessType.PRIVATE,
@@ -550,3 +570,123 @@ def test_admin_cc_pair_detail_carries_permissions_map(env: _ScopedEnv) -> None:
     assert body["permissions"] == {"edit": True, "delete": True, "publish": True}
     # edit is stamped from is_editable_for_current_user, so the two must agree
     assert body["permissions"]["edit"] == body["is_editable_for_current_user"]
+
+
+def test_manager_reads_detail_of_own_groupless_cc_pair(env: _ScopedEnv) -> None:
+    """Every fetch the detail page makes, on a connector that lost its last group.
+
+    The page gates its whole render on the cc-pair AND the index-attempts fetch, and
+    usePaginatedFetch never clears isLoading on error — so a single 404 here is an
+    infinite spinner, not a visible failure.
+    """
+    cc_pair = CCPairManager.create_from_scratch(
+        user_performing_action=env.manager,
+        access_type=AccessType.PRIVATE,
+        groups=[env.managed_group.id],
+    )
+    _detach_cc_pair_from_group(env.managed_group, env.admin)
+
+    for path in [
+        f"/manage/admin/cc-pair/{cc_pair.id}",
+        f"/manage/admin/cc-pair/{cc_pair.id}/index-attempts?page_num=0&page_size=10",
+        f"/manage/admin/cc-pair/{cc_pair.id}/last_pruned",
+        f"/manage/admin/cc-pair/{cc_pair.id}/permission-sync-attempts",
+    ]:
+        resp = call_endpoint(
+            "GET", path, None, env.manager.headers, env.manager.cookies
+        )
+        assert_response(resp, "GET", path, "manager", "allowed")
+
+
+def test_manager_cannot_read_groupless_cc_pair_of_another_creator(
+    env: _ScopedEnv,
+) -> None:
+    """The fallback is creator-only — otherwise detaching a group would expose a
+    connector to every manager instead of hiding it from all but one."""
+    admin_cc_pair = CCPairManager.create_from_scratch(
+        user_performing_action=env.admin,
+        access_type=AccessType.PRIVATE,
+        groups=[env.other_group.id],
+    )
+    _detach_cc_pair_from_group(env.other_group, env.admin)
+
+    path = f"/manage/admin/cc-pair/{admin_cc_pair.id}"
+    resp = call_endpoint("GET", path, None, env.manager.headers, env.manager.cookies)
+    assert resp.status_code in (403, 404), resp.text
+
+
+def test_manager_cc_pair_detail_stamps_delete_once_groupless(
+    env: _ScopedEnv,
+) -> None:
+    """The Delete control renders off permissions.delete, so the map must track the
+    same carve-out the deletion route enforces — not stay admin-only behind it."""
+    cc_pair = CCPairManager.create_from_scratch(
+        user_performing_action=env.manager,
+        access_type=AccessType.PRIVATE,
+        groups=[env.managed_group.id],
+    )
+    path = f"/manage/admin/cc-pair/{cc_pair.id}"
+
+    shared = call_endpoint(
+        "GET", path, None, env.manager.headers, env.manager.cookies
+    ).json()
+    assert shared["permissions"]["edit"] is True
+    assert shared["permissions"]["delete"] is False, "shared connector is admin-only"
+
+    _detach_cc_pair_from_group(env.managed_group, env.admin)
+
+    groupless = call_endpoint(
+        "GET", path, None, env.manager.headers, env.manager.cookies
+    ).json()
+    assert groupless["permissions"]["delete"] is True
+    assert groupless["permissions"]["publish"] is False, "publish stays global-only"
+
+
+def test_manager_deletes_own_groupless_cc_pair(env: _ScopedEnv) -> None:
+    """Mirrors the document-set carve-out: shared with nobody, so its creator may
+    delete it rather than needing an admin to unstrand it."""
+    cc_pair = CCPairManager.create_from_scratch(
+        user_performing_action=env.manager,
+        access_type=AccessType.PRIVATE,
+        groups=[env.managed_group.id],
+    )
+    _detach_cc_pair_from_group(env.managed_group, env.admin)
+
+    resp = call_endpoint(
+        "POST",
+        "/manage/admin/deletion-attempt",
+        {"connector_id": cc_pair.connector_id, "credential_id": cc_pair.credential_id},
+        env.manager.headers,
+        env.manager.cookies,
+    )
+    assert resp.status_code == 200, resp.text
+
+
+def test_manager_doc_set_listing_stamps_groupless_as_editable(
+    env: _ScopedEnv,
+) -> None:
+    """The Edit button reads permissions.edit off this listing, not the write gate.
+    Recomputing editability here instead of taking it from the editable query is what
+    previously left a creator able to PATCH a set the list showed as read-only."""
+    cc_pair = CCPairManager.create_from_scratch(
+        user_performing_action=env.manager,
+        access_type=AccessType.PRIVATE,
+        groups=[env.managed_group.id],
+    )
+    doc_set = _create_synced_doc_set(
+        env, groups=[env.managed_group.id], cc_pair_ids=[cc_pair.id]
+    )
+    detach = _doc_set_body(
+        is_public=False, groups=[], cc_pair_ids=[cc_pair.id], doc_set_id=doc_set.id
+    )
+    _patch_doc_set_ok(env, detach, doc_set)
+
+    listing = call_endpoint(
+        "GET", "/manage/document-set", None, env.manager.headers, env.manager.cookies
+    )
+    assert listing.status_code == 200, listing.text
+    listed = {entry["id"]: entry for entry in listing.json()}
+    assert doc_set.id in listed, "creator lost their groupless set from the listing"
+    assert listed[doc_set.id]["permissions"]["edit"] is True
+    assert listed[doc_set.id]["permissions"]["delete"] is True
+    assert listed[doc_set.id]["permissions"]["publish"] is False
