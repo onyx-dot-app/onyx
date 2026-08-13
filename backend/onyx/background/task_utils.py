@@ -1,10 +1,12 @@
 """Background task utilities.
 
-Contains query-history report helpers (used by all deployment modes) and
-in-process background task execution helpers for NO_VECTOR_DB mode:
+Contains query-history report helpers (used by all deployment modes), the
+shared enqueue path for user file deletes, and in-process background task
+execution helpers for NO_VECTOR_DB mode:
 
 - Atomic claim-and-mark helpers that prevent duplicate processing
 - Drain loops that process all pending user file work
+- The delete enqueue every request handler routes through
 
 Each claim function runs a short-lived transaction: SELECT ... FOR UPDATE
 SKIP LOCKED, UPDATE the row to remove it from future queries, COMMIT.
@@ -12,12 +14,22 @@ After the commit the row lock is released, but the row is no longer
 eligible for re-claiming.  No long-lived sessions or advisory locks.
 """
 
+from collections.abc import Sequence
 from uuid import UUID
 
 import sqlalchemy as sa
+from celery import Celery
+from fastapi import BackgroundTasks
 from sqlalchemy import select
 from sqlalchemy.orm import Session
 
+from onyx.configs.app_configs import DISABLE_VECTOR_DB
+from onyx.configs.constants import (
+    CELERY_USER_FILE_DELETE_TASK_EXPIRES,
+    OnyxCeleryPriority,
+    OnyxCeleryQueues,
+    OnyxCeleryTask,
+)
 from onyx.db.enums import UserFileStatus
 from onyx.db.models import UserFile
 from onyx.utils.logger import setup_logger
@@ -163,7 +175,10 @@ def drain_delete_loop(tenant_id: str) -> None:
     from onyx.background.celery.tasks.user_file_processing.tasks import (
         delete_user_file_impl,
     )
-    from onyx.chat.incognito import sweep_stale_incognito_user_files
+    from onyx.chat.incognito import (
+        sweep_incognito_generated_files,
+        sweep_stale_incognito_user_files,
+    )
     from onyx.db.engine.sql_engine import get_session_with_current_tenant
 
     failed: set[UUID] = set()
@@ -187,8 +202,11 @@ def drain_delete_loop(tenant_id: str) -> None:
     # deletion. What it queues is picked up on the next pass.
     try:
         with get_session_with_current_tenant() as session:
-            if sweep_stale_incognito_user_files(session):
-                session.commit()
+            sweep_stale_incognito_user_files(session)
+            # Always: the sweep also restarts the orphan clock on sessions it
+            # found live, which is lost if only a queued file triggers this.
+            session.commit()
+            sweep_incognito_generated_files(session)
     except Exception:
         logger.exception("Stale incognito sweep failed")
 
@@ -215,3 +233,48 @@ def drain_project_sync_loop(tenant_id: str) -> None:
         except Exception:
             logger.exception("Failed to sync user file %s", file_id)
             failed.add(file_id)
+
+
+# ------------------------------------------------------------------
+# Delete enqueue: the one path request handlers use
+# ------------------------------------------------------------------
+
+
+def send_user_file_delete_task(app: Celery, user_file_id: UUID, tenant_id: str) -> None:
+    """Send one delete to the worker queue.
+
+    Carries the expiry every send needs, so a backlog cannot grow without bound.
+    """
+    app.send_task(
+        OnyxCeleryTask.DELETE_SINGLE_USER_FILE,
+        kwargs={"user_file_id": str(user_file_id), "tenant_id": tenant_id},
+        queue=OnyxCeleryQueues.USER_FILE_DELETE,
+        priority=OnyxCeleryPriority.HIGH,
+        expires=CELERY_USER_FILE_DELETE_TASK_EXPIRES,
+    )
+
+
+def enqueue_user_file_deletes(
+    user_file_ids: Sequence[UUID],
+    *,
+    tenant_id: str,
+    bg_tasks: BackgroundTasks,
+) -> None:
+    """Hand rows already marked DELETING to whatever drains them here.
+
+    Lite deployments run no Celery, so the queue has no consumer and the work
+    goes to an in-process drain that runs with the request rather than waiting
+    on the recovery poll.
+    """
+    if not user_file_ids:
+        return
+    if DISABLE_VECTOR_DB:
+        bg_tasks.add_task(drain_delete_loop, tenant_id)
+        logger.info("Queued in-process delete for %d user file(s)", len(user_file_ids))
+        return
+
+    from onyx.background.celery.versioned_apps.client import app as client_app
+
+    for user_file_id in user_file_ids:
+        send_user_file_delete_task(client_app, user_file_id, tenant_id)
+    logger.info("Queued delete task for %d user file(s)", len(user_file_ids))

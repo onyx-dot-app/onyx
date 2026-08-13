@@ -1,14 +1,15 @@
 """Guards which incognito sessions the upload endpoint accepts files for.
 
-The guard must read the teardown tombstone alone, since an absent context key
-means the session is new: switching incognito on mints the id client-side, so
-uploads arrive naming a session that holds no context until its first message.
+Switching incognito on mints the session id client-side, so uploads arrive
+naming a session that holds no context until its first message. Only a teardown
+tombstone closes a session to new files, and an upload that overlaps one has to
+claim its own rows however the request ends.
 """
 
+from dataclasses import dataclass
 from unittest.mock import MagicMock, patch
 from uuid import uuid4
 
-import pytest
 from fastapi import BackgroundTasks
 
 from onyx.chat.incognito_context import _TOMBSTONE
@@ -22,29 +23,42 @@ CONTEXT_MODULE = "onyx.chat.incognito_context"
 NO_CONTEXT_YET = None
 
 
+@dataclass
+class Attempt:
+    """What one upload request did, including how it ended."""
+
+    wrote_rows: bool
+    claimed_rows: bool
+    error: Exception | None
+
+
 def _upload(
     *,
-    stored_before: bytes | None = NO_CONTEXT_YET,
-    stored_after: bytes | None = NO_CONTEXT_YET,
+    stored: list[bytes | None],
     allowed: bool = True,
-    expect_upload: bool = True,
-) -> MagicMock:
-    """Runs the endpoint against a fresh incognito session id and returns the
-    marking helper, so the caller can assert whether cleanup was queued.
+    upload_fails: bool = False,
+) -> Attempt:
+    """Run the endpoint against a fresh incognito session id.
 
-    *stored_before* and *stored_after* are what Redis holds for the context key
-    on the pre-check and the post-check. Driving the store rather than the
-    predicate keeps the assertion on which verdict the endpoint asks for.
+    *stored* is what Redis holds for the context key on the pre-check and then
+    the post-check, which is the only thing separating an ordinary upload from
+    one racing a teardown.
     """
     redis_client = MagicMock()
-    redis_client.get.side_effect = [stored_before, stored_after]
+    redis_client.get.side_effect = list(stored)
     with (
         patch(f"{MODULE}.incognito_allowed_for_user", return_value=allowed),
         patch(f"{CONTEXT_MODULE}.get_redis_client", return_value=redis_client),
-        patch(f"{MODULE}.upload_files_to_user_files_with_indexing") as upload_impl,
+        patch(
+            f"{MODULE}.upload_files_to_user_files_with_indexing",
+            side_effect=ConnectionError("indexing hand-off failed")
+            if upload_fails
+            else None,
+        ) as upload_impl,
         patch(f"{MODULE}.mark_incognito_user_files_deleting") as mark,
         patch(f"{MODULE}.CategorizedFilesSnapshot"),
     ):
+        error: Exception | None = None
         try:
             upload_user_files(
                 bg_tasks=BackgroundTasks(),
@@ -55,36 +69,51 @@ def _upload(
                 user=MagicMock(id=uuid4()),
                 db_session=MagicMock(),
             )
-        finally:
-            # In a finally so a refused upload still asserts nothing was
-            # written. A guard moved below the write would pass otherwise.
-            assert upload_impl.call_count == (1 if expect_upload else 0)
-    return mark
+        except Exception as raised:
+            error = raised
+        return Attempt(
+            wrote_rows=upload_impl.call_count == 1,
+            claimed_rows=mark.call_count == 1,
+            error=error,
+        )
 
 
 def test_a_session_that_has_sent_no_message_yet_accepts_the_upload() -> None:
-    mark = _upload()
+    """The case that rejected the first attachment of every new incognito
+    chat: no message sent, so no context key exists."""
+    attempt = _upload(stored=[NO_CONTEXT_YET, NO_CONTEXT_YET])
 
-    mark.assert_not_called()
+    assert attempt.error is None
+    assert attempt.wrote_rows
+    assert not attempt.claimed_rows
 
 
 def test_an_upload_racing_teardown_is_queued_for_deletion() -> None:
-    """The pre-check passed and the tombstone landed mid-upload, so the rows
-    exist and the post-check is what catches them."""
-    mark = _upload(stored_after=_TOMBSTONE)
+    attempt = _upload(stored=[NO_CONTEXT_YET, _TOMBSTONE])
 
-    mark.assert_called_once()
+    assert attempt.claimed_rows
+
+
+def test_an_upload_that_fails_after_writing_still_claims_its_rows() -> None:
+    """Rows are committed before the indexing hand-off, which can still fail,
+    so a torn-down session's files must not be left stored and unmarked."""
+    attempt = _upload(stored=[NO_CONTEXT_YET, _TOMBSTONE], upload_fails=True)
+
+    assert attempt.error is not None
+    assert attempt.claimed_rows
 
 
 def test_an_upload_into_an_ended_session_never_writes_a_row() -> None:
-    with pytest.raises(OnyxError) as raised:
-        _upload(stored_before=_TOMBSTONE, expect_upload=False)
+    attempt = _upload(stored=[_TOMBSTONE])
 
-    assert raised.value.error_code is OnyxErrorCode.INVALID_INPUT
+    assert isinstance(attempt.error, OnyxError)
+    assert attempt.error.error_code is OnyxErrorCode.INVALID_INPUT
+    assert not attempt.wrote_rows
 
 
 def test_a_user_without_incognito_is_refused() -> None:
-    with pytest.raises(OnyxError) as raised:
-        _upload(allowed=False, expect_upload=False)
+    attempt = _upload(stored=[], allowed=False)
 
-    assert raised.value.error_code is OnyxErrorCode.UNAUTHORIZED
+    assert isinstance(attempt.error, OnyxError)
+    assert attempt.error.error_code is OnyxErrorCode.UNAUTHORIZED
+    assert not attempt.wrote_rows

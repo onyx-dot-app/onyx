@@ -12,6 +12,7 @@ version. A lost save means a concurrent writer won or the session ended, and
 the caller must not retry with the history it loaded.
 """
 
+from collections.abc import Collection
 from uuid import UUID
 
 from pydantic import BaseModel, TypeAdapter, ValidationError
@@ -197,14 +198,31 @@ def incognito_session_torn_down(chat_session_id: UUID) -> bool:
     return _stored_context(chat_session_id) == _TOMBSTONE
 
 
+def incognito_sessions_ended(chat_session_ids: Collection[UUID]) -> set[UUID]:
+    """Which of these sessions have no live context, by teardown or by expiry.
+
+    One round trip for the whole batch. Duplicate ids collapse in the result.
+    """
+    # Materialized once: the ids and the values are zipped positionally, so a
+    # set argument must not be iterated twice.
+    session_ids = list(chat_session_ids)
+    values = get_redis_client().mget(
+        [_context_key(session_id) for session_id in session_ids]
+    )
+    return {
+        session_id
+        for session_id, raw in zip(session_ids, values, strict=True)
+        if raw is None or raw == _TOMBSTONE
+    }
+
+
 def incognito_session_ended(chat_session_id: UUID) -> bool:
     """Whether the live context is gone, by teardown or by expiry.
 
     Absence counts, so a session that has not written its first message reads
     as ended. Only for callers that have already ruled that out.
     """
-    raw = _stored_context(chat_session_id)
-    return raw is None or raw == _TOMBSTONE
+    return bool(incognito_sessions_ended([chat_session_id]))
 
 
 def teardown_incognito_session(chat_session_id: UUID) -> None:

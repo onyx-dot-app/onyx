@@ -1,4 +1,4 @@
-from sqlalchemy import String, and_, case, cast, select, update
+from sqlalchemy import String, and_, case, cast, func, select, update
 from sqlalchemy.dialects.postgresql import insert
 from sqlalchemy.orm import Session
 
@@ -247,12 +247,16 @@ def get_session_ids_with_incognito_files(
     db_session: Session, limit: int | None = None
 ) -> list[str]:
     """Sessions still holding blobs. Empty in steady state, since teardown
-    deletes the records, so this only sees what a store failure left."""
-    return list(
-        db_session.scalars(
-            select(FileRecord.file_metadata[INCOGNITO_SESSION_METADATA_KEY].astext)
-            .distinct()
-            .where(FileRecord.file_metadata.has_key(INCOGNITO_SESSION_METADATA_KEY))
-            .limit(limit)
-        )
+    deletes the records, so this only sees what a store failure left.
+
+    Sampled at random when limited: every row here is a retry, so a set that
+    keeps failing must not occupy the batch and hide the sessions behind it.
+    """
+    stmt = (
+        select(FileRecord.file_metadata[INCOGNITO_SESSION_METADATA_KEY].astext)
+        .distinct()
+        .where(FileRecord.file_metadata.has_key(INCOGNITO_SESSION_METADATA_KEY))
     )
+    if limit is not None:
+        stmt = stmt.order_by(func.random()).limit(limit)
+    return list(db_session.scalars(stmt))
