@@ -18,11 +18,11 @@ from typing import Any, NamedTuple
 from uuid import uuid4
 
 import pytest
-from sqlalchemy import update
+from sqlalchemy import select, update
 
 from onyx.db.engine.sql_engine import get_session_with_current_tenant
 from onyx.db.enums import AccessType
-from onyx.db.models import User__UserGroup
+from onyx.db.models import ConnectorCredentialPair, User__UserGroup
 from onyx.db.permissions import recompute_user_permissions__no_commit
 from tests.integration.common_utils.managers.cc_pair import CCPairManager
 from tests.integration.common_utils.managers.connector import ConnectorManager
@@ -69,6 +69,16 @@ def _promote_to_manager(user_id: str, group_id: int) -> None:
         db_session.flush()
         recompute_user_permissions__no_commit(user_id, db_session)
         db_session.commit()
+
+
+def _cc_pair_status(cc_pair_id: int) -> str:
+    with get_session_with_current_tenant() as db_session:
+        status = db_session.execute(
+            select(ConnectorCredentialPair.status).where(
+                ConnectorCredentialPair.id == cc_pair_id
+            )
+        ).scalar_one()
+        return status.value
 
 
 @pytest.fixture
@@ -537,6 +547,37 @@ def test_manager_cannot_pause_unmanaged_cc_pair(env: _ScopedEnv) -> None:
         env.manager.cookies,
     )
     assert_response(resp, "PUT", path, "manager", "denied")
+
+
+def test_manager_cannot_delete_managed_cc_pair_via_status(env: _ScopedEnv) -> None:
+    """A manager passes the editable-scope filter for a managed pair, so accepting
+    status=DELETING here would delete it, bypassing the admin-only /deletion-attempt gate."""
+    cc_pair = CCPairManager.create_from_scratch(
+        user_performing_action=env.manager,
+        access_type=AccessType.PRIVATE,
+        groups=[env.managed_group.id],
+    )
+    path = f"/manage/admin/cc-pair/{cc_pair.id}/status"
+    resp = call_endpoint(
+        "PUT", path, {"status": "DELETING"}, env.manager.headers, env.manager.cookies
+    )
+    assert resp.status_code != 200, resp.text
+    assert _cc_pair_status(cc_pair.id) != "DELETING"
+
+
+def test_status_route_rejects_deleting_even_for_admin(env: _ScopedEnv) -> None:
+    """Deletion goes through /deletion-attempt, not the status route — for admins too."""
+    cc_pair = CCPairManager.create_from_scratch(
+        user_performing_action=env.admin,
+        access_type=AccessType.PRIVATE,
+        groups=[env.managed_group.id],
+    )
+    path = f"/manage/admin/cc-pair/{cc_pair.id}/status"
+    resp = call_endpoint(
+        "PUT", path, {"status": "DELETING"}, env.admin.headers, env.admin.cookies
+    )
+    assert resp.status_code != 200, resp.text
+    assert _cc_pair_status(cc_pair.id) != "DELETING"
 
 
 def test_plain_member_cannot_create_doc_set(env: _ScopedEnv) -> None:
