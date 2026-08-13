@@ -443,7 +443,7 @@ async def oidc_login_callback_for_provider(
         )
 
     # Validated before the workspace is read out of it, so a tampered or expired
-    # state fails inside this handler and reaches the login-error redirect.
+    # state is rejected here before any workspace is selected.
     state_data = decode_and_validate_oauth_state(
         request=request,
         state_value=state,

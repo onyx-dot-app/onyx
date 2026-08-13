@@ -2,7 +2,7 @@
 
 Cloud serves every workspace from one domain, so the SSO login routes have no
 tenant until the user identifies themselves. Discovery resolves the workspace
-from the catalog and returns this token; the authorize call presents it to
+from the catalog and returns this token. The authorize call presents it to
 select the schema holding the provider row. Signed because the tenant it names
 decides which workspace's IdP configuration is read, and short-lived because it
 only has to survive the click between discovery and authorize.
