@@ -5,9 +5,9 @@ concurrency:
 
 # Requires deployment/helm/charts/onyx/Chart.yaml `version` to be bumped above the
 # version on main whenever the packaged chart changes. helm-chart-releases.yml
-# republishes the chart on every push to main and will NOT overwrite an
-# already-published version, so a chart change that reuses main's version is
-# silently never released. This gate prevents that.
+# republishes the chart on every push to main that touches the charts, and will
+# NOT overwrite an already-published version, so a chart change that reuses
+# main's version is silently never released. This gate prevents that.
 #
 # Uses native path filtering: the workflow only runs when watched chart files
 # change (onyx-cnpg-crds is bundled into the onyx chart via Chart.lock, so it
