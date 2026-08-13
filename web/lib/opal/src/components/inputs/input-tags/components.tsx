@@ -51,7 +51,17 @@ interface InputTagsProps {
 
   /** Renders the clear action button (Figma `Clear`). */
   onClear?: () => void;
+
+  /** Tag rows the field is tall enough to show before it grows. */
+  minRows?: number;
+
+  /** Focuses the text input on mount. */
+  autoFocus?: boolean;
 }
+
+/** Tag row height and wrap gap, mirroring `.opal-input-tags-tags` in styles.css. */
+const TAG_ROW_HEIGHT_PX = 24;
+const TAG_ROW_GAP_PX = 4;
 
 // ---------------------------------------------------------------------------
 // InputTags
@@ -74,6 +84,8 @@ function InputTags({
   disabled = false,
   icon: Icon,
   onClear,
+  minRows = 1,
+  autoFocus,
 }: InputTagsProps) {
   const rootRef = useRef<HTMLDivElement>(null);
   const inputRef = useRef<HTMLInputElement>(null);
@@ -121,7 +133,20 @@ function InputTags({
           <Icon className="opal-input-tags-icon" />
         </div>
       )}
-      <div className="opal-input-tags-tags">
+      <div
+        className="opal-input-tags-tags"
+        style={
+          minRows > 1
+            ? {
+                minHeight:
+                  minRows * TAG_ROW_HEIGHT_PX + (minRows - 1) * TAG_ROW_GAP_PX,
+                // The taller field packs rows from the top; `content-center`
+                // would float a single row into the middle of the box.
+                alignContent: "flex-start",
+              }
+            : undefined
+        }
+      >
         {tags.map((tag) => (
           <Tag
             key={tag.id}
@@ -140,6 +165,7 @@ function InputTags({
           ref={inputRef}
           type="text"
           className="opal-input-field opal-input-tags-field"
+          autoFocus={autoFocus}
           disabled={disabled}
           value={value}
           onChange={(event) => onChange(event.target.value)}

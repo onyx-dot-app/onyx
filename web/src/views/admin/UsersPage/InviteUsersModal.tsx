@@ -1,13 +1,22 @@
 "use client";
 
 import { useState, useCallback } from "react";
-import { Button } from "@opal/components";
-import { SvgUsers, SvgAlertTriangle, SvgLoader } from "@opal/icons";
-import { BasicModalFooter, Modal } from "@opal/components";
-import InputChipField from "@/refresh-components/inputs/InputChipField";
-import type { ChipItem } from "@/refresh-components/inputs/InputChipField";
-import Text from "@/refresh-components/texts/Text";
-import { toast } from "@opal/layouts";
+import {
+  BasicModalFooter,
+  Button,
+  InputTags,
+  Modal,
+  Text,
+} from "@opal/components";
+import type { TagItem } from "@opal/components";
+import {
+  SvgAlertTriangle,
+  SvgCheckCircle,
+  SvgLoader,
+  SvgUsers,
+} from "@opal/icons";
+import type { IconFunctionComponent } from "@opal/types";
+import { Section, toast } from "@opal/layouts";
 import { mutate } from "swr";
 import { SWR_KEYS } from "@/lib/swr-keys";
 import { inviteUsers } from "./svc";
@@ -18,6 +27,20 @@ import { inviteUsers } from "./svc";
 
 const EMAIL_REGEX = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
 
+/** Whitespace and commas both end an address, so typing either commits a tag. */
+const SEPARATOR_REGEX = /[\s,]+/;
+
+/** Tag rows the field is tall enough to show before it grows. */
+const EMAIL_FIELD_ROWS = 3;
+
+function isValidEmail(value: string): boolean {
+  return EMAIL_REGEX.test(value);
+}
+
+function normalizeEmail(value: string): string {
+  return value.trim().toLowerCase();
+}
+
 // ---------------------------------------------------------------------------
 // Types
 // ---------------------------------------------------------------------------
@@ -25,6 +48,12 @@ const EMAIL_REGEX = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
 interface InviteUsersModalProps {
   open: boolean;
   onOpenChange: (open: boolean) => void;
+}
+
+interface FieldMessage {
+  icon: IconFunctionComponent;
+  iconClassName: string;
+  text: string;
 }
 
 // ---------------------------------------------------------------------------
@@ -35,50 +64,87 @@ export default function InviteUsersModal({
   open,
   onOpenChange,
 }: InviteUsersModalProps) {
-  const [chips, setChips] = useState<ChipItem[]>([]);
+  const [tags, setTags] = useState<TagItem[]>([]);
   const [inputValue, setInputValue] = useState("");
   const [isSubmitting, setIsSubmitting] = useState(false);
 
-  /** Parse a comma-separated string into de-duped ChipItems */
-  function parseEmails(value: string, existing: ChipItem[]): ChipItem[] {
-    const entries = value
-      .split(",")
-      .map((e) => e.trim().toLowerCase())
-      .filter(Boolean);
-
-    const newChips: ChipItem[] = [];
-    for (const email of entries) {
-      const alreadyAdded =
-        existing.some((c) => c.label === email) ||
-        newChips.some((c) => c.label === email);
-      if (!alreadyAdded) {
-        newChips.push({
-          id: email,
-          label: email,
-          error: !EMAIL_REGEX.test(email),
-        });
+  /** Tags for entries not already present, de-duped case-insensitively. */
+  function buildTags(entries: string[], existing: TagItem[]): TagItem[] {
+    const added: TagItem[] = [];
+    for (const entry of entries) {
+      const email = normalizeEmail(entry);
+      const seen =
+        existing.some((tag) => tag.id === email) ||
+        added.some((tag) => tag.id === email);
+      if (email && !seen) {
+        added.push({ id: email, label: email, error: !isValidEmail(email) });
       }
     }
-    return newChips;
+    return added;
   }
 
-  function addEmail(value: string) {
-    const newChips = parseEmails(value, chips);
-    if (newChips.length > 0) {
-      setChips((prev) => [...prev, ...newChips]);
+  function addTags(entries: string[]) {
+    const added = buildTags(entries, tags);
+    if (added.length > 0) setTags((prev) => [...prev, ...added]);
+  }
+
+  function removeTag(id: string) {
+    setTags((prev) => prev.filter((tag) => tag.id !== id));
+  }
+
+  /** Commits every separator-terminated address, keeping the trailing text. */
+  function handleInputChange(next: string) {
+    if (!SEPARATOR_REGEX.test(next)) {
+      setInputValue(next);
+      return;
     }
+    const parts = next.split(SEPARATOR_REGEX);
+    const trailing = parts.pop() ?? "";
+    addTags(parts);
+    setInputValue(trailing);
+  }
+
+  function handleAdd(value: string) {
+    addTags([value]);
     setInputValue("");
   }
 
-  function removeChip(id: string) {
-    setChips((prev) => prev.filter((c) => c.id !== id));
+  const pendingEmail = normalizeEmail(inputValue);
+  const pendingIsValid =
+    isValidEmail(pendingEmail) && !tags.some((tag) => tag.id === pendingEmail);
+  const validCount =
+    tags.filter((tag) => !tag.error).length + (pendingIsValid ? 1 : 0);
+
+  function buildMessage(): FieldMessage | null {
+    if (tags.length === 0 && pendingEmail === "") return null;
+    if (tags.some((tag) => tag.error)) {
+      return {
+        icon: SvgAlertTriangle,
+        iconClassName: "text-status-warning-05",
+        text: "Some email addresses are invalid and will be skipped.",
+      };
+    }
+    if (validCount === 0) {
+      return {
+        icon: SvgAlertTriangle,
+        iconClassName: "text-status-warning-05",
+        text: "Enter a valid email address to invite.",
+      };
+    }
+    return {
+      icon: SvgCheckCircle,
+      iconClassName: "text-status-success-05",
+      text: `${validCount} email${validCount > 1 ? "s" : ""} to invite`,
+    };
   }
+
+  const message = buildMessage();
 
   const handleClose = useCallback(() => {
     onOpenChange(false);
     // Reset state after close animation
     setTimeout(() => {
-      setChips([]);
+      setTags([]);
       setInputValue("");
       setIsSubmitting(false);
     }, 200);
@@ -97,18 +163,19 @@ export default function InviteUsersModal({
   );
 
   async function handleInvite() {
-    // Flush any pending text in the input into chips synchronously
-    const pending = inputValue.trim();
-    const allChips = pending
-      ? [...chips, ...parseEmails(pending, chips)]
-      : chips;
+    // Flush any pending text in the input into tags synchronously
+    const allTags = pendingEmail
+      ? [...tags, ...buildTags([pendingEmail], tags)]
+      : tags;
 
-    if (pending) {
-      setChips(allChips);
+    if (pendingEmail) {
+      setTags(allTags);
       setInputValue("");
     }
 
-    const validEmails = allChips.filter((c) => !c.error).map((c) => c.label);
+    const validEmails = allTags
+      .filter((tag) => !tag.error)
+      .map((tag) => tag.label);
 
     if (validEmails.length === 0) {
       toast.error("Please add at least one valid email address");
@@ -150,26 +217,45 @@ export default function InviteUsersModal({
         />
 
         <Modal.Body>
-          <InputChipField
-            chips={chips}
-            onRemoveChip={removeChip}
-            onAdd={addEmail}
-            value={inputValue}
-            onChange={setInputValue}
-            placeholder="Add an email and press enter"
-            layout="stacked"
-          />
-          {chips.some((c) => c.error) && (
-            <div className="flex items-center gap-1 pt-1">
-              <SvgAlertTriangle
-                size={14}
-                className="text-status-warning-05 shrink-0"
-              />
-              <Text secondaryBody text03>
-                Some email addresses are invalid and will be skipped.
-              </Text>
-            </div>
-          )}
+          <Section
+            flexDirection="column"
+            alignItems="stretch"
+            height="fit"
+            gap={1}
+          >
+            <InputTags
+              tags={tags}
+              onRemoveTag={removeTag}
+              onAdd={handleAdd}
+              value={inputValue}
+              onChange={handleInputChange}
+              placeholder="Add emails to invite, space or comma separated"
+              minRows={EMAIL_FIELD_ROWS}
+              autoFocus
+            />
+            {message && (
+              <Section
+                flexDirection="row"
+                alignItems="start"
+                justifyContent="start"
+                height="fit"
+                gap={0.5}
+              >
+                <Section
+                  width={1}
+                  height={1}
+                  padding={0.5}
+                  gap={0}
+                  className="shrink-0"
+                >
+                  <message.icon size={12} className={message.iconClassName} />
+                </Section>
+                <Text font="secondary-body" color="text-03">
+                  {message.text}
+                </Text>
+              </Section>
+            )}
+          </Section>
         </Modal.Body>
 
         <Modal.Footer>
@@ -185,7 +271,7 @@ export default function InviteUsersModal({
             }
             submit={
               <Button
-                disabled={isSubmitting || chips.every((c) => c.error)}
+                disabled={isSubmitting || validCount === 0}
                 icon={
                   isSubmitting
                     ? () => <SvgLoader size={16} className="animate-spin" />
