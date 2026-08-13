@@ -2182,7 +2182,11 @@ def _upsert_mcp_server(
             "Created new MCP server '%s' with ID %s", request.name, mcp_server.id
         )
 
-    if any(
+    # A new server defaults to public (create_mcp_server__no_commit), so always run the
+    # access gate on create — otherwise a scoped manager could publish one org-wide by
+    # omitting is_public/users/groups. On update, only touch access when the caller sent it.
+    is_new_server = request.existing_server_id is None
+    if is_new_server or any(
         value is not None
         for value in (request.is_public, request.users, request.groups)
     ):
@@ -2192,7 +2196,7 @@ def _upsert_mcp_server(
             is_public=request.is_public,
             user_ids=request.users,
             group_ids=request.groups,
-            is_new=request.existing_server_id is None,
+            is_new=is_new_server,
             db_session=db_session,
         )
 
