@@ -94,8 +94,7 @@ export default function NRFPage({ isSidePanel = false }: NRFPageProps) {
   }, [lastFailedFiles, clearLastFailedFiles]);
 
   // Assistant controller
-  const { selectedAgent, setSelectedAgentFromId, liveAgent } =
-    useAgentController(undefined, () => {});
+  const { liveAgent } = useAgentController(undefined);
 
   // LLM manager for model selection.
   // - currentChatSession: undefined because NRF always starts new chats
@@ -136,7 +135,7 @@ export default function NRFPage({ isSidePanel = false }: NRFPageProps) {
   // Deep research toggle
   const { deepResearchEnabled, toggleDeepResearch } = useDeepResearchToggle({
     chatSessionId: existingChatSessionId,
-    agentId: selectedAgent?.id,
+    agentId: liveAgent?.id,
   });
 
   // State
@@ -281,7 +280,6 @@ export default function NRFPage({ isSidePanel = false }: NRFPageProps) {
       selectedDocuments: [],
       searchParams: searchParams!,
       resetInputBar,
-      setSelectedAgentFromId,
     });
 
   // Chat session controller for loading sessions
@@ -290,7 +288,6 @@ export default function NRFPage({ isSidePanel = false }: NRFPageProps) {
     searchParams: searchParams!,
     filterManager,
     firstMessage: undefined,
-    setSelectedAgentFromId,
     setSelectedDocuments: () => {}, // No-op: NRF doesn't support document selection
     setCurrentMessageFiles,
     chatSessionIdRef: { current: null },
