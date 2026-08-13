@@ -106,7 +106,7 @@ function useFolderIcon(
   return () => (
     <div
       data-testid="ProjectFolderIcon"
-      className="p-0.5 cursor-pointer"
+      className="p-0 cursor-pointer"
       onMouseEnter={() => setHovering(true)}
       onMouseLeave={() => {
         setHovering(false);
@@ -293,7 +293,6 @@ interface ProjectPopoverRowProps {
   match: ProjectSearchMatch;
   onNavigate: () => void;
 }
-
 function ProjectPopoverRow({ match, onNavigate }: ProjectPopoverRowProps) {
   const route = useAppRouter();
   const appFocus = useAppFocus();

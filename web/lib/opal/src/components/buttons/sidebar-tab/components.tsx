@@ -140,7 +140,7 @@ function SidebarTab({
     icon ??
     (nested
       ? ((() => (
-          <div className="w-5" aria-hidden="true" />
+          <div className="w-4" aria-hidden="true" />
         )) as IconFunctionComponent)
       : null);
 
