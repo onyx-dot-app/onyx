@@ -17,9 +17,12 @@ providers.
 | `onyx_llm_provider_default` | The deployment default (and vision) model — a singleton | `default` |
 | `onyx_settings` | Workspace settings — a singleton, partially managed | `settings` |
 | `onyx_embedding_provider` | Cloud embedding provider credentials | provider type (e.g. `openai`) |
+| `onyx_credential` | Connector credentials (`/manage/credential`) | numeric id |
+| `onyx_connector` | Connector definitions (`/manage/admin/connector`) | numeric id |
 | `data.onyx_llm_providers` | Read-only list of providers + defaults | — |
 | `data.onyx_embedding_providers` | Read-only list of embedding providers | — |
 | `data.onyx_settings` | Read-only current settings (incl. license `tier`) | — |
+| `data.onyx_connectors` | Read-only list of connectors | — |
 
 Generated per-resource docs live in [`docs/`](./docs/).
 
@@ -67,6 +70,13 @@ and on Onyx Cloud the tenant is embedded in the key itself.
 - **`model_configurations` is the list of record.** Models omitted from it are removed
   server-side, and removing the model currently set as deployment default fails — repoint
   `onyx_llm_provider_default` first (references order this correctly).
+- **`onyx_credential` payloads are write-only.** The API always returns `credential_json`
+  masked, so it is never refreshed or diffed. `admin_public`, `curator_public` and `groups`
+  have no update endpoint and force replacement instead.
+- **`onyx_connector` does not own its access control.** `access_type` and `groups` are
+  validated on write but stored on the cc-pair, so Terraform cannot refresh them. Onyx also
+  rewrites an unset `prune_freq` to 7 days on the first update, which the provider then
+  keeps as the value of record.
 - **The model list read is the API's display view.** It hides obsolete models and dated
   duplicates, so writes (including the auto-mode pass-through, which is also not atomic
   with its read) cannot preserve rows the API hides. The admin UI round-trips the same

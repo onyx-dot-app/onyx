@@ -146,6 +146,8 @@ func (p *onyxProvider) Resources(_ context.Context) []func() resource.Resource {
 		NewLLMProviderDefaultResource,
 		NewSettingsResource,
 		NewEmbeddingProviderResource,
+		NewCredentialResource,
+		NewConnectorResource,
 	}
 }
 
@@ -154,6 +156,7 @@ func (p *onyxProvider) DataSources(_ context.Context) []func() datasource.DataSo
 		NewLLMProvidersDataSource,
 		NewEmbeddingProvidersDataSource,
 		NewSettingsDataSource,
+		NewConnectorsDataSource,
 	}
 }
 
