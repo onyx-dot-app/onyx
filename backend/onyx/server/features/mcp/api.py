@@ -1282,7 +1282,7 @@ def _db_mcp_server_to_api_mcp_server(
 
     # Check if user has authentication configured and extract credentials
     auth_performer = db_server.auth_performer
-    user_authenticated: bool | None = None
+    can_authenticate: bool | None = None
     user_credentials = None
     admin_credentials = None
     is_owner_or_admin = request_user is not None and (
@@ -1300,7 +1300,7 @@ def _db_mcp_server_to_api_mcp_server(
         else get_user_connection_config(db_server.id, email, db)
     )
     if request_user is not None:
-        user_authenticated = user_can_authenticate(
+        can_authenticate = user_can_authenticate(
             db_server,
             request_user,
             db,
@@ -1360,8 +1360,6 @@ def _db_mcp_server_to_api_mcp_server(
                 required_fields=stored_template.required_fields,
             )
 
-    is_authenticated = bool(user_authenticated)
-
     # Calculate tool count from the relationship
     tool_count = len(db_server.current_actions) if db_server.current_actions else 0
 
@@ -1379,8 +1377,7 @@ def _db_mcp_server_to_api_mcp_server(
         oauth_token_endpoint=db_server.oauth_token_endpoint,
         oauth_scopes_override=db_server.oauth_scopes_override,
         oauth_additional_auth_params=db_server.oauth_additional_auth_params,
-        is_authenticated=is_authenticated,
-        user_authenticated=user_authenticated,
+        user_can_authenticate=can_authenticate,
         craft_connected=craft_connected,
         status=db_server.status,
         is_public=db_server.is_public,
@@ -2394,7 +2391,7 @@ def upsert_mcp_server(
             oauth_token_endpoint=mcp_server.oauth_token_endpoint,
             oauth_scopes_override=mcp_server.oauth_scopes_override,
             oauth_additional_auth_params=mcp_server.oauth_additional_auth_params,
-            is_authenticated=not requires_user_authentication(
+            no_user_authentication_required=not requires_user_authentication(
                 mcp_server.auth_type, request.auth_performer
             ),
         )
@@ -2512,7 +2509,7 @@ def create_mcp_server_simple(
         oauth_token_endpoint=mcp_server.oauth_token_endpoint,
         oauth_scopes_override=mcp_server.oauth_scopes_override,
         oauth_additional_auth_params=mcp_server.oauth_additional_auth_params,
-        is_authenticated=False,  # Not authenticated yet
+        user_can_authenticate=False,  # No credentials resolved yet
         status=mcp_server.status,
         is_public=mcp_server.is_public,
         groups=[group.id for group in mcp_server.user_groups],

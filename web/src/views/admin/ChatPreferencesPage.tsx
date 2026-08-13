@@ -114,7 +114,7 @@ function MCPServerCard({
 
   const allToolIds = tools.map((t) => t.id);
   const serverEnabled = tools.some((t) => isToolEnabled(t.id));
-  const needsAuth = !server.is_authenticated;
+  const needsAuth = !server.user_can_authenticate;
   const authTooltip = needsAuth
     ? "Authenticate this MCP server before enabling its tools."
     : undefined;

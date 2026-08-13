@@ -481,7 +481,7 @@ export default function ActionsPopover({
             const next = { ...prev } as any;
             servers.forEach((s: any) => {
               next[s.id as number] = {
-                isAuthenticated: !!s.user_authenticated || !!s.is_authenticated,
+                isAuthenticated: !!s.user_can_authenticate,
                 isLoading: false,
               };
             });
@@ -658,7 +658,7 @@ export default function ActionsPopover({
             },
           }));
         },
-        isAuthenticated: server.user_authenticated,
+        isAuthenticated: server.user_can_authenticate,
         existingCredentials: server.user_credentials,
       });
     }
@@ -698,10 +698,7 @@ export default function ActionsPopover({
     : undefined;
   const isActiveServerAuthenticated =
     selectedMcpServerData?.isAuthenticated ??
-    !!(
-      selectedMcpServer?.user_authenticated ||
-      selectedMcpServer?.is_authenticated
-    );
+    !!selectedMcpServer?.user_can_authenticate;
   const showActiveReauthRow =
     !!selectedMcpServer &&
     selectedMcpTools.length > 0 &&
@@ -928,8 +925,7 @@ export default function ActionsPopover({
         // MCP Servers
         ...filteredMCPServers.map((server) => {
           const serverData = mcpServerData[server.id] || {
-            isAuthenticated:
-              !!server.user_authenticated || !!server.is_authenticated,
+            isAuthenticated: !!server.user_can_authenticate,
             isLoading: false,
           };
 

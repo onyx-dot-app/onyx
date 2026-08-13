@@ -265,8 +265,8 @@ def test_craft_listing_agrees_with_session_emission(
     a server the session never gets, so pin the two together across the auth
     matrix rather than trusting them to stay in sync by hand.
 
-    `is_authenticated` / `user_authenticated` cannot serve this purpose: they
-    report whether a config row exists, not whether it yields auth headers.
+    `user_can_authenticate` cannot serve this purpose: it reports whether a
+    config row exists, not whether it yields auth headers.
     """
     craft, _ = craft_server
     user = create_test_user(db_session, "mcp_listing")
