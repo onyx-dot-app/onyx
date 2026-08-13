@@ -300,7 +300,8 @@ export class OnyxApiClient {
    */
   async createFileConnector(
     connectorName: string = "Test File Connector",
-    accessType: "public" | "private" = "public"
+    accessType: "public" | "private" = "public",
+    groups: number[] = []
   ): Promise<number> {
     const response = await this.post(
       "/manage/admin/connector-with-mock-credential",
@@ -315,7 +316,7 @@ export class OnyxApiClient {
         prune_freq: null,
         indexing_start: null,
         access_type: accessType,
-        groups: [],
+        groups,
       }
     );
 
@@ -397,15 +398,16 @@ export class OnyxApiClient {
    */
   async createDocumentSet(
     documentSetName: string,
-    ccPairIds: number[]
+    ccPairIds: number[],
+    options: { isPublic?: boolean; groups?: number[] } = {}
   ): Promise<number> {
     const response = await this.post("/manage/admin/document-set", {
       name: documentSetName,
       description: `Test document set: ${documentSetName}`,
       cc_pair_ids: ccPairIds,
-      is_public: true,
+      is_public: options.isPublic ?? true,
       users: [],
-      groups: [],
+      groups: options.groups ?? [],
       federated_connectors: [],
     });
 
@@ -822,19 +824,134 @@ export class OnyxApiClient {
   }
 
   /**
+   * Polls until a document set finishes syncing. Every edit is rejected while
+   * `is_up_to_date` is false, and the create response reports true before the sync
+   * has actually run.
+   */
+  async waitForDocumentSetSync(
+    documentSetId: number,
+    timeout: number = 60000
+  ): Promise<void> {
+    await expect
+      .poll(
+        async () => {
+          const response = await this.get("/manage/document-set");
+          if (!response.ok()) return false;
+          const sets = (await response.json()) as Array<{
+            id: number;
+            is_up_to_date: boolean;
+          }>;
+          return (
+            sets.find((s) => s.id === documentSetId)?.is_up_to_date ?? false
+          );
+        },
+        {
+          timeout,
+          message: `Document set ${documentSetId} never finished syncing`,
+        }
+      )
+      .toBe(true);
+  }
+
+  /**
+   * Strips a document set's groups via the same PATCH the editor sends, leaving it
+   * reachable only through its creator.
+   */
+  async detachDocumentSetGroups(
+    documentSetId: number,
+    name: string,
+    ccPairIds: number[]
+  ): Promise<void> {
+    await this.waitForDocumentSetSync(documentSetId);
+    const response = await this.patch("/manage/admin/document-set", {
+      id: documentSetId,
+      name,
+      description: `Test document set: ${name}`,
+      cc_pair_ids: ccPairIds,
+      is_public: false,
+      users: [],
+      groups: [],
+      federated_connectors: [],
+    });
+
+    await this.handleResponse(
+      response,
+      `Failed to detach groups from document set ${documentSetId}`
+    );
+  }
+
+  /**
+   * Promotes or demotes a group member to group manager. The target must
+   * already be a member of the group.
+   */
+  async setGroupManager(
+    groupId: number,
+    userId: string,
+    isManager: boolean = true
+  ): Promise<void> {
+    const response = await this.put(
+      `/manage/admin/user-group/${groupId}/manager`,
+      { user_id: userId, is_manager: isManager }
+    );
+
+    await this.handleResponse(
+      response,
+      `Failed to set manager on user group ${groupId}`
+    );
+    this.log(`Set manager=${isManager} for ${userId} on group ${groupId}`);
+  }
+
+  /**
+   * Replaces a group's connector list. Passing `[]` detaches every connector,
+   * which is the only way to reach a groupless connector a manager created —
+   * creating one directly is refused for having no managed scope.
+   */
+  async setGroupCcPairs(
+    groupId: number,
+    groupName: string,
+    ccPairIds: number[],
+    options: { waitForSync?: boolean } = {}
+  ): Promise<void> {
+    const response = await this.patch(`/manage/admin/user-group/${groupId}`, {
+      id: groupId,
+      name: groupName,
+      user_ids: [],
+      cc_pair_ids: ccPairIds,
+    });
+
+    await this.handleResponse(
+      response,
+      `Failed to set cc_pairs on user group ${groupId}`
+    );
+    // skippable for teardown: nothing reads the group again before it is deleted
+    if (options.waitForSync ?? true) {
+      await this.waitForGroupSync(groupId);
+    }
+  }
+
+  /**
    * Deletes a user group.
    *
    * @param groupId - The user group ID to delete
    */
   async deleteUserGroup(groupId: number): Promise<void> {
-    const response = await this.delete(`/manage/admin/user-group/${groupId}`);
+    let response = await this.delete(`/manage/admin/user-group/${groupId}`);
+
+    // a group still syncing refuses deletion; settle it and retry once rather than
+    // soft-logging a success that never happened and leaking the group
+    if (response.status() === 404) {
+      await this.waitForGroupSync(groupId).catch(() => undefined);
+      response = await this.delete(`/manage/admin/user-group/${groupId}`);
+    }
 
     await this.handleResponseSoft(
       response,
       `Failed to delete user group ${groupId}`
     );
 
-    this.log(`Deleted user group: ${groupId}`);
+    if (response.ok()) {
+      this.log(`Deleted user group: ${groupId}`);
+    }
   }
 
   /**
@@ -1019,7 +1136,15 @@ export class OnyxApiClient {
     return tools.find((tool) => tool.name === name) ?? null;
   }
 
-  async createAgent(name: string, description: string = ""): Promise<number> {
+  async createAgent(
+    name: string,
+    description: string = "",
+    options: {
+      isPublic?: boolean;
+      groups?: number[];
+      toolIds?: number[];
+    } = {}
+  ): Promise<number> {
     const response = await this.post("/persona", {
       name,
       description,
@@ -1027,8 +1152,9 @@ export class OnyxApiClient {
       task_prompt: "",
       datetime_aware: false,
       document_set_ids: [],
-      is_public: true,
-      tool_ids: [],
+      is_public: options.isPublic ?? true,
+      groups: options.groups ?? [],
+      tool_ids: options.toolIds ?? [],
     });
     const data = await this.handleResponse<{ id: number }>(
       response,

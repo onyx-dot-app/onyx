@@ -139,6 +139,9 @@ function usePaginatedFetch<T extends PaginatedType>({
         }));
       } catch (error) {
         setError(error instanceof Error ? error : new Error(String(error)));
+        // no batch will land in the cache now, and that is the only other place
+        // isLoading is cleared — without this a denied fetch spins forever
+        setIsLoading(false);
       } finally {
         ongoingRequestsRef.current.delete(batchNum);
       }
