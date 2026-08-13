@@ -10,7 +10,7 @@ from typing import TypeVar
 from sqlalchemy import ColumnElement, Select, and_, select
 from sqlalchemy.orm import InstrumentedAttribute, Session
 
-from onyx.db.models import User, User__UserGroup
+from onyx.db.models import User, User__UserGroup, UserGroup
 
 # Resource PK type — int for connectors/doc-sets, UUID for skills. The clause is
 # key-type agnostic; the TypeVar just ties the resource + junction cols together.
@@ -19,10 +19,19 @@ _ResourceId = TypeVar("_ResourceId")
 
 def scoped_group_ids_subquery(user: User) -> Select:
     """Subquery of the groups ``user`` manages; embed in a resource filter to
-    keep the scope predicate in SQL (no extra round-trip)."""
-    return select(User__UserGroup.user_group_id).where(
-        User__UserGroup.user_id == user.id,
-        User__UserGroup.is_manager.is_(True),
+    keep the scope predicate in SQL (no extra round-trip).
+
+    Default groups (Basic/Admin) are excluded: "Basic" holds the whole org, so a
+    manager edge on it — e.g. the GLOBAL_CURATOR migration backfill — would confer
+    org-wide scope. Managing a default group never grants scope."""
+    return (
+        select(User__UserGroup.user_group_id)
+        .join(UserGroup, UserGroup.id == User__UserGroup.user_group_id)
+        .where(
+            User__UserGroup.user_id == user.id,
+            User__UserGroup.is_manager.is_(True),
+            UserGroup.is_default.is_(False),
+        )
     )
 
 

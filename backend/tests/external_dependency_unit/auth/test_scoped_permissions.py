@@ -116,6 +116,25 @@ def test_get_scoped_groups_empty_for_non_manager(db_session: Session) -> None:
     assert get_scoped_groups(user, db_session) == set()
 
 
+def test_default_group_manager_edge_confers_no_scope(db_session: Session) -> None:
+    """A manager edge on a default group (e.g. the GLOBAL_CURATOR backfill on "Basic",
+    which holds the whole org) must grant no scope — only custom groups do."""
+    user = create_test_user(db_session, "scope-default")
+    custom = _make_group(db_session)
+    default_group = UserGroup(name=f"default-{uuid4().hex[:12]}", is_default=True)
+    db_session.add(default_group)
+    db_session.flush()
+    _manage(db_session, user, custom, default_group)
+
+    assert fetch_managed_group_ids(user, db_session) == {custom.id}
+    assert get_scoped_groups(user, db_session, Permission.MANAGE_USER_GROUPS) == {
+        custom.id
+    }
+    # The per-group write gate is denied for the default group, allowed for the custom one.
+    assert not manages_group(user, db_session, group_id=default_group.id)
+    assert manages_group(user, db_session, group_id=custom.id)
+
+
 def test_assert_global_admits_only_global(db_session: Session) -> None:
     """Admin-only gate (rule A): a SCOPED manager is rejected; GLOBAL passes."""
     manager = create_test_user(db_session, "global-gate-mgr")

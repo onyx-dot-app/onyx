@@ -31,8 +31,14 @@ user_table = sa.table(
 user_user_group = sa.table(
     "user__user_group",
     sa.column("user_id", sa.Uuid),
+    sa.column("user_group_id", sa.Integer),
     sa.column("is_curator", sa.Boolean),
     sa.column("is_manager", sa.Boolean),
+)
+user_group = sa.table(
+    "user_group",
+    sa.column("id", sa.Integer),
+    sa.column("is_default", sa.Boolean),
 )
 
 
@@ -56,21 +62,29 @@ def upgrade() -> None:
         ),
     )
 
+    # Never seed a manager edge on a default group: "Basic" holds the whole org, so it
+    # would grant org-wide scope. (CURATOR can't curate a default group today; carried
+    # for safety.)
+    default_group_ids = sa.select(user_group.c.id).where(
+        user_group.c.is_default == sa.true()
+    )
     op.execute(
         sa.update(user_user_group)
         .where(
             user_user_group.c.user_id == user_table.c.id,
             user_table.c.role == "CURATOR",
             user_user_group.c.is_curator == sa.true(),
+            user_user_group.c.user_group_id.notin_(default_group_ids),
         )
         .values(is_manager=sa.true())
     )
-    # GLOBAL_CURATOR has no is_curator rows — every membership becomes managed.
+    # GLOBAL_CURATOR has no is_curator rows — every non-default membership becomes managed.
     op.execute(
         sa.update(user_user_group)
         .where(
             user_user_group.c.user_id == user_table.c.id,
             user_table.c.role == "GLOBAL_CURATOR",
+            user_user_group.c.user_group_id.notin_(default_group_ids),
         )
         .values(is_manager=sa.true())
     )
