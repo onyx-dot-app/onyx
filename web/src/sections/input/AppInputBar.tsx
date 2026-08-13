@@ -28,6 +28,7 @@ import { Disabled } from "@opal/core";
 import { useUser } from "@/providers/UserProvider";
 import { useSettings } from "@/lib/settings/hooks";
 import { useProjectsContext } from "@/providers/ProjectsContext";
+import { useActiveProject } from "@/lib/projects/hooks";
 import { FileCard } from "@/sections/cards/FileCard";
 import { ProjectFile, UserFileStatus } from "@/lib/projects/types";
 import FilePickerPopover from "@/refresh-components/popovers/FilePickerPopover";
@@ -320,8 +321,9 @@ const AppInputBar = React.memo(
     }, [isNewSession, initialMessage]); // eslint-disable-line react-hooks/exhaustive-deps
 
     const { forcedToolIds, setForcedToolIds } = useForcedTools();
-    const { currentMessageFiles, setCurrentMessageFiles, currentProjectId } =
+    const { currentMessageFiles, setCurrentMessageFiles } =
       useProjectsContext();
+    const activeProject = useActiveProject();
 
     const currentIndexingFiles = useMemo(() => {
       return currentMessageFiles.filter(
@@ -548,7 +550,13 @@ const AppInputBar = React.memo(
     const showDeepResearch = useMemo(() => {
       const deepResearchGloballyEnabled =
         combinedSettingsData?.deep_research_enabled ?? true;
-      const isProjectWorkflow = currentProjectId !== null;
+
+      // Resolved from the chat, not the URL. `projectId` is dropped once a chat
+      // opens (`PARAMS_TO_SKIP` in `app/app/services/lib.tsx`), so a project
+      // chat carries no project context in its URL — reading the search param
+      // hid the toggle on the project page and left it showing in the one place
+      // it actually breaks.
+      const isProjectWorkflow = activeProject !== null;
 
       // TODO(@yuhong): Re-enable Deep Research in Projects workflow once it is fully supported.
       // https://linear.app/onyx-app/issue/ENG-3818/re-enable-deep-research-in-projects
@@ -560,7 +568,7 @@ const AppInputBar = React.memo(
     }, [
       selectedAgent?.tools,
       combinedSettingsData?.deep_research_enabled,
-      currentProjectId,
+      activeProject,
     ]);
 
     function handleKeyDownForPromptShortcuts(
