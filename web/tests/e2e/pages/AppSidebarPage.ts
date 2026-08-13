@@ -5,7 +5,7 @@ import { Locator, Page, expect } from "@playwright/test";
  * while it is folded.
  */
 export class ProjectsPopover {
-  constructor(private readonly page: Page) {}
+  constructor(readonly page: Page) {}
 
   get trigger(): Locator {
     return this.page.getByTestId("AppSidebar/projects");
@@ -73,6 +73,12 @@ export class ProjectsPopover {
   }
 
   /** The folded tab stays marked while its popover is open. */
+  /** Opens a chat from the popover and waits for the app to land on it. */
+  async openChat(projectName: string, chatId: string): Promise<void> {
+    await this.chatLink(projectName, chatId).click();
+    await expect(this.page).toHaveURL(new RegExp(`chatId=${chatId}`));
+  }
+
   async expectTriggerSelected(): Promise<void> {
     await expect(
       this.trigger.locator("[data-interactive-state]").first()

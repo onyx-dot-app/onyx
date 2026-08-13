@@ -116,20 +116,12 @@ test.describe("Folded sidebar Projects popover", () => {
     await sidebar.projectsPopover.expectVisible();
   });
 
-  test("closes and navigates when a chat is selected", async ({ page }) => {
+  test("closes and navigates when a chat is selected", async () => {
     await sidebar.projectsPopover.open();
     await sidebar.projectsPopover.toggleProjectChats(ALPHA_PROJECT);
 
-    const onboardingChatId = chatIds[0]!;
-    await sidebar.projectsPopover
-      .chatLink(ALPHA_PROJECT, onboardingChatId)
-      .click();
+    await sidebar.projectsPopover.openChat(ALPHA_PROJECT, chatIds[0]!);
 
-    await page.waitForFunction(
-      (chatId) => window.location.href.includes(`chatId=${chatId}`),
-      onboardingChatId,
-      { timeout: 10000 }
-    );
     await sidebar.projectsPopover.expectHidden();
   });
 });

@@ -90,12 +90,14 @@ export function useProjectSearch(query: string): ProjectSearchMatch[] {
 
       if (!nameMatched && matchedChats.length === 0) return [];
 
+      // A hit on the project's own name keeps it whole — the project is what
+      // matched, so hiding the chats it holds would answer a different
+      // question. Only a chat-only hit narrows, and only that opens the row.
       return [
         {
           project,
-          chatSessions:
-            matchedChats.length > 0 ? matchedChats : project.chat_sessions,
-          chatMatched: matchedChats.length > 0,
+          chatSessions: nameMatched ? project.chat_sessions : matchedChats,
+          chatMatched: !nameMatched && matchedChats.length > 0,
         },
       ];
     });
