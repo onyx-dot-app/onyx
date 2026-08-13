@@ -30,9 +30,9 @@ export const SWR_KEYS = {
     ...domains,
   ],
 
-  // ── Agents / Personas ─────────────────────────────────────────────────────
-  personas: "/api/persona",
-  persona: (id: number) => `/api/persona/${id}`,
+  // ── Agents ────────────────────────────────────────────────────────────────
+  agents: "/api/persona",
+  agent: (agentId: number) => `/api/persona/${agentId}`,
   agentPreferences: "/api/user/assistant/preferences",
   defaultAssistantConfig: "/api/admin/default-assistant/configuration",
   agentLabels: "/api/persona/labels",
@@ -42,8 +42,8 @@ export const SWR_KEYS = {
 
   // ── LLM Providers ─────────────────────────────────────────────────────────
   llmProviders: "/api/llm/provider",
-  llmProvidersForPersona: (personaId: number) =>
-    `/api/llm/persona/${personaId}/providers`,
+  llmProvidersForAgent: (agentId: number) =>
+    `/api/llm/persona/${agentId}/providers`,
   adminLlmProviders: "/api/admin/llm/provider",
   llmProvidersWithImageGen: "/api/admin/llm/provider?include_image_gen=true",
   customProviderNames: "/api/admin/llm/custom-provider-names",

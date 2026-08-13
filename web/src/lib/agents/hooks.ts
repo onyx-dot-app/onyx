@@ -1,7 +1,7 @@
 "use client";
 
 import useSWR, { useSWRConfig } from "swr";
-import { useState, useEffect, useMemo, useCallback, useRef } from "react";
+import { useState, useEffect, useMemo, useCallback } from "react";
 import { SWR_KEYS } from "@/lib/swr-keys";
 import {
   AgentLabel,
@@ -38,7 +38,7 @@ import { buildUpdateAgentPreferenceUrl } from "./utils";
  */
 export function useAgents() {
   const { data, error, mutate } = useSWR<MinimalAgent[]>(
-    SWR_KEYS.personas,
+    SWR_KEYS.agents,
     errorHandlingFetcher,
     {
       revalidateOnFocus: false,
@@ -61,7 +61,7 @@ export function useAgents() {
  */
 export function useAgent(agentId: number | null) {
   const { data, error, isLoading, mutate } = useSWR<FullAgent>(
-    agentId ? SWR_KEYS.persona(agentId) : null,
+    agentId ? SWR_KEYS.agent(agentId) : null,
     errorHandlingFetcher,
     {
       revalidateOnFocus: false,

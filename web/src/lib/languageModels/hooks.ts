@@ -109,7 +109,7 @@ export function useLLMProviders(agentId?: number) {
   const url = onAuthPath
     ? null
     : agentId !== undefined
-      ? SWR_KEYS.llmProvidersForPersona(agentId)
+      ? SWR_KEYS.llmProvidersForAgent(agentId)
       : SWR_KEYS.llmProviders;
 
   // `revalidateIfStale` is intentionally left at its default (true), unlike
