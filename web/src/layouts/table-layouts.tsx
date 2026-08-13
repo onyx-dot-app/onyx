@@ -1,4 +1,4 @@
-import { cn } from "@opal/utils";
+import { cn, clickOnKeyDown } from "@opal/utils";
 import type { WithoutStyles } from "@opal/types";
 import React from "react";
 
@@ -39,11 +39,9 @@ function TableRow({ selected, children, onClick, ...rest }: TableRowProps) {
       role="button"
       tabIndex={0}
       onClick={onClick}
-      onKeyDown={(event) => {
-        if (event.key !== "Enter" && event.key !== " ") return;
-        event.preventDefault();
-        event.currentTarget.click();
-      }}
+      onKeyDown={(event) =>
+        clickOnKeyDown(() => event.currentTarget.click())(event)
+      }
       {...rest}
     >
       {children}

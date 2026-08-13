@@ -47,7 +47,7 @@ function SourceIconStack({ sources }: SourceIconStackProps) {
   if (sources.length === 0) return null;
 
   const unique = Array.from(
-    new Map(sources.map((s) => [s.source, s])).values()
+    new Map(sources.map((s) => [s.source, s])).values(),
   ).slice(0, 3);
 
   return (
@@ -98,28 +98,28 @@ function SharedGroupResources({
 
   const selectedCcPairSet = useMemo(
     () => new Set(selectedCcPairIds),
-    [selectedCcPairIds]
+    [selectedCcPairIds],
   );
   const selectedDocSetSet = useMemo(
     () => new Set(selectedDocSetIds),
-    [selectedDocSetIds]
+    [selectedDocSetIds],
   );
   const selectedAgentSet = useMemo(
     () => new Set(selectedAgentIds),
-    [selectedAgentIds]
+    [selectedAgentIds],
   );
 
   const selectedPairs = useMemo(
     () => connectors.filter((p) => selectedCcPairSet.has(p.cc_pair_id)),
-    [connectors, selectedCcPairSet]
+    [connectors, selectedCcPairSet],
   );
   const selectedDocSets = useMemo(
     () => documentSets.filter((ds) => selectedDocSetSet.has(ds.id)),
-    [documentSets, selectedDocSetSet]
+    [documentSets, selectedDocSetSet],
   );
   const selectedAgentObjects = useMemo(
     () => agents.filter((a) => selectedAgentSet.has(a.id)),
-    [agents, selectedAgentSet]
+    [agents, selectedAgentSet],
   );
 
   // --- Popover sections ---
@@ -133,16 +133,17 @@ function SharedGroupResources({
         const isSelected = selectedCcPairSet.has(p.cc_pair_id);
         return {
           key: `c-${p.cc_pair_id}`,
+          label: p.name ?? `Connector #${p.cc_pair_id}`,
           disabled: isSelected,
           onSelect: () =>
             isSelected
               ? onCcPairIdsChange(
-                  selectedCcPairIds.filter((id) => id !== p.cc_pair_id)
+                  selectedCcPairIds.filter((id) => id !== p.cc_pair_id),
                 )
               : onCcPairIdsChange([...selectedCcPairIds, p.cc_pair_id]),
           render: (dimmed: boolean) => (
             <LineItem
-              interactive={!dimmed}
+              interactive={false}
               muted={dimmed}
               icon={getSourceMetadata(p.connector.source).icon}
               strokeIcon={false}
@@ -162,16 +163,17 @@ function SharedGroupResources({
         const isSelected = selectedDocSetSet.has(ds.id);
         return {
           key: `d-${ds.id}`,
+          label: ds.name,
           disabled: isSelected,
           onSelect: () =>
             isSelected
               ? onDocSetIdsChange(
-                  selectedDocSetIds.filter((id) => id !== ds.id)
+                  selectedDocSetIds.filter((id) => id !== ds.id),
                 )
               : onDocSetIdsChange([...selectedDocSetIds, ds.id]),
           render: (dimmed: boolean) => (
             <LineItem
-              interactive={!dimmed}
+              interactive={false}
               muted={dimmed}
               icon={SvgFiles}
               rightChildren={
@@ -213,6 +215,7 @@ function SharedGroupResources({
         const isSelected = selectedAgentSet.has(a.id);
         return {
           key: `a-${a.id}`,
+          label: a.name,
           disabled: isSelected,
           onSelect: () =>
             isSelected
@@ -220,7 +223,7 @@ function SharedGroupResources({
               : onAgentIdsChange([...selectedAgentIds, a.id]),
           render: (dimmed: boolean) => (
             <LineItem
-              interactive={!dimmed}
+              interactive={false}
               muted={dimmed}
               icon={(_props) => <AgentAvatar agent={a} size={16} />}
               description="agent"

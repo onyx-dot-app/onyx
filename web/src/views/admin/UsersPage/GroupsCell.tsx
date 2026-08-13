@@ -144,13 +144,17 @@ export default function GroupsCell({
           className={`relative flex justify-between items-center w-full min-w-0 ${
             user.id ? "cursor-pointer" : ""
           }`}
-          role="button"
-          tabIndex={user.id ? 0 : -1}
-          aria-label="Edit groups"
-          onKeyDown={clickOnKeyDown(() => {
-            if (user.id) setShowModal(true);
-          })}
-          onClick={user.id ? () => setShowModal(true) : undefined}
+          // A cell without a user has nothing to edit, so it carries no button
+          // semantics at all.
+          {...(user.id
+            ? {
+                role: "button" as const,
+                tabIndex: 0,
+                "aria-label": "Edit groups",
+                onClick: () => setShowModal(true),
+                onKeyDown: clickOnKeyDown(() => setShowModal(true)),
+              }
+            : {})}
         >
           {groups.length === 0 ? (
             <div

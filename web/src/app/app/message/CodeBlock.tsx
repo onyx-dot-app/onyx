@@ -44,7 +44,7 @@ export const CodeBlock = memo(function CodeBlock({
     <button
       type="button"
       className="ml-auto cursor-pointer select-none"
-      onMouseDown={handleCopy}
+      onClick={handleCopy}
     >
       {copied ? (
         <div className="flex items-center space-x-2">

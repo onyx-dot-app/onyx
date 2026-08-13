@@ -30,6 +30,7 @@ export const CheckboxField: React.FC<CheckboxFieldProps> = ({
 
   const handleClick = (e: React.MouseEvent<HTMLDivElement>) => {
     e.preventDefault();
+    if (disabled) return;
     const next = !field.value;
     helpers.setValue(next);
     onChange?.(next);

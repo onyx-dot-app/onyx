@@ -89,7 +89,7 @@ function ResourcePopover({
                           )}
                           role="button"
                           tabIndex={0}
-                          aria-label={item.key}
+                          aria-label={item.label}
                           onKeyDown={clickOnKeyDown(item.onSelect)}
                           onClick={() => {
                             item.onSelect();

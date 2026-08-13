@@ -114,7 +114,7 @@ function InputDatePicker({
   const normalizedMax = maxDate ? startOfDay(maxDate) : undefined;
 
   const [segments, setSegments] = React.useState<Segments>(() =>
-    toSegments(value)
+    toSegments(value),
   );
   const [open, setOpen] = React.useState(false);
 
@@ -180,10 +180,13 @@ function InputDatePicker({
         <div
           className="opal-input opal-input-segmented"
           data-variant={variant}
-          role="group"
-          aria-label="Date"
+          onBlur={handleRootBlur}
         >
-          <div className="opal-input-segmented-content" onBlur={handleRootBlur}>
+          <div
+            className="opal-input-segmented-content"
+            role="group"
+            aria-label="Date"
+          >
             {SEGMENT_FIELDS.map((field, i) => (
               <React.Fragment key={field.part}>
                 {i > 0 && separator}
@@ -203,11 +206,11 @@ function InputDatePicker({
                     field.maxLen,
                     i < SEGMENT_FIELDS.length - 1
                       ? segmentRefs[SEGMENT_FIELDS[i + 1]!.part]
-                      : null
+                      : null,
                   )}
                   onKeyDown={handleSegmentKeyDown(
                     field.part,
-                    i > 0 ? segmentRefs[SEGMENT_FIELDS[i - 1]!.part] : null
+                    i > 0 ? segmentRefs[SEGMENT_FIELDS[i - 1]!.part] : null,
                   )}
                 />
               </React.Fragment>
