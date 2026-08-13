@@ -9,6 +9,9 @@ import InputSelect from "@/refresh-components/inputs/InputSelect";
 import { useUser } from "@/providers/UserProvider";
 import { useIsMultiTenant } from "@/lib/auth/hooks";
 import { Section } from "@/layouts/general-layouts";
+import { useTierAtLeast } from "@/hooks/useTierAtLeast";
+import { Tier } from "@/lib/settings/types";
+import { useLLMProviders } from "@/lib/languageModels/hooks";
 
 interface LayoutProps {
   children: React.ReactNode;
@@ -24,16 +27,27 @@ export default function Layout({ children }: LayoutProps) {
   const router = useRouter();
   const { user } = useUser();
   const isMultiTenant = useIsMultiTenant();
+  const enterpriseTier = useTierAtLeast(Tier.ENTERPRISE);
+  const { llmProviders } = useLLMProviders();
 
   const showPasswordSection = Boolean(user?.password_configured);
   const showTokensSection = isMultiTenant !== null;
   const showAccountsAccessTab = showPasswordSection || showTokensSection;
+  const showGatewayTab =
+    enterpriseTier &&
+    (llmProviders?.some((provider) =>
+      provider.model_configurations.some((model) => model.is_visible)
+    ) ??
+      false);
 
   const tabs: SettingsTab[] = [
     { href: "/app/settings/general", label: "General" },
     { href: "/app/settings/chat-preferences", label: "Chat Preferences" },
     ...(showAccountsAccessTab
       ? [{ href: "/app/settings/accounts-access", label: "Accounts & Access" }]
+      : []),
+    ...(showGatewayTab
+      ? [{ href: "/app/settings/llm-gateway", label: "LLM Gateway" }]
       : []),
     { href: "/app/settings/connectors", label: "Connectors" },
     { href: "/app/settings/usage", label: "Usage" },

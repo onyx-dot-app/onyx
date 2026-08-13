@@ -1512,6 +1512,119 @@ function GatewayAccessSection({
   );
 }
 
+function LLMGatewaySettings() {
+  const canCreateTokens = useCloudSubscription();
+  const [showCreateModal, setShowCreateModal] = useState(false);
+  const [isCreating, setIsCreating] = useState(false);
+  const [newTokenName, setNewTokenName] = useState("LLM Gateway");
+  const [expirationDays, setExpirationDays] = useState<string>("30");
+  const [accessMode, setAccessMode] = useState<AccessMode>("limited");
+  const [selectedScopes, setSelectedScopes] = useState<string[]>([
+    "use:llm_gateway",
+  ]);
+  const [newlyCreatedToken, setNewlyCreatedToken] =
+    useState<CreatedTokenState | null>(null);
+  const currentTier = useSettings().tier;
+  const { data: allScopeOptions = [], error: scopeOptionsError } = useSWR<
+    PatScopeOption[]
+  >(canCreateTokens ? SWR_KEYS.userPatScopes : null, errorHandlingFetcher, {
+    fallbackData: [],
+  });
+  const scopeOptions = useMemo(
+    () =>
+      allScopeOptions.filter((option) =>
+        tierAtLeast(currentTier ?? Tier.COMMUNITY, option.min_tier)
+      ),
+    [allScopeOptions, currentTier]
+  );
+  const canCreateGatewayToken =
+    canCreateTokens &&
+    scopeOptions.some((option) => option.scope === "use:llm_gateway");
+
+  const toggleScope = useCallback((scope: string) => {
+    setSelectedScopes((previous) =>
+      previous.includes(scope)
+        ? previous.filter((selected) => selected !== scope)
+        : [...previous, scope]
+    );
+  }, []);
+
+  const closeTokenModal = useCallback(() => {
+    setShowCreateModal(false);
+    setNewTokenName("LLM Gateway");
+    setExpirationDays("30");
+    setAccessMode("limited");
+    setSelectedScopes(["use:llm_gateway"]);
+    setNewlyCreatedToken(null);
+  }, []);
+
+  const createPAT = useCallback(async () => {
+    if (!newTokenName.trim()) {
+      toast.error("Token name is required");
+      return;
+    }
+
+    setIsCreating(true);
+    try {
+      const response = await fetch("/api/user/pats", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          name: newTokenName,
+          expiration_days:
+            expirationDays === "null" ? null : parseInt(expirationDays),
+          scopes: accessMode === "limited" ? selectedScopes : null,
+        }),
+      });
+
+      if (response.ok) {
+        const data = await response.json();
+        setNewlyCreatedToken({
+          id: data.id,
+          token: data.token,
+          name: newTokenName,
+        });
+        toast.success("Token created successfully");
+      } else {
+        const errorData = await response.json();
+        toast.error(errorData.detail || "Failed to create token");
+      }
+    } catch {
+      toast.error("Network error creating token");
+    } finally {
+      setIsCreating(false);
+    }
+  }, [accessMode, expirationDays, newTokenName, selectedScopes]);
+
+  return (
+    <>
+      {showCreateModal && (
+        <PATModal
+          isCreating={isCreating}
+          newTokenName={newTokenName}
+          setNewTokenName={setNewTokenName}
+          expirationDays={expirationDays}
+          setExpirationDays={setExpirationDays}
+          accessMode={accessMode}
+          setAccessMode={setAccessMode}
+          scopeOptions={scopeOptions}
+          scopesError={Boolean(scopeOptionsError)}
+          selectedScopes={selectedScopes}
+          toggleScope={toggleScope}
+          onClose={closeTokenModal}
+          onCreate={createPAT}
+          createdToken={newlyCreatedToken}
+        />
+      )}
+
+      <GatewayAccessSection
+        canCreateToken={canCreateGatewayToken}
+        onCreateToken={() => setShowCreateModal(true)}
+      />
+    </>
+  );
+}
+
 function AccountsAccessSettings() {
   const { user, authTypeMetadata } = useUser();
   const isMultiTenant = useIsMultiTenant();
@@ -1598,17 +1711,6 @@ function AccountsAccessSettings() {
       prev.includes(scope) ? prev.filter((s) => s !== scope) : [...prev, scope]
     );
   }, []);
-
-  const openGatewayTokenModal = useCallback(() => {
-    setNewTokenName("LLM Gateway");
-    setAccessMode("limited");
-    setSelectedScopes(["use:llm_gateway"]);
-    setShowCreateModal(true);
-  }, []);
-
-  const canCreateGatewayToken =
-    canCreateTokens &&
-    scopeOptions.some((option) => option.scope === "use:llm_gateway");
 
   // Use filter hook for searching tokens
   const {
@@ -2045,11 +2147,6 @@ function AccountsAccessSettings() {
             )}
           </Section>
         )}
-
-        <GatewayAccessSection
-          canCreateToken={canCreateGatewayToken}
-          onCreateToken={openGatewayTokenModal}
-        />
       </Section>
     </>
   );
@@ -2263,5 +2360,6 @@ export {
   GeneralSettings,
   ChatPreferencesSettings,
   AccountsAccessSettings,
+  LLMGatewaySettings,
   ConnectorsSettings,
 };
