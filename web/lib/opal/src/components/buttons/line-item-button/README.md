@@ -19,8 +19,11 @@ native `<button>`, so interactive `rightChildren` such as action buttons don't p
 button-in-button nesting. With `href` it renders an anchor instead.
 
 `withInteractive` is always `true` and is not exposed. `padding` is forwarded to the inner
-`ContentAction`, defaulting to `0` so a row hugs its content — the surrounding `p-1.5` already
-supplies the row's own inset.
+`ContentAction`, on top of the row's own `p-1.5` inset.
+
+It is not an open `Spacing`: the prop is inherited from `ContentActionProps`, which narrows it to
+`0 | 0.5 | 1 | 2` — the four paddings `Interactive.Container` applies at its size presets, so that a
+row's label lines up with an adjacent button. A step outside that set is a type error.
 
 ## Props
 
@@ -43,7 +46,7 @@ supplies the row's own inset.
 |------|------|---------|-------------|
 | `rounding` | `InteractiveContainerRoundingVariant` | `"md"` | Corner rounding preset (height is content-driven) |
 | `width` | `WidthVariant` | `"full"` | Container width |
-| `padding` | `Spacing` | `0` | Padding around the inner `ContentAction`, as a spacing step (`N / 4` rem) |
+| `padding` | `0 \| 0.5 \| 1 \| 2` | `0.5` | Padding around the inner `ContentAction`, as a spacing step (`N / 4` rem) |
 | `tooltip` | `string` | — | Tooltip text shown on hover |
 | `tooltipSide` | `TooltipSide` | `"top"` | Tooltip side |
 
