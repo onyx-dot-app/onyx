@@ -132,7 +132,7 @@ function AgentChatInput({ agent, onSubmit }: AgentChatInputProps) {
       llmManager={llmManager}
       chatState="input"
       filterManager={filterManager}
-      selectedAgent={agent}
+      activeAgent={agent}
       stopGenerating={() => {}}
       handleFileUpload={() => {}}
       currentSessionFileTokenCount={0}

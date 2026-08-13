@@ -22,7 +22,7 @@ import { useProjectsContext } from "@/providers/ProjectsContext";
 import useDeepResearchToggle from "@/hooks/useDeepResearchToggle";
 import useChatController from "@/hooks/useChatController";
 import useChatSessionController from "@/hooks/useChatSessionController";
-import { useLiveAgent } from "@/lib/agents/hooks";
+import { useActiveAgent } from "@/lib/agents/hooks";
 import {
   useCurrentChatState,
   useCurrentMessageHistory,
@@ -94,16 +94,16 @@ export default function NRFPage({ isSidePanel = false }: NRFPageProps) {
   }, [lastFailedFiles, clearLastFailedFiles]);
 
   // Assistant controller
-  const liveAgent = useLiveAgent();
+  const activeAgent = useActiveAgent();
 
   // LLM manager for model selection.
   // - currentChatSession: undefined because NRF always starts new chats
-  // - liveAgent: uses the selected assistant, or undefined to fall back
+  // - activeAgent: uses the selected assistant, or undefined to fall back
   //   to system-wide default LLM provider.
   //
   // If no LLM provider is configured (e.g., fresh signup), the input bar is
   // disabled and a "Set up an LLM" button is shown (see bottom of component).
-  const llmManager = useLlmManager(undefined, liveAgent ?? undefined);
+  const llmManager = useLlmManager(undefined, activeAgent ?? undefined);
   const multiModel = useMultiModelChat(llmManager);
 
   // Sync single-model selection to llmManager so the submission path
@@ -135,7 +135,7 @@ export default function NRFPage({ isSidePanel = false }: NRFPageProps) {
   // Deep research toggle
   const { deepResearchEnabled, toggleDeepResearch } = useDeepResearchToggle({
     chatSessionId: existingChatSessionId,
-    agentId: liveAgent?.id,
+    agentId: activeAgent?.id,
   });
 
   // State
@@ -194,7 +194,7 @@ export default function NRFPage({ isSidePanel = false }: NRFPageProps) {
   const hasMessages = messageHistory.length > 0;
 
   // Resolved assistant to use throughout the component
-  const resolvedAgent = liveAgent ?? undefined;
+  const resolvedAgent = activeAgent ?? undefined;
 
   // Auto-scroll preference from user settings (matches ChatPage pattern)
   const autoScrollEnabled = user?.preferences?.auto_scroll !== false;
@@ -205,11 +205,11 @@ export default function NRFPage({ isSidePanel = false }: NRFPageProps) {
 
   // Determine if retrieval (search) is enabled based on the agent
   const retrievalEnabled = useMemo(() => {
-    if (liveAgent) {
-      return personaIncludesRetrieval(liveAgent);
+    if (activeAgent) {
+      return personaIncludesRetrieval(activeAgent);
     }
     return false;
-  }, [liveAgent]);
+  }, [activeAgent]);
 
   // Check if we're in search mode
   const isSearch =
@@ -275,7 +275,7 @@ export default function NRFPage({ isSidePanel = false }: NRFPageProps) {
       filterManager,
       llmManager,
       availableAgents: availableAgents || [],
-      liveAgent,
+      activeAgent,
       existingChatSessionId,
       selectedDocuments: [],
       searchParams: searchParams!,
@@ -484,7 +484,7 @@ export default function NRFPage({ isSidePanel = false }: NRFPageProps) {
                   hideScrollbar={isSidePanel}
                 >
                   <ChatUI
-                    liveAgent={resolvedAgent}
+                    activeAgent={resolvedAgent}
                     llmManager={llmManager}
                     currentMessageFiles={currentMessageFiles}
                     setPresentingDocument={setPresentingDocument}
@@ -510,7 +510,7 @@ export default function NRFPage({ isSidePanel = false }: NRFPageProps) {
                   className="max-w-(--app-page-main-content-width)"
                 >
                   <WelcomeMessage isDefaultAgent />
-                  {liveAgent && (
+                  {activeAgent && (
                     <MultiModelSelector
                       selectedModels={multiModel.selectedModels}
                       onAdd={multiModel.addModel}
@@ -533,7 +533,7 @@ export default function NRFPage({ isSidePanel = false }: NRFPageProps) {
                 !isSidePanel && "max-w-(--app-page-main-content-width)"
               )}
             >
-              {hasMessages && liveAgent && (
+              {hasMessages && activeAgent && (
                 <div className="pb-1">
                   <MultiModelSelector
                     selectedModels={multiModel.selectedModels}
@@ -558,7 +558,7 @@ export default function NRFPage({ isSidePanel = false }: NRFPageProps) {
                 chatState={currentChatState}
                 currentSessionFileTokenCount={currentSessionFileTokenCount}
                 availableContextTokens={AVAILABLE_CONTEXT_TOKENS}
-                selectedAgent={liveAgent ?? undefined}
+                activeAgent={activeAgent}
                 handleFileUpload={handleFileUpload}
                 disabled={
                   !llmManager.isLoadingProviders && !llmManager.hasAnyProvider

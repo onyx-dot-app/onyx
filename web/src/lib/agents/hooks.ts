@@ -185,18 +185,18 @@ export function usePinnedAgents() {
 // ── Agent resolution ──────────────────────────────────────────────────────────
 
 /**
- * The id the user has actually landed on: the open chat's agent, or the one
- * named by the URL. `undefined` when neither applies, which is the plain
+ * The agent named by where the user is: the open chat's agent, or the URL's
+ * `agentId`. `undefined` when neither names one, which is the plain
  * new-session case.
  *
- * The two inputs are disjoint in practice. `AGENT_ID` is stripped from the URL
- * the moment a chat opens (`PARAMS_TO_SKIP` in `app/app/services/lib.tsx`), so
- * a session and a URL agent never coexist under normal navigation. The session
- * is preferred anyway, for the case of a hand-written URL carrying both: the
- * messages already on screen came from the session's agent, and resolving to
- * the URL's would mislabel them.
+ * The two are disjoint in practice. `AGENT_ID` is stripped from the URL the
+ * moment a chat opens (`PARAMS_TO_SKIP` in `app/app/services/lib.tsx`), so a
+ * session and a URL agent never coexist under normal navigation. The session
+ * is preferred anyway, for a hand-written URL carrying both: the messages
+ * already on screen came from the session's agent, and resolving to the URL's
+ * would mislabel them.
  */
-function useResolvedAgentId(): number | undefined {
+function useAddressedAgentId(): number | undefined {
   const searchParams = useSearchParams();
   const { currentChatSession } = useChatSessions();
 
@@ -212,72 +212,101 @@ function useResolvedAgentId(): number | undefined {
 }
 
 /**
- * The agent the user explicitly landed on, or null when they did not pick one.
+ * The agents a chat is allowed to run on.
  *
- * Use this to answer "is this agent the one in view" — highlighting a sidebar
- * entry, showing starter messages. For the agent a message would actually run
- * on, use {@link useLiveAgent}, which never returns null.
+ * "Always Start with an Agent" (`disable_default_assistant`) is a constraint,
+ * not a preference: with it on, the Assistant is never a valid answer. Applying
+ * it once here means a stale `?agentId=0` or a session created before the
+ * setting was enabled cannot route back to it.
  */
-export function useSelectedAgent(): MinimalAgent | null {
-  const { agents } = useAgents();
-  const agentId = useResolvedAgentId();
-
-  return useMemo(() => {
-    if (agentId === undefined) return null;
-    return agents.find((a) => a.id === agentId) ?? null;
-  }, [agents, agentId]);
-}
-
-/**
- * The agent a new message will use: the selected one, or the Assistant, or
- * whatever else is available. Unlike {@link useSelectedAgent} this always
- * answers, because every message is sent against some agent — a plain chat
- * runs on the Assistant (id 0), sent explicitly as `personaId: 0`.
- *
- * `disable_default_assistant` excludes the Assistant from the fallback, so an
- * install with no other agent resolves to `undefined` and the caller shows its
- * no-agent state rather than silently using the agent the admin disabled.
- *
- * This is a derivation, not state. Every input is shared — the URL, the open
- * session, the SWR-backed agent list — so two callers always agree, and the
- * answer re-resolves on navigation.
- */
-export function useLiveAgent(): MinimalAgent | undefined {
-  const selectedAgent = useSelectedAgent();
+function useEligibleAgents(): MinimalAgent[] {
   const { agents } = useAgents();
   const settings = useSettings();
   const assistantDisabled = settings.disable_default_assistant ?? false;
 
+  return useMemo(
+    () =>
+      assistantDisabled
+        ? agents.filter((agent) => agent.id !== DEFAULT_AGENT_ID)
+        : agents,
+    [agents, assistantDisabled]
+  );
+}
+
+/**
+ * The agent this chat is running on. There is no agent-less chat — every
+ * message is sent against one, and a plain chat is the Assistant, sent
+ * explicitly as `personaId: 0`. So this answers whenever any agent is
+ * available, and `undefined` means the list has not loaded or nothing is
+ * eligible, not "no agent".
+ *
+ * Resolution, first match wins:
+ *
+ * 1. the agent the location names — the open session's, or the URL's
+ * 2. the Assistant, when eligible — the plain-chat default
+ * 3. the first pinned agent, which for a user with no pins of their own is the
+ *    first *featured* agent. This is what "Set featured agents to help new
+ *    users get started" means: with the Assistant disabled, steps 1 and 2 both
+ *    miss and featured agents are what a new user lands on.
+ * 4. anything eligible
+ *
+ * An id that matches no eligible agent falls through, which is how a deleted,
+ * inaccessible, or disabled agent degrades.
+ *
+ * This is a derivation, not state. Every input is shared — the URL, the open
+ * session, the SWR-backed agent lists — so two callers always agree, and the
+ * answer re-resolves on navigation.
+ */
+export function useActiveAgent(): MinimalAgent | undefined {
+  const eligibleAgents = useEligibleAgents();
+  const { pinnedAgents } = usePinnedAgents();
+  const addressedAgentId = useAddressedAgentId();
+
   return useMemo(() => {
-    // A selected id that matches no available agent falls through to the
-    // fallback, which is how a deleted or inaccessible agent degrades.
-    if (selectedAgent) return selectedAgent;
-    if (assistantDisabled) {
-      return agents.find((a) => a.id !== DEFAULT_AGENT_ID);
-    }
-    return agents.find((a) => a.id === DEFAULT_AGENT_ID) ?? agents[0];
-  }, [selectedAgent, agents, assistantDisabled]);
+    const addressed = eligibleAgents.find((a) => a.id === addressedAgentId);
+    if (addressed) return addressed;
+
+    const assistant = eligibleAgents.find((a) => a.id === DEFAULT_AGENT_ID);
+    if (assistant) return assistant;
+
+    const pinned = pinnedAgents.find((pinnedAgent) =>
+      eligibleAgents.some((a) => a.id === pinnedAgent.id)
+    );
+    return pinned ?? eligibleAgents[0];
+  }, [eligibleAgents, pinnedAgents, addressedAgentId]);
+}
+
+/**
+ * Where "New Session" goes.
+ *
+ * Normally a bare new chat, which lands on the Assistant. With
+ * "Always Start with an Agent" there is no such chat to land on, so the link
+ * names an agent outright — the one already in view, or the featured agent a
+ * new user should start in. {@link useActiveAgent} answers both.
+ */
+export function useNewSessionHref(): string {
+  const activeAgent = useActiveAgent();
+  const settings = useSettings();
+
+  if (!settings.disable_default_assistant || !activeAgent) return "/app";
+  return `/app?${SEARCH_PARAM_NAMES.AGENT_ID}=${activeAgent.id}`;
 }
 
 // ── Default agent detection ───────────────────────────────────────────────────
 
 /**
- * Whether the chat is running on the Assistant (id 0) rather than a chosen
- * agent. This is the "no particular agent" case, which the UI treats as plain
- * chat — no agent description, a generic greeting.
+ * Whether the chat is running on the Assistant rather than a chosen agent —
+ * the "plain chat" case, which the UI shows without an agent description or a
+ * named greeting.
  *
- * Loading counts as the Assistant: it is what an unresolved chat will almost
- * always settle on, and assuming otherwise flashes a named-agent layout for an
- * agent that is not there yet.
+ * Loading reads as plain chat: it is what an unresolved chat almost always
+ * settles on, and assuming otherwise flashes a named-agent layout for an agent
+ * that is not there. With the Assistant disabled it can never be the answer,
+ * because {@link useActiveAgent} will not return it.
  */
 export function useIsDefaultAgent(): boolean {
-  const liveAgent = useLiveAgent();
-  const settings = useSettings();
-
-  // With the Assistant disabled it is never the answer, even before the agent
-  // list resolves.
-  if (settings.disable_default_assistant) return false;
-  return liveAgent === undefined || liveAgent.id === DEFAULT_AGENT_ID;
+  const activeAgent = useActiveAgent();
+  return activeAgent === undefined || activeAgent.id === DEFAULT_AGENT_ID;
 }
 
 // ── Agent preferences ─────────────────────────────────────────────────────────

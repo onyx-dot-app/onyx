@@ -35,7 +35,7 @@ import DocumentsSidebar from "@/sections/document-sidebar/DocumentsSidebar";
 import useChatController from "@/hooks/useChatController";
 import useMultiModelChat from "@/hooks/useMultiModelChat";
 import MultiModelSelector from "@/sections/model-selector/MultiModelSelector";
-import { useLiveAgent } from "@/lib/agents/hooks";
+import { useActiveAgent } from "@/lib/agents/hooks";
 import useChatSessionController from "@/hooks/useChatSessionController";
 import useDeepResearchToggle from "@/hooks/useDeepResearchToggle";
 import { useIncognito } from "@/providers/IncognitoProvider";
@@ -212,7 +212,7 @@ export default function AppPage({ firstMessage }: ChatPageProps) {
     }
   }
 
-  const liveAgent = useLiveAgent();
+  const activeAgent = useActiveAgent();
 
   // An explicit agent pick supersedes project context — the two cannot both
   // scope a new chat. This used to ride on the agent-selection callback, but
@@ -230,7 +230,7 @@ export default function AppPage({ firstMessage }: ChatPageProps) {
 
   const { deepResearchEnabled, toggleDeepResearch } = useDeepResearchToggle({
     chatSessionId: currentChatSessionId,
-    agentId: liveAgent?.id,
+    agentId: activeAgent?.id,
   });
 
   // Incognito lives in context so the top-bar toggle and this page stay in
@@ -256,7 +256,10 @@ export default function AppPage({ firstMessage }: ChatPageProps) {
   const [presentingDocument, setPresentingDocument] =
     useState<MinimalOnyxDocument | null>(null);
 
-  const llmManager = useLlmManager(currentChatSession ?? undefined, liveAgent);
+  const llmManager = useLlmManager(
+    currentChatSession ?? undefined,
+    activeAgent
+  );
 
   const {
     showOnboarding,
@@ -267,13 +270,13 @@ export default function AppPage({ firstMessage }: ChatPageProps) {
     finishOnboarding,
     hideOnboarding,
   } = useShowOnboarding({
-    liveAgent,
+    activeAgent,
     isLoadingChatSessions,
     chatSessionsCount: chatSessions.length,
     userId: user?.id,
   });
 
-  const noAgents = liveAgent === null || liveAgent === undefined;
+  const noAgents = activeAgent === null || activeAgent === undefined;
 
   const availableSources: ValidSources[] = useMemo(() => {
     return ccPairs.map((ccPair) => ccPair.source);
@@ -537,7 +540,7 @@ export default function AppPage({ firstMessage }: ChatPageProps) {
     filterManager,
     llmManager,
     availableAgents: agents,
-    liveAgent,
+    activeAgent,
     existingChatSessionId: currentChatSessionId,
     selectedDocuments,
     searchParams,
@@ -567,11 +570,11 @@ export default function AppPage({ firstMessage }: ChatPageProps) {
   useSendMessageToParent();
 
   const retrievalEnabled = useMemo(() => {
-    if (liveAgent) {
-      return personaIncludesRetrieval(liveAgent);
+    if (activeAgent) {
+      return personaIncludesRetrieval(activeAgent);
     }
     return false;
-  }, [liveAgent]);
+  }, [activeAgent]);
 
   useEffect(() => {
     if (
@@ -774,7 +777,7 @@ export default function AppPage({ firstMessage }: ChatPageProps) {
   }
 
   const hasAgentStarterMessages =
-    (liveAgent?.starter_messages?.length ?? 0) > 0;
+    (activeAgent?.starter_messages?.length ?? 0) > 0;
 
   const isWelcomeFocus =
     (appFocus.isNewSession() || appFocus.isAgent()) &&
@@ -889,7 +892,7 @@ export default function AppPage({ firstMessage }: ChatPageProps) {
                     show={
                       appFocus.isChat() &&
                       !!currentChatSessionId &&
-                      !!liveAgent &&
+                      !!activeAgent &&
                       !sessionFetchError
                     }
                     className="h-full w-full flex flex-col items-center"
@@ -904,7 +907,7 @@ export default function AppPage({ firstMessage }: ChatPageProps) {
                       fullWidth={fullWidthActive}
                     >
                       <ChatUI
-                        liveAgent={liveAgent!}
+                        activeAgent={activeAgent!}
                         llmManager={llmManager}
                         deepResearchEnabled={
                           deepResearchEnabledForCurrentWorkflow
@@ -987,14 +990,14 @@ export default function AppPage({ firstMessage }: ChatPageProps) {
                       )}
                     >
                       <WelcomeMessage
-                        agent={liveAgent}
+                        agent={activeAgent}
                         isDefaultAgent={isDefaultAgent}
                       />
                       {!isSearch &&
                         !(
                           state.phase === "idle" && state.appMode === "search"
                         ) &&
-                        liveAgent &&
+                        activeAgent &&
                         llmManager.hasAnyProvider && (
                           <MultiModelSelector
                             selectedModels={multiModel.selectedModels}
@@ -1076,7 +1079,7 @@ export default function AppPage({ firstMessage }: ChatPageProps) {
                           isSearch ? "h-[14px]" : "h-0"
                         )}
                       />
-                      {appFocus.isChat() && liveAgent && (
+                      {appFocus.isChat() && activeAgent && (
                         <div className="pb-1">
                           <MultiModelSelector
                             selectedModels={multiModel.selectedModels}
@@ -1110,7 +1113,7 @@ export default function AppPage({ firstMessage }: ChatPageProps) {
                             : projectContextTokenCount
                         }
                         availableContextTokens={availableContextTokens}
-                        selectedAgent={liveAgent}
+                        activeAgent={activeAgent}
                         handleFileUpload={handleMessageSpecificFileUpload}
                         setPresentingDocument={setPresentingDocument}
                         // Intentionally enabled during name-only onboarding (showOnboarding=false)
@@ -1142,7 +1145,7 @@ export default function AppPage({ firstMessage }: ChatPageProps) {
                     !isDefaultAgent && (
                       <>
                         <Spacer rem={1} />
-                        <AgentDescription agent={liveAgent} />
+                        <AgentDescription agent={activeAgent} />
                         <Spacer rem={1.5} />
                       </>
                     )}

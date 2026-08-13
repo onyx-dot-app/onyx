@@ -82,7 +82,7 @@ export interface AppInputBarProps {
   availableContextTokens: number;
 
   // agents
-  selectedAgent: MinimalAgent | undefined;
+  activeAgent: MinimalAgent | undefined;
 
   handleFileUpload: (files: File[]) => void;
   filterManager: FilterManager;
@@ -108,7 +108,7 @@ const AppInputBar = React.memo(
     chatState,
     currentSessionFileTokenCount,
     availableContextTokens,
-    selectedAgent,
+    activeAgent,
 
     handleFileUpload,
     llmManager,
@@ -458,7 +458,7 @@ const AppInputBar = React.memo(
     const controlsLoading =
       ccPairsLoading ||
       federatedLoading ||
-      !selectedAgent ||
+      !activeAgent ||
       llmManager.isLoadingProviders;
     const [showPrompts, setShowPrompts] = useState(false);
 
@@ -566,10 +566,10 @@ const AppInputBar = React.memo(
       return (
         !isProjectWorkflow &&
         deepResearchGloballyEnabled &&
-        hasSearchToolsAvailable(selectedAgent?.tools || [])
+        hasSearchToolsAvailable(activeAgent?.tools || [])
       );
     }, [
-      selectedAgent?.tools,
+      activeAgent?.tools,
       combinedSettingsData?.deep_research_enabled,
       activeProject,
       isLoadingProjects,
@@ -666,9 +666,9 @@ const AppInputBar = React.memo(
               controlsLoading && "invisible"
             )}
           >
-            {selectedAgent && selectedAgent.tools.length > 0 && (
+            {activeAgent && activeAgent.tools.length > 0 && (
               <ActionsPopover
-                selectedAgent={selectedAgent}
+                activeAgent={activeAgent}
                 filterManager={filterManager}
                 availableSources={memoizedAvailableSources}
                 disabled={disabled}
@@ -713,10 +713,10 @@ const AppInputBar = React.memo(
               )
             )}
 
-            {selectedAgent &&
+            {activeAgent &&
               forcedToolIds.length > 0 &&
               forcedToolIds.map((toolId) => {
-                const tool = selectedAgent.tools.find(
+                const tool = activeAgent.tools.find(
                   (tool) => tool.id === toolId
                 );
                 if (!tool) {

@@ -2,7 +2,7 @@
 
 import React, { memo } from "react";
 import { MinimalAgent } from "@/lib/agents/types";
-import { usePinnedAgents, useSelectedAgent } from "@/lib/agents/hooks";
+import { usePinnedAgents, useActiveAgent } from "@/lib/agents/hooks";
 import { noProp } from "@/lib/utils";
 import { cn } from "@opal/utils";
 import { SidebarTab } from "@opal/components";
@@ -48,10 +48,10 @@ export interface AgentButtonProps {
 }
 
 const AgentButton = memo(({ agent }: AgentButtonProps) => {
-  const selectedAgent = useSelectedAgent();
+  const activeAgent = useActiveAgent();
   const { pinnedAgents, togglePinnedAgent } = usePinnedAgents();
   const isActuallyPinned = pinnedAgents.some((a) => a.id === agent.id);
-  const isCurrentAgent = selectedAgent?.id === agent.id;
+  const isCurrentAgent = activeAgent?.id === agent.id;
 
   const handleClick = async () => {
     if (!isActuallyPinned) {
