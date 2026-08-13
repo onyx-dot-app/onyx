@@ -72,7 +72,7 @@ interface FoldedTooltipProps {
   /** Explicit fold state. Falls back to the enclosing sidebar's. */
   folded?: boolean;
 
-  children: React.ReactElement<React.DOMAttributes<HTMLElement>>;
+  children: React.ReactElement;
 }
 
 /**
@@ -83,44 +83,20 @@ interface FoldedTooltipProps {
  * not. On a fold toggle React re-renders this wrapper alone — `children` is
  * the same element it received before, so the tab below it never re-renders.
  *
- * The tooltip stays mounted and is gated by `open` instead of being added and
- * removed. Changing the tree shape on a fold would remount the tab and cut the
- * label's fade short.
+ * The tooltip stays mounted and is suppressed while unfolded instead of being
+ * added and removed. Dropping it would change the tree shape on a fold, which
+ * remounts the tab and cuts the label's fade short.
  */
 function FoldedTooltip({ label, folded, children }: FoldedTooltipProps) {
   const foldedFromSidebar = useSidebarFolded();
-  const [hovered, setHovered] = React.useState(false);
 
   const effectiveFolded = folded ?? foldedFromSidebar;
 
-  /* Radix compares every open change against the `open` prop and drops the
-  ones that already match it. While the tab is unfolded `open` is false, so the
-  close that follows a hover never reaches `setHovered` and `hovered` stays
-  true. Folding the sidebar would then show the tooltip for a tab the pointer
-  left long ago. Clear the state from the trigger instead. While folded, `open`
-  tracks `hovered`, so Radix reports the close itself — leave it alone there and
-  keep its grace area for a pointer moving onto the tooltip.
-
-  TODO(@jamison): this patches a mismatch instead of removing it. Controlling
-  `open` with a value that is not the hover state is what makes Radix drop the
-  close. A `suppressed` prop on `Tooltip` — one that keeps the trigger mounted
-  but renders no content — would let this component drop `hovered`, `open`, and
-  the `cloneElement` below, and let Radix track the pointer on its own. */
-  const clearStaleHover = React.useCallback(() => {
-    if (!effectiveFolded) setHovered(false);
-  }, [effectiveFolded]);
-
+  /* `suppressed`, not a controlled `open`: hover stays Radix's to track, so an
+  unfolded tab keeps no hover state of its own that a later fold could act on. */
   return (
-    <Tooltip
-      tooltip={label}
-      side="right"
-      open={effectiveFolded && hovered}
-      onOpenChange={setHovered}
-    >
-      {React.cloneElement(children, {
-        onPointerLeave: clearStaleHover,
-        onBlur: clearStaleHover,
-      })}
+    <Tooltip tooltip={label} side="right" suppressed={!effectiveFolded}>
+      {children}
     </Tooltip>
   );
 }
