@@ -99,7 +99,13 @@ function FoldedTooltip({ label, folded, children }: FoldedTooltipProps) {
   true. Folding the sidebar would then show the tooltip for a tab the pointer
   left long ago. Clear the state from the trigger instead. While folded, `open`
   tracks `hovered`, so Radix reports the close itself — leave it alone there and
-  keep its grace area for a pointer moving onto the tooltip. */
+  keep its grace area for a pointer moving onto the tooltip.
+
+  TODO(@jamison): this patches a mismatch instead of removing it. Controlling
+  `open` with a value that is not the hover state is what makes Radix drop the
+  close. A `suppressed` prop on `Tooltip` — one that keeps the trigger mounted
+  but renders no content — would let this component drop `hovered`, `open`, and
+  the `cloneElement` below, and let Radix track the pointer on its own. */
   const clearStaleHover = React.useCallback(() => {
     if (!effectiveFolded) setHovered(false);
   }, [effectiveFolded]);
