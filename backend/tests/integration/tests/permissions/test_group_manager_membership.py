@@ -495,8 +495,9 @@ def test_plain_member_cannot_read_candidates(env: _ScopedEnv) -> None:
 def test_manager_me_permissions_flags(env: _ScopedEnv) -> None:
     perms = _me_permissions(env.manager)
     assert perms["is_manager"] is True
-    assert env.managed_group.id in perms["managed_group_ids"]
-    assert env.other_group.id not in perms["managed_group_ids"]
+    # Exact set, not just contains: a leaked managed group (e.g. a stray is_manager edge on
+    # the org-wide default group) would broaden real GATE-2 scope, so pin it precisely.
+    assert perms["managed_group_ids"] == [env.managed_group.id]
 
     info = UserManager.get_user_info(env.manager)
     effective = set(info.effective_permissions)

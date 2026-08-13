@@ -344,6 +344,43 @@ def test_manager_unpublishes_own_agent(env: _ScopedEnv) -> None:
     assert read_back.json()["is_public"] is False
 
 
+def test_manager_cannot_delete_unowned_agent(env: _ScopedEnv) -> None:
+    # Delete follows ownership: a manager may edit an admin-owned agent shared into a group
+    # they manage, but not delete it (mark_persona_as_deleted → get_persona_by_id is_for_edit
+    # admits only the owner or owner-group, not a shared-group manager).
+    agent = PersonaManager.create(
+        user_performing_action=env.admin,
+        is_public=False,
+        groups=[env.managed_group.id],
+    )
+    resp = call_endpoint(
+        "DELETE", f"/persona/{agent.id}", None, env.manager.headers, env.manager.cookies
+    )
+    assert resp.status_code == 403, resp.text
+
+
+def test_manager_cannot_publish_unowned_agent(env: _ScopedEnv) -> None:
+    # Publishing an admin-owned managed agent is owner-only: the manager may edit it, but
+    # upsert_persona drops the is_public silently, so it must not become public.
+    agent = PersonaManager.create(
+        user_performing_action=env.admin,
+        is_public=False,
+        groups=[env.managed_group.id],
+    )
+    call_endpoint(
+        "PATCH",
+        f"/persona/{agent.id}",
+        _persona_upsert_body(is_public=True, groups=[env.managed_group.id]),
+        env.manager.headers,
+        env.manager.cookies,
+    )
+    read_back = call_endpoint(
+        "GET", f"/persona/{agent.id}", None, env.admin.headers, env.admin.cookies
+    )
+    assert read_back.status_code == 200, read_back.text
+    assert read_back.json()["is_public"] is False
+
+
 def test_manager_cannot_capture_public_agent_via_share(env: _ScopedEnv) -> None:
     # A PUBLIC agent sits in nobody's managed scope, so sharing it into a managed group
     # captures it — rejected even for the owner. Ownership buys publishing, not scope.

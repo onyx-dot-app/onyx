@@ -35,7 +35,11 @@ from tests.integration.common_utils.managers.user import (
     build_email,
 )
 from tests.integration.common_utils.managers.user_group import UserGroupManager
-from tests.integration.common_utils.permission_state import effective_permissions
+from tests.integration.common_utils.permission_state import (
+    effective_permissions,
+    is_group_manager,
+    managed_group_ids,
+)
 from tests.integration.common_utils.test_models import DATestUser
 
 SCIM_GROUP_SCHEMA = "urn:ietf:params:scim:schemas:core:2.0:Group"
@@ -372,6 +376,14 @@ def test_replace_group_preserves_manager_for_retained_member(
 
     # keeper stays a manager; dropped loses it only because they left the group.
     assert UserGroupManager.get_manager_ids(created["id"], scim_admin) == {keeper["id"]}
+
+    # get_manager_ids reads edge rows, which the removal deletes regardless of whether the
+    # rollup recompute ran. Assert the cached is_group_manager column (what GATE 1 reads) and
+    # the source edges agree: cleared for the departed manager, intact for the keeper.
+    assert is_group_manager(dropped["id"]) is False
+    assert managed_group_ids(dropped["id"]) == set()
+    assert is_group_manager(keeper["id"]) is True
+    assert managed_group_ids(keeper["id"]) == {int(created["id"])}
 
 
 def test_patch_group_preserves_manager_for_retained_member(

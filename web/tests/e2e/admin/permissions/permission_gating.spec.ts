@@ -55,6 +55,23 @@ test.describe("Permission gating — ADD_AGENTS", () => {
 
     await expect(newAgentButton).toBeVisible();
     await expect(newAgentButton).toBeDisabled();
+
+    // The disabled button is only a hint — assert the API itself rejects creation without
+    // ADD_AGENTS, so a hidden control over an open endpoint can't be a false green.
+    const createResp = await page.request.post("/api/persona", {
+      data: {
+        name: `perm-test-agent-${Date.now()}`,
+        description: "",
+        system_prompt: "",
+        task_prompt: "",
+        datetime_aware: false,
+        document_set_ids: [],
+        is_public: false,
+        groups: [],
+        tool_ids: [],
+      },
+    });
+    expect(createResp.status()).toBe(403);
   });
 });
 

@@ -68,8 +68,15 @@ test("group permissions apply immediately when a user is added to the group", as
         Permission.READ_AGENTS,
       ])
     );
+    // MANAGE_LLMS must confer no other admin-tier capability. Pin the exact set of manage:*
+    // permissions (not just arrayContaining) so an over-broad implication — an accidental
+    // MANAGE_CONNECTORS, or the READ_CONNECTORS credential surface — can't slip through.
+    const managePermissions = permissions.filter((p) =>
+      p.startsWith("manage:")
+    );
+    expect(managePermissions).toEqual([Permission.MANAGE_LLMS]);
     expect(permissions).not.toContain(Permission.FULL_ADMIN_PANEL_ACCESS);
-    expect(permissions).not.toContain(Permission.MANAGE_USER_GROUPS);
+    expect(permissions).not.toContain(Permission.READ_CONNECTORS);
 
     const usersResponse = await page.request.get(
       "/api/manage/users?include_api_keys=false"
