@@ -16,7 +16,7 @@ from sqlalchemy.orm import Session
 
 from onyx.auth.permissions import require_permission
 from onyx.chat.incognito import incognito_allowed_for_user
-from onyx.chat.incognito_context import incognito_session_ended
+from onyx.chat.incognito_context import incognito_session_torn_down
 from onyx.configs.app_configs import DISABLE_VECTOR_DB
 from onyx.configs.constants import (
     PUBLIC_API_TAGS,
@@ -164,9 +164,8 @@ def upload_user_files(
                 "Incognito chat is not enabled for this user.",
             )
         # Teardown marks the rows that exist when it runs, so an upload landing
-        # after it would otherwise sit until the orphan sweep. The tombstone is
-        # durable, which makes this the point where that race is settled.
-        if incognito_session_ended(incognito_session_id):
+        # after it would otherwise sit until the orphan sweep.
+        if incognito_session_torn_down(incognito_session_id):
             raise OnyxError(
                 OnyxErrorCode.INVALID_INPUT,
                 "This incognito chat has ended.",
@@ -198,7 +197,7 @@ def upload_user_files(
         # Re-check after the rows exist. The tombstone is monotonic, so a
         # teardown that landed during the upload is caught here even though the
         # pre-check passed, which is what the marking query alone would miss.
-        if incognito_session_id is not None and incognito_session_ended(
+        if incognito_session_id is not None and incognito_session_torn_down(
             incognito_session_id
         ):
             mark_incognito_user_files_deleting(
