@@ -116,7 +116,6 @@ interface UseChatControllerProps {
   selectedDocuments: OnyxDocument[];
   searchParams: ReadonlyURLSearchParams;
   resetInputBar: () => void;
-  setSelectedAgentFromId: (agentId: number | null) => void;
 }
 
 async function stopChatSession(chatSessionId: string): Promise<void> {
@@ -140,7 +139,6 @@ export default function useChatController({
   existingChatSessionId,
   selectedDocuments,
   resetInputBar,
-  setSelectedAgentFromId,
 }: UseChatControllerProps) {
   const pathname = usePathname();
   const router = useRouter();
@@ -1368,7 +1366,6 @@ export default function useChatController({
       selectedDocuments,
       searchParams,
       resetInputBar,
-      setSelectedAgentFromId,
       updateSelectedNodeForDocDisplay,
       currentMessageTree,
       currentChatState,
@@ -1427,14 +1424,6 @@ export default function useChatController({
       }
     };
   }, [pathname]);
-
-  // update chosen assistant if we navigate between pages
-  useEffect(() => {
-    if (currentMessageHistory.length === 0 && existingChatSessionId === null) {
-      // Select from available assistants so shared assistants appear.
-      setSelectedAgentFromId(null);
-    }
-  }, [existingChatSessionId, availableAgents, currentMessageHistory.length]);
 
   useEffect(() => {
     const handleSlackChatRedirect = async () => {

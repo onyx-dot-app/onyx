@@ -209,15 +209,22 @@ export function useCurrentAgent(): MinimalAgent | null {
 // ── Agent controller (chat UI selection) ──────────────────────────────────────
 
 /**
- * Manages agent selection state for the chat UI. `liveAgent` is the agent
- * that will actually be used for a new message, resolved by priority:
- * explicit user selection → URL param → first pinned → first available.
- * When `disable_default_assistant` is on, the built-in default (id=0) is
- * skipped in the fallback chain.
+ * The agent a new message will use, resolved by priority: the open session's
+ * agent → the URL's `personaId` → the built-in default → first pinned → first
+ * available. When `disable_default_assistant` is on, the built-in default
+ * (id=0) is skipped in the fallback chain.
+ *
+ * This is a derivation, not state. Every input is shared — the URL, the open
+ * session, and the SWR-backed agent lists — so two callers always agree, and
+ * the answer re-resolves on navigation.
+ *
+ * It used to hold the choice in `useState`, latched by a one-shot effect the
+ * first time agents loaded. That made it path-dependent, so callers had to
+ * write the new agent back in on every navigation and session load, and the
+ * value could not be read anywhere but the component that owned it.
  */
 export function useAgentController(
-  selectedChatSession: ChatSession | null | undefined,
-  onAgentSelect?: () => void
+  selectedChatSession: ChatSession | null | undefined
 ) {
   const searchParams = useSearchParams();
   const { agents: availableAgents } = useAgents();
@@ -225,35 +232,22 @@ export function useAgentController(
   const settings = useSettings();
   const disableDefaultAssistant = settings.disable_default_assistant ?? false;
 
-  const defaultAgentIdRaw = searchParams?.get(SEARCH_PARAM_NAMES.PERSONA_ID);
-  const defaultAgentId = defaultAgentIdRaw
-    ? parseInt(defaultAgentIdRaw)
-    : undefined;
-
+  const urlAgentIdRaw = searchParams?.get(SEARCH_PARAM_NAMES.PERSONA_ID);
+  const urlAgentId = urlAgentIdRaw ? parseInt(urlAgentIdRaw) : undefined;
   const existingChatSessionAgentId = selectedChatSession?.persona_id;
-  const [selectedAgent, setSelectedAssistant] = useState<
-    MinimalAgent | undefined
-  >(undefined);
-
-  // The agents list loads asynchronously, so a useState initializer would
-  // always see an empty array. This effect runs the same logic once agents
-  // are available, and never again (agentsLoadedRef guard) so it doesn't
-  // override explicit user selections made via setSelectedAgentFromId.
-  const agentsLoadedRef = useRef(false);
-  useEffect(() => {
-    if (agentsLoadedRef.current || availableAgents.length === 0) return;
-    agentsLoadedRef.current = true;
-    setSelectedAssistant(
-      existingChatSessionAgentId !== undefined
-        ? availableAgents.find((a) => a.id === existingChatSessionAgentId)
-        : defaultAgentId !== undefined
-          ? availableAgents.find((a) => a.id === defaultAgentId)
-          : undefined
-    );
-  }, [availableAgents, existingChatSessionAgentId, defaultAgentId]);
 
   const liveAgent: MinimalAgent | undefined = useMemo(() => {
-    if (selectedAgent) return selectedAgent;
+    // The session wins over the URL: an open chat is pinned to the agent it
+    // was created with. An id that matches no available agent falls through,
+    // which is how a deleted or inaccessible agent degrades.
+    const chosen =
+      existingChatSessionAgentId !== undefined
+        ? availableAgents.find((a) => a.id === existingChatSessionAgentId)
+        : urlAgentId !== undefined
+          ? availableAgents.find((a) => a.id === urlAgentId)
+          : undefined;
+    if (chosen) return chosen;
+
     if (disableDefaultAssistant) {
       const nonDefaultPinned = pinnedAgents.filter((a) => a.id !== 0);
       const nonDefaultAvailable = availableAgents.filter((a) => a.id !== 0);
@@ -264,36 +258,15 @@ export function useAgentController(
     const unifiedAgent = availableAgents.find((a) => a.id === 0);
     if (unifiedAgent) return unifiedAgent;
     return pinnedAgents[0] || availableAgents[0];
-  }, [selectedAgent, pinnedAgents, availableAgents, disableDefaultAssistant]);
+  }, [
+    existingChatSessionAgentId,
+    urlAgentId,
+    availableAgents,
+    pinnedAgents,
+    disableDefaultAssistant,
+  ]);
 
-  const availableAgentsRef = useRef<MinimalAgent[]>(availableAgents);
-  const defaultAgentIdRef = useRef<number | undefined>(defaultAgentId);
-  useEffect(() => {
-    availableAgentsRef.current = availableAgents;
-    defaultAgentIdRef.current = defaultAgentId;
-  }, [availableAgents, defaultAgentId]);
-  const setSelectedAgentFromId = useCallback(
-    (agentId: number | null | undefined) => {
-      const latestAvailableAgents = availableAgentsRef.current;
-      const latestDefaultAgentId = defaultAgentIdRef.current;
-
-      let newAssistant =
-        agentId !== null
-          ? latestAvailableAgents.find((a) => a.id === agentId)
-          : undefined;
-
-      if (!newAssistant && latestDefaultAgentId !== undefined) {
-        newAssistant = latestAvailableAgents.find(
-          (a) => a.id === latestDefaultAgentId
-        );
-      }
-      setSelectedAssistant(newAssistant);
-      onAgentSelect?.();
-    },
-    [onAgentSelect]
-  );
-
-  return { selectedAgent, setSelectedAgentFromId, liveAgent };
+  return { liveAgent };
 }
 
 // ── Default agent detection ───────────────────────────────────────────────────

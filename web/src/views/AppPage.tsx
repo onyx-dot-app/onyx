@@ -212,22 +212,25 @@ export default function AppPage({ firstMessage }: ChatPageProps) {
     }
   }
 
-  const { selectedAgent, setSelectedAgentFromId, liveAgent } =
-    useAgentController(currentChatSession, () => {
-      // Only remove project context if user explicitly selected an agent
-      // (i.e., agentId is present). Avoid clearing project when agentId was removed.
-      const newSearchParams = new URLSearchParams(
-        searchParams?.toString() || ""
-      );
-      if (newSearchParams.has(SEARCH_PARAM_NAMES.PERSONA_ID)) {
-        newSearchParams.delete(SEARCH_PARAM_NAMES.PROJECT_ID);
-        router.replace(`?${newSearchParams.toString()}`, { scroll: false });
-      }
-    });
+  const { liveAgent } = useAgentController(currentChatSession);
+
+  // An explicit agent pick supersedes project context — the two cannot both
+  // scope a new chat. This used to ride on the agent-selection callback, but
+  // it is a URL concern, so it is stated against the URL.
+  useEffect(() => {
+    const params = new URLSearchParams(searchParams?.toString() || "");
+    if (
+      params.has(SEARCH_PARAM_NAMES.PERSONA_ID) &&
+      params.has(SEARCH_PARAM_NAMES.PROJECT_ID)
+    ) {
+      params.delete(SEARCH_PARAM_NAMES.PROJECT_ID);
+      router.replace(`?${params.toString()}`, { scroll: false });
+    }
+  }, [searchParams, router]);
 
   const { deepResearchEnabled, toggleDeepResearch } = useDeepResearchToggle({
     chatSessionId: currentChatSessionId,
-    agentId: selectedAgent?.id,
+    agentId: liveAgent?.id,
   });
 
   // Incognito lives in context so the top-bar toggle and this page stay in
@@ -544,7 +547,6 @@ export default function AppPage({ firstMessage }: ChatPageProps) {
     selectedDocuments,
     searchParams,
     resetInputBar,
-    setSelectedAgentFromId,
   });
 
   const {
@@ -556,7 +558,6 @@ export default function AppPage({ firstMessage }: ChatPageProps) {
     searchParams,
     filterManager,
     firstMessage,
-    setSelectedAgentFromId,
     setSelectedDocuments,
     setCurrentMessageFiles,
     chatSessionIdRef,
@@ -1114,7 +1115,7 @@ export default function AppPage({ firstMessage }: ChatPageProps) {
                             : projectContextTokenCount
                         }
                         availableContextTokens={availableContextTokens}
-                        selectedAgent={selectedAgent || liveAgent}
+                        selectedAgent={liveAgent}
                         handleFileUpload={handleMessageSpecificFileUpload}
                         setPresentingDocument={setPresentingDocument}
                         // Intentionally enabled during name-only onboarding (showOnboarding=false)
