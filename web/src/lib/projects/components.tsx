@@ -321,25 +321,28 @@ function ProjectPopoverRow({ match, onNavigate }: ProjectPopoverRowProps) {
 
   return (
     <div data-testid="ProjectsPopover/row" className="flex flex-col gap-1">
-      <LineItemButton
+      <SidebarTab
         icon={folderIcon}
-        title={match.project.name}
+        // Same rule as the sidebar: while the chats are hidden, the folder
+        // carries the "you are here" mark for them.
+        selected={isActiveProject && (appFocus.isProject() || !open)}
         onClick={noProp(handleClick)}
-        sizePreset="main-ui"
-        rounding="sm"
-      />
+      >
+        {match.project.name}
+      </SidebarTab>
       {open &&
         match.chatSessions.map((chatSession) => (
-          <LineItemButton
+          <SidebarTab
             key={chatSession.id}
-            icon={() => <div className="w-4" />}
-            title={chatSession.name || UNNAMED_CHAT}
+            // `nested` supplies the indent that lines a chat up under its
+            // project, so the row needs no icon of its own.
+            nested
             href={`/app?chatId=${chatSession.id}`}
             onClick={onNavigate}
-            state={appFocus.getId() === chatSession.id ? "selected" : "empty"}
-            sizePreset="main-ui"
-            rounding="sm"
-          />
+            selected={appFocus.getId() === chatSession.id}
+          >
+            {chatSession.name || UNNAMED_CHAT}
+          </SidebarTab>
         ))}
     </div>
   );
