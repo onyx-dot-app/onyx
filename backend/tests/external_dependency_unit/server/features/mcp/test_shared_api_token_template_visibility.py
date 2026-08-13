@@ -17,7 +17,6 @@ from onyx.db.enums import (
 )
 from onyx.db.mcp import (
     create_connection_config,
-    get_mcp_auth_template,
     get_mcp_server_by_id,
     get_user_connection_config,
 )
@@ -25,6 +24,7 @@ from onyx.server.features.mcp.api import (
     _db_mcp_server_to_api_mcp_server,
     _upsert_mcp_server,
 )
+from onyx.server.features.mcp.credentials import get_mcp_auth_template
 from onyx.server.features.mcp.models import (
     MCPAuthTemplate,
     MCPConnectionData,

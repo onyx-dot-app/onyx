@@ -1,6 +1,5 @@
 import datetime
 import re
-import time
 from enum import Enum
 from typing import Any, List, Literal, NotRequired, Optional, TypedDict
 from uuid import UUID
@@ -120,22 +119,6 @@ class MCPConnectionData(TypedDict):
 
     # the actual models are defined in mcp.shared.auth
     # from mcp.shared.auth import OAuthClientInformationFull, OAuthClientMetadata, OAuthToken
-
-
-def mcp_token_expired(config_data: MCPConnectionData) -> bool:
-    """True iff the stored access token is past its persisted expiry."""
-    expires_at = config_data.get(MCPOAuthKeys.TOKEN_EXPIRES_AT.value)
-    return expires_at is not None and float(expires_at) <= time.time()
-
-
-def mcp_oauth_reauth_required(config_data: MCPConnectionData) -> bool:
-    """True when the stored OAuth grant can never authenticate again on its
-    own: the access token is expired and there is no refresh token to redeem.
-    Such a config must not count as authenticated — the user has to reconnect."""
-    if not mcp_token_expired(config_data):
-        return False
-    tokens = config_data.get(MCPOAuthKeys.TOKENS.value) or {}
-    return not tokens.get("refresh_token")
 
 
 class MCPAuthTemplate(BaseModel):
