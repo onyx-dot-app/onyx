@@ -10,7 +10,7 @@ import {
   InputVertical,
   toast,
 } from "@opal/layouts";
-import { markdown } from "@opal/utils";
+import { copyText, markdown } from "@opal/utils";
 import { Formik, Form } from "formik";
 import * as Yup from "yup";
 import {
@@ -75,6 +75,9 @@ import { Tooltip } from "@opal/components";
 import { useCloudSubscription } from "@/hooks/useCloudSubscription";
 import { useSmoothStreaming } from "@/hooks/useSmoothStreaming";
 import { findModelConfigId } from "@/lib/languageModels/options";
+import { useLLMProviders } from "@/lib/languageModels/hooks";
+import { DOCS_BASE_URL } from "@/lib/constants";
+import SimpleCollapsible from "@/refresh-components/SimpleCollapsible";
 
 interface PAT {
   id: number;
@@ -1326,6 +1329,189 @@ function ChatPreferencesSettings() {
   );
 }
 
+interface GatewayAccessSectionProps {
+  canCreateToken: boolean;
+  onCreateToken: () => void;
+}
+
+interface GatewayCopyValueButtonProps {
+  value: string;
+}
+
+function GatewayCopyValueButton({ value }: GatewayCopyValueButtonProps) {
+  const [copied, setCopied] = useState(false);
+
+  async function handleCopy() {
+    try {
+      await copyText(value);
+      setCopied(true);
+      setTimeout(() => setCopied(false), 2000);
+    } catch {
+      toast.error("Could not copy value.");
+    }
+  }
+
+  return (
+    <Button
+      prominence="secondary"
+      size="sm"
+      onClick={handleCopy}
+      rightIcon={copied ? SvgCheck : undefined}
+      tooltip={copied ? "Copied" : "Copy"}
+    >
+      {value}
+    </Button>
+  );
+}
+
+function GatewayAccessSection({
+  canCreateToken,
+  onCreateToken,
+}: GatewayAccessSectionProps) {
+  const enterpriseTier = useTierAtLeast(Tier.ENTERPRISE);
+  const { llmProviders } = useLLMProviders();
+  const [gatewayUrl, setGatewayUrl] = useState("");
+
+  useEffect(() => {
+    setGatewayUrl(`${window.location.origin}/api/gateway/v1`);
+  }, []);
+
+  const providerGroups = useMemo(
+    () =>
+      (llmProviders ?? [])
+        .map((provider) => ({
+          id: provider.id,
+          name: provider.name || provider.provider_display_name,
+          models: provider.model_configurations
+            .filter((model) => model.is_visible)
+            .sort((first, second) => {
+              if (
+                first.is_recommended_default !== second.is_recommended_default
+              ) {
+                return first.is_recommended_default ? -1 : 1;
+              }
+
+              return first.effectiveDisplayName.localeCompare(
+                second.effectiveDisplayName
+              );
+            })
+            .map((model) => ({
+              id: `${provider.id}/${model.name}`,
+              name: model.effectiveDisplayName,
+            })),
+        }))
+        .filter((provider) => provider.models.length > 0)
+        .sort((first, second) => first.name.localeCompare(second.name)),
+    [llmProviders]
+  );
+
+  const availableModelCount = providerGroups.reduce(
+    (count, provider) => count + provider.models.length,
+    0
+  );
+
+  if (!enterpriseTier || availableModelCount === 0) {
+    return null;
+  }
+
+  const gatewayAddress = gatewayUrl || "/api/gateway/v1";
+
+  return (
+    <Section gap={3}>
+      <ContentAction
+        title="LLM Gateway"
+        description="Connect external tools to the models available to you in Onyx."
+        sizePreset="main-content"
+        variant="section"
+        width="full"
+        center
+        rightChildren={
+          <Button
+            prominence="tertiary"
+            href={`${DOCS_BASE_URL}/developers/guides/llm_gateway`}
+            target="_blank"
+            size="sm"
+          >
+            Guide
+          </Button>
+        }
+      />
+      <Card border="solid" rounding="lg" padding={3}>
+        <Section alignItems="start" height="fit" gap={3}>
+          <InputHorizontal
+            title="Gateway URL"
+            description="Use this base URL with compatible OpenAI and Anthropic clients."
+            center
+          >
+            <GatewayCopyValueButton value={gatewayAddress} />
+          </InputHorizontal>
+
+          <Divider />
+
+          <Section gap={2} alignItems="start">
+            <Content
+              title="Models"
+              description={`${availableModelCount} models are available to your account. Open a provider to copy an ID.`}
+              sizePreset="main-ui"
+              variant="section"
+            />
+
+            <Section gap={2} alignItems="start">
+              {providerGroups.map((provider) => (
+                <SimpleCollapsible key={provider.id} defaultOpen={false}>
+                  <SimpleCollapsible.Header
+                    title={provider.name}
+                    description={`${provider.models.length} ${
+                      provider.models.length === 1 ? "model" : "models"
+                    } available`}
+                    sizePreset="main-ui"
+                  />
+                  <SimpleCollapsible.Content>
+                    <Section gap={2} alignItems="start">
+                      {provider.models.map((model) => (
+                        <Section
+                          key={model.id}
+                          flexDirection="row"
+                          justifyContent="between"
+                          alignItems="center"
+                          height="fit"
+                          gap={2}
+                        >
+                          <Text font="main-ui-body" color="text-04">
+                            {model.name}
+                          </Text>
+                          <GatewayCopyValueButton value={model.id} />
+                        </Section>
+                      ))}
+                    </Section>
+                  </SimpleCollapsible.Content>
+                </SimpleCollapsible>
+              ))}
+            </Section>
+          </Section>
+
+          <Divider />
+
+          <InputHorizontal
+            title="Access token"
+            description="Create a scoped token before you connect an application."
+            center
+          >
+            <Button
+              prominence="secondary"
+              icon={SvgKey}
+              disabled={!canCreateToken}
+              onClick={onCreateToken}
+            >
+              New token
+            </Button>
+          </InputHorizontal>
+        </Section>
+      </Card>
+    </Section>
+  );
+}
+
 function AccountsAccessSettings() {
   const { user, authTypeMetadata } = useUser();
   const isMultiTenant = useIsMultiTenant();
@@ -1412,6 +1598,17 @@ function AccountsAccessSettings() {
       prev.includes(scope) ? prev.filter((s) => s !== scope) : [...prev, scope]
     );
   }, []);
+
+  const openGatewayTokenModal = useCallback(() => {
+    setNewTokenName("LLM Gateway");
+    setAccessMode("limited");
+    setSelectedScopes(["use:llm_gateway"]);
+    setShowCreateModal(true);
+  }, []);
+
+  const canCreateGatewayToken =
+    canCreateTokens &&
+    scopeOptions.some((option) => option.scope === "use:llm_gateway");
 
   // Use filter hook for searching tokens
   const {
@@ -1848,6 +2045,11 @@ function AccountsAccessSettings() {
             )}
           </Section>
         )}
+
+        <GatewayAccessSection
+          canCreateToken={canCreateGatewayToken}
+          onCreateToken={openGatewayTokenModal}
+        />
       </Section>
     </>
   );
