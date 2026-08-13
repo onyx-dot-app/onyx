@@ -461,7 +461,7 @@ func cherryPickToRelease(commitSHAs, commitMessages []string, branchSuffix, vers
 	if noVerify {
 		pushArgs = []string{"push", "--no-verify", "-u", "origin", hotfixBranch}
 	}
-	if err := git.RunCommandVerboseOnError(pushArgs...); err != nil {
+	if err := pushWithHookHint(noVerify, func() error { return git.RunCommandVerboseOnError(pushArgs...) }); err != nil {
 		return "", fmt.Errorf("failed to push hotfix branch: %w", err)
 	}
 
