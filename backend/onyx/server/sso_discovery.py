@@ -60,7 +60,9 @@ class SSODiscoveryResponse(BaseModel):
 
 
 async def _enforce_discovery_rate_limit(request: Request) -> None:
-    if not SSO_DISCOVERY_RATE_LIMIT_ENABLED:
+    # On cloud this is the only bound on address enumeration, so the disable
+    # flag relaxes single-tenant only. Multi-tenant always enforces.
+    if not SSO_DISCOVERY_RATE_LIMIT_ENABLED and not MULTI_TENANT:
         return
 
     ip = get_client_ip(request) or "unknown"
