@@ -229,9 +229,7 @@ export class UsersAdminPage {
 
   /** The email input inside the invite modal. */
   get inviteEmailInput(): Locator {
-    return this.dialog.getByPlaceholder(
-      "Add emails to invite, space or comma separated"
-    );
+    return this.dialog.getByRole("textbox");
   }
 
   async openInviteModal() {
@@ -242,7 +240,6 @@ export class UsersAdminPage {
   async addInviteEmail(email: string) {
     await this.inviteEmailInput.pressSequentially(email, { delay: 20 });
     await this.inviteEmailInput.press("Enter");
-    // Wait for the chip to appear in the dialog
     await expect(this.dialog.getByText(email)).toBeVisible();
   }
 

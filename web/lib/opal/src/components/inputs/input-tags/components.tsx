@@ -59,10 +59,6 @@ interface InputTagsProps {
   autoFocus?: boolean;
 }
 
-/** Tag row height and wrap gap, mirroring `.opal-input-tags-tags` in styles.css. */
-const TAG_ROW_HEIGHT_PX = 24;
-const TAG_ROW_GAP_PX = 4;
-
 // ---------------------------------------------------------------------------
 // InputTags
 // ---------------------------------------------------------------------------
@@ -135,15 +131,10 @@ function InputTags({
       )}
       <div
         className="opal-input-tags-tags"
+        data-multi-row={minRows > 1 || undefined}
         style={
           minRows > 1
-            ? {
-                minHeight:
-                  minRows * TAG_ROW_HEIGHT_PX + (minRows - 1) * TAG_ROW_GAP_PX,
-                // The taller field packs rows from the top; `content-center`
-                // would float a single row into the middle of the box.
-                alignContent: "flex-start",
-              }
+            ? ({ "--opal-input-tags-rows": minRows } as React.CSSProperties)
             : undefined
         }
       >

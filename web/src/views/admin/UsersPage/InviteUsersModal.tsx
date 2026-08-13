@@ -6,17 +6,16 @@ import {
   Button,
   InputTags,
   Modal,
-  Text,
+  type TagItem,
 } from "@opal/components";
-import type { TagItem } from "@opal/components";
 import {
   SvgAlertTriangle,
   SvgCheckCircle,
-  SvgLoader,
+  SvgSimpleLoader,
   SvgUsers,
 } from "@opal/icons";
-import type { IconFunctionComponent } from "@opal/types";
-import { Section, toast } from "@opal/layouts";
+import type { ColorTypes, IconFunctionComponent } from "@opal/types";
+import { Content, toast } from "@opal/layouts";
 import { mutate } from "swr";
 import { SWR_KEYS } from "@/lib/swr-keys";
 import { inviteUsers } from "./svc";
@@ -27,10 +26,10 @@ import { inviteUsers } from "./svc";
 
 const EMAIL_REGEX = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
 
-/** Whitespace and commas both end an address, so typing either commits a tag. */
+/** Whitespace and commas both end an address, so either one commits a tag. */
 const SEPARATOR_REGEX = /[\s,]+/;
 
-/** Tag rows the field is tall enough to show before it grows. */
+/** The field in the mock is three tag rows tall. */
 const EMAIL_FIELD_ROWS = 3;
 
 function isValidEmail(value: string): boolean {
@@ -39,6 +38,48 @@ function isValidEmail(value: string): boolean {
 
 function normalizeEmail(value: string): string {
   return value.trim().toLowerCase();
+}
+
+/** Tags for entries not already present, de-duped case-insensitively. */
+function buildTags(entries: string[], existing: TagItem[]): TagItem[] {
+  const added: TagItem[] = [];
+  for (const entry of entries) {
+    const email = normalizeEmail(entry);
+    const seen =
+      existing.some((tag) => tag.id === email) ||
+      added.some((tag) => tag.id === email);
+    if (email && !seen) {
+      added.push({ id: email, label: email, error: !isValidEmail(email) });
+    }
+  }
+  return added;
+}
+
+function buildMessage(
+  tags: TagItem[],
+  pendingEmail: string,
+  validCount: number
+): FieldMessage | null {
+  if (tags.length === 0 && pendingEmail === "") return null;
+  if (tags.some((tag) => tag.error)) {
+    return {
+      icon: SvgAlertTriangle,
+      color: "muted-warning",
+      text: "Some email addresses are invalid and will be skipped.",
+    };
+  }
+  if (validCount === 0) {
+    return {
+      icon: SvgAlertTriangle,
+      color: "muted-warning",
+      text: "Enter a valid email address to invite.",
+    };
+  }
+  return {
+    icon: SvgCheckCircle,
+    color: "muted-success",
+    text: `${validCount} email${validCount > 1 ? "s" : ""} to invite`,
+  };
 }
 
 // ---------------------------------------------------------------------------
@@ -52,7 +93,7 @@ interface InviteUsersModalProps {
 
 interface FieldMessage {
   icon: IconFunctionComponent;
-  iconClassName: string;
+  color: ColorTypes;
   text: string;
 }
 
@@ -68,24 +109,11 @@ export default function InviteUsersModal({
   const [inputValue, setInputValue] = useState("");
   const [isSubmitting, setIsSubmitting] = useState(false);
 
-  /** Tags for entries not already present, de-duped case-insensitively. */
-  function buildTags(entries: string[], existing: TagItem[]): TagItem[] {
-    const added: TagItem[] = [];
-    for (const entry of entries) {
-      const email = normalizeEmail(entry);
-      const seen =
-        existing.some((tag) => tag.id === email) ||
-        added.some((tag) => tag.id === email);
-      if (email && !seen) {
-        added.push({ id: email, label: email, error: !isValidEmail(email) });
-      }
-    }
-    return added;
-  }
-
   function addTags(entries: string[]) {
-    const added = buildTags(entries, tags);
-    if (added.length > 0) setTags((prev) => [...prev, ...added]);
+    setTags((prev) => {
+      const added = buildTags(entries, prev);
+      return added.length > 0 ? [...prev, ...added] : prev;
+    });
   }
 
   function removeTag(id: string) {
@@ -114,31 +142,7 @@ export default function InviteUsersModal({
     isValidEmail(pendingEmail) && !tags.some((tag) => tag.id === pendingEmail);
   const validCount =
     tags.filter((tag) => !tag.error).length + (pendingIsValid ? 1 : 0);
-
-  function buildMessage(): FieldMessage | null {
-    if (tags.length === 0 && pendingEmail === "") return null;
-    if (tags.some((tag) => tag.error)) {
-      return {
-        icon: SvgAlertTriangle,
-        iconClassName: "text-status-warning-05",
-        text: "Some email addresses are invalid and will be skipped.",
-      };
-    }
-    if (validCount === 0) {
-      return {
-        icon: SvgAlertTriangle,
-        iconClassName: "text-status-warning-05",
-        text: "Enter a valid email address to invite.",
-      };
-    }
-    return {
-      icon: SvgCheckCircle,
-      iconClassName: "text-status-success-05",
-      text: `${validCount} email${validCount > 1 ? "s" : ""} to invite`,
-    };
-  }
-
-  const message = buildMessage();
+  const message = buildMessage(tags, pendingEmail, validCount);
 
   const handleClose = useCallback(() => {
     onOpenChange(false);
@@ -150,7 +154,7 @@ export default function InviteUsersModal({
     }, 200);
   }, [onOpenChange]);
 
-  /** Intercept backdrop/ESC closes so state is always reset */
+  /** Route backdrop/ESC closes through handleClose, and block them mid-submit. */
   const handleOpenChange = useCallback(
     (next: boolean) => {
       if (!next) {
@@ -163,15 +167,10 @@ export default function InviteUsersModal({
   );
 
   async function handleInvite() {
-    // Flush any pending text in the input into tags synchronously
-    const allTags = pendingEmail
-      ? [...tags, ...buildTags([pendingEmail], tags)]
-      : tags;
-
-    if (pendingEmail) {
-      setTags(allTags);
-      setInputValue("");
-    }
+    // setTags is not visible until the next render, so submit the locally built list.
+    const allTags = [...tags, ...buildTags([inputValue], tags)];
+    setTags(allTags);
+    setInputValue("");
 
     const validEmails = allTags
       .filter((tag) => !tag.error)
@@ -216,46 +215,27 @@ export default function InviteUsersModal({
           onClose={isSubmitting ? undefined : handleClose}
         />
 
-        <Modal.Body>
-          <Section
-            flexDirection="column"
-            alignItems="stretch"
-            height="fit"
-            gap={1}
-          >
-            <InputTags
-              tags={tags}
-              onRemoveTag={removeTag}
-              onAdd={handleAdd}
-              value={inputValue}
-              onChange={handleInputChange}
-              placeholder="Add emails to invite, space or comma separated"
-              minRows={EMAIL_FIELD_ROWS}
-              autoFocus
+        <Modal.Body alignItems="stretch" gap={1}>
+          <InputTags
+            tags={tags}
+            onRemoveTag={removeTag}
+            onAdd={handleAdd}
+            value={inputValue}
+            onChange={handleInputChange}
+            placeholder="Add emails to invite, space or comma separated"
+            minRows={EMAIL_FIELD_ROWS}
+            autoFocus
+          />
+          {message && (
+            <Content
+              sizePreset="secondary"
+              variant="body"
+              icon={message.icon}
+              title={message.text}
+              color={message.color}
+              role="status"
             />
-            {message && (
-              <Section
-                flexDirection="row"
-                alignItems="start"
-                justifyContent="start"
-                height="fit"
-                gap={0.5}
-              >
-                <Section
-                  width={1}
-                  height={1}
-                  padding={0.5}
-                  gap={0}
-                  className="shrink-0"
-                >
-                  <message.icon size={12} className={message.iconClassName} />
-                </Section>
-                <Text font="secondary-body" color="text-03">
-                  {message.text}
-                </Text>
-              </Section>
-            )}
-          </Section>
+          )}
         </Modal.Body>
 
         <Modal.Footer>
@@ -272,11 +252,7 @@ export default function InviteUsersModal({
             submit={
               <Button
                 disabled={isSubmitting || validCount === 0}
-                icon={
-                  isSubmitting
-                    ? () => <SvgLoader size={16} className="animate-spin" />
-                    : undefined
-                }
+                icon={isSubmitting ? SvgSimpleLoader : undefined}
                 onClick={handleInvite}
               >
                 Invite
