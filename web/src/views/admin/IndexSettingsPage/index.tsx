@@ -962,6 +962,61 @@ export default function IndexSettingsPage() {
                 values,
                 initialFormValues
               );
+              const switchoverStrategySelect = (
+                <InputSelect
+                  value={switchoverType}
+                  onValueChange={(v) => setSwitchoverType(v as SwitchoverType)}
+                >
+                  <InputSelect.Trigger placeholder="Select a switchover strategy" />
+                  <InputSelect.Content>
+                    <InputSelect.Item
+                      value={SwitchoverType.REINDEX}
+                      icon={SvgClock}
+                      wrapDescription
+                      description="Safest option. Continue using the current document index with existing settings until all connectors have completed a successful index attempt."
+                    >
+                      Re-index All Connectors Then Switch
+                    </InputSelect.Item>
+                    <InputSelect.Item
+                      value={SwitchoverType.ACTIVE_ONLY}
+                      icon={SvgSlowTime}
+                      wrapDescription
+                      description="Continue using the current document index with existing settings until all active (not paused/deleting) connectors have completed a successful index attempt."
+                    >
+                      Re-index Active Connectors Then Switch
+                    </InputSelect.Item>
+                    <InputSelect.Item
+                      value={SwitchoverType.INSTANT}
+                      icon={SvgEmpty}
+                      wrapDescription
+                      description="Immediately clear the current document index and switch to the new settings. Requires re-indexing all connectors before the index is repopulated for search."
+                    >
+                      Switch Before Re-index
+                    </InputSelect.Item>
+                  </InputSelect.Content>
+                </InputSelect>
+              );
+              const revertButton = (
+                <Button
+                  prominence="secondary"
+                  onClick={() => {
+                    resetForm();
+                    setSwitchoverType(SwitchoverType.REINDEX);
+                  }}
+                >
+                  Revert
+                </Button>
+              );
+              const rebuildButton = (
+                <Button
+                  onClick={() => void submitForm()}
+                  disabled={contextualRagModelMissing}
+                >
+                  {contextualModelOnlyChange
+                    ? "Rebuild all existing documents"
+                    : "Apply & Re-index"}
+                </Button>
+              );
 
               return (
                 <>
@@ -1087,54 +1142,10 @@ export default function IndexSettingsPage() {
                         )}
                         bottomChildren={
                           dirty ? (
-                            <div className="flex flex-row items-end gap-4 p-2">
-                              <div className="flex-1 min-w-0">
-                                <InputSelect
-                                  value={switchoverType}
-                                  onValueChange={(v) =>
-                                    setSwitchoverType(v as SwitchoverType)
-                                  }
-                                >
-                                  <InputSelect.Trigger placeholder="Select a switchover strategy" />
-                                  <InputSelect.Content>
-                                    <InputSelect.Item
-                                      value={SwitchoverType.REINDEX}
-                                      icon={SvgClock}
-                                      wrapDescription
-                                      description="Safest option. Continue using the current document index with existing settings until all connectors have completed a successful index attempt."
-                                    >
-                                      Re-index All Connectors Then Switch
-                                    </InputSelect.Item>
-                                    <InputSelect.Item
-                                      value={SwitchoverType.ACTIVE_ONLY}
-                                      icon={SvgSlowTime}
-                                      wrapDescription
-                                      description="Continue using the current document index with existing settings until all active (not paused/deleting) connectors have completed a successful index attempt."
-                                    >
-                                      Re-index Active Connectors Then Switch
-                                    </InputSelect.Item>
-                                    <InputSelect.Item
-                                      value={SwitchoverType.INSTANT}
-                                      icon={SvgEmpty}
-                                      wrapDescription
-                                      description="Immediately clear the current document index and switch to the new settings. Requires re-indexing all connectors before the index is repopulated for search."
-                                    >
-                                      Switch Before Re-index
-                                    </InputSelect.Item>
-                                  </InputSelect.Content>
-                                </InputSelect>
-                              </div>
-                              <div className="flex flex-row gap-2 shrink-0">
-                                <Button
-                                  prominence="secondary"
-                                  onClick={() => {
-                                    resetForm();
-                                    setSwitchoverType(SwitchoverType.REINDEX);
-                                  }}
-                                >
-                                  Revert
-                                </Button>
-                                {contextualModelOnlyChange && (
+                            contextualModelOnlyChange ? (
+                              <div className="flex flex-row items-center gap-2 p-2">
+                                <div className="flex flex-row gap-2 shrink-0">
+                                  {revertButton}
                                   <Button
                                     prominence="secondary"
                                     onClick={() =>
@@ -1143,17 +1154,32 @@ export default function IndexSettingsPage() {
                                   >
                                     Apply to new and updated documents
                                   </Button>
-                                )}
-                                <Button
-                                  onClick={() => void submitForm()}
-                                  disabled={contextualRagModelMissing}
+                                </div>
+                                <Text
+                                  font="secondary-body"
+                                  color="text-03"
+                                  nowrap
                                 >
-                                  {contextualModelOnlyChange
-                                    ? "Rebuild all existing documents"
-                                    : "Apply & Re-index"}
-                                </Button>
+                                  or
+                                </Text>
+                                <div className="flex flex-row gap-2 flex-1 min-w-0">
+                                  <div className="flex-1 min-w-0">
+                                    {switchoverStrategySelect}
+                                  </div>
+                                  {rebuildButton}
+                                </div>
                               </div>
-                            </div>
+                            ) : (
+                              <div className="flex flex-row items-end gap-4 p-2">
+                                <div className="flex-1 min-w-0">
+                                  {switchoverStrategySelect}
+                                </div>
+                                <div className="flex flex-row gap-2 shrink-0">
+                                  {revertButton}
+                                  {rebuildButton}
+                                </div>
+                              </div>
+                            )
                           ) : undefined
                         }
                       />
