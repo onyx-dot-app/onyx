@@ -8,7 +8,7 @@ without SSO" in what it returns.
 
 from collections.abc import Generator
 from typing import Any, cast
-from unittest.mock import patch
+from unittest.mock import AsyncMock, patch
 from uuid import uuid4
 
 import pytest
@@ -118,7 +118,7 @@ def test_lookup_returns_none_for_unknown_address() -> None:
 
 
 @patch("onyx.server.sso_discovery.MULTI_TENANT", True)
-@patch("onyx.server.sso_discovery.SSO_DISCOVERY_RATE_LIMIT_ENABLED", False)
+@patch("onyx.server.sso_discovery._enforce_discovery_rate_limit", new=AsyncMock())
 def test_unknown_address_returns_an_empty_list(client: TestClient) -> None:
     """Same shape an SSO-less workspace returns, so the response cannot be used
     to tell whether an address belongs to a customer."""
@@ -127,13 +127,12 @@ def test_unknown_address_returns_an_empty_list(client: TestClient) -> None:
     assert response.json() == {"providers": []}
 
 
-@patch("onyx.server.sso_discovery.SSO_DISCOVERY_RATE_LIMIT_ENABLED", False)
 def test_malformed_address_is_rejected(client: TestClient) -> None:
     response = client.post("/auth/sso/discover", json={"email": "not-an-email"})
     assert response.status_code == 422
 
 
-@patch("onyx.server.sso_discovery.SSO_DISCOVERY_RATE_LIMIT_ENABLED", True)
+@patch("onyx.server.sso_discovery.MULTI_TENANT", True)
 @patch(
     "onyx.server.sso_discovery.get_async_redis_connection",
     side_effect=ConnectionError("redis is down"),
@@ -165,7 +164,7 @@ def test_workspace_pin_round_trips_and_rejects_another_signer() -> None:
 
 @patch("onyx.auth.sso_tenant_token.USER_AUTH_SECRET", _TEST_SECRET)
 @patch("onyx.server.sso_discovery.MULTI_TENANT", True)
-@patch("onyx.server.sso_discovery.SSO_DISCOVERY_RATE_LIMIT_ENABLED", False)
+@patch("onyx.server.sso_discovery._enforce_discovery_rate_limit", new=AsyncMock())
 def test_resolved_workspace_authorize_urls_carry_a_workspace_pin(
     client: TestClient,
 ) -> None:
