@@ -131,7 +131,7 @@ def test_contextual_rag_model_update_requires_enabled_feature(
     )
 
 
-def test_inference_update_rejects_embedding_model_change(
+def test_disabled_contextual_rag_rejected_before_embedding_model_change(
     reset: None,  # noqa: ARG001
     admin_user: DATestUser,
     llm_provider: DATestLLMProvider,
@@ -147,7 +147,7 @@ def test_inference_update_rejects_embedding_model_change(
         headers=admin_user.headers,
     )
     assert response.status_code == 400
-    assert "Only the Contextual Retrieval model" in response.json()["detail"]
+    assert "must be enabled" in response.json()["detail"]
 
 
 def test_update_contextual_rag_nonexistent_model_configuration(

@@ -90,12 +90,15 @@ import ModelSelector from "@/sections/model-selector/ModelSelector";
 import type { RichStr } from "@opal/types";
 import { ProviderCredentialsModal } from "@/views/admin/IndexSettingsPage/modals";
 import ReindexProgressBanner from "@/views/admin/IndexSettingsPage/ReindexProgressBanner";
+import { parseErrorDetail } from "@/lib/fetcher";
 
 const route = ADMIN_ROUTES.INDEX_SETTINGS;
 
 const MODEL_TAB_CLOUD = "cloud-based";
 const MODEL_TAB_SELF = "self-hosted";
 const CLOUD_TOOLTIP = "This setting is managed by Onyx Cloud.";
+const CONTEXTUAL_MODEL_UPDATE_ERROR =
+  "Failed to update Contextual Retrieval LLM";
 
 /**
  * Wrapper that disables its children when either:
@@ -794,22 +797,27 @@ export default function IndexSettingsPage() {
     async (modelConfigurationId: number): Promise<boolean> => {
       if (!searchSettings) return false;
 
-      const response = await updateInferenceSettings({
-        ...searchSettings,
-        contextual_rag_model_configuration_id: modelConfigurationId,
-      });
-      if (!response.ok) {
-        const error = (await response.json()) as { detail?: string };
-        toast.error(
-          error.detail ?? "Failed to update Contextual Retrieval LLM"
-        );
+      try {
+        const response = await updateInferenceSettings({
+          ...searchSettings,
+          contextual_rag_model_configuration_id: modelConfigurationId,
+        });
+        if (!response.ok) {
+          toast.error(
+            await parseErrorDetail(response, CONTEXTUAL_MODEL_UPDATE_ERROR)
+          );
+          return false;
+        }
+
+        await mutate(SWR_KEYS.currentSearchSettings);
+        forwardOnlyModal.toggle(false);
+        toast.success("Contextual Retrieval LLM updated");
+        return true;
+      } catch (error) {
+        console.error(CONTEXTUAL_MODEL_UPDATE_ERROR, error);
+        toast.error(CONTEXTUAL_MODEL_UPDATE_ERROR);
         return false;
       }
-
-      await mutate(SWR_KEYS.currentSearchSettings);
-      forwardOnlyModal.toggle(false);
-      toast.success("Contextual Retrieval LLM updated");
-      return true;
     },
     [forwardOnlyModal, searchSettings]
   );
@@ -1034,7 +1042,10 @@ export default function IndexSettingsPage() {
                               await applyContextualModelForward(
                                 modelConfigurationId
                               );
-                            if (updated) resetForm({ values });
+                            if (updated) {
+                              resetForm({ values });
+                              setSwitchoverType(SwitchoverType.REINDEX);
+                            }
                           }}
                         >
                           Apply to new and updated documents
@@ -1143,8 +1154,19 @@ export default function IndexSettingsPage() {
                         bottomChildren={
                           dirty ? (
                             contextualModelOnlyChange ? (
-                              <div className="flex flex-row items-center gap-2 p-2">
-                                <div className="flex flex-row gap-2 shrink-0">
+                              <GeneralLayouts.Section
+                                flexDirection="row"
+                                alignItems="center"
+                                gap={2}
+                                padding={2}
+                                height="fit"
+                              >
+                                <GeneralLayouts.Section
+                                  flexDirection="row"
+                                  gap={2}
+                                  width="fit"
+                                  height="fit"
+                                >
                                   {revertButton}
                                   <Button
                                     prominence="secondary"
@@ -1154,7 +1176,7 @@ export default function IndexSettingsPage() {
                                   >
                                     Apply to new and updated documents
                                   </Button>
-                                </div>
+                                </GeneralLayouts.Section>
                                 <Text
                                   font="secondary-body"
                                   color="text-03"
@@ -1162,13 +1184,20 @@ export default function IndexSettingsPage() {
                                 >
                                   or
                                 </Text>
-                                <div className="flex flex-row gap-2 flex-1 min-w-0">
-                                  <div className="flex-1 min-w-0">
+                                <GeneralLayouts.Section
+                                  flexDirection="row"
+                                  gap={2}
+                                  height="fit"
+                                >
+                                  <GeneralLayouts.Section
+                                    height="fit"
+                                    alignItems="stretch"
+                                  >
                                     {switchoverStrategySelect}
-                                  </div>
+                                  </GeneralLayouts.Section>
                                   {rebuildButton}
-                                </div>
-                              </div>
+                                </GeneralLayouts.Section>
+                              </GeneralLayouts.Section>
                             ) : (
                               <div className="flex flex-row items-end gap-4 p-2">
                                 <div className="flex-1 min-w-0">

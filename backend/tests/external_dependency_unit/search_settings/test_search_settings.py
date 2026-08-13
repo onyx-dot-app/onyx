@@ -227,6 +227,8 @@ def test_contextual_model_update_rejects_other_changes(
     db_session: Session,
 ) -> None:
     current = get_current_search_settings(db_session)
+    current.enable_contextual_rag = True
+    db_session.commit()
     requested = SavedSearchSettings.from_db_model(current).model_copy(
         update={
             "model_name": "other-embedding-model",

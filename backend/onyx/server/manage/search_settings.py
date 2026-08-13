@@ -466,6 +466,13 @@ def update_saved_search_settings(
         )
 
     current = get_current_search_settings(db_session)
+    if not current.enable_contextual_rag:
+        raise OnyxError(
+            OnyxErrorCode.INVALID_INPUT,
+            "Contextual Retrieval must be enabled before its model can be updated "
+            "without re-indexing.",
+        )
+
     model_configuration_id = _validate_contextual_model_only_update(
         current, search_settings
     )
@@ -474,12 +481,6 @@ def update_saved_search_settings(
         db_session=db_session,
         enable_contextual_rag=True,
     )
-    if not current.enable_contextual_rag:
-        raise OnyxError(
-            OnyxErrorCode.INVALID_INPUT,
-            "Contextual Retrieval must be enabled before its model can be updated "
-            "without re-indexing.",
-        )
 
     previous_model_configuration_id = current.contextual_rag_model_configuration_id
     update_current_search_settings(
