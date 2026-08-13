@@ -62,6 +62,7 @@ env:
   KIND_REGISTRY_PORT: "5001"
   KIND_VERSION: "v0.31.0"
   KUBECTL_VERSION: "v1.35.0"
+  CRAFT_ASSETS_ARTIFACT: "craft-k8s-assets"
 
   # The pytest process runs on the runner, so it reaches chart-managed
   # Postgres/Redis through kubectl port-forwards.
@@ -181,17 +182,7 @@ jobs:
         with:
           persist-credentials: false
 
-      # The run-scoped key prevents pull-request code from poisoning caches used
-      # by other runs. Test shards restore the completed cache after this job.
-      - name: Restore kind tools
-        id: kind-tools-cache
-        uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # zizmor: ignore[cache-poisoning]
-        with:
-          path: ${{ runner.tool_cache }}/kind/${{ env.KIND_VERSION }}/amd64
-          key: craft-kind-tools-${{ runner.os }}-${{ runner.arch }}-${{ env.KIND_VERSION }}-${{ env.KUBECTL_VERSION }}-${{ github.run_id }}
-
       - name: Download and verify kind tools
-        if: steps.kind-tools-cache.outputs.cache-hit != 'true'
         run: |
           set -euo pipefail
 
@@ -228,15 +219,7 @@ jobs:
             chmod +x kubectl
           )
 
-      - name: Restore Helm chart dependencies
-        id: helm-dependencies-cache
-        uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # zizmor: ignore[cache-poisoning]
-        with:
-          path: deployment/helm/charts/onyx/charts
-          key: craft-helm-dependencies-${{ hashFiles('deployment/helm/charts/onyx/Chart.yaml', 'deployment/helm/charts/onyx/Chart.lock') }}-${{ github.run_id }}
-
       - name: Download Helm chart dependencies
-        if: steps.helm-dependencies-cache.outputs.cache-hit != 'true'
         run: |
           set -euo pipefail
 
@@ -275,6 +258,27 @@ jobs:
           helm dependency list deployment/helm/charts/onyx
           helm dependency list deployment/helm/charts/onyx \
             | awk 'NR > 1 && NF && $4 != "ok" { bad = 1 } END { exit bad }'
+
+      # Tar preserves executable permissions for kind and kubectl.
+      - name: Package Craft test assets
+        run: |
+          set -euo pipefail
+          assets_dir="${RUNNER_TEMP}/craft-assets"
+          mkdir -p "${assets_dir}"
+          tar -C "${RUNNER_TOOL_CACHE}/kind/${KIND_VERSION}/amd64" \
+            -czf "${assets_dir}/kind-tools.tar.gz" .
+          tar -C deployment/helm/charts/onyx/charts \
+            -czf "${assets_dir}/helm-dependencies.tar.gz" .
+
+      - name: Upload Craft test assets
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a
+        with:
+          name: ${{ env.CRAFT_ASSETS_ARTIFACT }}
+          path: ${{ runner.temp }}/craft-assets
+          if-no-files-found: error
+          retention-days: 1
+          compression-level: 0
+          overwrite: true
 
   build-images:
     # Build both images in parallel (one matrix leg each) and push to the shared
@@ -392,19 +396,22 @@ jobs:
             backend/requirements/dev.txt
             backend/requirements/ee.txt
 
-      - name: Restore kind tools
-        uses: actions/cache/restore@55cc8345863c7cc4c66a329aec7e433d2d1c52a9
+      - name: Download Craft test assets
+        uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c
         with:
-          path: ${{ runner.tool_cache }}/kind/${{ env.KIND_VERSION }}/amd64
-          key: craft-kind-tools-${{ runner.os }}-${{ runner.arch }}-${{ env.KIND_VERSION }}-${{ env.KUBECTL_VERSION }}-${{ github.run_id }}
-          fail-on-cache-miss: true
+          name: ${{ env.CRAFT_ASSETS_ARTIFACT }}
+          path: ${{ runner.temp }}/craft-assets
 
-      - name: Restore Helm chart dependencies
-        uses: actions/cache/restore@55cc8345863c7cc4c66a329aec7e433d2d1c52a9
-        with:
-          path: deployment/helm/charts/onyx/charts
-          key: craft-helm-dependencies-${{ hashFiles('deployment/helm/charts/onyx/Chart.yaml', 'deployment/helm/charts/onyx/Chart.lock') }}-${{ github.run_id }}
-          fail-on-cache-miss: true
+      - name: Install Craft test assets
+        run: |
+          set -euo pipefail
+          kind_cache_dir="${RUNNER_TOOL_CACHE}/kind/${KIND_VERSION}/amd64"
+          charts_dir="deployment/helm/charts/onyx/charts"
+          mkdir -p "${kind_cache_dir}" "${charts_dir}"
+          tar -C "${kind_cache_dir}" \
+            -xzf "${RUNNER_TEMP}/craft-assets/kind-tools.tar.gz"
+          tar -C "${charts_dir}" \
+            -xzf "${RUNNER_TEMP}/craft-assets/helm-dependencies.tar.gz"
 
       - name: Log in to ECR pull-through cache
         uses: ./.github/actions/login-ecr-pullthrough-cache
