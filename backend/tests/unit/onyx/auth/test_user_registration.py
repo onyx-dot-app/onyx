@@ -67,7 +67,7 @@ class _AsyncSessionContextManager:
 
 def _mock_user_manager_methods(user_manager: UserManager) -> None:
     user_manager.validate_password = AsyncMock()
-    user_manager._assign_default_pinned_assistants = AsyncMock()
+    user_manager._seed_pinned_personas = AsyncMock()
 
 
 class TestDisposableEmailValidation:
