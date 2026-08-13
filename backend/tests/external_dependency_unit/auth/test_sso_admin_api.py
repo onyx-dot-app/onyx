@@ -604,6 +604,22 @@ def test_multi_tenant_requires_bounded_email_domains(
     assert response.status_code == OnyxErrorCode.INVALID_INPUT.status_code
 
 
+@pytest.mark.parametrize(
+    "domain", ["company a.com", "notadomain", "-bad.com", "bad_.com"]
+)
+@patch("onyx.server.manage.sso.api.MULTI_TENANT", True)
+def test_multi_tenant_rejects_malformed_email_domains(
+    client: TestClient, domain: str
+) -> None:
+    """A syntactically invalid domain would persist and route nowhere, then fail
+    only later when verification tries to email it, so it is rejected at save."""
+    request = _build_oidc_request(_new_provider_name(), "secret")
+    request["allowed_email_domains"] = [domain]
+
+    response = client.post("/admin/sso/provider", json=request)
+    assert response.status_code == OnyxErrorCode.INVALID_INPUT.status_code
+
+
 def test_single_tenant_allows_unbounded_email_domains(
     client: TestClient, provider_names: list[str]
 ) -> None:
