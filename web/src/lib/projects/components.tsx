@@ -106,7 +106,12 @@ function useFolderIcon(
   return () => (
     <div
       data-testid="ProjectFolderIcon"
-      className="p-0 cursor-pointer"
+      /* Above the tab's click overlay. `SidebarTab` lays an absolute
+         `z-99` control over the whole row whenever it has an `onClick`, and a
+         statically positioned element can never paint above it — so without
+         this the click lands on the row and navigates instead of folding.
+         `rightChildren` solves the same problem the same way. */
+      className="relative z-100 p-0 cursor-pointer"
       onMouseEnter={() => setHovering(true)}
       onMouseLeave={() => {
         setHovering(false);
