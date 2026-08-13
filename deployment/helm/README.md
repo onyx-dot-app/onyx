@@ -23,11 +23,19 @@ helm install onyx oci://ghcr.io/onyx-dot-app/charts/onyx \
 ```
 
 `helm repo add` does not accept `oci://` URLs, so an OCI install needs an
-explicit `--version`; there is no `helm repo update` or `helm search repo` for
-it. List the published versions with:
+explicit `--version`. There is no `helm repo update` or `helm search repo` for
+OCI and no helm command that lists the available versions. Read them from the
+`helm/onyx-<version>` [releases](https://github.com/onyx-dot-app/onyx/releases)
+or from the Helm repository index:
 
 ```bash
-helm show chart oci://ghcr.io/onyx-dot-app/charts/onyx --version <version>
+helm search repo onyx/onyx --versions   # needs `helm repo add` from above
+```
+
+To inspect one version before installing it:
+
+```bash
+helm show chart oci://ghcr.io/onyx-dot-app/charts/onyx --version 0.8.16
 ```
 
 Both channels ship identical bytes from the same build. Use the Helm repository

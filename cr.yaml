@@ -6,6 +6,12 @@
 #
 # Chart releases get a `helm/` tag prefix so they cannot collide with the
 # application releases (`v*.*.*`) or with the other prefixed release trains
-# (`cli/v*.*.*`, `opal/v*.*.*`). No workflow in this repo triggers on a `helm/`
-# tag, so publishing a chart does not re-run the application pipelines.
+# (`cli/v*.*.*`, `opal/v*.*.*`).
+#
+# The prefix also keeps chart publishes out of the image build pipeline.
+# `deployment.yml` triggers on `tags: ["*"]`, but a GitHub Actions `*` filter
+# does not match `/`, so slash-prefixed tags never reach it — which is why the
+# existing `cli/` and `opal/` tags do not build images either. Keep the prefix:
+# an unprefixed chart tag WOULD match that filter and publish web, backend and
+# model-server images under the chart version.
 release-name-template: "helm/{{ .Name }}-{{ .Version }}"
