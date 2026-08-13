@@ -58,7 +58,7 @@ import ChatScrollContainer, {
 } from "@/sections/chat/ChatScrollContainer";
 import ProjectContextPanel from "@/sections/projects/ProjectContextPanel";
 import { useProjectsContext } from "@/providers/ProjectsContext";
-import { useActiveProject } from "@/lib/projects/hooks";
+import { useActiveProject, useProjects } from "@/lib/projects/hooks";
 import { getProjectTokenCount } from "@/lib/projects/svc";
 import ProjectChatSessionList from "@/sections/projects/ProjectChatSessionList";
 import { cn } from "@opal/utils";
@@ -243,9 +243,12 @@ export default function AppPage({ firstMessage }: ChatPageProps) {
   // opens (`PARAMS_TO_SKIP` in `app/app/services/lib.tsx`), so `currentProjectId`
   // is null inside a project chat. This value is what reaches the backend, so
   // reading the search param let a project chat send deep research and error.
+  const { isLoading: isLoadingProjects } = useProjects();
   const activeProject = useActiveProject();
+  // Withhold until the projects snapshot has loaded: an unloaded list makes a
+  // project chat look like a normal one, and this value reaches the backend.
   const deepResearchEnabledForCurrentWorkflow =
-    activeProject === null && deepResearchEnabled;
+    !isLoadingProjects && activeProject === null && deepResearchEnabled;
 
   const [presentingDocument, setPresentingDocument] =
     useState<MinimalOnyxDocument | null>(null);

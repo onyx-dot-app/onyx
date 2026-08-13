@@ -28,7 +28,7 @@ import { Disabled } from "@opal/core";
 import { useUser } from "@/providers/UserProvider";
 import { useSettings } from "@/lib/settings/hooks";
 import { useProjectsContext } from "@/providers/ProjectsContext";
-import { useActiveProject } from "@/lib/projects/hooks";
+import { useActiveProject, useProjects } from "@/lib/projects/hooks";
 import { FileCard } from "@/sections/cards/FileCard";
 import { ProjectFile, UserFileStatus } from "@/lib/projects/types";
 import FilePickerPopover from "@/refresh-components/popovers/FilePickerPopover";
@@ -323,6 +323,7 @@ const AppInputBar = React.memo(
     const { forcedToolIds, setForcedToolIds } = useForcedTools();
     const { currentMessageFiles, setCurrentMessageFiles } =
       useProjectsContext();
+    const { isLoading: isLoadingProjects } = useProjects();
     const activeProject = useActiveProject();
 
     const currentIndexingFiles = useMemo(() => {
@@ -556,7 +557,9 @@ const AppInputBar = React.memo(
       // chat carries no project context in its URL — reading the search param
       // hid the toggle on the project page and left it showing in the one place
       // it actually breaks.
-      const isProjectWorkflow = activeProject !== null;
+      // Loading counts as "unknown", and unknown withholds: an unloaded
+      // projects list makes a project chat look like a normal one.
+      const isProjectWorkflow = isLoadingProjects || activeProject !== null;
 
       // TODO(@yuhong): Re-enable Deep Research in Projects workflow once it is fully supported.
       // https://linear.app/onyx-app/issue/ENG-3818/re-enable-deep-research-in-projects
@@ -569,6 +572,7 @@ const AppInputBar = React.memo(
       selectedAgent?.tools,
       combinedSettingsData?.deep_research_enabled,
       activeProject,
+      isLoadingProjects,
     ]);
 
     function handleKeyDownForPromptShortcuts(
