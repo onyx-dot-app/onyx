@@ -11,6 +11,10 @@ from onyx.connectors.capabilities import CredentialCapability
 from onyx.connectors.interfaces import BaseConnector
 from onyx.connectors.source_operations import SourceOperations
 
+# Re-exported: the enum lives in ``onyx.db.enums`` so the DB report row can
+# type its trigger column without importing this framework module.
+from onyx.db.enums import CapabilityCheckTrigger as CapabilityCheckTrigger
+
 
 class CapabilityCheckStatus(str, Enum):
     PASSED = "passed"
@@ -34,17 +38,6 @@ class CapabilityVerdict(str, Enum):
     SKIPPED = "skipped"
     # The source does not have this capability (e.g. no group sync for Slack).
     NOT_APPLICABLE = "not_applicable"
-
-
-class CapabilityCheckTrigger(str, Enum):
-    """What initiated a capability-check run."""
-
-    MANUAL = "manual"
-    CREDENTIAL_CREATED = "credential_created"
-    # Recorded from the blocking validation at cc-pair creation/swap time.
-    CC_PAIR_VALIDATION = "cc_pair_validation"
-    # Recorded from the blocking validation at indexing-run start.
-    INDEXING_ATTEMPT = "indexing_attempt"
 
 
 class CapabilityCheckContext(BaseModel):
