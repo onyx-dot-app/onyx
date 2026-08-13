@@ -128,7 +128,7 @@ function LineItemButton({
         rounding={rounding}
         {...rowButtonProps}
       >
-        <div className="w-full h-9 p-1.5 flex flex-col items-center justify-center">
+        <div className="w-full p-1.5">
           <ContentAction
             color="interactive"
             {...(contentActionProps as ContentActionProps)}
