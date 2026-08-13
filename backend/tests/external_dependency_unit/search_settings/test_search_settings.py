@@ -257,6 +257,32 @@ def test_contextual_model_update_rejects_other_changes(
     assert "Only the Contextual Retrieval model" in exc.value.detail
 
 
+def test_contextual_model_update_rejects_unknown_model(
+    baseline_search_settings: None,  # noqa: ARG001
+    db_session: Session,
+) -> None:
+    current = get_current_search_settings(db_session)
+    current.enable_contextual_rag = True
+    db_session.commit()
+    unknown_model_configuration_id = 999999
+
+    with pytest.raises(OnyxError) as exc:
+        update_saved_search_settings(
+            search_settings=SavedSearchSettings.from_db_model(current).model_copy(
+                update={
+                    "contextual_rag_model_configuration_id": (
+                        unknown_model_configuration_id
+                    )
+                }
+            ),
+            user=MagicMock(),
+            db_session=db_session,
+        )
+
+    assert exc.value.error_code == OnyxErrorCode.INVALID_INPUT
+    assert str(unknown_model_configuration_id) in exc.value.detail
+
+
 @patch("onyx.server.manage.search_settings.get_all_document_indices")
 @patch("onyx.server.manage.search_settings.get_default_document_index")
 def test_port_seed_excludes_invalid_cc_pair(

@@ -150,23 +150,6 @@ def test_disabled_contextual_rag_rejected_before_embedding_model_change(
     assert "must be enabled" in response.json()["detail"]
 
 
-def test_update_contextual_rag_nonexistent_model_configuration(
-    reset: None,  # noqa: ARG001
-    admin_user: DATestUser,
-) -> None:
-    """Updating with a model_configuration_id that does not exist should return 400."""
-    settings = _get_current_search_settings(admin_user)
-    settings["contextual_rag_model_configuration_id"] = 999999
-
-    response = client.post(
-        f"{SEARCH_SETTINGS_URL}/update-inference-settings",
-        json=settings,
-        headers=admin_user.headers,
-    )
-    assert response.status_code == 400
-    assert "999999" in response.json()["detail"]
-
-
 def test_set_new_search_settings_with_contextual_rag(
     reset: None,  # noqa: ARG001
     admin_user: DATestUser,
