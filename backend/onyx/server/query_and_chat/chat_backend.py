@@ -5,7 +5,15 @@ from collections.abc import Generator
 from datetime import timedelta
 from uuid import UUID
 
-from fastapi import APIRouter, Depends, HTTPException, Query, Request, Response
+from fastapi import (
+    APIRouter,
+    BackgroundTasks,
+    Depends,
+    HTTPException,
+    Query,
+    Request,
+    Response,
+)
 from fastapi.responses import JSONResponse, StreamingResponse
 from pydantic import BaseModel
 from sqlalchemy.orm import Session
@@ -15,6 +23,7 @@ from onyx.auth.api_key import get_hashed_api_key_from_request
 from onyx.auth.pat import get_hashed_pat_from_request
 from onyx.auth.permissions import require_permission
 from onyx.auth.users import current_chat_accessible_user
+from onyx.background.task_utils import enqueue_user_file_deletes
 from onyx.cache.factory import get_cache_backend
 from onyx.chat.chat_processing_checker import (
     get_processing_run_id,
@@ -48,13 +57,9 @@ from onyx.configs.chat_configs import (
     HARD_DELETE_CHATS,
 )
 from onyx.configs.constants import (
-    CELERY_USER_FILE_DELETE_TASK_EXPIRES,
     PUBLIC_API_TAGS,
     MessageType,
     MilestoneRecordType,
-    OnyxCeleryPriority,
-    OnyxCeleryQueues,
-    OnyxCeleryTask,
 )
 from onyx.configs.model_configs import LITELLM_PASS_THROUGH_HEADERS
 from onyx.db.chat import (
@@ -724,6 +729,7 @@ def get_incognito_availability(
 @router.post("/end-incognito-session/{session_id}", tags=PUBLIC_API_TAGS)
 def end_incognito_session(
     session_id: UUID,
+    bg_tasks: BackgroundTasks,
     user: User = Depends(require_permission(Permission.BASIC_ACCESS)),
     db_session: Session = Depends(get_session),
 ) -> None:
@@ -741,28 +747,27 @@ def end_incognito_session(
     # for deletion rather than stored but hidden.
     deletable_ids = mark_incognito_user_files_deleting(db_session, session_id, user.id)
     db_session.commit()
-    teardown_incognito_session(session_id)
 
-    if deletable_ids:
-        from onyx.background.celery.versioned_apps.client import app as client_app
-
-        tenant_id = get_current_tenant_id()
-        for user_file_id in deletable_ids:
-            client_app.send_task(
-                OnyxCeleryTask.DELETE_SINGLE_USER_FILE,
-                kwargs={"user_file_id": str(user_file_id), "tenant_id": tenant_id},
-                queue=OnyxCeleryQueues.USER_FILE_DELETE,
-                priority=OnyxCeleryPriority.HIGH,
-                expires=CELERY_USER_FILE_DELETE_TASK_EXPIRES,
-            )
-
-    # Last, so a store that refuses a blob cannot strand the queued uploads:
-    # this raises to tell the client the sweep will retry.
-    if not delete_incognito_generated_files(session_id, db_session):
-        raise OnyxError(
-            OnyxErrorCode.SERVICE_UNAVAILABLE,
-            "Some generated files could not be deleted yet and will be retried.",
-        )
+    # Nothing past the commit may raise. This is a one-shot beacon, so an error
+    # reaches nobody who can act on it, and raising would discard the response
+    # carrying the in-process drain that a Celery-less deployment relies on.
+    enqueue_user_file_deletes(
+        deletable_ids, tenant_id=get_current_tenant_id(), bg_tasks=bg_tasks
+    )
+    for what, step in (
+        (
+            "delete generated files",
+            lambda: delete_incognito_generated_files(session_id, db_session),
+        ),
+        ("end the context", lambda: teardown_incognito_session(session_id)),
+    ):
+        try:
+            if step() is False:
+                logger.warning(
+                    "Incognito teardown could not %s for %s", what, session_id
+                )
+        except Exception:
+            logger.exception("Incognito teardown could not %s for %s", what, session_id)
 
 
 # NOTE: This endpoint is extremely central to the application, any changes to it should be reviewed and approved by an experienced

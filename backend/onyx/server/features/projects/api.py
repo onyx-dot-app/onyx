@@ -71,6 +71,31 @@ class UserFileDeleteResult(BaseModel):
     assistant_names: list[str] = []
 
 
+def _claim_upload_if_session_ended(
+    db_session: Session, incognito_session_id: UUID | None, user_id: UUID
+) -> None:
+    """Queue this session's uploads if a teardown landed during the upload.
+
+    Never raises: it runs on the upload's failure path too, where masking the
+    original error would cost more than the delay to the orphan sweep.
+    """
+    if incognito_session_id is None:
+        return
+    try:
+        # The caller may be unwinding a failed statement, which would refuse
+        # any further query on this session.
+        db_session.rollback()
+        if not incognito_session_torn_down(incognito_session_id):
+            return
+        mark_incognito_user_files_deleting(db_session, incognito_session_id, user_id)
+        db_session.commit()
+    except Exception:
+        logger.exception(
+            "Could not claim uploads for ended incognito session %s",
+            incognito_session_id,
+        )
+
+
 def _trigger_user_file_project_sync(
     user_file_id: UUID,
     tenant_id: str,
@@ -194,17 +219,6 @@ def upload_user_files(
             incognito_session_id=incognito_session_id,
         )
 
-        # Re-check after the rows exist. The tombstone is monotonic, so a
-        # teardown that landed during the upload is caught here even though the
-        # pre-check passed, which is what the marking query alone would miss.
-        if incognito_session_id is not None and incognito_session_torn_down(
-            incognito_session_id
-        ):
-            mark_incognito_user_files_deleting(
-                db_session, incognito_session_id, user.id
-            )
-            db_session.commit()
-
         return CategorizedFilesSnapshot.from_result(categorized_files_result)
 
     except Exception as e:
@@ -213,6 +227,10 @@ def upload_user_files(
             status_code=500,
             detail="Failed to upload files. Please try again or contact support if the issue persists.",
         )
+    finally:
+        # Rows are committed before the indexing hand-off, which can still
+        # fail, so this runs on every exit.
+        _claim_upload_if_session_ended(db_session, incognito_session_id, user.id)
 
 
 @router.get("/{project_id}", tags=PUBLIC_API_TAGS)
