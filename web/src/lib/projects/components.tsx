@@ -4,8 +4,6 @@ import { useEffect, useState } from "react";
 import { useDroppable } from "@dnd-kit/core";
 import {
   Button,
-  Card,
-  Divider,
   EmptyMessageCard,
   InputTypeIn,
   LineItemButton,
@@ -36,6 +34,7 @@ import CreateProjectModal from "@/sections/modals/CreateProjectModal";
 import { useAppRouter } from "@/hooks/appNavigation";
 import useAppFocus from "@/hooks/useAppFocus";
 import { noProp } from "@/lib/utils";
+import { UNNAMED_CHAT } from "@/lib/constants";
 import { DRAG_TYPES } from "@/lib/sidebar/constants";
 import { useActiveProject, useProjectSearch } from "@/lib/projects/hooks";
 import type { Project, ProjectSearchMatch } from "@/lib/projects/types";
@@ -333,8 +332,11 @@ function ProjectPopoverRow({ match, onNavigate }: ProjectPopoverRowProps) {
         match.chatSessions.map((chatSession) => (
           <LineItemButton
             key={chatSession.id}
-            icon={() => <div className="w-5" />}
-            title={chatSession.name}
+            icon={() => <div className="w-4" />}
+            title={chatSession.name || UNNAMED_CHAT}
+            href={`/app?chatId=${chatSession.id}`}
+            onClick={onNavigate}
+            state={appFocus.getId() === chatSession.id ? "selected" : "empty"}
             sizePreset="main-ui"
             rounding="sm"
           />
@@ -420,9 +422,11 @@ export function FoldedProjectsPopover() {
               onChange={(event) => setQuery(event.target.value)}
               rightChildren={
                 <Button
+                  data-testid="ProjectsPopover/new-project"
                   icon={SvgFolderPlus}
                   prominence="internal"
                   size="sm"
+                  tooltip="New Project"
                   onClick={noProp(handleNewProject)}
                 />
               }

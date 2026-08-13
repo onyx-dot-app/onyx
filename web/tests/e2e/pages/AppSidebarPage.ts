@@ -52,9 +52,8 @@ export class ProjectsPopover {
   }
 
   /**
-   * The chat's click target. `SidebarTab` covers its own label with an absolute
-   * link overlay, so clicking the label text hits the overlay instead — the
-   * overlay is what has to be clicked.
+   * The chat's click target. A chat row is a `LineItemButton` with an `href`,
+   * which renders as an anchor, so target that rather than the label text.
    */
   chatLink(projectName: string, chatId: string): Locator {
     return this.projectRow(projectName).locator(`a[href*="chatId=${chatId}"]`);
