@@ -28,6 +28,14 @@ from onyx.server.manage.sso.api import admin_router
 from onyx.utils.encryption import is_masked_credential
 
 
+@pytest.fixture(autouse=True)
+def _stub_idp_url_guard() -> Generator[None, None, None]:
+    # Provider CRUD here uses placeholder IdP URLs and must not hit the network.
+    # The URL guard itself is covered in test_sso_url_guard.
+    with patch("onyx.server.manage.sso.api.validate_idp_url", return_value=None):
+        yield
+
+
 @pytest.fixture()
 def client(
     db_session: Session,

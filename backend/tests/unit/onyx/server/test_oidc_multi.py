@@ -28,6 +28,18 @@ _OIDC_CONFIG = {
     "openid_config_url": "https://idp.example.com/.well-known/openid-configuration",
 }
 _GOOGLE_CONFIG = {"client_id": "gid", "client_secret": "gsecret"}
+
+
+@pytest.fixture(autouse=True)
+def _stub_idp_url_guard(monkeypatch: pytest.MonkeyPatch) -> None:
+    # These tests build clients from fake IdP URLs and stay off the network. The
+    # URL guard's own DNS/SSRF checks live in test_sso_url_guard.
+    monkeypatch.setattr(oidc_multi, "validate_idp_url", lambda *_a, **_k: None)
+    monkeypatch.setattr(
+        oidc_multi, "validate_discovered_endpoints", lambda *_a, **_k: None
+    )
+
+
 _DB = cast(Session, object())
 _TEST_SECRET = "unit-test-secret"
 
