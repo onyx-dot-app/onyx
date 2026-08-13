@@ -33,10 +33,10 @@ Create chart name and version as used by the chart label.
 {{/*
 Build a child resource name as `<fullname>-<suffix>`, truncated to 63 chars to
 satisfy the Kubernetes DNS-1123 label limit that applies to Services, Pods,
-Deployments, HPAs, etc. Use this in place of
+Deployments, HPAs, etc. Always use this instead of
   {{ include "onyx.fullname" . }}-<suffix>
-whenever the suffix could push the rendered name over 63 chars for a long
-release name. Callers must pass `(list . "<suffix>")`.
+so that long release names cannot push a rendered name over 63 chars.
+Callers must pass `(list . "<suffix>")`.
 */}}
 {{- define "onyx.resourceName" -}}
 {{- $ctx := index . 0 -}}
@@ -140,7 +140,7 @@ Helpers for mounting a psql convenience script into pods.
 {{- end }}
 
 {{- define "onyx.pgInto.configMapName" -}}
-{{- printf "%s-pginto" (include "onyx.fullname" .) -}}
+{{- include "onyx.resourceName" (list . "pginto") -}}
 {{- end }}
 
 {{- define "onyx.pgInto.checksumAnnotation" -}}
@@ -241,7 +241,7 @@ invisible (the DaemonSet looks healthy while every sandbox still cold-pulls).
 {{- end }}
 
 {{- define "onyx.sandboxProxyHost" -}}
-{{- (index .Values.configMap "SANDBOX_PROXY_HOST") | default (printf "%s-sandbox-proxy.%s.svc.cluster.local" (include "onyx.fullname" .) .Release.Namespace) -}}
+{{- (index .Values.configMap "SANDBOX_PROXY_HOST") | default (printf "%s.%s.svc.cluster.local" (include "onyx.resourceName" (list . "sandbox-proxy")) .Release.Namespace) -}}
 {{- end }}
 
 {{- define "onyx.sandboxProxyPort" -}}

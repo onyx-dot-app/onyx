@@ -2,7 +2,7 @@
 apiVersion: apps/v1
 kind: Deployment
 metadata:
-  name: {{ include "onyx.fullname" . }}-inference-model
+  name: {{ include "onyx.resourceName" (list . "inference-model") }}
   labels:
     {{- range .Values.inferenceCapability.labels }}
     {{ .key }}: {{ .value }}
