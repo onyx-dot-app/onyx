@@ -5,7 +5,7 @@ import { Form, Formik, useField } from "formik";
 import * as Yup from "yup";
 import { Button, InputTags, type TagItem, Text } from "@opal/components";
 import { SvgCopy, SvgSimpleLoader } from "@opal/icons";
-import { InputVertical, toast } from "@opal/layouts";
+import { InputErrorText, InputVertical, toast } from "@opal/layouts";
 import { cn } from "@opal/utils";
 import type {
   SSOProviderCreateRequest,
@@ -171,27 +171,35 @@ interface TagListFieldProps {
 // Formik-bound Opal InputTags for string[] values. Always writes an array, so
 // clearing every tag stores [] rather than leaving the previous value.
 function TagListField({ name, placeholder, transform }: TagListFieldProps) {
-  const [field, , helpers] = useField<string[]>(name);
+  const [field, meta, helpers] = useField<string[]>(name);
   const [input, setInput] = useState("");
   const values = field.value ?? [];
   const tags: TagItem[] = values.map((value) => ({ id: value, label: value }));
   return (
-    <InputTags
-      tags={tags}
-      onRemoveTag={(id) => {
-        void helpers.setValue(values.filter((value) => value !== id));
-      }}
-      onAdd={(value) => {
-        const entry = transform ? transform(value.trim()) : value.trim();
-        if (entry && !values.includes(entry)) {
-          void helpers.setValue([...values, entry]);
-        }
-        setInput("");
-      }}
-      value={input}
-      onChange={setInput}
-      placeholder={placeholder}
-    />
+    <>
+      <InputTags
+        tags={tags}
+        onRemoveTag={(id) => {
+          void helpers.setValue(values.filter((value) => value !== id));
+        }}
+        onAdd={(value) => {
+          const entry = transform ? transform(value.trim()) : value.trim();
+          if (entry && !values.includes(entry)) {
+            void helpers.setValue([...values, entry]);
+          }
+          setInput("");
+        }}
+        value={input}
+        onChange={setInput}
+        placeholder={placeholder}
+      />
+      {/* A required list (cloud domains) disables submit when empty, so show the
+          reason directly. Array-level errors are strings; per-element errors are
+          not surfaced here. */}
+      {typeof meta.error === "string" && (
+        <InputErrorText>{meta.error}</InputErrorText>
+      )}
+    </>
   );
 }
 
