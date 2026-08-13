@@ -177,7 +177,7 @@ export default function AgentViewerModal({ agent }: AgentViewerModalProps) {
   const handleStartChat = useCallback(
     (message: string) => {
       const params = new URLSearchParams({
-        [SEARCH_PARAM_NAMES.PERSONA_ID]: String(agent.id),
+        [SEARCH_PARAM_NAMES.AGENT_ID]: String(agent.id),
         [SEARCH_PARAM_NAMES.USER_PROMPT]: message,
         [SEARCH_PARAM_NAMES.SEND_ON_LOAD]: "true",
       });

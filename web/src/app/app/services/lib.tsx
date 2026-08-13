@@ -539,7 +539,7 @@ const PARAMS_TO_SKIP = [
   SEARCH_PARAM_NAMES.TITLE,
   // only use these if explicitly passed in
   SEARCH_PARAM_NAMES.CHAT_ID,
-  SEARCH_PARAM_NAMES.PERSONA_ID,
+  SEARCH_PARAM_NAMES.AGENT_ID,
   SEARCH_PARAM_NAMES.PROJECT_ID,
   // do not persist project context in the URL after navigation
   "projectid",
@@ -561,7 +561,7 @@ export function buildChatUrl(
     );
   }
   if (personaId !== null) {
-    finalSearchParams.push(`${SEARCH_PARAM_NAMES.PERSONA_ID}=${personaId}`);
+    finalSearchParams.push(`${SEARCH_PARAM_NAMES.AGENT_ID}=${personaId}`);
   }
 
   existingSearchParams?.forEach((value, key) => {

@@ -19,7 +19,7 @@ export function useAppRouter() {
       const query = chatSessionId
         ? { [SEARCH_PARAM_NAMES.CHAT_ID]: chatSessionId }
         : agentId
-          ? { [SEARCH_PARAM_NAMES.PERSONA_ID]: agentId }
+          ? { [SEARCH_PARAM_NAMES.AGENT_ID]: agentId }
           : projectId
             ? { [SEARCH_PARAM_NAMES.PROJECT_ID]: projectId }
             : {};

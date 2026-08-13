@@ -22,7 +22,7 @@ import { useProjectsContext } from "@/providers/ProjectsContext";
 import useDeepResearchToggle from "@/hooks/useDeepResearchToggle";
 import useChatController from "@/hooks/useChatController";
 import useChatSessionController from "@/hooks/useChatSessionController";
-import { useAgentController } from "@/lib/agents/hooks";
+import { useLiveAgent } from "@/lib/agents/hooks";
 import {
   useCurrentChatState,
   useCurrentMessageHistory,
@@ -94,7 +94,7 @@ export default function NRFPage({ isSidePanel = false }: NRFPageProps) {
   }, [lastFailedFiles, clearLastFailedFiles]);
 
   // Assistant controller
-  const { liveAgent } = useAgentController(undefined);
+  const liveAgent = useLiveAgent();
 
   // LLM manager for model selection.
   // - currentChatSession: undefined because NRF always starts new chats
