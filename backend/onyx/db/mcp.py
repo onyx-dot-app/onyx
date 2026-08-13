@@ -397,12 +397,14 @@ def extract_connection_data(
 
 
 def get_connection_config_by_id(
-    config_id: int, db_session: Session
+    config_id: int, db_session: Session, *, for_update: bool = False
 ) -> MCPConnectionConfig:
-    """Get connection config by ID"""
-    config = db_session.scalar(
-        select(MCPConnectionConfig).where(MCPConnectionConfig.id == config_id)
-    )
+    """Get connection config by ID. ``for_update`` row-locks the config so a
+    read-compare-write over its JSON blob is atomic against concurrent writers."""
+    stmt = select(MCPConnectionConfig).where(MCPConnectionConfig.id == config_id)
+    if for_update:
+        stmt = stmt.with_for_update()
+    config = db_session.scalar(stmt)
     if not config:
         raise ValueError("Connection config by specified id does not exist")
     return config
@@ -512,6 +514,14 @@ class ResolvedMCPCredentials(BaseModel):
             )
         return headers
 
+    def needs_reauth(self) -> bool:
+        """The stored OAuth grant is dead (expired, no refresh token); only a
+        user reconnect can restore it. Its bearer header still takes precedence
+        in ``build_headers``, so no caller-supplied header can work around it."""
+        return self.auth_type == MCPAuthenticationType.OAUTH and (
+            mcp_oauth_reauth_required(self._config_data())
+        )
+
     def is_authenticated(self) -> bool:
         if self.auth_type in (None, MCPAuthenticationType.NONE):
             return self._has_required_substitutions()
@@ -522,7 +532,7 @@ class ResolvedMCPCredentials(BaseModel):
             # reconnect and Craft configs exclude the server.
             return (
                 bool(self._generated_auth_headers())
-                and not mcp_oauth_reauth_required(self._config_data())
+                and not self.needs_reauth()
                 and self._has_required_substitutions()
             )
         return bool(self._configured_headers()) and self._has_required_substitutions()
