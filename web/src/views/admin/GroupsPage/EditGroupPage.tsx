@@ -4,7 +4,7 @@ import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
 import useSWR, { useSWRConfig } from "swr";
 import useGroupMemberCandidates from "./useGroupMemberCandidates";
-import { Table, Button, Divider, Switch } from "@opal/components";
+import { Button, Card, Divider, Switch, Table } from "@opal/components";
 import { IllustrationContent, InputHorizontal, toast } from "@opal/layouts";
 import {
   SvgUsers,
@@ -15,7 +15,6 @@ import {
 } from "@opal/icons";
 import { markdown } from "@opal/utils";
 import IconButton from "@/refresh-components/buttons/IconButton";
-import Card from "@/refresh-components/cards/Card";
 import SvgNoResult from "@opal/illustrations/no-result";
 import { SettingsLayouts } from "@opal/layouts";
 import { Section } from "@/layouts/general-layouts";
@@ -497,36 +496,40 @@ function EditGroupPage({ groupId }: EditGroupPageProps) {
               />
 
               {showIncognitoField && (
-                <Card>
-                  <InputHorizontal
-                    title="Incognito Chats"
-                    description="Members of this group may start incognito chats."
-                    withLabel
-                  >
-                    <Switch
-                      checked={incognitoEnabled}
-                      onCheckedChange={setIncognitoEnabled}
-                    />
-                  </InputHorizontal>
+                <Card border="solid" rounding="lg">
+                  <Section alignItems="start" height="fit">
+                    <InputHorizontal
+                      title="Incognito Chats"
+                      description="Members of this group may start incognito chats."
+                      withLabel
+                    >
+                      <Switch
+                        checked={incognitoEnabled}
+                        onCheckedChange={setIncognitoEnabled}
+                      />
+                    </InputHorizontal>
+                  </Section>
                 </Card>
               )}
 
               {/* Delete This Group */}
-              <Card>
-                <InputHorizontal
-                  title="Delete This Group"
-                  description="Members will lose access to any resources shared with this group."
-                  center
-                >
-                  <Button
-                    variant="danger"
-                    prominence="secondary"
-                    icon={SvgTrash}
-                    onClick={() => setShowDeleteModal(true)}
+              <Card border="solid" rounding="lg">
+                <Section alignItems="start" height="fit">
+                  <InputHorizontal
+                    title="Delete This Group"
+                    description="Members will lose access to any resources shared with this group."
+                    center
                   >
-                    Delete Group
-                  </Button>
-                </InputHorizontal>
+                    <Button
+                      variant="danger"
+                      prominence="secondary"
+                      icon={SvgTrash}
+                      onClick={() => setShowDeleteModal(true)}
+                    >
+                      Delete Group
+                    </Button>
+                  </InputHorizontal>
+                </Section>
               </Card>
             </>
           )}

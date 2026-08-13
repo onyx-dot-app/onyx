@@ -28,8 +28,55 @@ import { Card } from "@opal/components";
 | `background` | `"none" \| "light" \| "heavy"` | `"light"` | Background fill intensity |
 | `border` | `"none" \| "dashed" \| "solid"` | `"none"` | Border style |
 | `borderColor` | `StatusVariants` | `"default"` | Status-palette border color (needs `border` ≠ `"none"`) |
+| `disabled` | `boolean` | `false` | Dims the card and shows a not-allowed cursor. Visual only — see below. |
 | `ref` | `React.Ref<HTMLDivElement>` | — | Ref forwarded to the root div |
 | `children` | `React.ReactNode` | — | Card content |
+| `data-*` | `string \| boolean` | — | Forwarded to the root. See below. |
+
+### `disabled`
+
+`disabled` dims the card and gives it a not-allowed cursor. It is **visual only** —
+children stay interactive, because a card is a container and suppressing what it
+holds is a stronger claim than dimming it:
+
+```tsx
+<Card disabled>…</Card>
+```
+
+Compose `Disabled` from `@opal/core` when clicks should be blocked as well, or
+when you want a tooltip explaining why:
+
+```tsx
+<Disabled disabled tooltip="Connect the app first">
+  <Card disabled>…</Card>
+</Disabled>
+```
+
+It is a boolean rather than a variant value, so it stacks with `background` and
+`border` instead of replacing them — a disabled card can still be transparent
+with a dashed border.
+
+In expandable mode the whole card dims, header and expanded body together.
+
+### `data-*` attributes
+
+Any `data-*` prop is forwarded to the card's root element, so an application can
+label a card for tests or analytics:
+
+```tsx
+<Card data-card>…</Card>
+```
+
+A card owns how it looks, not what the surrounding app calls it — `data-*` is the
+app's namespace, and silently dropping it is worse than either forwarding or
+rejecting it. Only `data-*` is picked up. `className` and `style` stay out, so the
+card's appearance is still its own; behavioural props such as `onClick` are a
+deliberate API decision rather than something inherited by a rest spread (use
+`SelectCard` for an interactive card).
+
+The card's own `data-background`, `data-border`, `data-shadow`, and
+`data-opal-status-border` are written after the forwarded attributes, so a caller
+cannot repurpose them to drive the stylesheet.
 
 ### Padding scale
 

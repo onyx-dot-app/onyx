@@ -1,9 +1,8 @@
 import { SvgArrowUpRight, SvgFilterPlus, SvgUserSync } from "@opal/icons";
 import { ContentAction } from "@opal/layouts";
-import { Button } from "@opal/components";
+import { Button, Card } from "@opal/components";
 import { Hoverable } from "@opal/core";
 import { Section } from "@/layouts/general-layouts";
-import Card from "@/refresh-components/cards/Card";
 import IconButton from "@/refresh-components/buttons/IconButton";
 import Text from "@/refresh-components/texts/Text";
 import Link from "next/link";
@@ -65,22 +64,28 @@ function StatCell({ value, label, onFilter }: StatCellProps) {
 
 function ScimCard() {
   return (
-    <Card gap={2} padding={3}>
-      <ContentAction
-        icon={SvgUserSync}
-        title="SCIM Sync"
-        description="Users are synced from your identity provider."
-        sizePreset="main-ui"
-        variant="section"
-        padding={0}
-        rightChildren={
-          <Link href={ADMIN_ROUTES.SCIM.path}>
-            <Button prominence="tertiary" rightIcon={SvgArrowUpRight} size="sm">
-              Manage
-            </Button>
-          </Link>
-        }
-      />
+    <Card border="solid" padding={3} rounding="lg">
+      <Section alignItems="start" height="fit" gap={2}>
+        <ContentAction
+          icon={SvgUserSync}
+          title="SCIM Sync"
+          description="Users are synced from your identity provider."
+          sizePreset="main-ui"
+          variant="section"
+          padding={0}
+          rightChildren={
+            <Link href={ADMIN_ROUTES.SCIM.path}>
+              <Button
+                prominence="tertiary"
+                rightIcon={SvgArrowUpRight}
+                size="sm"
+              >
+                Manage
+              </Button>
+            </Link>
+          }
+        />
+      </Section>
     </Card>
   );
 }
@@ -113,25 +118,27 @@ export default function UsersSummary({
   const showRequests = requests !== null && requests > 0;
 
   const statsCard = (
-    <Card padding={2}>
-      <Section flexDirection="row" gap={0}>
-        <StatCell
-          value={activeUsers}
-          label="active users"
-          onFilter={onFilterActive}
-        />
-        <StatCell
-          value={pendingInvites}
-          label="pending invites"
-          onFilter={onFilterInvites}
-        />
-        {showRequests && (
+    <Card border="solid" padding={2} rounding="lg">
+      <Section alignItems="start" height="fit">
+        <Section flexDirection="row" gap={0}>
           <StatCell
-            value={requests}
-            label="requests to join"
-            onFilter={onFilterRequests}
+            value={activeUsers}
+            label="active users"
+            onFilter={onFilterActive}
           />
-        )}
+          <StatCell
+            value={pendingInvites}
+            label="pending invites"
+            onFilter={onFilterInvites}
+          />
+          {showRequests && (
+            <StatCell
+              value={requests}
+              label="requests to join"
+              onFilter={onFilterRequests}
+            />
+          )}
+        </Section>
       </Section>
     </Card>
   );

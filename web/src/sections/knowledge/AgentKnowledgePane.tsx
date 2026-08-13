@@ -9,7 +9,6 @@ import React, {
 } from "react";
 import * as GeneralLayouts from "@/layouts/general-layouts";
 import * as TableLayouts from "@/layouts/table-layouts";
-import { Card } from "@/refresh-components/cards";
 import useCCPairs from "@/hooks/useCCPairs";
 import { fetchHierarchyNodeSearch } from "@/lib/hierarchy/svc";
 import type {
@@ -24,8 +23,8 @@ import type { ProjectFile } from "@/lib/projects/types";
 import type { DocumentSetSummary, ValidSources } from "@/lib/types";
 import { searchDocuments } from "@/ee/lib/search/svc";
 import { Disabled } from "@opal/core";
-import { Switch } from "@opal/components";
-import { Content, InputHorizontal } from "@opal/layouts";
+import { Card, Switch } from "@opal/components";
+import { Content, InputHorizontal, Section } from "@opal/layouts";
 
 import { KnowledgeAddView } from "@/sections/knowledge/agent-knowledge/KnowledgeAddView";
 import { KnowledgeMainContent } from "@/sections/knowledge/agent-knowledge/KnowledgeMainContent";
@@ -524,26 +523,28 @@ export default function AgentKnowledgePane({
         variant="section"
       />
 
-      <Card>
-        <GeneralLayouts.Section gap={2} alignItems="stretch" height="auto">
-          <InputHorizontal
-            title="Use Knowledge"
-            description="Let this agent reference these documents to inform its responses."
-            withLabel
-          >
-            <Switch
-              name="enable_knowledge"
-              checked={enableKnowledge}
-              onCheckedChange={onEnableKnowledgeChange}
-            />
-          </InputHorizontal>
+      <Card border="solid" rounding="lg">
+        <Section alignItems="start" height="fit">
+          <GeneralLayouts.Section gap={2} alignItems="stretch" height="auto">
+            <InputHorizontal
+              title="Use Knowledge"
+              description="Let this agent reference these documents to inform its responses."
+              withLabel
+            >
+              <Switch
+                name="enable_knowledge"
+                checked={enableKnowledge}
+                onCheckedChange={onEnableKnowledgeChange}
+              />
+            </InputHorizontal>
 
-          <Disabled disabled={!enableKnowledge}>
-            <GeneralLayouts.Section alignItems="stretch" height="auto">
-              {renderedContent}
-            </GeneralLayouts.Section>
-          </Disabled>
-        </GeneralLayouts.Section>
+            <Disabled disabled={!enableKnowledge}>
+              <GeneralLayouts.Section alignItems="stretch" height="auto">
+                {renderedContent}
+              </GeneralLayouts.Section>
+            </Disabled>
+          </GeneralLayouts.Section>
+        </Section>
       </Card>
     </GeneralLayouts.Section>
   );

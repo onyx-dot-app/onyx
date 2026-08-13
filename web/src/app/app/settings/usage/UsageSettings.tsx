@@ -3,7 +3,7 @@
 import { useEffect, useMemo, useState } from "react";
 import { Section } from "@/layouts/general-layouts";
 import { Content } from "@opal/layouts";
-import { Text, EmptyMessageCard, Divider } from "@opal/components";
+import { Card, Divider, EmptyMessageCard, Text } from "@opal/components";
 import {
   SvgBarChart,
   SvgWallet,
@@ -12,7 +12,6 @@ import {
   SvgChevronRight,
 } from "@opal/icons";
 import InputSelect from "@/refresh-components/inputs/InputSelect";
-import Card from "@/refresh-components/cards/Card";
 import {
   Collapsible,
   CollapsibleContent,
@@ -67,56 +66,58 @@ function WindowCostSection({ windowCostCents, rows }: WindowCostSectionProps) {
           description="Your model usage and costs will show up here once you start chatting."
         />
       ) : (
-        <Card>
-          {sortedRows.map((row, index) => (
-            <div key={`${row.day}-${row.model}`}>
-              {index > 0 && <Divider />}
-              <Section gap={2} alignItems="start" justifyContent="start">
-                <Section
-                  flexDirection="row"
-                  justifyContent="between"
-                  alignItems="center"
-                  width="full"
-                  gap={4}
-                >
-                  <Section gap={0} alignItems="start" justifyContent="start">
-                    <Text font="main-ui-action" color="text-03">
-                      {row.model}
-                    </Text>
-                    <Text font="secondary-body" color="text-01">
-                      {row.day}
+        <Card border="solid" rounding="lg">
+          <Section alignItems="start" height="fit">
+            {sortedRows.map((row, index) => (
+              <div key={`${row.day}-${row.model}`}>
+                {index > 0 && <Divider />}
+                <Section gap={2} alignItems="start" justifyContent="start">
+                  <Section
+                    flexDirection="row"
+                    justifyContent="between"
+                    alignItems="center"
+                    width="full"
+                    gap={4}
+                  >
+                    <Section gap={0} alignItems="start" justifyContent="start">
+                      <Text font="main-ui-action" color="text-03">
+                        {row.model}
+                      </Text>
+                      <Text font="secondary-body" color="text-01">
+                        {row.day}
+                      </Text>
+                    </Section>
+                    <Text font="main-ui-action" color="text-03" nowrap>
+                      {formatDollars(row.cost_cents)}
                     </Text>
                   </Section>
-                  <Text font="main-ui-action" color="text-03" nowrap>
-                    {formatDollars(row.cost_cents)}
+
+                  {/* Cost bar — proportional to the priciest row in the window. */}
+                  <div className="w-full h-1.5 rounded-full bg-background-neutral-03 overflow-hidden">
+                    <div
+                      className="h-full rounded-full bg-theme-primary-05"
+                      style={{
+                        width:
+                          maxRowCost > 0
+                            ? `${Math.max(2, (row.cost_cents / maxRowCost) * 100)}%`
+                            : "0%",
+                      }}
+                    />
+                  </div>
+
+                  <Text font="secondary-body" color="text-01">
+                    {`${formatTokens(row.input_tokens)} in · ${formatTokens(
+                      row.output_tokens
+                    )} out${
+                      hasCache
+                        ? ` · ${formatTokens(row.cache_read_tokens)} cache`
+                        : ""
+                    }`}
                   </Text>
                 </Section>
-
-                {/* Cost bar — proportional to the priciest row in the window. */}
-                <div className="w-full h-1.5 rounded-full bg-background-neutral-03 overflow-hidden">
-                  <div
-                    className="h-full rounded-full bg-theme-primary-05"
-                    style={{
-                      width:
-                        maxRowCost > 0
-                          ? `${Math.max(2, (row.cost_cents / maxRowCost) * 100)}%`
-                          : "0%",
-                    }}
-                  />
-                </div>
-
-                <Text font="secondary-body" color="text-01">
-                  {`${formatTokens(row.input_tokens)} in · ${formatTokens(
-                    row.output_tokens
-                  )} out${
-                    hasCache
-                      ? ` · ${formatTokens(row.cache_read_tokens)} cache`
-                      : ""
-                  }`}
-                </Text>
-              </Section>
-            </div>
-          ))}
+              </div>
+            ))}
+          </Section>
         </Card>
       )}
     </Section>
@@ -192,65 +193,67 @@ function ModelPriceSection({ prices, defaultPrice }: ModelPriceSectionProps) {
         variant="section"
         width="full"
       />
-      <Card>
-        {groups.length === 0 ? (
-          <Text font="main-ui-body" color="text-01">
-            Prices unavailable
-          </Text>
-        ) : (
-          <Section gap={1} alignItems="stretch" justifyContent="start">
-            {groups.map(({ provider, models }) => {
-              const open = expanded.has(provider);
-              return (
-                <Collapsible
-                  key={provider}
-                  open={open}
-                  onOpenChange={() => toggle(provider)}
-                  className="flex flex-col"
-                >
-                  <CollapsibleTrigger className="flex flex-row items-center justify-between cursor-pointer select-none py-1.5">
-                    <Text font="main-ui-action" color="text-03">
-                      {provider}
-                    </Text>
-                    <SvgChevronRight
-                      className={cn(
-                        "w-4 h-4 text-text-03 transition-transform",
-                        open && "rotate-90"
-                      )}
-                    />
-                  </CollapsibleTrigger>
-                  <CollapsibleContent>
-                    <Section
-                      gap={0}
-                      alignItems="stretch"
-                      justifyContent="start"
-                    >
-                      {models.map((price) => (
-                        <div
-                          key={`${provider}-${price.model}`}
-                          className="flex flex-row items-center justify-between gap-2 py-1 pl-3"
-                        >
-                          <Text font="secondary-body" color="text-03" nowrap>
-                            {isSameModelPrice(price, defaultPrice)
-                              ? `${price.model} · default`
-                              : price.model}
-                          </Text>
-                          <Text font="secondary-body" color="text-01" nowrap>
-                            {`${formatMtok(price.input_per_mtok)} in · ${formatMtok(
-                              price.output_per_mtok
-                            )} out · ${formatMtok(
-                              price.cache_per_mtok ?? price.input_per_mtok
-                            )} cache`}
-                          </Text>
-                        </div>
-                      ))}
-                    </Section>
-                  </CollapsibleContent>
-                </Collapsible>
-              );
-            })}
-          </Section>
-        )}
+      <Card border="solid" rounding="lg">
+        <Section alignItems="start" height="fit">
+          {groups.length === 0 ? (
+            <Text font="main-ui-body" color="text-01">
+              Prices unavailable
+            </Text>
+          ) : (
+            <Section gap={1} alignItems="stretch" justifyContent="start">
+              {groups.map(({ provider, models }) => {
+                const open = expanded.has(provider);
+                return (
+                  <Collapsible
+                    key={provider}
+                    open={open}
+                    onOpenChange={() => toggle(provider)}
+                    className="flex flex-col"
+                  >
+                    <CollapsibleTrigger className="flex flex-row items-center justify-between cursor-pointer select-none py-1.5">
+                      <Text font="main-ui-action" color="text-03">
+                        {provider}
+                      </Text>
+                      <SvgChevronRight
+                        className={cn(
+                          "w-4 h-4 text-text-03 transition-transform",
+                          open && "rotate-90"
+                        )}
+                      />
+                    </CollapsibleTrigger>
+                    <CollapsibleContent>
+                      <Section
+                        gap={0}
+                        alignItems="stretch"
+                        justifyContent="start"
+                      >
+                        {models.map((price) => (
+                          <div
+                            key={`${provider}-${price.model}`}
+                            className="flex flex-row items-center justify-between gap-2 py-1 pl-3"
+                          >
+                            <Text font="secondary-body" color="text-03" nowrap>
+                              {isSameModelPrice(price, defaultPrice)
+                                ? `${price.model} · default`
+                                : price.model}
+                            </Text>
+                            <Text font="secondary-body" color="text-01" nowrap>
+                              {`${formatMtok(price.input_per_mtok)} in · ${formatMtok(
+                                price.output_per_mtok
+                              )} out · ${formatMtok(
+                                price.cache_per_mtok ?? price.input_per_mtok
+                              )} cache`}
+                            </Text>
+                          </div>
+                        ))}
+                      </Section>
+                    </CollapsibleContent>
+                  </Collapsible>
+                );
+              })}
+            </Section>
+          )}
+        </Section>
       </Card>
     </Section>
   );
@@ -297,44 +300,46 @@ function BudgetSection({
         variant="section"
         width="full"
       />
-      <Card>
-        {hasBudget ? (
-          <Section gap={2} alignItems="start" justifyContent="start">
-            <Section
-              flexDirection="row"
-              justifyContent="between"
-              alignItems="center"
-              width="full"
-              gap={4}
-            >
-              <Text font="main-ui-body" color="text-03">
-                {`${formatDollars(remaining)} remaining`}
-              </Text>
-              <Text font="secondary-body" color="text-01">
-                {`of ${formatDollars(budgetCents)}${
-                  budgetPeriodHours
-                    ? ` per ${formatPeriod(budgetPeriodHours)}`
-                    : ""
-                }`}
-              </Text>
+      <Card border="solid" rounding="lg">
+        <Section alignItems="start" height="fit">
+          {hasBudget ? (
+            <Section gap={2} alignItems="start" justifyContent="start">
+              <Section
+                flexDirection="row"
+                justifyContent="between"
+                alignItems="center"
+                width="full"
+                gap={4}
+              >
+                <Text font="main-ui-body" color="text-03">
+                  {`${formatDollars(remaining)} remaining`}
+                </Text>
+                <Text font="secondary-body" color="text-01">
+                  {`of ${formatDollars(budgetCents)}${
+                    budgetPeriodHours
+                      ? ` per ${formatPeriod(budgetPeriodHours)}`
+                      : ""
+                  }`}
+                </Text>
+              </Section>
+              <div className="w-full h-1.5 rounded-full bg-background-neutral-03 overflow-hidden">
+                <div
+                  className={cn(
+                    "h-full rounded-full",
+                    usedFraction >= 1
+                      ? "bg-status-error-05"
+                      : "bg-theme-primary-05"
+                  )}
+                  style={{ width: `${usedFraction * 100}%` }}
+                />
+              </div>
             </Section>
-            <div className="w-full h-1.5 rounded-full bg-background-neutral-03 overflow-hidden">
-              <div
-                className={cn(
-                  "h-full rounded-full",
-                  usedFraction >= 1
-                    ? "bg-status-error-05"
-                    : "bg-theme-primary-05"
-                )}
-                style={{ width: `${usedFraction * 100}%` }}
-              />
-            </div>
-          </Section>
-        ) : (
-          <Text font="main-ui-body" color="text-01">
-            No budget set
-          </Text>
-        )}
+          ) : (
+            <Text font="main-ui-body" color="text-01">
+              No budget set
+            </Text>
+          )}
+        </Section>
       </Card>
     </Section>
   );
@@ -374,14 +379,16 @@ export default function UsageSettings() {
         </Section>
 
         {isLoading ? (
-          <Card>
-            <Section
-              flexDirection="row"
-              justifyContent="center"
-              alignItems="center"
-              width="full"
-            >
-              <SvgSimpleLoader />
+          <Card border="solid" rounding="lg">
+            <Section alignItems="start" height="fit">
+              <Section
+                flexDirection="row"
+                justifyContent="center"
+                alignItems="center"
+                width="full"
+              >
+                <SvgSimpleLoader />
+              </Section>
             </Section>
           </Card>
         ) : error || !data ? (

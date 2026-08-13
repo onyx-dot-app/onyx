@@ -2,12 +2,11 @@
 
 import { useState } from "react";
 import { SvgPlusCircle, SvgMinusCircle } from "@opal/icons";
-import { Button } from "@opal/components";
+import { Button, Card } from "@opal/components";
 import { Disabled } from "@opal/core";
 import type { RichStr } from "@opal/types";
 import { planTagProps } from "@/lib/tier-badge";
 import { Section } from "@/layouts/general-layouts";
-import Card from "@/refresh-components/cards/Card";
 import InputNumber from "@/refresh-components/inputs/InputNumber";
 import Text from "@/refresh-components/texts/Text";
 import IconButton from "@/refresh-components/buttons/IconButton";
@@ -126,88 +125,93 @@ function TokenLimitSection({
       />
       <SimpleCollapsible.Content>
         <Disabled disabled={disabled} tooltip={disabledTooltip}>
-          <Card>
-            <Section
-              gap={2}
-              height="auto"
-              alignItems="stretch"
-              justifyContent="start"
-              width="full"
-            >
-              {/* Column headers */}
-              <div className="flex flex-wrap items-center gap-1 pr-[40px]">
-                <div className="flex-1 flex items-center min-w-[160px]">
-                  <Text mainUiAction text04>
-                    Token Limit
-                  </Text>
-                  <Text mainUiMuted text03 className="ml-0.5">
-                    (thousands)
-                  </Text>
-                </div>
-                <div className="flex-1 flex items-center min-w-[160px]">
-                  <Text mainUiAction text04>
-                    Cost Limit
-                  </Text>
-                  <Text mainUiMuted text03 className="ml-0.5">
-                    (USD)
-                  </Text>
-                </div>
-                <div className="flex-1 flex items-center min-w-[160px]">
-                  <Text mainUiAction text04>
-                    Time Window
-                  </Text>
-                  <Text mainUiMuted text03 className="ml-0.5">
-                    (UTC days)
-                  </Text>
-                </div>
-              </div>
-
-              {/* Limit rows */}
-              {limits.map((limit, i) => (
-                <div key={rowKeys.keys[i]} className="flex items-center gap-1">
-                  <div className="flex-1">
-                    <InputNumber
-                      value={limit.tokenBudget}
-                      onChange={(v) => updateLimit(i, "tokenBudget", v)}
-                      min={1}
-                      placeholder="Token limit (thousands)"
-                    />
-                  </div>
-                  <div className="flex-1">
-                    <InputNumber
-                      value={limit.costBudgetDollars}
-                      onChange={(v) => updateLimit(i, "costBudgetDollars", v)}
-                      min={0.01}
-                      step={0.01}
-                      decimalPlaces={2}
-                      placeholder="Cost limit"
-                    />
-                  </div>
-                  <div className="flex-1">
-                    <InputNumber
-                      value={limit.periodDays}
-                      onChange={(v) => updateLimit(i, "periodDays", v)}
-                      min={1}
-                      placeholder="1"
-                    />
-                  </div>
-                  <IconButton
-                    small
-                    icon={SvgMinusCircle}
-                    onClick={() => removeLimit(i)}
-                  />
-                </div>
-              ))}
-
-              {/* Add button */}
-              <Button
-                icon={SvgPlusCircle}
-                prominence="secondary"
-                size="md"
-                onClick={addLimit}
+          <Card border="solid" rounding="lg">
+            <Section alignItems="start" height="fit">
+              <Section
+                gap={2}
+                height="auto"
+                alignItems="stretch"
+                justifyContent="start"
+                width="full"
               >
-                Add Limit
-              </Button>
+                {/* Column headers */}
+                <div className="flex flex-wrap items-center gap-1 pr-[40px]">
+                  <div className="flex-1 flex items-center min-w-[160px]">
+                    <Text mainUiAction text04>
+                      Token Limit
+                    </Text>
+                    <Text mainUiMuted text03 className="ml-0.5">
+                      (thousands)
+                    </Text>
+                  </div>
+                  <div className="flex-1 flex items-center min-w-[160px]">
+                    <Text mainUiAction text04>
+                      Cost Limit
+                    </Text>
+                    <Text mainUiMuted text03 className="ml-0.5">
+                      (USD)
+                    </Text>
+                  </div>
+                  <div className="flex-1 flex items-center min-w-[160px]">
+                    <Text mainUiAction text04>
+                      Time Window
+                    </Text>
+                    <Text mainUiMuted text03 className="ml-0.5">
+                      (UTC days)
+                    </Text>
+                  </div>
+                </div>
+
+                {/* Limit rows */}
+                {limits.map((limit, i) => (
+                  <div
+                    key={rowKeys.keys[i]}
+                    className="flex items-center gap-1"
+                  >
+                    <div className="flex-1">
+                      <InputNumber
+                        value={limit.tokenBudget}
+                        onChange={(v) => updateLimit(i, "tokenBudget", v)}
+                        min={1}
+                        placeholder="Token limit (thousands)"
+                      />
+                    </div>
+                    <div className="flex-1">
+                      <InputNumber
+                        value={limit.costBudgetDollars}
+                        onChange={(v) => updateLimit(i, "costBudgetDollars", v)}
+                        min={0.01}
+                        step={0.01}
+                        decimalPlaces={2}
+                        placeholder="Cost limit"
+                      />
+                    </div>
+                    <div className="flex-1">
+                      <InputNumber
+                        value={limit.periodDays}
+                        onChange={(v) => updateLimit(i, "periodDays", v)}
+                        min={1}
+                        placeholder="1"
+                      />
+                    </div>
+                    <IconButton
+                      small
+                      icon={SvgMinusCircle}
+                      onClick={() => removeLimit(i)}
+                    />
+                  </div>
+                ))}
+
+                {/* Add button */}
+                <Button
+                  icon={SvgPlusCircle}
+                  prominence="secondary"
+                  size="md"
+                  onClick={addLimit}
+                >
+                  Add Limit
+                </Button>
+              </Section>
             </Section>
           </Card>
         </Disabled>
