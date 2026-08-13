@@ -103,7 +103,7 @@ def _element_text(element: dict[str, Any]) -> str:
 
 def _load_json_arg(inline: str | None, file_path: str | None, what: str) -> Any:
     """A JSON payload given inline or via --file (exactly one required)."""
-    if inline and file_path:
+    if inline is not None and file_path is not None:
         raise ValueError(f"pass {what} inline or via --file, not both")
     raw = inline
     if file_path:
