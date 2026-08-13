@@ -1,9 +1,16 @@
 name: Release Onyx Helm Charts
 
+# Only runs when packaged chart files change. `helm package` is not
+# byte-reproducible (gzip records a timestamp), so every run rewrites every
+# chart tarball on gh-pages. Tarballs are already compressed, so git cannot
+# delta them and stores each republish in full. Running on every push to main
+# grew gh-pages to 2 GB, which every clone of this repo pays for.
 on:
   push:
     branches:
       - main
+    paths:
+      - "deployment/helm/charts/**"
 
 permissions: write-all
 
