@@ -153,10 +153,13 @@ export default function GroupsCell({
               </Text>
             </div>
           ) : (
+            /* Suppressed, not dropped: dropping the tooltip remounts the row,
+            which re-attaches the ref the overflow measurement reads. */
             <Tooltip
               side="bottom"
               align="start"
-              tooltip={hasOverflow ? allGroupsTooltip : undefined}
+              tooltip={allGroupsTooltip}
+              suppressed={!hasOverflow}
               delayDuration={200}
             >
               <div
