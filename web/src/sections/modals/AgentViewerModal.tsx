@@ -23,7 +23,7 @@ import {
 } from "@opal/icons";
 import { useMcpServers } from "@/lib/tools/hooks";
 import { getActionIcon } from "@/lib/tools/mcpUtils";
-import { MCPServer, ToolSnapshot } from "@/lib/tools/interfaces";
+import { MCPServer, ToolSnapshot } from "@/lib/tools/types";
 import { EmptyMessageCard } from "@opal/components";
 import { Switch } from "@opal/components";
 import { Button } from "@opal/components";

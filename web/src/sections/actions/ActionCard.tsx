@@ -4,7 +4,7 @@ import React, { useState, useEffect, useRef } from "react";
 import ActionCardHeader from "@/sections/actions/ActionCardHeader";
 import ToolsSection from "@/sections/actions/ToolsSection";
 import { cn } from "@opal/utils";
-import { ActionStatus } from "@/lib/tools/interfaces";
+import { ActionStatus } from "@/lib/tools/types";
 import type { IconProps } from "@opal/types";
 import { SvgServer } from "@opal/icons";
 import { Hoverable } from "@opal/core";

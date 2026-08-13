@@ -78,11 +78,7 @@ import { useMcpServersForAgent } from "@/lib/tools/hooks";
 import useOpenApiTools from "@/hooks/useOpenApiTools";
 import { useAvailableTools } from "@/hooks/useAvailableTools";
 import { getActionIcon } from "@/lib/tools/mcpUtils";
-import {
-  AgentEditorMCPServer,
-  MCPTool,
-  ToolSnapshot,
-} from "@/lib/tools/interfaces";
+import { AgentEditorMCPServer, MCPTool, ToolSnapshot } from "@/lib/tools/types";
 import { InputTypeIn } from "@opal/components";
 import useFilter from "@/hooks/useFilter";
 import EnabledCount from "@/refresh-components/EnabledCount";

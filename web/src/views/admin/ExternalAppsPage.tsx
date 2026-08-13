@@ -17,7 +17,7 @@ import {
   SvgSettings,
   SvgTrash,
 } from "@opal/icons";
-import { MCPServer, MCPServersResponse } from "@/lib/tools/interfaces";
+import { MCPServer, MCPServersResponse } from "@/lib/tools/types";
 import { updateMCPServer } from "@/lib/tools/mcpService";
 import { getActionIcon } from "@/lib/tools/mcpUtils";
 import { ADMIN_ROUTES } from "@/lib/admin-routes";

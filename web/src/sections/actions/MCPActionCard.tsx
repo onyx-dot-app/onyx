@@ -17,7 +17,7 @@ import {
   ToolSnapshot,
   MCPServerStatus,
   MCPServer,
-} from "@/lib/tools/interfaces";
+} from "@/lib/tools/types";
 import useServerTools from "@/hooks/useServerTools";
 import { can } from "@/lib/permissions/resource-actions";
 import { KeyedMutator } from "swr";

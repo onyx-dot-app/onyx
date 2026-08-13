@@ -6,7 +6,7 @@ import ActionCard from "@/sections/actions/ActionCard";
 import Actions from "@/sections/actions/Actions";
 import ToolsList from "@/sections/actions/ToolsList";
 import { useCreateModal } from "@opal/components";
-import { ToolSnapshot, ActionStatus, MethodSpec } from "@/lib/tools/interfaces";
+import { ToolSnapshot, ActionStatus, MethodSpec } from "@/lib/tools/types";
 import ToolItem from "@/sections/actions/ToolItem";
 import { extractMethodSpecsFromDefinition } from "@/lib/tools/openApiService";
 import { updateToolStatus } from "@/lib/tools/mcpService";

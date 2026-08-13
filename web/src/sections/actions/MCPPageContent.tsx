@@ -11,7 +11,7 @@ import {
   MCPServerStatus,
   MCPServer,
   ToolSnapshot,
-} from "@/lib/tools/interfaces";
+} from "@/lib/tools/types";
 import { toast } from "@opal/layouts";
 import { useCreateModal } from "@opal/components";
 import MCPAuthenticationModal from "@/sections/actions/modals/MCPAuthenticationModal";

@@ -1,6 +1,6 @@
 "use client";
 
-import { ToolSnapshot } from "@/lib/tools/interfaces";
+import { ToolSnapshot } from "@/lib/tools/types";
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { useCreateModal } from "@opal/components";
 import OpenAPIAuthenticationModal, {

@@ -7,7 +7,7 @@ import { errorHandlingFetcher } from "@/lib/fetcher";
 import type {
   AgentEditorMCPServer,
   MCPServersResponse,
-} from "@/lib/tools/interfaces";
+} from "@/lib/tools/types";
 
 /**
  * Every MCP server the current user can reach.

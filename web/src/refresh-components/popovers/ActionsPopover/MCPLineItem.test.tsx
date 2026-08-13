@@ -3,7 +3,7 @@ import {
   MCPAuthenticationPerformer,
   MCPAuthenticationType,
   ToolSnapshot,
-} from "@/lib/tools/interfaces";
+} from "@/lib/tools/types";
 import MCPLineItem, {
   MCPServer,
 } from "@/refresh-components/popovers/ActionsPopover/MCPLineItem";
