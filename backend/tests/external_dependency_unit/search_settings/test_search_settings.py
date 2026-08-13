@@ -266,7 +266,17 @@ def test_contextual_model_update_rejects_unknown_model(
     db_session.commit()
     unknown_model_configuration_id = 999999
 
-    with pytest.raises(OnyxError) as exc:
+    with (
+        patch(
+            "onyx.server.manage.search_settings.get_secondary_search_settings",
+            return_value=None,
+        ),
+        patch(
+            "onyx.server.manage.search_settings._active_port_settings",
+            return_value=None,
+        ),
+        pytest.raises(OnyxError) as exc,
+    ):
         update_saved_search_settings(
             search_settings=SavedSearchSettings.from_db_model(current).model_copy(
                 update={
