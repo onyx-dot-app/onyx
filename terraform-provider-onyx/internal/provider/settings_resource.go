@@ -364,22 +364,34 @@ func refreshSettingsModel(model *settingsResourceModel, server *client.Settings)
 	model.OpenSearchIndexingEnabled = types.BoolValue(server.OpenSearchIndexingEnabled)
 }
 
-// apply implements both Create and Update: PATCH the managed attributes,
-// then GET to populate computed attributes and confirm the applied values.
-func (r *settingsResource) apply(ctx context.Context, plan settingsResourceModel) (settingsResourceModel, error) {
+// apply PATCHes the managed attributes, then GETs to populate computed
+// attributes. patched reports whether the write landed, so callers persist
+// state even when only the read-back fails.
+func (r *settingsResource) apply(ctx context.Context, plan settingsResourceModel) (settingsResourceModel, bool, error) {
 	if body := patchBodyFromPlan(plan); len(body) > 0 {
 		if err := r.client.PatchSettings(ctx, body); err != nil {
-			return plan, err
+			return plan, false, err
 		}
 	}
 
+	plan.ID = types.StringValue(settingsResourceID)
 	applied, err := r.client.GetSettings(ctx)
 	if err != nil {
-		return plan, err
+		// Computed attributes are unknown in the plan; null them so the
+		// partial result is storable. The next Read refreshes them.
+		plan.ApplicationStatus = types.StringNull()
+		plan.Tier = types.StringNull()
+		plan.EEFeaturesEnabled = types.BoolNull()
+		plan.GPUEnabled = types.BoolNull()
+		plan.SeatCount = types.Int64Null()
+		plan.UsedSeats = types.Int64Null()
+		plan.HideQueryHistoryFromAdminPanel = types.BoolNull()
+		plan.ShowExtraConnectors = types.BoolNull()
+		plan.OpenSearchIndexingEnabled = types.BoolNull()
+		return plan, true, err
 	}
-	plan.ID = types.StringValue(settingsResourceID)
 	refreshSettingsModel(&plan, applied)
-	return plan, nil
+	return plan, true, nil
 }
 
 // settingsErrorDetail augments tier-gating errors with an actionable hint.
@@ -398,10 +410,13 @@ func (r *settingsResource) Create(ctx context.Context, req resource.CreateReques
 		return
 	}
 
-	state, err := r.apply(ctx, plan)
+	state, patched, err := r.apply(ctx, plan)
 	if err != nil {
 		resp.Diagnostics.AddError("Failed to apply Onyx settings", settingsErrorDetail(err))
-		return
+		if !patched {
+			return
+		}
+		// The PATCH landed; set state so the change is tracked.
 	}
 	resp.Diagnostics.Append(resp.State.Set(ctx, state)...)
 }
@@ -430,10 +445,12 @@ func (r *settingsResource) Update(ctx context.Context, req resource.UpdateReques
 		return
 	}
 
-	state, err := r.apply(ctx, plan)
+	state, patched, err := r.apply(ctx, plan)
 	if err != nil {
 		resp.Diagnostics.AddError("Failed to apply Onyx settings", settingsErrorDetail(err))
-		return
+		if !patched {
+			return
+		}
 	}
 	resp.Diagnostics.Append(resp.State.Set(ctx, state)...)
 }

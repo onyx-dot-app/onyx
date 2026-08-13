@@ -103,31 +103,45 @@ func (r *llmProviderDefaultResource) Configure(_ context.Context, req resource.C
 	r.client = clientFromResourceConfigure(req, resp)
 }
 
-func (r *llmProviderDefaultResource) apply(ctx context.Context, plan llmProviderDefaultResourceModel, clearChatNaming bool, diags *diag.Diagnostics) llmProviderDefaultResourceModel {
+// apply makes up to three writes, overlaying each success onto base. On
+// failure it returns the partial result plus whether anything was written,
+// so callers persist exactly what changed server-side.
+func (r *llmProviderDefaultResource) apply(ctx context.Context, plan, base llmProviderDefaultResourceModel, clearChatNaming bool, diags *diag.Diagnostics) (llmProviderDefaultResourceModel, bool) {
+	result := base
+	result.ID = types.StringValue(llmProviderDefaultResourceID)
+
 	providerID, ok := parseID(plan.ProviderID, "LLM provider", diags)
 	if !ok {
-		return plan
+		return result, false
 	}
 	if err := r.client.SetDefaultLLMModel(ctx, client.DefaultModel{
 		ProviderID: providerID,
 		ModelName:  plan.ModelName.ValueString(),
 	}); err != nil {
 		diags.AddError("Failed to set the default LLM model", err.Error())
-		return plan
+		return result, false
 	}
+	result.ProviderID = plan.ProviderID
+	result.ModelName = plan.ModelName
 
-	if !plan.VisionProviderID.IsNull() {
+	if plan.VisionProviderID.IsNull() {
+		// No server write: the vision default just stops being managed.
+		result.VisionProviderID = types.StringNull()
+		result.VisionModelName = types.StringNull()
+	} else {
 		visionProviderID, ok := parseID(plan.VisionProviderID, "LLM provider", diags)
 		if !ok {
-			return plan
+			return result, true
 		}
 		if err := r.client.SetDefaultVisionModel(ctx, client.DefaultModel{
 			ProviderID: visionProviderID,
 			ModelName:  plan.VisionModelName.ValueString(),
 		}); err != nil {
 			diags.AddError("Failed to set the default vision model", err.Error())
-			return plan
+			return result, true
 		}
+		result.VisionProviderID = plan.VisionProviderID
+		result.VisionModelName = plan.VisionModelName
 	}
 
 	// Unlike text/vision, the chat-naming default has an unset endpoint, so
@@ -136,24 +150,29 @@ func (r *llmProviderDefaultResource) apply(ctx context.Context, plan llmProvider
 	case !plan.ChatNamingProviderID.IsNull():
 		chatNamingProviderID, ok := parseID(plan.ChatNamingProviderID, "LLM provider", diags)
 		if !ok {
-			return plan
+			return result, true
 		}
 		if err := r.client.SetDefaultChatNamingModel(ctx, client.DefaultModel{
 			ProviderID: chatNamingProviderID,
 			ModelName:  plan.ChatNamingModelName.ValueString(),
 		}); err != nil {
 			diags.AddError("Failed to set the chat auto-naming model", err.Error())
-			return plan
+			return result, true
 		}
+		result.ChatNamingProviderID = plan.ChatNamingProviderID
+		result.ChatNamingModelName = plan.ChatNamingModelName
 	case clearChatNaming:
 		if err := r.client.ClearDefaultChatNamingModel(ctx); err != nil {
 			diags.AddError("Failed to clear the chat auto-naming model", err.Error())
-			return plan
+			return result, true
 		}
+		result.ChatNamingProviderID = types.StringNull()
+		result.ChatNamingModelName = types.StringNull()
+	default:
+		result.ChatNamingProviderID = types.StringNull()
+		result.ChatNamingModelName = types.StringNull()
 	}
-
-	plan.ID = types.StringValue(llmProviderDefaultResourceID)
-	return plan
+	return result, true
 }
 
 func (r *llmProviderDefaultResource) Create(ctx context.Context, req resource.CreateRequest, resp *resource.CreateResponse) {
@@ -162,11 +181,12 @@ func (r *llmProviderDefaultResource) Create(ctx context.Context, req resource.Cr
 	if resp.Diagnostics.HasError() {
 		return
 	}
-	plan = r.apply(ctx, plan, false, &resp.Diagnostics)
-	if resp.Diagnostics.HasError() {
+	model, wrote := r.apply(ctx, plan, llmProviderDefaultResourceModel{}, false, &resp.Diagnostics)
+	if resp.Diagnostics.HasError() && !wrote {
 		return
 	}
-	resp.Diagnostics.Append(resp.State.Set(ctx, plan)...)
+	// Set state even on partial failure so the server-side change is tracked.
+	resp.Diagnostics.Append(resp.State.Set(ctx, model)...)
 }
 
 func (r *llmProviderDefaultResource) Read(ctx context.Context, req resource.ReadRequest, resp *resource.ReadResponse) {
@@ -221,11 +241,11 @@ func (r *llmProviderDefaultResource) Update(ctx context.Context, req resource.Up
 		return
 	}
 	clearChatNaming := plan.ChatNamingProviderID.IsNull() && !state.ChatNamingProviderID.IsNull()
-	plan = r.apply(ctx, plan, clearChatNaming, &resp.Diagnostics)
-	if resp.Diagnostics.HasError() {
+	model, wrote := r.apply(ctx, plan, state, clearChatNaming, &resp.Diagnostics)
+	if resp.Diagnostics.HasError() && !wrote {
 		return
 	}
-	resp.Diagnostics.Append(resp.State.Set(ctx, plan)...)
+	resp.Diagnostics.Append(resp.State.Set(ctx, model)...)
 }
 
 func (r *llmProviderDefaultResource) Delete(ctx context.Context, req resource.DeleteRequest, resp *resource.DeleteResponse) {
