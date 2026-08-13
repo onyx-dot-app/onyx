@@ -56,6 +56,8 @@ It is a boolean rather than a variant value, so it stacks with `background` and
 `border` instead of replacing them — a disabled card can still be transparent
 with a dashed border.
 
+In expandable mode the whole card dims, header and expanded body together.
+
 ### `data-*` attributes
 
 Any `data-*` prop is forwarded to the card's root element, so an application can

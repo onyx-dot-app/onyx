@@ -28,8 +28,12 @@
 
    Deliberately keyed off `data-disabled`, not the `data-opal-disabled` that
    `Disabled` sets, so the two can stack without fighting over the cascade. */
+/* Expandable mode dims from the outer wrapper, not the header: the header and
+   the expanded body are siblings, so dimming the header alone would leave the
+   body at full opacity. The wrapper carries no styling of its own, so one
+   opacity layer covers both without compounding. */
 .opal-card[data-disabled],
-.opal-card-expandable-header[data-disabled] {
+.opal-card-expandable[data-disabled] {
   @apply cursor-not-allowed opacity-50;
 }
 

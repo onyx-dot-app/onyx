@@ -273,11 +273,11 @@ function Card(props: CardProps) {
       className="opal-card-expandable"
       {...dataAttributes(props)}
       data-shadow={shadow}
+      data-disabled={disabled || undefined}
     >
       <div
         className={cn("opal-card-expandable-header", headerRounding)}
         style={paddingStyle}
-        data-disabled={disabled || undefined}
         data-background={background}
         data-border={border}
         data-opal-status-border={borderColor}

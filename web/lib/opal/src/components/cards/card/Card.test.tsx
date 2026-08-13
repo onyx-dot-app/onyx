@@ -99,14 +99,19 @@ describe("Card disabled", () => {
     expect(card).toHaveAttribute("data-border", "dashed");
   });
 
-  it("marks the header in expandable mode", () => {
+  it("dims the whole card in expandable mode, not just the header", () => {
     render(
       <Card expandable expandedContent={<p>More</p>} disabled>
         <p>Header</p>
       </Card>
     );
+    // On the outer wrapper, so the expanded body dims with the header rather
+    // than staying fully opaque beside it.
+    expect(
+      document.querySelector(".opal-card-expandable[data-disabled]")
+    ).toBeInTheDocument();
     expect(
       document.querySelector(".opal-card-expandable-header[data-disabled]")
-    ).toBeInTheDocument();
+    ).not.toBeInTheDocument();
   });
 });
