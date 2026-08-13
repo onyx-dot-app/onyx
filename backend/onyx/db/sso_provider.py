@@ -181,6 +181,18 @@ def validate_sso_provider_name(name: str) -> None:
         )
 
 
+# A domain is a routing key and, on cloud, an email recipient (the verification
+# code is sent to a role mailbox at the domain), so it must be a syntactically
+# valid hostname before it can be stored.
+_VALID_EMAIL_DOMAIN = re.compile(
+    r"^(?=.{1,253}$)([a-z0-9]([a-z0-9-]{0,61}[a-z0-9])?\.)+[a-z]{2,}$"
+)
+
+
+def is_valid_email_domain(domain: str) -> bool:
+    return bool(_VALID_EMAIL_DOMAIN.match(domain))
+
+
 def normalize_email_domains(domains: list[str]) -> list[str]:
     return sorted({domain.strip().lower() for domain in domains if domain.strip()})
 

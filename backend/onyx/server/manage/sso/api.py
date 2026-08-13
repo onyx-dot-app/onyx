@@ -13,6 +13,7 @@ from onyx.db.models import SSOProvider, User
 from onyx.db.sso_provider import (
     create_sso_provider,
     fetch_sso_providers,
+    is_valid_email_domain,
     normalize_email_domains,
     set_sso_provider_enabled,
     sso_provider_type_supported,
@@ -45,20 +46,27 @@ def _reject_unsupported_provider_type(provider_type: SSOProviderType) -> None:
         )
 
 
-def _reject_unbounded_email_domains(allowed_email_domains: list[str] | None) -> None:
-    """A list that stores empty disables the domain check entirely, so on cloud
-    the provider would admit every address its IdP is willing to assert, each one
-    a billed seat. Judged after normalization, since blank entries are dropped on
-    write and `[" "]` would otherwise pass here and store as `[]`."""
+def _validate_cloud_email_domains(allowed_email_domains: list[str] | None) -> None:
+    """On cloud the domain list is both the seat boundary and a routing key, so
+    it must be non-empty and every entry a valid hostname. A malformed domain
+    would otherwise persist and fail only later, when verification tries to email
+    it. Judged after normalization, which drops blanks. Single-tenant leaves the
+    list optional and unrouted, so it skips both checks."""
     if not MULTI_TENANT or allowed_email_domains is None:
         return
-    if normalize_email_domains(allowed_email_domains):
-        return
-    raise OnyxError(
-        OnyxErrorCode.INVALID_INPUT,
-        "List the email domains this provider may sign in. Leaving it empty "
-        "would let any address its identity provider asserts join the workspace.",
-    )
+    normalized = normalize_email_domains(allowed_email_domains)
+    if not normalized:
+        raise OnyxError(
+            OnyxErrorCode.INVALID_INPUT,
+            "List the email domains this provider may sign in. Leaving it empty "
+            "would let any address its identity provider asserts join the workspace.",
+        )
+    invalid = [domain for domain in normalized if not is_valid_email_domain(domain)]
+    if invalid:
+        raise OnyxError(
+            OnyxErrorCode.INVALID_INPUT,
+            f"These are not valid email domains: {', '.join(invalid)}.",
+        )
 
 
 def _reject_unfetchable_idp_url(config: dict[str, Any]) -> None:
@@ -129,7 +137,7 @@ def create_sso_provider_endpoint(
 ) -> SSOProviderResponse:
     _reject_unsupported_provider_type(request.provider_type)
     _reject_unfetchable_idp_url(request.config)
-    _reject_unbounded_email_domains(request.allowed_email_domains)
+    _validate_cloud_email_domains(request.allowed_email_domains)
     # New providers are created enabled, so an existing enabled provider
     # makes this a multi-SSO create.
     _require_business_tier_for_additional_enabled_provider(db_session)
@@ -165,7 +173,7 @@ def update_sso_provider_endpoint(
     db_session: Session = Depends(get_session),
 ) -> SSOProviderResponse:
     provider = _fetch_sso_provider_or_raise(db_session, provider_id)
-    _reject_unbounded_email_domains(request.allowed_email_domains)
+    _validate_cloud_email_domains(request.allowed_email_domains)
 
     try:
         merged_config: dict[str, Any] | None = None
@@ -208,7 +216,7 @@ def set_sso_provider_enabled_endpoint(
         _reject_unsupported_provider_type(provider_to_toggle.provider_type)
         # Catches a row stored before the bound existed, which the write paths
         # never revisit.
-        _reject_unbounded_email_domains(provider_to_toggle.allowed_email_domains)
+        _validate_cloud_email_domains(provider_to_toggle.allowed_email_domains)
         _require_business_tier_for_additional_enabled_provider(
             db_session, exclude_provider_id=provider_id
         )
