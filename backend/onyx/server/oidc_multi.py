@@ -22,6 +22,7 @@ from sqlalchemy.orm import Session
 
 from onyx.auth.oidc_client import VerifiedEmailOpenID
 from onyx.auth.sso_url_guard import (
+    UnsafeSSOUrl,
     validate_discovered_endpoints,
     validate_idp_url,
 )
@@ -186,7 +187,16 @@ async def _get_oauth_client(
     if cached_client is not None:
         return cached_client
 
-    client = await run_in_threadpool(_build_client, provider, config)
+    try:
+        client = await run_in_threadpool(_build_client, provider, config)
+    except UnsafeSSOUrl as e:
+        # A row stored before the write guard, or a discovery doc that started
+        # naming a rejected endpoint, reaches this browser-facing path. Surface a
+        # clean error rather than letting the ValueError escape as a raw 400.
+        raise OnyxError(
+            OnyxErrorCode.BAD_GATEWAY,
+            "This provider's sign-in URL is not reachable.",
+        ) from e
     _CLIENT_CACHE[cache_key] = client
     return client
 
