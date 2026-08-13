@@ -1,0 +1,11 @@
+# See https://github.com/helm/chart-releaser#configuration
+#
+# Only settings that chart-releaser-action does not expose as a workflow input
+# belong here. Everything else is set in .github/workflows/helm-chart-releases.yml
+# so there is one source of truth per setting.
+#
+# Chart releases get a `helm/` tag prefix so they cannot collide with the
+# application releases (`v*.*.*`) or with the other prefixed release trains
+# (`cli/v*.*.*`, `opal/v*.*.*`). No workflow in this repo triggers on a `helm/`
+# tag, so publishing a chart does not re-run the application pipelines.
+release-name-template: "helm/{{ .Name }}-{{ .Version }}"
