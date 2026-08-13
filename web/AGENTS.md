@@ -510,11 +510,14 @@ const UserProfile = ({ userId }: UserProfileProps) => {
 
 **Extract prop types into their own interface definitions. Keep prop interfaces in the same file
 as the component they belong to. Non-prop types (shared models, API response shapes, enums, etc.)
-should be placed in a co-located `interfaces.ts` file.**
+should be placed in a co-located `types.ts` file.**
 
 **Reason:** Prop interfaces are tightly coupled to their component and rarely imported elsewhere,
-so co-location keeps things simple. Shared types belong in `interfaces.ts` so they can be
+so co-location keeps things simple. Shared types belong in `types.ts` so they can be
 imported without pulling in component code.
+
+Some feature directories still use `interfaces.ts`; they predate this rule. Use `types.ts` for new
+files, and rename an existing one when you are already working in that feature.
 
 ```typescript
 // ✅ Good — props interface in the same file as the component
@@ -529,8 +532,8 @@ function UserCard({ user, showActions = false, onEdit }: UserCardProps) {
   return <div>User Card</div>
 }
 
-// ✅ Good — shared types in interfaces.ts
-// interfaces.ts
+// ✅ Good — shared types in types.ts
+// types.ts
 export interface User {
   id: string
   name: string
