@@ -20,5 +20,8 @@ if (process.env.NEXT_PUBLIC_SENTRY_DSN) {
 }
 
 // This export will instrument router navigations, and is only relevant if you enable tracing.
-// `captureRouterTransitionStart` is available from SDK version 9.12.0 onwards
+// `captureRouterTransitionStart` is available from SDK version 9.12.0 onwards.
+// oxlint cannot follow the `export * from './client'` chain in the Sentry type
+// entrypoint, so it reports a false positive here. TypeScript resolves it.
+// oxlint-disable-next-line import/namespace
 export const onRouterTransitionStart = Sentry.captureRouterTransitionStart;

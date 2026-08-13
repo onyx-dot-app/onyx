@@ -1,6 +1,16 @@
 {
   "$schema": "./node_modules/oxlint/configuration_schema.json",
-  "plugins": ["typescript", "unicorn", "oxc", "react", "nextjs"],
+  "plugins": [
+    "typescript",
+    "unicorn",
+    "oxc",
+    "react",
+    "nextjs",
+    "import",
+    "jest",
+    "node",
+    "promise"
+  ],
   "jsPlugins": [
     { "name": "react-doctor", "specifier": "oxlint-plugin-react-doctor" }
   ],
@@ -20,7 +30,11 @@
     "react-doctor/aria-role": "error",
     "react-doctor/no-ref-current-in-render": "error",
     "react-doctor/no-impure-state-updater": "error",
-    "react-doctor/no-layout-property-animation": "error"
+    "react-doctor/no-layout-property-animation": "error",
+    "jest/expect-expect": [
+      "error",
+      { "assertFunctionNames": ["expect", "expect*"] }
+    ]
   },
   "ignorePatterns": [
     ".next",

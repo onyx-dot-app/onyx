@@ -603,12 +603,12 @@ describe("usePacedTurnGroups", () => {
       // Unmount before timer fires
       unmount();
 
-      // Advance timer - should not throw
-      act(() => {
-        jest.advanceTimersByTime(200);
-      });
-
-      // No assertion needed - just verifying no errors on timer fire after unmount
+      // A timer that fires after unmount must not throw
+      expect(() => {
+        act(() => {
+          jest.advanceTimersByTime(200);
+        });
+      }).not.toThrow();
     });
 
     test("clears timer on nodeId change", () => {
