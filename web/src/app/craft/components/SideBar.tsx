@@ -308,56 +308,6 @@ const MemoizedBuildSidebarInner = memo(() => {
     [requestNavigation, router, returnToMainAgent]
   );
 
-  const newBuildButton = (
-    <SidebarTab icon={SvgEditBig} onClick={handleNewBuild}>
-      Start Crafting
-    </SidebarTab>
-  );
-
-  const scheduledTasksPanel = (
-    <SidebarTab
-      icon={SvgClock}
-      onClick={() => navigate(CRAFT_TASKS_PATH)}
-      selected={pathname.startsWith(CRAFT_TASKS_PATH)}
-    >
-      Scheduled Tasks
-    </SidebarTab>
-  );
-
-  const appsTab = (
-    <SidebarTab
-      icon={SvgPlug}
-      onClick={() => navigate(CRAFT_APPS_PATH)}
-      selected={pathname.startsWith(CRAFT_APPS_PATH)}
-    >
-      Apps
-    </SidebarTab>
-  );
-
-  const skillsPanel = (
-    <SidebarTab
-      icon={SvgBlocks}
-      onClick={() => navigate(CRAFT_SKILLS_PATH)}
-      selected={pathname.startsWith(CRAFT_SKILLS_PATH)}
-    >
-      Skills
-    </SidebarTab>
-  );
-
-  const backToChatButton = (
-    <SidebarTab icon={SvgArrowLeft} onClick={() => navigate("/app")}>
-      Back to Chat
-    </SidebarTab>
-  );
-
-  const footer = (
-    <div>
-      {backToChatButton}
-      <OpencodeDebugLogsButton folded={folded} />
-      <AccountPopover />
-    </div>
-  );
-
   const showLogoWhenFolded = useShowLogoWhenFolded();
 
   return (
@@ -367,10 +317,30 @@ const MemoizedBuildSidebarInner = memo(() => {
         showLogoWhenFolded={showLogoWhenFolded}
       >
         <div className="flex flex-col gap-0.5">
-          {newBuildButton}
-          {scheduledTasksPanel}
-          {skillsPanel}
-          {appsTab}
+          <SidebarTab icon={SvgEditBig} onClick={handleNewBuild}>
+            Start Crafting
+          </SidebarTab>
+          <SidebarTab
+            icon={SvgClock}
+            onClick={() => navigate(CRAFT_TASKS_PATH)}
+            selected={pathname.startsWith(CRAFT_TASKS_PATH)}
+          >
+            Scheduled Tasks
+          </SidebarTab>
+          <SidebarTab
+            icon={SvgBlocks}
+            onClick={() => navigate(CRAFT_SKILLS_PATH)}
+            selected={pathname.startsWith(CRAFT_SKILLS_PATH)}
+          >
+            Skills
+          </SidebarTab>
+          <SidebarTab
+            icon={SvgPlug}
+            onClick={() => navigate(CRAFT_APPS_PATH)}
+            selected={pathname.startsWith(CRAFT_APPS_PATH)}
+          >
+            Apps
+          </SidebarTab>
         </div>
       </SidebarLayouts.Header>
       <SidebarLayouts.Body scrollKey="build-sidebar">
@@ -410,7 +380,15 @@ const MemoizedBuildSidebarInner = memo(() => {
           </>
         )}
       </SidebarLayouts.Body>
-      <SidebarLayouts.Footer>{footer}</SidebarLayouts.Footer>
+      <SidebarLayouts.Footer>
+        <div>
+          <SidebarTab icon={SvgArrowLeft} onClick={() => navigate("/app")}>
+            Back to Chat
+          </SidebarTab>
+          <OpencodeDebugLogsButton folded={folded} />
+          <AccountPopover />
+        </div>
+      </SidebarLayouts.Footer>
     </SidebarLayouts.Root>
   );
 });
