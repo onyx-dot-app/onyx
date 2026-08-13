@@ -6,6 +6,9 @@ from sqlalchemy.orm import Session
 from onyx.configs.app_configs import INTEGRATION_TESTS_MODE
 from onyx.configs.constants import DocumentSource
 from onyx.configs.llm_configs import get_image_extraction_and_analysis_enabled
+from onyx.connectors.capability_checks.recorder import (
+    record_blocking_validation_outcome,
+)
 from onyx.connectors.credentials_provider import build_db_credentials_provider
 from onyx.connectors.exceptions import ConnectorValidationError, ValidationError
 from onyx.connectors.interfaces import (
@@ -20,7 +23,7 @@ from onyx.connectors.models import InputType
 from onyx.connectors.registry import CONNECTOR_CLASS_MAP
 from onyx.db.connector import fetch_connector_by_id
 from onyx.db.credentials import backend_update_credential_json, fetch_credential_by_id
-from onyx.db.enums import AccessType
+from onyx.db.enums import AccessType, CapabilityCheckTrigger
 from onyx.db.models import Credential
 from onyx.file_store.staging import RawFileCallback
 from onyx.utils.credential_audit import emit_credential_access
@@ -174,6 +177,19 @@ def validate_ccpair_for_user(
     if not credential:
         raise ValueError("Credential not found")
 
+    def _record_outcome(error: Exception | None, perm_sync_validated: bool) -> None:
+        # Best-effort scribe for the outcome below; never raises and never
+        # touches this function's session or semantics.
+        record_blocking_validation_outcome(
+            credential_id=credential.id,
+            connector_id=connector_id,
+            source=connector.source,
+            trigger=CapabilityCheckTrigger.CC_PAIR_VALIDATION,
+            error=error,
+            perm_sync_validated=perm_sync_validated,
+            connector_specific_config=connector.connector_specific_config,
+        )
+
     try:
         runnable_connector = instantiate_connector(
             db_session=db_session,
@@ -185,12 +201,17 @@ def validate_ccpair_for_user(
         runnable_connector.validate_connector_settings()
         if access_type == AccessType.SYNC:
             runnable_connector.validate_perm_sync()
-    except ValidationError:
+    except ValidationError as e:
+        _record_outcome(e, perm_sync_validated=False)
         raise
     except Exception as e:
         if enforce_creation:
-            raise ConnectorValidationError(str(e))
+            validation_error = ConnectorValidationError(str(e))
+            _record_outcome(validation_error, perm_sync_validated=False)
+            raise validation_error
         else:
+            _record_outcome(e, perm_sync_validated=False)
             return False
 
+    _record_outcome(None, perm_sync_validated=access_type == AccessType.SYNC)
     return True
