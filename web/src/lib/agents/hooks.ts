@@ -212,28 +212,6 @@ function useAddressedAgentId(): number | undefined {
 }
 
 /**
- * The agents a chat is allowed to run on.
- *
- * "Always Start with an Agent" (`disable_default_assistant`) is a constraint,
- * not a preference: with it on, the Assistant is never a valid answer. Applying
- * it once here means a stale `?agentId=0` or a session created before the
- * setting was enabled cannot route back to it.
- */
-function useEligibleAgents(): MinimalAgent[] {
-  const { agents } = useAgents();
-  const settings = useSettings();
-  const assistantDisabled = settings.disable_default_assistant ?? false;
-
-  return useMemo(
-    () =>
-      assistantDisabled
-        ? agents.filter((agent) => agent.id !== DEFAULT_AGENT_ID)
-        : agents,
-    [agents, assistantDisabled]
-  );
-}
-
-/**
  * The agent this chat is running on. There is no agent-less chat — every
  * message is sent against one, and a plain chat is the Assistant, sent
  * explicitly as `personaId: 0`. So this answers whenever any agent is
@@ -250,6 +228,12 @@ function useEligibleAgents(): MinimalAgent[] {
  *    miss and featured agents are what a new user lands on.
  * 4. anything eligible
  *
+ * "Always Start with an Agent" (`disable_default_assistant`) is a constraint,
+ * not a preference: with it on the Assistant is never a valid answer, so it
+ * leaves the candidate set up front rather than being skipped at step 2. That
+ * is what stops a stale `?agentId=0`, or a session created before the setting
+ * was enabled, from routing back to it.
+ *
  * An id that matches no eligible agent falls through, which is how a deleted,
  * inaccessible, or disabled agent degrades.
  *
@@ -260,22 +244,30 @@ function useEligibleAgents(): MinimalAgent[] {
  * can disagree on step 3. Steps 1 and 2 answer in every ordinary case.
  */
 export function useActiveAgent(): MinimalAgent | undefined {
-  const eligibleAgents = useEligibleAgents();
+  const { agents } = useAgents();
   const { pinnedAgents } = usePinnedAgents();
+  const settings = useSettings();
   const addressedAgentId = useAddressedAgentId();
+  const assistantDisabled = settings.disable_default_assistant ?? false;
 
   return useMemo(() => {
-    const addressed = eligibleAgents.find((a) => a.id === addressedAgentId);
+    // The constraint leaves the candidate set before anything is resolved, so
+    // no later step can reach the Assistant by another route.
+    const eligible = assistantDisabled
+      ? agents.filter((agent) => agent.id !== DEFAULT_AGENT_ID)
+      : agents;
+
+    const addressed = eligible.find((a) => a.id === addressedAgentId);
     if (addressed) return addressed;
 
-    const assistant = eligibleAgents.find((a) => a.id === DEFAULT_AGENT_ID);
+    const assistant = eligible.find((a) => a.id === DEFAULT_AGENT_ID);
     if (assistant) return assistant;
 
     const pinned = pinnedAgents.find((pinnedAgent) =>
-      eligibleAgents.some((a) => a.id === pinnedAgent.id)
+      eligible.some((a) => a.id === pinnedAgent.id)
     );
-    return pinned ?? eligibleAgents[0];
-  }, [eligibleAgents, pinnedAgents, addressedAgentId]);
+    return pinned ?? eligible[0];
+  }, [agents, assistantDisabled, pinnedAgents, addressedAgentId]);
 }
 
 /**
