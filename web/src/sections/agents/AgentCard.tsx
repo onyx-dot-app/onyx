@@ -77,9 +77,6 @@ export default function AgentCard({ agent }: AgentCardProps) {
         group="group/AgentCard"
       >
         <Card
-          // TODO(@raunakab): Migrate to Opal's Card, once we decide where the radial gradient and hover shadow
-          // belongs. Opal's Card takes no className by design, so this needs either a
-          // prop in Opal or a wrapper that owns the styling.
           padding={0}
           gap={0}
           height="full"

@@ -1,6 +1,31 @@
 /**
  * Card - A styled container component
  *
+ * @deprecated Use `Card` from `@opal/components`. Opal's Card is the styled box
+ * alone, so a migrated call site wraps its children in the `<Section>` this one
+ * supplies implicitly, and passes `rounding="lg"` to keep the 16px corner.
+ * `variant` becomes Opal's `background` / `border` pair.
+ *
+ * TODO(@raunakab): retire this component. Eight call sites remain, in three
+ * groups:
+ *
+ *   1. Blocked only because a file migrates whole — both components are named
+ *      `Card`, so one file cannot import both. Nothing else stands in the way.
+ *      BillingDetailsView, CheckoutView, ExternalAppsPage, discord-bot/page.
+ *
+ *   2. A computed `variant` resolving to `"disabled"`. Opal's Card now has a
+ *      `disabled` prop, so these read as `disabled={…}` alongside
+ *      `border="solid"`. SkillCard, both discord-bot pages.
+ *
+ *   3. Passing a `className`, which Opal's Card takes none of by design. These
+ *      need a decision before they can move anywhere:
+ *        - ExternalAppsPage — pure layout, expressible as a `<Section>`, so it
+ *          needs no Opal change at all.
+ *        - BillingDetailsView, PlansView — entrance animation and payment-card
+ *          styling.
+ *        - AgentCard — radial gradient and hover shadow.
+ *        - CheckoutView — also clickable, so likely `SelectCard`, not `Card`.
+ *
  * Provides a consistent card-style container with background, padding, border, and rounded corners.
  * Uses a vertical flex layout with automatic gap spacing between children.
  *
@@ -23,20 +48,20 @@
  * import { Card } from "@/refresh-components/cards";
  *
  * // Basic usage (primary variant)
- * <Card border="solid" rounding="lg"><Section alignItems="start" height="fit">
+ * <Card>
  *   <h2>Card Title</h2>
  *   <p>Card content goes here</p>
- * </Section></Card>
+ * </Card>
  *
  * // Secondary variant for nested content
- * <Card background="none" border="solid" rounding="lg"><Section alignItems="start" height="fit">
+ * <Card variant="secondary">
  *   <div>Less prominent content</div>
- * </Section></Card>
+ * </Card>
  *
  * // Tertiary variant for empty states
- * <Card background="none" border="dashed" rounding="lg"><Section alignItems="start" height="fit">
+ * <Card variant="tertiary">
  *   <div>No items yet</div>
- * </Section></Card>
+ * </Card>
  * ```
  */
 

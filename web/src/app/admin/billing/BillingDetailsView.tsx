@@ -292,11 +292,7 @@ function SubscriptionCard({
     NEXT_PUBLIC_CLOUD_ENABLED && billing?.status === BillingStatus.TRIALING;
 
   return (
-    <Card
-    // TODO(@raunakab): Migrate to Opal's Card. Nothing here blocks it — this file just also holds a
-    // call site that cannot move yet, and both components are named Card, so the
-    // file has to migrate whole or not at all.
-    >
+    <Card>
       <Section
         flexDirection="row"
         justifyContent="between"
@@ -479,9 +475,6 @@ function SeatsCard({
   if (isEditing) {
     return (
       <Card
-        // TODO(@raunakab): Migrate to Opal's Card, once we decide where the card entrance animation
-        // belongs. Opal's Card takes no className by design, so this needs either a
-        // prop in Opal or a wrapper that owns the styling.
         padding={0}
         gap={0}
         alignItems="stretch"
@@ -595,11 +588,7 @@ function SeatsCard({
   }
 
   return (
-    <Card
-    // TODO(@raunakab): Migrate to Opal's Card. Nothing here blocks it — this file just also holds a
-    // call site that cannot move yet, and both components are named Card, so the
-    // file has to migrate whole or not at all.
-    >
+    <Card>
       <Section
         flexDirection="row"
         justifyContent="between"
@@ -672,12 +661,7 @@ function PaymentSection({ billing }: { billing: BillingInformation }) {
       <Section alignItems="start" height="auto" width="full">
         <Text mainContentEmphasis>Payment</Text>
         <Section flexDirection="row" gap={2} alignItems="stretch" height="auto">
-          <Card
-            // TODO(@raunakab): Migrate to Opal's Card, once we decide where the payment-card styling
-            // belongs. Opal's Card takes no className by design, so this needs either a
-            // prop in Opal or a wrapper that owns the styling.
-            className="billing-payment-card"
-          >
+          <Card className="billing-payment-card">
             <Section
               flexDirection="row"
               justifyContent="between"
@@ -699,12 +683,7 @@ function PaymentSection({ billing }: { billing: BillingInformation }) {
             </Section>
           </Card>
           {lastPaymentDate && (
-            <Card
-              // TODO(@raunakab): Migrate to Opal's Card, once we decide where the payment-card styling
-              // belongs. Opal's Card takes no className by design, so this needs either a
-              // prop in Opal or a wrapper that owns the styling.
-              className="billing-payment-card"
-            >
+            <Card className="billing-payment-card">
               <Section
                 flexDirection="row"
                 justifyContent="between"

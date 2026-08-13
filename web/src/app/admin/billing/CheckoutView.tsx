@@ -35,9 +35,6 @@ function BillingOption({
 }: BillingOptionProps) {
   return (
     <Card
-      // TODO(@raunakab): Migrate to Opal — but probably to SelectCard, not Card. This card is
-      // clickable, which is the line between the two, and its className needs
-      // somewhere to go first.
       onClick={onClick}
       className="billing-option"
       data-selected={selected}
@@ -157,14 +154,7 @@ export default function CheckoutView({ onAdjustPlan }: CheckoutViewProps) {
   };
 
   return (
-    <Card
-      // TODO(@raunakab): Migrate to Opal's Card. Nothing here blocks it — this file just also holds a
-      // call site that cannot move yet, and both components are named Card, so the
-      // file has to migrate whole or not at all.
-      padding={0}
-      gap={0}
-      alignItems="stretch"
-    >
+    <Card padding={0} gap={0} alignItems="stretch">
       {/* Header */}
       <Section
         flexDirection="row"

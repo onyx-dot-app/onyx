@@ -140,12 +140,7 @@ function AppsAdminContent() {
 
   if (!isReady) {
     return (
-      <Card
-        // TODO(@raunakab): Migrate to Opal's Card. Nothing here blocks it — this file just also holds a
-        // call site that cannot move yet, and both components are named Card, so the
-        // file has to migrate whole or not at all.
-        variant="tertiary"
-      >
+      <Card variant="tertiary">
         <Text font="main-content-body">Loading…</Text>
       </Card>
     );
@@ -422,11 +417,7 @@ function IntegrationCard({ integration }: IntegrationCardProps) {
   }
 
   return (
-    <Card
-    // TODO(@raunakab): Migrate to Opal's Card. Nothing here blocks it — this file just also holds a
-    // call site that cannot move yet, and both components are named Card, so the
-    // file has to migrate whole or not at all.
-    >
+    <Card>
       <div className="flex items-center gap-3 w-full">
         <Logo className="w-8 h-8" />
         <div className="flex-1 flex flex-col gap-0.5">
@@ -506,12 +497,7 @@ interface AvailableAppCardProps {
 function AvailableAppCard({ descriptor, onClick }: AvailableAppCardProps) {
   const Logo = getAppTypeLogo(descriptor.app_type);
   return (
-    <Card
-      // TODO(@raunakab): Migrate to Opal's Card. This className is pure layout — it becomes a
-      // `<Section height="full" justifyContent="center">` inside the card, so no
-      // Opal change is needed to move it.
-      className="h-full flex flex-col justify-center"
-    >
+    <Card className="h-full flex flex-col justify-center">
       <div className="flex items-center gap-3 w-full">
         <Logo className="w-8 h-8 shrink-0" />
         <div className="flex-1">
@@ -533,12 +519,7 @@ interface CreateCustomAppCardProps {
 
 function CreateCustomAppCard({ onClick }: CreateCustomAppCardProps) {
   return (
-    <Card
-      // TODO(@raunakab): Migrate to Opal's Card. This className is pure layout — it becomes a
-      // `<Section height="full" justifyContent="center">` inside the card, so no
-      // Opal change is needed to move it.
-      className="h-full flex flex-col justify-center"
-    >
+    <Card className="h-full flex flex-col justify-center">
       <div className="flex items-center gap-3 w-full">
         <SvgPlug className="w-8 h-8 shrink-0" />
         <div className="flex-1 flex flex-col gap-0.5">

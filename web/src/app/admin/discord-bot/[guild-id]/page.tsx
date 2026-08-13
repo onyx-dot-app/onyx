@@ -88,11 +88,7 @@ function GuildDetailContent({
         </Callout>
       )}
 
-      <Card
-        // TODO(@raunakab): Migrate to Opal's Card. Opal's now has a `disabled` prop, so this reads as
-        // `disabled={…}` alongside `border="solid"` instead of a variant.
-        variant={disabled ? "disabled" : "primary"}
-      >
+      <Card variant={disabled ? "disabled" : "primary"}>
         <ContentAction
           title="Channel Configuration"
           description="Run !sync-channels in Discord to update the channel list."
@@ -352,11 +348,7 @@ export default function Page({ params }: Props) {
       />
       <SettingsLayouts.Body>
         {/* Default Agent Selector */}
-        <Card
-          // TODO(@raunakab): Migrate to Opal's Card. Opal's now has a `disabled` prop, so this reads as
-          // `disabled={…}` alongside `border="solid"` instead of a variant.
-          variant={!guild?.enabled ? "disabled" : "primary"}
-        >
+        <Card variant={!guild?.enabled ? "disabled" : "primary"}>
           <ContentAction
             title="Default Agent"
             description="The agent used by the bot in all channels unless overridden."

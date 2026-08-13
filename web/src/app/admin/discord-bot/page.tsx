@@ -78,12 +78,7 @@ function DiscordBotContent() {
             <Text text04 mainUiBody>
               Copy the command and send it from any text channel in your server!
             </Text>
-            <Card
-              // TODO(@raunakab): Migrate to Opal's Card. Nothing here blocks it — this file just also holds a
-              // call site that cannot move yet, and both components are named Card, so the
-              // file has to migrate whole or not at all.
-              variant="secondary"
-            >
+            <Card variant="secondary">
               <Section
                 flexDirection="row"
                 justifyContent="between"
@@ -101,11 +96,7 @@ function DiscordBotContent() {
         </Modal.Content>
       </Modal>
 
-      <Card
-        // TODO(@raunakab): Migrate to Opal's Card. Opal's now has a `disabled` prop, so this reads as
-        // `disabled={…}` alongside `border="solid"` instead of a variant.
-        variant={!isBotAvailable ? "disabled" : "primary"}
-      >
+      <Card variant={!isBotAvailable ? "disabled" : "primary"}>
         <Section
           flexDirection="row"
           justifyContent="between"

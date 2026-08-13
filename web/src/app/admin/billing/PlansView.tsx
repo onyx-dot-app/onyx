@@ -97,9 +97,6 @@ function PlanCard({
 }: PlanConfig & { hideFeatures?: boolean }) {
   return (
     <Card
-      // TODO(@raunakab): Migrate to Opal's Card, once className and aria-label have answers. Opal's
-      // Card exposes neither, and the label is a real accessibility affordance
-      // rather than styling.
       padding={0}
       gap={0}
       alignItems="stretch"
