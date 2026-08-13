@@ -15,7 +15,9 @@ python gdrive_api.py get-doc <document_id> [--fields "documentId,body,title"]
 ```
 
 Returns the document's `body.content` with each element's `startIndex` /
-`endIndex`. Use these indices to target edits precisely.
+`endIndex`. Use these indices to target edits precisely. For a tabbed Doc,
+`body` holds only the first tab — pass `--tabs` to get every tab's content
+under `tabs[]`.
 
 ## Insert text at an index (write)
 

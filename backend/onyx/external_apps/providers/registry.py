@@ -126,6 +126,18 @@ def get_endpoint_catalog(app_type: ExternalAppType) -> list[EndpointSpec]:
     return list(catalog)
 
 
+def withheld_on_cloud(app_type: ExternalAppType) -> list[EndpointSpec]:
+    """The catalog actions this app cannot offer on cloud, where Onyx's own
+    OAuth client must avoid Google's restricted scopes — every endpoint marked
+    ``requires_self_hosted_scope``. Empty when the deployment uses its own
+    credentials."""
+    if not uses_cloud_scope(app_type):
+        return []
+    # uses_cloud_scope implies the provider is registered.
+    catalog = PROVIDERS[app_type].spec.endpoint_catalog
+    return [e for e in catalog if e.requires_self_hosted_scope]
+
+
 def effective_policy(
     endpoint: EndpointSpec,
     stored: dict[str, EndpointPolicy],

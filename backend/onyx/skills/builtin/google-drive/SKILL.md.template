@@ -1,6 +1,7 @@
 ---
 name: google-drive
 description: Search, read, create, and edit the connected user's Google Drive — including Google Docs, Sheets, and Slides — via light API wrappers.
+cloud-description: Create, upload, and organize Google Drive files, and read or edit any Google Doc, Sheet, or Slides file by id, via light API wrappers.
 ---
 
 # Google Drive
@@ -9,6 +10,27 @@ Call the Google Drive, Docs, Sheets, and Slides APIs as the connected user via
 the bundled helpers. Reads run freely; writes (create / upload / edit / delete)
 may pause for the user to approve.
 
+{{#IF_CLOUD_SCOPE}}
+This deployment's Google Drive grant is per-file (`drive.file`). The Drive
+commands in [drive.md](drive.md) (`search`, `list`, `get`, `read`, `update`,
+`trash`, ...) only see files that Onyx itself created — through these helpers,
+in any session. Everything else in the user's Drive is invisible there, even
+files the user owns. Drive reports an invisible file as **HTTP 404 "File not
+found"** — never 403 — even though it exists. The Docs, Sheets, and Slides
+APIs are not per-file scoped; they reach any file of their type the user can
+open, by id. So:
+
+- For a Docs, Sheets, or Slides link or id, go straight to the per-API helper:
+  `get-doc` ([docs.md](docs.md)), `gsheets_api.py` ([sheets.md](sheets.md)), or
+  `gslides_api.py` ([slides.md](slides.md)) — they work even where
+  `gdrive_api.py read` answers 404.
+- An empty `search` result does not mean the file is absent — it may just be
+  outside the grant.
+- PDFs, folders, and other non-native files not created through Onyx are
+  unreachable; ask the user to attach the file to the session instead of
+  passing a link.
+
+{{/IF_CLOUD_SCOPE}}
 {{ACTION_AVAILABILITY_SECTION}}
 
 > **Path convention**: run helpers from the session workspace as

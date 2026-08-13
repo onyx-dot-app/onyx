@@ -1,16 +1,19 @@
 """The cloud/self-hosted scope split for the Google providers: the cloud scope
-stays clear of Google's restricted tier, and the catalog it exposes never
-outruns it."""
+stays clear of Google's restricted tier, the catalog it exposes never outruns
+it, and the SKILL.md rendered under it surfaces the withheld actions and
+per-grant caveats."""
 
 from __future__ import annotations
 
 import pytest
 
-from onyx.db.enums import ExternalAppType
+from onyx.db.enums import EndpointPolicy, ExternalAppType
 from onyx.external_apps.providers import gmail, google_calendar, google_drive, registry
 from onyx.external_apps.providers.gmail import GmailAction
 from onyx.external_apps.providers.google_drive import GoogleDriveAction
 from onyx.external_apps.providers.registry import PROVIDERS, get_endpoint_catalog
+from onyx.skills.built_in import BUILTIN_SKILLS_PATH
+from onyx.skills.rendering import render_external_app_skill
 
 # Requesting any of these subjects the OAuth client to an annual third-party
 # security assessment: https://support.google.com/cloud/answer/13464325
@@ -92,3 +95,95 @@ def test_calendar_catalog_survives_on_cloud() -> None:
         get_endpoint_catalog(ExternalAppType.GOOGLE_CALENDAR)
         == PROVIDERS[ExternalAppType.GOOGLE_CALENDAR].spec.endpoint_catalog
     )
+
+
+# --- Skill-facing cloud-scope caveats ---
+# The rendered SKILL.md must surface what the narrowed cloud grant changes:
+# the {{#IF_CLOUD_SCOPE}} note carries the why/guidance, and the unavailable
+# list carries the withheld actions (nothing else surfaces them — they are
+# filtered out of the catalog).
+
+_SKILL_TEMPLATES = {
+    ExternalAppType.GOOGLE_DRIVE: "google-drive",
+    ExternalAppType.GMAIL: "gmail",
+}
+
+
+def _render_skill(
+    app_type: ExternalAppType,
+    stored: dict[str, EndpointPolicy] | None = None,
+) -> str:
+    template = (
+        BUILTIN_SKILLS_PATH / _SKILL_TEMPLATES[app_type] / "SKILL.md.template"
+    ).read_text()
+    return render_external_app_skill(template, app_type, stored or {})
+
+
+@pytest.mark.usefixtures("cloud")
+def test_drive_skill_warns_about_per_file_grant_on_cloud() -> None:
+    rendered = _render_skill(ExternalAppType.GOOGLE_DRIVE)
+    assert "drive.file" in rendered
+    assert "get-doc" in rendered
+    # DRIVES_READ is withheld on cloud; it must be listed, not silently absent.
+    assert "- List shared drives" in rendered
+    # Discovery must not promise Drive-wide search on cloud.
+    assert "description: Create, upload, and organize" in rendered
+    assert "cloud-description" not in rendered
+
+
+@pytest.mark.usefixtures("cloud")
+def test_gmail_skill_is_send_and_draft_create_on_cloud() -> None:
+    rendered = _render_skill(ExternalAppType.GMAIL)
+    assert "gmail.send" in rendered
+    # Withheld actions are fenced off in the unavailable list...
+    assert "- Read messages" in rendered
+    assert "- Update a draft" in rendered
+    # ...and their usage docs are not rendered at all.
+    assert "### Send a message (write)" in rendered
+    assert "### List / search messages" not in rendered
+    assert "draft-update" not in rendered
+    assert "### Download an attachment" not in rendered
+    # Surviving actions are not fenced, and draft-create is documented.
+    assert "- Send a message" not in rendered
+    assert "- Create a draft" not in rendered
+    assert "### Create a draft (write, not sent)" in rendered
+    # Skill discovery reads the description: it must not advertise reads.
+    assert "description: Send email and create drafts" in rendered
+    assert "Read, search" not in rendered
+    assert "cloud-description" not in rendered
+
+
+def test_gmail_skill_documents_everything_self_hosted() -> None:
+    rendered = _render_skill(ExternalAppType.GMAIL)
+    assert "### List / search messages" in rendered
+    assert "### Update a draft (write, not sent)" in rendered
+    assert "### Download an attachment" in rendered
+    assert "description: Read, search, send, and draft email" in rendered
+    assert "cloud-description" not in rendered
+
+
+@pytest.mark.usefixtures("cloud")
+def test_cloud_note_precedes_the_unavailable_list_with_deny_merged() -> None:
+    """An admin DENY must not displace the cloud note (or vice versa): the note
+    renders first, and the unavailable list carries both the withheld action
+    and the DENY override."""
+    rendered = _render_skill(
+        ExternalAppType.GOOGLE_DRIVE,
+        {GoogleDriveAction.FILES_CREATE: EndpointPolicy.DENY},
+    )
+    assert rendered.index("drive.file") < rendered.index(
+        "These actions are unavailable"
+    )
+    assert "- List shared drives" in rendered
+    assert "- Create or upload a file" in rendered
+
+
+@pytest.mark.parametrize(
+    "app_type", [ExternalAppType.GOOGLE_DRIVE, ExternalAppType.GMAIL]
+)
+def test_self_hosted_skill_has_no_cloud_caveats(app_type: ExternalAppType) -> None:
+    rendered = _render_skill(app_type)
+    assert "drive.file" not in rendered
+    assert "Create, upload, and organize" not in rendered
+    assert "gmail.drafts.create" not in rendered
+    assert "These actions are unavailable" not in rendered
