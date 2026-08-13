@@ -95,7 +95,7 @@ interface UseUserPersonalizationOptions {
 export default function useUserPersonalization(
   user: User | null,
   persistPersonalization: (
-    personalization: UserPersonalization
+    personalization: Partial<UserPersonalization>
   ) => Promise<void>,
   options?: UseUserPersonalizationOptions
 ) {
@@ -178,18 +178,33 @@ export default function useUserPersonalization(
     async (overrides?: Partial<UserPersonalization>, silent?: boolean) => {
       setIsSavingPersonalization(true);
 
-      const valuesToSave = { ...personalizationValues, ...overrides };
-      const trimmedMemories = valuesToSave.memories
-        .map((memory) => ({ ...memory, content: memory.content.trim() }))
-        .filter((memory) => memory.content.length > 0);
+      // Persist ONLY the fields the caller intends to change. The backend
+      // leaves omitted fields untouched, so independent field saves commute and
+      // can't clobber one another. Persisting the full local snapshot (the
+      // previous behavior) let a stale save silently revert another field's
+      // change whenever two updates raced.
+      const changes: Partial<UserPersonalization> =
+        overrides ?? personalizationValues;
+      const changesToPersist: Partial<UserPersonalization> =
+        changes.memories === undefined
+          ? changes
+          : {
+              ...changes,
+              memories: changes.memories
+                .map((memory) => ({
+                  ...memory,
+                  content: memory.content.trim(),
+                }))
+                .filter((memory) => memory.content.length > 0),
+            };
 
       const updatedPersonalization: UserPersonalization = {
-        ...valuesToSave,
-        memories: trimmedMemories,
+        ...personalizationValues,
+        ...changesToPersist,
       };
 
       try {
-        await persistPersonalization(updatedPersonalization);
+        await persistPersonalization(changesToPersist);
         setPersonalizationValues(updatedPersonalization);
         if (!silent) {
           onSuccess?.(updatedPersonalization);
