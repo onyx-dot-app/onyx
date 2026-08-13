@@ -19,6 +19,7 @@ from onyx.auth.scoped_permissions import (
     manages_group,
     within_scope,
 )
+from onyx.db.document_set import get_document_set_by_id
 from onyx.db.enums import AccessType, Permission
 from onyx.db.models import (
     ConnectorCredentialPair,
@@ -133,6 +134,15 @@ def test_default_group_manager_edge_confers_no_scope(db_session: Session) -> Non
     # The per-group write gate is denied for the default group, allowed for the custom one.
     assert not manages_group(user, db_session, group_id=default_group.id)
     assert manages_group(user, db_session, group_id=custom.id)
+
+
+def test_document_set_locked_fetch_returns_row(db_session: Session) -> None:
+    """The patch path locks the row FOR UPDATE before GATE 2; ensure the locked fetch works
+    (Postgres forbids FOR UPDATE with DISTINCT, so the query must drop it)."""
+    ds_id = _doc_set(db_session, is_public=False, groups=[])
+    locked = get_document_set_by_id(db_session, ds_id, for_update=True)
+    assert locked is not None
+    assert locked.id == ds_id
 
 
 def test_assert_global_admits_only_global(db_session: Session) -> None:

@@ -89,7 +89,11 @@ def patch_document_set(
     db_session: Session = Depends(get_session),
     tenant_id: str = Depends(get_current_tenant_id),
 ) -> None:
-    document_set = get_document_set_by_id(db_session, document_set_update_request.id)
+    # Lock the row through the GATE 2 read → write so a concurrent admin edit can't land
+    # between the scope check and the write and be silently reverted.
+    document_set = get_document_set_by_id(
+        db_session, document_set_update_request.id, for_update=True
+    )
     if document_set is None:
         raise OnyxError(
             OnyxErrorCode.DOCUMENT_SET_NOT_FOUND,

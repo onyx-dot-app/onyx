@@ -183,14 +183,21 @@ def get_document_set_by_id(
     db_session: Session,
     document_set_id: int,
     prefetch_relationships: bool = False,
+    for_update: bool = False,
 ) -> DocumentSetDBModel | None:
-    stmt = select(DocumentSetDBModel).distinct()
+    stmt = select(DocumentSetDBModel)
     if prefetch_relationships:
         stmt = stmt.options(
             selectinload(DocumentSetDBModel.connector_credential_pairs),
             selectinload(DocumentSetDBModel.federated_connectors),
         )
     stmt = stmt.where(DocumentSetDBModel.id == document_set_id)
+    if for_update:
+        # Lock the row so a scoped-manager GATE-2 check and its write serialize with a
+        # concurrent admin edit. No DISTINCT — Postgres forbids it with FOR UPDATE.
+        stmt = stmt.execution_options(populate_existing=True).with_for_update()
+    else:
+        stmt = stmt.distinct()
     return db_session.scalar(stmt)
 
 
