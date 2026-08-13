@@ -728,3 +728,66 @@ def test_manager_reads_action_by_id_only_when_reachable(env: _ScopedEnv) -> None
 
     _assert_manager(env, "GET", f"/tool/{connected}", "allowed")
     _assert_manager(env, "GET", f"/tool/{unconnected}", "denied")
+
+
+def test_manager_mcp_server_listing_isolates_unmanaged_groups(
+    env: _ScopedEnv,
+) -> None:
+    """A server carries no group of its own, so the admin listing resolves reach the
+    same way the tool listing does: owned, or connected to a managed group via an
+    agent. This filter had no test at all."""
+    own = _create_mcp_server(
+        env.manager, is_public=False, groups=[env.managed_group.id]
+    )
+    foreign = _create_mcp_server(
+        env.admin, is_public=False, groups=[env.other_group.id]
+    )
+
+    resp = _assert_manager(env, "GET", "/admin/mcp/servers", "allowed")
+    listed = {server["id"] for server in resp.json()["mcp_servers"]}
+
+    assert own in listed, "manager lost the server they own"
+    assert foreign not in listed, "unmanaged group's server leaked"
+
+
+def test_manager_agent_listing_isolates_unmanaged_groups(env: _ScopedEnv) -> None:
+    """The admin list is a management surface, not a catalog: _admin_list_get_editable
+    pins a scoped manager to the editable set, so a public agent they cannot edit is
+    absent by design and an agent in an unmanaged group never appears."""
+    mine = PersonaManager.create(
+        user_performing_action=env.admin,
+        is_public=False,
+        groups=[env.managed_group.id],
+    )
+    public = PersonaManager.create(user_performing_action=env.admin, is_public=True)
+    foreign = PersonaManager.create(
+        user_performing_action=env.admin,
+        is_public=False,
+        groups=[env.other_group.id],
+    )
+
+    resp = _assert_manager(env, "GET", "/admin/persona", "allowed")
+    listed = {persona["id"] for persona in resp.json()}
+
+    assert mine.id in listed, "manager lost an agent shared to their group"
+    assert public.id not in listed, "public agent is not manageable, so not listed"
+    assert foreign.id not in listed, "unmanaged group's agent leaked"
+
+
+def test_manager_cannot_read_agent_of_unmanaged_group(env: _ScopedEnv) -> None:
+    """The by-id route must refuse what the listing hides."""
+    foreign = PersonaManager.create(
+        user_performing_action=env.admin,
+        is_public=False,
+        groups=[env.other_group.id],
+    )
+    resp = call_endpoint(
+        "GET",
+        f"/persona/{foreign.id}",
+        None,
+        env.manager.headers,
+        env.manager.cookies,
+    )
+    # get_persona_by_id raises a bare ValueError, which the global handler renders as
+    # 400 — the denial holds, the code just isn't the 403/404 the shape suggests
+    assert resp.status_code in (400, 403, 404), resp.text

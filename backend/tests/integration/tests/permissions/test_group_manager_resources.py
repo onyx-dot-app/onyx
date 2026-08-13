@@ -690,3 +690,70 @@ def test_manager_doc_set_listing_stamps_groupless_as_editable(
     assert listed[doc_set.id]["permissions"]["edit"] is True
     assert listed[doc_set.id]["permissions"]["delete"] is True
     assert listed[doc_set.id]["permissions"]["publish"] is False
+
+
+def test_manager_connector_listing_isolates_unmanaged_groups(
+    env: _ScopedEnv,
+) -> None:
+    """Both directions in one call: the picker must keep what the manager may use and
+    drop what belongs to a group they don't manage. Over-tightening strands them just
+    as badly as leaking — a manager with an empty picker cannot build anything."""
+    mine = CCPairManager.create_from_scratch(
+        user_performing_action=env.manager,
+        access_type=AccessType.PRIVATE,
+        groups=[env.managed_group.id],
+    )
+    public = CCPairManager.create_from_scratch(
+        user_performing_action=env.admin, access_type=AccessType.PUBLIC, groups=[]
+    )
+    foreign = CCPairManager.create_from_scratch(
+        user_performing_action=env.admin,
+        access_type=AccessType.PRIVATE,
+        groups=[env.other_group.id],
+    )
+
+    path = "/manage/admin/connector/status"
+    resp = call_endpoint("GET", path, None, env.manager.headers, env.manager.cookies)
+    assert resp.status_code == 200, resp.text
+    listed = {entry["cc_pair_id"] for entry in resp.json()}
+
+    assert mine.id in listed, "manager lost a connector in their own group"
+    assert public.id in listed, "manager lost a public connector"
+    assert foreign.id not in listed, "unmanaged group's connector leaked"
+
+
+def test_manager_doc_set_listing_isolates_unmanaged_groups(env: _ScopedEnv) -> None:
+    """Same both-directions check for document sets."""
+    cc_pair = CCPairManager.create_from_scratch(
+        user_performing_action=env.manager,
+        access_type=AccessType.PRIVATE,
+        groups=[env.managed_group.id],
+    )
+    mine = _create_synced_doc_set(
+        env, groups=[env.managed_group.id], cc_pair_ids=[cc_pair.id]
+    )
+    admin_cc_pair = CCPairManager.create_from_scratch(
+        user_performing_action=env.admin, access_type=AccessType.PUBLIC, groups=[]
+    )
+    public = DocumentSetManager.create(
+        user_performing_action=env.admin,
+        is_public=True,
+        groups=[],
+        cc_pair_ids=[admin_cc_pair.id],
+    )
+    foreign = DocumentSetManager.create(
+        user_performing_action=env.admin,
+        is_public=False,
+        groups=[env.other_group.id],
+        cc_pair_ids=[admin_cc_pair.id],
+    )
+
+    resp = call_endpoint(
+        "GET", "/manage/document-set", None, env.manager.headers, env.manager.cookies
+    )
+    assert resp.status_code == 200, resp.text
+    listed = {entry["id"] for entry in resp.json()}
+
+    assert mine.id in listed, "manager lost a set in their own group"
+    assert public.id in listed, "manager lost a public set"
+    assert foreign.id not in listed, "unmanaged group's set leaked"
