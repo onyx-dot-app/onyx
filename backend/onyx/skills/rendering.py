@@ -10,7 +10,8 @@ from onyx.db.connector_credential_pair import get_connector_credential_pairs_for
 from onyx.db.enums import EndpointPolicy, ExternalAppType, GatedAppKind
 from onyx.db.gated_app import get_action_policies
 from onyx.db.models import ExternalApp, User
-from onyx.external_apps.providers.registry import action_policy_views
+from onyx.external_apps.providers.actions import EndpointSpec
+from onyx.external_apps.providers.registry import effective_policy, get_endpoint_catalog
 from onyx.utils.logger import setup_logger
 
 logger = setup_logger()
@@ -78,22 +79,52 @@ def render_company_search_skill(
     return template.replace("{{AVAILABLE_SOURCES_SECTION}}", sources_section)
 
 
+def _is_scope_denied(
+    endpoint: EndpointSpec,
+    granted_scopes: list[str] | None,
+) -> bool:
+    """Whether the user's OAuth grant can't authorize ``endpoint``.
+
+    Only actions that declare ``required_scopes`` are gated — those are the ones
+    a provider requests as *optional* scopes, so the grant genuinely differs per
+    user (a read-only HubSpot account connects fine but can't write). Anything
+    else is authorized by definition for a connected user.
+
+    ``granted_scopes is None`` means "grant unknown" (a legacy credential row, or
+    a provider that doesn't report scopes). Unknown is never treated as denied:
+    hiding actions on a missing signal would silently break every pre-existing
+    credential, so the DENY-policy behaviour is all that applies there.
+    """
+    if granted_scopes is None or not endpoint.required_scopes:
+        return False
+    return not set(endpoint.required_scopes).issubset(granted_scopes)
+
+
 def build_action_availability_section(
     app_type: ExternalAppType,
     stored: dict[str, EndpointPolicy],
+    granted_scopes: list[str] | None = None,
 ) -> str:
-    """Render the warning listing the app's ``DENY`` (unavailable) actions, or an
-    empty string when nothing is disabled. Available actions are intentionally
+    """Render the warning listing the app's unavailable actions, or an empty
+    string when nothing is unavailable. Available actions are intentionally
     omitted — the skill body already documents what the agent can do; this only
     fences off what it must not attempt.
 
+    An action is unavailable when the admin set its policy to ``DENY``, or when
+    the user's OAuth grant lacks a scope the action requires (see
+    ``_is_scope_denied``) — advertising a write to a read-only account only gets
+    the agent a 401 it then has to reason about. Both land in one list, so an
+    action is never named twice.
+
     ``stored`` is the app's per-action overrides; an empty map falls back to the
-    catalog defaults.
+    catalog defaults. ``granted_scopes`` is the user's persisted grant, or
+    ``None`` when it's unknown (nothing is scope-gated then).
     """
     disabled = [
-        f"- {view.normalised_name}"
-        for view in action_policy_views(app_type, stored)
-        if view.state == EndpointPolicy.DENY
+        f"- {endpoint.normalised_name}"
+        for endpoint in get_endpoint_catalog(app_type)
+        if effective_policy(endpoint, stored) == EndpointPolicy.DENY
+        or _is_scope_denied(endpoint, granted_scopes)
     ]
     if not disabled:
         return ""
@@ -106,10 +137,13 @@ def render_external_app_skill(
     app_type: ExternalAppType,
     external_app: ExternalApp | None,
     skill_dir: Path,
+    granted_scopes: list[str] | None = None,
 ) -> str:
     """Render an external-app SKILL.md with its per-user action availability.
 
     ``skill_dir`` is the skill's on-disk directory (holds ``SKILL.md.template``).
+    ``granted_scopes`` is the rendering user's persisted OAuth grant for the app;
+    ``None`` (the default) means unknown, which gates nothing.
     """
     template = (skill_dir / "SKILL.md.template").read_text()
     stored = (
@@ -117,7 +151,7 @@ def render_external_app_skill(
         if external_app
         else {}
     )
-    section = build_action_availability_section(app_type, stored)
+    section = build_action_availability_section(app_type, stored, granted_scopes)
     if section:
         return template.replace(ACTION_AVAILABILITY_PLACEHOLDER, section)
     # Nothing disabled: drop the placeholder and its trailing blank line so the

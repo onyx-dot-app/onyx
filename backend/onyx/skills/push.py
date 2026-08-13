@@ -12,8 +12,9 @@ from sqlalchemy.orm import Session
 from onyx.db.external_app import (
     get_connectable_apps_for_user,
     get_external_app_by_skill_id,
+    get_external_app_user_credential,
 )
-from onyx.db.models import Skill, User
+from onyx.db.models import ExternalApp, Skill, User
 from onyx.db.skill import (
     SkillValidityUpdate,
     affected_user_ids_for_skill,
@@ -96,6 +97,25 @@ def _add_static_builtin(
         files[f"{skill.name}/{rel.as_posix()}"] = path.read_bytes()
 
 
+def _granted_scopes_for(
+    db_session: Session,
+    external_app: ExternalApp | None,
+    user: User,
+) -> list[str] | None:
+    """The user's persisted OAuth grant for ``external_app``, or ``None`` when
+    it's unknown — no app, no stored credential, or a credential written before
+    the grant was recorded. ``None`` means the renderer gates nothing on scopes,
+    so a missing signal can never hide an action the user actually has."""
+    if external_app is None:
+        return None
+    credential = get_external_app_user_credential(
+        db_session,
+        external_app_id=external_app.id,
+        user_id=user.id,
+    )
+    return credential.granted_scopes if credential else None
+
+
 def _render_template(
     files: FileSet,
     skill: Skill,
@@ -121,6 +141,7 @@ def _render_template(
             app_type,
             external_app,
             definition.source_dir,
+            _granted_scopes_for(db_session, external_app, user),
         )
         files[f"{skill.name}/SKILL.md"] = rendered.encode("utf-8")
         return
