@@ -1,0 +1,145 @@
+"""DB accessors for the latest-only credential capability reports.
+
+One row per (credential, connector-scope): ``connector_id`` NULL is the
+config-less credential-time report, non-NULL is one per attached connector.
+Writers upsert against the scope's partial unique index, so concurrent
+writers resolve to one row instead of racing an insert.
+"""
+
+from typing import Any
+
+from sqlalchemy import func, select, text
+from sqlalchemy.dialects.postgresql import insert
+from sqlalchemy.orm import Session
+
+from onyx.configs.constants import DocumentSource
+from onyx.connectors.capability_checks.models import CredentialCapabilityReport
+from onyx.db.enums import CapabilityCheckTrigger, CapabilityReportRunStatus
+from onyx.db.models import CredentialCapabilityReportRow
+
+
+def _scope_conflict_kwargs(connector_id: int | None) -> dict[str, Any]:
+    """ON CONFLICT inference for the row's scope-specific partial index."""
+    if connector_id is None:
+        return {
+            "index_elements": [CredentialCapabilityReportRow.credential_id],
+            "index_where": text("connector_id IS NULL"),
+        }
+    return {
+        "index_elements": [
+            CredentialCapabilityReportRow.credential_id,
+            CredentialCapabilityReportRow.connector_id,
+        ],
+        "index_where": text("connector_id IS NOT NULL"),
+    }
+
+
+def _upsert_row(
+    db_session: Session,
+    *,
+    credential_id: int,
+    connector_id: int | None,
+    values: dict[str, Any],
+) -> CredentialCapabilityReportRow:
+    """Inserts or updates the scope's single row with ``values``.
+
+    Columns absent from ``values`` keep their stored value on the update
+    path, which is how RUNNING marks preserve the previous report and
+    completion writes preserve ``run_started_at``.
+    """
+    stmt = (
+        insert(CredentialCapabilityReportRow)
+        .values(credential_id=credential_id, connector_id=connector_id, **values)
+        .on_conflict_do_update(
+            **_scope_conflict_kwargs(connector_id),
+            # The model's ``onupdate`` is not applied to ON CONFLICT SET
+            # clauses, so bump ``time_updated`` explicitly.
+            set_={**values, "time_updated": func.now()},
+        )
+        .returning(CredentialCapabilityReportRow)
+    )
+    # ``populate_existing``: without it, RETURNING resolves to the stale
+    # identity-map instance when the caller's session already holds this row.
+    row = db_session.scalars(stmt, execution_options={"populate_existing": True}).one()
+    db_session.commit()
+    return row
+
+
+def upsert_completed_capability_report(
+    db_session: Session,
+    *,
+    credential_id: int,
+    connector_id: int | None,
+    source: DocumentSource,
+    trigger: CapabilityCheckTrigger,
+    report: CredentialCapabilityReport,
+    connector_config_hash: str | None = None,
+) -> CredentialCapabilityReportRow:
+    """Writes a finished report onto the scope's row (latest-only replace)."""
+    return _upsert_row(
+        db_session,
+        credential_id=credential_id,
+        connector_id=connector_id,
+        values={
+            "source": source,
+            "trigger": trigger,
+            "report": report.model_dump(mode="json"),
+            "connector_config_hash": connector_config_hash,
+            "run_status": CapabilityReportRunStatus.COMPLETED,
+        },
+    )
+
+
+def mark_capability_report_running(
+    db_session: Session,
+    *,
+    credential_id: int,
+    connector_id: int | None,
+    source: DocumentSource,
+    trigger: CapabilityCheckTrigger,
+) -> CredentialCapabilityReportRow:
+    """Flags the scope's row RUNNING with a fresh start time.
+
+    The previous COMPLETED ``report`` stays readable while the run is in
+    flight.
+    """
+    return _upsert_row(
+        db_session,
+        credential_id=credential_id,
+        connector_id=connector_id,
+        values={
+            "source": source,
+            "trigger": trigger,
+            "run_status": CapabilityReportRunStatus.RUNNING,
+            "run_started_at": func.now(),
+        },
+    )
+
+
+def get_capability_report_row(
+    db_session: Session,
+    credential_id: int,
+    connector_id: int | None,
+) -> CredentialCapabilityReportRow | None:
+    """Returns the scope's row; it is the latest report by construction."""
+    stmt = select(CredentialCapabilityReportRow).where(
+        CredentialCapabilityReportRow.credential_id == credential_id
+    )
+    if connector_id is None:
+        stmt = stmt.where(CredentialCapabilityReportRow.connector_id.is_(None))
+    else:
+        stmt = stmt.where(CredentialCapabilityReportRow.connector_id == connector_id)
+    return db_session.scalars(stmt).one_or_none()
+
+
+def get_capability_report_rows_for_source(
+    db_session: Session,
+    source: DocumentSource,
+) -> list[CredentialCapabilityReportRow]:
+    """Returns every report row for a source, most recently updated first."""
+    stmt = (
+        select(CredentialCapabilityReportRow)
+        .where(CredentialCapabilityReportRow.source == source)
+        .order_by(CredentialCapabilityReportRow.time_updated.desc())
+    )
+    return list(db_session.scalars(stmt).all())
