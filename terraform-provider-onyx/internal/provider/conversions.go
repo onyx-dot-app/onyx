@@ -39,6 +39,24 @@ func normalizedFromJSONObject(object map[string]any, attribute string, diags *di
 	return jsontypes.NewNormalizedValue(string(encoded)), true
 }
 
+// int64Pointer converts an optional number into a request field. Unknown must
+// map to nil: ValueInt64Pointer reports it as a pointer to zero, which the API
+// would store as a real zero instead of applying its own default.
+func int64Pointer(value types.Int64) *int64 {
+	if value.IsNull() || value.IsUnknown() {
+		return nil
+	}
+	return value.ValueInt64Pointer()
+}
+
+// stringPointer is int64Pointer for optional strings.
+func stringPointer(value types.String) *string {
+	if value.IsNull() || value.IsUnknown() {
+		return nil
+	}
+	return value.ValueStringPointer()
+}
+
 // int64ListValues converts an optional list attribute into a slice. The list
 // is never nil: the API rejects a null where it expects an array.
 func int64ListValues(ctx context.Context, list types.List, diags *diag.Diagnostics) ([]int64, bool) {

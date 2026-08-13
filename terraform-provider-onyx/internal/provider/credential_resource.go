@@ -136,7 +136,7 @@ func (r *credentialResource) upsertFromModel(ctx context.Context, model credenti
 		CredentialJSON: payload,
 		AdminPublic:    model.AdminPublic.ValueBool(),
 		Source:         model.Source.ValueString(),
-		Name:           model.Name.ValueStringPointer(),
+		Name:           stringPointer(model.Name),
 		CuratorPublic:  model.CuratorPublic.ValueBool(),
 		Groups:         groups,
 	}, true

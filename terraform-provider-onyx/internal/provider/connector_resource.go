@@ -10,7 +10,6 @@ import (
 	"github.com/hashicorp/terraform-plugin-framework/path"
 	"github.com/hashicorp/terraform-plugin-framework/resource"
 	"github.com/hashicorp/terraform-plugin-framework/resource/schema"
-	"github.com/hashicorp/terraform-plugin-framework/resource/schema/int64planmodifier"
 	"github.com/hashicorp/terraform-plugin-framework/resource/schema/planmodifier"
 	"github.com/hashicorp/terraform-plugin-framework/resource/schema/stringdefault"
 	"github.com/hashicorp/terraform-plugin-framework/resource/schema/stringplanmodifier"
@@ -102,7 +101,7 @@ func (r *connectorResource) Schema(_ context.Context, _ resource.SchemaRequest, 
 				MarkdownDescription: "Seconds between pruning runs. Onyx rewrites an unset value to its " +
 					"default of 604800 (7 days) on the first update, and Terraform then keeps that value.",
 				PlanModifiers: []planmodifier.Int64{
-					int64planmodifier.UseStateForUnknown(),
+					ServerDefaultedInt64(),
 				},
 			},
 			"indexing_start": schema.StringAttribute{
@@ -156,9 +155,9 @@ func (r *connectorResource) upsertFromModel(ctx context.Context, model connector
 		Source:                  model.Source.ValueString(),
 		InputType:               model.InputType.ValueString(),
 		ConnectorSpecificConfig: config,
-		RefreshFreq:             model.RefreshFreq.ValueInt64Pointer(),
-		PruneFreq:               model.PruneFreq.ValueInt64Pointer(),
-		IndexingStart:           model.IndexingStart.ValueStringPointer(),
+		RefreshFreq:             int64Pointer(model.RefreshFreq),
+		PruneFreq:               int64Pointer(model.PruneFreq),
+		IndexingStart:           stringPointer(model.IndexingStart),
 		AccessType:              model.AccessType.ValueString(),
 		Groups:                  groups,
 	}, true

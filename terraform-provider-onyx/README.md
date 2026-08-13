@@ -127,6 +127,20 @@ TF_ACC=1 ONYX_TF_ACC_SERVER_URL=http://localhost:8080 go test ./internal/provide
 Without `TF_ACC` these tests skip, so plain `go test ./...` (and the repo's Go CI) stays
 green with no Onyx running.
 
+To test against an API server that does not touch your dev database, give it a database of
+its own. This reuses the running Postgres, Redis, OpenSearch and MinIO containers:
+
+```bash
+docker exec onyx-stack-relational_db-1 psql -U postgres -c "CREATE DATABASE onyx_tf_acc;"
+cd backend && POSTGRES_DB=onyx_tf_acc uv run alembic upgrade head
+POSTGRES_DB=onyx_tf_acc AUTH_TYPE=basic LICENSE_ENFORCEMENT_ENABLED=false \
+  USER_AUTH_SECRET="$(openssl rand -hex 32)" \
+  uv run uvicorn onyx.main:app --port 8081
+```
+
+`AUTH_TYPE=basic` gives the harness a login to bootstrap its key with, and license
+enforcement must be off or API key creation answers 402.
+
 ### Docs
 
 `docs/` is generated — edit schema `MarkdownDescription`s and `examples/`, then:

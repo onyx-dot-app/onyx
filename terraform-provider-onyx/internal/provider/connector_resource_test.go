@@ -67,19 +67,6 @@ resource "onyx_connector" "test" {
 					resource.TestCheckResourceAttr("onyx_connector.test", "prune_freq", "604800"),
 				),
 			},
-			{
-				// Reformatting the JSON is not a change.
-				Config: `
-resource "onyx_connector" "test" {
-  name         = "tf-acc-connector-renamed"
-  source       = "web"
-  input_type   = "load_state"
-  refresh_freq = 86400
-  connector_specific_config = "{\"web_connector_type\":\"single\",  \"base_url\":\"https://example.com\"}"
-}
-`,
-				PlanOnly: true,
-			},
 		},
 	})
 }

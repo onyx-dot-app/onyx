@@ -65,7 +65,8 @@ resource "onyx_credential" "test" {
 }
 
 // testAccCheckCredentialTokenStored asserts the rotated secret reached the
-// server. The read-back is masked, so this compares the unmasked prefix.
+// server. The read-back is masked as first4...last4, so this compares the
+// visible ends.
 func testAccCheckCredentialTokenStored(t *testing.T, wantToken string) resource.TestCheckFunc {
 	return func(s *terraform.State) error {
 		rs, ok := s.RootModule().Resources["onyx_credential.test"]
@@ -81,8 +82,9 @@ func testAccCheckCredentialTokenStored(t *testing.T, wantToken string) resource.
 			return err
 		}
 		stored, _ := remote.CredentialJSON["confluence_access_token"].(string)
-		if len(stored) < 6 || stored[:6] != wantToken[:6] {
-			return fmt.Errorf("stored token %q does not match the configured value %q", stored, wantToken)
+		want := fmt.Sprintf("%s...%s", wantToken[:4], wantToken[len(wantToken)-4:])
+		if stored != want {
+			return fmt.Errorf("stored token reads %q, want %q — the configured value did not land", stored, want)
 		}
 		return nil
 	}
