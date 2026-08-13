@@ -367,6 +367,118 @@ function PATModal({
   );
 }
 
+interface UsePATCreationOptions {
+  defaultName?: string;
+  defaultAccessMode?: AccessMode;
+  defaultScopes?: string[];
+  onCreateSuccess?: () => Promise<unknown> | void;
+}
+
+function usePATCreation({
+  defaultName = "",
+  defaultAccessMode = "full",
+  defaultScopes = [],
+  onCreateSuccess,
+}: UsePATCreationOptions = {}) {
+  const [showCreateModal, setShowCreateModal] = useState(false);
+  const [isCreating, setIsCreating] = useState(false);
+  const [newTokenName, setNewTokenName] = useState(defaultName);
+  const [expirationDays, setExpirationDays] = useState<string>("30");
+  const [accessMode, setAccessMode] = useState<AccessMode>(defaultAccessMode);
+  const [selectedScopes, setSelectedScopes] = useState<string[]>(defaultScopes);
+  const [newlyCreatedToken, setNewlyCreatedToken] =
+    useState<CreatedTokenState | null>(null);
+
+  const toggleScope = useCallback((scope: string) => {
+    setSelectedScopes((previous) =>
+      previous.includes(scope)
+        ? previous.filter((selected) => selected !== scope)
+        : [...previous, scope]
+    );
+  }, []);
+
+  const reset = useCallback(() => {
+    setNewTokenName(defaultName);
+    setExpirationDays("30");
+    setAccessMode(defaultAccessMode);
+    setSelectedScopes(defaultScopes);
+    setNewlyCreatedToken(null);
+  }, [defaultAccessMode, defaultName, defaultScopes]);
+
+  const openTokenModal = useCallback(() => {
+    reset();
+    setShowCreateModal(true);
+  }, [reset]);
+
+  const closeTokenModal = useCallback(() => {
+    setShowCreateModal(false);
+    reset();
+  }, [reset]);
+
+  const createPAT = useCallback(async () => {
+    if (!newTokenName.trim()) {
+      toast.error("Token name is required");
+      return;
+    }
+
+    setIsCreating(true);
+    try {
+      const response = await fetch("/api/user/pats", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          name: newTokenName,
+          expiration_days:
+            expirationDays === "null" ? null : parseInt(expirationDays),
+          scopes: accessMode === "limited" ? selectedScopes : null,
+        }),
+      });
+
+      if (response.ok) {
+        const data = await response.json();
+        setNewlyCreatedToken({
+          id: data.id,
+          token: data.token,
+          name: newTokenName,
+        });
+        toast.success("Token created successfully");
+        await onCreateSuccess?.();
+      } else {
+        const errorData = await response.json();
+        toast.error(errorData.detail || "Failed to create token");
+      }
+    } catch (error) {
+      console.error("Failed to create access token", error);
+      toast.error("Network error creating token");
+    } finally {
+      setIsCreating(false);
+    }
+  }, [
+    accessMode,
+    expirationDays,
+    newTokenName,
+    onCreateSuccess,
+    selectedScopes,
+  ]);
+
+  return {
+    showCreateModal,
+    isCreating,
+    newTokenName,
+    setNewTokenName,
+    expirationDays,
+    setExpirationDays,
+    accessMode,
+    setAccessMode,
+    selectedScopes,
+    toggleScope,
+    newlyCreatedToken,
+    openTokenModal,
+    closeTokenModal,
+    createPAT,
+  };
+}
+
 function GeneralSettings() {
   const {
     user,
@@ -1514,16 +1626,11 @@ function GatewayAccessSection({
 
 function LLMGatewaySettings() {
   const canCreateTokens = useCloudSubscription();
-  const [showCreateModal, setShowCreateModal] = useState(false);
-  const [isCreating, setIsCreating] = useState(false);
-  const [newTokenName, setNewTokenName] = useState("LLM Gateway");
-  const [expirationDays, setExpirationDays] = useState<string>("30");
-  const [accessMode, setAccessMode] = useState<AccessMode>("limited");
-  const [selectedScopes, setSelectedScopes] = useState<string[]>([
-    "use:llm_gateway",
-  ]);
-  const [newlyCreatedToken, setNewlyCreatedToken] =
-    useState<CreatedTokenState | null>(null);
+  const tokenCreation = usePATCreation({
+    defaultName: "LLM Gateway",
+    defaultAccessMode: "limited",
+    defaultScopes: ["use:llm_gateway"],
+  });
   const currentTier = useSettings().tier;
   const { data: allScopeOptions = [], error: scopeOptionsError } = useSWR<
     PatScopeOption[]
@@ -1541,85 +1648,30 @@ function LLMGatewaySettings() {
     canCreateTokens &&
     scopeOptions.some((option) => option.scope === "use:llm_gateway");
 
-  const toggleScope = useCallback((scope: string) => {
-    setSelectedScopes((previous) =>
-      previous.includes(scope)
-        ? previous.filter((selected) => selected !== scope)
-        : [...previous, scope]
-    );
-  }, []);
-
-  const closeTokenModal = useCallback(() => {
-    setShowCreateModal(false);
-    setNewTokenName("LLM Gateway");
-    setExpirationDays("30");
-    setAccessMode("limited");
-    setSelectedScopes(["use:llm_gateway"]);
-    setNewlyCreatedToken(null);
-  }, []);
-
-  const createPAT = useCallback(async () => {
-    if (!newTokenName.trim()) {
-      toast.error("Token name is required");
-      return;
-    }
-
-    setIsCreating(true);
-    try {
-      const response = await fetch("/api/user/pats", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          name: newTokenName,
-          expiration_days:
-            expirationDays === "null" ? null : parseInt(expirationDays),
-          scopes: accessMode === "limited" ? selectedScopes : null,
-        }),
-      });
-
-      if (response.ok) {
-        const data = await response.json();
-        setNewlyCreatedToken({
-          id: data.id,
-          token: data.token,
-          name: newTokenName,
-        });
-        toast.success("Token created successfully");
-      } else {
-        const errorData = await response.json();
-        toast.error(errorData.detail || "Failed to create token");
-      }
-    } catch {
-      toast.error("Network error creating token");
-    } finally {
-      setIsCreating(false);
-    }
-  }, [accessMode, expirationDays, newTokenName, selectedScopes]);
-
   return (
     <>
-      {showCreateModal && (
+      {tokenCreation.showCreateModal && (
         <PATModal
-          isCreating={isCreating}
-          newTokenName={newTokenName}
-          setNewTokenName={setNewTokenName}
-          expirationDays={expirationDays}
-          setExpirationDays={setExpirationDays}
-          accessMode={accessMode}
-          setAccessMode={setAccessMode}
+          isCreating={tokenCreation.isCreating}
+          newTokenName={tokenCreation.newTokenName}
+          setNewTokenName={tokenCreation.setNewTokenName}
+          expirationDays={tokenCreation.expirationDays}
+          setExpirationDays={tokenCreation.setExpirationDays}
+          accessMode={tokenCreation.accessMode}
+          setAccessMode={tokenCreation.setAccessMode}
           scopeOptions={scopeOptions}
           scopesError={Boolean(scopeOptionsError)}
-          selectedScopes={selectedScopes}
-          toggleScope={toggleScope}
-          onClose={closeTokenModal}
-          onCreate={createPAT}
-          createdToken={newlyCreatedToken}
+          selectedScopes={tokenCreation.selectedScopes}
+          toggleScope={tokenCreation.toggleScope}
+          onClose={tokenCreation.closeTokenModal}
+          onCreate={tokenCreation.createPAT}
+          createdToken={tokenCreation.newlyCreatedToken}
         />
       )}
 
       <GatewayAccessSection
         canCreateToken={canCreateGatewayToken}
-        onCreateToken={() => setShowCreateModal(true)}
+        onCreateToken={tokenCreation.openTokenModal}
       />
     </>
   );
@@ -1646,15 +1698,6 @@ function AccountsAccessSettings() {
       .required("Please confirm your new password"),
   });
 
-  // PAT state
-  const [showCreateModal, setShowCreateModal] = useState(false);
-  const [isCreating, setIsCreating] = useState(false);
-  const [newTokenName, setNewTokenName] = useState("");
-  const [expirationDays, setExpirationDays] = useState<string>("30");
-  const [accessMode, setAccessMode] = useState<AccessMode>("full");
-  const [selectedScopes, setSelectedScopes] = useState<string[]>([]);
-  const [newlyCreatedToken, setNewlyCreatedToken] =
-    useState<CreatedTokenState | null>(null);
   const [tokenToDelete, setTokenToDelete] = useState<PAT | null>(null);
 
   const canCreateTokens = useCloudSubscription();
@@ -1694,6 +1737,7 @@ function AccountsAccessSettings() {
       ),
     [allScopeOptions, currentTier]
   );
+  const tokenCreation = usePATCreation({ onCreateSuccess: mutate });
 
   const scopeLabels = useMemo(
     () =>
@@ -1705,12 +1749,6 @@ function AccountsAccessSettings() {
       ),
     [scopeOptions]
   );
-
-  const toggleScope = useCallback((scope: string) => {
-    setSelectedScopes((prev) =>
-      prev.includes(scope) ? prev.filter((s) => s !== scope) : [...prev, scope]
-    );
-  }, []);
 
   // Use filter hook for searching tokens
   const {
@@ -1732,47 +1770,6 @@ function AccountsAccessSettings() {
     }
   }, [scopeOptionsError]);
 
-  const createPAT = useCallback(async () => {
-    if (!newTokenName.trim()) {
-      toast.error("Token name is required");
-      return;
-    }
-
-    setIsCreating(true);
-    try {
-      const response = await fetch("/api/user/pats", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          name: newTokenName,
-          expiration_days:
-            expirationDays === "null" ? null : parseInt(expirationDays),
-          scopes: accessMode === "limited" ? selectedScopes : null,
-        }),
-      });
-
-      if (response.ok) {
-        const data = await response.json();
-        // Store the newly created token - modal will switch to display view
-        setNewlyCreatedToken({
-          id: data.id,
-          token: data.token,
-          name: newTokenName,
-        });
-        toast.success("Token created successfully");
-        // Revalidate the token list
-        await mutate();
-      } else {
-        const errorData = await response.json();
-        toast.error(errorData.detail || "Failed to create token");
-      }
-    } catch (error) {
-      toast.error("Network error creating token");
-    } finally {
-      setIsCreating(false);
-    }
-  }, [newTokenName, expirationDays, accessMode, selectedScopes, mutate]);
-
   const deletePAT = useCallback(
     async (patId: number) => {
       try {
@@ -1782,8 +1779,8 @@ function AccountsAccessSettings() {
 
         if (response.ok) {
           // Clear the newly created token if it's the one being deleted
-          if (newlyCreatedToken?.id === patId) {
-            setNewlyCreatedToken(null);
+          if (tokenCreation.newlyCreatedToken?.id === patId) {
+            tokenCreation.closeTokenModal();
           }
           await mutate();
           toast.success("Token deleted successfully");
@@ -1795,7 +1792,7 @@ function AccountsAccessSettings() {
         toast.error("Network error deleting token");
       }
     },
-    [newlyCreatedToken, mutate]
+    [mutate, tokenCreation]
   );
 
   const handleChangePassword = useCallback(
@@ -1832,29 +1829,22 @@ function AccountsAccessSettings() {
 
   return (
     <>
-      {showCreateModal && (
+      {tokenCreation.showCreateModal && (
         <PATModal
-          isCreating={isCreating}
-          newTokenName={newTokenName}
-          setNewTokenName={setNewTokenName}
-          expirationDays={expirationDays}
-          setExpirationDays={setExpirationDays}
-          accessMode={accessMode}
-          setAccessMode={setAccessMode}
+          isCreating={tokenCreation.isCreating}
+          newTokenName={tokenCreation.newTokenName}
+          setNewTokenName={tokenCreation.setNewTokenName}
+          expirationDays={tokenCreation.expirationDays}
+          setExpirationDays={tokenCreation.setExpirationDays}
+          accessMode={tokenCreation.accessMode}
+          setAccessMode={tokenCreation.setAccessMode}
           scopeOptions={scopeOptions}
           scopesError={Boolean(scopeOptionsError)}
-          selectedScopes={selectedScopes}
-          toggleScope={toggleScope}
-          onClose={() => {
-            setShowCreateModal(false);
-            setNewTokenName("");
-            setExpirationDays("30");
-            setAccessMode("full");
-            setSelectedScopes([]);
-            setNewlyCreatedToken(null);
-          }}
-          onCreate={createPAT}
-          createdToken={newlyCreatedToken}
+          selectedScopes={tokenCreation.selectedScopes}
+          toggleScope={tokenCreation.toggleScope}
+          onClose={tokenCreation.closeTokenModal}
+          onCreate={tokenCreation.createPAT}
+          createdToken={tokenCreation.newlyCreatedToken}
         />
       )}
 
@@ -2056,8 +2046,10 @@ function AccountsAccessSettings() {
                         <Button
                           rightIcon={SvgPlusCircle}
                           prominence="internal"
-                          interaction={showCreateModal ? "active" : "rest"}
-                          onClick={() => setShowCreateModal(true)}
+                          interaction={
+                            tokenCreation.showCreateModal ? "active" : "rest"
+                          }
+                          onClick={tokenCreation.openTokenModal}
                         >
                           New Access Token
                         </Button>

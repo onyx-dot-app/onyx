@@ -12,6 +12,7 @@ import { Section } from "@/layouts/general-layouts";
 import { useTierAtLeast } from "@/hooks/useTierAtLeast";
 import { Tier } from "@/lib/settings/types";
 import { useLLMProviders } from "@/lib/languageModels/hooks";
+import { hasVisibleLLMModel } from "@/lib/languageModels/utils";
 
 interface LayoutProps {
   children: React.ReactNode;
@@ -33,12 +34,7 @@ export default function Layout({ children }: LayoutProps) {
   const showPasswordSection = Boolean(user?.password_configured);
   const showTokensSection = isMultiTenant !== null;
   const showAccountsAccessTab = showPasswordSection || showTokensSection;
-  const showGatewayTab =
-    enterpriseTier &&
-    (llmProviders?.some((provider) =>
-      provider.model_configurations.some((model) => model.is_visible)
-    ) ??
-      false);
+  const showGatewayTab = enterpriseTier && hasVisibleLLMModel(llmProviders);
 
   const tabs: SettingsTab[] = [
     { href: "/app/settings/general", label: "General" },
