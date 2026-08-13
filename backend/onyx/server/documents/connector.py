@@ -1552,6 +1552,8 @@ def update_connector_from_model(
     except ValueError as e:
         raise HTTPException(status_code=400, detail=str(e))
 
+    # TODO(andrei, evan): Validate the updated config here like the creation
+    # flows do (``validate_ccpair_for_user`` / ``validate_connector_settings``).
     updated_connector = update_connector(connector_id, connector_base, db_session)
     if updated_connector is None:
         raise HTTPException(

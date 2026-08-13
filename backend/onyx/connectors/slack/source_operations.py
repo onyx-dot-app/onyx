@@ -68,8 +68,6 @@ _MAX_RETRIES = 7  # Arbitrarily selected.
 # Timeout for the uncoordinated client behind ``fast=True`` operations.
 _FAST_TIMEOUT = 1
 
-_TEMPORARILY_UNTESTED = "Not yet tested: checks land in the Slack capability checks PR."
-
 
 class SlackChannelVariant(str, Enum):
     """Permission class of a channel-scoped operation call.
@@ -440,6 +438,10 @@ class SlackAuthTestResponse(SlackResponseModel):
     error: str | None = None
     url: str | None = None
     enterprise_id: str | None = None
+    # Parsed from the ``X-OAuth-Scopes`` response header, not the payload; None
+    # when the header is absent. Lets checks verify scopes whose functional
+    # probe would have side effects (``channels:join``).
+    granted_scopes: list[str] | None = None
 
 
 class SlackOkResponse(SlackResponseModel):
@@ -493,6 +495,20 @@ def _paginate(
 def _validated(response: SlackResponse, model: type[_ResponseT]) -> _ResponseT:
     """Validates the payload; operations never return live SDK objects."""
     return model.model_validate(response.data)
+
+
+def _parse_granted_scopes(headers: dict[str, Any] | None) -> list[str] | None:
+    """Parses the ``X-OAuth-Scopes`` response header; None when absent.
+
+    urllib may surface a header value as a list; tolerate both shapes, like the
+    retry handler does for ``retry-after``.
+    """
+    for key, value in (headers or {}).items():
+        if str(key).lower() != "x-oauth-scopes":
+            continue
+        raw = value[0] if isinstance(value, list) else value
+        return [scope.strip() for scope in str(raw).split(",") if scope.strip()]
+    return None
 
 
 class SlackSourceOperationsConfig(BaseModel):
@@ -586,11 +602,16 @@ class SlackSourceOperations(SourceOperations):
             CredentialCapability.DOC_PERMISSION_SYNC,
         },
         consumes=OperationConsumes.CREDENTIAL,
-        untested=_TEMPORARILY_UNTESTED,
     )
     def check_auth(self, *, fast: bool = False) -> SlackAuthTestResponse:
-        """``auth.test``: token validity, workspace url, Grid enterprise id."""
-        return _validated(self._client_for(fast).auth_test(), SlackAuthTestResponse)
+        """
+        ``auth.test``: token validity, workspace url, Grid enterprise id, and
+        the granted bot scopes (from the ``X-OAuth-Scopes`` response header).
+        """
+        response = self._client_for(fast).auth_test()
+        result = _validated(response, SlackAuthTestResponse)
+        result.granted_scopes = _parse_granted_scopes(response.headers)
+        return result
 
     @source_operation(
         capabilities={
@@ -599,7 +620,6 @@ class SlackSourceOperations(SourceOperations):
         },
         consumes=OperationConsumes.CREDENTIAL,
         variants=(SlackChannelVariant.PUBLIC, SlackChannelVariant.PRIVATE),
-        untested=_TEMPORARILY_UNTESTED,
     )
     def list_channels(
         self,
@@ -636,7 +656,6 @@ class SlackSourceOperations(SourceOperations):
             CredentialCapability.DOC_PERMISSION_SYNC,
         },
         consumes=OperationConsumes.CREDENTIAL,
-        untested=_TEMPORARILY_UNTESTED,
     )
     def list_teams(
         self, *, limit: int | None = None, fast: bool = False
@@ -678,7 +697,6 @@ class SlackSourceOperations(SourceOperations):
         capabilities={CredentialCapability.INDEXING},
         consumes=OperationConsumes.CREDENTIAL,
         variants=(SlackChannelVariant.PUBLIC, SlackChannelVariant.PRIVATE),
-        untested=_TEMPORARILY_UNTESTED,
     )
     def fetch_channel_history(
         self,
@@ -708,7 +726,6 @@ class SlackSourceOperations(SourceOperations):
         capabilities={CredentialCapability.INDEXING},
         consumes=OperationConsumes.CREDENTIAL,
         variants=(SlackChannelVariant.PUBLIC, SlackChannelVariant.PRIVATE),
-        untested=_TEMPORARILY_UNTESTED,
     )
     def fetch_thread_replies(
         self, *, variant: SlackChannelVariant, channel_id: str, thread_ts: str
@@ -725,7 +742,6 @@ class SlackSourceOperations(SourceOperations):
     @source_operation(
         capabilities={CredentialCapability.INDEXING},
         consumes=OperationConsumes.CREDENTIAL,
-        untested=_TEMPORARILY_UNTESTED,
     )
     def fetch_channel_info(self, *, channel_id: str) -> SlackChannelInfoResponse:
         """
@@ -738,13 +754,15 @@ class SlackSourceOperations(SourceOperations):
         )
 
     @source_operation(
+        # No EXTERNAL_GROUP_SYNC tag: the one group-sync caller
+        # (``group_sync.py``) is dormant, since Slack registers no group sync
+        # in ``sync_params.py``. Tagging it would make the coverage test
+        # demand a group-sync check for a path that never runs.
         capabilities={
             CredentialCapability.INDEXING,
             CredentialCapability.DOC_PERMISSION_SYNC,
-            CredentialCapability.EXTERNAL_GROUP_SYNC,
         },
         consumes=OperationConsumes.CREDENTIAL,
-        untested=_TEMPORARILY_UNTESTED,
     )
     def fetch_user_info(self, user_id: str) -> SlackUserInfoResponse:
         """
@@ -762,7 +780,6 @@ class SlackSourceOperations(SourceOperations):
             CredentialCapability.DOC_PERMISSION_SYNC,
         },
         consumes=OperationConsumes.CREDENTIAL,
-        untested=_TEMPORARILY_UNTESTED,
     )
     def list_users(
         self,
@@ -784,7 +801,6 @@ class SlackSourceOperations(SourceOperations):
     @source_operation(
         capabilities={CredentialCapability.DOC_PERMISSION_SYNC},
         consumes=OperationConsumes.CREDENTIAL,
-        untested=_TEMPORARILY_UNTESTED,
     )
     def list_channel_members(
         self, *, channel_id: str

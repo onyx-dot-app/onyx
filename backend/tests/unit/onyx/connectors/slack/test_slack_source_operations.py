@@ -70,9 +70,15 @@ def test_operation_inventory_is_pinned() -> None:
     assert set(specs) == _EXPECTED_OPERATIONS
     # Every operation runs on the bot token alone.
     assert all(spec.consumes == OperationConsumes.CREDENTIAL for spec in specs.values())
-    # Checks land in the Slack capability checks PR; until then everything is
-    # untested with a reviewable reason.
-    assert all(spec.untested for spec in specs.values())
+    # Only the permanent exemptions remain untested: a side-effecting probe, a
+    # gracefully-degrading one, and the dormant group-sync pair. Everything else
+    # is exercised by the checks in ``slack/capability_checks.py``.
+    assert {name for name, spec in specs.items() if spec.untested} == {
+        "join_channel",
+        "fetch_team_info",
+        "list_usergroups",
+        "list_usergroup_members",
+    }
 
 
 def test_permission_class_variants_are_pinned() -> None:
@@ -99,10 +105,11 @@ def test_capability_tags_are_pinned() -> None:
     specs = SlackSourceOperations.operation_specs()
 
     # Postcondition.
+    # No EXTERNAL_GROUP_SYNC on ``fetch_user_info``: its only group-sync caller
+    # is the dormant, unregistered ``group_sync.py`` path.
     assert specs["fetch_user_info"].capabilities == {
         CredentialCapability.INDEXING,
         CredentialCapability.DOC_PERMISSION_SYNC,
-        CredentialCapability.EXTERNAL_GROUP_SYNC,
     }
     assert specs["list_channel_members"].capabilities == {
         CredentialCapability.DOC_PERMISSION_SYNC
@@ -179,3 +186,38 @@ def test_clients_are_memoized_and_fast_client_is_separate() -> None:
     assert gateway._fast_client() is fast
     assert fast is not client
     assert fast.timeout == 1
+
+
+def test_check_auth_parses_granted_scopes_from_the_response_header() -> None:
+    """
+    Verifies scope introspection: ``granted_scopes`` comes from the
+    ``X-OAuth-Scopes`` response header (case-insensitive, list-tolerant), not
+    the payload.
+    """
+    # Precondition.
+    gateway = _gateway()
+    client = MagicMock()
+    client.auth_test.return_value = MagicMock(
+        data={"ok": True, "url": "https://onyx.slack.com"},
+        headers={"X-OAuth-Scopes": ["channels:read, channels:join"]},
+    )
+    gateway._cached_client = client
+
+    # Under test.
+    response = gateway.check_auth()
+
+    # Postcondition.
+    assert response.ok is True
+    assert response.granted_scopes == ["channels:read", "channels:join"]
+
+
+def test_check_auth_scopes_are_none_when_the_header_is_absent() -> None:
+    """Verifies the absent-header case stays distinguishable from no scopes."""
+    # Precondition.
+    gateway = _gateway()
+    client = MagicMock()
+    client.auth_test.return_value = MagicMock(data={"ok": True}, headers={})
+    gateway._cached_client = client
+
+    # Under test and postcondition.
+    assert gateway.check_auth().granted_scopes is None

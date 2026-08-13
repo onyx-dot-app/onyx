@@ -1399,6 +1399,11 @@ class SlackConnector(
         Channel existence (for non-regex includes) is validated during indexing
         via filter_channels, not here.
         """
+        # Config-shape validation, load-bearing at creation time: unlike the
+        # credential probes below (mirrored as named capability checks in
+        # ``slack/capability_checks.py``), regex compilation is
+        # credential-invariant and has NO capability-check counterpart. This is
+        # the only thing that blocks a malformed regex from being created.
         if self.channel_regex_enabled:
             _validate_channel_regexes(self.channels, "channel")
         if self.exclude_channel_regex_enabled:
