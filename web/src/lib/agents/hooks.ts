@@ -348,16 +348,16 @@ export function useAgentPreferences() {
 export function useLabels() {
   const { mutate } = useSWRConfig();
   const { data: labels, error } = useSWR<AgentLabel[]>(
-    SWR_KEYS.personaLabels,
+    SWR_KEYS.agentLabels,
     errorHandlingFetcher
   );
 
   const refreshLabels = async () => {
-    return mutate(SWR_KEYS.personaLabels);
+    return mutate(SWR_KEYS.agentLabels);
   };
 
   const createLabel = async (name: string): Promise<AgentLabel | null> => {
-    const response = await fetch(SWR_KEYS.personaLabels, {
+    const response = await fetch(SWR_KEYS.agentLabels, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ name }),
@@ -369,7 +369,7 @@ export function useLabels() {
 
     const newLabel: AgentLabel = await response.json();
     mutate(
-      SWR_KEYS.personaLabels,
+      SWR_KEYS.agentLabels,
       (currentLabels: AgentLabel[] | undefined) => [
         ...(currentLabels || []),
         newLabel,
@@ -380,7 +380,7 @@ export function useLabels() {
   };
 
   const updateLabel = async (id: number, name: string) => {
-    const response = await fetch(`/api/admin/persona/label/${id}`, {
+    const response = await fetch(SWR_KEYS.adminAgentLabel(id), {
       method: "PATCH",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ label_name: name }),
@@ -388,7 +388,7 @@ export function useLabels() {
 
     if (response.ok) {
       mutate(
-        SWR_KEYS.personaLabels,
+        SWR_KEYS.agentLabels,
         labels?.map((label) => (label.id === id ? { ...label, name } : label)),
         false
       );
@@ -398,14 +398,14 @@ export function useLabels() {
   };
 
   const deleteLabel = async (id: number) => {
-    const response = await fetch(`/api/admin/persona/label/${id}`, {
+    const response = await fetch(SWR_KEYS.adminAgentLabel(id), {
       method: "DELETE",
       headers: { "Content-Type": "application/json" },
     });
 
     if (response.ok) {
       mutate(
-        SWR_KEYS.personaLabels,
+        SWR_KEYS.agentLabels,
         labels?.filter((label) => label.id !== id),
         false
       );

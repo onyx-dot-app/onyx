@@ -35,7 +35,8 @@ export const SWR_KEYS = {
   persona: (id: number) => `/api/persona/${id}`,
   agentPreferences: "/api/user/assistant/preferences",
   defaultAssistantConfig: "/api/admin/default-assistant/configuration",
-  personaLabels: "/api/persona/labels",
+  agentLabels: "/api/persona/labels",
+  adminAgentLabel: (labelId: number) => `/api/admin/persona/label/${labelId}`,
   adminAgents: "/api/admin/agents",
   adminPersona: "/api/admin/persona",
 
