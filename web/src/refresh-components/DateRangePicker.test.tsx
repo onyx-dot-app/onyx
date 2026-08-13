@@ -19,7 +19,7 @@ describe("DateRangePicker", () => {
     render(
       <DateRangePicker
         value={{
-          from: new Date(2026, 6, 5),
+          from: new Date(2026, 7, 1),
           to: new Date(2026, 7, 4),
         }}
         onValueChange={onValueChange}
@@ -68,6 +68,72 @@ describe("DateRangePicker", () => {
 
     expect(onValueChange).toHaveBeenCalledWith({
       from: new Date(2026, 7, 4),
+      to: new Date(2026, 7, 4, 23, 59, 59, 999),
+    });
+  });
+
+  it("emits exactly 30 calendar days for 1M", async () => {
+    const user = userEvent.setup({ advanceTimers: jest.advanceTimersByTime });
+    const onValueChange = jest.fn();
+
+    render(
+      <DateRangePicker
+        value={{
+          from: new Date(2026, 6, 6),
+          to: new Date(2026, 7, 4),
+        }}
+        onValueChange={onValueChange}
+      />
+    );
+
+    await user.click(screen.getByRole("button", { name: "1M" }));
+
+    expect(onValueChange).toHaveBeenCalledWith({
+      from: new Date(2026, 6, 6),
+      to: new Date(2026, 7, 4, 23, 59, 59, 999),
+    });
+  });
+
+  it("emits exactly 7 calendar days for 7D", async () => {
+    const user = userEvent.setup({ advanceTimers: jest.advanceTimersByTime });
+    const onValueChange = jest.fn();
+
+    render(
+      <DateRangePicker
+        value={{
+          from: new Date(2026, 6, 6),
+          to: new Date(2026, 7, 4),
+        }}
+        onValueChange={onValueChange}
+      />
+    );
+
+    await user.click(screen.getByRole("button", { name: "7D" }));
+
+    expect(onValueChange).toHaveBeenCalledWith({
+      from: new Date(2026, 6, 29),
+      to: new Date(2026, 7, 4, 23, 59, 59, 999),
+    });
+  });
+
+  it("emits exactly 90 calendar days for 3M", async () => {
+    const user = userEvent.setup({ advanceTimers: jest.advanceTimersByTime });
+    const onValueChange = jest.fn();
+
+    render(
+      <DateRangePicker
+        value={{
+          from: new Date(2026, 6, 6),
+          to: new Date(2026, 7, 4),
+        }}
+        onValueChange={onValueChange}
+      />
+    );
+
+    await user.click(screen.getByRole("button", { name: "3M" }));
+
+    expect(onValueChange).toHaveBeenCalledWith({
+      from: new Date(2026, 4, 7),
       to: new Date(2026, 7, 4, 23, 59, 59, 999),
     });
   });

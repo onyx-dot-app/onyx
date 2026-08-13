@@ -251,6 +251,18 @@ class TestGetUsageExportHelper:
 
 
 class TestExportEndpoint:
+    def test_default_range_covers_thirty_calendar_days(
+        self, db_session: Session
+    ) -> None:
+        client = TestClient(_make_app(db_session, _ADMIN))
+
+        body = client.get("/admin/usage/export").json()
+
+        start = datetime.date.fromisoformat(body["start"])
+        end = datetime.date.fromisoformat(body["end"])
+        # Inclusive endpoints differ by 29 days when the range has 30 dates.
+        assert (end - start).days == 29
+
     def test_nested_per_user_with_totals(self, db_session: Session) -> None:
         _seed_two_users(db_session)
         client = TestClient(_make_app(db_session, _ADMIN))
@@ -289,14 +301,27 @@ class TestExportEndpoint:
         assert all(r["model"] == "model-b" for r in body["users"][0]["records"])
 
     def test_date_range_end_excludes_later_window(self, db_session: Session) -> None:
-        _seed_two_users(db_session)
+        alice, _ = _seed_two_users(db_session)
+        _seed_usage(
+            db_session,
+            alice,
+            "model-a",
+            "CHAT",
+            "openai",
+            500,
+            90,
+            0,
+            5.0,
+            datetime.datetime(2026, 6, 7, tzinfo=datetime.timezone.utc),
+        )
+        db_session.commit()
         client = TestClient(_make_app(db_session, _ADMIN))
         # end=2026-06-07 -> half-open through 06-08 00:00, so W2 (06-08) excluded.
         body = client.get(
             "/admin/usage/export", params={"start": "2026-06-01", "end": "2026-06-07"}
         ).json()
         all_days = {r["day"] for u in body["users"] for r in u["records"]}
-        assert all_days == {"2026-06-01"}
+        assert all_days == {"2026-06-01", "2026-06-07"}
         assert "bob@example.com" not in {u["email"] for u in body["users"]}
 
     def test_non_admin_rejected(self, db_session: Session) -> None:
