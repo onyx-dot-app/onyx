@@ -93,7 +93,7 @@ function LineItemButton({
   // Sizing
   rounding = "md",
   width = "full",
-  padding = 0,
+  padding = 0.5,
   tooltip,
   tooltipSide = "top",
 
