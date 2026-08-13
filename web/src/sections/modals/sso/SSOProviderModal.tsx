@@ -14,6 +14,7 @@ import type {
   SSOProviderUpdateRequest,
 } from "@/lib/sso/interfaces";
 import { useSupportedSSOProviderTypes } from "@/lib/sso/hooks";
+import { NEXT_PUBLIC_CLOUD_ENABLED } from "@/lib/constants";
 import { createSSOProvider, updateSSOProvider } from "@/lib/sso/svc";
 import {
   CONFIG_FIELDS_BY_TYPE,
@@ -100,7 +101,14 @@ const SSO_VALIDATION_SCHEMA = Yup.object({
     "provider_type",
     ([type], schema) => CONFIG_SCHEMA_BY_TYPE[type as string] ?? schema
   ),
-  allowed_email_domains: Yup.array().of(Yup.string()).optional(),
+  // Cloud rejects an empty list (every address the IdP asserts would become a
+  // billed seat), so require at least one domain there. Single-tenant leaves it
+  // optional, where empty means every address may sign in.
+  allowed_email_domains: NEXT_PUBLIC_CLOUD_ENABLED
+    ? Yup.array()
+        .of(Yup.string())
+        .min(1, "List at least one email domain that may sign in")
+    : Yup.array().of(Yup.string()).optional(),
 });
 
 // The backend masks every config string on read and restores any value sent
@@ -385,8 +393,16 @@ export function SSOProviderModal({ provider, onSaved }: SSOProviderModalProps) {
                   ))}
 
                   <InputVertical
-                    title="Allowed Email Domains (Optional)"
-                    description="Only emails in these domains may sign in through this provider. Empty allows any."
+                    title={
+                      NEXT_PUBLIC_CLOUD_ENABLED
+                        ? "Allowed Email Domains"
+                        : "Allowed Email Domains (Optional)"
+                    }
+                    description={
+                      NEXT_PUBLIC_CLOUD_ENABLED
+                        ? "Only emails in these domains may sign in through this provider."
+                        : "Only emails in these domains may sign in through this provider. Empty allows any."
+                    }
                     withLabel
                   >
                     <TagListField
