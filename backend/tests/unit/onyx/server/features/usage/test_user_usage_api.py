@@ -17,6 +17,7 @@ from sqlalchemy.ext.compiler import compiles
 from sqlalchemy.orm import Session, sessionmaker
 from sqlalchemy.pool import StaticPool
 
+import onyx.server.features.usage.api as usage_api
 from onyx.auth.users import current_user
 from onyx.db.engine.sql_engine import get_session
 from onyx.db.models import (
@@ -198,6 +199,175 @@ def test_returns_only_callers_rows_and_aggregates(
     assert body["budget_cents"] is None
     assert body["budget_remaining_cents"] is None
     assert body["selected_model_price"] is None
+
+
+def test_default_range_uses_usage_limit_window(
+    db_session: Session, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    caller = str(uuid4())
+    fixed_now = datetime.datetime(2026, 8, 4, 12, 34, tzinfo=datetime.timezone.utc)
+    seen: dict[str, datetime.datetime] = {}
+
+    class _FixedDatetime(datetime.datetime):
+        @classmethod
+        def now(cls, tz: datetime.tzinfo | None = None) -> datetime.datetime:
+            return fixed_now if tz is not None else fixed_now.replace(tzinfo=None)
+
+    def _capture_usage_bounds(
+        *_args: object,
+        since: datetime.datetime,
+        until: datetime.datetime,
+    ) -> list[object]:
+        seen["since"] = since
+        seen["until"] = until
+        return []
+
+    monkeypatch.setattr(usage_api, "datetime", _FixedDatetime)
+    monkeypatch.setattr(
+        usage_api, "get_user_usage_by_day_and_model", _capture_usage_bounds
+    )
+    monkeypatch.setattr(
+        "onyx.server.features.usage.api.fetch_default_llm_model", lambda _db: None
+    )
+
+    resp = TestClient(_make_app(db_session, _StubUser(caller))).get("/user/usage")
+
+    assert resp.status_code == 200
+    assert seen == {
+        "since": usage_api.get_window_start(
+            fixed_now, period_seconds=usage_api.USAGE_LIMIT_WINDOW_SECONDS
+        ),
+        "until": fixed_now,
+    }
+
+
+def test_days_range_uses_legacy_rolling_bounds(
+    db_session: Session, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    caller = str(uuid4())
+    fixed_now = datetime.datetime(2026, 8, 4, 12, 34, tzinfo=datetime.timezone.utc)
+    seen: dict[str, datetime.datetime] = {}
+
+    class _FixedDatetime(datetime.datetime):
+        @classmethod
+        def now(cls, tz: datetime.tzinfo | None = None) -> datetime.datetime:
+            return fixed_now if tz is not None else fixed_now.replace(tzinfo=None)
+
+    def _capture_usage_bounds(
+        *_args: object,
+        since: datetime.datetime,
+        until: datetime.datetime,
+    ) -> list[object]:
+        seen["since"] = since
+        seen["until"] = until
+        return []
+
+    monkeypatch.setattr(usage_api, "datetime", _FixedDatetime)
+    monkeypatch.setattr(
+        usage_api, "get_user_usage_by_day_and_model", _capture_usage_bounds
+    )
+    monkeypatch.setattr(
+        "onyx.server.features.usage.api.fetch_default_llm_model", lambda _db: None
+    )
+
+    resp = TestClient(_make_app(db_session, _StubUser(caller))).get(
+        "/user/usage", params={"days": 7}
+    )
+
+    assert resp.status_code == 200
+    assert seen == {
+        "since": fixed_now - datetime.timedelta(days=7),
+        "until": fixed_now,
+    }
+
+
+def test_custom_date_range_uses_inclusive_calendar_bounds(
+    db_session: Session, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    caller = str(uuid4())
+    _seed_usage(
+        db_session,
+        caller,
+        "model-a",
+        "CHAT",
+        "openai",
+        100,
+        50,
+        0,
+        1.0,
+        datetime.datetime(2026, 7, 1, 12, tzinfo=datetime.timezone.utc),
+    )
+    _seed_usage(
+        db_session,
+        caller,
+        "model-b",
+        "CHAT",
+        "openai",
+        200,
+        60,
+        0,
+        2.0,
+        datetime.datetime(2026, 7, 3, 23, 59, tzinfo=datetime.timezone.utc),
+    )
+    _seed_usage(
+        db_session,
+        caller,
+        "model-c",
+        "CHAT",
+        "openai",
+        300,
+        70,
+        0,
+        3.0,
+        datetime.datetime(2026, 7, 4, tzinfo=datetime.timezone.utc),
+    )
+    db_session.commit()
+    monkeypatch.setattr(
+        "onyx.server.features.usage.api.fetch_default_llm_model", lambda _db: None
+    )
+
+    body = (
+        TestClient(_make_app(db_session, _StubUser(caller)))
+        .get("/user/usage", params={"start": "2026-07-01", "end": "2026-07-03"})
+        .json()
+    )
+
+    assert [row["model"] for row in body["per_day_by_model"]] == [
+        "model-a",
+        "model-b",
+    ]
+    assert body["window_cost_cents"] == pytest.approx(3.0)
+
+
+def test_custom_date_range_rejects_start_after_end(db_session: Session) -> None:
+    caller = str(uuid4())
+
+    resp = TestClient(_make_app(db_session, _StubUser(caller))).get(
+        "/user/usage", params={"start": "2026-07-04", "end": "2026-07-03"}
+    )
+
+    assert resp.status_code == 400
+    assert resp.json()["error_code"] == "INVALID_INPUT"
+
+
+@pytest.mark.parametrize(
+    "params",
+    [
+        {"end": "9999-12-31"},
+        {"end": "0001-01-01"},
+    ],
+)
+def test_custom_date_range_rejects_unsupported_bounds(
+    db_session: Session, params: dict[str, str]
+) -> None:
+    caller = str(uuid4())
+
+    resp = TestClient(_make_app(db_session, _StubUser(caller))).get(
+        "/user/usage", params=params
+    )
+
+    assert resp.status_code == 400
+    assert resp.json()["error_code"] == "INVALID_INPUT"
 
 
 def test_selected_model_price_known_model(

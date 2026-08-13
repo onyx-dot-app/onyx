@@ -11,7 +11,6 @@ import {
   SvgSimpleLoader,
   SvgChevronRight,
 } from "@opal/icons";
-import InputSelect from "@/refresh-components/inputs/InputSelect";
 import {
   Collapsible,
   CollapsibleContent,
@@ -24,12 +23,14 @@ import {
   type ModelPrice,
 } from "@/app/app/settings/usage/lib";
 import {
+  DateRangePicker,
+  rangeForInclusiveDays,
+  type DateRange,
+} from "@/refresh-components/DateRangePicker";
+import {
   formatCurrencyFromCents as formatDollars,
   formatTokenCount as formatTokens,
 } from "@/lib/format";
-
-const DAYS_OPTIONS = ["7", "30"] as const;
-const DEFAULT_DAYS = 30;
 
 interface WindowCostSectionProps {
   windowCostCents: number;
@@ -346,8 +347,10 @@ function BudgetSection({
 }
 
 export default function UsageSettings() {
-  const [days, setDays] = useState<string>(String(DEFAULT_DAYS));
-  const { data, error, isLoading } = useUserUsage(Number(days));
+  const [dateRange, setDateRange] = useState<DateRange>(
+    rangeForInclusiveDays(30)
+  );
+  const { data, error, isLoading } = useUserUsage(dateRange);
 
   useEffect(() => {
     if (error) console.error("Failed to load usage", error);
@@ -362,20 +365,14 @@ export default function UsageSettings() {
           alignItems="center"
           width="full"
           gap={4}
+          wrap
         >
           <Content title="Usage" sizePreset="main-content" variant="section" />
-          <div className="min-w-32">
-            <InputSelect value={days} onValueChange={setDays}>
-              <InputSelect.Trigger placeholder="Period" />
-              <InputSelect.Content>
-                {DAYS_OPTIONS.map((option) => (
-                  <InputSelect.Item key={option} value={option}>
-                    {`Last ${option} days`}
-                  </InputSelect.Item>
-                ))}
-              </InputSelect.Content>
-            </InputSelect>
-          </div>
+          <DateRangePicker
+            value={dateRange}
+            onValueChange={setDateRange}
+            size="sm"
+          />
         </Section>
 
         {isLoading ? (
