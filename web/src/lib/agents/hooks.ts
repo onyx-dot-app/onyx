@@ -418,8 +418,8 @@ export function useLabels() {
 
 // ── MCP servers for agent editor ──────────────────────────────────────────────
 
-/** Fetches the list of MCP servers for display in the agent editor's tool selector. */
-export function useMcpServersForAgentEditor() {
+/** Every MCP server the current user can reach. */
+export function useMcpServers() {
   const {
     data: mcpData,
     error,
@@ -435,14 +435,14 @@ export function useMcpServersForAgentEditor() {
   };
 }
 
-export function useMcpServersForPersonaEditor(personaId: number | undefined) {
-  const accessible = useMcpServersForAgentEditor();
+export function useMcpServersForAgent(agentId: number | undefined) {
+  const accessible = useMcpServers();
   const {
     data: attachedData,
     error: attachedError,
     isLoading: attachedIsLoading,
   } = useSWR<MCPServersResponse>(
-    personaId ? SWR_KEYS.personaMcpServers(personaId) : null,
+    agentId ? SWR_KEYS.agentMcpServers(agentId) : null,
     errorHandlingFetcher
   );
 
@@ -460,7 +460,7 @@ export function useMcpServersForPersonaEditor(personaId: number | undefined) {
   return {
     mcpServers,
     isLoading:
-      accessible.isLoading || (personaId !== undefined && attachedIsLoading),
+      accessible.isLoading || (agentId !== undefined && attachedIsLoading),
     error: accessible.error || attachedError,
   };
 }

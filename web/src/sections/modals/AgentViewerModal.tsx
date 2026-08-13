@@ -21,7 +21,7 @@ import {
   SvgStar,
   SvgUser,
 } from "@opal/icons";
-import { useMcpServersForAgentEditor } from "@/lib/agents/hooks";
+import { useMcpServers } from "@/lib/agents/hooks";
 import { getActionIcon } from "@/lib/tools/mcpUtils";
 import { MCPServer, ToolSnapshot } from "@/lib/tools/interfaces";
 import { EmptyMessageCard } from "@opal/components";
@@ -212,7 +212,7 @@ export default function AgentViewerModal({ agent }: AgentViewerModalProps) {
   );
 
   // Fetch MCP server metadata for display
-  const { mcpData } = useMcpServersForAgentEditor();
+  const { mcpData } = useMcpServers();
   const mcpServers = mcpData?.mcp_servers ?? [];
 
   const mcpServersWithTools = useMemo(

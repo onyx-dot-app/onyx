@@ -65,7 +65,7 @@ import {
 import { Modal } from "@opal/components";
 import GenericConfirmModal from "@/sections/modals/GenericConfirmModal";
 import { Switch } from "@opal/components";
-import { useMcpServersForAgentEditor } from "@/lib/agents/hooks";
+import { useMcpServers } from "@/lib/agents/hooks";
 import useOpenApiTools from "@/hooks/useOpenApiTools";
 import { getActionIcon } from "@/lib/tools/mcpUtils";
 import { Disabled, Hoverable } from "@opal/core";
@@ -794,7 +794,7 @@ export default function ChatPreferencesPage() {
   const uniqueSources = Array.from(new Set(ccPairs.map((p) => p.source)));
 
   // MCP servers and OpenAPI tools
-  const { mcpData } = useMcpServersForAgentEditor();
+  const { mcpData } = useMcpServers();
   const { openApiTools: openApiToolsRaw } = useOpenApiTools();
   const mcpServers = mcpData?.mcp_servers ?? [];
   const openApiTools = openApiToolsRaw ?? [];

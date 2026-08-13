@@ -74,7 +74,7 @@ import { useAgents, useLabels } from "@/lib/agents/hooks";
 import { createAgent, updateAgent } from "@/lib/agents/svc";
 import InputChipField from "@/refresh-components/inputs/InputChipField";
 import { AgentUpsertParameters } from "@/lib/agents/types";
-import { useMcpServersForPersonaEditor } from "@/lib/agents/hooks";
+import { useMcpServersForAgent } from "@/lib/agents/hooks";
 import useOpenApiTools from "@/hooks/useOpenApiTools";
 import { useAvailableTools } from "@/hooks/useAvailableTools";
 import { getActionIcon } from "@/lib/tools/mcpUtils";
@@ -627,7 +627,7 @@ export default function AgentEditorPage({
     semantic_identifier: string;
   } | null>(null);
 
-  const { mcpServers, isLoading: isMcpLoading } = useMcpServersForPersonaEditor(
+  const { mcpServers, isLoading: isMcpLoading } = useMcpServersForAgent(
     existingAgent?.id
   );
   const { openApiTools: openApiToolsRaw, isLoading: isOpenApiLoading } =
