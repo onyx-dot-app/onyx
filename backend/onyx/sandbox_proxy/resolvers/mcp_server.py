@@ -23,11 +23,8 @@ from onyx.db.enums import (
     MCPAuthenticationType,
 )
 from onyx.db.mcp import (
-    MCPCredentialsError,
-    extract_connection_data,
     get_craft_enabled_mcp_servers,
     get_mcp_server_by_id,
-    resolve_mcp_credentials,
     user_can_access_mcp_server,
 )
 from onyx.db.models import MCPServer
@@ -47,10 +44,13 @@ from onyx.sandbox_proxy.resolvers.mcp_matching import (
     normalized_request_path,
     parse_target,
 )
-from onyx.server.features.mcp.oauth import (
+from onyx.server.features.mcp.credentials import (
+    MCPCredentialsError,
+    extract_connection_data,
     mcp_token_expired,
-    refresh_mcp_oauth_token_if_expired,
+    resolve_mcp_credentials,
 )
+from onyx.server.features.mcp.oauth import refresh_mcp_oauth_token_if_expired
 from onyx.utils.credential_audit import emit_credential_access
 from onyx.utils.logger import setup_logger
 from shared_configs.contextvars import CURRENT_TENANT_ID_CONTEXTVAR
@@ -173,7 +173,7 @@ class MCPServerResolver(CredentialResolver):
                     str(e), sandbox_detail=_connect_detail(server.name, admin_managed)
                 ) from e
             headers = creds.build_headers()
-            credentials_ready = creds.is_authenticated()
+            credentials_ready = creds.can_authenticate()
             expired_oauth_config_id: int | None = None
             if (
                 server.auth_type == MCPAuthenticationType.OAUTH

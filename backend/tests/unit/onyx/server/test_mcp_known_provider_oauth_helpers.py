@@ -275,7 +275,7 @@ def _patch_config_read(
     monkeypatch.setattr(
         mcp_oauth.OnyxTokenStorage,
         "_ensure_connection_config",
-        lambda _self, _db: SimpleNamespace(id=1),
+        lambda _self, _db, **_kwargs: SimpleNamespace(id=1),
     )
     monkeypatch.setattr(
         mcp_oauth, "extract_connection_data", lambda _config: config_data

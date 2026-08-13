@@ -5,8 +5,8 @@ import json
 import pytest
 
 from onyx.db.enums import MCPAuthenticationType
-from onyx.db.mcp import ResolvedMCPCredentials
 from onyx.db.models import MCPConnectionConfig
+from onyx.server.features.mcp.credentials import ResolvedMCPCredentials
 from onyx.server.features.mcp.models import MCPAuthTemplate
 from onyx.utils.sensitive import SensitiveValue
 
@@ -75,7 +75,7 @@ def test_pt_oauth_merges_template_headers_and_overrides_authorization() -> None:
         "X-User": "alice@example.com",
         "Authorization": "Bearer login-token",
     }
-    assert creds.is_authenticated()
+    assert creds.can_authenticate()
 
 
 def test_oauth_merges_template_headers_with_token_auth() -> None:
@@ -98,7 +98,7 @@ def test_oauth_merges_template_headers_with_token_auth() -> None:
         "X-Gateway-Key": "gateway-secret",
         "Authorization": "Bearer oauth-token",
     }
-    assert creds.is_authenticated()
+    assert creds.can_authenticate()
 
 
 def test_no_auth_template_requires_user_substitutions() -> None:
@@ -121,8 +121,8 @@ def test_no_auth_template_requires_user_substitutions() -> None:
         }
     )
 
-    assert not disconnected.is_authenticated()
-    assert connected.is_authenticated()
+    assert not disconnected.can_authenticate()
+    assert connected.can_authenticate()
     assert connected.build_headers() == {"X-Gateway-Key": "gateway-secret"}
 
 
@@ -135,7 +135,7 @@ def test_api_token_template_without_placeholders_needs_no_user_config() -> None:
         user_email="alice@example.com",
     )
 
-    assert creds.is_authenticated()
+    assert creds.can_authenticate()
     assert creds.build_headers() == {"X-Gateway-Key": "shared-key"}
 
 

@@ -25,6 +25,7 @@ from onyx.db.token_limit import (
     fetch_user_group_token_rate_limits,
 )
 from onyx.db.user_usage import (
+    get_cost_window_reset,
     get_cost_window_start,
     get_group_cost_cents_buckets_since,
     get_total_cost_cents_buckets_since,
@@ -65,7 +66,12 @@ _DEFAULT_USAGE_RANGE_INCLUSIVE_DAYS = 30
 
 
 def _start_for_inclusive_range(end_date: date, inclusive_days: int) -> date:
-    return end_date - timedelta(days=inclusive_days - 1)
+    try:
+        return end_date - timedelta(days=inclusive_days - 1)
+    except OverflowError as error:
+        raise OnyxError(
+            OnyxErrorCode.INVALID_INPUT, "date range exceeds supported bounds"
+        ) from error
 
 
 def _date_range_to_utc_bounds(
@@ -75,9 +81,14 @@ def _date_range_to_utc_bounds(
         raise OnyxError(OnyxErrorCode.INVALID_INPUT, "start must not be after end")
 
     start_dt = datetime.combine(start_date, time.min, tzinfo=timezone.utc)
-    end_dt = datetime.combine(end_date, time.min, tzinfo=timezone.utc) + timedelta(
-        days=1
-    )
+    try:
+        end_dt = datetime.combine(
+            end_date + timedelta(days=1), time.min, tzinfo=timezone.utc
+        )
+    except OverflowError as error:
+        raise OnyxError(
+            OnyxErrorCode.INVALID_INPUT, "date range exceeds supported bounds"
+        ) from error
     return start_dt, end_dt
 
 
@@ -106,14 +117,16 @@ def _user_cost_budget(db_session: Session, user_id: str) -> EffectiveCostBudget 
                     budget_cents=rl.cost_budget_cents,
                     remaining_cents=rl.cost_budget_cents - used,
                     period_hours=rl.period_hours,
+                    reset_at=get_cost_window_reset(now, rl.period_hours),
                 )
             )
 
     user_rls = fetch_all_user_token_rate_limits(db_session, enabled_only=True)
     user_cost_rls = [rl for rl in user_rls if rl.cost_budget_cents is not None]
     if user_cost_rls:
-        broadest = max(rl.period_hours for rl in user_cost_rls)
-        fetch_cutoff = get_cost_window_start(now, broadest)
+        fetch_cutoff = min(
+            get_cost_window_start(now, rl.period_hours) for rl in user_cost_rls
+        )
         _add_from_limits(
             user_cost_rls,
             get_user_cost_cents_buckets_since(db_session, user_id, fetch_cutoff),
@@ -122,8 +135,9 @@ def _user_cost_budget(db_session: Session, user_id: str) -> EffectiveCostBudget 
     global_rls = fetch_all_global_token_rate_limits(db_session, enabled_only=True)
     global_cost_rls = [rl for rl in global_rls if rl.cost_budget_cents is not None]
     if global_cost_rls:
-        broadest = max(rl.period_hours for rl in global_cost_rls)
-        fetch_cutoff = get_cost_window_start(now, broadest)
+        fetch_cutoff = min(
+            get_cost_window_start(now, rl.period_hours) for rl in global_cost_rls
+        )
         _add_from_limits(
             global_cost_rls,
             get_total_cost_cents_buckets_since(db_session, fetch_cutoff),
@@ -140,6 +154,7 @@ def _user_cost_budget(db_session: Session, user_id: str) -> EffectiveCostBudget 
         budget_cents=best.budget_cents,
         remaining_cents=max(best.remaining_cents, 0.0),
         period_hours=best.period_hours,
+        reset_at=best.reset_at,
     )
 
 
@@ -162,8 +177,7 @@ def _group_cost_budget_candidate(
         return None
 
     # One batched query for every group's cost buckets, then window in Python.
-    broadest = max(rl.period_hours for rl in cost_rls)
-    fetch_cutoff = get_cost_window_start(now, broadest)
+    fetch_cutoff = min(get_cost_window_start(now, rl.period_hours) for rl in cost_rls)
     buckets = get_group_cost_cents_buckets_since(
         db_session, list(group_limits.keys()), fetch_cutoff
     )
@@ -183,6 +197,7 @@ def _group_cost_budget_candidate(
                     budget_cents=rl.cost_budget_cents,
                     remaining_cents=remaining,
                     period_hours=rl.period_hours,
+                    reset_at=get_cost_window_reset(now, rl.period_hours),
                 )
         if group_binding is None:
             return None  # a cost-exempt group exempts the whole group scope
@@ -205,6 +220,8 @@ admin_usage_router = APIRouter(prefix="/admin/usage", tags=PUBLIC_API_TAGS)
 @user_usage_router.get("")
 def get_my_usage(
     days: Annotated[int | None, Query(ge=1, le=3_650)] = None,
+    start: date | None = None,
+    end: date | None = None,
     user: User = Depends(current_user),
     db_session: Session = Depends(get_session),
 ) -> UserUsageResponse:
@@ -212,13 +229,27 @@ def get_my_usage(
     now = datetime.now(timezone.utc)
     window_start = get_window_start(now, period_seconds=USAGE_LIMIT_WINDOW_SECONDS)
 
-    since = now - timedelta(days=days) if days else window_start
+    if start is not None or end is not None:
+        end_date = end or now.date()
+        inclusive_days = days or _DEFAULT_USAGE_RANGE_INCLUSIVE_DAYS
+        start_date = start or _start_for_inclusive_range(end_date, inclusive_days)
+        since, until = _date_range_to_utc_bounds(start_date, end_date)
+    elif days is not None:
+        since = now - timedelta(days=days)
+        until = now
+    else:
+        since = window_start
+        until = now
     user_id = str(user.id)
 
     per_day = get_user_usage_by_day_and_model(
-        db_session, user_id, since=since, until=now
+        db_session, user_id, since=since, until=until
     )
-    window_cost_cents = get_user_cost_cents_since(db_session, user_id, window_start)
+    window_cost_cents = (
+        sum(row.cost_cents for row in per_day)
+        if start is not None or end is not None
+        else get_user_cost_cents_since(db_session, user_id, window_start)
+    )
 
     accessible_providers = fetch_all_llm_providers_accessible_in_any_context(
         db_session, user
@@ -262,6 +293,7 @@ def get_my_usage(
         budget_cents=budget.budget_cents if budget is not None else None,
         budget_remaining_cents=(budget.remaining_cents if budget is not None else None),
         budget_period_hours=budget.period_hours if budget is not None else None,
+        budget_reset_at=budget.reset_at if budget is not None else None,
         selected_model_price=selected_model_price,
         available_model_prices=available_model_prices,
     )

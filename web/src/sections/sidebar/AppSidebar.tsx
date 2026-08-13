@@ -491,45 +491,6 @@ export default function AppSidebar() {
     combinedSettingsData?.disable_default_assistant && currentAgent
       ? `/app?agentId=${currentAgent.id}`
       : "/app";
-  const newSessionButton = (
-    <div data-testid="AppSidebar/new-session">
-      <SidebarTab
-        icon={SvgEditBig}
-        href={newSessionHref}
-        selected={activeSidebarTab.isNewSession()}
-        onClick={() => {
-          if (!activeSidebarTab.isNewSession()) return;
-          setAppMode(defaultAppMode);
-          reset();
-        }}
-      >
-        New Session
-      </SidebarTab>
-    </div>
-  );
-
-  const buildButton = (
-    <div data-testid="AppSidebar/build">
-      <SidebarTab
-        icon={SvgDevKit}
-        href={CRAFT_PATH}
-        onClick={() => track(AnalyticsEvent.CLICKED_CRAFT_IN_SIDEBAR)}
-      >
-        Craft
-      </SidebarTab>
-    </div>
-  );
-
-  const searchChatsButton = (
-    <ChatSearchCommandMenu
-      trigger={(open) => (
-        <SidebarTab icon={SvgSearchMenu} onClick={open}>
-          Search Chats
-        </SidebarTab>
-      )}
-    />
-  );
-
   const moreAgentsButton = (
     <div data-testid="AppSidebar/more-agents">
       <SidebarTab
@@ -561,24 +522,6 @@ export default function AppSidebar() {
   const handleShowBuildIntro = useCallback(() => {
     setShowIntroAnimation(true);
   }, []);
-
-  const settingsButton = (
-    <div>
-      {(isAdmin || isCurator) && (
-        <SidebarTab
-          href={
-            isCurator ? "/admin/agents" : "/admin/configuration/language-models"
-          }
-          icon={SvgSettings}
-        >
-          {isAdmin ? "Admin Panel" : "Curator Panel"}
-        </SidebarTab>
-      )}
-      <AccountPopover
-        onShowBuildIntro={isOnyxCraftEnabled ? handleShowBuildIntro : undefined}
-      />
-    </div>
-  );
 
   return (
     <>
@@ -647,9 +590,38 @@ export default function AppSidebar() {
           showLogoWhenFolded={showLogoWhenFolded}
           renderAppLogo={renderSidebarLogo}
         >
-          {newSessionButton}
-          {searchChatsButton}
-          {isOnyxCraftEnabled && buildButton}
+          <div data-testid="AppSidebar/new-session">
+            <SidebarTab
+              icon={SvgEditBig}
+              href={newSessionHref}
+              selected={activeSidebarTab.isNewSession()}
+              onClick={() => {
+                if (!activeSidebarTab.isNewSession()) return;
+                setAppMode(defaultAppMode);
+                reset();
+              }}
+            >
+              New Session
+            </SidebarTab>
+          </div>
+          <ChatSearchCommandMenu
+            trigger={(open) => (
+              <SidebarTab icon={SvgSearchMenu} onClick={open}>
+                Search Chats
+              </SidebarTab>
+            )}
+          />
+          {isOnyxCraftEnabled && (
+            <div data-testid="AppSidebar/build">
+              <SidebarTab
+                icon={SvgDevKit}
+                href={CRAFT_PATH}
+                onClick={() => track(AnalyticsEvent.CLICKED_CRAFT_IN_SIDEBAR)}
+              >
+                Craft
+              </SidebarTab>
+            </div>
+          )}
           {folded && moreAgentsButton}
           {folded && newProjectButton}
         </SidebarLayouts.Header>
@@ -717,7 +689,27 @@ export default function AppSidebar() {
           )}
         </SidebarLayouts.Body>
 
-        <SidebarLayouts.Footer>{settingsButton}</SidebarLayouts.Footer>
+        <SidebarLayouts.Footer>
+          <div>
+            {(isAdmin || isCurator) && (
+              <SidebarTab
+                href={
+                  isCurator
+                    ? "/admin/agents"
+                    : "/admin/configuration/language-models"
+                }
+                icon={SvgSettings}
+              >
+                {isAdmin ? "Admin Panel" : "Curator Panel"}
+              </SidebarTab>
+            )}
+            <AccountPopover
+              onShowBuildIntro={
+                isOnyxCraftEnabled ? handleShowBuildIntro : undefined
+              }
+            />
+          </div>
+        </SidebarLayouts.Footer>
       </SidebarLayouts.Root>
     </>
   );

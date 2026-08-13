@@ -90,7 +90,7 @@ export function mcpServerFixture(
     owner: "admin@example.com",
     auth_type: MCPAuthenticationType.API_TOKEN,
     auth_performer: MCPAuthenticationPerformer.PER_USER,
-    is_authenticated: true,
+    user_can_authenticate: true,
     craft_connected: true,
     status: MCPServerStatus.CONNECTED,
     is_public: true,

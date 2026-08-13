@@ -56,6 +56,10 @@ class SavedSearchSettings(IndexingSetting):
         )
 
 
+class ContextualRagModelUpdateResponse(BaseModel):
+    contextual_rag_model_configuration_id: int
+
+
 class Tag(BaseModel):
     tag_key: str
     tag_value: str

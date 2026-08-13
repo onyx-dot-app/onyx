@@ -460,7 +460,7 @@ class MCPToolResponse(BaseModel):
     server_url: str
     auth_type: str
     auth_performer: Optional[str] = None
-    is_authenticated: bool
+    user_can_authenticate: bool
 
 
 class MCPOAuthConnectRequest(BaseModel):
@@ -615,8 +615,9 @@ class MCPServer(BaseModel):
     oauth_token_endpoint: Optional[str] = None
     oauth_scopes_override: Optional[list[str]] = None
     oauth_additional_auth_params: Optional[dict[str, str]] = None
-    is_authenticated: bool
-    user_authenticated: Optional[bool] = None
+    # Whether this user's credentials resolve for the server right now (or the
+    # server needs no per-user auth). None when there is no user context.
+    user_can_authenticate: Optional[bool] = None
     status: MCPServerStatus
     is_public: bool = True
     groups: list[int] = Field(default_factory=list)
@@ -670,7 +671,9 @@ class MCPServerCreateResponse(BaseModel):
     oauth_token_endpoint: Optional[str] = None
     oauth_scopes_override: Optional[list[str]] = None
     oauth_additional_auth_params: Optional[dict[str, str]] = None
-    is_authenticated: bool
+    # True when the server needs no per-user auth (auth_type NONE or an admin
+    # supplies shared credentials), so it is usable right after creation.
+    no_user_authentication_required: bool
 
 
 class MCPServerUpdateResponse(BaseModel):

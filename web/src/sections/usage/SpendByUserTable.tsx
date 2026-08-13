@@ -18,6 +18,7 @@ const ALL = "__all__";
 export interface SpendRow {
   email: string;
   cost_cents: number;
+  total_tokens: number;
   input_tokens: number;
   output_tokens: number;
   cache_read_tokens: number;
@@ -38,7 +39,11 @@ function filteredRow(
   flow: string
 ): SpendRow | null {
   if (model === ALL && flow === ALL) {
-    return { email: user.email, ...user.totals };
+    return {
+      email: user.email,
+      ...user.totals,
+      total_tokens: user.totals.input_tokens + user.totals.output_tokens,
+    };
   }
   const records = user.records.filter(
     (record) =>
@@ -55,7 +60,11 @@ function filteredRow(
     }),
     emptyTotals()
   );
-  return { email: user.email, ...totals };
+  return {
+    email: user.email,
+    ...totals,
+    total_tokens: totals.input_tokens + totals.output_tokens,
+  };
 }
 
 const tc = createTableColumns<SpendRow>();
@@ -65,7 +74,7 @@ function buildColumns() {
     tc.qualifier({ content: "icon", getContent: () => SvgUser }),
     tc.column("email", {
       header: "User",
-      weight: 34,
+      weight: 38,
       cell: (value) => (
         <span className="underline-offset-2 group-hover/row:underline">
           <Text font="main-ui-body" color="text-05" nowrap>
@@ -76,12 +85,24 @@ function buildColumns() {
     }),
     tc.column("cost_cents", {
       header: "Spend",
-      weight: 14,
+      weight: 16,
       alignment: "right",
       cell: (value) => (
         <span className="tabular-nums">
           <Text font="main-ui-action" color="text-05" nowrap>
             {formatCost(value)}
+          </Text>
+        </span>
+      ),
+    }),
+    tc.column("total_tokens", {
+      header: "Tokens",
+      weight: 18,
+      alignment: "right",
+      cell: (value) => (
+        <span className="tabular-nums">
+          <Text font="main-ui-action" color="text-05" nowrap>
+            {formatTokens(value)}
           </Text>
         </span>
       ),
@@ -100,18 +121,6 @@ function buildColumns() {
     }),
     tc.column("output_tokens", {
       header: "Output",
-      weight: 14,
-      alignment: "right",
-      cell: (value) => (
-        <span className="tabular-nums">
-          <Text font="main-ui-body" color="text-03" nowrap>
-            {formatTokens(value)}
-          </Text>
-        </span>
-      ),
-    }),
-    tc.column("cache_read_tokens", {
-      header: "Cache",
       weight: 14,
       alignment: "right",
       cell: (value) => (
@@ -233,6 +242,10 @@ export default function SpendByUserTable({
           )}
         </div>
       </div>
+
+      <Text font="secondary-body" color="text-03" aria-live="polite">
+        {`${rows.length.toLocaleString()} ${rows.length === 1 ? "user" : "users"}`}
+      </Text>
 
       <Table
         // Remount on filter change so the Table's internal page index resets;

@@ -6,7 +6,7 @@ metadata:
     {{- include "onyx.labels" . | nindent 4 }}
 data:
   {{- $craftEnabled := eq (include "onyx.craftEnabled" .) "true" }}
-  INTERNAL_URL: "http://{{ include "onyx.fullname" . }}-api-service:{{ .Values.api.service.servicePort | default 8080 }}"
+  INTERNAL_URL: "http://{{ include "onyx.resourceName" (list . "api-service") }}:{{ .Values.api.service.servicePort | default 8080 }}"
   {{- if .Values.postgresql.enabled }}
   POSTGRES_HOST: {{ .Release.Name }}-pg-rw
   {{- end }}
@@ -24,11 +24,11 @@ data:
   {{- /* configMap overrides win (rendered by the range below) — emitting the
   default too would produce a duplicate YAML key. */}}
   {{- if not (index .Values.configMap "MODEL_SERVER_HOST") }}
-  MODEL_SERVER_HOST: "{{ include "onyx.fullname" . }}-inference-model-service"
+  MODEL_SERVER_HOST: "{{ include "onyx.resourceName" (list . "inference-model-service") }}"
   {{- end }}
   {{- if .Values.vectorDB.enabled }}
   {{- if not (index .Values.configMap "INDEXING_MODEL_SERVER_HOST") }}
-  INDEXING_MODEL_SERVER_HOST: "{{ include "onyx.fullname" . }}-indexing-model-service"
+  INDEXING_MODEL_SERVER_HOST: "{{ include "onyx.resourceName" (list . "indexing-model-service") }}"
   {{- end }}
   DISABLE_VECTOR_DB: "false"
   {{- else }}

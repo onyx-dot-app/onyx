@@ -217,12 +217,8 @@ export async function setNewSearchSettings({
 }
 
 /**
- * Persists non-reindex search-settings updates (e.g. toggling Contextual RAG
- * or switching its LLM). Backend is `update_saved_search_settings` — it
- * mutates the CURRENT search-settings row in place rather than creating a new
- * one + kicking off a re-index. Caller is responsible for ensuring the
- * embedding-model fields in `settings` match the current model; the endpoint
- * does not validate this.
+ * Switches the Contextual Retrieval LLM on the current index. Contextual
+ * Retrieval must already be enabled; all other settings must stay unchanged.
  */
 export async function updateInferenceSettings(
   settings: SavedSearchSettings

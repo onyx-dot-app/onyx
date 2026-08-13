@@ -70,6 +70,7 @@ import {
   cancelNewEmbedding,
   disconnectEmbeddingProvider,
   setNewSearchSettings,
+  updateInferenceSettings,
 } from "@/lib/indexing/svc";
 import { useCreateModal } from "@opal/components";
 import { ContentAction } from "@opal/layouts";
@@ -89,12 +90,15 @@ import ModelSelector from "@/sections/model-selector/ModelSelector";
 import type { RichStr } from "@opal/types";
 import { ProviderCredentialsModal } from "@/views/admin/IndexSettingsPage/modals";
 import ReindexProgressBanner from "@/views/admin/IndexSettingsPage/ReindexProgressBanner";
+import { parseErrorDetail } from "@/lib/fetcher";
 
 const route = ADMIN_ROUTES.INDEX_SETTINGS;
 
 const MODEL_TAB_CLOUD = "cloud-based";
 const MODEL_TAB_SELF = "self-hosted";
 const CLOUD_TOOLTIP = "This setting is managed by Onyx Cloud.";
+const CONTEXTUAL_MODEL_UPDATE_ERROR =
+  "Failed to update Contextual Retrieval LLM";
 
 /**
  * Wrapper that disables its children when either:
@@ -567,6 +571,22 @@ interface IndexSettingsFormValues {
   contextual_rag_model_configuration_id: number | null;
 }
 
+function isContextualModelOnlyChange(
+  values: IndexSettingsFormValues,
+  initialValues: IndexSettingsFormValues
+): boolean {
+  return (
+    values.enable_contextual_rag &&
+    values.enable_contextual_rag === initialValues.enable_contextual_rag &&
+    values.contextual_rag_model_configuration_id !== null &&
+    values.contextual_rag_model_configuration_id !==
+      initialValues.contextual_rag_model_configuration_id &&
+    values.model_name === initialValues.model_name &&
+    values.custom_model === null &&
+    values.custom_model_provider === null
+  );
+}
+
 export default function IndexSettingsPage() {
   const router = useRouter();
   const settings = useSettings();
@@ -691,6 +711,7 @@ export default function IndexSettingsPage() {
     [configuredProvidersList]
   );
   const cancelReindexModal = useCreateModal();
+  const forwardOnlyModal = useCreateModal();
   const customModelModal = useCreateModal();
 
   const {
@@ -770,6 +791,35 @@ export default function IndexSettingsPage() {
         searchSettings?.contextual_rag_model_configuration_id ?? null,
     }),
     [currentEmbeddingModel, searchSettings]
+  );
+
+  const applyContextualModelForward = useCallback(
+    async (modelConfigurationId: number): Promise<boolean> => {
+      if (!searchSettings) return false;
+
+      try {
+        const response = await updateInferenceSettings({
+          ...searchSettings,
+          contextual_rag_model_configuration_id: modelConfigurationId,
+        });
+        if (!response.ok) {
+          toast.error(
+            await parseErrorDetail(response, CONTEXTUAL_MODEL_UPDATE_ERROR)
+          );
+          return false;
+        }
+
+        await mutate(SWR_KEYS.currentSearchSettings);
+        forwardOnlyModal.toggle(false);
+        toast.success("Contextual Retrieval LLM updated");
+        return true;
+      } catch (error) {
+        console.error(CONTEXTUAL_MODEL_UPDATE_ERROR, error);
+        toast.error(CONTEXTUAL_MODEL_UPDATE_ERROR);
+        return false;
+      }
+    },
+    [forwardOnlyModal, searchSettings]
   );
 
   const handleCancelReindex = useCallback(async () => {
@@ -916,9 +966,101 @@ export default function IndexSettingsPage() {
               const contextualRagModelMissing =
                 values.enable_contextual_rag &&
                 values.contextual_rag_model_configuration_id === null;
+              const contextualModelOnlyChange = isContextualModelOnlyChange(
+                values,
+                initialFormValues
+              );
+              const switchoverStrategySelect = (
+                <InputSelect
+                  value={switchoverType}
+                  onValueChange={(v) => setSwitchoverType(v as SwitchoverType)}
+                >
+                  <InputSelect.Trigger placeholder="Select a switchover strategy" />
+                  <InputSelect.Content>
+                    <InputSelect.Item
+                      value={SwitchoverType.REINDEX}
+                      icon={SvgClock}
+                      wrapDescription
+                      description="Safest option. Continue using the current document index with existing settings until all connectors have completed a successful index attempt."
+                    >
+                      Re-index All Connectors Then Switch
+                    </InputSelect.Item>
+                    <InputSelect.Item
+                      value={SwitchoverType.ACTIVE_ONLY}
+                      icon={SvgSlowTime}
+                      wrapDescription
+                      description="Continue using the current document index with existing settings until all active (not paused/deleting) connectors have completed a successful index attempt."
+                    >
+                      Re-index Active Connectors Then Switch
+                    </InputSelect.Item>
+                    <InputSelect.Item
+                      value={SwitchoverType.INSTANT}
+                      icon={SvgEmpty}
+                      wrapDescription
+                      description="Immediately clear the current document index and switch to the new settings. Requires re-indexing all connectors before the index is repopulated for search."
+                    >
+                      Switch Before Re-index
+                    </InputSelect.Item>
+                  </InputSelect.Content>
+                </InputSelect>
+              );
+              const revertButton = (
+                <Button
+                  prominence="secondary"
+                  onClick={() => {
+                    resetForm();
+                    setSwitchoverType(SwitchoverType.REINDEX);
+                  }}
+                >
+                  Revert
+                </Button>
+              );
+              const rebuildButton = (
+                <Button
+                  onClick={() => void submitForm()}
+                  disabled={contextualRagModelMissing}
+                >
+                  {contextualModelOnlyChange
+                    ? "Rebuild all existing documents"
+                    : "Apply & Re-index"}
+                </Button>
+              );
 
               return (
                 <>
+                  <forwardOnlyModal.Provider>
+                    <ConfirmationModalLayout
+                      icon={SvgArrowExchange}
+                      title="Apply Contextual Retrieval LLM going forward"
+                      submit={
+                        <Button
+                          onClick={async () => {
+                            const modelConfigurationId =
+                              values.contextual_rag_model_configuration_id;
+                            if (modelConfigurationId === null) return;
+                            const updated =
+                              await applyContextualModelForward(
+                                modelConfigurationId
+                              );
+                            if (updated) {
+                              resetForm({ values });
+                              setSwitchoverType(SwitchoverType.REINDEX);
+                            }
+                          }}
+                        >
+                          Apply to new and updated documents
+                        </Button>
+                      }
+                    >
+                      <Text font="main-ui-body" color="text-03" as="p">
+                        Existing documents will keep context generated by the
+                        previous model. The new model will apply only when
+                        documents are added or updated. Contextual enrichment
+                        can differ between documents.
+                      </Text>
+                    </ConfirmationModalLayout>
+                  </forwardOnlyModal.Provider>
+
                   <customModelModal.Provider>
                     <ProviderCredentialsModal
                       provider={CUSTOM_PROVIDER}
@@ -998,70 +1140,77 @@ export default function IndexSettingsPage() {
                         title={
                           contextualRagModelMissing
                             ? "Select a Contextual Retrieval LLM"
-                            : "Changes require a full re-index."
+                            : contextualModelOnlyChange
+                              ? "Choose how to apply this Contextual Retrieval LLM"
+                              : "Changes require a full re-index."
                         }
                         description={markdown(
                           contextualRagModelMissing
                             ? "Contextual Retrieval is enabled but no model is selected. Pick a Contextual Retrieval LLM below before re-indexing — without one, the re-index cannot run."
-                            : "Modifying embedding or retrieval settings requires a full re-index of all documents to take effect, which may take **hours or days** depending on corpus size. [Learn More](https://docs.onyx.app/security/architecture/data_flows)"
+                            : contextualModelOnlyChange
+                              ? "Apply the model only to new and updated documents, or rebuild all documents for uniform contextual enrichment."
+                              : "Modifying embedding or retrieval settings requires a full re-index of all documents to take effect, which may take **hours or days** depending on corpus size. [Learn More](https://docs.onyx.app/security/architecture/data_flows)"
                         )}
                         bottomChildren={
                           dirty ? (
-                            <div className="flex flex-row items-end gap-4 p-2">
-                              <div className="flex-1 min-w-0">
-                                <InputSelect
-                                  value={switchoverType}
-                                  onValueChange={(v) =>
-                                    setSwitchoverType(v as SwitchoverType)
-                                  }
+                            contextualModelOnlyChange ? (
+                              <GeneralLayouts.Section
+                                flexDirection="row"
+                                alignItems="center"
+                                gap={2}
+                                padding={2}
+                                height="fit"
+                              >
+                                <GeneralLayouts.Section
+                                  flexDirection="row"
+                                  gap={2}
+                                  width="fit"
+                                  height="fit"
                                 >
-                                  <InputSelect.Trigger placeholder="Select a switchover strategy" />
-                                  <InputSelect.Content>
-                                    <InputSelect.Item
-                                      value={SwitchoverType.REINDEX}
-                                      icon={SvgClock}
-                                      wrapDescription
-                                      description="Safest option. Continue using the current document index with existing settings until all connectors have completed a successful index attempt."
-                                    >
-                                      Re-index All Connectors Then Switch
-                                    </InputSelect.Item>
-                                    <InputSelect.Item
-                                      value={SwitchoverType.ACTIVE_ONLY}
-                                      icon={SvgSlowTime}
-                                      wrapDescription
-                                      description="Continue using the current document index with existing settings until all active (not paused/deleting) connectors have completed a successful index attempt."
-                                    >
-                                      Re-index Active Connectors Then Switch
-                                    </InputSelect.Item>
-                                    <InputSelect.Item
-                                      value={SwitchoverType.INSTANT}
-                                      icon={SvgEmpty}
-                                      wrapDescription
-                                      description="Immediately clear the current document index and switch to the new settings. Requires re-indexing all connectors before the index is repopulated for search."
-                                    >
-                                      Switch Before Re-index
-                                    </InputSelect.Item>
-                                  </InputSelect.Content>
-                                </InputSelect>
+                                  {revertButton}
+                                  <Button
+                                    prominence="secondary"
+                                    onClick={() =>
+                                      forwardOnlyModal.toggle(true)
+                                    }
+                                  >
+                                    Apply to new and updated documents
+                                  </Button>
+                                </GeneralLayouts.Section>
+                                <Text
+                                  font="secondary-body"
+                                  color="text-03"
+                                  nowrap
+                                >
+                                  or
+                                </Text>
+                                <GeneralLayouts.Section
+                                  flexDirection="row"
+                                  gap={2}
+                                  height="fit"
+                                  className="flex-1 min-w-0"
+                                >
+                                  <GeneralLayouts.Section
+                                    height="fit"
+                                    alignItems="stretch"
+                                    className="flex-1 min-w-0"
+                                  >
+                                    {switchoverStrategySelect}
+                                  </GeneralLayouts.Section>
+                                  {rebuildButton}
+                                </GeneralLayouts.Section>
+                              </GeneralLayouts.Section>
+                            ) : (
+                              <div className="flex flex-row items-end gap-4 p-2">
+                                <div className="flex-1 min-w-0">
+                                  {switchoverStrategySelect}
+                                </div>
+                                <div className="flex flex-row gap-2 shrink-0">
+                                  {revertButton}
+                                  {rebuildButton}
+                                </div>
                               </div>
-                              <div className="flex flex-row gap-2 shrink-0">
-                                <Button
-                                  prominence="secondary"
-                                  onClick={() => {
-                                    resetForm();
-                                    setSwitchoverType(SwitchoverType.REINDEX);
-                                  }}
-                                >
-                                  Revert
-                                </Button>
-                                <Button
-                                  onClick={() => void submitForm()}
-                                  disabled={contextualRagModelMissing}
-                                >
-                                  Apply & Re-index
-                                </Button>
-                              </div>
-                            </div>
+                            )
                           ) : undefined
                         }
                       />

@@ -25,6 +25,12 @@ test("opens a user from the keyboard", () => {
   const row = screen.getByRole("row", {
     name: "View usage details for ada@example.com",
   });
+
+  expect(
+    screen.getByRole("columnheader", { name: "Tokens" })
+  ).toBeInTheDocument();
+  expect(screen.getByText("1 user")).toBeInTheDocument();
+
   row.focus();
   fireEvent.keyDown(row, { key: "Enter" });
 

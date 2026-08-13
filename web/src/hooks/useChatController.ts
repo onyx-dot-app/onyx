@@ -527,6 +527,14 @@ export default function useChatController({
             projectId: projectId ? parseInt(projectId) : null,
           });
         }
+
+        // The project's chat list is how the app answers "is this chat inside a
+        // project" once `projectId` leaves the URL. Without this the new chat is
+        // missing from that list until the next revalidation, and the cache is
+        // configured not to revalidate on stale or focus.
+        if (projectId) {
+          void fetchProjects();
+        }
       } else {
         // Use the existing session ID from props or from the store
         currChatSessionId =

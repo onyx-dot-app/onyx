@@ -4,7 +4,7 @@
 apiVersion: apps/v1
 kind: Deployment
 metadata:
-  name: {{ include "onyx.fullname" . }}-sandbox-proxy
+  name: {{ include "onyx.resourceName" (list . "sandbox-proxy") }}
   labels:
     {{- include "onyx.labels" . | nindent 4 }}
     app.kubernetes.io/component: sandbox-proxy
@@ -36,7 +36,7 @@ spec:
       imagePullSecrets:
         {{- toYaml . | nindent 8 }}
       {{- end }}
-      serviceAccountName: {{ include "onyx.fullname" . }}-sandbox-proxy
+      serviceAccountName: {{ include "onyx.resourceName" (list . "sandbox-proxy") }}
       terminationGracePeriodSeconds: {{ .Values.sandboxProxy.terminationGracePeriodSeconds }}
       securityContext:
         runAsNonRoot: true

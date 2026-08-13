@@ -200,7 +200,7 @@ export default function AddMCPServerModal({
 
                 {/* Authentication Status Section - Only show in edit mode when authenticated */}
                 {isEditMode &&
-                  server?.is_authenticated &&
+                  server?.user_can_authenticate &&
                   server?.status === MCPServerStatus.CONNECTED && (
                     <Section
                       flexDirection="row"

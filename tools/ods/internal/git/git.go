@@ -9,9 +9,22 @@ import (
 	"path/filepath"
 	"strconv"
 	"strings"
+	"time"
 
 	log "github.com/sirupsen/logrus"
 )
+
+// PushHookHintDelay is how long a push with hooks enabled runs before HintAfter
+// tells the user how to skip them.
+const PushHookHintDelay = 10 * time.Second
+
+// HintAfter runs fn and logs hint if fn is still running after delay. Use it to
+// point at a faster flag when pre-push hooks make a command slow.
+func HintAfter(delay time.Duration, hint string, fn func() error) error {
+	timer := time.AfterFunc(delay, func() { log.Warn(hint) })
+	defer timer.Stop()
+	return fn()
+}
 
 // CheckGitHubCLI checks if the GitHub CLI is installed and exits with a helpful message if not
 func CheckGitHubCLI() {
@@ -62,6 +75,26 @@ func RunCommandVerboseOnError(args ...string) error {
 		fmt.Print(string(output))
 	}
 	return nil
+}
+
+// PushTag pushes a tag to origin, optionally with --force. Pre-push hooks are
+// skipped unless verify is true: a tag points at a commit that already passed
+// CI, and the hooks run over the whole delta since the previous tag, which is
+// slow and unrelated to the push.
+func PushTag(tag string, force, verify bool) error {
+	args := []string{"push"}
+	if !verify {
+		args = append(args, "--no-verify")
+	}
+	if force {
+		args = append(args, "-f")
+	}
+	args = append(args, "origin", tag)
+	if !verify {
+		return RunCommand(args...)
+	}
+	hint := "Push is slow because --verify runs the pre-push hooks over every commit since the previous tag. Re-run without --verify to skip them."
+	return HintAfter(PushHookHintDelay, hint, func() error { return RunCommand(args...) })
 }
 
 // GetCommitMessage gets the first line of a commit message
