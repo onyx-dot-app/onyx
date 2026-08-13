@@ -180,7 +180,7 @@ interface UpsertMCPServerResponse {
   oauth_token_endpoint?: string;
   oauth_scopes_override?: string[];
   oauth_additional_auth_params?: Record<string, string>;
-  is_authenticated: boolean;
+  no_user_authentication_required: boolean;
 }
 
 export async function upsertMCPServer(serverData: {

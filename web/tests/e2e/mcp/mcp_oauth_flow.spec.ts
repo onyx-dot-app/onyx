@@ -342,9 +342,9 @@ test.describe("MCP OAuth flows", () => {
 
     // Per-user OAuth servers require the user to authenticate from chat before
     // their tools become usable: the admin-page "connect" only stores the
-    // server's client config, not a per-user token for this user
-    // (backend mcp/api.py: user_authenticated = get_user_connection_config(...)
-    // is not None). So authenticate from chat first, then verify the tool runs.
+    // server's client config, not a per-user token for this user (backend
+    // mcp/api.py resolves the server's `user_can_authenticate` from the user's
+    // stored credentials). So authenticate from chat first, then verify the tool runs.
     const actions = new ActionsPopover(page);
     await oauthFlow.reauthenticateFromChat(
       actions,
