@@ -120,6 +120,8 @@ export default function SkillCard({
     <Tooltip tooltip={tooltip} side="top">
       <Interactive.Simple onClick={handleClick} group="group/SkillCard">
         <Card
+          // TODO(@raunakab): Migrate to Opal's Card. Opal's now has a `disabled` prop, so this reads as
+          // `disabled={…}` alongside `border="solid"` instead of a variant.
           variant={
             isInvalid ||
             isBuiltinUnavailable ||
