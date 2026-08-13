@@ -312,24 +312,20 @@ def _recent_cost_buckets(total: float) -> list[tuple[datetime.datetime, float]]:
 class TestCostBudgetReset:
     """Unit of the shared cost evaluator (no DB; cost buckets are injected)."""
 
-    def test_current_day_usage_expires_at_full_window(self) -> None:
-        # Usage sits in today's (newest) bucket, so a 2-day window only clears
-        # once today itself rolls off — the full-window expiry.
+    def test_current_day_usage_expires_at_calendar_reset(self) -> None:
         now = datetime.datetime.now(datetime.timezone.utc)
-        limit = _cost_limit(100.0, TokenRateLimitScope.USER, period_hours=48)
+        limit = _cost_limit(100.0, TokenRateLimitScope.USER, period_hours=168)
         assert token_limit._cost_budget_reset(
             [limit], _recent_cost_buckets(150.0)
-        ) == get_cost_window_reset(now, 48)
+        ) == get_cost_window_reset(now, 168)
 
-    def test_stale_day_usage_expires_early(self) -> None:
-        # The overage is entirely in the oldest day of a 2-day window, so it ages
-        # out tomorrow — the exact reset, well before the full-window expiry.
+    def test_oldest_weekly_usage_expires_at_calendar_reset(self) -> None:
         now = datetime.datetime.now(datetime.timezone.utc)
-        limit = _cost_limit(100.0, TokenRateLimitScope.USER, period_hours=48)
-        oldest_day = [(get_cost_window_start(now, 48), 150.0)]
+        limit = _cost_limit(100.0, TokenRateLimitScope.USER, period_hours=168)
+        oldest_day = [(get_cost_window_start(now, 168), 150.0)]
         assert token_limit._cost_budget_reset(
             [limit], oldest_day
-        ) == get_cost_window_reset(now, 24)
+        ) == get_cost_window_reset(now, 168)
 
     def test_over_cost_budget_returns_reset(self) -> None:
         limit = _cost_limit(100.0, TokenRateLimitScope.USER)
@@ -590,10 +586,10 @@ class TestTokenRateLimitArgsValidation:
         )
         assert args.token_budget is None and args.cost_budget_cents == 500.0
 
-    def test_cost_period_must_be_whole_days(self) -> None:
+    def test_cost_period_must_be_a_supported_calendar_period(self) -> None:
         from onyx.server.token_rate_limits.models import TokenRateLimitArgs
 
-        with pytest.raises(ValueError, match="whole UTC days"):
+        with pytest.raises(ValueError, match="daily.*weekly.*monthly"):
             TokenRateLimitArgs(
                 enabled=True,
                 token_budget=None,

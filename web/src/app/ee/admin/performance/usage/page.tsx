@@ -20,17 +20,16 @@ export default function UsagePage() {
         title={route.title}
         description="Monitor workspace spend and review usage by user."
         divider
+        rightChildren={
+          <DateRangePicker
+            value={timeRange}
+            onValueChange={(value) => setTimeRange(value as any)}
+            size="sm"
+          />
+        }
       />
       <SettingsLayouts.Body>
-        <PerUserUsagePanel
-          timeRange={timeRange}
-          headerRight={
-            <DateRangePicker
-              value={timeRange}
-              onValueChange={(value) => setTimeRange(value as any)}
-            />
-          }
-        />
+        <PerUserUsagePanel timeRange={timeRange} />
         <Divider />
         <TokenRateLimitsPanel embedded />
       </SettingsLayouts.Body>

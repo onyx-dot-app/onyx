@@ -57,13 +57,13 @@ def test_token_periods_use_whole_utc_days() -> None:
     )
 
 
-def test_cost_window_uses_whole_utc_day_buckets() -> None:
+def test_cost_windows_use_fixed_utc_calendar_periods() -> None:
     now = datetime.datetime(2026, 7, 21, 13, 30, tzinfo=datetime.timezone.utc)
 
     assert get_cost_window_start(now, 24) == datetime.datetime(
         2026, 7, 21, tzinfo=datetime.timezone.utc
     )
-    assert get_cost_window_start(now, 48) == datetime.datetime(
+    assert get_cost_window_start(now, 168) == datetime.datetime(
         2026, 7, 20, tzinfo=datetime.timezone.utc
     )
 

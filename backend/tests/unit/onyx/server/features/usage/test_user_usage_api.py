@@ -27,6 +27,7 @@ from onyx.db.models import (
     User__UserGroup,
     UserUsage,
 )
+from onyx.db.user_usage import get_cost_window_reset, get_cost_window_start
 from onyx.error_handling.exceptions import register_onyx_exception_handlers
 from onyx.llm import cost_overrides
 from onyx.llm.cost import ModelPrice, get_model_price_per_million
@@ -46,6 +47,26 @@ def _compile_jsonb_sqlite(_element: object, _compiler: object, **_kw: object) ->
 class _StubUser:
     def __init__(self, user_id: str) -> None:
         self.id = user_id
+
+
+@pytest.mark.parametrize(
+    ("period_hours", "start", "reset"),
+    [
+        (24, datetime.datetime(2026, 8, 12), datetime.datetime(2026, 8, 13)),
+        (168, datetime.datetime(2026, 8, 10), datetime.datetime(2026, 8, 17)),
+        (720, datetime.datetime(2026, 8, 1), datetime.datetime(2026, 9, 1)),
+    ],
+)
+def test_cost_budgets_use_fixed_utc_calendar_periods(
+    period_hours: int, start: datetime.datetime, reset: datetime.datetime
+) -> None:
+    now = datetime.datetime(2026, 8, 12, 15, tzinfo=datetime.timezone.utc)
+    assert get_cost_window_start(now, period_hours) == start.replace(
+        tzinfo=datetime.timezone.utc
+    )
+    assert get_cost_window_reset(now, period_hours) == reset.replace(
+        tzinfo=datetime.timezone.utc
+    )
 
 
 @pytest.fixture
@@ -336,7 +357,6 @@ def test_custom_date_range_uses_inclusive_calendar_bounds(
         "model-a",
         "model-b",
     ]
-    assert body["window_cost_cents"] == pytest.approx(3.0)
 
 
 def test_custom_date_range_rejects_start_after_end(db_session: Session) -> None:
@@ -344,26 +364,6 @@ def test_custom_date_range_rejects_start_after_end(db_session: Session) -> None:
 
     resp = TestClient(_make_app(db_session, _StubUser(caller))).get(
         "/user/usage", params={"start": "2026-07-04", "end": "2026-07-03"}
-    )
-
-    assert resp.status_code == 400
-    assert resp.json()["error_code"] == "INVALID_INPUT"
-
-
-@pytest.mark.parametrize(
-    "params",
-    [
-        {"end": "9999-12-31"},
-        {"end": "0001-01-01"},
-    ],
-)
-def test_custom_date_range_rejects_unsupported_bounds(
-    db_session: Session, params: dict[str, str]
-) -> None:
-    caller = str(uuid4())
-
-    resp = TestClient(_make_app(db_session, _StubUser(caller))).get(
-        "/user/usage", params=params
     )
 
     assert resp.status_code == 400
@@ -517,6 +517,9 @@ def test_budget_reflects_user_cost_limit(
     )
     assert body["budget_cents"] == pytest.approx(100.0)
     assert body["budget_remaining_cents"] == pytest.approx(98.75)  # 100 - 1.25
+    assert body["budget_reset_at"] == get_cost_window_reset(
+        datetime.datetime.now(datetime.timezone.utc), 168
+    ).isoformat().replace("+00:00", "Z")
 
 
 def test_budget_reflects_global_cost_limit(

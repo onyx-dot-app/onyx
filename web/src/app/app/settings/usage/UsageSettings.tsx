@@ -3,14 +3,17 @@
 import { useEffect, useMemo, useState } from "react";
 import { Section } from "@/layouts/general-layouts";
 import { Content } from "@opal/layouts";
-import { Card, Divider, EmptyMessageCard, Text } from "@opal/components";
+import { Button, Text, EmptyMessageCard, Divider } from "@opal/components";
 import {
   SvgBarChart,
   SvgWallet,
   SvgCreditCard,
   SvgSimpleLoader,
+  SvgChevronDown,
   SvgChevronRight,
+  SvgChevronUp,
 } from "@opal/icons";
+import Card from "@/refresh-components/cards/Card";
 import {
   Collapsible,
   CollapsibleContent,
@@ -27,6 +30,7 @@ import {
   rangeForInclusiveDays,
   type DateRange,
 } from "@/refresh-components/DateRangePicker";
+import { formatCalendarDay } from "@/lib/dateUtils";
 import {
   formatCurrencyFromCents as formatDollars,
   formatTokenCount as formatTokens,
@@ -37,20 +41,40 @@ interface WindowCostSectionProps {
   rows: UsagePerDayByModel[];
 }
 
+const COLLAPSED_USAGE_ROW_COUNT = 3;
+
 function WindowCostSection({ windowCostCents, rows }: WindowCostSectionProps) {
-  // Drives the relative bar widths in the breakdown.
-  const maxRowCost = rows.reduce(
-    (max, row) => Math.max(max, row.cost_cents),
-    0
-  );
+  const [showAll, setShowAll] = useState(false);
   const hasCache = rows.some((row) => row.cache_read_tokens > 0);
-  const sortedRows = useMemo(
-    () => [...rows].sort((a, b) => b.cost_cents - a.cost_cents),
-    [rows]
-  );
+  const modelRows = useMemo(() => {
+    const byModel = new Map<string, Omit<UsagePerDayByModel, "day">>();
+    for (const row of rows) {
+      const model = byModel.get(row.model) ?? {
+        model: row.model,
+        input_tokens: 0,
+        output_tokens: 0,
+        cache_read_tokens: 0,
+        cost_cents: 0,
+      };
+      model.input_tokens += row.input_tokens;
+      model.output_tokens += row.output_tokens;
+      model.cache_read_tokens += row.cache_read_tokens;
+      model.cost_cents += row.cost_cents;
+      byModel.set(row.model, model);
+    }
+    return Array.from(byModel.values()).sort(
+      (a, b) => b.cost_cents - a.cost_cents
+    );
+  }, [rows]);
+  const maxModelCost = modelRows[0]?.cost_cents ?? 0;
+  const isExpandable = modelRows.length > COLLAPSED_USAGE_ROW_COUNT;
+  const displayedRows = showAll
+    ? modelRows
+    : modelRows.slice(0, COLLAPSED_USAGE_ROW_COUNT + 1);
+  const hiddenRowCount = modelRows.length - COLLAPSED_USAGE_ROW_COUNT;
 
   return (
-    <Section gap={3} justifyContent="start">
+    <Section gap={0.75} justifyContent="start">
       <Content
         icon={SvgBarChart}
         title="Usage this period"
@@ -67,25 +91,32 @@ function WindowCostSection({ windowCostCents, rows }: WindowCostSectionProps) {
           description="Your model usage and costs will show up here once you start chatting."
         />
       ) : (
-        <Card border="solid" rounding="lg">
-          <Section alignItems="start" height="fit">
-            {sortedRows.map((row, index) => (
-              <div key={`${row.day}-${row.model}`}>
+        <Card>
+          {displayedRows.map((row, index) => {
+            const isPreview = !showAll && index === COLLAPSED_USAGE_ROW_COUNT;
+
+            return (
+              <div
+                key={row.model}
+                data-testid={isPreview ? "usage-model-preview" : undefined}
+                aria-hidden={isPreview || undefined}
+                className={cn(
+                  isPreview &&
+                    "max-h-10 overflow-hidden [mask-image:linear-gradient(to_bottom,black_5%,transparent_75%)]"
+                )}
+              >
                 {index > 0 && <Divider />}
-                <Section gap={2} alignItems="start" justifyContent="start">
+                <Section gap={0.5} alignItems="start" justifyContent="start">
                   <Section
                     flexDirection="row"
                     justifyContent="between"
                     alignItems="center"
                     width="full"
-                    gap={4}
+                    gap={1}
                   >
                     <Section gap={0} alignItems="start" justifyContent="start">
                       <Text font="main-ui-action" color="text-03">
                         {row.model}
-                      </Text>
-                      <Text font="secondary-body" color="text-01">
-                        {row.day}
                       </Text>
                     </Section>
                     <Text font="main-ui-action" color="text-03" nowrap>
@@ -99,14 +130,14 @@ function WindowCostSection({ windowCostCents, rows }: WindowCostSectionProps) {
                       className="h-full rounded-full bg-theme-primary-05"
                       style={{
                         width:
-                          maxRowCost > 0
-                            ? `${Math.max(2, (row.cost_cents / maxRowCost) * 100)}%`
+                          maxModelCost > 0
+                            ? `${Math.max(2, (row.cost_cents / maxModelCost) * 100)}%`
                             : "0%",
                       }}
                     />
                   </div>
 
-                  <Text font="secondary-body" color="text-01">
+                  <Text font="secondary-body" color="text-03">
                     {`${formatTokens(row.input_tokens)} in · ${formatTokens(
                       row.output_tokens
                     )} out${
@@ -117,8 +148,32 @@ function WindowCostSection({ windowCostCents, rows }: WindowCostSectionProps) {
                   </Text>
                 </Section>
               </div>
-            ))}
-          </Section>
+            );
+          })}
+          {isExpandable && (
+            <div
+              data-testid="usage-models-expander"
+              className={cn(
+                "relative z-10 -mx-4 -mb-4 flex self-stretch justify-center pb-1 pt-1",
+                showAll ? "mt-1" : "-mt-8"
+              )}
+            >
+              <Button
+                prominence="tertiary"
+                size="2xs"
+                rightIcon={showAll ? SvgChevronUp : SvgChevronDown}
+                aria-expanded={showAll}
+                aria-label={
+                  showAll
+                    ? "Show fewer models"
+                    : `Show ${hiddenRowCount} more models`
+                }
+                onClick={() => setShowAll((value) => !value)}
+              >
+                {showAll ? "Show less" : `Show ${hiddenRowCount} more`}
+              </Button>
+            </div>
+          )}
         </Card>
       )}
     </Section>
@@ -185,7 +240,7 @@ function ModelPriceSection({ prices, defaultPrice }: ModelPriceSectionProps) {
   }
 
   return (
-    <Section gap={3} justifyContent="start">
+    <Section gap={0.75} justifyContent="start">
       <Content
         icon={SvgCreditCard}
         title="Model prices"
@@ -194,67 +249,65 @@ function ModelPriceSection({ prices, defaultPrice }: ModelPriceSectionProps) {
         variant="section"
         width="full"
       />
-      <Card border="solid" rounding="lg">
-        <Section alignItems="start" height="fit">
-          {groups.length === 0 ? (
-            <Text font="main-ui-body" color="text-01">
-              Prices unavailable
-            </Text>
-          ) : (
-            <Section gap={1} alignItems="stretch" justifyContent="start">
-              {groups.map(({ provider, models }) => {
-                const open = expanded.has(provider);
-                return (
-                  <Collapsible
-                    key={provider}
-                    open={open}
-                    onOpenChange={() => toggle(provider)}
-                    className="flex flex-col"
-                  >
-                    <CollapsibleTrigger className="flex flex-row items-center justify-between cursor-pointer select-none py-1.5">
-                      <Text font="main-ui-action" color="text-03">
-                        {provider}
-                      </Text>
-                      <SvgChevronRight
-                        className={cn(
-                          "w-4 h-4 text-text-03 transition-transform",
-                          open && "rotate-90"
-                        )}
-                      />
-                    </CollapsibleTrigger>
-                    <CollapsibleContent>
-                      <Section
-                        gap={0}
-                        alignItems="stretch"
-                        justifyContent="start"
-                      >
-                        {models.map((price) => (
-                          <div
-                            key={`${provider}-${price.model}`}
-                            className="flex flex-row items-center justify-between gap-2 py-1 pl-3"
-                          >
-                            <Text font="secondary-body" color="text-03" nowrap>
-                              {isSameModelPrice(price, defaultPrice)
-                                ? `${price.model} · default`
-                                : price.model}
-                            </Text>
-                            <Text font="secondary-body" color="text-01" nowrap>
-                              {`${formatMtok(price.input_per_mtok)} in · ${formatMtok(
-                                price.output_per_mtok
-                              )} out · ${formatMtok(
-                                price.cache_per_mtok ?? price.input_per_mtok
-                              )} cache`}
-                            </Text>
-                          </div>
-                        ))}
-                      </Section>
-                    </CollapsibleContent>
-                  </Collapsible>
-                );
-              })}
-            </Section>
-          )}
-        </Section>
+      <Card>
+        {groups.length === 0 ? (
+          <Text font="main-ui-body" color="text-01">
+            Prices unavailable
+          </Text>
+        ) : (
+          <Section gap={0.25} alignItems="stretch" justifyContent="start">
+            {groups.map(({ provider, models }) => {
+              const open = expanded.has(provider);
+              return (
+                <Collapsible
+                  key={provider}
+                  open={open}
+                  onOpenChange={() => toggle(provider)}
+                  className="flex flex-col"
+                >
+                  <CollapsibleTrigger className="flex flex-row items-center justify-between cursor-pointer select-none py-1.5">
+                    <Text font="main-ui-action" color="text-03">
+                      {provider}
+                    </Text>
+                    <SvgChevronRight
+                      className={cn(
+                        "w-4 h-4 text-text-03 transition-transform",
+                        open && "rotate-90"
+                      )}
+                    />
+                  </CollapsibleTrigger>
+                  <CollapsibleContent>
+                    <Section
+                      gap={0}
+                      alignItems="stretch"
+                      justifyContent="start"
+                    >
+                      {models.map((price) => (
+                        <div
+                          key={`${provider}-${price.model}`}
+                          className="flex flex-row items-center justify-between gap-2 py-1 pl-3"
+                        >
+                          <Text font="secondary-body" color="text-05" nowrap>
+                            {isSameModelPrice(price, defaultPrice)
+                              ? `${price.model} · default`
+                              : price.model}
+                          </Text>
+                          <Text font="secondary-body" color="text-03" nowrap>
+                            {`${formatMtok(price.input_per_mtok)} in · ${formatMtok(
+                              price.output_per_mtok
+                            )} out · ${formatMtok(
+                              price.cache_per_mtok ?? price.input_per_mtok
+                            )} cache`}
+                          </Text>
+                        </div>
+                      ))}
+                    </Section>
+                  </CollapsibleContent>
+                </Collapsible>
+              );
+            })}
+          </Section>
+        )}
       </Card>
     </Section>
   );
@@ -263,27 +316,19 @@ function ModelPriceSection({ prices, defaultPrice }: ModelPriceSectionProps) {
 interface BudgetSectionProps {
   budgetCents: number | null;
   budgetRemainingCents: number | null;
-  budgetPeriodHours: number | null;
+  budgetResetAt: string | null;
 }
 
-// Hours -> a friendly window label so the budget reads "per week", not "per 168h".
-function formatPeriod(hours: number | null): string {
-  if (hours == null) return "";
-  if (hours % 168 === 0) {
-    const w = hours / 168;
-    return w === 1 ? "week" : `${w} weeks`;
-  }
-  if (hours % 24 === 0) {
-    const d = hours / 24;
-    return d === 1 ? "day" : `${d} days`;
-  }
-  return hours === 1 ? "hour" : `${hours} hours`;
+function formatBudgetReset(resetAt: string | null): string | null {
+  return resetAt
+    ? `Resets on ${formatCalendarDay(resetAt.slice(0, 10))}`
+    : null;
 }
 
 function BudgetSection({
   budgetCents,
   budgetRemainingCents,
-  budgetPeriodHours,
+  budgetResetAt,
 }: BudgetSectionProps) {
   // budget_* are null when the user has no cost limit; show a graceful empty state.
   const hasBudget = budgetCents !== null;
@@ -291,9 +336,10 @@ function BudgetSection({
   const spent = hasBudget ? Math.max(0, budgetCents - remaining) : 0;
   const usedFraction =
     hasBudget && budgetCents > 0 ? Math.min(1, spent / budgetCents) : 0;
+  const budgetReset = formatBudgetReset(budgetResetAt);
 
   return (
-    <Section gap={3} justifyContent="start">
+    <Section gap={0.75} justifyContent="start">
       <Content
         icon={SvgWallet}
         title="Budget"
@@ -301,46 +347,41 @@ function BudgetSection({
         variant="section"
         width="full"
       />
-      <Card border="solid" rounding="lg">
-        <Section alignItems="start" height="fit">
-          {hasBudget ? (
-            <Section gap={2} alignItems="start" justifyContent="start">
-              <Section
-                flexDirection="row"
-                justifyContent="between"
-                alignItems="center"
-                width="full"
-                gap={4}
-              >
-                <Text font="main-ui-body" color="text-03">
-                  {`${formatDollars(remaining)} remaining`}
+      <Card>
+        {hasBudget ? (
+          <Section gap={0.5} alignItems="start" justifyContent="start">
+            <div className="flex w-full flex-wrap items-baseline gap-x-4 gap-y-1">
+              <Text font="main-ui-body" color="text-03">
+                {`${formatDollars(remaining)} remaining`}
+              </Text>
+            </div>
+            <div className="h-1.5 w-full overflow-hidden rounded-full bg-background-neutral-03">
+              <div
+                className={cn(
+                  "h-full rounded-full",
+                  usedFraction >= 1
+                    ? "bg-status-error-05"
+                    : "bg-theme-primary-05"
+                )}
+                style={{ width: `${usedFraction * 100}%` }}
+              />
+            </div>
+            <div className="flex w-full flex-wrap justify-between gap-x-4 gap-y-1">
+              {budgetReset && (
+                <Text font="secondary-body" color="text-03">
+                  {budgetReset}
                 </Text>
-                <Text font="secondary-body" color="text-01">
-                  {`of ${formatDollars(budgetCents)}${
-                    budgetPeriodHours
-                      ? ` per ${formatPeriod(budgetPeriodHours)}`
-                      : ""
-                  }`}
-                </Text>
-              </Section>
-              <div className="w-full h-1.5 rounded-full bg-background-neutral-03 overflow-hidden">
-                <div
-                  className={cn(
-                    "h-full rounded-full",
-                    usedFraction >= 1
-                      ? "bg-status-error-05"
-                      : "bg-theme-primary-05"
-                  )}
-                  style={{ width: `${usedFraction * 100}%` }}
-                />
-              </div>
-            </Section>
-          ) : (
-            <Text font="main-ui-body" color="text-01">
-              No budget set
-            </Text>
-          )}
-        </Section>
+              )}
+              <Text font="secondary-body" color="text-03">
+                {`${formatDollars(budgetCents)} limit`}
+              </Text>
+            </div>
+          </Section>
+        ) : (
+          <Text font="main-ui-body" color="text-01">
+            No budget set
+          </Text>
+        )}
       </Card>
     </Section>
   );
@@ -357,35 +398,26 @@ export default function UsageSettings() {
   }, [error]);
 
   return (
-    <Section gap={8}>
-      <Section gap={3} justifyContent="start">
-        <Section
-          flexDirection="row"
-          justifyContent="between"
-          alignItems="center"
-          width="full"
-          gap={4}
-          wrap
-        >
-          <Content title="Usage" sizePreset="main-content" variant="section" />
+    <Section gap={2}>
+      <Section gap={0.75} justifyContent="start">
+        <div className="flex w-full flex-wrap items-center justify-between gap-3">
+          <Text font="heading-h3">Usage</Text>
           <DateRangePicker
             value={dateRange}
             onValueChange={setDateRange}
             size="sm"
           />
-        </Section>
+        </div>
 
         {isLoading ? (
-          <Card border="solid" rounding="lg">
-            <Section alignItems="start" height="fit">
-              <Section
-                flexDirection="row"
-                justifyContent="center"
-                alignItems="center"
-                width="full"
-              >
-                <SvgSimpleLoader />
-              </Section>
+          <Card>
+            <Section
+              flexDirection="row"
+              justifyContent="center"
+              alignItems="center"
+              width="full"
+            >
+              <SvgSimpleLoader />
             </Section>
           </Card>
         ) : error || !data ? (
@@ -395,7 +427,7 @@ export default function UsageSettings() {
             description="Something went wrong fetching your usage. Try again in a moment."
           />
         ) : (
-          <Section gap={8}>
+          <Section gap={2}>
             <WindowCostSection
               windowCostCents={data.window_cost_cents}
               rows={data.per_day_by_model}
@@ -403,7 +435,7 @@ export default function UsageSettings() {
             <BudgetSection
               budgetCents={data.budget_cents}
               budgetRemainingCents={data.budget_remaining_cents}
-              budgetPeriodHours={data.budget_period_hours}
+              budgetResetAt={data.budget_reset_at}
             />
             <ModelPriceSection
               prices={data.available_model_prices ?? []}
