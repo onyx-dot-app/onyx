@@ -21,7 +21,6 @@ from onyx.auth.sso_tenant_token import (
     SSO_TENANT_TOKEN_PARAM,
     generate_sso_tenant_token,
 )
-from onyx.configs.app_configs import SSO_DISCOVERY_RATE_LIMIT_ENABLED
 from onyx.db.engine.sql_engine import get_session_with_tenant
 from onyx.db.models import SSOProvider
 from onyx.db.sso_provider import (
@@ -60,9 +59,10 @@ class SSODiscoveryResponse(BaseModel):
 
 
 async def _enforce_discovery_rate_limit(request: Request) -> None:
-    # On cloud this is the only bound on address enumeration, so the disable
-    # flag relaxes single-tenant only. Multi-tenant always enforces.
-    if not SSO_DISCOVERY_RATE_LIMIT_ENABLED and not MULTI_TENANT:
+    # Single-tenant has one workspace to enumerate and runs without Redis on
+    # Onyx-lite, so the bound applies only on cloud, where it is the sole limit
+    # on address enumeration.
+    if not MULTI_TENANT:
         return
 
     ip = get_client_ip(request) or "unknown"
