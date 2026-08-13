@@ -604,9 +604,10 @@ class SlackSourceOperations(SourceOperations):
         consumes=OperationConsumes.CREDENTIAL,
     )
     def check_auth(self, *, fast: bool = False) -> SlackAuthTestResponse:
-        """``auth.test``: token validity, workspace url, Grid enterprise id,
-        and the granted bot scopes (from the ``X-OAuth-Scopes`` response
-        header)."""
+        """
+        ``auth.test``: token validity, workspace url, Grid enterprise id, and
+        the granted bot scopes (from the ``X-OAuth-Scopes`` response header).
+        """
         response = self._client_for(fast).auth_test()
         result = _validated(response, SlackAuthTestResponse)
         result.granted_scopes = _parse_granted_scopes(response.headers)
@@ -753,10 +754,10 @@ class SlackSourceOperations(SourceOperations):
         )
 
     @source_operation(
-        # The dormant EE group-sync path (``group_sync.py``) also calls this,
-        # but group sync is unregistered for Slack by design
-        # (``sync_params.py``), so the op does not bear the EXTERNAL_GROUP_SYNC
-        # tag: tags mirror live consumption that checks must cover.
+        # No EXTERNAL_GROUP_SYNC tag: the one group-sync caller
+        # (``group_sync.py``) is dormant, since Slack registers no group sync
+        # in ``sync_params.py``. Tagging it would make the coverage test
+        # demand a group-sync check for a path that never runs.
         capabilities={
             CredentialCapability.INDEXING,
             CredentialCapability.DOC_PERMISSION_SYNC,

@@ -280,7 +280,7 @@ def test_unregistered_source_gets_no_gateway(
 ) -> None:
     """Verifies the context carries no gateway for unmigrated sources."""
     # Precondition.
-    # GITHUB has no registered gateway, so the real lookup returns None.
+    # Github has no registered gateway, so the real lookup returns None.
     seen_contexts: list[CapabilityCheckContext] = []
     check = _CallableCheck(
         seen_contexts.append,

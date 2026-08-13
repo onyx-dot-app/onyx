@@ -70,9 +70,9 @@ def test_operation_inventory_is_pinned() -> None:
     assert set(specs) == _EXPECTED_OPERATIONS
     # Every operation runs on the bot token alone.
     assert all(spec.consumes == OperationConsumes.CREDENTIAL for spec in specs.values())
-    # Only the permanent exemptions remain untested: a side-effecting probe,
-    # a gracefully-degrading one, and the dormant group-sync pair. Everything
-    # else is exercised by the checks in ``slack/capability_checks.py``.
+    # Only the permanent exemptions remain untested: a side-effecting probe, a
+    # gracefully-degrading one, and the dormant group-sync pair. Everything else
+    # is exercised by the checks in ``slack/capability_checks.py``.
     assert {name for name, spec in specs.items() if spec.untested} == {
         "join_channel",
         "fetch_team_info",
@@ -105,8 +105,8 @@ def test_capability_tags_are_pinned() -> None:
     specs = SlackSourceOperations.operation_specs()
 
     # Postcondition.
-    # No EXTERNAL_GROUP_SYNC on ``fetch_user_info``: its only group-sync
-    # caller is the dormant, unregistered ``group_sync.py`` path.
+    # No EXTERNAL_GROUP_SYNC on ``fetch_user_info``: its only group-sync caller
+    # is the dormant, unregistered ``group_sync.py`` path.
     assert specs["fetch_user_info"].capabilities == {
         CredentialCapability.INDEXING,
         CredentialCapability.DOC_PERMISSION_SYNC,

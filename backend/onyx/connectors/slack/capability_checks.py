@@ -73,8 +73,8 @@ _HISTORY_PROBE_CHANNEL_PAGE_SIZE = 20
 _EMAIL_PROBE_PAGE_SIZE = 100
 
 # Hang guard for the full-workspace channel enumeration, the one multi-page
-# probe: triple the 600s ``CAPABILITY_CHECK_TIMEOUT_SECONDS`` default, since
-# the gateway's redis-coordinated client also serves any concurrently running
+# probe: triple the 600s ``CAPABILITY_CHECK_TIMEOUT_SECONDS`` default, since the
+# gateway's redis-coordinated client also serves any concurrently running
 # indexing job's rate-limit backoff.
 _CHANNEL_ENUMERATION_TIMEOUT_SECONDS = 1800.0
 
@@ -86,7 +86,7 @@ def _slack_client(context: CapabilityCheckContext) -> SlackSourceOperations:
     runner, not a check outcome.
     """
     assert isinstance(context.source_operations, SlackSourceOperations), (
-        "The runner constructs the registered gateway for migrated sources."
+        "Bug: The runner constructs the registered gateway for migrated sources."
     )
     return context.source_operations
 
@@ -166,8 +166,8 @@ def _first_private_channel(
     None covers an empty listing and a ``missing_scope`` failure alike: without
     ``groups:read`` no private channels are in scope, and the non-required
     private-listing checks own that finding. Any other listing error maps
-    through ``_raise_for_slack_api_error``; a rate-limited listing must not
-    turn into a pass of a required check.
+    through ``_raise_for_slack_api_error``; a rate-limited listing must not turn
+    into a pass of a required check.
     """
     try:
         listing = next(
@@ -453,10 +453,10 @@ class _ChannelJoinScopeCheck(CapabilityCheck):
     """Verifies the ``channels:join`` scope via the ``X-OAuth-Scopes`` header.
 
     Header-based instead of a functional probe: actually calling
-    ``conversations.join`` would join a channel in the customer's workspace as
-    a side effect (the operation carries a matching ``untested`` annotation).
-    Not required: a bot manually invited to every configured channel indexes
-    fine without the scope.
+    ``conversations.join`` would join a channel in the customer's workspace as a
+    side effect (the operation carries a matching ``untested`` annotation). Not
+    required: a bot manually invited to every configured channel indexes fine
+    without the scope.
     """
 
     def __init__(self) -> None:
@@ -574,8 +574,8 @@ class _ConfiguredChannelsVisibleCheck(CapabilityCheck):
     """Verifies every configured channel name is visible to the bot.
 
     Existed only as commented-out code in ``validate_connector_settings``
-    (removed as too slow for a synchronous request); resurrected here where
-    slow runs are acceptable. Composes the same enumeration the connector runs
+    (removed as too slow for a synchronous request); resurrected here where slow
+    runs are acceptable. Composes the same enumeration the connector runs
     (``get_channels`` / ``get_channels_across_teams``).
     """
 
@@ -601,8 +601,7 @@ class _ConfiguredChannelsVisibleCheck(CapabilityCheck):
             # No channel filter configured; whatever is visible gets indexed.
             return
         if config.get("channel_regex_enabled"):
-            # Regex includes match dynamically; existence cannot be
-            # pre-checked.
+            # Regex includes match dynamically; existence cannot be pre-checked.
             return
         slack_client = _slack_client(context)
         try:
@@ -672,9 +671,9 @@ class _PermSyncChannelListingCheck(CapabilityCheck):
 class _PermSyncPrivateChannelListingCheck(CapabilityCheck):
     """Lists one private channel under the permission-sync capability.
 
-    Not required: doc sync has the same silent public-only fallback indexing
-    has when private channels cannot be listed, so the capability degrades
-    rather than breaks.
+    Not required: doc sync has the same silent public-only fallback indexing has
+    when private channels cannot be listed, so the capability degrades rather
+    than breaks.
     """
 
     def __init__(self) -> None:
@@ -764,10 +763,10 @@ class _UserEmailVisibilityCheck(CapabilityCheck):
 class _PrivateChannelMemberListingCheck(CapabilityCheck):
     """Lists one private channel's members, then resolves one member.
 
-    The ``users.info`` step mirrors doc sync's fallback for members missing
-    from the workspace user list (external users). Listing scope failures pass
-    here: doc sync silently degrades to public-only without ``groups:read``,
-    and ``slack_perm_sync_private_channel_listing`` owns that warning.
+    The ``users.info`` step mirrors doc sync's fallback for members missing from
+    the workspace user list (external users). Listing scope failures pass here:
+    doc sync silently degrades to public-only without ``groups:read``, and
+    ``slack_perm_sync_private_channel_listing`` owns that warning.
     """
 
     def __init__(self) -> None:

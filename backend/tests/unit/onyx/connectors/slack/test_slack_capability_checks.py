@@ -367,8 +367,8 @@ def test_private_history_leaves_listing_scope_failures_to_the_listing_check() ->
 
 def test_private_history_rate_limited_listing_is_indeterminate() -> None:
     """
-    Verifies the listing gate passes only scope failures: a rate-limited
-    listing must not turn into a false pass of a required check.
+    Verifies the listing gate passes only scope failures: a rate-limited listing
+    must not turn into a false pass of a required check.
     """
     # Precondition.
     gateway = _gateway()
@@ -562,8 +562,8 @@ def test_email_visibility_passes_when_emails_present() -> None:
 def test_email_visibility_fails_when_emails_absent() -> None:
     """Verifies the content-based detection of a missing ``users:read.email``.
 
-    Slack omits email fields rather than raising ``missing_scope``, so the
-    check must fail on successful-but-emailless responses.
+    Slack omits email fields rather than raising ``missing_scope``, so the check
+    must fail on successful-but-emailless responses.
     """
     # Precondition.
     gateway = _gateway()
@@ -683,8 +683,9 @@ def test_private_member_listing_missing_scope() -> None:
 
 
 def test_private_member_listing_resolves_one_member() -> None:
-    """Verifies the ``users.info`` step mirrors doc sync's external-user
-    fallback."""
+    """
+    Verifies the ``users.info`` step mirrors doc sync's external-user fallback.
+    """
     # Precondition.
     gateway = _gateway()
     gateway.list_channels.side_effect = _pages(
@@ -894,10 +895,10 @@ def test_full_slack_check_run_happy_path() -> None:
 
 def test_configless_run_gates_indexing_on_the_required_config_check() -> None:
     """
-    Verifies the credential-time verdict semantics: every runnable check
-    passes, but ``slack_configured_channels_visible`` is required and needs a
-    config, so its skip keeps INDEXING at SKIPPED (no pass-ish claim on a
-    partially verified capability) until connector binding re-runs the checks.
+    Verifies the credential-time verdict semantics: every runnable check passes,
+    but ``slack_configured_channels_visible`` is required and needs a config, so
+    its skip keeps INDEXING at SKIPPED (no pass-ish claim on a partially
+    verified capability) until connector binding re-runs the checks.
     """
     # Precondition.
     checks = build_slack_indexing_checks() + build_slack_doc_permission_sync_checks()
