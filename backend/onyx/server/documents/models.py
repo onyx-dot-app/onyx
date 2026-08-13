@@ -527,6 +527,7 @@ class CCPairFullInfo(BaseModel):
         *,
         mask_credential_prefix: bool,
         is_connectors_admin: bool = False,
+        owns_groupless: bool = False,
         last_successful_index_time: datetime | None = None,
         last_permission_sync_attempt_status: PermissionSyncStatus | None = None,
         permission_syncing: bool = False,
@@ -579,6 +580,7 @@ class CCPairFullInfo(BaseModel):
             permissions=cc_pair_permissions(
                 is_editable=is_editable_for_current_user,
                 is_connectors_admin=is_connectors_admin,
+                owns_groupless=owns_groupless,
             ),
             deletion_failure_message=cc_pair_model.deletion_failure_message,
             indexing=indexing,

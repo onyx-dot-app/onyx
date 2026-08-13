@@ -26,16 +26,16 @@ CC_PAIR_ACTIONS: frozenset[str] = frozenset(CCPairPermissions.__annotations__)
 
 
 def cc_pair_permissions(
-    *, is_editable: bool, is_connectors_admin: bool
+    *, is_editable: bool, is_connectors_admin: bool, owns_groupless: bool = False
 ) -> dict[str, bool]:
     """``is_editable`` is the managed-scope editable decision the write guard enforces
     (a scoped manager may edit a managed private connector; it also gates the
-    manage-access control, so there is no separate key). ``delete`` and ``publish``
-    (make org-wide PUBLIC) are global-only: a manager can edit a managed connector but
-    never delete it or make it public."""
+    manage-access control, so there is no separate key). ``publish`` (make org-wide
+    PUBLIC) is global-only. So is ``delete``, except for a private groupless connector
+    its creator made — mirrors the GATE 2 carve-out in create_deletion_attempt_for_connector_id."""
     result: CCPairPermissions = {
         "edit": is_editable,
-        "delete": is_connectors_admin,
+        "delete": is_connectors_admin or owns_groupless,
         "publish": is_connectors_admin,
     }
     return cast(dict[str, bool], result)
@@ -99,16 +99,17 @@ DOCUMENT_SET_ACTIONS: frozenset[str] = frozenset(DocumentSetPermissions.__annota
 
 
 def document_set_permissions(
-    *, is_editable: bool, is_document_sets_admin: bool
+    *, is_editable: bool, is_document_sets_admin: bool, owns_groupless: bool = False
 ) -> dict[str, bool]:
     """Document set affordance map. ``edit`` and ``manage_access`` are the managed-scope
     editable decision the write guard enforces (a doc set has no editor-share arm, so
-    editable membership is that decision). ``delete`` and ``publish`` (make org-wide
-    public) are global MANAGE_DOCUMENT_SETS only."""
+    editable membership is that decision). ``publish`` (make org-wide public) is global
+    MANAGE_DOCUMENT_SETS only. So is ``delete``, except for a private groupless set its
+    creator made — mirrors the GATE 2 carve-out in delete_document_set."""
     result: DocumentSetPermissions = {
         "edit": is_editable,
         "manage_access": is_editable,
-        "delete": is_document_sets_admin,
+        "delete": is_document_sets_admin or owns_groupless,
         "publish": is_document_sets_admin,
     }
     return cast(dict[str, bool], result)

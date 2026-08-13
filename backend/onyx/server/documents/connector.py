@@ -1109,6 +1109,26 @@ def get_connector_indexing_status(
 
     is_connectors_admin = has_global_permission(user, Permission.MANAGE_CONNECTORS)
 
+    # a pair shared with nobody stays deletable by its creator; only the editable set
+    # can qualify, and an admin already has delete on everything
+    groupless_owned_ids: set[int] = set()
+    if not is_connectors_admin:
+        grouped_ids = {
+            relationship.cc_pair_id
+            for relationship in get_cc_pair_groups_for_ids(
+                db_session=db_session,
+                cc_pair_ids=[cc_pair.id for cc_pair in editable_cc_pairs],
+            )
+            if relationship.is_current
+        }
+        groupless_owned_ids = {
+            cc_pair.id
+            for cc_pair in editable_cc_pairs
+            if cc_pair.id not in grouped_ids
+            and cc_pair.creator_id == user.id
+            and cc_pair.access_type != AccessType.PUBLIC
+        }
+
     def build_connector_indexing_status(
         cc_pair: ConnectorCredentialPair,
         is_editable: bool,
@@ -1139,6 +1159,7 @@ def get_connector_indexing_status(
             is_editable,
             doc_count,
             is_connectors_admin=is_connectors_admin,
+            owns_groupless=cc_pair.id in groupless_owned_ids,
         )
 
     # Process editable cc_pairs
@@ -1306,6 +1327,7 @@ def _get_connector_indexing_status_lite(
     document_cnt: int,
     *,
     is_connectors_admin: bool,
+    owns_groupless: bool = False,
 ) -> ConnectorIndexingStatusLite | None:
     # TODO remove this to enable ingestion API
     if cc_pair.name == "DefaultCCPair":
@@ -1330,7 +1352,9 @@ def _get_connector_indexing_status_lite(
         cc_pair_status=cc_pair.status,
         is_editable=is_editable,
         permissions=cc_pair_permissions(
-            is_editable=is_editable, is_connectors_admin=is_connectors_admin
+            is_editable=is_editable,
+            is_connectors_admin=is_connectors_admin,
+            owns_groupless=owns_groupless,
         ),
         in_progress=in_progress,
         in_repeated_error_state=cc_pair.in_repeated_error_state,

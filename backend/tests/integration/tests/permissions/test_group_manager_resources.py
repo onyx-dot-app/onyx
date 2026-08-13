@@ -264,6 +264,139 @@ def test_manager_edits_doc_set_within_managed_group(env: _ScopedEnv) -> None:
     DocumentSetManager.edit(doc_set, user_performing_action=env.manager)
 
 
+def test_manager_edits_own_groupless_doc_set(env: _ScopedEnv) -> None:
+    """Detaching the last group must leave it editable in place — delete is admin-only,
+    so otherwise the creator can see it and do nothing with it."""
+    cc_pair = CCPairManager.create_from_scratch(
+        user_performing_action=env.manager,
+        access_type=AccessType.PRIVATE,
+        groups=[env.managed_group.id],
+    )
+    doc_set = DocumentSetManager.create(
+        user_performing_action=env.manager,
+        is_public=False,
+        groups=[env.managed_group.id],
+        cc_pair_ids=[cc_pair.id],
+    )
+    body = _doc_set_body(
+        is_public=False, groups=[], cc_pair_ids=[cc_pair.id], doc_set_id=doc_set.id
+    )
+    # first call detaches (scope gate, current groups still managed); second edits it
+    # in place with no groups left, which only the creator path admits
+    detach = call_endpoint(
+        "PATCH", _DOC_SET_PATH, body, env.manager.headers, env.manager.cookies
+    )
+    assert detach.status_code == 200, detach.text
+
+    body["name"] = f"ds-renamed-{uuid4()}"
+    in_place = call_endpoint(
+        "PATCH", _DOC_SET_PATH, body, env.manager.headers, env.manager.cookies
+    )
+    assert in_place.status_code == 200, in_place.text
+
+
+def test_manager_cannot_publish_own_groupless_doc_set(env: _ScopedEnv) -> None:
+    """In-place editing is not a route to publishing."""
+    cc_pair = CCPairManager.create_from_scratch(
+        user_performing_action=env.manager,
+        access_type=AccessType.PRIVATE,
+        groups=[env.managed_group.id],
+    )
+    doc_set = DocumentSetManager.create(
+        user_performing_action=env.manager,
+        is_public=False,
+        groups=[env.managed_group.id],
+        cc_pair_ids=[cc_pair.id],
+    )
+    detach = _doc_set_body(
+        is_public=False, groups=[], cc_pair_ids=[cc_pair.id], doc_set_id=doc_set.id
+    )
+    assert (
+        call_endpoint(
+            "PATCH", _DOC_SET_PATH, detach, env.manager.headers, env.manager.cookies
+        ).status_code
+        == 200
+    )
+
+    publish = _doc_set_body(
+        is_public=True, groups=[], cc_pair_ids=[cc_pair.id], doc_set_id=doc_set.id
+    )
+    resp = call_endpoint(
+        "PATCH", _DOC_SET_PATH, publish, env.manager.headers, env.manager.cookies
+    )
+    assert_response(resp, "PATCH", _DOC_SET_PATH, "manager", "denied")
+
+
+def test_manager_cannot_attach_unmanaged_group_to_groupless_doc_set(
+    env: _ScopedEnv,
+) -> None:
+    """Nor to capture: any group added still goes through the gate."""
+    cc_pair = CCPairManager.create_from_scratch(
+        user_performing_action=env.manager,
+        access_type=AccessType.PRIVATE,
+        groups=[env.managed_group.id],
+    )
+    doc_set = DocumentSetManager.create(
+        user_performing_action=env.manager,
+        is_public=False,
+        groups=[env.managed_group.id],
+        cc_pair_ids=[cc_pair.id],
+    )
+    detach = _doc_set_body(
+        is_public=False, groups=[], cc_pair_ids=[cc_pair.id], doc_set_id=doc_set.id
+    )
+    assert (
+        call_endpoint(
+            "PATCH", _DOC_SET_PATH, detach, env.manager.headers, env.manager.cookies
+        ).status_code
+        == 200
+    )
+
+    capture = _doc_set_body(
+        is_public=False,
+        groups=[env.other_group.id],
+        cc_pair_ids=[cc_pair.id],
+        doc_set_id=doc_set.id,
+    )
+    resp = call_endpoint(
+        "PATCH", _DOC_SET_PATH, capture, env.manager.headers, env.manager.cookies
+    )
+    assert_response(resp, "PATCH", _DOC_SET_PATH, "manager", "denied")
+
+
+def test_manager_deletes_own_groupless_doc_set(env: _ScopedEnv) -> None:
+    """Groupless and creator-owned is shared with nobody, so delete is allowed."""
+    cc_pair = CCPairManager.create_from_scratch(
+        user_performing_action=env.manager,
+        access_type=AccessType.PRIVATE,
+        groups=[env.managed_group.id],
+    )
+    doc_set = DocumentSetManager.create(
+        user_performing_action=env.manager,
+        is_public=False,
+        groups=[env.managed_group.id],
+        cc_pair_ids=[cc_pair.id],
+    )
+    detach = _doc_set_body(
+        is_public=False, groups=[], cc_pair_ids=[cc_pair.id], doc_set_id=doc_set.id
+    )
+    assert (
+        call_endpoint(
+            "PATCH", _DOC_SET_PATH, detach, env.manager.headers, env.manager.cookies
+        ).status_code
+        == 200
+    )
+
+    resp = call_endpoint(
+        "DELETE",
+        f"{_DOC_SET_PATH}/{doc_set.id}",
+        None,
+        env.manager.headers,
+        env.manager.cookies,
+    )
+    assert resp.status_code == 200, resp.text
+
+
 def test_manager_cannot_delete_doc_set(env: _ScopedEnv) -> None:
     cc_pair = CCPairManager.create_from_scratch(
         user_performing_action=env.manager,
@@ -276,7 +409,7 @@ def test_manager_cannot_delete_doc_set(env: _ScopedEnv) -> None:
         groups=[env.managed_group.id],
         cc_pair_ids=[cc_pair.id],
     )
-    # Owns it, in a managed group — still denied: delete is admin-only.
+    # Owns it, but it is still shared into a group — delete stays admin-only.
     path = f"{_DOC_SET_PATH}/{doc_set.id}"
     resp = call_endpoint("DELETE", path, None, env.manager.headers, env.manager.cookies)
     assert_response(resp, "DELETE", path, "manager", "denied")
@@ -300,10 +433,8 @@ def test_manager_cannot_delete_cc_pair(env: _ScopedEnv) -> None:
 
 
 def test_manager_reads_detail_of_managed_cc_pair(env: _ScopedEnv) -> None:
-    """The connector detail page. Every write route already admitted scope, but these
-    reads did not — so a manager could create a connector and then get a 403 opening
-    it. Each read row-filters by caller, so GATE 1 admitting scope is the whole fix.
-    """
+    """Write routes admitted scope but these reads did not, so a manager could create
+    a connector then 403 opening it. Each read row-filters by caller."""
     cc_pair = CCPairManager.create_from_scratch(
         user_performing_action=env.manager,
         access_type=AccessType.PRIVATE,
@@ -321,8 +452,7 @@ def test_manager_reads_detail_of_managed_cc_pair(env: _ScopedEnv) -> None:
 
 
 def test_manager_cannot_read_detail_of_unmanaged_cc_pair(env: _ScopedEnv) -> None:
-    """allow_scope must not widen the row filter: an out-of-scope pair still 404s
-    (the fetch returns nothing), never 200."""
+    """allow_scope must not widen the row filter."""
     admin_cc_pair = CCPairManager.create_from_scratch(
         user_performing_action=env.admin,
         access_type=AccessType.PRIVATE,
@@ -334,8 +464,8 @@ def test_manager_cannot_read_detail_of_unmanaged_cc_pair(env: _ScopedEnv) -> Non
 
 
 def test_manager_reads_credentials_for_connector_form(env: _ScopedEnv) -> None:
-    """Backs the connector setup page, which renders an empty fragment when either
-    credential fetch fails — a blank page with a sidebar, not an error."""
+    """The setup page renders an empty fragment when either fetch fails — a blank
+    page with a sidebar, not an error."""
     for path in [
         "/manage/admin/credential",
         "/manage/admin/similar-credentials/file",

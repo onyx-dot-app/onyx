@@ -48,8 +48,12 @@ from onyx.configs.constants import DocumentSource
 from onyx.connectors.models import InputType
 from onyx.db.connector_credential_pair import (
     get_connector_credential_pair_from_id_for_user,
+    user_owns_groupless_cc_pair,
 )
-from onyx.db.document_set import fetch_all_document_sets_for_user
+from onyx.db.document_set import (
+    fetch_all_document_sets_for_user,
+    user_owns_groupless_document_set,
+)
 from onyx.db.engine.sql_engine import get_session_with_current_tenant
 from onyx.db.enums import (
     AccessType,
@@ -100,6 +104,9 @@ from onyx.server.documents.credential import (
     create_credential_with_private_key,
 )
 from onyx.server.documents.models import CredentialBase
+from onyx.server.features.document_set.api import (
+    delete_document_set as delete_document_set_route,
+)
 from onyx.server.features.mcp.api import (
     _ensure_mcp_server_owner_or_admin,
     _ensure_mcp_server_viewable,
@@ -193,9 +200,9 @@ def _make_cc_pair(
 def test_cc_pair_projection_matches_gates(db_session: Session) -> None:
     """Each key is pinned to the real route, not the bool that built it: edit → the editable
     query (which must agree with the within_scope write decision); delete → the deletion route's
-    GATE 1 (global MANAGE_CONNECTORS, no allow_scope); publish → the associate route's real GATE 2
-    (assert_within_scope for the PUBLIC state). So this fails if either route starts admitting a
-    scoped manager — a scoped manager edits a managed connector but can never delete/publish it."""
+    GATE 1 narrowed by its GATE 2; publish → the associate route's real GATE 2
+    (assert_within_scope for the PUBLIC state). The pair here sits in a group, so a scoped
+    manager edits it but can neither delete nor publish it."""
     managed = _make_group(db_session)
 
     in_scope = create_test_user(db_session, "proj-cc-inscope")
@@ -229,9 +236,13 @@ def test_cc_pair_projection_matches_gates(db_session: Session) -> None:
         )
         assert is_editable == scope_decision, actor.email
 
-        # delete: the deletion route's GATE 1 (global only, no allow_scope)
+        # delete: the deletion route's GATE 1 (allow_scope) narrowed by its GATE 2,
+        # which admits a non-admin only for a groupless pair they created
         delete_admits = _route_admits(
             create_deletion_attempt_for_connector_id, "user", actor
+        ) and (
+            has_global_permission(actor, Permission.MANAGE_CONNECTORS)
+            or user_owns_groupless_cc_pair(cc_pair, db_session, actor)
         )
         # publish: the associate route's real GATE 2 for the PUBLIC state (is_non_public=False)
         publish_enforced = not _guard_raises(
@@ -844,9 +855,15 @@ def test_document_set_projection_matches_gates(db_session: Session) -> None:
         tags = document_set_permissions(
             is_editable=is_editable, is_document_sets_admin=is_ds_admin
         )
+        # delete: GATE 1 (allow_scope) narrowed by its GATE 2, which admits a non-admin
+        # only for a groupless set they created
+        delete_admits = _route_admits(delete_document_set_route, "user", actor) and (
+            is_ds_admin or user_owns_groupless_document_set(doc_set, actor)
+        )
+
         assert tags["edit"] == scope_decision
         assert tags["manage_access"] == scope_decision
-        assert tags["delete"] == is_ds_admin
+        assert tags["delete"] == delete_admits
 
 
 def test_persona_and_doc_set_key_coverage() -> None:

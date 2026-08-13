@@ -29,7 +29,7 @@ from onyx.db.connector_credential_pair import (
     get_connector_credential_pair_from_id_for_user,
     remove_credential_from_connector,
     update_connector_credential_pair_from_id,
-    verify_user_has_access_to_cc_pair,
+    user_owns_groupless_cc_pair,
 )
 from onyx.db.document import get_document_counts_for_cc_pairs, get_documents_for_cc_pair
 from onyx.db.engine.sql_engine import get_session
@@ -52,7 +52,7 @@ from onyx.db.index_attempt import (
 )
 from onyx.db.index_attempt_metrics import get_stage_metrics_for_attempt
 from onyx.db.indexing_coordination import IndexingCoordination
-from onyx.db.models import IndexAttempt, User
+from onyx.db.models import ConnectorCredentialPair, IndexAttempt, User
 from onyx.db.permission_sync_attempt import (
     get_latest_doc_permission_sync_attempt_for_cc_pair,
     get_recent_doc_permission_sync_attempts_for_cc_pair,
@@ -96,6 +96,22 @@ logger = setup_logger()
 router = APIRouter(prefix="/manage")
 
 
+def _get_readable_cc_pair(
+    cc_pair_id: int, db_session: Session, user: User
+) -> ConnectorCredentialPair | None:
+    """Fetch a cc-pair for the detail page and its sub-resources.
+
+    Neither filter contains the other, so both run: the read one drops a creator's
+    groupless private pair, the editable one drops public/sync pairs and plain group
+    membership. Editable runs second, so the common case still costs one query.
+    """
+    return get_connector_credential_pair_from_id_for_user(
+        cc_pair_id, db_session, user, get_editable=False
+    ) or get_connector_credential_pair_from_id_for_user(
+        cc_pair_id, db_session, user, get_editable=True
+    )
+
+
 @router.get("/admin/cc-pair/{cc_pair_id}/index-attempts", tags=PUBLIC_API_TAGS)
 def get_cc_pair_index_attempts(
     cc_pair_id: int,
@@ -106,10 +122,7 @@ def get_cc_pair_index_attempts(
     ),
     db_session: Session = Depends(get_session),
 ) -> PaginatedReturn[IndexAttemptSnapshot]:
-    user_has_access = verify_user_has_access_to_cc_pair(
-        cc_pair_id, db_session, user, get_editable=False
-    )
-    if not user_has_access:
+    if _get_readable_cc_pair(cc_pair_id, db_session, user) is None:
         raise OnyxError(
             OnyxErrorCode.INSUFFICIENT_PERMISSIONS,
             "CC Pair not found for current user permissions",
@@ -161,11 +174,11 @@ def get_index_attempt_stage_metrics(
     if index_attempt is None:
         raise OnyxError(OnyxErrorCode.NOT_FOUND, "Index attempt not found")
 
-    if not verify_user_has_access_to_cc_pair(
-        index_attempt.connector_credential_pair_id,
-        db_session,
-        user,
-        get_editable=False,
+    if (
+        _get_readable_cc_pair(
+            index_attempt.connector_credential_pair_id, db_session, user
+        )
+        is None
     ):
         raise OnyxError(
             OnyxErrorCode.INSUFFICIENT_PERMISSIONS,
@@ -205,20 +218,7 @@ def _get_cc_pair_source_or_raise(
     can't see it. Co-located with the sync-history endpoints because both
     routes need the same cc-pair lookup + auth + source resolution.
     """
-    if not verify_user_has_access_to_cc_pair(
-        cc_pair_id, db_session, user, get_editable=False
-    ):
-        raise OnyxError(
-            OnyxErrorCode.NOT_FOUND,
-            "CC Pair not found for current user permissions",
-        )
-
-    cc_pair = get_connector_credential_pair_from_id_for_user(
-        cc_pair_id=cc_pair_id,
-        db_session=db_session,
-        user=user,
-        get_editable=False,
-    )
+    cc_pair = _get_readable_cc_pair(cc_pair_id, db_session, user)
     if cc_pair is None:
         raise OnyxError(
             OnyxErrorCode.NOT_FOUND,
@@ -340,17 +340,21 @@ def get_cc_pair_full_info(
 ) -> CCPairFullInfo:
     tenant_id = get_current_tenant_id()
 
-    cc_pair = get_connector_credential_pair_from_id_for_user(
-        cc_pair_id, db_session, user, get_editable=False
+    # this route needs both halves of _get_readable_cc_pair, so it fetches them directly
+    editable_cc_pair = get_connector_credential_pair_from_id_for_user(
+        cc_pair_id, db_session, user, get_editable=True
+    )
+    cc_pair = (
+        get_connector_credential_pair_from_id_for_user(
+            cc_pair_id, db_session, user, get_editable=False
+        )
+        or editable_cc_pair
     )
     if not cc_pair:
         raise OnyxError(
             OnyxErrorCode.NOT_FOUND,
             "CC Pair not found for current user permissions",
         )
-    editable_cc_pair = get_connector_credential_pair_from_id_for_user(
-        cc_pair_id, db_session, user, get_editable=True
-    )
     is_editable_for_current_user = editable_cc_pair is not None
 
     document_count_info_list = list(
@@ -394,6 +398,7 @@ def get_cc_pair_full_info(
         cc_pair_model=cc_pair,
         mask_credential_prefix=get_security_settings().mask_credential_prefix,
         is_connectors_admin=has_global_permission(user, Permission.MANAGE_CONNECTORS),
+        owns_groupless=user_owns_groupless_cc_pair(cc_pair, db_session, user),
         number_of_index_attempts=count_index_attempts_for_cc_pair(
             db_session=db_session,
             cc_pair_id=cc_pair_id,
@@ -630,12 +635,7 @@ def get_cc_pair_last_pruned(
     ),
     db_session: Session = Depends(get_session),
 ) -> datetime | None:
-    cc_pair = get_connector_credential_pair_from_id_for_user(
-        cc_pair_id=cc_pair_id,
-        db_session=db_session,
-        user=user,
-        get_editable=False,
-    )
+    cc_pair = _get_readable_cc_pair(cc_pair_id, db_session, user)
     if not cc_pair:
         raise OnyxError(
             OnyxErrorCode.INSUFFICIENT_PERMISSIONS,

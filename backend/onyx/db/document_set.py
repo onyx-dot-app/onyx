@@ -46,13 +46,27 @@ def _add_user_filters(stmt: Select, user: User, get_editable: bool = True) -> Se
     # group is managed. Non-managers get an empty subquery, so it fails closed
     # like the prior sa_false().
     if get_editable:
+        # no managed scope matches a groupless set, stranding its creator; all three
+        # conditions matter — creator alone survives publishing and re-grouping
+        owns_groupless_set = and_(
+            DocumentSetDBModel.user_id == user.id,
+            DocumentSetDBModel.is_public.is_(False),
+            ~(
+                select(DocumentSet__UserGroup.document_set_id)
+                .where(DocumentSet__UserGroup.document_set_id == DocumentSetDBModel.id)
+                .exists()
+            ),
+        )
         return stmt.where(
-            within_managed_scope_clause(
-                resource_id_col=DocumentSetDBModel.id,
-                junction_resource_col=DocumentSet__UserGroup.document_set_id,
-                junction_group_col=DocumentSet__UserGroup.user_group_id,
-                non_public_clause=DocumentSetDBModel.is_public.is_(False),
-                managed_subq=scoped_group_ids_subquery(user),
+            or_(
+                within_managed_scope_clause(
+                    resource_id_col=DocumentSetDBModel.id,
+                    junction_resource_col=DocumentSet__UserGroup.document_set_id,
+                    junction_group_col=DocumentSet__UserGroup.user_group_id,
+                    non_public_clause=DocumentSetDBModel.is_public.is_(False),
+                    managed_subq=scoped_group_ids_subquery(user),
+                ),
+                owns_groupless_set,
             )
         )
     # READ → return all when reading, nothing when editing
@@ -127,6 +141,21 @@ def get_group_ids_for_document_set(
                 DocumentSet__UserGroup.document_set_id == document_set_id
             )
         ).all()
+    )
+
+
+def user_owns_groupless_document_set(
+    document_set: DocumentSetDBModel, user: User
+) -> bool:
+    """Whether a set is shared with nobody but its creator.
+
+    Matches the creator fallback in _add_user_filters. The delete gate and the delete
+    affordance both read this, so keep it the only definition — they must not drift.
+    """
+    return (
+        document_set.user_id == user.id
+        and not document_set.is_public
+        and not document_set.groups
     )
 
 

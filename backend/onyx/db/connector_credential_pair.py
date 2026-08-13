@@ -365,6 +365,24 @@ def get_cc_pair_groups_for_ids(
     return list(db_session.scalars(stmt).all())
 
 
+def user_owns_groupless_cc_pair(
+    cc_pair: ConnectorCredentialPair, db_session: Session, user: User
+) -> bool:
+    """Whether a pair is shared with nobody but its creator.
+
+    Matches the creator fallback in _add_user_filters. The delete gate and the delete
+    affordance both read this, so keep it the only definition — they must not drift.
+    """
+    if cc_pair.creator_id != user.id or cc_pair.access_type == AccessType.PUBLIC:
+        return False
+    return not any(
+        relationship.is_current
+        for relationship in get_cc_pair_groups_for_ids(
+            db_session=db_session, cc_pair_ids=[cc_pair.id]
+        )
+    )
+
+
 # For use with our thread-level parallelism utils. Note that any relationships
 # you wish to use MUST be eagerly loaded, as the session will not be available
 # after this function to allow lazy loading.

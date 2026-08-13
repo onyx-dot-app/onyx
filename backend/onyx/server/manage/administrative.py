@@ -4,7 +4,7 @@ from typing import cast
 from fastapi import APIRouter, Depends
 from sqlalchemy.orm import Session
 
-from onyx.auth.permissions import require_permission
+from onyx.auth.permissions import has_permission, require_permission
 from onyx.background.celery.versioned_apps.client import app as client_app
 from onyx.background.indexing.models import IndexAttemptErrorPydantic
 from onyx.configs.app_configs import GENERATIVE_MODEL_ACCESS_CHECK_FREQ
@@ -18,9 +18,14 @@ from onyx.configs.constants import (
 from onyx.db.connector_credential_pair import (
     get_connector_credential_pair_for_user,
     update_connector_credential_pair_from_id,
+    user_owns_groupless_cc_pair,
 )
 from onyx.db.engine.sql_engine import get_session
-from onyx.db.enums import ConnectorCredentialPairStatus, Permission
+from onyx.db.enums import (
+    ConnectorCredentialPairStatus,
+    Permission,
+    PermissionAuthority,
+)
 from onyx.db.feedback import (
     fetch_docs_ranked_by_boost_for_user,
     update_document_boost_for_user,
@@ -144,7 +149,9 @@ def validate_existing_genai_api_key(
 @router.post("/admin/deletion-attempt", tags=PUBLIC_API_TAGS)
 def create_deletion_attempt_for_connector_id(
     connector_credential_pair_identifier: ConnectorCredentialPairIdentifier,
-    user: User = Depends(require_permission(Permission.MANAGE_CONNECTORS)),
+    user: User = Depends(
+        require_permission(Permission.MANAGE_CONNECTORS, allow_scope=True)
+    ),
     db_session: Session = Depends(get_session),
 ) -> None:
     tenant_id = get_current_tenant_id()
@@ -163,6 +170,17 @@ def create_deletion_attempt_for_connector_id(
         error = f"Connector with ID '{connector_id}' and credential ID '{credential_id}' does not exist. Has it already been deleted?"
         logger.error(error)
         raise OnyxError(OnyxErrorCode.CONNECTOR_NOT_FOUND, error)
+
+    # GATE 2: the fetch admits every pair in a managed group; delete is admin-only
+    # (index cleanup) except a groupless pair its creator made
+    is_admin = (
+        has_permission(user, Permission.MANAGE_CONNECTORS) is PermissionAuthority.GLOBAL
+    )
+    if not is_admin and not user_owns_groupless_cc_pair(cc_pair, db_session, user):
+        raise OnyxError(
+            OnyxErrorCode.INSUFFICIENT_PERMISSIONS,
+            "Deleting a shared connector is restricted to administrators.",
+        )
 
     # Cancel any scheduled indexing attempts
     cancel_indexing_attempts_for_ccpair(
