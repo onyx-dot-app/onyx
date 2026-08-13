@@ -50,6 +50,7 @@ import {
   SvgSimpleLoader,
 } from "@opal/icons";
 import { Button } from "@opal/components";
+import { isAssistant } from "@/lib/agents/utils";
 
 function buildTooltipMessage(
   actionDescription: string,
@@ -193,7 +194,7 @@ export default function ActionsPopover({
     activeAgent.id
   );
 
-  const isDefaultAgent = activeAgent.id === 0;
+  const agentIsAssistant = isAssistant(activeAgent);
 
   const hasSearchTool = activeAgent.tools.some(
     (tool) => tool.in_code_tool_id === SEARCH_TOOL_ID
@@ -203,7 +204,7 @@ export default function ActionsPopover({
   // can search over (doc sets, federated, hierarchy nodes, attached docs, user files).
   // Default agent is special-cased to show everything available.
   const agentAccessibleSources = useMemo(() => {
-    if (isDefaultAgent) {
+    if (agentIsAssistant) {
       return null; // null means "all accessible"
     }
 
@@ -213,7 +214,7 @@ export default function ActionsPopover({
     }
 
     return new Set<string>(sources);
-  }, [isDefaultAgent, activeAgent.knowledge_sources, hasSearchTool]);
+  }, [agentIsAssistant, activeAgent.knowledge_sources, hasSearchTool]);
 
   // Scope availableSources to only what this agent can access. This ensures
   // that (a) agent-only sources like user_file appear in the toggle list and

@@ -39,7 +39,7 @@ import { useActiveAgent } from "@/lib/agents/hooks";
 import useChatSessionController from "@/hooks/useChatSessionController";
 import useDeepResearchToggle from "@/hooks/useDeepResearchToggle";
 import { useIncognito } from "@/providers/IncognitoProvider";
-import { useIsDefaultAgent } from "@/lib/agents/hooks";
+import { isAssistant } from "@/lib/agents/utils";
 import AgentDescription from "@/app/app/components/AgentDescription";
 import {
   useChatSessionStore,
@@ -324,7 +324,9 @@ export default function AppPage({ firstMessage }: ChatPageProps) {
 
   const filterManager = useFilters();
 
-  const isDefaultAgent = useIsDefaultAgent();
+  // An unresolved agent reads as plain chat, so a named-agent layout never
+  // flashes for an agent that is not there yet.
+  const isPlainChat = !activeAgent || isAssistant(activeAgent);
 
   const scrollContainerRef = useRef<ChatScrollContainerHandle>(null);
   const [showScrollButton, setShowScrollButton] = useState(false);
@@ -991,7 +993,7 @@ export default function AppPage({ firstMessage }: ChatPageProps) {
                     >
                       <WelcomeMessage
                         agent={activeAgent}
-                        isDefaultAgent={isDefaultAgent}
+                        isDefaultAgent={isPlainChat}
                       />
                       {!isSearch &&
                         !(
@@ -1142,7 +1144,7 @@ export default function AppPage({ firstMessage }: ChatPageProps) {
                 <div className="row-start-3 min-h-0 overflow-hidden flex flex-col items-center w-full px-2 sm:px-4">
                   {/* Agent description below input */}
                   {(appFocus.isNewSession() || appFocus.isAgent()) &&
-                    !isDefaultAgent && (
+                    !isPlainChat && (
                       <>
                         <Spacer rem={1} />
                         <AgentDescription agent={activeAgent} />

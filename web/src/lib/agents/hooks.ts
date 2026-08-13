@@ -253,9 +253,11 @@ function useEligibleAgents(): MinimalAgent[] {
  * An id that matches no eligible agent falls through, which is how a deleted,
  * inaccessible, or disabled agent degrades.
  *
- * This is a derivation, not state. Every input is shared — the URL, the open
- * session, the SWR-backed agent lists — so two callers always agree, and the
- * answer re-resolves on navigation.
+ * This is a derivation, not state, so it re-resolves on navigation rather than
+ * latching. Its inputs are shared — the URL, the open session, the SWR-backed
+ * agent list — with one exception: {@link usePinnedAgents} keeps an optimistic
+ * copy per hook instance, so during the moment after a pin toggle two callers
+ * can disagree on step 3. Steps 1 and 2 answer in every ordinary case.
  */
 export function useActiveAgent(): MinimalAgent | undefined {
   const eligibleAgents = useEligibleAgents();
@@ -290,23 +292,6 @@ export function useNewSessionHref(): string {
 
   if (!settings.disable_default_assistant || !activeAgent) return "/app";
   return `/app?${SEARCH_PARAM_NAMES.AGENT_ID}=${activeAgent.id}`;
-}
-
-// ── Default agent detection ───────────────────────────────────────────────────
-
-/**
- * Whether the chat is running on the Assistant rather than a chosen agent —
- * the "plain chat" case, which the UI shows without an agent description or a
- * named greeting.
- *
- * Loading reads as plain chat: it is what an unresolved chat almost always
- * settles on, and assuming otherwise flashes a named-agent layout for an agent
- * that is not there. With the Assistant disabled it can never be the answer,
- * because {@link useActiveAgent} will not return it.
- */
-export function useIsDefaultAgent(): boolean {
-  const activeAgent = useActiveAgent();
-  return activeAgent === undefined || activeAgent.id === DEFAULT_AGENT_ID;
 }
 
 // ── Agent preferences ─────────────────────────────────────────────────────────
