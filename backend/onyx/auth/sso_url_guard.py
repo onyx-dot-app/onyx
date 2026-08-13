@@ -21,9 +21,9 @@ class UnsafeSSOUrl(ValueError):
 
 _IPAddress = ipaddress.IPv4Address | ipaddress.IPv6Address
 
-# is_global already rejects loopback, private, link-local, NAT64 (via the ::/8
-# reserved block), and IPv4-mapped (it judges the embedded address). IPv6
-# site-local is the one private range it still reports as global.
+# is_global rejects loopback, private, link-local, and IPv4-mapped (it judges the
+# embedded address). NAT64 and other reserved blocks fall to is_reserved, multicast
+# to is_multicast. IPv6 site-local still reads as global, so it is rejected below.
 _SITE_LOCAL_V6 = ipaddress.IPv6Network("fec0::/10")
 
 
