@@ -43,6 +43,14 @@ interface TooltipProps {
   onOpenChange?: (open: boolean) => void;
 
   /**
+   * Shows nothing on hover, but keeps the trigger in place.
+   *
+   * Use this to turn a tooltip off for a while. Dropping `tooltip` instead
+   * returns `children` bare, and the change of tree shape remounts them.
+   */
+  suppressed?: boolean;
+
+  /**
    * Delay in milliseconds before the tooltip appears on hover.
    * Passed to `TooltipPrimitive.Root`.
    */
@@ -92,6 +100,7 @@ function Tooltip({
   align = "center",
   open,
   onOpenChange,
+  suppressed,
   delayDuration,
   sideOffset = 4,
   children,
@@ -112,18 +121,26 @@ function Tooltip({
       open={open}
       onOpenChange={onOpenChange}
       delayDuration={delayDuration}
+      /* Radix closes on a pointer that leaves the trigger from the content
+      itself, which tracks the pointer across the gap between the two. A
+      suppressed tooltip renders no content, so the trigger has to do the
+      closing. Without this the tooltip stays open in Radix's eyes, and it
+      appears the moment the suppression lifts. */
+      disableHoverableContent={suppressed}
     >
       <TooltipPrimitive.Trigger asChild>{children}</TooltipPrimitive.Trigger>
-      <TooltipPrimitive.Portal>
-        <TooltipPrimitive.Content
-          className="opal-tooltip"
-          side={side}
-          align={align}
-          sideOffset={sideOffset}
-        >
-          {content}
-        </TooltipPrimitive.Content>
-      </TooltipPrimitive.Portal>
+      {!suppressed && (
+        <TooltipPrimitive.Portal>
+          <TooltipPrimitive.Content
+            className="opal-tooltip"
+            side={side}
+            align={align}
+            sideOffset={sideOffset}
+          >
+            {content}
+          </TooltipPrimitive.Content>
+        </TooltipPrimitive.Portal>
+      )}
     </TooltipPrimitive.Root>
   );
 }

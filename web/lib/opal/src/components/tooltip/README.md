@@ -17,6 +17,7 @@ modes.
 | `align` | `"start" \| "center" \| "end"` | `"center"` | Alignment along the tooltip's side axis |
 | `open` | `boolean` | — | Controlled open state. When omitted, uses default hover behavior. |
 | `onOpenChange` | `(open: boolean) => void` | — | Callback when open state changes. Use with `open` for controlled mode. |
+| `suppressed` | `boolean` | `false` | Shows nothing on hover, but keeps the trigger mounted |
 | `delayDuration` | `number` | — | Delay in ms before the tooltip appears on hover |
 | `sideOffset` | `number` | `4` | Distance in pixels between the trigger and the tooltip |
 
@@ -40,6 +41,11 @@ const [isOpen, setIsOpen] = useState(false);
 <Tooltip tooltip={isDisabled ? "Not available" : undefined}>
   <Button>Action</Button>
 </Tooltip>
+
+// Suppressed — same tree, nothing on hover
+<Tooltip tooltip="Rename" suppressed={!isCollapsed}>
+  <Button icon={SvgEdit} />
+</Tooltip>
 ```
 
 ## Notes
@@ -49,3 +55,6 @@ const [isOpen, setIsOpen] = useState(false);
 - `string` and `RichStr` content is rendered via `Text font="secondary-body" color="inherit"`.
 - `ReactNode` content is rendered as-is for custom tooltip layouts.
 - The `opal-tooltip` CSS class provides z-indexing, animations, and a `max-width: 20rem` cap.
+- Prefer `suppressed` over dropping `tooltip` when the tooltip comes and goes during the life of
+  the trigger. Dropping `tooltip` returns children bare, and the change of tree shape remounts
+  them — which restarts any animation or transition they hold.
