@@ -72,7 +72,7 @@ interface FoldedTooltipProps {
   /** Explicit fold state. Falls back to the enclosing sidebar's. */
   folded?: boolean;
 
-  children: React.ReactElement;
+  children: React.ReactElement<React.DOMAttributes<HTMLElement>>;
 }
 
 /**
@@ -93,6 +93,17 @@ function FoldedTooltip({ label, folded, children }: FoldedTooltipProps) {
 
   const effectiveFolded = folded ?? foldedFromSidebar;
 
+  /* Radix compares every open change against the `open` prop and drops the
+  ones that already match it. While the tab is unfolded `open` is false, so the
+  close that follows a hover never reaches `setHovered` and `hovered` stays
+  true. Folding the sidebar would then show the tooltip for a tab the pointer
+  left long ago. Clear the state from the trigger instead. While folded, `open`
+  tracks `hovered`, so Radix reports the close itself — leave it alone there and
+  keep its grace area for a pointer moving onto the tooltip. */
+  const clearStaleHover = React.useCallback(() => {
+    if (!effectiveFolded) setHovered(false);
+  }, [effectiveFolded]);
+
   return (
     <Tooltip
       tooltip={label}
@@ -100,7 +111,10 @@ function FoldedTooltip({ label, folded, children }: FoldedTooltipProps) {
       open={effectiveFolded && hovered}
       onOpenChange={setHovered}
     >
-      {children}
+      {React.cloneElement(children, {
+        onPointerLeave: clearStaleHover,
+        onBlur: clearStaleHover,
+      })}
     </Tooltip>
   );
 }
