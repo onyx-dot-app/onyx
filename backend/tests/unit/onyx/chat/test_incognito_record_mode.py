@@ -10,11 +10,17 @@ from unittest.mock import MagicMock, patch
 import pytest
 
 from onyx.chat.incognito import (
+    BIFROST_DISABLE_CONTENT_LOGGING_HEADER,
+    LITELLM_PROXY_REDACTION_HEADER,
+    PORTKEY_DEBUG_HEADER,
     content_free_file_descriptors,
+    incognito_llm_extra_body,
+    incognito_llm_extra_headers,
     resolve_incognito_record_mode,
 )
 from onyx.db.enums import IncognitoRecordMode
 from onyx.file_store.models import ChatFileType, FileDescriptor
+from onyx.llm.well_known_providers.constants import BIFROST_PROVIDER_NAME
 
 
 class TestModeSinkMatrix:
@@ -103,3 +109,71 @@ class TestContentFreeFileDescriptors:
             FileDescriptor(id="file-1", type=ChatFileType.DOC, user_file_id="uf-1")
         ]
         assert "name" not in scrubbed[0]
+
+
+class TestBifrostHeaders:
+    def test_usage_only_on_bifrost_sends_the_header(self) -> None:
+        assert incognito_llm_extra_headers(
+            IncognitoRecordMode.USAGE_ONLY, BIFROST_PROVIDER_NAME
+        ) == {BIFROST_DISABLE_CONTENT_LOGGING_HEADER: "true"}
+
+    def test_header_name_is_the_wire_contract(self) -> None:
+        """Bifrost matches on this exact string. Renaming it silently re-enables
+        gateway content logging for every content-free incognito chat."""
+        assert BIFROST_DISABLE_CONTENT_LOGGING_HEADER == "x-bf-disable-content-logging"
+
+    def test_full_history_sends_nothing(self) -> None:
+        """The workspace chose to record, so the gateway log stays consistent."""
+        assert (
+            incognito_llm_extra_headers(
+                IncognitoRecordMode.FULL_HISTORY, BIFROST_PROVIDER_NAME
+            )
+            == {}
+        )
+
+    def test_ordinary_chat_sends_nothing(self) -> None:
+        assert incognito_llm_extra_headers(None, BIFROST_PROVIDER_NAME) == {}
+
+    def test_other_providers_get_no_bifrost_header(self) -> None:
+        for provider in ("openai", "anthropic", "", None):
+            assert (
+                incognito_llm_extra_headers(IncognitoRecordMode.USAGE_ONLY, provider)
+                == {}
+            )
+
+
+class TestProviderPolicyMatrix:
+    """Pins the per-provider retention suppression each content-free turn
+    sends. A provider absent here has no per-request option."""
+
+    def test_gateway_headers(self) -> None:
+        assert incognito_llm_extra_headers(
+            IncognitoRecordMode.USAGE_ONLY, "portkey"
+        ) == {PORTKEY_DEBUG_HEADER: "false"}
+        assert incognito_llm_extra_headers(
+            IncognitoRecordMode.USAGE_ONLY, "litellm_proxy"
+        ) == {LITELLM_PROXY_REDACTION_HEADER: "true"}
+
+    def test_store_false_for_openai_family(self) -> None:
+        for provider in ("openai", "azure"):
+            assert incognito_llm_extra_body(
+                IncognitoRecordMode.USAGE_ONLY, provider
+            ) == {"store": False}
+
+    def test_openrouter_denies_data_collection(self) -> None:
+        assert incognito_llm_extra_body(
+            IncognitoRecordMode.USAGE_ONLY, "openrouter"
+        ) == {"extra_body": {"provider": {"data_collection": "deny"}}}
+
+    def test_no_option_providers_send_nothing(self) -> None:
+        for provider in ("anthropic", "google", "vertex_ai", "mistral", "bedrock"):
+            assert (
+                incognito_llm_extra_body(IncognitoRecordMode.USAGE_ONLY, provider) == {}
+            )
+
+    def test_full_history_sends_no_body_params(self) -> None:
+        for provider in ("openai", "azure", "openrouter"):
+            assert (
+                incognito_llm_extra_body(IncognitoRecordMode.FULL_HISTORY, provider)
+                == {}
+            )

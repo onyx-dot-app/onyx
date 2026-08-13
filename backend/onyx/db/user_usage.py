@@ -1,7 +1,7 @@
 """Daily per-user LLM usage rollup for cost/token attribution.
 
 A window rollup: rows accumulate in place per (user, window,
-model, flow, provider), not an append-only per-call ledger."""
+model, flow, provider, incognito), not an append-only per-call ledger."""
 
 from collections import defaultdict
 from collections.abc import Iterator, Sequence
@@ -27,7 +27,7 @@ TOKEN_BUDGET_PERIOD_ERROR = "Token budget periods must be whole UTC days"
 COST_BUDGET_PERIOD_ERROR = "Cost budget periods must be whole UTC days"
 # Not email-shaped on purpose: it can never collide with a real address.
 DELETED_USER_EXPORT_EMAIL = "(deleted user)"
-_CONFLICT_COLS = ["user_id", "window_start", "model", "flow", "provider"]
+_CONFLICT_COLS = ["user_id", "window_start", "model", "flow", "provider", "incognito"]
 
 
 class TokenUsageBucket(BaseModel):
@@ -123,6 +123,7 @@ class UsageExportRow(BaseModel):
     model: str
     flow: str
     provider: str
+    incognito: bool
     day: str  # YYYY-MM-DD
     input_tokens: int
     output_tokens: int
@@ -141,6 +142,7 @@ def record_user_usage(
     cache_read_tokens: int,
     cost_cents: float,
     window_start: datetime,
+    incognito: bool = False,
 ) -> None:
     """Atomically accumulate into the ledger (Postgres upsert). Caller commits."""
     # Store "" rather than NULL for a missing provider so the dedup unique index
@@ -152,6 +154,7 @@ def record_user_usage(
         model=model,
         flow=flow,
         provider=provider,
+        incognito=incognito,
         input_tokens=input_tokens,
         output_tokens=output_tokens,
         cache_read_tokens=cache_read_tokens,
@@ -226,6 +229,7 @@ def _get_usage_export_query(
             UserUsage.model,
             UserUsage.flow,
             UserUsage.provider,
+            UserUsage.incognito,
             utc_day.label("day"),
             func.sum(UserUsage.input_tokens),
             func.sum(UserUsage.output_tokens),
@@ -240,7 +244,12 @@ def _get_usage_export_query(
             UserUsage.window_start < end,
         )
         .group_by(
-            email_label, UserUsage.model, UserUsage.flow, UserUsage.provider, utc_day
+            email_label,
+            UserUsage.model,
+            UserUsage.flow,
+            UserUsage.provider,
+            UserUsage.incognito,
+            utc_day,
         )
         .order_by(
             email_label,
@@ -248,6 +257,7 @@ def _get_usage_export_query(
             UserUsage.model,
             UserUsage.flow,
             UserUsage.provider,
+            UserUsage.incognito,
         )
     )
     if model is not None:
@@ -267,12 +277,24 @@ def iter_usage_export(
             stream_results=True
         )
     ).yield_per(1000)
-    for email, mdl, flow, provider, day, in_tok, out_tok, cache_tok, cost in result:
+    for (
+        email,
+        mdl,
+        flow,
+        provider,
+        incognito,
+        day,
+        in_tok,
+        out_tok,
+        cache_tok,
+        cost,
+    ) in result:
         yield UsageExportRow(
             email=str(email),
             model=mdl,
             flow=flow,
             provider=provider,
+            incognito=bool(incognito),
             day=str(day),
             input_tokens=int(in_tok or 0),
             output_tokens=int(out_tok or 0),

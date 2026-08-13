@@ -15,6 +15,7 @@ from collections.abc import Callable, Generator
 from concurrent.futures import ThreadPoolExecutor
 from contextvars import Token
 from enum import Enum
+from functools import partial
 from typing import Final, cast
 from uuid import UUID
 
@@ -41,6 +42,7 @@ from onyx.chat.compression import (
 from onyx.chat.emitter import Emitter
 from onyx.chat.incognito import (
     content_free_file_descriptors,
+    incognito_llm_request_policy,
 )
 from onyx.chat.incognito_context import (
     append_incognito_message,
@@ -691,12 +693,18 @@ def build_chat_turn(
         if is_multi
         else [new_msg_req.llm_override or chat_session.llm_override]
     )
+    # Provider-keyed so the factory can apply it to whichever provider the
+    # persona resolution lands on, with final precedence over other sources.
+    incognito_policy_fn = partial(
+        incognito_llm_request_policy, chat_session.incognito_record_mode
+    )
     for override in selected_overrides:
         llm = get_llm_for_persona(
             persona=persona,
             user=user,
             llm_override=override,
             additional_headers=litellm_additional_headers,
+            policy_fn=incognito_policy_fn,
         )
         check_llm_cost_limit_for_provider(
             db_session=db_session,

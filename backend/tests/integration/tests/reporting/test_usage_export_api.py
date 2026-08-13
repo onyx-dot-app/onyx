@@ -309,6 +309,7 @@ class TestUsageExportAPI:
                     "model",
                     "flow",
                     "provider",
+                    "incognito",
                     "input_tokens",
                     "output_tokens",
                     "cache_read_tokens",

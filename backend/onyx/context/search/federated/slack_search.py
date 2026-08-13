@@ -40,6 +40,7 @@ from onyx.indexing.chunker import Chunker
 from onyx.indexing.embedder import DefaultIndexingEmbedder
 from onyx.indexing.models import DocAwareChunk
 from onyx.llm.factory import get_default_llm
+from onyx.llm.interfaces import LLM
 from onyx.onyxbot.slack.models import ChannelType, SlackContext
 from onyx.redis.redis_pool import get_redis_client
 from onyx.server.federated.models import FederatedConnectorDetail
@@ -1005,6 +1006,7 @@ def slack_retrieval(
     team_id: str | None = None,
     # Pre-fetched data — when provided, avoids DB query (no session needed)
     search_settings: SearchSettings | None = None,
+    llm: LLM | None = None,
 ) -> list[InferenceChunk]:
     """
     Main entry point for Slack federated search with entity filtering.
@@ -1069,8 +1071,10 @@ def slack_retrieval(
             entities, channel_metadata_dict
         )
 
-    # Query slack with entity filtering
-    llm = get_default_llm()
+    # Query slack with entity filtering. Inside a chat turn the caller's LLM
+    # carries request policy (e.g. incognito retention headers) that a freshly
+    # constructed default would drop.
+    llm = llm or get_default_llm()
     query_items = build_slack_queries(query, llm, entities, available_channels)
 
     # Partition into direct thread fetches and search query strings

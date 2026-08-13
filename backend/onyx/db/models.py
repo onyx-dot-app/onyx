@@ -5998,7 +5998,8 @@ class UserUsage(Base):
     """
     Daily per-user LLM usage rollup for cost/token attribution and budget checks.
 
-    One accumulating row per (user, window, model, flow, provider), not per call.
+    One accumulating row per (user, window, model, flow, provider, incognito),
+    not per call.
     """
 
     __tablename__ = "user_usage"
@@ -6019,6 +6020,11 @@ class UserUsage(Base):
     # '' not NULL: unique index dedups pre-PG15 without NULLS NOT DISTINCT.
     provider: Mapped[str] = mapped_column(
         String, nullable=False, default="", server_default=""
+    )
+    # Incognito-turn spend accumulates in its own rows so reporting can label
+    # it. Budget readers sum across both values.
+    incognito: Mapped[bool] = mapped_column(
+        Boolean, nullable=False, default=False, server_default=text("false")
     )
 
     input_tokens: Mapped[int] = mapped_column(BigInteger, nullable=False)
@@ -6051,6 +6057,7 @@ class UserUsage(Base):
             "model",
             "flow",
             "provider",
+            "incognito",
             unique=True,
         ),
     )

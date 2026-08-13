@@ -43,6 +43,7 @@ class UsageExportRecord(BaseModel):
     model: str
     flow: str
     provider: str
+    incognito: bool
     day: str  # YYYY-MM-DD
     input_tokens: int
     output_tokens: int

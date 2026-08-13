@@ -462,6 +462,7 @@ class SearchTool(Tool[SearchToolOverrideKwargs]):
                 bot_token=bot_token,
                 team_id=None,
                 search_settings=search_settings,
+                llm=self.llm,
             )
 
             logger.info("Slack federated search returned %s chunks", len(chunks))
