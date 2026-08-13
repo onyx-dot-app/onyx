@@ -485,6 +485,17 @@ def update_cc_pair_status(
             "Connection not found for current user's permissions",
         )
 
+    # Pause/resume only. Accepting DELETING here would let a scoped manager delete via
+    # the editable-scope gate, bypassing the admin-only /deletion-attempt route.
+    if status_update_request.status not in (
+        ConnectorCredentialPairStatus.ACTIVE,
+        ConnectorCredentialPairStatus.PAUSED,
+    ):
+        raise OnyxError(
+            OnyxErrorCode.INVALID_INPUT,
+            "Connector status can only be set to ACTIVE or PAUSED.",
+        )
+
     redis_connector = RedisConnector(tenant_id, cc_pair_id)
     if status_update_request.status == ConnectorCredentialPairStatus.PAUSED:
         redis_connector.stop.set_fence(True)
