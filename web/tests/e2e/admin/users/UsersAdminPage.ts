@@ -229,7 +229,9 @@ export class UsersAdminPage {
 
   /** The email input inside the invite modal. */
   get inviteEmailInput(): Locator {
-    return this.dialog.getByPlaceholder("Add an email and press enter");
+    return this.dialog.getByPlaceholder(
+      "Add emails to invite, space or comma separated"
+    );
   }
 
   async openInviteModal() {
