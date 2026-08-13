@@ -101,7 +101,9 @@ def get_cc_pair_index_attempts(
     cc_pair_id: int,
     page_num: int = Query(0, ge=0),
     page_size: int = Query(10, ge=1, le=1000),
-    user: User = Depends(require_permission(Permission.READ_CONNECTORS)),
+    user: User = Depends(
+        require_permission(Permission.READ_CONNECTORS, allow_scope=True)
+    ),
     db_session: Session = Depends(get_session),
 ) -> PaginatedReturn[IndexAttemptSnapshot]:
     user_has_access = verify_user_has_access_to_cc_pair(
@@ -230,7 +232,9 @@ def get_cc_pair_permission_sync_attempts(
     cc_pair_id: int,
     page_num: int = Query(0, ge=0),
     page_size: int = Query(10, ge=1, le=1000),
-    user: User = Depends(require_permission(Permission.READ_CONNECTORS)),
+    user: User = Depends(
+        require_permission(Permission.READ_CONNECTORS, allow_scope=True)
+    ),
     db_session: Session = Depends(get_session),
 ) -> CCPairSyncAttemptsResponse[DocPermissionSyncAttemptSnapshot]:
     """Recent doc-permission sync attempts for a cc-pair, paginated.
@@ -278,7 +282,9 @@ def get_cc_pair_external_group_sync_attempts(
     cc_pair_id: int,
     page_num: int = Query(0, ge=0),
     page_size: int = Query(10, ge=1, le=1000),
-    user: User = Depends(require_permission(Permission.READ_CONNECTORS)),
+    user: User = Depends(
+        require_permission(Permission.READ_CONNECTORS, allow_scope=True)
+    ),
     db_session: Session = Depends(get_session),
 ) -> CCPairSyncAttemptsResponse[ExternalGroupSyncAttemptSnapshot]:
     """Recent external-group sync attempts a viewer of this cc-pair would
@@ -327,7 +333,9 @@ def get_cc_pair_external_group_sync_attempts(
 @router.get("/admin/cc-pair/{cc_pair_id}", tags=PUBLIC_API_TAGS)
 def get_cc_pair_full_info(
     cc_pair_id: int,
-    user: User = Depends(require_permission(Permission.READ_CONNECTORS)),
+    user: User = Depends(
+        require_permission(Permission.READ_CONNECTORS, allow_scope=True)
+    ),
     db_session: Session = Depends(get_session),
 ) -> CCPairFullInfo:
     tenant_id = get_current_tenant_id()
@@ -617,7 +625,9 @@ def update_cc_pair_property(
 @router.get("/admin/cc-pair/{cc_pair_id}/last_pruned")
 def get_cc_pair_last_pruned(
     cc_pair_id: int,
-    user: User = Depends(require_permission(Permission.READ_CONNECTORS)),
+    user: User = Depends(
+        require_permission(Permission.READ_CONNECTORS, allow_scope=True)
+    ),
     db_session: Session = Depends(get_session),
 ) -> datetime | None:
     cc_pair = get_connector_credential_pair_from_id_for_user(

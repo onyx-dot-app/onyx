@@ -361,7 +361,7 @@ def list_all_users(
     slack_users_page: int | None = None,
     invited_page: int | None = None,
     include_api_keys: bool = False,
-    _: User = Depends(require_permission(Permission.READ_USERS)),
+    _: User = Depends(require_permission(Permission.READ_USERS, allow_scope=True)),
     db_session: Session = Depends(get_session),
 ) -> AllUsersResponse:
     users = get_all_users(

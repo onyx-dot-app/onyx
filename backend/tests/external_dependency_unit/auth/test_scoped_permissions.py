@@ -7,11 +7,17 @@ import pytest
 from sqlalchemy import select
 from sqlalchemy.orm import Session
 
-from onyx.auth.permissions import SCOPED_MANAGER_PERMISSIONS
+from onyx.auth.permissions import (
+    SCOPED_MANAGER_PERMISSIONS,
+    SCOPED_MANAGER_PERMISSIONS_EXPANDED,
+)
 from onyx.auth.scoped_permissions import (
     assert_global,
+    assert_manages_group,
     assert_within_scope,
     get_scoped_groups,
+    manages_group,
+    within_scope,
 )
 from onyx.db.enums import AccessType, Permission
 from onyx.db.models import (
@@ -24,10 +30,12 @@ from onyx.db.models import (
     UserGroup__ConnectorCredentialPair,
 )
 from onyx.db.scoped_permissions import (
+    fetch_managed_group_ids,
     scoped_group_ids_subquery,
     within_managed_scope_clause,
 )
 from onyx.error_handling.exceptions import OnyxError
+from onyx.server.manage.models import UserInfo
 from tests.external_dependency_unit.conftest import create_test_user
 from tests.external_dependency_unit.indexing_helpers import make_cc_pair
 
@@ -393,3 +401,131 @@ def test_within_managed_scope_clause_includes_sync_cc_pairs(
     assert private_pair.id in editable
     assert sync_pair.id in editable
     assert public_pair.id not in editable
+
+
+def test_manages_group_global_holder_bypasses_scope(db_session: Session) -> None:
+    """The per-group gate, unlike the resource gate, takes no group arguments to
+    validate — a global holder administers every group, including ones with no
+    manager edge at all."""
+    unmanaged = _make_group(db_session)
+
+    holder = create_test_user(db_session, "mg-holder")
+    holder.effective_permissions = [Permission.MANAGE_USER_GROUPS.value]
+    assert manages_group(holder, db_session, group_id=unmanaged.id)
+    assert_manages_group(holder, db_session, group_id=unmanaged.id)
+
+    admin = create_test_user(db_session, "mg-admin", is_admin=True)
+    assert manages_group(admin, db_session, group_id=unmanaged.id)
+
+
+def test_manages_group_scoped_manager_only_managed(db_session: Session) -> None:
+    manager = create_test_user(db_session, "mg-mgr")
+    manager.effective_permissions = []
+    managed = _make_group(db_session)
+    unmanaged = _make_group(db_session)
+    _manage(db_session, manager, managed)
+
+    assert manages_group(manager, db_session, group_id=managed.id)
+    assert_manages_group(manager, db_session, group_id=managed.id)
+
+    assert not manages_group(manager, db_session, group_id=unmanaged.id)
+    with pytest.raises(OnyxError):
+        assert_manages_group(manager, db_session, group_id=unmanaged.id)
+
+
+def test_manages_group_rejects_plain_member(db_session: Session) -> None:
+    """Membership is not management: the gate keys on the manager edge, so a member
+    of the very group being edited is still refused."""
+    member = create_test_user(db_session, "mg-member")
+    member.effective_permissions = []
+    group = _make_group(db_session)
+    db_session.add(
+        User__UserGroup(user_id=member.id, user_group_id=group.id, is_manager=False)
+    )
+    db_session.commit()
+
+    assert not manages_group(member, db_session, group_id=group.id)
+
+
+def test_manages_group_honours_preloaded_scope(db_session: Session) -> None:
+    """Row stamping passes a preloaded scope to avoid a query per row, so the gate
+    must read that set instead of re-querying — otherwise the two disagree."""
+    manager = create_test_user(db_session, "mg-preload")
+    manager.effective_permissions = []
+    managed = _make_group(db_session)
+    _manage(db_session, manager, managed)
+
+    assert not manages_group(
+        manager, db_session, group_id=managed.id, managed_group_ids=set()
+    )
+    assert manages_group(
+        manager, db_session, group_id=999_999, managed_group_ids={999_999}
+    )
+
+
+def test_within_scope_honours_preloaded_scope(db_session: Session) -> None:
+    """Same preloaded-set contract on the resource gate."""
+    manager = create_test_user(db_session, "ws-preload")
+    manager.effective_permissions = []
+    managed = _make_group(db_session)
+    _manage(db_session, manager, managed)
+
+    assert within_scope(
+        manager,
+        db_session,
+        permission=Permission.MANAGE_DOCUMENT_SETS,
+        current_group_ids=[managed.id],
+        requested_group_ids=[],
+        is_non_public=True,
+    )
+    assert not within_scope(
+        manager,
+        db_session,
+        permission=Permission.MANAGE_DOCUMENT_SETS,
+        current_group_ids=[managed.id],
+        requested_group_ids=[],
+        is_non_public=True,
+        managed_group_ids=set(),
+    )
+
+
+def test_fetch_managed_group_ids_ignores_the_bundle(db_session: Session) -> None:
+    """Bundle gating lives in get_scoped_groups, not the DB helper — a non-scopable
+    token resolves no scope there while the raw manager edges are unchanged."""
+    manager = create_test_user(db_session, "fetch-mgr")
+    managed = _make_group(db_session)
+    _manage(db_session, manager, managed)
+
+    assert fetch_managed_group_ids(manager, db_session) == {managed.id}
+    assert get_scoped_groups(manager, db_session, Permission.MANAGE_LLMS) == set()
+
+
+def test_admin_capabilities_reveal_the_bundle_for_a_manager(
+    db_session: Session,
+) -> None:
+    """``admin_capabilities`` is what reveals admin nav to a manager who holds no
+    admin token; ``effective_permissions`` must stay global-only beside it, since
+    org-wide gates read that field and would otherwise admit them."""
+    manager = create_test_user(db_session, "caps-mgr")
+    granted = [Permission.BASIC_ACCESS.value]
+    manager.effective_permissions = granted
+    _manage(db_session, manager, _make_group(db_session))
+
+    info = UserInfo.from_model(manager, effective_permissions=granted)
+
+    assert info.is_group_manager
+    assert SCOPED_MANAGER_PERMISSIONS_EXPANDED <= set(info.admin_capabilities)
+    assert info.effective_permissions == granted
+
+
+def test_admin_capabilities_stay_global_only_without_a_manager_edge(
+    db_session: Session,
+) -> None:
+    user = create_test_user(db_session, "caps-plain")
+    granted = [Permission.BASIC_ACCESS.value]
+    user.effective_permissions = granted
+
+    info = UserInfo.from_model(user, effective_permissions=granted)
+
+    assert not info.is_group_manager
+    assert info.admin_capabilities == granted

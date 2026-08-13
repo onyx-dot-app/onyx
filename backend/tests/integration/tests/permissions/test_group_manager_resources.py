@@ -299,6 +299,64 @@ def test_manager_cannot_delete_cc_pair(env: _ScopedEnv) -> None:
     assert_response(resp, "POST", path, "manager", "denied")
 
 
+def test_manager_reads_detail_of_managed_cc_pair(env: _ScopedEnv) -> None:
+    """The connector detail page. Every write route already admitted scope, but these
+    reads did not — so a manager could create a connector and then get a 403 opening
+    it. Each read row-filters by caller, so GATE 1 admitting scope is the whole fix.
+    """
+    cc_pair = CCPairManager.create_from_scratch(
+        user_performing_action=env.manager,
+        access_type=AccessType.PRIVATE,
+        groups=[env.managed_group.id],
+    )
+    for path in [
+        f"/manage/admin/cc-pair/{cc_pair.id}",
+        f"/manage/admin/cc-pair/{cc_pair.id}/index-attempts?page=0&page_size=10",
+        f"/manage/admin/cc-pair/{cc_pair.id}/last_pruned",
+    ]:
+        resp = call_endpoint(
+            "GET", path, None, env.manager.headers, env.manager.cookies
+        )
+        assert_response(resp, "GET", path, "manager", "allowed")
+
+
+def test_manager_cannot_read_detail_of_unmanaged_cc_pair(env: _ScopedEnv) -> None:
+    """allow_scope must not widen the row filter: an out-of-scope pair still 404s
+    (the fetch returns nothing), never 200."""
+    admin_cc_pair = CCPairManager.create_from_scratch(
+        user_performing_action=env.admin,
+        access_type=AccessType.PRIVATE,
+        groups=[env.other_group.id],
+    )
+    path = f"/manage/admin/cc-pair/{admin_cc_pair.id}"
+    resp = call_endpoint("GET", path, None, env.manager.headers, env.manager.cookies)
+    assert resp.status_code in (403, 404), resp.text
+
+
+def test_manager_reads_credentials_for_connector_form(env: _ScopedEnv) -> None:
+    """Backs the connector setup page, which renders an empty fragment when either
+    credential fetch fails — a blank page with a sidebar, not an error."""
+    for path in [
+        "/manage/admin/credential",
+        "/manage/admin/similar-credentials/file",
+    ]:
+        resp = call_endpoint(
+            "GET", path, None, env.manager.headers, env.manager.cookies
+        )
+        assert_response(resp, "GET", path, "manager", "allowed")
+
+
+def test_plain_member_cannot_read_credentials(env: _ScopedEnv) -> None:
+    """allow_scope admits managers, not everyone in the group."""
+    member = UserManager.create(name="cred_plain_member")
+    UserGroupManager.add_users(
+        env.managed_group, [member.id], user_performing_action=env.admin
+    )
+    path = "/manage/admin/credential"
+    resp = call_endpoint("GET", path, None, member.headers, member.cookies)
+    assert_response(resp, "GET", path, "member", "denied")
+
+
 def test_manager_pauses_own_managed_cc_pair(env: _ScopedEnv) -> None:
     # Pause/status (mutate routes) authorize via the re-keyed read/editable filter,
     # not a separate scope check — so managed-scope access gates mutation too.

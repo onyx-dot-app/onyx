@@ -32,7 +32,9 @@ router = APIRouter(prefix="/manage")
 @router.get("/admin/cc-pair/{cc_pair_id}/sync-permissions")
 def get_cc_pair_latest_sync(
     cc_pair_id: int,
-    user: User = Depends(require_permission(Permission.READ_CONNECTORS)),
+    user: User = Depends(
+        require_permission(Permission.READ_CONNECTORS, allow_scope=True)
+    ),
     db_session: Session = Depends(get_session),
 ) -> datetime | None:
     cc_pair = get_connector_credential_pair_from_id_for_user(
@@ -109,7 +111,9 @@ def sync_cc_pair(
 @router.get("/admin/cc-pair/{cc_pair_id}/sync-groups")
 def get_cc_pair_latest_group_sync(
     cc_pair_id: int,
-    user: User = Depends(require_permission(Permission.READ_CONNECTORS)),
+    user: User = Depends(
+        require_permission(Permission.READ_CONNECTORS, allow_scope=True)
+    ),
     db_session: Session = Depends(get_session),
 ) -> datetime | None:
     cc_pair = get_connector_credential_pair_from_id_for_user(

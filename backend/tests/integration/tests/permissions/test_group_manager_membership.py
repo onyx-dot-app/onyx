@@ -43,6 +43,8 @@ pytestmark = pytest.mark.skipif(
 _GROUP_LIST_PATH = "/manage/admin/user-group"
 _RENAME_PATH = "/manage/admin/user-group/rename"
 _ME_PERMISSIONS_PATH = "/me/permissions"
+# Exactly what the Edit Group page's member picker requests.
+_USERS_PATH = "/manage/users?include_api_keys=true"
 
 
 class _ScopedEnv(NamedTuple):
@@ -466,6 +468,28 @@ def test_admin_group_list_includes_all(env: _ScopedEnv) -> None:
     groups = UserGroupManager.get_all(user_performing_action=env.admin)
     group_ids = {g.id for g in groups}
     assert {env.managed_group.id, env.other_group.id}.issubset(group_ids)
+
+
+def test_manager_reads_member_candidates(env: _ScopedEnv) -> None:
+    """The roster behind the Edit Group member picker. MANAGE_USER_GROUPS implies
+    READ_USERS, so a manager resolves it SCOPED — the route must allow_scope or this
+    403s and the page renders "Failed to load group data", blaming the group fetch
+    that actually succeeded. Not narrowed to the managed group: picking a new member
+    means seeing users who aren't in it yet.
+    """
+    resp = call_endpoint(
+        "GET", _USERS_PATH, None, env.manager.headers, env.manager.cookies
+    )
+    assert_response(resp, "GET", _USERS_PATH, "manager", "allowed")
+    emails = {u["email"] for u in resp.json()["accepted"]}
+    assert {env.manager.email, env.outsider.email}.issubset(emails)
+
+
+def test_plain_member_cannot_read_candidates(env: _ScopedEnv) -> None:
+    resp = call_endpoint(
+        "GET", _USERS_PATH, None, env.member.headers, env.member.cookies
+    )
+    assert_response(resp, "GET", _USERS_PATH, "member", "denied")
 
 
 def test_manager_me_permissions_flags(env: _ScopedEnv) -> None:

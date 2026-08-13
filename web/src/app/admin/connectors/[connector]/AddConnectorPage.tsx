@@ -1,6 +1,8 @@
 "use client";
 
 import { errorHandlingFetcher } from "@/lib/fetcher";
+import { usePermissionAuthority } from "@/lib/permissions/hooks";
+import { Permission } from "@/lib/types";
 import useSWR, { mutate } from "swr";
 import { AdminPageTitle } from "@/components/admin/Title";
 import { buildSimilarCredentialInfoURL } from "@/app/admin/connector/[ccPairId]/lib";
@@ -159,6 +161,10 @@ export default function AddConnector({
   const [createCredentialFormToggle, setCreateCredentialFormToggle] =
     useState(false);
 
+  const { isScopedManager } = usePermissionAuthority(
+    Permission.MANAGE_CONNECTORS
+  );
+
   // Fetch credentials data
   const { data: credentials } = useSWR<Credential<any>[]>(
     buildSimilarCredentialInfoURL(connector),
@@ -306,7 +312,10 @@ export default function AddConnector({
   return (
     <Formik
       initialValues={createConnectorInitialValues(connector)}
-      validationSchema={createConnectorValidationSchema(connector)}
+      validationSchema={createConnectorValidationSchema(
+        connector,
+        isScopedManager
+      )}
       onSubmit={async (values) => {
         const {
           name,
@@ -431,13 +440,14 @@ export default function AddConnector({
               connectorIdRef.current = response.id;
             }
 
-            // If no credential
             if (!credentialActivated) {
               if (isSuccess) {
                 onSuccess();
               } else {
                 toast.error(message);
               }
+              timeoutErrorHappenedRef.current = false;
+              return;
             }
 
             // With credential
