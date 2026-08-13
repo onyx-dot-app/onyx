@@ -66,16 +66,19 @@ def test_self_hosted_keeps_the_full_catalog(app_type: ExternalAppType) -> None:
 
 
 @pytest.mark.usefixtures("cloud")
-def test_gmail_is_send_only_on_cloud() -> None:
+def test_gmail_cloud_catalog_is_send_and_draft_create() -> None:
+    """`gmail.send` covers sending; the granular `gmail.drafts.create` scope
+    covers draft creation. Everything else needs a restricted scope."""
     assert [e.id for e in get_endpoint_catalog(ExternalAppType.GMAIL)] == [
-        GmailAction.MESSAGES_SEND
+        GmailAction.MESSAGES_SEND,
+        GmailAction.DRAFTS_CREATE,
     ]
 
 
 @pytest.mark.usefixtures("cloud")
 def test_drive_drops_only_shared_drive_listing_on_cloud() -> None:
-    """`drive.file` + the Docs API cover the rest of the catalog; only
-    drives.list needs a Drive-wide scope."""
+    """`drive.file` + the Docs/Sheets/Slides APIs cover the rest of the
+    catalog; only drives.list needs a Drive-wide scope."""
     withheld = {
         e.id for e in PROVIDERS[ExternalAppType.GOOGLE_DRIVE].spec.endpoint_catalog
     } - {e.id for e in get_endpoint_catalog(ExternalAppType.GOOGLE_DRIVE)}
