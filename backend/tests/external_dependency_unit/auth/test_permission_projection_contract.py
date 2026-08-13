@@ -116,7 +116,13 @@ from onyx.server.features.persona.api import (
     patch_user_persona_public_status,
 )
 from onyx.server.features.persona.models import PersonaUpsertRequest
-from onyx.server.features.tool.api import _get_manageable_custom_tool
+from onyx.server.features.tool.api import (
+    _connected_tool_ids,
+    _get_manageable_custom_tool,
+    _may_view_tool,
+    get_custom_tool,
+    list_tools,
+)
 from onyx.server.manage.administrative import create_deletion_attempt_for_connector_id
 from onyx.server.token_rate_limits.models import TokenRateLimitArgs
 from tests.external_dependency_unit.conftest import create_test_user
@@ -993,6 +999,60 @@ def test_tool_projection_matches_gates(db_session: Session) -> None:
         "toggle": True,
         "authenticate": True,
     }
+
+
+def test_tool_read_gate_follows_the_agent_link(db_session: Session) -> None:
+    """An action has no group, so a manager reaches one only through an agent in a group they
+    manage. The by-id route must answer like the listing filter, or one leaks what the other
+    hides."""
+    managed = _make_group(db_session)
+
+    in_scope = create_test_user(db_session, "proj-toolread-in")
+    _manage(db_session, in_scope, managed)
+    in_scope.effective_permissions = []
+
+    outsider = create_test_user(db_session, "proj-toolread-out")
+    _manage(db_session, outsider, _make_group(db_session))
+    outsider.effective_permissions = []
+
+    creator = create_test_user(db_session, "proj-toolread-creator")
+    _manage(db_session, creator, _make_group(db_session))
+    creator.effective_permissions = []
+
+    admin = create_test_user(db_session, "proj-toolread-admin", is_admin=True)
+    db_session.commit()
+
+    linked = _make_tool(db_session, creator=creator)
+    orphan = _make_tool(db_session, creator=creator)
+    builtin = _make_tool(db_session, in_code="SearchTool")
+    db_session.commit()
+
+    persona = _make_persona(
+        db_session, owner=creator, is_public=False, groups=[managed]
+    )
+    _link_persona_tool(db_session, persona, linked)
+
+    for actor, sees_linked, sees_orphan in (
+        (admin, True, True),
+        (creator, True, True),
+        (in_scope, True, False),
+        (outsider, False, False),
+    ):
+        connected = _connected_tool_ids(actor, db_session)
+        assert _may_view_tool(linked, actor, connected) is sees_linked, actor.email
+        assert _may_view_tool(orphan, actor, connected) is sees_orphan, actor.email
+        # built-ins have no owner to scope by
+        assert _may_view_tool(builtin, actor, connected), actor.email
+
+        for tool, visible in ((linked, sees_linked), (orphan, sees_orphan)):
+            assert (
+                not _guard_raises(get_custom_tool, tool.id, db_session, actor)
+            ) is visible, f"{actor.email} {tool.id}"
+
+    # filtering the attach catalog would strip every agent editor but the creator's
+    for actor in (in_scope, outsider):
+        catalog = {snapshot.id for snapshot in list_tools(db_session, actor)}
+        assert {linked.id, orphan.id} <= catalog, actor.email
 
 
 def test_mcp_projection_matches_gates(db_session: Session) -> None:

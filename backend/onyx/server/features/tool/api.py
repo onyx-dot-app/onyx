@@ -5,10 +5,11 @@ from pydantic import BaseModel
 from sqlalchemy.orm import Session
 
 from onyx.auth.permission_projection import tool_permissions
-from onyx.auth.permissions import require_permission
+from onyx.auth.permissions import has_permission, require_permission
+from onyx.auth.scoped_permissions import get_scoped_groups
 from onyx.configs.constants import PUBLIC_API_TAGS
 from onyx.db.engine.sql_engine import get_session
-from onyx.db.enums import Permission
+from onyx.db.enums import Permission, PermissionAuthority
 from onyx.db.mcp import get_mcp_servers_accessible_to_user
 from onyx.db.models import Tool, User
 from onyx.db.oauth_config import get_oauth_config
@@ -18,6 +19,7 @@ from onyx.db.tools import (
     create_tool__no_commit,
     delete_tool__no_commit,
     get_tool_by_id,
+    get_tool_ids_connected_to_groups,
     get_tools,
     get_tools_by_ids,
     update_tool,
@@ -263,17 +265,37 @@ def validate_tool(
 """Endpoints for all"""
 
 
+def _connected_tool_ids(user: User, db_session: Session) -> set[int]:
+    """Empty for a global MANAGE_ACTIONS holder — can_manage_tool passes them before this
+    is read."""
+    if has_permission(user, Permission.MANAGE_ACTIONS) is PermissionAuthority.GLOBAL:
+        return set()
+    return get_tool_ids_connected_to_groups(
+        get_scoped_groups(user, db_session, Permission.MANAGE_ACTIONS), db_session
+    )
+
+
+def _may_view_tool(tool: Tool, user: User, connected_tool_ids: set[int]) -> bool:
+    """Read gate for the management surfaces: can_manage_tool covers admin, creator and MCP
+    server owner; the connected set adds what a manager sees without owning."""
+    if tool.in_code_tool_id is not None:
+        return True
+    return can_manage_tool(user, tool) or tool.id in connected_tool_ids
+
+
 @router.get("/openapi", tags=PUBLIC_API_TAGS)
 def list_openapi_tools(
     db_session: Session = Depends(get_session),
     user: User = Depends(require_permission(Permission.BASIC_ACCESS)),
 ) -> list[ToolSnapshot]:
     tools = get_tools(db_session, only_openapi=True)
+    connected_tool_ids = _connected_tool_ids(user, db_session)
 
-    # Every action affordance is owner-or-admin, decided per tool with no query.
     openapi_tools: list[ToolSnapshot] = []
     for tool in tools:
         if not should_expose_tool_to_fe(tool):
+            continue
+        if not _may_view_tool(tool, user, connected_tool_ids):
             continue
 
         openapi_tools.append(
@@ -290,12 +312,17 @@ def list_openapi_tools(
 def get_custom_tool(
     tool_id: int,
     db_session: Session = Depends(get_session),
-    _: User = Depends(require_permission(Permission.BASIC_ACCESS)),
+    user: User = Depends(require_permission(Permission.BASIC_ACCESS)),
 ) -> ToolSnapshot:
     try:
         tool = get_tool_by_id(tool_id, db_session)
     except ValueError as e:
         raise HTTPException(status_code=404, detail=str(e))
+    if not _may_view_tool(tool, user, _connected_tool_ids(user, db_session)):
+        raise OnyxError(
+            OnyxErrorCode.INSUFFICIENT_PERMISSIONS,
+            "You can only view actions you manage, or ones an agent in your groups uses.",
+        )
     return ToolSnapshot.from_model(tool)
 
 

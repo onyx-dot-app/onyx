@@ -2,8 +2,8 @@ from collections.abc import Collection
 from typing import TYPE_CHECKING, Any, Type, cast
 from uuid import UUID
 
-from sqlalchemy import func, or_, select
-from sqlalchemy.orm import Session
+from sqlalchemy import Select, func, or_, select
+from sqlalchemy.orm import InstrumentedAttribute, Session
 
 from onyx.auth.permissions import has_permission
 from onyx.db.constants import UNSET, UnsetType
@@ -151,29 +151,48 @@ def can_link_oauth_config(
     )
 
 
-def get_mcp_server_ids_connected_to_groups(
-    group_ids: Collection[int], db_session: Session
-) -> set[int]:
-    """MCP server ids exposed to any of ``group_ids`` via an agent — a persona shared to or
-    owned by the group that uses one of the server's tools. The read-visibility set for a
-    scoped manager, who may view servers connected to their groups without managing them."""
-    if not group_ids:
-        return set()
-    rows = db_session.execute(
-        select(Tool.mcp_server_id)
+def _connected_to_groups_stmt(
+    column: InstrumentedAttribute[Any], group_ids: Collection[int]
+) -> Select[tuple[Any]]:
+    """Tools an agent in ``group_ids`` uses — one shared to or owned by the group. An action
+    has no group of its own, so an agent is the only path from a group to one."""
+    return (
+        select(column)
         .join(Persona__Tool, Persona__Tool.tool_id == Tool.id)
         .join(Persona, Persona.id == Persona__Tool.persona_id)
         .outerjoin(Persona__UserGroup, Persona__UserGroup.persona_id == Persona.id)
         .where(
-            Tool.mcp_server_id.is_not(None),
             Persona.deleted.is_(False),
             or_(
                 Persona__UserGroup.user_group_id.in_(group_ids),
                 Persona.owner_group_id.in_(group_ids),
             ),
         )
+    )
+
+
+def get_mcp_server_ids_connected_to_groups(
+    group_ids: Collection[int], db_session: Session
+) -> set[int]:
+    """MCP server ids reachable from ``group_ids``. A scoped manager may view these without
+    managing them."""
+    if not group_ids:
+        return set()
+    rows = db_session.execute(
+        _connected_to_groups_stmt(Tool.mcp_server_id, group_ids).where(
+            Tool.mcp_server_id.is_not(None)
+        )
     ).all()
     return {server_id for (server_id,) in rows if server_id is not None}
+
+
+def get_tool_ids_connected_to_groups(
+    group_ids: Collection[int], db_session: Session
+) -> set[int]:
+    if not group_ids:
+        return set()
+    rows = db_session.execute(_connected_to_groups_stmt(Tool.id, group_ids)).all()
+    return {tool_id for (tool_id,) in rows}
 
 
 def get_tool_by_name(tool_name: str, db_session: Session) -> Tool:
