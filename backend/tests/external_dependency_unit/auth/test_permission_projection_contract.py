@@ -867,9 +867,21 @@ def test_document_set_projection_matches_gates(db_session: Session) -> None:
             is_ds_admin or user_owns_groupless_document_set(doc_set, actor)
         )
 
+        # publish: org-wide, so the PATCH gate for the PUBLIC state — global-only
+        publish_enforced = not _guard_raises(
+            assert_within_scope,
+            actor,
+            db_session,
+            permission=Permission.MANAGE_DOCUMENT_SETS,
+            current_group_ids=[managed.id],
+            requested_group_ids=[managed.id],
+            is_non_public=False,
+        )
+
         assert tags["edit"] == scope_decision
         assert tags["manage_access"] == scope_decision
         assert tags["delete"] == delete_admits
+        assert tags["publish"] == publish_enforced
 
 
 def test_persona_and_doc_set_key_coverage() -> None:
