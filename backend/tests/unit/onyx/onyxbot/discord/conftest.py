@@ -27,6 +27,25 @@ class AsyncIteratorMock:
         return item
 
 
+def mock_attachment(
+    filename: str = "screenshot.png",
+    content_type: str | None = "image/png",
+    size: int = 1024,
+    data: bytes = b"fake-image-bytes",
+    read_error: Exception | None = None,
+) -> MagicMock:
+    """Helper to create a mock Discord attachment."""
+    attachment = MagicMock(spec=discord.Attachment)
+    attachment.filename = filename
+    attachment.content_type = content_type
+    attachment.size = size
+    attachment.read = AsyncMock(
+        side_effect=read_error if read_error else None,
+        return_value=data,
+    )
+    return attachment
+
+
 def mock_message(
     content: str = "Test message",
     author_bot: bool = False,
@@ -35,6 +54,7 @@ def mock_message(
     message_id: int | None = None,
     author_id: int | None = None,
     author_display_name: str | None = None,
+    attachments: list[MagicMock] | None = None,
 ) -> MagicMock:
     """Helper to create mock Discord messages."""
     msg = MagicMock(spec=discord.Message)
@@ -49,6 +69,7 @@ def mock_message(
     msg.mentions = []
     msg.role_mentions = []
     msg.channel_mentions = []
+    msg.attachments = attachments or []
     return msg
 
 
@@ -113,6 +134,7 @@ def mock_discord_message(mock_bot_user: MagicMock) -> MagicMock:  # noqa: ARG001
     msg.role_mentions = []
     msg.channel_mentions = []
     msg.reference = None
+    msg.attachments = []
     return msg
 
 
@@ -251,6 +273,7 @@ def mock_message_with_bot_mention(mock_bot_user: MagicMock) -> MagicMock:
     msg.channel.id = 111111111
     msg.role_mentions = []
     msg.channel_mentions = []
+    msg.attachments = []
     return msg
 
 

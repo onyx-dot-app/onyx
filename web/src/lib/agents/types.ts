@@ -90,6 +90,7 @@ export interface Agent extends MinimalAgent {
   replace_base_system_prompt: boolean;
   task_prompt: string | null;
   datetime_aware: boolean;
+  include_citations: boolean;
 }
 
 export interface FullAgent extends Agent {
@@ -111,6 +112,7 @@ export interface AgentUpsertParameters {
   replace_base_system_prompt: boolean;
   task_prompt: string;
   datetime_aware: boolean;
+  include_citations: boolean;
   document_set_ids: number[];
   // Sharing fields: omit on update — the share dialog owns sharing for
   // saved agents and the backend treats absent as "leave unchanged"
@@ -137,6 +139,7 @@ export interface AgentUpsertRequest {
   system_prompt: string;
   task_prompt: string;
   datetime_aware: boolean;
+  include_citations: boolean;
   document_set_ids: number[];
   is_public?: boolean;
   default_model_configuration_id: number | null;
