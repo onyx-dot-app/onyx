@@ -99,7 +99,7 @@ def _install_mocks(
     monkeypatch.setattr(
         mcp_oauth,
         "get_connection_config_by_id",
-        lambda config_id, _db_session: SimpleNamespace(id=config_id),
+        lambda config_id, _db_session, **_kwargs: SimpleNamespace(id=config_id),
     )
     # extract_connection_data returns the same dict the SDK storage mutates.
     monkeypatch.setattr(

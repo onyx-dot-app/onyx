@@ -31,6 +31,7 @@ from mcp.shared.auth import (
 from pydantic import AnyUrl, BaseModel, ValidationError
 from sqlalchemy.orm import Session
 
+from onyx.auth.oauth_token_manager import ensure_offline_access_auth_params
 from onyx.cache.interface import CacheLockAcquisitionError
 from onyx.cache.locks import cache_shared_lock
 from onyx.db.engine.sql_engine import get_session_with_current_tenant
@@ -51,8 +52,8 @@ from onyx.server.features.mcp.client_metadata import (
 )
 from onyx.server.features.mcp.models import (
     DENYLISTED_MCP_HEADERS,
-    MCPConnectionData,
     MCPOAuthKeys,
+    mcp_token_expired,
     merge_mcp_headers,
 )
 from onyx.server.features.mcp.ssrf import (
@@ -519,12 +520,6 @@ def refresh_mcp_oauth_token_if_expired(
         return _persisted_auth_header(connection_config_id)
 
 
-def mcp_token_expired(config_data: MCPConnectionData) -> bool:
-    """True iff the stored access token is past its persisted expiry."""
-    expires_at = config_data.get(MCPOAuthKeys.TOKEN_EXPIRES_AT.value)
-    return expires_at is not None and float(expires_at) <= time.time()
-
-
 def _persisted_auth_header(connection_config_id: int) -> str | None:
     """The stored ``Authorization`` header when the persisted token is still
     fresh, else None — used as the fallback when a concurrent refresh wins."""
@@ -580,8 +575,12 @@ class OnyxTokenStorage(TokenStorage):
     def bind_oauth_context(self, context: OAuthContext) -> None:
         self._oauth_context = context
 
-    def _ensure_connection_config(self, db_session: Session) -> MCPConnectionConfig:
-        config = get_connection_config_by_id(self.connection_config_id, db_session)
+    def _ensure_connection_config(
+        self, db_session: Session, *, for_update: bool = False
+    ) -> MCPConnectionConfig:
+        config = get_connection_config_by_id(
+            self.connection_config_id, db_session, for_update=for_update
+        )
         if config is None:
             raise OnyxError(OnyxErrorCode.NOT_FOUND, "Connection config not found")
         return config
@@ -682,6 +681,37 @@ class OnyxTokenStorage(TokenStorage):
             r.rpush(key_tokens(str(self.alt_config_id)), tokens.model_dump_json())
             r.expire(key_tokens(str(self.alt_config_id)), OAUTH_WAIT_SECONDS)
 
+    async def discard_persisted_tokens(
+        self, redeemed_refresh_token: str | None
+    ) -> bool:
+        """Drop the persisted grant (tokens, expiry, Authorization header) so
+        the connection reads as unauthenticated until the user reconnects.
+
+        No-ops when the stored refresh token no longer matches
+        ``redeemed_refresh_token``: a concurrent refresh or reconnect already
+        replaced the grant, and the replacement must survive. Returns whether
+        the grant was discarded."""
+        with get_session_with_current_tenant() as db_session:
+            # Row lock: a concurrent set_tokens commit between an unlocked read
+            # and the update below would be clobbered by this stale read.
+            config = self._ensure_connection_config(db_session, for_update=True)
+            config_data = extract_connection_data(config)
+            stored_tokens = config_data.get(MCPOAuthKeys.TOKENS.value) or {}
+            if (
+                redeemed_refresh_token is None
+                or stored_tokens.get("refresh_token") != redeemed_refresh_token
+            ):
+                return False
+            config_data.pop(MCPOAuthKeys.TOKENS.value, None)
+            config_data.pop(MCPOAuthKeys.TOKEN_EXPIRES_AT.value, None)
+            config_data["headers"] = {
+                key: value
+                for key, value in config_data.get("headers", {}).items()
+                if key.lower() != "authorization"
+            }
+            update_connection_config(config.id, db_session, config_data)
+            return True
+
     async def get_client_info(self) -> OAuthClientInformationFull | None:
         with get_session_with_current_tenant() as db_session:
             config = self._ensure_connection_config(db_session)
@@ -758,6 +788,9 @@ class OnyxOAuthClientProvider(OAuthClientProvider):
         self.refresh_log_context = refresh_log_context
         self.refresh_attempt_id: str | None = None
         self.token_expiry_before_refresh: float | None = None
+        # The refresh token the in-flight refresh attempt redeemed; guards the
+        # invalid_grant discard against wiping a concurrently stored grant.
+        self.redeemed_refresh_token: str | None = None
 
     def _refresh_log_fields(self, **fields: Any) -> dict[str, Any]:
         log_fields: dict[str, Any] = {
@@ -771,6 +804,10 @@ class OnyxOAuthClientProvider(OAuthClientProvider):
     async def _refresh_token(self) -> httpx.Request:
         self.refresh_attempt_id = uuid4().hex
         self.token_expiry_before_refresh = self.context.token_expiry_time
+        current_tokens = self.context.current_tokens
+        self.redeemed_refresh_token = (
+            current_tokens.refresh_token if current_tokens else None
+        )
 
         request = await super()._refresh_token()
         logger.info(
@@ -820,6 +857,17 @@ class OnyxOAuthClientProvider(OAuthClientProvider):
         if response.status_code != 200:
             logger.warning("mcp_oauth.refresh.failed", extra=response_fields)
             self.context.clear_tokens()
+            # invalid_grant means the refresh token itself is expired or
+            # revoked (RFC 6749) — discard the dead grant so the connection
+            # reads as unauthenticated instead of retrying forever.
+            storage = self.context.storage
+            if oauth_error == "invalid_grant" and isinstance(storage, OnyxTokenStorage):
+                if await storage.discard_persisted_tokens(self.redeemed_refresh_token):
+                    logger.warning("mcp_oauth.tokens_discarded", extra=response_fields)
+                else:
+                    logger.info(
+                        "mcp_oauth.tokens_discard_skipped_stale", extra=response_fields
+                    )
             return False
 
         try:
@@ -857,6 +905,9 @@ def make_oauth_provider(
     async def redirect_handler(auth_url: str) -> None:
         if return_path == UNUSED_RETURN_PATH:
             raise ValueError("Please Reconnect to the server")
+        # The SDK exposes no hook for provider-specific authorize params; add
+        # them here, where every auto-discovery consent URL passes through.
+        auth_url = ensure_offline_access_auth_params(auth_url)
         r = get_redis_client()
         # The SDK generated & embedded 'state' in the auth_url; extract & store it.
         parsed = urlparse(auth_url)

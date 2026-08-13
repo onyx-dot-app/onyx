@@ -111,6 +111,7 @@ from onyx.server.features.mcp.models import (
     MCPUserOAuthConnectRequest,
     MCPUserOAuthConnectResponse,
     contains_mcp_placeholder,
+    mcp_token_expired,
     merge_mcp_headers,
 )
 from onyx.server.features.mcp.oauth import (
@@ -125,7 +126,6 @@ from onyx.server.features.mcp.oauth import (
     key_state,
     key_tokens,
     make_oauth_provider,
-    mcp_token_expired,
 )
 from onyx.server.features.mcp.ssrf import validate_mcp_outbound_url
 from onyx.server.features.tool.models import ToolSnapshot
