@@ -116,11 +116,15 @@ export const worldTest = test.extend<{ world: ScopedWorld }>({
       [foreignGroupId]
     );
     // an agent in the managed group is the only path from that group to an action
-    await adminClient.createAgent(`bridge-agent-${stamp}`, "", {
-      isPublic: false,
-      groups: [scopedManager.groupId],
-      toolIds: [connectedActionId],
-    });
+    const bridgeAgentId = await adminClient.createAgent(
+      `bridge-agent-${stamp}`,
+      "",
+      {
+        isPublic: false,
+        groups: [scopedManager.groupId],
+        toolIds: [connectedActionId],
+      }
+    );
 
     const managerClient = await actAsManager(page, scopedManager);
     const ownActionId = await managerClient.createCustomTool(
@@ -190,8 +194,15 @@ export const worldTest = test.extend<{ world: ScopedWorld }>({
       await page.context().clearCookies();
       await loginAs(page, "admin");
       const cleanup = new OnyxApiClient(page.request);
+      await softCleanup(() => cleanup.deleteAgent(bridgeAgentId));
       for (const id of [ownActionId, connectedActionId, orphanActionId]) {
         await softCleanup(() => cleanup.deleteCustomTool(id));
+      }
+      for (const id of [managedDocSetId, grouplessDocSetId]) {
+        await softCleanup(() => cleanup.deleteDocumentSet(id));
+      }
+      for (const id of [managedCcPairId, grouplessCcPairId, foreignCcPairId]) {
+        await softCleanup(() => cleanup.deleteCCPair(id));
       }
       await softCleanup(() =>
         cleanup.setGroupCcPairs(foreignGroupId, foreignGroupName, [], {
