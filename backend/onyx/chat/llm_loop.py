@@ -37,7 +37,10 @@ from onyx.chat.prompt_utils import (
 from onyx.configs.app_configs import INTEGRATION_TESTS_MODE
 from onyx.configs.chat_configs import MAX_LLM_CYCLES
 from onyx.configs.constants import DocumentSource, MessageType
-from onyx.configs.model_configs import GEN_AI_INPUT_TOKEN_SAFETY_MARGIN
+from onyx.configs.model_configs import (
+    GEN_AI_INPUT_TOKEN_SAFETY_MARGIN,
+    GEN_AI_NUM_RESERVED_OUTPUT_TOKENS,
+)
 from onyx.context.search.models import SearchDoc, SearchDocsResponse
 from onyx.db.engine.sql_engine import get_session_with_current_tenant
 from onyx.db.memory import UserMemoryContext, add_memory, update_memory_at_index
@@ -1086,10 +1089,14 @@ def run_llm_loop(
                     )
                     - tool_token_budget
                 )
-                if context_headroom > 0:
-                    cycle_max_output_tokens = min(
-                        model_max_output_tokens, context_headroom
-                    )
+                # Never leave this unset once the model is known: an absent cap
+                # hands the request back to LiteLLM's model-ceiling default,
+                # which is the worst possible value precisely when headroom has
+                # run out.
+                cycle_max_output_tokens = min(
+                    model_max_output_tokens,
+                    max(context_headroom, GEN_AI_NUM_RESERVED_OUTPUT_TOKENS),
+                )
 
             llm_step_result, has_reasoned = run_llm_step(
                 emitter=emitter,

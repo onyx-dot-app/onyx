@@ -227,6 +227,25 @@ _BEDROCK_INFERENCE_PROFILE_PREFIXES = (
     "global.",
 )
 
+# Vendor namespaces AWS publishes Bedrock models under. Gating on these rather
+# than on the provider name keeps the retry working for GovCloud gateways
+# registered as custom providers, without matching arbitrary local model ids.
+_BEDROCK_MODEL_VENDOR_NAMESPACES = (
+    "ai21.",
+    "amazon.",
+    "anthropic.",
+    "cohere.",
+    "deepseek.",
+    "luma.",
+    "meta.",
+    "mistral.",
+    "openai.",
+    "qwen.",
+    "stability.",
+    "twelvelabs.",
+    "writer.",
+)
+
 
 def resolve_max_output_tokens(model_name: str, model_provider: str) -> int | None:
     """The model's real max output tokens, or None when it cannot be determined.
@@ -243,10 +262,10 @@ def resolve_max_output_tokens(model_name: str, model_provider: str) -> int | Non
             if not model_name.startswith(prefix):
                 continue
             base_model_name = model_name[len(prefix) :]
-            # Only retry when the remainder is still `vendor.model` shaped, so a
-            # self-hosted model that merely happens to start with "us." cannot
-            # inherit an unrelated model's ceiling.
-            if "." not in base_model_name:
+            # Only retry when the remainder still carries a Bedrock vendor
+            # namespace, so a self-hosted model that merely happens to start
+            # with "us." cannot inherit an unrelated model's ceiling.
+            if not base_model_name.startswith(_BEDROCK_MODEL_VENDOR_NAMESPACES):
                 break
             model_obj = find_model_obj(model_map, model_provider, base_model_name)
             break

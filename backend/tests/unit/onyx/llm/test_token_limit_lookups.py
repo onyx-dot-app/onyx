@@ -263,6 +263,12 @@ class TestResolveMaxOutputTokens:
         with patch("onyx.llm.model_capabilities.get_model_map", return_value=model_map):
             assert resolve_max_output_tokens("us.foo", "ollama") is None
 
+    def test_prefix_strip_requires_a_known_bedrock_vendor(self) -> None:
+        # A dotted remainder is not enough — it must be a Bedrock vendor.
+        model_map = {"foo.bar": {"max_output_tokens": 128000}}
+        with patch("onyx.llm.model_capabilities.get_model_map", return_value=model_map):
+            assert resolve_max_output_tokens("us.foo.bar", "ollama") is None
+
     def test_prefix_strip_still_returns_none_when_base_unknown(self) -> None:
         with patch("onyx.llm.model_capabilities.get_model_map", return_value={}):
             assert (
