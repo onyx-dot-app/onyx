@@ -1,14 +1,21 @@
 package cmd
 
-// Cloud tag state matrix. Base states (commit vs release branches on origin;
-// computeCloudTag):
+// Cloud tag state matrix. A "cut" is the commit where a release/vX.Y branch was
+// created off main; the branch contains every main commit up to its cut and
+// none after. The base version of a cloud tag is one minor past the newest
+// release branch that does not contain the tagged commit. That places the tag
+// above every release whose branch is missing the commit and below every
+// release whose branch contains it.
 //
-//	S1 commit past the newest cut            -> newest minor+1, counter fresh   TestComputeCloudTag_postCutCommitBumpsPastNewestBranch
-//	S2 commit between two cuts               -> older train's minor+1           TestComputeCloudTag_betweenCutsUsesOlderTrain
-//	S3 commit on every release branch        -> error, hint --version           TestComputeCloudTag_commitOnAllBranchesErrors
+// Base states (computeCloudTag; the fixture cuts release/v4.4, then
+// release/v4.5, on a shared main line):
+//
+//	S1 commit after the v4.5 cut             -> v4.6.0-cloud.0                  TestComputeCloudTag_postCutCommitBumpsPastNewestBranch
+//	S2 commit after the v4.4 cut, before v4.5's -> v4.5.0-cloud.0               TestComputeCloudTag_betweenCutsBumpsPastOlderBranch
+//	S3 commit before every cut               -> error, hint --version           TestComputeCloudTag_commitOnAllBranchesErrors
 //	S4 no release branches on origin         -> error, hint --version           TestComputeCloudTag_noReleaseBranchesErrors
-//	S5 skipped minor between branch cuts     -> still cut-anchored minor+1      TestComputeCloudTag_skippedMinorStaysCutAnchored
-//	S6 double-digit minor / major boundary   -> numeric minor bump              TestComputeCloudTag_doubleDigitMinorAndMajorBoundary
+//	S5 v4.5 never branched (v4.4, v4.6 cuts) -> between-cuts commit still v4.5.0 TestComputeCloudTag_skippedMinorStaysCutAnchored
+//	S6 v4.10 and v5.0 cuts                   -> v4.11.0 / v5.1.0 (numeric bump) TestComputeCloudTag_doubleDigitMinorAndMajorBoundary
 //	S7 commit not on origin/main             -> error                           TestComputeCloudTag_commitNotOnMainErrors
 //	S8 shallow clone (even with --version)   -> error                           TestComputeCloudTag_shallowCloneErrors
 //	S9 --version override                    -> override base, counter fresh    TestComputeCloudTag_versionOverride
@@ -83,12 +90,12 @@ func TestComputeCloudTag_postCutCommitBumpsPastNewestBranch(t *testing.T) {
 	}
 }
 
-func TestComputeCloudTag_betweenCutsUsesOlderTrain(t *testing.T) {
+func TestComputeCloudTag_betweenCutsBumpsPastOlderBranch(t *testing.T) {
 	// Precondition.
 	repo := setupReleaseBranchRepo(t)
 
 	// Under test: the v4.5 cut point is on release/v4.5 but not release/v4.4,
-	// so it ships in the 4.5 train.
+	// so its code ships in v4.5.0 and the tag must sort below v4.5.0.
 	tag, err := computeCloudTag(repo.cutSHA, "")
 
 	// Postcondition.
@@ -163,8 +170,8 @@ func TestComputeCloudTag_doubleDigitMinorAndMajorBoundary(t *testing.T) {
 	betweenSHA, postSHA := setupTwoBranchRepo(t, "release/v4.10", "release/v5.0")
 
 	// Under test and postcondition: v4.10 bumps numerically to v4.11.0, and a
-	// commit past the v5.0 cut lands on the v5.1 train (major bumps are not
-	// guessed; they arrive via the next branch cut or --version).
+	// commit past the v5.0 cut gets base v5.1.0 (major bumps are not guessed;
+	// they arrive via the next branch cut or --version).
 	tag, err := computeCloudTag(betweenSHA, "")
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
@@ -302,8 +309,8 @@ func TestReleaseCloud_tagsOriginMainHead(t *testing.T) {
 }
 
 func TestReleaseCloud_fetchesRemoteOnlyCounterTags(t *testing.T) {
-	// Precondition: a counter tag another developer pushed but this clone
-	// never fetched. Computing from local tags alone would mint a colliding
+	// Precondition: a counter tag another developer pushed but this clone never
+	// fetched. Computing from local tags alone would mint a colliding
 	// v4.6.0-cloud.3.
 	repo := setupReleaseBranchRepo(t)
 	gitIn(t, repo.work, "tag", "v4.6.0-cloud.3", repo.postCutSHA)

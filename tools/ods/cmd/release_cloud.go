@@ -32,8 +32,8 @@ func NewReleaseCloudCommand() *cobra.Command {
 		Short: "Cut the next cloud release tag (vX.Y.0-cloud.N) off main",
 		Long: `Cut the next cloud release tag (vX.Y.0-cloud.N) and push it to origin.
 
-The base version names the release train the tagged commit belongs to: one
-minor past the newest release/vX.Y branch that does not contain the commit.
+The base version is one minor past the newest release/vX.Y branch that does
+not contain the tagged commit.
 A commit on main after the release/v4.6 cut is therefore tagged
 v4.7.0-cloud.N, never v4.6.0-cloud.N, so cloud tags order correctly against
 stable and beta tags under semver. N is one past the highest existing counter
@@ -73,9 +73,9 @@ func releaseCloud(opts *ReleaseCloudOptions) error {
 	if err := git.RunCommand("fetch", "--quiet", "--force", "origin", "+refs/heads/main:refs/remotes/origin/main"); err != nil {
 		return fmt.Errorf("failed to fetch origin/main: %w", err)
 	}
-	// Best-effort: a failure here only leaves the counter stale, which is
-	// safe. If the computed tag already exists on origin, the push (which is
-	// never forced) is rejected and rolled back.
+	// Best-effort: a failure here only leaves the counter stale, which is safe.
+	// If the computed tag already exists on origin, the push (which is never
+	// forced) is rejected and rolled back.
 	if err := fetchCloudTags(); err != nil {
 		log.Warnf("Could not fetch cloud tags (using local tags): %v", err)
 	}
@@ -107,7 +107,8 @@ func releaseCloud(opts *ReleaseCloudOptions) error {
 		return fmt.Errorf("failed to create tag %s: %w", tag, err)
 	}
 	if err := git.PushTag(tag, false, opts.Verify); err != nil {
-		// Roll back the local tag so the command stays retryable after a failed push.
+		// Roll back the local tag so the command stays retryable after a failed
+		// push.
 		if delErr := git.RunCommand("tag", "-d", tag); delErr != nil {
 			log.Warnf("Also failed to delete local tag %s; remove it before retrying: %v", tag, delErr)
 		}
@@ -117,10 +118,10 @@ func releaseCloud(opts *ReleaseCloudOptions) error {
 	return nil
 }
 
-// computeCloudTag returns the next cloud tag for commitSHA. The base version
-// is "v" + overrideVersion when given, else one minor past the release train
-// detected from origin's release branches; the counter is one past the highest
-// existing "-cloud.N" tag for that base.
+// computeCloudTag returns the next cloud tag for commitSHA. The base version is
+// "v" + overrideVersion when given, else one minor past the newest release
+// branch on origin that does not contain the commit; the counter is one past
+// the highest existing "-cloud.N" tag for that base.
 func computeCloudTag(commitSHA, overrideVersion string) (string, error) {
 	// The ancestry checks below cannot be answered truthfully in a shallow
 	// clone; fail loudly instead.
@@ -144,12 +145,12 @@ func computeCloudTag(commitSHA, overrideVersion string) (string, error) {
 	if overrideVersion != "" {
 		base = "v" + overrideVersion
 	} else {
-		train, err := findTargetReleaseVersion(commitSHA)
+		branchVersion, err := findTargetReleaseVersion(commitSHA)
 		if err != nil {
-			return "", fmt.Errorf("failed to detect the release train (pass --version to override): %w", err)
+			return "", fmt.Errorf("failed to detect the base version from release branches (pass --version to override): %w", err)
 		}
-		base = train.nextMinorBase()
-		log.Infof("Newest release branch not containing %.10s: release/%s -> cloud base %s", commitSHA, train, base)
+		base = branchVersion.nextMinorBase()
+		log.Infof("Newest release branch not containing %.10s: release/%s -> cloud base %s", commitSHA, branchVersion, base)
 	}
 
 	return nextCloudTag(base)

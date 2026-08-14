@@ -119,8 +119,8 @@ type releaseBranchRepo struct {
 }
 
 // setupReleaseBranchRepo creates a bare origin holding main, release/v4.4, and
-// release/v4.5, with a local work repo as the current directory. It returns
-// the repo paths and three main-line commit SHAs bracketing the branch cuts.
+// release/v4.5, with a local work repo as the current directory. It returns the
+// repo paths and three main-line commit SHAs bracketing the branch cuts.
 func setupReleaseBranchRepo(t *testing.T) releaseBranchRepo {
 	t.Helper()
 
