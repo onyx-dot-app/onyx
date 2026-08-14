@@ -1,8 +1,9 @@
 """Which capabilities exist per source on this build.
 
-Kept apart from the check registry so hot-path modules (the blocking
-validation recorder) can resolve applicability without importing the
-registry, which eagerly imports every migrated connector's check module.
+Kept apart from the check registry, on both the OSS and EE sides, so
+applicability resolution never imports a per-connector check module: the
+blocking-validation recorder resolves applicability on hot paths, and a check
+module's import failure or weight must not reach it.
 """
 
 from onyx.configs.constants import DocumentSource
@@ -18,7 +19,7 @@ def get_applicable_capabilities(source: DocumentSource) -> set[CredentialCapabil
     exist there.
     """
     get_perm_sync_capabilities = fetch_ee_implementation_or_noop(
-        "onyx.connectors.capability_checks",
+        "onyx.connectors.capability_applicability",
         "get_applicable_perm_sync_capabilities",
         noop_return_value=set(),
     )

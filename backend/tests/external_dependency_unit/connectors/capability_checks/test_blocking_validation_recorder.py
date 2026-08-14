@@ -247,7 +247,7 @@ def test_recorder_failure_never_breaks_validation(
     cc_pair, _ = blocking_validation
     monkeypatch.setattr(
         recorder,
-        "upsert_completed_capability_report",
+        "upsert_completed_capability_report_unless_granular",
         MagicMock(side_effect=RuntimeError("db down")),
     )
 

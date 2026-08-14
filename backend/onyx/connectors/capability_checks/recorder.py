@@ -30,11 +30,9 @@ from onyx.connectors.capability_checks.models import (
 )
 from onyx.connectors.exceptions import ConnectorValidationError
 from onyx.db.credential_capability import (
-    get_capability_report_row,
-    upsert_completed_capability_report,
+    upsert_completed_capability_report_unless_granular,
 )
 from onyx.db.engine.sql_engine import get_session_with_current_tenant
-from onyx.db.models import CredentialCapabilityReportRow
 from onyx.utils.logger import setup_logger
 
 logger = setup_logger()
@@ -97,14 +95,6 @@ def _synthesize_results(
     return results
 
 
-def _has_granular_report(row: CredentialCapabilityReportRow) -> bool:
-    """True when the stored report came from named checks, not a fallback."""
-    if row.report is None:
-        return False
-    check_results = row.report.get("check_results", [])
-    return any(not result.get("is_fallback") for result in check_results)
-
-
 def _connector_config_hash(config: dict[str, Any] | None) -> str | None:
     """sha256 of the canonical config JSON; the staleness signal."""
     if config is None:
@@ -127,7 +117,8 @@ def record_blocking_validation_outcome(
 
     Uses its own session so the caller's in-flight transaction is untouched,
     and never overwrites a granular (named-checks) report with this coarse
-    fallback-shaped record (the no-clobber rule).
+    fallback-shaped record: the no-clobber guard is part of the upsert
+    statement itself, so a concurrent granular write cannot race it.
     """
     try:
         results = _synthesize_results(source, error, perm_sync_validated)
@@ -143,12 +134,7 @@ def record_blocking_validation_outcome(
             check_results=results,
         )
         with get_session_with_current_tenant() as db_session:
-            existing = get_capability_report_row(
-                db_session, credential_id, connector_id
-            )
-            if existing is not None and _has_granular_report(existing):
-                return
-            upsert_completed_capability_report(
+            upsert_completed_capability_report_unless_granular(
                 db_session,
                 credential_id=credential_id,
                 connector_id=connector_id,
