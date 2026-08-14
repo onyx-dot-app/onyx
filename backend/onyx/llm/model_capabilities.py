@@ -212,6 +212,47 @@ def get_llm_max_output_tokens(
     return default_output_tokens
 
 
+# Bedrock serves models through regional inference profiles that prefix the base
+# model id. LiteLLM's map carries only some of them, so retry a failed lookup
+# without the prefix rather than treating the model as unknown.
+_BEDROCK_INFERENCE_PROFILE_PREFIXES = (
+    "us-gov.",
+    "us.",
+    "eu.",
+    "apac.",
+    "au.",
+    "jp.",
+    "ca.",
+    "sa.",
+    "global.",
+)
+
+
+def resolve_max_output_tokens(model_name: str, model_provider: str) -> int | None:
+    """The model's real max output tokens, or None when it cannot be determined.
+
+    Unlike `get_llm_max_output_tokens` this never falls back to a guess. Callers
+    that send the value to a provider must not invent a ceiling the model may
+    not accept — returning None leaves the limit to the provider.
+    """
+    model_map = get_model_map()
+    model_obj = find_model_obj(model_map, model_provider, model_name)
+
+    if model_obj is None:
+        for prefix in _BEDROCK_INFERENCE_PROFILE_PREFIXES:
+            if model_name.startswith(prefix):
+                model_obj = find_model_obj(
+                    model_map, model_provider, model_name[len(prefix) :]
+                )
+                break
+
+    if model_obj is None:
+        return None
+
+    max_output_tokens = model_obj.get("max_output_tokens")
+    return int(max_output_tokens) if max_output_tokens else None
+
+
 def get_max_input_tokens(
     model_name: str,
     model_provider: str,

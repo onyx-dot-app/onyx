@@ -46,7 +46,7 @@ from onyx.file_store.models import ChatFileType
 from onyx.llm.constants import LlmProviderNames
 from onyx.llm.exceptions import ClassifiedLLMError
 from onyx.llm.interfaces import LLM, LLMUserIdentity, ToolChoiceOptions
-from onyx.llm.model_capabilities import is_true_openai_model
+from onyx.llm.model_capabilities import is_true_openai_model, resolve_max_output_tokens
 from onyx.llm.models import ReasoningEffort
 from onyx.llm.utils import model_supports_image_input
 from onyx.prompts.chat_prompts import (
@@ -810,6 +810,13 @@ def run_llm_loop(
         available_tokens = int(
             llm.config.max_input_tokens * (1 - GEN_AI_INPUT_TOKEN_SAFETY_MARGIN)
         )
+        # Without an explicit cap LiteLLM applies its own default (4096 for
+        # Anthropic), which truncates models that spend output tokens on
+        # reasoning before they emit an answer. Stays None for models we can't
+        # resolve, so we never claim a ceiling the provider may reject.
+        model_max_output_tokens = resolve_max_output_tokens(
+            llm.config.model_name, llm.config.model_provider
+        )
         # When the model takes no image input, history images are replayed as
         # short text markers (translate_history_to_llm_format) — budget them
         # as markers too, not at their stored image token cost.
@@ -1039,6 +1046,21 @@ def run_llm_loop(
             # This measures how long the user waits before the answer starts streaming
             pre_answer_processing_time = time.monotonic() - loop_start_time
 
+            # Providers reject a request whose input plus requested output
+            # exceeds the context window, so cap the ask at what this cycle's
+            # history actually leaves free.
+            cycle_max_output_tokens: int | None = None
+            if model_max_output_tokens is not None:
+                context_headroom = (
+                    llm.config.max_input_tokens
+                    - sum(msg.token_count for msg in truncated_message_history)
+                    - tool_token_budget
+                )
+                if context_headroom > 0:
+                    cycle_max_output_tokens = min(
+                        model_max_output_tokens, context_headroom
+                    )
+
             llm_step_result, has_reasoned = run_llm_step(
                 emitter=emitter,
                 history=truncated_message_history,
@@ -1055,6 +1077,7 @@ def run_llm_loop(
                 user_identity=user_identity,
                 pre_answer_processing_time=pre_answer_processing_time,
                 reasoning_effort=reasoning_effort,
+                max_tokens=cycle_max_output_tokens,
             )
             if has_reasoned:
                 reasoning_cycles += 1
