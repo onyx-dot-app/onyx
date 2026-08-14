@@ -1,7 +1,7 @@
 """add cache creation tokens to user usage
 
 Revision ID: 8d1297b43210
-Revises: 3debc2b55899
+Revises: 3350a25df58e
 Create Date: 2026-07-31 15:45:02.165673
 
 """
@@ -11,7 +11,7 @@ import sqlalchemy as sa
 
 # revision identifiers, used by Alembic.
 revision = "8d1297b43210"
-down_revision = "3debc2b55899"
+down_revision = "3350a25df58e"
 branch_labels = None
 depends_on = None
 
