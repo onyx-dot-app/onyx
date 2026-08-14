@@ -1,7 +1,7 @@
 import abc
 from collections.abc import Generator, Iterator
 from types import TracebackType
-from typing import Any, Generic, TypeAlias, TypeVar
+from typing import Any, ClassVar, Generic, TypeAlias, TypeVar
 
 from pydantic import BaseModel, Field
 
@@ -158,6 +158,8 @@ class SlimConnectorWithPermSync(BaseConnector):
 
 
 class OAuthConnector(BaseConnector):
+    supports_pkce: ClassVar[bool] = False
+
     class AdditionalOauthKwargs(BaseModel):
         # if overridden, all fields should be str type
         pass
@@ -174,6 +176,7 @@ class OAuthConnector(BaseConnector):
         base_domain: str,
         state: str,
         additional_kwargs: dict[str, str],
+        code_challenge: str | None = None,
     ) -> str:
         raise NotImplementedError
 
@@ -184,6 +187,7 @@ class OAuthConnector(BaseConnector):
         base_domain: str,
         code: str,
         additional_kwargs: dict[str, str],
+        code_verifier: str | None = None,
     ) -> dict[str, Any]:
         raise NotImplementedError
 

@@ -96,6 +96,7 @@ class LinearConnector(LoadConnector, PollConnector, OAuthConnector):
         base_domain: str,
         state: str,
         additional_kwargs: dict[str, str],  # noqa: ARG003
+        code_challenge: str | None = None,  # noqa: ARG003
     ) -> str:
         if not LINEAR_CLIENT_ID:
             raise ValueError("LINEAR_CLIENT_ID environment variable must be set")
@@ -117,6 +118,7 @@ class LinearConnector(LoadConnector, PollConnector, OAuthConnector):
         base_domain: str,
         code: str,
         additional_kwargs: dict[str, str],  # noqa: ARG003
+        code_verifier: str | None = None,  # noqa: ARG003
     ) -> dict[str, Any]:
         data = {
             "code": code,
