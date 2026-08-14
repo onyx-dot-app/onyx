@@ -8,7 +8,7 @@ Utilities for dynamic LLM providers (Bedrock, Ollama, OpenRouter):
 """
 
 import re
-from typing import TypedDict
+from typing import TypedDict, cast
 
 from onyx.llm.constants import (
     BEDROCK_MODEL_NAME_MAPPINGS,
@@ -253,7 +253,7 @@ def lm_studio_capability_enabled(value: object) -> bool:
     if isinstance(value, bool):
         return value
     if isinstance(value, dict):
-        allowed_options = value.get("allowed_options")
+        allowed_options = cast(dict[str, object], value).get("allowed_options")
         if isinstance(allowed_options, list):
             return any(str(option).lower() != "off" for option in allowed_options)
         return True
