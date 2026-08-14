@@ -123,6 +123,7 @@ from onyx.server.manage.llm.utils import (
     is_embedding_model,
     is_reasoning_model,
     is_valid_bedrock_model,
+    lm_studio_capability_enabled,
     strip_openrouter_vendor_prefix,
 )
 from onyx.utils.audit import (
@@ -1654,8 +1655,12 @@ def get_lm_studio_available_models(
                 name=model_key,
                 display_name=display_name,
                 max_input_tokens=max_context_length,
-                supports_image_input=capabilities.get("vision", False),
-                supports_reasoning=capabilities.get("reasoning", False)
+                supports_image_input=lm_studio_capability_enabled(
+                    capabilities.get("vision")
+                ),
+                supports_reasoning=lm_studio_capability_enabled(
+                    capabilities.get("reasoning")
+                )
                 or is_reasoning_model(model_key, display_name),
             )
         )
