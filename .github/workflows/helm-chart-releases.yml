@@ -52,6 +52,15 @@ jobs:
           # cr authenticates with CR_TOKEN, not the git credential helper.
           persist-credentials: false
 
+      # `cr index` commits index.yaml in a gh-pages worktree. The worktree
+      # shares this repository config, and chart-releaser-action has no input
+      # for the committer, so the identity must be set here or the commit
+      # fails with "empty ident name".
+      - name: Configure the git committer
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+
       - name: Install Helm CLI
         uses: azure/setup-helm@9bc31f4ebc9c6b171d7bfbaa5d006ae7abdb4310 # ratchet:azure/setup-helm@v5.0.1
         with:
