@@ -73,8 +73,9 @@ func releaseCloud(opts *ReleaseCloudOptions) error {
 	if err := git.RunCommand("fetch", "--quiet", "--force", "origin", "+refs/heads/main:refs/remotes/origin/main"); err != nil {
 		return fmt.Errorf("failed to fetch origin/main: %w", err)
 	}
-	// Best-effort like the opal release: an offline run still works off local
-	// tags, and a stale counter only makes the push fail (and roll back).
+	// Best-effort: a failure here only leaves the counter stale, which is
+	// safe. If the computed tag already exists on origin, the push (which is
+	// never forced) is rejected and rolled back.
 	if err := fetchCloudTags(); err != nil {
 		log.Warnf("Could not fetch cloud tags (using local tags): %v", err)
 	}
