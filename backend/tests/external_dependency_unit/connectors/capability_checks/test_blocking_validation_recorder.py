@@ -216,6 +216,8 @@ def test_no_clobber_of_a_granular_report(
         source=DocumentSource.SLACK,
         trigger=CapabilityCheckTrigger.MANUAL,
         report=granular,
+        # Connector-scoped writes must carry the config hash they ran with.
+        connector_config_hash="seeded-hash",
     )
     # Commit the seed: the recorder's own session cannot see it uncommitted,
     # and its upsert would block on this transaction's index lock.
