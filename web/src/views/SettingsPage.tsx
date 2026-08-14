@@ -10,7 +10,7 @@ import {
   InputVertical,
   toast,
 } from "@opal/layouts";
-import { markdown } from "@opal/utils";
+import { copyText, markdown } from "@opal/utils";
 import { Formik, Form } from "formik";
 import * as Yup from "yup";
 import {
@@ -75,6 +75,9 @@ import { Tooltip } from "@opal/components";
 import { useCloudSubscription } from "@/hooks/useCloudSubscription";
 import { useSmoothStreaming } from "@/hooks/useSmoothStreaming";
 import { findModelConfigId } from "@/lib/languageModels/options";
+import { useLLMProviders } from "@/lib/languageModels/hooks";
+import { DOCS_BASE_URL } from "@/lib/constants";
+import SimpleCollapsible from "@/refresh-components/SimpleCollapsible";
 
 interface PAT {
   id: number;
@@ -362,6 +365,118 @@ function PATModal({
       </Section>
     </ConfirmationModalLayout>
   );
+}
+
+interface UsePATCreationOptions {
+  defaultName?: string;
+  defaultAccessMode?: AccessMode;
+  defaultScopes?: string[];
+  onCreateSuccess?: () => Promise<unknown> | void;
+}
+
+function usePATCreation({
+  defaultName = "",
+  defaultAccessMode = "full",
+  defaultScopes = [],
+  onCreateSuccess,
+}: UsePATCreationOptions = {}) {
+  const [showCreateModal, setShowCreateModal] = useState(false);
+  const [isCreating, setIsCreating] = useState(false);
+  const [newTokenName, setNewTokenName] = useState(defaultName);
+  const [expirationDays, setExpirationDays] = useState<string>("30");
+  const [accessMode, setAccessMode] = useState<AccessMode>(defaultAccessMode);
+  const [selectedScopes, setSelectedScopes] = useState<string[]>(defaultScopes);
+  const [newlyCreatedToken, setNewlyCreatedToken] =
+    useState<CreatedTokenState | null>(null);
+
+  const toggleScope = useCallback((scope: string) => {
+    setSelectedScopes((previous) =>
+      previous.includes(scope)
+        ? previous.filter((selected) => selected !== scope)
+        : [...previous, scope]
+    );
+  }, []);
+
+  const reset = useCallback(() => {
+    setNewTokenName(defaultName);
+    setExpirationDays("30");
+    setAccessMode(defaultAccessMode);
+    setSelectedScopes(defaultScopes);
+    setNewlyCreatedToken(null);
+  }, [defaultAccessMode, defaultName, defaultScopes]);
+
+  const openTokenModal = useCallback(() => {
+    reset();
+    setShowCreateModal(true);
+  }, [reset]);
+
+  const closeTokenModal = useCallback(() => {
+    setShowCreateModal(false);
+    reset();
+  }, [reset]);
+
+  const createPAT = useCallback(async () => {
+    if (!newTokenName.trim()) {
+      toast.error("Token name is required");
+      return;
+    }
+
+    setIsCreating(true);
+    try {
+      const response = await fetch("/api/user/pats", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          name: newTokenName,
+          expiration_days:
+            expirationDays === "null" ? null : parseInt(expirationDays),
+          scopes: accessMode === "limited" ? selectedScopes : null,
+        }),
+      });
+
+      if (response.ok) {
+        const data = await response.json();
+        setNewlyCreatedToken({
+          id: data.id,
+          token: data.token,
+          name: newTokenName,
+        });
+        toast.success("Token created successfully");
+        await onCreateSuccess?.();
+      } else {
+        const errorData = await response.json();
+        toast.error(errorData.detail || "Failed to create token");
+      }
+    } catch (error) {
+      console.error("Failed to create access token", error);
+      toast.error("Network error creating token");
+    } finally {
+      setIsCreating(false);
+    }
+  }, [
+    accessMode,
+    expirationDays,
+    newTokenName,
+    onCreateSuccess,
+    selectedScopes,
+  ]);
+
+  return {
+    showCreateModal,
+    isCreating,
+    newTokenName,
+    setNewTokenName,
+    expirationDays,
+    setExpirationDays,
+    accessMode,
+    setAccessMode,
+    selectedScopes,
+    toggleScope,
+    newlyCreatedToken,
+    openTokenModal,
+    closeTokenModal,
+    createPAT,
+  };
 }
 
 function GeneralSettings() {
@@ -1326,6 +1441,242 @@ function ChatPreferencesSettings() {
   );
 }
 
+interface GatewayAccessSectionProps {
+  canCreateToken: boolean;
+  onCreateToken: () => void;
+}
+
+interface GatewayCopyValueButtonProps {
+  value: string;
+}
+
+function GatewayCopyValueButton({ value }: GatewayCopyValueButtonProps) {
+  const [copied, setCopied] = useState(false);
+
+  async function handleCopy() {
+    try {
+      await copyText(value);
+      setCopied(true);
+      setTimeout(() => setCopied(false), 2000);
+    } catch {
+      toast.error("Could not copy value.");
+    }
+  }
+
+  return (
+    <Button
+      prominence="secondary"
+      size="sm"
+      onClick={handleCopy}
+      rightIcon={copied ? SvgCheck : undefined}
+      tooltip={copied ? "Copied" : "Copy"}
+    >
+      {value}
+    </Button>
+  );
+}
+
+function GatewayAccessSection({
+  canCreateToken,
+  onCreateToken,
+}: GatewayAccessSectionProps) {
+  const enterpriseTier = useTierAtLeast(Tier.ENTERPRISE);
+  const { llmProviders } = useLLMProviders();
+  const [gatewayUrl, setGatewayUrl] = useState("");
+
+  useEffect(() => {
+    setGatewayUrl(`${window.location.origin}/api/gateway/v1`);
+  }, []);
+
+  const providerGroups = useMemo(
+    () =>
+      (llmProviders ?? [])
+        .map((provider) => ({
+          id: provider.id,
+          name: provider.name || provider.provider_display_name,
+          models: provider.model_configurations
+            .filter((model) => model.is_visible)
+            .sort((first, second) => {
+              if (
+                first.is_recommended_default !== second.is_recommended_default
+              ) {
+                return first.is_recommended_default ? -1 : 1;
+              }
+
+              return first.effectiveDisplayName.localeCompare(
+                second.effectiveDisplayName
+              );
+            })
+            .map((model) => ({
+              id: `${provider.id}/${model.name}`,
+              name: model.effectiveDisplayName,
+            })),
+        }))
+        .filter((provider) => provider.models.length > 0)
+        .sort((first, second) => first.name.localeCompare(second.name)),
+    [llmProviders]
+  );
+
+  const availableModelCount = providerGroups.reduce(
+    (count, provider) => count + provider.models.length,
+    0
+  );
+
+  if (!enterpriseTier || availableModelCount === 0) {
+    return null;
+  }
+
+  const gatewayAddress = gatewayUrl || "/api/gateway/v1";
+
+  return (
+    <Section gap={3}>
+      <ContentAction
+        title="LLM Gateway"
+        description="Connect external tools to the models available to you in Onyx."
+        sizePreset="main-content"
+        variant="section"
+        width="full"
+        center
+        rightChildren={
+          <Button
+            prominence="tertiary"
+            href={`${DOCS_BASE_URL}/developers/guides/llm_gateway`}
+            target="_blank"
+            size="sm"
+          >
+            Guide
+          </Button>
+        }
+      />
+      <Card border="solid" rounding="lg" padding={3}>
+        <Section alignItems="start" height="fit" gap={3}>
+          <InputHorizontal
+            title="Gateway URL"
+            description="Use this base URL with compatible OpenAI and Anthropic clients."
+            center
+          >
+            <GatewayCopyValueButton value={gatewayAddress} />
+          </InputHorizontal>
+
+          <Divider />
+
+          <Section gap={2} alignItems="start">
+            <Content
+              title="Models"
+              description={`${availableModelCount} models are available to your account. Open a provider to copy an ID.`}
+              sizePreset="main-ui"
+              variant="section"
+            />
+
+            <Section gap={2} alignItems="start">
+              {providerGroups.map((provider) => (
+                <SimpleCollapsible key={provider.id} defaultOpen={false}>
+                  <SimpleCollapsible.Header
+                    title={provider.name}
+                    description={`${provider.models.length} ${
+                      provider.models.length === 1 ? "model" : "models"
+                    } available`}
+                    sizePreset="main-ui"
+                  />
+                  <SimpleCollapsible.Content>
+                    <Section gap={2} alignItems="start">
+                      {provider.models.map((model) => (
+                        <Section
+                          key={model.id}
+                          flexDirection="row"
+                          justifyContent="between"
+                          alignItems="center"
+                          height="fit"
+                          gap={2}
+                        >
+                          <Text font="main-ui-body" color="text-04">
+                            {model.name}
+                          </Text>
+                          <GatewayCopyValueButton value={model.id} />
+                        </Section>
+                      ))}
+                    </Section>
+                  </SimpleCollapsible.Content>
+                </SimpleCollapsible>
+              ))}
+            </Section>
+          </Section>
+
+          <Divider />
+
+          <InputHorizontal
+            title="Access token"
+            description="Create a scoped token before you connect an application."
+            center
+          >
+            <Button
+              prominence="secondary"
+              icon={SvgKey}
+              disabled={!canCreateToken}
+              onClick={onCreateToken}
+            >
+              New token
+            </Button>
+          </InputHorizontal>
+        </Section>
+      </Card>
+    </Section>
+  );
+}
+
+function LLMGatewaySettings() {
+  const canCreateTokens = useCloudSubscription();
+  const tokenCreation = usePATCreation({
+    defaultName: "LLM Gateway",
+    defaultAccessMode: "limited",
+    defaultScopes: ["use:llm_gateway"],
+  });
+  const currentTier = useSettings().tier;
+  const { data: allScopeOptions = [], error: scopeOptionsError } = useSWR<
+    PatScopeOption[]
+  >(canCreateTokens ? SWR_KEYS.userPatScopes : null, errorHandlingFetcher, {
+    fallbackData: [],
+  });
+  const scopeOptions = useMemo(
+    () =>
+      allScopeOptions.filter((option) =>
+        tierAtLeast(currentTier ?? Tier.COMMUNITY, option.min_tier)
+      ),
+    [allScopeOptions, currentTier]
+  );
+  const canCreateGatewayToken =
+    canCreateTokens &&
+    scopeOptions.some((option) => option.scope === "use:llm_gateway");
+
+  return (
+    <>
+      {tokenCreation.showCreateModal && (
+        <PATModal
+          isCreating={tokenCreation.isCreating}
+          newTokenName={tokenCreation.newTokenName}
+          setNewTokenName={tokenCreation.setNewTokenName}
+          expirationDays={tokenCreation.expirationDays}
+          setExpirationDays={tokenCreation.setExpirationDays}
+          accessMode={tokenCreation.accessMode}
+          setAccessMode={tokenCreation.setAccessMode}
+          scopeOptions={scopeOptions}
+          scopesError={Boolean(scopeOptionsError)}
+          selectedScopes={tokenCreation.selectedScopes}
+          toggleScope={tokenCreation.toggleScope}
+          onClose={tokenCreation.closeTokenModal}
+          onCreate={tokenCreation.createPAT}
+          createdToken={tokenCreation.newlyCreatedToken}
+        />
+      )}
+
+      <GatewayAccessSection
+        canCreateToken={canCreateGatewayToken}
+        onCreateToken={tokenCreation.openTokenModal}
+      />
+    </>
+  );
+}
+
 function AccountsAccessSettings() {
   const { user, authTypeMetadata } = useUser();
   const isMultiTenant = useIsMultiTenant();
@@ -1347,15 +1698,6 @@ function AccountsAccessSettings() {
       .required("Please confirm your new password"),
   });
 
-  // PAT state
-  const [showCreateModal, setShowCreateModal] = useState(false);
-  const [isCreating, setIsCreating] = useState(false);
-  const [newTokenName, setNewTokenName] = useState("");
-  const [expirationDays, setExpirationDays] = useState<string>("30");
-  const [accessMode, setAccessMode] = useState<AccessMode>("full");
-  const [selectedScopes, setSelectedScopes] = useState<string[]>([]);
-  const [newlyCreatedToken, setNewlyCreatedToken] =
-    useState<CreatedTokenState | null>(null);
   const [tokenToDelete, setTokenToDelete] = useState<PAT | null>(null);
 
   const canCreateTokens = useCloudSubscription();
@@ -1395,6 +1737,7 @@ function AccountsAccessSettings() {
       ),
     [allScopeOptions, currentTier]
   );
+  const tokenCreation = usePATCreation({ onCreateSuccess: mutate });
 
   const scopeLabels = useMemo(
     () =>
@@ -1406,12 +1749,6 @@ function AccountsAccessSettings() {
       ),
     [scopeOptions]
   );
-
-  const toggleScope = useCallback((scope: string) => {
-    setSelectedScopes((prev) =>
-      prev.includes(scope) ? prev.filter((s) => s !== scope) : [...prev, scope]
-    );
-  }, []);
 
   // Use filter hook for searching tokens
   const {
@@ -1433,47 +1770,6 @@ function AccountsAccessSettings() {
     }
   }, [scopeOptionsError]);
 
-  const createPAT = useCallback(async () => {
-    if (!newTokenName.trim()) {
-      toast.error("Token name is required");
-      return;
-    }
-
-    setIsCreating(true);
-    try {
-      const response = await fetch("/api/user/pats", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          name: newTokenName,
-          expiration_days:
-            expirationDays === "null" ? null : parseInt(expirationDays),
-          scopes: accessMode === "limited" ? selectedScopes : null,
-        }),
-      });
-
-      if (response.ok) {
-        const data = await response.json();
-        // Store the newly created token - modal will switch to display view
-        setNewlyCreatedToken({
-          id: data.id,
-          token: data.token,
-          name: newTokenName,
-        });
-        toast.success("Token created successfully");
-        // Revalidate the token list
-        await mutate();
-      } else {
-        const errorData = await response.json();
-        toast.error(errorData.detail || "Failed to create token");
-      }
-    } catch (error) {
-      toast.error("Network error creating token");
-    } finally {
-      setIsCreating(false);
-    }
-  }, [newTokenName, expirationDays, accessMode, selectedScopes, mutate]);
-
   const deletePAT = useCallback(
     async (patId: number) => {
       try {
@@ -1483,8 +1779,8 @@ function AccountsAccessSettings() {
 
         if (response.ok) {
           // Clear the newly created token if it's the one being deleted
-          if (newlyCreatedToken?.id === patId) {
-            setNewlyCreatedToken(null);
+          if (tokenCreation.newlyCreatedToken?.id === patId) {
+            tokenCreation.closeTokenModal();
           }
           await mutate();
           toast.success("Token deleted successfully");
@@ -1496,7 +1792,7 @@ function AccountsAccessSettings() {
         toast.error("Network error deleting token");
       }
     },
-    [newlyCreatedToken, mutate]
+    [mutate, tokenCreation]
   );
 
   const handleChangePassword = useCallback(
@@ -1533,29 +1829,22 @@ function AccountsAccessSettings() {
 
   return (
     <>
-      {showCreateModal && (
+      {tokenCreation.showCreateModal && (
         <PATModal
-          isCreating={isCreating}
-          newTokenName={newTokenName}
-          setNewTokenName={setNewTokenName}
-          expirationDays={expirationDays}
-          setExpirationDays={setExpirationDays}
-          accessMode={accessMode}
-          setAccessMode={setAccessMode}
+          isCreating={tokenCreation.isCreating}
+          newTokenName={tokenCreation.newTokenName}
+          setNewTokenName={tokenCreation.setNewTokenName}
+          expirationDays={tokenCreation.expirationDays}
+          setExpirationDays={tokenCreation.setExpirationDays}
+          accessMode={tokenCreation.accessMode}
+          setAccessMode={tokenCreation.setAccessMode}
           scopeOptions={scopeOptions}
           scopesError={Boolean(scopeOptionsError)}
-          selectedScopes={selectedScopes}
-          toggleScope={toggleScope}
-          onClose={() => {
-            setShowCreateModal(false);
-            setNewTokenName("");
-            setExpirationDays("30");
-            setAccessMode("full");
-            setSelectedScopes([]);
-            setNewlyCreatedToken(null);
-          }}
-          onCreate={createPAT}
-          createdToken={newlyCreatedToken}
+          selectedScopes={tokenCreation.selectedScopes}
+          toggleScope={tokenCreation.toggleScope}
+          onClose={tokenCreation.closeTokenModal}
+          onCreate={tokenCreation.createPAT}
+          createdToken={tokenCreation.newlyCreatedToken}
         />
       )}
 
@@ -1757,8 +2046,10 @@ function AccountsAccessSettings() {
                         <Button
                           rightIcon={SvgPlusCircle}
                           prominence="internal"
-                          interaction={showCreateModal ? "active" : "rest"}
-                          onClick={() => setShowCreateModal(true)}
+                          interaction={
+                            tokenCreation.showCreateModal ? "active" : "rest"
+                          }
+                          onClick={tokenCreation.openTokenModal}
                         >
                           New Access Token
                         </Button>
@@ -2061,5 +2352,6 @@ export {
   GeneralSettings,
   ChatPreferencesSettings,
   AccountsAccessSettings,
+  LLMGatewaySettings,
   ConnectorsSettings,
 };
