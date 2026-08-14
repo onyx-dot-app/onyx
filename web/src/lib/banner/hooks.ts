@@ -34,6 +34,9 @@ import {
   type Notification,
   type NotificationsResponse,
 } from "@/lib/notifications/interfaces";
+import { buildBannerQueue, type BannerQueueItem } from "@/lib/banner/queue";
+
+export type { BannerQueueItem } from "@/lib/banner/queue";
 
 // A single max-size page always holds every active banner-worthy notification
 // (only a handful are ever live per user at once).
@@ -53,18 +56,6 @@ const BANNER_NOTIFICATIONS_KEY = SWR_KEYS.notificationsBySeverity(
   BANNER_NOTIFICATIONS_PAGE_SIZE
 );
 
-function severityRank(notification: Notification): number {
-  return Object.values(NotificationSeverity).indexOf(notification.severity);
-}
-
-// Loudest first, ties broken by most recent.
-function byUrgency(a: Notification, b: Notification): number {
-  return (
-    severityRank(b) - severityRank(a) ||
-    new Date(b.last_shown).getTime() - new Date(a.last_shown).getTime()
-  );
-}
-
 // TRIAL_ENDS_TWO_DAYS is a global product-gating notification. It can only be
 // dismissed per-user through a browser cookie: a basic user can't dismiss a
 // global row server-side, and an admin dismiss would hide it tenant-wide. This
@@ -74,14 +65,6 @@ const COOKIE_DISMISS_EXPIRY_DAYS = 1;
 
 function isGlobalBannerType(notifType: NotificationType): boolean {
   return notifType === NotificationType.TRIAL_ENDS_TWO_DAYS;
-}
-
-export interface BannerQueueItem {
-  notification: Notification;
-  // Every collapsed same-type notification in this slot, most urgent first.
-  ids: number[];
-  // Same-type notifications collapsed into this slot; >1 renders aggregate copy.
-  count: number;
 }
 
 export interface UseBannerQueueResult {
@@ -135,32 +118,15 @@ export function useBannerQueue(): UseBannerQueueResult {
     await mutate(SWR_KEYS.settings);
   }, []);
 
-  // One slot per type, holding that type's most urgent notification plus the
-  // count it collapses; slots come out loudest-first via the sorted insertion.
   const queue = useMemo<BannerQueueItem[]>(() => {
     const dismissedCookies = Cookies.get();
-    const visible = notifications.filter(
+    return buildBannerQueue(
+      notifications,
       (n) =>
-        !n.dismissed &&
-        !pendingDismissals.has(n.id) &&
-        !(`${DISMISSED_NOTIFICATION_COOKIE_PREFIX}${n.id}` in dismissedCookies)
+        n.dismissed ||
+        pendingDismissals.has(n.id) ||
+        `${DISMISSED_NOTIFICATION_COOKIE_PREFIX}${n.id}` in dismissedCookies
     );
-
-    const byType = new Map<NotificationType, BannerQueueItem>();
-    for (const notification of visible.sort(byUrgency)) {
-      const slot = byType.get(notification.notif_type);
-      if (slot) {
-        slot.ids.push(notification.id);
-        slot.count += 1;
-      } else {
-        byType.set(notification.notif_type, {
-          notification,
-          ids: [notification.id],
-          count: 1,
-        });
-      }
-    }
-    return Array.from(byType.values());
   }, [notifications, pendingDismissals]);
 
   // Clamp during render, not in an effect. Dismissing a non-first banner
