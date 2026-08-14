@@ -51,6 +51,7 @@ def _outcome_status(error: Exception | None) -> CapabilityCheckStatus:
 
 def _synthesize_results(
     source: DocumentSource,
+    applicable: set[CredentialCapability],
     error: Exception | None,
     perm_sync_validated: bool,
 ) -> list[CapabilityCheckResult]:
@@ -77,9 +78,7 @@ def _synthesize_results(
         )
     ]
     if perm_sync_validated:
-        for capability in get_applicable_capabilities(source) - {
-            CredentialCapability.INDEXING
-        }:
+        for capability in applicable - {CredentialCapability.INDEXING}:
             results.append(
                 CapabilityCheckResult(
                     capability=capability,
@@ -121,16 +120,15 @@ def record_blocking_validation_outcome(
     statement itself, so a concurrent granular write cannot race it.
     """
     try:
-        results = _synthesize_results(source, error, perm_sync_validated)
+        applicable = get_applicable_capabilities(source)
+        results = _synthesize_results(source, applicable, error, perm_sync_validated)
         report = CredentialCapabilityReport(
             credential_id=credential_id,
             source=source,
             connector_id=connector_id,
             checked_at=datetime.now(timezone.utc),
             trigger=trigger,
-            verdicts=compute_capability_verdicts(
-                get_applicable_capabilities(source), results
-            ),
+            verdicts=compute_capability_verdicts(applicable, results),
             check_results=results,
         )
         with get_session_with_current_tenant() as db_session:

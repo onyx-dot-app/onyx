@@ -177,17 +177,23 @@ def validate_ccpair_for_user(
     if not credential:
         raise ValueError("Credential not found")
 
+    # Plain values for the closure: it runs inside exception handlers, where
+    # lazy ORM attribute loads can raise (e.g. ``PendingRollbackError``) and
+    # replace the exception being handled.
+    source = connector.source
+    connector_specific_config = connector.connector_specific_config
+
     def _record_outcome(error: Exception | None, perm_sync_validated: bool) -> None:
         # Best-effort scribe for the outcome below; never raises and never
         # touches this function's session or semantics.
         record_blocking_validation_outcome(
-            credential_id=credential.id,
+            credential_id=credential_id,
             connector_id=connector_id,
-            source=connector.source,
+            source=source,
             trigger=CapabilityCheckTrigger.CC_PAIR_VALIDATION,
             error=error,
             perm_sync_validated=perm_sync_validated,
-            connector_specific_config=connector.connector_specific_config,
+            connector_specific_config=connector_specific_config,
         )
 
     try:
@@ -205,13 +211,12 @@ def validate_ccpair_for_user(
         _record_outcome(e, perm_sync_validated=False)
         raise
     except Exception as e:
+        # Record ``e`` itself: wrapping first would misreport an unexpected
+        # error as FAILED and erase the real ``error_type``.
+        _record_outcome(e, perm_sync_validated=False)
         if enforce_creation:
-            validation_error = ConnectorValidationError(str(e))
-            _record_outcome(validation_error, perm_sync_validated=False)
-            raise validation_error
-        else:
-            _record_outcome(e, perm_sync_validated=False)
-            return False
+            raise ConnectorValidationError(str(e))
+        return False
 
     _record_outcome(None, perm_sync_validated=access_type == AccessType.SYNC)
     return True

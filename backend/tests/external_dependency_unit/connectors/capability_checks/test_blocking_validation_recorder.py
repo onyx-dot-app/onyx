@@ -1,6 +1,7 @@
 """Recorder tests: blocking validation outcomes become persisted reports.
 
-Runs ``validate_ccpair_for_user`` against real Postgres with the connector
+Runs the two hook sites (``validate_ccpair_for_user`` and docfetching's
+``_get_connector_runner``) against real Postgres with the connector
 instantiation mocked: the subject is the recording side effect and its
 guarantees (fallback shape, no-clobber, never breaking validation), not the
 per-connector validation logic.
@@ -13,6 +14,7 @@ from unittest.mock import MagicMock
 import pytest
 from sqlalchemy.orm import Session
 
+from onyx.background.indexing import run_docfetching
 from onyx.configs.constants import DocumentSource
 from onyx.connectors import factory
 from onyx.connectors.capabilities import CredentialCapability
@@ -34,8 +36,8 @@ from onyx.db.credential_capability import (
     get_capability_report_row,
     upsert_completed_capability_report,
 )
-from onyx.db.enums import AccessType, CapabilityReportRunStatus
-from onyx.db.models import ConnectorCredentialPair
+from onyx.db.enums import AccessType, CapabilityReportRunStatus, IndexingStatus
+from onyx.db.models import ConnectorCredentialPair, IndexAttempt
 from tests.external_dependency_unit.indexing_helpers import (
     cleanup_cc_pair,
     make_cc_pair,
@@ -153,6 +155,36 @@ def test_unexpected_failure_records_indeterminate(
     assert row.report["verdicts"]["indexing"] == "indeterminate"
 
 
+@pytest.mark.usefixtures("tenant_context")
+def test_wrapped_creation_failure_records_the_original_exception(
+    db_session: Session,
+    blocking_validation: tuple[ConnectorCredentialPair, MagicMock],
+) -> None:
+    """
+    Verifies the creation gate raises its wrapper while the report keeps the
+    original exception: an unexpected error is INDETERMINATE, never FAILED.
+    """
+    # Precondition.
+    cc_pair, connector_mock = blocking_validation
+    connector_mock.validate_connector_settings.side_effect = RuntimeError("boom")
+
+    # Under test.
+    with pytest.raises(ConnectorValidationError, match="boom"):
+        validate_ccpair_for_user(
+            cc_pair.connector_id, cc_pair.credential_id, AccessType.PUBLIC, db_session
+        )
+
+    # Postcondition.
+    row = get_capability_report_row(
+        db_session, cc_pair.credential_id, cc_pair.connector_id
+    )
+    assert row is not None
+    assert row.report is not None
+    assert row.report["verdicts"]["indexing"] == "indeterminate"
+    (check_result,) = row.report["check_results"]
+    assert check_result["error_type"] == "RuntimeError"
+
+
 @pytest.mark.usefixtures("tenant_context", "enable_ee")
 def test_sync_success_mirrors_the_outcome_onto_perm_sync(
     db_session: Session,
@@ -260,3 +292,74 @@ def test_recorder_failure_never_breaks_validation(
         )
         is True
     )
+
+
+@pytest.fixture
+def docfetching_validation(
+    db_session: Session, monkeypatch: pytest.MonkeyPatch
+) -> Generator[tuple[IndexAttempt, MagicMock], None, None]:
+    """A committed Slack index attempt with docfetching's instantiation mocked.
+
+    Mirrors ``blocking_validation`` for the ``_get_connector_runner`` hook.
+    """
+    cc_pair = make_cc_pair(db_session, source=DocumentSource.SLACK)
+    attempt = IndexAttempt(
+        connector_credential_pair_id=cc_pair.id,
+        search_settings_id=None,
+        from_beginning=False,
+        status=IndexingStatus.NOT_STARTED,
+    )
+    db_session.add(attempt)
+    db_session.commit()
+    db_session.refresh(attempt)
+    instantiate_mock = MagicMock()
+    monkeypatch.setattr(run_docfetching, "instantiate_connector", instantiate_mock)
+    monkeypatch.setattr(run_docfetching, "INTEGRATION_TESTS_MODE", False)
+    yield attempt, instantiate_mock
+    # The attempt does not cascade from the pair; its stage-metric rows
+    # cascade from the attempt.
+    db_session.query(IndexAttempt).filter(IndexAttempt.id == attempt.id).delete(
+        synchronize_session="fetch"
+    )
+    db_session.commit()
+    cleanup_cc_pair(db_session, cc_pair)
+
+
+@pytest.mark.usefixtures("tenant_context")
+def test_docfetching_failure_records_through_the_indexing_attempt_hook(
+    db_session: Session,
+    docfetching_validation: tuple[IndexAttempt, MagicMock],
+) -> None:
+    """
+    Verifies the second hook site: a validation failure at docfetching start
+    lands as an INDEXING_ATTEMPT-triggered report and still propagates.
+    """
+    # Precondition.
+    attempt, instantiate_mock = docfetching_validation
+    instantiate_mock.side_effect = RuntimeError("source down")
+    cc_pair = attempt.connector_credential_pair
+
+    # Under test.
+    with pytest.raises(RuntimeError, match="source down"):
+        run_docfetching._get_connector_runner(
+            db_session=db_session,
+            attempt=attempt,
+            batch_size=16,
+            start_time=datetime.now(timezone.utc),
+            end_time=datetime.now(timezone.utc),
+            include_permissions=False,
+            # True skips the pause-the-pair branch, which is not under test.
+            leave_connector_active=True,
+        )
+
+    # Postcondition.
+    row = get_capability_report_row(
+        db_session, cc_pair.credential_id, cc_pair.connector_id
+    )
+    assert row is not None
+    assert row.trigger == CapabilityCheckTrigger.INDEXING_ATTEMPT
+    assert row.report is not None
+    assert row.report["verdicts"]["indexing"] == "indeterminate"
+    (check_result,) = row.report["check_results"]
+    assert check_result["is_fallback"] is True
+    assert check_result["error_type"] == "RuntimeError"

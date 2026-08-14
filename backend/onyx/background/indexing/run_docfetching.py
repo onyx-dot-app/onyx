@@ -137,6 +137,16 @@ def _get_connector_runner(
 
     task = attempt.connector_credential_pair.connector.input_type
 
+    # Plain values for the closure: it runs inside exception handlers, where
+    # lazy ORM attribute loads can raise (e.g. ``PendingRollbackError``) and
+    # replace the exception being handled.
+    credential_id = attempt.connector_credential_pair.credential.id
+    connector_id = attempt.connector_credential_pair.connector.id
+    source = attempt.connector_credential_pair.connector.source
+    connector_specific_config = (
+        attempt.connector_credential_pair.connector.connector_specific_config
+    )
+
     def _record_outcome(error: Exception | None, perm_sync_validated: bool) -> None:
         # Best-effort scribe for the validation outcome below; never raises.
         # INTEGRATION_TESTS_MODE skips the validation itself, so there is no
@@ -144,15 +154,13 @@ def _get_connector_runner(
         if INTEGRATION_TESTS_MODE:
             return
         record_blocking_validation_outcome(
-            credential_id=attempt.connector_credential_pair.credential.id,
-            connector_id=attempt.connector_credential_pair.connector.id,
-            source=attempt.connector_credential_pair.connector.source,
+            credential_id=credential_id,
+            connector_id=connector_id,
+            source=source,
             trigger=CapabilityCheckTrigger.INDEXING_ATTEMPT,
             error=error,
             perm_sync_validated=perm_sync_validated,
-            connector_specific_config=(
-                attempt.connector_credential_pair.connector.connector_specific_config
-            ),
+            connector_specific_config=connector_specific_config,
         )
 
     try:
