@@ -11,7 +11,7 @@ from sqlalchemy.sql.elements import ColumnElement
 
 from onyx.configs.constants import DEFAULT_CC_PAIR_ID, DocumentSource, NotificationType
 from onyx.db.connector import fetch_connector_by_id
-from onyx.db.connector_alerts import clear_connector_alerts
+from onyx.db.connector_alerts import clear_connector_alerts__no_commit
 from onyx.db.credentials import fetch_credential_by_id, fetch_credential_by_id_for_user
 from onyx.db.engine.sql_engine import get_session_with_current_tenant
 from onyx.db.enums import (
@@ -518,7 +518,7 @@ def _update_connector_credential_pair(
             cc_pair.status == ConnectorCredentialPairStatus.INVALID
             and status != ConnectorCredentialPairStatus.INVALID
         ):
-            clear_connector_alerts(
+            clear_connector_alerts__no_commit(
                 db_session=db_session,
                 cc_pair_id=cc_pair.id,
                 notif_type=NotificationType.CONNECTOR_INVALID,

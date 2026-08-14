@@ -10,7 +10,7 @@ from sqlalchemy.orm import Session
 from onyx.auth.schemas import UserRole
 from onyx.configs.constants import NotificationType
 from onyx.db.connector_alerts import (
-    clear_connector_alerts,
+    clear_connector_alerts__no_commit,
     notify_admins_of_connector_alert,
 )
 from onyx.db.enums import NotificationSeverity
@@ -846,7 +846,7 @@ def test_connector_alert_lifecycle_producer_and_recovery_agree(
     }
 
     # Recovery: cleanup deletes by the same helper-built key.
-    clear_connector_alerts(
+    clear_connector_alerts__no_commit(
         db_session=db_session,
         cc_pair_id=cc_pair_id,
         notif_type=notif_type,

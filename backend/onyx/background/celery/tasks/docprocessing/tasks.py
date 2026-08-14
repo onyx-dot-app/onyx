@@ -69,7 +69,7 @@ from onyx.configs.constants import (
 from onyx.connectors.models import ConnectorFailure, Document, IndexAttemptMetadata
 from onyx.db.connector import mark_ccpair_with_indexing_trigger
 from onyx.db.connector_alerts import (
-    clear_connector_alerts,
+    clear_connector_alerts__no_commit,
     notify_admins_of_connector_alert,
 )
 from onyx.db.connector_credential_pair import (
@@ -650,7 +650,7 @@ def check_indexing_completion(
 
                 # Clear every admin's alert so the next incident creates a
                 # fresh one.
-                clear_connector_alerts(
+                clear_connector_alerts__no_commit(
                     db_session=db_session,
                     cc_pair_id=cc_pair.id,
                     notif_type=NotificationType.CONNECTOR_REPEATED_ERRORS,

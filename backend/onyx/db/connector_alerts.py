@@ -31,8 +31,8 @@ def notify_admins_of_connector_alert(
 ) -> None:
     """Best-effort ERROR alert to all active admins; never raises.
 
-    Rolls the session back on failure, so call it with no uncommitted work
-    pending on the session."""
+    Commits the inserts on success; rolls the session back on failure. Call
+    it with no uncommitted work pending on the session."""
     try:
         batch_create_notifications(
             user_ids=[admin.id for admin in get_active_admin_users(db_session)],
@@ -52,7 +52,7 @@ def notify_admins_of_connector_alert(
         )
 
 
-def clear_connector_alerts(
+def clear_connector_alerts__no_commit(
     db_session: Session,
     cc_pair_id: int,
     notif_type: NotificationType,
