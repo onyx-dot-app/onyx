@@ -1,9 +1,9 @@
 """add credential capability report table
 
-Latest-only capability-check reports, one row per (credential,
-connector-scope): ``connector_id`` NULL is the config-less credential-time
-report, non-NULL is one per attached connector. The two partial unique
-indexes enforce the upsert semantics.
+Latest-only capability-check reports, one row per (credential, connector-scope):
+``connector_id`` NULL is the config-less credential-time report, non-NULL is one
+per attached connector. The two partial unique indexes enforce the upsert
+semantics.
 
 Revision ID: df90f43d9ab2
 Revises: 3350a25df58e

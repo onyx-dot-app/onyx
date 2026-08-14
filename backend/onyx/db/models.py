@@ -2067,10 +2067,10 @@ class Credential(Base):
 class CredentialCapabilityReportRow(Base):
     """Latest capability-check report per (credential, connector-scope).
 
-    One config-less credential-time row (``connector_id`` NULL) plus one row
-    per attached connector; latest-only upsert semantics are enforced by the
-    two partial unique indexes. ``report`` holds the last COMPLETED report so
-    it stays readable while a re-run is RUNNING.
+    One config-less credential-time row (``connector_id`` NULL) plus one row per
+    attached connector; latest-only upsert semantics are enforced by the two
+    partial unique indexes. ``report`` holds the last COMPLETED report so it
+    stays readable while a re-run is RUNNING.
     """
 
     __tablename__ = "credential_capability_report"
@@ -2087,8 +2087,8 @@ class CredentialCapabilityReportRow(Base):
     source: Mapped[DocumentSource] = mapped_column(
         Enum(DocumentSource, native_enum=False), nullable=False
     )
-    # sha256 of the canonical config JSON the report ran with; staleness
-    # signal for connector-scoped reports.
+    # sha256 of the canonical config JSON the report ran with; staleness signal
+    # for connector-scoped reports.
     connector_config_hash: Mapped[str | None] = mapped_column(String, nullable=True)
     # What initiated the run this row reflects (last write wins).
     trigger: Mapped[CapabilityCheckTrigger] = mapped_column(
