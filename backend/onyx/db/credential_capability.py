@@ -45,7 +45,8 @@ def _upsert_row(
 
     Columns absent from ``values`` keep their stored value on the update
     path, which is how RUNNING marks preserve the previous report and
-    completion writes preserve ``run_started_at``.
+    completion writes preserve ``run_started_at``. The statement executes
+    immediately, but the caller owns the transaction and must commit.
     """
     stmt = (
         insert(CredentialCapabilityReportRow)
@@ -60,9 +61,7 @@ def _upsert_row(
     )
     # ``populate_existing``: without it, RETURNING resolves to the stale
     # identity-map instance when the caller's session already holds this row.
-    row = db_session.scalars(stmt, execution_options={"populate_existing": True}).one()
-    db_session.commit()
-    return row
+    return db_session.scalars(stmt, execution_options={"populate_existing": True}).one()
 
 
 def upsert_completed_capability_report(

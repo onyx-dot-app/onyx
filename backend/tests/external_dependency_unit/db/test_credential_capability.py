@@ -2,6 +2,8 @@
 
 Runs against real Postgres: the upsert semantics live in the two partial
 unique indexes and ON CONFLICT inference, which mocks cannot exercise.
+Nothing here commits (the accessors leave the transaction to the caller), so
+every test's rows roll back when its session closes.
 """
 
 from datetime import datetime, timezone
@@ -61,7 +63,7 @@ def _report(
 def test_upsert_inserts_then_replaces(db_session: Session) -> None:
     """Verifies latest-only semantics: a second write lands on the same row."""
     # Precondition.
-    cc_pair = make_cc_pair(db_session, source=DocumentSource.SLACK)
+    cc_pair = make_cc_pair(db_session, source=DocumentSource.SLACK, commit=False)
     credential_id = cc_pair.credential_id
 
     # Under test.
@@ -99,7 +101,7 @@ def test_credential_and_connector_scopes_coexist(db_session: Session) -> None:
     are distinct rows for one credential, each fetched by its scope.
     """
     # Precondition.
-    cc_pair = make_cc_pair(db_session, source=DocumentSource.SLACK)
+    cc_pair = make_cc_pair(db_session, source=DocumentSource.SLACK, commit=False)
     credential_id = cc_pair.credential_id
     connector_id = cc_pair.connector_id
 
@@ -146,7 +148,7 @@ def test_mark_running_preserves_report_and_completion_keeps_start_time(
     readable, and the completing write keeps the run's start time.
     """
     # Precondition.
-    cc_pair = make_cc_pair(db_session, source=DocumentSource.SLACK)
+    cc_pair = make_cc_pair(db_session, source=DocumentSource.SLACK, commit=False)
     credential_id = cc_pair.credential_id
     upsert_completed_capability_report(
         db_session,
@@ -191,7 +193,7 @@ def test_mark_running_preserves_report_and_completion_keeps_start_time(
 def test_mark_running_creates_the_row_when_none_exists(db_session: Session) -> None:
     """Verifies a first-ever run starts from a report-less RUNNING row."""
     # Precondition.
-    cc_pair = make_cc_pair(db_session, source=DocumentSource.SLACK)
+    cc_pair = make_cc_pair(db_session, source=DocumentSource.SLACK, commit=False)
 
     # Under test.
     row = mark_capability_report_running(
@@ -213,8 +215,8 @@ def test_rows_for_source_lists_most_recently_updated_first(
 ) -> None:
     """Verifies the per-source listing includes both rows, freshest first."""
     # Precondition.
-    first_pair = make_cc_pair(db_session, source=DocumentSource.SLACK)
-    second_pair = make_cc_pair(db_session, source=DocumentSource.SLACK)
+    first_pair = make_cc_pair(db_session, source=DocumentSource.SLACK, commit=False)
+    second_pair = make_cc_pair(db_session, source=DocumentSource.SLACK, commit=False)
     for pair in (first_pair, second_pair):
         upsert_completed_capability_report(
             db_session,
@@ -238,7 +240,8 @@ def test_rows_for_source_lists_most_recently_updated_first(
     rows = get_capability_report_rows_for_source(db_session, DocumentSource.SLACK)
 
     # Postcondition.
-    # Other tests write SLACK rows too, so assert relative order, not equality.
+    # The DB may hold committed SLACK rows from other suites or prior runs,
+    # so assert relative order, not equality.
     row_credential_ids = [row.credential_id for row in rows]
     assert first_pair.credential_id in row_credential_ids
     assert second_pair.credential_id in row_credential_ids
@@ -252,7 +255,7 @@ def test_rows_for_source_lists_most_recently_updated_first(
 def test_rows_cascade_with_their_credential(db_session: Session) -> None:
     """Verifies report rows die with the credential, not as orphans."""
     # Precondition.
-    cc_pair = make_cc_pair(db_session, source=DocumentSource.SLACK)
+    cc_pair = make_cc_pair(db_session, source=DocumentSource.SLACK, commit=False)
     credential_id = cc_pair.credential_id
     upsert_completed_capability_report(
         db_session,
@@ -268,7 +271,9 @@ def test_rows_cascade_with_their_credential(db_session: Session) -> None:
     credential = db_session.get(Credential, credential_id)
     assert credential is not None, "The cc-pair helper persists its credential."
     db_session.delete(credential)
-    db_session.commit()
+    # The FK cascade fires at statement execution; no commit needed, so the
+    # deletions roll back with the rest of the test's rows.
+    db_session.flush()
 
     # Postcondition.
     assert get_capability_report_row(db_session, credential_id, None) is None
