@@ -216,6 +216,10 @@ jobs:
           platforms: linux/arm64
           tags: ${{ env.RUNS_ON_ECR_CACHE }}:playwright-test-web-${{ github.run_id }}
           push: true
+          # Attestations attach as ECR referrers to the image digest, which is
+          # stable across runs and caps out at 100 per subject.
+          provenance: false
+          sbom: false
           build-args: |
             BASE_IMAGE_REGISTRY=${{ env.BASE_IMAGE_REGISTRY }}
             ${{ env.DHI_NODE_BUILD_ARGS }}
@@ -284,6 +288,10 @@ jobs:
           platforms: linux/arm64
           tags: ${{ env.RUNS_ON_ECR_CACHE }}:playwright-test-backend-${{ github.run_id }}
           push: true
+          # Attestations attach as ECR referrers to the image digest, which is
+          # stable across runs and caps out at 100 per subject.
+          provenance: false
+          sbom: false
           build-args: |
             BASE_IMAGE_REGISTRY=${{ env.BASE_IMAGE_REGISTRY }}
           cache-from: |

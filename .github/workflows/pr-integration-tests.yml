@@ -219,6 +219,10 @@ jobs:
           build-args: |
             BASE_IMAGE_REGISTRY=${{ env.BASE_IMAGE_REGISTRY }}
           tags: ${{ env.RUNS_ON_ECR_CACHE }}:integration-test-devcontainer-${{ github.run_id }}
+          # Attestations attach as ECR referrers to the image digest, which is
+          # stable across runs and caps out at 100 per subject.
+          provenance: false
+          sbom: false
           cache-from: |
             type=registry,ref=${{ env.RUNS_ON_ECR_CACHE }}:devcontainer-cache-${{ github.event.pull_request.head.sha || github.sha }}
             type=registry,ref=${{ env.RUNS_ON_ECR_CACHE }}:devcontainer-cache-${{ steps.format-branch.outputs.cache-suffix }}
