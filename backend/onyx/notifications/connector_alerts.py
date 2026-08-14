@@ -41,6 +41,9 @@ def notify_admins_of_connector_alert(
             severity=NotificationSeverity.ERROR,
         )
     except Exception:
+        # Leave the caller's session usable: a failed insert would otherwise
+        # poison the transaction and break the connector update that follows.
+        db_session.rollback()
         logger.exception(
             "Failed to send %s alert for cc_pair %s", notif_type.value, cc_pair_id
         )

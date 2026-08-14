@@ -120,6 +120,9 @@ export default function BannerQueue() {
 
   const notification = current.notification;
   const config = BANNER_TYPE_CONFIG[notification.notif_type];
+  // An aggregate card represents every collapsed notification, so dismissing
+  // it must dismiss them all — not surface them one at a time.
+  const showsAggregate = current.count > 1 && Boolean(config?.aggregate);
   const styles =
     VARIANT_STYLES[config?.variantOverride ?? notification.severity];
   const Icon = getNotificationIcon(notification.notif_type);
@@ -131,7 +134,8 @@ export default function BannerQueue() {
   const footer = [
     sourceLabel,
     relativeTime,
-    current.count > 1 ? `+${current.count - 1} more` : null,
+    // Aggregate copy already states the count in the title.
+    current.count > 1 && !showsAggregate ? `+${current.count - 1} more` : null,
   ]
     .filter(Boolean)
     .join(" • ");
@@ -193,7 +197,9 @@ export default function BannerQueue() {
             icon={SvgX}
             prominence="internal"
             size="sm"
-            onClick={() => void dismissCurrent()}
+            onClick={() =>
+              void dismissCurrent(showsAggregate ? current.ids : undefined)
+            }
             aria-label="Dismiss"
           />
         </Section>
