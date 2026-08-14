@@ -2,7 +2,8 @@
   "$schema": "./node_modules/oxlint/configuration_schema.json",
   "plugins": ["typescript", "unicorn", "oxc", "react", "nextjs", "jsx-a11y"],
   "jsPlugins": [
-    { "name": "react-doctor", "specifier": "oxlint-plugin-react-doctor" }
+    { "name": "react-doctor", "specifier": "oxlint-plugin-react-doctor" },
+    { "name": "anti-slop", "specifier": "./tools/oxlint/anti-slop/index.ts" }
   ],
   "categories": {
     "correctness": "error"
@@ -21,8 +22,54 @@
     "react-doctor/aria-role": "error",
     "react-doctor/no-ref-current-in-render": "error",
     "react-doctor/no-impure-state-updater": "error",
-    "react-doctor/no-layout-property-animation": "error"
+    "react-doctor/no-layout-property-animation": "error",
+    "anti-slop/no-chained-type-assertions": "error",
+    "anti-slop/no-module-mocking": "error",
+    "anti-slop/no-object-parameters": "error",
+    "anti-slop/no-reflect-apply": "error",
+    "anti-slop/no-reflect-get": "error",
+    "anti-slop/no-unknown-returns": "error",
+    "anti-slop/no-unknown-type-aliases": "error",
+    "anti-slop/no-widen-then-assert": "error",
+    "anti-slop/no-conditional-empty-object-spread": "warn",
+    "anti-slop/no-known-value-widening": "warn",
+    "anti-slop/no-unknown-parameters": "warn",
+    "anti-slop/no-unsafe-dictionary-type": "warn",
+    "anti-slop/require-safety-comment-for-type-assertion": "warn",
+    "anti-slop/no-runtime-typeof": "off",
+    "anti-slop/no-shape-in-symbol-names": "off"
   },
+  "overrides": [
+    {
+      "files": [
+        "**/*.test.ts",
+        "**/*.test.tsx",
+        "**/*.spec.ts",
+        "**/*.spec.tsx",
+        "**/__tests__/**",
+        "**/__mocks__/**",
+        "tests/**",
+        "**/*.stories.tsx"
+      ],
+      "rules": {
+        "anti-slop/no-chained-type-assertions": "off",
+        "anti-slop/no-conditional-empty-object-spread": "off",
+        "anti-slop/no-known-value-widening": "off",
+        "anti-slop/no-module-mocking": "off",
+        "anti-slop/no-object-parameters": "off",
+        "anti-slop/no-reflect-apply": "off",
+        "anti-slop/no-reflect-get": "off",
+        "anti-slop/no-runtime-typeof": "off",
+        "anti-slop/no-shape-in-symbol-names": "off",
+        "anti-slop/no-unknown-parameters": "off",
+        "anti-slop/no-unknown-returns": "off",
+        "anti-slop/no-unknown-type-aliases": "off",
+        "anti-slop/no-unsafe-dictionary-type": "off",
+        "anti-slop/no-widen-then-assert": "off",
+        "anti-slop/require-safety-comment-for-type-assertion": "off"
+      }
+    }
+  ],
   "ignorePatterns": [
     ".next",
     "node_modules",
@@ -30,7 +77,8 @@
     "build",
     "public",
     "storybook-static",
-    "lib/opal/dist"
+    "lib/opal/dist",
+    "tools/oxlint/anti-slop"
   ],
   "env": {
     "builtin": true

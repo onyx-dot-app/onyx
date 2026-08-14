@@ -134,7 +134,12 @@ export default function TracingPage() {
 
       {activeProvider && (
         <setupModal.Provider>
-          <TracingSetupModal state={activeProvider} onSaved={mutateProviders} />
+          <TracingSetupModal
+            state={activeProvider}
+            onSaved={async () => {
+              await mutateProviders();
+            }}
+          />
         </setupModal.Provider>
       )}
 
@@ -142,7 +147,9 @@ export default function TracingPage() {
         <disconnectModal.Provider>
           <TracingDisconnectModal
             target={disconnectTarget}
-            onDisconnected={mutateProviders}
+            onDisconnected={async () => {
+              await mutateProviders();
+            }}
           />
         </disconnectModal.Provider>
       )}

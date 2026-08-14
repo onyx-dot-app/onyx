@@ -371,7 +371,7 @@ interface UsePATCreationOptions {
   defaultName?: string;
   defaultAccessMode?: AccessMode;
   defaultScopes?: string[];
-  onCreateSuccess?: () => Promise<unknown> | void;
+  onCreateSuccess?: () => Promise<void> | void;
 }
 
 function usePATCreation({
@@ -1737,7 +1737,11 @@ function AccountsAccessSettings() {
       ),
     [allScopeOptions, currentTier]
   );
-  const tokenCreation = usePATCreation({ onCreateSuccess: mutate });
+  const tokenCreation = usePATCreation({
+    onCreateSuccess: async () => {
+      await mutate();
+    },
+  });
 
   const scopeLabels = useMemo(
     () =>

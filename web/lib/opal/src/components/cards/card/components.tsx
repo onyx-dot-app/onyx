@@ -21,6 +21,9 @@ import { cn } from "@opal/utils";
 // Types
 // ---------------------------------------------------------------------------
 
+/** What React accepts as the value of a `data-*` attribute. */
+type DataAttributeValue = string | number | boolean | null | undefined;
+
 /**
  * Props shared by both plain and expandable Card modes.
  */
@@ -121,6 +124,11 @@ type CardBaseProps = {
    * header region (the part that stays put whether expanded or collapsed).
    */
   children?: React.ReactNode;
+
+  /**
+   * Test hooks and analytics markers forwarded to the outer element.
+   */
+  [key: `data-${string}`]: DataAttributeValue;
 };
 
 type CardPlainProps = CardBaseProps & {
@@ -216,10 +224,15 @@ type CardProps = CardPlainProps | CardExpandableProps;
  * up: `className` and `style` stay out by design, and behavioural props like
  * `onClick` are a deliberate API decision rather than something to inherit.
  */
-function dataAttributes(props: object): Record<string, unknown> {
-  return Object.fromEntries(
-    Object.entries(props).filter(([key]) => key.startsWith("data-"))
-  );
+function dataAttributes(props: CardProps): Record<string, DataAttributeValue> {
+  const attributes: Record<string, DataAttributeValue> = {};
+  for (const key of Object.keys(props)) {
+    if (!key.startsWith("data-")) continue;
+    // SAFETY: the prefix check above proves `key` matches the `data-${string}`
+    // index signature, which is the only shape that reads back as a value.
+    attributes[key] = props[key as `data-${string}`];
+  }
+  return attributes;
 }
 
 function Card(props: CardProps) {
