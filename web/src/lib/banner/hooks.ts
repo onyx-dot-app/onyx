@@ -152,7 +152,11 @@ export function useBannerQueue(): UseBannerQueueResult {
       if (!current) return;
       const targets = ids ?? [current.notification.id];
       const global = isGlobalBannerType(current.notification.notif_type);
-      setPendingDismissals((prev) => new Set([...prev, ...targets]));
+      setPendingDismissals((prev) => {
+        const next = new Set(prev);
+        targets.forEach((id) => next.add(id));
+        return next;
+      });
       // A global product-gating alert can't be dismissed per-user server-side,
       // so record the dismissal in a cookie and treat the server call as
       // best-effort.
@@ -168,14 +172,17 @@ export function useBannerQueue(): UseBannerQueueResult {
       const results = await Promise.allSettled(
         targets.map(dismissNotification)
       );
-      const failed = targets.filter(
-        (_, index) => results[index]?.status === "rejected"
-      );
-      if (failed.length > 0 && !global) {
-        console.error("Failed to dismiss banner notifications:", failed);
+      const failures = targets.flatMap((id, index) => {
+        const result = results[index];
+        return result?.status === "rejected"
+          ? [{ id, reason: result.reason }]
+          : [];
+      });
+      if (failures.length > 0 && !global) {
+        console.error("Failed to dismiss banner notifications:", failures);
         setPendingDismissals((prev) => {
           const next = new Set(prev);
-          failed.forEach((id) => next.delete(id));
+          failures.forEach(({ id }) => next.delete(id));
           return next;
         });
       }
