@@ -1,10 +1,15 @@
 import time
+from collections.abc import Callable
 from typing import Any
+from urllib.parse import urlsplit, urlunsplit
 
+from requests import Response
 from requests.adapters import HTTPAdapter
 from simple_salesforce import Salesforce, SFType
+from simple_salesforce.api import exception_handler
 from simple_salesforce.exceptions import SalesforceRefusedRequest
 from simple_salesforce.format import format_soql
+from typing_extensions import override
 from urllib3.util.retry import Retry
 
 from onyx.connectors.cross_connector_utils.rate_limit_wrapper import rate_limit_builder
@@ -13,6 +18,7 @@ from onyx.connectors.salesforce.blacklist import (
     SALESFORCE_BLACKLISTED_PREFIXES,
     SALESFORCE_BLACKLISTED_SUFFIXES,
 )
+from onyx.connectors.salesforce.models import SalesforceSessionCredentials
 from onyx.connectors.salesforce.salesforce_calls import get_object_by_id_query
 from onyx.connectors.salesforce.utils import ID_FIELD, validate_sf_identifier
 from onyx.utils.logger import setup_logger
@@ -41,7 +47,13 @@ def is_salesforce_rate_limit_error(exception: Exception) -> bool:
 class OnyxSalesforce(Salesforce):
     SOQL_MAX_SUBQUERIES = 20
 
-    def __init__(self, *args: Any, **kwargs: Any) -> None:
+    def __init__(
+        self,
+        *args: Any,
+        refresh_callback: Callable[[str], SalesforceSessionCredentials] | None = None,
+        **kwargs: Any,
+    ) -> None:
+        self._oauth_refresh_callback = refresh_callback
         super().__init__(*args, **kwargs)
 
         self._mount_retry_adapter()
@@ -59,6 +71,74 @@ class OnyxSalesforce(Salesforce):
         self.prefix_to_type: dict[
             str, str
         ] = {}  # infer the object type of an id immediately
+
+    def _set_instance_urls(self) -> None:
+        self.base_url = f"https://{self.sf_instance}/services/data/v{self.sf_version}/"
+        self.apex_url = f"https://{self.sf_instance}/services/apexrest/"
+        self.bulk_url = f"https://{self.sf_instance}/services/async/{self.sf_version}/"
+        self.bulk2_url = (
+            f"https://{self.sf_instance}/services/data/v{self.sf_version}/jobs/"
+        )
+        self.metadata_url = (
+            f"https://{self.sf_instance}/services/Soap/m/{self.sf_version}/"
+        )
+        self.tooling_url = f"{self.base_url}tooling/"
+        self.oauth2_url = f"https://{self.sf_instance}/services/oauth2/"
+
+    def _refresh_oauth_session(self) -> None:
+        if self._oauth_refresh_callback is None:
+            raise RuntimeError("Salesforce OAuth refresh is not configured")
+        refreshed = self._oauth_refresh_callback(self.session_id)
+        self.session_id = refreshed.sf_access_token
+        self.sf_instance = refreshed.sf_instance_host
+        self._generate_headers()
+        self._set_instance_urls()
+
+    @override
+    def _call_salesforce(
+        self,
+        method: str,
+        url: str,
+        name: str = "",
+        retries: int = 0,
+        max_retries: int = 3,
+        **kwargs: Any,
+    ) -> Response:
+        if self._oauth_refresh_callback is None:
+            return super()._call_salesforce(
+                method, url, name, retries, max_retries, **kwargs
+            )
+
+        headers = self.headers.copy()
+        headers.update(kwargs.pop("headers", {}))
+        result = self.session.request(method, url, headers=headers, **kwargs)
+
+        if (
+            result.status_code == 401
+            and result.json()[0].get("errorCode") == "INVALID_SESSION_ID"
+        ):
+            if retries >= max_retries:
+                exception_handler(result, name=name)
+            previous_host = self.sf_instance
+            self._refresh_oauth_session()
+            parsed_url = urlsplit(url)
+            if parsed_url.hostname == previous_host:
+                url = urlunsplit(parsed_url._replace(netloc=self.sf_instance))
+            return self._call_salesforce(
+                method,
+                url,
+                name,
+                retries=retries + 1,
+                max_retries=max_retries,
+                **kwargs,
+            )
+
+        if result.status_code >= 300:
+            exception_handler(result, name=name)
+
+        if sforce_limit_info := result.headers.get("Sforce-Limit-Info"):
+            self.api_usage = self.parse_api_usage(sforce_limit_info)
+        return result
 
     def _mount_retry_adapter(self) -> None:
         """Make the shared requests session resilient to stale keep-alive

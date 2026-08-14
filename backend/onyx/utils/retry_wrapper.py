@@ -22,6 +22,8 @@ from onyx.utils.logger import setup_logger
 
 logger = setup_logger()
 
+_REDACTED_REQUEST_DATA = "<redacted>"
+
 
 F = TypeVar("F", bound=Callable[..., Any])
 
@@ -87,6 +89,7 @@ def request_with_retries(
     tries: int = 8,
     delay: float = 1,
     backoff: float = 2,
+    log_request_data: bool = True,
 ) -> requests.Response:
     # jitter=0 + max_delay=None preserves the exact wait curve this function
     # had on the legacy `retry` package: delay * backoff**n, uncapped
@@ -109,7 +112,7 @@ def request_with_retries(
                 {
                     "method": method,
                     "url": url,
-                    "data": data,
+                    "data": data if log_request_data else _REDACTED_REQUEST_DATA,
                     "headers": headers,
                     "params": params,
                     "timeout": timeout,
