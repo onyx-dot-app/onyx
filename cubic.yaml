@@ -30,6 +30,9 @@ reviews:
     files:
       - greptile.json
       - cubic.yaml
+      # Verbatim vendor of github.com/dmmulroy/anti-slop. We do not edit these
+      # files, so review findings here belong upstream, not on our PRs.
+      - web/tools/oxlint/anti-slop/**
 
   custom_rules:
     - name: TODO format
