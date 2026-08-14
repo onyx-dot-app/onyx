@@ -46,6 +46,7 @@ import { useProjectsContext } from "@/providers/ProjectsContext";
 import { useCreateModal } from "@opal/components";
 import UserFilesModal from "@/sections/modals/UserFilesModal";
 import { ProjectFile, UserFileStatus } from "@/lib/projects/types";
+import { ChatFileType } from "@/app/app/interfaces";
 import { Popover, PopoverMenu } from "@opal/components";
 import LineItem from "@/refresh-components/buttons/LineItem";
 import {
@@ -1173,6 +1174,10 @@ export default function AgentEditorPage({
             description:
               initialValues.description.length >
               MAX_CHARACTERS_AGENT_DESCRIPTION,
+            // SAFETY: Formik collapses `FormikTouched` for an array of
+            // primitives to a single `boolean`, but it reads a `boolean[]` at
+            // runtime — one entry per element. The value below is that array.
+            // oxlint-disable-next-line anti-slop/no-chained-type-assertions
             starter_messages: initialValues.starter_messages.map(
               (msg) => msg.length > MAX_CHARACTERS_STARTER_MESSAGE
             ) as unknown as boolean,
@@ -1226,13 +1231,16 @@ export default function AgentEditorPage({
                   <UserFilesModal
                     title="User Files"
                     description="All files selected for this agent"
-                    recentFiles={values.user_file_ids
-                      .map((userFileId: string) => {
+                    recentFiles={values.user_file_ids.map(
+                      (userFileId: string) => {
                         const rf = allRecentFiles.find(
                           (f) => f.id === userFileId
                         );
                         if (rf) return rf;
-                        return {
+                        // Placeholder for a selected file that is not in the
+                        // recent-files list. Mirrors the optimistic upload
+                        // placeholder built in `ProjectsContext`.
+                        const placeholder: ProjectFile = {
                           id: userFileId,
                           name: `File ${userFileId.slice(0, 8)}`,
                           status: UserFileStatus.COMPLETED,
@@ -1242,10 +1250,13 @@ export default function AgentEditorPage({
                           user_id: null,
                           file_type: "",
                           last_accessed_at: new Date().toISOString(),
-                          chat_file_type: "file" as const,
-                        } as unknown as ProjectFile;
-                      })
-                      .filter((f): f is ProjectFile => f !== null)}
+                          chat_file_type: ChatFileType.DOCUMENT,
+                          token_count: null,
+                          chunk_count: null,
+                        };
+                        return placeholder;
+                      }
+                    )}
                     selectedFileIds={values.user_file_ids}
                     onPickRecent={(file: ProjectFile) => {
                       if (!values.user_file_ids.includes(file.id)) {

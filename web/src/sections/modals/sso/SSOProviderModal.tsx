@@ -33,7 +33,7 @@ import { useModalClose } from "@opal/components";
 
 export interface SSOProviderModalProps {
   provider: SSOProviderResponse | null;
-  onSaved: () => Promise<unknown>;
+  onSaved: () => Promise<void>;
 }
 
 // Config values are keyed dynamically (config.<field name>), so they live in a

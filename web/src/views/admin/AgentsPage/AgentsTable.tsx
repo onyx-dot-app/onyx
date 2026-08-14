@@ -9,7 +9,7 @@ import { PageLoader } from "@opal/layouts";
 import { InputTypeIn } from "@opal/components";
 import type { MinimalUserSnapshot } from "@/lib/types";
 import AgentAvatar from "@/refresh-components/avatars/AgentAvatar";
-import type { MinimalAgent, Agent } from "@/lib/agents/types";
+import type { Agent } from "@/lib/agents/types";
 import { useAdminAgents } from "@/lib/agents/hooks";
 import AgentRowActions from "@/views/admin/AgentsPage/AgentRowActions";
 import { updateAgentDisplayPriorities } from "@/lib/agents/svc";
@@ -67,7 +67,7 @@ function buildColumns(onMutate: () => void) {
       content: "icon",
       background: true,
       getContent: (row) => (props) => (
-        <AgentAvatar agent={row as unknown as MinimalAgent} size={props.size} />
+        <AgentAvatar agent={row} size={props.size} />
       ),
     }),
     tc.column("name", {
