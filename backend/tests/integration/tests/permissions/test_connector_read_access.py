@@ -1,11 +1,12 @@
-"""Integration tests for the curator-or-admin gate on connector read endpoints.
+"""Integration tests for the READ_CONNECTORS gate on connector read endpoints.
 
 ``GET /manage/connector`` (list) and ``GET /manage/connector/{id}`` (by-id) return
 full ``ConnectorSnapshot``s including ``connector_specific_config`` and
-``credential_ids``. They must be restricted to curator/admin users
+``credential_ids``. They must be restricted to global READ_CONNECTORS holders
 (pentest M8 / ENG-4249); basic users, limited service accounts, bot users,
-external-permission users, and anonymous clients must be denied. Curator access
-is covered in ``test_connector_permissions.py``.
+external-permission users, and anonymous clients must be denied. Group managers are
+denied too: a ``Connector`` row has no group on it, so these routes cannot filter per
+user. That case is covered in ``test_group_manager_resources.py``.
 """
 
 import pytest
@@ -14,7 +15,7 @@ from tests.integration.common_utils.constants import API_SERVER_URL
 from tests.integration.common_utils.http_client import client
 from tests.integration.common_utils.test_models import DATestAPIKey, DATestUser
 
-# Connector read endpoints gated on current_curator_or_admin_user.
+# Connector read endpoints gated on a global READ_CONNECTORS grant.
 # The by-id path targets a non-existent id on purpose: the auth dependency runs
 # before the handler, so denied users get 403 while an admin gets 404 -- both
 # outcomes confirm the auth gate behaved correctly.
@@ -30,7 +31,7 @@ def test_admin_user_allowed(
     path: str,
     permission_admin_user: DATestUser,
 ) -> None:
-    """Admin users pass the curator-or-admin gate (200 for list, 404 for missing id)."""
+    """Admins hold READ_CONNECTORS globally (200 for list, 404 for missing id)."""
     resp = client.request(
         method,
         f"{API_SERVER_URL}{path}",
@@ -68,7 +69,7 @@ def test_limited_service_account_denied(
     path: str,
     limited_service_account: DATestAPIKey,
 ) -> None:
-    """Limited service accounts (no curator/admin role) should be denied."""
+    """Limited service accounts (no READ_CONNECTORS grant) should be denied."""
     resp = client.request(
         method,
         f"{API_SERVER_URL}{path}",

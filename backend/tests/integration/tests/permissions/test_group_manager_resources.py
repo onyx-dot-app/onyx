@@ -763,6 +763,19 @@ def test_manager_connector_listing_isolates_unmanaged_groups(
     assert foreign.id not in listed, "unmanaged group's connector leaked"
 
 
+def test_manager_cannot_read_raw_connector_snapshots(env: _ScopedEnv) -> None:
+    """These two routes return every connector's config and credential ids, and have no
+    way to filter per user. So a manager must be rejected at the gate, even for a
+    connector they created. Their scoped read is /admin/connector/status, tested
+    above."""
+    connector_id, _ = _build_connector_and_credential(env.manager)
+    for path in ["/manage/connector", f"/manage/connector/{connector_id}"]:
+        resp = call_endpoint(
+            "GET", path, None, env.manager.headers, env.manager.cookies
+        )
+        assert_response(resp, "GET", path, "manager", "denied_gate1")
+
+
 def test_manager_doc_set_listing_isolates_unmanaged_groups(env: _ScopedEnv) -> None:
     """Same both-directions check for document sets."""
     cc_pair = CCPairManager.create_from_scratch(
