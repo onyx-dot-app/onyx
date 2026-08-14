@@ -14,11 +14,6 @@ from onyx.db.enums import NotificationSeverity
 from onyx.db.models import Notification, User
 
 
-def _severity_at_least(min_severity: NotificationSeverity) -> ColumnElement[bool]:
-    ordered = list(NotificationSeverity)
-    return Notification.severity.in_(ordered[ordered.index(min_severity) :])
-
-
 def _notification_additional_data_key() -> ColumnElement[dict]:
     """Normalize legacy JSON null and SQL NULL values to the empty-object key."""
     return func.coalesce(
@@ -44,7 +39,10 @@ def _notification_filters(
     if notif_type:
         filters.append(Notification.notif_type == notif_type)
     if min_severity is not None:
-        filters.append(_severity_at_least(min_severity))
+        ordered = list(NotificationSeverity)
+        filters.append(
+            Notification.severity.in_(ordered[ordered.index(min_severity) :])
+        )
     return filters
 
 
