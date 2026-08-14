@@ -98,9 +98,9 @@ export const SWR_KEYS = {
     });
     return `/api/notifications?${params.toString()}`;
   },
-  notificationsByType: (notifType: string, pageSize: number) => {
+  notificationsBySeverity: (minSeverity: string, pageSize: number) => {
     const params = new URLSearchParams({
-      notif_type: notifType,
+      min_severity: minSeverity,
       page_size: pageSize.toString(),
     });
     return `/api/notifications?${params.toString()}`;

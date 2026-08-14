@@ -1,6 +1,23 @@
+import type { Route } from "next";
+import type { useRouter } from "next/navigation";
 import { SvgAlertCircle, SvgAlertTriangle, SvgBullhorn } from "@opal/icons";
 import type { IconProps } from "@opal/types";
 import { NotificationType } from "@/lib/notifications/interfaces";
+
+export function isExternalLink(link: string): boolean {
+  return link.startsWith("http://") || link.startsWith("https://");
+}
+
+export function openNotificationLink(
+  link: string,
+  router: ReturnType<typeof useRouter>
+): void {
+  if (isExternalLink(link)) {
+    window.open(link, "_blank", "noopener,noreferrer");
+    return;
+  }
+  router.push(link as Route);
+}
 
 export function getNotificationIcon(
   notifType: string
