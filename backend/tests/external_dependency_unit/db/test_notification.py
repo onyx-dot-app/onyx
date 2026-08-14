@@ -8,6 +8,7 @@ from sqlalchemy import select
 from sqlalchemy.orm import Session
 
 from onyx.configs.constants import NotificationType
+from onyx.db.enums import NotificationSeverity
 from onyx.db.models import Notification, User
 from onyx.db.notification import (
     batch_create_notifications,
@@ -648,3 +649,146 @@ def _disable_notification_ensure_checks(monkeypatch: pytest.MonkeyPatch) -> None
         "ensure_release_notes_fresh_and_notify",
         noop_ensure,
     )
+
+
+def test_get_notifications_filters_by_min_severity(
+    db_session: Session,
+    tenant_context: None,  # noqa: ARG001
+) -> None:
+    user = create_test_user(db_session, "notification_severity")
+    for index, severity in enumerate(NotificationSeverity):
+        create_notification(
+            user_id=user.id,
+            notif_type=NotificationType.APPROVAL_REQUESTED,
+            db_session=db_session,
+            title=f"severity {severity.value}",
+            additional_data={"severity_case": index},
+            severity=severity,
+        )
+
+    def severities(
+        min_severity: NotificationSeverity | None,
+    ) -> set[NotificationSeverity]:
+        return {
+            n.severity
+            for n in get_notifications(
+                user=user, db_session=db_session, min_severity=min_severity
+            )
+        }
+
+    # No filter returns everything; min_severity is exact-or-above.
+    assert severities(None) == set(NotificationSeverity)
+    assert severities(NotificationSeverity.WARNING) == {
+        NotificationSeverity.WARNING,
+        NotificationSeverity.ERROR,
+    }
+    assert severities(NotificationSeverity.ERROR) == {NotificationSeverity.ERROR}
+
+    total_items, undismissed_count = count_notifications(
+        user=user,
+        db_session=db_session,
+        min_severity=NotificationSeverity.WARNING,
+    )
+    assert total_items == 2
+    assert undismissed_count == 2
+
+
+def test_get_notifications_api_filters_by_min_severity(
+    db_session: Session,
+    tenant_context: None,  # noqa: ARG001
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    _disable_notification_ensure_checks(monkeypatch)
+    monkeypatch.setattr(notifications_api, "_polled_ensure_cache", {})
+    user = create_test_user(db_session, "notification_api_severity")
+    for index, severity in enumerate(NotificationSeverity):
+        create_notification(
+            user_id=user.id,
+            notif_type=NotificationType.APPROVAL_REQUESTED,
+            db_session=db_session,
+            title=f"severity {severity.value}",
+            additional_data={"api_severity_case": index},
+            severity=severity,
+        )
+
+    response = notifications_api.get_notifications_api(
+        page_num=0,
+        page_size=50,
+        min_severity=NotificationSeverity.WARNING,
+        user=user,
+        db_session=db_session,
+    )
+
+    assert response.total_items == 2
+    assert {n.severity for n in response.notifications} == {
+        NotificationSeverity.WARNING,
+        NotificationSeverity.ERROR,
+    }
+
+
+def test_get_notifications_api_polled_ensures_run_once_per_window(
+    db_session: Session,
+    tenant_context: None,  # noqa: ARG001
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """A severity-only request (the banner poll) runs the banner-type ensures
+    at most once per user per throttle window; the generic create-checks
+    never run on that path."""
+    generic_calls: list[str] = []
+
+    def record_call(name: str) -> Callable[..., None]:
+        def _record_call(*_args: object, **_kwargs: object) -> None:
+            generic_calls.append(name)
+
+        return _record_call
+
+    for hook in (
+        "ensure_build_mode_intro_notification",
+        "ensure_permissions_migration_notification",
+        "ensure_release_notes_fresh_and_notify",
+    ):
+        monkeypatch.setattr(notifications_api, hook, record_call(hook))
+
+    banner_ensure_calls: list[str] = []
+
+    def record_banner_ensure(name: str) -> Callable[..., bool]:
+        def _record(*_args: object, **_kwargs: object) -> bool:
+            banner_ensure_calls.append(name)
+            return True
+
+        return _record
+
+    monkeypatch.setattr(
+        notifications_api,
+        "_ensure_system_announcement_notification",
+        record_banner_ensure("announcement"),
+    )
+    monkeypatch.setattr(
+        notifications_api,
+        "_ensure_license_expiry_notification",
+        record_banner_ensure("license"),
+    )
+    monkeypatch.setattr(notifications_api, "_polled_ensure_cache", {})
+
+    user = create_test_user(db_session, "notification_api_polled_throttle")
+
+    notifications_api.get_notifications_api(
+        page_num=0,
+        page_size=50,
+        min_severity=NotificationSeverity.WARNING,
+        user=user,
+        db_session=db_session,
+    )
+    assert banner_ensure_calls == ["announcement", "license"]
+    assert generic_calls == []
+
+    banner_ensure_calls.clear()
+    notifications_api.get_notifications_api(
+        page_num=0,
+        page_size=50,
+        min_severity=NotificationSeverity.WARNING,
+        user=user,
+        db_session=db_session,
+    )
+    assert banner_ensure_calls == []
+    assert generic_calls == []
