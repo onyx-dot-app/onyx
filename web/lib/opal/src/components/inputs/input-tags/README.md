@@ -26,7 +26,7 @@ Interaction model:
 | `icon` | `IconFunctionComponent` | — | Leading icon (24px container) |
 | `onClear` | `() => void` | — | Renders the clear action button |
 | `minRows` | `number` | `1` | Tag rows the field is tall enough to show before it grows. Rows pack from the top |
-| `autoFocus` | `boolean` | — | Focuses the text input on mount |
+| `focusOnMount` | `boolean` | `false` | Focuses the text input on mount |
 
 ### `TagItem`
 
