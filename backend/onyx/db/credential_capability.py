@@ -54,8 +54,10 @@ def _upsert_row(
         .on_conflict_do_update(
             **_scope_conflict_kwargs(connector_id),
             # The model's ``onupdate`` is not applied to ON CONFLICT SET
-            # clauses, so bump ``time_updated`` explicitly.
-            set_={**values, "time_updated": func.now()},
+            # clauses, so bump ``time_updated`` explicitly -- with statement
+            # time, because ``now()`` is transaction-start time and would
+            # stamp every write of one transaction identically.
+            set_={**values, "time_updated": func.statement_timestamp()},
         )
         .returning(CredentialCapabilityReportRow)
     )
@@ -139,6 +141,10 @@ def get_capability_report_rows_for_source(
     stmt = (
         select(CredentialCapabilityReportRow)
         .where(CredentialCapabilityReportRow.source == source)
-        .order_by(CredentialCapabilityReportRow.time_updated.desc())
+        # ``id`` breaks timestamp ties deterministically.
+        .order_by(
+            CredentialCapabilityReportRow.time_updated.desc(),
+            CredentialCapabilityReportRow.id.desc(),
+        )
     )
     return list(db_session.scalars(stmt).all())
