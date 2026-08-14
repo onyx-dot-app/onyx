@@ -9,11 +9,14 @@ import {
   useState,
 } from "react";
 import { useRouter } from "next/navigation";
-import { Route } from "next";
 import { track, AnalyticsEvent } from "@/lib/analytics/utils";
 import type { Notification as NotificationData } from "@/lib/notifications/interfaces";
 import { NotificationType } from "@/lib/notifications/interfaces";
-import { getNotificationIcon } from "@/lib/notifications";
+import {
+  getNotificationIcon,
+  isExternalLink,
+  openNotificationLink,
+} from "@/lib/notifications";
 import {
   dismissAllNotifications,
   dismissNotification,
@@ -183,19 +186,13 @@ export default function NotificationsPopover({
         });
       }
 
-      if (link.startsWith("http://") || link.startsWith("https://")) {
-        if (!notification.dismissed) {
-          handleDismiss(notification.id);
-        }
-        window.open(link, "_blank", "noopener,noreferrer");
-        return;
-      }
-
       if (!notification.dismissed) {
         handleDismiss(notification.id);
       }
-      onNavigate();
-      router.push(link as Route);
+      if (!isExternalLink(link)) {
+        onNavigate();
+      }
+      openNotificationLink(link, router);
     },
     [handleDismiss, onNavigate, onShowBuildIntro, router]
   );

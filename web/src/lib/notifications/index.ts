@@ -1,6 +1,34 @@
+import type { Route } from "next";
+import type { useRouter } from "next/navigation";
 import { SvgAlertCircle, SvgAlertTriangle, SvgBullhorn } from "@opal/icons";
 import type { IconProps } from "@opal/types";
 import { NotificationType } from "@/lib/notifications/interfaces";
+
+export function isExternalLink(link: string): boolean {
+  return link.startsWith("http://") || link.startsWith("https://");
+}
+
+// Internal links must be absolute paths. Rejects other schemes (mailto:,
+// tel:) and protocol-relative //host values, which router.push would
+// otherwise navigate to unvalidated.
+function isInternalPath(link: string): boolean {
+  return link.startsWith("/") && !link.startsWith("//");
+}
+
+export function openNotificationLink(
+  link: string,
+  router: ReturnType<typeof useRouter>
+): void {
+  if (isExternalLink(link)) {
+    window.open(link, "_blank", "noopener,noreferrer");
+    return;
+  }
+  if (!isInternalPath(link)) {
+    console.error("Ignoring notification link with unsupported format:", link);
+    return;
+  }
+  router.push(link as Route);
+}
 
 export function getNotificationIcon(
   notifType: string

@@ -1,12 +1,13 @@
 "use client";
 
 // Bottom-left floating banner: shows one banner-worthy notification at a time
-// (admin site-wide announcement, license expiry warning, trial-ending notice),
-// pageable via prev/next when more than one is active. Always dismissible.
-// Anchored to the main content area's bottom-left corner so it never covers
-// the sidebar. Falls back to the viewport edge when there is no content area.
+// (severity WARNING or louder — connector failures, license expiry, admin
+// announcements, trial notices), pageable via prev/next when more than one is
+// active. Always dismissible. Anchored to the main content area's bottom-left
+// corner so it never covers the sidebar. Falls back to the viewport edge when
+// there is no content area.
 
-import { usePathname } from "next/navigation";
+import { usePathname, useRouter } from "next/navigation";
 import { Button, Text } from "@opal/components";
 import { cn, markdown } from "@opal/utils";
 import { timeAgo } from "@opal/time";
@@ -14,24 +15,18 @@ import { SvgChevronLeft, SvgChevronRight, SvgX } from "@opal/icons";
 import { Section } from "@/layouts/general-layouts";
 import { isAuthPath } from "@/lib/auth/paths";
 import useContainerCenter from "@/hooks/useContainerCenter";
-import { getNotificationIcon } from "@/lib/notifications";
+import { getNotificationIcon, openNotificationLink } from "@/lib/notifications";
 import {
+  NotificationSeverity,
   NotificationType,
-  type Notification,
 } from "@/lib/notifications/interfaces";
-import {
-  LICENSE_EXPIRY_ERROR_THRESHOLD,
-  licenseExpirySeverity,
-  useBannerQueue,
-} from "@/lib/banner/hooks";
+import { useBannerQueue, type BannerQueueItem } from "@/lib/banner/hooks";
 
 // Inset from the content area's left edge, matching the card's bottom inset.
 const CONTENT_INSET_PX = 8;
 
-type BannerVariant = "info" | "warning" | "error";
-
 const VARIANT_STYLES: Record<
-  BannerVariant,
+  NotificationSeverity,
   { headerBg: string; iconClass: string }
 > = {
   info: { headerBg: "bg-status-info-00", iconClass: "stroke-status-info-05" },
@@ -45,47 +40,75 @@ const VARIANT_STYLES: Record<
   },
 };
 
-function bannerVariant(notification: Notification): BannerVariant {
-  switch (notification.notif_type) {
-    case NotificationType.TRIAL_ENDS_TWO_DAYS:
-      return "warning";
-    case NotificationType.LICENSE_EXPIRY_WARNING:
-      return licenseExpirySeverity(notification) >=
-        LICENSE_EXPIRY_ERROR_THRESHOLD
-        ? "error"
-        : "warning";
-    default:
-      return "info";
-  }
+// Per-type presentation extras. Variant comes from the notification's
+// severity; ordering and eligibility live in useBannerQueue. Types without an
+// entry get the defaults, so a new loud notification type needs no changes
+// here to render.
+interface BannerTypeConfig {
+  sourceLabel: string;
+  // Overrides the severity-derived look (admin announcements are loud enough
+  // to be banners but keep their informational styling).
+  variantOverride?: NotificationSeverity;
+  ctaLabel?: string;
 }
 
-function bannerSourceLabel(notifType: NotificationType): string {
-  switch (notifType) {
-    case NotificationType.SYSTEM_ANNOUNCEMENT:
-      return "Admin announcement";
-    case NotificationType.LICENSE_EXPIRY_WARNING:
-      return "License";
-    case NotificationType.TRIAL_ENDS_TWO_DAYS:
-      return "Trial";
-    default:
-      return "Notification";
-  }
+interface BannerContent {
+  title: string;
+  description: string | null;
+  link: string | null;
+  ctaLabel: string;
+}
+
+const DEFAULT_SOURCE_LABEL = "Notification";
+const DEFAULT_CTA_LABEL = "View";
+
+const BANNER_TYPE_CONFIG: Partial<Record<NotificationType, BannerTypeConfig>> =
+  {
+    [NotificationType.SYSTEM_ANNOUNCEMENT]: {
+      sourceLabel: "Admin announcement",
+      variantOverride: NotificationSeverity.INFO,
+    },
+    [NotificationType.LICENSE_EXPIRY_WARNING]: { sourceLabel: "License" },
+    [NotificationType.TRIAL_ENDS_TWO_DAYS]: { sourceLabel: "Trial" },
+  };
+
+function bannerContent(item: BannerQueueItem): BannerContent {
+  const { notification } = item;
+  const config = BANNER_TYPE_CONFIG[notification.notif_type];
+  return {
+    title: notification.title,
+    description: notification.description,
+    link: notification.additional_data?.link ?? null,
+    ctaLabel: config?.ctaLabel ?? DEFAULT_CTA_LABEL,
+  };
 }
 
 export default function BannerQueue() {
   const pathname = usePathname();
+  const router = useRouter();
   const { left: contentLeft } = useContainerCenter();
   const { current, hasMultiple, goToNext, goToPrevious, dismissCurrent } =
     useBannerQueue();
 
   if (isAuthPath(pathname) || !current) return null;
 
-  const styles = VARIANT_STYLES[bannerVariant(current)];
-  const Icon = getNotificationIcon(current.notif_type);
-  const relativeTime = timeAgo(current.last_shown);
-  const footer = relativeTime
-    ? `${bannerSourceLabel(current.notif_type)} • ${relativeTime}`
-    : bannerSourceLabel(current.notif_type);
+  const notification = current.notification;
+  const config = BANNER_TYPE_CONFIG[notification.notif_type];
+  const styles =
+    VARIANT_STYLES[config?.variantOverride ?? notification.severity];
+  const Icon = getNotificationIcon(notification.notif_type);
+  const { title, description, link, ctaLabel } = bannerContent(current);
+  const relativeTime = timeAgo(notification.last_shown);
+  const sourceLabel = config?.sourceLabel ?? DEFAULT_SOURCE_LABEL;
+  // Disclose collapsed same-type siblings so dismissing the visible one
+  // never surfaces the rest as a surprise.
+  const footer = [
+    sourceLabel,
+    relativeTime,
+    current.count > 1 ? `+${current.count - 1} more` : null,
+  ]
+    .filter(Boolean)
+    .join(" • ");
 
   return (
     <div
@@ -119,7 +142,7 @@ export default function BannerQueue() {
               needs a block box, so Section (a flex container) cannot host it. */}
           <div className="flex-1 min-w-0 truncate px-0.5">
             <Text font="main-ui-action" color="text-04">
-              {current.title}
+              {title}
             </Text>
           </div>
           {hasMultiple && (
@@ -158,14 +181,31 @@ export default function BannerQueue() {
           padding={2}
           className="rounded-08 bg-background-tint-01"
         >
-          {current.description && (
+          {description && (
             <Text font="main-ui-body" color="text-03">
-              {markdown(current.description)}
+              {markdown(description)}
             </Text>
           )}
-          <Text font="secondary-body" color="text-03">
-            {footer}
-          </Text>
+          <Section
+            flexDirection="row"
+            alignItems="center"
+            justifyContent="between"
+            height="fit"
+            gap={1}
+          >
+            <Text font="secondary-body" color="text-03">
+              {footer}
+            </Text>
+            {link && (
+              <Button
+                prominence="secondary"
+                size="sm"
+                onClick={() => openNotificationLink(link, router)}
+              >
+                {ctaLabel}
+              </Button>
+            )}
+          </Section>
         </Section>
       </Section>
     </div>

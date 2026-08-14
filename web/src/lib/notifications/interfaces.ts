@@ -19,9 +19,18 @@ export enum NotificationType {
   SYSTEM_ANNOUNCEMENT = "system_announcement",
 }
 
+// INFO renders in the bell popover only; WARNING/ERROR also as a banner.
+// Declared in ascending loudness.
+export enum NotificationSeverity {
+  INFO = "info",
+  WARNING = "warning",
+  ERROR = "error",
+}
+
 export interface Notification {
   id: number;
   notif_type: NotificationType;
+  severity: NotificationSeverity;
   title: string;
   description: string | null;
   dismissed: boolean;
