@@ -53,7 +53,7 @@ export async function copyText(text: string): Promise<void> {
  * and nested buttons are invalid HTML.
  */
 export function clickOnKeyDown(
-  onClick: () => void,
+  onClick: () => void
 ): (event: React.KeyboardEvent) => void {
   return (event: React.KeyboardEvent) => {
     // Keyboard events bubble, so a nested button would fire its own action and

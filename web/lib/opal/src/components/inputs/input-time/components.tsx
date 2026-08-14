@@ -50,7 +50,7 @@ function isValidTime(time: TimeValue): boolean {
     (part) =>
       Number.isInteger(time[part]) &&
       time[part] >= 0 &&
-      time[part] <= SEGMENT_LIMITS[part],
+      time[part] <= SEGMENT_LIMITS[part]
   );
 }
 
@@ -66,7 +66,7 @@ function toSegments(time: TimeValue | null): TimeSegments {
 
 function parseSegments(
   segments: TimeSegments,
-  showSeconds: boolean,
+  showSeconds: boolean
 ): TimeValue | null {
   const { hours, minutes } = segments;
   // Hidden seconds parse as zero so HH:MM commits still produce a value.
@@ -85,7 +85,7 @@ function parseSegments(
 function sameCommitted(
   a: TimeValue,
   b: TimeValue,
-  showSeconds: boolean,
+  showSeconds: boolean
 ): boolean {
   return (
     a.hours === b.hours &&
@@ -144,7 +144,7 @@ function InputTime({
       : "primary";
 
   const [segments, setSegments] = React.useState<TimeSegments>(() =>
-    toSegments(value),
+    toSegments(value)
   );
 
   const hoursRef = React.useRef<HTMLInputElement>(null);
@@ -226,11 +226,11 @@ function InputTime({
                   2,
                   i < segmentParts.length - 1
                     ? segmentRefs[segmentParts[i + 1]!]
-                    : null,
+                    : null
                 )}
                 onKeyDown={handleSegmentKeyDown(
                   part,
-                  i > 0 ? segmentRefs[segmentParts[i - 1]!] : null,
+                  i > 0 ? segmentRefs[segmentParts[i - 1]!] : null
                 )}
               />
             </React.Fragment>

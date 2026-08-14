@@ -83,9 +83,7 @@ const FederatedConnectorTitle = ({
             .filter(
               ([_, value]) =>
                 value &&
-                (Array.isArray(value)
-                  ? value.length > 0
-                  : String(value).trim()),
+                (Array.isArray(value) ? value.length > 0 : String(value).trim())
             )
             .map(([key, value]) => (
               <div key={key} className="truncate">
@@ -177,7 +175,7 @@ const DocumentSetTable = ({
   const sortedDocumentSets = [
     ...editableDocumentSets,
     ...documentSets.filter(
-      (ds) => !editableDocumentSets.some((eds) => eds.id === ds.id),
+      (ds) => !editableDocumentSets.some((eds) => eds.id === ds.id)
     ),
   ];
 
@@ -199,7 +197,7 @@ const DocumentSetTable = ({
             .slice((page - 1) * numToDisplay, page * numToDisplay)
             .map((documentSet) => {
               const isEditable = editableDocumentSets.some(
-                (eds) => eds.id === documentSet.id,
+                (eds) => eds.id === documentSet.id
               );
               return (
                 <TableRow key={documentSet.id}>
@@ -236,7 +234,7 @@ const DocumentSetTable = ({
                               </div>
                             </div>
                           );
-                        },
+                        }
                       )}
 
                       {/* Federated Connectors */}
@@ -267,7 +265,7 @@ const DocumentSetTable = ({
                                     />
                                   </div>
                                 );
-                              },
+                              }
                             )}
                           </>
                         )}
@@ -313,16 +311,16 @@ const DocumentSetTable = ({
                       <DeleteButton
                         onClick={async () => {
                           const response = await deleteDocumentSet(
-                            documentSet.id,
+                            documentSet.id
                           );
                           if (response.ok) {
                             toast.success(
-                              `Document set "${documentSet.name}" scheduled for deletion`,
+                              `Document set "${documentSet.name}" scheduled for deletion`
                             );
                           } else {
                             const errorMsg = (await response.json()).detail;
                             toast.error(
-                              `Failed to schedule document set for deletion - ${errorMsg}`,
+                              `Failed to schedule document set for deletion - ${errorMsg}`
                             );
                           }
                           refresh();
@@ -387,7 +385,7 @@ function Main() {
     <div className="mb-8">
       <Text as="p">
         {markdown(
-          "**Document Sets** allow you to group logically connected documents into a single bundle. These can then be used as a filter when performing searches to control the scope of information Onyx searches over.",
+          "**Document Sets** allow you to group logically connected documents into a single bundle. These can then be used as a filter when performing searches to control the scope of information Onyx searches over."
         )}
       </Text>
       <Spacer rem={0.75} />
