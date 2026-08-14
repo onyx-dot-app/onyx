@@ -138,6 +138,7 @@ def _seed_usage(
     cache_read_tokens: int,
     cost_cents: float,
     window_start: datetime.datetime,
+    cache_creation_tokens: int = 0,
 ) -> None:
     db_session.add(
         UserUsage(
@@ -149,6 +150,7 @@ def _seed_usage(
             input_tokens=input_tokens,
             output_tokens=output_tokens,
             cache_read_tokens=cache_read_tokens,
+            cache_creation_tokens=cache_creation_tokens,
             cost_cents=cost_cents,
         )
     )
@@ -193,7 +195,17 @@ def test_returns_only_callers_rows_and_aggregates(
     window = _seed_current_window(db_session, caller)
     # Same window, distinct model -> second per-day row for the caller.
     _seed_usage(
-        db_session, caller, "claude-3", "CHAT", "anthropic", 200, 60, 5, 2.0, window
+        db_session,
+        caller,
+        "claude-3",
+        "CHAT",
+        "anthropic",
+        200,
+        60,
+        5,
+        2.0,
+        window,
+        cache_creation_tokens=7,
     )
     # Another user's usage must never surface.
     _seed_usage(
@@ -213,6 +225,7 @@ def test_returns_only_callers_rows_and_aggregates(
     assert models["gpt-4o"]["input_tokens"] == 100
     assert models["claude-3"]["output_tokens"] == 60
     assert models["claude-3"]["cache_read_tokens"] == 5
+    assert models["claude-3"]["cache_creation_tokens"] == 7
     # No row leaks the other user's 999s.
     assert all(r["input_tokens"] != 999 for r in body["per_day_by_model"])
 

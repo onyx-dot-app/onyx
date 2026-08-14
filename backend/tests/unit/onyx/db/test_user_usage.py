@@ -89,6 +89,7 @@ def _seed_usage(
     cache_read_tokens: int,
     cost_cents: float,
     window_start: datetime.datetime,
+    cache_creation_tokens: int = 0,
 ) -> None:
     """Insert a ledger row without going through the Postgres upsert path."""
     db_session.add(
@@ -101,6 +102,7 @@ def _seed_usage(
             input_tokens=input_tokens,
             output_tokens=output_tokens,
             cache_read_tokens=cache_read_tokens,
+            cache_creation_tokens=cache_creation_tokens,
             cost_cents=cost_cents,
         )
     )
@@ -149,12 +151,21 @@ class TestRecordUserUsage:
             input_tokens=100,
             output_tokens=50,
             cache_read_tokens=10,
+            cache_creation_tokens=25,
             cost_cents=1.5,
             window_start=window,
         )
 
         mock_session.execute.assert_called_once()
         mock_session.flush.assert_called_once()
+        stmt = mock_session.execute.call_args[0][0]
+        compiled = stmt.compile(dialect=postgresql.dialect())
+        assert compiled.params["cache_creation_tokens"] == 25
+        assert (
+            "cache_creation_tokens = "
+            "(user_usage.cache_creation_tokens + excluded.cache_creation_tokens)"
+            in str(compiled)
+        )
 
     def test_null_provider_stored_as_empty_string(self) -> None:
         mock_session = MagicMock()
@@ -309,7 +320,17 @@ class TestAggregation:
         day2 = datetime.datetime(2026, 6, 2, tzinfo=datetime.timezone.utc)
 
         _seed_usage(
-            db_session, user_id, "model-a", "CHAT", "anthropic", 100, 50, 0, 1.0, day1
+            db_session,
+            user_id,
+            "model-a",
+            "CHAT",
+            "anthropic",
+            100,
+            50,
+            0,
+            1.0,
+            day1,
+            cache_creation_tokens=7,
         )
         _seed_usage(
             db_session, user_id, "model-b", "CHAT", "anthropic", 200, 60, 0, 2.0, day1
@@ -331,6 +352,7 @@ class TestAggregation:
                 input_tokens=100,
                 output_tokens=50,
                 cache_read_tokens=0,
+                cache_creation_tokens=7,
                 cost_cents=1.0,
             ),
             UserUsageByDay(
@@ -339,6 +361,7 @@ class TestAggregation:
                 input_tokens=200,
                 output_tokens=60,
                 cache_read_tokens=0,
+                cache_creation_tokens=0,
                 cost_cents=2.0,
             ),
             UserUsageByDay(
@@ -347,6 +370,7 @@ class TestAggregation:
                 input_tokens=300,
                 output_tokens=70,
                 cache_read_tokens=0,
+                cache_creation_tokens=0,
                 cost_cents=3.0,
             ),
         ]

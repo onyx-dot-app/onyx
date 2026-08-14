@@ -10,6 +10,7 @@ export interface UsageExportTotals {
   input_tokens: number;
   output_tokens: number;
   cache_read_tokens: number;
+  cache_creation_tokens: number;
   cost_cents: number;
 }
 
@@ -27,6 +28,7 @@ export interface UsageExportRecord {
   input_tokens: number;
   output_tokens: number;
   cache_read_tokens: number;
+  cache_creation_tokens: number;
   cost_cents: number;
 }
 

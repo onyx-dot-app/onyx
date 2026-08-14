@@ -313,6 +313,7 @@ class TestUsageExportAPI:
                     "input_tokens",
                     "output_tokens",
                     "cache_read_tokens",
+                    "cache_creation_tokens",
                     "cost_cents",
                 }
                 actual_columns = set(csv_reader.fieldnames or [])

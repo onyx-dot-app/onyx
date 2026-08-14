@@ -6032,6 +6032,9 @@ class UserUsage(Base):
     cache_read_tokens: Mapped[int] = mapped_column(
         BigInteger, nullable=False, default=0
     )
+    cache_creation_tokens: Mapped[int] = mapped_column(
+        BigInteger, nullable=False, default=0
+    )
     cost_cents: Mapped[float] = mapped_column(
         Numeric(18, 6, asdecimal=False), nullable=False, default=0.0
     )

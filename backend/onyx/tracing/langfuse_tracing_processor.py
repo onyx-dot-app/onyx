@@ -101,6 +101,7 @@ class LangfuseTracingProcessor(TracingProcessor):
                 usage.get("output_tokens") or usage.get("completion_tokens") or 0
             )
             cache_read = int(usage.get("cache_read_input_tokens") or 0)
+            cache_creation = int(usage.get("cache_creation_input_tokens") or 0)
             model_config = data.model_config or {}
             provider = model_config.get("model_provider")
             flow = model_config.get("flow")
@@ -109,13 +110,13 @@ class LangfuseTracingProcessor(TracingProcessor):
             ):
                 return None
 
-            non_cached_input = max(input_tokens - cache_read, 0)
             input_cents, output_cents = compute_cost_cents(
-                data.model,
-                provider,
-                non_cached_input,
-                output_tokens,
+                model=data.model,
+                provider=provider,
+                prompt_tokens=input_tokens,
+                completion_tokens=output_tokens,
                 cache_read_tokens=cache_read,
+                cache_creation_tokens=cache_creation,
                 flow=flow,
                 image_count=data.image_count or 1,
             )

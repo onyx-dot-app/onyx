@@ -107,6 +107,7 @@ def _seed_usage(
     cache_read_tokens: int,
     cost_cents: float,
     window_start: datetime.datetime,
+    cache_creation_tokens: int = 0,
 ) -> None:
     db_session.add(
         UserUsage(
@@ -118,6 +119,7 @@ def _seed_usage(
             input_tokens=input_tokens,
             output_tokens=output_tokens,
             cache_read_tokens=cache_read_tokens,
+            cache_creation_tokens=cache_creation_tokens,
             cost_cents=cost_cents,
         )
     )
@@ -128,7 +130,19 @@ def _seed_two_users(db_session: Session) -> tuple[str, str]:
     alice = _add_user(db_session, "alice@example.com")
     bob = _add_user(db_session, "bob@example.com")
 
-    _seed_usage(db_session, alice, "model-a", "CHAT", "openai", 100, 50, 5, 1.0, _W1)
+    _seed_usage(
+        db_session,
+        alice,
+        "model-a",
+        "CHAT",
+        "openai",
+        100,
+        50,
+        5,
+        1.0,
+        _W1,
+        cache_creation_tokens=7,
+    )
     _seed_usage(db_session, alice, "model-b", "CHAT", "openai", 200, 60, 0, 2.0, _W1)
     _seed_usage(db_session, alice, "model-a", "CHAT", "openai", 300, 70, 0, 3.0, _W2)
     _seed_usage(db_session, bob, "model-a", "CHAT", "anthropic", 400, 80, 0, 4.0, _W2)
@@ -155,6 +169,7 @@ class TestGetUsageExportHelper:
                 input_tokens=100,
                 output_tokens=50,
                 cache_read_tokens=5,
+                cache_creation_tokens=7,
                 cost_cents=1.0,
             ),
             UsageExportRow(
@@ -167,6 +182,7 @@ class TestGetUsageExportHelper:
                 input_tokens=200,
                 output_tokens=60,
                 cache_read_tokens=0,
+                cache_creation_tokens=0,
                 cost_cents=2.0,
             ),
             UsageExportRow(
@@ -179,6 +195,7 @@ class TestGetUsageExportHelper:
                 input_tokens=300,
                 output_tokens=70,
                 cache_read_tokens=0,
+                cache_creation_tokens=0,
                 cost_cents=3.0,
             ),
             UsageExportRow(
@@ -191,6 +208,7 @@ class TestGetUsageExportHelper:
                 input_tokens=400,
                 output_tokens=80,
                 cache_read_tokens=0,
+                cache_creation_tokens=0,
                 cost_cents=4.0,
             ),
         ]
@@ -283,6 +301,7 @@ class TestExportEndpoint:
         assert alice["totals"]["input_tokens"] == 600  # 100 + 200 + 300
         assert alice["totals"]["output_tokens"] == 180  # 50 + 60 + 70
         assert alice["totals"]["cache_read_tokens"] == 5
+        assert alice["totals"]["cache_creation_tokens"] == 7
         assert alice["totals"]["cost_cents"] == pytest.approx(6.0)
 
         bob = users["bob@example.com"]
