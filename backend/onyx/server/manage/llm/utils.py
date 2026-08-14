@@ -8,7 +8,7 @@ Utilities for dynamic LLM providers (Bedrock, Ollama, OpenRouter):
 """
 
 import re
-from typing import Any, TypedDict
+from typing import TypedDict
 
 from onyx.llm.constants import (
     BEDROCK_MODEL_NAME_MAPPINGS,
@@ -241,7 +241,7 @@ def is_reasoning_model(model_id: str, display_name: str) -> bool:
     return any(pattern in combined for pattern in REASONING_MODEL_PATTERNS)
 
 
-def lm_studio_capability_enabled(value: Any) -> bool:
+def lm_studio_capability_enabled(value: object) -> bool:
     """Read one entry of an LM Studio `capabilities` object as a boolean.
 
     LM Studio reports a capability either as a plain boolean or as an options
