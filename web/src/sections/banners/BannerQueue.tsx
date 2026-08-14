@@ -50,6 +50,8 @@ interface BannerTypeConfig {
   // to be banners but keep their informational styling).
   variantOverride?: NotificationSeverity;
   ctaLabel?: string;
+  // Replaces the copy when several undismissed notifications share the type.
+  aggregate?: (count: number) => BannerContent;
 }
 
 interface BannerContent {
@@ -62,6 +64,15 @@ interface BannerContent {
 const DEFAULT_SOURCE_LABEL = "Notification";
 const DEFAULT_CTA_LABEL = "View";
 
+function connectorAggregate(noun: string, cause: string) {
+  return (count: number): BannerContent => ({
+    title: `${count} connectors are ${noun}`,
+    description: `Multiple connectors have ${cause}. Open the connectors page to review them.`,
+    link: "/admin/indexing/status",
+    ctaLabel: DEFAULT_CTA_LABEL,
+  });
+}
+
 const BANNER_TYPE_CONFIG: Partial<Record<NotificationType, BannerTypeConfig>> =
   {
     [NotificationType.SYSTEM_ANNOUNCEMENT]: {
@@ -70,11 +81,26 @@ const BANNER_TYPE_CONFIG: Partial<Record<NotificationType, BannerTypeConfig>> =
     },
     [NotificationType.LICENSE_EXPIRY_WARNING]: { sourceLabel: "License" },
     [NotificationType.TRIAL_ENDS_TWO_DAYS]: { sourceLabel: "Trial" },
+    [NotificationType.CONNECTOR_REPEATED_ERRORS]: {
+      sourceLabel: "Connectors",
+      ctaLabel: "View connector",
+      aggregate: connectorAggregate("failing", "repeated indexing failures"),
+    },
+    [NotificationType.CONNECTOR_INVALID]: {
+      sourceLabel: "Connectors",
+      ctaLabel: "View connector",
+      aggregate: connectorAggregate("invalid", "invalid credentials"),
+    },
   };
 
+// The notification's own copy when it stands alone, the type's aggregate
+// copy when it represents several.
 function bannerContent(item: BannerQueueItem): BannerContent {
-  const { notification } = item;
+  const { notification, count } = item;
   const config = BANNER_TYPE_CONFIG[notification.notif_type];
+  if (count > 1 && config?.aggregate) {
+    return config.aggregate(count);
+  }
   return {
     title: notification.title,
     description: notification.description,
@@ -94,6 +120,9 @@ export default function BannerQueue() {
 
   const notification = current.notification;
   const config = BANNER_TYPE_CONFIG[notification.notif_type];
+  // An aggregate card represents every collapsed notification, so dismissing
+  // it must dismiss them all — not surface them one at a time.
+  const showsAggregate = current.count > 1 && Boolean(config?.aggregate);
   const styles =
     VARIANT_STYLES[config?.variantOverride ?? notification.severity];
   const Icon = getNotificationIcon(notification.notif_type);
@@ -105,7 +134,8 @@ export default function BannerQueue() {
   const footer = [
     sourceLabel,
     relativeTime,
-    current.count > 1 ? `+${current.count - 1} more` : null,
+    // Aggregate copy already states the count in the title.
+    current.count > 1 && !showsAggregate ? `+${current.count - 1} more` : null,
   ]
     .filter(Boolean)
     .join(" • ");
@@ -167,7 +197,9 @@ export default function BannerQueue() {
             icon={SvgX}
             prominence="internal"
             size="sm"
-            onClick={() => void dismissCurrent()}
+            onClick={() =>
+              void dismissCurrent(showsAggregate ? current.ids : undefined)
+            }
             aria-label="Dismiss"
           />
         </Section>

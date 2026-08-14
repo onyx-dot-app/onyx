@@ -7,7 +7,12 @@ import pytest
 from sqlalchemy import select
 from sqlalchemy.orm import Session
 
+from onyx.auth.schemas import UserRole
 from onyx.configs.constants import NotificationType
+from onyx.db.connector_alerts import (
+    clear_connector_alerts__no_commit,
+    notify_admins_of_connector_alert,
+)
 from onyx.db.enums import NotificationSeverity
 from onyx.db.models import Notification, User
 from onyx.db.notification import (
@@ -792,3 +797,63 @@ def test_get_notifications_api_polled_ensures_run_once_per_window(
     )
     assert banner_ensure_calls == []
     assert generic_calls == []
+
+
+def test_connector_alert_lifecycle_producer_and_recovery_agree(
+    db_session: Session,
+    tenant_context: None,  # noqa: ARG001
+) -> None:
+    """The producer and the recovery cleanup must target the same dedup key:
+    fan-out on entering the error state, exact-match delete on recovery,
+    fresh row on the next incident."""
+    admin_one = create_test_user(
+        db_session, "alert_lifecycle_admin1", role=UserRole.ADMIN
+    )
+    admin_two = create_test_user(
+        db_session, "alert_lifecycle_admin2", role=UserRole.ADMIN
+    )
+    admin_ids = [admin_one.id, admin_two.id]
+    cc_pair_id = 424242
+    notif_type = NotificationType.CONNECTOR_REPEATED_ERRORS
+
+    def produce() -> None:
+        notify_admins_of_connector_alert(
+            db_session=db_session,
+            cc_pair_id=cc_pair_id,
+            notif_type=notif_type,
+            title="Connector 'Lifecycle Test' failed",
+            description="test",
+        )
+
+    def rows() -> list[Notification]:
+        return list(
+            db_session.scalars(
+                select(Notification).where(
+                    Notification.notif_type == notif_type,
+                    Notification.user_id.in_(admin_ids),
+                )
+            ).all()
+        )
+
+    # Incident: one ERROR row per admin; a repeat produce is a no-op.
+    produce()
+    produce()
+    incident_rows = rows()
+    assert len(incident_rows) == 2
+    assert {r.severity for r in incident_rows} == {NotificationSeverity.ERROR}
+    assert {(r.additional_data or {}).get("link") for r in incident_rows} == {
+        f"/admin/connector/{cc_pair_id}"
+    }
+
+    # Recovery: cleanup deletes by the same helper-built key.
+    clear_connector_alerts__no_commit(
+        db_session=db_session,
+        cc_pair_id=cc_pair_id,
+        notif_type=notif_type,
+    )
+    db_session.commit()
+    assert rows() == []
+
+    # Next incident re-creates fresh undismissed rows.
+    produce()
+    assert len(rows()) == 2

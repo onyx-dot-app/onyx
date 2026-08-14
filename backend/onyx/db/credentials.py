@@ -5,7 +5,8 @@ from sqlalchemy.orm import Session
 from sqlalchemy.sql.expression import and_, or_
 
 from onyx.auth.schemas import UserRole
-from onyx.configs.constants import DocumentSource
+from onyx.configs.constants import DocumentSource, NotificationType
+from onyx.db.connector_alerts import clear_connector_alerts__no_commit
 from onyx.db.enums import ConnectorCredentialPairStatus
 from onyx.db.models import (
     ConnectorCredentialPair,
@@ -232,6 +233,11 @@ def swap_credentials_connector(
     # Update ccpair status if it's in INVALID state
     if existing_pair.status == ConnectorCredentialPairStatus.INVALID:
         existing_pair.status = ConnectorCredentialPairStatus.ACTIVE
+        clear_connector_alerts__no_commit(
+            db_session=db_session,
+            cc_pair_id=existing_pair.id,
+            notif_type=NotificationType.CONNECTOR_INVALID,
+        )
 
     # Commit the changes
     db_session.commit()
