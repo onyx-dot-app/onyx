@@ -750,15 +750,23 @@ def test_get_notifications_api_polled_ensures_run_once_per_window(
         monkeypatch.setattr(notifications_api, hook, record_call(hook))
 
     banner_ensure_calls: list[str] = []
+
+    def record_banner_ensure(name: str) -> Callable[..., bool]:
+        def _record(*_args: object, **_kwargs: object) -> bool:
+            banner_ensure_calls.append(name)
+            return True
+
+        return _record
+
     monkeypatch.setattr(
         notifications_api,
         "_ensure_system_announcement_notification",
-        lambda _user, _db_session: banner_ensure_calls.append("announcement"),
+        record_banner_ensure("announcement"),
     )
     monkeypatch.setattr(
         notifications_api,
         "_ensure_license_expiry_notification",
-        lambda _user, _db_session: banner_ensure_calls.append("license"),
+        record_banner_ensure("license"),
     )
     monkeypatch.setattr(notifications_api, "_polled_ensure_cache", {})
 

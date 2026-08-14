@@ -51,12 +51,14 @@ _polled_ensure_cache: TTLCache[UUID, bool] = TTLCache(
 _polled_ensure_lock = Lock()
 
 
-def _should_run_polled_ensures(user_id: UUID) -> bool:
+def _polled_ensures_due(user_id: UUID) -> bool:
     with _polled_ensure_lock:
-        if user_id in _polled_ensure_cache:
-            return False
+        return user_id not in _polled_ensure_cache
+
+
+def _mark_polled_ensures_done(user_id: UUID) -> None:
+    with _polled_ensure_lock:
         _polled_ensure_cache[user_id] = True
-        return True
 
 
 def _check_for_notifications_to_create(
@@ -83,16 +85,18 @@ def _check_for_notifications_to_create(
         logger.exception("Failed to check for release notes in notifications endpoint")
 
 
-def _ensure_system_announcement_notification(user: User, db_session: Session) -> None:
+def _ensure_system_announcement_notification(user: User, db_session: Session) -> bool:
     """Materialize the current admin-authored site-wide announcement on read so
     it appears without waiting for a background pass. No-op when none is set."""
     try:
         ensure_system_announcement_notification(user, db_session)
+        return True
     except Exception:
         logger.exception("Failed to ensure system announcement notification on read")
+        return False
 
 
-def _ensure_license_expiry_notification(user: User, db_session: Session) -> None:
+def _ensure_license_expiry_notification(user: User, db_session: Session) -> bool:
     """Self-hosted EE only: create the admin's current-stage license-expiry
     notification on read so the banner appears without waiting for the daily
     task. No-op on non-EE builds (and for non-admins / no active warning)."""
@@ -101,8 +105,10 @@ def _ensure_license_expiry_notification(user: User, db_session: Session) -> None
             "onyx.utils.license_notifications",
             "ensure_license_expiry_notification_for_user",
         )(user, db_session)
+        return True
     except Exception:
         logger.exception("Failed to ensure license expiry notification on read")
+        return False
 
 
 @router.get("")
@@ -136,9 +142,12 @@ def get_notifications_api(
         if notif_type is None and min_severity is None:
             _check_for_notifications_to_create(user, db_session)
         # A severity-only request is the banner queue's polled fetch: its
-        # ensures are throttled. Other requests keep the always-run behavior.
+        # ensures are throttled, and a user is only marked done once both
+        # succeed so a transient failure retries on the next poll. Other
+        # requests keep the always-run behavior.
         polled = min_severity is not None and notif_type is None
-        if not polled or _should_run_polled_ensures(user.id):
+        if not polled or _polled_ensures_due(user.id):
+            succeeded: list[bool] = []
             for banner_type, ensure in (
                 (
                     NotificationType.SYSTEM_ANNOUNCEMENT,
@@ -150,7 +159,9 @@ def get_notifications_api(
                 ),
             ):
                 if polled or notif_type in (None, banner_type):
-                    ensure(user, db_session)
+                    succeeded.append(ensure(user, db_session))
+            if polled and all(succeeded):
+                _mark_polled_ensures_done(user.id)
 
     total_items, undismissed_count = count_notifications(
         user=user,
