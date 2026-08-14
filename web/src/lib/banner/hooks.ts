@@ -78,6 +78,8 @@ function isGlobalBannerType(notifType: NotificationType): boolean {
 
 export interface BannerQueueItem {
   notification: Notification;
+  // Every collapsed same-type notification in this slot, most urgent first.
+  ids: number[];
   // Same-type notifications collapsed into this slot; >1 renders aggregate copy.
   count: number;
 }
@@ -88,7 +90,9 @@ export interface UseBannerQueueResult {
   hasMultiple: boolean;
   goToNext: () => void;
   goToPrevious: () => void;
-  dismissCurrent: () => Promise<void>;
+  // Dismisses the current slot's representative, or the given ids (the card
+  // passes every collapsed id when it rendered aggregate copy).
+  dismissCurrent: (ids?: number[]) => Promise<void>;
 }
 
 export function useBannerQueue(): UseBannerQueueResult {
@@ -145,8 +149,16 @@ export function useBannerQueue(): UseBannerQueueResult {
     const byType = new Map<NotificationType, BannerQueueItem>();
     for (const notification of visible.sort(byUrgency)) {
       const slot = byType.get(notification.notif_type);
-      if (slot) slot.count += 1;
-      else byType.set(notification.notif_type, { notification, count: 1 });
+      if (slot) {
+        slot.ids.push(notification.id);
+        slot.count += 1;
+      } else {
+        byType.set(notification.notif_type, {
+          notification,
+          ids: [notification.id],
+          count: 1,
+        });
+      }
     }
     return Array.from(byType.values());
   }, [notifications, pendingDismissals]);
@@ -169,33 +181,39 @@ export function useBannerQueue(): UseBannerQueueResult {
     );
   }, [queue.length]);
 
-  const dismissCurrent = useCallback(async () => {
-    if (!current) return;
-    const id = current.notification.id;
-    const global = isGlobalBannerType(current.notification.notif_type);
-    setPendingDismissals((prev) => new Set(prev).add(id));
-    // A global product-gating alert can't be dismissed per-user server-side, so
-    // record the dismissal in a cookie and treat the server call as best-effort.
-    if (global) {
-      Cookies.set(`${DISMISSED_NOTIFICATION_COOKIE_PREFIX}${id}`, "true", {
-        expires: COOKIE_DISMISS_EXPIRY_DAYS,
-      });
-    }
-    try {
-      await dismissNotification(id);
-    } catch (error) {
-      if (!global) {
-        console.error("Failed to dismiss banner notification:", error);
-        setPendingDismissals((prev) => {
-          const next = new Set(prev);
-          next.delete(id);
-          return next;
-        });
-        return;
+  const dismissCurrent = useCallback(
+    async (ids?: number[]) => {
+      if (!current) return;
+      const targets = ids ?? [current.notification.id];
+      const global = isGlobalBannerType(current.notification.notif_type);
+      setPendingDismissals((prev) => new Set([...prev, ...targets]));
+      // A global product-gating alert can't be dismissed per-user server-side,
+      // so record the dismissal in a cookie and treat the server call as
+      // best-effort.
+      if (global) {
+        for (const id of targets) {
+          Cookies.set(`${DISMISSED_NOTIFICATION_COOKIE_PREFIX}${id}`, "true", {
+            expires: COOKIE_DISMISS_EXPIRY_DAYS,
+          });
+        }
       }
-    }
-    await refresh();
-  }, [current, refresh]);
+      try {
+        await Promise.all(targets.map(dismissNotification));
+      } catch (error) {
+        if (!global) {
+          console.error("Failed to dismiss banner notification:", error);
+          setPendingDismissals((prev) => {
+            const next = new Set(prev);
+            targets.forEach((id) => next.delete(id));
+            return next;
+          });
+          return;
+        }
+      }
+      await refresh();
+    },
+    [current, refresh]
+  );
 
   return {
     current,

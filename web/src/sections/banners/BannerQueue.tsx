@@ -100,9 +100,15 @@ export default function BannerQueue() {
   const { title, description, link, ctaLabel } = bannerContent(current);
   const relativeTime = timeAgo(notification.last_shown);
   const sourceLabel = config?.sourceLabel ?? DEFAULT_SOURCE_LABEL;
-  const footer = relativeTime
-    ? `${sourceLabel} • ${relativeTime}`
-    : sourceLabel;
+  // Disclose collapsed same-type siblings so dismissing the visible one
+  // never surfaces the rest as a surprise.
+  const footer = [
+    sourceLabel,
+    relativeTime,
+    current.count > 1 ? `+${current.count - 1} more` : null,
+  ]
+    .filter(Boolean)
+    .join(" • ");
 
   return (
     <div
