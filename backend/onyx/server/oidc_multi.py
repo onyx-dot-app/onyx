@@ -3,11 +3,18 @@
 Resolves the enabled provider row from the database on each request so one
 deployment can serve multiple Google and generic OIDC IdPs. Ships dark when no
 matching provider rows exist.
+
+Provider rows are per-workspace, and on cloud a login request carries no session
+to resolve the workspace from. Both halves of the flow therefore name it
+explicitly: authorize takes the signed pin discovery issued, and the callback
+reads it back out of the OAuth state Onyx signed on the way out.
 """
 
 import hashlib
 import json
 import uuid
+from collections.abc import AsyncGenerator, Generator
+from contextlib import contextmanager
 from typing import Any
 
 from cachetools import TTLCache
@@ -21,6 +28,10 @@ from httpx_oauth.oauth2 import BaseOAuth2, GetAccessTokenError
 from sqlalchemy.orm import Session
 
 from onyx.auth.oidc_client import VerifiedEmailOpenID
+from onyx.auth.sso_tenant_token import (
+    SSO_TENANT_TOKEN_PARAM,
+    decode_sso_tenant_token,
+)
 from onyx.auth.sso_url_guard import (
     UnsafeSSOUrl,
     validate_discovered_endpoints,
@@ -50,7 +61,10 @@ from onyx.configs.app_configs import (
     USER_AUTH_SECRET,
     WEB_DOMAIN,
 )
-from onyx.db.engine.sql_engine import get_session
+from onyx.db.engine.sql_engine import (
+    get_session_with_current_tenant,
+    get_session_with_tenant,
+)
 from onyx.db.enums import SSOProviderType
 from onyx.db.models import SSOProvider, User
 from onyx.db.sso_provider import (
@@ -61,9 +75,23 @@ from onyx.db.sso_provider import (
 from onyx.error_handling.error_codes import OnyxErrorCode
 from onyx.error_handling.exceptions import OnyxError
 from onyx.utils.url import sanitize_next_url
-from shared_configs.contextvars import get_current_tenant_id
+from shared_configs.configs import MULTI_TENANT
+from shared_configs.contextvars import (
+    CURRENT_TENANT_ID_CONTEXTVAR,
+    SESSION_TENANT_OVERRIDE_CONTEXTVAR,
+    get_current_tenant_id,
+)
 
 router = APIRouter(prefix="/auth/oidc")
+
+_NO_WORKSPACE_DETAIL = (
+    "Sign-in did not identify a workspace. Return to the login page and enter "
+    "your email to continue."
+)
+
+# Named in the OAuth state so the callback can reach the workspace whose
+# provider row started the flow.
+_STATE_TENANT_KEY = "tenant_id"
 
 _CLIENT_CACHE_TTL_SECONDS = 600
 # Hardcoded off: linking a second IdP to an existing account by verified email is
@@ -74,6 +102,60 @@ _CLIENT_CACHE: TTLCache[tuple[str, str, SSOProviderType, str], BaseOAuth2[Any]] 
     TTLCache(maxsize=128, ttl=_CLIENT_CACHE_TTL_SECONDS)
 )
 _COOKIE_SECURE = WEB_DOMAIN.startswith("https")
+
+
+@contextmanager
+def _workspace_session(tenant_id: str | None) -> Generator[Session, None, None]:
+    # Context var travels with the session so downstream login code agrees on
+    # the workspace this request belongs to.
+    if not MULTI_TENANT:
+        with get_session_with_current_tenant() as db_session:
+            yield db_session
+        return
+
+    if not tenant_id:
+        raise OnyxError(OnyxErrorCode.UNAUTHORIZED, _NO_WORKSPACE_DETAIL)
+    context_token = CURRENT_TENANT_ID_CONTEXTVAR.set(tenant_id)
+    try:
+        with get_session_with_tenant(tenant_id=tenant_id) as db_session:
+            yield db_session
+    finally:
+        CURRENT_TENANT_ID_CONTEXTVAR.reset(context_token)
+
+
+@contextmanager
+def _pinned_workspace(tenant_id: str | None) -> Generator[None, None, None]:
+    """Bind the callback's whole tail to one workspace. The override is what
+    keeps a pinned login there: session issuance and post-register read it
+    instead of re-deriving from the address."""
+    if not MULTI_TENANT:
+        yield
+        return
+    if not tenant_id:
+        raise OnyxError(OnyxErrorCode.UNAUTHORIZED, _NO_WORKSPACE_DETAIL)
+    tenant_token = CURRENT_TENANT_ID_CONTEXTVAR.set(tenant_id)
+    override_token = SESSION_TENANT_OVERRIDE_CONTEXTVAR.set(tenant_id)
+    try:
+        yield
+    finally:
+        SESSION_TENANT_OVERRIDE_CONTEXTVAR.reset(override_token)
+        CURRENT_TENANT_ID_CONTEXTVAR.reset(tenant_token)
+
+
+async def get_authorize_session(
+    request: Request,
+) -> AsyncGenerator[Session, None]:
+    """Session for the authorize call, which has no session cookie to resolve a
+    workspace from and instead presents the pin discovery issued."""
+    workspace_token = request.query_params.get(SSO_TENANT_TOKEN_PARAM)
+    tenant_id = decode_sso_tenant_token(workspace_token) if workspace_token else None
+    with _workspace_session(tenant_id) as db_session:
+        yield db_session
+
+
+def _state_workspace(state_data: dict[str, Any]) -> str | None:
+    tenant_id = state_data.get(_STATE_TENANT_KEY)
+    return tenant_id if isinstance(tenant_id, str) and tenant_id else None
 
 
 def _resolve_oidc_provider(
@@ -229,7 +311,7 @@ def _callback_uri(provider: SSOProvider, config: dict[str, Any]) -> str:
 async def oidc_login_for_provider(
     provider_name: str,
     request: Request,
-    db_session: Session = Depends(get_session),
+    db_session: Session = Depends(get_authorize_session),
 ) -> Response:
     provider, config = _resolve_oidc_provider(db_session, provider_name)
     client = await _get_oauth_client(provider, config)
@@ -244,6 +326,9 @@ async def oidc_login_for_provider(
             # Pins this flow's PKCE mode, so a provider edit mid-login cannot
             # make the callback disagree with the authorization request.
             "pkce": use_pkce,
+            # The IdP redirect arrives with no session, so the state is the only
+            # thing carrying the workspace across the round trip.
+            _STATE_TENANT_KEY: get_current_tenant_id(),
             CSRF_TOKEN_KEY: csrf_token,
         },
         USER_AUTH_SECRET,
@@ -297,7 +382,6 @@ async def oidc_login_callback(
     code: str | None = None,
     state: str | None = None,
     error: str | None = None,
-    db_session: Session = Depends(get_session),
     strategy: Strategy[User, uuid.UUID] = Depends(auth_backend.get_strategy),
     user_manager: UserManager = Depends(get_user_manager),
 ) -> Response:
@@ -326,7 +410,6 @@ async def oidc_login_callback(
         code=code,
         state=state,
         error=error,
-        db_session=db_session,
         strategy=strategy,
         user_manager=user_manager,
     )
@@ -340,14 +423,9 @@ async def oidc_login_callback_for_provider(
     code: str | None = None,
     state: str | None = None,
     error: str | None = None,
-    db_session: Session = Depends(get_session),
     strategy: Strategy[User, uuid.UUID] = Depends(auth_backend.get_strategy),
     user_manager: UserManager = Depends(get_user_manager),
 ) -> Response:
-    provider, config = _resolve_oidc_provider(db_session, provider_name)
-    client = await _get_oauth_client(provider, config)
-    redirect_uri = _callback_uri(provider, config)
-
     if error is not None:
         raise OnyxError(
             OnyxErrorCode.VALIDATION_ERROR,
@@ -364,47 +442,59 @@ async def oidc_login_callback_for_provider(
             "Missing state parameter in OAuth callback",
         )
 
+    # Validated before the workspace is read out of it, so a tampered or expired
+    # state is rejected here before any workspace is selected.
     state_data = decode_and_validate_oauth_state(
         request=request,
         state_value=state,
         state_secret=USER_AUTH_SECRET,
         expected_provider_name=provider_name,
     )
+    pinned_tenant_id = _state_workspace(state_data)
 
-    # The state pins the flow's PKCE mode. States without the claim fall back
-    # to the row's current setting so logins in flight across a deploy complete.
-    use_pkce = (
-        bool(state_data["pkce"]) if "pkce" in state_data else _pkce_enabled(config)
-    )
-    code_verifier: str | None = None
-    if use_pkce:
-        code_verifier = request.cookies.get(get_pkce_cookie_name(state))
-        if not code_verifier:
+    # Everything below runs inside the pinned workspace: the client cache is
+    # keyed on the current tenant, and session issuance reads the override.
+    with _pinned_workspace(pinned_tenant_id):
+        with get_session_with_current_tenant() as db_session:
+            provider, config = _resolve_oidc_provider(db_session, provider_name)
+            client = await _get_oauth_client(provider, config)
+            redirect_uri = _callback_uri(provider, config)
+            allowed_email_domains = list(provider.allowed_email_domains)
+
+        # The state pins the flow's PKCE mode. States without the claim fall
+        # back to the row's setting so logins in flight across a deploy complete.
+        use_pkce = (
+            bool(state_data["pkce"]) if "pkce" in state_data else _pkce_enabled(config)
+        )
+        code_verifier: str | None = None
+        if use_pkce:
+            code_verifier = request.cookies.get(get_pkce_cookie_name(state))
+            if not code_verifier:
+                raise OnyxError(
+                    OnyxErrorCode.VALIDATION_ERROR,
+                    "Missing PKCE verifier cookie in OAuth callback",
+                )
+
+        try:
+            token = await client.get_access_token(code, redirect_uri, code_verifier)
+        except GetAccessTokenError as e:
             raise OnyxError(
                 OnyxErrorCode.VALIDATION_ERROR,
-                "Missing PKCE verifier cookie in OAuth callback",
-            )
+                "Authorization code exchange failed",
+            ) from e
 
-    try:
-        token = await client.get_access_token(code, redirect_uri, code_verifier)
-    except GetAccessTokenError as e:
-        raise OnyxError(
-            OnyxErrorCode.VALIDATION_ERROR,
-            "Authorization code exchange failed",
-        ) from e
-
-    redirect_response = await complete_login_flow(
-        oauth_client=client,
-        token=token,
-        state_data=state_data,
-        request=request,
-        user_manager=user_manager,
-        backend=auth_backend,
-        strategy=strategy,
-        associate_by_email=_ALLOW_AUTO_LINK,
-        is_verified_by_default=True,
-        allowed_email_domains_override=provider.allowed_email_domains,
-    )
+        redirect_response = await complete_login_flow(
+            oauth_client=client,
+            token=token,
+            state_data=state_data,
+            request=request,
+            user_manager=user_manager,
+            backend=auth_backend,
+            strategy=strategy,
+            associate_by_email=_ALLOW_AUTO_LINK,
+            is_verified_by_default=True,
+            allowed_email_domains_override=allowed_email_domains,
+        )
 
     if use_pkce:
         delete_pkce_cookie(redirect_response, state)

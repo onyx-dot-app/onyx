@@ -444,7 +444,6 @@ def test_fixed_callback_rejects_missing_state() -> None:
                 code="code",
                 state=None,
                 error=None,
-                db_session=_DB,
                 strategy=cast(Any, None),
                 user_manager=cast(Any, None),
             )
@@ -472,7 +471,6 @@ def test_fixed_callback_rejects_state_without_provider(
                 code="code",
                 state=state,
                 error=None,
-                db_session=_DB,
                 strategy=cast(Any, None),
                 user_manager=cast(Any, None),
             )
