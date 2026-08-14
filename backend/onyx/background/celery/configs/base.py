@@ -65,10 +65,19 @@ def _redis_ssl_settings() -> dict[str, str]:
     return settings
 
 
-_SENTINEL_NODES = ";".join(
-    f"sentinel://{CELERY_PASSWORD_PART}{host}:{port}"
-    for host, port in REDIS_SENTINEL_HOSTS
-)
+def _sentinel_url(db: int) -> str:
+    """Build the `;`-separated Sentinel URL for one Redis db.
+
+    The db goes on every node. Celery reads the db from the first URL in the
+    list and kombu reads it from the primary URL, so a db on the last node only
+    is dropped and both silently fall back to db 0.
+    """
+    return ";".join(
+        f"sentinel://{CELERY_PASSWORD_PART}{host}:{port}/{db}"
+        for host, port in REDIS_SENTINEL_HOSTS
+    )
+
+
 _SENTINEL_TRANSPORT_OPTIONS: dict = {}
 # Celery TLS settings for the Sentinel data connections. Always defined (empty =
 # no SSL, matching Celery's default) so they're not conditionally-present module
@@ -97,7 +106,7 @@ if USE_SENTINEL:
 # region Broker settings
 # example celery_broker_url: "redis://:password@localhost:6379/15"
 if USE_SENTINEL:
-    broker_url = f"{_SENTINEL_NODES}/{REDIS_DB_NUMBER_CELERY}"
+    broker_url = _sentinel_url(REDIS_DB_NUMBER_CELERY)
 else:
     broker_url = f"{REDIS_SCHEME}://{CELERY_PASSWORD_PART}{REDIS_HOST}:{REDIS_PORT}/{REDIS_DB_NUMBER_CELERY}{SSL_QUERY_PARAMS}"
 
@@ -136,7 +145,7 @@ task_acks_late = True
 # might be irrelevant
 result_backend_transport_options: dict = {}
 if USE_SENTINEL:
-    result_backend = f"{_SENTINEL_NODES}/{REDIS_DB_NUMBER_CELERY_RESULT_BACKEND}"
+    result_backend = _sentinel_url(REDIS_DB_NUMBER_CELERY_RESULT_BACKEND)
     result_backend_transport_options = _SENTINEL_TRANSPORT_OPTIONS
 else:
     result_backend = f"{REDIS_SCHEME}://{CELERY_PASSWORD_PART}{REDIS_HOST}:{REDIS_PORT}/{REDIS_DB_NUMBER_CELERY_RESULT_BACKEND}{SSL_QUERY_PARAMS}"

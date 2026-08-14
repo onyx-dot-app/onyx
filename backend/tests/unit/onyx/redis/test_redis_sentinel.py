@@ -96,11 +96,12 @@ def test_celery_uses_sentinel_urls_and_master_name() -> None:
         importlib.reload(app_configs)
         importlib.reload(celery_base)
         try:
+            # the db goes on every node, not just the last one
             assert celery_base.broker_url == (
-                "sentinel://s1:26379;sentinel://s2:26379/15"
+                "sentinel://s1:26379/15;sentinel://s2:26379/15"
             )
-            assert celery_base.result_backend.startswith(
-                "sentinel://s1:26379;sentinel://s2:26379/"
+            assert celery_base.result_backend == (
+                "sentinel://s1:26379/14;sentinel://s2:26379/14"
             )
             assert celery_base.broker_transport_options["master_name"] == "mymaster"
             assert (
@@ -197,6 +198,53 @@ def test_every_app_resolves_sentinel_master_name_on_both_connections() -> None:
                 assert backend_options["sentinel_kwargs"] == {
                     "password": "sentinelpw"
                 }, f"{module_name} result backend lost the sentinel password"
+        finally:
+            importlib.reload(app_configs)
+            importlib.reload(celery_base)
+            for module_name in _APP_CONFIG_MODULES:
+                importlib.reload(importlib.import_module(module_name))
+
+
+def test_sentinel_urls_keep_the_configured_redis_db() -> None:
+    """Celery and kombu both read the db from the first node in the list. A db
+    on the last node only sent the broker, the result backend, and the app
+    itself all into db 0."""
+    from celery import Celery
+    from celery.backends.redis import SentinelBackend
+    from kombu import Connection
+
+    env = {
+        "REDIS_SENTINEL_HOSTS": "s1:26379,s2:26379,s3:26379",
+        "REDIS_SENTINEL_MASTER_NAME": "mymaster",
+        "REDIS_PASSWORD": "datapw",
+    }
+    with patch.dict(os.environ, env):
+        import onyx.background.celery.configs.base as celery_base
+        import onyx.configs.app_configs as app_configs
+
+        importlib.reload(app_configs)
+        importlib.reload(celery_base)
+        try:
+            beat = importlib.reload(
+                importlib.import_module("onyx.background.celery.configs.beat")
+            )
+            app = Celery("test-sentinel-db")
+            app.config_from_object(beat)
+
+            # kombu takes the db from the primary URL. It read "/" (-> db 0)
+            # while the db sat on the last node.
+            broker = Connection(
+                app.conf["broker_url"],
+                transport_options=app.conf["broker_transport_options"],
+            )
+            assert broker.virtual_host == str(app_configs.REDIS_DB_NUMBER_CELERY)
+
+            backend = SentinelBackend(app=app, url=app.conf["result_backend"])
+            connparams = cast(dict, backend.connparams)  # ty: ignore[unresolved-attribute]
+            assert connparams["db"] == app_configs.REDIS_DB_NUMBER_CELERY_RESULT_BACKEND
+            # master auth still rides the URL, and every node is discovered
+            assert connparams["password"] == "datapw"
+            assert len(connparams["hosts"]) == 3
         finally:
             importlib.reload(app_configs)
             importlib.reload(celery_base)
