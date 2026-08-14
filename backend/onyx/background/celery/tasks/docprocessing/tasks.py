@@ -68,6 +68,10 @@ from onyx.configs.constants import (
 )
 from onyx.connectors.models import ConnectorFailure, Document, IndexAttemptMetadata
 from onyx.db.connector import mark_ccpair_with_indexing_trigger
+from onyx.db.connector_alerts import (
+    clear_connector_alerts,
+    notify_admins_of_connector_alert,
+)
 from onyx.db.connector_credential_pair import (
     fetch_indexable_standard_connector_credential_pair_ids,
     get_connector_credential_pair_from_id,
@@ -125,10 +129,6 @@ from onyx.indexing.persistent_indexing import (
 from onyx.natural_language_processing.search_nlp_models import (
     EmbeddingModel,
     warm_up_bi_encoder,
-)
-from onyx.notifications.connector_alerts import (
-    clear_connector_alerts,
-    notify_admins_of_connector_alert,
 )
 from onyx.redis.redis_connector import RedisConnector
 from onyx.redis.redis_docprocessing import RedisDocprocessing

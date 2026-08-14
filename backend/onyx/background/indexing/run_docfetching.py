@@ -47,6 +47,7 @@ from onyx.connectors.models import (
     TextSection,
 )
 from onyx.db.connector import mark_ccpair_with_indexing_trigger
+from onyx.db.connector_alerts import notify_admins_of_connector_alert
 from onyx.db.connector_credential_pair import (
     get_connector_credential_pair_from_id,
     get_last_successful_attempt_poll_range_end,
@@ -89,7 +90,6 @@ from onyx.file_store.staging import (
     reap_prior_attempt_staged_files,
 )
 from onyx.indexing.indexing_heartbeat import IndexingHeartbeatInterface
-from onyx.notifications.connector_alerts import notify_admins_of_connector_alert
 from onyx.redis.redis_docprocessing import RedisDocprocessing
 from onyx.redis.redis_hierarchy import (
     HierarchyNodeCacheEntry,

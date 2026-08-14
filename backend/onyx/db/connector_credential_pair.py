@@ -11,6 +11,7 @@ from sqlalchemy.sql.elements import ColumnElement
 
 from onyx.configs.constants import DEFAULT_CC_PAIR_ID, DocumentSource, NotificationType
 from onyx.db.connector import fetch_connector_by_id
+from onyx.db.connector_alerts import clear_connector_alerts
 from onyx.db.credentials import fetch_credential_by_id, fetch_credential_by_id_for_user
 from onyx.db.engine.sql_engine import get_session_with_current_tenant
 from onyx.db.enums import (
@@ -32,7 +33,6 @@ from onyx.db.models import (
     UserGroup__ConnectorCredentialPair,
     UserRole,
 )
-from onyx.notifications.connector_alerts import clear_connector_alerts
 from onyx.server.models import StatusResponse
 from onyx.utils.logger import setup_logger
 from onyx.utils.variable_functionality import fetch_ee_implementation_or_noop

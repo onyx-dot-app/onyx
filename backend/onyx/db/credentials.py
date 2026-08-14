@@ -6,6 +6,7 @@ from sqlalchemy.sql.expression import and_, or_
 
 from onyx.auth.schemas import UserRole
 from onyx.configs.constants import DocumentSource, NotificationType
+from onyx.db.connector_alerts import clear_connector_alerts
 from onyx.db.enums import ConnectorCredentialPairStatus
 from onyx.db.models import (
     ConnectorCredentialPair,
@@ -15,7 +16,6 @@ from onyx.db.models import (
     User,
     User__UserGroup,
 )
-from onyx.notifications.connector_alerts import clear_connector_alerts
 from onyx.server.documents.models import CredentialBase
 from onyx.utils.logger import setup_logger
 

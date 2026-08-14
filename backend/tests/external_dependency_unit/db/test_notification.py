@@ -9,6 +9,10 @@ from sqlalchemy.orm import Session
 
 from onyx.auth.schemas import UserRole
 from onyx.configs.constants import NotificationType
+from onyx.db.connector_alerts import (
+    clear_connector_alerts,
+    notify_admins_of_connector_alert,
+)
 from onyx.db.enums import NotificationSeverity
 from onyx.db.models import Notification, User
 from onyx.db.notification import (
@@ -18,10 +22,6 @@ from onyx.db.notification import (
     delete_notifications_by_additional_data,
     dismiss_user_notifications,
     get_notifications,
-)
-from onyx.notifications.connector_alerts import (
-    clear_connector_alerts,
-    notify_admins_of_connector_alert,
 )
 from onyx.server.features.notifications import api as notifications_api
 from tests.external_dependency_unit.conftest import create_test_user

@@ -29,7 +29,10 @@ def notify_admins_of_connector_alert(
     title: str,
     description: str,
 ) -> None:
-    """Best-effort ERROR alert to all active admins; never raises."""
+    """Best-effort ERROR alert to all active admins; never raises.
+
+    Rolls the session back on failure, so call it with no uncommitted work
+    pending on the session."""
     try:
         batch_create_notifications(
             user_ids=[admin.id for admin in get_active_admin_users(db_session)],
