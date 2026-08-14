@@ -80,6 +80,35 @@ def create_document_set(
     return document_set_db_model.id
 
 
+def _assert_attachable_cc_pairs(
+    user: User, db_session: Session, cc_pair_ids: list[int]
+) -> None:
+    """Bounds attachments to the connectors the caller can already reach: public and
+    sync pairs, pairs in a group they belong to or manage, and groupless pairs they
+    created. ``update_document_set`` checks connectors against the *requested* groups,
+    so it checks nothing once those are empty; only the editable query carries the
+    creator fallback."""
+    if not cc_pair_ids:
+        return
+
+    attachable = {
+        cc_pair.id
+        for editable in (False, True)
+        for cc_pair in get_connector_credential_pairs_for_user(
+            db_session=db_session,
+            user=user,
+            get_editable=editable,
+            ids=cc_pair_ids,
+            processing_mode=None,
+        )
+    }
+    if set(cc_pair_ids) - attachable:
+        raise OnyxError(
+            OnyxErrorCode.INSUFFICIENT_PERMISSIONS,
+            "Document set references a connector you do not have access to.",
+        )
+
+
 @router.patch("/admin/document-set")
 def patch_document_set(
     document_set_update_request: DocumentSetUpdateRequest,
@@ -89,8 +118,7 @@ def patch_document_set(
     db_session: Session = Depends(get_session),
     tenant_id: str = Depends(get_current_tenant_id),
 ) -> None:
-    # Lock the row through the GATE 2 read → write so a concurrent admin edit can't land
-    # between the scope check and the write and be silently reverted.
+    # Locked for the whole gate → write, so a concurrent admin edit is not reverted.
     document_set = get_document_set_by_id(
         db_session, document_set_update_request.id, for_update=True
     )
@@ -100,50 +128,36 @@ def patch_document_set(
             f"Document set {document_set_update_request.id} does not exist",
         )
 
-    current_group_ids = get_group_ids_for_document_set(
-        db_session, document_set_update_request.id
-    )
-    stays_non_public = (
-        not document_set.is_public and not document_set_update_request.is_public
-    )
-    # within_scope unions current and requested, so a groupless set never passes — its
-    # creator could see it but not rename it; adding a group still hits the gate below
-    creator_editing_in_place = (
-        document_set.user_id == user.id
-        and not current_group_ids
-        and not document_set_update_request.groups
-        and stays_non_public
-    )
-
-    # GATE 2 write authorization (see assert_within_scope). Current groups AND
-    # current privacy are re-read from the DB, not the client, so a manager can
-    # neither capture-by-reassignment nor convert a currently-PUBLIC set to PRIVATE.
-    if creator_editing_in_place:
-        # update_document_set gates attachments with check_if_cc_pairs_are_owned_by_groups,
-        # which is vacuous on an empty group list, so bound them to what the user can see
-        visible_cc_pair_ids = {
-            cc_pair.id
-            for cc_pair in get_connector_credential_pairs_for_user(
-                db_session=db_session,
-                user=user,
-                get_editable=False,
-                ids=document_set_update_request.cc_pair_ids,
-                processing_mode=None,
+    # GATE 2, and it must stay outside the try below, which would turn its 403 into a
+    # 400. Groups and privacy come from the locked row, never the request, so a manager
+    # can neither capture a set by reassigning it nor pull a public one private.
+    if (
+        has_permission(user, Permission.MANAGE_DOCUMENT_SETS)
+        is not PermissionAuthority.GLOBAL
+    ):
+        current_group_ids = get_group_ids_for_document_set(db_session, document_set.id)
+        stays_non_public = (
+            not document_set.is_public and not document_set_update_request.is_public
+        )
+        # A set in no group has no scope to test, so only its creator may edit it in
+        # place; adding a group puts it back under the scope gate.
+        creator_editing_in_place = (
+            document_set.user_id == user.id
+            and not current_group_ids
+            and not document_set_update_request.groups
+            and stays_non_public
+        )
+        if not creator_editing_in_place:
+            assert_within_scope(
+                user,
+                db_session,
+                permission=Permission.MANAGE_DOCUMENT_SETS,
+                current_group_ids=current_group_ids,
+                requested_group_ids=document_set_update_request.groups,
+                is_non_public=stays_non_public,
             )
-        }
-        if set(document_set_update_request.cc_pair_ids) - visible_cc_pair_ids:
-            raise OnyxError(
-                OnyxErrorCode.INSUFFICIENT_PERMISSIONS,
-                "Document set references a connector you do not have access to.",
-            )
-    else:
-        assert_within_scope(
-            user,
-            db_session,
-            permission=Permission.MANAGE_DOCUMENT_SETS,
-            current_group_ids=current_group_ids,
-            requested_group_ids=document_set_update_request.groups,
-            is_non_public=stays_non_public,
+        _assert_attachable_cc_pairs(
+            user, db_session, document_set_update_request.cc_pair_ids
         )
 
     try:
