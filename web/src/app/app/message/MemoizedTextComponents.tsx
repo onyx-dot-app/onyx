@@ -205,7 +205,9 @@ export const MemoizedLink = memo(
               semantic_identifier: filename,
             })
           }
-          className="cursor-pointer text-link hover:text-link-hover"
+          // `inline`: a button is inline-block by default, which would break
+          // the surrounding prose differently than the <a> it replaces.
+          className="inline cursor-pointer text-link hover:text-link-hover"
         >
           {rest.children}
         </button>

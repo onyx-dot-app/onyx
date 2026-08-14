@@ -134,7 +134,7 @@ export function EditableStringFieldDisplay({
           <button
             type="button"
             onClick={() => setIsEditing(true)}
-            aria-label="Edit"
+            aria-label="Rename"
             className="group flex cursor-pointer"
             style={{ fontSize: `${scale}rem` }}
           >
