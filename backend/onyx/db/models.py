@@ -94,6 +94,7 @@ from onyx.db.enums import (
     MCPOAuthProviderMode,
     MCPServerStatus,
     MCPTransport,
+    NotificationSeverity,
     OpenSearchDocumentMigrationStatus,
     OpenSearchTenantMigrationStatus,
     PatType,
@@ -601,6 +602,11 @@ class Notification(Base):
     id: Mapped[int] = mapped_column(primary_key=True)
     notif_type: Mapped[NotificationType] = mapped_column(
         Enum(NotificationType, native_enum=False)
+    )
+    severity: Mapped[NotificationSeverity] = mapped_column(
+        Enum(NotificationSeverity, native_enum=False),
+        default=NotificationSeverity.INFO,
+        server_default=NotificationSeverity.INFO.name,
     )
     user_id: Mapped[UUID | None] = mapped_column(
         ForeignKey("user.id", ondelete="CASCADE"), nullable=True
