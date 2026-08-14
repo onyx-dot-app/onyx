@@ -102,7 +102,7 @@ function SelectButton({
       >
         <div
           className={cn(
-            "opal-select-button",
+            "opal-select-content",
             foldable && "interactive-foldable-host"
           )}
         >

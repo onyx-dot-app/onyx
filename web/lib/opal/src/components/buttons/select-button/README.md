@@ -28,10 +28,10 @@ Use SelectButton for general-purpose stateful toggles. Use `OpenButton` for popo
 ```
 Interactive.Stateful           <- variant, state, interaction, disabled, onClick
   └─ Interactive.Container     <- height, rounding, padding (from `size`)
-       └─ div.opal-select-button.interactive-foreground
+       └─ div.opal-select-content.interactive-foreground
             ├─ Icon?           (interactive-foreground-icon)
             ├─ [Foldable]?     (wraps label + rightIcon when foldable)
-            │    ├─ <span>     .opal-select-button-label
+            │    ├─ <span>     .opal-select-content-label
             │    └─ RightIcon?
             └─ <span>? / RightIcon?  (non-foldable)
 ```

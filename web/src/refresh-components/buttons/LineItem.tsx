@@ -8,34 +8,34 @@ import type { Route } from "next";
 import { Section } from "@/layouts/general-layouts";
 import type { WithoutStyles } from "@opal/types";
 
-const buttonClassNames = {
+const rowClassNames = {
   main: {
-    normal: "line-item-button-main",
-    emphasized: "line-item-button-main-emphasized",
+    normal: "line-item-row-main",
+    emphasized: "line-item-row-main-emphasized",
   },
   strikethrough: {
-    normal: "line-item-button-strikethrough",
-    emphasized: "line-item-button-strikethrough-emphasized",
+    normal: "line-item-row-strikethrough",
+    emphasized: "line-item-row-strikethrough-emphasized",
   },
   disabled: {
-    normal: "line-item-button-disabled",
-    emphasized: "line-item-button-disabled-emphasized",
+    normal: "line-item-row-disabled",
+    emphasized: "line-item-row-disabled-emphasized",
   },
   danger: {
-    normal: "line-item-button-danger",
-    emphasized: "line-item-button-danger-emphasized",
+    normal: "line-item-row-danger",
+    emphasized: "line-item-row-danger-emphasized",
   },
   action: {
-    normal: "line-item-button-action",
-    emphasized: "line-item-button-action-emphasized",
+    normal: "line-item-row-action",
+    emphasized: "line-item-row-action-emphasized",
   },
   muted: {
-    normal: "line-item-button-muted",
-    emphasized: "line-item-button-muted-emphasized",
+    normal: "line-item-row-muted",
+    emphasized: "line-item-row-muted-emphasized",
   },
   skeleton: {
-    normal: "line-item-button-skeleton",
-    emphasized: "line-item-button-skeleton-emphasized",
+    normal: "line-item-row-skeleton",
+    emphasized: "line-item-row-skeleton-emphasized",
   },
 } as const;
 
@@ -230,7 +230,7 @@ export default function LineItem({
     "flex flex-row w-full items-start p-2 rounded-08 group/LineItem gap-2",
     children && description ? "items-start" : "items-center",
     interactive && (disabled ? "cursor-not-allowed" : "cursor-pointer"),
-    buttonClassNames[variant][emphasisKey]
+    rowClassNames[variant][emphasisKey]
   );
 
   const rowProps = {
