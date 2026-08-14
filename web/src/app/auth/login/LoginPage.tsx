@@ -2,7 +2,6 @@
 
 import { AuthTypeMetadata } from "@/lib/auth/types";
 import LoginText from "@/app/auth/login/LoginText";
-import CloudSSOSignIn from "@/app/auth/login/CloudSSOSignIn";
 import ProviderSignInButton from "@/app/auth/login/ProviderSignInButton";
 import { SignInButton, EmailPasswordForm } from "@/lib/auth/components";
 import { NEXT_PUBLIC_FORGOT_PASSWORD_ENABLED } from "@/lib/constants";
@@ -49,12 +48,11 @@ export default function LoginPage({
         <div className="w-full justify-center flex flex-col gap-6">
           <LoginText />
           {authUrl && authTypeMetadata && (
-            <SignInButton authorizeUrl={authUrl} />
+            <>
+              <SignInButton authorizeUrl={authUrl} />
+              <AuthLayouts.OrSeparator />
+            </>
           )}
-          <CloudSSOSignIn nextUrl={effectiveNextUrl} />
-          <AuthLayouts.OrSeparator />
-          {/* Password sign-in is never hidden on cloud: it is the only route
-              that does not need a workspace resolved first. */}
           <EmailPasswordForm
             label="submit"
             shouldVerify={true}
