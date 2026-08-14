@@ -17,6 +17,38 @@ from onyx.server.documents import standard_oauth
 from onyx.server.documents.standard_oauth import OAuthState
 
 
+class DisabledOAuthConnector(OAuthConnector):
+    supports_manual_credentials = True
+
+    @classmethod
+    def oauth_enabled(cls) -> bool:
+        return False
+
+    @classmethod
+    def oauth_id(cls) -> DocumentSource:
+        return DocumentSource.LINEAR
+
+    @classmethod
+    def oauth_authorization_url(
+        cls,
+        base_domain: str,  # noqa: ARG003
+        state: str,  # noqa: ARG003
+        additional_kwargs: dict[str, str],  # noqa: ARG003
+        code_challenge: str | None = None,  # noqa: ARG003
+    ) -> str:
+        raise AssertionError("Disabled OAuth must not authorize")
+
+    @classmethod
+    def oauth_code_to_token(
+        cls,
+        base_domain: str,  # noqa: ARG003
+        code: str,  # noqa: ARG003
+        additional_kwargs: dict[str, str],  # noqa: ARG003
+        code_verifier: str | None = None,  # noqa: ARG003
+    ) -> dict[str, Any]:
+        raise AssertionError("Disabled OAuth must not exchange tokens")
+
+
 class PKCEOAuthConnector(OAuthConnector):
     supports_pkce = True
 
@@ -184,3 +216,71 @@ def test_tenant_redis_getdel_prefixes_key() -> None:
 
     assert redis_client.getdel("oauth_state:state-id") == b"value"
     raw_client.getdel.assert_called_once_with("tenant:oauth_state:state-id")
+
+
+def test_oauth_details_reports_manual_capability_when_oauth_is_disabled(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    monkeypatch.setattr(
+        standard_oauth,
+        "_discover_oauth_connectors",
+        lambda: {DocumentSource.LINEAR: DisabledOAuthConnector},
+    )
+
+    details = standard_oauth.oauth_details(
+        source=DocumentSource.LINEAR, _=cast(User, object())
+    )
+
+    assert details.oauth_enabled is False
+    assert details.supports_manual_credentials is True
+    assert details.additional_kwargs == []
+
+
+def test_oauth_details_defaults_non_oauth_sources_to_manual(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    monkeypatch.setattr(standard_oauth, "_discover_oauth_connectors", lambda: {})
+
+    details = standard_oauth.oauth_details(
+        source=DocumentSource.SALESFORCE, _=cast(User, object())
+    )
+
+    assert details.oauth_enabled is False
+    assert details.supports_manual_credentials is True
+
+
+def _configure_disabled_connector(monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.setattr(
+        standard_oauth,
+        "_discover_oauth_connectors",
+        lambda: {DocumentSource.LINEAR: DisabledOAuthConnector},
+    )
+
+
+def test_disabled_oauth_connector_rejects_authorize(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    _configure_disabled_connector(monkeypatch)
+
+    with pytest.raises(OnyxError, match="OAuth is not configured"):
+        standard_oauth.oauth_authorize(
+            request=_request(),
+            source=DocumentSource.LINEAR,
+            desired_return_url="https://onyx.example/return",
+            _=cast(User, object()),
+        )
+
+
+def test_disabled_oauth_connector_rejects_callback(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    _configure_disabled_connector(monkeypatch)
+
+    with pytest.raises(OnyxError, match="OAuth is not configured"):
+        standard_oauth.oauth_callback(
+            source=DocumentSource.LINEAR,
+            code="authorization-code",
+            state="state-id",
+            db_session=cast(Session, object()),
+            user=cast(User, object()),
+        )

@@ -9,6 +9,7 @@ export interface OAuthAdditionalKwargDescription {
 
 export interface OAuthDetails {
   oauth_enabled: boolean;
+  supports_manual_credentials: boolean;
   additional_kwargs: OAuthAdditionalKwargDescription[];
 }
 export interface AuthMethodOption<TFields> {
@@ -214,12 +215,25 @@ export interface OCICredentialJson {
   access_key_id: string;
   secret_access_key: string;
 }
-export interface SalesforceCredentialJson {
+export interface SalesforceLegacyCredentialJson {
+  authentication_method?: "password";
   sf_username: string;
   sf_password: string;
   sf_security_token: string;
   is_sandbox: boolean;
 }
+
+export interface SalesforceOAuthCredentialJson {
+  authentication_method: "oauth";
+  sf_access_token: string;
+  sf_refresh_token: string;
+  sf_instance_url: string;
+  sf_login_url: string;
+}
+
+export type SalesforceCredentialJson =
+  | SalesforceLegacyCredentialJson
+  | SalesforceOAuthCredentialJson;
 
 export interface SharepointCredentialJson {
   sp_client_id: string;
