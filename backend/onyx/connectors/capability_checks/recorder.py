@@ -2,13 +2,13 @@
 
 The blocking paths (cc-pair validation, indexing-run start) already probe the
 source; this module records what they found as a fallback-shaped capability
-report, so reports accumulate before any check-running infrastructure exists.
-It runs no checks of its own.
+report, so reports accumulate before any check-running infrastructure exists. It
+runs no checks of its own.
 
 Deliberately import-light: the hook sites live in ``factory.py`` and the
-docfetching hot path, so this module must not pull in the check registry
-(which eagerly imports every migrated connector's check module) or the
-runner (which imports ``factory``).
+docfetching hot path, so this module must not pull in the check registry (which
+eagerly imports every migrated connector's check module) or the runner (which
+imports ``factory``).
 """
 
 import hashlib
@@ -57,8 +57,8 @@ def _synthesize_results(
 ) -> list[CapabilityCheckResult]:
     """Builds fallback-shaped results mirroring what the blocking path ran.
 
-    Perm-sync rows appear only when the caller knows ``validate_perm_sync``
-    ran (the success path with sync access). On failure the outcome cannot be
+    Perm-sync rows appear only when the caller knows ``validate_perm_sync`` ran
+    (the success path with sync access). On failure the outcome cannot be
     attributed between the settings and perm-sync probes, so only the INDEXING
     row carries it.
     """
@@ -114,10 +114,10 @@ def record_blocking_validation_outcome(
 ) -> None:
     """Persists one blocking validation's outcome; never raises.
 
-    Uses its own session so the caller's in-flight transaction is untouched,
-    and never overwrites a granular (named-checks) report with this coarse
-    fallback-shaped record: the no-clobber guard is part of the upsert
-    statement itself, so a concurrent granular write cannot race it.
+    Uses its own session so the caller's in-flight transaction is untouched, and
+    never overwrites a granular (named-checks) report with this coarse
+    fallback-shaped record: the no-clobber guard is part of the upsert statement
+    itself, so a concurrent granular write cannot race it.
     """
     try:
         applicable = get_applicable_capabilities(source)
@@ -141,8 +141,8 @@ def record_blocking_validation_outcome(
                 report=report,
                 connector_config_hash=_connector_config_hash(connector_specific_config),
             )
-            # The accessors leave the transaction to the caller, and the
-            # session context manager closes without committing.
+            # The accessors leave the transaction to the caller, and the session
+            # context manager closes without committing.
             db_session.commit()
     except Exception:
         logger.warning(

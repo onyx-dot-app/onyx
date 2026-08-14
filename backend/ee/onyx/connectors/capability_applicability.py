@@ -1,8 +1,8 @@
 """Which perm-sync capabilities exist per source.
 
 Kept apart from the EE check dispatch (``capability_checks``) so applicability
-resolution never depends on per-connector check modules: a broken or heavy
-check import must not affect callers that only need applicability (the
+resolution never depends on per-connector check modules: a broken or heavy check
+import must not affect callers that only need applicability (the
 blocking-validation recorder). ``sync_params`` is the truth source for what
 syncs exist and is already part of the EE production import graph.
 """

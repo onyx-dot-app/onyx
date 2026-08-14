@@ -131,8 +131,9 @@ def _get_connector_runner(
     NOTE: `start_time` and `end_time` are only used for poll connectors
 
     Returns an iterator of document batches and whether the returned documents
-    are the complete list of existing documents of the connector. If the task
-    of type LOAD_STATE, the list will be considered complete and otherwise incomplete.
+    are the complete list of existing documents of the connector. If the task of
+    type LOAD_STATE, the list will be considered complete and otherwise
+    incomplete.
     """
 
     task = attempt.connector_credential_pair.connector.input_type
@@ -174,7 +175,7 @@ def _get_connector_runner(
                 raw_file_callback=raw_file_callback,
             )
 
-            # validate the connector settings
+            # Validate the connector settings.
             if not INTEGRATION_TESTS_MODE:
                 runnable_connector.validate_connector_settings()
 

@@ -50,9 +50,9 @@ def blocking_validation(
 ) -> Generator[tuple[ConnectorCredentialPair, MagicMock], None, None]:
     """A Slack cc-pair plus a mocked connector behind the blocking validation.
 
-    Committed on purpose: the recorder reads and writes through its own
-    session, which cannot see this session's uncommitted rows. Teardown
-    removes the pair; report rows cascade with the credential.
+    Committed on purpose: the recorder reads and writes through its own session,
+    which cannot see this session's uncommitted rows. Teardown removes the pair;
+    report rows cascade with the credential.
     """
     cc_pair = make_cc_pair(db_session, source=DocumentSource.SLACK)
     connector_mock = MagicMock(spec=BaseConnector)
@@ -251,8 +251,8 @@ def test_no_clobber_of_a_granular_report(
         # Connector-scoped writes must carry the config hash they ran with.
         connector_config_hash="seeded-hash",
     )
-    # Commit the seed: the recorder's own session cannot see it uncommitted,
-    # and its upsert would block on this transaction's index lock.
+    # Commit the seed: the recorder's own session cannot see it uncommitted, and
+    # its upsert would block on this transaction's index lock.
     db_session.commit()
 
     # Under test.
@@ -316,8 +316,8 @@ def docfetching_validation(
     monkeypatch.setattr(run_docfetching, "instantiate_connector", instantiate_mock)
     monkeypatch.setattr(run_docfetching, "INTEGRATION_TESTS_MODE", False)
     yield attempt, instantiate_mock
-    # The attempt does not cascade from the pair; its stage-metric rows
-    # cascade from the attempt.
+    # The attempt does not cascade from the pair; its stage-metric rows cascade
+    # from the attempt.
     db_session.query(IndexAttempt).filter(IndexAttempt.id == attempt.id).delete(
         synchronize_session="fetch"
     )

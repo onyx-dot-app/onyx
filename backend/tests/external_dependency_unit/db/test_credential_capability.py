@@ -305,8 +305,8 @@ def test_unless_granular_inserts_and_replaces_fallback_reports(
     db_session: Session,
 ) -> None:
     """
-    Verifies the guard only protects granular state: the guarded upsert
-    still inserts into an empty scope and replaces fallback-shaped reports.
+    Verifies the guard only protects granular state: the guarded upsert still
+    inserts into an empty scope and replaces fallback-shaped reports.
     """
     # Precondition.
     cc_pair = make_cc_pair(db_session, source=DocumentSource.SLACK, commit=False)

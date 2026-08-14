@@ -1,8 +1,8 @@
 from onyx.configs.constants import DocumentSource
 
-# Re-exported: existing callers resolve applicability through the registry;
-# the function lives in ``applicability`` so hot-path modules can import it
-# without this module's eager per-connector check imports.
+# Re-exported: existing callers resolve applicability through the registry; the
+# function lives in ``applicability`` so hot-path modules can import it without
+# this module's eager per-connector check imports.
 from onyx.connectors.capability_checks.applicability import (
     get_applicable_capabilities as get_applicable_capabilities,
 )
