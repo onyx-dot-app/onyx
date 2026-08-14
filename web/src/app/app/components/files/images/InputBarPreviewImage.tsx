@@ -14,7 +14,10 @@ export function InputBarPreviewImage({ fileId }: { fileId: string }) {
         open={fullImageShowing}
         onOpenChange={(open) => setFullImageShowing(open)}
       />
-      <div
+      <button
+        type="button"
+        aria-label="View the full image"
+        onClick={() => setFullImageShowing(true)}
         className={`
           bg-transparent
           border-none
@@ -28,18 +31,12 @@ export function InputBarPreviewImage({ fileId }: { fileId: string }) {
           h-6
       `}
       >
-        <button
-          type="button"
-          aria-label="View the full image"
-          onClick={() => setFullImageShowing(true)}
-        >
-          <img
-            alt="preview"
-            className="h-6 w-6 object-cover rounded-lg bg-background cursor-pointer"
-            src={buildImgUrl(fileId)}
-          />
-        </button>
-      </div>
+        <img
+          alt="preview"
+          className="h-6 w-6 object-cover rounded-lg bg-background cursor-pointer"
+          src={buildImgUrl(fileId)}
+        />
+      </button>
     </>
   );
 }

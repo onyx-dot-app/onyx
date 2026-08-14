@@ -5,7 +5,7 @@ import { FullImageModal } from "@/app/app/components/files/images/FullImageModal
 import { buildImgUrl } from "@/app/app/components/files/images/utils";
 import { Button } from "@opal/components";
 import { Hoverable } from "@opal/core";
-import { cn } from "@opal/utils";
+import { cn, clickOnKeyDown } from "@opal/utils";
 
 const DEFAULT_SHAPE: ImageShape = "square";
 
@@ -78,34 +78,36 @@ export const InMessageImage = memo(function InMessageImage({
       />
 
       <Hoverable.Root group="messageImage" width="fit">
-        <div className={cn("relative", shapeContainerClasses)}>
+        {/* The container holds its own download button, so it takes the button
+            semantics rather than a <button> wrapping a <button>. */}
+        <div
+          className={cn("relative", shapeContainerClasses)}
+          role="button"
+          tabIndex={0}
+          aria-label="View the full image"
+          onClick={() => setFullImageShowing(true)}
+          onKeyDown={clickOnKeyDown(() => setFullImageShowing(true))}
+        >
           {!imageLoaded && (
             <div className="absolute inset-0 bg-background-tint-02 animate-pulse rounded-lg" />
           )}
 
-          <button
-            type="button"
-            className="w-full h-full"
-            aria-label="View the full image"
-            onClick={() => setFullImageShowing(true)}
-          >
-            <img
-              width={1200}
-              height={1200}
-              alt="Chat attachment"
-              onLoad={() => {
-                loadedImages.add(fileId);
-                setImageLoaded(true);
-              }}
-              className={cn(
-                "object-contain object-left overflow-hidden rounded-lg w-full h-full transition-opacity duration-300 cursor-pointer",
-                shapeImageClasses,
-                imageLoaded ? "opacity-100" : "opacity-0"
-              )}
-              src={buildImgUrl(fileId)}
-              loading="lazy"
-            />
-          </button>
+          <img
+            width={1200}
+            height={1200}
+            alt="Chat attachment"
+            onLoad={() => {
+              loadedImages.add(fileId);
+              setImageLoaded(true);
+            }}
+            className={cn(
+              "object-contain object-left overflow-hidden rounded-lg w-full h-full transition-opacity duration-300 cursor-pointer",
+              shapeImageClasses,
+              imageLoaded ? "opacity-100" : "opacity-0"
+            )}
+            src={buildImgUrl(fileId)}
+            loading="lazy"
+          />
 
           {/* Download button - appears on hover */}
           <div className="absolute bottom-2 right-2 z-10">
