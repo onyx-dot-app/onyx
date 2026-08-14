@@ -12,7 +12,7 @@ from onyx.db.connector_credential_pair import (
     get_connector_credential_pairs,
 )
 from onyx.db.enums import AccessType, ConnectorCredentialPairStatus, Permission
-from onyx.db.federated import create_federated_connector_document_set_mapping
+from onyx.db.federated import create_federated_connector_document_set_mapping__no_commit
 from onyx.db.models import (
     ConnectorCredentialPair,
     Document,
@@ -31,6 +31,7 @@ from onyx.db.scoped_permissions import (
 from onyx.server.features.document_set.models import (
     DocumentSetCreationRequest,
     DocumentSetUpdateRequest,
+    FederatedConnectorConfig,
 )
 from onyx.utils.logger import setup_logger
 from onyx.utils.variable_functionality import fetch_versioned_implementation
@@ -314,6 +315,16 @@ def check_if_cc_pairs_are_owned_by_groups(
                 )
 
 
+def _check_federated_connectors_are_distinct(
+    federated_connectors: list[FederatedConnectorConfig],
+) -> None:
+    """The junction is unique on (federated_connector_id, document_set_id), so a
+    repeated id would fail the insert partway through the write."""
+    ids = [fc.federated_connector_id for fc in federated_connectors]
+    if len(ids) != len(set(ids)):
+        raise ValueError("A federated connector can only be attached once")
+
+
 def insert_document_set(
     document_set_creation_request: DocumentSetCreationRequest,
     user_id: UUID | None,
@@ -325,6 +336,10 @@ def insert_document_set(
         and not document_set_creation_request.federated_connectors
     ):
         raise ValueError("Cannot create a document set with no connectors")
+
+    _check_federated_connectors_are_distinct(
+        document_set_creation_request.federated_connectors
+    )
 
     if not document_set_creation_request.is_public:
         check_if_cc_pairs_are_owned_by_groups(
@@ -359,10 +374,8 @@ def insert_document_set(
         db_session.add_all(ds_cc_pairs)
 
         # Create federated connector mappings
-        from onyx.db.federated import create_federated_connector_document_set_mapping
-
         for fc_config in document_set_creation_request.federated_connectors:
-            create_federated_connector_document_set_mapping(
+            create_federated_connector_document_set_mapping__no_commit(
                 db_session=db_session,
                 federated_connector_id=fc_config.federated_connector_id,
                 document_set_id=new_document_set_row.id,
@@ -405,6 +418,10 @@ def update_document_set(
         and not document_set_update_request.federated_connectors
     ):
         raise ValueError("Cannot update a document set with no connectors")
+
+    _check_federated_connectors_are_distinct(
+        document_set_update_request.federated_connectors
+    )
 
     if not document_set_update_request.is_public:
         check_if_cc_pairs_are_owned_by_groups(
@@ -473,7 +490,7 @@ def update_document_set(
 
         # Create new federated connector mappings
         for fc_config in document_set_update_request.federated_connectors:
-            create_federated_connector_document_set_mapping(
+            create_federated_connector_document_set_mapping__no_commit(
                 db_session=db_session,
                 federated_connector_id=fc_config.federated_connector_id,
                 document_set_id=document_set_row.id,

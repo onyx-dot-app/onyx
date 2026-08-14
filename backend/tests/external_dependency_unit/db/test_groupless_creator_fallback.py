@@ -9,8 +9,10 @@ gave opposite outcomes. Both types are tested together to keep them from driftin
 from uuid import uuid4
 
 import pytest
+from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
 
+from onyx.configs.constants import FederatedConnectorSource
 from onyx.db.connector_credential_pair import (
     get_connector_credential_pair_from_id_for_user,
     user_owns_groupless_cc_pair,
@@ -19,18 +21,26 @@ from onyx.db.document_set import (
     filter_document_set_ids_by_user_access,
     filter_document_set_names_by_user_access,
     get_document_set_by_id_for_user,
+    insert_document_set,
+    update_document_set,
     user_owns_groupless_document_set,
 )
 from onyx.db.enums import AccessType
 from onyx.db.models import (
     DocumentSet,
     DocumentSet__UserGroup,
+    FederatedConnector,
     User,
     User__UserGroup,
     UserGroup,
     UserGroup__ConnectorCredentialPair,
 )
 from onyx.server.documents.cc_pair import _get_readable_cc_pair
+from onyx.server.features.document_set.models import (
+    DocumentSetCreationRequest,
+    DocumentSetUpdateRequest,
+    FederatedConnectorConfig,
+)
 from tests.external_dependency_unit.conftest import create_test_user
 from tests.external_dependency_unit.indexing_helpers import make_cc_pair
 
@@ -298,6 +308,138 @@ def test_document_set_fallback_switches_off_once_grouped(
         )
         is None
     )
+
+
+def _federated_connector(db_session: Session) -> FederatedConnector:
+    connector = FederatedConnector(
+        source=FederatedConnectorSource.FEDERATED_SLACK,
+        credentials={"workspace_url": "https://test.slack.com"},
+    )
+    db_session.add(connector)
+    db_session.commit()
+    return connector
+
+
+def _dead_federated_connector_id(db_session: Session) -> int:
+    """An id that is guaranteed absent, so the mapping insert fails on its FK."""
+    connector = _federated_connector(db_session)
+    dead_id = connector.id
+    db_session.delete(connector)
+    db_session.commit()
+    return dead_id
+
+
+def test_failed_create_leaves_no_document_set(
+    db_session: Session, manager: User
+) -> None:
+    """A create that dies inside the federated-connector loop must roll back whole.
+
+    The set row is written before its groups are, so a mid-loop commit would leave a
+    groupless creator-owned set behind a 400 — handing the caller the creator fallback
+    out of a failed request.
+    """
+    live = _federated_connector(db_session)
+    name = f"gl-atomic-{uuid4().hex[:12]}"
+
+    with pytest.raises(IntegrityError):
+        insert_document_set(
+            document_set_creation_request=DocumentSetCreationRequest(
+                name=name,
+                description="",
+                cc_pair_ids=[],
+                is_public=False,
+                users=[],
+                groups=[],
+                federated_connectors=[
+                    FederatedConnectorConfig(
+                        federated_connector_id=live.id, entities={}
+                    ),
+                    FederatedConnectorConfig(
+                        federated_connector_id=_dead_federated_connector_id(db_session),
+                        entities={},
+                    ),
+                ],
+            ),
+            user_id=manager.id,
+            db_session=db_session,
+        )
+    db_session.rollback()
+
+    assert db_session.query(DocumentSet).filter_by(name=name).one_or_none() is None, (
+        "failed create left a groupless document set owned by its creator"
+    )
+
+
+def test_failed_update_persists_nothing(db_session: Session, manager: User) -> None:
+    """Same defect on the edit path, where the rewrite of groups and privacy runs
+    before the loop — a partial commit would strip a set's groups behind a 400."""
+    live = _federated_connector(db_session)
+    doc_set = DocumentSet(
+        name=f"gl-ds-{uuid4().hex[:12]}",
+        is_public=False,
+        user_id=manager.id,
+        is_up_to_date=True,
+    )
+    db_session.add(doc_set)
+    db_session.commit()
+    original_name = doc_set.name
+
+    with pytest.raises(IntegrityError):
+        update_document_set(
+            db_session=db_session,
+            document_set_update_request=DocumentSetUpdateRequest(
+                id=doc_set.id,
+                name=f"gl-renamed-{uuid4().hex[:12]}",
+                description="",
+                cc_pair_ids=[],
+                is_public=False,
+                users=[],
+                groups=[],
+                federated_connectors=[
+                    FederatedConnectorConfig(
+                        federated_connector_id=live.id, entities={}
+                    ),
+                    FederatedConnectorConfig(
+                        federated_connector_id=_dead_federated_connector_id(db_session),
+                        entities={},
+                    ),
+                ],
+            ),
+            user=manager,
+        )
+    db_session.rollback()
+
+    assert (
+        db_session.query(DocumentSet).filter_by(id=doc_set.id).one().name
+        == original_name
+    ), "failed update left a partial write behind an error"
+
+
+def test_duplicate_federated_connector_is_refused(
+    db_session: Session, manager: User
+) -> None:
+    """Rejected up front — the junction is unique per (connector, set), so the second
+    insert would otherwise fail partway through the write."""
+    live = _federated_connector(db_session)
+    name = f"gl-dupe-{uuid4().hex[:12]}"
+    duplicate = FederatedConnectorConfig(federated_connector_id=live.id, entities={})
+
+    with pytest.raises(ValueError, match="only be attached once"):
+        insert_document_set(
+            document_set_creation_request=DocumentSetCreationRequest(
+                name=name,
+                description="",
+                cc_pair_ids=[],
+                is_public=False,
+                users=[],
+                groups=[],
+                federated_connectors=[duplicate, duplicate],
+            ),
+            user_id=manager.id,
+            db_session=db_session,
+        )
+
+    assert db_session.query(DocumentSet).filter_by(name=name).one_or_none() is None
 
 
 def test_pipeline_filters_ignore_the_creator_fallback(
