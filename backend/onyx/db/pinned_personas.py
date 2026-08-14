@@ -44,6 +44,9 @@ def set_pinned_personas(
     authorization, and the two failures are not worth distinguishing to a
     caller: both mean "that is not yours to pin". Duplicates collapse to their
     first position.
+
+    The built-in Assistant is dropped for the same reason seeding skips it: the
+    sidebar never renders id 0, so the row would be invisible to the user.
     """
     seen: set[int] = set()
     accepted: list[int] = []
@@ -51,6 +54,12 @@ def set_pinned_personas(
         if persona_id in seen:
             continue
         seen.add(persona_id)
+        if persona_id == DEFAULT_PERSONA_ID:
+            logger.warning(
+                "Ignoring pin of the built-in Assistant for user %s: never rendered",
+                user.id,
+            )
+            continue
         if not user_can_access_persona(
             db_session=db_session, persona_id=persona_id, user=user
         ):
@@ -82,7 +91,7 @@ def build_seed_pinned_personas_stmt(user_id: UUID) -> Insert:
     """Insert this user's starting pins, straight from the featured agents.
 
     One statement rather than a read followed by inserts, so a user is never
-    half-seeded and the whole thing rides on the creating transaction.
+    half-seeded.
 
     The rule is "featured and viewable by this user". Viewable means public,
     shared directly, or shared with one of the user's groups - but seeding runs
@@ -142,6 +151,10 @@ async def seed_pinned_personas_from_featured(
     editing the sidebars of existing ones. A user who registers before anything
     is featured therefore starts with nothing, which is the admin having curated
     too late rather than a failure here.
+
+    The commit is this function's own: the user row is already committed by the
+    time this runs, and the session context manager the caller opened closes
+    without committing.
     """
     await db_session.execute(build_seed_pinned_personas_stmt(user.id))
     await db_session.commit()

@@ -28,10 +28,12 @@ def test_seed_selects_only_featured_public_listed_live_agents() -> None:
     """
     sql = _compiled_seed_sql(uuid4())
 
-    assert "is_featured" in sql
-    assert "is_public" in sql
-    assert "is_listed" in sql
-    assert "deleted" in sql
+    # Assert the direction of each flag, not just its presence: a filter
+    # inverted to `is_(False)` still mentions the column it got wrong.
+    assert "persona.is_featured IS true" in sql
+    assert "persona.is_public IS true" in sql
+    assert "persona.is_listed IS true" in sql
+    assert "persona.deleted IS false" in sql
     assert f"persona.id != {DEFAULT_PERSONA_ID}" in sql
 
 
@@ -53,8 +55,12 @@ def test_seed_writes_in_one_statement() -> None:
 
 
 @pytest.mark.asyncio
-async def test_seeding_runs_on_the_creating_session() -> None:
-    """Seeding rides the transaction that created the user."""
+async def test_seeding_commits_on_the_creating_session() -> None:
+    """Seeding writes and commits on the session that created the user.
+
+    The commit is not optional: the session context manager the caller opens
+    closes without committing, so a flush here would discard every pin.
+    """
     user = MagicMock()
     user.id = uuid4()
     db_session = MagicMock(spec=AsyncSession)
