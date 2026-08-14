@@ -658,8 +658,8 @@ class User__PinnedPersona(Base):
     """An agent a user has pinned to their sidebar, and where it sits.
 
     `display_order` carries the ordering that a JSONB array used to carry by
-    position. It is only meaningful within one user, and the values are not
-    guaranteed dense - reordering rewrites them, so gaps are fine.
+    position. It is only meaningful within one user, and it is dense: every
+    write path replaces the user's whole set and numbers it 0..n-1.
     """
 
     __tablename__ = "user__pinned_persona"

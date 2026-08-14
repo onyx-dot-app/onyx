@@ -29,24 +29,35 @@ def upgrade() -> None:
         sa.PrimaryKeyConstraint("user_id", "persona_id"),
     )
 
-    # Carry existing pins over, dropping two kinds of entry the array allowed
-    # and the table will not: ids of agents that no longer exist, and the
-    # built-in Assistant, which the sidebar never renders - so pinning it left a
-    # row the user could neither see nor remove.
+    # Carry existing pins over, dropping three kinds of entry the array allowed
+    # and the table will not: ids of agents that no longer exist, the built-in
+    # Assistant, which the sidebar never renders - so pinning it left a row the
+    # user could neither see nor remove - and repeats of an id already pinned.
+    #
+    # Number after the drops, not from the array position, so `display_order`
+    # comes out dense. Taking `ord` directly would leave a hole wherever an
+    # entry was dropped.
     op.execute(
         """
         INSERT INTO user__pinned_persona (user_id, persona_id, display_order)
         SELECT
-            u.id,
-            (elem #>> '{}')::int,
-            (ord - 1)::int
-        FROM "user" AS u
-        CROSS JOIN LATERAL jsonb_array_elements(u.pinned_assistants)
-            WITH ORDINALITY AS t(elem, ord)
-        JOIN persona AS p ON p.id = (elem #>> '{}')::int
-        WHERE u.pinned_assistants IS NOT NULL
-          AND p.id <> 0
-          AND NOT p.deleted
+            user_id,
+            persona_id,
+            (ROW_NUMBER() OVER (PARTITION BY user_id ORDER BY ord) - 1)::int
+        FROM (
+            SELECT DISTINCT ON (u.id, (elem #>> '{}')::int)
+                u.id AS user_id,
+                (elem #>> '{}')::int AS persona_id,
+                ord
+            FROM "user" AS u
+            CROSS JOIN LATERAL jsonb_array_elements(u.pinned_assistants)
+                WITH ORDINALITY AS t(elem, ord)
+            JOIN persona AS p ON p.id = (elem #>> '{}')::int
+            WHERE u.pinned_assistants IS NOT NULL
+              AND p.id <> 0
+              AND NOT p.deleted
+            ORDER BY u.id, (elem #>> '{}')::int, ord
+        ) AS deduped
         ON CONFLICT DO NOTHING
         """
     )
