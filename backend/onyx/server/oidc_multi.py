@@ -21,6 +21,11 @@ from httpx_oauth.oauth2 import BaseOAuth2, GetAccessTokenError
 from sqlalchemy.orm import Session
 
 from onyx.auth.oidc_client import VerifiedEmailOpenID
+from onyx.auth.sso_url_guard import (
+    UnsafeSSOUrl,
+    validate_discovered_endpoints,
+    validate_idp_url,
+)
 from onyx.auth.sso_web_error import delete_pkce_cookie, redirect_sso_errors_to_web
 from onyx.auth.users import (
     CSRF_TOKEN_COOKIE_NAME,
@@ -119,6 +124,10 @@ def _drop_unadvertised_offline_access(client: BaseOAuth2[Any]) -> None:
 
 def _build_client(provider: SSOProvider, config: dict[str, Any]) -> BaseOAuth2[Any]:
     if provider.provider_type is SSOProviderType.OIDC:
+        # Re-checked here, not just on write, so a row stored before the guard
+        # existed cannot be fetched either. Cached with the client, so this
+        # costs one resolution per TTL rather than one per login.
+        validate_idp_url(config["openid_config_url"], field="openid_config_url")
         # Scope overrides let providers request extra API scopes (e.g. MS Graph
         # User.Read for claims capture): the row's scopes win, then the env
         # override while it exists. offline_access secures refresh tokens.
@@ -134,6 +143,9 @@ def _build_client(provider: SSOProvider, config: dict[str, Any]) -> BaseOAuth2[A
             base_scopes=scopes,
             require_verified_email=config.get("require_verified_email", False),
         )
+        # The document is attacker-chosen once its URL is, and the endpoints it
+        # names are fetched next, so they get the same treatment as the URL.
+        validate_discovered_endpoints(getattr(client, "openid_configuration", None))
         # Explicitly configured offline_access is always respected as-is.
         if offline_access_auto_added:
             _drop_unadvertised_offline_access(client)
@@ -175,7 +187,16 @@ async def _get_oauth_client(
     if cached_client is not None:
         return cached_client
 
-    client = await run_in_threadpool(_build_client, provider, config)
+    try:
+        client = await run_in_threadpool(_build_client, provider, config)
+    except UnsafeSSOUrl as e:
+        # A row stored before the write guard, or a discovery doc that started
+        # naming a rejected endpoint, reaches this browser-facing path. Surface a
+        # clean error rather than letting the ValueError escape as a raw 400.
+        raise OnyxError(
+            OnyxErrorCode.BAD_GATEWAY,
+            "This provider's sign-in URL is not reachable.",
+        ) from e
     _CLIENT_CACHE[cache_key] = client
     return client
 
