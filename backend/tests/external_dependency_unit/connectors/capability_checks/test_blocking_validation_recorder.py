@@ -6,6 +6,7 @@ guarantees (fallback shape, no-clobber, never breaking validation), not the
 per-connector validation logic.
 """
 
+from collections.abc import Generator
 from datetime import datetime, timezone
 from unittest.mock import MagicMock
 
@@ -35,14 +36,22 @@ from onyx.db.credential_capability import (
 )
 from onyx.db.enums import AccessType, CapabilityReportRunStatus
 from onyx.db.models import ConnectorCredentialPair
-from tests.external_dependency_unit.indexing_helpers import make_cc_pair
+from tests.external_dependency_unit.indexing_helpers import (
+    cleanup_cc_pair,
+    make_cc_pair,
+)
 
 
 @pytest.fixture
 def blocking_validation(
     db_session: Session, monkeypatch: pytest.MonkeyPatch
-) -> tuple[ConnectorCredentialPair, MagicMock]:
-    """A Slack cc-pair plus a mocked connector behind the blocking validation."""
+) -> Generator[tuple[ConnectorCredentialPair, MagicMock], None, None]:
+    """A Slack cc-pair plus a mocked connector behind the blocking validation.
+
+    Committed on purpose: the recorder reads and writes through its own
+    session, which cannot see this session's uncommitted rows. Teardown
+    removes the pair; report rows cascade with the credential.
+    """
     cc_pair = make_cc_pair(db_session, source=DocumentSource.SLACK)
     connector_mock = MagicMock(spec=BaseConnector)
     monkeypatch.setattr(
@@ -50,7 +59,8 @@ def blocking_validation(
     )
     # The early return would skip validation (and thus recording) entirely.
     monkeypatch.setattr(factory, "INTEGRATION_TESTS_MODE", False)
-    return cc_pair, connector_mock
+    yield cc_pair, connector_mock
+    cleanup_cc_pair(db_session, cc_pair)
 
 
 @pytest.mark.usefixtures("tenant_context")
@@ -207,6 +217,9 @@ def test_no_clobber_of_a_granular_report(
         trigger=CapabilityCheckTrigger.MANUAL,
         report=granular,
     )
+    # Commit the seed: the recorder's own session cannot see it uncommitted,
+    # and its upsert would block on this transaction's index lock.
+    db_session.commit()
 
     # Under test.
     validate_ccpair_for_user(

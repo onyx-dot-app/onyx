@@ -157,6 +157,9 @@ def record_blocking_validation_outcome(
                 report=report,
                 connector_config_hash=_connector_config_hash(connector_specific_config),
             )
+            # The accessors leave the transaction to the caller, and the
+            # session context manager closes without committing.
+            db_session.commit()
     except Exception:
         logger.warning(
             "Failed to record a blocking validation outcome for credential %s.",
