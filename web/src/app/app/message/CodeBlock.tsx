@@ -87,10 +87,20 @@ export const CodeBlock = memo(function CodeBlock({
     );
   }
 
+  // Concentric with the wrapper: inner radius = outer radius - the gap between
+  // the two boxes. Both come from vars the wrapper sets, so they stay in sync.
+  const innerRounding =
+    "rounded-[calc(var(--code-block-radius,0px)-var(--code-block-gap,0px))]!";
+
   const CodeContent = () => {
     if (!language) {
       return (
-        <pre className="p-2! m-0 overflow-x-auto w-0 min-w-full hljs">
+        <pre
+          className={cn(
+            "p-2! m-0 overflow-x-auto w-0 min-w-full hljs",
+            innerRounding
+          )}
+        >
           <code className={`text-sm hljs ${className}`}>
             {Array.isArray(children)
               ? children.map((child, index) => (
@@ -103,7 +113,12 @@ export const CodeBlock = memo(function CodeBlock({
     }
 
     return (
-      <pre className="p-2! m-0 overflow-x-auto w-0 min-w-full hljs">
+      <pre
+        className={cn(
+          "p-2! m-0 overflow-x-auto w-0 min-w-full hljs",
+          innerRounding
+        )}
+      >
         <code className="text-xs">
           {Array.isArray(children)
             ? children.map((child, index) => (
@@ -121,7 +136,10 @@ export const CodeBlock = memo(function CodeBlock({
         <div
           className={cn(
             "bg-background-tint-00 rounded-12 max-w-full min-w-0",
-            !noPadding && "px-1 pb-1"
+            "[--code-block-radius:var(--radius-12)]",
+            noPadding
+              ? "[--code-block-gap:0px]"
+              : "px-1 pb-1 [--code-block-gap:0.25rem]"
           )}
         >
           {language && (
