@@ -1,9 +1,9 @@
 """Accessor tests for the latest-only credential capability report rows.
 
-Runs against real Postgres: the upsert semantics live in the two partial
-unique indexes and ON CONFLICT inference, which mocks cannot exercise.
-Nothing here commits (the accessors leave the transaction to the caller), so
-every test's rows roll back when its session closes.
+Runs against real Postgres: the upsert semantics live in the two partial unique
+indexes and ON CONFLICT inference, which mocks cannot exercise. Nothing here
+commits (the accessors leave the transaction to the caller), so every test's
+rows roll back when its session closes.
 """
 
 from datetime import datetime, timezone
@@ -97,8 +97,8 @@ def test_upsert_inserts_then_replaces(db_session: Session) -> None:
 @pytest.mark.usefixtures("tenant_context")
 def test_credential_and_connector_scopes_coexist(db_session: Session) -> None:
     """
-    Verifies the config-less credential-time row and a connector-scoped row
-    are distinct rows for one credential, each fetched by its scope.
+    Verifies the config-less credential-time row and a connector-scoped row are
+    distinct rows for one credential, each fetched by its scope.
     """
     # Precondition.
     cc_pair = make_cc_pair(db_session, source=DocumentSource.SLACK, commit=False)
@@ -235,8 +235,8 @@ def test_rows_for_source_lists_most_recently_updated_first(
         trigger=CapabilityCheckTrigger.MANUAL,
         report=_report(first_pair.credential_id, check_id="touched"),
     )
-    # A fresh insert after the touch must sort first: inserts and updates
-    # share the statement-time clock.
+    # A fresh insert after the touch must sort first: inserts and updates share
+    # the statement-time clock.
     third_pair = make_cc_pair(db_session, source=DocumentSource.SLACK, commit=False)
     upsert_completed_capability_report(
         db_session,
@@ -251,8 +251,8 @@ def test_rows_for_source_lists_most_recently_updated_first(
     rows = get_capability_report_rows_for_source(db_session, DocumentSource.SLACK)
 
     # Postcondition.
-    # The DB may hold committed SLACK rows from other suites or prior runs,
-    # so assert relative order, not equality.
+    # The DB may hold committed SLACK rows from other suites or prior runs, so
+    # assert relative order, not equality.
     row_credential_ids = [row.credential_id for row in rows]
     third_index = row_credential_ids.index(third_pair.credential_id)
     first_index = row_credential_ids.index(first_pair.credential_id)

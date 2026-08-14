@@ -2,8 +2,8 @@
 
 One row per (credential, connector-scope): ``connector_id`` NULL is the
 config-less credential-time report, non-NULL is one per attached connector.
-Writers upsert against the scope's partial unique index, so concurrent
-writers resolve to one row instead of racing an insert.
+Writers upsert against the scope's partial unique index, so concurrent writers
+resolve to one row instead of racing an insert.
 """
 
 from typing import Any
@@ -43,15 +43,15 @@ def _upsert_row(
 ) -> CredentialCapabilityReportRow:
     """Inserts or updates the scope's single row with ``values``.
 
-    Columns absent from ``values`` keep their stored value on the update
-    path, which is how RUNNING marks preserve the previous report and
-    completion writes preserve ``run_started_at``. The statement executes
-    immediately, but the caller owns the transaction and must commit.
+    Columns absent from ``values`` keep their stored value on the update path,
+    which is how RUNNING marks preserve the previous report and completion
+    writes preserve ``run_started_at``. The statement executes immediately, but
+    the caller owns the transaction and must commit.
     """
-    # Stamp both the insert and the conflict-update path explicitly: the
-    # model's ``onupdate`` is not applied to ON CONFLICT SET clauses, and the
-    # ``now()`` defaults are transaction-start time, which would stamp every
-    # write of one transaction identically.
+    # Stamp both the insert and the conflict-update path explicitly: the model's
+    # ``onupdate`` is not applied to ON CONFLICT SET clauses, and the ``now()``
+    # defaults are transaction-start time, which would stamp every write of one
+    # transaction identically.
     stamped = {**values, "time_updated": func.statement_timestamp()}
     stmt = (
         insert(CredentialCapabilityReportRow)
@@ -109,8 +109,7 @@ def mark_capability_report_running(
 ) -> CredentialCapabilityReportRow:
     """Flags the scope's row RUNNING with a fresh start time.
 
-    The previous COMPLETED ``report`` stays readable while the run is in
-    flight.
+    The previous COMPLETED ``report`` stays readable while the run is in flight.
     """
     return _upsert_row(
         db_session,
