@@ -901,11 +901,13 @@ export class OnyxApiClient {
     this.log(`Set manager=${isManager} for ${userId} on group ${groupId}`);
   }
 
-  /**
-   * Replaces a group's connector list. Passing `[]` detaches every connector,
-   * which is the only way to reach a groupless connector a manager created —
-   * creating one directly is refused for having no managed scope.
-   */
+  private async getGroupUserIds(groupId: number): Promise<string[]> {
+    const response = await this.get("/manage/admin/user-group");
+    const groups = await response.json();
+    const group = groups.find((g: { id: number }) => g.id === groupId);
+    return (group?.users ?? []).map((user: { id: string }) => user.id);
+  }
+
   async setGroupCcPairs(
     groupId: number,
     groupName: string,
@@ -915,7 +917,7 @@ export class OnyxApiClient {
     const response = await this.patch(`/manage/admin/user-group/${groupId}`, {
       id: groupId,
       name: groupName,
-      user_ids: [],
+      user_ids: await this.getGroupUserIds(groupId),
       cc_pair_ids: ccPairIds,
     });
 
