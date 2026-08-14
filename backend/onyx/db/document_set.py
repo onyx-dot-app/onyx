@@ -254,13 +254,20 @@ def filter_document_set_ids_by_user_access(
 
 
 def get_document_sets_by_ids(
-    db_session: Session, document_set_ids: list[int]
+    db_session: Session,
+    document_set_ids: list[int],
+    for_update: bool = False,
 ) -> Sequence[DocumentSetDBModel]:
     if not document_set_ids:
         return []
-    return db_session.scalars(
-        select(DocumentSetDBModel).where(DocumentSetDBModel.id.in_(document_set_ids))
-    ).all()
+    stmt = select(DocumentSetDBModel).where(DocumentSetDBModel.id.in_(document_set_ids))
+    if for_update:
+        stmt = (
+            stmt.order_by(DocumentSetDBModel.id)
+            .execution_options(populate_existing=True)
+            .with_for_update(key_share=True)
+        )
+    return db_session.scalars(stmt).all()
 
 
 def make_doc_set_private(

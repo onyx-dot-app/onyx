@@ -426,7 +426,7 @@ def update_group_document_sets(
     document_sets = {
         document_set.id: document_set
         for document_set in get_document_sets_by_ids(
-            db_session, list(attach_ids | detach_ids)
+            db_session, list(attach_ids | detach_ids), for_update=True
         )
     }
     missing = sorted((attach_ids | detach_ids) - document_sets.keys())
