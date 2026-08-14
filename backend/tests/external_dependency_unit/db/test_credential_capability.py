@@ -226,7 +226,7 @@ def test_rows_for_source_lists_most_recently_updated_first(
             trigger=CapabilityCheckTrigger.MANUAL,
             report=_report(pair.credential_id),
         )
-    # Touch the first row so it becomes the most recently updated.
+    # Touch the first row so it becomes more recently updated than the second.
     upsert_completed_capability_report(
         db_session,
         credential_id=first_pair.credential_id,
@@ -234,6 +234,17 @@ def test_rows_for_source_lists_most_recently_updated_first(
         source=DocumentSource.SLACK,
         trigger=CapabilityCheckTrigger.MANUAL,
         report=_report(first_pair.credential_id, check_id="touched"),
+    )
+    # A fresh insert after the touch must sort first: inserts and updates
+    # share the statement-time clock.
+    third_pair = make_cc_pair(db_session, source=DocumentSource.SLACK, commit=False)
+    upsert_completed_capability_report(
+        db_session,
+        credential_id=third_pair.credential_id,
+        connector_id=None,
+        source=DocumentSource.SLACK,
+        trigger=CapabilityCheckTrigger.MANUAL,
+        report=_report(third_pair.credential_id),
     )
 
     # Under test.
@@ -243,11 +254,10 @@ def test_rows_for_source_lists_most_recently_updated_first(
     # The DB may hold committed SLACK rows from other suites or prior runs,
     # so assert relative order, not equality.
     row_credential_ids = [row.credential_id for row in rows]
-    assert first_pair.credential_id in row_credential_ids
-    assert second_pair.credential_id in row_credential_ids
-    assert row_credential_ids.index(
-        first_pair.credential_id
-    ) < row_credential_ids.index(second_pair.credential_id)
+    third_index = row_credential_ids.index(third_pair.credential_id)
+    first_index = row_credential_ids.index(first_pair.credential_id)
+    second_index = row_credential_ids.index(second_pair.credential_id)
+    assert third_index < first_index < second_index
     assert all(row.source == DocumentSource.SLACK for row in rows)
 
 

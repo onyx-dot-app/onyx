@@ -48,16 +48,17 @@ def _upsert_row(
     completion writes preserve ``run_started_at``. The statement executes
     immediately, but the caller owns the transaction and must commit.
     """
+    # Stamp both the insert and the conflict-update path explicitly: the
+    # model's ``onupdate`` is not applied to ON CONFLICT SET clauses, and the
+    # ``now()`` defaults are transaction-start time, which would stamp every
+    # write of one transaction identically.
+    stamped = {**values, "time_updated": func.statement_timestamp()}
     stmt = (
         insert(CredentialCapabilityReportRow)
-        .values(credential_id=credential_id, connector_id=connector_id, **values)
+        .values(credential_id=credential_id, connector_id=connector_id, **stamped)
         .on_conflict_do_update(
             **_scope_conflict_kwargs(connector_id),
-            # The model's ``onupdate`` is not applied to ON CONFLICT SET
-            # clauses, so bump ``time_updated`` explicitly -- with statement
-            # time, because ``now()`` is transaction-start time and would
-            # stamp every write of one transaction identically.
-            set_={**values, "time_updated": func.statement_timestamp()},
+            set_=stamped,
         )
         .returning(CredentialCapabilityReportRow)
     )
@@ -77,6 +78,13 @@ def upsert_completed_capability_report(
     connector_config_hash: str | None = None,
 ) -> CredentialCapabilityReportRow:
     """Writes a finished report onto the scope's row (latest-only replace)."""
+    # A connector-scoped report always ran against a config, a credential-time
+    # one never did; enforcing the pairing keeps an omitted hash from silently
+    # erasing the staleness signal.
+    assert (connector_id is None) == (connector_config_hash is None), (
+        "Connector-scoped reports must carry a config hash; credential-scoped "
+        "reports must not."
+    )
     return _upsert_row(
         db_session,
         credential_id=credential_id,
@@ -112,7 +120,9 @@ def mark_capability_report_running(
             "source": source,
             "trigger": trigger,
             "run_status": CapabilityReportRunStatus.RUNNING,
-            "run_started_at": func.now(),
+            # Statement time, not ``now()``: the run starts now, not when the
+            # caller's transaction began.
+            "run_started_at": func.statement_timestamp(),
         },
     )
 
