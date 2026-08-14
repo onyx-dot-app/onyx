@@ -6,8 +6,8 @@ import ProviderSignInButton from "@/app/auth/login/ProviderSignInButton";
 import { SignInButton, EmailPasswordForm } from "@/lib/auth/components";
 import { NEXT_PUBLIC_FORGOT_PASSWORD_ENABLED } from "@/lib/constants";
 import { useSendAuthRequiredMessage } from "@/lib/extension/hooks";
-import Text from "@/refresh-components/texts/Text";
 import { Button, MessageCard } from "@opal/components";
+import { AuthLayouts } from "@opal/layouts";
 
 interface LoginPageProps {
   authUrl: string | null;
@@ -50,13 +50,7 @@ export default function LoginPage({
           {authUrl && authTypeMetadata && (
             <>
               <SignInButton authorizeUrl={authUrl} />
-              <div className="flex flex-row items-center w-full gap-2">
-                <div className="flex-1 border-t border-text-01" />
-                <Text as="p" text03 mainUiMuted>
-                  or
-                </Text>
-                <div className="flex-1 border-t border-text-01" />
-              </div>
+              <AuthLayouts.OrSeparator />
             </>
           )}
           <EmailPasswordForm
@@ -84,16 +78,7 @@ export default function LoginPage({
                   />
                 ))}
               </div>
-              {passwordAuthEnabled && (
-                /* raw-ok: pre-existing or-divider markup */
-                <div className="flex flex-row items-center w-full gap-2">
-                  <div className="flex-1 border-t border-text-01" />
-                  <Text as="p" text03 mainUiMuted>
-                    or
-                  </Text>
-                  <div className="flex-1 border-t border-text-01" />
-                </div>
-              )}
+              {passwordAuthEnabled && <AuthLayouts.OrSeparator />}
             </>
           )}
           {passwordAuthEnabled && (
