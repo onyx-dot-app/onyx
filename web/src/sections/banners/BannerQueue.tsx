@@ -50,6 +50,8 @@ interface BannerTypeConfig {
   // to be banners but keep their informational styling).
   variantOverride?: NotificationSeverity;
   ctaLabel?: string;
+  // Replaces the copy when several undismissed notifications share the type.
+  aggregate?: (count: number) => BannerContent;
 }
 
 interface BannerContent {
@@ -62,6 +64,15 @@ interface BannerContent {
 const DEFAULT_SOURCE_LABEL = "Notification";
 const DEFAULT_CTA_LABEL = "View";
 
+function connectorAggregate(noun: string, cause: string) {
+  return (count: number): BannerContent => ({
+    title: `${count} connectors are ${noun}`,
+    description: `Multiple connectors have ${cause}. Open the connectors page to review them.`,
+    link: "/admin/indexing/status",
+    ctaLabel: DEFAULT_CTA_LABEL,
+  });
+}
+
 const BANNER_TYPE_CONFIG: Partial<Record<NotificationType, BannerTypeConfig>> =
   {
     [NotificationType.SYSTEM_ANNOUNCEMENT]: {
@@ -70,11 +81,26 @@ const BANNER_TYPE_CONFIG: Partial<Record<NotificationType, BannerTypeConfig>> =
     },
     [NotificationType.LICENSE_EXPIRY_WARNING]: { sourceLabel: "License" },
     [NotificationType.TRIAL_ENDS_TWO_DAYS]: { sourceLabel: "Trial" },
+    [NotificationType.CONNECTOR_REPEATED_ERRORS]: {
+      sourceLabel: "Connectors",
+      ctaLabel: "View connector",
+      aggregate: connectorAggregate("failing", "repeated indexing failures"),
+    },
+    [NotificationType.CONNECTOR_INVALID]: {
+      sourceLabel: "Connectors",
+      ctaLabel: "View connector",
+      aggregate: connectorAggregate("invalid", "invalid credentials"),
+    },
   };
 
+// The notification's own copy when it stands alone, the type's aggregate
+// copy when it represents several.
 function bannerContent(item: BannerQueueItem): BannerContent {
-  const { notification } = item;
+  const { notification, count } = item;
   const config = BANNER_TYPE_CONFIG[notification.notif_type];
+  if (count > 1 && config?.aggregate) {
+    return config.aggregate(count);
+  }
   return {
     title: notification.title,
     description: notification.description,

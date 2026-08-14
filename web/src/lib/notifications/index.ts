@@ -38,6 +38,7 @@ export function getNotificationIcon(
     case NotificationType.REINDEX:
     case NotificationType.ASSISTANT_FILES_READY:
     case NotificationType.CONNECTOR_REPEATED_ERRORS:
+    case NotificationType.CONNECTOR_INVALID:
     case NotificationType.SCHEDULED_TASK_PRE_APPROVED_ACTION:
     case NotificationType.APPROVAL_REQUESTED:
       return SvgAlertCircle;

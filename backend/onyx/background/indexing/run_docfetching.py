@@ -26,7 +26,12 @@ from onyx.configs.app_configs import (
     PERSISTENT_INDEXING,
     POLL_CONNECTOR_OFFSET,
 )
-from onyx.configs.constants import OnyxCeleryPriority, OnyxCeleryQueues, OnyxCeleryTask
+from onyx.configs.constants import (
+    NotificationType,
+    OnyxCeleryPriority,
+    OnyxCeleryQueues,
+    OnyxCeleryTask,
+)
 from onyx.connectors.connector_runner import ConnectorRunner
 from onyx.connectors.exceptions import (
     ConnectorValidationError,
@@ -84,6 +89,7 @@ from onyx.file_store.staging import (
     reap_prior_attempt_staged_files,
 )
 from onyx.indexing.indexing_heartbeat import IndexingHeartbeatInterface
+from onyx.notifications.connector_alerts import notify_admins_of_connector_alert
 from onyx.redis.redis_docprocessing import RedisDocprocessing
 from onyx.redis.redis_hierarchy import (
     HierarchyNodeCacheEntry,
@@ -912,6 +918,19 @@ def connector_document_extraction(
                             connector_id=db_connector.id,
                             credential_id=db_credential.id,
                             status=ConnectorCredentialPairStatus.INVALID,
+                        )
+                        invalid_name = db_connector.name or f"cc_pair_{cc_pair_id}"
+                        notify_admins_of_connector_alert(
+                            db_session=db_session_temp,
+                            cc_pair_id=cc_pair_id,
+                            notif_type=NotificationType.CONNECTOR_INVALID,
+                            title=f"Connector '{invalid_name}' has been marked invalid",
+                            description=(
+                                f"The {db_connector.source.value} connector failed "
+                                "validation repeatedly, usually due to expired "
+                                "credentials or revoked access. Update its "
+                                "credentials to resume indexing."
+                            ),
                         )
             raise e
         elif isinstance(e, ConnectorStopSignal):
