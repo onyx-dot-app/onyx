@@ -345,6 +345,10 @@ jobs:
             ${{ matrix.extra_build_args }}
           tags: ${{ env.RUNS_ON_ECR_CACHE }}:craft-k8s-${{ matrix.image }}-${{ github.run_id }}
           push: true
+          # Attestations attach as ECR referrers to the image digest, which is
+          # stable across runs and caps out at 100 per subject.
+          provenance: false
+          sbom: false
           cache-from: type=gha,scope=craft-${{ matrix.image }}
           cache-to: type=gha,scope=craft-${{ matrix.image }},mode=max
 

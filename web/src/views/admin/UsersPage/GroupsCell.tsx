@@ -8,6 +8,7 @@ import {
   useEffect,
 } from "react";
 import { Hoverable } from "@opal/core";
+import { clickOnKeyDown } from "@opal/utils";
 import { SvgEdit } from "@opal/icons";
 import { Button, Tag } from "@opal/components";
 import Text from "@/refresh-components/texts/Text";
@@ -137,11 +138,23 @@ export default function GroupsCell({
   return (
     <>
       <Hoverable.Root group="tags">
+        {/* The cell holds its own edit button, so it stays a div with button
+        semantics rather than a <button> wrapping a <button>. */}
         <div
           className={`relative flex justify-between items-center w-full min-w-0 ${
             user.id ? "cursor-pointer" : ""
           }`}
-          onClick={user.id ? () => setShowModal(true) : undefined}
+          // A cell without a user has nothing to edit, so it carries no button
+          // semantics at all.
+          {...(user.id
+            ? {
+                role: "button" as const,
+                tabIndex: 0,
+                "aria-label": "Edit groups",
+                onClick: () => setShowModal(true),
+                onKeyDown: clickOnKeyDown(() => setShowModal(true)),
+              }
+            : {})}
         >
           {groups.length === 0 ? (
             <div

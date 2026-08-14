@@ -22,6 +22,7 @@ export interface SpendRow {
   input_tokens: number;
   output_tokens: number;
   cache_read_tokens: number;
+  cache_creation_tokens: number;
 }
 
 function emptyTotals(): UsageExportTotals {
@@ -29,6 +30,7 @@ function emptyTotals(): UsageExportTotals {
     input_tokens: 0,
     output_tokens: 0,
     cache_read_tokens: 0,
+    cache_creation_tokens: 0,
     cost_cents: 0,
   };
 }
@@ -56,6 +58,8 @@ function filteredRow(
       input_tokens: sum.input_tokens + record.input_tokens,
       output_tokens: sum.output_tokens + record.output_tokens,
       cache_read_tokens: sum.cache_read_tokens + record.cache_read_tokens,
+      cache_creation_tokens:
+        sum.cache_creation_tokens + record.cache_creation_tokens,
       cost_cents: sum.cost_cents + record.cost_cents,
     }),
     emptyTotals()

@@ -5,7 +5,7 @@ import { Form, Formik, useField } from "formik";
 import * as Yup from "yup";
 import { Button, InputTags, type TagItem, Text } from "@opal/components";
 import { SvgCopy, SvgSimpleLoader } from "@opal/icons";
-import { InputVertical, toast } from "@opal/layouts";
+import { InputErrorText, InputVertical, toast } from "@opal/layouts";
 import { cn } from "@opal/utils";
 import type {
   SSOProviderCreateRequest,
@@ -13,6 +13,8 @@ import type {
   SSOProviderType,
   SSOProviderUpdateRequest,
 } from "@/lib/sso/interfaces";
+import { useSupportedSSOProviderTypes } from "@/lib/sso/hooks";
+import { NEXT_PUBLIC_CLOUD_ENABLED } from "@/lib/constants";
 import { createSSOProvider, updateSSOProvider } from "@/lib/sso/svc";
 import {
   CONFIG_FIELDS_BY_TYPE,
@@ -99,7 +101,14 @@ const SSO_VALIDATION_SCHEMA = Yup.object({
     "provider_type",
     ([type], schema) => CONFIG_SCHEMA_BY_TYPE[type as string] ?? schema
   ),
-  allowed_email_domains: Yup.array().of(Yup.string()).optional(),
+  // Cloud rejects an empty list (every address the IdP asserts would become a
+  // billed seat), so require at least one domain there. Single-tenant leaves it
+  // optional, where empty means every address may sign in.
+  allowed_email_domains: NEXT_PUBLIC_CLOUD_ENABLED
+    ? Yup.array()
+        .of(Yup.string())
+        .min(1, "List at least one email domain that may sign in")
+    : Yup.array().of(Yup.string()).optional(),
 });
 
 // The backend masks every config string on read and restores any value sent
@@ -162,27 +171,35 @@ interface TagListFieldProps {
 // Formik-bound Opal InputTags for string[] values. Always writes an array, so
 // clearing every tag stores [] rather than leaving the previous value.
 function TagListField({ name, placeholder, transform }: TagListFieldProps) {
-  const [field, , helpers] = useField<string[]>(name);
+  const [field, meta, helpers] = useField<string[]>(name);
   const [input, setInput] = useState("");
   const values = field.value ?? [];
   const tags: TagItem[] = values.map((value) => ({ id: value, label: value }));
   return (
-    <InputTags
-      tags={tags}
-      onRemoveTag={(id) => {
-        void helpers.setValue(values.filter((value) => value !== id));
-      }}
-      onAdd={(value) => {
-        const entry = transform ? transform(value.trim()) : value.trim();
-        if (entry && !values.includes(entry)) {
-          void helpers.setValue([...values, entry]);
-        }
-        setInput("");
-      }}
-      value={input}
-      onChange={setInput}
-      placeholder={placeholder}
-    />
+    <>
+      <InputTags
+        tags={tags}
+        onRemoveTag={(id) => {
+          void helpers.setValue(values.filter((value) => value !== id));
+        }}
+        onAdd={(value) => {
+          const entry = transform ? transform(value.trim()) : value.trim();
+          if (entry && !values.includes(entry)) {
+            void helpers.setValue([...values, entry]);
+          }
+          setInput("");
+        }}
+        value={input}
+        onChange={setInput}
+        placeholder={placeholder}
+      />
+      {/* A required list (cloud domains) disables submit when empty, so show the
+          reason directly. Array-level errors are strings; per-element errors are
+          not surfaced here. */}
+      {typeof meta.error === "string" && (
+        <InputErrorText>{meta.error}</InputErrorText>
+      )}
+    </>
   );
 }
 
@@ -218,6 +235,8 @@ function ConfigInput({
 export function SSOProviderModal({ provider, onSaved }: SSOProviderModalProps) {
   const onClose = useModalClose();
   const isEditing = provider !== null;
+  const { providerTypes, isLoading: providerTypesLoading } =
+    useSupportedSSOProviderTypes();
 
   const initialValues: SSOProviderFormValues = {
     provider_type: provider?.provider_type ?? "GOOGLE_OAUTH",
@@ -302,7 +321,7 @@ export function SSOProviderModal({ provider, onSaved }: SSOProviderModalProps) {
                   description={
                     isEditing
                       ? "Update how this provider signs users in."
-                      : "Add a Google, OIDC, or SAML provider for sign-in."
+                      : "Add an SSO provider for sign-in."
                   }
                   onClose={onClose}
                 />
@@ -318,14 +337,14 @@ export function SSOProviderModal({ provider, onSaved }: SSOProviderModalProps) {
                       onValueChange={(value) => {
                         void setFieldValue("provider_type", value);
                       }}
-                      disabled={isEditing}
+                      disabled={isEditing || providerTypesLoading}
                       error={Boolean(
                         touched.provider_type && errors.provider_type
                       )}
                     >
                       <InputSelect.Trigger placeholder="Select a provider type" />
                       <InputSelect.Content>
-                        {CREATABLE_SSO_PROVIDER_TYPES.map((type) => {
+                        {providerTypes.map((type) => {
                           const detail = SSO_PROVIDER_DETAILS[type];
                           return (
                             <InputSelect.Item
@@ -382,8 +401,16 @@ export function SSOProviderModal({ provider, onSaved }: SSOProviderModalProps) {
                   ))}
 
                   <InputVertical
-                    title="Allowed Email Domains (Optional)"
-                    description="Only emails in these domains may sign in through this provider. Empty allows any."
+                    title={
+                      NEXT_PUBLIC_CLOUD_ENABLED
+                        ? "Allowed Email Domains"
+                        : "Allowed Email Domains (Optional)"
+                    }
+                    description={
+                      NEXT_PUBLIC_CLOUD_ENABLED
+                        ? "Only emails in these domains may sign in through this provider."
+                        : "Only emails in these domains may sign in through this provider. Empty allows any."
+                    }
                     withLabel
                   >
                     <TagListField

@@ -61,6 +61,10 @@ runs:
         build-args: |
           BASE_IMAGE_REGISTRY=${{ env.BASE_IMAGE_REGISTRY }}
         tags: ${{ inputs.runs-on-ecr-cache }}:nightly-llm-it-backend-${{ inputs.run-id }}
+        # Attestations attach as ECR referrers to the image digest, which is
+        # stable across runs and caps out at 100 per subject.
+        provenance: false
+        sbom: false
         cache-from: |
           type=registry,ref=${{ inputs.runs-on-ecr-cache }}:backend-cache-${{ inputs.github-sha }}
           type=registry,ref=${{ inputs.runs-on-ecr-cache }}:backend-cache-${{ steps.format-branch.outputs.cache-suffix }}

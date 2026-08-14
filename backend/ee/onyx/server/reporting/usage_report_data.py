@@ -42,6 +42,7 @@ class UsageReportData(BaseModel):
     total_input_tokens: int
     total_output_tokens: int
     total_cache_read_tokens: int
+    total_cache_creation_tokens: int
 
     licensed_users: int
     # Everyone who used it, including people since deactivated, so this can
@@ -107,6 +108,7 @@ def build_usage_report_data(
     total_input = 0
     total_output = 0
     total_cache_read = 0
+    total_cache_creation = 0
     active_emails: set[str] = set()
 
     for row in rows:
@@ -129,6 +131,7 @@ def build_usage_report_data(
         total_input += row.input_tokens
         total_output += row.output_tokens
         total_cache_read += row.cache_read_tokens
+        total_cache_creation += row.cache_creation_tokens
 
         daily_cost[row.day] += row.cost_cents
         # Their spend still counts toward totals so the pack reconciles with the
@@ -160,6 +163,7 @@ def build_usage_report_data(
         total_input_tokens=total_input,
         total_output_tokens=total_output,
         total_cache_read_tokens=total_cache_read,
+        total_cache_creation_tokens=total_cache_creation,
         licensed_users=len(seat_emails),
         active_users=len(active_emails),
         seated_active_users=len(active_emails & seat_emails),

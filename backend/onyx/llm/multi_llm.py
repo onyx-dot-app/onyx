@@ -620,19 +620,17 @@ class LitellmLLM(LLM):
         from onyx.db.engine.sql_engine import get_session_with_current_tenant
         from onyx.db.usage import UsageType, increment_usage
 
-        cache_read = usage.cache_read_input_tokens
-        # prompt_tokens is cache-inclusive; price non-cached + cache separately.
-        non_cached_input = max(usage.prompt_tokens - cache_read, 0)
         provider = self._custom_llm_provider or self._model_provider
 
         try:
             with get_session_with_current_tenant() as db_session:
                 input_cents, output_cents = compute_cost_cents(
-                    self._model_version,
-                    provider,
-                    non_cached_input,
-                    usage.completion_tokens,
-                    cache_read_tokens=cache_read,
+                    model=self._model_version,
+                    provider=provider,
+                    prompt_tokens=usage.prompt_tokens,
+                    completion_tokens=usage.completion_tokens,
+                    cache_read_tokens=usage.cache_read_input_tokens,
+                    cache_creation_tokens=usage.cache_creation_input_tokens,
                     db_session=db_session,
                 )
                 cost_cents = input_cents + output_cents

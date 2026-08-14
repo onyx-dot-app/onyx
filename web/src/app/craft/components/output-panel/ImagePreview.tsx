@@ -60,7 +60,7 @@ export default function ImagePreview({ src, fileName }: ImagePreviewProps) {
         <img
           src={src}
           alt={displayName}
-          role="img"
+
           aria-label={`Preview of ${displayName}`}
           className={cn(
             "max-w-full max-h-full object-contain transition-opacity",

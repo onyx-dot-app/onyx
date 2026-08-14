@@ -36,7 +36,8 @@ export function SelectedBubble({
   onClick: () => void;
 }) {
   return (
-    <div
+    <button
+      type="button"
       className={
         "flex cursor-pointer items-center border border-border " +
         "py-1 my-1.5 rounded-lg px-2 w-fit hover:bg-accent-background-hovered"
@@ -45,7 +46,7 @@ export function SelectedBubble({
     >
       {children}
       <FiX className="ml-2" size={14} />
-    </div>
+    </button>
   );
 }
 

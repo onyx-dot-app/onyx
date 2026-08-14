@@ -229,7 +229,7 @@ export class UsersAdminPage {
 
   /** The email input inside the invite modal. */
   get inviteEmailInput(): Locator {
-    return this.dialog.getByPlaceholder("Add an email and press enter");
+    return this.dialog.getByRole("textbox");
   }
 
   async openInviteModal() {
@@ -240,12 +240,15 @@ export class UsersAdminPage {
   async addInviteEmail(email: string) {
     await this.inviteEmailInput.pressSequentially(email, { delay: 20 });
     await this.inviteEmailInput.press("Enter");
-    // Wait for the chip to appear in the dialog
     await expect(this.dialog.getByText(email)).toBeVisible();
   }
 
   async submitInvite() {
-    await this.dialog.getByRole("button", { name: "Invite" }).click();
+    // Exact, or the substring default also matches a tag's "Remove <email>"
+    // button whenever the address itself contains "invite".
+    await this.dialog
+      .getByRole("button", { name: "Invite", exact: true })
+      .click();
   }
 
   // ---------------------------------------------------------------------------

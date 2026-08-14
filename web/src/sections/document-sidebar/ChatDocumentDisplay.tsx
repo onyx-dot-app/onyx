@@ -79,10 +79,11 @@ export default function ChatDocumentDisplay({
     document.updated_at || Object.keys(document.metadata).length > 0;
 
   return (
-    <div
+    <button
+      type="button"
       onClick={() => openDocument(document, setPresentingDocument)}
       className={cn(
-        "flex w-full flex-col p-3 gap-2 rounded-12 hover:bg-background-tint-00 cursor-pointer",
+        "flex w-full flex-col p-3 gap-2 rounded-12 hover:bg-background-tint-00 cursor-pointer text-left",
         isSelected && "bg-action-selection-02"
       )}
     >
@@ -104,6 +105,6 @@ export default function ChatDocumentDisplay({
       <Text as="p" className="line-clamp-2 text-left" secondaryBody text03>
         {buildDocumentSummaryDisplay(document.match_highlights, document.blurb)}
       </Text>
-    </div>
+    </button>
   );
 }

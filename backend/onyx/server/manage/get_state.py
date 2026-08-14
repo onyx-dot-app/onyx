@@ -17,8 +17,7 @@ from onyx.configs.constants import (
 )
 from onyx.db.auth import get_user_count
 from onyx.db.engine.sql_engine import get_session_with_shared_schema
-from onyx.db.enums import SSOProviderType
-from onyx.db.sso_provider import fetch_sso_providers
+from onyx.db.sso_provider import fetch_sso_providers, sso_authorize_path
 from onyx.server.manage.models import (
     AllVersions,
     AuthConfigResponse,
@@ -31,15 +30,6 @@ from onyx.server.security.store import get_security_settings
 from shared_configs.configs import MULTI_TENANT
 
 router = APIRouter()
-
-# GOOGLE_OAUTH and OIDC share the /auth/oidc router. SAML has its own. Keep in
-# sync with the router prefixes in oidc_multi.py and saml_multi.py.
-_SSO_AUTHORIZE_ROUTER = {
-    SSOProviderType.GOOGLE_OAUTH: "oidc",
-    SSOProviderType.OIDC: "oidc",
-    SSOProviderType.SAML: "saml",
-}
-
 
 # TTL matches the endpoint's HTTP max-age (60s). The two windows stack.
 # Admin mutations invalidate this pod directly. Other pods ride the TTL.
@@ -63,8 +53,8 @@ def invalidate_sso_provider_options_cache() -> None:
 
 
 def _fetch_sso_provider_options() -> list[SSOProviderOption]:
-    # Single-tenant only. /auth/type runs before any tenant context, so a
-    # multi-tenant lookup has no tenant to key on.
+    # One cached response for every visitor, so it can only speak for a
+    # deployment with one set of providers. Cloud uses /auth/sso/discover.
     if MULTI_TENANT:
         return []
     # The lock spans the DB read so a mutation's invalidate cannot land between
@@ -79,10 +69,7 @@ def _fetch_sso_provider_options() -> list[SSOProviderOption]:
                     name=provider.name,
                     display_name=provider.display_name,
                     provider_type=provider.provider_type,
-                    authorize_url=(
-                        f"/api/auth/{_SSO_AUTHORIZE_ROUTER[provider.provider_type]}"
-                        f"/{provider.name}/authorize"
-                    ),
+                    authorize_url=sso_authorize_path(provider),
                 )
                 for provider in fetch_sso_providers(db_session, enabled_only=True)
             ]

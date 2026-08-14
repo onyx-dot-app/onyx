@@ -81,6 +81,17 @@ def require_mock_oidc() -> None:
         pytest.skip("requires navikt/mock-oauth2-server (MOCK_OIDC_URL)")
 
 
+@pytest.fixture(autouse=True)
+def _stub_idp_url_guard(monkeypatch: pytest.MonkeyPatch) -> None:
+    # The mock IdP is http on loopback, which the authorize-path guard rejects
+    # (https and public only). Stub it here. The guard is covered in
+    # test_sso_url_guard.py.
+    monkeypatch.setattr(oidc_multi, "validate_idp_url", lambda *_a, **_k: None)
+    monkeypatch.setattr(
+        oidc_multi, "validate_discovered_endpoints", lambda *_a, **_k: None
+    )
+
+
 def _config_url(issuer: str) -> str:
     return f"{_MOCK_URL}/{issuer}/.well-known/openid-configuration"
 

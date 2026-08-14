@@ -17,8 +17,8 @@
 
 import { useState } from "react";
 import { Button } from "@opal/components";
-import { FcGoogle } from "react-icons/fc";
-import Text from "@/refresh-components/texts/Text";
+import { InputErrorText } from "@opal/layouts";
+import { SvgGoogle } from "@opal/logos";
 import { SSOProviderOption } from "@/lib/auth/types";
 
 interface ProviderSignInButtonProps {
@@ -40,10 +40,11 @@ export default function ProviderSignInButton({
     setIsRedirecting(true);
     setError(null);
     try {
-      const url = nextUrl
-        ? `${provider.authorizeUrl}?next=${encodeURIComponent(nextUrl)}`
-        : provider.authorizeUrl;
-      const res = await fetch(url, { credentials: "include" });
+      // The authorize URL may already carry a query (the workspace pin on
+      // cloud), so `next` has to be appended as a parameter, not concatenated.
+      const url = new URL(provider.authorizeUrl, window.location.origin);
+      if (nextUrl) url.searchParams.set("next", nextUrl);
+      const res = await fetch(url.toString(), { credentials: "include" });
       if (!res.ok) {
         throw new Error(`Could not start sign-in (status ${res.status})`);
       }
@@ -64,17 +65,13 @@ export default function ProviderSignInButton({
       <Button
         prominence={isGoogle ? "secondary" : "primary"}
         width="full"
-        icon={isGoogle ? FcGoogle : undefined}
+        icon={isGoogle ? SvgGoogle : undefined}
         onClick={handleClick}
         disabled={isRedirecting}
       >
         {provider.displayName}
       </Button>
-      {error && (
-        <Text as="p" mainUiMuted className="text-status-error-05 mt-2">
-          {error}
-        </Text>
-      )}
+      {error && <InputErrorText>{error}</InputErrorText>}
     </>
   );
 }

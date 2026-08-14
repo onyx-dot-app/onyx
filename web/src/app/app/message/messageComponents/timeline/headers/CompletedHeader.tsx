@@ -10,6 +10,7 @@ import { Section } from "@/layouts/general-layouts";
 import { ContentAction } from "@opal/layouts";
 import { formatDurationSeconds } from "@opal/time";
 import { noProp } from "@/lib/utils";
+import { clickOnKeyDown } from "@opal/utils";
 import MemoriesModal from "@/refresh-components/modals/MemoriesModal";
 import { useCreateModal } from "@opal/components";
 
@@ -166,38 +167,52 @@ export const CompletedHeader = React.memo(function CompletedHeader({
         }`
       : null;
 
+  const summary = (
+    <div className="flex items-center gap-2 px-(--timeline-header-text-padding-x) py-(--timeline-header-text-padding-y)">
+      <Text as="p" mainUiAction text03>
+        {isExpanded ? durationText : (imageText ?? durationText)}
+      </Text>
+      {memoryOperation && !isExpanded && (
+        <MemoryTagWithTooltip
+          memoryText={memoryText}
+          memoryOperation={memoryOperation}
+          memoryId={memoryId}
+          memoryIndex={memoryIndex}
+        />
+      )}
+    </div>
+  );
+
+  const className = "flex items-center justify-between w-full";
+
+  // Without a toggle target the row must not announce itself as a button.
+  if (!collapsible || totalSteps === 0) {
+    return <div className={className}>{summary}</div>;
+  }
+
   return (
+    // The row holds its own expand button, so it stays a div with button
+    // semantics rather than a <button> wrapping a <button>.
     <div
       role="button"
+      tabIndex={0}
+      aria-label="Toggle timeline"
+      onKeyDown={clickOnKeyDown(onToggle)}
       onClick={onToggle}
-      className="flex items-center justify-between w-full"
+      className={className}
     >
-      <div className="flex items-center gap-2 px-(--timeline-header-text-padding-x) py-(--timeline-header-text-padding-y)">
-        <Text as="p" mainUiAction text03>
-          {isExpanded ? durationText : (imageText ?? durationText)}
-        </Text>
-        {memoryOperation && !isExpanded && (
-          <MemoryTagWithTooltip
-            memoryText={memoryText}
-            memoryOperation={memoryOperation}
-            memoryId={memoryId}
-            memoryIndex={memoryIndex}
-          />
-        )}
-      </div>
+      {summary}
 
-      {collapsible && totalSteps > 0 && (
-        <Button
-          prominence="tertiary"
-          size="md"
-          onClick={noProp(onToggle)}
-          rightIcon={isExpanded ? SvgFold : SvgExpand}
-          aria-label="Expand timeline"
-          aria-expanded={isExpanded}
-        >
-          {`${totalSteps} ${totalSteps === 1 ? "step" : "steps"}`}
-        </Button>
-      )}
+      <Button
+        prominence="tertiary"
+        size="md"
+        onClick={noProp(onToggle)}
+        rightIcon={isExpanded ? SvgFold : SvgExpand}
+        aria-label="Expand timeline"
+        aria-expanded={isExpanded}
+      >
+        {`${totalSteps} ${totalSteps === 1 ? "step" : "steps"}`}
+      </Button>
     </div>
   );
 });

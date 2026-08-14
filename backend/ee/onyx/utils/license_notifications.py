@@ -23,6 +23,7 @@ from onyx.auth.email_utils import build_html_email, send_email
 from onyx.auth.schemas import UserRole
 from onyx.configs.app_configs import EMAIL_CONFIGURED
 from onyx.configs.constants import ONYX_DEFAULT_APPLICATION_NAME, NotificationType
+from onyx.db.enums import NotificationSeverity
 from onyx.db.models import User
 from onyx.db.notification import batch_create_notifications
 from onyx.db.users import get_active_admin_users
@@ -158,6 +159,16 @@ def _build_additional_data(
     return data
 
 
+def _severity_for_stage(
+    stage: ExpiryWarningStage, renewal_error: str | None = None
+) -> NotificationSeverity:
+    """t_1d, grace, and failed renewals are errors; earlier stages warn.
+    Migration f8048443da9e backfills historical rows with the same mapping."""
+    if renewal_error or stage in (ExpiryWarningStage.T_1D, ExpiryWarningStage.GRACE):
+        return NotificationSeverity.ERROR
+    return NotificationSeverity.WARNING
+
+
 def notify_admins_for_stage(
     db_session: Session,
     stage: ExpiryWarningStage,
@@ -198,6 +209,7 @@ def notify_admins_for_stage(
         title=title,
         description=description,
         additional_data=additional_data,
+        severity=_severity_for_stage(stage, renewal_error),
     )
     if not inserted_admin_ids:
         return
@@ -261,4 +273,5 @@ def ensure_license_expiry_notification_for_user(
         title=title,
         description=description,
         additional_data=additional_data,
+        severity=_severity_for_stage(stage),
     )
