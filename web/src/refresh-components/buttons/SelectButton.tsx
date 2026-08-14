@@ -37,9 +37,9 @@ const iconClassNames = (engaged?: boolean, transient?: boolean) =>
     main: {
       enabled: [
         "stroke-text-03",
-        "group-hover/SelectButton:stroke-text-04",
+        "group-hover/SelectAction:stroke-text-04",
         transient && "stroke-text-04",
-        "group-active/SelectButton:stroke-text-05",
+        "group-active/SelectAction:stroke-text-05",
       ],
       disabled: ["stroke-text-02"],
     },
@@ -47,11 +47,11 @@ const iconClassNames = (engaged?: boolean, transient?: boolean) =>
       enabled: [
         engaged ? "stroke-action-selection-05" : "stroke-text-03",
         engaged
-          ? "group-hover/SelectButton:stroke-action-selection-05"
-          : "group-hover/SelectButton:stroke-text-04",
+          ? "group-hover/SelectAction:stroke-action-selection-05"
+          : "group-hover/SelectAction:stroke-text-04",
         engaged
-          ? "group-active/SelectButton:stroke-action-selection-06"
-          : "group-active/SelectButton:stroke-text-05",
+          ? "group-active/SelectAction:stroke-action-selection-06"
+          : "group-active/SelectAction:stroke-text-05",
       ],
       disabled: ["stroke-action-selection-03"],
     },
@@ -62,9 +62,9 @@ const textClassNames = (engaged?: boolean, transient?: boolean) =>
     main: {
       enabled: [
         "text-text-03",
-        "group-hover/SelectButton:text-text-04",
+        "group-hover/SelectAction:text-text-04",
         transient && "text-text-04",
-        "group-active/SelectButton:text-text-05",
+        "group-active/SelectAction:text-text-05",
       ],
       disabled: ["text-text-01"],
     },
@@ -72,11 +72,11 @@ const textClassNames = (engaged?: boolean, transient?: boolean) =>
       enabled: [
         engaged ? "text-action-selection-05" : "text-text-03",
         engaged
-          ? "group-hover/SelectButton:text-action-selection-05"
-          : "group-hover/SelectButton:text-text-04",
+          ? "group-hover/SelectAction:text-action-selection-05"
+          : "group-hover/SelectAction:text-text-04",
         engaged
-          ? "group-active/SelectButton:text-action-selection-06"
-          : "group-active/SelectButton:text-text-05",
+          ? "group-active/SelectAction:text-action-selection-06"
+          : "group-active/SelectAction:text-text-05",
       ],
       disabled: ["stroke-action-selection-03"],
     },
@@ -175,7 +175,7 @@ export default function SelectButton({
       <button
         className={cn(
           baseClasses,
-          "group/SelectButton flex items-center px-2 py-2 rounded-12 h-fit w-fit",
+          "group/SelectAction flex items-center px-2 py-2 rounded-12 h-fit w-fit",
           className
         )}
         onClick={disabled ? undefined : onClick}

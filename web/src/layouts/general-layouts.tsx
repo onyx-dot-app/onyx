@@ -37,10 +37,10 @@ function AttachmentItemLayout({
       <div className={cn("h-9 aspect-square rounded-08 shrink-0")}>
         <Section>
           <div
-            className="attachment-button__icon-wrapper"
+            className="attachment-item__icon-wrapper"
             data-testid="attachment-item-icon-wrapper"
           >
-            <Icon className="attachment-button__icon" />
+            <Icon className="attachment-item__icon" />
           </div>
         </Section>
       </div>
