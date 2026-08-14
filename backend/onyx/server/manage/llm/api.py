@@ -1638,32 +1638,38 @@ def get_lm_studio_available_models(
 
     results: list[LMStudioFinalModelResponse] = []
     for item in models:
-        # Filter to LLM-type models only (skip embeddings, etc.)
-        if item.get("type") != "llm":
-            continue
+        try:
+            # Filter to LLM-type models only (skip embeddings, etc.)
+            if item.get("type") != "llm":
+                continue
 
-        model_key = item.get("key")
-        if not model_key:
-            continue
+            model_key = item.get("key")
+            if not model_key:
+                continue
 
-        display_name = item.get("display_name") or model_key
-        max_context_length = item.get("max_context_length")
-        capabilities = item.get("capabilities") or {}
+            display_name = item.get("display_name") or model_key
+            max_context_length = item.get("max_context_length")
+            capabilities = item.get("capabilities") or {}
 
-        results.append(
-            LMStudioFinalModelResponse(
-                name=model_key,
-                display_name=display_name,
-                max_input_tokens=max_context_length,
-                supports_image_input=lm_studio_capability_enabled(
-                    capabilities.get("vision")
-                ),
-                supports_reasoning=lm_studio_capability_enabled(
-                    capabilities.get("reasoning")
+            results.append(
+                LMStudioFinalModelResponse(
+                    name=model_key,
+                    display_name=display_name,
+                    max_input_tokens=max_context_length,
+                    supports_image_input=lm_studio_capability_enabled(
+                        capabilities.get("vision")
+                    ),
+                    supports_reasoning=lm_studio_capability_enabled(
+                        capabilities.get("reasoning")
+                    )
+                    or is_reasoning_model(model_key, display_name),
                 )
-                or is_reasoning_model(model_key, display_name),
             )
-        )
+        except Exception as e:
+            logger.warning(
+                "Failed to parse LM Studio model entry",
+                extra={"error": str(e), "item": str(item)[:1000]},
+            )
 
     if not results:
         raise OnyxError(
