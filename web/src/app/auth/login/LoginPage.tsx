@@ -105,7 +105,8 @@ export default function LoginPage({
       {!hidePageRedirect && passwordAuthEnabled && (
         <p className="text-center mt-4">
           Don&apos;t have an account?{" "}
-          <span
+          <button
+            type="button"
             onClick={() => {
               if (typeof window !== "undefined" && window.top) {
                 window.top.location.href = "/auth/signup";
@@ -116,7 +117,7 @@ export default function LoginPage({
             className="text-link font-medium cursor-pointer"
           >
             Create an account
-          </span>
+          </button>
         </p>
       )}
     </div>

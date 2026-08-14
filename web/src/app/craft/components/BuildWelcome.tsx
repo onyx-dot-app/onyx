@@ -66,7 +66,8 @@ export default function BuildWelcome({
           <div className="flex flex-row items-center justify-between gap-4 pb-6">
             {/* The wordmark's baseline sits ~79% down its box, so nudge it
                 down (~0.21 × size) to share craft's baseline. */}
-            <div
+            <button
+              type="button"
               className="flex flex-row items-baseline gap-2 select-none"
               onClick={handleWordmarkClick}
             >
@@ -85,7 +86,7 @@ export default function BuildWelcome({
               >
                 craft
               </Text>
-            </div>
+            </button>
             <ModelPickerButton
               selection={selectedModel}
               onChange={setSelectedModel}

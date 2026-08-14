@@ -1,6 +1,6 @@
 {
   "$schema": "./node_modules/oxlint/configuration_schema.json",
-  "plugins": ["typescript", "unicorn", "oxc", "react", "nextjs"],
+  "plugins": ["typescript", "unicorn", "oxc", "react", "nextjs", "jsx-a11y"],
   "jsPlugins": [
     { "name": "react-doctor", "specifier": "oxlint-plugin-react-doctor" }
   ],
@@ -9,6 +9,7 @@
   },
   "rules": {
     "nextjs/no-img-element": "off",
+    "jsx-a11y/prefer-tag-over-role": "off",
     "react/exhaustive-deps": "off",
     "typescript/no-unused-vars": "off",
     "unicorn/no-thenable": "off",

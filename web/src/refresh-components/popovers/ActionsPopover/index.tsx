@@ -9,6 +9,7 @@ import {
   WEB_SEARCH_TOOL_ID,
 } from "@/app/app/components/tools/constants";
 import { useState, useEffect, useMemo, useCallback, useRef } from "react";
+import useFocusOnMount from "@opal/hooks/useFocusOnMount";
 import { Popover, PopoverMenu } from "@opal/components";
 import SwitchList, {
   SwitchListItem,
@@ -176,6 +177,7 @@ export default function ActionsPopover({
     null
   );
   const [searchTerm, setSearchTerm] = useState("");
+  const focusOnMount = useFocusOnMount<HTMLInputElement>();
   // const [showFadeMask, setShowFadeMask] = useState(false);
   // const [showTopShadow, setShowTopShadow] = useState(false);
   const { selectedSources, setSelectedSources } = filterManager;
@@ -869,7 +871,7 @@ export default function ActionsPopover({
           searchIcon
           value={searchTerm}
           onChange={(event) => setSearchTerm(event.target.value)}
-          autoFocus
+          ref={focusOnMount}
           variant="internal"
         />,
 

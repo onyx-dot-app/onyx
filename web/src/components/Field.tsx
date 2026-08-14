@@ -763,7 +763,10 @@ export const BooleanFormField = memo(function BooleanFormField({
                   />
                 </div>
                 {!noLabel && (
+                  // Pointer convenience only — the checkbox itself is
+                  // keyboard reachable.
                   <div
+                    role="presentation"
                     className={disabled ? "" : "cursor-pointer"}
                     onClick={toggle}
                   >

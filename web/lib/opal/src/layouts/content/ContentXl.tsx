@@ -8,6 +8,7 @@ import type { IconFunctionComponent, RichStr } from "@opal/types";
 import { toPlainString } from "@opal/components/text/InlineMarkdown";
 import { cn } from "@opal/utils";
 import { useState } from "react";
+import useFocusOnMount from "@opal/hooks/useFocusOnMount";
 
 // ---------------------------------------------------------------------------
 // Types
@@ -115,6 +116,7 @@ function ContentXl({
 }: ContentXlProps) {
   const [editing, setEditing] = useState(false);
   const [editValue, setEditValue] = useState(toPlainString(title));
+  const focusOnMount = useFocusOnMount<HTMLInputElement>();
 
   const config = CONTENT_XL_PRESETS[sizePreset];
 
@@ -194,7 +196,7 @@ function ContentXl({
               value={editValue}
               onChange={(e) => setEditValue(e.target.value)}
               size={1}
-              autoFocus
+              ref={focusOnMount}
               onFocus={(e) => e.currentTarget.select()}
               onBlur={commit}
               onKeyDown={(e) => {

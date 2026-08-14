@@ -54,7 +54,8 @@ export function FilterDropdown({
             {options.map((option, ind) => {
               const isSelected = selected.includes(option.key);
               return (
-                <div
+                <button
+                  type="button"
                   key={`${option.key}-1`}
                   className={`
                       ${optionClassName}
@@ -90,7 +91,7 @@ export function FilterDropdown({
                       <FiCheck />
                     </div>
                   )}
-                </div>
+                </button>
               );
             })}
           </div>
@@ -118,7 +119,9 @@ export function FilterDropdown({
             <p className="line-clamp-1">{selected.join(", ")}</p>
           )}
           {resetValues && selected.length !== 0 ? (
-            <div
+            <button
+              type="button"
+              aria-label="Clear"
               className="my-auto ml-auto p-0.5 rounded-full w-fit"
               onClick={(e) => {
                 resetValues();
@@ -126,7 +129,7 @@ export function FilterDropdown({
               }}
             >
               <FiXCircle />
-            </div>
+            </button>
           ) : (
             <FiChevronDown className="my-auto ml-auto" />
           )}

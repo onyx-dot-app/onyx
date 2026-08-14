@@ -4,6 +4,7 @@ import { forwardRef, useEffect, useRef, useState, JSX } from "react";
 import { FiCheck, FiChevronDown, FiInfo } from "react-icons/fi";
 import { Popover } from "@opal/components";
 import { Tooltip } from "@opal/components";
+import { clickOnKeyDown } from "@opal/utils";
 export interface Option<T> {
   name: string;
   value: T;
@@ -46,10 +47,14 @@ export const CustomDropdown = ({
 
   return (
     <div className="relative inline-block text-left w-full" ref={dropdownRef}>
-      <div onClick={() => setIsOpen(!isOpen)}>{children}</div>
+      {/* Pointer convenience only — the trigger inside stays keyboard-reachable. */}
+      <div role="presentation" onClick={() => setIsOpen(!isOpen)}>
+        {children}
+      </div>
 
       {isOpen && (
         <div
+          role="presentation"
           onClick={() => setIsOpen(!isOpen)}
           className={`absolute ${
             direction === "up" ? "bottom-full pb-2" : "pt-2"
@@ -97,6 +102,10 @@ export function DefaultDropdownElement({
         text-text-dark
         ${disabled ? "" : "hover:bg-accent-background-hovered"}
       `}
+      role="button"
+      tabIndex={disabled ? -1 : 0}
+      aria-disabled={disabled || undefined}
+      onKeyDown={disabled || !onSelect ? undefined : clickOnKeyDown(onSelect)}
       onClick={disabled ? undefined : onSelect}
     >
       <div>

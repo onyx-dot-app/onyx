@@ -1,6 +1,6 @@
 import { Text, Button } from "@opal/components";
 import { SvgTrash } from "@opal/icons";
-import { cn } from "@opal/utils";
+import { cn, clickOnKeyDown } from "@opal/utils";
 import { QueuedMessage } from "@/app/app/interfaces";
 
 interface QueuedMessageBarProps {
@@ -41,6 +41,12 @@ function QueuedMessageBar({
                 className={cn(
                   "bg-background-neutral-02 rounded-12 border px-3 py-1.5 flex items-center gap-2 cursor-pointer",
                   isHighlighted ? "border-border-03" : "border-border-01"
+                )}
+                role="button"
+                tabIndex={0}
+                aria-label="Toggle queued message"
+                onKeyDown={clickOnKeyDown(() =>
+                  onHighlight(isHighlighted ? null : index)
                 )}
                 onClick={() => onHighlight(isHighlighted ? null : index)}
               >

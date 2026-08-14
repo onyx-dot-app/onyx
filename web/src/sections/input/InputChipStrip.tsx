@@ -2,7 +2,7 @@
 
 import { useRef, type ReactNode } from "react";
 import { AnimatePresence, motion, useReducedMotion } from "motion/react";
-import { cn } from "@opal/utils";
+import { cn, clickOnKeyDown } from "@opal/utils";
 import { Button, Text, Tooltip } from "@opal/components";
 import {
   SvgAlertCircle,
@@ -38,18 +38,14 @@ function InputChip({
 }: InputChipProps) {
   const chipRef = useRef<HTMLDivElement>(null);
 
-  return (
-    <div
-      ref={chipRef}
-      className={cn(
-        "flex items-center gap-1 px-1 py-px rounded-08 border",
-        colorClassName,
-        onClick && "cursor-pointer"
-      )}
-      onClick={() => {
-        if (chipRef.current) onClick?.(chipRef.current);
-      }}
-    >
+  const chipClassName = cn(
+    "flex items-center gap-1 px-1 py-px rounded-08 border",
+    colorClassName,
+    onClick && "cursor-pointer"
+  );
+
+  const chipBody = (
+    <>
       {icon}
       <span className="max-w-[120px] truncate">
         <Text font="secondary-body" color="inherit" nowrap>
@@ -67,6 +63,34 @@ function InputChip({
         }}
         aria-label={`Remove ${label}`}
       />
+    </>
+  );
+
+  if (!onClick) {
+    return (
+      <div ref={chipRef} className={chipClassName}>
+        {chipBody}
+      </div>
+    );
+  }
+
+  return (
+    // The chip holds its own remove button, so it stays a div with button
+    // semantics rather than a <button> wrapping a <button>.
+    <div
+      ref={chipRef}
+      className={chipClassName}
+      role="button"
+      tabIndex={0}
+      aria-label={label}
+      onKeyDown={clickOnKeyDown(() => {
+        if (chipRef.current) onClick(chipRef.current);
+      })}
+      onClick={() => {
+        if (chipRef.current) onClick(chipRef.current);
+      }}
+    >
+      {chipBody}
     </div>
   );
 }

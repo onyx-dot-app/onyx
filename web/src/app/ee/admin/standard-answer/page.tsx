@@ -18,6 +18,7 @@ import type { Route } from "next";
 import { StandardAnswer, StandardAnswerCategory } from "@/lib/types";
 import { SvgSearch } from "@opal/icons";
 import { useState, JSX } from "react";
+import useFocusOnMount from "@opal/hooks/useFocusOnMount";
 import ReactMarkdown from "react-markdown";
 import remarkGfm from "remark-gfm";
 import { deleteStandardAnswer } from "./lib";
@@ -25,7 +26,7 @@ import { FilterDropdown } from "@/components/search/filtering/FilterDropdown";
 import { FiTag } from "react-icons/fi";
 import { PageSelector } from "@/components/PageSelector";
 import { Text } from "@opal/components";
-import { markdown } from "@opal/utils";
+import { cn, clickOnKeyDown, markdown } from "@opal/utils";
 import { Spacer } from "@opal/components";
 import { TableHeader } from "@/components/ui/table";
 import { SvgEdit, SvgPlusCircle, SvgTrash } from "@opal/icons";
@@ -69,36 +70,35 @@ const CategoryBubble = ({
 }: {
   name: string;
   onDelete?: () => void;
-}) => (
-  <span
-    className={`
-      inline-block
-      px-2
-      py-1
-      mr-1
-      mb-1
-      text-xs
-      font-semibold
-      text-emphasis
-      bg-accent-background-hovered
-      rounded-full
-      items-center
-      w-fit
-      ${onDelete ? "cursor-pointer" : ""}
-    `}
-    onClick={onDelete}
-  >
-    {name}
-    {onDelete && (
+}) => {
+  const className = cn(
+    "inline-block px-2 py-1 mr-1 mb-1 text-xs font-semibold text-emphasis bg-accent-background-hovered rounded-full items-center w-fit",
+    onDelete && "cursor-pointer"
+  );
+
+  if (!onDelete) return <span className={className}>{name}</span>;
+
+  return (
+    // The bubble holds its own remove button, so it stays a span with button
+    // semantics rather than a <button> wrapping a <button>.
+    <span
+      className={className}
+      role="button"
+      tabIndex={0}
+      aria-label={`Remove category ${name}`}
+      onKeyDown={clickOnKeyDown(onDelete)}
+      onClick={onDelete}
+    >
+      {name}
       <button
         className="ml-1 text-subtle hover:text-emphasis"
         aria-label="Remove category"
       >
         &times;
       </button>
-    )}
-  </span>
-);
+    </span>
+  );
+};
 
 const StandardAnswersTableRow = ({
   standardAnswer,
@@ -168,6 +168,7 @@ const StandardAnswersTable = ({
   const [selectedCategories, setSelectedCategories] = useState<
     StandardAnswerCategory[]
   >([]);
+  const focusOnMount = useFocusOnMount<HTMLTextAreaElement>();
   const columns = [
     { name: "", key: "edit" },
     { name: "Categories", key: "category" },
@@ -238,7 +239,7 @@ const StandardAnswersTable = ({
       <div className="flex items-center w-full border-2 border-border rounded-lg px-4 py-2 focus-within:border-accent">
         <SvgSearch className="w-4 h-4" />
         <textarea
-          autoFocus
+          ref={focusOnMount}
           className="grow ml-2 h-6 bg-transparent outline-hidden placeholder-subtle overflow-hidden whitespace-normal resize-none"
           placeholder="Find standard answers by keyword/phrase..."
           value={query}

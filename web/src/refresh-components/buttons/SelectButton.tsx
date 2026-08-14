@@ -181,8 +181,9 @@ export default function SelectButton({
         onClick={disabled ? undefined : onClick}
         disabled={disabled}
         onMouseEnter={() => setHovered(true)}
-        onMouseOver={() => setHovered(true)}
         onMouseLeave={() => setHovered(false)}
+        onFocus={() => setHovered(true)}
+        onBlur={() => setHovered(false)}
       >
         {/* Left icon */}
         {hasLeftIcon && LeftIcon && (
