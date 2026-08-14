@@ -244,7 +244,11 @@ export class UsersAdminPage {
   }
 
   async submitInvite() {
-    await this.dialog.getByRole("button", { name: "Invite" }).click();
+    // Exact, or the substring default also matches a tag's "Remove <email>"
+    // button whenever the address itself contains "invite".
+    await this.dialog
+      .getByRole("button", { name: "Invite", exact: true })
+      .click();
   }
 
   // ---------------------------------------------------------------------------
