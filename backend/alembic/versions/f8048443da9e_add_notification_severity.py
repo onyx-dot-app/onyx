@@ -1,7 +1,7 @@
 """add notification severity
 
 Revision ID: f8048443da9e
-Revises: 3350a25df58e
+Revises: 8d1297b43210
 Create Date: 2026-08-13 15:22:27.752583
 
 """
@@ -11,7 +11,7 @@ from alembic import op
 
 # revision identifiers, used by Alembic.
 revision = "f8048443da9e"
-down_revision = "3350a25df58e"
+down_revision = "8d1297b43210"
 branch_labels = None
 depends_on = None
 
