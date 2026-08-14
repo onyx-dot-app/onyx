@@ -14,5 +14,10 @@ src/**/*.test.tsx
 lib/opal/dist
 lib/shared/dist
 
+# Vendored oxlint plugin sources. They run only in pre-commit and CI lint, never
+# at build or run time. They are also excluded from tsconfig.json, so `next build`
+# does not type check them.
+tools
+
 # Explicitly include src/app/build (overrides .gitignore /build pattern)
 !src/app/build
