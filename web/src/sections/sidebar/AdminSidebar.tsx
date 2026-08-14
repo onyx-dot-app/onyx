@@ -164,7 +164,11 @@ function buildItems(
   if (!isCurator) {
     addGated(SECTIONS.ORGANIZATION, ADMIN_ROUTES.THEME, Tier.BUSINESS);
     add(SECTIONS.ORGANIZATION, ADMIN_ROUTES.SECURITY_HARDENING);
-    add(SECTIONS.ORGANIZATION, ADMIN_ROUTES.SSO_PROVIDERS);
+    // Cloud login cannot use these providers yet, so keep the entry hidden
+    // on cloud until that ships.
+    if (!enableCloud) {
+      add(SECTIONS.ORGANIZATION, ADMIN_ROUTES.SSO_PROVIDERS);
+    }
     if (hasSubscription) {
       add(SECTIONS.ORGANIZATION, ADMIN_ROUTES.BILLING);
     }
