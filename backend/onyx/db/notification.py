@@ -268,6 +268,10 @@ def batch_create_notifications(
     Callers that need to fire side effects only on fresh inserts (emails, webhooks)
     can iterate the returned set without re-triggering on idempotent retries.
 
+    Severity is set only on fresh inserts: a conflicting row keeps its original
+    severity. Producers that need an escalation to re-alert must vary
+    additional_data (as the license flow does with its stage field).
+
     Relies on unique index on (user_id, notif_type, COALESCE(additional_data, '{}'))
     """
     if not user_ids:

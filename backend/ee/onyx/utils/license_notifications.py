@@ -162,7 +162,8 @@ def _build_additional_data(
 def _severity_for_stage(
     stage: ExpiryWarningStage, renewal_error: str | None = None
 ) -> NotificationSeverity:
-    """t_1d, grace, and failed renewals are errors; earlier stages warn."""
+    """t_1d, grace, and failed renewals are errors; earlier stages warn.
+    Migration f8048443da9e backfills historical rows with the same mapping."""
     if renewal_error or stage in (ExpiryWarningStage.T_1D, ExpiryWarningStage.GRACE):
         return NotificationSeverity.ERROR
     return NotificationSeverity.WARNING

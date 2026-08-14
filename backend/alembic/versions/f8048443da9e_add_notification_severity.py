@@ -37,8 +37,9 @@ def upgrade() -> None:
         """
     )
     # License expiry: t_1d / grace stages and failed renewals render as
-    # errors (mirrors the frontend's stage-severity threshold); earlier
-    # stages render as warnings.
+    # errors; earlier stages render as warnings. Mirrors _severity_for_stage
+    # in ee/onyx/utils/license_notifications.py — duplicated here because
+    # migrations must not import application code.
     op.execute(
         """
         UPDATE notification
