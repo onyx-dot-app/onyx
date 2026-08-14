@@ -112,6 +112,98 @@ def test_celery_uses_sentinel_urls_and_master_name() -> None:
             importlib.reload(celery_base)
 
 
+# --- per-app Celery config modules ----------------------------------------
+
+# Celery reads settings as attributes of the module given to
+# `config_from_object`. A setting that base.py defines but a per-app module
+# does not re-export falls back to the Celery default, silently.
+_APP_CONFIG_MODULES = [
+    f"onyx.background.celery.configs.{name}"
+    for name in (
+        "beat",
+        "client",
+        "docfetching",
+        "docprocessing",
+        "heavy",
+        "light",
+        "monitoring",
+        "primary",
+        "scheduled_tasks",
+        "user_file_processing",
+    )
+]
+
+# Redis connection settings that every app must share with base.py.
+_SHARED_CONNECTION_SETTINGS = [
+    "broker_url",
+    "broker_connection_retry_on_startup",
+    "broker_pool_limit",
+    "broker_transport_options",
+    "broker_use_ssl",
+    "redis_socket_keepalive",
+    "redis_retry_on_timeout",
+    "redis_backend_health_check_interval",
+    "redis_backend_use_ssl",
+    "result_backend",
+    "result_backend_transport_options",
+    "result_expires",
+]
+
+
+def test_app_configs_reexport_all_shared_connection_settings() -> None:
+    import onyx.background.celery.configs.base as celery_base
+
+    for module_name in _APP_CONFIG_MODULES:
+        module = importlib.import_module(module_name)
+        for setting in _SHARED_CONNECTION_SETTINGS:
+            assert hasattr(module, setting), f"{module_name} does not set {setting}"
+            assert getattr(module, setting) == getattr(celery_base, setting), (
+                f"{module_name} {setting} does not match base"
+            )
+
+
+def test_every_app_resolves_sentinel_master_name_on_both_connections() -> None:
+    """Beat failed with "No master found for None" because the app config
+    modules re-exported result_backend but not its transport options."""
+    from celery import Celery
+
+    env = {
+        "REDIS_SENTINEL_HOSTS": "s1:26379,s2:26379",
+        "REDIS_SENTINEL_MASTER_NAME": "mymaster",
+        "REDIS_SENTINEL_PASSWORD": "sentinelpw",
+    }
+    with patch.dict(os.environ, env):
+        import onyx.background.celery.configs.base as celery_base
+        import onyx.configs.app_configs as app_configs
+
+        importlib.reload(app_configs)
+        importlib.reload(celery_base)
+        try:
+            for module_name in _APP_CONFIG_MODULES:
+                module = importlib.reload(importlib.import_module(module_name))
+                app = Celery(f"test-{module_name}")
+                app.config_from_object(module)
+
+                broker_options = cast(dict, app.conf["broker_transport_options"])
+                backend_options = cast(
+                    dict, app.conf["result_backend_transport_options"]
+                )
+                assert broker_options["master_name"] == "mymaster", (
+                    f"{module_name} broker lost the master name"
+                )
+                assert backend_options["master_name"] == "mymaster", (
+                    f"{module_name} result backend lost the master name"
+                )
+                assert backend_options["sentinel_kwargs"] == {
+                    "password": "sentinelpw"
+                }, f"{module_name} result backend lost the sentinel password"
+        finally:
+            importlib.reload(app_configs)
+            importlib.reload(celery_base)
+            for module_name in _APP_CONFIG_MODULES:
+                importlib.reload(importlib.import_module(module_name))
+
+
 # --- config validation + Celery TLS ---------------------------------------
 
 
