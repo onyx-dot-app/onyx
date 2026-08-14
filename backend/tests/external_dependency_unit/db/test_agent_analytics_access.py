@@ -2,6 +2,7 @@
 else only agents they own, and the token is required either way. The route's GATE 2
 delegates to the projection the UI reads, so asserting one asserts both."""
 
+import pytest
 from sqlalchemy.orm import Session
 
 from ee.onyx.db.analytics import user_can_view_assistant_stats
@@ -10,6 +11,10 @@ from onyx.db.models import User
 from onyx.db.persona import can_view_persona_stats
 from tests.external_dependency_unit.conftest import create_test_user
 from tests.external_dependency_unit.db.agent_sharing_helpers import create_test_persona
+
+# The gate under test is MIT-computable, so EE mode changes nothing here — pinned so the
+# EE entry point is exercised in the mode it runs in, not whatever a neighbour left set.
+pytestmark = pytest.mark.usefixtures("enable_ee")
 
 
 def _grant(user: User, *permissions: Permission) -> None:
