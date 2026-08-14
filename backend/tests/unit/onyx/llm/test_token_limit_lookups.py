@@ -256,6 +256,13 @@ class TestResolveMaxOutputTokens:
                 == 128000
             )
 
+    def test_prefix_strip_requires_a_vendor_namespace(self) -> None:
+        # A self-hosted model merely starting with "us." must not inherit an
+        # unrelated model's ceiling.
+        model_map = {"foo": {"max_output_tokens": 128000}}
+        with patch("onyx.llm.model_capabilities.get_model_map", return_value=model_map):
+            assert resolve_max_output_tokens("us.foo", "ollama") is None
+
     def test_prefix_strip_still_returns_none_when_base_unknown(self) -> None:
         with patch("onyx.llm.model_capabilities.get_model_map", return_value={}):
             assert (

@@ -375,6 +375,45 @@ def _build_project_message(
     return messages
 
 
+def marker_replay_token_count(
+    image_files_replayed_as_markers: bool,
+    token_counter: Callable[[str], int] | None,
+) -> int:
+    """Token cost of the placeholder text sent in place of one image."""
+    if not image_files_replayed_as_markers:
+        return 0
+    sample_marker = NON_VISION_IMAGE_MARKER.format(file_id="0" * 36)
+    return (
+        token_counter(sample_marker)
+        if token_counter
+        else _NON_VISION_MARKER_TOKEN_FALLBACK
+    )
+
+
+def replay_token_count(
+    msg: ChatMessageSimple,
+    image_files_replayed_as_markers: bool,
+    marker_tokens: int,
+) -> int:
+    """Tokens this message actually costs on the wire.
+
+    Shared by the history budget and the output-token cap so both measure the
+    same thing — the stored image cost is not what gets sent when the model
+    takes no image input.
+    """
+    if not image_files_replayed_as_markers:
+        return msg.token_count
+    # Charge markers for every IMAGE entry, including ones whose stored
+    # token contribution is zero (project/context images are never
+    # counted) — the marker text is still sent for them.
+    num_images = sum(
+        1 for f in msg.image_files or [] if f.file_type == ChatFileType.IMAGE
+    )
+    if not num_images:
+        return msg.token_count
+    return max(0, msg.token_count - msg.image_token_count) + num_images * marker_tokens
+
+
 def construct_message_history(
     system_prompt: ChatMessageSimple | None,
     custom_agent_prompt: ChatMessageSimple | None,
@@ -397,29 +436,12 @@ def construct_message_history(
     # input, translate_history_to_llm_format sends short text markers instead
     # of the images, so charging the stored image token cost would evict
     # history that actually fits.
-    marker_tokens = 0
-    if image_files_replayed_as_markers:
-        sample_marker = NON_VISION_IMAGE_MARKER.format(file_id="0" * 36)
-        marker_tokens = (
-            token_counter(sample_marker)
-            if token_counter
-            else _NON_VISION_MARKER_TOKEN_FALLBACK
-        )
+    marker_tokens = marker_replay_token_count(
+        image_files_replayed_as_markers, token_counter
+    )
 
-    def _replay_token_count(msg: ChatMessageSimple) -> int:
-        if not image_files_replayed_as_markers:
-            return msg.token_count
-        # Charge markers for every IMAGE entry, including ones whose stored
-        # token contribution is zero (project/context images are never
-        # counted) — the marker text is still sent for them.
-        num_images = sum(
-            1 for f in msg.image_files or [] if f.file_type == ChatFileType.IMAGE
-        )
-        if not num_images:
-            return msg.token_count
-        return (
-            max(0, msg.token_count - msg.image_token_count) + num_images * marker_tokens
-        )
+    def _replay_tokens(msg: ChatMessageSimple) -> int:
+        return replay_token_count(msg, image_files_replayed_as_markers, marker_tokens)
 
     # Build the project / file-metadata messages up front so we can use their
     # actual token counts for the budget.
@@ -490,10 +512,8 @@ def construct_message_history(
     messages_after_last_user = simple_chat_history[last_user_msg_index + 1 :]
 
     # Calculate tokens needed for the last user message and everything after it
-    last_user_tokens = _replay_token_count(last_user_message)
-    after_user_tokens = sum(
-        _replay_token_count(msg) for msg in messages_after_last_user
-    )
+    last_user_tokens = _replay_tokens(last_user_message)
+    after_user_tokens = sum(_replay_tokens(msg) for msg in messages_after_last_user)
 
     # Check if we can fit at least the last user message and messages after it
     required_tokens = last_user_tokens + after_user_tokens
@@ -514,7 +534,7 @@ def construct_message_history(
     current_token_count = 0
 
     for msg in reversed(history_before_last_user):
-        msg_tokens = _replay_token_count(msg)
+        msg_tokens = _replay_tokens(msg)
         if current_token_count + msg_tokens <= remaining_budget:
             msg.should_cache = True
             truncated_history_before.insert(0, msg)
@@ -567,7 +587,7 @@ def construct_message_history(
             remaining_budget -= forgotten_files_message.token_count
             while truncated_history_before and current_token_count > remaining_budget:
                 evicted = truncated_history_before.pop(0)
-                current_token_count -= _replay_token_count(evicted)
+                current_token_count -= _replay_tokens(evicted)
                 # If the evicted message is itself a file, add it to the
                 # forgotten metadata (it's now dropped too).
                 if (
@@ -826,6 +846,9 @@ def run_llm_loop(
         ) and not model_supports_image_input(
             llm.config.model_name, llm.config.model_provider
         )
+        history_marker_tokens = marker_replay_token_count(
+            image_files_replayed_as_markers, token_counter
+        )
         tool_choice: ToolChoiceOptions = ToolChoiceOptions.AUTO
         # Initialize gathered_documents with project files if present
         gathered_documents: list[SearchDoc] | None = (
@@ -1048,12 +1071,19 @@ def run_llm_loop(
 
             # Providers reject a request whose input plus requested output
             # exceeds the context window, so cap the ask at what this cycle's
-            # history actually leaves free.
+            # history actually leaves free. Measured against available_tokens,
+            # not max_input_tokens, so the safety margin stays reserved for
+            # input our local estimate may undercount.
             cycle_max_output_tokens: int | None = None
             if model_max_output_tokens is not None:
                 context_headroom = (
-                    llm.config.max_input_tokens
-                    - sum(msg.token_count for msg in truncated_message_history)
+                    available_tokens
+                    - sum(
+                        replay_token_count(
+                            msg, image_files_replayed_as_markers, history_marker_tokens
+                        )
+                        for msg in truncated_message_history
+                    )
                     - tool_token_budget
                 )
                 if context_headroom > 0:

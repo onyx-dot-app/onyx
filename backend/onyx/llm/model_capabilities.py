@@ -240,11 +240,16 @@ def resolve_max_output_tokens(model_name: str, model_provider: str) -> int | Non
 
     if model_obj is None:
         for prefix in _BEDROCK_INFERENCE_PROFILE_PREFIXES:
-            if model_name.startswith(prefix):
-                model_obj = find_model_obj(
-                    model_map, model_provider, model_name[len(prefix) :]
-                )
+            if not model_name.startswith(prefix):
+                continue
+            base_model_name = model_name[len(prefix) :]
+            # Only retry when the remainder is still `vendor.model` shaped, so a
+            # self-hosted model that merely happens to start with "us." cannot
+            # inherit an unrelated model's ceiling.
+            if "." not in base_model_name:
                 break
+            model_obj = find_model_obj(model_map, model_provider, base_model_name)
+            break
 
     if model_obj is None:
         return None
