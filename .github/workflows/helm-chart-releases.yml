@@ -52,6 +52,15 @@ jobs:
           # cr authenticates with CR_TOKEN, not the git credential helper.
           persist-credentials: false
 
+      # `cr index` commits index.yaml in a gh-pages worktree. The worktree
+      # shares this repository config, and chart-releaser-action has no input
+      # for the committer, so the identity must be set here or the commit
+      # fails with "empty ident name".
+      - name: Configure the git committer
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+
       - name: Install Helm CLI
         uses: azure/setup-helm@9bc31f4ebc9c6b171d7bfbaa5d006ae7abdb4310 # ratchet:azure/setup-helm@v5.0.1
         with:
@@ -91,7 +100,11 @@ jobs:
           echo "Packaged onyx ${version} -> ${package}"
 
       - name: Publish GitHub release and gh-pages index
-        uses: helm/chart-releaser-action@cae68fefc6b5f367a0275617c9f83181ba54714f # ratchet:helm/chart-releaser-action@v1.7.0
+        # HEAD of main, one commit past v1.7.0. v1.7.0 reads `latest_tag` after
+        # the branch that defines it, so `skip_packaging` makes cr.sh exit 1 on
+        # an unbound variable AFTER the release and the index are published.
+        # Move back to a tag once one ships past that fix.
+        uses: helm/chart-releaser-action@3e001cb8c68933439c7e721650f20a07a1a5c61e # ratchet:helm/chart-releaser-action@main
         with:
           config: cr.yaml
           # We already packaged into PACKAGE_DIR above.
