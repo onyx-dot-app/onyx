@@ -1,7 +1,7 @@
 """normalise pinned agents into a table
 
 Revision ID: 4d93b0fd5ca8
-Revises: 3350a25df58e
+Revises: f8048443da9e
 Create Date: 2026-08-13 15:10:53.661660
 
 """
@@ -13,7 +13,7 @@ from sqlalchemy.dialects import postgresql
 
 # revision identifiers, used by Alembic.
 revision = "4d93b0fd5ca8"
-down_revision = "3350a25df58e"
+down_revision = "f8048443da9e"
 branch_labels = None
 depends_on = None
 
