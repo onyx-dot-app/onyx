@@ -118,24 +118,23 @@ def oauth_authorize(
     if connector_cls.supports_pkce:
         code_verifier, code_challenge = generate_pkce_pair()
 
-    redis_client = get_redis_client(tenant_id=tenant_id)
     state = str(uuid.uuid4())
+    redirect_url = connector_cls.oauth_authorization_url(
+        base_url, state, additional_kwargs, code_challenge
+    )
     oauth_state = OAuthState(
         desired_return_url=desired_return_url,
         additional_kwargs=additional_kwargs,
         code_verifier=code_verifier,
     )
+    redis_client = get_redis_client(tenant_id=tenant_id)
     redis_client.set(
         _OAUTH_STATE_KEY_FMT.format(state=state),
         oauth_state.model_dump_json(),
         ex=_OAUTH_STATE_EXPIRATION_SECONDS,
     )
 
-    return AuthorizeResponse(
-        redirect_url=connector_cls.oauth_authorization_url(
-            base_url, state, additional_kwargs, code_challenge
-        )
-    )
+    return AuthorizeResponse(redirect_url=redirect_url)
 
 
 class CallbackResponse(BaseModel):
