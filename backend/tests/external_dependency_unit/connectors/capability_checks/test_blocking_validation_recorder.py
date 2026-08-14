@@ -100,6 +100,35 @@ def test_success_records_a_fallback_shaped_passed_report(
 
 
 @pytest.mark.usefixtures("tenant_context")
+def test_caller_supplied_trigger_lands_on_the_report_row(
+    db_session: Session,
+    blocking_validation: tuple[ConnectorCredentialPair, MagicMock],
+) -> None:
+    """
+    Verifies non-creation callers (the perm-sync task) can relabel their
+    recordings.
+    """
+    # Precondition.
+    cc_pair, _ = blocking_validation
+
+    # Under test.
+    validate_ccpair_for_user(
+        cc_pair.connector_id,
+        cc_pair.credential_id,
+        AccessType.PUBLIC,
+        db_session,
+        trigger=CapabilityCheckTrigger.PERM_SYNC_ATTEMPT,
+    )
+
+    # Postcondition.
+    row = get_capability_report_row(
+        db_session, cc_pair.credential_id, cc_pair.connector_id
+    )
+    assert row is not None
+    assert row.trigger == CapabilityCheckTrigger.PERM_SYNC_ATTEMPT
+
+
+@pytest.mark.usefixtures("tenant_context")
 def test_validation_failure_records_failed_and_still_raises(
     db_session: Session,
     blocking_validation: tuple[ConnectorCredentialPair, MagicMock],
