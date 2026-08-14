@@ -241,6 +241,27 @@ def is_reasoning_model(model_id: str, display_name: str) -> bool:
     return any(pattern in combined for pattern in REASONING_MODEL_PATTERNS)
 
 
+def lm_studio_capability_enabled(value: object) -> bool:
+    """Read one entry of an LM Studio `capabilities` object as a boolean.
+
+    LM Studio reports a capability either as a plain boolean or as an options
+    object, for example
+    `{"allowed_options": ["off", "low", "high"], "default": "off"}`.
+    An options object means the model supports the capability, unless "off" is
+    the only allowed option.
+    """
+    if isinstance(value, bool):
+        return value
+    if isinstance(value, dict):
+        allowed_options = value.get("allowed_options")
+        if isinstance(allowed_options, list):
+            return any(str(option).lower() != "off" for option in allowed_options)
+        return True
+    if isinstance(value, str):
+        return value.lower() not in {"", "off", "false", "none"}
+    return bool(value)
+
+
 def extract_base_model_name(model: str) -> str | None:
     """Extract base model name by removing date suffixes.
 
