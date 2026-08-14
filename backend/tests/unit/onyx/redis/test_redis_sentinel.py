@@ -1,5 +1,7 @@
 import importlib
 import os
+from collections.abc import Iterator
+from contextlib import contextmanager
 from typing import cast
 from unittest.mock import patch
 
@@ -83,38 +85,6 @@ def test_sentinel_tls_and_auth_apply_to_both_connection_sets() -> None:
 
 # --- Celery broker / result backend ---------------------------------------
 
-
-def test_celery_uses_sentinel_urls_and_master_name() -> None:
-    env = {
-        "REDIS_SENTINEL_HOSTS": "s1:26379,s2:26379",
-        "REDIS_SENTINEL_MASTER_NAME": "mymaster",
-    }
-    with patch.dict(os.environ, env):
-        import onyx.background.celery.configs.base as celery_base
-        import onyx.configs.app_configs as app_configs
-
-        importlib.reload(app_configs)
-        importlib.reload(celery_base)
-        try:
-            # the db goes on every node, not just the last one
-            assert celery_base.broker_url == (
-                "sentinel://s1:26379/15;sentinel://s2:26379/15"
-            )
-            assert celery_base.result_backend == (
-                "sentinel://s1:26379/14;sentinel://s2:26379/14"
-            )
-            assert celery_base.broker_transport_options["master_name"] == "mymaster"
-            assert (
-                celery_base.result_backend_transport_options["master_name"]
-                == "mymaster"
-            )
-        finally:
-            importlib.reload(app_configs)
-            importlib.reload(celery_base)
-
-
-# --- per-app Celery config modules ----------------------------------------
-
 # Celery reads settings as attributes of the module given to
 # `config_from_object`. A setting that base.py defines but a per-app module
 # does not re-export falls back to the Celery default, silently.
@@ -133,6 +103,54 @@ _APP_CONFIG_MODULES = [
         "user_file_processing",
     )
 ]
+
+
+def _reload_celery_configs() -> None:
+    import onyx.background.celery.configs.base as celery_base
+    import onyx.configs.app_configs as app_configs
+
+    importlib.reload(app_configs)
+    importlib.reload(celery_base)
+    for module_name in _APP_CONFIG_MODULES:
+        importlib.reload(importlib.import_module(module_name))
+
+
+@contextmanager
+def _celery_config_env(env: dict[str, str]) -> Iterator[None]:
+    """Reload the Celery config modules under `env`, then restore them.
+
+    The restore runs outside the env patch on purpose. These modules read
+    os.environ as they execute, so reloading while it is still patched would
+    leave the Sentinel settings in place for every later test.
+    """
+    try:
+        with patch.dict(os.environ, env):
+            _reload_celery_configs()
+            yield
+    finally:
+        _reload_celery_configs()
+
+
+def test_celery_uses_sentinel_urls_and_master_name() -> None:
+    env = {
+        "REDIS_SENTINEL_HOSTS": "s1:26379,s2:26379",
+        "REDIS_SENTINEL_MASTER_NAME": "mymaster",
+    }
+    with _celery_config_env(env):
+        import onyx.background.celery.configs.base as celery_base
+
+        # the db goes on every node, not just the last one
+        assert celery_base.broker_url == (
+            "sentinel://s1:26379/15;sentinel://s2:26379/15"
+        )
+        assert celery_base.result_backend == (
+            "sentinel://s1:26379/14;sentinel://s2:26379/14"
+        )
+        assert celery_base.broker_transport_options["master_name"] == "mymaster"
+        assert celery_base.result_backend_transport_options["master_name"] == "mymaster"
+
+
+# --- per-app Celery config modules ----------------------------------------
 
 # Redis connection settings that every app must share with base.py.
 _SHARED_CONNECTION_SETTINGS = [
@@ -154,6 +172,10 @@ _SHARED_CONNECTION_SETTINGS = [
 def test_app_configs_reexport_all_shared_connection_settings() -> None:
     import onyx.background.celery.configs.base as celery_base
 
+    # normalize first: this assertion holds for any env, but only if base and
+    # the app modules were last loaded under the same one
+    _reload_celery_configs()
+
     for module_name in _APP_CONFIG_MODULES:
         module = importlib.import_module(module_name)
         for setting in _SHARED_CONNECTION_SETTINGS:
@@ -173,36 +195,23 @@ def test_every_app_resolves_sentinel_master_name_on_both_connections() -> None:
         "REDIS_SENTINEL_MASTER_NAME": "mymaster",
         "REDIS_SENTINEL_PASSWORD": "sentinelpw",
     }
-    with patch.dict(os.environ, env):
-        import onyx.background.celery.configs.base as celery_base
-        import onyx.configs.app_configs as app_configs
+    with _celery_config_env(env):
+        for module_name in _APP_CONFIG_MODULES:
+            module = importlib.import_module(module_name)
+            app = Celery(f"test-{module_name}")
+            app.config_from_object(module)
 
-        importlib.reload(app_configs)
-        importlib.reload(celery_base)
-        try:
-            for module_name in _APP_CONFIG_MODULES:
-                module = importlib.reload(importlib.import_module(module_name))
-                app = Celery(f"test-{module_name}")
-                app.config_from_object(module)
-
-                broker_options = cast(dict, app.conf["broker_transport_options"])
-                backend_options = cast(
-                    dict, app.conf["result_backend_transport_options"]
-                )
-                assert broker_options["master_name"] == "mymaster", (
-                    f"{module_name} broker lost the master name"
-                )
-                assert backend_options["master_name"] == "mymaster", (
-                    f"{module_name} result backend lost the master name"
-                )
-                assert backend_options["sentinel_kwargs"] == {
-                    "password": "sentinelpw"
-                }, f"{module_name} result backend lost the sentinel password"
-        finally:
-            importlib.reload(app_configs)
-            importlib.reload(celery_base)
-            for module_name in _APP_CONFIG_MODULES:
-                importlib.reload(importlib.import_module(module_name))
+            broker_options = cast(dict, app.conf["broker_transport_options"])
+            backend_options = cast(dict, app.conf["result_backend_transport_options"])
+            assert broker_options["master_name"] == "mymaster", (
+                f"{module_name} broker lost the master name"
+            )
+            assert backend_options["master_name"] == "mymaster", (
+                f"{module_name} result backend lost the master name"
+            )
+            assert backend_options["sentinel_kwargs"] == {"password": "sentinelpw"}, (
+                f"{module_name} result backend lost the sentinel password"
+            )
 
 
 def test_sentinel_urls_keep_the_configured_redis_db() -> None:
@@ -218,38 +227,27 @@ def test_sentinel_urls_keep_the_configured_redis_db() -> None:
         "REDIS_SENTINEL_MASTER_NAME": "mymaster",
         "REDIS_PASSWORD": "datapw",
     }
-    with patch.dict(os.environ, env):
-        import onyx.background.celery.configs.base as celery_base
+    with _celery_config_env(env):
         import onyx.configs.app_configs as app_configs
 
-        importlib.reload(app_configs)
-        importlib.reload(celery_base)
-        try:
-            beat = importlib.reload(
-                importlib.import_module("onyx.background.celery.configs.beat")
-            )
-            app = Celery("test-sentinel-db")
-            app.config_from_object(beat)
+        beat = importlib.import_module("onyx.background.celery.configs.beat")
+        app = Celery("test-sentinel-db")
+        app.config_from_object(beat)
 
-            # kombu takes the db from the primary URL. It read "/" (-> db 0)
-            # while the db sat on the last node.
-            broker = Connection(
-                app.conf["broker_url"],
-                transport_options=app.conf["broker_transport_options"],
-            )
-            assert broker.virtual_host == str(app_configs.REDIS_DB_NUMBER_CELERY)
+        # kombu takes the db from the primary URL. It read "/" (-> db 0) while
+        # the db sat on the last node.
+        broker = Connection(
+            app.conf["broker_url"],
+            transport_options=app.conf["broker_transport_options"],
+        )
+        assert broker.virtual_host == str(app_configs.REDIS_DB_NUMBER_CELERY)
 
-            backend = SentinelBackend(app=app, url=app.conf["result_backend"])
-            connparams = cast(dict, backend.connparams)  # ty: ignore[unresolved-attribute]
-            assert connparams["db"] == app_configs.REDIS_DB_NUMBER_CELERY_RESULT_BACKEND
-            # master auth still rides the URL, and every node is discovered
-            assert connparams["password"] == "datapw"
-            assert len(connparams["hosts"]) == 3
-        finally:
-            importlib.reload(app_configs)
-            importlib.reload(celery_base)
-            for module_name in _APP_CONFIG_MODULES:
-                importlib.reload(importlib.import_module(module_name))
+        backend = SentinelBackend(app=app, url=app.conf["result_backend"])
+        connparams = cast(dict, backend.connparams)  # ty: ignore[unresolved-attribute]
+        assert connparams["db"] == app_configs.REDIS_DB_NUMBER_CELERY_RESULT_BACKEND
+        # master auth still rides the URL, and every node is discovered
+        assert connparams["password"] == "datapw"
+        assert len(connparams["hosts"]) == 3
 
 
 # --- config validation + Celery TLS ---------------------------------------
@@ -280,22 +278,15 @@ def test_sentinel_with_iam_auth_raises() -> None:
 
 def test_celery_sentinel_kwargs_enable_ssl_under_tls() -> None:
     env = {"REDIS_SENTINEL_HOSTS": "s1:26379", "REDIS_SSL": "true"}
-    with patch.dict(os.environ, env):
+    with _celery_config_env(env):
         import onyx.background.celery.configs.base as celery_base
-        import onyx.configs.app_configs as app_configs
 
-        importlib.reload(app_configs)
-        importlib.reload(celery_base)
-        try:
-            sk = cast(dict, celery_base.broker_transport_options["sentinel_kwargs"])
-            # cert params are inert without the explicit ssl flag
-            assert sk["ssl"] is True
-            # broker_use_ssl is a Celery setting; its presence enables TLS and it
-            # must NOT carry the ssl key
-            assert "ssl" not in celery_base.broker_use_ssl
-        finally:
-            importlib.reload(app_configs)
-            importlib.reload(celery_base)
+        sk = cast(dict, celery_base.broker_transport_options["sentinel_kwargs"])
+        # cert params are inert without the explicit ssl flag
+        assert sk["ssl"] is True
+        # broker_use_ssl is a Celery setting; its presence enables TLS and it
+        # must NOT carry the ssl key
+        assert "ssl" not in celery_base.broker_use_ssl
 
 
 def test_out_of_range_sentinel_port_raises() -> None:
