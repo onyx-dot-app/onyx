@@ -43,6 +43,8 @@ class OnyxErrorCode(Enum):
     EE_REQUIRED = ("EE_REQUIRED", 403)
     SINGLE_TENANT_ONLY = ("SINGLE_TENANT_ONLY", 403)
     ENV_VAR_GATED = ("ENV_VAR_GATED", 403)
+    # The deployment cannot support the feature at all, so no grant helps.
+    DEPLOYMENT_UNSUPPORTED = ("DEPLOYMENT_UNSUPPORTED", 403)
 
     # --------------------------------------------------------------------------
     # Validation / Bad Request (400)

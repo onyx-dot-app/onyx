@@ -513,7 +513,7 @@ def list_connector_files(
         )
         backfilled_sizes = {
             file_id: size
-            for file_id, size in zip(missing_size_ids, looked_up_sizes)
+            for file_id, size in zip(missing_size_ids, looked_up_sizes, strict=True)
             if isinstance(size, int)
         }
         if backfilled_sizes:
@@ -529,7 +529,7 @@ def list_connector_files(
                 )
 
     files = []
-    for file_id, file_name in zip(file_locations, file_names):
+    for file_id, file_name in zip(file_locations, file_names, strict=False):
         record = records_by_id.get(file_id)
         file_size = None
         upload_date = None
@@ -663,7 +663,9 @@ def update_connector_files(
     remaining_file_names = []
     removed_file_names = set()
 
-    for file_id, file_name in zip(current_file_locations, current_file_names):
+    for file_id, file_name in zip(
+        current_file_locations, current_file_names, strict=False
+    ):
         if file_id not in files_to_remove_set:
             remaining_file_locations.append(file_id)
             remaining_file_names.append(file_name)
@@ -1594,6 +1596,8 @@ def update_connector_from_model(
     except ValueError as e:
         raise OnyxError(OnyxErrorCode.INVALID_INPUT, str(e))
 
+    # TODO(andrei, evan): Validate the updated config here like the creation
+    # flows do (``validate_ccpair_for_user`` / ``validate_connector_settings``).
     updated_connector = update_connector(connector_id, connector_base, db_session)
     if updated_connector is None:
         raise OnyxError(

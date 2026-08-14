@@ -8,12 +8,20 @@ from dataclasses import dataclass
 from enum import Enum, auto
 from uuid import UUID
 
+from sqlalchemy.orm import Session
+
 from onyx.cache.factory import get_cache_backend
 from onyx.cache.interface import CACHE_TRANSIENT_ERRORS, CacheBackend
 from onyx.db.engine.sql_engine import get_session_with_current_tenant
+from onyx.db.models import Sandbox
 from onyx.db.users import fetch_user_by_id
 from onyx.server.features.build.configs import (
     OPENCODE_PROMPT_INACTIVITY_TIMEOUT_SECONDS,
+)
+from onyx.server.features.build.db.build_session import get_build_session
+from onyx.server.features.build.db.sandbox import (
+    get_sandbox_by_user_id,
+    update_sandbox_heartbeat,
 )
 from onyx.server.features.build.interactive_turns.state import (
     TURN_STATUS_CANCELLED,
@@ -30,13 +38,22 @@ from onyx.server.features.build.sandbox.event_schema import (
     PromptResponse,
 )
 from onyx.server.features.build.sandbox.event_schema import Error as SandboxError
+from onyx.server.features.build.sandbox.factory import get_sandbox_manager
 from onyx.server.features.build.sandbox.models import PromptAttachment
 from onyx.server.features.build.sandbox.sse import SSEKeepalive
 from onyx.server.features.build.session.interrupt_signal import (
     clear_interrupt,
     is_interrupt_requested,
 )
+from onyx.server.features.build.session.locks import session_creation_lock
 from onyx.server.features.build.session.manager import SessionManager
+from onyx.server.features.build.session.sandbox_lifecycle import (
+    HEALTH_PROBE_TIMEOUT_SECONDS,
+)
+from onyx.server.features.build.session.session_ready import (
+    ensure_session_ready,
+    session_runtime_intact,
+)
 from onyx.server.features.build.session.streaming import BuildStreamingState
 from onyx.server.features.build.timeouts import (
     INTERACTIVE_TURN_HARD_CAP_SECONDS,
@@ -171,6 +188,56 @@ def run_claimed_interactive_build_turn(
         )
 
 
+def _ready_session_runtime(
+    db_session: Session, session_id: UUID, user_id: UUID
+) -> Sandbox:
+    """The sandbox this turn runs in, with the session's workspace present.
+
+    A settled session returns straight away; anything else — a sandbox the
+    reaper took, a session never restored, a pod that died under a live record —
+    is rebuilt through the same path and the same lock the restore endpoint
+    uses, blocking, because the turn has nothing to do until the workspace is
+    there.
+
+    The pre-lock check is only a fast path: ``ensure_session_ready`` re-verifies
+    everything (pod liveness included) under the lock, so it stays with this
+    caller — its point is skipping the lock on the hot path, and lock
+    acquisition is caller policy (the turn blocks; restore 409s).
+    """
+    session = get_build_session(session_id, user_id, db_session)
+    sandbox = get_sandbox_by_user_id(db_session, user_id)
+    if sandbox is not None and session_runtime_intact(session, sandbox):
+        # The reaper decides from this timestamp, and the stream only starts
+        # refreshing it after the prompt slot and the send.
+        update_sandbox_heartbeat(db_session, sandbox.id)
+        db_session.commit()
+        # RUNNING is a claim, not a fact: the reaper terminates the pod before
+        # it writes SLEEPING, and an evicted pod is never written down at all.
+        if get_sandbox_manager().health_check(
+            sandbox.id, timeout=HEALTH_PROBE_TIMEOUT_SECONDS
+        ):
+            return sandbox
+        logger.warning(
+            "Session %s claims a RUNNING sandbox with no live pod; waking it",
+            session_id,
+        )
+
+    if session is None:
+        raise RuntimeError(f"Build session {session_id} not found")
+    user = fetch_user_by_id(db_session, user_id)
+    if user is None:
+        raise RuntimeError(f"User {user_id} not found")
+
+    logger.info(
+        "Interactive turn is waking session %s (session=%s sandbox=%s)",
+        session_id,
+        session.status.value,
+        sandbox.status.value if sandbox else "missing",
+    )
+    with session_creation_lock(user_id):
+        return ensure_session_ready(db_session, get_sandbox_manager(), session, user)
+
+
 def _drive_interactive_turn(
     *,
     turn_id: UUID,
@@ -186,7 +253,7 @@ def _drive_interactive_turn(
     cache = get_cache_backend()
     with get_session_with_current_tenant() as db_session:
         session_manager = SessionManager(db_session)
-        sandbox = session_manager.ensure_sandbox_running(user_id)
+        sandbox = _ready_session_runtime(db_session, session_id, user_id)
         db_session.commit()
 
         if not touch_turn(cache=cache, turn_id=turn_id, runner_id=runner_id):

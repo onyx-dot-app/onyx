@@ -1,11 +1,7 @@
 import { Card } from "@opal/components/cards/card/components";
 import { Content } from "@opal/layouts";
 import { SvgEmpty } from "@opal/icons";
-import type {
-  IconFunctionComponent,
-  PaddingVariants,
-  RichStr,
-} from "@opal/types";
+import type { IconFunctionComponent, RichStr } from "@opal/types";
 
 // ---------------------------------------------------------------------------
 // Types
@@ -18,8 +14,16 @@ type EmptyMessageCardBaseProps = {
   /** Primary message text. */
   title: string | RichStr;
 
-  /** Padding preset for the card. @default "md" */
-  padding?: PaddingVariants;
+  /**
+   * Padding around the card, as a spacing step (`N / 4` rem).
+   *
+   * A closed set: an empty state is a fixed presentation, not a surface callers
+   * lay out themselves, so it offers the densities the named scale did and no
+   * more. `Card` stays open — it is the general-purpose container.
+   *
+   * @default 4
+   */
+  padding?: 0 | 0.5 | 1 | 2 | 4 | 6;
 
   /** Ref forwarded to the root Card div. */
   ref?: React.Ref<HTMLDivElement>;
@@ -45,7 +49,7 @@ function EmptyMessageCard(props: EmptyMessageCardProps) {
     sizePreset = "secondary",
     icon = SvgEmpty,
     title,
-    padding = "md",
+    padding = 4,
     ref,
   } = props;
 

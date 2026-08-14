@@ -129,7 +129,7 @@ function BedrockModalInternals({
   return (
     <>
       <InputPadder>
-        <Section gap={1}>
+        <Section gap={4}>
           <InputVertical
             withLabel={FIELD_AWS_REGION_NAME}
             title="AWS Region"
@@ -180,8 +180,8 @@ function BedrockModalInternals({
       </InputPadder>
 
       {authMethod === AUTH_METHOD_ACCESS_KEY && (
-        <Card background="light" border="none" padding="sm">
-          <Section gap={1}>
+        <Card background="light" border="none" padding={2}>
+          <Section gap={4}>
             <InputVertical
               withLabel={FIELD_AWS_ACCESS_KEY_ID}
               title="AWS Access Key ID"
@@ -214,8 +214,8 @@ function BedrockModalInternals({
       )}
 
       {authMethod === AUTH_METHOD_LONG_TERM_API_KEY && (
-        <Card background="light" border="none" padding="sm">
-          <Section gap={0.5}>
+        <Card background="light" border="none" padding={2}>
+          <Section gap={2}>
             <InputVertical
               withLabel={FIELD_AWS_BEARER_TOKEN_BEDROCK}
               title="Long-term API Key"

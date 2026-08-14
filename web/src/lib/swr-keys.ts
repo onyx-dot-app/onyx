@@ -20,6 +20,7 @@ export const SWR_KEYS = {
   customAnalyticsScript: "/api/enterprise-settings/custom-analytics-script",
   authType: "/api/auth/type",
   adminSecuritySettings: "/api/admin/security",
+  incognitoAvailability: "/api/chat/incognito-availability",
   adminSsoProviders: "/api/admin/sso/provider",
 
   // ── Agents / Personas ─────────────────────────────────────────────────────
@@ -42,7 +43,7 @@ export const SWR_KEYS = {
   wellKnownLlmProvider: (providerEndpoint: string) =>
     `/api/admin/llm/built-in/options/${providerEndpoint}`,
   llmContextualCost: "/api/admin/llm/provider-contextual-cost",
-  userUsage: (days: number) => `/api/user/usage?days=${days}`,
+  userUsage: "/api/user/usage",
   costOverrides: "/api/admin/cost-overrides",
   adminUsageExport: "/api/admin/usage/export",
   adminUsageReset: "/api/admin/usage/reset",
@@ -202,6 +203,7 @@ export const SWR_KEYS = {
   // ── Admin ─────────────────────────────────────────────────────────────────
   hooks: "/api/admin/hooks",
   hookSpecs: "/api/admin/hooks/specs",
+  logExportStatus: (exportId: string) => `/api/admin/log-export/${exportId}`,
 
   // ── Slack Bots ────────────────────────────────────────────────────────────
   slackChannels: "/api/manage/admin/slack-app/channel",

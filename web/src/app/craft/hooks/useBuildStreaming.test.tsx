@@ -119,6 +119,45 @@ describe("useBuildStreaming thinking packets", () => {
     });
   });
 
+  it.each([
+    { changesDuringTurn: false, expected: false },
+    { changesDuringTurn: true, expected: true },
+  ])(
+    "reconciles stale skills after turn creation when changesDuringTurn is $changesDuringTurn",
+    async ({ changesDuringTurn, expected }) => {
+      let resolveTurn: (
+        turn: Awaited<ReturnType<typeof createTurn>>
+      ) => void = () => {};
+      jest.mocked(createTurn).mockReturnValueOnce(
+        new Promise((resolve) => {
+          resolveTurn = resolve;
+        })
+      );
+      useBuildSessionStore.getState().updateSessionData(sessionId, {
+        skillsStale: true,
+      });
+      const { result } = renderHook(() => useBuildStreaming());
+
+      const stream = result.current.streamMessage(sessionId, "build the app");
+      if (changesDuringTurn) {
+        useBuildSessionStore.getState().updateSessionData(sessionId, {
+          skillsStale: true,
+        });
+      }
+      resolveTurn({
+        session_id: sessionId,
+        turn_id: "turn-thinking",
+        status: "QUEUED",
+        turn_index: 0,
+      });
+      await act(async () => stream);
+
+      expect(
+        useBuildSessionStore.getState().sessions.get(sessionId)?.skillsStale
+      ).toBe(expected);
+    }
+  );
+
   it("does not reset the abort controller when a newer turn took ownership mid-stream", async () => {
     const newerController = new AbortController();
     jest.mocked(processSSEStream).mockImplementationOnce(async () => {

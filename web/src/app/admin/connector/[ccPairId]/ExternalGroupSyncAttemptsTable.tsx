@@ -213,7 +213,7 @@ export function ExternalGroupSyncAttemptsTable({
         />
       )}
 
-      <Section gap={0.75} alignItems="stretch" height="auto">
+      <Section gap={3} alignItems="stretch" height="auto">
         <Table
           data={attempts}
           columns={columns}

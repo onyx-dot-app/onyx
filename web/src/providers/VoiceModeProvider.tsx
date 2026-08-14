@@ -161,6 +161,11 @@ export function VoiceModeProvider({ children }: { children: React.ReactNode }) {
     useState(false);
   const [manualStopCount, setManualStopCount] = useState(0);
   const [isTTSMuted, setIsTTSMuted] = useState(false);
+  const [pendingWsConnection, setPendingWsConnection] = useState<{
+    id: number;
+    url: string;
+    speed: number;
+  } | null>(null);
   const manualTTSMuteHandlerRef = useRef<((muted: boolean) => void) | null>(
     null
   );
@@ -191,6 +196,8 @@ export function VoiceModeProvider({ children }: { children: React.ReactNode }) {
   const lastRawTextRef = useRef("");
   const pendingTextRef = useRef<string[]>([]);
   const isConnectingRef = useRef(false);
+  const connectAttemptRef = useRef(0);
+  const connectingWsRef = useRef<WebSocket | null>(null);
 
   // Timers
   const flushTimerRef = useRef<NodeJS.Timeout | null>(null);
@@ -470,85 +477,143 @@ export function VoiceModeProvider({ children }: { children: React.ReactNode }) {
       return;
     }
 
-    // Set connecting flag to prevent concurrent connection attempts
     isConnectingRef.current = true;
+    const attemptId = connectAttemptRef.current + 1;
+    connectAttemptRef.current = attemptId;
 
     try {
-      // Initialize MediaSource first
       const initialized = await initMediaSource();
-      if (!initialized) {
-        isConnectingRef.current = false;
+      if (!initialized || connectAttemptRef.current !== attemptId) {
+        if (connectAttemptRef.current === attemptId) {
+          isConnectingRef.current = false;
+        }
         return;
       }
 
-      // Get WebSocket URL with auth token
       const wsUrl = await getWebSocketUrl();
+      // Stale attempt: a newer connect/disconnect owns the flags now.
+      if (connectAttemptRef.current !== attemptId) {
+        return;
+      }
 
-      const ws = new WebSocket(wsUrl);
-
-      ws.onopen = () => {
-        isConnectingRef.current = false;
-        // Send initial config
-        ws.send(
-          JSON.stringify({
-            type: "config",
-            speed: playbackSpeed,
-          })
-        );
-
-        // Send any pending text
-        for (const text of pendingTextRef.current) {
-          ws.send(JSON.stringify({ type: "synthesize", text }));
-        }
-        pendingTextRef.current = [];
-      };
-
-      ws.onmessage = async (event) => {
-        if (event.data instanceof Blob) {
-          const arrayBuffer = await event.data.arrayBuffer();
-          handleAudioData(arrayBuffer);
-        } else if (typeof event.data === "string") {
-          try {
-            const msg = JSON.parse(event.data);
-            if (msg.type === "audio_done") {
-              if (loadingTimeoutRef.current) {
-                clearTimeout(loadingTimeoutRef.current);
-                loadingTimeoutRef.current = null;
-              }
-              setIsTTSLoading(false);
-              finalizeStream();
-            }
-          } catch {
-            // Ignore parse errors
-          }
-        }
-      };
-
-      ws.onerror = () => {
-        isConnectingRef.current = false;
-        setIsTTSLoading(false);
-        setIsAwaitingAutoPlaybackStart(false);
-      };
-
-      ws.onclose = () => {
-        wsRef.current = null;
-        isConnectingRef.current = false;
-        setIsTTSLoading(false);
-        setIsAwaitingAutoPlaybackStart(false);
-        finalizeStream();
-      };
-
-      wsRef.current = ws;
+      setPendingWsConnection({
+        id: attemptId,
+        url: wsUrl,
+        speed: playbackSpeed,
+      });
     } catch {
-      isConnectingRef.current = false;
+      if (connectAttemptRef.current === attemptId) {
+        isConnectingRef.current = false;
+      }
     }
-  }, [
-    playbackSpeed,
-    handleAudioData,
-    getWebSocketUrl,
-    initMediaSource,
-    finalizeStream,
-  ]);
+  }, [getWebSocketUrl, initMediaSource, playbackSpeed]);
+
+  useEffect(() => {
+    if (!pendingWsConnection) {
+      return;
+    }
+    const ws = new WebSocket(pendingWsConnection.url);
+    connectingWsRef.current = ws;
+
+    ws.onopen = () => {
+      // Stale socket (a newer attempt superseded this one): drop it silently.
+      if (connectAttemptRef.current !== pendingWsConnection.id) {
+        ws.close();
+        return;
+      }
+      if (connectingWsRef.current === ws) {
+        connectingWsRef.current = null;
+      }
+      isConnectingRef.current = false;
+      ws.send(
+        JSON.stringify({
+          type: "config",
+          speed: pendingWsConnection.speed,
+        })
+      );
+
+      for (const text of pendingTextRef.current) {
+        ws.send(JSON.stringify({ type: "synthesize", text }));
+      }
+      pendingTextRef.current = [];
+    };
+
+    ws.onmessage = async (event) => {
+      if (connectAttemptRef.current !== pendingWsConnection.id) {
+        return;
+      }
+      if (event.data instanceof Blob) {
+        const arrayBuffer = await event.data.arrayBuffer();
+        // Re-check after the await: a supersede during decoding must not
+        // append this socket's audio to the replacement stream.
+        if (connectAttemptRef.current !== pendingWsConnection.id) {
+          return;
+        }
+        handleAudioData(arrayBuffer);
+      } else if (typeof event.data === "string") {
+        try {
+          const msg = JSON.parse(event.data);
+          if (msg.type === "audio_done") {
+            if (loadingTimeoutRef.current) {
+              clearTimeout(loadingTimeoutRef.current);
+              loadingTimeoutRef.current = null;
+            }
+            setIsTTSLoading(false);
+            finalizeStream();
+          }
+        } catch {
+          // Ignore parse errors
+        }
+      }
+    };
+
+    ws.onerror = () => {
+      if (connectAttemptRef.current !== pendingWsConnection.id) {
+        return;
+      }
+      isConnectingRef.current = false;
+      setIsTTSLoading(false);
+      setIsAwaitingAutoPlaybackStart(false);
+    };
+
+    ws.onclose = () => {
+      if (wsRef.current === ws) {
+        wsRef.current = null;
+      }
+      if (connectingWsRef.current === ws) {
+        connectingWsRef.current = null;
+      }
+      // Stale socket closing must not reset the active attempt's stream state.
+      if (connectAttemptRef.current !== pendingWsConnection.id) {
+        return;
+      }
+      isConnectingRef.current = false;
+      setIsTTSLoading(false);
+      setIsAwaitingAutoPlaybackStart(false);
+      finalizeStream();
+    };
+
+    wsRef.current = ws;
+
+    return () => {
+      try {
+        ws.close();
+      } catch {
+        // Ignore
+      }
+      if (wsRef.current === ws) {
+        wsRef.current = null;
+      }
+      if (connectingWsRef.current === ws) {
+        connectingWsRef.current = null;
+      }
+      // Only the still-current attempt may release the connecting flag. A
+      // superseding attempt already owns it.
+      if (connectAttemptRef.current === pendingWsConnection.id) {
+        isConnectingRef.current = false;
+      }
+    };
+  }, [pendingWsConnection, handleAudioData, finalizeStream]);
 
   const stopTTS = useCallback((options?: { manual?: boolean }) => {
     // Clear timers
@@ -613,15 +678,19 @@ export function VoiceModeProvider({ children }: { children: React.ReactNode }) {
     streamEndedRef.current = false;
 
     // Close WebSocket
-    if (wsRef.current) {
+    const ws = wsRef.current ?? connectingWsRef.current;
+    if (ws) {
       try {
-        wsRef.current.send(JSON.stringify({ type: "end" }));
-        wsRef.current.close();
+        ws.send(JSON.stringify({ type: "end" }));
+        ws.close();
       } catch {
         // Ignore
       }
-      wsRef.current = null;
     }
+    wsRef.current = null;
+    connectingWsRef.current = null;
+    connectAttemptRef.current += 1;
+    setPendingWsConnection(null);
 
     setIsTTSPlaying(false);
     setIsTTSLoading(false);
@@ -871,15 +940,17 @@ export function VoiceModeProvider({ children }: { children: React.ReactNode }) {
 
   // Toggle TTS mute state
   const toggleTTSMute = useCallback(() => {
-    setIsTTSMuted((prev) => {
-      const newMuted = !prev;
-      if (audioElementRef.current) {
-        audioElementRef.current.muted = newMuted;
-      }
-      manualTTSMuteHandlerRef.current?.(newMuted);
-      return newMuted;
-    });
+    setIsTTSMuted((prev) => !prev);
   }, []);
+
+  // Audio element and manual handler track the committed mute state, so every
+  // path that changes it (toggle, reset) stays in sync.
+  useEffect(() => {
+    if (audioElementRef.current) {
+      audioElementRef.current.muted = isTTSMuted;
+    }
+    manualTTSMuteHandlerRef.current?.(isTTSMuted);
+  }, [isTTSMuted]);
 
   const registerManualTTSMuteHandler = useCallback(
     (handler: ((muted: boolean) => void) | null) => {
@@ -975,14 +1046,17 @@ export function VoiceModeProvider({ children }: { children: React.ReactNode }) {
       if (audioUrlRef.current) {
         URL.revokeObjectURL(audioUrlRef.current);
       }
-      if (wsRef.current) {
+      const ws = wsRef.current ?? connectingWsRef.current;
+      if (ws) {
         try {
-          wsRef.current.close();
+          ws.close();
         } catch (err) {
           // WebSocket may already be closed or in CLOSING state — non-critical
           console.warn("Failed to close TTS WebSocket during cleanup:", err);
         }
       }
+      wsRef.current = null;
+      connectingWsRef.current = null;
       if (audioElementRef.current) {
         try {
           audioElementRef.current.pause();

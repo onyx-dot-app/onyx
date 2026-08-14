@@ -9,6 +9,7 @@ from typing import Any, cast
 from onyx.chat.chat_state import ChatStateContainer
 from onyx.chat.citation_processor import DynamicCitationProcessor
 from onyx.chat.emitter import Emitter
+from onyx.chat.incognito import current_turn_persists_content
 from onyx.chat.models import ChatMessageSimple, LlmStepResult
 from onyx.chat.tool_call_args_streaming import maybe_emit_argument_delta
 from onyx.configs.app_configs import (
@@ -42,8 +43,12 @@ from onyx.llm.models import (
     UserMessage,
 )
 from onyx.llm.prompt_cache.processor import process_with_prompt_cache
-from onyx.llm.utils import model_needs_formatting_reenabled
-from onyx.prompts.chat_prompts import CODE_BLOCK_MARKDOWN, IMAGE_DROP_REMINDER
+from onyx.llm.utils import model_needs_formatting_reenabled, model_supports_image_input
+from onyx.prompts.chat_prompts import (
+    CODE_BLOCK_MARKDOWN,
+    IMAGE_DROP_REMINDER,
+    NON_VISION_IMAGE_MARKER,
+)
 from onyx.prompts.constants import SYSTEM_REMINDER_TAG_CLOSE, SYSTEM_REMINDER_TAG_OPEN
 from onyx.server.query_and_chat.placement import Placement
 from onyx.server.query_and_chat.streaming_models import (
@@ -862,10 +867,25 @@ def translate_history_to_llm_format(
     last_cacheable_msg_idx = -1
     all_previous_msgs_cacheable = True
 
+    # History can contain images even when the current model cannot accept
+    # them (e.g. the user switched models mid-session). Sending them yields a
+    # provider 400, so replay a text marker instead. Admins can mark custom
+    # vision models with the VISION flow type to keep images flowing.
+    supports_image_input = True
+    if any(msg.message_type == MessageType.USER and msg.image_files for msg in history):
+        supports_image_input = model_supports_image_input(
+            llm_config.model_name, llm_config.model_provider
+        )
+
     # Per-request image cap (provider-aware). When the cap is enforced and
     # images are dropped, we emit a system-reminder UserMessage at the end of
     # the translated request — the same pattern MessageType.USER_REMINDER uses.
-    image_cap = resolve_image_cap(llm_config.model_provider)
+    # The cap bounds image payloads, so it only applies when images are
+    # actually sent — markers for a non-vision model are plain text and must
+    # never be capped away.
+    image_cap = (
+        resolve_image_cap(llm_config.model_provider) if supports_image_input else None
+    )
     keep_image_indices: set[tuple[int, int]] | None = None
     image_drop_notice: str | None = None
     if image_cap is not None:
@@ -925,6 +945,16 @@ def translate_history_to_llm_format(
                         keep_image_indices is not None
                         and (idx, img_idx) not in keep_image_indices
                     ):
+                        continue
+                    if not supports_image_input:
+                        content_parts.append(
+                            TextContentPart(
+                                type="text",
+                                text=NON_VISION_IMAGE_MARKER.format(
+                                    file_id=img_file.file_id
+                                ),
+                            )
+                        )
                         continue
                     try:
                         image_type = get_image_type_from_bytes(img_file.content)
@@ -1126,7 +1156,7 @@ def run_llm_step_pkt_generator(
     llm_msg_history = translate_history_to_llm_format(history, llm.config)
     has_reasoned = False
 
-    if LOG_ONYX_MODEL_INTERACTIONS:
+    if LOG_ONYX_MODEL_INTERACTIONS and current_turn_persists_content():
         logger.debug(
             "Message history:\n%s",
             _format_message_history_for_logging(llm_msg_history),
@@ -1492,7 +1522,7 @@ def run_llm_step_pkt_generator(
 
     # Note: Content (AgentResponseDelta) doesn't need an explicit end packet - OverallStop handles it
     # Tool calls are handled by tool execution code and emit their own packets (e.g., SectionEnd)
-    if LOG_ONYX_MODEL_INTERACTIONS:
+    if LOG_ONYX_MODEL_INTERACTIONS and current_turn_persists_content():
         logger.debug("Accumulated reasoning: %s", accumulated_reasoning)
         logger.debug("Accumulated answer: %s", accumulated_answer)
 

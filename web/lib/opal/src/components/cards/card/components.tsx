@@ -3,17 +3,17 @@ import "@opal/components/cards/card/styles.css";
 import type {
   BackgroundVariants,
   BorderVariants,
-  PaddingVariants,
+  Spacing,
   RoundingVariants,
   ShadowVariants,
   SizeVariants,
   StatusVariants,
 } from "@opal/types";
 import {
-  paddingVariants,
   cardRoundingVariants,
   cardTopRoundingVariants,
   cardBottomRoundingVariants,
+  spacingToRem,
 } from "@opal/shared";
 import { cn } from "@opal/utils";
 
@@ -26,24 +26,17 @@ import { cn } from "@opal/utils";
  */
 type CardBaseProps = {
   /**
-   * Padding preset.
+   * Padding.
    *
-   * | Value   | Class   |
-   * |---------|---------|
-   * | `"lg"`  | `p-6`   |
-   * | `"md"`  | `p-4`   |
-   * | `"sm"`  | `p-2`   |
-   * | `"xs"`  | `p-1`   |
-   * | `"2xs"` | `p-0.5` |
-   * | `"fit"` | `p-0`   |
+   * A spacing step: `N` is `N / 4` rem, so `4` is `1rem`.
    *
    * In expandable mode, applied **only** to the header region. The
    * `expandedContent` slot has no intrinsic padding — callers own any padding
    * inside the content they pass in.
    *
-   * @default "md"
+   * @default 4
    */
-  padding?: PaddingVariants;
+  padding?: Spacing;
 
   /**
    * Border-radius preset.
@@ -105,6 +98,20 @@ type CardBaseProps = {
    * @default "none"
    */
   shadow?: ShadowVariants;
+
+  /**
+   * Marks the card unavailable: dimmed, with a not-allowed cursor.
+   *
+   * Visual only. Children stay interactive, because a card is a container and
+   * suppressing its contents is a stronger claim than dimming them — compose
+   * `Disabled` from `@opal/core` when clicks should be blocked too.
+   *
+   * A boolean rather than a variant, so it stacks with `background` and
+   * `border` instead of replacing them.
+   *
+   * @default false
+   */
+  disabled?: boolean;
 
   /** Ref forwarded to the root `<div>`. */
   ref?: React.Ref<HTMLDivElement>;
@@ -182,7 +189,7 @@ type CardProps = CardPlainProps | CardExpandableProps;
  *
  * @example Plain
  * ```tsx
- * <Card padding="md" border="solid">
+ * <Card padding={4} border="solid">
  *   <p>Hello</p>
  * </Card>
  * ```
@@ -200,30 +207,49 @@ type CardProps = CardPlainProps | CardExpandableProps;
  * </Card>
  * ```
  */
+/**
+ * The `data-*` entries a caller passed in.
+ *
+ * A card owns how it looks, not what the surrounding app calls it — `data-*` is
+ * the app's namespace, used for test hooks and analytics, and silently dropping
+ * it is worse than either forwarding or rejecting it. Only `data-*` is picked
+ * up: `className` and `style` stay out by design, and behavioural props like
+ * `onClick` are a deliberate API decision rather than something to inherit.
+ */
+function dataAttributes(props: object): Record<string, unknown> {
+  return Object.fromEntries(
+    Object.entries(props).filter(([key]) => key.startsWith("data-"))
+  );
+}
+
 function Card(props: CardProps) {
   const {
-    padding: paddingProp = "md",
+    padding: paddingProp = 4,
     rounding: roundingProp = "md",
     background = "light",
     border = "none",
     borderColor = "default",
     shadow = "none",
+    disabled = false,
     ref,
     children,
   } = props;
 
-  const padding = paddingVariants[paddingProp];
+  const paddingStyle = { padding: spacingToRem(paddingProp) };
 
   // Plain mode — unchanged behavior
   if (!props.expandable) {
     return (
       <div
         ref={ref}
-        className={cn("opal-card", padding, cardRoundingVariants[roundingProp])}
+        className={cn("opal-card", cardRoundingVariants[roundingProp])}
+        style={paddingStyle}
+        {...dataAttributes(props)}
         data-background={background}
         data-border={border}
         data-opal-status-border={borderColor}
         data-shadow={shadow}
+        data-disabled={disabled || undefined}
       >
         {children}
       </div>
@@ -242,9 +268,16 @@ function Card(props: CardProps) {
     : cardRoundingVariants[roundingProp];
 
   return (
-    <div ref={ref} className="opal-card-expandable" data-shadow={shadow}>
+    <div
+      ref={ref}
+      className="opal-card-expandable"
+      {...dataAttributes(props)}
+      data-shadow={shadow}
+      data-disabled={disabled || undefined}
+    >
       <div
-        className={cn("opal-card-expandable-header", padding, headerRounding)}
+        className={cn("opal-card-expandable-header", headerRounding)}
+        style={paddingStyle}
         data-background={background}
         data-border={border}
         data-opal-status-border={borderColor}

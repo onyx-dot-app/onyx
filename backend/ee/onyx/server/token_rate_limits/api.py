@@ -16,8 +16,10 @@ from onyx.db.enums import Permission
 from onyx.db.models import User
 from onyx.db.token_limit import (
     delete_token_rate_limit,
+    fetch_all_global_token_rate_limits,
     fetch_all_user_token_rate_limits,
     get_token_rate_limit_scope_and_group_ids,
+    insert_global_token_rate_limit,
     insert_user_token_rate_limit,
     update_token_rate_limit,
 )
@@ -29,9 +31,80 @@ from onyx.server.query_and_chat.token_limit import (
 from onyx.server.token_rate_limits.models import (
     TokenRateLimitArgs,
     TokenRateLimitDisplay,
+    TokenRateLimitUpdateArgs,
 )
 
+# Spending limits are an Enterprise feature, so every endpoint here is mounted
+# only by the EE app. Community builds have no way to create or edit a limit.
 router = APIRouter(prefix="/admin/token-rate-limits", tags=PUBLIC_API_TAGS)
+
+
+"""
+Global Token Limit Settings
+"""
+
+
+@router.get("/global")
+def get_global_token_limit_settings(
+    _: User = Depends(require_permission(Permission.FULL_ADMIN_PANEL_ACCESS)),
+    db_session: Session = Depends(get_session),
+) -> list[TokenRateLimitDisplay]:
+    return [
+        TokenRateLimitDisplay.from_db(token_rate_limit)
+        for token_rate_limit in fetch_all_global_token_rate_limits(db_session)
+    ]
+
+
+@router.post("/global")
+def create_global_token_limit_settings(
+    token_limit_settings: TokenRateLimitArgs,
+    _: User = Depends(require_permission(Permission.FULL_ADMIN_PANEL_ACCESS)),
+    db_session: Session = Depends(get_session),
+) -> TokenRateLimitDisplay:
+    rate_limit_display = TokenRateLimitDisplay.from_db(
+        insert_global_token_rate_limit(db_session, token_limit_settings)
+    )
+    # clear cache in case this was the first rate limit created
+    invalidate_any_rate_limit_exists_cache()
+    return rate_limit_display
+
+
+"""
+General Token Limit Settings
+"""
+
+
+@router.put("/rate-limit/{token_rate_limit_id}")
+def update_token_limit_settings(
+    token_rate_limit_id: int,
+    token_limit_settings: TokenRateLimitUpdateArgs,
+    _: User = Depends(require_permission(Permission.FULL_ADMIN_PANEL_ACCESS)),
+    db_session: Session = Depends(get_session),
+) -> TokenRateLimitDisplay:
+    rate_limit_display = TokenRateLimitDisplay.from_db(
+        update_token_rate_limit(
+            db_session=db_session,
+            token_rate_limit_id=token_rate_limit_id,
+            token_rate_limit_settings=token_limit_settings,
+        )
+    )
+    # enabling/disabling a limit changes whether any rate limit exists
+    invalidate_any_rate_limit_exists_cache()
+    return rate_limit_display
+
+
+@router.delete("/rate-limit/{token_rate_limit_id}")
+def delete_token_limit_settings(
+    token_rate_limit_id: int,
+    _: User = Depends(require_permission(Permission.FULL_ADMIN_PANEL_ACCESS)),
+    db_session: Session = Depends(get_session),
+) -> None:
+    delete_token_rate_limit(
+        db_session=db_session,
+        token_rate_limit_id=token_rate_limit_id,
+    )
+    # removing a limit can change whether any rate limit exists
+    invalidate_any_rate_limit_exists_cache()
 
 
 """
@@ -152,7 +225,7 @@ def _authorize_group_token_rate_limit_write(
 def update_group_token_limit_settings(
     group_id: int,
     rate_limit_id: int,
-    token_limit_settings: TokenRateLimitArgs,
+    token_limit_settings: TokenRateLimitUpdateArgs,
     user: User = Depends(
         require_permission(Permission.MANAGE_USER_GROUPS, allow_scope=True)
     ),

@@ -7,8 +7,14 @@ const nextConfig = {
   productionBrowserSourceMaps: false,
   poweredByHeader: false,
   output: "standalone",
+  typescript: {
+    ignoreBuildErrors: process.env.SKIP_TYPE_CHECK === "1",
+  },
   transpilePackages: ["@onyx-ai/opal", "@onyx-ai/shared"],
   typedRoutes: true,
+  // `next dev` otherwise appends its own managed block to web/AGENTS.md on every
+  // start, which dirties the tree. Keep our agent instructions author-owned.
+  agentRules: false,
   // NOTE: `reactCompiler` is set per-phase in module.exports below — enabled for
   // builds, disabled for the dev server. See the comment there for the rationale.
   // Pin the workspace root to this directory so Turbopack resolves modules

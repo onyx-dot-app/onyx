@@ -33,7 +33,6 @@ from onyx.db.enums import (
 from onyx.db.mcp import (
     create_connection_config,
     create_mcp_server__no_commit,
-    extract_connection_data,
     get_connection_config_by_id,
     update_mcp_server__no_commit,
 )
@@ -49,6 +48,7 @@ from onyx.sandbox_proxy.credential_injection import (
 )
 from onyx.sandbox_proxy.identity import ResolvedSandbox
 from onyx.sandbox_proxy.resolvers.mcp_server import MCPServerResolver
+from onyx.server.features.mcp.credentials import extract_connection_data
 from onyx.server.features.mcp.models import MCPConnectionData, MCPOAuthKeys
 from shared_configs.contextvars import POSTGRES_DEFAULT_SCHEMA
 from tests.external_dependency_unit.conftest import create_test_user

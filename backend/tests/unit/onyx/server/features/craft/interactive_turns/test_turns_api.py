@@ -10,6 +10,7 @@ from uuid import UUID, uuid4
 import pytest
 from sqlalchemy.orm import Session
 
+from onyx.db.enums import SandboxStatus
 from onyx.db.models import User
 from onyx.error_handling.exceptions import OnyxError
 from onyx.server.features.build.interactive_turns import api as turns_api
@@ -48,6 +49,12 @@ def _fake_db_session_scope() -> Iterator[_FakeDbSession]:
     yield _FakeDbSession()
 
 
+def _running_sandbox(*_args: object, **_kwargs: object) -> SimpleNamespace:
+    """The wait loop consults the sandbox as well as the session; most tests
+    are about the session half, so hand them a live runtime."""
+    return SimpleNamespace(id=uuid4(), status=SandboxStatus.RUNNING)
+
+
 def _create_running_turn(
     cache: FakeCache,
     *,
@@ -81,6 +88,7 @@ def test_get_active_interactive_turn_returns_cache_marker(
         "get_build_session",
         lambda *_: SimpleNamespace(id=session_id),
     )
+    monkeypatch.setattr(turns_api, "get_sandbox_by_user_id", _running_sandbox)
 
     response = turns_api.get_active_interactive_turn(
         session_id=session_id,
@@ -150,6 +158,7 @@ def test_get_interactive_turn_events_waits_then_forwards_live_stream(
         _fake_db_session_scope,
     )
     monkeypatch.setattr(turns_api, "get_build_session", lambda *_: next(session_rows))
+    monkeypatch.setattr(turns_api, "get_sandbox_by_user_id", _running_sandbox)
 
     response = cast(
         _FakeStreamingResponse,
@@ -160,6 +169,7 @@ def test_get_interactive_turn_events_waits_then_forwards_live_stream(
             db_session=cast(Session, SimpleNamespace()),
         ),
     )
+    monkeypatch.setattr(turns_api, "get_sandbox_by_user_id", _running_sandbox)
 
     chunks = list(response.body)
 
@@ -193,6 +203,7 @@ def test_get_interactive_turn_events_streams_retained_failure(
         "get_build_session",
         lambda *_: SimpleNamespace(id=session_id),
     )
+    monkeypatch.setattr(turns_api, "get_sandbox_by_user_id", _running_sandbox)
 
     response = cast(
         _FakeStreamingResponse,
@@ -237,6 +248,7 @@ def test_get_interactive_turn_events_yields_failed_turn_error_before_ready(
         "get_build_session",
         lambda *_: SimpleNamespace(id=session_id, opencode_session_id=None),
     )
+    monkeypatch.setattr(turns_api, "get_sandbox_by_user_id", _running_sandbox)
 
     response = cast(
         _FakeStreamingResponse,
@@ -309,6 +321,7 @@ def test_get_interactive_turn_events_yields_failed_turn_error_after_stream_chunk
         "get_build_session",
         lambda *_: SimpleNamespace(id=session_id, opencode_session_id="opencode-1"),
     )
+    monkeypatch.setattr(turns_api, "get_sandbox_by_user_id", _running_sandbox)
 
     response = turns_api.get_interactive_turn_events(
         session_id=session_id,
@@ -384,6 +397,7 @@ def test_get_interactive_turn_events_retries_runner_start_mid_stream(
         "get_build_session",
         lambda *_: SimpleNamespace(id=session_id, opencode_session_id="opencode-1"),
     )
+    monkeypatch.setattr(turns_api, "get_sandbox_by_user_id", _running_sandbox)
 
     response = cast(
         _FakeStreamingResponse,
@@ -459,6 +473,7 @@ def test_get_interactive_turn_events_rate_limits_runner_retry_within_window(
         "get_build_session",
         lambda *_: SimpleNamespace(id=session_id, opencode_session_id="opencode-1"),
     )
+    monkeypatch.setattr(turns_api, "get_sandbox_by_user_id", _running_sandbox)
 
     response = cast(
         _FakeStreamingResponse,
@@ -490,6 +505,7 @@ def test_get_interactive_turn_events_requires_active_turn(
         "get_build_session",
         lambda *_: SimpleNamespace(id=session_id),
     )
+    monkeypatch.setattr(turns_api, "get_sandbox_by_user_id", _running_sandbox)
 
     with pytest.raises(OnyxError):
         turns_api.get_interactive_turn_events(
@@ -498,3 +514,81 @@ def test_get_interactive_turn_events_requires_active_turn(
             user=cast(User, SimpleNamespace(id=user_id)),
             db_session=cast(Session, SimpleNamespace()),
         )
+
+
+def test_get_interactive_turn_events_waits_out_a_reclaimed_sandbox(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """A sandbox reclaimed between turns must not fail the next message.
+
+    ``opencode_session_id`` outlives the pod that minted it, so after a reap the
+    session still carries one while nothing is listening. Treating that alone as
+    "ready" attached to a sandbox that was still provisioning and surfaced
+    "Sandbox is not running" — for a turn whose own runner was, at that moment,
+    waking the sandbox. The stream has to hold the line instead.
+    """
+    cache = FakeCache()
+    session_id = uuid4()
+    user_id = uuid4()
+    turn_id = _create_running_turn(cache, session_id=session_id, user_id=user_id)
+
+    # The id is set from the previous incarnation the whole time.
+    session_row = SimpleNamespace(id=session_id, opencode_session_id="opencode-stale")
+    sandbox_states = iter(
+        [
+            SimpleNamespace(id=uuid4(), status=SandboxStatus.SLEEPING),
+            SimpleNamespace(id=uuid4(), status=SandboxStatus.PROVISIONING),
+            SimpleNamespace(id=uuid4(), status=SandboxStatus.RUNNING),
+        ]
+    )
+
+    class FakeSessionManager:
+        def __init__(self, db_session: object) -> None:
+            _ = db_session
+
+        def subscribe_to_existing_session_events(
+            self,
+            session_id_arg: UUID,
+            user_id_arg: UUID,
+            keepalive_seconds: float,
+        ) -> Iterator[str]:
+            _ = (session_id_arg, user_id_arg, keepalive_seconds)
+            finish_turn(cache=cache, turn_id=turn_id, status=TURN_STATUS_SUCCEEDED)
+            yield 'event: message\ndata: {"type":"text_chunk","text":"awake"}\n\n'
+
+    monkeypatch.setattr(turns_api, "get_cache_backend", lambda: cache)
+    monkeypatch.setattr(turns_api, "start_interactive_turn_runner", lambda _: False)
+    monkeypatch.setattr(turns_api, "StreamingResponse", _FakeStreamingResponse)
+    monkeypatch.setattr(
+        turns_api,
+        "time",
+        SimpleNamespace(sleep=lambda _: None, monotonic=real_time.monotonic),
+    )
+    monkeypatch.setattr(turns_api, "SessionManager", FakeSessionManager)
+    monkeypatch.setattr(
+        turns_api, "get_session_with_current_tenant", _fake_db_session_scope
+    )
+    monkeypatch.setattr(turns_api, "get_build_session", lambda *_: session_row)
+    monkeypatch.setattr(
+        turns_api, "get_sandbox_by_user_id", lambda *_: next(sandbox_states)
+    )
+
+    response = cast(
+        _FakeStreamingResponse,
+        turns_api.get_interactive_turn_events(
+            session_id=session_id,
+            turn_id=turn_id,
+            user=cast(User, SimpleNamespace(id=user_id)),
+            db_session=cast(Session, SimpleNamespace()),
+        ),
+    )
+
+    chunks = list(response.body)
+
+    # Two keepalives while the sandbox came back, then the turn's output — and
+    # no error packet anywhere.
+    assert chunks == [
+        turns_api.SSE_KEEPALIVE,
+        turns_api.SSE_KEEPALIVE,
+        'event: message\ndata: {"type":"text_chunk","text":"awake"}\n\n',
+    ]

@@ -171,7 +171,7 @@ export function PerUserAuthConfig({
 
       {credentialFields.length > 0 && (
         <>
-          <Divider paddingParallel="fit" paddingPerpendicular="fit" />
+          <Divider paddingParallel={0} paddingPerpendicular={0} />
 
           <div className="flex flex-col gap-4">
             <div className="flex items-start gap-1">

@@ -47,6 +47,7 @@ from onyx.document_index.factory import get_all_document_indices
 from onyx.document_index.interfaces_new import DocumentIndex
 from onyx.document_index.opensearch.client import (
     OpenSearchClient,
+    OpenSearchIndexWriteBlockedError,
     wait_for_opensearch_with_timeout,
 )
 from onyx.document_index.opensearch.opensearch_document_index import set_cluster_state
@@ -232,6 +233,22 @@ def setup_document_indices(
                 logger.notice(
                     "Document index %s setup complete.",
                     document_index.__class__.__name__,
+                )
+                document_index_setup_success = True
+                break
+            except OpenSearchIndexWriteBlockedError as e:
+                # The index exists but is write-blocked (typically the
+                # read_only_allow_delete block applied at the disk flood-stage
+                # watermark). It is still readable, so start up degraded rather
+                # than crash-loop until the block clears. A missing index or
+                # blocked creation raises a different error and still fails.
+                logger.error(
+                    "Document index %s is write-blocked; continuing startup without "
+                    "the mapping refresh. Search still works, but indexing will fail "
+                    "until the block is cleared (usually by freeing disk space below "
+                    "the flood-stage watermark). Error: %s",
+                    document_index.__class__.__name__,
+                    e,
                 )
                 document_index_setup_success = True
                 break

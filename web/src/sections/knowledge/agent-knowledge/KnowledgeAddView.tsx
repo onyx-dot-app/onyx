@@ -34,7 +34,7 @@ export const KnowledgeAddView = memo(function KnowledgeAddView({
 }: KnowledgeAddViewProps) {
   return (
     <GeneralLayouts.Section
-      gap={0.5}
+      gap={2}
       alignItems="start"
       height="auto"
       aria-label="knowledge-add-view"
@@ -42,7 +42,7 @@ export const KnowledgeAddView = memo(function KnowledgeAddView({
       <GeneralLayouts.Section
         flexDirection="row"
         justifyContent="start"
-        gap={0.5}
+        gap={2}
         height="auto"
         wrap
       >

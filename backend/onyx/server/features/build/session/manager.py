@@ -64,6 +64,9 @@ from onyx.server.features.build.sandbox.models import (
     FilesystemEntry,
     PromptAttachment,
 )
+from onyx.server.features.build.sandbox.nextjs_dev import (
+    WEBAPP_PACKAGE_JSON_PATH,
+)
 from onyx.server.features.build.sandbox.serve_transport import PromptSlot
 from onyx.server.features.build.sandbox.snapshot_manager import SnapshotManager
 from onyx.server.features.build.sandbox.util.agent_instructions import (
@@ -108,6 +111,23 @@ logger = setup_logger()
 
 _DISPOSE_PENDING_TTL_SECONDS = 24 * 3600
 
+
+def _dispose_pending_key(session_id: UUID) -> str:
+    return f"craft:llm_config_dispose_pending:{session_id}"
+
+
+def mark_opencode_dispose_pending(session_id: UUID) -> None:
+    """Claim the dispose owed to a running instance after rewriting its config.
+
+    ``reconcile_session_llm_config`` performs it on the next turn, and needs the
+    marker because it short-circuits when the file already matches what it would
+    write — which it does after a workspace rebuild.
+    """
+    get_cache_backend().set(
+        _dispose_pending_key(session_id), "1", ex=_DISPOSE_PENDING_TTL_SECONDS
+    )
+
+
 # Webapp-ready probe on the UI-poll hot path; any response (even 404) counts.
 _WEBAPP_PROBE_TIMEOUT_SECONDS = 2.0
 
@@ -126,6 +146,9 @@ HIDDEN_PATTERNS = {
     "nextjs.log",
     "nextjs.pid",
 }
+
+_WEBAPP_DIRECTORY = str(Path(WEBAPP_PACKAGE_JSON_PATH).parent)
+_WEBAPP_PACKAGE_FILENAME = Path(WEBAPP_PACKAGE_JSON_PATH).name
 
 
 def _sanitize_zip_basename(name: str, *, allow_dots: bool) -> str:
@@ -270,7 +293,7 @@ class SessionManager:
             current = None
 
         cache = get_cache_backend()
-        dispose_pending_key = f"craft:llm_config_dispose_pending:{session.id}"
+        dispose_pending_key = _dispose_pending_key(session.id)
         if current == expected:
             # A matching file does NOT prove the running opencode instance
             # picked it up: a prior reconcile may have written the file and
@@ -296,7 +319,7 @@ class SessionManager:
         # the next reconcile, so the marker is the only thing that tells it to
         # retry the missed dispose. Setting it after the write leaves that exact
         # window uncovered.
-        cache.set(dispose_pending_key, "1", ex=_DISPOSE_PENDING_TTL_SECONDS)
+        mark_opencode_dispose_pending(session.id)
         self._sandbox_manager.regenerate_session_config(
             sandbox_id=sandbox.id,
             session_id=session.id,
@@ -1407,15 +1430,15 @@ class SessionManager:
         path: str,
     ) -> dict[str, Any] | None:
         """
-        Generate slide image previews for a PPTX file.
+        Generate slide image previews for a PowerPoint file.
 
-        Converts the PPTX to individual JPEG slide images using
+        Converts the presentation to individual JPEG slide images using
         soffice + pdftoppm, with caching to avoid re-conversion.
 
         Args:
             session_id: The session UUID
             user_id: The user ID to verify ownership
-            path: Relative path to the PPTX file within session workspace
+            path: Relative path to the PowerPoint file within session workspace
 
         Returns:
             Dict with slide_count, slide_paths, and cached flag,
@@ -1430,8 +1453,8 @@ class SessionManager:
         _, sandbox = resolved
 
         # Validate file extension
-        if not path.lower().endswith(".pptx"):
-            raise ValueError("Only .pptx files are supported for preview")
+        if Path(path).suffix.lower() not in {".ppt", ".pptx"}:
+            raise ValueError("Only .ppt and .pptx files are supported for preview")
 
         # Compute cache directory from path hash
         path_hash = hashlib.sha256(path.encode()).hexdigest()[:12]
@@ -1474,32 +1497,58 @@ class SessionManager:
         sandbox = get_sandbox_by_user_id(self._db_session, user_id)
         if sandbox is None:
             return {
-                "has_webapp": False,
+                "has_webapp": None,
                 "webapp_url": None,
                 "status": "no_sandbox",
                 "ready": False,
                 "sharing_scope": session.sharing_scope,
             }
 
+        has_webapp = (
+            self._has_scaffolded_webapp(sandbox.id, session_id)
+            if sandbox.status == SandboxStatus.RUNNING
+            else None
+        )
         # Return the proxy URL - the proxy handles routing to the correct sandbox
-        # for both local and Kubernetes environments
+        # for both local and Kubernetes environments.
         webapp_url = None
         ready = False
-        if session.nextjs_port:
+        if has_webapp and session.nextjs_port:
             webapp_url = f"{WEB_DOMAIN}/api/build/sessions/{session_id}/webapp"
-
-            # Quick health check: can the API server reach the NextJS dev server?
             ready = self._check_nextjs_ready(
                 sandbox.id, session_id, session.nextjs_port
             )
 
         return {
-            "has_webapp": session.nextjs_port is not None,
+            "has_webapp": has_webapp,
             "webapp_url": webapp_url,
             "status": sandbox.status.value,
             "ready": ready,
             "sharing_scope": session.sharing_scope,
         }
+
+    def _has_scaffolded_webapp(self, sandbox_id: UUID, session_id: UUID) -> bool | None:
+        """Return True if ``outputs/web/package.json`` exists in the session."""
+        try:
+            entries = self._sandbox_manager.list_directory(
+                sandbox_id=sandbox_id,
+                session_id=session_id,
+                path=_WEBAPP_DIRECTORY,
+            )
+        except ValueError:
+            return False
+        except RuntimeError:
+            logger.warning(
+                "Could not check webapp scaffold for session %s",
+                session_id,
+                exc_info=True,
+            )
+            return None
+
+        return any(
+            entry.name == _WEBAPP_PACKAGE_FILENAME and not entry.is_directory
+            for entry in entries
+        )
 
     def _check_nextjs_ready(
         self, sandbox_id: UUID, session_id: UUID, port: int

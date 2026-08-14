@@ -8,11 +8,16 @@ import { cn } from "@opal/utils";
 import type {
   IconFunctionComponent,
   InputVariants,
-  PaddingVariants,
   RichStr,
   WithoutStyles,
 } from "@opal/types";
-import { Divider, InputTypeIn, Text, Tooltip } from "@opal/components";
+import {
+  Divider,
+  type DividerSpacing,
+  InputTypeIn,
+  Text,
+  Tooltip,
+} from "@opal/components";
 import { toPlainString } from "@opal/components/text/InlineMarkdown";
 import { ContentAction } from "@opal/layouts";
 import { SvgChevronDownSmall } from "@opal/icons";
@@ -355,16 +360,17 @@ function InputSelectItem({
   // registrations.
   const childrenRef = React.useRef<string | RichStr>(children);
   const iconRef = React.useRef(icon);
-  childrenRef.current = children;
-  iconRef.current = icon;
+  React.useLayoutEffect(() => {
+    childrenRef.current = children;
+    iconRef.current = icon;
+  }, [children, icon]);
 
   // Layout effect so the trigger never paints the placeholder on first
   // render when a value is already selected. Radix mounts closed Content
   // into a detached fragment, so this runs even while the menu is closed.
-  // Keyed on the rendered content (plain-text key, since RichStr identity
-  // churns per render) so the trigger mirror re-renders when the selected
-  // option's label or icon changes without a value change.
-  const childrenKey = toPlainString(children);
+  // Keyed on the raw rendered content so RichStr formatting changes still
+  // refresh the trigger without reacting to identity churn.
+  const childrenKey = typeof children === "string" ? children : children.raw;
   React.useLayoutEffect(() => {
     if (!isSelected) return;
     setSelectedItemDisplay({ childrenRef, iconRef });
@@ -397,7 +403,7 @@ function InputSelectItem({
           titleMaxLines={1}
           description={description}
           descriptionMaxLines={wrapDescription ? undefined : 1}
-          padding="fit"
+          padding={0}
           width="full"
         />
       </div>
@@ -433,8 +439,8 @@ function InputSelectLabel({
 }
 
 interface InputSelectSeparatorProps {
-  paddingParallel?: PaddingVariants;
-  paddingPerpendicular?: PaddingVariants;
+  paddingParallel?: DividerSpacing;
+  paddingPerpendicular?: DividerSpacing;
 }
 
 function InputSelectSeparator({

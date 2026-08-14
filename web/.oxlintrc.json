@@ -1,6 +1,9 @@
 {
   "$schema": "./node_modules/oxlint/configuration_schema.json",
   "plugins": ["typescript", "unicorn", "oxc", "react", "nextjs"],
+  "jsPlugins": [
+    { "name": "react-doctor", "specifier": "oxlint-plugin-react-doctor" }
+  ],
   "categories": {
     "correctness": "error"
   },
@@ -9,7 +12,15 @@
     "react/exhaustive-deps": "off",
     "typescript/no-unused-vars": "off",
     "unicorn/no-thenable": "off",
-    "no-unused-vars": "off"
+    "no-unused-vars": "off",
+    "react-doctor/rules-of-hooks": "error",
+    "react-doctor/no-unguarded-browser-global-in-render-or-hook-init": "error",
+    "react-doctor/effect-needs-cleanup": "error",
+    "react-doctor/no-effect-with-fresh-deps": "error",
+    "react-doctor/aria-role": "error",
+    "react-doctor/no-ref-current-in-render": "error",
+    "react-doctor/no-impure-state-updater": "error",
+    "react-doctor/no-layout-property-animation": "error"
   },
   "ignorePatterns": [
     ".next",

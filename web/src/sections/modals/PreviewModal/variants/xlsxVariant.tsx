@@ -38,7 +38,7 @@ export const xlsxVariant: PreviewVariant = {
     const preview = parseSpreadsheetPreview(ctx.fileContent);
     if (!preview || preview.sheets.length === 0) {
       return (
-        <Section padding={1}>
+        <Section padding={4}>
           <Text as="p" font="main-ui-body" color="text-03">
             Unable to preview this spreadsheet.
           </Text>

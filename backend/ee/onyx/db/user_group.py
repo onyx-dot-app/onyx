@@ -481,6 +481,18 @@ def _add_user_group__cc_pair_relationships__no_commit(
     return relationships
 
 
+def set_user_group_incognito(
+    db_session: Session, user_group_id: int, enabled: bool
+) -> UserGroup:
+    """Flip whether members may use incognito under groups-only availability."""
+    group = db_session.scalar(select(UserGroup).where(UserGroup.id == user_group_id))
+    if group is None:
+        raise ValueError(f"UserGroup with id '{user_group_id}' not found")
+    group.incognito_enabled = enabled
+    db_session.commit()
+    return group
+
+
 def insert_user_group(db_session: Session, user_group: UserGroupCreate) -> UserGroup:
     db_user_group = UserGroup(
         name=user_group.name,

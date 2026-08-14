@@ -154,7 +154,7 @@
 .opal-sidebar-body__content {
   @apply flex-1 flex flex-col px-2 gap-2;
 }
-.opal-sidebar-body__content[data-folded="true"] {
+.opal-sidebar-root__inner[data-folded="true"] .opal-sidebar-body__content {
   @apply hidden;
 }
 

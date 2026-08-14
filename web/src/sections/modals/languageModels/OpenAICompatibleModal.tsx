@@ -1,6 +1,5 @@
 "use client";
 
-import { markdown } from "@opal/utils";
 import { useSWRConfig } from "swr";
 import { useFormikContext } from "formik";
 import { InputDivider, toast } from "@opal/layouts";
@@ -25,6 +24,7 @@ import {
   DisplayNameField,
   ModelAccessField,
   ModalWrapper,
+  useApiBaseSubDescription,
 } from "@/sections/modals/languageModels/shared";
 import { refreshLlmProviderCaches } from "@/lib/languageModels/cache";
 
@@ -43,6 +43,10 @@ function OpenAICompatibleModalInternals({
   isOnboarding,
 }: OpenAICompatibleModalInternalsProps) {
   const formikProps = useFormikContext<OpenAICompatibleModalValues>();
+  const apiBaseSubDescription = useApiBaseSubDescription(
+    "Paste your OpenAI-compatible endpoint URL.",
+    "[Learn More](https://docs.litellm.ai/docs/providers/openai_compatible)"
+  );
 
   const isFetchDisabled = !formikProps.values.api_base;
 
@@ -67,9 +71,7 @@ function OpenAICompatibleModalInternals({
   return (
     <>
       <APIBaseField
-        subDescription={markdown(
-          "Paste your OpenAI-compatible endpoint URL. [Learn More](https://docs.litellm.ai/docs/providers/openai_compatible)"
-        )}
+        subDescription={apiBaseSubDescription}
         placeholder="http://localhost:8000/v1"
       />
 

@@ -28,6 +28,7 @@ type DeployEdgeOptions struct {
 	DryRun         bool
 	Yes            bool
 	NoWaitDeploy   bool
+	Verify         bool
 }
 
 // NewDeployEdgeCommand creates the `ods deploy edge` command.
@@ -68,6 +69,7 @@ Example usage:
 	cmd.Flags().BoolVar(&opts.DryRun, "dry-run", false, "Perform local operations only; skip pushing the tag and dispatching workflows")
 	cmd.Flags().BoolVar(&opts.Yes, "yes", false, "Skip the confirmation prompt")
 	cmd.Flags().BoolVar(&opts.NoWaitDeploy, "no-wait-deploy", false, "Do not wait for the deploy workflow to finish after dispatching it")
+	cmd.Flags().BoolVar(&opts.Verify, "verify", false, "Run pre-push hooks when pushing the tag; they are skipped by default")
 
 	return cmd
 }
@@ -119,7 +121,7 @@ func deployEdge(opts *DeployEdgeOptions) {
 	}
 
 	log.Infof("Force-pushing tag '%s' to origin...", edgeTagName)
-	if err := git.RunCommand("push", "-f", "origin", edgeTagName); err != nil {
+	if err := git.PushTag(edgeTagName, true, opts.Verify); err != nil {
 		log.Fatalf("Failed to push edge tag: %v", err)
 	}
 

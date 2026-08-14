@@ -301,7 +301,7 @@ def drop_messages_history_overflow(
 
     final_messages: list[BaseMessage] = []
     messages, token_counts = cast(
-        tuple[list[BaseMessage], list[int]], zip(*messages_with_token_cnts)
+        tuple[list[BaseMessage], list[int]], zip(*messages_with_token_cnts, strict=True)
     )
     system_msg = (
         final_messages[0]

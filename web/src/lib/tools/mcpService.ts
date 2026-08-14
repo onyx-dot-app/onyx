@@ -180,7 +180,7 @@ interface UpsertMCPServerResponse {
   oauth_token_endpoint?: string;
   oauth_scopes_override?: string[];
   oauth_additional_auth_params?: Record<string, string>;
-  is_authenticated: boolean;
+  no_user_authentication_required: boolean;
 }
 
 export async function upsertMCPServer(serverData: {
@@ -255,6 +255,33 @@ export async function startMCPUserOAuth(
   if (!res.ok) {
     throw new Error(
       await parseErrorDetail(res, "Failed to start authorization")
+    );
+  }
+  return res.json();
+}
+
+export interface MCPOAuthCallbackResponse {
+  success: boolean;
+  server_id: number;
+  server_name: string;
+  message: string;
+  redirect_url: string;
+}
+
+/** Complete the OAuth flow started by `startMCPUserOAuth`: exchange the
+ * provider's authorization code for tokens and store them for the current
+ * user. The code + state are single-use — call at most once per callback. */
+export async function completeMCPUserOAuth(
+  code: string,
+  state: string
+): Promise<MCPOAuthCallbackResponse> {
+  const params = new URLSearchParams({ code, state });
+  const res = await fetch(`/api/mcp/oauth/callback?${params.toString()}`, {
+    method: "POST",
+  });
+  if (!res.ok) {
+    throw new Error(
+      await parseErrorDetail(res, "Failed to complete authorization")
     );
   }
   return res.json();

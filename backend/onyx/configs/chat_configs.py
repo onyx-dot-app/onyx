@@ -1,7 +1,5 @@
 import os
 
-PROMPTS_YAML = "./onyx/seeding/prompts.yaml"
-PERSONAS_YAML = "./onyx/seeding/personas.yaml"
 NUM_RETURNED_HITS = 50
 
 # May be less depending on model
@@ -18,8 +16,6 @@ MAX_LLM_CYCLES: int = int(os.environ.get("MAX_LLM_CYCLES") or 6)
 DOC_TIME_DECAY = float(
     os.environ.get("DOC_TIME_DECAY") or 0.5  # Hits limit at 2 years by default
 )
-BASE_RECENCY_DECAY = 0.5
-FAVOR_RECENT_DECAY_MULTIPLIER = 2.0
 # For the highest matching base size chunk, how many chunks above and below do we pull in by default
 # Note this is not in any of the deployment configs yet
 # Currently only applies to search flow not chat

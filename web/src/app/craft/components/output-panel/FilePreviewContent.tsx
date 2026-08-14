@@ -45,7 +45,7 @@ function ImageRendererWrapper({ content, fileName }: FileRendererProps) {
 const PREVIEW_REGISTRY: PreviewEntry[] = [
   {
     type: "standalone",
-    matches: (path) => /\.pptx$/i.test(path),
+    matches: (path) => /\.pptx?$/i.test(path),
     component: PptxPreview,
   },
   {
@@ -177,7 +177,7 @@ function FetchedFilePreview({
           height="full"
           alignItems="center"
           justifyContent="center"
-          padding={2}
+          padding={8}
         >
           <Text font="secondary-body" color="text-03">
             Loading file...
@@ -201,7 +201,7 @@ function FetchedFilePreview({
           height="full"
           alignItems="center"
           justifyContent="center"
-          padding={2}
+          padding={8}
         >
           <SvgFileText size={48} className="stroke-text-02" />
           <Text font="heading-h3" color="text-03">
@@ -229,7 +229,7 @@ function FetchedFilePreview({
           height="full"
           alignItems="center"
           justifyContent="center"
-          padding={2}
+          padding={8}
         >
           <Text font="secondary-body" color="text-03">
             No content
@@ -253,7 +253,7 @@ function FetchedFilePreview({
           height="full"
           alignItems="center"
           justifyContent="center"
-          padding={2}
+          padding={8}
         >
           <SvgFileText size={48} className="stroke-text-02" />
           <Text font="heading-h3" color="text-03">

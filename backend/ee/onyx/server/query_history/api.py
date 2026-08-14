@@ -10,6 +10,7 @@ from sqlalchemy.orm import Session
 
 from ee.onyx.background.task_name_builders import query_history_task_name
 from ee.onyx.db.query_history import (
+    fetch_persisting_chat_session_by_id,
     get_all_query_history_export_tasks,
     get_page_of_chat_sessions,
     get_total_filtered_chat_sessions_count,
@@ -37,7 +38,7 @@ from onyx.configs.constants import (
     QueryHistoryType,
     SessionType,
 )
-from onyx.db.chat import get_chat_session_by_id, get_chat_sessions_by_user
+from onyx.db.chat import get_chat_sessions_by_user
 from onyx.db.engine.sql_engine import get_session
 from onyx.db.enums import Permission, TaskStatus
 from onyx.db.file_record import get_query_history_export_files
@@ -170,8 +171,14 @@ def admin_get_chat_sessions(
     )
 
     try:
+        # Full History incognito is recorded for the workspace and hidden only
+        # from its own owner, so query history must still return it.
         chat_sessions = get_chat_sessions_by_user(
-            user_id=user_id, deleted=False, db_session=db_session, limit=0
+            user_id=user_id,
+            deleted=False,
+            db_session=db_session,
+            limit=0,
+            exclude_content_free=True,
         )
 
     except ValueError:
@@ -248,11 +255,9 @@ def get_chat_session_admin(
     )
 
     try:
-        chat_session = get_chat_session_by_id(
+        chat_session = fetch_persisting_chat_session_by_id(
             chat_session_id=chat_session_id,
-            user_id=None,  # view chat regardless of user
             db_session=db_session,
-            include_deleted=True,
         )
     except ValueError:
         raise HTTPException(

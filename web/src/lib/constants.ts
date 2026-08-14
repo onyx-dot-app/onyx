@@ -15,8 +15,6 @@ export const NEXT_PUBLIC_DO_NOT_USE_TOGGLE_OFF_DANSWER_POWERED =
   process.env.NEXT_PUBLIC_DO_NOT_USE_TOGGLE_OFF_DANSWER_POWERED?.toLowerCase() ===
   "true";
 
-export const TENANT_ID_COOKIE_NAME = "onyx_tid";
-
 // Name of the FastAPI-Users auth cookie. Configurable via env (shared with the
 // backend's AUTH_COOKIE_NAME) so deployments sharing a hostname — e.g. parallel
 // local worktrees on different ports of localhost — keep separate auth cookies.

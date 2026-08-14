@@ -80,7 +80,7 @@ function CreateGroupPage() {
   }
 
   const headerActions = (
-    <Section flexDirection="row" gap={0.5} width="auto" height="auto">
+    <Section flexDirection="row" gap={2} width="auto" height="auto">
       <Button
         prominence="secondary"
         onClick={() => router.push("/admin/groups")}
@@ -108,7 +108,7 @@ function CreateGroupPage() {
       <SettingsLayouts.Body>
         {/* Group Name */}
         <Section
-          gap={0.5}
+          gap={2}
           height="auto"
           alignItems="stretch"
           justifyContent="start"
@@ -123,7 +123,7 @@ function CreateGroupPage() {
           />
         </Section>
 
-        <Divider paddingParallel="fit" paddingPerpendicular="fit" />
+        <Divider paddingParallel={0} paddingPerpendicular={0} />
 
         {/* Members table */}
         {isLoading && <SvgSimpleLoader />}
@@ -136,7 +136,7 @@ function CreateGroupPage() {
 
         {!isLoading && !error && (
           <Section
-            gap={0.75}
+            gap={3}
             height="auto"
             alignItems="stretch"
             justifyContent="start"

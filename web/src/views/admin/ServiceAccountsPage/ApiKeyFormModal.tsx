@@ -144,8 +144,8 @@ export default function ApiKeyFormModal({
 
                   <InputVertical withLabel="group_ids" title="Groups">
                     <Section
-                      gap={0.5}
-                      padding={0.25}
+                      gap={2}
+                      padding={1}
                       height={
                         joinedGroups.length === 0 && !popoverOpen
                           ? "auto"

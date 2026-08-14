@@ -178,7 +178,9 @@ class DefaultIndexingEmbedder(IndexingEmbedder):
             title_embed_dict.update(
                 {
                     title: vector
-                    for title, vector in zip(chunk_titles_list, title_embeddings)
+                    for title, vector in zip(
+                        chunk_titles_list, title_embeddings, strict=True
+                    )
                 }
             )
 

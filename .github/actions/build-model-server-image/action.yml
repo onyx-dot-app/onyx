@@ -28,11 +28,15 @@ inputs:
     description: "ECR registry host for the Docker Hub pull-through cache (the ECR_REGISTRY repo variable)"
     required: true
   docker-username:
-    description: "Docker Hub username (must have access to the DHI catalog on dhi.io)"
-    required: true
+    description: >-
+      Docker Hub username with DHI catalog access. Optional -- without it the image
+      builds on its public base defaults instead of the hardened ones.
+    required: false
+    default: ""
   docker-token:
     description: "Docker Hub token"
-    required: true
+    required: false
+    default: ""
 runs:
   using: "composite"
   steps:
@@ -59,14 +63,13 @@ runs:
       with:
         ecr-registry: ${{ inputs.ecr-registry }}
 
-    # Dockerfile.model_server pulls its hardened Python base from dhi.io, authenticated
-    # with the same Docker account credentials (the account must have DHI catalog access).
-    - name: Login to Docker Hardened Images (dhi.io)
-      uses: docker/login-action@c99871dec2022cc055c062a10cc1a1310835ceb4
+    # Dockerfile.model_server defaults to the public Python bases. CI builds ship on the
+    # hardened DHI equivalents, passed as build args below.
+    - name: Resolve Docker Hardened Image bases
+      uses: ./.github/actions/dhi-base-images
       with:
-        registry: dhi.io
-        username: ${{ inputs.docker-username }}
-        password: ${{ inputs.docker-token }}
+        docker-username: ${{ inputs.docker-username }}
+        docker-token: ${{ inputs.docker-token }}
 
     - name: Build and push Model Server Docker image
       uses: docker/build-push-action@f9f3042f7e2789586610d6e8b85c8f03e5195baf # ratchet:docker/build-push-action@v6
@@ -77,6 +80,7 @@ runs:
         platforms: ${{ inputs.platforms }}
         build-args: |
           BASE_IMAGE_REGISTRY=${{ env.BASE_IMAGE_REGISTRY }}
+          ${{ env.DHI_PYTHON_BUILD_ARGS }}
         tags: ${{ inputs.runs-on-ecr-cache }}:${{ inputs.tag-prefix }}-${{ inputs.run-id }}
         cache-from: |
           type=registry,ref=${{ inputs.runs-on-ecr-cache }}:model-server-cache-${{ inputs.github-sha }}

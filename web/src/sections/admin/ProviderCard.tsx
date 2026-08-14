@@ -100,7 +100,7 @@ export default function ProviderCard({
     >
       <SelectCard
         state={STATUS_TO_STATE[status]}
-        padding="sm"
+        padding={2}
         rounding="lg"
         aria-label={ariaLabel}
         onClick={
@@ -119,7 +119,7 @@ export default function ProviderCard({
           icon={icon}
           title={title}
           description={description}
-          padding="lg"
+          padding={2}
           rightChildren={
             isDisconnected && onConnect ? (
               <Button
@@ -156,11 +156,7 @@ export default function ProviderCard({
                 ) : undefined}
                 {(onDisconnect || onEdit) && (
                   <div className="px-1 pb-1">
-                    <Section
-                      flexDirection="row"
-                      justifyContent="end"
-                      gap={0.25}
-                    >
+                    <Section flexDirection="row" justifyContent="end" gap={1}>
                       {onDisconnect && (
                         <Hoverable.Item
                           group="ProviderCard"

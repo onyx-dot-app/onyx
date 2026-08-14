@@ -1,6 +1,6 @@
 "use client";
 
-import React, { useCallback, useMemo, useRef } from "react";
+import React, { useCallback, useEffect, useMemo, useRef } from "react";
 import { Message } from "@/app/app/interfaces";
 import { OnyxDocument, MinimalOnyxDocument } from "@/lib/search/interfaces";
 import HumanMessage from "@/app/app/message/HumanMessage";
@@ -106,10 +106,13 @@ const ChatUI = React.memo(
     const deepResearchEnabledRef = useRef(deepResearchEnabled);
     const currentMessageFilesRef = useRef(currentMessageFiles);
     const selectedModelsRef = useRef(selectedModels);
-    onSubmitRef.current = onSubmit;
-    deepResearchEnabledRef.current = deepResearchEnabled;
-    currentMessageFilesRef.current = currentMessageFiles;
-    selectedModelsRef.current = selectedModels;
+
+    useEffect(() => {
+      onSubmitRef.current = onSubmit;
+      deepResearchEnabledRef.current = deepResearchEnabled;
+      currentMessageFilesRef.current = currentMessageFiles;
+      selectedModelsRef.current = selectedModels;
+    }, [onSubmit, deepResearchEnabled, currentMessageFiles, selectedModels]);
 
     const createRegenerator = useCallback(
       (regenerationRequest: {

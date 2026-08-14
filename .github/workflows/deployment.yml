@@ -46,7 +46,7 @@ jobs:
           fetch-tags: true
 
       - name: Setup uv
-        uses: astral-sh/setup-uv@fac544c07dec837d0ccb6301d7b5580bf5edae39 # ratchet:astral-sh/setup-uv@v8.2.0
+        uses: astral-sh/setup-uv@c771a70e6277c0a99b617c7a806ffedaca235ff9 # ratchet:astral-sh/setup-uv@v9.0.0
         with:
           version: "0.11.25"
           enable-cache: false
@@ -169,7 +169,7 @@ jobs:
           persist-credentials: false
 
       - name: Setup uv
-        uses: astral-sh/setup-uv@fac544c07dec837d0ccb6301d7b5580bf5edae39 # ratchet:astral-sh/setup-uv@v8.2.0
+        uses: astral-sh/setup-uv@c771a70e6277c0a99b617c7a806ffedaca235ff9 # ratchet:astral-sh/setup-uv@v9.0.0
         with:
           version: "0.11.25"
           enable-cache: false
@@ -198,7 +198,7 @@ jobs:
           fetch-depth: 0
 
       - name: Setup uv
-        uses: astral-sh/setup-uv@fac544c07dec837d0ccb6301d7b5580bf5edae39 # ratchet:astral-sh/setup-uv@v8.2.0
+        uses: astral-sh/setup-uv@c771a70e6277c0a99b617c7a806ffedaca235ff9 # ratchet:astral-sh/setup-uv@v9.0.0
         with:
           version: "0.11.25"
           # NOTE: This isn't caching much and zizmor suggests this could be poisoned, so disable.
@@ -535,14 +535,13 @@ jobs:
           username: ${{ env.DOCKER_USERNAME }}
           password: ${{ env.DOCKER_TOKEN }}
 
-      # web/Dockerfile pulls its hardened Node base from dhi.io, authenticated with the same
-      # Docker account credentials (the account must have access to the DHI catalog).
-      - name: Login to Docker Hardened Images (dhi.io)
-        uses: docker/login-action@c99871dec2022cc055c062a10cc1a1310835ceb4
+      # web/Dockerfile defaults to the public Node bases. Release builds ship on the
+      # hardened DHI equivalents, passed as build args below.
+      - name: Resolve Docker Hardened Image bases
+        uses: ./.github/actions/dhi-base-images
         with:
-          registry: dhi.io
-          username: ${{ env.DOCKER_USERNAME }}
-          password: ${{ env.DOCKER_TOKEN }}
+          docker-username: ${{ env.DOCKER_USERNAME }}
+          docker-token: ${{ env.DOCKER_TOKEN }}
 
       - name: Build and push AMD64
         id: build
@@ -554,6 +553,7 @@ jobs:
           labels: ${{ steps.meta.outputs.labels }}
           build-args: |
             ONYX_VERSION=${{ github.ref_name }}
+            ${{ env.DHI_NODE_BUILD_ARGS }}
             NODE_OPTIONS=--max-old-space-size=8192
           cache-from: |
             type=registry,ref=${{ env.REGISTRY_IMAGE }}:edge
@@ -617,14 +617,13 @@ jobs:
           username: ${{ env.DOCKER_USERNAME }}
           password: ${{ env.DOCKER_TOKEN }}
 
-      # web/Dockerfile pulls its hardened Node base from dhi.io, authenticated with the same
-      # Docker account credentials (the account must have access to the DHI catalog).
-      - name: Login to Docker Hardened Images (dhi.io)
-        uses: docker/login-action@c99871dec2022cc055c062a10cc1a1310835ceb4
+      # web/Dockerfile defaults to the public Node bases. Release builds ship on the
+      # hardened DHI equivalents, passed as build args below.
+      - name: Resolve Docker Hardened Image bases
+        uses: ./.github/actions/dhi-base-images
         with:
-          registry: dhi.io
-          username: ${{ env.DOCKER_USERNAME }}
-          password: ${{ env.DOCKER_TOKEN }}
+          docker-username: ${{ env.DOCKER_USERNAME }}
+          docker-token: ${{ env.DOCKER_TOKEN }}
 
       - name: Build and push ARM64
         id: build
@@ -636,6 +635,7 @@ jobs:
           labels: ${{ steps.meta.outputs.labels }}
           build-args: |
             ONYX_VERSION=${{ github.ref_name }}
+            ${{ env.DHI_NODE_BUILD_ARGS }}
             NODE_OPTIONS=--max-old-space-size=8192
           cache-from: |
             type=registry,ref=${{ env.REGISTRY_IMAGE }}:edge
@@ -791,14 +791,13 @@ jobs:
           username: ${{ env.DOCKER_USERNAME }}
           password: ${{ env.DOCKER_TOKEN }}
 
-      # web/Dockerfile pulls its hardened Node base from dhi.io, authenticated with the same
-      # Docker account credentials (the account must have access to the DHI catalog).
-      - name: Login to Docker Hardened Images (dhi.io)
-        uses: docker/login-action@c99871dec2022cc055c062a10cc1a1310835ceb4
+      # web/Dockerfile defaults to the public Node bases. Release builds ship on the
+      # hardened DHI equivalents, passed as build args below.
+      - name: Resolve Docker Hardened Image bases
+        uses: ./.github/actions/dhi-base-images
         with:
-          registry: dhi.io
-          username: ${{ env.DOCKER_USERNAME }}
-          password: ${{ env.DOCKER_TOKEN }}
+          docker-username: ${{ env.DOCKER_USERNAME }}
+          docker-token: ${{ env.DOCKER_TOKEN }}
 
       - name: Build and push AMD64
         id: build
@@ -810,12 +809,12 @@ jobs:
           labels: ${{ steps.meta.outputs.labels }}
           build-args: |
             ONYX_VERSION=${{ github.ref_name }}
+            ${{ env.DHI_NODE_BUILD_ARGS }}
             NEXT_PUBLIC_CLOUD_ENABLED=true
             WEB_FRAME_PROTECTION_ENABLED=false
             NEXT_PUBLIC_POSTHOG_KEY=${{ secrets.POSTHOG_KEY }}
             NEXT_PUBLIC_POSTHOG_HOST=${{ secrets.POSTHOG_HOST }}
             NEXT_PUBLIC_SENTRY_DSN=${{ secrets.SENTRY_DSN }}
-            NEXT_PUBLIC_STRIPE_PUBLISHABLE_KEY=${{ secrets.STRIPE_PUBLISHABLE_KEY }}
             NEXT_PUBLIC_RECAPTCHA_SITE_KEY=${{ vars.NEXT_PUBLIC_RECAPTCHA_SITE_KEY }}
             NEXT_PUBLIC_GTM_ENABLED=true
             NEXT_PUBLIC_FORGOT_PASSWORD_ENABLED=true
@@ -884,14 +883,13 @@ jobs:
           username: ${{ env.DOCKER_USERNAME }}
           password: ${{ env.DOCKER_TOKEN }}
 
-      # web/Dockerfile pulls its hardened Node base from dhi.io, authenticated with the same
-      # Docker account credentials (the account must have access to the DHI catalog).
-      - name: Login to Docker Hardened Images (dhi.io)
-        uses: docker/login-action@c99871dec2022cc055c062a10cc1a1310835ceb4
+      # web/Dockerfile defaults to the public Node bases. Release builds ship on the
+      # hardened DHI equivalents, passed as build args below.
+      - name: Resolve Docker Hardened Image bases
+        uses: ./.github/actions/dhi-base-images
         with:
-          registry: dhi.io
-          username: ${{ env.DOCKER_USERNAME }}
-          password: ${{ env.DOCKER_TOKEN }}
+          docker-username: ${{ env.DOCKER_USERNAME }}
+          docker-token: ${{ env.DOCKER_TOKEN }}
 
       - name: Build and push ARM64
         id: build
@@ -903,12 +901,12 @@ jobs:
           labels: ${{ steps.meta.outputs.labels }}
           build-args: |
             ONYX_VERSION=${{ github.ref_name }}
+            ${{ env.DHI_NODE_BUILD_ARGS }}
             NEXT_PUBLIC_CLOUD_ENABLED=true
             WEB_FRAME_PROTECTION_ENABLED=false
             NEXT_PUBLIC_POSTHOG_KEY=${{ secrets.POSTHOG_KEY }}
             NEXT_PUBLIC_POSTHOG_HOST=${{ secrets.POSTHOG_HOST }}
             NEXT_PUBLIC_SENTRY_DSN=${{ secrets.SENTRY_DSN }}
-            NEXT_PUBLIC_STRIPE_PUBLISHABLE_KEY=${{ secrets.STRIPE_PUBLISHABLE_KEY }}
             NEXT_PUBLIC_RECAPTCHA_SITE_KEY=${{ vars.NEXT_PUBLIC_RECAPTCHA_SITE_KEY }}
             NEXT_PUBLIC_GTM_ENABLED=true
             NEXT_PUBLIC_FORGOT_PASSWORD_ENABLED=true
@@ -1351,14 +1349,13 @@ jobs:
           username: ${{ env.DOCKER_USERNAME }}
           password: ${{ env.DOCKER_TOKEN }}
 
-      # Dockerfile.model_server pulls its hardened Python base from dhi.io, authenticated
-      # with the same Docker account credentials (the account must have DHI catalog access).
-      - name: Login to Docker Hardened Images (dhi.io)
-        uses: docker/login-action@c99871dec2022cc055c062a10cc1a1310835ceb4
+      # Dockerfile.model_server defaults to the public Python bases. Release builds ship
+      # on the hardened DHI equivalents, passed as build args below.
+      - name: Resolve Docker Hardened Image bases
+        uses: ./.github/actions/dhi-base-images
         with:
-          registry: dhi.io
-          username: ${{ env.DOCKER_USERNAME }}
-          password: ${{ env.DOCKER_TOKEN }}
+          docker-username: ${{ env.DOCKER_USERNAME }}
+          docker-token: ${{ env.DOCKER_TOKEN }}
 
       - name: Build and push AMD64
         id: build
@@ -1372,6 +1369,7 @@ jobs:
           labels: ${{ steps.meta.outputs.labels }}
           build-args: |
             ONYX_VERSION=${{ github.ref_name }}
+            ${{ env.DHI_PYTHON_BUILD_ARGS }}
           cache-from: |
             type=registry,ref=${{ env.REGISTRY_IMAGE }}:edge
             type=registry,ref=${{ env.REGISTRY_IMAGE }}:latest
@@ -1437,14 +1435,13 @@ jobs:
           username: ${{ env.DOCKER_USERNAME }}
           password: ${{ env.DOCKER_TOKEN }}
 
-      # Dockerfile.model_server pulls its hardened Python base from dhi.io, authenticated
-      # with the same Docker account credentials (the account must have DHI catalog access).
-      - name: Login to Docker Hardened Images (dhi.io)
-        uses: docker/login-action@c99871dec2022cc055c062a10cc1a1310835ceb4
+      # Dockerfile.model_server defaults to the public Python bases. Release builds ship
+      # on the hardened DHI equivalents, passed as build args below.
+      - name: Resolve Docker Hardened Image bases
+        uses: ./.github/actions/dhi-base-images
         with:
-          registry: dhi.io
-          username: ${{ env.DOCKER_USERNAME }}
-          password: ${{ env.DOCKER_TOKEN }}
+          docker-username: ${{ env.DOCKER_USERNAME }}
+          docker-token: ${{ env.DOCKER_TOKEN }}
 
       - name: Build and push ARM64
         id: build
@@ -1458,6 +1455,7 @@ jobs:
           labels: ${{ steps.meta.outputs.labels }}
           build-args: |
             ONYX_VERSION=${{ github.ref_name }}
+            ${{ env.DHI_PYTHON_BUILD_ARGS }}
           cache-from: |
             type=registry,ref=${{ env.REGISTRY_IMAGE }}:edge
             type=registry,ref=${{ env.REGISTRY_IMAGE }}:latest
@@ -2027,7 +2025,7 @@ jobs:
 
       - name: Setup uv
         if: steps.should-run.outputs.run == 'true'
-        uses: astral-sh/setup-uv@fac544c07dec837d0ccb6301d7b5580bf5edae39 # ratchet:astral-sh/setup-uv@v8.2.0
+        uses: astral-sh/setup-uv@c771a70e6277c0a99b617c7a806ffedaca235ff9 # ratchet:astral-sh/setup-uv@v9.0.0
         with:
           version: "0.11.25"
           enable-cache: false

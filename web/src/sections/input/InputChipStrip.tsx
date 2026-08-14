@@ -178,8 +178,11 @@ export function InputChipStrip({
       {hasContent && (
         <motion.div
           key="chip-strip"
+          // oxlint-disable-next-line react-doctor/no-layout-property-animation -- height 0/auto must reflow the input bar, transform cannot
           initial={{ height: 0, opacity: 0 }}
+          // oxlint-disable-next-line react-doctor/no-layout-property-animation -- height 0/auto must reflow the input bar, transform cannot
           animate={{ height: "auto", opacity: 1 }}
+          // oxlint-disable-next-line react-doctor/no-layout-property-animation -- height 0/auto must reflow the input bar, transform cannot
           exit={{ height: 0, opacity: 0 }}
           transition={stripTransition}
           style={{ overflow: "hidden" }}

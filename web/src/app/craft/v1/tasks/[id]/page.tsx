@@ -20,7 +20,7 @@ import {
   updateScheduledTask,
 } from "@/app/craft/v1/tasks/api";
 import RunHistoryTable from "@/app/craft/v1/tasks/components/RunHistoryTable";
-import PreApprovedAppsSummary from "@/app/craft/v1/tasks/components/PreApprovedAppsSummary";
+import PreApprovalSummary from "@/app/craft/v1/tasks/components/PreApprovalSummary";
 import { TaskStatusBadge } from "@/app/craft/v1/tasks/components/StatusBadge";
 import { TASKS_PATH, taskEditPath } from "@/app/craft/v1/tasks/constants";
 import type {
@@ -187,8 +187,12 @@ export default function ScheduledTaskDetailPage() {
           </Text>
         ) : (
           <div className="flex flex-col gap-6">
-            {data.pre_approved_app_ids.length > 0 && (
-              <PreApprovedAppsSummary appIds={data.pre_approved_app_ids} />
+            {(data.pre_approved_app_ids.length > 0 ||
+              data.pre_approved_mcp_server_ids.length > 0) && (
+              <PreApprovalSummary
+                appIds={data.pre_approved_app_ids}
+                mcpServerIds={data.pre_approved_mcp_server_ids}
+              />
             )}
             <RunHistoryTable taskId={data.id} />
           </div>

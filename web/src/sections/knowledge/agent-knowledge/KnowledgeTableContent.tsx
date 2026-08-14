@@ -124,7 +124,7 @@ export function SourcesTableContent({
   initialNodeId,
 }: SourcesTableContentProps) {
   return (
-    <GeneralLayouts.Section gap={0.5} alignItems="stretch">
+    <GeneralLayouts.Section gap={2} alignItems="stretch">
       <SourceHierarchyBrowser
         source={source}
         selectedDocumentIds={selectedDocumentIds}
@@ -196,7 +196,7 @@ export function RecentFilesTableContent({
   const fileInputRef = React.useRef<HTMLInputElement>(null);
 
   return (
-    <GeneralLayouts.Section gap={0.5} alignItems="stretch">
+    <GeneralLayouts.Section gap={2} alignItems="stretch">
       <TableLayouts.HiddenInput
         inputRef={fileInputRef}
         type="file"

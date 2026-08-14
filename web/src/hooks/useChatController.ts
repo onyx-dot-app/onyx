@@ -74,6 +74,7 @@ import { SelectedModel } from "@/sections/model-selector/MultiModelSelector";
 import { useAgentPreferences } from "@/lib/agents/hooks";
 import { useForcedTools } from "@/lib/hooks/useForcedTools";
 import { ProjectFile, useProjectsContext } from "@/providers/ProjectsContext";
+import { useIncognito } from "@/providers/IncognitoProvider";
 import { useAppParams } from "@/hooks/appNavigation";
 import { projectFilesToFileDescriptors } from "@/lib/projects/utils";
 
@@ -151,6 +152,7 @@ export default function useChatController({
   const { forcedToolIds } = useForcedTools();
   const { fetchProjects, setCurrentMessageFiles, beginUpload } =
     useProjectsContext();
+  const { incognitoEnabledRef, incognitoSessionId } = useIncognito();
 
   // Use selectors to access only the specific fields we need
   const currentSessionId = useChatSessionStore(
@@ -235,11 +237,16 @@ export default function useChatController({
     }
   };
 
-  const updateStatesWithNewSessionId = (newSessionId: string) => {
+  const updateStatesWithNewSessionId = (
+    newSessionId: string,
+    incognito = false
+  ) => {
     // Create new session in store if it doesn't exist
     const existingSession = sessions.get(newSessionId);
     if (!existingSession) {
-      createSession(newSessionId);
+      // Pinned here so vote suppression holds even before any backend
+      // session fetch stores the flag.
+      createSession(newSessionId, { incognito });
     }
 
     // Set as current session
@@ -381,6 +388,8 @@ export default function useChatController({
       additionalContext,
       selectedModels,
     }: OnSubmitProps) => {
+      // Read at submit time so no caller can capture a stale value.
+      const incognito = incognitoEnabledRef.current ?? false;
       const isMultiModel =
         !regenerationRequest && (selectedModels?.length ?? 0) >= 2;
       const projectId = params(SEARCH_PARAM_NAMES.PROJECT_ID);
@@ -498,19 +507,34 @@ export default function useChatController({
         (m) => m.type === "user"
       );
       if (isNewSession) {
+        // There is no incognito agent chat, so incognito pins the default
+        // assistant regardless of any selected agent.
         currChatSessionId = await createChatSession(
-          liveAgent?.id || 0,
+          incognito ? 0 : liveAgent?.id || 0,
           searchParamBasedChatSessionName,
-          projectId ? parseInt(projectId) : null
+          projectId ? parseInt(projectId) : null,
+          incognito,
+          incognito ? incognitoSessionId : null
         );
 
-        // Optimistically add the new chat session to the sidebar cache
-        // This ensures "New Chat" appears immediately, even before any messages are saved
-        addPendingChatSession({
-          chatSessionId: currChatSessionId,
-          personaId: liveAgent?.id || 0,
-          projectId: projectId ? parseInt(projectId) : null,
-        });
+        // Optimistically add the new chat session to the sidebar cache so
+        // "New Chat" appears immediately. Incognito sessions are excluded: they
+        // must never show in the sidebar, and the server filters them out too.
+        if (!incognito) {
+          addPendingChatSession({
+            chatSessionId: currChatSessionId,
+            personaId: liveAgent?.id || 0,
+            projectId: projectId ? parseInt(projectId) : null,
+          });
+        }
+
+        // The project's chat list is how the app answers "is this chat inside a
+        // project" once `projectId` leaves the URL. Without this the new chat is
+        // missing from that list until the next revalidation, and the cache is
+        // configured not to revalidate on stale or focus.
+        if (projectId) {
+          void fetchProjects();
+        }
       } else {
         // Use the existing session ID from props or from the store
         currChatSessionId =
@@ -536,7 +560,7 @@ export default function useChatController({
       );
 
       // mark the session as the current session
-      updateStatesWithNewSessionId(currChatSessionId);
+      updateStatesWithNewSessionId(currChatSessionId, incognito);
 
       // Navigate immediately for new sessions (before streaming starts)
       if (isNewSession) {
@@ -1475,7 +1499,10 @@ export default function useChatController({
     (async () => {
       try {
         if (sessionId) {
-          const available = await getAvailableContextTokens(sessionId);
+          const available = await getAvailableContextTokens(
+            sessionId,
+            llmManager.currentLlm.modelConfigurationId
+          );
           setIfActive(available ?? DEFAULT_CONTEXT_TOKENS);
           return;
         }
@@ -1502,6 +1529,7 @@ export default function useChatController({
     existingChatSessionId,
     liveAgent?.id,
     llmManager.hasAnyProvider,
+    llmManager.currentLlm.modelConfigurationId,
   ]);
 
   // check if there's an image file in the message history so that we know

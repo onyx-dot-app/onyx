@@ -94,7 +94,7 @@ function GroupPermissionsSection({
               return (
                 <Fragment key={entry.id}>
                   {index > 0 && entry.group !== prevGroup && (
-                    <Divider paddingParallel="fit" paddingPerpendicular="fit" />
+                    <Divider paddingParallel={0} paddingPerpendicular={0} />
                   )}
                   <ContentAction
                     icon={icon}
@@ -102,7 +102,7 @@ function GroupPermissionsSection({
                     description={entry.description}
                     sizePreset="main-ui"
                     variant="section"
-                    padding="md"
+                    padding={1}
                     rightChildren={
                       <Switch
                         checked={isRowEnabled(entry)}

@@ -50,7 +50,7 @@ import { SvgGlobe, SvgCheckSquare } from "@opal/icons";
     description="Web search provider"
     sizePreset="main-ui"
     variant="section"
-    padding="fit"
+    padding={0}
     rightChildren={
       <Button icon={SvgCheckSquare} variant="action" prominence="tertiary">
         Current Default
@@ -70,7 +70,7 @@ import { SvgGlobe, SvgCheckSquare } from "@opal/icons";
     description="Not configured"
     sizePreset="main-ui"
     variant="section"
-    padding="fit"
+    padding={0}
     rightChildren={
       <Button rightIcon={SvgArrowExchange} prominence="tertiary">
         Connect
@@ -92,7 +92,7 @@ import { SvgGlobe, SvgCheckSquare } from "@opal/icons";
     description="12 tools available"
     sizePreset="main-ui"
     variant="section"
-    padding="fit"
+    padding={0}
     rightChildren={<Button icon={SvgSettings} prominence="tertiary" />}
   />
 </Card.Header>
@@ -108,7 +108,7 @@ import { SvgGlobe, SvgCheckSquare } from "@opal/icons";
     description="Description text"
     sizePreset="main-content"
     variant="section"
-    padding="fit"
+    padding={0}
   />
 </Card.Header>
 ```

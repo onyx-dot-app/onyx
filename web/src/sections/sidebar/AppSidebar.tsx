@@ -1,6 +1,13 @@
 "use client";
 
-import { useCallback, useMemo, useState, useEffect, useRef } from "react";
+import {
+  useCallback,
+  useMemo,
+  useState,
+  useEffect,
+  useLayoutEffect,
+  useRef,
+} from "react";
 import useNotifications from "@/hooks/useNotifications";
 import { useRouter } from "next/navigation";
 import { useSettings } from "@/lib/settings/hooks";
@@ -134,7 +141,12 @@ function RecentsSection({
   // Sentinel ref for IntersectionObserver-based infinite scroll
   const sentinelRef = useRef<HTMLDivElement | null>(null);
   const onLoadMoreRef = useRef(onLoadMore);
-  onLoadMoreRef.current = onLoadMore;
+
+  // Layout effect: an already-scheduled observer callback must not see the
+  // previous page's loadMore after commit.
+  useLayoutEffect(() => {
+    onLoadMoreRef.current = onLoadMore;
+  }, [onLoadMore]);
 
   useEffect(() => {
     if (!hasMore || isLoadingMore) return;
@@ -469,137 +481,48 @@ export default function AppSidebar() {
     ]
   );
 
-  const { isAdmin, hasAdminAccess, adminCapabilities, user } = useUser();
+  const { hasAdminAccess, adminCapabilities, user } = useUser();
   const activeSidebarTab = useAppFocus();
   const createProjectModal = useCreateModal();
   const showLogoWhenFolded = useShowLogoWhenFolded();
   const defaultAppMode =
     (user?.preferences?.default_app_mode?.toLowerCase() as "chat" | "search") ??
     "chat";
-  const newSessionButton = useMemo(() => {
-    const href =
-      combinedSettingsData?.disable_default_assistant && currentAgent
-        ? `/app?agentId=${currentAgent.id}`
-        : "/app";
-    return (
-      <div data-testid="AppSidebar/new-session">
-        <SidebarTab
-          icon={SvgEditBig}
-          folded={folded}
-          href={href}
-          selected={activeSidebarTab.isNewSession()}
-          onClick={() => {
-            if (!activeSidebarTab.isNewSession()) return;
-            setAppMode(defaultAppMode);
-            reset();
-          }}
-        >
-          New Session
-        </SidebarTab>
-      </div>
-    );
-  }, [
-    folded,
-    activeSidebarTab,
-    combinedSettingsData,
-    currentAgent,
-    defaultAppMode,
-  ]);
-
-  const buildButton = useMemo(
-    () => (
-      <div data-testid="AppSidebar/build">
-        <SidebarTab
-          icon={SvgDevKit}
-          folded={folded}
-          href={CRAFT_PATH}
-          onClick={() => track(AnalyticsEvent.CLICKED_CRAFT_IN_SIDEBAR)}
-        >
-          Craft
-        </SidebarTab>
-      </div>
-    ),
-    [folded]
-  );
-
-  const searchChatsButton = useMemo(
-    () => (
-      <ChatSearchCommandMenu
-        trigger={
-          <SidebarTab icon={SvgSearchMenu} folded={folded}>
-            Search Chats
-          </SidebarTab>
-        }
-      />
-    ),
-    [folded]
-  );
-  const moreAgentsButton = useMemo(
-    () => (
-      <div data-testid="AppSidebar/more-agents">
-        <SidebarTab
-          icon={
-            folded || visibleAgents.length === 0
-              ? SvgOnyxOctagon
-              : SvgMoreHorizontal
-          }
-          href="/app/agents"
-          folded={folded}
-          selected={activeSidebarTab.isMoreAgents()}
-          variant={folded ? "sidebar-heavy" : "sidebar-light"}
-        >
-          {visibleAgents.length === 0 ? "Explore Agents" : "More Agents"}
-        </SidebarTab>
-      </div>
-    ),
-    [folded, activeSidebarTab, visibleAgents]
-  );
-  const newProjectButton = useMemo(
-    () => (
+  const newSessionHref =
+    combinedSettingsData?.disable_default_assistant && currentAgent
+      ? `/app?agentId=${currentAgent.id}`
+      : "/app";
+  const moreAgentsButton = (
+    <div data-testid="AppSidebar/more-agents">
       <SidebarTab
-        icon={SvgFolderPlus}
-        onClick={() => createProjectModal.toggle(true)}
-        selected={createProjectModal.isOpen}
-        folded={folded}
+        icon={
+          folded || visibleAgents.length === 0
+            ? SvgOnyxOctagon
+            : SvgMoreHorizontal
+        }
+        href="/app/agents"
+        selected={activeSidebarTab.isMoreAgents()}
         variant={folded ? "sidebar-heavy" : "sidebar-light"}
       >
-        New Project
+        {visibleAgents.length === 0 ? "Explore Agents" : "More Agents"}
       </SidebarTab>
-    ),
-    [folded, createProjectModal.toggle, createProjectModal.isOpen]
+    </div>
   );
+
+  const newProjectButton = (
+    <SidebarTab
+      icon={SvgFolderPlus}
+      onClick={() => createProjectModal.toggle(true)}
+      selected={createProjectModal.isOpen}
+      variant={folded ? "sidebar-heavy" : "sidebar-light"}
+    >
+      New Project
+    </SidebarTab>
+  );
+
   const handleShowBuildIntro = useCallback(() => {
     setShowIntroAnimation(true);
   }, []);
-
-  const settingsButton = useMemo(
-    () => (
-      <div>
-        {hasAdminAccess && (
-          <SidebarTab
-            href={getFirstPermittedAdminRoute(adminCapabilities)}
-            icon={SvgSettings}
-            folded={folded}
-          >
-            Admin Panel
-          </SidebarTab>
-        )}
-        <AccountPopover
-          folded={folded}
-          onShowBuildIntro={
-            isOnyxCraftEnabled ? handleShowBuildIntro : undefined
-          }
-        />
-      </div>
-    ),
-    [
-      folded,
-      hasAdminAccess,
-      adminCapabilities,
-      handleShowBuildIntro,
-      isOnyxCraftEnabled,
-    ]
-  );
 
   return (
     <>
@@ -668,9 +591,38 @@ export default function AppSidebar() {
           showLogoWhenFolded={showLogoWhenFolded}
           renderAppLogo={renderSidebarLogo}
         >
-          {newSessionButton}
-          {searchChatsButton}
-          {isOnyxCraftEnabled && buildButton}
+          <div data-testid="AppSidebar/new-session">
+            <SidebarTab
+              icon={SvgEditBig}
+              href={newSessionHref}
+              selected={activeSidebarTab.isNewSession()}
+              onClick={() => {
+                if (!activeSidebarTab.isNewSession()) return;
+                setAppMode(defaultAppMode);
+                reset();
+              }}
+            >
+              New Session
+            </SidebarTab>
+          </div>
+          <ChatSearchCommandMenu
+            trigger={(open) => (
+              <SidebarTab icon={SvgSearchMenu} onClick={open}>
+                Search Chats
+              </SidebarTab>
+            )}
+          />
+          {isOnyxCraftEnabled && (
+            <div data-testid="AppSidebar/build">
+              <SidebarTab
+                icon={SvgDevKit}
+                href={CRAFT_PATH}
+                onClick={() => track(AnalyticsEvent.CLICKED_CRAFT_IN_SIDEBAR)}
+              >
+                Craft
+              </SidebarTab>
+            </div>
+          )}
           {folded && moreAgentsButton}
           {folded && newProjectButton}
         </SidebarLayouts.Header>
@@ -738,7 +690,23 @@ export default function AppSidebar() {
           )}
         </SidebarLayouts.Body>
 
-        <SidebarLayouts.Footer>{settingsButton}</SidebarLayouts.Footer>
+        <SidebarLayouts.Footer>
+          <div>
+            {hasAdminAccess && (
+              <SidebarTab
+                href={getFirstPermittedAdminRoute(adminCapabilities)}
+                icon={SvgSettings}
+              >
+                Admin Panel
+              </SidebarTab>
+            )}
+            <AccountPopover
+              onShowBuildIntro={
+                isOnyxCraftEnabled ? handleShowBuildIntro : undefined
+              }
+            />
+          </div>
+        </SidebarLayouts.Footer>
       </SidebarLayouts.Root>
     </>
   );

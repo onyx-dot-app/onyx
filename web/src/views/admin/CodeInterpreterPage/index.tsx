@@ -57,8 +57,8 @@ function CheckingStatus() {
       flexDirection="row"
       justifyContent="end"
       alignItems="center"
-      gap={0.25}
-      padding={0.5}
+      gap={1}
+      padding={2}
     >
       <Text mainUiAction text03>
         Checking...
@@ -91,8 +91,8 @@ function ConnectionStatus({
       flexDirection="row"
       justifyContent="end"
       alignItems="center"
-      gap={0.25}
-      padding={0.5}
+      gap={1}
+      padding={2}
     >
       <Text mainUiAction text03>
         {label}
@@ -174,7 +174,7 @@ export default function CodeInterpreterPage() {
             group="code-interpreter/Card"
             interaction={showDisconnectModal ? "hover" : "rest"}
           >
-            <SelectCard state="filled" padding="sm" rounding="lg">
+            <SelectCard state="filled" padding={2} rounding="lg">
               <Card.Header>
                 <ContentAction
                   sizePreset="main-ui"
@@ -182,7 +182,7 @@ export default function CodeInterpreterPage() {
                   icon={SvgTerminal}
                   title="Code Interpreter"
                   description="Built-in Python runtime"
-                  padding="lg"
+                  padding={2}
                   rightChildren={
                     <Section alignItems="end" gap={0}>
                       <ConnectionStatus
@@ -194,7 +194,7 @@ export default function CodeInterpreterPage() {
                         <Section
                           flexDirection="row"
                           justifyContent="end"
-                          gap={0.25}
+                          gap={1}
                         >
                           <Disabled disabled={isLoading}>
                             <Hoverable.Item group="code-interpreter/Card">
@@ -226,7 +226,7 @@ export default function CodeInterpreterPage() {
         ) : (
           <SelectCard
             state="empty"
-            padding="sm"
+            padding={2}
             rounding="lg"
             onClick={() => handleToggle(true)}
           >
@@ -236,7 +236,7 @@ export default function CodeInterpreterPage() {
               icon={SvgTerminal}
               title="Code Interpreter (Disconnected)"
               description="Built-in Python runtime"
-              padding="lg"
+              padding={2}
               rightChildren={
                 isReconnecting ? (
                   <CheckingStatus />
@@ -264,7 +264,7 @@ export default function CodeInterpreterPage() {
             onMouseLeave={() => handleErrorHover(false)}
           >
             <div className="w-[15rem]">
-              <SelectCard state="filled" padding="sm" rounding="lg">
+              <SelectCard state="filled" padding={2} rounding="lg">
                 <Content
                   icon={(props) => (
                     <SvgXOctagon

@@ -54,6 +54,7 @@ import AgentAvatar from "@/refresh-components/avatars/AgentAvatar";
 import useUsers from "@/hooks/useUsers";
 import { Modal } from "@opal/components";
 import { getProvider } from "@/lib/languageModels";
+import { useSettings } from "@/lib/settings/hooks";
 
 // ─── DisplayNameField ────────────────────────────────────────────────────────
 
@@ -123,7 +124,27 @@ export function APIKeyField({
  * `host.docker.internal`.
  */
 export const CONTAINERIZED_HOST_NOTE =
-  "With Onyx running in a container, `host.docker.internal` acts like `localhost` inside the container.";
+  "With Onyx running in a container, use `host.docker.internal` in place of `localhost` to reach a service on your host.";
+
+/**
+ * Builds the API Base URL `subDescription` for self-hosted and custom
+ * providers. These point at a service on the admin's own machine, which
+ * `localhost` does not reach from inside a container — so when Onyx is
+ * containerized, {@link CONTAINERIZED_HOST_NOTE} goes between `description`
+ * and `suffix`.
+ */
+export function useApiBaseSubDescription(
+  description?: string,
+  suffix?: string
+): RichStr | undefined {
+  const settings = useSettings();
+  const sentences = [
+    description,
+    settings.is_containerized ? CONTAINERIZED_HOST_NOTE : undefined,
+    suffix,
+  ].filter((sentence) => sentence !== undefined);
+  return sentences.length > 0 ? markdown(sentences.join(" ")) : undefined;
+}
 
 export interface APIBaseFieldProps {
   optional?: boolean;
@@ -269,8 +290,8 @@ export function ModelAccessField() {
       </InputPadder>
 
       {!isPublic && (
-        <Card background="light" border="none" padding="sm">
-          <Section gap={0.5}>
+        <Card background="light" border="none" padding={2}>
+          <Section gap={2}>
             <InputComboBox
               placeholder="Add groups and agents"
               value=""
@@ -281,7 +302,7 @@ export function ModelAccessField() {
               searchIcon
             />
 
-            <Card background="heavy" border="none" padding="sm">
+            <Card background="heavy" border="none" padding={2}>
               <ContentAction
                 icon={SvgUserManage}
                 title="Admin"
@@ -295,7 +316,7 @@ export function ModelAccessField() {
                     Always shared
                   </Text>
                 }
-                padding="fit"
+                padding={0}
               />
             </Card>
             {selectedGroupIds.length > 0 && (
@@ -305,7 +326,7 @@ export function ModelAccessField() {
                   const memberCount = group?.users.length ?? 0;
                   return (
                     <div key={`group-${id}`} className="min-w-0">
-                      <Card background="heavy" border="none" padding="sm">
+                      <Card background="heavy" border="none" padding={2}>
                         <ContentAction
                           icon={SvgUsers}
                           title={group?.name ?? `Group ${id}`}
@@ -323,7 +344,7 @@ export function ModelAccessField() {
                               type="button"
                             />
                           }
-                          padding="fit"
+                          padding={0}
                         />
                       </Card>
                     </div>
@@ -340,7 +361,7 @@ export function ModelAccessField() {
                   const agent = agentMap.get(id);
                   return (
                     <div key={`agent-${id}`} className="min-w-0">
-                      <Card background="heavy" border="none" padding="sm">
+                      <Card background="heavy" border="none" padding={2}>
                         <ContentAction
                           icon={
                             agent
@@ -360,7 +381,7 @@ export function ModelAccessField() {
                               type="button"
                             />
                           }
-                          padding="fit"
+                          padding={0}
                         />
                       </Card>
                     </div>
@@ -561,7 +582,7 @@ function ModelRow({
               rightChildren={modelRightChildren(model)}
               editable
               onTitleChange={(newTitle) => onRename(newTitle || undefined)}
-              padding="fit"
+              padding={0}
             />
           </div>
         </Interactive.Container>
@@ -651,8 +672,8 @@ export function ModelSelectionField({
   const visibleModels = models.filter((m) => m.is_visible);
 
   return (
-    <Card background="light" border="none" padding="sm">
-      <Section gap={0.5}>
+    <Card background="light" border="none" padding={2}>
+      <Section gap={2}>
         <InputHorizontal
           title="Models"
           description="Select models to make available for this provider."
@@ -674,10 +695,10 @@ export function ModelSelectionField({
         {models.length === 0 ? (
           <EmptyMessageCard
             title={emptyMessage ?? "No models available."}
-            padding="sm"
+            padding={2}
           />
         ) : (
-          <Section gap={0.25} alignItems="stretch">
+          <Section gap={1} alignItems="stretch">
             {(() => {
               const baseModels = isAutoMode ? visibleModels : models;
               // Sort alphabetically by id for providers that ship rich model
@@ -737,7 +758,7 @@ export function ModelSelectionField({
         )}
 
         {onAddModel && !isAutoMode && (
-          <Section flexDirection="row" gap={0.5}>
+          <Section flexDirection="row" gap={2}>
             <div className="flex-1">
               <InputTypeIn
                 placeholder="Enter model name"
@@ -907,7 +928,7 @@ function ModalWrapperInner({
             description={description}
             onClose={onClose}
           />
-          <Modal.Body padding={0.5} gap={0}>
+          <Modal.Body padding={2} gap={0}>
             {children}
           </Modal.Body>
           <Modal.Footer>

@@ -33,7 +33,7 @@ def batched_doc_ids(
     batch_size: int,
 ) -> Generator[set[str], None, None]:
     batch: set[str] = set()
-    for document, hierarchy_node, failure, next_checkpoint in CheckpointOutputWrapper[
+    for document, _hierarchy_node, failure, _next_checkpoint in CheckpointOutputWrapper[
         CT
     ]()(checkpoint_connector_generator):
         if document is not None:
@@ -177,10 +177,13 @@ class ConnectorRunner(Generic[CT]):
                     document,
                     hierarchy_node,
                     failure,
-                    next_checkpoint,
+                    loop_checkpoint,
                 ) in CheckpointOutputWrapper[CT]()(
                     checkpoint_connector_generator  # ty: ignore[invalid-argument-type]
                 ):
+                    # Keep the last checkpoint seen; it is yielded after the loop.
+                    next_checkpoint = loop_checkpoint
+
                     if document is not None:
                         self.doc_batch.append(document)
 

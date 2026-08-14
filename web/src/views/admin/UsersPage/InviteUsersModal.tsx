@@ -1,13 +1,21 @@
 "use client";
 
 import { useState, useCallback } from "react";
-import { Button } from "@opal/components";
-import { SvgUsers, SvgAlertTriangle, SvgLoader } from "@opal/icons";
-import { BasicModalFooter, Modal } from "@opal/components";
-import InputChipField from "@/refresh-components/inputs/InputChipField";
-import type { ChipItem } from "@/refresh-components/inputs/InputChipField";
-import Text from "@/refresh-components/texts/Text";
-import { toast } from "@opal/layouts";
+import {
+  BasicModalFooter,
+  Button,
+  InputTags,
+  Modal,
+  type TagItem,
+} from "@opal/components";
+import {
+  SvgAlertTriangle,
+  SvgCheckCircle,
+  SvgSimpleLoader,
+  SvgUsers,
+} from "@opal/icons";
+import type { ColorTypes, IconFunctionComponent } from "@opal/types";
+import { Content, toast } from "@opal/layouts";
 import { mutate } from "swr";
 import { SWR_KEYS } from "@/lib/swr-keys";
 import { inviteUsers } from "./svc";
@@ -18,6 +26,62 @@ import { inviteUsers } from "./svc";
 
 const EMAIL_REGEX = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
 
+/** Whitespace and commas both end an address, so either one commits a tag. */
+const SEPARATOR_REGEX = /[\s,]+/;
+
+/** The field in the mock is three tag rows tall. */
+const EMAIL_FIELD_ROWS = 3;
+
+function isValidEmail(value: string): boolean {
+  return EMAIL_REGEX.test(value);
+}
+
+function normalizeEmail(value: string): string {
+  return value.trim().toLowerCase();
+}
+
+/** Tags for entries not already present, de-duped case-insensitively. */
+function buildTags(entries: string[], existing: TagItem[]): TagItem[] {
+  const added: TagItem[] = [];
+  for (const entry of entries) {
+    const email = normalizeEmail(entry);
+    const seen =
+      existing.some((tag) => tag.id === email) ||
+      added.some((tag) => tag.id === email);
+    if (email && !seen) {
+      added.push({ id: email, label: email, error: !isValidEmail(email) });
+    }
+  }
+  return added;
+}
+
+function buildMessage(
+  tags: TagItem[],
+  pendingEmail: string,
+  validCount: number
+): FieldMessage | null {
+  if (tags.length === 0 && pendingEmail === "") return null;
+  if (tags.some((tag) => tag.error)) {
+    return {
+      icon: SvgAlertTriangle,
+      color: "muted-warning",
+      text: "Some email addresses are invalid and will be skipped.",
+    };
+  }
+  if (validCount === 0) {
+    return {
+      icon: SvgAlertTriangle,
+      color: "muted-warning",
+      text: "Enter a valid email address to invite.",
+    };
+  }
+  return {
+    icon: SvgCheckCircle,
+    color: "muted-success",
+    text: `${validCount} email${validCount > 1 ? "s" : ""} to invite`,
+  };
+}
+
 // ---------------------------------------------------------------------------
 // Types
 // ---------------------------------------------------------------------------
@@ -25,6 +89,12 @@ const EMAIL_REGEX = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
 interface InviteUsersModalProps {
   open: boolean;
   onOpenChange: (open: boolean) => void;
+}
+
+interface FieldMessage {
+  icon: IconFunctionComponent;
+  color: ColorTypes;
+  text: string;
 }
 
 // ---------------------------------------------------------------------------
@@ -35,56 +105,56 @@ export default function InviteUsersModal({
   open,
   onOpenChange,
 }: InviteUsersModalProps) {
-  const [chips, setChips] = useState<ChipItem[]>([]);
+  const [tags, setTags] = useState<TagItem[]>([]);
   const [inputValue, setInputValue] = useState("");
   const [isSubmitting, setIsSubmitting] = useState(false);
 
-  /** Parse a comma-separated string into de-duped ChipItems */
-  function parseEmails(value: string, existing: ChipItem[]): ChipItem[] {
-    const entries = value
-      .split(",")
-      .map((e) => e.trim().toLowerCase())
-      .filter(Boolean);
-
-    const newChips: ChipItem[] = [];
-    for (const email of entries) {
-      const alreadyAdded =
-        existing.some((c) => c.label === email) ||
-        newChips.some((c) => c.label === email);
-      if (!alreadyAdded) {
-        newChips.push({
-          id: email,
-          label: email,
-          error: !EMAIL_REGEX.test(email),
-        });
-      }
-    }
-    return newChips;
+  function addTags(entries: string[]) {
+    setTags((prev) => {
+      const added = buildTags(entries, prev);
+      return added.length > 0 ? [...prev, ...added] : prev;
+    });
   }
 
-  function addEmail(value: string) {
-    const newChips = parseEmails(value, chips);
-    if (newChips.length > 0) {
-      setChips((prev) => [...prev, ...newChips]);
+  function removeTag(id: string) {
+    setTags((prev) => prev.filter((tag) => tag.id !== id));
+  }
+
+  /** Commits every separator-terminated address, keeping the trailing text. */
+  function handleInputChange(next: string) {
+    if (!SEPARATOR_REGEX.test(next)) {
+      setInputValue(next);
+      return;
     }
+    const parts = next.split(SEPARATOR_REGEX);
+    const trailing = parts.pop() ?? "";
+    addTags(parts);
+    setInputValue(trailing);
+  }
+
+  function handleAdd(value: string) {
+    addTags([value]);
     setInputValue("");
   }
 
-  function removeChip(id: string) {
-    setChips((prev) => prev.filter((c) => c.id !== id));
-  }
+  const pendingEmail = normalizeEmail(inputValue);
+  const pendingIsValid =
+    isValidEmail(pendingEmail) && !tags.some((tag) => tag.id === pendingEmail);
+  const validCount =
+    tags.filter((tag) => !tag.error).length + (pendingIsValid ? 1 : 0);
+  const message = buildMessage(tags, pendingEmail, validCount);
 
   const handleClose = useCallback(() => {
     onOpenChange(false);
     // Reset state after close animation
     setTimeout(() => {
-      setChips([]);
+      setTags([]);
       setInputValue("");
       setIsSubmitting(false);
     }, 200);
   }, [onOpenChange]);
 
-  /** Intercept backdrop/ESC closes so state is always reset */
+  /** Route backdrop/ESC closes through handleClose, and block them mid-submit. */
   const handleOpenChange = useCallback(
     (next: boolean) => {
       if (!next) {
@@ -97,18 +167,14 @@ export default function InviteUsersModal({
   );
 
   async function handleInvite() {
-    // Flush any pending text in the input into chips synchronously
-    const pending = inputValue.trim();
-    const allChips = pending
-      ? [...chips, ...parseEmails(pending, chips)]
-      : chips;
+    // setTags is not visible until the next render, so submit the locally built list.
+    const allTags = [...tags, ...buildTags([inputValue], tags)];
+    setTags(allTags);
+    setInputValue("");
 
-    if (pending) {
-      setChips(allChips);
-      setInputValue("");
-    }
-
-    const validEmails = allChips.filter((c) => !c.error).map((c) => c.label);
+    const validEmails = allTags
+      .filter((tag) => !tag.error)
+      .map((tag) => tag.label);
 
     if (validEmails.length === 0) {
       toast.error("Please add at least one valid email address");
@@ -149,26 +215,26 @@ export default function InviteUsersModal({
           onClose={isSubmitting ? undefined : handleClose}
         />
 
-        <Modal.Body>
-          <InputChipField
-            chips={chips}
-            onRemoveChip={removeChip}
-            onAdd={addEmail}
+        <Modal.Body alignItems="stretch" gap={1}>
+          <InputTags
+            tags={tags}
+            onRemoveTag={removeTag}
+            onAdd={handleAdd}
             value={inputValue}
-            onChange={setInputValue}
-            placeholder="Add an email and press enter"
-            layout="stacked"
+            onChange={handleInputChange}
+            placeholder="Add emails to invite, space or comma separated"
+            minRows={EMAIL_FIELD_ROWS}
+            autoFocus
           />
-          {chips.some((c) => c.error) && (
-            <div className="flex items-center gap-1 pt-1">
-              <SvgAlertTriangle
-                size={14}
-                className="text-status-warning-05 shrink-0"
-              />
-              <Text secondaryBody text03>
-                Some email addresses are invalid and will be skipped.
-              </Text>
-            </div>
+          {message && (
+            <Content
+              sizePreset="secondary"
+              variant="body"
+              icon={message.icon}
+              title={message.text}
+              color={message.color}
+              role="status"
+            />
           )}
         </Modal.Body>
 
@@ -185,12 +251,8 @@ export default function InviteUsersModal({
             }
             submit={
               <Button
-                disabled={isSubmitting || chips.every((c) => c.error)}
-                icon={
-                  isSubmitting
-                    ? () => <SvgLoader size={16} className="animate-spin" />
-                    : undefined
-                }
+                disabled={isSubmitting || validCount === 0}
+                icon={isSubmitting ? SvgSimpleLoader : undefined}
                 onClick={handleInvite}
               >
                 Invite

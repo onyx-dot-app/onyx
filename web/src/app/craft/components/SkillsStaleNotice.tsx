@@ -34,20 +34,15 @@ export default function SkillsStaleNotice({
     }
   };
 
+  if (turnActive) return null;
+
   return (
     <MessageCard
       variant="warning"
       title="Your agent’s capabilities have changed"
       description="Reload this session to apply the latest skills and app access."
       rightChildren={
-        <Button
-          icon={SvgRefreshCw}
-          onClick={reload}
-          disabled={turnActive || reloading}
-          tooltip={
-            turnActive ? "Wait for the current turn to finish." : undefined
-          }
-        >
+        <Button icon={SvgRefreshCw} onClick={reload} disabled={reloading}>
           {reloading ? "Reloading…" : "Reload"}
         </Button>
       }

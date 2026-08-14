@@ -3099,3 +3099,23 @@ def test_invoke_caps_read_timeout_at_total_budget(
             total_timeout_override=total_timeout_override,
         )
         assert mock_completion.call_args.kwargs["timeout"] == expected_read_timeout
+
+
+def test_policy_extra_body_keeps_deployment_siblings_under_the_same_key() -> None:
+    """The OpenRouter retention policy sets one key under `provider`. The
+    deployment's other keys under `provider` must survive that merge."""
+    llm = LitellmLLM(
+        api_key="or-test-key",
+        timeout=30,
+        model_provider=LlmProviderNames.OPENROUTER,
+        model_name="openai/gpt-5.6",
+        max_input_tokens=128_000,
+        model_kwargs={"extra_body": {"provider": {"data_collection": "deny"}}},
+        extra_body={"provider": {"order": ["Azure"], "allow_fallbacks": False}},
+    )
+
+    assert llm._model_kwargs["extra_body"]["provider"] == {
+        "order": ["Azure"],
+        "allow_fallbacks": False,
+        "data_collection": "deny",
+    }

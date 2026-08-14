@@ -1,13 +1,10 @@
-// Toggle primitive, RN port of Opal Switch (web/lib/opal/src/components/inputs/switch/). Track
-// 32×18, thumb 14×14, reanimated thumb translate. RN's native Switch can't match the token look, so
-// this is hand-built from a Pressable track + an Animated thumb.
-import { useEffect } from "react";
-import { Pressable } from "react-native";
-import Animated, {
-  useAnimatedStyle,
-  useSharedValue,
-  withTiming,
-} from "react-native-reanimated";
+/*
+ * Hand-built rather than RN's Switch, which can't match the token look. Animated is react-native's,
+ * not reanimated's: importing reanimated here drags the worklets runtime into every jest suite that
+ * renders a menu row.
+ */
+import { useEffect, useState } from "react";
+import { Animated, Pressable } from "react-native";
 
 import { cn } from "@/lib/utils";
 
@@ -17,6 +14,7 @@ const THUMB_SIZE = 14;
 const TRACK_PADDING = 2;
 // Inner track width minus the thumb: 32 − 2·2 − 14 = 14.
 const THUMB_TRAVEL = TRACK_WIDTH - TRACK_PADDING * 2 - THUMB_SIZE;
+const DURATION_MS = 150;
 
 interface SwitchProps {
   checked: boolean;
@@ -31,15 +29,18 @@ function Switch({
   disabled = false,
   accessibilityLabel,
 }: SwitchProps) {
-  const offset = useSharedValue(checked ? THUMB_TRAVEL : 0);
+  // Lazy useState, not a ref: created once, and refs can't be read during render.
+  const [offset] = useState(
+    () => new Animated.Value(checked ? THUMB_TRAVEL : 0),
+  );
 
   useEffect(() => {
-    offset.value = withTiming(checked ? THUMB_TRAVEL : 0, { duration: 150 });
+    Animated.timing(offset, {
+      toValue: checked ? THUMB_TRAVEL : 0,
+      duration: DURATION_MS,
+      useNativeDriver: true,
+    }).start();
   }, [checked, offset]);
-
-  const thumbStyle = useAnimatedStyle(() => ({
-    transform: [{ translateX: offset.value }],
-  }));
 
   const trackColor = disabled
     ? checked
@@ -68,7 +69,10 @@ function Switch({
     >
       <Animated.View
         className={cn("rounded-full", thumbColor)}
-        style={[{ width: THUMB_SIZE, height: THUMB_SIZE }, thumbStyle]}
+        style={[
+          { width: THUMB_SIZE, height: THUMB_SIZE },
+          { transform: [{ translateX: offset }] },
+        ]}
       />
     </Pressable>
   );

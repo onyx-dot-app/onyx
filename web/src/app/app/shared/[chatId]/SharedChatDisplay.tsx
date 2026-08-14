@@ -49,7 +49,7 @@ export default function SharedChatDisplay({
   if (!chatSession) {
     return (
       <div className="h-full w-full flex flex-col items-center justify-center">
-        <Section flexDirection="column" alignItems="center" gap={1}>
+        <Section flexDirection="column" alignItems="center" gap={4}>
           <IllustrationContent
             illustration={SvgNotFound}
             title="Shared chat not found"
@@ -74,7 +74,7 @@ export default function SharedChatDisplay({
   if (firstMessage === undefined) {
     return (
       <div className="h-full w-full flex flex-col items-center justify-center">
-        <Section flexDirection="column" alignItems="center" gap={1}>
+        <Section flexDirection="column" alignItems="center" gap={4}>
           <IllustrationContent
             illustration={SvgNotFound}
             title="Shared chat not found"

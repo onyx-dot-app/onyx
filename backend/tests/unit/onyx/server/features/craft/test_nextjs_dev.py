@@ -12,9 +12,15 @@ from uuid import UUID
 
 from onyx.server.features.build.sandbox import nextjs_dev
 from onyx.server.features.build.sandbox.nextjs_dev import (
+    WEBAPP_ABSENT_SENTINEL,
+    WEBAPP_AUTOSTART_SENTINEL,
     build_nextjs_start_script,
     build_webapp_bootstrap_script,
+    build_webapp_restore_script,
     build_webapp_script_write_snippet,
+)
+from onyx.server.features.build.sandbox.session_workspace import (
+    build_session_workspace_setup_script,
 )
 from onyx.server.features.build.session.manager import SessionManager
 
@@ -198,6 +204,48 @@ def test_bootstrap_script_reuses_live_server_via_embedded_guard() -> None:
     assert script.count("kill -0") == 1
 
 
+def test_setup_script_writes_start_webapp_script_and_chmod_444() -> None:
+    script = build_session_workspace_setup_script(
+        session_path=_SESSION_PATH,
+        agents_md="# Agent",
+        session_opencode_config_json='{"model": "x"}',
+        nextjs_port=3010,
+    )
+
+    assert f"> {_SESSION_PATH}/start-webapp.sh" in script
+    assert f"chmod 444 {_SESSION_PATH}/start-webapp.sh" in script
+    # No eager scaffold/install at setup time: the old eager invocations (bare
+    # session path, unquoted) are gone. What's left mentioning bun/outputs is
+    # inert text inside the printf'd start-webapp.sh payload, which addresses
+    # the session dir via the $SESSION_PATH shell variable instead.
+    assert f"cd {_SESSION_PATH}/outputs/web &&" not in script
+    assert (
+        f"cp -r /workspace/templates/outputs/* {_SESSION_PATH}/outputs/" not in script
+    )
+
+
+def test_setup_script_headless_writes_no_start_webapp_script() -> None:
+    script = build_session_workspace_setup_script(
+        session_path=_SESSION_PATH,
+        agents_md="# Agent",
+        session_opencode_config_json='{"model": "x"}',
+        nextjs_port=None,
+    )
+
+    assert "start-webapp.sh" not in script
+    assert "chmod 444" not in script
+
+
+def test_setup_script_is_valid_bash() -> None:
+    script = build_session_workspace_setup_script(
+        session_path=_SESSION_PATH,
+        agents_md="# Agent",
+        session_opencode_config_json='{"model": "x"}',
+        nextjs_port=3010,
+    )
+    _assert_valid_bash(script)
+
+
 def test_webapp_script_write_snippet_removes_before_writing() -> None:
     snippet = build_webapp_script_write_snippet(_SESSION_PATH, 3010)
 
@@ -206,3 +254,28 @@ def test_webapp_script_write_snippet_removes_before_writing() -> None:
     remove_index = snippet.index("rm -f")
     write_index = snippet.index("printf")
     assert remove_index < write_index
+
+
+def test_restore_script_rewrites_scripts_before_gated_autostart() -> None:
+    script = build_webapp_restore_script(_SESSION_PATH, 3010)
+
+    # Script rewrite (with the new port) must come before the auto-start gate.
+    assert build_webapp_script_write_snippet(_SESSION_PATH, 3010) in script
+    gate = f"[ -f {_SESSION_PATH}/outputs/web/package.json ]"
+    assert gate in script
+    assert script.index("printf") < script.index(gate)
+
+    # The auto-start must exec the tamper-hardened canonical copy, gated on
+    # the webapp actually existing in the restored snapshot, and backgrounded.
+    autostart = f"nohup bash {_SESSION_PATH}/start-webapp.sh"
+    assert autostart in script
+    assert script.index(gate) < script.index(autostart)
+    assert f"> {_SESSION_PATH}/webapp-bootstrap.log 2>&1 &" in script
+
+    # Exactly one sentinel per branch; k8s restore relies on them for success.
+    assert WEBAPP_AUTOSTART_SENTINEL in script
+    assert WEBAPP_ABSENT_SENTINEL in script
+
+
+def test_restore_script_is_valid_bash() -> None:
+    _assert_valid_bash(build_webapp_restore_script(_SESSION_PATH, 3010))

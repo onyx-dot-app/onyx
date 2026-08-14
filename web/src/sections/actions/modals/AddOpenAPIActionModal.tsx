@@ -287,7 +287,7 @@ function FormContent({
           </Hoverable.Root>
         </InputVertical>
 
-        <Divider paddingParallel="fit" paddingPerpendicular="fit" />
+        <Divider paddingParallel={0} paddingPerpendicular={0} />
 
         {methodSpecs && methodSpecs.length > 0 ? (
           <>
@@ -305,8 +305,8 @@ function FormContent({
                 description="URL found in the schema. Only connect to servers you trust."
               />
             )}
-            <Divider paddingParallel="fit" paddingPerpendicular="fit" />
-            <Section gap={0.5}>
+            <Divider paddingParallel={0} paddingPerpendicular={0} />
+            <Section gap={2}>
               {methodSpecs.map((method) => (
                 <ToolItem
                   key={`${method.method}-${method.path}-${method.name}`}
@@ -335,12 +335,12 @@ function FormContent({
             flexDirection="row"
             justifyContent="between"
             alignItems="start"
-            gap={1}
+            gap={4}
           >
-            <Section gap={0.25} alignItems="start">
+            <Section gap={1} alignItems="start">
               <Section
                 flexDirection="row"
-                gap={0.5}
+                gap={2}
                 alignItems="center"
                 width="fit"
               >
@@ -359,7 +359,7 @@ function FormContent({
             </Section>
             <Section
               flexDirection="row"
-              gap={0.5}
+              gap={2}
               alignItems="center"
               width="fit"
             >

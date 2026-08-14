@@ -180,7 +180,7 @@ export default function AddMCPServerModal({
                   />
                 </InputVertical>
 
-                <Divider paddingParallel="fit" paddingPerpendicular="fit" />
+                <Divider paddingParallel={0} paddingPerpendicular={0} />
 
                 <InputVertical
                   withLabel="server_url"
@@ -193,7 +193,7 @@ export default function AddMCPServerModal({
                   />
                 </InputVertical>
 
-                <Divider paddingParallel="fit" paddingPerpendicular="fit" />
+                <Divider paddingParallel={0} paddingPerpendicular={0} />
 
                 {/* Access control: who can add this server's tools to agents.
                     Self-gates on tier/role; no-op when groups are unavailable. */}
@@ -209,18 +209,18 @@ export default function AddMCPServerModal({
 
                 {/* Authentication Status Section - Only show in edit mode when authenticated */}
                 {isEditMode &&
-                  server?.is_authenticated &&
+                  server?.user_can_authenticate &&
                   server?.status === MCPServerStatus.CONNECTED && (
                     <Section
                       flexDirection="row"
                       justifyContent="between"
                       alignItems="start"
-                      gap={1}
+                      gap={4}
                     >
-                      <Section gap={0.25} alignItems="start">
+                      <Section gap={1} alignItems="start">
                         <Section
                           flexDirection="row"
-                          gap={0.5}
+                          gap={2}
                           alignItems="center"
                           width="fit"
                         >
@@ -237,7 +237,7 @@ export default function AddMCPServerModal({
                       </Section>
                       <Section
                         flexDirection="row"
-                        gap={0.5}
+                        gap={2}
                         alignItems="center"
                         width="fit"
                       >

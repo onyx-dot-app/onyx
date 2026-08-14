@@ -22,6 +22,14 @@ class LLMUserIdentity(BaseModel):
     session_id: str | None = None
 
 
+class LlmRequestPolicy(BaseModel):
+    """Per-request policy an LLM call must carry (e.g. incognito retention
+    suppression). Merged after every other source so nothing overrides it."""
+
+    headers: dict[str, str] = {}
+    model_kwargs: dict[str, Any] = {}
+
+
 class LLMConfig(BaseModel):
     model_provider: str
     model_name: str

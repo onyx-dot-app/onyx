@@ -283,7 +283,7 @@ export default function UserLibraryModal({
             description="Files your agent can read in every session."
             onClose={onClose}
           >
-            <Section flexDirection="row" gap={0.5}>
+            <Section flexDirection="row" gap={2}>
               <InputTypeIn
                 placeholder="Search files..."
                 value={searchQuery}

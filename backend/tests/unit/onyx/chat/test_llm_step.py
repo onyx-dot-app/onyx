@@ -19,7 +19,13 @@ from onyx.configs.constants import MessageType
 from onyx.file_store.models import ChatFileType
 from onyx.llm.constants import LlmProviderNames
 from onyx.llm.interfaces import LLMConfig, ToolChoiceOptions
-from onyx.llm.models import AssistantMessage, TextContentPart, ToolMessage, UserMessage
+from onyx.llm.models import (
+    AssistantMessage,
+    ImageContentPart,
+    TextContentPart,
+    ToolMessage,
+    UserMessage,
+)
 from onyx.llm.well_known_providers.constants import (
     AZURE_PROVIDER_NAME,
     OPENAI_PROVIDER_NAME,
@@ -659,6 +665,13 @@ class TestImageCap:
     the same 30-line feature.
     """
 
+    @pytest.fixture(autouse=True)
+    def _vision_capable(self, monkeypatch: pytest.MonkeyPatch) -> None:
+        # These tests exercise the cap, not the vision gate — pin it open.
+        monkeypatch.setattr(
+            llm_step_module, "model_supports_image_input", lambda *_: True
+        )
+
     def test_disabled_by_default_passes_everything_through(
         self, monkeypatch: pytest.MonkeyPatch
     ) -> None:
@@ -718,6 +731,65 @@ class TestImageCap:
         assert len(translated) == 1
         assert isinstance(translated[0], UserMessage)
         assert len(_attached_image_file_ids(translated[0])) == 5
+
+
+class TestNonVisionImageStripping:
+    """History can contain images the currently selected model cannot accept
+    (e.g. after a mid-session model switch). translate_history_to_llm_format
+    must replace them with text markers instead of causing a provider 400."""
+
+    def test_strips_image_parts_for_non_vision_model(
+        self, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        monkeypatch.setattr(
+            llm_step_module, "model_supports_image_input", lambda *_: False
+        )
+        history = [_make_user_msg("look at this", images=[_make_image("img0")])]
+        translated = translate_history_to_llm_format(
+            history=history, llm_config=_make_llm_config(OPENAI_PROVIDER_NAME)
+        )
+        assert isinstance(translated, list)
+        (user_msg,) = translated
+        assert isinstance(user_msg, UserMessage)
+        assert isinstance(user_msg.content, list)
+        assert not any(isinstance(p, ImageContentPart) for p in user_msg.content)
+        markers = [
+            p.text
+            for p in user_msg.content
+            if isinstance(p, TextContentPart) and "img0" in p.text
+        ]
+        assert markers
+        assert "does not support image input" in markers[0]
+
+    def test_keeps_image_parts_for_vision_model(
+        self, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        monkeypatch.setattr(
+            llm_step_module, "model_supports_image_input", lambda *_: True
+        )
+        history = [_make_user_msg("look at this", images=[_make_image("img0")])]
+        translated = translate_history_to_llm_format(
+            history=history, llm_config=_make_llm_config(OPENAI_PROVIDER_NAME)
+        )
+        (user_msg,) = translated
+        assert isinstance(user_msg, UserMessage)
+        assert isinstance(user_msg.content, list)
+        assert _attached_image_file_ids(user_msg) == ["img0"]
+        assert any(isinstance(p, ImageContentPart) for p in user_msg.content)
+
+    def test_capability_not_checked_without_images(
+        self, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        def _boom(*_: object) -> bool:
+            raise AssertionError("capability check should not run for text-only")
+
+        monkeypatch.setattr(llm_step_module, "model_supports_image_input", _boom)
+        history = [_make_user_msg("just text")]
+        translated = translate_history_to_llm_format(
+            history=history, llm_config=_make_llm_config(OPENAI_PROVIDER_NAME)
+        )
+        assert isinstance(translated, list)
+        assert len(translated) == 1
 
 
 class TestEmptyAnswerRecovery:

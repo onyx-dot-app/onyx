@@ -2,6 +2,12 @@ node_modules
 .next
 /tests/
 
+# Co-located unit tests. They import helpers from /tests/, which is excluded above,
+# so keeping them would break the `next build` type check inside the image.
+# Pre-commit still type checks them through tsconfig.types.json.
+src/**/*.test.ts
+src/**/*.test.tsx
+
 # Local build artifacts — opal/shared rebuild these via `prepare` on `bun install`.
 # Excluding them keeps a stale local dist out of hand-built images (CI clones clean,
 # so a stale dist only exists when building the image from a dirty working tree).

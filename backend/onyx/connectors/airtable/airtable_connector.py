@@ -48,7 +48,6 @@ DEFAULT_METADATA_FIELD_TYPES = {
     "lookup",
     "count",
     "formula",
-    "date",
 }
 
 
@@ -249,7 +248,9 @@ class AirtableConnector(LoadConnector):
                     backoff=2,
                     max_delay=10,
                 )
-                def get_attachment_with_retry(url: str, record_id: str) -> bytes | None:
+                def get_attachment_with_retry(
+                    url: str, record_id: str, filename: str
+                ) -> bytes | None:
                     try:
                         attachment_response = requests.get(
                             url, timeout=REQUEST_TIMEOUT_SECONDS
@@ -280,7 +281,7 @@ class AirtableConnector(LoadConnector):
                             )
                         raise
 
-                attachment_content = get_attachment_with_retry(url, record_id)
+                attachment_content = get_attachment_with_retry(url, record_id, filename)
                 if attachment_content:
                     try:
                         file_ext = get_file_ext(filename)

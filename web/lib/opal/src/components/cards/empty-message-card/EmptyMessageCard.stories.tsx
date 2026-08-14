@@ -2,7 +2,7 @@ import type { Meta, StoryObj } from "@storybook/react-vite";
 import { EmptyMessageCard } from "@opal/components";
 import { SvgActions, SvgServer, SvgSparkle, SvgUsers } from "@opal/icons";
 
-const PADDING_VARIANTS = ["fit", "2xs", "xs", "sm", "md", "lg"] as const;
+const PADDING_VARIANTS = [0, 0.5, 1, 2, 4, 6] as const;
 
 const meta: Meta<typeof EmptyMessageCard> = {
   title: "opal/components/EmptyMessageCard",

@@ -24,6 +24,7 @@ type ReleaseOpalOptions struct {
 	Version string
 	DryRun  bool
 	Yes     bool
+	Verify  bool
 }
 
 // NewReleaseOpalCommand creates the `ods release opal` command.
@@ -58,6 +59,7 @@ Example usage:
 	cmd.Flags().StringVar(&opts.Version, "version", "", "Exact version to release (X.Y.Z, no leading v); overrides --bump")
 	cmd.Flags().BoolVar(&opts.DryRun, "dry-run", false, "Compute the version but don't tag or push")
 	cmd.Flags().BoolVar(&opts.Yes, "yes", false, "Skip the confirmation prompt")
+	cmd.Flags().BoolVar(&opts.Verify, "verify", false, "Run pre-push hooks when pushing the tag; they are skipped by default")
 
 	return cmd
 }
@@ -114,7 +116,7 @@ func releaseOpal(opts *ReleaseOpalOptions) {
 	if err := git.RunCommand("tag", tag); err != nil {
 		log.Fatalf("Failed to create tag %s: %v", tag, err)
 	}
-	if err := git.RunCommand("push", "origin", tag); err != nil {
+	if err := git.PushTag(tag, false, opts.Verify); err != nil {
 		// Roll back the local tag so the command stays retryable after a failed push.
 		if delErr := git.RunCommand("tag", "-d", tag); delErr != nil {
 			log.Warnf("Also failed to delete local tag %s; remove it before retrying: %v", tag, delErr)

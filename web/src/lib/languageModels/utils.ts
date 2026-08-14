@@ -6,6 +6,16 @@ import type {
 } from "@/lib/languageModels/types";
 import { LlmDescriptor } from "@/lib/hooks";
 
+export function hasVisibleLLMModel(
+  llmProviders: LLMProviderDescriptor[] | undefined
+): boolean {
+  return (
+    llmProviders?.some((provider) =>
+      provider.model_configurations.some((model) => model.is_visible)
+    ) ?? false
+  );
+}
+
 export function getFinalLLM(
   llmProviders: LLMProviderDescriptor[],
   agent: MinimalAgent | null,

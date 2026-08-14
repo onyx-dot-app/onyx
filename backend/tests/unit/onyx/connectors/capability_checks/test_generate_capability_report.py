@@ -16,6 +16,7 @@ from onyx.connectors.capability_checks.models import (
 from onyx.connectors.capability_checks.runner import generate_capability_report
 from onyx.connectors.exceptions import CredentialInvalidError
 from onyx.connectors.interfaces import BaseConnector
+from onyx.connectors.source_operations import SourceOperations
 
 
 class _CallableCheck(CapabilityCheck):
@@ -227,6 +228,72 @@ def test_real_config_unlocks_config_requiring_checks(
     assert report.connector_id == 42
     assert report.trigger == CapabilityCheckTrigger.CC_PAIR_VALIDATION
     assert report.check_results[0].status == CapabilityCheckStatus.PASSED
+
+
+def test_registered_gateway_is_constructed_and_reaches_checks(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """
+    Verifies the runner constructs the registered gateway uniformly (provider
+    plus the supplied config) and hands it to checks via the context.
+    """
+    # Precondition.
+    seen_contexts: list[CapabilityCheckContext] = []
+    check = _CallableCheck(
+        seen_contexts.append,
+        check_id="gateway_check",
+        requires_connector_instance=False,
+    )
+    _patch_runner_environment(monkeypatch, [check])
+    provider = MagicMock()
+    monkeypatch.setattr(
+        runner_module,
+        "build_db_credentials_provider",
+        MagicMock(return_value=provider),
+    )
+    gateway_instance = MagicMock(spec=SourceOperations)
+    gateway_class = MagicMock(return_value=gateway_instance)
+    monkeypatch.setattr(
+        runner_module,
+        "get_source_operations_class",
+        MagicMock(return_value=gateway_class),
+    )
+    connector_specific_config = {"channels": ["general"]}
+
+    # Under test.
+    generate_capability_report(
+        MagicMock(),
+        _make_credential(),
+        connector_specific_config=connector_specific_config,
+    )
+
+    # Postcondition.
+    gateway_class.assert_called_once_with(
+        credentials_provider=provider,
+        connector_specific_config=connector_specific_config,
+    )
+    assert seen_contexts[0].source_operations is gateway_instance
+
+
+def test_unregistered_source_gets_no_gateway(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """Verifies the context carries no gateway for unmigrated sources."""
+    # Precondition.
+    # Github has no registered gateway, so the real lookup returns None.
+    seen_contexts: list[CapabilityCheckContext] = []
+    check = _CallableCheck(
+        seen_contexts.append,
+        check_id="gateway_check",
+        requires_connector_instance=False,
+    )
+    _patch_runner_environment(monkeypatch, [check])
+
+    # Under test.
+    generate_capability_report(MagicMock(), _make_credential())
+
+    # Postcondition.
+    assert seen_contexts[0].source_operations is None
 
 
 def test_report_decrypt_emits_a_credential_audit_event(

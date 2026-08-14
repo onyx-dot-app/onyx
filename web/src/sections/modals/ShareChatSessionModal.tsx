@@ -63,7 +63,7 @@ function PrivacyOption({
   return (
     <SelectCard
       state={selected ? "filled" : "empty"}
-      padding="sm"
+      padding={2}
       rounding="sm"
       border="none"
       onClick={onClick}
@@ -75,7 +75,7 @@ function PrivacyOption({
         icon={Icon}
         title={title}
         description={description}
-        padding="fit"
+        padding={0}
         color="interactive"
         rightChildren={
           selected ? (
@@ -182,7 +182,7 @@ export default function ShareChatSessionModal({
             justifyContent="start"
             alignItems="stretch"
             height="auto"
-            gap={0.25}
+            gap={1}
           >
             <PrivacyOption
               icon={SvgLock}

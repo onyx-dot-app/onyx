@@ -701,7 +701,7 @@ def test_slim_retrieval_does_not_call_permissions_list(
         "onyx.connectors.google_drive.connector.execute_paginated_retrieval",
         wraps=execute_paginated_retrieval,
     ) as mock_paginated:
-        for batch in connector.retrieve_all_slim_docs():
+        for _batch in connector.retrieve_all_slim_docs():
             pass
 
     permissions_calls = [

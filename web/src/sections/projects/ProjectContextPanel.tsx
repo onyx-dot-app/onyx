@@ -134,7 +134,7 @@ export default function ProjectContextPanel({
           }}
         />
 
-        <Divider paddingParallel="fit" paddingPerpendicular="fit" />
+        <Divider paddingParallel={0} paddingPerpendicular={0} />
 
         <ContentAction
           sizePreset="main-ui"
@@ -147,7 +147,7 @@ export default function ProjectContextPanel({
                 "Add instructions to tailor the response in this project."
           }
           descriptionMaxLines={2}
-          padding="fit"
+          padding={0}
           center
           rightChildren={
             <Button
@@ -170,7 +170,7 @@ export default function ProjectContextPanel({
             variant="section"
             title="Files"
             description="Chats in this project can access these files."
-            padding="fit"
+            padding={0}
             center
             rightChildren={
               <FilePickerPopover

@@ -152,7 +152,8 @@ const ProjectFolderButton = memo(({ project }: ProjectFolderButtonProps) => {
               activeSidebar.isProject() &&
               activeSidebar.getId() === String(project.id)
             }
-            onClick={noProp(handleTextClick)}
+            /* While renaming, drop the click target so the input stays usable. */
+            onClick={isEditing ? undefined : noProp(handleTextClick)}
             rightChildren={
               <>
                 <Popover.Trigger asChild onClick={noProp()}>

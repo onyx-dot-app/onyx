@@ -69,7 +69,7 @@ def get_markitdown_converter() -> "MarkItDown":
         # unindexable.
         from markitdown.converters._pptx_converter import PptxConverter
 
-        setattr(
+        setattr(  # noqa: B010
             PptxConverter,
             "_convert_chart_to_markdown",
             lambda self, chart: "\n\n[chart omitted]\n\n",  # noqa: ARG005

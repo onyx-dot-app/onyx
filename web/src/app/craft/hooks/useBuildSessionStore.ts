@@ -1,7 +1,6 @@
 "use client";
 
 import { create } from "zustand";
-import { DELETE_SUCCESS_DISPLAY_DURATION_MS } from "@/app/craft/constants";
 
 import {
   ApiSessionResponse,
@@ -978,7 +977,7 @@ export async function waitForWebappReady(
       // keep polling
     }
     // Done on a definitive answer (no webapp or serving); errors keep polling.
-    if (info && (!info.has_webapp || info.ready)) return;
+    if (info && (info.has_webapp === false || info.ready)) return;
     await new Promise((resolve) => setTimeout(resolve, intervalMs));
   }
 }
@@ -1507,6 +1506,11 @@ export const useBuildSessionStore = create<BuildSessionStore>()((set, get) => ({
 
     // Set as current and mark as loading
     setCurrentSession(sessionId);
+    const skillsStaleRevision =
+      get().sessions.get(sessionId)!.skillsStaleRevision;
+    const canApplySkillsStale = () =>
+      get().sessions.get(sessionId)?.skillsStaleRevision ===
+      skillsStaleRevision;
 
     try {
       // First fetch session to check sandbox status
@@ -1612,7 +1616,8 @@ export const useBuildSessionStore = create<BuildSessionStore>()((set, get) => ({
         sandbox,
         agentProvider: sessionData.agent_provider,
         agentModel: sessionData.agent_model,
-        skillsStale: sessionData.skills_stale,
+        ...(sessionData.skills_stale &&
+          canApplySkillsStale() && { skillsStale: true }),
         origin: sessionData.origin,
         activeTurnId: resolvedActiveTurnId,
         activeTurnIndex: resolvedActiveTurnIndex,
@@ -1627,6 +1632,8 @@ export const useBuildSessionStore = create<BuildSessionStore>()((set, get) => ({
       });
 
       if (needsRestore) {
+        const skillsStaleRevisionBeforeRestore =
+          get().sessions.get(sessionId)?.skillsStaleRevision;
         try {
           sessionData = await restoreSession(sessionId);
         } catch (restoreErr) {
@@ -1648,7 +1655,10 @@ export const useBuildSessionStore = create<BuildSessionStore>()((set, get) => ({
           sandbox: sessionData.sandbox
             ? { ...sessionData.sandbox, status: "restoring" }
             : sessionData.sandbox,
-          skillsStale: sessionData.skills_stale,
+          ...(get().sessions.get(sessionId)?.skillsStaleRevision ===
+            skillsStaleRevisionBeforeRestore && {
+            skillsStale: sessionData.skills_stale,
+          }),
           webappNeedsRefresh:
             (get().sessions.get(sessionId)?.webappNeedsRefresh || 0) + 1,
         });
@@ -1746,16 +1756,15 @@ export const useBuildSessionStore = create<BuildSessionStore>()((set, get) => ({
         newSessions.delete(sessionId);
         return {
           sessions: newSessions,
+          sessionHistory: state.sessionHistory.filter(
+            (historyItem) => historyItem.id !== sessionId
+          ),
           currentSessionId:
             currentSessionId === sessionId ? null : state.currentSessionId,
         };
       });
 
-      // Refresh history after UI has shown success state
-      setTimeout(
-        () => refreshSessionHistory(),
-        DELETE_SUCCESS_DISPLAY_DURATION_MS
-      );
+      void refreshSessionHistory();
     } catch (err) {
       console.error("Failed to delete session:", err);
       throw err;

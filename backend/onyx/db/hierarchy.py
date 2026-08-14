@@ -326,10 +326,10 @@ def upsert_hierarchy_node(
         existing_node.link = node.link
         existing_node.node_type = node.node_type
         existing_node.parent_id = parent_id
-        # Update permission fields
-        existing_node.is_public = is_public
-        existing_node.external_user_emails = external_user_emails
-        existing_node.external_user_group_ids = external_user_group_ids
+        if is_connector_public or node.external_access is not None:
+            existing_node.is_public = is_public
+            existing_node.external_user_emails = external_user_emails
+            existing_node.external_user_group_ids = external_user_group_ids
         hierarchy_node = existing_node
     else:
         # Create new node

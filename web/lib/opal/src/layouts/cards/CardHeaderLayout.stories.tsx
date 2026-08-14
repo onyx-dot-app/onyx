@@ -36,7 +36,7 @@ export const Default: Story = {
           icon={SvgGlobe}
           title="Google Search"
           description="Web search provider"
-          padding="fit"
+          padding={0}
           rightChildren={
             <Button prominence="tertiary" rightIcon={SvgArrowExchange}>
               Connect
@@ -58,7 +58,7 @@ export const WithCurrentDefault: Story = {
           icon={SvgGlobe}
           title="Google Search"
           description="Currently the default provider."
-          padding="fit"
+          padding={0}
           rightChildren={
             <Button
               variant="action"
@@ -84,7 +84,7 @@ export const NoRightAction: Story = {
           icon={SvgGlobe}
           title="Section Header"
           description="No actions on the right."
-          padding="fit"
+          padding={0}
         />
       </Card.Header>
     </div>
@@ -112,7 +112,7 @@ export const WithBottomChildren: Story = {
           icon={SvgGlobe}
           title="MCP Server"
           description="12 tools available"
-          padding="fit"
+          padding={0}
           rightChildren={
             <Button
               variant="action"
@@ -138,7 +138,7 @@ export const LongContent: Story = {
           icon={SvgGlobe}
           title="Very Long Provider Name That Should Truncate"
           description="This is a much longer description that tests how the layout handles overflow when the content area needs to shrink."
-          padding="fit"
+          padding={0}
           rightChildren={
             <Button
               variant="action"

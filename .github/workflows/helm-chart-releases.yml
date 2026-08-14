@@ -1,9 +1,16 @@
 name: Release Onyx Helm Charts
 
+# Only runs when packaged chart files change. `helm package` is not
+# byte-reproducible (gzip records a timestamp), so every run rewrites every
+# chart tarball on gh-pages. Tarballs are already compressed, so git cannot
+# delta them and stores each republish in full. Running on every push to main
+# grew gh-pages to 2 GB, which every clone of this repo pays for.
 on:
   push:
     branches:
       - main
+    paths:
+      - "deployment/helm/charts/**"
 
 permissions: write-all
 
@@ -25,7 +32,7 @@ jobs:
           persist-credentials: false
 
       - name: Install Helm CLI
-        uses: azure/setup-helm@dda3372f752e03dde6b3237bc9431cdc2f7a02a2 # ratchet:azure/setup-helm@v5.0.0
+        uses: azure/setup-helm@9bc31f4ebc9c6b171d7bfbaa5d006ae7abdb4310 # ratchet:azure/setup-helm@v5.0.1
         with:
           version: v3.12.1
 

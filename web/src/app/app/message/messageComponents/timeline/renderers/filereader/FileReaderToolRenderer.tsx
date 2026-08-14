@@ -1,4 +1,5 @@
 import { useEffect } from "react";
+import { Card } from "@opal/components";
 import { SvgFileText } from "@opal/icons";
 import {
   PacketType,
@@ -11,7 +12,6 @@ import {
 } from "@/app/app/message/messageComponents/interfaces";
 import { BlinkingBar } from "@/app/app/message/BlinkingBar";
 import { Section } from "@/layouts/general-layouts";
-import Card from "@/refresh-components/cards/Card";
 import Text from "@/refresh-components/texts/Text";
 
 interface FileReaderState {
@@ -105,14 +105,14 @@ export const FileReaderToolRenderer: MessageRenderer<
       supportsCollapsible: true,
       timelineLayout: "timeline",
       content: (
-        <Section gap={0.5} alignItems="start" height="fit">
+        <Section gap={2} alignItems="start" height="fit">
           {state.fileName ? (
             <>
               <Section
                 flexDirection="row"
                 alignItems="center"
                 justifyContent="start"
-                gap={0.5}
+                gap={2}
                 height="fit"
               >
                 <Text as="span" mainUiAction text02>
@@ -127,17 +127,24 @@ export const FileReaderToolRenderer: MessageRenderer<
                 </Text>
               </Section>
               {hasPreview && (
-                <Card variant="secondary" padding={0.5} gap={0.25}>
-                  <Text as="span" secondaryMono text04>
-                    {state.previewStart}
-                    {state.previewEnd && "\u2026"}
-                  </Text>
-                  {state.previewEnd && (
+                <Card
+                  background="none"
+                  border="solid"
+                  padding={2}
+                  rounding="lg"
+                >
+                  <Section alignItems="start" height="fit" gap={1}>
                     <Text as="span" secondaryMono text04>
-                      {"\u2026"}
-                      {state.previewEnd}
+                      {state.previewStart}
+                      {state.previewEnd && "\u2026"}
                     </Text>
-                  )}
+                    {state.previewEnd && (
+                      <Text as="span" secondaryMono text04>
+                        {"\u2026"}
+                        {state.previewEnd}
+                      </Text>
+                    )}
+                  </Section>
                 </Card>
               )}
             </>

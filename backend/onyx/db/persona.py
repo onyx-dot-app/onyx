@@ -563,7 +563,7 @@ def stamp_persona_permissions(
     holds_add_agents = (
         has_permission(user, Permission.ADD_AGENTS) is not PermissionAuthority.NONE
     )
-    for snapshot, persona in zip(snapshots, personas):
+    for snapshot, persona in zip(snapshots, personas, strict=True):
         is_editable = persona.id in editable_ids
         snapshot.permissions = persona_permissions(
             can_edit=can_edit_persona(

@@ -56,8 +56,6 @@ function MessageEditing({
           className={cn(
             "w-full h-full resize-none outline-hidden bg-transparent overflow-y-scroll whitespace-normal break-word"
           )}
-          aria-multiline
-          role="textarea"
           value={editedContent}
           style={{ scrollbarWidth: "thin" }}
           onChange={(e) => {
