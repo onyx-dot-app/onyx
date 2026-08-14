@@ -163,18 +163,21 @@ export function useBannerQueue(): UseBannerQueueResult {
           });
         }
       }
-      try {
-        await Promise.all(targets.map(dismissNotification));
-      } catch (error) {
-        if (!global) {
-          console.error("Failed to dismiss banner notification:", error);
-          setPendingDismissals((prev) => {
-            const next = new Set(prev);
-            targets.forEach((id) => next.delete(id));
-            return next;
-          });
-          return;
-        }
+      // Settle individually: a partial failure must not unhide targets that
+      // did dismiss, and the refresh reconciles with server state either way.
+      const results = await Promise.allSettled(
+        targets.map(dismissNotification)
+      );
+      const failed = targets.filter(
+        (_, index) => results[index]?.status === "rejected"
+      );
+      if (failed.length > 0 && !global) {
+        console.error("Failed to dismiss banner notifications:", failed);
+        setPendingDismissals((prev) => {
+          const next = new Set(prev);
+          failed.forEach((id) => next.delete(id));
+          return next;
+        });
       }
       await refresh();
     },
