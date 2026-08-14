@@ -141,16 +141,18 @@ const ChatButton = memo(
 
     // Drag and drop setup for chat sessions
     const dragId = `${DRAG_TYPES.CHAT}-${chatSession.id}`;
-    const { attributes, listeners, setNodeRef, transform, isDragging } =
-      useDraggable({
-        id: dragId,
-        data: {
-          type: DRAG_TYPES.CHAT,
-          chatSession,
-          projectId: project?.id,
-        },
-        disabled: !draggable || renaming,
-      });
+    // `attributes` is intentionally dropped: it turns the wrapper into a
+    // focusable role="button", which adds a second tab stop per row and lets
+    // Enter/Space start a keyboard drag that looks like the chat is disabled.
+    const { listeners, setNodeRef, transform, isDragging } = useDraggable({
+      id: dragId,
+      data: {
+        type: DRAG_TYPES.CHAT,
+        chatSession,
+        projectId: project?.id,
+      },
+      disabled: !draggable || renaming,
+    });
 
     // Sync local name state when chatSession.name changes (e.g., after auto-naming)
     useEffect(() => {
@@ -528,7 +530,6 @@ const ChatButton = memo(
                 : undefined,
               opacity: isDragging ? 0.5 : 1,
             }}
-            {...(mounted ? attributes : {})}
             {...(mounted ? listeners : {})}
           >
             {popover}
