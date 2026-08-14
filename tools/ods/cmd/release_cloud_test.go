@@ -29,6 +29,7 @@ package cmd
 //	E2 real run                              -> tag on origin at origin/main    TestReleaseCloud_tagsOriginMainHead
 //	E3 push rejected by origin               -> local tag rolled back           TestReleaseCloud_pushFailureRollsBackLocalTag
 //	E4 counter tag only on origin            -> fetched, counter continues      TestReleaseCloud_fetchesRemoteOnlyCounterTags
+//	E5 --version with leading zeroes         -> rejected before any git work    TestReleaseCloud_rejectsLeadingZeroVersion
 
 import (
 	"os"
@@ -318,6 +319,20 @@ func TestReleaseCloud_fetchesRemoteOnlyCounterTags(t *testing.T) {
 	}
 	if !tagExistsIn(repo.origin, "v4.6.0-cloud.4") {
 		t.Error("expected v4.6.0-cloud.4 on origin")
+	}
+}
+
+func TestReleaseCloud_rejectsLeadingZeroVersion(t *testing.T) {
+	// Precondition: SemVer 2.0.0 item 2 forbids leading zeroes in numeric
+	// identifiers; such an override must never become a tag.
+	setupReleaseBranchRepo(t)
+
+	// Under test and postcondition.
+	for _, version := range []string{"04.6.0", "4.06.0", "4.6.00"} {
+		err := releaseCloud(&ReleaseCloudOptions{Ref: "origin/main", Version: version, DryRun: true, Yes: true})
+		if err == nil || !strings.Contains(err.Error(), "--version must be X.Y.Z") {
+			t.Errorf("expected validation error for %q, got %v", version, err)
+		}
 	}
 }
 
