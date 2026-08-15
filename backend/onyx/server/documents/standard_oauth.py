@@ -14,6 +14,8 @@ from onyx.db.credentials import create_credential
 from onyx.db.engine.sql_engine import get_session
 from onyx.db.enums import Permission
 from onyx.db.models import User
+from onyx.error_handling.error_codes import OnyxErrorCode
+from onyx.error_handling.exceptions import OnyxError
 from onyx.redis.redis_pool import get_redis_client
 from onyx.server.documents.models import CredentialBase
 from onyx.utils.logger import setup_logger
@@ -95,6 +97,14 @@ def oauth_authorize(
         raise HTTPException(status_code=400, detail=f"Unknown OAuth source: {source}")
 
     connector_cls = oauth_connectors[source]
+
+    if not connector_cls.oauth_enabled():
+        raise OnyxError(
+            OnyxErrorCode.ENV_VAR_GATED,
+            f"OAuth is not configured for {source} on this deployment. "
+            "Add a credential manually instead.",
+        )
+
     base_url = WEB_DOMAIN
 
     # get additional kwargs from request
@@ -145,6 +155,13 @@ def oauth_callback(
         raise HTTPException(status_code=400, detail=f"Unknown OAuth source: {source}")
 
     connector_cls = oauth_connectors[source]
+
+    if not connector_cls.oauth_enabled():
+        raise OnyxError(
+            OnyxErrorCode.ENV_VAR_GATED,
+            f"OAuth is not configured for {source} on this deployment. "
+            "Add a credential manually instead.",
+        )
 
     # get state from redis
     redis_client = get_redis_client()
@@ -221,6 +238,6 @@ def oauth_details(
         )
 
     return OAuthDetails(
-        oauth_enabled=True,
+        oauth_enabled=connector_cls.oauth_enabled(),
         additional_kwargs=additional_kwarg_descriptions,
     )

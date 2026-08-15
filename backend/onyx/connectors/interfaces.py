@@ -163,6 +163,22 @@ class OAuthConnector(BaseConnector):
         pass
 
     @classmethod
+    def oauth_client_id(cls) -> str | None:
+        # Server-registered OAuth app credentials. Connectors backed by such an
+        # app override these so oauth_enabled() reflects whether it's configured.
+        return None
+
+    @classmethod
+    def oauth_client_secret(cls) -> str | None:
+        return None
+
+    @classmethod
+    def oauth_enabled(cls) -> bool:
+        # OAuth is only usable once the app credentials are configured; the UI
+        # falls back to manual credential entry otherwise.
+        return bool(cls.oauth_client_id() and cls.oauth_client_secret())
+
+    @classmethod
     @abc.abstractmethod
     def oauth_id(cls) -> DocumentSource:
         raise NotImplementedError
