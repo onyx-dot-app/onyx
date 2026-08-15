@@ -358,6 +358,9 @@ def update_group_agents(
     # any other. Mirrors rename_user_group_endpoint and set_group_manager.
     assert_manages_group(user, db_session, group_id=user_group_id)
 
+    if fetch_user_group(db_session, user_group_id) is None:
+        raise OnyxError(OnyxErrorCode.NOT_FOUND, "User group not found")
+
     # A global groups admin shares any agent (READ_AGENTS resolves the whole org on the
     # non-editable branch); a scoped manager stays pinned to their editable set.
     get_editable = not has_global_permission(user, Permission.MANAGE_USER_GROUPS)
@@ -412,6 +415,9 @@ def update_group_document_sets(
     gated on MANAGE_DOCUMENT_SETS, which a groups admin doesn't hold."""
     # GATE 2: the group must be one the caller administers.
     assert_manages_group(user, db_session, group_id=user_group_id)
+
+    if fetch_user_group(db_session, user_group_id) is None:
+        raise OnyxError(OnyxErrorCode.NOT_FOUND, "User group not found")
 
     attach_ids = set(request.added_document_set_ids)
     detach_ids = set(request.removed_document_set_ids)
