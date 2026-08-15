@@ -88,6 +88,9 @@ export const SlackChannelConfigCreationForm = ({
           show_continue_in_web_ui:
             existingSlackChannelConfig?.channel_config
               ?.show_continue_in_web_ui ?? !isUpdate,
+          remove_feedback_buttons:
+            existingSlackChannelConfig?.channel_config
+              ?.remove_feedback_buttons ?? false,
           enable_auto_filters:
             existingSlackChannelConfig?.enable_auto_filters || false,
           respond_member_group_list:
@@ -136,6 +139,7 @@ export const SlackChannelConfigCreationForm = ({
           respond_to_bots: Yup.boolean().required(),
           is_ephemeral: Yup.boolean().required(),
           show_continue_in_web_ui: Yup.boolean().required(),
+          remove_feedback_buttons: Yup.boolean().required(),
           enable_auto_filters: Yup.boolean().required(),
           respond_member_group_list: Yup.array().of(Yup.string()).required(),
           still_need_help_enabled: Yup.boolean().required(),
