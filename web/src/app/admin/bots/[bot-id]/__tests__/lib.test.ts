@@ -30,7 +30,16 @@ test("includes the feedback-button preference in channel configuration requests"
 
   await createSlackChannelConfig(creationRequest);
 
-  const [, requestInit] = fetchSpy.mock.calls[0]!;
-  const requestBody = JSON.parse(requestInit?.body as string);
+  expect(fetchSpy).toHaveBeenCalledTimes(1);
+  const requestCall = fetchSpy.mock.calls[0];
+  expect(requestCall).toBeDefined();
+  if (!requestCall) {
+    throw new Error("Expected fetch to be called");
+  }
+  const [, requestInit] = requestCall;
+  if (!requestInit) {
+    throw new Error("Expected fetch request options");
+  }
+  const requestBody = JSON.parse(requestInit.body as string);
   expect(requestBody.remove_feedback_buttons).toBe(true);
 });
