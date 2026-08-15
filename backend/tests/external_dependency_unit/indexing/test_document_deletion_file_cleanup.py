@@ -22,7 +22,7 @@ from onyx.db.document import (
     delete_all_documents_for_connector_credential_pair,
     upsert_document_by_connector_credential_pair,
 )
-from onyx.db.models import ConnectorCredentialPair
+from onyx.db.models import ConnectorCredentialPair, UserRole
 from onyx.indexing.indexing_pipeline import index_doc_batch_prepare
 from onyx.server.onyx_api.ingestion import delete_ingestion_doc
 from shared_configs.configs import POSTGRES_DEFAULT_SCHEMA_STANDARD_VALUE
@@ -188,7 +188,7 @@ class TestDeleteIngestionDoc:
         ):
             delete_ingestion_doc(
                 document_id=doc.id,
-                _=MagicMock(),  # auth dep — not used by the function body
+                user=MagicMock(role=UserRole.ADMIN),  # admin bypasses ownership check
                 db_session=db_session,
             )
 
