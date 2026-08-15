@@ -14,6 +14,10 @@ logger = setup_logger()
 
 KEENABLE_DEFAULT_BASE_URL = "https://api.keenable.ai"
 KEENABLE_REQUEST_TIMEOUT_SECONDS = 30
+# Keenable returns whole-page text where the other providers return a short
+# snippet, so cap it to keep WebSearchResult.snippet preview-sized. The full
+# page is available through the contents step.
+KEENABLE_MAX_SNIPPET_CHARS = 500
 
 
 class RetryableKeenableSearchError(Exception):
@@ -113,7 +117,7 @@ class KeenableClient(WebSearchProvider):
                 WebSearchResult(
                     title=(result.get("title") or "").strip(),
                     link=link,
-                    snippet=(result.get("description") or "").strip(),
+                    snippet=_extract_snippet(result),
                     author=result.get("author"),
                     published_date=None,
                 )
@@ -162,6 +166,20 @@ class KeenableClient(WebSearchProvider):
 
         logger.info("Web search provider test succeeded for Keenable.")
         return {"status": "ok"}
+
+
+def _extract_snippet(result: dict[str, Any]) -> str:
+    """Pull a result's text out of the Keenable response.
+
+    Keenable returns both `snippet` and `description`. `snippet` carries the
+    page text and `description` is frequently empty, so prefer whichever has
+    content. Snippets are raw page text with newlines in them, so collapse
+    whitespace and cap the length.
+    """
+    text = " ".join(
+        str(result.get("snippet") or result.get("description") or "").split()
+    )
+    return text[:KEENABLE_MAX_SNIPPET_CHARS]
 
 
 def _build_error_message(response: requests.Response) -> str:
