@@ -6,6 +6,7 @@ import { SvgUser, SvgUsers, SvgX } from "@opal/icons";
 import { cn } from "@opal/utils";
 import InputTypeIn from "@/refresh-components/inputs/InputTypeIn";
 import type { MinimalUserSnapshot } from "@/lib/types";
+import { userDisplayName, userSecondaryEmail } from "@/lib/users/svc";
 import type { MinimalUserGroupSnapshot } from "@/hooks/useShareableGroups";
 import { SharePermissionMenu } from "@/sections/modals/SharePermissionMenu";
 import {
@@ -16,6 +17,7 @@ import {
 interface Suggestion {
   id: string;
   label: string;
+  description?: string;
   shared: boolean;
   type: "group" | "user";
 }
@@ -69,11 +71,16 @@ export function AddPeoplePicker({
     }
 
     const userSuggestions = users
-      .filter((user) => user.email.toLowerCase().includes(trimmedQuery))
+      .filter(
+        (user) =>
+          user.email.toLowerCase().includes(trimmedQuery) ||
+          (user.personal_name?.toLowerCase().includes(trimmedQuery) ?? false)
+      )
       .filter((user) => !stagedUserIds.has(user.id))
       .map((user) => ({
         id: user.id,
-        label: user.email,
+        label: userDisplayName(user),
+        description: userSecondaryEmail(user),
         shared: existingUserIds.has(user.id),
         type: "user" as const,
       }));
@@ -84,6 +91,7 @@ export function AddPeoplePicker({
       .map((group) => ({
         id: String(group.id),
         label: group.name,
+        description: "Group",
         shared: existingGroupIds.has(group.id),
         type: "group" as const,
       }));
@@ -137,7 +145,7 @@ export function AddPeoplePicker({
             >
               <SvgUser className="h-4 w-4 stroke-text-03" />
               <Text color="text-04" font="main-ui-body">
-                {user.email}
+                {userDisplayName(user)}
               </Text>
               <Button
                 icon={SvgX}
@@ -189,9 +197,7 @@ export function AddPeoplePicker({
                     key={`${suggestion.type}-${suggestion.id}`}
                   >
                     <LineItemButton
-                      description={
-                        suggestion.type === "group" ? "Group" : undefined
-                      }
+                      description={suggestion.description}
                       icon={suggestion.type === "group" ? SvgUsers : SvgUser}
                       onClick={() => handleSelectSuggestion(suggestion)}
                       rightChildren={
