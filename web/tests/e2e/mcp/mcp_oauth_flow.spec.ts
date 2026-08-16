@@ -224,6 +224,8 @@ test.describe("MCP OAuth flows", () => {
       `Playwright Curator Group ${Date.now()}`,
       [curatorRecord.id]
     );
+    // roles are gone: the is_manager edge is what confers scoped MANAGE_ACTIONS
+    await adminClient.setGroupManager(curatorGroupId, curatorRecord.id);
     curatorTwoCredentials = {
       email: `pw-curator-${Date.now()}-b@example.com`,
       password: basePassword,
@@ -240,6 +242,7 @@ test.describe("MCP OAuth flows", () => {
       `Playwright Curator Group ${Date.now()}-2`,
       [curatorTwoRecord.id]
     );
+    await adminClient.setGroupManager(curatorTwoGroupId, curatorTwoRecord.id);
 
     await adminContext.close();
   });
