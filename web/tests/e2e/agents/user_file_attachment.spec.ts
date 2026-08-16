@@ -1,5 +1,6 @@
 import { test, expect, Page } from "@playwright/test";
 import { loginAsRandomUser } from "@tests/e2e/utils/auth";
+import { grantAddAgents } from "@tests/e2e/utils/grantPermissions";
 
 /**
  * E2E test to verify user files are properly attached to assistants.
@@ -238,12 +239,13 @@ test.describe("User File Attachment to Assistant", () => {
 
   test("should persist user file attachment after creating assistant", async ({
     page,
-  }: {
-    page: Page;
+    browser,
   }) => {
     // Login as a random user (no admin needed for user files)
     await page.context().clearCookies();
-    await loginAsRandomUser(page);
+    const { email } = await loginAsRandomUser(page);
+    // POST /api/persona is 403 without it, and waitForResponse only matches ok()
+    await grantAddAgents(browser, email);
 
     const agentName = `User File Test ${Date.now()}`;
     const agentDescription = "Testing user file persistence";
@@ -331,12 +333,13 @@ test.describe("User File Attachment to Assistant", () => {
 
   test("should persist multiple user files after editing assistant", async ({
     page,
-  }: {
-    page: Page;
+    browser,
   }) => {
     // Login as a random user
     await page.context().clearCookies();
-    await loginAsRandomUser(page);
+    const { email } = await loginAsRandomUser(page);
+    // POST /api/persona is 403 without it, and waitForResponse only matches ok()
+    await grantAddAgents(browser, email);
 
     const agentName = `Multi-File Test ${Date.now()}`;
     const testFileName1 = `test-file-1-${Date.now()}.txt`;
