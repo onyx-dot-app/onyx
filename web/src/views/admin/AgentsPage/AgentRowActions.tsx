@@ -107,6 +107,7 @@ export default function AgentRowActions({
               prominence="tertiary"
               icon={SvgEdit}
               tooltip="Edit Agent"
+              aria-label="Edit Agent"
               data-testid={`edit-agent-${agent.id}`}
               onClick={() =>
                 router.push(
@@ -124,6 +125,7 @@ export default function AgentRowActions({
                 prominence="tertiary"
                 icon={SvgEyeOff}
                 tooltip="Re-list Agent"
+                aria-label="Re-list Agent"
                 onClick={() =>
                   handleAction(
                     () => toggleAgentListed(agent.id, agent.is_listed),
@@ -144,6 +146,9 @@ export default function AgentRowActions({
                   icon={SvgStar}
                   interaction={featuredOpen ? "hover" : "rest"}
                   tooltip={
+                    agent.is_featured ? "Remove Featured" : "Set as Featured"
+                  }
+                  aria-label={
                     agent.is_featured ? "Remove Featured" : "Set as Featured"
                   }
                   onClick={() => {

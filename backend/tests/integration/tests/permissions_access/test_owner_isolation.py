@@ -16,6 +16,7 @@ from tests.integration.common_utils.managers.persona import PersonaManager
 from tests.integration.common_utils.managers.project import ProjectManager
 from tests.integration.common_utils.managers.user import UserManager
 from tests.integration.common_utils.managers.user_group import UserGroupManager
+from tests.integration.common_utils.permission_state import effective_permissions
 from tests.integration.common_utils.test_models import DATestUser
 
 pytestmark = pytest.mark.skipif(
@@ -59,6 +60,32 @@ def owner(permission_admin_user: DATestUser) -> DATestUser:
         user_performing_action=permission_admin_user,
     ).raise_for_status()
     return user
+
+
+@pytest.fixture(scope="module")
+def publisher(permission_admin_user: DATestUser) -> tuple[DATestUser, int]:
+    """An owner holding no ADD_AGENTS — the shape e55a92be61 fixed. Creating the agent
+    needs the grant and publishing it must not, so the grant is revoked in between."""
+    user = UserManager.create(name="isolation_publisher")
+    grant_group = UserGroupManager.create(
+        name="isolation-publisher-group",
+        user_ids=[user.id],
+        user_performing_action=permission_admin_user,
+    )
+    UserGroupManager.set_permissions(
+        user_group=grant_group,
+        permissions=[Permission.ADD_AGENTS.value],
+        user_performing_action=permission_admin_user,
+    ).raise_for_status()
+
+    persona = PersonaManager.create(user_performing_action=user, is_public=False)
+
+    UserGroupManager.set_permissions(
+        user_group=grant_group,
+        permissions=[],
+        user_performing_action=permission_admin_user,
+    ).raise_for_status()
+    return user, persona.id
 
 
 @pytest.fixture(scope="module")
@@ -129,13 +156,21 @@ def test_persona_write_routes_are_owner_scoped(
     )
 
 
-def test_persona_owner_can_publish_own_agent(owner: DATestUser) -> None:
+def test_persona_owner_can_publish_own_agent(
+    publisher: tuple[DATestUser, int],
+) -> None:
     """The other half of GATE 2. Requiring ADD_AGENTS here would 403 an owner who
     can already publish the same agent through /share — what e55a92be61 fixed."""
-    persona = PersonaManager.create(user_performing_action=owner, is_public=False)
+    owner, persona_id = publisher
+
+    # the shared `owner` holds ADD_AGENTS for persona creation, which would make a
+    # reintroduced gate pass here; this assert keeps that drift from going unnoticed
+    assert Permission.ADD_AGENTS.value not in effective_permissions(owner.id), (
+        "publisher must not hold ADD_AGENTS or this proves nothing"
+    )
 
     resp = client.patch(
-        f"{API_SERVER_URL}/persona/{persona.id}/public",
+        f"{API_SERVER_URL}/persona/{persona_id}/public",
         headers=owner.headers,
         cookies=owner.cookies,
         json={"is_public": True},

@@ -13,6 +13,7 @@ export function DeleteButton({ onClick, disabled }: DeleteButtonProps) {
       onClick={onClick}
       icon={SvgTrash}
       tooltip="Delete"
+      aria-label="Delete"
       data-testid="delete-button"
       prominence="tertiary"
       size="sm"
