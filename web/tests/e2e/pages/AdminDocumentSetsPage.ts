@@ -21,7 +21,9 @@ export class AdminDocumentSetsPage {
   }
 
   row(name: string): Locator {
-    return this.page.getByRole("row", { name: new RegExp(name) });
+    return this.page
+      .getByRole("row")
+      .filter({ has: this.page.getByText(name, { exact: true }) });
   }
 
   async expectListed(name: string): Promise<void> {
