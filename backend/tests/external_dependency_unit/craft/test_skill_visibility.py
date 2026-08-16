@@ -249,7 +249,9 @@ class TestSkillVisibility:
     ) -> None:
         curator = make_user(db_session, role=UserRole.GLOBAL_CURATOR)
         group = make_group(db_session)
-        add_user_to_group(db_session, curator, group)
+        membership = add_user_to_group(db_session, curator, group)
+        membership.is_manager = True
+        db_session.flush()
         private_skill = make_skill(db_session, is_public=False)
         share_skill_with_group(db_session, private_skill, group)
 

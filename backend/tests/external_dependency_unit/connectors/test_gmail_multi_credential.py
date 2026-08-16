@@ -12,7 +12,7 @@ from onyx.configs.constants import DocumentSource
 from onyx.db.models import Credential, User
 from onyx.server.documents.credential import create_credential_from_model
 from onyx.server.documents.models import CredentialBase
-from tests.external_dependency_unit.conftest import create_test_user
+from tests.external_dependency_unit.conftest import create_test_user, delete_test_user
 
 
 @dataclass
@@ -58,7 +58,7 @@ def created_gmail_credentials_cleanup(
     if state.user_id is not None:
         user = db_session.get(User, state.user_id)
         if user is not None:
-            db_session.delete(user)
+            delete_test_user(db_session, user)
 
     db_session.commit()
 

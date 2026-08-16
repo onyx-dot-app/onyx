@@ -263,6 +263,9 @@ def test_list_stamps_affordance_map_for_owner(db_session: Session) -> None:
     """The list endpoint stamps the per-agent permissions map, so a card gates its icons
     from list data instead of a per-card full-agent refetch (the flicker Nik flagged)."""
     owner = create_test_user(db_session, "list-owner")
+    # delete gates on ADD_AGENTS, which EE does not grant by default.
+    owner.effective_permissions = [Permission.ADD_AGENTS.value]
+    db_session.commit()
     persona = create_test_persona(db_session, owner)
 
     snap = _list_snapshot(db_session, owner, persona.id)
