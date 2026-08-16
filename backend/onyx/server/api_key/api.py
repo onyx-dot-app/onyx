@@ -40,6 +40,8 @@ def create_api_key(
     ),
     db_session: Session = Depends(get_session),
 ) -> ApiKeyDescriptor:
+    # Admin-equivalent by design: group_ids is deliberately uncapped, so a holder may
+    # assign a key to any group, Admin included. Granting this permission grants admin.
     api_key = insert_api_key(db_session, api_key_args, user.id)
     emit_audit_event(
         AuditAction.API_KEY_CREATE,
