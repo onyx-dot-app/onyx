@@ -97,6 +97,7 @@ async function configureOauthServer(
     serverDescription: string;
     serverUrl: string;
     toolName: string;
+    group?: string;
   }
 ): Promise<number> {
   const adminMcp = new AdminMcpServersPage(page);
@@ -106,6 +107,7 @@ async function configureOauthServer(
     name: options.serverName,
     description: options.serverDescription,
     url: options.serverUrl,
+    group: options.group,
   });
   const serverId = await adminMcp.submitAddServer();
 
@@ -167,6 +169,7 @@ test.describe("MCP OAuth flows", () => {
   let curatorTwoCredentials: Credentials | null = null;
   let curatorGroupId: number | null = null;
   let curatorTwoGroupId: number | null = null;
+  let curatorGroupName = "";
 
   test.beforeAll(async ({ browser }, workerInfo) => {
     if (workerInfo.project.name !== "admin") {
@@ -220,10 +223,10 @@ test.describe("MCP OAuth flows", () => {
       adminClient,
       curatorCredentials.email
     );
-    curatorGroupId = await adminClient.createUserGroup(
-      `Playwright Curator Group ${Date.now()}`,
-      [curatorRecord.id]
-    );
+    curatorGroupName = `Playwright Curator Group ${Date.now()}`;
+    curatorGroupId = await adminClient.createUserGroup(curatorGroupName, [
+      curatorRecord.id,
+    ]);
     // roles are gone: the is_manager edge is what confers scoped MANAGE_ACTIONS
     await adminClient.setGroupManager(curatorGroupId, curatorRecord.id);
     curatorTwoCredentials = {
@@ -418,6 +421,8 @@ test.describe("MCP OAuth flows", () => {
         serverDescription: "Playwright MCP OAuth server (curator)",
         serverUrl: curatorServerUrl,
         toolName: TOOL_NAMES.curator,
+        // a scoped manager may only create servers private to a group they manage
+        group: curatorGroupName,
       });
       const curatorToolId = await curatorClient.findMcpToolId(
         serverId,
@@ -430,6 +435,8 @@ test.describe("MCP OAuth flows", () => {
         {
           instructions: "Curator MCP OAuth assistant.",
           description: "Playwright curator MCP assistant.",
+          // same scope rule as the server: a managed group is required
+          groupIds: [curatorGroupId!],
         }
       );
 
