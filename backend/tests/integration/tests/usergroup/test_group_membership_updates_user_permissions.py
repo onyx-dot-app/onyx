@@ -70,13 +70,13 @@ def test_user_gets_permissions_when_added_to_group(admin_user: DATestUser) -> No
         recompute_user_permissions__no_commit(basic_user.id, db_session)
         db_session.commit()
 
-    # Verify the user gained the new permission (expanded includes read:agents)
     updated_permissions = UserManager.get_permissions(basic_user)
     assert "add:agents" in updated_permissions, (
         f"User should have 'add:agents' after group grant, got: {updated_permissions}"
     )
-    assert "read:agents" in updated_permissions, (
-        f"User should have implied 'read:agents', got: {updated_permissions}"
+    # add:agents must not imply read:agents — making your own agents is not see-all
+    assert "read:agents" not in updated_permissions, (
+        f"'add:agents' must not grant see-all visibility, got: {updated_permissions}"
     )
     assert "basic" in updated_permissions
 
@@ -113,11 +113,11 @@ def test_group_permission_change_propagates_to_all_members(
         recompute_permissions_for_group__no_commit(group.id, db_session)
         db_session.commit()
 
-    # Both users should now have the permission (plus implied read:agents)
+    # add:agents must not imply read:agents — making your own agents is not see-all
     for u in (user_a, user_b):
         perms = UserManager.get_permissions(u)
         assert "add:agents" in perms, f"{u.id} missing add:agents: {perms}"
-        assert "read:agents" in perms, f"{u.id} missing implied read:agents: {perms}"
+        assert "read:agents" not in perms, f"{u.id} must not gain see-all: {perms}"
 
     # Soft-delete the grant and recompute — permission should be removed
     with get_session_with_current_tenant() as db_session:
