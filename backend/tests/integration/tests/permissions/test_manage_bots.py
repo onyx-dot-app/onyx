@@ -42,8 +42,6 @@ _SLACK_CHANNEL_BODY: dict[str, Any] = {
     "persona_id": None,
     "document_sets": [],
     "enable_auto_filters": False,
-    "answer_validity_check_enabled": False,
-    "questionmark_prefilter_enabled": False,
     "respond_tag_only": False,
     "respond_to_bots": False,
     "is_ephemeral": False,
