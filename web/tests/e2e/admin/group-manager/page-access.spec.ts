@@ -63,7 +63,7 @@ test.describe("scoped manager admin surface", () => {
     page,
     world,
   }) => {
-    await actAsManager(page, world.manager);
+    const managerClient = await actAsManager(page, world.manager);
     await page.goto("/admin/indexing/status");
     await page.waitForLoadState("networkidle");
 
@@ -86,7 +86,6 @@ test.describe("scoped manager admin surface", () => {
       expect(hrefs, `${path} missing from the sidebar`).toContain(path);
     }
     // the rest only when their feature flag is on
-    const managerClient = await actAsManager(page, world.manager);
     if (await managerClient.isVectorDbEnabled()) {
       for (const path of VECTOR_DB_PAGES) {
         expect(hrefs, `${path} missing with vector db enabled`).toContain(path);
