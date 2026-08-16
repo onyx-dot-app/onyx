@@ -61,6 +61,9 @@ IMPLIED_PERMISSIONS: dict[str, set[str]] = {
     Permission.MANAGE_SERVICE_ACCOUNT_API_KEYS.value: {
         Permission.READ_USER_GROUPS.value,
     },
+    Permission.MANAGE_ACTIONS.value: {
+        Permission.READ_USER_GROUPS.value,
+    },
     # basic grants the search/chat surfaces; admin grants read:admin (and the
     # rest) via the FULL_ADMIN_PANEL_ACCESS short-circuit in
     # resolve_effective_permissions.

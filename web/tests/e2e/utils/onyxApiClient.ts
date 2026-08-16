@@ -754,11 +754,11 @@ export class OnyxApiClient {
   /**
    * Adds users to an existing user group.
    *
-   * This endpoint recomputes effective permissions for the added users before
-   * returning, so callers do not need to wait for document-index group sync
-   * when they only need auth permissions.
+   * add-users 404s while the group is still syncing, so settle it first.
    */
   async addUsersToGroup(groupId: number, userIds: string[]): Promise<void> {
+    // best-effort like deleteUserGroup: a stalled sync must not fail the caller
+    await this.waitForGroupSync(groupId).catch(() => undefined);
     const response = await this.post(
       `/manage/admin/user-group/${groupId}/add-users`,
       {

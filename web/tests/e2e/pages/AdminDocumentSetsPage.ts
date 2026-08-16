@@ -37,13 +37,10 @@ export class AdminDocumentSetsPage {
     );
   }
 
-  /**
-   * The delete control is the row's only button, and it renders only when the
-   * listing stamps `permissions.delete` — it carries no accessible name of its own
-   * (icon-only, tooltip is not a label), so presence is counted rather than named.
-   */
+  /** Icon-only with no accessible name, and an editable row's name is a button
+   *  too — so name the control instead of counting buttons. */
   async expectDeleteOffered(name: string, offered: boolean): Promise<void> {
-    await expect(this.row(name).getByRole("button")).toHaveCount(
+    await expect(this.row(name).getByTestId("delete-button")).toHaveCount(
       offered ? 1 : 0
     );
   }

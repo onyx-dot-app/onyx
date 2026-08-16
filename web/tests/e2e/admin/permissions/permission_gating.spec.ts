@@ -4,6 +4,16 @@ import { apiLogin, loginAs } from "@tests/e2e/utils/auth";
 import { OnyxApiClient } from "@tests/e2e/utils/onyxApiClient";
 import { AdminAgentsPage } from "@tests/e2e/pages/AdminAgentsPage";
 
+/** After a timeout the context is closed, so an unguarded cleanup throws and
+ *  replaces the real error. */
+async function cleanup(fn: () => Promise<void>): Promise<void> {
+  try {
+    await fn();
+  } catch {
+    // real failure already recorded
+  }
+}
+
 test.describe("Permission gating — ADD_AGENTS", () => {
   test("New Agent button is disabled without ADD_AGENTS and enabled after granting it", async ({
     page,
@@ -142,10 +152,12 @@ test.describe("Permission gating — MANAGE_AGENTS", () => {
       await page.waitForLoadState("networkidle");
       expect(page.url()).toContain("/app");
     } finally {
-      await page.context().clearCookies();
-      await loginAs(page, "admin");
-      const cleanupClient = new OnyxApiClient(page.request);
-      await cleanupClient.deleteAgent(agentId);
+      await cleanup(async () => {
+        await page.context().clearCookies();
+        await loginAs(page, "admin");
+        const cleanupClient = new OnyxApiClient(page.request);
+        await cleanupClient.deleteAgent(agentId);
+      });
     }
   });
 });
@@ -222,11 +234,13 @@ test.describe("Permission gating — MANAGE_LLMS", () => {
       await page.waitForLoadState("networkidle");
       expect(page.url()).toContain("/app");
     } finally {
-      await page.context().clearCookies();
-      await loginAs(page, "admin");
-      const cleanupClient = new OnyxApiClient(page.request);
-      await cleanupClient.deleteProvider(providerId);
-      await cleanupClient.deleteCostOverride(overrideModel);
+      await cleanup(async () => {
+        await page.context().clearCookies();
+        await loginAs(page, "admin");
+        const cleanupClient = new OnyxApiClient(page.request);
+        await cleanupClient.deleteProvider(providerId);
+        await cleanupClient.deleteCostOverride(overrideModel);
+      });
     }
   });
 });
@@ -298,8 +312,10 @@ test.describe("Permission gating — MANAGE_CONNECTORS", () => {
         timeout: 10000,
       });
 
-      // Must be the picker, not "this Connector will be assigned to group X":
-      // the old code auto-assigned and hid the control from non-admins.
+      // a global holder defaults to public, which has no groups to scope
+      // must be the picker, not "assigned to group X" — the old code auto-assigned
+      await page.getByText("Public", { exact: true }).first().click();
+      await page.getByText("Private", { exact: true }).first().click();
       await expect(
         page.getByText("Assign group access for this Connector")
       ).toBeVisible({ timeout: 10000 });
@@ -324,10 +340,12 @@ test.describe("Permission gating — MANAGE_CONNECTORS", () => {
       await page.waitForLoadState("networkidle");
       expect(page.url()).toContain("/app");
     } finally {
-      await page.context().clearCookies();
-      await loginAs(page, "admin");
-      const cleanupClient = new OnyxApiClient(page.request);
-      await cleanupClient.deleteCCPair(ccPairId);
+      await cleanup(async () => {
+        await page.context().clearCookies();
+        await loginAs(page, "admin");
+        const cleanupClient = new OnyxApiClient(page.request);
+        await cleanupClient.deleteCCPair(ccPairId);
+      });
     }
   });
 });
@@ -438,12 +456,17 @@ test.describe("Permission gating — MANAGE_DOCUMENT_SETS", () => {
 
       // Rendered only for a holder of this permission — its presence is the
       // assertion that MANAGE_DOCUMENT_SETS is honoured, not just admin.
+      // the input is a 1x1 hidden box; the label beside it is what's clickable
       const publicToggle = page.locator("#checkbox-is_public");
-      await expect(publicToggle).toBeVisible({ timeout: 10000 });
+      await expect(publicToggle).toBeAttached({ timeout: 10000 });
+      const publicToggleLabel = page
+        .getByText("Make this Document Set Public?", { exact: false })
+        .first();
+      await expect(publicToggleLabel).toBeVisible({ timeout: 10000 });
 
       // Document sets default to public, and a public set has no groups to
       // scope, so the picker is disabled until this is unticked.
-      await publicToggle.click();
+      await publicToggleLabel.click();
 
       // Open the group dropdown and verify the extra group is listed
       const groupSearchInput = page.getByTestId("groups-search-input");
@@ -466,12 +489,14 @@ test.describe("Permission gating — MANAGE_DOCUMENT_SETS", () => {
       await page.waitForLoadState("networkidle");
       expect(page.url()).toContain("/app");
     } finally {
-      await page.context().clearCookies();
-      await loginAs(page, "admin");
-      const cleanupClient = new OnyxApiClient(page.request);
-      await cleanupClient.deleteCCPair(ccPairId);
-      await cleanupClient.deleteCCPair(privateCcPairId);
-      await cleanupClient.deleteUserGroup(extraGroupId);
+      await cleanup(async () => {
+        await page.context().clearCookies();
+        await loginAs(page, "admin");
+        const cleanupClient = new OnyxApiClient(page.request);
+        await cleanupClient.deleteCCPair(ccPairId);
+        await cleanupClient.deleteCCPair(privateCcPairId);
+        await cleanupClient.deleteUserGroup(extraGroupId);
+      });
     }
   });
 });
@@ -551,10 +576,14 @@ test.describe("Permission gating — MANAGE_ACTIONS", () => {
 
       // Rendered only for a holder of this permission.
       const mcpPublicToggle = page.locator("#checkbox-is_public");
-      await expect(mcpPublicToggle).toBeVisible({ timeout: 10000 });
+      await expect(mcpPublicToggle).toBeAttached({ timeout: 10000 });
+      const mcpPublicToggleLabel = page
+        .getByText("Make this MCP Server Public?", { exact: false })
+        .first();
+      await expect(mcpPublicToggleLabel).toBeVisible({ timeout: 10000 });
 
       // MCP servers default to public, so the picker is disabled until unticked.
-      await mcpPublicToggle.click();
+      await mcpPublicToggleLabel.click();
       await expect(
         page.getByText("Assign group access for this MCP server")
       ).toBeVisible({ timeout: 10000 });
@@ -577,11 +606,13 @@ test.describe("Permission gating — MANAGE_ACTIONS", () => {
       await page.waitForLoadState("networkidle");
       expect(page.url()).toContain("/app");
     } finally {
-      await page.context().clearCookies();
-      await loginAs(page, "admin");
-      const cleanupClient = new OnyxApiClient(page.request);
-      await cleanupClient.deleteCustomTool(toolId);
-      await cleanupClient.deleteMcpServer(mcpServerId);
+      await cleanup(async () => {
+        await page.context().clearCookies();
+        await loginAs(page, "admin");
+        const cleanupClient = new OnyxApiClient(page.request);
+        await cleanupClient.deleteCustomTool(toolId);
+        await cleanupClient.deleteMcpServer(mcpServerId);
+      });
     }
   });
 });
@@ -676,11 +707,13 @@ test.describe("Permission gating — MANAGE_SERVICE_ACCOUNT_API_KEYS", () => {
       await page.waitForLoadState("networkidle");
       expect(page.url()).toContain("/app");
     } finally {
-      await page.context().clearCookies();
-      await loginAs(page, "admin");
-      const cleanupClient = new OnyxApiClient(page.request);
-      await cleanupClient.deleteServiceAccount(apiKeyId);
-      await cleanupClient.deleteUserGroup(extraGroupId);
+      await cleanup(async () => {
+        await page.context().clearCookies();
+        await loginAs(page, "admin");
+        const cleanupClient = new OnyxApiClient(page.request);
+        await cleanupClient.deleteServiceAccount(apiKeyId);
+        await cleanupClient.deleteUserGroup(extraGroupId);
+      });
     }
   });
 });
@@ -733,8 +766,9 @@ test.describe("Permission gating — MANAGE_BOTS", () => {
       await expect(
         page.getByLabel("admin-page-title").getByText("Slack Integration")
       ).toBeVisible({ timeout: 10000 });
+      // href Buttons render as links, not buttons
       await expect(
-        page.getByRole("button", { name: "New Slack Bot" })
+        page.getByRole("link", { name: "New Slack Bot" })
       ).toBeVisible();
 
       // Verify Discord Integration page
@@ -761,10 +795,12 @@ test.describe("Permission gating — MANAGE_BOTS", () => {
       await page.waitForLoadState("networkidle");
       expect(page.url()).toContain("/app");
     } finally {
-      await page.context().clearCookies();
-      await loginAs(page, "admin");
-      const cleanupClient = new OnyxApiClient(page.request);
-      await cleanupClient.deleteDiscordGuild(guild.id);
+      await cleanup(async () => {
+        await page.context().clearCookies();
+        await loginAs(page, "admin");
+        const cleanupClient = new OnyxApiClient(page.request);
+        await cleanupClient.deleteDiscordGuild(guild.id);
+      });
     }
   });
 });
@@ -829,10 +865,12 @@ test.describe("Permission gating — READ_QUERY_HISTORY", () => {
       await page.waitForLoadState("networkidle");
       expect(page.url()).toContain("/app");
     } finally {
-      await page.context().clearCookies();
-      await loginAs(page, "admin");
-      const cleanupClient = new OnyxApiClient(page.request);
-      await cleanupClient.deleteChatSession(chatSessionId);
+      await cleanup(async () => {
+        await page.context().clearCookies();
+        await loginAs(page, "admin");
+        const cleanupClient = new OnyxApiClient(page.request);
+        await cleanupClient.deleteChatSession(chatSessionId);
+      });
     }
   });
 });
@@ -918,14 +956,16 @@ test.describe("Permission gating — CREATE_USER_API_KEYS", () => {
       await expect(newTokenButton).toBeVisible({ timeout: 10000 });
       await expect(newTokenButton).toBeDisabled();
     } finally {
-      // Delete the PAT (only requires BASIC_ACCESS)
-      if (createdPatId !== undefined) {
-        await page.context().clearCookies();
-        await apiLogin(page, email, password);
-        await page.request
-          .delete(`/api/user/pats/${createdPatId}`)
-          .catch(() => {});
-      }
+      await cleanup(async () => {
+        // Delete the PAT (only requires BASIC_ACCESS)
+        if (createdPatId !== undefined) {
+          await page.context().clearCookies();
+          await apiLogin(page, email, password);
+          await page.request
+            .delete(`/api/user/pats/${createdPatId}`)
+            .catch(() => {});
+        }
+      });
     }
   });
 });
@@ -1047,14 +1087,16 @@ test.describe("Permission gating — MANAGE_USER_GROUPS", () => {
       await page.waitForLoadState("networkidle");
       expect(page.url()).toContain("/app");
     } finally {
-      // Delete doc set before connector since it references it
-      await page.context().clearCookies();
-      await loginAs(page, "admin");
-      const cleanupClient = new OnyxApiClient(page.request);
-      await cleanupClient.deleteDocumentSet(docSetId);
-      await cleanupClient.deleteCCPair(ccPairId);
-      await cleanupClient.deleteAgent(agentId);
-      await cleanupClient.deleteUserGroup(extraGroupId);
+      await cleanup(async () => {
+        // Delete doc set before connector since it references it
+        await page.context().clearCookies();
+        await loginAs(page, "admin");
+        const cleanupClient = new OnyxApiClient(page.request);
+        await cleanupClient.deleteDocumentSet(docSetId);
+        await cleanupClient.deleteCCPair(ccPairId);
+        await cleanupClient.deleteAgent(agentId);
+        await cleanupClient.deleteUserGroup(extraGroupId);
+      });
     }
   });
 });

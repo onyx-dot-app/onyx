@@ -20,7 +20,11 @@ export class AdminConnectorDetailPage {
   constructor(page: Page) {
     this.page = page;
     this.indexingSection = page.getByText("Documents Indexed", { exact: true });
-    this.manageButton = page.getByRole("button", { name: "Manage" });
+    // without exact, a "managed-*" connector's title button also matches
+    this.manageButton = page.getByRole("button", {
+      name: "Manage",
+      exact: true,
+    });
     this.deleteMenuItem = page.getByRole("menuitem", { name: /Delete/i });
   }
 

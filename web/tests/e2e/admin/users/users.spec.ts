@@ -137,36 +137,39 @@ test.describe("Users page — search", () => {
 // ---------------------------------------------------------------------------
 
 test.describe("Users page — filters", () => {
-  test("account types filter shows expected roles", async ({ usersPage }) => {
+  test("account types filter shows expected account types", async ({
+    usersPage,
+  }) => {
     await usersPage.goto();
     await usersPage.openAccountTypesFilter();
 
     await expect(
       usersPage.popover.getByText("All Account Types").first()
     ).toBeVisible();
-    await expect(usersPage.popover.getByText("Admin").first()).toBeVisible();
-    await expect(usersPage.popover.getByText("Basic").first()).toBeVisible();
+    await expect(usersPage.popover.getByText("Standard").first()).toBeVisible();
+    await expect(
+      usersPage.popover.getByText("Service Account").first()
+    ).toBeVisible();
 
     await usersPage.closePopover();
   });
 
-  test("filtering by Admin role shows only admin users", async ({
+  test("filtering by Standard shows only standard users", async ({
     usersPage,
   }) => {
     await usersPage.goto();
     await usersPage.openAccountTypesFilter();
-    await usersPage.selectAccountType("Admin");
+    await usersPage.selectAccountType("Standard");
     await usersPage.closePopover();
 
-    await expect(usersPage.accountTypesFilter).toContainText("Admin");
+    await expect(usersPage.accountTypesFilter).toContainText("Standard");
 
     const rowCount = await usersPage.getVisibleRowCount();
     expect(rowCount).toBeGreaterThan(0);
 
-    // Every visible row's Account Type column must say "Admin"
-    const roleTexts = await usersPage.getColumnTexts(2);
-    for (const role of roleTexts) {
-      expect(role).toBe("Admin");
+    const accountTypes = await usersPage.getColumnTexts(2);
+    for (const accountType of accountTypes) {
+      expect(accountType).toBe("Standard");
     }
   });
 
@@ -230,15 +233,20 @@ test.describe("Users page — sorting", () => {
   }) => {
     await usersPage.goto();
 
-    const rolesBefore = await usersPage.getColumnTexts(2);
+    const before = await usersPage.getColumnTexts(2);
+    // needs 2+ real types to observe an order; "—" is the no-account-type placeholder
+    const distinctTypes = new Set(before.filter((t) => t && t !== "—"));
+    test.skip(
+      distinctTypes.size < 2,
+      "needs at least two account types among the visible users"
+    );
 
-    // Click twice to guarantee a different order from default
     await usersPage.sortByColumn("Account Type");
     await usersPage.sortByColumn("Account Type");
 
-    const rolesAfter = await usersPage.getColumnTexts(2);
-    expect(rolesAfter.length).toBeGreaterThan(0);
-    expect(rolesAfter).not.toEqual(rolesBefore);
+    const after = await usersPage.getColumnTexts(2);
+    expect(after.length).toBeGreaterThan(0);
+    expect(after).not.toEqual(before);
   });
 });
 
@@ -482,29 +490,6 @@ test.describe("Users page — inline role editing", () => {
     await withApiContext(browser, async (api) => {
       await api.registerUser(testUserEmail, TEST_PASSWORD);
     });
-  });
-
-  test("change user role from Basic to Admin and back", async ({
-    usersPage,
-  }) => {
-    await usersPage.goto();
-    await usersPage.search(testUserEmail);
-
-    const row = usersPage.getRowByEmail(testUserEmail);
-    await expect(row).toBeVisible();
-
-    // Initially Basic
-    await expect(row.getByText("Basic")).toBeVisible();
-
-    // Change to Admin
-    await usersPage.openRoleDropdown(testUserEmail);
-    await usersPage.selectRole("Admin");
-    await expect(row.getByText("Admin")).toBeVisible();
-
-    // Change back to Basic
-    await usersPage.openRoleDropdown(testUserEmail);
-    await usersPage.selectRole("Basic");
-    await expect(row.getByText("Basic")).toBeVisible();
   });
 
   test.afterAll(async ({ browser }) => {

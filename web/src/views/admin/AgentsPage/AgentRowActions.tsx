@@ -107,6 +107,7 @@ export default function AgentRowActions({
               prominence="tertiary"
               icon={SvgEdit}
               tooltip="Edit Agent"
+              data-testid={`edit-agent-${agent.id}`}
               onClick={() =>
                 router.push(
                   `/app/agents/edit/${

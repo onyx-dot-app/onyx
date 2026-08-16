@@ -301,17 +301,6 @@ export const ADMIN_ROUTES = {
     requiredTier: null,
     visibleWhen: (f: FeatureFlags) => f.vectorDbEnabled,
   },
-  INDEX_MIGRATION: {
-    path: "/admin/document-index-migration",
-    icon: SvgArrowExchange,
-    title: "Document Index Migration",
-    sidebarLabel: "Document Index Migration",
-    requiredPermission: Permission.FULL_ADMIN_PANEL_ACCESS,
-    section: "Documents & Knowledge",
-    requiredTier: null,
-    visibleWhen: (f: FeatureFlags) => f.vectorDbEnabled && f.opensearchEnabled,
-  },
-
   // ── Integrations ──────────────────────────────────────────────────
   API_KEYS: {
     path: "/admin/service-accounts",
