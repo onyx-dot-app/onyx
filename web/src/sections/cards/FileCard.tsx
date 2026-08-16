@@ -57,6 +57,34 @@ function Removable({ onRemove, children }: RemovableProps) {
   );
 }
 
+interface FileThumbnailProps {
+  className: string;
+  label: string;
+  onClick?: () => void;
+  children: React.ReactNode;
+}
+
+/** Renders the thumbnail as a button only when it can be opened. */
+function FileThumbnail({
+  className,
+  label,
+  onClick,
+  children,
+}: FileThumbnailProps) {
+  if (!onClick) return <div className={className}>{children}</div>;
+
+  return (
+    <button
+      type="button"
+      className={className}
+      aria-label={label}
+      onClick={onClick}
+    >
+      {children}
+    </button>
+  );
+}
+
 interface ImageFileCardProps {
   file: ProjectFile;
   imageUrl: string | null;
@@ -86,18 +114,17 @@ function ImageFileCard({
         removeFile && doneUploading ? () => removeFile(file.id) : undefined
       }
     >
-      <div
+      <FileThumbnail
         className={cn(
           sizeClass,
           "rounded-08 border border-border-01",
           isProcessing && "bg-background-neutral-02",
           onFileClick && !isProcessing && "cursor-pointer hover:opacity-90"
         )}
-        onClick={() => {
-          if (onFileClick && !isProcessing) {
-            onFileClick(file);
-          }
-        }}
+        label={file.name}
+        onClick={
+          onFileClick && !isProcessing ? () => onFileClick(file) : undefined
+        }
       >
         {!doneUploading || !imageUrl ? (
           <div className="h-full w-full flex items-center justify-center">
@@ -115,7 +142,7 @@ function ImageFileCard({
             onError={() => setImgError(true)}
           />
         )}
-      </div>
+      </FileThumbnail>
     </Removable>
   );
 }

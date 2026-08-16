@@ -46,7 +46,7 @@ export default function DocumentSetCard({
               description={documentSet.description}
               rightChildren={
                 isSelected === undefined ? undefined : (
-                  <div onClick={(e) => e.stopPropagation()}>
+                  <div role="presentation" onClick={(e) => e.stopPropagation()}>
                     <Checkbox
                       checked={isSelected}
                       disabled={disabled}

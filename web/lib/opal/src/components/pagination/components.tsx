@@ -16,6 +16,7 @@ import {
   type KeyboardEvent,
   type ReactNode,
 } from "react";
+import useFocusOnMount from "@opal/hooks/useFocusOnMount";
 
 // ---------------------------------------------------------------------------
 // Types
@@ -205,6 +206,7 @@ interface GoToPagePopupProps {
 function GoToPagePopup({ totalPages, onSubmit, children }: GoToPagePopupProps) {
   const [open, setOpen] = useState(false);
   const [value, setValue] = useState("");
+  const focusOnMount = useFocusOnMount<HTMLInputElement>();
 
   const parsed = parseInt(value, 10);
   const isValid = !isNaN(parsed) && parsed >= 1 && parsed <= totalPages;
@@ -257,7 +259,7 @@ function GoToPagePopup({ totalPages, onSubmit, children }: GoToPagePopupProps) {
             onChange={handleChange}
             onKeyDown={handleKeyDown}
             placeholder="Go to page"
-            autoFocus
+            ref={focusOnMount}
             className={cn(
               "w-28 bg-transparent px-1.5 py-1 rounded-08",
               containerSizeVariants.lg.height,

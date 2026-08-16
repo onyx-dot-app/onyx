@@ -1,6 +1,6 @@
 /* AttachmentButton styles */
 
-.attachment-button {
+.attachment-item {
   display: flex;
   flex-direction: row;
   width: 100%;
@@ -10,15 +10,15 @@
   gap: 0.5rem;
 }
 
-.attachment-button:hover {
+.attachment-item:hover {
   background-color: var(--background-tint-02);
 }
 
-.attachment-button[data-state="selected"] {
+.attachment-item[data-state="selected"] {
   background-color: var(--action-selection-01);
 }
 
-.attachment-button__content {
+.attachment-item__content {
   flex: 1;
   display: flex;
   flex-direction: row;
@@ -26,7 +26,7 @@
   min-width: 0;
 }
 
-.attachment-button__icon-wrapper {
+.attachment-item__icon-wrapper {
   height: 100%;
   aspect-ratio: 1;
   background-color: var(--background-tint-01);
@@ -38,17 +38,17 @@
   flex-shrink: 0;
 }
 
-.attachment-button__icon {
+.attachment-item__icon {
   height: 1rem;
   width: 1rem;
   stroke: var(--text-02);
 }
 
-.attachment-button[data-state="processing"] .attachment-button__icon {
+.attachment-item[data-state="processing"] .attachment-item__icon {
   stroke: var(--text-01);
 }
 
-.attachment-button__text-container {
+.attachment-item__text-container {
   display: flex;
   flex-direction: column;
   align-items: flex-start;
@@ -57,7 +57,7 @@
   flex: 1;
 }
 
-.attachment-button__title-row {
+.attachment-item__title-row {
   display: flex;
   flex-direction: row;
   align-items: center;
@@ -66,23 +66,23 @@
   min-width: 0;
 }
 
-.attachment-button__title-wrapper {
+.attachment-item__title-wrapper {
   max-width: 70%;
   min-width: 0;
   flex-shrink: 1;
   overflow: hidden;
 }
 
-.attachment-button__view-button {
+.attachment-item__view {
   flex-shrink: 0;
   visibility: hidden;
 }
 
-.attachment-button:hover .attachment-button__view-button {
+.attachment-item:hover .attachment-item__view {
   visibility: visible;
 }
 
-.attachment-button__actions {
+.attachment-item__actions {
   display: flex;
   flex-direction: row;
   align-self: stretch;
@@ -93,10 +93,10 @@
   flex-shrink: 0;
 }
 
-.attachment-button__action-button {
+.attachment-item__action {
   visibility: hidden;
 }
 
-.attachment-button:hover .attachment-button__action-button {
+.attachment-item:hover .attachment-item__action {
   visibility: visible;
 }

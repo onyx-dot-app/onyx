@@ -224,7 +224,7 @@ export default function InviteUsersModal({
             onChange={handleInputChange}
             placeholder="Add emails to invite, space or comma separated"
             minRows={EMAIL_FIELD_ROWS}
-            autoFocus
+            focusOnMount
           />
           {message && (
             <Content

@@ -330,6 +330,7 @@ def export_usage(
                 input_tokens=sum(r.input_tokens for r in records),
                 output_tokens=sum(r.output_tokens for r in records),
                 cache_read_tokens=sum(r.cache_read_tokens for r in records),
+                cache_creation_tokens=sum(r.cache_creation_tokens for r in records),
                 cost_cents=sum(r.cost_cents for r in records),
             ),
             records=records,

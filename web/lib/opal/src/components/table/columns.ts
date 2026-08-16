@@ -179,6 +179,10 @@ export function createTableColumns<TData>(): TableColumnsBuilder<TData> {
     },
 
     column(
+      // The accessor pulls an arbitrary cell value out of a caller-owned row.
+      // The value is opaque to the table and only handed back to the caller's
+      // own `cell` renderer, so `unknown` is the honest type here.
+      // oxlint-disable-next-line anti-slop/no-unknown-returns
       accessor: DeepKeys<TData> | ((row: TData) => unknown),
       config: DataColumnConfig<TData, any> & { id?: string }
     ): OnyxDataColumn<TData> {

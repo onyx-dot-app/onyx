@@ -25,6 +25,7 @@ import {
 } from "@/app/craft/services/apiServices";
 import { FileSystemEntry } from "@/app/craft/types/streamingTypes";
 import { getFileIcon } from "@/lib/utils";
+import { clickOnKeyDown } from "@opal/utils";
 
 interface ArtifactsTabProps {
   artifacts: Artifact[];
@@ -162,10 +163,16 @@ export default function ArtifactsTab({
         <div className="divide-y divide-border-01">
           {/* Webapp Artifacts */}
           {webappArtifacts.map((artifact) => (
+            // The row holds its own buttons, so it stays a div with button
+            // semantics rather than a <button> wrapping a <button>.
             <div
               key={artifact.id}
               className="flex items-center gap-3 p-3 hover:bg-background-tint-01 transition-colors cursor-pointer"
               style={{ paddingLeft: 12 }}
+              role="button"
+              tabIndex={0}
+              aria-label={`Open ${artifact.name}`}
+              onKeyDown={clickOnKeyDown(handleWebappOpen)}
               onClick={handleWebappOpen}
             >
               <div className="w-4 shrink-0" />
@@ -246,19 +253,27 @@ function OutputEntryRow({
     setExpanded((prev) => !prev);
   }, [entry.is_directory, entry.path, sessionId, loaded]);
 
+  const openEntry = entry.is_directory
+    ? toggleExpand
+    : () => onFileOpen(entry.path, entry.name);
+
   const FileIcon = entry.is_directory ? SvgFolder : getFileIcon(entry.name);
   const paddingLeft = depth * 20;
 
   return (
     <>
+      {/* The row holds its own buttons, so it stays a div with button
+      semantics rather than a <button> wrapping a <button>. */}
       <div
         className="flex items-center gap-3 p-3 hover:bg-background-tint-01 transition-colors cursor-pointer"
         style={{ paddingLeft: 12 + paddingLeft }}
-        onClick={
-          entry.is_directory
-            ? toggleExpand
-            : () => onFileOpen(entry.path, entry.name)
+        role="button"
+        tabIndex={0}
+        aria-label={
+          entry.is_directory ? `Toggle ${entry.name}` : `Open ${entry.name}`
         }
+        onKeyDown={clickOnKeyDown(openEntry)}
+        onClick={openEntry}
       >
         {entry.is_directory ? (
           expanded ? (

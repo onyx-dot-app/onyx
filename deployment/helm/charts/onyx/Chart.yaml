@@ -5,25 +5,32 @@ home: https://www.onyx.app/
 sources:
   - "https://github.com/onyx-dot-app/onyx"
 type: application
-version: 0.8.15
+version: 0.8.16
 appVersion: latest
 annotations:
   category: Productivity
   licenses: MIT
+  # Links the GHCR package back to this repository. `helm push` copies chart
+  # annotations onto the OCI manifest, and GHCR reads this key to attach the
+  # package to the repo.
+  org.opencontainers.image.source: https://github.com/onyx-dot-app/onyx
   images: |
     - name: webserver
       image: docker.io/onyxdotapp/onyx-web-server:latest
     - name: background
       image: docker.io/onyxdotapp/onyx-backend:latest
   artifacthub.io/changes: |
-    - kind: fixed
-      description: Cap all child resource names at the 63-character Kubernetes
-        limit. Most templates built names as `<fullname>-<suffix>` without truncation,
-        so long release names made the install fail (for example the Service
-        `<fullname>-celery-worker-heavy-metrics`). Every name now goes through the
-        `onyx.resourceName` helper, which truncates over-limit names and appends a
-        short hash so sibling resources with a shared suffix prefix cannot collide.
-        Rendered names do not change for names already under the limit.
+    - kind: added
+      description: The chart is now also published as an OCI artifact at
+        `oci://ghcr.io/onyx-dot-app/charts/onyx`. Install it with
+        `helm install onyx oci://ghcr.io/onyx-dot-app/charts/onyx --version <version>`.
+        The existing repository at https://onyx-dot-app.github.io/onyx keeps working
+        and stays the default install path; no action is needed to keep using it.
+    - kind: changed
+      description: Chart tarballs are now attached to GitHub releases
+        (`helm/onyx-<version>`) instead of being committed to the gh-pages branch.
+        `helm repo add` and `helm install` are unaffected — only the download URL
+        behind index.yaml changed.
 dependencies:
   # Helm uses the first condition path that exists: `postgresqlOperator.enabled`
   # is unset by default, so this falls through to `postgresql.enabled`. Set it

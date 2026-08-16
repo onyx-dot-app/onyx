@@ -2,7 +2,7 @@ import React from "react";
 import Text from "@/refresh-components/texts/Text";
 import { OptionItem } from "./OptionItem";
 import { ComboBoxOption } from "../types";
-import { cn } from "@opal/utils";
+import { cn, clickOnKeyDown } from "@opal/utils";
 import { SvgPlus } from "@opal/icons";
 import { sanitizeOptionId } from "../utils/aria";
 
@@ -72,12 +72,16 @@ export const OptionsList: React.FC<OptionsListProps> = ({
           id={`${fieldId}-option-${sanitizeOptionId(inputValue)}`}
           data-index={0}
           role="option"
+          tabIndex={-1}
           aria-selected={false}
           aria-label={`${createPrefix ?? "Create"} "${inputValue}"`}
           onClick={(e) => {
             e.stopPropagation();
             onSelect({ value: inputValue, label: inputValue });
           }}
+          onKeyDown={clickOnKeyDown(() =>
+            onSelect({ value: inputValue, label: inputValue })
+          )}
           onMouseDown={(e) => {
             e.preventDefault();
           }}

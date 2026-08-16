@@ -13,6 +13,7 @@ test("opens a user from the keyboard", () => {
             input_tokens: 1_000,
             output_tokens: 200,
             cache_read_tokens: 100,
+            cache_creation_tokens: 50,
             cost_cents: 25,
           },
           records: [],

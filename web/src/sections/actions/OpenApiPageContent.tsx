@@ -376,7 +376,9 @@ export default function OpenApiPageContent() {
                 onManage={handleManageTool}
                 onDelete={handleDeleteTool}
                 onRename={handleRenameTool}
-                mutateOpenApiTools={mutateOpenApiTools}
+                mutateOpenApiTools={async () => {
+                  await mutateOpenApiTools();
+                }}
                 onOpenDisconnectModal={handleOpenDisconnectModal}
               />
             ))

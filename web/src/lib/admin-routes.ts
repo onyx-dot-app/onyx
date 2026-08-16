@@ -428,8 +428,8 @@ export const ADMIN_ROUTES = {
     requiredTier: null,
     visibleWhen: null,
   },
-  // SSO provider config is single-tenant only; Business tier gates having *multiple*
-  // providers, inside the page itself, not reaching it.
+  // Hidden on cloud until cloud login can use these providers. Business tier gates
+  // having *multiple* providers, inside the page itself, not reaching it.
   SSO_PROVIDERS: {
     path: "/admin/sso-providers",
     icon: SvgUserKey,

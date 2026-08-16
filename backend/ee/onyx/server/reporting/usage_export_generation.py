@@ -159,6 +159,7 @@ def generate_usage_breakdown_report(
                 "input_tokens",
                 "output_tokens",
                 "cache_read_tokens",
+                "cache_creation_tokens",
                 "cost_cents",
             ]
         )
@@ -175,6 +176,7 @@ def generate_usage_breakdown_report(
                     row.input_tokens,
                     row.output_tokens,
                     row.cache_read_tokens,
+                    row.cache_creation_tokens,
                     row.cost_cents,
                 ]
             )

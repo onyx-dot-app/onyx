@@ -22,6 +22,7 @@ import ShareChatSessionModal from "@/sections/modals/ShareChatSessionModal";
 import { Button, LineItemButton, SidebarTab } from "@opal/components";
 import IconButton from "@/refresh-components/buttons/IconButton";
 import { InputTypeIn } from "@opal/components";
+import useFocusOnMount from "@opal/hooks/useFocusOnMount";
 import { DRAG_TYPES, LOCAL_STORAGE_KEYS } from "@/lib/sidebar/constants";
 import {
   shouldShowMoveModal,
@@ -53,6 +54,7 @@ export function PopoverSearchInput({
   onSearch,
 }: PopoverSearchInputProps) {
   const [searchTerm, setSearchTerm] = useState("");
+  const focusOnMount = useFocusOnMount<HTMLInputElement>();
 
   const handleChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     const value = e.target.value;
@@ -87,7 +89,7 @@ export function PopoverSearchInput({
         placeholder="Search Projects"
         onClick={noProp()}
         variant="internal"
-        autoFocus
+        ref={focusOnMount}
       />
     </div>
   );

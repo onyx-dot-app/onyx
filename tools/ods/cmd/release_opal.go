@@ -3,7 +3,6 @@ package cmd
 import (
 	"fmt"
 	"os/exec"
-	"regexp"
 	"strings"
 
 	log "github.com/sirupsen/logrus"
@@ -14,9 +13,6 @@ import (
 )
 
 const opalTagPrefix = "opal/v"
-
-// opalSemverRe matches a bare X.Y.Z version (no leading v).
-var opalSemverRe = regexp.MustCompile(`^\d+\.\d+\.\d+$`)
 
 // ReleaseOpalOptions holds options for the release opal command.
 type ReleaseOpalOptions struct {
@@ -66,7 +62,7 @@ Example usage:
 
 func releaseOpal(opts *ReleaseOpalOptions) {
 	if opts.Version != "" {
-		if !opalSemverRe.MatchString(opts.Version) {
+		if !bareSemverRe.MatchString(opts.Version) {
 			log.Fatalf("--version must be X.Y.Z with no leading v, got %q", opts.Version)
 		}
 	} else if opts.Bump != "patch" && opts.Bump != "minor" && opts.Bump != "major" {
@@ -134,7 +130,7 @@ func latestOpalVersion() (string, error) {
 	}
 	for _, line := range strings.Split(strings.TrimSpace(string(out)), "\n") {
 		version := strings.TrimPrefix(strings.TrimSpace(line), opalTagPrefix)
-		if opalSemverRe.MatchString(version) {
+		if bareSemverRe.MatchString(version) {
 			return version, nil
 		}
 	}

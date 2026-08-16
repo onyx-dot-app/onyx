@@ -11,6 +11,13 @@ CURRENT_TENANT_ID_CONTEXTVAR: contextvars.ContextVar[str | None] = (
     )
 )
 
+# Workspace a session must be issued against, set only by a caller that already
+# decided it. Not CURRENT_TENANT_ID_CONTEXTVAR: that is whatever cookie the
+# request carried, which can name a workspace this user does not belong to.
+SESSION_TENANT_OVERRIDE_CONTEXTVAR: contextvars.ContextVar[str | None] = (
+    contextvars.ContextVar("session_tenant_override", default=None)
+)
+
 # set by every route in the API server
 INDEXING_REQUEST_ID_CONTEXTVAR: contextvars.ContextVar[str | None] = (
     contextvars.ContextVar("indexing_request_id", default=None)

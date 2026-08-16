@@ -295,6 +295,12 @@ export default function UserUsageDetailModal({
                   value={formatTokens(totals.cache_read_tokens)}
                 />
               </div>
+              <div className="basis-1/2 sm:basis-1/4">
+                <StatCell
+                  label="Cache writes"
+                  value={formatTokens(totals.cache_creation_tokens)}
+                />
+              </div>
             </div>
 
             <DailySpendStrip days={days} />

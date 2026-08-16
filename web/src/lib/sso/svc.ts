@@ -1,4 +1,5 @@
 import { SWR_KEYS } from "@/lib/swr-keys";
+import type { SSOProviderOption, SSOProviderType } from "@/lib/auth/types";
 import {
   SSOProviderCreateRequest,
   SSOProviderResponse,
@@ -48,6 +49,31 @@ export function updateSSOProvider(
     "PATCH",
     request
   );
+}
+
+// The backend serves snake_case, so the wire shape is spelled out separately
+// from the camelCase model rather than cast across the boundary.
+interface SSOProviderOptionWire {
+  name: string;
+  display_name: string;
+  provider_type: SSOProviderType;
+  authorize_url: string;
+}
+
+export async function discoverSSOProviders(
+  email: string
+): Promise<SSOProviderOption[]> {
+  const data = await ssoRequest<{ providers?: SSOProviderOptionWire[] }>(
+    "/api/auth/sso/discover",
+    "POST",
+    { email }
+  );
+  return (data.providers ?? []).map((provider) => ({
+    name: provider.name,
+    displayName: provider.display_name,
+    providerType: provider.provider_type,
+    authorizeUrl: provider.authorize_url,
+  }));
 }
 
 export function setSSOProviderEnabled(

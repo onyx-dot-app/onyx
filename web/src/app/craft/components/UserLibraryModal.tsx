@@ -1,6 +1,7 @@
 "use client";
 
 import { useState, useCallback, useRef, useMemo, useEffect } from "react";
+import useFocusOnMount from "@opal/hooks/useFocusOnMount";
 import useSWR from "swr";
 import { SWR_KEYS } from "@/lib/swr-keys";
 import {
@@ -12,7 +13,7 @@ import {
 } from "@/app/craft/services/apiServices";
 import { LibraryEntry } from "@/app/craft/types/user-library";
 import { Modal } from "@opal/components";
-import { cn } from "@opal/utils";
+import { cn, clickOnKeyDown } from "@opal/utils";
 import {
   SvgFolder,
   SvgFolderOpen,
@@ -100,6 +101,7 @@ export default function UserLibraryModal({
   const [entryToDelete, setEntryToDelete] = useState<LibraryEntry | null>(null);
   const [showNewFolderModal, setShowNewFolderModal] = useState(false);
   const [newFolderName, setNewFolderName] = useState("");
+  const focusOnMount = useFocusOnMount<HTMLInputElement>();
   const [searchQuery, setSearchQuery] = useState("");
   const [isDragging, setIsDragging] = useState(false);
   const fileInputRef = useRef<HTMLInputElement>(null);
@@ -443,7 +445,7 @@ export default function UserLibraryModal({
                     handleCreateDirectory();
                   }
                 }}
-                autoFocus
+                ref={focusOnMount}
               />
             </div>
           </Modal.Body>
@@ -540,104 +542,115 @@ function LibraryTreeView({
       {sortedEntries.map((entry) => {
         const isExpanded = forceExpanded || expandedPaths.has(entry.path);
 
-        return (
-          <div key={entry.id} className="flex flex-col">
-            <div
-              className={cn(
-                "group flex items-center gap-2 rounded-8 px-2 py-1.5 transition-colors hover:bg-background-tint-01",
-                entry.is_directory && "cursor-pointer"
-              )}
-              onClick={
-                entry.is_directory
-                  ? () => onToggleFolder(entry.path)
-                  : undefined
-              }
-            >
-              {/* Indent for nesting depth */}
-              {depth > 0 && (
-                <span
-                  aria-hidden
-                  className="shrink-0"
-                  style={{ width: `${depth * 1.25}rem` }}
-                />
-              )}
+        const rowClassName = cn(
+          "group flex items-center gap-2 rounded-8 px-2 py-1.5 transition-colors hover:bg-background-tint-01",
+          entry.is_directory && "cursor-pointer"
+        );
 
-              {/* Expand/collapse for directories (icon swap avoids a rotate style) */}
-              {entry.is_directory ? (
-                <Button
-                  prominence="tertiary"
-                  size="2xs"
-                  icon={isExpanded ? SvgChevronDown : SvgChevronRight}
-                  onClick={(e) => {
-                    e.stopPropagation();
-                    onToggleFolder(entry.path);
-                  }}
-                  tooltip={isExpanded ? "Collapse" : "Expand"}
-                  aria-label={isExpanded ? "Collapse" : "Expand"}
-                />
+        const rowBody = (
+          <>
+            {/* Indent for nesting depth */}
+            {depth > 0 && (
+              <span
+                aria-hidden
+                className="shrink-0"
+                style={{ width: `${depth * 1.25}rem` }}
+              />
+            )}
+
+            {/* Expand/collapse for directories (icon swap avoids a rotate style) */}
+            {entry.is_directory ? (
+              <Button
+                prominence="tertiary"
+                size="2xs"
+                icon={isExpanded ? SvgChevronDown : SvgChevronRight}
+                onClick={(e) => {
+                  e.stopPropagation();
+                  onToggleFolder(entry.path);
+                }}
+                tooltip={isExpanded ? "Collapse" : "Expand"}
+                aria-label={isExpanded ? "Collapse" : "Expand"}
+              />
+            ) : (
+              hasDirectories && <span aria-hidden className="w-5 shrink-0" />
+            )}
+
+            {/* Type icon */}
+            {entry.is_directory ? (
+              isExpanded ? (
+                <SvgFolderOpen size={16} className="shrink-0 stroke-text-03" />
               ) : (
-                hasDirectories && <span aria-hidden className="w-5 shrink-0" />
-              )}
+                <SvgFolder size={16} className="shrink-0 stroke-text-03" />
+              )
+            ) : (
+              <SvgFileText size={16} className="shrink-0 stroke-text-03" />
+            )}
 
-              {/* Type icon */}
-              {entry.is_directory ? (
-                isExpanded ? (
-                  <SvgFolderOpen
-                    size={16}
-                    className="shrink-0 stroke-text-03"
-                  />
-                ) : (
-                  <SvgFolder size={16} className="shrink-0 stroke-text-03" />
-                )
-              ) : (
-                <SvgFileText size={16} className="shrink-0 stroke-text-03" />
-              )}
+            {/* Name */}
+            <div className="min-w-0 flex-1">
+              <Text font="main-ui-muted" color="text-04" maxLines={1}>
+                {entry.name}
+              </Text>
+            </div>
 
-              {/* Name */}
-              <div className="min-w-0 flex-1">
-                <Text font="main-ui-muted" color="text-04" maxLines={1}>
-                  {entry.name}
-                </Text>
-              </div>
+            {/* File size */}
+            {!entry.is_directory && entry.file_size !== null && (
+              <Text font="secondary-body" color="text-03" nowrap>
+                {formatFileSize(entry.file_size)}
+              </Text>
+            )}
 
-              {/* File size */}
-              {!entry.is_directory && entry.file_size !== null && (
-                <Text font="secondary-body" color="text-03" nowrap>
-                  {formatFileSize(entry.file_size)}
-                </Text>
-              )}
-
-              {/* Row actions — revealed on hover/focus */}
-              <div className="flex items-center gap-1 opacity-0 transition-opacity focus-within:opacity-100 group-hover:opacity-100 no-hover:opacity-100">
-                {entry.is_directory && (
-                  <Button
-                    prominence="tertiary"
-                    size="sm"
-                    icon={SvgUploadCloud}
-                    onClick={(e) => {
-                      e.stopPropagation();
-                      const uploadPath =
-                        entry.path.replace(/^user_library/, "") || "/";
-                      onUploadToFolder(uploadPath);
-                    }}
-                    tooltip="Upload to this folder"
-                    aria-label="Upload to this folder"
-                  />
-                )}
+            {/* Row actions — revealed on hover/focus */}
+            <div className="flex items-center gap-1 opacity-0 transition-opacity focus-within:opacity-100 group-hover:opacity-100 no-hover:opacity-100">
+              {entry.is_directory && (
                 <Button
-                  variant="danger"
                   prominence="tertiary"
                   size="sm"
-                  icon={SvgTrash}
+                  icon={SvgUploadCloud}
                   onClick={(e) => {
                     e.stopPropagation();
-                    onDelete(entry);
+                    const uploadPath =
+                      entry.path.replace(/^user_library/, "") || "/";
+                    onUploadToFolder(uploadPath);
                   }}
-                  tooltip="Delete"
-                  aria-label="Delete"
+                  tooltip="Upload to this folder"
+                  aria-label="Upload to this folder"
                 />
-              </div>
+              )}
+              <Button
+                variant="danger"
+                prominence="tertiary"
+                size="sm"
+                icon={SvgTrash}
+                onClick={(e) => {
+                  e.stopPropagation();
+                  onDelete(entry);
+                }}
+                tooltip="Delete"
+                aria-label="Delete"
+              />
             </div>
+          </>
+        );
+
+        return (
+          <div key={entry.id} className="flex flex-col">
+            {entry.is_directory ? (
+              // The row holds its own buttons, so a clickable folder row stays
+              // a div with button semantics rather than a nested <button>.
+              <div
+                className={rowClassName}
+                role="button"
+                tabIndex={0}
+                aria-label={`Toggle ${entry.name}`}
+                onKeyDown={clickOnKeyDown(() => onToggleFolder(entry.path))}
+                onClick={() => onToggleFolder(entry.path)}
+              >
+                {rowBody}
+              </div>
+            ) : (
+              <div className={rowClassName}>{rowBody}</div>
+            )}
 
             {/* Children */}
             {entry.is_directory && isExpanded && entry.children && (

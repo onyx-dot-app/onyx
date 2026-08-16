@@ -73,6 +73,16 @@ class IndexingStatus(str, PyEnum):
         )
 
 
+class NotificationSeverity(str, PyEnum):
+    """How loud a notification renders: INFO stays in the bell popover,
+    WARNING and ERROR also surface in the banner queue. Declared in
+    ascending loudness."""
+
+    INFO = "info"
+    WARNING = "warning"
+    ERROR = "error"
+
+
 class PermissionSyncStatus(str, PyEnum):
     """Status enum for permission sync attempts"""
 

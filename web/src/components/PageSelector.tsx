@@ -51,7 +51,9 @@ const PageLink = ({
   active,
   unclickable,
 }: PageLinkProps) => (
-  <div
+  <button
+    type="button"
+    disabled={unclickable}
     className={`
     select-none
     inline-block
@@ -77,7 +79,7 @@ const PageLink = ({
     }}
   >
     {linkText}
-  </div>
+  </button>
 );
 
 export interface PageSelectorProps {

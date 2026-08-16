@@ -4,7 +4,7 @@ import "@opal/components/inputs/shared.css";
 // The inner field reuses InputTypeIn's .opal-input-field styling.
 import "@opal/components/inputs/input-type-in/styles.css";
 import "@opal/components/inputs/input-tags/styles.css";
-import { useRef } from "react";
+import { useEffect, useRef } from "react";
 import type { IconFunctionComponent } from "@opal/types";
 import { Button, Tag, TAG_REMOVE_CLASS } from "@opal/components";
 import { SvgX } from "@opal/icons";
@@ -56,7 +56,7 @@ interface InputTagsProps {
   minRows?: number;
 
   /** Focuses the text input on mount. */
-  autoFocus?: boolean;
+  focusOnMount?: boolean;
 }
 
 // ---------------------------------------------------------------------------
@@ -81,10 +81,16 @@ function InputTags({
   icon: Icon,
   onClear,
   minRows = 1,
-  autoFocus,
+  focusOnMount = false,
 }: InputTagsProps) {
   const rootRef = useRef<HTMLDivElement>(null);
   const inputRef = useRef<HTMLInputElement>(null);
+
+  useEffect(() => {
+    if (focusOnMount) inputRef.current?.focus();
+    // Mount only: later prop changes must not steal focus back.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
 
   function handleInputKeyDown(event: React.KeyboardEvent<HTMLInputElement>) {
     // During IME composition, Enter confirms the candidate and Backspace
@@ -119,6 +125,7 @@ function InputTags({
   return (
     <div
       ref={rootRef}
+      role="presentation"
       className="opal-input opal-input-tags"
       data-variant={disabled ? "disabled" : variant}
       onKeyDown={handleRootKeyDown}
@@ -156,7 +163,6 @@ function InputTags({
           ref={inputRef}
           type="text"
           className="opal-input-field opal-input-tags-field"
-          autoFocus={autoFocus}
           disabled={disabled}
           value={value}
           onChange={(event) => onChange(event.target.value)}

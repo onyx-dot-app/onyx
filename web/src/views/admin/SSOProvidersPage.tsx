@@ -208,7 +208,12 @@ export default function SSOProvidersPage() {
       </Shell>
 
       <setupModal.Provider>
-        <SSOProviderModal provider={editProvider} onSaved={() => mutate()} />
+        <SSOProviderModal
+          provider={editProvider}
+          onSaved={async () => {
+            await mutate();
+          }}
+        />
       </setupModal.Provider>
     </>
   );

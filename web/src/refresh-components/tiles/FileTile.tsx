@@ -1,7 +1,7 @@
 import type { FunctionComponent } from "react";
 
 import { noProp } from "@/lib/utils";
-import { cn } from "@opal/utils";
+import { cn, clickOnKeyDown } from "@opal/utils";
 import { SvgMaximize2, SvgTextLines, SvgX } from "@opal/icons";
 import type { IconProps } from "@opal/types";
 import { Hoverable } from "@opal/core";
@@ -77,97 +77,112 @@ export default function FileTile({
 }: FileTileProps) {
   const Icon = icon ?? SvgTextLines;
   const isMuted = state === "processing" || state === "disabled";
+  const canOpen = !!onOpen && state !== "disabled";
+
+  const tileClassName = cn(
+    "relative min-w-30 max-w-60 h-full",
+    "border rounded-12 p-1",
+    "flex flex-row items-center",
+    "transition-colors duration-150",
+    // Outer container bg + border per state
+    isMuted
+      ? "bg-background-neutral-02 border-border-01"
+      : "bg-background-tint-00 border-border-01",
+    // Hover overrides (disabled gets none)
+    state !== "disabled" && "hover:border-border-02",
+    state === "default" && "hover:bg-background-tint-02",
+    // Clickable cursor when onOpen is provided and not disabled
+    onOpen && state !== "disabled" && "cursor-pointer"
+  );
+
+  const tileBody = (
+    <>
+      {onRemove && <RemoveButton onRemove={onRemove} />}
+
+      <div
+        className={cn(
+          "shrink-0 h-9 w-9 rounded-08",
+          "flex items-center justify-center",
+          isMuted ? "bg-background-neutral-03" : "bg-background-tint-01"
+        )}
+      >
+        <Icon
+          size={16}
+          className={cn(isMuted ? "stroke-text-01" : "stroke-text-02")}
+        />
+      </div>
+
+      {(title || description || onOpen) && (
+        <div className="min-w-0 flex pl-1 w-full justify-between h-full">
+          {isMuted ? (
+            <div className="flex flex-col min-w-0">
+              {title && (
+                <Truncated
+                  secondaryAction
+                  text02
+                  className={cn(
+                    "truncate",
+                    state === "processing" && "hover:text-text-03"
+                  )}
+                >
+                  {title}
+                </Truncated>
+              )}
+              {description && (
+                <Text
+                  secondaryBody
+                  text02
+                  className={cn(
+                    "line-clamp-2",
+                    state === "processing" && "hover:text-text-03"
+                  )}
+                >
+                  {description}
+                </Text>
+              )}
+            </div>
+          ) : (
+            <div className="flex flex-col min-w-0">
+              {title && (
+                <Truncated secondaryAction text04 className="truncate">
+                  {title}
+                </Truncated>
+              )}
+              {description && (
+                <Text secondaryBody text03 className="line-clamp-2">
+                  {description}
+                </Text>
+              )}
+            </div>
+          )}
+          {onOpen && (
+            <div className="h-full">
+              <IconButton small icon={SvgMaximize2} onClick={noProp(onOpen)} />
+            </div>
+          )}
+        </div>
+      )}
+    </>
+  );
 
   return (
     <Hoverable.Root group="fileTile" width="fit">
-      <div
-        onClick={onOpen && state !== "disabled" ? () => onOpen() : undefined}
-        className={cn(
-          "relative min-w-30 max-w-60 h-full",
-          "border rounded-12 p-1",
-          "flex flex-row items-center",
-          "transition-colors duration-150",
-          // Outer container bg + border per state
-          isMuted
-            ? "bg-background-neutral-02 border-border-01"
-            : "bg-background-tint-00 border-border-01",
-          // Hover overrides (disabled gets none)
-          state !== "disabled" && "hover:border-border-02",
-          state === "default" && "hover:bg-background-tint-02",
-          // Clickable cursor when onOpen is provided and not disabled
-          onOpen && state !== "disabled" && "cursor-pointer"
-        )}
-      >
-        {onRemove && <RemoveButton onRemove={onRemove} />}
-
+      {canOpen ? (
+        // The tile holds its own remove and open buttons, so it stays a div
+        // with button semantics rather than a <button> wrapping a <button>.
         <div
-          className={cn(
-            "shrink-0 h-9 w-9 rounded-08",
-            "flex items-center justify-center",
-            isMuted ? "bg-background-neutral-03" : "bg-background-tint-01"
-          )}
+          role="button"
+          tabIndex={0}
+          aria-label={`Open ${title ?? "file"}`}
+          onKeyDown={clickOnKeyDown(onOpen)}
+          onClick={() => onOpen()}
+          className={tileClassName}
         >
-          <Icon
-            size={16}
-            className={cn(isMuted ? "stroke-text-01" : "stroke-text-02")}
-          />
+          {tileBody}
         </div>
-
-        {(title || description || onOpen) && (
-          <div className="min-w-0 flex pl-1 w-full justify-between h-full">
-            {isMuted ? (
-              <div className="flex flex-col min-w-0">
-                {title && (
-                  <Truncated
-                    secondaryAction
-                    text02
-                    className={cn(
-                      "truncate",
-                      state === "processing" && "hover:text-text-03"
-                    )}
-                  >
-                    {title}
-                  </Truncated>
-                )}
-                {description && (
-                  <Text
-                    secondaryBody
-                    text02
-                    className={cn(
-                      "line-clamp-2",
-                      state === "processing" && "hover:text-text-03"
-                    )}
-                  >
-                    {description}
-                  </Text>
-                )}
-              </div>
-            ) : (
-              <div className="flex flex-col min-w-0">
-                {title && (
-                  <Truncated secondaryAction text04 className="truncate">
-                    {title}
-                  </Truncated>
-                )}
-                {description && (
-                  <Text secondaryBody text03 className="line-clamp-2">
-                    {description}
-                  </Text>
-                )}
-              </div>
-            )}
-            {onOpen && (
-              <div className="h-full">
-                <IconButton
-                  small
-                  icon={SvgMaximize2}
-                  onClick={noProp(onOpen)}
-                />
-              </div>
-            )}
-          </div>
-        )}
-      </div>
+      ) : (
+        <div className={tileClassName}>{tileBody}</div>
+      )}
     </Hoverable.Root>
   );
 }

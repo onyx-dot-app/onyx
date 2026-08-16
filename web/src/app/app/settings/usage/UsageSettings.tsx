@@ -46,6 +46,7 @@ const COLLAPSED_USAGE_ROW_COUNT = 3;
 function WindowCostSection({ windowCostCents, rows }: WindowCostSectionProps) {
   const [showAll, setShowAll] = useState(false);
   const hasCache = rows.some((row) => row.cache_read_tokens > 0);
+  const hasCacheWrites = rows.some((row) => row.cache_creation_tokens > 0);
   const modelRows = useMemo(() => {
     const byModel = new Map<string, Omit<UsagePerDayByModel, "day">>();
     for (const row of rows) {
@@ -54,11 +55,13 @@ function WindowCostSection({ windowCostCents, rows }: WindowCostSectionProps) {
         input_tokens: 0,
         output_tokens: 0,
         cache_read_tokens: 0,
+        cache_creation_tokens: 0,
         cost_cents: 0,
       };
       model.input_tokens += row.input_tokens;
       model.output_tokens += row.output_tokens;
       model.cache_read_tokens += row.cache_read_tokens;
+      model.cache_creation_tokens += row.cache_creation_tokens;
       model.cost_cents += row.cost_cents;
       byModel.set(row.model, model);
     }
@@ -142,7 +145,13 @@ function WindowCostSection({ windowCostCents, rows }: WindowCostSectionProps) {
                       row.output_tokens
                     )} out${
                       hasCache
-                        ? ` · ${formatTokens(row.cache_read_tokens)} cache`
+                        ? ` · ${formatTokens(row.cache_read_tokens)} cache reads`
+                        : ""
+                    }${
+                      hasCacheWrites
+                        ? ` · ${formatTokens(
+                            row.cache_creation_tokens
+                          )} cache writes`
                         : ""
                     }`}
                   </Text>

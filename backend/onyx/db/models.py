@@ -94,6 +94,7 @@ from onyx.db.enums import (
     MCPOAuthProviderMode,
     MCPServerStatus,
     MCPTransport,
+    NotificationSeverity,
     OpenSearchDocumentMigrationStatus,
     OpenSearchTenantMigrationStatus,
     PatType,
@@ -608,6 +609,11 @@ class Notification(Base):
     id: Mapped[int] = mapped_column(primary_key=True)
     notif_type: Mapped[NotificationType] = mapped_column(
         Enum(NotificationType, native_enum=False)
+    )
+    severity: Mapped[NotificationSeverity] = mapped_column(
+        Enum(NotificationSeverity, native_enum=False),
+        default=NotificationSeverity.INFO,
+        server_default=NotificationSeverity.INFO.name,
     )
     user_id: Mapped[UUID | None] = mapped_column(
         ForeignKey("user.id", ondelete="CASCADE"), nullable=True
@@ -6041,6 +6047,9 @@ class UserUsage(Base):
     input_tokens: Mapped[int] = mapped_column(BigInteger, nullable=False)
     output_tokens: Mapped[int] = mapped_column(BigInteger, nullable=False)
     cache_read_tokens: Mapped[int] = mapped_column(
+        BigInteger, nullable=False, default=0
+    )
+    cache_creation_tokens: Mapped[int] = mapped_column(
         BigInteger, nullable=False, default=0
     )
     cost_cents: Mapped[float] = mapped_column(

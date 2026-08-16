@@ -10,8 +10,9 @@ from sqlalchemy.orm import Session, aliased, joinedload, selectinload
 from sqlalchemy.sql.elements import ColumnElement
 
 from onyx.auth.permissions import get_effective_permissions
-from onyx.configs.constants import DEFAULT_CC_PAIR_ID, DocumentSource
+from onyx.configs.constants import DEFAULT_CC_PAIR_ID, DocumentSource, NotificationType
 from onyx.db.connector import fetch_connector_by_id
+from onyx.db.connector_alerts import clear_connector_alerts__no_commit
 from onyx.db.credentials import fetch_credential_by_id, fetch_credential_by_id_for_user
 from onyx.db.engine.sql_engine import get_session_with_current_tenant
 from onyx.db.enums import (
@@ -541,6 +542,16 @@ def _update_connector_credential_pair(
     if net_docs is not None:
         cc_pair.total_docs_indexed += net_docs
     if status is not None:
+        # Leaving INVALID means the connector was fixed: retire its alerts.
+        if (
+            cc_pair.status == ConnectorCredentialPairStatus.INVALID
+            and status != ConnectorCredentialPairStatus.INVALID
+        ):
+            clear_connector_alerts__no_commit(
+                db_session=db_session,
+                cc_pair_id=cc_pair.id,
+                notif_type=NotificationType.CONNECTOR_INVALID,
+            )
         cc_pair.status = status
 
     db_session.commit()

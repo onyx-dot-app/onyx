@@ -153,6 +153,7 @@ function SharedGroupResources({
         const isSelected = selectedCcPairSet.has(p.cc_pair_id);
         return {
           key: `c-${p.cc_pair_id}`,
+          label: p.name ?? `Connector #${p.cc_pair_id}`,
           disabled: isSelected,
           onSelect: () =>
             isSelected
@@ -162,7 +163,7 @@ function SharedGroupResources({
               : onCcPairIdsChange([...selectedCcPairIds, p.cc_pair_id]),
           render: (dimmed: boolean) => (
             <LineItem
-              interactive={!dimmed}
+              interactive={false}
               muted={dimmed}
               icon={getSourceMetadata(p.connector.source).icon}
               strokeIcon={false}
@@ -182,6 +183,7 @@ function SharedGroupResources({
         const isSelected = selectedDocSetSet.has(ds.id);
         return {
           key: `d-${ds.id}`,
+          label: ds.name,
           disabled: isSelected,
           onSelect: () =>
             isSelected
@@ -191,7 +193,7 @@ function SharedGroupResources({
               : onDocSetIdsChange([...selectedDocSetIds, ds.id]),
           render: (dimmed: boolean) => (
             <LineItem
-              interactive={!dimmed}
+              interactive={false}
               muted={dimmed}
               icon={SvgFiles}
               rightChildren={
@@ -233,6 +235,7 @@ function SharedGroupResources({
         const isSelected = selectedAgentSet.has(a.id);
         return {
           key: `a-${a.id}`,
+          label: a.name,
           disabled: isSelected,
           onSelect: () =>
             isSelected
@@ -240,7 +243,7 @@ function SharedGroupResources({
               : onAgentIdsChange([...selectedAgentIds, a.id]),
           render: (dimmed: boolean) => (
             <LineItem
-              interactive={!dimmed}
+              interactive={false}
               muted={dimmed}
               icon={(_props) => <AgentAvatar agent={a} size={16} />}
               description="agent"

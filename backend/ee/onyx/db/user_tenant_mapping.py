@@ -97,6 +97,47 @@ def get_tenant_id_for_email(email: str) -> str:
     return tenant_id
 
 
+def lookup_tenant_id_for_login(email: str) -> str | None:
+    """Workspace this address may sign in to, resolved without side effects.
+
+    SSO discovery runs before the user has authenticated, so unlike
+    ``get_tenant_id_for_email`` it must not accept a pending invitation on the
+    caller's behalf. An address that names no single workspace resolves to
+    None, which the caller surfaces as "no SSO here" rather than an error.
+    """
+    if not MULTI_TENANT:
+        return POSTGRES_DEFAULT_SCHEMA
+
+    email = email.lower()
+    with get_catalog_session() as db_session:
+        active_tenant_ids = (
+            db_session.scalars(
+                select(UserTenantMapping.tenant_id).where(
+                    UserTenantMapping.email == email,
+                    UserTenantMapping.active.is_(True),
+                )
+            )
+            .unique()
+            .all()
+        )
+        if len(active_tenant_ids) == 1:
+            return active_tenant_ids[0]
+        if active_tenant_ids:
+            return None
+
+        pending_tenant_ids = (
+            db_session.scalars(
+                select(UserTenantMapping.tenant_id).where(
+                    UserTenantMapping.email == email,
+                    UserTenantMapping.active.is_(False),
+                )
+            )
+            .unique()
+            .all()
+        )
+        return pending_tenant_ids[0] if len(pending_tenant_ids) == 1 else None
+
+
 def resolve_tenant_id(
     email: str, oauth_name: str | None = None, account_id: str | None = None
 ) -> str | None:

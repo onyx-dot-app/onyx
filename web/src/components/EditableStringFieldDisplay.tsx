@@ -69,6 +69,13 @@ export function EditableStringFieldDisplay({
     }
   };
 
+  const displayClassName = cn(
+    textClassName,
+    "text-3xl font-bold text-text-800",
+    "user-text",
+    isEditable && "cursor-pointer"
+  );
+
   return (
     <div ref={containerRef} className={"flex items-center"}>
       <Input
@@ -85,19 +92,24 @@ export function EditableStringFieldDisplay({
         )}
         style={{ fontSize: `${scale}rem` }}
       />
-      {!isEditing && (
-        <span
-          onClick={() => isEditable && setIsEditing(true)}
-          className={cn(
-            textClassName,
-            "text-3xl font-bold text-text-800",
-            "cursor-pointer user-text"
-          )}
-          style={{ fontSize: `${scale}rem` }}
-        >
-          {value}
-        </span>
-      )}
+      {!isEditing &&
+        (isEditable ? (
+          <button
+            type="button"
+            onClick={() => setIsEditing(true)}
+            className={displayClassName}
+            style={{ fontSize: `${scale}rem` }}
+          >
+            {value}
+          </button>
+        ) : (
+          <span
+            className={displayClassName}
+            style={{ fontSize: `${scale}rem` }}
+          >
+            {value}
+          </span>
+        ))}
       {isEditing && isEditable ? (
         <>
           <div className={cn("flex", "flex-row")}>
@@ -118,15 +130,17 @@ export function EditableStringFieldDisplay({
           </div>
         </>
       ) : (
-        <h1
-          onClick={() => isEditable && setIsEditing(true)}
-          className={`group flex ${isEditable ? "cursor-pointer" : ""} ${""}`}
-          style={{ fontSize: `${scale}rem` }}
-        >
-          {isEditable && (
-            <SvgEdit className={`visible ml-2`} size={12 * scale} />
-          )}
-        </h1>
+        isEditable && (
+          <button
+            type="button"
+            onClick={() => setIsEditing(true)}
+            aria-label="Rename"
+            className="group flex cursor-pointer"
+            style={{ fontSize: `${scale}rem` }}
+          >
+            <SvgEdit className="visible ml-2" size={12 * scale} />
+          </button>
+        )
       )}
     </div>
   );

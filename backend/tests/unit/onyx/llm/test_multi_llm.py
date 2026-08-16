@@ -1,8 +1,10 @@
 import os
 import threading
 import time
+from collections.abc import Iterator
+from contextlib import contextmanager
 from typing import Any
-from unittest.mock import ANY, patch
+from unittest.mock import ANY, MagicMock, patch
 
 import litellm
 import pytest
@@ -14,7 +16,7 @@ from onyx.configs.app_configs import MOCK_LLM_RESPONSE
 from onyx.llm.constants import LlmProviderNames
 from onyx.llm.interfaces import LLMUserIdentity
 from onyx.llm.model_capabilities import get_max_input_tokens
-from onyx.llm.model_response import ModelResponse, ModelResponseStream
+from onyx.llm.model_response import ModelResponse, ModelResponseStream, Usage
 from onyx.llm.models import (
     AssistantMessage,
     FunctionCall,
@@ -3119,3 +3121,48 @@ def test_policy_extra_body_keeps_deployment_siblings_under_the_same_key() -> Non
         "allow_fallbacks": False,
         "data_collection": "deny",
     }
+
+
+def test_track_llm_cost_prices_cache_creation_at_write_rate(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    llm = LitellmLLM(
+        api_key="managed-key",
+        timeout=30,
+        model_provider=LlmProviderNames.ANTHROPIC,
+        model_name="claude-sonnet-4-5",
+        max_input_tokens=200000,
+    )
+    db_session = MagicMock()
+
+    @contextmanager
+    def _fake_session() -> Iterator[Any]:
+        yield db_session
+
+    monkeypatch.setattr(
+        "onyx.server.usage_limits.is_usage_limits_enabled", lambda: True
+    )
+    monkeypatch.setattr(
+        "onyx.server.usage_limits.is_onyx_managed_api_key", lambda _key: True
+    )
+    monkeypatch.setattr(
+        "onyx.db.engine.sql_engine.get_session_with_current_tenant", _fake_session
+    )
+    monkeypatch.setattr(
+        "onyx.llm.cost.cost_overrides.get_override",
+        lambda _session, _model, _provider: None,
+    )
+    increment_usage = MagicMock()
+    monkeypatch.setattr("onyx.db.usage.increment_usage", increment_usage)
+
+    llm._track_llm_cost(
+        Usage(
+            prompt_tokens=3000,
+            completion_tokens=0,
+            total_tokens=3000,
+            cache_read_input_tokens=0,
+            cache_creation_input_tokens=2000,
+        )
+    )
+
+    assert increment_usage.call_args.args[2] == pytest.approx(1.05)

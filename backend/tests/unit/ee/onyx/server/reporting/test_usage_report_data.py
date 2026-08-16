@@ -46,6 +46,7 @@ def _row(
         input_tokens=100,
         output_tokens=50,
         cache_read_tokens=10,
+        cache_creation_tokens=5,
         cost_cents=cost,
     )
 
