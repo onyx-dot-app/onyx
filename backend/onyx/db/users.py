@@ -666,7 +666,7 @@ def get_active_admin_count(db_session: Session) -> int:
     return db_session.execute(stmt).scalar_one()
 
 
-def delete_user_from_db(
+def delete_user_from_db__no_commit(
     user_to_delete: User,
     db_session: Session,
 ) -> None:
@@ -718,6 +718,13 @@ def delete_user_from_db(
         User__UserGroup.user_id == user_to_delete.id
     ).delete()
     db_session.delete(user_to_delete)
+
+
+def delete_user_from_db(
+    user_to_delete: User,
+    db_session: Session,
+) -> None:
+    delete_user_from_db__no_commit(user_to_delete, db_session)
     db_session.commit()
 
     # NOTE: edge case may exist with race conditions

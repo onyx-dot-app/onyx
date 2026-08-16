@@ -16,7 +16,10 @@ from onyx.db.models import (
     DiscordGuildConfig,
     User,
 )
-from onyx.db.users import assign_user_to_default_groups__no_commit, delete_user_from_db
+from onyx.db.users import (
+    assign_user_to_default_groups__no_commit,
+    delete_user_from_db__no_commit,
+)
 from onyx.db.utils import DiscordChannelView
 from onyx.server.api_key.models import APIKeyArgs
 from onyx.utils.logger import setup_logger
@@ -163,9 +166,8 @@ def delete_discord_service_api_key(db_session: Session) -> bool:
 
     db_session.delete(existing_key)
     if api_key_user:
-        delete_user_from_db(api_key_user, db_session)
-    else:
-        db_session.flush()
+        delete_user_from_db__no_commit(api_key_user, db_session)
+    db_session.flush()
     logger.info("Deleted Discord service API key")
     return True
 

@@ -1,8 +1,7 @@
-import requests
-
 from onyx.db.enums import AccountType
 from onyx.server.models import FullUserSnapshot
 from tests.integration.common_utils.constants import API_SERVER_URL
+from tests.integration.common_utils.http_client import client
 from tests.integration.common_utils.managers.user import UserManager
 from tests.integration.common_utils.test_models import DATestUser
 
@@ -247,7 +246,7 @@ def test_user_pagination_rejects_removed_roles_param(
     results for any external integration that hasn't migrated."""
     admin: DATestUser = UserManager.create(name="admin_roles_reject")
 
-    response = requests.get(
+    response = client.get(
         url=f"{API_SERVER_URL}/manage/users/accepted",
         params={"roles": "admin"},
         headers=admin.headers,
