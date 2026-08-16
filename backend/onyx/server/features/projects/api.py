@@ -257,6 +257,15 @@ def get_files_in_project(
     db_session: Session = Depends(get_session),
 ) -> list[UserFileSnapshot]:
     user_id = user.id
+    # filtering files by owner alone 200s an empty list, leaking that the id exists
+    project_exists = (
+        db_session.query(UserProject.id)
+        .filter(UserProject.id == project_id, UserProject.user_id == user_id)
+        .one_or_none()
+    )
+    if project_exists is None:
+        raise OnyxError(OnyxErrorCode.NOT_FOUND, "Project not found")
+
     user_files = (
         db_session.query(UserFile)
         .join(Project__UserFile, UserFile.id == Project__UserFile.user_file_id)

@@ -618,10 +618,12 @@ def test_manager_cannot_create_public_mcp_server_by_omitting_access(
     # /servers/create defaults is_public=True when is_public/users/groups are omitted, so
     # the create path must gate unconditionally — else a manager publishes org-wide simply
     # by leaving the access fields out of the body.
+    # auth_performer is required; omitting it 422s before the gate runs
     body = {
         "name": f"mcp-{uuid4()}",
         "server_url": "https://example.com/mcp",
         "auth_type": MCPAuthenticationType.NONE.value,
+        "auth_performer": MCPAuthenticationPerformer.ADMIN.value,
     }
     _assert_manager(env, "POST", "/admin/mcp/servers/create", "denied_gate2", body)
 

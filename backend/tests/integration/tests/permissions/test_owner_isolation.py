@@ -9,11 +9,13 @@ import os
 
 import pytest
 
+from onyx.db.enums import Permission
 from tests.integration.common_utils.constants import API_SERVER_URL
 from tests.integration.common_utils.http_client import client
 from tests.integration.common_utils.managers.persona import PersonaManager
 from tests.integration.common_utils.managers.project import ProjectManager
 from tests.integration.common_utils.managers.user import UserManager
+from tests.integration.common_utils.managers.user_group import UserGroupManager
 from tests.integration.common_utils.test_models import DATestUser
 
 pytestmark = pytest.mark.skipif(
@@ -43,8 +45,20 @@ _BODY_BY_ROUTE: dict[str, dict[str, object]] = {
 # permission_admin_user first, so neither principal below is the admin and
 # nothing passes via the short-circuit.
 @pytest.fixture(scope="module")
-def owner(permission_admin_user: DATestUser) -> DATestUser:  # noqa: ARG001
-    return UserManager.create(name="isolation_owner")
+def owner(permission_admin_user: DATestUser) -> DATestUser:
+    """Holds ADD_AGENTS — EE never grants it by default, so persona creation 403s."""
+    user = UserManager.create(name="isolation_owner")
+    grant_group = UserGroupManager.create(
+        name="isolation-owner-group",
+        user_ids=[user.id],
+        user_performing_action=permission_admin_user,
+    )
+    UserGroupManager.set_permissions(
+        user_group=grant_group,
+        permissions=[Permission.ADD_AGENTS.value],
+        user_performing_action=permission_admin_user,
+    ).raise_for_status()
+    return user
 
 
 @pytest.fixture(scope="module")

@@ -12,7 +12,8 @@ from uuid import uuid4
 
 import pytest
 
-from onyx.db.enums import Permission
+from onyx.db.enums import AccessType, Permission
+from tests.integration.common_utils.managers.cc_pair import CCPairManager
 from tests.integration.common_utils.managers.document_set import DocumentSetManager
 from tests.integration.common_utils.test_models import (
     DATestAPIKey,
@@ -96,10 +97,11 @@ def test_access_matrix(
 
 
 class _ScopedDocSet(NamedTuple):
-    """The update body re-sends current groups, so the id alone isn't enough."""
+    """Update re-sends groups and cc_pairs, so the id alone isn't enough."""
 
     id: int
     group_id: int
+    cc_pair_id: int
 
 
 def _update_body(doc_set: _ScopedDocSet) -> dict[str, Any]:
@@ -109,7 +111,7 @@ def _update_body(doc_set: _ScopedDocSet) -> dict[str, Any]:
         "id": doc_set.id,
         "name": f"scope-doc-set-{doc_set.id}",
         "description": "scope matrix",
-        "cc_pair_ids": [],
+        "cc_pair_ids": [doc_set.cc_pair_id],
         "is_public": False,
         "users": [],
         "groups": [doc_set.group_id],
@@ -124,20 +126,33 @@ def scoped_document_sets(
     scoped_other_group: DATestUserGroup,
 ) -> tuple[_ScopedDocSet, _ScopedDocSet]:
     """Created by the admin so the manager's create path isn't a precondition for
-    testing their edit path."""
+    testing their edit path. A private set is rejected without a connector owned by
+    its own groups."""
+
+    def _pair_for(group: DATestUserGroup) -> int:
+        return CCPairManager.create_from_scratch(
+            user_performing_action=permission_admin_user,
+            access_type=AccessType.PRIVATE,
+            groups=[group.id],
+        ).id
+
+    managed_pair = _pair_for(scoped_managed_group)
+    other_pair = _pair_for(scoped_other_group)
     in_scope = DocumentSetManager.create(
         user_performing_action=permission_admin_user,
         is_public=False,
+        cc_pair_ids=[managed_pair],
         groups=[scoped_managed_group.id],
     )
     out_of_scope = DocumentSetManager.create(
         user_performing_action=permission_admin_user,
         is_public=False,
+        cc_pair_ids=[other_pair],
         groups=[scoped_other_group.id],
     )
     return (
-        _ScopedDocSet(in_scope.id, scoped_managed_group.id),
-        _ScopedDocSet(out_of_scope.id, scoped_other_group.id),
+        _ScopedDocSet(in_scope.id, scoped_managed_group.id, managed_pair),
+        _ScopedDocSet(out_of_scope.id, scoped_other_group.id, other_pair),
     )
 
 
@@ -147,7 +162,7 @@ def _create_body(doc_set: _ScopedDocSet) -> dict[str, Any]:
     return {
         "name": f"scope-create-{uuid4()}",
         "description": "scope matrix",
-        "cc_pair_ids": [],
+        "cc_pair_ids": [doc_set.cc_pair_id],
         "is_public": False,
         "users": [],
         "groups": [doc_set.group_id],
