@@ -103,7 +103,7 @@ class Gate(str, Enum):
 
     GATE_1 = "gate_1"  # require_permission
     GATE_2 = "gate_2"  # assert_within_scope / assert_manages_group
-    ADMIN_ONLY = "admin_only"  # assert_global
+    ADMIN_ONLY = "admin_only"  # assert_global, or a handler doing the same test inline
     LIMITED_USER = "limited_user"  # current_user, empty effective_permissions
     NOT_A_GATE = "not_a_gate"  # handler-level 403, or not a 403 at all
 
@@ -113,6 +113,9 @@ _GATE_BY_DETAIL_PREFIX: list[tuple[str, Gate]] = [
     ("You do not have the required permissions", Gate.GATE_1),
     ("Group managers can only act", Gate.GATE_2),
     ("This action is restricted to administrators", Gate.ADMIN_ONLY),
+    # delete_document_set can't call assert_global — it exempts a groupless set's
+    # creator — so it tests PermissionAuthority.GLOBAL inline and needs its own entry.
+    ("Deleting a shared document set is restricted to administrators", Gate.ADMIN_ONLY),
     (_LIMITED_USER_DETAIL, Gate.LIMITED_USER),
     # Handler-level checks reusing INSUFFICIENT_PERMISSIONS — listed so the fallback
     # below doesn't file them as GATE 1. The caller cleared every gate.
@@ -147,6 +150,13 @@ def _is_gate_denial(resp: httpx.Response) -> bool:
     return gate_of(resp) is not Gate.NOT_A_GATE
 
 
+_EXPECTED_GATE: dict[str, Gate] = {
+    "denied_gate1": Gate.GATE_1,
+    "denied_gate2": Gate.GATE_2,
+    "denied_admin_only": Gate.ADMIN_ONLY,
+}
+
+
 def assert_response(
     resp: httpx.Response,
     method: str,
@@ -155,7 +165,7 @@ def assert_response(
     expected: str,
 ) -> None:
     """``expected``: allowed | denied (any auth layer) | denied_gate1 |
-    denied_gate2 | anon_denied (401 or 403)."""
+    denied_gate2 | denied_admin_only | anon_denied (401 or 403)."""
     if expected == "allowed":
         # Tolerates a handler-level 403 (bogus ids reuse 403); only the gate matters.
         assert resp.status_code != 401 and not _is_gate_denial(resp), (
@@ -169,8 +179,8 @@ def assert_response(
             f"{method} {path}, got {resp.status_code} "
             f"(body={resp.text[:200]})"
         )
-    elif expected in ("denied_gate1", "denied_gate2"):
-        wanted = Gate.GATE_1 if expected == "denied_gate1" else Gate.GATE_2
+    elif expected in _EXPECTED_GATE:
+        wanted = _EXPECTED_GATE[expected]
         actual = gate_of(resp)
         assert actual is wanted, (
             f"{user_kind} should be denied by {wanted.value} on {method} {path}, "

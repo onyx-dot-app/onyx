@@ -50,6 +50,22 @@ _SLACK_CHANNEL_BODY: dict[str, Any] = {
     "show_continue_in_web_ui": False,
 }
 
+# Discord's update models have no `is_active`; both PATCH handlers 404 cleanly on a
+# missing id, so a complete body reaches them the way the bogus ids elsewhere do.
+_DISCORD_GUILD_BODY: dict[str, Any] = {
+    "enabled": False,
+    "default_persona_id": None,
+}
+
+_DISCORD_CHANNEL_BODY: dict[str, Any] = {
+    "require_bot_invocation": False,
+    "persona_override_id": None,
+    "enabled": False,
+    "thread_only_mode": False,
+}
+
+_DISCORD_GUILDS_PATH = "/manage/admin/discord-bot/guilds"
+
 # Both bot surfaces, every method — a GET-only list would miss a mutating route
 # losing its gate.
 ENDPOINTS: list[Endpoint] = [
@@ -65,16 +81,16 @@ ENDPOINTS: list[Endpoint] = [
     ("PATCH", "/manage/admin/slack-app/bots/999999", {"name": "perm-test-bot"}),
     ("DELETE", "/manage/admin/slack-app/bots/999999", None),
     # Discord — guilds and their channels
-    ("GET", "/manage/admin/discord-bot/guilds", None),
-    ("POST", "/manage/admin/discord-bot/guilds", None),
+    ("GET", _DISCORD_GUILDS_PATH, None),
+    ("POST", _DISCORD_GUILDS_PATH, None),
     ("GET", "/manage/admin/discord-bot/guilds/999999", None),
-    ("PATCH", "/manage/admin/discord-bot/guilds/999999", {"is_active": False}),
+    ("PATCH", "/manage/admin/discord-bot/guilds/999999", _DISCORD_GUILD_BODY),
     ("DELETE", "/manage/admin/discord-bot/guilds/999999", None),
     ("GET", "/manage/admin/discord-bot/guilds/999999/channels", None),
     (
         "PATCH",
         "/manage/admin/discord-bot/guilds/999999/channels/999999",
-        {"is_active": False},
+        _DISCORD_CHANNEL_BODY,
     ),
 ]
 
@@ -105,3 +121,13 @@ def test_access_matrix(
     headers, cookies = resolve_credentials(user_kind, request)
     resp = call_endpoint(method, path, body, headers, cookies)
     assert_response(resp, method, path, user_kind, expected)
+
+    # the guild POST is the one endpoint here that really creates
+    if method == "POST" and path == _DISCORD_GUILDS_PATH and resp.status_code == 200:
+        call_endpoint(
+            "DELETE",
+            f"{_DISCORD_GUILDS_PATH}/{resp.json()['id']}",
+            None,
+            headers,
+            cookies,
+        )

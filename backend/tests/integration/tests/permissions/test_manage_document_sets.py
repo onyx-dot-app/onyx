@@ -193,14 +193,20 @@ def test_scope_matrix(
     assert_scope_case(endpoint, out_of_scope_set, user_kind, out_of_scope, request)
 
 
-@pytest.mark.parametrize("user_kind", ["manager", "plain_member"])
+@pytest.mark.parametrize(
+    "user_kind,expected",
+    [("manager", "denied_admin_only"), ("plain_member", "denied_gate1")],
+)
 def test_delete_is_out_of_manager_scope(
     user_kind: str,
+    expected: str,
     scoped_document_sets: tuple[_ScopedDocSet, _ScopedDocSet],
     request: pytest.FixtureRequest,
 ) -> None:
-    """No allow_scope on DELETE, so a manager is stopped at GATE 1 either way —
-    that is what keeps delete admin-only for a set they can otherwise edit. The
-    admin side is covered above; repeating it here would delete the fixture."""
+    """DELETE does allow scope, so a manager clears GATE 1 and is stopped by the
+    handler's admin-only check either way — that is what keeps delete admin-only for
+    a set they can otherwise edit. Pinning the layer catches a lost allow_scope, which
+    would deny them at GATE 1 instead. The admin side is covered above; repeating it
+    here would delete the fixture."""
     for doc_set in scoped_document_sets:
-        assert_scope_case(_DELETE_ENDPOINT, doc_set, user_kind, "denied_gate1", request)
+        assert_scope_case(_DELETE_ENDPOINT, doc_set, user_kind, expected, request)
