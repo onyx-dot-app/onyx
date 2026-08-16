@@ -8,6 +8,7 @@ MANAGE_ACTIONS protects custom-tool + MCP admin endpoints in
 
 import os
 from typing import Any
+from uuid import uuid4
 
 import pytest
 
@@ -44,6 +45,8 @@ _OAUTH_CONFIG_BODY: dict[str, Any] = {
     "client_secret": "client-secret",
 }
 
+_OAUTH_CONFIG_CREATE_PATH = "/admin/oauth-config/create"
+
 # MANAGE_ACTIONS spans three route clusters — custom tools, OAuth configs and
 # MCP servers. Sampled across all of them, and across every method, because a
 # GET-only list would miss a mutating route losing its gate.
@@ -55,7 +58,7 @@ ENDPOINTS: list[Endpoint] = [
     ("PATCH", "/admin/tool/status", {"tool_ids": [999999], "enabled": True}),
     ("POST", "/admin/tool/custom/validate", _VALIDATE_TOOL_BODY),
     # OAuth configs
-    ("POST", "/admin/oauth-config/create", _OAUTH_CONFIG_BODY),
+    ("POST", _OAUTH_CONFIG_CREATE_PATH, _OAUTH_CONFIG_BODY),
     ("GET", "/admin/oauth-config/999999", None),
     ("PUT", "/admin/oauth-config/999999", _OAUTH_CONFIG_BODY),
     ("DELETE", "/admin/oauth-config/999999", None),
@@ -93,6 +96,21 @@ def test_access_matrix(
     request: pytest.FixtureRequest,
     permission_admin_user: DATestUser,  # noqa: ARG001 -- ensures module_reset ran
 ) -> None:
+    creates_oauth_config = path == _OAUTH_CONFIG_CREATE_PATH
     headers, cookies = resolve_credentials(user_kind, request)
+    if creates_oauth_config:
+        # oauth_config.name is unique-constrained, so a shared name fails for every
+        # principal after the first and assert_response reads that as "allowed"
+        body = {**_OAUTH_CONFIG_BODY, "name": f"perm-test-oauth-{user_kind}-{uuid4()}"}
+
     resp = call_endpoint(method, path, body, headers, cookies)
     assert_response(resp, method, path, user_kind, expected)
+
+    if creates_oauth_config and resp.status_code == 200:
+        call_endpoint(
+            "DELETE",
+            f"/admin/oauth-config/{resp.json()['id']}",
+            None,
+            headers,
+            cookies,
+        )
