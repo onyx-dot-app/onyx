@@ -37,12 +37,6 @@ export class AdminAgentsPage {
     });
   }
 
-  /** Absent when the row has no actions the caller may take. */
-  async expectOverflowHidden(agentId: number): Promise<void> {
-    await expect(this.rowActions(agentId)).toBeVisible({ timeout: 10_000 });
-    await expect(this.overflowTrigger(agentId)).toHaveCount(0);
-  }
-
   async openOverflow(agentId: number): Promise<void> {
     const trigger = this.overflowTrigger(agentId);
     await expect(trigger).toBeVisible({ timeout: 10_000 });
