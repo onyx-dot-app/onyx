@@ -1,6 +1,9 @@
 import { test } from "@playwright/test";
 import { loginAsRandomUser } from "@tests/e2e/utils/auth";
-import { grantAddAgents } from "@tests/e2e/utils/grantPermissions";
+import {
+  grantAddAgents,
+  deleteGrantGroups,
+} from "@tests/e2e/utils/grantPermissions";
 import {
   sendMessage,
   startNewChat,
@@ -18,7 +21,7 @@ test("Chat workflow", async ({ page, browser }) => {
   // );
   const { email } = await loginAsRandomUser(page);
   // this flow creates an agent through the UI, which EE gates
-  await grantAddAgents(browser, email);
+  const grantGroupId = await grantAddAgents(browser, email);
 
   // Navigate to the chat page
   await page.goto("/app");
@@ -57,4 +60,6 @@ test("Chat workflow", async ({ page, browser }) => {
 
   // Verify the presence of the default agent text
   await verifyDefaultAgentIsChosen(page);
+
+  await deleteGrantGroups(browser, [grantGroupId]);
 });
