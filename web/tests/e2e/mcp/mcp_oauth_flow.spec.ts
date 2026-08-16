@@ -472,8 +472,8 @@ test.describe("MCP OAuth flows", () => {
         toolId: curatorToolId,
       };
 
-      // Isolation: a second curator must not be able to edit the first
-      // curator's server.
+      // Isolation: the second curator manages a different group, so the first
+      // curator's group-private server is neither listed nor readable.
       const curatorTwoContext = await browser.newContext();
       const curatorTwoPage = await curatorTwoContext.newPage();
       await apiLogin(
@@ -482,9 +482,13 @@ test.describe("MCP OAuth flows", () => {
         curatorTwoCredentials!.password
       );
       await curatorTwoPage.goto("/admin/actions/mcp");
+      // anchor on the page rendering, else the absence check races the load
+      await expect(
+        curatorTwoPage.getByRole("button", { name: /Add MCP Server/i })
+      ).toBeVisible({ timeout: 30_000 });
       await expect(
         curatorTwoPage.getByText(serverName, { exact: false })
-      ).not.toHaveCount(0);
+      ).toHaveCount(0);
 
       const editResponse = await curatorTwoPage.request.get(
         `${oauthConfig().appBaseUrl}/api/admin/mcp/servers/${serverId}`
