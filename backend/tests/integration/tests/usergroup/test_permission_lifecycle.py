@@ -50,6 +50,11 @@ def _grant_group(
         cc_pair_ids=[],
         user_performing_action=admin,
     )
+    # Creation kicks off a sync, and edit/delete routes reject the group while one is
+    # in flight — a later delete 404s without this.
+    UserGroupManager.wait_for_sync(
+        user_performing_action=admin, user_groups_to_check=[group]
+    )
     UserGroupManager.set_permissions(
         user_group=group,
         permissions=[permission.value],
