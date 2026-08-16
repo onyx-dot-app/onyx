@@ -114,7 +114,8 @@ def test_service_account_inherits_its_groups_permissions(
 
     assert Permission.MANAGE_LLMS.value in effective_permissions(created["user_id"])
 
-    # The whole chain, not just the projection: the key opens a route its creator can't.
+    # intended: the permission is admin-equivalent, so a key may carry grants its
+    # creator lacks
     key_headers = {"Authorization": f"Bearer {created['api_key']}"}
     assert_response(
         call_endpoint("GET", "/admin/llm/provider", None, key_headers, None),
