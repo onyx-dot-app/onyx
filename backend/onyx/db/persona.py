@@ -1997,16 +1997,21 @@ def get_persona_by_id(
 
 
 def get_personas_by_ids(
-    persona_ids: list[int], db_session: Session
+    persona_ids: list[int], db_session: Session, for_update: bool = False
 ) -> Sequence[Persona]:
     """WARNING: Unsafe, can fetch personas from all users."""
     if not persona_ids:
         return []
-    personas = db_session.scalars(
-        select(Persona).where(Persona.id.in_(persona_ids))
-    ).all()
-
-    return personas
+    stmt = select(Persona).where(Persona.id.in_(persona_ids))
+    if for_update:
+        # Ordered so overlapping requests lock in the same order. FOR NO KEY UPDATE
+        # keeps FK takers, like a new chat session on the agent, unblocked.
+        stmt = (
+            stmt.order_by(Persona.id)
+            .execution_options(populate_existing=True)
+            .with_for_update(key_share=True)
+        )
+    return db_session.scalars(stmt).all()
 
 
 def delete_persona_by_name(

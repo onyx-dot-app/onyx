@@ -475,7 +475,7 @@ def test_manager_reads_detail_of_managed_cc_pair(env: _ScopedEnv) -> None:
     )
     for path in [
         f"/manage/admin/cc-pair/{cc_pair.id}",
-        f"/manage/admin/cc-pair/{cc_pair.id}/index-attempts?page=0&page_size=10",
+        f"/manage/admin/cc-pair/{cc_pair.id}/index-attempts?page_num=0&page_size=10",
         f"/manage/admin/cc-pair/{cc_pair.id}/last_pruned",
     ]:
         resp = call_endpoint(

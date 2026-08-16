@@ -59,7 +59,7 @@ from onyx.db.document_set import (
 from onyx.db.engine.sql_engine import get_session
 from onyx.db.enums import Permission, PermissionAuthority
 from onyx.db.models import User
-from onyx.db.persona import fetch_persona_by_id_for_user
+from onyx.db.persona import fetch_persona_by_id_for_user, get_personas_by_ids
 from onyx.error_handling.error_codes import OnyxErrorCode
 from onyx.error_handling.exceptions import OnyxError
 from onyx.server.security.store import get_security_settings
@@ -361,11 +361,23 @@ def update_group_agents(
     if fetch_user_group(db_session, user_group_id) is None:
         raise OnyxError(OnyxErrorCode.NOT_FOUND, "User group not found")
 
+    attach_ids = set(request.added_agent_ids)
+    detach_ids = set(request.removed_agent_ids)
+    if attach_ids & detach_ids:
+        raise OnyxError(
+            OnyxErrorCode.INVALID_INPUT,
+            "An agent cannot be both added and removed.",
+        )
+
+    # Read groups under the lock: update_persona_access replaces the whole group list,
+    # so a pre-lock read re-applies a share a concurrent save just revoked.
+    get_personas_by_ids(list(attach_ids | detach_ids), db_session, for_update=True)
+
     # A global groups admin shares any agent (READ_AGENTS resolves the whole org on the
     # non-editable branch); a scoped manager stays pinned to their editable set.
     get_editable = not has_global_permission(user, Permission.MANAGE_USER_GROUPS)
 
-    for agent_id in request.added_agent_ids:
+    for agent_id in attach_ids:
         persona = fetch_persona_by_id_for_user(
             db_session=db_session,
             persona_id=agent_id,
@@ -382,7 +394,7 @@ def update_group_agents(
                 group_ids=current_group_ids + [user_group_id],
             )
 
-    for agent_id in request.removed_agent_ids:
+    for agent_id in detach_ids:
         persona = fetch_persona_by_id_for_user(
             db_session=db_session,
             persona_id=agent_id,
