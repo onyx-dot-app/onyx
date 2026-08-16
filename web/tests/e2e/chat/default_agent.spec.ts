@@ -13,6 +13,7 @@ import {
   waitForUnifiedGreeting,
 } from "@tests/e2e/utils/tools";
 import { OnyxApiClient } from "@tests/e2e/utils/onyxApiClient";
+import { grantAddAgents } from "@tests/e2e/utils/grantPermissions";
 
 // Tool-related test selectors now imported from shared utils
 
@@ -58,10 +59,12 @@ test.describe("Default Agent Tests", () => {
     }
   });
 
-  test.beforeEach(async ({ page }) => {
+  test.beforeEach(async ({ page, browser }) => {
     // Clear cookies and log in as a random user
     await page.context().clearCookies();
-    await loginAsRandomUser(page);
+    const { email } = await loginAsRandomUser(page);
+    // several tests here create an agent through the UI, which EE gates
+    await grantAddAgents(browser, email);
 
     // Navigate to the chat page
     await page.goto("/app");

@@ -1,5 +1,6 @@
 import { test, expect } from "@playwright/test";
 import { loginAs, apiLogin } from "@tests/e2e/utils/auth";
+import { Permission } from "@/lib/types";
 import { ensureOnboardingComplete } from "@tests/e2e/utils/chatActions";
 import { OnyxApiClient } from "@tests/e2e/utils/onyxApiClient";
 import {
@@ -90,7 +91,18 @@ test.describe("Default Agent MCP Integration", () => {
 
     basicUserEmail = `pw-basic-user-${Date.now()}@example.com`;
     basicUserPassword = "BasicUserPass123!";
-    await adminClient.registerUser(basicUserEmail, basicUserPassword);
+    const basicUser = await adminClient.registerUser(
+      basicUserEmail,
+      basicUserPassword
+    );
+    // this user creates an agent through the UI, which EE gates on ADD_AGENTS
+    const addAgentsGroupId = await adminClient.createUserGroup(
+      `mcp-add-agents-${Date.now()}`,
+      [basicUser.id]
+    );
+    await adminClient.setUserGroupPermissions(addAgentsGroupId, [
+      Permission.ADD_AGENTS,
+    ]);
 
     await adminContext.close();
   });

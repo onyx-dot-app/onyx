@@ -53,16 +53,18 @@ function buildMcpServerUrl(baseUrl: string): string {
   return trimmed.endsWith("/mcp") ? trimmed : `${trimmed}/mcp`;
 }
 
-/** Confirm the current session belongs to the expected user + role. */
+/** Confirm the current session belongs to the expected user. Admin status comes
+ *  from effective_permissions now that roles are gone. */
 async function verifySessionUser(
   page: Page,
-  expected: { email: string; role: string }
+  expected: { email: string; isAdmin: boolean }
 ): Promise<void> {
   const response = await page.request.get(`${oauthConfig().appBaseUrl}/api/me`);
   expect(response.ok()).toBeTruthy();
   const data = await response.json();
   expect(data.email).toBe(expected.email);
-  expect(data.role).toBe(expected.role);
+  const permissions: string[] = data.effective_permissions ?? [];
+  expect(permissions.includes("admin")).toBe(expected.isAdmin);
 }
 
 async function waitForUserRecord(
@@ -290,7 +292,7 @@ test.describe("MCP OAuth flows", () => {
     await loginAs(page, "admin");
     await verifySessionUser(page, {
       email: TEST_ADMIN_CREDENTIALS.email,
-      role: "admin",
+      isAdmin: true,
     });
     const adminClient = new OnyxApiClient(page.request);
 
@@ -387,7 +389,7 @@ test.describe("MCP OAuth flows", () => {
     );
     await verifySessionUser(page, {
       email: curatorCredentials!.email,
-      role: "curator",
+      isAdmin: false,
     });
     const curatorClient = new OnyxApiClient(page.request);
 

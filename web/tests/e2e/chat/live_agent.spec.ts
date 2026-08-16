@@ -1,5 +1,6 @@
 import { test } from "@playwright/test";
 import { loginAsRandomUser } from "@tests/e2e/utils/auth";
+import { grantAddAgents } from "@tests/e2e/utils/grantPermissions";
 import {
   sendMessage,
   startNewChat,
@@ -7,7 +8,7 @@ import {
   verifyDefaultAgentIsChosen,
 } from "@tests/e2e/utils/chatActions";
 
-test("Chat workflow", async ({ page }) => {
+test("Chat workflow", async ({ page, browser }) => {
   // Clear cookies and log in as a random user
   await page.context().clearCookies();
   // Use waitForSelector for robustness instead of expect().toBeVisible()
@@ -15,7 +16,9 @@ test("Chat workflow", async ({ page }) => {
   //   `//div[@aria-label="Agents Modal"]//*[contains(text(), "${agentName}") and not(contains(@class, 'invisible'))]`,
   //   { state: "visible", timeout: 10000 }
   // );
-  await loginAsRandomUser(page);
+  const { email } = await loginAsRandomUser(page);
+  // this flow creates an agent through the UI, which EE gates
+  await grantAddAgents(browser, email);
 
   // Navigate to the chat page
   await page.goto("/app");
