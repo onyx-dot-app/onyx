@@ -26,8 +26,10 @@ from ee.onyx.auth.sso_domain_verification import (
 )
 from ee.onyx.db.tenant_sso_domain import (
     claim_email_domains,
+    is_claimed_domain,
     is_email_domain_verified,
     lookup_tenant_id_for_email_domain,
+    mark_domain_unverified,
     mark_domain_verified,
 )
 from ee.onyx.db.user_tenant_mapping import (
@@ -289,6 +291,28 @@ def test_revalidation_keeps_a_domain_on_a_transient_dns_failure(
             resolver_cls.return_value.resolve.side_effect = dns.exception.Timeout
             revalidate_tenant_domains(tenant_id)
         assert lookup_tenant_id_for_email_domain(f"user@{domain}") == tenant_id
+    finally:
+        _clear_domains(catalog_with_domains, tenant_id)
+
+
+@patch("ee.onyx.db.tenant_sso_domain.MULTI_TENANT", True)
+def test_catalog_writes_match_a_claim_regardless_of_domain_casing(
+    catalog_with_domains: Session,
+) -> None:
+    """Catalog keys are normalized, so a caller passing mixed case or surrounding
+    whitespace resolves the claim it owns rather than missing it and leaving the
+    domain verified and routable."""
+    tenant_id = f"tenant_{uuid4().hex[:12]}"
+    domain = f"acme-{uuid4().hex[:8]}.com"
+    try:
+        claim_email_domains(tenant_id, [f"  {domain.upper()}  "])
+        assert is_claimed_domain(tenant_id, f"  {domain.upper()}  ")
+
+        mark_domain_verified(tenant_id, domain.upper())
+        assert lookup_tenant_id_for_email_domain(f"user@{domain}") == tenant_id
+
+        mark_domain_unverified(tenant_id, f" {domain.upper()} ")
+        assert lookup_tenant_id_for_email_domain(f"user@{domain}") is None
     finally:
         _clear_domains(catalog_with_domains, tenant_id)
 
