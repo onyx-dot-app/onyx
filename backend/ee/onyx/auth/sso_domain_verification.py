@@ -109,7 +109,13 @@ def _proof_still_present(tenant_id: str, domain: str) -> bool:
 def revalidate_tenant_domains(tenant_id: str) -> None:
     """Re-resolve each verified domain's TXT proof and drop verification for any
     whose record is gone, so a domain the workspace no longer controls stops
-    routing strangers into it."""
+    routing strangers into it.
+
+    Every domain is attempted even if one fails, then the run raises so a domain
+    left routing past its proof surfaces as a failed task rather than only a log
+    line. The next run retries it.
+    """
+    failed: list[str] = []
     for record in list_login_domains(tenant_id):
         if not record.verified:
             continue
@@ -123,3 +129,9 @@ def revalidate_tenant_domains(tenant_id: str) -> None:
             )
         except Exception:
             logger.exception("Failed to re-validate SSO domain %s", record.domain)
+            failed.append(record.domain)
+
+    if failed:
+        raise RuntimeError(
+            f"Could not re-validate SSO domains, still routing: {', '.join(failed)}"
+        )
