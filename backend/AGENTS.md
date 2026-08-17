@@ -91,6 +91,15 @@ Write the migration manually and place it in the file that alembic creates when 
 Run pytest through `uv run` from the repo root — no venv activation needed (`uv run` uses the
 lockfile-pinned environment and creates/syncs `.venv` as needed).
 
+`ods test` is the shorter form of every command in this section. It picks the suite from a name
+or a path, supplies `.vscode/.env` where the suite needs it, and passes the rest to pytest:
+
+```bash
+ods test unit                                   # the whole suite
+ods test backend/tests/unit/onyx/test_foo.py    # one file
+ods test external -k some_name                  # arguments reach pytest
+```
+
 There are 4 main types of tests within Onyx:
 
 ### Model choice for tests that make real LLM calls

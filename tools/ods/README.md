@@ -244,6 +244,55 @@ ods web lint
 ods web test --watch
 ```
 
+### `test` - Run Tests
+
+Run any test suite in the repo without changing directories or remembering
+which runner applies.
+
+```shell
+ods test <suite|path> [args...]
+```
+
+The first argument is a suite name or a path inside a suite. A path selects the
+suite that covers it, so you can pass a file straight from your editor. All
+later arguments go to the underlying runner.
+
+| Suite | Aliases | Runner | Needs services |
+| --- | --- | --- | --- |
+| `unit` | `u` | pytest | no |
+| `external` | `edu`, `ext` | pytest | Postgres, Redis, OpenSearch, MinIO |
+| `integration` | `int` | pytest | full deployment |
+| `web` | `jest` | jest | no |
+| `e2e` | `playwright`, `pw` | playwright | full deployment |
+| `mobile` | | jest-expo | no |
+| `backend` | `py` | pytest | any other `backend/tests` path |
+
+Backend suites run from `backend/`, so `backend/pytest.ini` applies. Suites that
+need credentials read `.vscode/.env`, which is created from
+`.vscode/env_template.txt` on first use. Enterprise Edition features are on by
+default; use `--no-ee` to turn them off.
+
+**Examples:**
+
+```shell
+# Run a whole suite
+ods test unit
+
+# Run one file, or one test
+ods test backend/tests/unit/onyx/utils/test_vespa_tasks.py
+ods test backend/tests/unit/onyx/utils/test_vespa_tasks.py::test_monitor
+
+# Forward arguments to the runner
+ods test unit -k some_name
+ods test web --watch
+
+# Run a backend suite in parallel (pytest-xdist)
+ods test external --parallel
+
+# Web end-to-end tests
+ods test e2e chat
+```
+
 ### `dev` - Devcontainer Management
 
 Manage the Onyx devcontainer. Also available as `ods dc`.
