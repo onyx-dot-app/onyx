@@ -233,10 +233,14 @@ def test_salesforce_standard_oauth_invalid_domain_and_disabled_config(
 
     try:
         monkeypatch.setattr(standard_oauth.uuid, "uuid4", lambda: _INVALID_STATE)
-        with pytest.raises(OnyxError, match="Invalid additional kwargs"):
+        with pytest.raises(OnyxError, match="Salesforce URL must use HTTPS"):
             standard_oauth.oauth_authorize(
                 request=_request(
-                    {"salesforce_my_domain_url": "https://internal.example"}
+                    {
+                        "salesforce_my_domain_url": (
+                            "danswer-dev-ed.develop.my.salesforce.com"
+                        )
+                    }
                 ),
                 source=DocumentSource.SALESFORCE,
                 desired_return_url=_RETURN_URL,

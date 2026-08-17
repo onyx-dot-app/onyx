@@ -1,8 +1,9 @@
 import * as Yup from "yup";
 
-import { Button, InputTypeIn } from "@opal/components";
+import { Button, InputTypeIn, MessageCard } from "@opal/components";
 import { InputVertical, Section } from "@opal/layouts";
 import { Form, Formik, FormikHelpers } from "formik";
+import { useState } from "react";
 
 import { OAuthAdditionalKwargDescription } from "@/lib/connectors/credentials";
 import { getConnectorOauthRedirectUrl } from "@/lib/connectors/oauth";
@@ -10,6 +11,8 @@ import { ValidSources } from "@/lib/types";
 import { FormikField } from "@/refresh-components/form/FormikField";
 
 type OAuthFormValues = Record<string, string>;
+
+const OAUTH_REDIRECT_ERROR = "Unable to start OAuth";
 
 interface CreateStdOAuthCredentialProps {
   sourceType: ValidSources;
@@ -20,6 +23,8 @@ export function CreateStdOAuthCredential({
   sourceType,
   additionalFields,
 }: CreateStdOAuthCredentialProps) {
+  const [errorMessage, setErrorMessage] = useState<string | null>(null);
+
   async function handleSubmit(
     values: OAuthFormValues,
     formikHelpers: FormikHelpers<OAuthFormValues>
@@ -30,12 +35,20 @@ export function CreateStdOAuthCredential({
       return;
     }
 
+    setErrorMessage(null);
     formikHelpers.setSubmitting(true);
-    const redirectUrl = await getConnectorOauthRedirectUrl(sourceType, values);
-    if (!redirectUrl) {
-      throw new Error("No redirect URL found for OAuth connector");
+    try {
+      const redirectUrl = await getConnectorOauthRedirectUrl(
+        sourceType,
+        values
+      );
+      window.location.href = redirectUrl;
+    } catch (error) {
+      setErrorMessage(
+        error instanceof Error ? error.message : OAUTH_REDIRECT_ERROR
+      );
+      formikHelpers.setSubmitting(false);
     }
-    window.location.href = redirectUrl;
   }
 
   return (
@@ -71,6 +84,13 @@ export function CreateStdOAuthCredential({
                 />
               </InputVertical>
             ))}
+            {errorMessage && (
+              <MessageCard
+                variant="error"
+                title="Could not connect"
+                description={errorMessage}
+              />
+            )}
             <Section flexDirection="row" justifyContent="start">
               <Button disabled={isSubmitting} type="submit">
                 Connect

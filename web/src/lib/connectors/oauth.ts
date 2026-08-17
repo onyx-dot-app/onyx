@@ -1,12 +1,19 @@
 import useSWR from "swr";
-import { ValidSources } from "../types";
-import { OAuthDetails } from "./credentials";
-import { errorHandlingFetcher } from "../fetcher";
+
+import { OAuthDetails } from "@/lib/connectors/credentials";
+import { errorHandlingFetcher, parseErrorDetail } from "@/lib/fetcher";
+import { ValidSources } from "@/lib/types";
+
+const OAUTH_REDIRECT_ERROR = "Unable to start OAuth";
+
+interface OAuthRedirectResponse {
+  redirect_url: string;
+}
 
 export async function getConnectorOauthRedirectUrl(
   connector: ValidSources,
   additional_kwargs: Record<string, string>
-): Promise<string | null> {
+): Promise<string> {
   const queryParams = new URLSearchParams({
     desired_return_url: window.location.href,
     ...additional_kwargs,
@@ -16,12 +23,11 @@ export async function getConnectorOauthRedirectUrl(
   );
 
   if (!response.ok) {
-    console.error(`Failed to fetch OAuth redirect URL for ${connector}`);
-    return null;
+    throw new Error(await parseErrorDetail(response, OAUTH_REDIRECT_ERROR));
   }
 
-  const data = await response.json();
-  return data.redirect_url as string;
+  const data = (await response.json()) as OAuthRedirectResponse;
+  return data.redirect_url;
 }
 
 export function useOAuthDetails(sourceType: ValidSources) {

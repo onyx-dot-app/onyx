@@ -61,10 +61,11 @@ def _get_additional_kwargs(
     try:
         connector_cls.AdditionalOauthKwargs(**additional_kwargs_dict)
     except ValidationError as error:
-        detail = (
-            f"Invalid additional kwargs. Got {additional_kwargs_dict}, expected "
-            f"{connector_cls.AdditionalOauthKwargs.model_json_schema()}"
-        )
+        messages = {
+            str(item["msg"]).removeprefix("Value error, ")
+            for item in error.errors(include_url=False, include_input=False)
+        }
+        detail = "Invalid OAuth configuration: " + "; ".join(sorted(messages))
         raise OnyxError(OnyxErrorCode.VALIDATION_ERROR, detail) from error
 
     return additional_kwargs_dict
