@@ -31,6 +31,7 @@ from onyx.db.models import (
     User__UserGroup,
 )
 from onyx.db.permissions import recompute_user_permissions__no_commit
+from tests.integration.common_utils.constants import ADMIN_USER_NAME
 from tests.integration.common_utils.managers.cc_pair import CCPairManager
 from tests.integration.common_utils.managers.connector import ConnectorManager
 from tests.integration.common_utils.managers.credential import CredentialManager
@@ -39,6 +40,7 @@ from tests.integration.common_utils.managers.file import FileManager
 from tests.integration.common_utils.managers.index_attempt import IndexAttemptManager
 from tests.integration.common_utils.managers.user import UserManager
 from tests.integration.common_utils.managers.user_group import UserGroupManager
+from tests.integration.common_utils.reset import reset_all
 from tests.integration.common_utils.test_models import (
     DATestDocumentSet,
     DATestUser,
@@ -93,8 +95,17 @@ def _cc_pair_status(cc_pair_id: int) -> str:
         return status.value
 
 
-@pytest.fixture
-def env(reset: None, admin_user: DATestUser) -> _ScopedEnv:  # noqa: ARG001
+@pytest.fixture(scope="module")
+def module_reset() -> None:
+    """Once per module: reset_all() is a ~20s alembic downgrade/upgrade, and
+    44 tests of it overran the CI job's whole budget."""
+    reset_all()
+
+
+@pytest.fixture(scope="module")
+def env(module_reset: None) -> _ScopedEnv:  # noqa: ARG001
+    # first registered user is promoted to admin automatically
+    admin_user = UserManager.create(name=ADMIN_USER_NAME)
     manager = UserManager.create(name="scoped_manager")
     managed_group = UserGroupManager.create(
         name="managed", user_ids=[manager.id], user_performing_action=admin_user
