@@ -60,6 +60,7 @@ from onyx.db.engine.sql_engine import (
 )
 from onyx.db.enums import (
     AccessType,
+    CapabilityCheckTrigger,
     ConnectorCredentialPairStatus,
     SyncStatus,
     SyncType,
@@ -515,6 +516,7 @@ def connector_permission_sync_generator_task(
                     cc_pair.access_type,
                     db_session,
                     enforce_creation=False,
+                    trigger=CapabilityCheckTrigger.PERM_SYNC_ATTEMPT,
                 )
                 if not created:
                     task_logger.warning(

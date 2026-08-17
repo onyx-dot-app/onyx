@@ -154,6 +154,7 @@ def validate_ccpair_for_user(
     access_type: AccessType,
     db_session: Session,
     enforce_creation: bool = True,
+    trigger: CapabilityCheckTrigger = CapabilityCheckTrigger.CC_PAIR_VALIDATION,
 ) -> bool:
     if INTEGRATION_TESTS_MODE:
         return True
@@ -190,7 +191,7 @@ def validate_ccpair_for_user(
             credential_id=credential_id,
             connector_id=connector_id,
             source=source,
-            trigger=CapabilityCheckTrigger.CC_PAIR_VALIDATION,
+            trigger=trigger,
             error=error,
             perm_sync_validated=perm_sync_validated,
             connector_specific_config=connector_specific_config,
