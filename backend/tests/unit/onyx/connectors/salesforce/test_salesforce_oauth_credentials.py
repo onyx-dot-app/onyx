@@ -1,3 +1,4 @@
+from pathlib import Path
 from types import TracebackType
 from typing import Any
 from unittest.mock import MagicMock, patch
@@ -5,9 +6,10 @@ from unittest.mock import MagicMock, patch
 import pytest
 from pydantic import ValidationError
 from requests.exceptions import HTTPError
+from simple_salesforce.exceptions import SalesforceExpiredSession
 
 from onyx.connectors.interfaces import CredentialsProviderInterface
-from onyx.connectors.salesforce import auth
+from onyx.connectors.salesforce import auth, salesforce_calls
 from onyx.connectors.salesforce.auth import (
     SalesforceOAuthTokenError,
     build_salesforce_client,
@@ -237,6 +239,7 @@ def test_authorization_code_exchange_uses_typed_form(
         f"{PRODUCTION_LOGIN_URL}/services/oauth2/token"
     )
     assert request.call_args.kwargs["log_request_data"] is False
+    assert request.call_args.kwargs["tries"] == 1
     assert request.call_args.kwargs["data"] == {
         "grant_type": "authorization_code",
         "code": "authorization-code",
@@ -285,10 +288,31 @@ def test_token_exchange_includes_safe_structured_oauth_error(
     assert message.startswith(
         "Salesforce token request failed with status 400: invalid_grant:"
     )
-    assert message.count("[redacted]") == 3
+    assert message.count("[REDACTED]") == 3
     assert "authorization-code" not in message
     assert "client-secret" not in message
     assert "pkce-verifier" not in message
+
+
+@patch("onyx.utils.retry_wrapper.requests.request")
+def test_token_exchange_does_not_retry_terminal_oauth_error(
+    request: MagicMock,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    _configure_oauth(monkeypatch)
+    response = _error_response({"error": "invalid_grant"})
+    response.raise_for_status.side_effect = HTTPError(response=response)
+    request.return_value = response
+
+    with pytest.raises(SalesforceOAuthTokenError):
+        exchange_salesforce_authorization_code(
+            login_url=PRODUCTION_LOGIN_URL,
+            code="authorization-code",
+            redirect_uri="https://onyx.example/oauth/callback",
+            code_verifier="pkce-verifier",
+        )
+
+    request.assert_called_once()
 
 
 def test_token_refresh_redacts_sensitive_values_from_oauth_error(
@@ -313,7 +337,7 @@ def test_token_refresh_redacts_sensitive_values_from_oauth_error(
         )
 
     message = str(exc_info.value)
-    assert message.count("[redacted]") == 2
+    assert message.count("[REDACTED]") == 2
     assert "refresh-token" not in message
     assert "client-secret" not in message
 
@@ -492,6 +516,88 @@ def test_onyx_salesforce_refreshes_invalid_session_mid_run() -> None:
     assert session.request.call_args_list[1].kwargs["headers"]["Authorization"] == (
         "Bearer new-access-token"
     )
+
+
+@pytest.mark.parametrize("payload", [[], {}, "unauthorized"])
+def test_onyx_salesforce_routes_malformed_unauthorized_response(
+    payload: Any,
+) -> None:
+    unauthorized = MagicMock(
+        status_code=401,
+        url=f"{INSTANCE_URL}/services/data/v59.0/sobjects",
+        text="unauthorized",
+    )
+    unauthorized.json.return_value = payload
+    session = MagicMock()
+    session.proxies = {}
+    session.request.return_value = unauthorized
+    refresh_callback = MagicMock()
+    client = OnyxSalesforce(
+        session_id="expired-access-token",
+        instance_url=INSTANCE_URL,
+        session=session,
+        refresh_callback=refresh_callback,
+    )
+
+    with pytest.raises(SalesforceExpiredSession):
+        client._call_salesforce("GET", unauthorized.url)
+
+    refresh_callback.assert_not_called()
+
+
+def test_bulk_download_rebuilds_client_after_session_refresh(tmp_path: Path) -> None:
+    original_path = tmp_path / "result.csv"
+    original_path.write_text("Id\n001\n")
+    expired = SalesforceExpiredSession(
+        INSTANCE_URL,
+        401,
+        "Contact",
+        b"INVALID_SESSION_ID",
+    )
+    expired_bulk_type = MagicMock()
+    expired_bulk_type.download.side_effect = expired
+    refreshed_bulk_type = MagicMock()
+    refreshed_bulk_type.download.return_value = [{"file": str(original_path)}]
+
+    sf_client = MagicMock(spec=OnyxSalesforce)
+    sf_client.session_id = "expired-access-token"
+    sf_client.bulk2_url = f"{INSTANCE_URL}/services/data/v59.0/jobs/"
+    sf_client.proxies = {}
+    sf_client.session = MagicMock()
+
+    def refresh_session() -> None:
+        sf_client.session_id = "new-access-token"
+
+    sf_client.refresh_session.side_effect = refresh_session
+    bulk_handler = MagicMock(
+        bulk2_url=sf_client.bulk2_url,
+        headers={},
+        session=sf_client.session,
+    )
+    with (
+        patch.object(
+            salesforce_calls, "SFBulk2Handler", return_value=bulk_handler
+        ) as handler,
+        patch.object(
+            salesforce_calls,
+            "SFBulk2Type",
+            side_effect=[expired_bulk_type, refreshed_bulk_type],
+        ),
+    ):
+        sf_type, paths = salesforce_calls._bulk_retrieve_from_salesforce(
+            "Contact",
+            "SELECT Id FROM Contact",
+            str(tmp_path),
+            sf_client,
+        )
+
+    assert sf_type == "Contact"
+    assert paths == [str(tmp_path / "Contact.result.csv")]
+    sf_client.refresh_session.assert_called_once_with()
+    assert [call.kwargs["session_id"] for call in handler.call_args_list] == [
+        "expired-access-token",
+        "new-access-token",
+    ]
 
 
 def test_oauth_credentials_reject_untrusted_instance_url() -> None:

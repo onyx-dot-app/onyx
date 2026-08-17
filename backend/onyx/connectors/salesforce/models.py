@@ -1,19 +1,23 @@
-import re
 from enum import StrEnum
 from typing import Annotated, Any, Literal
-from urllib.parse import urlsplit
 
-from pydantic import AfterValidator, BaseModel, ConfigDict, Field
+from pydantic import (
+    AfterValidator,
+    BaseModel,
+    ConfigDict,
+    Field,
+    HttpUrl,
+    TypeAdapter,
+    ValidationError,
+)
 
 AUTHENTICATION_METHOD_FIELD = "authentication_method"
 
-_MY_DOMAIN_HOST_PATTERN = re.compile(
-    r"^[a-z0-9](?:[a-z0-9.-]*[a-z0-9])?\.(?:sandbox\.)?my\.salesforce\.com$"
-)
-_INSTANCE_HOST_PATTERN = re.compile(
-    r"^[a-z0-9](?:[a-z0-9.-]*[a-z0-9])?\.salesforce\.com$"
-)
-_HOST_LABEL_PATTERN = re.compile(r"^[a-z0-9](?:[a-z0-9-]{0,61}[a-z0-9])?$")
+_HTTP_URL_ADAPTER = TypeAdapter(HttpUrl)
+_MY_DOMAIN_HOST_SUFFIX = ".my.salesforce.com"
+_INSTANCE_HOST_SUFFIX = ".salesforce.com"
+_MAX_HOST_LENGTH = 253
+_MAX_HOST_LABEL_LENGTH = 63
 
 
 class SalesforceAuthenticationMethod(StrEnum):
@@ -26,29 +30,37 @@ class SalesforceGrantType(StrEnum):
     REFRESH_TOKEN = "refresh_token"
 
 
-def _validate_salesforce_url(value: str, host_pattern: re.Pattern[str]) -> str:
-    parsed = urlsplit(value)
+def _valid_host_label(label: str) -> bool:
+    return (
+        0 < len(label) <= _MAX_HOST_LABEL_LENGTH
+        and label[0].isalnum()
+        and label[-1].isalnum()
+        and all(character.isalnum() or character == "-" for character in label)
+    )
+
+
+def _validate_salesforce_url(value: str, host_suffix: str) -> str:
     try:
-        port = parsed.port
-    except ValueError as error:
-        raise ValueError("Salesforce URL has an invalid port") from error
+        parsed = _HTTP_URL_ADAPTER.validate_python(value)
+    except ValidationError as error:
+        raise ValueError("Salesforce URL is invalid") from error
 
     if parsed.scheme != "https":
         raise ValueError("Salesforce URL must use HTTPS")
-    if parsed.username is not None or parsed.password is not None:
+    if "@" in value or parsed.username is not None or parsed.password is not None:
         raise ValueError("Salesforce URL must not contain credentials")
-    if "?" in value or "#" in value:
+    if parsed.query is not None or parsed.fragment is not None:
         raise ValueError("Salesforce URL must not contain a query or fragment")
-    if parsed.path not in ("", "/"):
+    if parsed.path != "/":
         raise ValueError("Salesforce URL must not contain a path")
-    if port not in (None, 443):
+    if parsed.port != 443:
         raise ValueError("Salesforce URL must use the default HTTPS port")
 
-    hostname = parsed.hostname
-    if not hostname or not host_pattern.fullmatch(hostname):
+    hostname = parsed.host
+    if not hostname or not hostname.endswith(host_suffix):
         raise ValueError("Salesforce URL has an unsupported host")
-    if len(hostname) > 253 or any(
-        not _HOST_LABEL_PATTERN.fullmatch(label) for label in hostname.split(".")
+    if len(hostname) > _MAX_HOST_LENGTH or any(
+        not _valid_host_label(label) for label in hostname.split(".")
     ):
         raise ValueError("Salesforce URL has an invalid host")
 
@@ -56,11 +68,11 @@ def _validate_salesforce_url(value: str, host_pattern: re.Pattern[str]) -> str:
 
 
 def validate_salesforce_my_domain_url(value: str) -> str:
-    return _validate_salesforce_url(value, _MY_DOMAIN_HOST_PATTERN)
+    return _validate_salesforce_url(value, _MY_DOMAIN_HOST_SUFFIX)
 
 
 def validate_salesforce_instance_url(value: str) -> str:
-    return _validate_salesforce_url(value, _INSTANCE_HOST_PATTERN)
+    return _validate_salesforce_url(value, _INSTANCE_HOST_SUFFIX)
 
 
 SalesforceMyDomainUrl = Annotated[

@@ -19,6 +19,7 @@ from onyx.connectors.salesforce.models import (
     validate_salesforce_my_domain_url,
 )
 from onyx.connectors.salesforce.onyx_salesforce import OnyxSalesforce
+from onyx.utils.redaction import scrub_sensitive_values
 from onyx.utils.retry_wrapper import request_with_retries
 
 _SALESFORCE_TOKEN_PATH = "/services/oauth2/token"
@@ -26,7 +27,6 @@ _FORM_CONTENT_TYPE = "application/x-www-form-urlencoded"
 _CONTENT_TYPE_HEADER = "Content-Type"
 _POST_METHOD = "POST"
 _MAX_OAUTH_ERROR_LENGTH = 500
-_REDACTED_OAUTH_VALUE = "[redacted]"
 
 
 class SalesforceOAuthTokenError(RuntimeError):
@@ -45,21 +45,19 @@ def _sensitive_request_values(
     token_request: (
         SalesforceAuthorizationCodeTokenRequest | SalesforceRefreshTokenRequest
     ),
-) -> tuple[str, ...]:
+) -> list[str]:
     values = [token_request.client_secret]
     if isinstance(token_request, SalesforceAuthorizationCodeTokenRequest):
         values.extend([token_request.code, token_request.code_verifier])
     else:
         values.append(token_request.refresh_token)
-    return tuple(sorted(values, key=len, reverse=True))
+    return values
 
 
-def _safe_oauth_error_text(value: Any, sensitive_values: tuple[str, ...]) -> str | None:
+def _safe_oauth_error_text(value: Any, sensitive_values: list[str]) -> str | None:
     if not isinstance(value, str):
         return None
-    for sensitive_value in sensitive_values:
-        value = value.replace(sensitive_value, _REDACTED_OAUTH_VALUE)
-    normalized = " ".join(value.split())
+    normalized = " ".join(scrub_sensitive_values(value, sensitive_values).split())
     return normalized[:_MAX_OAUTH_ERROR_LENGTH] or None
 
 
@@ -100,6 +98,7 @@ def _request_salesforce_token(
             data=token_request.model_dump(mode="json"),
             headers={_CONTENT_TYPE_HEADER: _FORM_CONTENT_TYPE},
             log_request_data=False,
+            tries=1,
         )
     except HTTPError as error:
         if error.response is None:
