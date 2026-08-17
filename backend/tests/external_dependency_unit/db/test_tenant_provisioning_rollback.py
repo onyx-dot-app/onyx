@@ -1,24 +1,34 @@
 """
-Integration tests for tenant provisioning rollback behavior.
+Tenant provisioning rollback behavior, against a real database.
 
 Tests the fix for the drop_schema bug where:
 1. isidentifier() rejected valid UUID tenant IDs (with hyphens)
 2. SQL syntax was broken (%(schema_name)s instead of proper identifier handling)
 
 This test verifies the full flow: provisioning failure → rollback → schema cleanup.
+Provisioning has to fail partway through for a rollback to happen at all, and no
+API can ask it to, so the failure is injected here rather than driven end to end.
 """
 
 import uuid
 from unittest.mock import MagicMock, patch
 
+import pytest
 from sqlalchemy import text
 
 from ee.onyx.server.tenants.schema_management import (
     create_schema_if_not_exists,
     drop_schema,
 )
-from onyx.db.engine.sql_engine import get_session_with_shared_schema
+from onyx.db.engine.sql_engine import SqlEngine, get_session_with_shared_schema
 from shared_configs.configs import TENANT_ID_PREFIX
+
+
+@pytest.fixture(autouse=True)
+def _engine() -> None:
+    """These tests open their own sessions, so they never pull in the suite's
+    db_session fixture that would otherwise initialize the engine."""
+    SqlEngine.init_engine(pool_size=5, max_overflow=2)
 
 
 def _schema_exists(schema_name: str) -> bool:
