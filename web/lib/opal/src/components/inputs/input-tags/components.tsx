@@ -4,7 +4,7 @@ import "@opal/components/inputs/shared.css";
 // The inner field reuses InputTypeIn's .opal-input-field styling.
 import "@opal/components/inputs/input-type-in/styles.css";
 import "@opal/components/inputs/input-tags/styles.css";
-import { useRef } from "react";
+import { useEffect, useRef } from "react";
 import type { IconFunctionComponent } from "@opal/types";
 import { Button, Tag, TAG_REMOVE_CLASS } from "@opal/components";
 import { SvgX } from "@opal/icons";
@@ -51,6 +51,12 @@ interface InputTagsProps {
 
   /** Renders the clear action button (Figma `Clear`). */
   onClear?: () => void;
+
+  /** Tag rows the field is tall enough to show before it grows. */
+  minRows?: number;
+
+  /** Focuses the text input on mount. */
+  focusOnMount?: boolean;
 }
 
 // ---------------------------------------------------------------------------
@@ -74,9 +80,17 @@ function InputTags({
   disabled = false,
   icon: Icon,
   onClear,
+  minRows = 1,
+  focusOnMount = false,
 }: InputTagsProps) {
   const rootRef = useRef<HTMLDivElement>(null);
   const inputRef = useRef<HTMLInputElement>(null);
+
+  useEffect(() => {
+    if (focusOnMount) inputRef.current?.focus();
+    // Mount only: later prop changes must not steal focus back.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
 
   function handleInputKeyDown(event: React.KeyboardEvent<HTMLInputElement>) {
     // During IME composition, Enter confirms the candidate and Backspace
@@ -111,6 +125,7 @@ function InputTags({
   return (
     <div
       ref={rootRef}
+      role="presentation"
       className="opal-input opal-input-tags"
       data-variant={disabled ? "disabled" : variant}
       onKeyDown={handleRootKeyDown}
@@ -121,7 +136,15 @@ function InputTags({
           <Icon className="opal-input-tags-icon" />
         </div>
       )}
-      <div className="opal-input-tags-tags">
+      <div
+        className="opal-input-tags-tags"
+        data-multi-row={minRows > 1 || undefined}
+        style={
+          minRows > 1
+            ? ({ "--opal-input-tags-rows": minRows } as React.CSSProperties)
+            : undefined
+        }
+      >
         {tags.map((tag) => (
           <Tag
             key={tag.id}

@@ -94,7 +94,7 @@ export interface Settings {
   // are unavailable.
   vector_db_enabled?: boolean;
 
-  // True when hooks are available: single-tenant deployment with HOOK_ENABLED=true.
+  // True when hooks are available: single-tenant deployments only.
   hooks_enabled?: boolean;
 
   // Application version from the ONYX_VERSION env var on the server.

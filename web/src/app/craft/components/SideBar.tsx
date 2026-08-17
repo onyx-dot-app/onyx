@@ -1,6 +1,6 @@
 "use client";
 
-import { memo, useMemo, useCallback, useState, useEffect, useRef } from "react";
+import { memo, useCallback, useState, useEffect, useRef } from "react";
 import type { Route } from "next";
 import { useRouter, usePathname } from "next/navigation";
 import { useBuildContext } from "@/app/craft/contexts/BuildContext";
@@ -212,7 +212,8 @@ function BuildSessionButton({
       >
         <Popover.Anchor>
           <SidebarTab
-            onClick={onLoad}
+            /* While renaming, drop the click target so the input stays usable. */
+            onClick={renaming ? undefined : onLoad}
             selected={isActive}
             rightChildren={rightMenu}
           >
@@ -307,81 +308,6 @@ const MemoizedBuildSidebarInner = memo(() => {
     [requestNavigation, router, returnToMainAgent]
   );
 
-  const newBuildButton = useMemo(
-    () => (
-      <SidebarTab icon={SvgEditBig} folded={folded} onClick={handleNewBuild}>
-        Start Crafting
-      </SidebarTab>
-    ),
-    [folded, handleNewBuild]
-  );
-
-  const scheduledTasksPanel = useMemo(
-    () => (
-      <SidebarTab
-        icon={SvgClock}
-        folded={folded}
-        onClick={() => navigate(CRAFT_TASKS_PATH)}
-        selected={pathname.startsWith(CRAFT_TASKS_PATH)}
-      >
-        Scheduled Tasks
-      </SidebarTab>
-    ),
-    [folded, navigate, pathname]
-  );
-
-  const appsTab = useMemo(
-    () => (
-      <SidebarTab
-        icon={SvgPlug}
-        folded={folded}
-        onClick={() => navigate(CRAFT_APPS_PATH)}
-        selected={pathname.startsWith(CRAFT_APPS_PATH)}
-      >
-        Apps
-      </SidebarTab>
-    ),
-    [folded, navigate, pathname]
-  );
-
-  const skillsPanel = useMemo(
-    () => (
-      <SidebarTab
-        icon={SvgBlocks}
-        folded={folded}
-        onClick={() => navigate(CRAFT_SKILLS_PATH)}
-        selected={pathname.startsWith(CRAFT_SKILLS_PATH)}
-      >
-        Skills
-      </SidebarTab>
-    ),
-    [folded, navigate, pathname]
-  );
-
-  const backToChatButton = useMemo(
-    () => (
-      <SidebarTab
-        icon={SvgArrowLeft}
-        folded={folded}
-        onClick={() => navigate("/app")}
-      >
-        Back to Chat
-      </SidebarTab>
-    ),
-    [folded, navigate]
-  );
-
-  const footer = useMemo(
-    () => (
-      <div>
-        {backToChatButton}
-        <OpencodeDebugLogsButton folded={folded} />
-        <AccountPopover folded={folded} />
-      </div>
-    ),
-    [folded, backToChatButton]
-  );
-
   const showLogoWhenFolded = useShowLogoWhenFolded();
 
   return (
@@ -391,10 +317,30 @@ const MemoizedBuildSidebarInner = memo(() => {
         showLogoWhenFolded={showLogoWhenFolded}
       >
         <div className="flex flex-col gap-0.5">
-          {newBuildButton}
-          {scheduledTasksPanel}
-          {skillsPanel}
-          {appsTab}
+          <SidebarTab icon={SvgEditBig} onClick={handleNewBuild}>
+            Start Crafting
+          </SidebarTab>
+          <SidebarTab
+            icon={SvgClock}
+            onClick={() => navigate(CRAFT_TASKS_PATH)}
+            selected={pathname.startsWith(CRAFT_TASKS_PATH)}
+          >
+            Scheduled Tasks
+          </SidebarTab>
+          <SidebarTab
+            icon={SvgBlocks}
+            onClick={() => navigate(CRAFT_SKILLS_PATH)}
+            selected={pathname.startsWith(CRAFT_SKILLS_PATH)}
+          >
+            Skills
+          </SidebarTab>
+          <SidebarTab
+            icon={SvgPlug}
+            onClick={() => navigate(CRAFT_APPS_PATH)}
+            selected={pathname.startsWith(CRAFT_APPS_PATH)}
+          >
+            Apps
+          </SidebarTab>
         </div>
       </SidebarLayouts.Header>
       <SidebarLayouts.Body scrollKey="build-sidebar">
@@ -434,7 +380,15 @@ const MemoizedBuildSidebarInner = memo(() => {
           </>
         )}
       </SidebarLayouts.Body>
-      <SidebarLayouts.Footer>{footer}</SidebarLayouts.Footer>
+      <SidebarLayouts.Footer>
+        <div>
+          <SidebarTab icon={SvgArrowLeft} onClick={() => navigate("/app")}>
+            Back to Chat
+          </SidebarTab>
+          <OpencodeDebugLogsButton folded={folded} />
+          <AccountPopover />
+        </div>
+      </SidebarLayouts.Footer>
     </SidebarLayouts.Root>
   );
 });

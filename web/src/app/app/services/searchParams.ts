@@ -25,7 +25,10 @@ export const SEARCH_PARAM_NAMES = {
   // when sending a message for the first time, we don't want to reload the page
   // and cause a re-render
   SKIP_RELOAD: "skip-reload",
-};
+} as const;
+
+export type SearchParamName =
+  (typeof SEARCH_PARAM_NAMES)[keyof typeof SEARCH_PARAM_NAMES];
 
 export function shouldSubmitOnLoad(
   searchParams: ReadonlyURLSearchParams | null

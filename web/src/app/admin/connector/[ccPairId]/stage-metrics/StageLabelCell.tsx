@@ -20,7 +20,7 @@ export default function StageLabelCell({ stage }: StageLabelCellProps) {
       alignItems="center"
       width="fit"
       height="fit"
-      gap={0.5}
+      gap={2}
     >
       {/* Inline color swatch: a color-only marker doesn't fit any
           layout primitive, and Tailwind handles the styling fully. */}

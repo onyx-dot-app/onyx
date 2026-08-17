@@ -199,7 +199,7 @@ export default function CraftPage() {
       {header}
       <SettingsLayouts.Body>
         <Card border="solid" rounding="lg">
-          <Section alignItems="stretch" gap={0.5}>
+          <Section alignItems="stretch" gap={2}>
             <InputHorizontal
               title="Enable Craft by default"
               tag={{ title: "beta", color: "blue" }}
@@ -220,7 +220,7 @@ export default function CraftPage() {
           </Section>
         </Card>
 
-        <Section alignItems="stretch" gap={0.75}>
+        <Section alignItems="stretch" gap={3}>
           <Content
             sizePreset="main-content"
             variant="section"

@@ -20,7 +20,9 @@ export const SWR_KEYS = {
   customAnalyticsScript: "/api/enterprise-settings/custom-analytics-script",
   authType: "/api/auth/type",
   adminSecuritySettings: "/api/admin/security",
+  incognitoAvailability: "/api/chat/incognito-availability",
   adminSsoProviders: "/api/admin/sso/provider",
+  adminSsoProviderTypes: "/api/admin/sso/provider-type",
 
   // ── Agents / Personas ─────────────────────────────────────────────────────
   personas: "/api/persona",
@@ -42,7 +44,7 @@ export const SWR_KEYS = {
   wellKnownLlmProvider: (providerEndpoint: string) =>
     `/api/admin/llm/built-in/options/${providerEndpoint}`,
   llmContextualCost: "/api/admin/llm/provider-contextual-cost",
-  userUsage: (days: number) => `/api/user/usage?days=${days}`,
+  userUsage: "/api/user/usage",
   costOverrides: "/api/admin/cost-overrides",
   adminUsageExport: "/api/admin/usage/export",
   adminUsageReset: "/api/admin/usage/reset",
@@ -96,9 +98,9 @@ export const SWR_KEYS = {
     });
     return `/api/notifications?${params.toString()}`;
   },
-  notificationsByType: (notifType: string, pageSize: number) => {
+  notificationsBySeverity: (minSeverity: string, pageSize: number) => {
     const params = new URLSearchParams({
-      notif_type: notifType,
+      min_severity: minSeverity,
       page_size: pageSize.toString(),
     });
     return `/api/notifications?${params.toString()}`;

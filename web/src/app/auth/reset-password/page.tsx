@@ -1,5 +1,5 @@
 "use client";
-import React, { useState, useEffect } from "react";
+import React, { useState } from "react";
 import { resetPassword } from "../forgot-password/utils";
 import AuthFlowContainer from "@/components/auth/AuthFlowContainer";
 import Title from "@/components/ui/title";
@@ -14,28 +14,12 @@ import { TextFormField } from "@/components/Field";
 import { toast } from "@opal/layouts";
 import { Spinner } from "@/components/Spinner";
 import { redirect, useSearchParams } from "next/navigation";
-import {
-  NEXT_PUBLIC_FORGOT_PASSWORD_ENABLED,
-  TENANT_ID_COOKIE_NAME,
-} from "@/lib/constants";
-import Cookies from "js-cookie";
+import { NEXT_PUBLIC_FORGOT_PASSWORD_ENABLED } from "@/lib/constants";
 
 const ResetPasswordPage: React.FC = () => {
   const [isWorking, setIsWorking] = useState(false);
   const searchParams = useSearchParams();
   const token = searchParams?.get("token");
-  const tenantId = searchParams?.get(TENANT_ID_COOKIE_NAME);
-  // Keep search param same name as cookie for simplicity
-
-  useEffect(() => {
-    if (tenantId) {
-      Cookies.set(TENANT_ID_COOKIE_NAME, tenantId, {
-        path: "/",
-        expires: 1 / 24,
-      }); // Expires in 1 hour
-    }
-  }, [tenantId]);
-
   if (!NEXT_PUBLIC_FORGOT_PASSWORD_ENABLED) {
     redirect("/auth/login");
   }

@@ -38,7 +38,7 @@ export default function PreviewTab({
         height="full"
         alignItems="center"
         justifyContent="center"
-        padding={2}
+        padding={8}
       >
         <SvgGlobe size={48} className="stroke-text-02" aria-hidden />
         <Text font="heading-h3" color="text-03">
@@ -57,7 +57,7 @@ export default function PreviewTab({
         height="full"
         alignItems="center"
         justifyContent="center"
-        padding={2}
+        padding={8}
         role="status"
       >
         <SvgLoader

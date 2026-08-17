@@ -1,11 +1,11 @@
 import datetime
 import re
 from enum import Enum
-from typing import Any, List, NotRequired, Optional, TypedDict
+from typing import Any, List, Literal, NotRequired, Optional, TypedDict
 from uuid import UUID
 
 from mcp.types import Tool as MCPLibTool
-from pydantic import BaseModel, Field, model_validator
+from pydantic import AnyUrl, BaseModel, Field, model_validator
 
 from onyx.db.enums import (
     EndpointPolicy,
@@ -348,9 +348,8 @@ class MCPToolCreateRequest(BaseModel):
                     "admin_credentials is required when auth_performer is 'per_user'"
                 )
 
-        # OAuth client ID/secret are optional. If provided, they will seed the
-        # OAuth client info; otherwise, the MCP client will attempt dynamic
-        # client registration.
+        # OAuth client ID/secret are optional. Without them, auto-discovery
+        # attempts CIMD before falling back to dynamic client registration.
         if self.auth_type != MCPAuthenticationType.OAUTH:
             self.oauth_provider_mode = MCPOAuthProviderMode.AUTO_DISCOVERY
             self.oauth_authorization_endpoint = None
@@ -461,7 +460,7 @@ class MCPToolResponse(BaseModel):
     server_url: str
     auth_type: str
     auth_performer: Optional[str] = None
-    is_authenticated: bool
+    user_can_authenticate: bool
 
 
 class MCPOAuthConnectRequest(BaseModel):
@@ -486,11 +485,15 @@ class MCPUserOAuthConnectRequest(BaseModel):
     server_id: int = Field(..., description="ID of the MCP server")
     return_path: str = Field(..., description="Path to redirect to after callback")
     include_resource_param: bool = Field(..., description="Include resource parameter")
+    force_reauthentication: bool = Field(
+        default=False,
+        description="Ignore stored OAuth tokens and start a fresh authorization flow",
+    )
     oauth_client_id: str | None = Field(
-        None, description="OAuth client ID (optional for DCR)"
+        None, description="OAuth client ID (optional for CIMD or DCR)"
     )
     oauth_client_secret: str | None = Field(
-        None, description="OAuth client secret (optional for DCR)"
+        None, description="OAuth client secret (optional for CIMD or DCR)"
     )
     oauth_client_id_changed: bool = Field(
         default=False,
@@ -535,6 +538,15 @@ class MCPOAuthCallbackResponse(BaseModel):
     server_id: int
     server_name: str
     redirect_url: str
+
+
+class MCPOAuthClientMetadataDocument(BaseModel):
+    client_id: AnyUrl
+    client_name: str
+    redirect_uris: list[AnyUrl]
+    grant_types: list[Literal["authorization_code", "refresh_token"]]
+    response_types: list[Literal["code"]]
+    token_endpoint_auth_method: Literal["none"]
 
 
 class MCPDynamicClientRegistrationRequest(BaseModel):
@@ -603,8 +615,9 @@ class MCPServer(BaseModel):
     oauth_token_endpoint: Optional[str] = None
     oauth_scopes_override: Optional[list[str]] = None
     oauth_additional_auth_params: Optional[dict[str, str]] = None
-    is_authenticated: bool
-    user_authenticated: Optional[bool] = None
+    # Whether this user's credentials resolve for the server right now (or the
+    # server needs no per-user auth). None when there is no user context.
+    user_can_authenticate: Optional[bool] = None
     status: MCPServerStatus
     is_public: bool = True
     groups: list[int] = Field(default_factory=list)
@@ -658,7 +671,9 @@ class MCPServerCreateResponse(BaseModel):
     oauth_token_endpoint: Optional[str] = None
     oauth_scopes_override: Optional[list[str]] = None
     oauth_additional_auth_params: Optional[dict[str, str]] = None
-    is_authenticated: bool
+    # True when the server needs no per-user auth (auth_type NONE or an admin
+    # supplies shared credentials), so it is usable right after creation.
+    no_user_authentication_required: bool
 
 
 class MCPServerUpdateResponse(BaseModel):

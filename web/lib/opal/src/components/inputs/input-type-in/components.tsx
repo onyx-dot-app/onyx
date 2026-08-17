@@ -75,6 +75,7 @@ export default function InputTypeIn({
 
   return (
     <div
+      role="presentation"
       data-variant={variant}
       className="opal-input"
       onClick={(e) => e.currentTarget.querySelector("input")?.focus()}

@@ -14,6 +14,7 @@ import { convertMarkdownTablesToTsv } from "@/app/app/message/copyingUtils";
 import { getTextContent } from "@/app/app/services/packetUtils";
 import { removeThinkingTokens } from "@/app/app/services/thinkingTokens";
 import MessageSwitcher from "@/app/app/message/MessageSwitcher";
+import { useIncognitoOptional } from "@/providers/IncognitoProvider";
 import SourceTag from "@/refresh-components/buttons/source-tag/SourceTag";
 import { citationsToSourceInfoArray } from "@/refresh-components/buttons/source-tag/sourceTagUtils";
 import { CopyButton, OpenButton, SelectButton } from "@opal/components";
@@ -142,6 +143,15 @@ export default function MessageToolbar({
   citations,
   documentMap,
 }: MessageToolbarProps) {
+  // Incognito responses take no feedback: votes would persist reviewable
+  // signal tied to a chat hidden from the owner's surfaces. The session's
+  // pinned flag keeps suppression on while exit clears the live toggle.
+  const sessionIncognito = useChatSessionStore(
+    (state) =>
+      state.sessions.get(state.currentSessionId || "")?.incognito ?? false
+  );
+  const incognitoEnabled =
+    (useIncognitoOptional()?.incognitoEnabled ?? false) || sessionIncognito;
   // Document sidebar state - managed internally to reduce prop drilling
   const documentSidebarVisible = useDocumentSidebarVisible();
   const selectedMessageForDocDisplay = useSelectedNodeForDocDisplay();
@@ -267,28 +277,32 @@ export default function MessageToolbar({
               getHtmlContent={() => finalAnswerRef.current?.innerHTML || ""}
               data-testid="AgentMessage/copy-button"
             />
-            <SelectButton
-              icon={SvgThumbsUp}
-              onClick={() => handleFeedbackClick("like")}
-              variant="select-light"
-              state={isFeedbackTransient("like") ? "selected" : "empty"}
-              tooltip={
-                currentFeedback === "like" ? "Remove Like" : "Good Response"
-              }
-              data-testid="AgentMessage/like-button"
-            />
-            <SelectButton
-              icon={SvgThumbsDown}
-              onClick={() => handleFeedbackClick("dislike")}
-              variant="select-light"
-              state={isFeedbackTransient("dislike") ? "selected" : "empty"}
-              tooltip={
-                currentFeedback === "dislike"
-                  ? "Remove Dislike"
-                  : "Bad Response"
-              }
-              data-testid="AgentMessage/dislike-button"
-            />
+            {!incognitoEnabled && (
+              <>
+                <SelectButton
+                  icon={SvgThumbsUp}
+                  onClick={() => handleFeedbackClick("like")}
+                  variant="select-light"
+                  state={isFeedbackTransient("like") ? "selected" : "empty"}
+                  tooltip={
+                    currentFeedback === "like" ? "Remove Like" : "Good Response"
+                  }
+                  data-testid="AgentMessage/like-button"
+                />
+                <SelectButton
+                  icon={SvgThumbsDown}
+                  onClick={() => handleFeedbackClick("dislike")}
+                  variant="select-light"
+                  state={isFeedbackTransient("dislike") ? "selected" : "empty"}
+                  tooltip={
+                    currentFeedback === "dislike"
+                      ? "Remove Dislike"
+                      : "Bad Response"
+                  }
+                  data-testid="AgentMessage/dislike-button"
+                />
+              </>
+            )}
             {ttsEnabled && (
               <TTSButton
                 text={

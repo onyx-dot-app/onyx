@@ -112,7 +112,7 @@ function ScopeOption({
   return (
     <SelectCard
       state={selected ? "selected" : "empty"}
-      padding="sm"
+      padding={2}
       rounding="sm"
       role="radio"
       aria-checked={selected}
@@ -134,7 +134,7 @@ function ScopeOption({
         variant="section"
         icon={option.icon}
         title={option.title}
-        padding="fit"
+        padding={0}
         color="interactive"
         center
         rightChildren={
@@ -502,7 +502,7 @@ export default function CreateRateLimitModal({
             return (
               <Form className="flex min-h-0 flex-1 flex-col overflow-hidden">
                 <Modal.Body>
-                  <Section alignItems="stretch" height="auto" gap={1}>
+                  <Section alignItems="stretch" height="auto" gap={4}>
                     {!forSpecificScope && (
                       <InputVertical
                         title="Applies to"

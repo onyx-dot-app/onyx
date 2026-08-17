@@ -13,6 +13,7 @@ from typing import Any
 from sqlalchemy.orm import Session
 
 from onyx.db.engine.sql_engine import get_session_with_tenant
+from onyx.db.enums import IncognitoRecordMode
 from onyx.db.user_usage import USER_USAGE_BUCKET_SECONDS, record_user_usage
 from onyx.llm.cost import compute_cost_cents
 from onyx.tracing.flows import IMAGE_FLOWS
@@ -24,6 +25,7 @@ from onyx.utils.datetime import get_window_start
 from onyx.utils.logger import setup_logger
 from shared_configs.contextvars import (
     CURRENT_TENANT_ID_CONTEXTVAR,
+    get_current_incognito_record_mode,
     get_current_tenant_id,
     get_current_user_id,
 )
@@ -51,9 +53,11 @@ class _UsageRecord:
     model: str
     flow: str
     provider: str | None
+    incognito: bool
     input_tokens: int
     output_tokens: int
     cache_read_tokens: int
+    cache_creation_tokens: int
     image_count: int
     window_start: datetime
 
@@ -128,21 +132,29 @@ class UserUsageTracingProcessor(TracingProcessor):
         input_tokens = _usage_field(usage, "input_tokens", "prompt_tokens")
         output_tokens = _usage_field(usage, "output_tokens", "completion_tokens")
         cache_read_tokens = _usage_field(usage, "cache_read_input_tokens")
+        cache_creation_tokens = _usage_field(usage, "cache_creation_input_tokens")
         provider = model_config.get("model_provider")
 
         window_start = get_window_start(
             datetime.now(timezone.utc), period_seconds=USER_USAGE_BUCKET_SECONDS
         )
 
+        # Every incognito turn is labelled, including full history. The label
+        # says the turn was incognito, not whether its content was kept.
+        incognito_mode = IncognitoRecordMode.from_context_value(
+            get_current_incognito_record_mode()
+        )
         return _UsageRecord(
             tenant_id=get_current_tenant_id(),
             user_id=user_id,
             model=model,
             flow=flow,
             provider=provider,
+            incognito=incognito_mode is not None,
             input_tokens=input_tokens,
             output_tokens=output_tokens,
             cache_read_tokens=cache_read_tokens,
+            cache_creation_tokens=cache_creation_tokens,
             image_count=data.image_count or 1,
             window_start=window_start,
         )
@@ -197,7 +209,7 @@ class UserUsageTracingProcessor(TracingProcessor):
     @staticmethod
     def _aggregate_batch(batch: list[_UsageRecord]) -> list[_UsageRecord]:
         aggregated: dict[
-            tuple[str, str, str, str, str | None, datetime], _UsageRecord
+            tuple[str, str, str, str, str | None, bool, datetime], _UsageRecord
         ] = {}
         for record in batch:
             key = (
@@ -206,6 +218,7 @@ class UserUsageTracingProcessor(TracingProcessor):
                 record.model,
                 record.flow,
                 record.provider,
+                record.incognito,
                 record.window_start,
             )
             current = aggregated.get(key)
@@ -217,6 +230,9 @@ class UserUsageTracingProcessor(TracingProcessor):
                 input_tokens=current.input_tokens + record.input_tokens,
                 output_tokens=current.output_tokens + record.output_tokens,
                 cache_read_tokens=current.cache_read_tokens + record.cache_read_tokens,
+                cache_creation_tokens=(
+                    current.cache_creation_tokens + record.cache_creation_tokens
+                ),
                 image_count=current.image_count + record.image_count,
             )
         return list(aggregated.values())
@@ -233,13 +249,13 @@ class UserUsageTracingProcessor(TracingProcessor):
 
     @staticmethod
     def _write_record(db_session: Session, record: _UsageRecord) -> None:
-        non_cached_input = max(record.input_tokens - record.cache_read_tokens, 0)
         input_cost, output_cost = compute_cost_cents(
-            record.model,
-            record.provider,
-            non_cached_input,
-            record.output_tokens,
+            model=record.model,
+            provider=record.provider,
+            prompt_tokens=record.input_tokens,
+            completion_tokens=record.output_tokens,
             cache_read_tokens=record.cache_read_tokens,
+            cache_creation_tokens=record.cache_creation_tokens,
             flow=record.flow,
             image_count=record.image_count,
             db_session=db_session,
@@ -253,8 +269,10 @@ class UserUsageTracingProcessor(TracingProcessor):
             input_tokens=record.input_tokens,
             output_tokens=record.output_tokens,
             cache_read_tokens=record.cache_read_tokens,
+            cache_creation_tokens=record.cache_creation_tokens,
             cost_cents=input_cost + output_cost,
             window_start=record.window_start,
+            incognito=record.incognito,
         )
 
     # --- TracingProcessor interface (non-generation events are no-ops) ---

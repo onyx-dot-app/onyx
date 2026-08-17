@@ -163,7 +163,7 @@ def _select_files_for_staging(
         )
 
         over_budget = False
-        for idx, content in zip(batch, contents):
+        for idx, content in zip(batch, contents, strict=True):
             if content is None:
                 logger.warning(
                     "Failed to read file for Python execution: %s",
@@ -327,7 +327,7 @@ class PythonTool(Tool[PythonToolOverrideKwargs]):
                 allow_failures=True,
                 max_workers=CODE_INTERPRETER_STAGING_CONCURRENCY,
             )
-            for plan, ci_file_id in zip(misses, upload_results):
+            for plan, ci_file_id in zip(misses, upload_results, strict=True):
                 if ci_file_id is None:
                     logger.warning(
                         "Failed to upload file for Python execution: %s", plan.file_name

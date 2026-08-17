@@ -32,12 +32,13 @@ export interface MCPServer {
   oauth_token_endpoint?: string;
   oauth_scopes_override?: string[];
   oauth_additional_auth_params?: Record<string, string>;
-  is_authenticated: boolean;
-  user_authenticated?: boolean;
+  // Whether this user's credentials resolve for the server right now (or the
+  // server needs no per-user auth). Absent when there is no user context.
+  user_can_authenticate?: boolean;
   // Whether Craft will actually emit this server into the user's sessions, i.e.
-  // whether the sandbox proxy can authenticate them against it. Unlike the two
-  // flags above it asks whether stored credentials yield auth headers, not
-  // whether a config row exists. Only the Craft listing computes it.
+  // whether the sandbox proxy can authenticate them against it. Unlike the flag
+  // above it asks whether stored credentials yield auth headers, not whether a
+  // config row exists. Only the Craft listing computes it.
   craft_connected?: boolean;
   auth_template?: MCPAuthTemplate | null;
   admin_credentials?: Record<string, string>;

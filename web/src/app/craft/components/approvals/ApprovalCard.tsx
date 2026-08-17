@@ -107,7 +107,7 @@ export default function ApprovalCard({
 
   async function submitDecision(
     next: ApprovalSubmitDecision,
-    request: () => Promise<unknown>,
+    request: () => Promise<void>,
     refetchDelayMs = SETTLE_HOLD_MS
   ) {
     setSubmitting(true);
@@ -228,9 +228,12 @@ export default function ApprovalCard({
                 size="sm"
                 disabled={submitting}
                 onClick={() =>
-                  void submitDecision("APPROVED", () =>
-                    postApprovalDecision(approval.approval_id, "APPROVED")
-                  )
+                  void submitDecision("APPROVED", async () => {
+                    await postApprovalDecision(
+                      approval.approval_id,
+                      "APPROVED"
+                    );
+                  })
                 }
                 aria-label="Approve this action once"
               >
@@ -247,7 +250,9 @@ export default function ApprovalCard({
                   onClick={() =>
                     void submitDecision(
                       "APPROVED",
-                      () => postApprovalSessionGrant(approval.approval_id),
+                      async () => {
+                        await postApprovalSessionGrant(approval.approval_id);
+                      },
                       0
                     )
                   }
@@ -261,9 +266,12 @@ export default function ApprovalCard({
                 size="sm"
                 disabled={submitting}
                 onClick={() =>
-                  void submitDecision("REJECTED", () =>
-                    postApprovalDecision(approval.approval_id, "REJECTED")
-                  )
+                  void submitDecision("REJECTED", async () => {
+                    await postApprovalDecision(
+                      approval.approval_id,
+                      "REJECTED"
+                    );
+                  })
                 }
                 aria-label="Reject this action"
               >

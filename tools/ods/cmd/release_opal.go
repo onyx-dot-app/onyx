@@ -3,7 +3,6 @@ package cmd
 import (
 	"fmt"
 	"os/exec"
-	"regexp"
 	"strings"
 
 	log "github.com/sirupsen/logrus"
@@ -15,15 +14,13 @@ import (
 
 const opalTagPrefix = "opal/v"
 
-// opalSemverRe matches a bare X.Y.Z version (no leading v).
-var opalSemverRe = regexp.MustCompile(`^\d+\.\d+\.\d+$`)
-
 // ReleaseOpalOptions holds options for the release opal command.
 type ReleaseOpalOptions struct {
 	Bump    string
 	Version string
 	DryRun  bool
 	Yes     bool
+	Verify  bool
 }
 
 // NewReleaseOpalCommand creates the `ods release opal` command.
@@ -58,13 +55,14 @@ Example usage:
 	cmd.Flags().StringVar(&opts.Version, "version", "", "Exact version to release (X.Y.Z, no leading v); overrides --bump")
 	cmd.Flags().BoolVar(&opts.DryRun, "dry-run", false, "Compute the version but don't tag or push")
 	cmd.Flags().BoolVar(&opts.Yes, "yes", false, "Skip the confirmation prompt")
+	cmd.Flags().BoolVar(&opts.Verify, "verify", false, "Run pre-push hooks when pushing the tag; they are skipped by default")
 
 	return cmd
 }
 
 func releaseOpal(opts *ReleaseOpalOptions) {
 	if opts.Version != "" {
-		if !opalSemverRe.MatchString(opts.Version) {
+		if !bareSemverRe.MatchString(opts.Version) {
 			log.Fatalf("--version must be X.Y.Z with no leading v, got %q", opts.Version)
 		}
 	} else if opts.Bump != "patch" && opts.Bump != "minor" && opts.Bump != "major" {
@@ -114,7 +112,7 @@ func releaseOpal(opts *ReleaseOpalOptions) {
 	if err := git.RunCommand("tag", tag); err != nil {
 		log.Fatalf("Failed to create tag %s: %v", tag, err)
 	}
-	if err := git.RunCommand("push", "origin", tag); err != nil {
+	if err := git.PushTag(tag, false, opts.Verify); err != nil {
 		// Roll back the local tag so the command stays retryable after a failed push.
 		if delErr := git.RunCommand("tag", "-d", tag); delErr != nil {
 			log.Warnf("Also failed to delete local tag %s; remove it before retrying: %v", tag, delErr)
@@ -132,7 +130,7 @@ func latestOpalVersion() (string, error) {
 	}
 	for _, line := range strings.Split(strings.TrimSpace(string(out)), "\n") {
 		version := strings.TrimPrefix(strings.TrimSpace(line), opalTagPrefix)
-		if opalSemverRe.MatchString(version) {
+		if bareSemverRe.MatchString(version) {
 			return version, nil
 		}
 	}

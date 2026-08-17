@@ -68,6 +68,7 @@ PUBLIC_ENDPOINT_SPECS = [
     # oauth
     ("/auth/oauth/authorize", {"GET"}),
     ("/auth/oauth/callback", {"GET"}),
+    ("/mcp/oauth/client-metadata", {"GET"}),
     # dedicated mobile google oauth (callback routes to the api_server, not the web app)
     ("/auth/mobile/oauth/authorize", {"GET"}),
     ("/auth/mobile/oauth/callback", {"GET"}),
@@ -77,6 +78,10 @@ PUBLIC_ENDPOINT_SPECS = [
     # db-backed multi-provider oidc/google (oidc_multi router)
     ("/auth/oidc/{provider_name}/authorize", {"GET"}),
     ("/auth/oidc/{provider_name}/callback", {"GET"}),
+    # Resolves a workspace's SSO buttons before the user has any session. Public
+    # only because it answers uniformly for unknown, ambiguous, and SSO-less
+    # addresses, and is rate limited.
+    ("/auth/sso/discover", {"POST"}),
     # saml (single router: legacy-compatible + parametric authorize, one
     # issuer-resolved callback)
     ("/auth/saml/authorize", {"GET"}),

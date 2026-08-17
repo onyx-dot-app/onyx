@@ -8,6 +8,7 @@ from urllib.parse import parse_qs, urlparse
 import httpx
 import pytest
 from mcp.client.auth import OAuthClientProvider
+from mcp.client.auth.utils import should_use_client_metadata_url
 from mcp.shared.auth import OAuthClientInformationFull, OAuthMetadata, OAuthToken
 from pydantic import AnyHttpUrl, AnyUrl
 
@@ -250,6 +251,17 @@ def _build_provider(provider_mode: MCPOAuthProviderMode) -> OAuthClientProvider:
     )
 
 
+def _oauth_metadata_with_cimd(supported: bool) -> OAuthMetadata:
+    return OAuthMetadata(
+        issuer=cast(AnyHttpUrl, "https://accounts.example.com"),
+        authorization_endpoint=cast(
+            AnyHttpUrl, "https://accounts.example.com/authorize"
+        ),
+        token_endpoint=cast(AnyHttpUrl, "https://accounts.example.com/token"),
+        client_id_metadata_document_supported=supported,
+    )
+
+
 def _patch_config_read(
     monkeypatch: pytest.MonkeyPatch, config_data: dict[str, object]
 ) -> None:
@@ -263,7 +275,7 @@ def _patch_config_read(
     monkeypatch.setattr(
         mcp_oauth.OnyxTokenStorage,
         "_ensure_connection_config",
-        lambda _self, _db: SimpleNamespace(id=1),
+        lambda _self, _db, **_kwargs: SimpleNamespace(id=1),
     )
     monkeypatch.setattr(
         mcp_oauth, "extract_connection_data", lambda _config: config_data
@@ -283,15 +295,53 @@ def test_make_oauth_provider_sets_known_provider_metadata_and_binds_storage() ->
     assert storage._oauth_context is provider.context
 
 
-def test_make_oauth_provider_auto_discovery_leaves_metadata_unset() -> None:
+def test_make_oauth_provider_auto_discovery_leaves_metadata_unset(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    monkeypatch.setattr(
+        mcp_oauth, "validated_mcp_oauth_client_metadata_url", lambda: None
+    )
     provider = _build_provider(MCPOAuthProviderMode.AUTO_DISCOVERY)
     assert provider.context.oauth_metadata is None
     assert provider.context.token_expiry_time is None
+    assert provider.context.client_metadata_url is None
 
 
-def test_make_oauth_provider_auto_discovery_requests_public_pkce_client() -> None:
+def test_make_oauth_provider_auto_discovery_requests_public_pkce_client(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    metadata_url = "https://onyx.example.com/api/mcp/oauth/client-metadata"
+    monkeypatch.setattr(
+        mcp_oauth,
+        "validated_mcp_oauth_client_metadata_url",
+        lambda: metadata_url,
+    )
     provider = _build_provider(MCPOAuthProviderMode.AUTO_DISCOVERY)
+
     assert provider.context.client_metadata.token_endpoint_auth_method == "none"
+    assert provider.context.client_metadata_url == metadata_url
+    assert should_use_client_metadata_url(
+        _oauth_metadata_with_cimd(True),
+        provider.context.client_metadata_url,
+    )
+    assert not should_use_client_metadata_url(
+        _oauth_metadata_with_cimd(False),
+        provider.context.client_metadata_url,
+    )
+
+
+def test_make_oauth_provider_known_provider_ignores_client_metadata_url(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    monkeypatch.setattr(
+        mcp_oauth,
+        "validated_mcp_oauth_client_metadata_url",
+        lambda: "https://onyx.example.com/api/mcp/oauth/client-metadata",
+    )
+
+    provider = _build_provider(MCPOAuthProviderMode.KNOWN_PROVIDER)
+
+    assert provider.context.client_metadata_url is None
 
 
 def test_get_tokens_hydrates_expiry_and_invalidates_expired_token(
@@ -312,6 +362,36 @@ def test_get_tokens_hydrates_expiry_and_invalidates_expired_token(
     assert provider.context.token_expiry_time == past
     provider.context.current_tokens = tokens
     assert provider.context.is_token_valid() is False
+
+
+def test_get_tokens_can_ignore_stored_token_for_reauthentication(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    provider = make_oauth_provider(
+        _make_mcp_server_stub(provider_mode=MCPOAuthProviderMode.AUTO_DISCOVERY),
+        user_id="user-1",
+        return_path="/return",
+        connection_config_id=1,
+        admin_config_id=None,
+        load_stored_tokens=False,
+    )
+    _patch_config_read(
+        monkeypatch,
+        {
+            MCPOAuthKeys.TOKENS.value: {
+                "access_token": "current-token",
+                "token_type": "Bearer",
+            },
+            MCPOAuthKeys.METADATA.value: {
+                "issuer": "https://accounts.example.com",
+                "authorization_endpoint": "https://accounts.example.com/authorize",
+                "token_endpoint": "https://accounts.example.com/token",
+            },
+        },
+    )
+
+    assert asyncio.run(provider.context.storage.get_tokens()) is None
+    assert provider.context.oauth_metadata is not None
 
 
 def test_get_tokens_clears_stale_expiry_when_absent(
@@ -499,8 +579,9 @@ def test_proactive_refresh_targets_configured_endpoint_and_persists(
         for record in caplog.records
         if record.getMessage() == "mcp_oauth.refresh.persisted"
     )
-    assert getattr(persisted_record, "refresh_attempt_id") == getattr(
-        started_record, "refresh_attempt_id"
+    assert getattr(persisted_record, "refresh_attempt_id") == getattr(  # noqa: B009
+        started_record,
+        "refresh_attempt_id",  # noqa: B009
     )
 
     caplog.clear()

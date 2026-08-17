@@ -123,21 +123,24 @@ const EditRow = ({
             : undefined
         }
       >
-        <div
+        <button
+          type="button"
           className={`
               text-text-darker font-medium my-auto p-1 hover:bg-accent-background flex items-center select-none
               ${documentSet.is_up_to_date ? "cursor-pointer" : "cursor-default"}
             `}
           style={{ wordBreak: "normal", overflowWrap: "break-word" }}
+          // Not `disabled`: a disabled button fires no pointer events, which
+          // would hide the tooltip that explains why it cannot be used.
+          aria-disabled={!documentSet.is_up_to_date}
           onClick={() => {
-            if (documentSet.is_up_to_date) {
-              router.push(`/admin/documents/sets/${documentSet.id}`);
-            }
+            if (!documentSet.is_up_to_date) return;
+            router.push(`/admin/documents/sets/${documentSet.id}`);
           }}
         >
           <FiEdit2 className="mr-2 shrink-0" />
           <span className="font-medium">{documentSet.name}</span>
-        </div>
+        </button>
       </Tooltip>
     </div>
   );

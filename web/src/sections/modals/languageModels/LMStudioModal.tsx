@@ -3,7 +3,6 @@
 import { useSWRConfig } from "swr";
 import { useFormikContext } from "formik";
 import { InputDivider, toast } from "@opal/layouts";
-import { markdown } from "@opal/utils";
 import {
   LLMProviderFormProps,
   LLMProviderName,
@@ -20,11 +19,11 @@ import { LLMProviderConfiguredSource } from "@/lib/analytics/utils";
 import {
   APIKeyField,
   APIBaseField,
-  CONTAINERIZED_HOST_NOTE,
   ModelSelectionField,
   DisplayNameField,
   ModelAccessField,
   ModalWrapper,
+  useApiBaseSubDescription,
 } from "@/sections/modals/languageModels/shared";
 import { fetchModels } from "@/lib/languageModels/svc";
 import { refreshLlmProviderCaches } from "@/lib/languageModels/cache";
@@ -47,7 +46,9 @@ function LMStudioModalInternals({
   isOnboarding,
 }: LMStudioModalInternalsProps) {
   const formikProps = useFormikContext<LMStudioModalValues>();
-  const settings = useSettings();
+  const apiBaseSubDescription = useApiBaseSubDescription(
+    "The base URL for your LM Studio server."
+  );
 
   const isFetchDisabled = !formikProps.values.api_base;
 
@@ -75,13 +76,7 @@ function LMStudioModalInternals({
   return (
     <>
       <APIBaseField
-        subDescription={
-          settings.is_containerized
-            ? markdown(
-                `The base URL for your LM Studio server. ${CONTAINERIZED_HOST_NOTE}`
-              )
-            : "The base URL for your LM Studio server."
-        }
+        subDescription={apiBaseSubDescription}
         placeholder="Your LM Studio API base URL"
       />
 

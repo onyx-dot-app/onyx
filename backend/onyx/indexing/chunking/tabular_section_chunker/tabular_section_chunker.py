@@ -72,7 +72,7 @@ def format_columns_header(headers: list[str]) -> str:
 
 
 def _row_to_pairs(headers: list[str], row: list[str]) -> list[tuple[str, str]]:
-    return [(h, v) for h, v in zip(headers, row) if v.strip()]
+    return [(h, v) for h, v in zip(headers, row, strict=False) if v.strip()]
 
 
 def pack_chunk(chunk: str, new_row: str) -> str:

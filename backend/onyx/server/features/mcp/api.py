@@ -48,24 +48,20 @@ from onyx.db.gated_app import (
 )
 from onyx.db.mcp import (
     affected_user_ids_for_mcp_server,
-    can_resolve_mcp_credentials,
     create_connection_config,
     create_mcp_server__no_commit,
     delete_all_user_connection_configs_for_server_no_commit,
     delete_connection_config,
     delete_mcp_server,
     delete_user_connection_configs_for_server,
-    extract_connection_data,
     get_all_mcp_servers,
     get_all_mcp_tools_for_server,
     get_craft_enabled_mcp_servers,
-    get_mcp_auth_template,
     get_mcp_server_by_id,
     get_mcp_servers_accessible_to_user,
     get_mcp_servers_for_persona,
     get_user_connection_config,
     get_user_connection_configs,
-    resolve_mcp_credentials,
     update_connection_config,
     update_connection_config__no_commit,
     update_mcp_server__no_commit,
@@ -85,6 +81,20 @@ from onyx.redis.redis_pool import get_redis_client
 from onyx.server.features.mcp.client import (
     discover_mcp_tools,
     log_exception_group,
+)
+from onyx.server.features.mcp.client_metadata import (
+    mcp_oauth_redirect_uri,
+)
+from onyx.server.features.mcp.client_metadata import (
+    router as client_metadata_router,
+)
+from onyx.server.features.mcp.credentials import (
+    extract_connection_data,
+    get_mcp_auth_template,
+    mcp_token_expired,
+    requires_user_authentication,
+    resolve_mcp_credentials,
+    user_can_authenticate,
 )
 from onyx.server.features.mcp.models import (
     MCPApiKeyResponse,
@@ -119,7 +129,6 @@ from onyx.server.features.mcp.oauth import (
     key_state,
     key_tokens,
     make_oauth_provider,
-    mcp_token_expired,
 )
 from onyx.server.features.mcp.ssrf import validate_mcp_outbound_url
 from onyx.server.features.tool.models import ToolSnapshot
@@ -560,6 +569,7 @@ def _upsert_user_template_config(
 
 
 router = APIRouter(prefix="/mcp")
+router.include_router(client_metadata_router)
 admin_router = APIRouter(prefix="/admin/mcp")
 
 HEADER_SUBSTITUTIONS: Literal["header_substitutions"] = "header_substitutions"
@@ -619,13 +629,6 @@ def make_pkce_pair() -> tuple[str, str]:
     verifier = b64url(token_urlsafe(64).encode())
     challenge = b64url(hashlib.sha256(verifier.encode("ascii")).digest())
     return verifier, challenge
-
-
-MCP_OAUTH_CALLBACK_PATH = "/mcp/oauth/callback"
-
-
-def _mcp_oauth_redirect_uri() -> str:
-    return f"{WEB_DOMAIN}{MCP_OAUTH_CALLBACK_PATH}"
 
 
 def _mcp_known_provider_flow_params(
@@ -771,10 +774,10 @@ async def _connect_oauth(
         and not request.oauth_client_id_changed
         and not request.oauth_client_secret_changed
     )
-    is_authenticated = bool(
+    credentials_usable = bool(
         oauth_credentials_unchanged
         and not mcp_token_expired(existing_user_data)
-        and can_resolve_mcp_credentials(
+        and user_can_authenticate(
             mcp_server,
             user,
             db,
@@ -871,7 +874,7 @@ async def _connect_oauth(
 
         oauth_url = build_oauth_authorization_url(
             _mcp_known_provider_flow_params(mcp_server, client_info),
-            _mcp_oauth_redirect_uri(),
+            mcp_oauth_redirect_uri(),
             state,
             code_challenge=code_challenge,
             resource=(
@@ -898,7 +901,8 @@ async def _connect_oauth(
             admin_config_id=mcp_server.admin_connection_config_id,
             connection_headers=connection_config_dict.get("headers", {}),
             transport=mcp_server.transport,
-            is_authenticated=is_authenticated,
+            credentials_usable=credentials_usable,
+            force_reauthentication=request.force_reauthentication,
         )
     except OnyxError:
         raise
@@ -990,7 +994,7 @@ async def process_oauth_callback(
             token_payload = exchange_oauth_code_for_token(
                 _mcp_known_provider_flow_params(mcp_server, client_info),
                 code,
-                _mcp_oauth_redirect_uri(),
+                mcp_oauth_redirect_uri(),
                 code_verifier=state_data.code_verifier,
             )
         except (SSRFException, ValueError) as e:
@@ -1191,7 +1195,7 @@ def save_user_credentials(
         message=validation_message,
         server_id=request.server_id,
         server_name=mcp_server.name,
-        authenticated=resolved.is_authenticated(),
+        authenticated=resolved.can_authenticate(),
         validation_tested=validation_tested,
     )
 
@@ -1278,7 +1282,7 @@ def _db_mcp_server_to_api_mcp_server(
 
     # Check if user has authentication configured and extract credentials
     auth_performer = db_server.auth_performer
-    user_authenticated: bool | None = None
+    can_authenticate: bool | None = None
     user_credentials = None
     admin_credentials = None
     is_owner_or_admin = request_user is not None and (
@@ -1296,7 +1300,7 @@ def _db_mcp_server_to_api_mcp_server(
         else get_user_connection_config(db_server.id, email, db)
     )
     if request_user is not None:
-        user_authenticated = can_resolve_mcp_credentials(
+        can_authenticate = user_can_authenticate(
             db_server,
             request_user,
             db,
@@ -1356,8 +1360,6 @@ def _db_mcp_server_to_api_mcp_server(
                 required_fields=stored_template.required_fields,
             )
 
-    is_authenticated = bool(user_authenticated)
-
     # Calculate tool count from the relationship
     tool_count = len(db_server.current_actions) if db_server.current_actions else 0
 
@@ -1375,8 +1377,7 @@ def _db_mcp_server_to_api_mcp_server(
         oauth_token_endpoint=db_server.oauth_token_endpoint,
         oauth_scopes_override=db_server.oauth_scopes_override,
         oauth_additional_auth_params=db_server.oauth_additional_auth_params,
-        is_authenticated=is_authenticated,
-        user_authenticated=user_authenticated,
+        user_can_authenticate=can_authenticate,
         craft_connected=craft_connected,
         status=db_server.status,
         is_public=db_server.is_public,
@@ -1465,7 +1466,7 @@ def get_craft_mcp_servers_for_user(
             db_server,
             db,
             request_user=user,
-            craft_connected=can_resolve_mcp_credentials(
+            craft_connected=user_can_authenticate(
                 db_server, user, db, user_configs=user_configs
             ),
             user_configs=user_configs,
@@ -1630,7 +1631,7 @@ def _list_mcp_tools_by_id(
         )
 
     credentials = resolve_mcp_credentials(mcp_server, user, db)
-    if not credentials.is_authenticated():
+    if not credentials.can_authenticate():
         raise OnyxError(
             OnyxErrorCode.UNAUTHENTICATED,
             "This MCP server is not configured for the current user.",
@@ -2390,9 +2391,8 @@ def upsert_mcp_server(
             oauth_token_endpoint=mcp_server.oauth_token_endpoint,
             oauth_scopes_override=mcp_server.oauth_scopes_override,
             oauth_additional_auth_params=mcp_server.oauth_additional_auth_params,
-            is_authenticated=(
-                mcp_server.auth_type == MCPAuthenticationType.NONE.value
-                or request.auth_performer == MCPAuthenticationPerformer.ADMIN
+            no_user_authentication_required=not requires_user_authentication(
+                mcp_server.auth_type, request.auth_performer
             ),
         )
 
@@ -2509,7 +2509,7 @@ def create_mcp_server_simple(
         oauth_token_endpoint=mcp_server.oauth_token_endpoint,
         oauth_scopes_override=mcp_server.oauth_scopes_override,
         oauth_additional_auth_params=mcp_server.oauth_additional_auth_params,
-        is_authenticated=False,  # Not authenticated yet
+        user_can_authenticate=False,  # No credentials resolved yet
         status=mcp_server.status,
         is_public=mcp_server.is_public,
         groups=[group.id for group in mcp_server.user_groups],

@@ -7,9 +7,10 @@ import {
   ComposerToolsProvider,
   type ComposerTools,
 } from "@/state/ComposerToolsProvider";
+import { makeComposerTools } from "@/state/__tests__/fixtures";
 
-// The provider reaches MMKV via the settings/preferences APIs, which jest can't load; this suite
-// only needs the context.
+// These reach MMKV, which jest can't load; the suite only needs the context the provider supplies.
+jest.mock("@/state/storage");
 jest.mock("@/api/settings", () => ({ useWorkspaceSettings: jest.fn() }));
 jest.mock("@/hooks/useAgentPreferences", () => ({
   useAgentPreferences: jest.fn(),
@@ -39,24 +40,10 @@ const imageTool: ToolSnapshot = {
 };
 
 function renderMenu(overrides: Partial<ComposerTools> = {}) {
-  const value: ComposerTools = {
-    showDeepResearch: false,
-    deepResearchEnabled: false,
-    toggleDeepResearch: jest.fn(),
+  const value: ComposerTools = makeComposerTools({
     actionTools: [searchTool, imageTool],
-    forcedToolId: null,
-    toggleForcedTool: jest.fn(),
-    disabledToolIds: [],
-    toggleToolEnabled: jest.fn(),
-    notePendingSend: jest.fn(),
-    resolveToolOptions: () => ({
-      deepResearch: false,
-      allowedToolIds: null,
-      forcedToolId: null,
-      internalSearchFilters: null,
-    }),
     ...overrides,
-  };
+  });
   render(
     <ComposerToolsProvider value={value}>
       <ActionsMenu />
@@ -80,7 +67,6 @@ describe("ActionsMenu", () => {
     renderMenu();
     fireEvent.press(screen.getByLabelText("Manage Actions"));
 
-    // An ordered exact match, so a duplicated or reordered row fails here.
     const labels = screen
       .getAllByText(/^(Search|Generate Image)$/)
       .map((node) => node.props.children);
@@ -103,5 +89,79 @@ describe("ActionsMenu", () => {
     // Search is on → "Disable"; Generate Image is off → "Enable".
     fireEvent.press(screen.getByLabelText("Enable"));
     expect(value.toggleToolEnabled).toHaveBeenCalledWith(2);
+  });
+
+  it("offers the source drill-in only on the row that owns it", () => {
+    renderMenu({ sourceToolId: 1, sourceOptions: ["notion"] });
+    fireEvent.press(screen.getByLabelText("Manage Actions"));
+
+    expect(screen.getAllByLabelText("Configure Sources")).toHaveLength(1);
+  });
+
+  it("keeps the drill-in hidden while the agent has no sources to choose between", () => {
+    renderMenu({ sourceToolId: 1, sourceOptions: [] });
+    fireEvent.press(screen.getByLabelText("Manage Actions"));
+    expect(screen.queryByLabelText("Configure Sources")).toBeNull();
+  });
+
+  it("swaps the body for the sources in place, and back", () => {
+    renderMenu({
+      sourceToolId: 1,
+      sourceOptions: ["notion"],
+      enabledSourceCount: 1,
+      isSourceEnabled: () => true,
+    });
+    fireEvent.press(screen.getByLabelText("Manage Actions"));
+    fireEvent.press(screen.getByLabelText("Configure Sources"));
+
+    expect(screen.getByText("Sources")).toBeTruthy();
+    expect(screen.getByText("Notion")).toBeTruthy();
+    expect(screen.queryByText("Generate Image")).toBeNull();
+
+    fireEvent.press(screen.getByLabelText("Back"));
+    expect(screen.getByText("Actions")).toBeTruthy();
+    expect(screen.getByText("Generate Image")).toBeTruthy();
+  });
+
+  it("marks the forced row and counts its sources", () => {
+    // The leaf takes these as props; only the menu can prove it derives them the right way round.
+    renderMenu({
+      forcedToolId: 1,
+      sourceToolId: 1,
+      sourceOptions: ["notion", "web", "jira"],
+      enabledSourceCount: 2,
+    });
+    fireEvent.press(screen.getByLabelText("Manage Actions"));
+
+    expect(screen.getByText("2 of 3")).toBeTruthy();
+  });
+
+  it("closes instead of drilling in when the forced search row is tapped", () => {
+    const value = renderMenu({
+      forcedToolId: 1,
+      sourceToolId: 1,
+      sourceOptions: ["notion"],
+      enabledSourceCount: 1,
+    });
+    fireEvent.press(screen.getByLabelText("Manage Actions"));
+    fireEvent.press(screen.getByText("Search"));
+
+    expect(value.toggleForcedTool).toHaveBeenCalledWith(1);
+    expect(screen.queryByText("Notion")).toBeNull();
+  });
+
+  it("reopens on the tool list after the sub-view was left open", () => {
+    renderMenu({
+      sourceToolId: 1,
+      sourceOptions: ["notion"],
+      enabledSourceCount: 1,
+      isSourceEnabled: () => true,
+    });
+    fireEvent.press(screen.getByLabelText("Manage Actions"));
+    fireEvent.press(screen.getByLabelText("Configure Sources"));
+    fireEvent.press(screen.getByLabelText("Close"));
+
+    fireEvent.press(screen.getByLabelText("Manage Actions"));
+    expect(screen.getByText("Actions")).toBeTruthy();
   });
 });

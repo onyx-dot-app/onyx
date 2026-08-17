@@ -109,12 +109,13 @@ export function useBuildSessionController({
         const session = await fetchSession(sessionId, {
           checkWorkspace: false,
         });
+        if (!session.skills_stale) return;
         const currentSession = useBuildSessionStore
           .getState()
           .sessions.get(sessionId);
         if (currentSession?.skillsStaleRevision !== skillsStaleRevision) return;
         updateSessionData(sessionId, {
-          skillsStale: session.skills_stale,
+          skillsStale: true,
         });
       } catch {
         // Keep the usable cached session on transient refresh failures.

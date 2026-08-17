@@ -59,7 +59,7 @@ function Header({ children, onClose }: HeaderProps) {
           tooltip="Close Sidebar"
         />
       </div>
-      <Divider paddingParallel="fit" paddingPerpendicular="fit" />
+      <Divider paddingParallel={0} paddingPerpendicular={0} />
     </div>
   );
 }

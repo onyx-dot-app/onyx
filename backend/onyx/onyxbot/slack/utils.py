@@ -24,7 +24,8 @@ from onyx.configs.onyxbot_configs import (
     ONYX_BOT_RESPONSE_LIMIT_PER_TIME_PERIOD,
     ONYX_BOT_RESPONSE_LIMIT_TIME_PERIOD_SECONDS,
 )
-from onyx.connectors.slack.utils import SlackTextCleaner
+from onyx.connectors.slack.source_operations import SlackUserInfoResponse
+from onyx.connectors.slack.utils import FetchUserInfo, SlackTextCleaner
 from onyx.db.engine.sql_engine import get_session_with_current_tenant
 from onyx.db.users import get_user_by_email
 from onyx.onyxbot.slack.constants import FeedbackVisibility
@@ -42,6 +43,16 @@ slack_token_lock = threading.Lock()
 
 _ONYX_BOT_MESSAGE_COUNT: int = 0
 _ONYX_BOT_COUNT_START_TIME: float = time.time()
+
+
+def bot_user_info_fetcher(client: WebClient) -> FetchUserInfo:
+    """
+    Adapts a bot WebClient to the ``FetchUserInfo`` contract of the shared slack
+    helpers (the connector satisfies it via its gateway operation).
+    """
+    return lambda user_id: SlackUserInfoResponse.model_validate(
+        client.users_info(user=user_id).data
+    )
 
 
 def get_onyx_bot_auth_ids(

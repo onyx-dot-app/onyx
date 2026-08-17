@@ -27,7 +27,7 @@ dependencies = [
 
 [dependency-groups]
 backend = [
-    "aiohttp==3.14.1",
+    "aiohttp==3.14.3",
     "alembic==1.18.4",
     "asyncpg==0.30.0",
     "atlassian-python-api==4.0.7",
@@ -92,13 +92,15 @@ backend = [
     "python-docx==1.1.2",
     "python-gitlab==5.6.0",
     "python-pptx==0.6.23",
-    "pypdf==6.14.2",
+    "pypdf==6.15.0",
     "pypdfium2==5.9.0",
     "python-dotenv==1.2.2",
     "python-slugify==8.0.4",
     "pywikibot==11.4.2",
     "readerwriterlock==1.0.9",
     "redis==5.0.8",
+    # PDF generation for the usage report review pack.
+    "reportlab==5.0.0",
     "requests==2.33.0",
     "requests-oauthlib==2.0.0",
     "simple-salesforce==1.12.6",
@@ -140,7 +142,7 @@ dev = [
     "manygo==0.2.0",
     "matplotlib==3.10.8",
     "ty==0.0.63",
-    "onyx-devtools==0.10.6",
+    "onyx-devtools==0.12.0",
     "openapi-generator-cli==7.17.0",
     "pre-commit==3.2.2",
     "pytest-alembic==0.12.1",
@@ -285,9 +287,24 @@ ignore = [
     # Tracked in kanban ticket #491 — to be removed once existing violations are
     # cleaned up:
     "S113", # request-without-timeout (~463 existing violations).
+    # flake8-bugbear (B) rule deferred — to be removed once existing violations
+    # are cleaned up:
+    "B904", # raise-without-from-inside-except (~465 existing violations).
 ]
 # G004: f-strings in logging break Sentry's message-pattern grouping.
-select = ["ARG", "E", "F", "G004", "I", "S", "W"]
+select = ["ARG", "B", "E", "F", "G004", "I", "S", "W"]
+
+[tool.ruff.lint.flake8-bugbear]
+# FastAPI dependency-injection markers are the intended way to write these
+# defaults, so B008 must not flag them.
+extend-immutable-calls = [
+    "fastapi.Body",
+    "fastapi.Depends",
+    "fastapi.File",
+    "fastapi.Form",
+    "fastapi.Query",
+    "onyx.auth.permissions.require_permission",
+]
 
 [tool.ruff.lint.isort]
 known-first-party = ["onyx", "ee", "tests", "shared_configs", "model_server"]

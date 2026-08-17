@@ -154,6 +154,15 @@ def _assert_403(flow: http.HTTPFlow, expected_code: SandboxProxyError) -> None:
 
 
 _MATCH = make_matched_actions(payload={"text": "hi"})
+_MATCH_MCP = AllMatchedActions(
+    actions=_MATCH.actions,
+    target=GatedTarget(
+        kind=GatedAppKind.MCP_SERVER,
+        id=73,
+        app_name="Linear MCP",
+    ),
+    payload=_MATCH.payload,
+)
 _MATCH_MULTI_ASK = AllMatchedActions(
     actions=(
         MatchedAction(
@@ -561,16 +570,19 @@ async def test_ask_denied_blocks(
 _RUN_ID = UUID("55555555-5555-5555-5555-555555555555")
 # make_matched_actions defaults external_app_id=42.
 _GRANTED_APP_ID = 42
+_GRANTED_MCP_SERVER_ID = 73
 
 
 def _stub_grants(
     monkeypatch: pytest.MonkeyPatch,
     result: tuple[UUID, list[int]] | None | Exception,
+    *,
+    kind: GatedAppKind = GatedAppKind.EXTERNAL_APP,
 ) -> list[UUID]:
     """Stub the gate's grant lookup; returns the recorded session_ids.
 
-    Callers pass granted external-app ids; the stub wraps them as the
-    ``(kind, id)`` targets the real lookup now returns."""
+    The stub wraps target ids as the ``(kind, id)`` keys returned by the real
+    lookup."""
     calls: list[UUID] = []
 
     def _lookup(
@@ -583,8 +595,8 @@ def _stub_grants(
             raise result
         if result is None:
             return None
-        run_id, app_ids = result
-        return run_id, {(GatedAppKind.EXTERNAL_APP, app_id) for app_id in app_ids}
+        run_id, target_ids = result
+        return run_id, {(kind, target_id) for target_id in target_ids}
 
     monkeypatch.setattr(gate, "get_live_scheduled_run_grants", _lookup)
     return calls
@@ -643,17 +655,27 @@ class _SessionGrantCache:
 
 
 @pytest.mark.asyncio
+@pytest.mark.parametrize(
+    ("matched_actions", "target_kind", "target_id"),
+    [
+        (_MATCH, GatedAppKind.EXTERNAL_APP, _GRANTED_APP_ID),
+        (_MATCH_MCP, GatedAppKind.MCP_SERVER, _GRANTED_MCP_SERVER_ID),
+    ],
+    ids=["external-app", "mcp-server"],
+)
 async def test_pre_approved_scheduled_run_skips_park(
     monkeypatch: pytest.MonkeyPatch,
+    matched_actions: AllMatchedActions,
+    target_kind: GatedAppKind,
+    target_id: int,
 ) -> None:
-    """Granted app on a RUNNING scheduled run: forwarded immediately with a
-    pre-decided APPROVED row — the park pipeline never runs."""
+    """A granted target skips the approval park during a scheduled run."""
     user_id = uuid4()
     sandbox = make_resolved_sandbox(user_id=user_id)
     resolver = StubResolver(sandbox=sandbox, session_by_id=UUID(_TAG_UUID))
-    addon = _build(resolver=resolver, matcher=_StubMatcher(result=_MATCH))
+    addon = _build(resolver=resolver, matcher=_StubMatcher(result=matched_actions))
     spy = _spy_pipeline(addon, monkeypatch)
-    _stub_grants(monkeypatch, (_RUN_ID, [_GRANTED_APP_ID]))
+    _stub_grants(monkeypatch, (_RUN_ID, [target_id]), kind=target_kind)
     inserted = _spy_pre_approve_insert(monkeypatch)
     notified: list[dict[str, Any]] = []
     monkeypatch.setattr(gate, "create_notification", lambda **kw: notified.append(kw))
@@ -664,17 +686,17 @@ async def test_pre_approved_scheduled_run_skips_park(
     assert flow.response is None  # forwarded
     assert not spy.approval_ran  # park pipeline skipped
     assert spy.awaited == []
-    assert spy.dispatched == [(_MATCH, user_id, sandbox.tenant_id)]
+    assert spy.dispatched == [(matched_actions, user_id, sandbox.tenant_id)]
     assert len(inserted) == 1
     assert inserted[0]["decision"] == ApprovalDecision.APPROVED
     assert inserted[0]["decided_via"] == ApprovalDecidedVia.PRE_APPROVAL
-    assert inserted[0]["target"] == (GatedAppKind.EXTERNAL_APP, _GRANTED_APP_ID)
-    # Dedup contract: additional_data is exactly the stable (run, app) pair.
+    assert inserted[0]["target"] == (target_kind, target_id)
+    # Dedup contract: additional_data is exactly the stable run and target.
     assert len(notified) == 1
     assert notified[0]["additional_data"] == {
         "run_id": str(_RUN_ID),
-        "target_kind": GatedAppKind.EXTERNAL_APP.value,
-        "target_id": _GRANTED_APP_ID,
+        "target_kind": target_kind.value,
+        "target_id": target_id,
     }
 
 

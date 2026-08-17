@@ -28,11 +28,37 @@ export function getXDaysAgo(daysAgo: number) {
   return daysAgoDate;
 }
 
+export function convertDateToEndOfDay(date?: Date | null) {
+  if (!date) {
+    return date;
+  }
+
+  const dateCopy = new Date(date);
+  dateCopy.setHours(23, 59, 59, 999);
+  return dateCopy;
+}
+
+export function convertDateToStartOfDay(date?: Date | null) {
+  if (!date) {
+    return date;
+  }
+
+  const dateCopy = new Date(date);
+  dateCopy.setHours(0, 0, 0, 0);
+  return dateCopy;
+}
+
 export function getXYearsAgo(yearsAgo: number) {
   const today = new Date();
   const yearsAgoDate = new Date(today);
   yearsAgoDate.setFullYear(yearsAgoDate.getFullYear() - yearsAgo);
   return yearsAgoDate;
+}
+
+export function formatDateForApiParam(date: Date): string {
+  const month = String(date.getMonth() + 1).padStart(2, "0");
+  const day = String(date.getDate()).padStart(2, "0");
+  return `${date.getFullYear()}-${month}-${day}`;
 }
 
 export function normalizeDate(date: Date): Date {
@@ -50,15 +76,7 @@ export function isDateInFuture(date: Date): boolean {
 }
 
 export const timestampToDateString = (timestamp: string) => {
-  const date = new Date(timestamp);
-  const year = date.getFullYear();
-  const month = date.getMonth() + 1; // getMonth() is zero-based
-  const day = date.getDate();
-
-  const formattedDate = `${year}-${month.toString().padStart(2, "0")}-${day
-    .toString()
-    .padStart(2, "0")}`;
-  return formattedDate;
+  return formatDateForApiParam(new Date(timestamp));
 };
 
 // Options for formatting the date

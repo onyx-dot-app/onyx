@@ -8,6 +8,11 @@ from fastapi.datastructures import Headers
 from pydantic import BaseModel
 from sqlalchemy.orm import Session
 
+from onyx.chat.incognito import (
+    incognito_allowed_for_user,
+    resolve_incognito_record_mode,
+)
+from onyx.chat.incognito_context import incognito_context_available
 from onyx.chat.models import (
     ChatHistoryResult,
     ChatLoadedFile,
@@ -28,7 +33,11 @@ from onyx.db.chat import (
     get_chat_messages_by_session,
     get_or_create_root_message,
 )
-from onyx.db.enums import UserFileStatus
+from onyx.db.enums import (
+    IncognitoRecordMode,
+    UserFileStatus,
+    record_mode_persists_content,
+)
 from onyx.db.file_record import FileRecordNotFoundError
 from onyx.db.kg_config import (
     get_kg_config_settings,
@@ -39,6 +48,8 @@ from onyx.db.models import SearchDoc as DbSearchDoc
 from onyx.db.persona import user_can_access_persona
 from onyx.db.projects import check_project_ownership
 from onyx.db.user_file import get_user_file_by_id
+from onyx.error_handling.error_codes import OnyxErrorCode
+from onyx.error_handling.exceptions import OnyxError
 from onyx.file_processing.extract_file_text import extract_file_text
 from onyx.file_store.file_store import get_default_file_store
 from onyx.file_store.models import ChatFileType, FileDescriptor
@@ -185,13 +196,46 @@ def create_chat_session_from_request(
         ):
             raise ValueError("User does not have access to persona")
 
-    return create_chat_session(
+    # Pinned at creation so a later setting change cannot alter a live session.
+    # Availability decides server-side, never the client flag. A refusal
+    # errors: degrading would silently persist a believed-incognito chat.
+    # The capability is checked first so a deployment that cannot hold the
+    # context says so, rather than reporting it as a permission the admin
+    # could grant.
+    incognito_mode: IncognitoRecordMode | None = None
+    if chat_session_request.incognito:
+        if not incognito_context_available():
+            raise OnyxError(
+                OnyxErrorCode.DEPLOYMENT_UNSUPPORTED,
+                "Incognito chat is not supported on this deployment.",
+            )
+        if not incognito_allowed_for_user(user, db_session, cached=False):
+            raise OnyxError(
+                OnyxErrorCode.UNAUTHORIZED,
+                "Incognito chat is not enabled for this user.",
+            )
+        incognito_mode = resolve_incognito_record_mode()
+
+    # A caller-supplied title is conversation-derived, so a content-free
+    # session stores none of it.
+    description = (
+        chat_session_request.description or ""
+        if record_mode_persists_content(incognito_mode)
+        else ""
+    )
+
+    chat_session = create_chat_session(
         db_session=db_session,
-        description=chat_session_request.description or "",
+        description=description,
         user_id=user.id,
         persona_id=chat_session_request.persona_id,
         project_id=chat_session_request.project_id,
+        incognito_record_mode=incognito_mode,
+        session_id=(
+            chat_session_request.incognito_session_id if incognito_mode else None
+        ),
     )
+    return chat_session
 
 
 def create_chat_history_chain(

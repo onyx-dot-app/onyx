@@ -132,7 +132,7 @@ function LineItemButton({
           <ContentAction
             color="interactive"
             {...(contentActionProps as ContentActionProps)}
-            padding="fit"
+            padding={0}
           />
         </div>
       </Interactive.Container>

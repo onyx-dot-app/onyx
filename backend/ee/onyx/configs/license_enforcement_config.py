@@ -28,6 +28,7 @@ from onyx.server.settings.models import Tier
 #   /settings, /enterprise-settings - View app status and branding
 #   /billing - Unified billing API
 #   /proxy - Self-hosted proxy endpoints (have own license-based auth)
+#   /mcp/oauth/client-metadata - Public OAuth client identity
 #   /tenants/billing-* - Legacy billing endpoints (backwards compatibility)
 #   /manage/users, /users - User management (needed for seat limit resolution)
 #   /notifications - Needed for UI to load properly
@@ -44,6 +45,7 @@ LICENSE_ENFORCEMENT_ALLOWED_PREFIXES: frozenset[str] = frozenset(
         "/admin/billing",
         # Proxy endpoints for self-hosted billing (no tenant context)
         "/proxy",
+        "/mcp/oauth/client-metadata",
         # Legacy tenant billing endpoints (kept for backwards compatibility)
         "/tenants/billing-information",
         "/tenants/create-customer-portal-session",
@@ -78,7 +80,7 @@ PATH_PREFIX_MIN_TIER: dict[str, Tier] = {
     "/manage/admin/standard-answer": Tier.ENTERPRISE,
     "/admin/token-rate-limits": Tier.ENTERPRISE,
     "/admin/hooks": Tier.ENTERPRISE,  # outbound webhooks
-    "/admin/log-export": Tier.ENTERPRISE,  # container-local log download
+    "/admin/log-export": Tier.ENTERPRISE,  # deployment-wide log export
     "/analytics": Tier.ENTERPRISE,  # non-admin analytics (e.g. assistant stats)
     "/evals": Tier.ENTERPRISE,
     "/scim": Tier.ENTERPRISE,  # SCIM protocol

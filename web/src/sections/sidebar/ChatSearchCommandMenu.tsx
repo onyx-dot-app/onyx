@@ -47,7 +47,8 @@ function DynamicFooter() {
 }
 
 interface ChatSearchCommandMenuProps {
-  trigger: React.ReactNode;
+  /** Renders the control that opens the menu. */
+  trigger: (open: () => void) => React.ReactNode;
 }
 
 interface FilterableProject {
@@ -182,6 +183,8 @@ export default function ChatSearchCommandMenu({
     [createProjectModal]
   );
 
+  const handleOpen = useCallback(() => setOpen(true), []);
+
   const handleOpenChange = useCallback((newOpen: boolean) => {
     setOpen(newOpen);
     if (!newOpen) {
@@ -204,9 +207,7 @@ export default function ChatSearchCommandMenu({
 
   return (
     <>
-      <div aria-label="Open chat search" onClick={() => setOpen(true)}>
-        {trigger}
-      </div>
+      {trigger(handleOpen)}
 
       <CommandMenu open={open} onOpenChange={handleOpenChange}>
         <CommandMenu.Content>

@@ -24,7 +24,7 @@ export interface TracingSetupModalState {
 
 export interface TracingSetupModalProps {
   state: TracingSetupModalState;
-  onSaved: () => Promise<unknown>;
+  onSaved: () => Promise<void>;
 }
 
 type FormValues = Record<string, string>;

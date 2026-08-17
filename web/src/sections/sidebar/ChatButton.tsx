@@ -22,6 +22,7 @@ import ShareChatSessionModal from "@/sections/modals/ShareChatSessionModal";
 import { Button, LineItemButton, SidebarTab } from "@opal/components";
 import IconButton from "@/refresh-components/buttons/IconButton";
 import { InputTypeIn } from "@opal/components";
+import useFocusOnMount from "@opal/hooks/useFocusOnMount";
 import { DRAG_TYPES, LOCAL_STORAGE_KEYS } from "@/lib/sidebar/constants";
 import {
   shouldShowMoveModal,
@@ -53,6 +54,7 @@ export function PopoverSearchInput({
   onSearch,
 }: PopoverSearchInputProps) {
   const [searchTerm, setSearchTerm] = useState("");
+  const focusOnMount = useFocusOnMount<HTMLInputElement>();
 
   const handleChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     const value = e.target.value;
@@ -87,7 +89,7 @@ export function PopoverSearchInput({
         placeholder="Search Projects"
         onClick={noProp()}
         variant="internal"
-        autoFocus
+        ref={focusOnMount}
       />
     </div>
   );
@@ -141,16 +143,18 @@ const ChatButton = memo(
 
     // Drag and drop setup for chat sessions
     const dragId = `${DRAG_TYPES.CHAT}-${chatSession.id}`;
-    const { attributes, listeners, setNodeRef, transform, isDragging } =
-      useDraggable({
-        id: dragId,
-        data: {
-          type: DRAG_TYPES.CHAT,
-          chatSession,
-          projectId: project?.id,
-        },
-        disabled: !draggable || renaming,
-      });
+    // `attributes` is intentionally dropped: it turns the wrapper into a
+    // focusable role="button", which adds a second tab stop per row and lets
+    // Enter/Space start a keyboard drag that looks like the chat is disabled.
+    const { listeners, setNodeRef, transform, isDragging } = useDraggable({
+      id: dragId,
+      data: {
+        type: DRAG_TYPES.CHAT,
+        chatSession,
+        projectId: project?.id,
+      },
+      disabled: !draggable || renaming,
+    });
 
     // Sync local name state when chatSession.name changes (e.g., after auto-naming)
     useEffect(() => {
@@ -433,8 +437,13 @@ const ChatButton = memo(
       >
         <Popover.Anchor>
           <SidebarTab
-            href={isDragging ? undefined : `/app?chatId=${chatSession.id}`}
-            onClick={handleClick}
+            /* While renaming, drop the click target so the input stays usable. */
+            href={
+              isDragging || renaming
+                ? undefined
+                : `/app?chatId=${chatSession.id}`
+            }
+            onClick={renaming ? undefined : handleClick}
             selected={active}
             rightChildren={rightMenu}
             nested={!!project}
@@ -523,7 +532,6 @@ const ChatButton = memo(
                 : undefined,
               opacity: isDragging ? 0.5 : 1,
             }}
-            {...(mounted ? attributes : {})}
             {...(mounted ? listeners : {})}
           >
             {popover}

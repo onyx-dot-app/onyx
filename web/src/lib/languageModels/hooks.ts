@@ -142,9 +142,11 @@ export function useLLMProviders(agentId?: number) {
     defaultChatNaming: data?.default_chat_naming ?? null,
     isLoading: !error && !data,
     error,
-    refetch: mutate as unknown as () => Promise<
-      LLMProviderResponse<LLMProviderDescriptor> | undefined
-    >,
+    // `mutate` resolves to the raw (unenriched) response, so callers must not
+    // read its result. Wrapping it keeps the revalidation without the lie.
+    refetch: async (): Promise<void> => {
+      await mutate();
+    },
   };
 }
 

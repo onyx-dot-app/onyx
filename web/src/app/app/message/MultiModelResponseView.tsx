@@ -102,28 +102,20 @@ export default function MultiModelResponseView({
   const [selectionExiting, setSelectionExiting] = useState(false);
   // Measures the overflow-hidden carousel container for responsive preferred-panel sizing.
   const [trackContainerW, setTrackContainerW] = useState(0);
-  const roRef = useRef<ResizeObserver | null>(null);
   const trackContainerElRef = useRef<HTMLDivElement | null>(null);
+  const [trackContainerEl, setTrackContainerEl] =
+    useState<HTMLDivElement | null>(null);
   const trackContainerRef = useCallback((el: HTMLDivElement | null) => {
     trackContainerElRef.current = el;
-    if (roRef.current) {
-      roRef.current.disconnect();
-      roRef.current = null;
-    }
-    if (!el) return;
-    const ro = new ResizeObserver(([entry]) => {
-      setTrackContainerW(entry?.contentRect.width ?? 0);
-    });
-    ro.observe(el);
-    setTrackContainerW(el.offsetWidth);
-    roRef.current = ro;
+    setTrackContainerEl(el);
   }, []);
 
   // Measures the preferred panel's height to cap non-preferred panels in selection mode.
   const [preferredPanelHeight, setPreferredPanelHeight] = useState<
     number | null
   >(null);
-  const preferredRoRef = useRef<ResizeObserver | null>(null);
+  const [preferredPanelEl, setPreferredPanelEl] =
+    useState<HTMLDivElement | null>(null);
   // Refs to each panel wrapper for height animation on deselect
   const panelElsRef = useRef<Map<number, HTMLDivElement>>(new Map());
 
@@ -148,21 +140,36 @@ export default function MultiModelResponseView({
     });
   }, [preferredPanelHeight, preferredIndex, hiddenPanels, responses]);
 
-  const preferredPanelRef = useCallback((el: HTMLDivElement | null) => {
-    if (preferredRoRef.current) {
-      preferredRoRef.current.disconnect();
-      preferredRoRef.current = null;
-    }
-    if (!el) {
+  useLayoutEffect(() => {
+    if (!trackContainerEl) return;
+    const ro = new ResizeObserver(([entry]) => {
+      setTrackContainerW(entry?.contentRect.width ?? 0);
+    });
+    ro.observe(trackContainerEl);
+    setTrackContainerW(trackContainerEl.offsetWidth);
+    return () => ro.disconnect();
+  }, [trackContainerEl]);
+
+  useLayoutEffect(() => {
+    if (!preferredPanelEl) {
       setPreferredPanelHeight(null);
       return;
     }
     const ro = new ResizeObserver(([entry]) => {
       setPreferredPanelHeight(entry?.contentRect.height ?? 0);
     });
-    ro.observe(el);
-    setPreferredPanelHeight(el.offsetHeight);
-    preferredRoRef.current = ro;
+    ro.observe(preferredPanelEl);
+    setPreferredPanelHeight(preferredPanelEl.offsetHeight);
+    return () => ro.disconnect();
+  }, [preferredPanelEl]);
+
+  useEffect(() => {
+    return () => {
+      if (deselectTimeoutRef.current !== null) {
+        clearTimeout(deselectTimeoutRef.current);
+        deselectTimeoutRef.current = null;
+      }
+    };
   }, []);
 
   const isGenerating = useMemo(
@@ -554,7 +561,7 @@ export default function MultiModelResponseView({
                   } else {
                     panelElsRef.current.delete(r.modelIndex);
                   }
-                  if (isPref) preferredPanelRef(el);
+                  if (isPref) setPreferredPanelEl(el);
                 }}
                 style={{
                   width: `${selectionEntered ? finalW : startW}px`,

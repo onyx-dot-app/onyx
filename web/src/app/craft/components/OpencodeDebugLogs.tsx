@@ -115,7 +115,9 @@ function LogStreamPane({ open }: LogStreamPaneProps) {
   // Refs mirror the state inside the SSE reader's hot loop without
   // forcing it to re-bind on every state change.
   const followRef = useRef<boolean>(follow);
-  followRef.current = follow;
+  useEffect(() => {
+    followRef.current = follow;
+  }, [follow]);
 
   const appendLine = useCallback((text: string) => {
     const line: LogLine = {

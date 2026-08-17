@@ -59,6 +59,14 @@ from onyx.document_index.opensearch.search import (
 )
 from shared_configs.configs import POSTGRES_DEFAULT_SCHEMA
 
+_PUBLIC_DOCUMENT_ACCESS = DocumentAccess.build(
+    user_emails=[],
+    user_groups=[],
+    external_user_emails=[],
+    external_user_group_ids=[],
+    is_public=True,
+)
+
 
 def _patch_global_tenant_state(monkeypatch: pytest.MonkeyPatch, state: bool) -> None:
     """Patches MULTI_TENANT wherever necessary for this test file.
@@ -138,13 +146,7 @@ def _create_test_document_chunk(
     title: str | None = None,
     title_vector: list[float] | None = None,
     hidden: bool = False,
-    document_access: DocumentAccess = DocumentAccess.build(
-        user_emails=[],
-        user_groups=[],
-        external_user_emails=[],
-        external_user_group_ids=[],
-        is_public=True,
-    ),
+    document_access: DocumentAccess = _PUBLIC_DOCUMENT_ACCESS,
     source_type: DocumentSource = DocumentSource.FILE,
     last_updated: datetime | None = None,
     created_at: datetime | None = None,
@@ -1257,7 +1259,7 @@ class TestOpenSearchClient:
 
         # Postcondition.
         # Retrieve each document and verify updates were applied.
-        for doc, doc_chunk_id in zip(docs, doc_chunk_ids):
+        for doc, doc_chunk_id in zip(docs, doc_chunk_ids, strict=True):
             updated_doc = test_client.get_document(document_chunk_id=doc_chunk_id)
             assert updated_doc.hidden is True
             assert updated_doc.global_boost == 7

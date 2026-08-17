@@ -20,6 +20,7 @@ from onyx.connectors.capability_checks.registry import (
     get_applicable_capabilities,
     get_capability_checks,
 )
+from onyx.connectors.credentials_provider import build_db_credentials_provider
 from onyx.connectors.exceptions import (
     ConnectorValidationError,
     UnexpectedValidationError,
@@ -27,6 +28,10 @@ from onyx.connectors.exceptions import (
 from onyx.connectors.factory import identify_connector_class, instantiate_connector
 from onyx.connectors.interfaces import BaseConnector
 from onyx.connectors.models import InputType
+from onyx.connectors.source_operations import (
+    SourceOperations,
+    get_source_operations_class,
+)
 from onyx.db.models import Credential
 from onyx.utils.credential_audit import emit_credential_access
 from onyx.utils.logger import setup_logger
@@ -288,6 +293,17 @@ def generate_capability_report(
             e,
         )
 
+    # Migrated sources always get their gateway constructed: construction is
+    # lazy (no client build or decrypt until an operation runs), and checks
+    # treat a registered-but-missing gateway as a programmer error.
+    source_operations: SourceOperations | None = None
+    source_operations_class = get_source_operations_class(source)
+    if source_operations_class is not None:
+        source_operations = source_operations_class(
+            credentials_provider=build_db_credentials_provider(source, credential.id),
+            connector_specific_config=connector_specific_config,
+        )
+
     if credential.credential_json:
         # Distinct decrypt site from ``instantiate_connector``'s paths (which
         # may not have decrypted at all when instantiation fails). Audit is
@@ -311,6 +327,7 @@ def generate_capability_report(
         # than probe an empty dict.
         connector_specific_config=connector_specific_config,
         instantiation_error=instantiation_error,
+        source_operations=source_operations,
     )
     results = run_capability_checks(checks, context)
     return CredentialCapabilityReport(

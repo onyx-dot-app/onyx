@@ -38,8 +38,8 @@ def test_load_from_checkpoint_access__public_channel(
     slack_connector: SlackConnector,
 ) -> None:
     """Test that load_from_checkpoint returns correct access information for documents."""
-    if not slack_connector.client:
-        raise RuntimeError("Web client must be defined")
+    if not slack_connector.slack_client:
+        raise RuntimeError("Source operations gateway must be defined")
 
     docs = load_all_from_connector(
         connector=slack_connector,
@@ -77,8 +77,8 @@ def test_load_from_checkpoint_access__private_channel(
     slack_connector: SlackConnector,
 ) -> None:
     """Test that load_from_checkpoint returns correct access information for documents."""
-    if not slack_connector.client:
-        raise RuntimeError("Web client must be defined")
+    if not slack_connector.slack_client:
+        raise RuntimeError("Source operations gateway must be defined")
 
     docs = load_all_from_connector(
         connector=slack_connector,
@@ -118,8 +118,8 @@ def test_slim_documents_access__public_channel(
     start_ts: float | None,
 ) -> None:
     """Test that retrieve_all_slim_docs_perm_sync returns correct access information for slim documents."""
-    if not slack_connector.client:
-        raise RuntimeError("Web client must be defined")
+    if not slack_connector.slack_client:
+        raise RuntimeError("Source operations gateway must be defined")
 
     slim_docs_generator = slack_connector.retrieve_all_slim_docs_perm_sync(
         start=start_ts,
@@ -154,8 +154,8 @@ def test_slim_documents_access__private_channel(
     slack_connector: SlackConnector,
 ) -> None:
     """Test that retrieve_all_slim_docs_perm_sync returns correct access information for slim documents."""
-    if not slack_connector.client:
-        raise RuntimeError("Web client must be defined")
+    if not slack_connector.slack_client:
+        raise RuntimeError("Source operations gateway must be defined")
 
     slim_docs_generator = slack_connector.retrieve_all_slim_docs_perm_sync(
         start=None,

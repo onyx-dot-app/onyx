@@ -5,32 +5,32 @@ home: https://www.onyx.app/
 sources:
   - "https://github.com/onyx-dot-app/onyx"
 type: application
-version: 0.8.12
+version: 0.8.16
 appVersion: latest
 annotations:
   category: Productivity
   licenses: MIT
+  # Links the GHCR package back to this repository. `helm push` copies chart
+  # annotations onto the OCI manifest, and GHCR reads this key to attach the
+  # package to the repo.
+  org.opencontainers.image.source: https://github.com/onyx-dot-app/onyx
   images: |
     - name: webserver
       image: docker.io/onyxdotapp/onyx-web-server:latest
     - name: background
       image: docker.io/onyxdotapp/onyx-backend:latest
   artifacthub.io/changes: |
+    - kind: added
+      description: The chart is now also published as an OCI artifact at
+        `oci://ghcr.io/onyx-dot-app/charts/onyx`. Install it with
+        `helm install onyx oci://ghcr.io/onyx-dot-app/charts/onyx --version <version>`.
+        The existing repository at https://onyx-dot-app.github.io/onyx keeps working
+        and stays the default install path; no action is needed to keep using it.
     - kind: changed
-      description: values-localdev.yaml now disables the sandbox image prepuller.
-        Local kind clusters side-load the sandbox image (kind load + IfNotPresent),
-        so there is no registry pull to front-run, and with the localdev defaults
-        (:edge, pullPolicy Always) the prepuller would eagerly pull the ~3.3 GB
-        image from Docker Hub onto the kind node. Production values are unchanged.
-    - kind: fixed
-      description: Fixed "helm upgrade" failing with 'PriorityClass ... value: Forbidden;
-        may not be changed in an update' after the sandbox image prepuller landed in
-        0.8.6. PriorityClass.value is immutable and helm upgrade patches, so the
-        prepuller no longer ships a PriorityClass at all; it was buying very little.
-        Upgrading from 0.8.6 deletes it, and the prepuller runs at the cluster default
-        priority — set sandboxImagePrepull.priorityClassName to an existing class to
-        keep it preemptible. Running pods are unaffected, because pod priority is
-        resolved at admission. The chart now renders no cluster-scoped objects.
+      description: Chart tarballs are now attached to GitHub releases
+        (`helm/onyx-<version>`) instead of being committed to the gh-pages branch.
+        `helm repo add` and `helm install` are unaffected — only the download URL
+        behind index.yaml changed.
 dependencies:
   # Helm uses the first condition path that exists: `postgresqlOperator.enabled`
   # is unset by default, so this falls through to `postgresql.enabled`. Set it

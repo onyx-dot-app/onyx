@@ -57,13 +57,13 @@ def test_token_periods_use_whole_utc_days() -> None:
     )
 
 
-def test_cost_window_uses_whole_utc_day_buckets() -> None:
+def test_cost_windows_use_fixed_utc_calendar_periods() -> None:
     now = datetime.datetime(2026, 7, 21, 13, 30, tzinfo=datetime.timezone.utc)
 
     assert get_cost_window_start(now, 24) == datetime.datetime(
         2026, 7, 21, tzinfo=datetime.timezone.utc
     )
-    assert get_cost_window_start(now, 48) == datetime.datetime(
+    assert get_cost_window_start(now, 168) == datetime.datetime(
         2026, 7, 20, tzinfo=datetime.timezone.utc
     )
 
@@ -89,6 +89,7 @@ def _seed_usage(
     cache_read_tokens: int,
     cost_cents: float,
     window_start: datetime.datetime,
+    cache_creation_tokens: int = 0,
 ) -> None:
     """Insert a ledger row without going through the Postgres upsert path."""
     db_session.add(
@@ -101,6 +102,7 @@ def _seed_usage(
             input_tokens=input_tokens,
             output_tokens=output_tokens,
             cache_read_tokens=cache_read_tokens,
+            cache_creation_tokens=cache_creation_tokens,
             cost_cents=cost_cents,
         )
     )
@@ -149,12 +151,21 @@ class TestRecordUserUsage:
             input_tokens=100,
             output_tokens=50,
             cache_read_tokens=10,
+            cache_creation_tokens=25,
             cost_cents=1.5,
             window_start=window,
         )
 
         mock_session.execute.assert_called_once()
         mock_session.flush.assert_called_once()
+        stmt = mock_session.execute.call_args[0][0]
+        compiled = stmt.compile(dialect=postgresql.dialect())
+        assert compiled.params["cache_creation_tokens"] == 25
+        assert (
+            "cache_creation_tokens = "
+            "(user_usage.cache_creation_tokens + excluded.cache_creation_tokens)"
+            in str(compiled)
+        )
 
     def test_null_provider_stored_as_empty_string(self) -> None:
         mock_session = MagicMock()
@@ -176,6 +187,31 @@ class TestRecordUserUsage:
         stmt = mock_session.execute.call_args[0][0]
         compiled = stmt.compile(dialect=postgresql.dialect())
         assert compiled.params["provider"] == ""
+
+    def test_incognito_dimension_reaches_the_upsert(self) -> None:
+        """The flag must land in both the inserted row and the conflict target,
+        or incognito spend would silently merge into regular rows."""
+        mock_session = MagicMock()
+        window = datetime.datetime(2026, 6, 1, tzinfo=datetime.timezone.utc)
+
+        record_user_usage(
+            mock_session,
+            user_id=str(uuid4()),
+            model="model-a",
+            flow="CHAT",
+            provider="openai",
+            input_tokens=10,
+            output_tokens=5,
+            cache_read_tokens=0,
+            cost_cents=0.1,
+            window_start=window,
+            incognito=True,
+        )
+
+        stmt = mock_session.execute.call_args[0][0]
+        compiled = stmt.compile(dialect=postgresql.dialect())
+        assert compiled.params["incognito"] is True
+        assert "incognito" in str(compiled).split("ON CONFLICT")[1]
 
     def test_user_deletion_retains_usage_row_with_null_user_id(self) -> None:
         engine: Engine = create_engine("sqlite://")
@@ -284,7 +320,17 @@ class TestAggregation:
         day2 = datetime.datetime(2026, 6, 2, tzinfo=datetime.timezone.utc)
 
         _seed_usage(
-            db_session, user_id, "model-a", "CHAT", "anthropic", 100, 50, 0, 1.0, day1
+            db_session,
+            user_id,
+            "model-a",
+            "CHAT",
+            "anthropic",
+            100,
+            50,
+            0,
+            1.0,
+            day1,
+            cache_creation_tokens=7,
         )
         _seed_usage(
             db_session, user_id, "model-b", "CHAT", "anthropic", 200, 60, 0, 2.0, day1
@@ -306,6 +352,7 @@ class TestAggregation:
                 input_tokens=100,
                 output_tokens=50,
                 cache_read_tokens=0,
+                cache_creation_tokens=7,
                 cost_cents=1.0,
             ),
             UserUsageByDay(
@@ -314,6 +361,7 @@ class TestAggregation:
                 input_tokens=200,
                 output_tokens=60,
                 cache_read_tokens=0,
+                cache_creation_tokens=0,
                 cost_cents=2.0,
             ),
             UserUsageByDay(
@@ -322,6 +370,7 @@ class TestAggregation:
                 input_tokens=300,
                 output_tokens=70,
                 cache_read_tokens=0,
+                cache_creation_tokens=0,
                 cost_cents=3.0,
             ),
         ]

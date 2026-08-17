@@ -1,44 +1,35 @@
 "use client";
 
-import { AdminDateRangeSelector } from "@/components/dateRangeSelectors/AdminDateRangeSelector";
-import { OnyxBotChart } from "@/app/ee/admin/performance/usage/OnyxBotChart";
-import { FeedbackChart } from "@/app/ee/admin/performance/usage/FeedbackChart";
-import { QueryPerformanceChart } from "@/app/ee/admin/performance/usage/QueryPerformanceChart";
-import { PersonaMessagesChart } from "@/app/ee/admin/performance/usage/PersonaMessagesChart";
-import { useTimeRange } from "@/app/ee/admin/performance/lib";
-import UsageReports from "@/app/ee/admin/performance/usage/UsageReports";
+import { DateRangePicker } from "@/refresh-components/DateRangePicker";
+import { useTimeRange } from "@/lib/usage/hooks";
 import PerUserUsagePanel from "@/views/admin/PerUserUsagePanel";
-import { Divider } from "@opal/components";
-import { useAdminAgents } from "@/lib/agents/hooks";
 import { ADMIN_ROUTES } from "@/lib/admin-routes";
+import { Divider } from "@opal/components";
 import { SettingsLayouts } from "@opal/layouts";
 import TokenRateLimitsPanel from "@/app/admin/token-rate-limits/TokenRateLimitsPanel";
 
 const route = ADMIN_ROUTES.USAGE;
 
-export default function AnalyticsPage() {
+export default function UsagePage() {
   const [timeRange, setTimeRange] = useTimeRange();
-  const { agents } = useAdminAgents();
 
   return (
-    <SettingsLayouts.Root>
-      <SettingsLayouts.Header icon={route.icon} title={route.title} divider />
+    <SettingsLayouts.Root width="lg">
+      <SettingsLayouts.Header
+        icon={route.icon}
+        title={route.title}
+        description="Monitor workspace spend and review usage by user."
+        divider
+        rightChildren={
+          <DateRangePicker
+            value={timeRange}
+            onValueChange={(value) => setTimeRange(value as any)}
+            size="sm"
+          />
+        }
+      />
       <SettingsLayouts.Body>
-        <AdminDateRangeSelector
-          value={timeRange}
-          onValueChange={(value) => setTimeRange(value as any)}
-        />
-        <QueryPerformanceChart timeRange={timeRange} />
-        <FeedbackChart timeRange={timeRange} />
-        <OnyxBotChart timeRange={timeRange} />
-        <PersonaMessagesChart
-          availablePersonas={agents}
-          timeRange={timeRange}
-        />
-        <Divider />
-        <PerUserUsagePanel />
-        <Divider />
-        <UsageReports />
+        <PerUserUsagePanel timeRange={timeRange} />
         <Divider />
         <TokenRateLimitsPanel embedded />
       </SettingsLayouts.Body>

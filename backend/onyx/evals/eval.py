@@ -446,8 +446,11 @@ def run_eval(
     configuration: EvalConfigurationOptions,
     data: list[dict[str, Any]] | None = None,
     remote_dataset_name: str | None = None,
-    provider: EvalProvider = get_provider(),
+    provider: EvalProvider | None = None,
 ) -> EvalationAck:
+    if provider is None:
+        provider = get_provider()
+
     if data is not None and remote_dataset_name is not None:
         raise ValueError("Cannot specify both data and remote_dataset_name")
 

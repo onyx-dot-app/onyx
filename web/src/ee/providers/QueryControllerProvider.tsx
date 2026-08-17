@@ -61,14 +61,15 @@ export function QueryControllerProvider({
 
   const setAppMode = useCallback(
     (mode: AppMode) => {
-      if (!businessTier || !searchUiEnabled) return;
-      setState((prev) => {
-        if (prev.phase !== "idle") return prev;
-        appModeRef.current = mode;
-        return { phase: "idle", appMode: mode };
-      });
+      if (!businessTier || !searchUiEnabled || state.phase !== "idle") return;
+      appModeRef.current = mode;
+      // Re-check inside the updater: a phase transition queued in the same
+      // batch must not be rolled back to idle.
+      setState((prev) =>
+        prev.phase === "idle" ? { phase: "idle", appMode: mode } : prev
+      );
     },
-    [businessTier, searchUiEnabled]
+    [businessTier, searchUiEnabled, state.phase]
   );
 
   // ── Ancillary state ───────────────────────────────────────────────────

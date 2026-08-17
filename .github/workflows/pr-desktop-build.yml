@@ -25,7 +25,10 @@ jobs:
   build-desktop:
     name: Build Desktop (${{ matrix.platform }})
     runs-on: ${{ matrix.os }}
-    timeout-minutes: 60
+    # Windows runners are the slow leg: a cold cache compiles the whole Tauri
+    # dep tree twice (Clippy, then the release build), incl. native aws-lc-sys.
+    # Matches the desktop build timeout in deployment.yml.
+    timeout-minutes: 90
     strategy:
       fail-fast: false
       matrix:
@@ -38,11 +41,10 @@ jobs:
             os: macos-latest
             target: universal-apple-darwin
             args: "--target universal-apple-darwin"
-          # TODO: Fix and enable the Windows build.
-          #- platform: windows
-          #  os: windows-latest
-          #  target: x86_64-pc-windows-msvc
-          #  args: ""
+          - platform: windows
+            os: windows-latest
+            target: x86_64-pc-windows-msvc
+            args: ""
 
     steps:
       - name: Checkout code
@@ -105,6 +107,20 @@ jobs:
       - name: Run Clippy
         working-directory: ./desktop/src-tauri
         run: cargo clippy --all-targets --all-features -- -D warnings
+
+      # `tauri build` bundles an MSI on Windows, and WiX's ProductVersion only
+      # accepts numeric `major.minor.patch[.build]` -- the checked-in
+      # `0.0.0-dev` fails with "optional pre-release identifier in app version
+      # must be numeric-only ... for msi target". The release workflow injects a
+      # real numeric version at this point; presubmit has none to inject, so
+      # pin a throwaway one to keep MSI bundling exercised on PRs.
+      - name: Pin an MSI-compatible version (Windows)
+        if: matrix.platform == 'windows'
+        shell: bash
+        working-directory: ./desktop/src-tauri
+        run: |
+          jq '.version = "0.0.0"' tauri.conf.json > tauri.conf.json.tmp
+          mv tauri.conf.json.tmp tauri.conf.json
 
       - name: Build desktop app
         working-directory: ./desktop

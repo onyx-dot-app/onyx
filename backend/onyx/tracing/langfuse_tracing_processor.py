@@ -20,6 +20,7 @@ from onyx.tracing.framework.span_data import (
 )
 from onyx.tracing.framework.spans import Span
 from onyx.tracing.framework.traces import Trace
+from onyx.tracing.incognito import suppresses_external_traces
 
 logger = logging.getLogger(__name__)
 
@@ -64,6 +65,8 @@ class LangfuseTracingProcessor(TracingProcessor):
         self._langfuse_span_ids: dict[
             str, str
         ] = {}  # framework_span_id -> langfuse_span.id
+        # Membership decides every later callback, immune to mid-trace changes.
+        self._suppressed_traces: set[str] = set()
 
     def _get_client(self) -> Langfuse:
         """Get or create Langfuse client."""
@@ -98,6 +101,7 @@ class LangfuseTracingProcessor(TracingProcessor):
                 usage.get("output_tokens") or usage.get("completion_tokens") or 0
             )
             cache_read = int(usage.get("cache_read_input_tokens") or 0)
+            cache_creation = int(usage.get("cache_creation_input_tokens") or 0)
             model_config = data.model_config or {}
             provider = model_config.get("model_provider")
             flow = model_config.get("flow")
@@ -106,13 +110,13 @@ class LangfuseTracingProcessor(TracingProcessor):
             ):
                 return None
 
-            non_cached_input = max(input_tokens - cache_read, 0)
             input_cents, output_cents = compute_cost_cents(
-                data.model,
-                provider,
-                non_cached_input,
-                output_tokens,
+                model=data.model,
+                provider=provider,
+                prompt_tokens=input_tokens,
+                completion_tokens=output_tokens,
                 cache_read_tokens=cache_read,
+                cache_creation_tokens=cache_creation,
                 flow=flow,
                 image_count=data.image_count or 1,
             )
@@ -125,6 +129,10 @@ class LangfuseTracingProcessor(TracingProcessor):
 
     def on_trace_start(self, trace: Trace) -> None:
         """Called when a trace is started."""
+        if suppresses_external_traces():
+            with self._lock:
+                self._suppressed_traces.add(trace.trace_id)
+            return
         try:
             client = self._get_client()
             trace_meta = trace.export() or {}
@@ -162,6 +170,10 @@ class LangfuseTracingProcessor(TracingProcessor):
 
     def on_trace_end(self, trace: Trace) -> None:
         """Called when a trace is finished."""
+        with self._lock:
+            if trace.trace_id in self._suppressed_traces:
+                self._suppressed_traces.discard(trace.trace_id)
+                return
         try:
             with self._lock:
                 langfuse_span = self._trace_spans.pop(trace.trace_id, None)
@@ -191,6 +203,9 @@ class LangfuseTracingProcessor(TracingProcessor):
         agents run in parallel threads, and calling methods on span objects created
         in other threads can cause OpenTelemetry context issues.
         """
+        with self._lock:
+            if span.trace_id in self._suppressed_traces:
+                return
         try:
             data = span.span_data
             # Declare as Any since different code paths return different observation types

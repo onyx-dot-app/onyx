@@ -3,7 +3,9 @@
 import { useMemo } from "react";
 import { Button, Modal, ProgressBar, Text, Tooltip } from "@opal/components";
 import { Section } from "@opal/layouts";
+import type { IconFunctionComponent } from "@opal/types";
 import { formatCalendarDay } from "@/lib/dateUtils";
+import { getModelIcon } from "@/lib/languageModels";
 import type { UsageExportUser } from "@/lib/usage/userUsage";
 import { formatCost, formatTokens } from "@/lib/utils";
 
@@ -81,16 +83,22 @@ interface BreakdownListProps {
   title: string;
   slices: BreakdownSlice[];
   totalCostCents: number;
+  getIcon?: (slice: BreakdownSlice) => IconFunctionComponent;
 }
 
-function BreakdownList({ title, slices, totalCostCents }: BreakdownListProps) {
+function BreakdownList({
+  title,
+  slices,
+  totalCostCents,
+  getIcon,
+}: BreakdownListProps) {
   if (slices.length === 0) return null;
   return (
     <Section
       flexDirection="column"
       justifyContent="start"
       alignItems="stretch"
-      gap={0.5}
+      gap={2}
       width="full"
       height="fit"
     >
@@ -101,29 +109,33 @@ function BreakdownList({ title, slices, totalCostCents }: BreakdownListProps) {
         flexDirection="column"
         justifyContent="start"
         alignItems="stretch"
-        gap={0.625}
+        gap={2.5}
         width="full"
         height="fit"
       >
         {slices.map((slice) => {
           const share =
             totalCostCents > 0 ? slice.cost_cents / totalCostCents : 0;
+          const Icon = getIcon?.(slice);
           return (
             <Section
               key={slice.label}
               flexDirection="column"
               justifyContent="start"
               alignItems="stretch"
-              gap={0.25}
+              gap={1}
               width="full"
               height="fit"
             >
               {/* items-baseline has no Section equivalent, kept as a raw div */}
               <div className="flex items-baseline justify-between gap-3">
-                <span className="min-w-0 truncate">
-                  <Text font="main-ui-body" color="text-05" nowrap>
-                    {slice.label}
-                  </Text>
+                <span className="flex min-w-0 items-center gap-1.5">
+                  {Icon && <Icon size={16} className="shrink-0" />}
+                  <span className="min-w-0 truncate">
+                    <Text font="main-ui-body" color="text-05" nowrap>
+                      {slice.label}
+                    </Text>
+                  </span>
                 </span>
                 <span className="shrink-0 tabular-nums">
                   <Text font="main-ui-body" color="text-05">
@@ -157,7 +169,7 @@ function DailySpendStrip({ days }: { days: DailySpend[] }) {
       flexDirection="column"
       justifyContent="start"
       alignItems="stretch"
-      gap={0.25}
+      gap={1}
       width="full"
       height="fit"
     >
@@ -175,7 +187,7 @@ function DailySpendStrip({ days }: { days: DailySpend[] }) {
         flexDirection="row"
         justifyContent="start"
         alignItems="end"
-        gap={0.125}
+        gap={0.5}
         width="full"
         height={3.5}
       >
@@ -260,7 +272,7 @@ export default function UserUsageDetailModal({
           onClose={() => onOpenChange(false)}
         />
         <Modal.Body>
-          <Section alignItems="stretch" height="auto" gap={1.5}>
+          <Section alignItems="stretch" height="auto" gap={6}>
             <div className="flex flex-wrap gap-2">
               <div className="basis-1/2 sm:basis-1/4">
                 <StatCell label="Spend" value={formatCost(totals.cost_cents)} />
@@ -283,6 +295,12 @@ export default function UserUsageDetailModal({
                   value={formatTokens(totals.cache_read_tokens)}
                 />
               </div>
+              <div className="basis-1/2 sm:basis-1/4">
+                <StatCell
+                  label="Cache writes"
+                  value={formatTokens(totals.cache_creation_tokens)}
+                />
+              </div>
             </div>
 
             <DailySpendStrip days={days} />
@@ -290,6 +308,7 @@ export default function UserUsageDetailModal({
               title="By model"
               slices={byModel}
               totalCostCents={totals.cost_cents}
+              getIcon={(slice) => getModelIcon("", slice.label)}
             />
             <BreakdownList
               title="By flow"
@@ -300,6 +319,7 @@ export default function UserUsageDetailModal({
               title="By provider"
               slices={byProvider}
               totalCostCents={totals.cost_cents}
+              getIcon={(slice) => getModelIcon(slice.label)}
             />
 
             {byModel.length === 0 && (

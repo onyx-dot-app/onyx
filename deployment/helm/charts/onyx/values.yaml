@@ -22,8 +22,8 @@ global:
 # -- Custom (private/internal) CA certificates for outbound TLS.
 # When enabled, every pod that makes outbound TLS connections mounts the
 # referenced Secret/ConfigMap and trusts its roots. Keys must be PEM certs
-# ending in `.crt` (model servers also accept `.pem`). Two mechanisms, by pod
-# type:
+# ending in `.crt` (model servers also accept `.pem`). The handling varies by
+# pod type:
 #   - Shell-based pods (api server, celery workers, bots, MCP server) mount at
 #     /usr/local/share/ca-certificates, run `update-ca-certificates` at startup,
 #     and get REQUESTS_CA_BUNDLE / SSL_CERT_FILE pointed at the merged system
@@ -32,6 +32,10 @@ global:
 #   - Model servers run on a distroless image with no shell, so they mount at
 #     /etc/onyx/certs and merge the mounted roots with certifi's public roots in
 #     Python at startup (additive — public roots stay trusted). No root required.
+#   - The Craft sandbox proxy runs non-root on a read-only root filesystem. An
+#     init container builds an additive bundle in its writable confdir and
+#     configures mitmproxy through SANDBOX_PROXY_SSL_VERIFY_UPSTREAM_TRUSTED_CA
+#     to use that bundle for upstream TLS verification.
 # Version coupling: chart >= 0.7.0 pairs with the distroless model-server image
 # and can't run older ones — the model servers now run nonroot (1001, see their
 # securityContext below) and read ONYX_CUSTOM_CA_CERTS_DIR. Upgrade the chart and
@@ -43,6 +47,22 @@ customCACerts:
   # Exactly one of secretName / configMapName must be set when enabled.
   secretName: ""
   configMapName: ""
+
+# -- TLS verification for PostgreSQL connections.
+# When enabled, the chart mounts one CA certificate into each backend workload
+# that connects to PostgreSQL and configures libpq-compatible POSTGRES_SSL*
+# settings. The certificate source must already exist in the release namespace.
+postgresTls:
+  enabled: false
+  # verify-ca validates the server certificate without requiring POSTGRES_HOST
+  # to be one of the certificate's DNS names. Use verify-full when it is.
+  sslMode: verify-ca
+  # Exactly one of caSecretName / caConfigMapName must be set when enabled.
+  caSecretName: ""
+  caConfigMapName: ""
+  caKey: ca.crt
+  # Full path exposed to POSTGRES_SSLROOTCERT.
+  caMountPath: /etc/postgres-ca/ca.crt
 
 # Uncomment to skip the bundled CNPG operator and its CRDs, and let an existing
 # cluster-managed CloudNativePG operator reconcile the Cluster CR below (keep

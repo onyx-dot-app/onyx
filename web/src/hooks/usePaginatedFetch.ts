@@ -65,7 +65,16 @@ function usePaginatedFetch<T extends PaginatedType>({
   );
 
   // Tracks ongoing requests to avoid duplicate requests, uses ref to persist across renders
-  const ongoingRequestsRef = useRef<Set<number>>(new Set());
+  const requestKey = useMemo(
+    () =>
+      JSON.stringify({ endpoint, query, filter, itemsPerPage, pagesPerBatch }),
+    [endpoint, query, filter, itemsPerPage, pagesPerBatch]
+  );
+  const requestKeyRef = useRef(requestKey);
+  useEffect(() => {
+    requestKeyRef.current = requestKey;
+  }, [requestKey]);
+  const ongoingRequestsRef = useRef<Set<string>>(new Set());
 
   const totalPages = useMemo(() => {
     if (totalItems === 0) return 1;
@@ -82,11 +91,12 @@ function usePaginatedFetch<T extends PaginatedType>({
   // Fetches a batch of data and stores it in the cache
   const fetchBatchData = useCallback(
     async (batchNum: number) => {
+      const requestId = `${requestKey}:${batchNum}`;
       // Prevents duplicate requests
-      if (ongoingRequestsRef.current.has(batchNum)) {
+      if (ongoingRequestsRef.current.has(requestId)) {
         return;
       }
-      ongoingRequestsRef.current.add(batchNum);
+      ongoingRequestsRef.current.add(requestId);
 
       try {
         // Build query params
@@ -110,6 +120,10 @@ function usePaginatedFetch<T extends PaginatedType>({
         const url = `${endpoint}?${params.toString()}`;
         const responseData =
           await errorHandlingFetcher<PaginatedApiResponse<T>>(url);
+
+        if (requestKeyRef.current !== requestKey) {
+          return;
+        }
 
         // Validate response data structure
         if (
@@ -140,10 +154,10 @@ function usePaginatedFetch<T extends PaginatedType>({
       } catch (error) {
         setError(error instanceof Error ? error : new Error(String(error)));
       } finally {
-        ongoingRequestsRef.current.delete(batchNum);
+        ongoingRequestsRef.current.delete(requestId);
       }
     },
-    [endpoint, pagesPerBatch, itemsPerPage, query, filter]
+    [endpoint, pagesPerBatch, itemsPerPage, query, filter, requestKey]
   );
 
   // Updates the URL with the current page number

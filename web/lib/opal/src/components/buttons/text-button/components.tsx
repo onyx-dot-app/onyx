@@ -81,12 +81,12 @@ function TextButton({
           href={(disabled ? undefined : href) as Route}
           target={target}
           rel={target === "_blank" ? "noopener noreferrer" : undefined}
-          className="opal-text-button interactive-foreground"
+          className="opal-text-label interactive-foreground"
         >
           {label}
         </Link>
       ) : (
-        <div className="opal-text-button interactive-foreground">{label}</div>
+        <div className="opal-text-label interactive-foreground">{label}</div>
       )}
     </Interactive.Stateless>
   );

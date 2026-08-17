@@ -1681,7 +1681,7 @@ def get_base_llm_doc_information(
 
     documents = []
 
-    for doc_nr, doc in enumerate(results):
+    for _doc_nr, doc in enumerate(results):
         bare_doc = doc[0]
         documents.append(
             f"""* [{bare_doc.semantic_id}]({bare_doc.link}) ({bare_doc.doc_updated_at})"""

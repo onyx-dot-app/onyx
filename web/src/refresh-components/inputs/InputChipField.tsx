@@ -127,7 +127,10 @@ function InputChipField({
   );
 
   return (
+    // Pointer convenience only — this forwards a click to the input, which is
+    // already keyboard reachable.
     <div
+      role="presentation"
       className={cn(
         "flex p-1.5 rounded-08 cursor-text w-full",
         layout === "stacked"

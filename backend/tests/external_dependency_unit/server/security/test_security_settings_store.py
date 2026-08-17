@@ -13,7 +13,10 @@ from sqlalchemy.orm import Session
 from onyx.db.engine.sql_engine import get_session_with_current_tenant
 from onyx.db.models import SecuritySettings as SecuritySettingsRow
 from onyx.server.security import store as security_store
-from onyx.server.security.models import SecuritySettingsOverrides
+from onyx.server.security.models import (
+    IncognitoAvailability,
+    SecuritySettingsOverrides,
+)
 from onyx.server.security.store import (
     _build_env_defaults,
     _install_cache_for_test,
@@ -71,6 +74,27 @@ def test_partial_overrides_only_overrides_specified_fields() -> None:
     assert effective.password_min_length == env.password_min_length
     assert effective.password_max_length == env.password_max_length
     assert effective.password_require_uppercase == env.password_require_uppercase
+
+
+def test_every_override_field_has_a_column_or_kv_backing() -> None:
+    """upsert_overrides only writes fields with a matching row column, so an
+    override without one echoes from PUT but vanishes on the next read."""
+    kv_backed = {"password_auth_enabled"}
+    missing = [
+        name
+        for name in SecuritySettingsOverrides.model_fields
+        if name not in kv_backed and not hasattr(SecuritySettingsRow, name)
+    ]
+    assert not missing
+
+
+def test_incognito_availability_round_trips_through_the_store() -> None:
+    apply_patch(
+        SecuritySettingsOverrides(incognito_availability=IncognitoAvailability.GROUPS),
+        present_keys={"incognito_availability"},
+    )
+    effective = get_security_settings()
+    assert effective.incognito_availability is IncognitoAvailability.GROUPS
 
 
 def test_cache_hits_avoid_db_reads() -> None:

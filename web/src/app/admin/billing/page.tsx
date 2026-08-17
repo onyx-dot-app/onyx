@@ -69,7 +69,7 @@ function FooterLinks({
   )}`;
 
   return (
-    <Section flexDirection="row" justifyContent="center" gap={1} height="auto">
+    <Section flexDirection="row" justifyContent="center" gap={4} height="auto">
       {onActivateLicense && !hideLicenseLink && (
         <>
           <Text secondaryBody text03>

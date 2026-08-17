@@ -32,9 +32,21 @@
 }
 
 .opal-input-tags-tags {
+  --opal-input-tags-row-height: 24px;
+  --opal-input-tags-row-gap: 4px;
+  --opal-input-tags-rows: 1;
   @apply flex min-w-0 flex-1 flex-wrap content-center items-center;
-  gap: 4px;
-  min-height: 24px;
+  gap: var(--opal-input-tags-row-gap);
+  min-height: calc(
+    var(--opal-input-tags-rows) * var(--opal-input-tags-row-height) +
+      (var(--opal-input-tags-rows) - 1) * var(--opal-input-tags-row-gap)
+  );
+}
+
+/* A multi-row field packs rows from the top. content-center would float a
+   single row into the middle of the box. */
+.opal-input-tags-tags[data-multi-row] {
+  align-content: flex-start;
 }
 
 .opal-input-tags-field {

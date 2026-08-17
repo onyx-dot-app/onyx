@@ -1,5 +1,6 @@
 from collections.abc import Callable
 from enum import Enum
+from functools import partial
 from typing import List, Optional, Tuple, TypeVar
 
 from github import Github, RateLimitExceededException
@@ -151,7 +152,7 @@ def _fetch_repository_teams_detailed(
 
         members: PaginatedList[NamedUser] | list[NamedUser] = (
             _run_with_retry(
-                lambda: team.get_members(),
+                team.get_members,
                 f"get members for team {team.name}",
                 github_client,
             )
@@ -230,7 +231,7 @@ def _get_collaborators_and_outside_collaborators(
             if org is not None:
                 org_obj = org
                 membership = _run_with_retry(
-                    lambda: org_obj.has_in_members(collaborator),
+                    partial(org_obj.has_in_members, collaborator),
                     f"check membership for {collaborator.login} in org {org_obj.login}",
                     github_client,
                 )

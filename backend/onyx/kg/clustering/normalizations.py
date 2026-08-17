@@ -251,11 +251,11 @@ def normalize_entities(
     mapping: list[str | None] = run_functions_tuples_in_parallel(
         [
             (_normalize_one_entity, (entity, attributes, allowed_docs_temp_view_name))
-            for entity, attributes in zip(raw_entities, entity_attributes)
+            for entity, attributes in zip(raw_entities, entity_attributes, strict=True)
         ]
     )
     for entity, attributes, normalized_entity in zip(
-        raw_entities, entity_attributes, mapping
+        raw_entities, entity_attributes, mapping, strict=True
     ):
         if normalized_entity is not None:
             normalized_entities.append(normalized_entity)

@@ -413,7 +413,7 @@ export default function OpenAPIAuthenticationModal({
                       </FormField>
                     </div>
 
-                    <Divider paddingPerpendicular="fit" />
+                    <Divider paddingPerpendicular={0} />
 
                     {values.authMethod === "oauth" && (
                       <section className="flex flex-col gap-4 rounded-12 bg-background-tint-00 border border-border-01 p-4">

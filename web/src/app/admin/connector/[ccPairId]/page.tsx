@@ -607,12 +607,13 @@ function Main({ ccPairId }: { ccPairId: number }) {
             ) : (
               <>
                 We ran into some issues while processing some documents.{" "}
-                <b
-                  className="text-link cursor-pointer dark:text-blue-300"
+                <button
+                  type="button"
+                  className="text-link cursor-pointer dark:text-blue-300 font-bold"
                   onClick={() => setShowIndexAttemptErrors(true)}
                 >
                   View details.
-                </b>
+                </button>
               </>
             )}
           </AlertDescription>

@@ -41,7 +41,7 @@ describe("useBuildSessionController", () => {
     useBuildSessionStore.getState().setCurrentSession(SESSION_ID);
   });
 
-  it("refreshes stale skill state on mount and browser focus", async () => {
+  it("marks skills stale from reads without clearing confirmed stale state", async () => {
     jest.mocked(api.fetchSession).mockResolvedValue({
       skills_stale: true,
     } as never);
@@ -65,10 +65,12 @@ describe("useBuildSessionController", () => {
     act(() => window.dispatchEvent(new Event("focus")));
 
     await waitFor(() => {
-      expect(
-        useBuildSessionStore.getState().sessions.get(SESSION_ID)?.skillsStale
-      ).toBe(false);
+      expect(api.fetchSession).toHaveBeenCalledTimes(2);
     });
+    await act(async () => Promise.resolve());
+    expect(
+      useBuildSessionStore.getState().sessions.get(SESSION_ID)?.skillsStale
+    ).toBe(true);
   });
 
   it("does not restore stale state after an intervening reload", async () => {
