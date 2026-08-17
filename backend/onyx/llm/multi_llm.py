@@ -1,6 +1,5 @@
 import copy
 import os
-import re
 import time
 from collections.abc import Iterator
 from contextlib import AbstractContextManager, contextmanager, nullcontext
@@ -38,9 +37,14 @@ from onyx.llm.interfaces import (
     ToolChoice,
 )
 from onyx.llm.model_capabilities import (
+    ReasoningParamStyle,
+    anthropic_omits_sampling_params,
+    anthropic_supports_thinking,
+    anthropic_uses_adaptive_thinking,
     is_true_openai_model,
     model_is_reasoning_model,
     openai_model_rejects_reasoning_effort,
+    resolve_reasoning_param_style,
 )
 from onyx.llm.model_response import ModelResponse, ModelResponseStream, Usage
 from onyx.llm.models import (
@@ -84,22 +88,6 @@ _VERTEX_ANTHROPIC_MODELS_REJECTING_STREAM_OPTIONS = (
     "claude-opus-4-8",
 )
 
-# Starting with Claude Opus 4.7, Anthropic requires the adaptive thinking API
-# (thinking.type.adaptive + output_config.effort) in place of the legacy
-# thinking.type.enabled + budget_tokens, and rejects any non-default sampling
-# parameter (temperature/top_p/top_k) with a 400 invalid_request_error. Every
-# later model — Opus 4.8, the Claude 5 line (fable/mythos/sonnet), and beyond —
-# inherits both behaviors, so we gate on the parsed model version rather than an
-# explicit list. This lets new releases be handled without a code change, and
-# avoids relying on LiteLLM's drop_params (unreliable here, since AnthropicConfig
-# still advertises temperature as supported).
-_ANTHROPIC_ADAPTIVE_THINKING_MIN_VERSION = (4, 7)
-
-# Extended thinking landed in Claude 3.7. Parsing the version off the name
-# keeps aliased deployments (gateways, custom model names) reasoning even when
-# the litellm registry doesn't recognize the string.
-_ANTHROPIC_THINKING_MIN_VERSION = (3, 7)
-
 # Best-effort tuning kwargs, never worth failing a chat over. _completion
 # retries provider rejections without them: reasoning keys first, then all.
 # Semantics-changing keys (tools, tool_choice, messages) are never stripped.
@@ -142,13 +130,6 @@ def _rejection_names_strippable_kwargs(error: Exception, strippable: set[str]) -
         for key in strippable
         for alias in _KWARG_ERROR_ALIASES.get(key, (key,))
     )
-
-
-# Named tiers spanning Claude's naming schemes, including the Claude 5 line whose
-# version digit can precede or follow the tier ("claude-sonnet-5" vs
-# "claude-5-sonnet").
-_ANTHROPIC_MODEL_TIERS = ("opus", "sonnet", "haiku", "fable", "mythos")
-_ANTHROPIC_VERSION_PATTERN = r"\d+(?:[.-]\d+)?"
 
 
 class LLMTimeoutError(Exception):
@@ -388,66 +369,6 @@ def _is_vertex_model_rejecting_stream_options(model_name: str) -> bool:
     )
 
 
-def _parse_anthropic_model_version(model_name: str) -> tuple[int, int] | None:
-    """Extract the (major, minor) version from a Claude model name.
-
-    Handles the naming variants that reach LiteLLM: tier-first
-    ("claude-opus-4-8"), version-first ("claude-4-8-opus"), dot-separated
-    ("claude-opus-4.8"), the named Claude 5 tiers ("claude-fable-5",
-    "claude-5-sonnet"), legacy names ("claude-3-5-sonnet-20241022"), and
-    provider-prefixed / date-snapshot forms. Returns None when the name is not a
-    Claude model or carries no parseable version.
-    """
-    name = model_name.lower()
-    if "claude" not in name:
-        return None
-    # Drop any provider prefix (e.g. "anthropic/", "bedrock/anthropic.").
-    name = name[name.index("claude") :]
-    # Drop date/snapshot suffixes ("@20260101", "-20241022") so their digits
-    # can't be mistaken for a version.
-    name = name.split("@")[0]
-    name = re.sub(r"\d{6,}", "", name)
-
-    tier = next((t for t in _ANTHROPIC_MODEL_TIERS if t in name), None)
-    if tier is not None:
-        # The version can sit on either side of the tier depending on scheme.
-        match = re.search(
-            rf"{tier}[.-]?({_ANTHROPIC_VERSION_PATTERN})", name
-        ) or re.search(rf"({_ANTHROPIC_VERSION_PATTERN})[.-]?{tier}", name)
-        version_str = match.group(1) if match else None
-    else:
-        match = re.search(_ANTHROPIC_VERSION_PATTERN, name)
-        version_str = match.group(0) if match else None
-
-    if not version_str:
-        return None
-    parts = re.split(r"[.-]", version_str)
-    major = int(parts[0])
-    minor = int(parts[1]) if len(parts) > 1 else 0
-    return (major, minor)
-
-
-def _anthropic_meets_version(model_name: str, min_version: tuple[int, int]) -> bool:
-    version = _parse_anthropic_model_version(model_name)
-    return version is not None and version >= min_version
-
-
-def _anthropic_uses_adaptive_thinking(model_name: str) -> bool:
-    return _anthropic_meets_version(
-        model_name, _ANTHROPIC_ADAPTIVE_THINKING_MIN_VERSION
-    )
-
-
-def _anthropic_supports_thinking(model_name: str) -> bool:
-    return _anthropic_meets_version(model_name, _ANTHROPIC_THINKING_MIN_VERSION)
-
-
-def _anthropic_omits_sampling_params(model_name: str) -> bool:
-    return _anthropic_meets_version(
-        model_name, _ANTHROPIC_ADAPTIVE_THINKING_MIN_VERSION
-    )
-
-
 def _env_injection_enabled() -> bool:
     # Deferred import: the security store pulls in the DB layer, which this
     # module must not import at module load.
@@ -677,14 +598,14 @@ class LitellmLLM(LLM):
         is_claude_model = any("claude" in name.lower() for name in model_identity_names)
         is_qwen_model = "qwen" in self.config.model_name.lower()
         uses_adaptive_thinking = any(
-            _anthropic_uses_adaptive_thinking(name) for name in model_identity_names
+            anthropic_uses_adaptive_thinking(name) for name in model_identity_names
         )
-        anthropic_supports_thinking = any(
-            _anthropic_supports_thinking(name) for name in model_identity_names
+        model_supports_anthropic_thinking = any(
+            anthropic_supports_thinking(name) for name in model_identity_names
         )
         is_reasoning = (
             uses_adaptive_thinking
-            or anthropic_supports_thinking
+            or model_supports_anthropic_thinking
             or any(
                 model_is_reasoning_model(name, self.config.model_provider)
                 for name in model_identity_names
@@ -778,7 +699,7 @@ class LitellmLLM(LLM):
         # TODO(litellm): Consider removing this once the above is resolved,
         # although this assumes users have upgraded their litellm if relevant.
         omits_sampling_params = any(
-            _anthropic_omits_sampling_params(name) for name in model_identity_names
+            anthropic_omits_sampling_params(name) for name in model_identity_names
         )
         if not omits_sampling_params:
             optional_kwargs["temperature"] = 1 if is_reasoning else self._temperature
@@ -798,24 +719,30 @@ class LitellmLLM(LLM):
                 "effort": OPENAI_REASONING_EFFORT[reasoning_effort],
                 "summary": "auto",
             }
+            reasoning_style = resolve_reasoning_param_style(
+                self.config.model_provider,
+                model_identity_names,
+                self._api_surface,
+            )
 
-            if is_openai_model:
-                # OpenAI API does not accept reasoning params for GPT 5 chat models
-                # (neither reasoning nor reasoning_effort are accepted)
-                # even though they are reasoning models (bug in OpenAI)
-                if "-chat" not in model:
+            if reasoning_style is ReasoningParamStyle.OPENAI:
+                if is_claude_model:
+                    # Only a gateway routes Claude here, and it still translates
+                    # to Anthropic, so the signed-thinking-block constraint
+                    # described below applies to these requests too.
+                    send_reasoning = not _prompt_contains_tool_call_history(prompt)
+                else:
+                    # OpenAI API does not accept reasoning params for GPT 5 chat
+                    # models (neither reasoning nor reasoning_effort are accepted)
+                    # even though they are reasoning models (bug in OpenAI)
+                    send_reasoning = "-chat" not in model
+                if send_reasoning:
                     optional_kwargs["reasoning"] = openai_style_reasoning
 
-            elif is_claude_model and is_openai_compatible_proxy:
-                # Wire format follows the API surface, not the model vendor.
-                # LiteLLM drops thinking/output_config as unsupported on an
-                # openai surface, so a gateway only sees reasoning.effort.
-                # The gateway still translates to Anthropic, so the tool-call
-                # constraint below applies here too.
-                if not _prompt_contains_tool_call_history(prompt):
-                    optional_kwargs["reasoning"] = openai_style_reasoning
-
-            elif is_claude_model:
+            elif reasoning_style in (
+                ReasoningParamStyle.ANTHROPIC_ADAPTIVE,
+                ReasoningParamStyle.ANTHROPIC_BUDGET,
+            ):
                 # Anthropic requires every assistant message with tool_use
                 # blocks to start with a thinking block that carries a
                 # cryptographic signature.  We don't preserve those blocks
@@ -825,7 +752,7 @@ class LitellmLLM(LLM):
                 # (notably Bedrock).
                 has_tool_call_history = _prompt_contains_tool_call_history(prompt)
 
-                if uses_adaptive_thinking:
+                if reasoning_style is ReasoningParamStyle.ANTHROPIC_ADAPTIVE:
                     # Newer Anthropic models (Claude Opus 4.7+) reject
                     # thinking.type.enabled — they require the adaptive
                     # thinking config with output_config.effort.
@@ -873,7 +800,9 @@ class LitellmLLM(LLM):
                     optional_kwargs["reasoning_effort"] = reasoning_effort.value
                 elif reasoning_effort is ReasoningEffort.XHIGH:
                     # Provider mappings behind litellm's reasoning_effort are
-                    # uneven (Gemini raises on xhigh), clamp to high.
+                    # uneven (Gemini raises on xhigh), clamp to high. The model
+                    # picker greys the level out for these models, so reaching
+                    # here means a stored override outliving a model switch.
                     optional_kwargs["reasoning_effort"] = ReasoningEffort.HIGH.value
                 else:
                     optional_kwargs["reasoning_effort"] = ReasoningEffort.MEDIUM.value

@@ -19,6 +19,12 @@ export interface ModelConfiguration {
   max_input_tokens: number | null;
   supports_image_input: boolean;
   supports_reasoning: boolean;
+  /**
+   * Effort levels this model tells apart, ascending, as resolved by the
+   * backend that builds the request. Absent from an older backend, in which
+   * case the picker falls back to the levels every reasoning model supports.
+   */
+  supported_reasoning_efforts?: ReasoningEffortOverride[];
   /** Display-only metadata surfaced in the model picker (Nebius TokenFactory). */
   quantization?: string | null;
   country_code?: string | null;

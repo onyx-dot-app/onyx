@@ -10,6 +10,7 @@ These tests verify the flow plumbing:
 from unittest.mock import MagicMock, patch
 
 from onyx.db.enums import LLMModelFlowType
+from onyx.llm.models import ReasoningEffort
 from onyx.server.manage.llm.models import (
     LLMProviderDescriptor,
     ModelConfigurationUpsertRequest,
@@ -438,6 +439,40 @@ class TestLLMProviderDescriptorRecommendedDefault:
         assert all(
             not m.is_recommended_default for m in descriptor.model_configurations
         )
+
+
+class TestSupportedReasoningEfforts:
+    """The picker offers exactly the levels the request builder can deliver, so
+    the view has to resolve them from the provider and its wire protocol."""
+
+    def test_openai_model_behind_a_gateway_offers_xhigh(self) -> None:
+        """Bifrost addresses models as "vendor/model". Reading the vendor off
+        the name is what keeps xhigh available here."""
+        view = ModelConfigurationView.from_model(
+            _make_model_config(name="openai/gpt-5.1", display_name="GPT-5.1"),
+            "bifrost",
+            custom_config={"bifrost_api_mode": "chat_completions"},
+        )
+
+        assert ReasoningEffort.XHIGH in view.supported_reasoning_efforts
+
+    def test_unknown_gateway_model_stops_at_high(self) -> None:
+        """LiteLLM's fallback mapping clamps xhigh, so it must not be offered."""
+        view = ModelConfigurationView.from_model(
+            _make_model_config(name="google/gemini-3-pro", display_name="Gemini 3 Pro"),
+            "bifrost",
+            custom_config={"bifrost_api_mode": "chat_completions"},
+        )
+
+        assert view.supported_reasoning_efforts[-1] is ReasoningEffort.HIGH
+
+    def test_static_provider_branch_populates_efforts(self) -> None:
+        """The LiteLLM-enriched branch answers too, not just the dynamic one."""
+        view = ModelConfigurationView.from_model(
+            _make_model_config(name="gpt-5.1", display_name=None), "openai"
+        )
+
+        assert ReasoningEffort.XHIGH in view.supported_reasoning_efforts
 
 
 def _make_model_config(

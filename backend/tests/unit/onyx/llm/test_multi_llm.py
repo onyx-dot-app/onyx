@@ -30,7 +30,6 @@ from onyx.llm.multi_llm import (
     LitellmLLM,
     LLMTimeoutError,
     _consume_stream_with_timeout,
-    _parse_anthropic_model_version,
     temporary_env_and_lock,
 )
 
@@ -619,52 +618,6 @@ def test_keeps_temperature_for_older_sonnet_models(model_name: str) -> None:
         assert "temperature" in kwargs
 
 
-@pytest.mark.parametrize(
-    "model_name, expected",
-    [
-        # Tier-first, hyphenated
-        ("claude-opus-4-8", (4, 8)),
-        ("claude-opus-4-7", (4, 7)),
-        ("claude-sonnet-4-6", (4, 6)),
-        ("claude-sonnet-4-5", (4, 5)),
-        # Tier-first, dot-separated
-        ("claude-opus-4.8", (4, 8)),
-        ("claude-opus-4.7", (4, 7)),
-        # Version-first (litellm_proxy / reversed schemes)
-        ("claude-4-8-opus", (4, 8)),
-        ("claude-4.8-opus", (4, 8)),
-        ("claude-4-7-opus", (4, 7)),
-        ("claude-4.7-opus", (4, 7)),
-        # Claude 5 named tiers, version digit on either side
-        ("claude-sonnet-5", (5, 0)),
-        ("claude-5-sonnet", (5, 0)),
-        ("claude-fable-5", (5, 0)),
-        ("claude-5-fable", (5, 0)),
-        ("claude-mythos-5", (5, 0)),
-        ("claude-5-mythos", (5, 0)),
-        ("claude-opus-5", (5, 0)),
-        ("claude-5-opus", (5, 0)),
-        # Date/snapshot suffixes stripped
-        ("claude-opus-4-8@20260101", (4, 8)),
-        ("claude-sonnet-5@20260203", (5, 0)),
-        ("claude-opus-4-5@20251101", (4, 5)),
-        ("claude-3-5-sonnet-20241022", (3, 5)),
-        # Legacy naming
-        ("claude-3-7-sonnet", (3, 7)),
-        # Provider-prefixed
-        ("anthropic/claude-opus-4-8", (4, 8)),
-        ("bedrock/anthropic.claude-opus-4-7", (4, 7)),
-        # Non-Claude models parse to None
-        ("gpt-5.2", None),
-        ("gemini-2.5-pro", None),
-    ],
-)
-def test_parse_anthropic_model_version(
-    model_name: str, expected: tuple[int, int] | None
-) -> None:
-    assert _parse_anthropic_model_version(model_name) == expected
-
-
 @pytest.mark.parametrize("model_name", VERTEX_OPUS_MODELS_REJECTING_STREAM_OPTIONS)
 def test_vertex_stream_omits_stream_options(model_name: str) -> None:
     llm = LitellmLLM(
@@ -766,6 +719,57 @@ def test_claude_via_openai_compatible_proxy_uses_reasoning_param() -> None:
         assert kwargs["reasoning"] == {"effort": "high", "summary": "auto"}
         assert "thinking" not in kwargs
         assert "output_config" not in kwargs
+
+
+@pytest.mark.parametrize("api_mode", ["chat_completions", "responses"])
+def test_openai_via_openai_compatible_proxy_reaches_xhigh(api_mode: str) -> None:
+    """An OpenAI model behind a gateway is still an OpenAI model: it takes the
+    OpenAI reasoning param, and xhigh reaches it instead of being clamped to
+    high by the LiteLLM fallback."""
+    llm = LitellmLLM(
+        api_key="test_key",
+        timeout=30,
+        model_provider=LlmProviderNames.BIFROST,
+        model_name="openai/gpt-5.1",
+        api_base="https://gateway.example/v1",
+        max_input_tokens=200000,
+        custom_config={"bifrost_api_mode": api_mode},
+    )
+
+    with patch("litellm.completion") as mock_completion:
+        mock_completion.return_value = []
+
+        messages: LanguageModelInput = [UserMessage(content="Hi")]
+        list(llm.stream(messages, reasoning_effort=ReasoningEffort.XHIGH))
+
+        kwargs = mock_completion.call_args.kwargs
+        assert kwargs["reasoning"] == {"effort": "xhigh", "summary": "auto"}
+        assert "reasoning_effort" not in kwargs
+
+
+def test_gateway_chat_alias_only_silences_openai_models() -> None:
+    """The "-chat" rule is an OpenAI quirk (their chat models reject reasoning
+    params). A Claude alias that happens to contain it must still reason."""
+    llm = LitellmLLM(
+        api_key="test_key",
+        timeout=30,
+        model_provider=LlmProviderNames.BIFROST,
+        model_name="anthropic/claude-sonnet-4-5-chat",
+        api_base="https://gateway.example/v1",
+        max_input_tokens=200000,
+        custom_config={"bifrost_api_mode": "chat_completions"},
+    )
+
+    with patch("litellm.completion") as mock_completion:
+        mock_completion.return_value = []
+
+        messages: LanguageModelInput = [UserMessage(content="Hi")]
+        list(llm.stream(messages, reasoning_effort=ReasoningEffort.HIGH))
+
+        assert mock_completion.call_args.kwargs["reasoning"] == {
+            "effort": "high",
+            "summary": "auto",
+        }
 
 
 def test_aliased_claude_model_still_reasons() -> None:

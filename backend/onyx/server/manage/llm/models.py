@@ -6,12 +6,15 @@ from typing import TYPE_CHECKING, Any, Generic, TypeVar
 from pydantic import BaseModel, Field, field_validator
 
 from onyx.db.enums import LLMModelFlowType
+from onyx.llm.api_surfaces import resolve_api_surface
 from onyx.llm.constants import DYNAMIC_LLM_PROVIDERS
 from onyx.llm.model_capabilities import (
     get_max_input_tokens,
     litellm_thinks_model_supports_image_input,
     model_is_reasoning_model,
+    supported_reasoning_efforts,
 )
+from onyx.llm.models import ReasoningEffort
 from onyx.server.manage.llm.utils import (
     extract_vendor_from_model_name,
     filter_model_configurations,
@@ -82,6 +85,7 @@ class LLMProviderDescriptor(BaseModel):
             llm_provider_model.model_configurations,
             provider,
             use_stored_display_name=llm_provider_model.custom_config is not None,
+            custom_config=llm_provider_model.custom_config,
         )
         default_model = fetch_default_model_for_provider(provider)
         for model_configuration in model_configurations:
@@ -189,6 +193,7 @@ class LLMProviderView(LLMProvider):
                 llm_provider_model.model_configurations,
                 provider,
                 use_stored_display_name=llm_provider_model.custom_config is not None,
+                custom_config=llm_provider_model.custom_config,
             ),
         )
 
@@ -231,6 +236,10 @@ class ModelConfigurationView(BaseModel):
     configured_max_input_tokens: int | None = Field(default=None, exclude=True)
     supports_image_input: bool
     supports_reasoning: bool = False
+    # Effort levels this model tells apart, ascending. Read alongside
+    # supports_reasoning: an empty list on a reasoning model means the model
+    # takes no effort parameter. The model picker offers exactly these.
+    supported_reasoning_efforts: list[ReasoningEffort] = Field(default_factory=list)
     # True when this is the provider's recommended default model.
     is_recommended_default: bool = False
     display_name: str | None = None
@@ -246,7 +255,16 @@ class ModelConfigurationView(BaseModel):
         model_configuration_model: "ModelConfigurationModel",
         provider_name: str,
         use_stored_display_name: bool = False,
+        custom_config: dict[str, str] | None = None,
     ) -> "ModelConfigurationView":
+        # The admin's chosen wire protocol decides which reasoning parameters
+        # reach the model, so it decides which effort levels are selectable.
+        reasoning_efforts = supported_reasoning_efforts(
+            provider_name,
+            [model_configuration_model.name],
+            resolve_api_surface(provider_name, custom_config),
+        )
+
         # For dynamic providers (OpenRouter, Bedrock, Ollama) and custom-config
         # providers, use the display_name stored in DB. Skip LiteLLM parsing.
         if (
@@ -286,6 +304,7 @@ class ModelConfigurationView(BaseModel):
                         model_configuration_model.display_name or "",
                     )
                 ),
+                supported_reasoning_efforts=reasoning_efforts,
                 display_name=model_configuration_model.display_name,
                 custom_display_name=model_configuration_model.custom_display_name,
                 provider_display_name=None,  # Not needed for dynamic providers
@@ -340,6 +359,7 @@ class ModelConfigurationView(BaseModel):
                     model_configuration_model.name, provider_name
                 )
             ),
+            supported_reasoning_efforts=reasoning_efforts,
             # Populate display fields from parsed model name
             display_name=display_name,
             custom_display_name=model_configuration_model.custom_display_name,
