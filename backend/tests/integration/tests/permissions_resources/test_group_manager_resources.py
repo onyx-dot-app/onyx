@@ -28,6 +28,7 @@ from tests.integration.common_utils.managers.cc_pair import CCPairManager
 from tests.integration.common_utils.managers.connector import ConnectorManager
 from tests.integration.common_utils.managers.credential import CredentialManager
 from tests.integration.common_utils.managers.document_set import DocumentSetManager
+from tests.integration.common_utils.managers.index_attempt import IndexAttemptManager
 from tests.integration.common_utils.managers.user import UserManager
 from tests.integration.common_utils.managers.user_group import UserGroupManager
 from tests.integration.common_utils.test_models import (
@@ -494,6 +495,37 @@ def test_manager_cannot_read_detail_of_unmanaged_cc_pair(env: _ScopedEnv) -> Non
     path = f"/manage/admin/cc-pair/{admin_cc_pair.id}"
     resp = call_endpoint("GET", path, None, env.manager.headers, env.manager.cookies)
     assert resp.status_code in (403, 404), resp.text
+
+
+def test_manager_reads_stage_metrics_of_managed_cc_pair(env: _ScopedEnv) -> None:
+    """GATE 2 already scoped correctly; GATE 1 was missing allow_scope."""
+    cc_pair = CCPairManager.create_from_scratch(
+        user_performing_action=env.manager,
+        access_type=AccessType.PRIVATE,
+        groups=[env.managed_group.id],
+    )
+    attempt = IndexAttemptManager.create_test_index_attempts(
+        num_attempts=1, cc_pair_id=cc_pair.id
+    )[0]
+    path = f"/manage/admin/index-attempt/{attempt.id}/stage-metrics"
+    resp = call_endpoint("GET", path, None, env.manager.headers, env.manager.cookies)
+    assert_response(resp, "GET", path, "manager", "allowed")
+
+
+def test_manager_cannot_read_stage_metrics_of_unmanaged_cc_pair(
+    env: _ScopedEnv,
+) -> None:
+    admin_cc_pair = CCPairManager.create_from_scratch(
+        user_performing_action=env.admin,
+        access_type=AccessType.PRIVATE,
+        groups=[env.other_group.id],
+    )
+    attempt = IndexAttemptManager.create_test_index_attempts(
+        num_attempts=1, cc_pair_id=admin_cc_pair.id
+    )[0]
+    path = f"/manage/admin/index-attempt/{attempt.id}/stage-metrics"
+    resp = call_endpoint("GET", path, None, env.manager.headers, env.manager.cookies)
+    assert_response(resp, "GET", path, "manager", "denied")
 
 
 def test_manager_reads_credentials_for_connector_form(env: _ScopedEnv) -> None:
