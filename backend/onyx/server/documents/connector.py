@@ -75,6 +75,7 @@ from onyx.db.connector_credential_pair import (
     fetch_connector_credential_pair_for_connector,
     get_cc_pair_groups_for_ids,
     get_connector_credential_pair,
+    get_connector_credential_pair_for_user,
     get_connector_credential_pairs_for_user,
     get_connector_credential_pairs_for_user_parallel,
     verify_user_has_access_to_cc_pair,
@@ -1662,7 +1663,9 @@ def delete_connector_by_id(
 @router.post("/admin/connector/run-once", tags=PUBLIC_API_TAGS)
 def connector_run_once(
     run_info: RunConnectorRequest,
-    _: User = Depends(require_permission(Permission.MANAGE_CONNECTORS)),
+    user: User = Depends(
+        require_permission(Permission.MANAGE_CONNECTORS, allow_scope=True)
+    ),
     db_session: Session = Depends(get_session),
 ) -> StatusResponse[int]:
     """Used to trigger indexing on a set of cc_pairs associated with a
@@ -1698,6 +1701,23 @@ def connector_run_once(
             status_code=400,
             detail="Connector has no valid credentials, cannot create index attempts.",
         )
+
+    # GATE 2, all pairs up front — a mid-loop reject would leave attempts already queued
+    for credential_id in credential_ids:
+        if (
+            get_connector_credential_pair_for_user(
+                db_session=db_session,
+                connector_id=connector_id,
+                credential_id=credential_id,
+                user=user,
+            )
+            is None
+        ):
+            raise OnyxError(
+                OnyxErrorCode.INSUFFICIENT_PERMISSIONS,
+                "Connection not found for current user's permissions",
+            )
+
     try:
         num_triggers = trigger_indexing_for_cc_pair(
             credential_ids,

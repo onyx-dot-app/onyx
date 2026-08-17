@@ -13,6 +13,7 @@ from onyx.db.enums import Permission, PermissionAuthority
 from onyx.db.mcp import get_mcp_servers_accessible_to_user
 from onyx.db.models import Tool, User
 from onyx.db.oauth_config import get_oauth_config
+from onyx.db.persona import get_tool_ids_on_editable_personas
 from onyx.db.tools import (
     can_link_oauth_config,
     can_manage_tool,
@@ -266,13 +267,14 @@ def validate_tool(
 
 
 def _connected_tool_ids(user: User, db_session: Session) -> set[int]:
-    """Empty for a global MANAGE_ACTIONS holder — can_manage_tool passes them before this
-    is read."""
+    """Tools viewable without managing them — including those on agents the user can
+    edit, since the editor rebuilds tool_ids from this and drops whatever it never saw."""
+    # global holders need no set — can_manage_tool passes them before this is read
     if has_permission(user, Permission.MANAGE_ACTIONS) is PermissionAuthority.GLOBAL:
         return set()
     return get_tool_ids_connected_to_groups(
         get_scoped_groups(user, db_session, Permission.MANAGE_ACTIONS), db_session
-    )
+    ) | get_tool_ids_on_editable_personas(user, db_session)
 
 
 def _may_view_tool(tool: Tool, user: User, connected_tool_ids: set[int]) -> bool:

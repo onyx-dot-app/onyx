@@ -29,6 +29,7 @@ from onyx.db.models import (
     FederatedConnector__DocumentSet,
     HierarchyNode,
     Persona,
+    Persona__Tool,
     Persona__User,
     Persona__UserGroup,
     PersonaLabel,
@@ -190,6 +191,24 @@ def fetch_persona_by_id_for_user(
             detail=f"Persona with ID {persona_id} does not exist or user is not authorized to access it",
         )
     return persona
+
+
+def get_tool_ids_on_editable_personas(user: User, db_session: Session) -> set[int]:
+    """Tools on agents this user may edit. The editor rebuilds an agent's tool_ids
+    from this listing, so anything absent is dropped on the next save."""
+    # _add_user_filters short-circuits anonymous to public+listed before reading get_editable
+    if user.is_anonymous:
+        return set()
+    editable_persona_ids = _add_user_filters(
+        select(Persona), user, get_editable=True
+    ).with_only_columns(Persona.id)
+    return set(
+        db_session.scalars(
+            select(Persona__Tool.tool_id).where(
+                Persona__Tool.persona_id.in_(editable_persona_ids)
+            )
+        )
+    )
 
 
 def get_best_persona_id_for_user(

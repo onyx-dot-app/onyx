@@ -208,7 +208,8 @@ def get_llm_for_persona(
             provider_model,
             user_group_ids,
             persona,
-            has_global_permission(user, Permission.FULL_ADMIN_PANEL_ACCESS),
+            # must match db/llm.py's gate; a mismatch silently swaps in the default model
+            has_global_permission(user, Permission.MANAGE_LLMS),
         ):
             logger.warning(
                 "User %s with persona %s cannot access provider %s. Falling back to default provider.",

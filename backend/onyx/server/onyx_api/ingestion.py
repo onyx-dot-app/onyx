@@ -6,7 +6,12 @@ from sqlalchemy.orm import Session
 from onyx.auth.permissions import require_permission
 from onyx.configs.constants import DEFAULT_CC_PAIR_ID, PUBLIC_API_TAGS
 from onyx.connectors.models import Document, IndexAttemptMetadata
-from onyx.db.connector_credential_pair import get_connector_credential_pair_from_id
+from onyx.db.connector_credential_pair import (
+    get_cc_pair_ids_for_document,
+    get_connector_credential_pair_from_id,
+    verify_user_can_edit_all_cc_pairs,
+    verify_user_has_access_to_cc_pair,
+)
 from onyx.db.document import (
     delete_documents_complete,
     get_document,
@@ -51,9 +56,18 @@ router = APIRouter(prefix="/onyx-api", tags=PUBLIC_API_TAGS)
 @router.get("/connector-docs/{cc_pair_id}")
 def get_docs_by_connector_credential_pair(
     cc_pair_id: int,
-    _: User = Depends(require_permission(Permission.MANAGE_CONNECTORS)),
+    user: User = Depends(
+        require_permission(Permission.MANAGE_CONNECTORS, allow_scope=True)
+    ),
     db_session: Session = Depends(get_session),
 ) -> list[DocMinimalInfo]:
+    # GATE 2
+    if not verify_user_has_access_to_cc_pair(cc_pair_id, db_session, user):
+        raise OnyxError(
+            OnyxErrorCode.INSUFFICIENT_PERMISSIONS,
+            "Connection not found for current user's permissions",
+        )
+
     db_docs = get_documents_by_cc_pair(cc_pair_id=cc_pair_id, db_session=db_session)
     return [
         DocMinimalInfo(
@@ -70,6 +84,7 @@ def get_ingestion_docs(
     _: User = Depends(require_permission(Permission.MANAGE_CONNECTORS)),
     db_session: Session = Depends(get_session),
 ) -> list[DocMinimalInfo]:
+    # no allow_scope: lists every ingested doc org-wide, which no group scope can bound
     db_docs = get_ingestion_documents(db_session)
     return [
         DocMinimalInfo(
@@ -84,7 +99,9 @@ def get_ingestion_docs(
 @router.post("/ingestion", dependencies=[Depends(require_vector_db)])
 def upsert_ingestion_doc(
     doc_info: IngestionDocument,
-    _: User = Depends(require_permission(Permission.MANAGE_CONNECTORS)),
+    user: User = Depends(
+        require_permission(Permission.MANAGE_CONNECTORS, allow_scope=True)
+    ),
     db_session: Session = Depends(get_session),
 ) -> IngestionResult:
     tenant_id = get_current_tenant_id()
@@ -96,14 +113,22 @@ def upsert_ingestion_doc(
 
     document = Document.from_base(doc_info.document)
 
+    target_cc_pair_id = doc_info.cc_pair_id or DEFAULT_CC_PAIR_ID
     cc_pair = get_connector_credential_pair_from_id(
         db_session=db_session,
-        cc_pair_id=doc_info.cc_pair_id or DEFAULT_CC_PAIR_ID,
+        cc_pair_id=target_cc_pair_id,
     )
     if cc_pair is None:
         raise OnyxError(
             OnyxErrorCode.CONNECTOR_NOT_FOUND,
             "Connector-Credential Pair specified does not exist",
+        )
+
+    # GATE 2: the default pair is public, so a scoped manager cannot ingest into it
+    if not verify_user_has_access_to_cc_pair(target_cc_pair_id, db_session, user):
+        raise OnyxError(
+            OnyxErrorCode.INSUFFICIENT_PERMISSIONS,
+            "Connection not found for current user's permissions",
         )
 
     # Need to index for both the primary and secondary index if possible
@@ -185,7 +210,9 @@ def upsert_ingestion_doc(
 @router.delete("/ingestion/{document_id}", dependencies=[Depends(require_vector_db)])
 def delete_ingestion_doc(
     document_id: str,
-    _: User = Depends(require_permission(Permission.MANAGE_CONNECTORS)),
+    user: User = Depends(
+        require_permission(Permission.MANAGE_CONNECTORS, allow_scope=True)
+    ),
     db_session: Session = Depends(get_session),
 ) -> None:
     # Verify the document exists and was created via the ingestion API
@@ -197,6 +224,15 @@ def delete_ingestion_doc(
         raise OnyxError(
             OnyxErrorCode.VALIDATION_ERROR,
             "Document was not created via the ingestion API",
+        )
+
+    # GATE 2 on every owning pair — one is not enough to drop a doc another group serves
+    if not verify_user_can_edit_all_cc_pairs(
+        get_cc_pair_ids_for_document(db_session, document_id), db_session, user
+    ):
+        raise OnyxError(
+            OnyxErrorCode.INSUFFICIENT_PERMISSIONS,
+            "Connection not found for current user's permissions",
         )
 
     active_search_settings = get_active_search_settings(db_session)

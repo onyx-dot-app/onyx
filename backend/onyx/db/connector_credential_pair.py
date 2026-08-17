@@ -27,6 +27,7 @@ from onyx.db.models import (
     Connector,
     ConnectorCredentialPair,
     Credential,
+    DocumentByConnectorCredentialPair,
     IndexAttempt,
     IndexingStatus,
     SearchSettings,
@@ -445,6 +446,39 @@ def verify_user_has_access_to_cc_pair(
     stmt = stmt.where(ConnectorCredentialPair.id == cc_pair_id)
     result = db_session.execute(stmt)
     return result.scalars().first() is not None
+
+
+def get_cc_pair_ids_for_document(db_session: Session, document_id: str) -> set[int]:
+    return set(
+        db_session.scalars(
+            select(ConnectorCredentialPair.id)
+            .join(
+                DocumentByConnectorCredentialPair,
+                and_(
+                    DocumentByConnectorCredentialPair.connector_id
+                    == ConnectorCredentialPair.connector_id,
+                    DocumentByConnectorCredentialPair.credential_id
+                    == ConnectorCredentialPair.credential_id,
+                ),
+            )
+            .where(DocumentByConnectorCredentialPair.id == document_id)
+        )
+    )
+
+
+def verify_user_can_edit_all_cc_pairs(
+    cc_pair_ids: set[int],
+    db_session: Session,
+    user: User,
+) -> bool:
+    # guard: issubset is vacuously true for an empty set, which would authorize anything
+    if not cc_pair_ids:
+        return False
+    stmt = select(ConnectorCredentialPair.id)
+    stmt = _add_user_filters(stmt, user, get_editable=True)
+    stmt = stmt.where(ConnectorCredentialPair.id.in_(cc_pair_ids))
+    editable = set(db_session.scalars(stmt))
+    return cc_pair_ids.issubset(editable)
 
 
 def get_connector_credential_pair_from_id(
