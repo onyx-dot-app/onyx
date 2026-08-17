@@ -66,11 +66,7 @@ export const IsPublicGroupSelector = <T extends IsPublicGroupSelectorFormType>({
             name="is_public"
             removeIndent={removeIndent}
             small={smallLabels}
-            label={
-              publicToWhom === "Curators"
-                ? `Make this ${objectName} Curator Accessible?`
-                : `Make this ${objectName} Public?`
-            }
+            label={`Make this ${objectName} Public?`}
             subtext={
               <span className="block mt-2 text-sm text-text-600 dark:text-neutral-400">
                 If set, then this {objectName} will be usable by{" "}

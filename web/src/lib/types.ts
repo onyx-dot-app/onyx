@@ -550,7 +550,6 @@ export interface UserGroup {
   users: User[];
   // ids of members who manage this group (drives the Make/Revoke Manager toggle)
   manager_ids: string[];
-  curator_ids: string[];
   cc_pairs: CCPairDescriptor<any, any>[];
   document_sets: DocumentSetSummary[];
   personas: Agent[];
