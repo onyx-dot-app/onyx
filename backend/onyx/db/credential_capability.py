@@ -151,9 +151,12 @@ def upsert_completed_capability_report_unless_granular(
 ) -> CredentialCapabilityReportRow | None:
     """Writes a finished report unless the stored one came from named checks.
 
-    The guard is part of the upsert statement, so a granular report committed
-    concurrently can never be replaced by this coarse write (the no-clobber
-    rule). Returns None when the stored report was preserved.
+    The "unless" is not Python logic: it compiles into the statement as ``ON
+    CONFLICT DO UPDATE ... WHERE <stored report is not granular>``. A
+    read-then-decide here would race a concurrent granular write; Postgres
+    evaluates the guard against the stored row atomically, so a granular report
+    can never be replaced by this coarse write (the no-clobber rule). Returns
+    None when the stored report was preserved.
     """
     return _upsert_row(
         db_session,
@@ -162,6 +165,7 @@ def upsert_completed_capability_report_unless_granular(
         values=_completed_values(
             connector_id, source, trigger, report, connector_config_hash
         ),
+        # The "unless": evaluated by Postgres inside the upsert, not here.
         update_where=_STORED_REPORT_IS_NOT_GRANULAR,
     )
 
