@@ -1,8 +1,10 @@
+import ast
 import os
 import platform
 import shutil
 import subprocess
 from collections.abc import Callable, Generator
+from pathlib import Path
 from typing import Any
 from unittest.mock import patch
 
@@ -521,6 +523,78 @@ def document_builder(admin_user: DATestUser) -> DocumentBuilderType:
         return docs
 
     return _document_builder
+
+
+_INTEGRATION_DIR = Path(__file__).parent
+
+
+def _imports_mock(source: str) -> bool:
+    """Report whether the module imports unittest.mock, in any spelling.
+
+    Parsed rather than pattern-matched so that a docstring quoting the rule is
+    not mistaken for a violation, and so that a parenthesized import still
+    counts. It does not follow ``import unittest`` to a later ``unittest.mock``
+    attribute access; the check is a signpost, not a sandbox.
+    """
+    try:
+        tree = ast.parse(source)
+    except SyntaxError:
+        # pytest reports the syntax error itself; nothing useful to add here.
+        return False
+
+    for node in ast.walk(tree):
+        if isinstance(node, ast.Import):
+            if any(alias.name == "unittest.mock" for alias in node.names):
+                return True
+        elif isinstance(node, ast.ImportFrom):
+            if node.module == "unittest.mock":
+                return True
+            if node.module == "unittest" and any(
+                alias.name == "mock" for alias in node.names
+            ):
+                return True
+    return False
+
+
+def pytest_collection_modifyitems(items: list[pytest.Item]) -> None:
+    """Fail collection if an integration test mocks the code under test.
+
+    Integration tests are the black-box tier: they drive the product through its
+    real API and assert on observable behavior. Reaching inside with
+    ``unittest.mock`` turns them into external-dependency-unit tests wearing the
+    wrong hat, and that used to be caught only by a reviewer noticing the import.
+    """
+    offenders: set[str] = set()
+    checked: set[Path] = set()
+
+    for item in items:
+        path = getattr(item, "path", None)
+        if path is None or path in checked:
+            continue
+        checked.add(path)
+
+        try:
+            rel = path.relative_to(_INTEGRATION_DIR).as_posix()
+        except ValueError:
+            continue
+
+        try:
+            source = path.read_text(encoding="utf-8")
+        except OSError:
+            continue
+        if _imports_mock(source):
+            offenders.add(rel)
+
+    if offenders:
+        listed = "\n".join(f"  tests/integration/{name}" for name in sorted(offenders))
+        raise pytest.UsageError(
+            "Integration tests must not import unittest.mock — they drive the "
+            "product through its real API and cannot mock it:\n"
+            f"{listed}\n"
+            "Move the test to backend/tests/external_dependency_unit/ (where "
+            "mocking is allowed and functions are called directly), or rewrite "
+            "it to assert on observable API behavior."
+        )
 
 
 def pytest_runtest_logstart(
