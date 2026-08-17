@@ -16,7 +16,6 @@ from onyx.connectors.capabilities import CredentialCapability
 from onyx.connectors.capability_checks.models import (
     CapabilityCheckResult,
     CapabilityCheckStatus,
-    CapabilityCheckTrigger,
     CapabilityVerdict,
     CredentialCapabilityReport,
 )
@@ -26,7 +25,7 @@ from onyx.db.credential_capability import (
     mark_capability_report_running,
     upsert_completed_capability_report,
 )
-from onyx.db.enums import CapabilityReportRunStatus
+from onyx.db.enums import CapabilityCheckTrigger, CapabilityReportRunStatus
 from onyx.db.models import Credential
 from tests.external_dependency_unit.indexing_helpers import make_cc_pair
 
