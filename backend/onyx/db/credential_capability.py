@@ -6,9 +6,10 @@ Writers upsert against the scope's partial unique index, so concurrent writers
 resolve to one row instead of racing an insert.
 """
 
-from typing import Any
+from datetime import datetime
+from typing import Any, TypedDict
 
-from sqlalchemy import func, select, text
+from sqlalchemy import ColumnElement, func, select, text
 from sqlalchemy.dialects.postgresql import insert
 from sqlalchemy.orm import Session
 
@@ -18,20 +19,26 @@ from onyx.db.enums import CapabilityCheckTrigger, CapabilityReportRunStatus
 from onyx.db.models import CredentialCapabilityReportRow
 
 
+class _CapabilityReportValues(TypedDict, total=False):
+    """Columns an upsert may write; each writer passes only what it changes."""
+
+    source: DocumentSource
+    trigger: CapabilityCheckTrigger
+    report: dict[str, Any]
+    connector_config_hash: str | None
+    run_status: CapabilityReportRunStatus
+    run_started_at: ColumnElement[datetime]
+    time_updated: ColumnElement[datetime]
+
+
 def _scope_conflict_kwargs(connector_id: int | None) -> dict[str, Any]:
     """ON CONFLICT inference for the row's scope-specific partial index."""
-    if connector_id is None:
-        return {
-            "index_elements": [CredentialCapabilityReportRow.credential_id],
-            "index_where": text("connector_id IS NULL"),
-        }
-    return {
-        "index_elements": [
-            CredentialCapabilityReportRow.credential_id,
-            CredentialCapabilityReportRow.connector_id,
-        ],
-        "index_where": text("connector_id IS NOT NULL"),
-    }
+    index_elements = [CredentialCapabilityReportRow.credential_id]
+    index_where = "connector_id IS NULL"
+    if connector_id is not None:
+        index_elements.append(CredentialCapabilityReportRow.connector_id)
+        index_where = "connector_id IS NOT NULL"
+    return {"index_elements": index_elements, "index_where": text(index_where)}
 
 
 def _upsert_row(
@@ -39,7 +46,7 @@ def _upsert_row(
     *,
     credential_id: int,
     connector_id: int | None,
-    values: dict[str, Any],
+    values: _CapabilityReportValues,
 ) -> CredentialCapabilityReportRow:
     """Inserts or updates the scope's single row with ``values``.
 
@@ -52,7 +59,10 @@ def _upsert_row(
     # ``onupdate`` is not applied to ON CONFLICT SET clauses, and the ``now()``
     # defaults are transaction-start time, which would stamp every write of one
     # transaction identically.
-    stamped = {**values, "time_updated": func.statement_timestamp()}
+    stamped: _CapabilityReportValues = {
+        **values,
+        "time_updated": func.statement_timestamp(),
+    }
     stmt = (
         insert(CredentialCapabilityReportRow)
         .values(credential_id=credential_id, connector_id=connector_id, **stamped)
