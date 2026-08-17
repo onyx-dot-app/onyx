@@ -395,6 +395,18 @@ func TestResolveGoTargets(t *testing.T) {
 			want:      []string{"./internal/tui"},
 		},
 		{
+			name:      "path relative to the module",
+			args:      []string{"ods", "internal/testsuite"},
+			wantSuite: "ods",
+			want:      []string{"./internal/testsuite"},
+		},
+		{
+			name:      "node id relative to the module",
+			args:      []string{"cli", "internal/tui/tui_test.go::TestChat"},
+			wantSuite: "cli",
+			want:      []string{"./internal/tui", "-run", "^TestChat$"},
+		},
+		{
 			name:      "flags pass through",
 			args:      []string{"ods", "-run", "TestResolve", "-v"},
 			wantSuite: "ods",

@@ -299,6 +299,12 @@ func relocateArg(root, cwd string, suite *Suite, arg string) []string {
 	}
 	repoPath, ok := repoRelative(root, cwd, arg)
 	if !ok {
+		// The path may still be relative to the suite directory, which is
+		// where the runner starts. pytest and jest read it that way on their
+		// own; go test needs a "./" prefix, so shape it here.
+		if rel, ok := suiteRelative(root, suite, arg); ok {
+			return runnerTarget(root, suite, rel)
+		}
 		return []string{arg}
 	}
 	// A path outside this suite is left alone, so the runner reports it
@@ -311,6 +317,19 @@ func relocateArg(root, cwd string, suite *Suite, arg string) []string {
 		return []string{arg}
 	}
 	return runnerTarget(root, suite, path(rel))
+}
+
+// suiteRelative reports whether arg names a path inside the suite's working
+// directory, and returns it relative to that directory. Any node id is kept.
+func suiteRelative(root string, suite *Suite, arg string) (string, bool) {
+	filePart := stripNodeID(arg)
+	if filePart == "" || filepath.IsAbs(filePart) {
+		return "", false
+	}
+	if _, err := os.Stat(filepath.Join(root, suite.Dir, filePart)); err != nil {
+		return "", false
+	}
+	return path(filePart) + arg[len(filePart):], true
 }
 
 // suiteForPath returns the suite whose prefix is the longest match for a
