@@ -159,10 +159,15 @@ class SlimConnectorWithPermSync(BaseConnector):
 
 class OAuthConnector(BaseConnector):
     supports_pkce: ClassVar[bool] = False
+    supports_manual_credentials: ClassVar[bool] = False
 
     class AdditionalOauthKwargs(BaseModel):
         # if overridden, all fields should be str type
         pass
+
+    @classmethod
+    def oauth_enabled(cls) -> bool:
+        return True
 
     @classmethod
     @abc.abstractmethod

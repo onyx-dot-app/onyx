@@ -2,6 +2,7 @@ from pathlib import Path
 from types import TracebackType
 from typing import Any
 from unittest.mock import MagicMock, patch
+from urllib.parse import parse_qs, urlsplit
 
 import pytest
 from pydantic import ValidationError
@@ -10,6 +11,7 @@ from simple_salesforce.exceptions import SalesforceExpiredSession
 
 from onyx.connectors.interfaces import CredentialsProviderInterface
 from onyx.connectors.salesforce import auth, salesforce_calls
+from onyx.connectors.salesforce import connector as salesforce_connector
 from onyx.connectors.salesforce.auth import (
     SalesforceOAuthTokenError,
     build_salesforce_client,
@@ -608,3 +610,87 @@ def test_oauth_credentials_reject_untrusted_instance_url() -> None:
                 "sf_instance_url": "https://internal.example",
             }
         )
+
+
+@pytest.mark.parametrize("login_url", [PRODUCTION_LOGIN_URL, SANDBOX_LOGIN_URL])
+def test_salesforce_authorization_url_uses_my_domain_and_pkce(
+    monkeypatch: pytest.MonkeyPatch, login_url: str
+) -> None:
+    monkeypatch.setattr(salesforce_connector, "SALESFORCE_CLIENT_ID", "client-id")
+
+    authorization_url = SalesforceConnector.oauth_authorization_url(
+        base_domain="https://onyx.example/",
+        state="oauth-state",
+        additional_kwargs={"salesforce_my_domain_url": login_url},
+        code_challenge="pkce-challenge",
+    )
+
+    parsed = urlsplit(authorization_url)
+    assert f"{parsed.scheme}://{parsed.netloc}" == login_url
+    assert parsed.path == "/services/oauth2/authorize"
+    assert parse_qs(parsed.query) == {
+        "client_id": ["client-id"],
+        "response_type": ["code"],
+        "redirect_uri": ["https://onyx.example/connector/oauth/callback/salesforce"],
+        "scope": ["api refresh_token"],
+        "state": ["oauth-state"],
+        "code_challenge": ["pkce-challenge"],
+        "code_challenge_method": ["S256"],
+    }
+
+
+def test_salesforce_code_exchange_requires_pkce_verifier() -> None:
+    with pytest.raises(ValueError, match="PKCE code verifier"):
+        SalesforceConnector.oauth_code_to_token(
+            base_domain="https://onyx.example",
+            code="authorization-code",
+            additional_kwargs={"salesforce_my_domain_url": PRODUCTION_LOGIN_URL},
+        )
+
+
+def test_salesforce_code_exchange_returns_json_credentials(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    exchange = MagicMock(
+        return_value=SalesforceOAuthCredentials.model_validate(OAUTH_CREDENTIALS)
+    )
+    monkeypatch.setattr(
+        salesforce_connector, "exchange_salesforce_authorization_code", exchange
+    )
+
+    credentials = SalesforceConnector.oauth_code_to_token(
+        base_domain="https://onyx.example/",
+        code="authorization-code",
+        additional_kwargs={"salesforce_my_domain_url": PRODUCTION_LOGIN_URL},
+        code_verifier="pkce-verifier",
+    )
+
+    assert credentials == OAUTH_CREDENTIALS
+    exchange.assert_called_once_with(
+        login_url=PRODUCTION_LOGIN_URL,
+        code="authorization-code",
+        redirect_uri="https://onyx.example/connector/oauth/callback/salesforce",
+        code_verifier="pkce-verifier",
+    )
+
+
+@pytest.mark.parametrize(
+    ("client_id", "client_secret", "expected"),
+    [
+        ("client-id", "client-secret", True),
+        (None, "client-secret", False),
+        ("client-id", None, False),
+        (None, None, False),
+    ],
+)
+def test_salesforce_oauth_enabled_requires_both_client_values(
+    monkeypatch: pytest.MonkeyPatch,
+    client_id: str | None,
+    client_secret: str | None,
+    expected: bool,
+) -> None:
+    monkeypatch.setattr(salesforce_connector, "SALESFORCE_CLIENT_ID", client_id)
+    monkeypatch.setattr(salesforce_connector, "SALESFORCE_CLIENT_SECRET", client_secret)
+
+    assert SalesforceConnector.oauth_enabled() is expected
+    assert SalesforceConnector.supports_manual_credentials is True

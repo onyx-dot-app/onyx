@@ -80,6 +80,19 @@ class AuthorizeResponse(BaseModel):
     redirect_url: str
 
 
+def _get_enabled_oauth_connector(
+    source: DocumentSource,
+) -> type[OAuthConnector]:
+    connector_cls = _discover_oauth_connectors().get(source)
+    if connector_cls is None:
+        raise OnyxError(OnyxErrorCode.INVALID_INPUT, f"Unknown OAuth source: {source}")
+    if not connector_cls.oauth_enabled():
+        raise OnyxError(
+            OnyxErrorCode.INVALID_INPUT, f"OAuth is not configured for {source}"
+        )
+    return connector_cls
+
+
 @router.get("/authorize/{source}")
 def oauth_authorize(
     request: Request,
@@ -90,12 +103,7 @@ def oauth_authorize(
     """Initiates the OAuth flow by redirecting to the provider's auth page"""
 
     tenant_id = get_current_tenant_id()
-    oauth_connectors = _discover_oauth_connectors()
-
-    if source not in oauth_connectors:
-        raise OnyxError(OnyxErrorCode.INVALID_INPUT, f"Unknown OAuth source: {source}")
-
-    connector_cls = oauth_connectors[source]
+    connector_cls = _get_enabled_oauth_connector(source)
     base_url = WEB_DOMAIN
 
     additional_kwargs = _get_additional_kwargs(
@@ -143,12 +151,7 @@ def oauth_callback(
     user: User = Depends(require_permission(Permission.BASIC_ACCESS)),
 ) -> CallbackResponse:
     """Handles the OAuth callback and exchanges the code for tokens"""
-    oauth_connectors = _discover_oauth_connectors()
-
-    if source not in oauth_connectors:
-        raise OnyxError(OnyxErrorCode.INVALID_INPUT, f"Unknown OAuth source: {source}")
-
-    connector_cls = oauth_connectors[source]
+    connector_cls = _get_enabled_oauth_connector(source)
 
     redis_client = get_redis_client()
     oauth_state_bytes = redis_client.getdel(_OAUTH_STATE_KEY_FMT.format(state=state))
@@ -197,6 +200,7 @@ class OAuthAdditionalKwargDescription(BaseModel):
 
 class OAuthDetails(BaseModel):
     oauth_enabled: bool
+    supports_manual_credentials: bool
     additional_kwargs: list[OAuthAdditionalKwargDescription]
 
 
@@ -210,6 +214,7 @@ def oauth_details(
     if source not in oauth_connectors:
         return OAuthDetails(
             oauth_enabled=False,
+            supports_manual_credentials=True,
             additional_kwargs=[],
         )
 
@@ -228,6 +233,7 @@ def oauth_details(
         )
 
     return OAuthDetails(
-        oauth_enabled=True,
+        oauth_enabled=connector_cls.oauth_enabled(),
+        supports_manual_credentials=connector_cls.supports_manual_credentials,
         additional_kwargs=additional_kwarg_descriptions,
     )

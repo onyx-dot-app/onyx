@@ -17,6 +17,12 @@ import AdvancedFormPage from "@/app/admin/connectors/[connector]/pages/Advanced"
 import DynamicConnectionForm from "@/app/admin/connectors/[connector]/pages/DynamicConnectorCreationForm";
 import CreateCredential from "@/lib/credentials/components/CreateCredential";
 import { CreateStdOAuthCredential } from "@/lib/credentials/components/CreateStdOAuthCredential";
+import {
+  CredentialCreationMethod,
+  getCredentialCreationActionLabel,
+  getCredentialCreationMethods,
+  shouldRedirectToOAuth,
+} from "@/lib/credentials/credentialCreation";
 import ModifyCredential from "@/lib/credentials/components/ModifyCredential";
 import {
   ConfigurableSources,
@@ -55,7 +61,7 @@ import {
   useOAuthDetails,
 } from "@/lib/connectors/oauth";
 import { Spinner } from "@/components/Spinner";
-import { Button } from "@opal/components";
+import { Button, Text as OpalText } from "@opal/components";
 import { Section, toast } from "@opal/layouts";
 import { deleteConnector } from "@/lib/connector";
 import ConnectorDocsLink from "@/components/admin/connectors/ConnectorDocsLink";
@@ -158,8 +164,8 @@ export default function AddConnector({
   // State for managing credentials and files
   const [currentCredential, setCurrentCredential] =
     useState<Credential<any> | null>(null);
-  const [createCredentialFormToggle, setCreateCredentialFormToggle] =
-    useState(false);
+  const [credentialCreationMethod, setCredentialCreationMethod] =
+    useState<CredentialCreationMethod | null>(null);
 
   const { isScopedManager } = usePermissionAuthority(
     Permission.MANAGE_CONNECTORS
@@ -232,6 +238,8 @@ export default function AddConnector({
   const displayName = getSourceDisplayName(connector) || connector;
   const sourceMetadata = getSourceMetadata(connector);
   const hasFederatedOption = sourceMetadata.federated === true;
+  const credentialCreationMethods = getCredentialCreationMethods(oauthDetails);
+  const showExplicitCredentialMethods = credentialCreationMethods.length > 1;
 
   if (!credentials || !editableCredentials) {
     return <></>;
@@ -263,7 +271,7 @@ export default function AddConnector({
     router.push("/admin/indexing/status?message=connector-created");
   };
 
-  const closeCredentialModal = () => setCreateCredentialFormToggle(false);
+  const closeCredentialModal = () => setCredentialCreationMethod(null);
 
   // Used when the connector supports OAuth but needs no additional_kwargs,
   // so credential creation should redirect straight into OAuth rather than
@@ -274,8 +282,25 @@ export default function AddConnector({
     if (redirectUrl) {
       window.location.href = redirectUrl;
     } else {
-      setCreateCredentialFormToggle(true);
+      setCredentialCreationMethod(CredentialCreationMethod.OAuth);
     }
+  };
+
+  const openCredentialCreationMethod = async (
+    method: CredentialCreationMethod
+  ) => {
+    if (
+      method === CredentialCreationMethod.OAuth &&
+      oauthDetails &&
+      shouldRedirectToOAuth(oauthDetails)
+    ) {
+      await attemptOauthRedirect();
+      return;
+    }
+    if (method === CredentialCreationMethod.OAuth && !oauthDetails) {
+      return;
+    }
+    setCredentialCreationMethod(method);
   };
 
   const handleAuthorize = async () => {
@@ -568,34 +593,29 @@ export default function AddConnector({
                   onDeleteCredential={onDeleteCredential}
                   onSwitch={onSwap}
                 />
-                {!createCredentialFormToggle && (
+                {credentialCreationMethod === null && (
                   <Section
                     flexDirection="row"
                     justifyContent="start"
-                    gap={4}
+                    gap={1}
                     className="mt-6"
                   >
-                    {/* Button to pop up a form to manually enter credentials */}
-                    <Button
-                      disabled={oauthDetailsLoading}
-                      onClick={async () => {
-                        if (oauthDetails && oauthDetails.oauth_enabled) {
-                          if (oauthDetails.additional_kwargs.length > 0) {
-                            setCreateCredentialFormToggle(true);
-                          } else {
-                            // no additional_kwargs needed, so go straight to OAuth
-                            await attemptOauthRedirect();
-                          }
-                        } else {
-                          setCreateCredentialFormToggle(
-                            (createConnectorToggle) => !createConnectorToggle
-                          );
-                        }
-                      }}
-                    >
-                      Create New
-                    </Button>
-                    {/* Button to sign in via OAuth */}
+                    {oauthDetailsLoading ? (
+                      <Button disabled>Create New</Button>
+                    ) : (
+                      credentialCreationMethods.map((method) => (
+                        <Button
+                          key={method}
+                          onClick={() => openCredentialCreationMethod(method)}
+                        >
+                          {getCredentialCreationActionLabel(
+                            method,
+                            displayName,
+                            showExplicitCredentialMethods
+                          )}
+                        </Button>
+                      ))
+                    )}
                     {oauthSupportedSources.includes(connector) &&
                       (NEXT_PUBLIC_CLOUD_ENABLED || NEXT_PUBLIC_TEST_ENV) && (
                         <Button
@@ -614,7 +634,7 @@ export default function AddConnector({
                   </Section>
                 )}
 
-                {createCredentialFormToggle && (
+                {credentialCreationMethod !== null && (
                   <Modal open onOpenChange={closeCredentialModal}>
                     <Modal.Content>
                       <Modal.Header
@@ -624,30 +644,32 @@ export default function AddConnector({
                         )} credential`}
                         onClose={closeCredentialModal}
                       />
-                      <Modal.Body>
+                      <Modal.Body alignItems="stretch">
                         {oauthDetailsLoading ? (
                           <Spinner />
-                        ) : oauthDetails &&
-                          oauthDetails.oauth_enabled &&
-                          oauthDetails.additional_kwargs.length > 0 ? (
-                          <CreateStdOAuthCredential
-                            sourceType={connector}
-                            additionalFields={oauthDetails.additional_kwargs}
-                          />
-                        ) : oauthDetails && oauthDetails.oauth_enabled ? (
-                          // No additional_kwargs means credential creation
-                          // should have redirected straight into OAuth; if
-                          // we're here, that redirect failed.
-                          <div className="flex flex-col items-start gap-4">
-                            <Text as="p" text03>
-                              {`We couldn't redirect you to sign in with ${getSourceDisplayName(
-                                connector
-                              )}. Please try again.`}
-                            </Text>
-                            <Button onClick={attemptOauthRedirect}>
-                              Retry
-                            </Button>
-                          </div>
+                        ) : credentialCreationMethod ===
+                            CredentialCreationMethod.OAuth && oauthDetails ? (
+                          shouldRedirectToOAuth(oauthDetails) ? (
+                            <Section alignItems="start">
+                              <OpalText
+                                as="p"
+                                font="main-ui-body"
+                                color="text-03"
+                              >
+                                {`We couldn't redirect you to sign in with ${getSourceDisplayName(
+                                  connector
+                                )}. Please try again.`}
+                              </OpalText>
+                              <Button onClick={attemptOauthRedirect}>
+                                Retry
+                              </Button>
+                            </Section>
+                          ) : (
+                            <CreateStdOAuthCredential
+                              sourceType={connector}
+                              additionalFields={oauthDetails.additional_kwargs}
+                            />
+                          )
                         ) : (
                           <CreateCredential
                             close

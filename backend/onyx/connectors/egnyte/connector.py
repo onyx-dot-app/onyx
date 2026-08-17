@@ -133,6 +133,8 @@ def _process_egnyte_file(
 
 
 class EgnyteConnector(LoadConnector, PollConnector, OAuthConnector):
+    supports_manual_credentials = True
+
     class AdditionalOauthKwargs(OAuthConnector.AdditionalOauthKwargs):
         egnyte_domain: str = Field(
             title="Egnyte Domain",

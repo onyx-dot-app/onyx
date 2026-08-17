@@ -1,83 +1,82 @@
 import * as Yup from "yup";
 
-import { Button } from "@opal/components";
-import { ValidSources } from "@/lib/types";
-import { TextFormField } from "@/components/Field";
+import { Button, InputTypeIn } from "@opal/components";
+import { InputVertical, Section } from "@opal/layouts";
 import { Form, Formik, FormikHelpers } from "formik";
-import CardSection from "@/components/admin/CardSection";
-import { getConnectorOauthRedirectUrl } from "@/lib/connectors/oauth";
-import { OAuthAdditionalKwargDescription } from "@/lib/connectors/credentials";
 
-type formType = {
-  [key: string]: any; // For additional credential fields
-};
+import { OAuthAdditionalKwargDescription } from "@/lib/connectors/credentials";
+import { getConnectorOauthRedirectUrl } from "@/lib/connectors/oauth";
+import { ValidSources } from "@/lib/types";
+import { FormikField } from "@/refresh-components/form/FormikField";
+
+type OAuthFormValues = Record<string, string>;
+
+interface CreateStdOAuthCredentialProps {
+  sourceType: ValidSources;
+  additionalFields: OAuthAdditionalKwargDescription[];
+}
 
 export function CreateStdOAuthCredential({
   sourceType,
   additionalFields,
-}: {
-  // Source information
-  sourceType: ValidSources;
-
-  additionalFields: OAuthAdditionalKwargDescription[];
-}) {
-  const handleSubmit = async (
-    values: formType,
-    formikHelpers: FormikHelpers<formType>
-  ) => {
-    const { setSubmitting, validateForm } = formikHelpers;
-
-    const errors = await validateForm(values);
+}: CreateStdOAuthCredentialProps) {
+  async function handleSubmit(
+    values: OAuthFormValues,
+    formikHelpers: FormikHelpers<OAuthFormValues>
+  ) {
+    const errors = await formikHelpers.validateForm(values);
     if (Object.keys(errors).length > 0) {
       formikHelpers.setErrors(errors);
       return;
     }
 
-    setSubmitting(true);
     formikHelpers.setSubmitting(true);
-
     const redirectUrl = await getConnectorOauthRedirectUrl(sourceType, values);
-
     if (!redirectUrl) {
       throw new Error("No redirect URL found for OAuth connector");
     }
-
     window.location.href = redirectUrl;
-  };
+  }
 
   return (
     <Formik
-      initialValues={
-        Object.fromEntries(
-          additionalFields.map((field) => [field, ""])
-        ) as formType
-      }
+      initialValues={Object.fromEntries(
+        additionalFields.map((field) => [field.name, ""])
+      )}
       validationSchema={Yup.object().shape(
         Object.fromEntries(
           additionalFields.map((field) => [field.name, Yup.string().required()])
         )
       )}
-      onSubmit={(values, formikHelpers) => {
-        handleSubmit(values, formikHelpers);
-      }}
+      onSubmit={handleSubmit}
     >
-      {() => (
-        <Form className="w-full flex items-stretch">
-          <CardSection className="w-full border-0! mt-4 flex flex-col gap-y-6">
+      {({ isSubmitting }) => (
+        <Form className="w-full">
+          <Section alignItems="stretch" gap={6}>
             {additionalFields.map((field) => (
-              <TextFormField
+              <InputVertical
                 key={field.name}
-                name={field.name}
-                label={field.display_name}
-                subtext={field.description}
-                type="text"
-              />
+                withLabel={field.name}
+                title={field.display_name}
+                description={field.description}
+              >
+                <FormikField<string>
+                  name={field.name}
+                  render={(formikField, _helper, _meta, status) => (
+                    <InputTypeIn
+                      {...formikField}
+                      variant={status === "error" ? "error" : "primary"}
+                    />
+                  )}
+                />
+              </InputVertical>
             ))}
-
-            <div className="flex w-full">
-              <Button type="submit">Create</Button>
-            </div>
-          </CardSection>
+            <Section flexDirection="row" justifyContent="start">
+              <Button disabled={isSubmitting} type="submit">
+                Connect
+              </Button>
+            </Section>
+          </Section>
         </Form>
       )}
     </Formik>
