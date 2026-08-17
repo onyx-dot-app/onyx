@@ -23,7 +23,6 @@ from onyx.connectors.capability_checks.applicability import (
 from onyx.connectors.capability_checks.models import (
     CapabilityCheckResult,
     CapabilityCheckStatus,
-    CapabilityCheckTrigger,
     CredentialCapability,
     CredentialCapabilityReport,
     compute_capability_verdicts,
@@ -33,6 +32,7 @@ from onyx.db.credential_capability import (
     upsert_completed_capability_report_unless_granular,
 )
 from onyx.db.engine.sql_engine import get_session_with_current_tenant
+from onyx.db.enums import CapabilityCheckTrigger
 from onyx.utils.logger import setup_logger
 
 logger = setup_logger()

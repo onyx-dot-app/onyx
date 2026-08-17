@@ -22,7 +22,6 @@ from onyx.connectors.capability_checks import recorder
 from onyx.connectors.capability_checks.models import (
     CapabilityCheckResult,
     CapabilityCheckStatus,
-    CapabilityCheckTrigger,
     CapabilityVerdict,
     CredentialCapabilityReport,
 )
@@ -36,7 +35,12 @@ from onyx.db.credential_capability import (
     get_capability_report_row,
     upsert_completed_capability_report,
 )
-from onyx.db.enums import AccessType, CapabilityReportRunStatus, IndexingStatus
+from onyx.db.enums import (
+    AccessType,
+    CapabilityCheckTrigger,
+    CapabilityReportRunStatus,
+    IndexingStatus,
+)
 from onyx.db.models import ConnectorCredentialPair, IndexAttempt
 from tests.external_dependency_unit.indexing_helpers import (
     cleanup_cc_pair,

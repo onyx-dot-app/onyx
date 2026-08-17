@@ -179,12 +179,15 @@ def _get_connector_runner(
             if not INTEGRATION_TESTS_MODE:
                 runnable_connector.validate_connector_settings()
 
-        if (
+        perm_sync_validated = (
             not INTEGRATION_TESTS_MODE
             and attempt.connector_credential_pair.access_type == AccessType.SYNC
-        ):
+        )
+        if perm_sync_validated:
             with time_stage(IndexAttemptStage.PERMISSION_VALIDATION, attempt.id):
                 runnable_connector.validate_perm_sync()
+
+        _record_outcome(None, perm_sync_validated=perm_sync_validated)
 
     except UnexpectedValidationError as e:
         logger.exception(
@@ -216,12 +219,6 @@ def _get_connector_runner(
                     status=ConnectorCredentialPairStatus.PAUSED,
                 )
         raise e
-
-    _record_outcome(
-        None,
-        perm_sync_validated=attempt.connector_credential_pair.access_type
-        == AccessType.SYNC,
-    )
 
     return ConnectorRunner(
         connector=runnable_connector,

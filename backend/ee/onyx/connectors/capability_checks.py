@@ -6,10 +6,8 @@ implementations stay in the OSS connector modules, mirroring the
 ``perm_sync_valid.py`` pattern.
 """
 
-# Re-exported: applicability lives in its own module so its resolution never
-# depends on the per-connector check imports below.
 from ee.onyx.connectors.capability_applicability import (
-    get_applicable_perm_sync_capabilities as get_applicable_perm_sync_capabilities,
+    get_applicable_perm_sync_capabilities,
 )
 from ee.onyx.connectors.perm_sync_valid import source_has_perm_sync_probe
 from onyx.configs.constants import DocumentSource
