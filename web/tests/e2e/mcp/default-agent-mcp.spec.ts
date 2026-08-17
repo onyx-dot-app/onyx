@@ -1,5 +1,9 @@
 import { test, expect } from "@playwright/test";
 import { loginAs, apiLogin } from "@tests/e2e/utils/auth";
+import {
+  grantAddAgents,
+  deleteGrantGroups,
+} from "@tests/e2e/utils/grantPermissions";
 import { ensureOnboardingComplete } from "@tests/e2e/utils/chatActions";
 import { OnyxApiClient } from "@tests/e2e/utils/onyxApiClient";
 import {
@@ -35,6 +39,7 @@ test.describe("Default Agent MCP Integration", () => {
   let serverName: string;
   let serverUrl: string;
   let basicUserEmail: string;
+  const grantGroupIds: number[] = [];
   let basicUserPassword: string;
   let createdProviderId: number | null = null;
   let assertedToolId: number;
@@ -93,9 +98,15 @@ test.describe("Default Agent MCP Integration", () => {
     await adminClient.registerUser(basicUserEmail, basicUserPassword);
 
     await adminContext.close();
+
+    // this user creates an agent through the UI, which EE gates on ADD_AGENTS
+    grantGroupIds.push(await grantAddAgents(browser, basicUserEmail));
   });
 
   test.afterAll(async ({ browser }) => {
+    await deleteGrantGroups(browser, grantGroupIds);
+    grantGroupIds.length = 0;
+
     const adminContext = await browser.newContext({
       storageState: "admin_auth.json",
     });

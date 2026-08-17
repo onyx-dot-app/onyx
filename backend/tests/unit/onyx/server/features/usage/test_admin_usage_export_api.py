@@ -20,7 +20,7 @@ from sqlalchemy.pool import StaticPool
 
 from onyx.auth.users import current_user
 from onyx.db.engine.sql_engine import get_session
-from onyx.db.enums import Permission
+from onyx.db.enums import AccountType, Permission
 from onyx.db.models import UserUsage
 from onyx.db.user_usage import UsageExportRow, get_usage_export
 from onyx.error_handling.exceptions import register_onyx_exception_handlers
@@ -42,6 +42,8 @@ class _StubUser:
     def __init__(self, permissions: list[str]) -> None:
         self.id = "00000000-0000-0000-0000-000000000001"
         self.effective_permissions = permissions
+        self.account_type = AccountType.STANDARD
+        self.is_group_manager = False
 
 
 _ADMIN = _StubUser([Permission.FULL_ADMIN_PANEL_ACCESS.value])

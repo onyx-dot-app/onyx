@@ -2,7 +2,7 @@ import datetime
 from collections import defaultdict
 from typing import List
 
-from fastapi import APIRouter, Depends, HTTPException
+from fastapi import APIRouter, Depends
 from pydantic import BaseModel
 from sqlalchemy.orm import Session
 
@@ -22,11 +22,25 @@ from onyx.configs.constants import PUBLIC_API_TAGS
 from onyx.db.engine.sql_engine import get_session
 from onyx.db.enums import Permission
 from onyx.db.models import User
+from onyx.error_handling.error_codes import OnyxErrorCode
+from onyx.error_handling.exceptions import OnyxError
 
 router = APIRouter(prefix="/analytics", tags=PUBLIC_API_TAGS)
 
 
 _DEFAULT_LOOKBACK_DAYS = 30
+
+
+def _assert_may_view_agent_analytics(
+    db_session: Session, user: User, persona_id: int
+) -> None:
+    """GATE 2: the token admits the caller, this decides which agent — any for a global
+    MANAGE_AGENTS holder, only their own for everyone else."""
+    if not user_can_view_assistant_stats(db_session, user, persona_id):
+        raise OnyxError(
+            OnyxErrorCode.INSUFFICIENT_PERMISSIONS,
+            "You can only view analytics for agents you own.",
+        )
 
 
 class QueryAnalyticsResponse(BaseModel):
@@ -144,10 +158,11 @@ def get_persona_messages(
     persona_id: int,
     start: datetime.datetime | None = None,
     end: datetime.datetime | None = None,
-    _: User = Depends(require_permission(Permission.FULL_ADMIN_PANEL_ACCESS)),
+    user: User = Depends(require_permission(Permission.READ_AGENT_ANALYTICS)),
     db_session: Session = Depends(get_session),
 ) -> list[PersonaMessageAnalyticsResponse]:
     """Fetch daily message counts for a single persona within the given time range."""
+    _assert_may_view_agent_analytics(db_session, user, persona_id)
     start = start or (
         datetime.datetime.now(tz=datetime.timezone.utc)
         - datetime.timedelta(days=_DEFAULT_LOOKBACK_DAYS)
@@ -183,10 +198,11 @@ def get_persona_unique_users(
     persona_id: int,
     start: datetime.datetime,
     end: datetime.datetime,
-    _: User = Depends(require_permission(Permission.FULL_ADMIN_PANEL_ACCESS)),
+    user: User = Depends(require_permission(Permission.READ_AGENT_ANALYTICS)),
     db_session: Session = Depends(get_session),
 ) -> list[PersonaUniqueUsersResponse]:
     """Get unique users per day for a single persona."""
+    _assert_may_view_agent_analytics(db_session, user, persona_id)
     unique_user_counts = []
     daily_counts = fetch_persona_unique_users(
         db_session=db_session,
@@ -222,7 +238,7 @@ def get_assistant_stats(
     assistant_id: int,
     start: datetime.datetime | None = None,
     end: datetime.datetime | None = None,
-    user: User = Depends(require_permission(Permission.BASIC_ACCESS)),
+    user: User = Depends(require_permission(Permission.READ_AGENT_ANALYTICS)),
     db_session: Session = Depends(get_session),
 ) -> AssistantStatsResponse:
     """
@@ -235,10 +251,7 @@ def get_assistant_stats(
     )
     end = end or datetime.datetime.now(tz=datetime.timezone.utc)
 
-    if not user_can_view_assistant_stats(db_session, user, assistant_id):
-        raise HTTPException(
-            status_code=403, detail="Not allowed to access this assistant's stats."
-        )
+    _assert_may_view_agent_analytics(db_session, user, assistant_id)
 
     # Pull daily usage from the DB calls
     messages_data = fetch_assistant_message_analytics(

@@ -14,7 +14,7 @@ import pytest
 
 from ee.onyx.db.user_group import update_user_group
 from ee.onyx.server.user_group.models import UserGroupUpdate
-from onyx.db.models import UserRole
+from onyx.db.enums import AccountType, Permission
 
 
 def _audit_events(caplog: pytest.LogCaptureFixture) -> list[dict[str, Any]]:
@@ -52,7 +52,14 @@ def test_update_user_group_emits_on_membership_change(
     existing = uuid4()
     added = uuid4()
     db_session = _make_db_session([existing], [10])
-    admin = MagicMock(id="admin-1", email="admin@example.com", role=UserRole.ADMIN)
+    admin = MagicMock(
+        id="admin-1",
+        email="admin@example.com",
+        # A MagicMock attribute would never equal a real permission value.
+        effective_permissions=[Permission.FULL_ADMIN_PANEL_ACCESS.value],
+        account_type=AccountType.STANDARD,
+        is_group_manager=False,
+    )
 
     with caplog.at_level(logging.INFO, logger="onyx.audit"):
         update_user_group(
@@ -89,7 +96,14 @@ def test_update_user_group_cc_pair_only_emits_nothing(
 ) -> None:
     existing = uuid4()
     db_session = _make_db_session([existing], [10])
-    admin = MagicMock(id="admin-1", email="admin@example.com", role=UserRole.ADMIN)
+    admin = MagicMock(
+        id="admin-1",
+        email="admin@example.com",
+        # A MagicMock attribute would never equal a real permission value.
+        effective_permissions=[Permission.FULL_ADMIN_PANEL_ACCESS.value],
+        account_type=AccountType.STANDARD,
+        is_group_manager=False,
+    )
 
     with caplog.at_level(logging.INFO, logger="onyx.audit"):
         update_user_group(

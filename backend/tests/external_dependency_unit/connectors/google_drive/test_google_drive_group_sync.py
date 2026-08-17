@@ -19,7 +19,6 @@ from onyx.db.models import (
     PublicExternalUserGroup,
     User,
     User__ExternalUserGroupId,
-    UserRole,
 )
 from shared_configs.configs import POSTGRES_DEFAULT_SCHEMA_STANDARD_VALUE
 from tests.external_dependency_unit.conftest import create_test_user
@@ -30,7 +29,6 @@ def _create_ext_perm_user(db_session: Session, name: str) -> User:
     return create_test_user(
         db_session,
         name,
-        role=UserRole.EXT_PERM_USER,
         account_type=AccountType.EXT_PERM_USER,
     )
 

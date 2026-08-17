@@ -150,7 +150,7 @@ class TestSkillVisibility:
         db_session: Session,
         test_user: User,  # noqa: ARG002
     ) -> None:
-        # Current behavior pinned: ONLY UserRole.ADMIN bypasses the visibility
+        # Current behavior pinned: ONLY a global MANAGE_SKILLS holder bypasses the visibility
         # filter. Curators (and global curators) walk the same path as
         # regular users — no admin-style "see every row" override.
         curator = make_user(db_session, role=UserRole.CURATOR)
@@ -183,7 +183,7 @@ class TestSkillVisibility:
         curator = make_user(db_session, role=UserRole.CURATOR)
         group = make_group(db_session)
         membership = add_user_to_group(db_session, curator, group)
-        membership.is_curator = True
+        membership.is_manager = True
         db_session.flush()
         private_skill = make_skill(db_session, is_public=False)
         share_skill_with_group(db_session, private_skill, group)
@@ -227,7 +227,7 @@ class TestSkillVisibility:
         curated_group = make_group(db_session)
         other_group = make_group(db_session)
         membership = add_user_to_group(db_session, curator, curated_group)
-        membership.is_curator = True
+        membership.is_manager = True
         db_session.flush()
         private_skill = make_skill(db_session, is_public=False)
         share_skill_with_group(db_session, private_skill, curated_group)
@@ -249,7 +249,9 @@ class TestSkillVisibility:
     ) -> None:
         curator = make_user(db_session, role=UserRole.GLOBAL_CURATOR)
         group = make_group(db_session)
-        add_user_to_group(db_session, curator, group)
+        membership = add_user_to_group(db_session, curator, group)
+        membership.is_manager = True
+        db_session.flush()
         private_skill = make_skill(db_session, is_public=False)
         share_skill_with_group(db_session, private_skill, group)
 

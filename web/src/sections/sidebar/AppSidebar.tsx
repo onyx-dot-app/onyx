@@ -64,6 +64,7 @@ import { handleMoveOperation } from "@/lib/sidebar/svc";
 import { SidebarTab } from "@opal/components";
 import { ChatSession } from "@/app/app/interfaces";
 import { useUser } from "@/providers/UserProvider";
+import { getFirstPermittedAdminRoute } from "@/lib/permissions";
 import useAppFocus from "@/hooks/useAppFocus";
 import { useCreateModal } from "@opal/components";
 import { useModalContext } from "@/components/context/ModalContext";
@@ -480,7 +481,7 @@ export default function AppSidebar() {
     ]
   );
 
-  const { isAdmin, isCurator, user } = useUser();
+  const { hasAdminAccess, adminCapabilities, user } = useUser();
   const activeSidebarTab = useAppFocus();
   const createProjectModal = useCreateModal();
   const showLogoWhenFolded = useShowLogoWhenFolded();
@@ -691,16 +692,12 @@ export default function AppSidebar() {
 
         <SidebarLayouts.Footer>
           <div>
-            {(isAdmin || isCurator) && (
+            {hasAdminAccess && (
               <SidebarTab
-                href={
-                  isCurator
-                    ? "/admin/agents"
-                    : "/admin/configuration/language-models"
-                }
+                href={getFirstPermittedAdminRoute(adminCapabilities)}
                 icon={SvgSettings}
               >
-                {isAdmin ? "Admin Panel" : "Curator Panel"}
+                Admin Panel
               </SidebarTab>
             )}
             <AccountPopover

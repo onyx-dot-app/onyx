@@ -1,6 +1,6 @@
 from typing import Any
 
-from pydantic import BaseModel
+from pydantic import BaseModel, Field
 
 from onyx.db.models import Tool
 from onyx.server.features.tool.tool_visibility import get_tool_visibility_config
@@ -21,17 +21,23 @@ class ToolSnapshot(BaseModel):
     oauth_config_name: str | None = None
     enabled: bool = True
 
+    # Server-stamped affordance map; fail-closed empty (only the admin actions list stamps it).
+    permissions: dict[str, bool] = Field(default_factory=dict)
+
     # Visibility settings computed from TOOL_VISIBILITY_CONFIG
     chat_selectable: bool = True
     agent_creation_selectable: bool = True
     default_enabled: bool = False
 
     @classmethod
-    def from_model(cls, tool: Tool) -> "ToolSnapshot":
+    def from_model(
+        cls, tool: Tool, *, permissions: dict[str, bool] | None = None
+    ) -> "ToolSnapshot":
         # Get visibility config for this tool
         config = get_tool_visibility_config(tool)
 
         return cls(
+            permissions=permissions or {},
             id=tool.id,
             name=tool.name,
             description=tool.description or "",

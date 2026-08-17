@@ -2,7 +2,7 @@ from sqlalchemy import delete, or_, select, update
 from sqlalchemy.dialects.postgresql import insert
 from sqlalchemy.orm import Session, load_only, selectinload
 
-from onyx.auth.schemas import UserRole
+from onyx.auth.permissions import Permission, has_global_permission
 from onyx.db.enums import LLMModelFlowType
 from onyx.db.models import CloudEmbeddingProvider as CloudEmbeddingProviderModel
 from onyx.db.models import (
@@ -108,7 +108,7 @@ def can_user_access_llm_provider(
     provider: LLMProviderModel,
     user_group_ids: set[int],
     persona: Persona | None,
-    is_admin: bool = False,
+    can_manage_llms: bool = False,
 ) -> bool:
     """Check if a user may use an LLM provider.
 
@@ -116,23 +116,23 @@ def can_user_access_llm_provider(
         provider: The LLM provider to check access for
         user_group_ids: Set of user group IDs the user belongs to
         persona: The persona being used (if any)
-        is_admin: If True, bypass user group restrictions but still respect persona restrictions
+        can_manage_llms: If True, bypass user group restrictions but still respect persona restrictions
 
     Access logic:
     - is_public controls USER access (group bypass): when True, all users can access
       regardless of group membership. When False, user must be in a whitelisted group
-      (or be admin).
+      (or hold MANAGE_LLMS).
     - Persona restrictions are ALWAYS enforced when set, regardless of is_public.
-      This allows admins to make a provider available to all users while still
-      restricting which personas (assistants) can use it.
+      This allows MANAGE_LLMS holders to make a provider available to all users
+      while still restricting which personas (assistants) can use it.
 
     Decision matrix:
     1. is_public=True, no personas set → everyone has access
     2. is_public=True, personas set → all users, but only whitelisted personas
-    3. is_public=False, groups+personas set → must satisfy BOTH (admins bypass groups)
-    4. is_public=False, only groups set → must be in group (admins bypass)
+    3. is_public=False, groups+personas set → must satisfy BOTH (MANAGE_LLMS bypasses groups)
+    4. is_public=False, only groups set → must be in group (MANAGE_LLMS bypasses)
     5. is_public=False, only personas set → must use whitelisted persona
-    6. is_public=False, neither set → admin-only (locked)
+    6. is_public=False, neither set → MANAGE_LLMS-only (locked)
     """
     provider_group_ids = {g.id for g in (provider.groups or [])}
     provider_persona_ids = {p.id for p in (provider.personas or [])}
@@ -147,10 +147,10 @@ def can_user_access_llm_provider(
         return True
 
     if has_groups:
-        return is_admin or bool(user_group_ids & provider_group_ids)
+        return can_manage_llms or bool(user_group_ids & provider_group_ids)
 
-    # No groups: either persona-whitelisted (already passed) or admin-only if locked
-    return has_personas or is_admin
+    # No groups: either persona-whitelisted (already passed) or MANAGE_LLMS-only if locked
+    return has_personas or can_manage_llms
 
 
 def validate_persona_ids_exist(
@@ -546,7 +546,7 @@ def fetch_first_accessible_llm_provider_by_type(
         .order_by(LLMProviderModel.id.asc())
     )
     user_group_ids = fetch_user_group_ids(db_session, user)
-    is_admin = user.role == UserRole.ADMIN
+    can_manage_llms = has_global_permission(user, Permission.MANAGE_LLMS)
     provider = next(
         (
             provider
@@ -555,7 +555,7 @@ def fetch_first_accessible_llm_provider_by_type(
                 provider,
                 user_group_ids,
                 persona=None,
-                is_admin=is_admin,
+                can_manage_llms=can_manage_llms,
             )
         ),
         None,
@@ -582,14 +582,14 @@ def fetch_all_accessible_llm_providers(
         )
     )
     user_group_ids = fetch_user_group_ids(db_session, user)
-    is_admin = user.role == UserRole.ADMIN
+    can_manage_llms = has_global_permission(user, Permission.MANAGE_LLMS)
     # This per-turn catalog never uses the key (the gateway injects it per
     # selected model), so skip the per-provider decrypt + audit.
     return [
         LLMProviderView.from_model(p, include_api_key=False)
         for p in provider_models
         if can_user_access_llm_provider(
-            p, user_group_ids, persona=None, is_admin=is_admin
+            p, user_group_ids, persona=None, can_manage_llms=can_manage_llms
         )
     ]
 
@@ -609,17 +609,17 @@ def fetch_all_llm_providers_accessible_in_any_context(
     }
     provider_models = fetch_existing_llm_providers(db_session, [])
     user_group_ids = fetch_user_group_ids(db_session, user)
-    is_admin = user.role == UserRole.ADMIN
+    can_manage_llms = has_global_permission(user, Permission.MANAGE_LLMS)
 
     def is_accessible(provider: LLMProviderModel) -> bool:
         if can_user_access_llm_provider(
-            provider, user_group_ids, persona=None, is_admin=is_admin
+            provider, user_group_ids, persona=None, can_manage_llms=can_manage_llms
         ):
             return True
         return any(
             persona.id in accessible_persona_ids
             and can_user_access_llm_provider(
-                provider, user_group_ids, persona, is_admin=is_admin
+                provider, user_group_ids, persona, can_manage_llms=can_manage_llms
             )
             for persona in provider.personas
         )
@@ -678,7 +678,7 @@ def fetch_accessible_llm_provider_by_id(
         provider_model,
         user_group_ids,
         persona=None,
-        is_admin=user.role == UserRole.ADMIN,
+        can_manage_llms=has_global_permission(user, Permission.MANAGE_LLMS),
     ):
         return None
     return LLMProviderView.from_model(provider_model)

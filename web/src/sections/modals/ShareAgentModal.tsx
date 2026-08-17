@@ -15,7 +15,9 @@ import {
   updateAgentShares,
 } from "@/lib/agents/svc";
 import { SWR_KEYS } from "@/lib/swr-keys";
-import type { MinimalUserSnapshot } from "@/lib/types";
+import { Permission, type MinimalUserSnapshot } from "@/lib/types";
+import { hasPermission } from "@/lib/permissions";
+import { can } from "@/lib/permissions/resource-actions";
 import { useUser } from "@/providers/UserProvider";
 import { useSettings } from "@/lib/settings/hooks";
 import { Modal } from "@opal/components";
@@ -139,12 +141,22 @@ export default function ShareAgentModal({
     includeApiKeys: false,
   });
   const { data: shareableGroupsData } = useShareableGroups();
-  const { isAdmin, user: currentUser } = useUser();
+  const { isAdmin, user: currentUser, adminCapabilities } = useUser();
   const settings = useSettings();
 
   const shareableUsers = shareableUsersData ?? [];
   const transferableUsers = transferableUsersData ?? [];
   const shareableGroups = shareableGroupsData ?? [];
+
+  // Publish is owner-or-admin per agent, so use the server's answer, not a role check.
+  // A new agent has nothing stamped yet, and its creator owns it, so publish stays open.
+  const canPublish = !agentId || can(agent, "publish");
+  // Attaching an agent to a group is a MANAGE_AGENTS action (decision D7), so a plain
+  // owner can share with users but not with groups.
+  const canGroupShare = hasPermission(
+    adminCapabilities,
+    Permission.MANAGE_AGENTS
+  );
   const isPaidEnterpriseFeaturesEnabled =
     !settings.isLoading && settings.enterprise !== null;
 
@@ -507,7 +519,7 @@ export default function ShareAgentModal({
           <AddPeoplePicker
             existingGroupIds={existingGroupIds}
             existingUserIds={existingUserIds}
-            groups={shareableGroups}
+            groups={canGroupShare ? shareableGroups : []}
             onAddGroup={(group) => {
               setStagedGroups((currentGroups) => [...currentGroups, group]);
             }}
@@ -539,7 +551,8 @@ export default function ShareAgentModal({
           titleSlot={
             <SharePermissionMenu
               ariaLabel="Change sharing scope"
-              disabled={!canEditShares}
+              // Stays visible so the current scope still reads; only changing it is gated.
+              disabled={!canEditShares || !canPublish}
               menuWidth="2xl"
               showTriggerIcon={false}
               onChange={(scope) => {
@@ -555,7 +568,7 @@ export default function ShareAgentModal({
           rightChildren={
             <SharePermissionMenu
               ariaLabel="Change public permission"
-              disabled={!canEditShares}
+              disabled={!canEditShares || !canPublish}
               onChange={(permission) => {
                 setDraftState((currentDraftState) => ({
                   ...currentDraftState,
@@ -728,7 +741,9 @@ export default function ShareAgentModal({
           {view === "transfer" ? (
             <TransferOwnershipView
               agent={agent}
-              groups={shareableGroups}
+              // Handing an agent to a group attaches it to that group, so it answers to
+              // MANAGE_AGENTS like group sharing does; transfer to a user stays open.
+              groups={canGroupShare ? shareableGroups : []}
               onSelectedTargetChange={setTransferTarget}
               selectedTarget={transferTarget}
               users={transferableUsers}

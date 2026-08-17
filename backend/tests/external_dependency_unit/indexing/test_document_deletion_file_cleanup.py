@@ -10,7 +10,7 @@ best-effort deletes the underlying files after the DB commit.
 """
 
 from collections.abc import Generator
-from unittest.mock import MagicMock, patch
+from unittest.mock import patch
 from uuid import uuid4
 
 import pytest
@@ -26,6 +26,7 @@ from onyx.db.models import ConnectorCredentialPair
 from onyx.indexing.indexing_pipeline import index_doc_batch_prepare
 from onyx.server.onyx_api.ingestion import delete_ingestion_doc
 from shared_configs.configs import POSTGRES_DEFAULT_SCHEMA_STANDARD_VALUE
+from tests.external_dependency_unit.conftest import create_test_user
 from tests.external_dependency_unit.indexing_helpers import (
     cleanup_cc_pair,
     get_doc_row,
@@ -188,7 +189,8 @@ class TestDeleteIngestionDoc:
         ):
             delete_ingestion_doc(
                 document_id=doc.id,
-                _=MagicMock(),  # auth dep — not used by the function body
+                # a real admin: the body now feeds this to the GATE 2 cc_pair check
+                user=create_test_user(db_session, "ingestion_delete", is_admin=True),
                 db_session=db_session,
             )
 

@@ -31,6 +31,7 @@ from onyx.db.chat import (
     reserve_message_id,
 )
 from onyx.db.file_record import (
+    FileRecordNotFoundError,
     get_incognito_file_ids,
     get_session_ids_with_incognito_files,
 )
@@ -39,7 +40,7 @@ from onyx.file_store.file_store import get_default_file_store
 from onyx.redis.redis_pool import get_redis_client
 from onyx.tools.models import ToolCallInfo
 from shared_configs.contextvars import CURRENT_CONTENT_FREE_SESSION_ID_CONTEXTVAR
-from tests.external_dependency_unit.conftest import create_test_user
+from tests.external_dependency_unit.conftest import create_test_user, delete_test_user
 
 
 @pytest.fixture
@@ -48,7 +49,7 @@ def owner(db_session: Session) -> Generator[User, None, None]:
     yield user
     db_session.rollback()
     db_session.query(ChatSession).filter(ChatSession.user_id == user.id).delete()
-    db_session.delete(user)
+    delete_test_user(db_session, user)
     db_session.commit()
 
 
@@ -242,7 +243,7 @@ def test_teardown_deletes_the_stamped_blobs(db_session: Session) -> None:
 
     assert delete_incognito_generated_files(session_id, db_session)
 
-    with pytest.raises(Exception):
+    with pytest.raises(FileRecordNotFoundError):
         file_store.read_file(file_id)
     assert get_incognito_file_ids(str(session_id), db_session) == []
 
@@ -262,5 +263,5 @@ def test_a_refused_deletion_keeps_the_stamp(db_session: Session) -> None:
     assert str(session_id) in get_session_ids_with_incognito_files(db_session)
 
     assert delete_incognito_generated_files(session_id, db_session)
-    with pytest.raises(Exception):
+    with pytest.raises(FileRecordNotFoundError):
         file_store.read_file(file_id)

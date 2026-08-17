@@ -92,9 +92,9 @@ describe("group token-limit persistence", () => {
     );
 
     expect(fetchMock.mock.calls.map(([url]) => url)).toEqual([
-      "/api/admin/token-rate-limits/rate-limit/10",
-      "/api/admin/token-rate-limits/rate-limit/30",
-      "/api/admin/token-rate-limits/rate-limit/20",
+      "/api/admin/token-rate-limits/user-group/7/rate-limit/10",
+      "/api/admin/token-rate-limits/user-group/7/rate-limit/30",
+      "/api/admin/token-rate-limits/user-group/7/rate-limit/20",
     ]);
     expect(
       fetchMock.mock.calls.map(([, options]) => (options as RequestInit).method)

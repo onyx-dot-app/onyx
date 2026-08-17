@@ -371,7 +371,7 @@ def reset_usage(
 
 @router.get("")
 def list_cost_overrides(
-    _: User = Depends(require_permission(Permission.FULL_ADMIN_PANEL_ACCESS)),
+    _: User = Depends(require_permission(Permission.MANAGE_LLMS)),
     db_session: Session = Depends(get_session),
 ) -> list[CostOverride]:
     return [CostOverride.from_db(row) for row in list_overrides(db_session)]
@@ -380,7 +380,7 @@ def list_cost_overrides(
 @router.put("")
 def upsert_cost_override(
     payload: CostOverrideUpsertRequest,
-    _: User = Depends(require_permission(Permission.FULL_ADMIN_PANEL_ACCESS)),
+    _: User = Depends(require_permission(Permission.MANAGE_LLMS)),
     db_session: Session = Depends(get_session),
 ) -> CostOverride:
     row = upsert_override(
@@ -402,7 +402,7 @@ def upsert_cost_override(
 def delete_cost_override(
     model: str,
     provider: str = "",
-    _: User = Depends(require_permission(Permission.FULL_ADMIN_PANEL_ACCESS)),
+    _: User = Depends(require_permission(Permission.MANAGE_LLMS)),
     db_session: Session = Depends(get_session),
 ) -> None:
     if not delete_override(db_session, model, provider):

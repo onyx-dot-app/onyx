@@ -41,7 +41,6 @@ from onyx.db.models import (
     User,
     User__UserGroup,
     UserGroup,
-    UserRole,
 )
 from onyx.db.users import reconcile_user_email__no_commit
 from onyx.utils.logger import setup_logger
@@ -248,7 +247,6 @@ class ScimDAL(DAL):
         email: str | None = None,
         is_active: bool | None = None,
         personal_name: str | None = None,
-        role: UserRole | None = None,
         account_type: AccountType | None = None,
     ) -> None:
         """Update user attributes. Only sets fields that are provided.
@@ -263,8 +261,6 @@ class ScimDAL(DAL):
             user.is_active = is_active
         if personal_name is not None:
             user.personal_name = personal_name
-        if role is not None:
-            user.role = role
         if account_type is not None:
             user.account_type = account_type
 
@@ -687,11 +683,26 @@ class ScimDAL(DAL):
         )
 
     def replace_group_members(self, group_id: int, user_ids: list[UUID]) -> None:
-        """Replace all members of a group."""
-        self._session.execute(
-            sa_delete(User__UserGroup).where(User__UserGroup.user_group_id == group_id)
-        )
-        self.upsert_group_members(group_id, user_ids)
+        """Replace all members of a group, leaving retained members' rows untouched.
+
+        Diffs rather than delete-all-then-reinsert: the membership row carries
+        ``is_manager``, and ``upsert_group_members`` doesn't name that column, so
+        re-inserting a retained member silently demotes them to the server_default.
+        IdPs push a full ``PUT /Groups`` on routine reconciliation, so delete-all
+        would strip every group manager on each sync, unaudited.
+        """
+        requested = set(user_ids)
+        current = {
+            uid
+            for uid in self._session.scalars(
+                select(User__UserGroup.user_id).where(
+                    User__UserGroup.user_group_id == group_id
+                )
+            )
+            if uid is not None
+        }
+        self.remove_group_members(group_id, list(current - requested))
+        self.upsert_group_members(group_id, list(requested - current))
 
     def remove_group_members(self, group_id: int, user_ids: list[UUID]) -> None:
         """Remove specific members from a group."""

@@ -1,6 +1,6 @@
 from uuid import UUID
 
-from pydantic import BaseModel
+from pydantic import BaseModel, Field
 
 from onyx.auth.permissions import Permission
 from onyx.db.models import UserGroup as UserGroupModel
@@ -18,7 +18,7 @@ class UserGroup(BaseModel):
     id: int
     name: str
     users: list[UserInfo]
-    curator_ids: list[UUID]
+    manager_ids: list[str]
     cc_pairs: list[ConnectorCredentialPairDescriptor]
     document_sets: list[DocumentSet]
     personas: list[PersonaSnapshot]
@@ -27,6 +27,10 @@ class UserGroup(BaseModel):
     is_default: bool
     # Members may start incognito chats when availability is groups-only.
     incognito_enabled: bool
+    # Per-action affordance map ({"manage": true, ...}) the client reads to show/hide
+    # controls. Empty default = every action denied (missing key is false), so it fails
+    # closed. Only the list-groups endpoint fills it in; the mutation routes leave it empty.
+    permissions: dict[str, bool] = Field(default_factory=dict)
 
     @classmethod
     def from_model(
@@ -34,10 +38,17 @@ class UserGroup(BaseModel):
         user_group_model: UserGroupModel,
         *,
         mask_credential_prefix: bool,
+        permissions: dict[str, bool] | None = None,
     ) -> "UserGroup":
         return cls(
+            permissions=permissions or {},
             id=user_group_model.id,
             name=user_group_model.name,
+            manager_ids=[
+                str(relationship.user_id)
+                for relationship in user_group_model.user_group_relationships
+                if relationship.is_manager and relationship.user_id is not None
+            ],
             users=[
                 UserInfo(
                     id=str(user.id),
@@ -45,18 +56,13 @@ class UserGroup(BaseModel):
                     is_active=user.is_active,
                     is_superuser=user.is_superuser,
                     is_verified=user.is_verified,
-                    role=user.role,
+                    account_type=user.account_type,
                     preferences=UserPreferences(
                         default_model=user.default_model,
                         chosen_assistants=user.chosen_assistants,
                     ),
                 )
                 for user in user_group_model.users
-            ],
-            curator_ids=[
-                user.user_id
-                for user in user_group_model.user_group_relationships
-                if user.is_curator and user.user_id is not None
             ],
             cc_pairs=[
                 ConnectorCredentialPairDescriptor(
@@ -131,21 +137,20 @@ class UserGroupRename(BaseModel):
     name: str
 
 
-class SetCuratorRequest(BaseModel):
-    user_id: UUID
-    is_curator: bool
-
-
 class UpdateGroupAgentsRequest(BaseModel):
     added_agent_ids: list[int]
     removed_agent_ids: list[int]
 
 
-class SetPermissionRequest(BaseModel):
-    permission: Permission
-    enabled: bool
+class UpdateGroupDocumentSetsRequest(BaseModel):
+    added_document_set_ids: list[int]
+    removed_document_set_ids: list[int]
 
 
-class SetPermissionResponse(BaseModel):
-    permission: Permission
-    enabled: bool
+class SetGroupManagerRequest(BaseModel):
+    user_id: UUID
+    is_manager: bool
+
+
+class BulkSetPermissionsRequest(BaseModel):
+    permissions: list[Permission]

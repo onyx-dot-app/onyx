@@ -644,6 +644,8 @@ class MCPServer(BaseModel):
         None,
         description="Admin's credential key-value pairs for template substitution and storage",
     )
+    # Server-stamped affordance map; fail-closed empty (only the admin server list stamps it).
+    permissions: dict[str, bool] = Field(default_factory=dict)
     craft_connected: Optional[bool] = Field(
         None,
         description=(

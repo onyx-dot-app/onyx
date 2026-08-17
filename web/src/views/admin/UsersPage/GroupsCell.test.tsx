@@ -3,7 +3,7 @@
 // attached once per `groups` value, so the observed node must survive the
 // render that follows the first measurement.
 import { render, screen, waitFor } from "@tests/setup/test-utils";
-import { UserRole, UserStatus } from "@/lib/types";
+import { AccountType, UserStatus } from "@/lib/types";
 import GroupsCell from "./GroupsCell";
 import type { UserRow } from "./interfaces";
 
@@ -24,7 +24,7 @@ beforeEach(() => {
 const user: UserRow = {
   id: "1",
   email: "user@example.com",
-  role: UserRole.BASIC,
+  account_type: AccountType.STANDARD,
   status: UserStatus.ACTIVE,
   is_active: true,
   is_scim_synced: false,

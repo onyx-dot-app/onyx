@@ -53,16 +53,18 @@ function buildMcpServerUrl(baseUrl: string): string {
   return trimmed.endsWith("/mcp") ? trimmed : `${trimmed}/mcp`;
 }
 
-/** Confirm the current session belongs to the expected user + role. */
+/** Confirm the current session belongs to the expected user. Admin status comes
+ *  from effective_permissions now that roles are gone. */
 async function verifySessionUser(
   page: Page,
-  expected: { email: string; role: string }
+  expected: { email: string; isAdmin: boolean }
 ): Promise<void> {
   const response = await page.request.get(`${oauthConfig().appBaseUrl}/api/me`);
   expect(response.ok()).toBeTruthy();
   const data = await response.json();
   expect(data.email).toBe(expected.email);
-  expect(data.role).toBe(expected.role);
+  const permissions: string[] = data.effective_permissions ?? [];
+  expect(permissions.includes("admin")).toBe(expected.isAdmin);
 }
 
 async function waitForUserRecord(
@@ -95,6 +97,7 @@ async function configureOauthServer(
     serverDescription: string;
     serverUrl: string;
     toolName: string;
+    group?: string;
   }
 ): Promise<number> {
   const adminMcp = new AdminMcpServersPage(page);
@@ -104,6 +107,7 @@ async function configureOauthServer(
     name: options.serverName,
     description: options.serverDescription,
     url: options.serverUrl,
+    group: options.group,
   });
   const serverId = await adminMcp.submitAddServer();
 
@@ -165,6 +169,7 @@ test.describe("MCP OAuth flows", () => {
   let curatorTwoCredentials: Credentials | null = null;
   let curatorGroupId: number | null = null;
   let curatorTwoGroupId: number | null = null;
+  let curatorGroupName = "";
 
   test.beforeAll(async ({ browser }, workerInfo) => {
     if (workerInfo.project.name !== "admin") {
@@ -218,16 +223,12 @@ test.describe("MCP OAuth flows", () => {
       adminClient,
       curatorCredentials.email
     );
-    curatorGroupId = await adminClient.createUserGroup(
-      `Playwright Curator Group ${Date.now()}`,
-      [curatorRecord.id]
-    );
-    await adminClient.setCuratorStatus(
-      String(curatorGroupId),
+    curatorGroupName = `Playwright Curator Group ${Date.now()}`;
+    curatorGroupId = await adminClient.createUserGroup(curatorGroupName, [
       curatorRecord.id,
-      true
-    );
-
+    ]);
+    // roles are gone: the is_manager edge is what confers scoped MANAGE_ACTIONS
+    await adminClient.setGroupManager(curatorGroupId, curatorRecord.id);
     curatorTwoCredentials = {
       email: `pw-curator-${Date.now()}-b@example.com`,
       password: basePassword,
@@ -244,11 +245,7 @@ test.describe("MCP OAuth flows", () => {
       `Playwright Curator Group ${Date.now()}-2`,
       [curatorTwoRecord.id]
     );
-    await adminClient.setCuratorStatus(
-      String(curatorTwoGroupId),
-      curatorTwoRecord.id,
-      true
-    );
+    await adminClient.setGroupManager(curatorTwoGroupId, curatorTwoRecord.id);
 
     await adminContext.close();
   });
@@ -301,7 +298,7 @@ test.describe("MCP OAuth flows", () => {
     await loginAs(page, "admin");
     await verifySessionUser(page, {
       email: TEST_ADMIN_CREDENTIALS.email,
-      role: "admin",
+      isAdmin: true,
     });
     const adminClient = new OnyxApiClient(page.request);
 
@@ -398,7 +395,7 @@ test.describe("MCP OAuth flows", () => {
     );
     await verifySessionUser(page, {
       email: curatorCredentials!.email,
-      role: "curator",
+      isAdmin: false,
     });
     const curatorClient = new OnyxApiClient(page.request);
 
@@ -424,6 +421,8 @@ test.describe("MCP OAuth flows", () => {
         serverDescription: "Playwright MCP OAuth server (curator)",
         serverUrl: curatorServerUrl,
         toolName: TOOL_NAMES.curator,
+        // a scoped manager may only create servers private to a group they manage
+        group: curatorGroupName,
       });
       const curatorToolId = await curatorClient.findMcpToolId(
         serverId,
@@ -436,6 +435,8 @@ test.describe("MCP OAuth flows", () => {
         {
           instructions: "Curator MCP OAuth assistant.",
           description: "Playwright curator MCP assistant.",
+          // same scope rule as the server: a managed group is required
+          groupIds: [curatorGroupId!],
         }
       );
 
@@ -471,8 +472,8 @@ test.describe("MCP OAuth flows", () => {
         toolId: curatorToolId,
       };
 
-      // Isolation: a second curator must not be able to edit the first
-      // curator's server.
+      // Isolation: the second curator manages a different group, so the first
+      // curator's group-private server is neither listed nor readable.
       const curatorTwoContext = await browser.newContext();
       const curatorTwoPage = await curatorTwoContext.newPage();
       await apiLogin(
@@ -481,9 +482,13 @@ test.describe("MCP OAuth flows", () => {
         curatorTwoCredentials!.password
       );
       await curatorTwoPage.goto("/admin/actions/mcp");
+      // anchor on the page rendering, else the absence check races the load
+      await expect(
+        curatorTwoPage.getByRole("button", { name: /Add MCP Server/i })
+      ).toBeVisible({ timeout: 30_000 });
       await expect(
         curatorTwoPage.getByText(serverName, { exact: false })
-      ).not.toHaveCount(0);
+      ).toHaveCount(0);
 
       const editResponse = await curatorTwoPage.request.get(
         `${oauthConfig().appBaseUrl}/api/admin/mcp/servers/${serverId}`

@@ -148,8 +148,9 @@ export function AdvancedConfigDisplay({
   pruneFreq: number | null;
   refreshFreq: number | null;
   indexingStart: Date | null;
-  onRefreshEdit: () => void;
-  onPruningEdit: () => void;
+  // Omit to hide the pencil for a caller who may not edit.
+  onRefreshEdit?: () => void;
+  onPruningEdit?: () => void;
 }) {
   const formatRefreshFrequency = (seconds: number | null): string => {
     if (seconds === null) return "-";

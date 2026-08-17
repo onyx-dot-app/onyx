@@ -1,7 +1,7 @@
 "use client";
 
 import type { Route } from "next";
-import { useState } from "react";
+import { useMemo, useState } from "react";
 import { useRouter } from "next/navigation";
 import useSWR from "swr";
 import { SvgExternalLink, SvgUsers, SvgSimpleLoader } from "@opal/icons";
@@ -9,7 +9,11 @@ import { Button, MessageCard } from "@opal/components";
 import { SettingsLayouts } from "@opal/layouts";
 import { errorHandlingFetcher } from "@/lib/fetcher";
 import type { UserGroup } from "@/lib/types";
+import { Permission } from "@/lib/types";
 import { SWR_KEYS } from "@/lib/swr-keys";
+import { useUser } from "@/providers/UserProvider";
+import { hasPermission } from "@/lib/permissions";
+import { can } from "@/lib/permissions/resource-actions";
 import GroupsList from "./GroupsList";
 import AdminListHeader from "@/sections/admin/AdminListHeader";
 import { IllustrationContent } from "@opal/layouts";
@@ -18,6 +22,14 @@ import SvgNoResult from "@opal/illustrations/no-result";
 function GroupsPage() {
   const router = useRouter();
   const [searchQuery, setSearchQuery] = useState("");
+  const { user } = useUser();
+
+  // Create is global-only (route has no allow_scope); gate on the global token, not
+  // admin_capabilities, which would show it to scoped managers who'd then 403.
+  const canCreateGroup = hasPermission(
+    user?.effective_permissions ?? [],
+    Permission.MANAGE_USER_GROUPS
+  );
 
   const {
     data: groups,
@@ -25,14 +37,21 @@ function GroupsPage() {
     isLoading,
   } = useSWR<UserGroup[]>(SWR_KEYS.adminUserGroups, errorHandlingFetcher);
 
+  // The list is READ_USER_GROUPS-scoped (implied by MANAGE_LLMS etc.), so filter to
+  // manageable groups — else a read-only holder sees groups with no open action.
+  const manageableGroups = useMemo(
+    () => (groups ?? []).filter((group) => can(group, "manage")),
+    [groups]
+  );
+
   return (
     <SettingsLayouts.Root>
       <div data-testid="groups-page-heading">
         <SettingsLayouts.Header icon={SvgUsers} title="Groups" divider>
           <MessageCard
             variant="info"
-            title="Upcoming changes to permissions"
-            description="Onyx is transitioning to group-based permissions, enabling more flexible access control through configurable permissions per group. We recommend reviewing your group structure to prepare for this update."
+            title="Permissions have changed"
+            description="Onyx now uses group-based permissions. Access is configured per group, so a user's permissions are the combination of every group they belong to."
             rightChildren={
               <Button
                 icon={SvgExternalLink}
@@ -53,13 +72,17 @@ function GroupsPage() {
 
       <SettingsLayouts.Body>
         <AdminListHeader
-          hasItems={!isLoading && !error && (groups?.length ?? 0) > 0}
+          hasItems={!isLoading && !error && manageableGroups.length > 0}
           searchQuery={searchQuery}
           onSearchQueryChange={setSearchQuery}
           placeholder="Search groups..."
           emptyStateText="Create groups to organize users and manage access."
-          onAction={() => router.push("/admin/groups/create" as Route)}
-          actionLabel="New Group"
+          onAction={
+            canCreateGroup
+              ? () => router.push("/admin/groups/create" as Route)
+              : undefined
+          }
+          actionLabel={canCreateGroup ? "New Group" : undefined}
         />
 
         {isLoading && <SvgSimpleLoader />}
@@ -73,7 +96,7 @@ function GroupsPage() {
         )}
 
         {!isLoading && !error && groups && (
-          <GroupsList groups={groups} searchQuery={searchQuery} />
+          <GroupsList groups={manageableGroups} searchQuery={searchQuery} />
         )}
       </SettingsLayouts.Body>
     </SettingsLayouts.Root>

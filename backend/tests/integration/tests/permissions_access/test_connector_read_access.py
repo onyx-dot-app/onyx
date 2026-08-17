@@ -1,11 +1,12 @@
-"""Integration tests for FULL_ADMIN_PANEL_ACCESS permission gate.
+"""Integration tests for the READ_CONNECTORS gate on connector read endpoints.
 
-Verifies that endpoints protected by
-``require_permission(Permission.FULL_ADMIN_PANEL_ACCESS)``
-allow admin users but reject basic users, limited service accounts,
-bot users, external-permission users, and anonymous (unauthenticated) client.
-
-Each endpoint is tested with all six user types via parameterization.
+``GET /manage/connector`` (list) and ``GET /manage/connector/{id}`` (by-id) return
+full ``ConnectorSnapshot``s including ``connector_specific_config`` and
+``credential_ids``. They must be restricted to global READ_CONNECTORS holders
+(pentest M8 / ENG-4249); basic users, limited service accounts, bot users,
+external-permission users, and anonymous clients must be denied. Group managers are
+denied too: a ``Connector`` row has no group on it, so these routes cannot filter per
+user. That case is covered in ``test_group_manager_resources.py``.
 """
 
 import pytest
@@ -14,30 +15,23 @@ from tests.integration.common_utils.constants import API_SERVER_URL
 from tests.integration.common_utils.http_client import client
 from tests.integration.common_utils.test_models import DATestAPIKey, DATestUser
 
-# Representative endpoints that use require_permission(Permission.FULL_ADMIN_PANEL_ACCESS).
-# One per major router file to cover breadth without redundancy.
-ADMIN_ACCESS_ENDPOINTS: list[tuple[str, str]] = [
-    ("GET", "/admin/token-rate-limits/global"),
-    ("GET", "/manage/users/counts"),
-    ("GET", "/manage/users/invited"),
-    ("GET", "/manage/admin/valid-domains"),
-    ("GET", "/manage/users/download"),
-    ("GET", "/build/admin/base-instructions"),
+# Connector read endpoints gated on a global READ_CONNECTORS grant.
+# The by-id path targets a non-existent id on purpose: the auth dependency runs
+# before the handler, so denied users get 403 while an admin gets 404 -- both
+# outcomes confirm the auth gate behaved correctly.
+CONNECTOR_READ_ENDPOINTS: list[tuple[str, str]] = [
+    ("GET", "/manage/connector"),
+    ("GET", "/manage/connector/1"),
 ]
 
 
-# ------------------------------------------------------------------
-# Allowed users: admin only
-# ------------------------------------------------------------------
-
-
-@pytest.mark.parametrize("method,path", ADMIN_ACCESS_ENDPOINTS)
+@pytest.mark.parametrize("method,path", CONNECTOR_READ_ENDPOINTS)
 def test_admin_user_allowed(
     method: str,
     path: str,
     permission_admin_user: DATestUser,
 ) -> None:
-    """Admin users should be able to access FULL_ADMIN_PANEL_ACCESS endpoints."""
+    """Admins hold READ_CONNECTORS globally (200 for list, 404 for missing id)."""
     resp = client.request(
         method,
         f"{API_SERVER_URL}{path}",
@@ -45,23 +39,18 @@ def test_admin_user_allowed(
         cookies=permission_admin_user.cookies,
         timeout=30,
     )
-    assert resp.status_code < 400, (
-        f"Admin should access {method} {path}, got {resp.status_code}"
+    assert resp.status_code not in (401, 403), (
+        f"Admin should pass auth on {method} {path}, got {resp.status_code}"
     )
 
 
-# ------------------------------------------------------------------
-# Denied users: basic, limited service account, bot, ext_perm, anonymous
-# ------------------------------------------------------------------
-
-
-@pytest.mark.parametrize("method,path", ADMIN_ACCESS_ENDPOINTS)
+@pytest.mark.parametrize("method,path", CONNECTOR_READ_ENDPOINTS)
 def test_basic_user_denied(
     method: str,
     path: str,
     permission_basic_user: DATestUser,
 ) -> None:
-    """Basic users should NOT be able to access admin-only endpoints."""
+    """Basic users must NOT read connector config/credential ids."""
     resp = client.request(
         method,
         f"{API_SERVER_URL}{path}",
@@ -74,13 +63,13 @@ def test_basic_user_denied(
     )
 
 
-@pytest.mark.parametrize("method,path", ADMIN_ACCESS_ENDPOINTS)
+@pytest.mark.parametrize("method,path", CONNECTOR_READ_ENDPOINTS)
 def test_limited_service_account_denied(
     method: str,
     path: str,
     limited_service_account: DATestAPIKey,
 ) -> None:
-    """Limited service accounts (no FULL_ADMIN_PANEL_ACCESS) should be denied."""
+    """Limited service accounts (no READ_CONNECTORS grant) should be denied."""
     resp = client.request(
         method,
         f"{API_SERVER_URL}{path}",
@@ -93,13 +82,13 @@ def test_limited_service_account_denied(
     )
 
 
-@pytest.mark.parametrize("method,path", ADMIN_ACCESS_ENDPOINTS)
+@pytest.mark.parametrize("method,path", CONNECTOR_READ_ENDPOINTS)
 def test_bot_user_denied(
     method: str,
     path: str,
     bot_user_headers: dict[str, str],
 ) -> None:
-    """Bot (SLACK_USER) accounts should be denied from admin endpoints."""
+    """Bot (SLACK_USER) accounts should be denied."""
     resp = client.request(
         method,
         f"{API_SERVER_URL}{path}",
@@ -111,13 +100,13 @@ def test_bot_user_denied(
     )
 
 
-@pytest.mark.parametrize("method,path", ADMIN_ACCESS_ENDPOINTS)
+@pytest.mark.parametrize("method,path", CONNECTOR_READ_ENDPOINTS)
 def test_ext_perm_user_denied(
     method: str,
     path: str,
     ext_perm_user_headers: dict[str, str],
 ) -> None:
-    """External permission users should be denied from admin endpoints."""
+    """External permission users should be denied."""
     resp = client.request(
         method,
         f"{API_SERVER_URL}{path}",
@@ -129,7 +118,7 @@ def test_ext_perm_user_denied(
     )
 
 
-@pytest.mark.parametrize("method,path", ADMIN_ACCESS_ENDPOINTS)
+@pytest.mark.parametrize("method,path", CONNECTOR_READ_ENDPOINTS)
 def test_anonymous_denied(
     method: str,
     path: str,

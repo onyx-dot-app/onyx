@@ -11,6 +11,7 @@ import { CopyButton } from "@opal/components";
 import { Button, Divider } from "@opal/components";
 import { Hoverable } from "@opal/core";
 import { MethodSpec, ToolSnapshot } from "@/lib/tools/interfaces";
+import { can } from "@/lib/permissions/resource-actions";
 import {
   validateToolDefinition,
   createCustomTool,
@@ -90,6 +91,11 @@ function FormContent({
   const [url, setUrl] = useState<string | undefined>(undefined);
 
   const isEditMode = Boolean(existingTool);
+  // Editing auth manages the action's OAuth config (owner-or-admin); gate on the same
+  // server-stamped capability as the card.
+  const canEditAuthentication = existingTool
+    ? can(existingTool, "authenticate")
+    : false;
 
   const handleFormat = useCallback(() => {
     if (!values.definition.trim()) {
@@ -370,7 +376,12 @@ function FormContent({
                 }}
               />
               <Button
-                disabled={!onEditAuthentication}
+                disabled={!onEditAuthentication || !canEditAuthentication}
+                tooltip={
+                  !canEditAuthentication
+                    ? "Only the action's creator or an admin can manage authentication"
+                    : undefined
+                }
                 prominence="secondary"
                 type="button"
                 onClick={handleEditAuthenticationClick}

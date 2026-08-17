@@ -78,7 +78,8 @@ from onyx.auth.mobile_sso.sso_completion import (
     is_mobile_sso,
 )
 from onyx.auth.pat import get_hashed_pat_from_request
-from onyx.auth.schemas import AuthBackend, UserCreate, UserRole
+from onyx.auth.permissions import has_global_permission
+from onyx.auth.schemas import AuthBackend, UserCreate
 from onyx.auth.session_tokens import (
     SESSION_TOKEN_GRACE_PERIOD_SECONDS,
     SessionRejection,
@@ -119,7 +120,6 @@ from onyx.configs.constants import (
 )
 from onyx.db.api_key import fetch_api_key_auth_result
 from onyx.db.auth import (
-    SQLAlchemyUserAdminDB,
     get_access_token_db,
     get_default_admin_user_emails,
     get_user_count,
@@ -185,7 +185,7 @@ REGISTER_INVITE_ONLY_CODE = "REGISTER_INVITE_ONLY"
 
 
 def is_user_admin(user: User) -> bool:
-    return user.role == UserRole.ADMIN
+    return has_global_permission(user, Permission.FULL_ADMIN_PANEL_ACCESS)
 
 
 def verify_auth_setting() -> None:
@@ -563,7 +563,7 @@ class UserManager(UUIDIDMixin, BaseUserManager[User, uuid.UUID]):
         )(user_email)
         async with get_async_session_context_manager(tenant_id) as db_session:
             if MULTI_TENANT:
-                tenant_user_db = SQLAlchemyUserAdminDB[User, uuid.UUID](
+                tenant_user_db = SQLAlchemyUserDatabase[User, uuid.UUID](
                     db_session, User, OAuthAccount
                 )
                 user = await tenant_user_db.get_by_email(user_email)
@@ -612,7 +612,7 @@ class UserManager(UUIDIDMixin, BaseUserManager[User, uuid.UUID]):
         contextvar_token = CURRENT_TENANT_ID_CONTEXTVAR.set(tenant_id)
         try:
             async with get_async_session_context_manager(tenant_id) as db_session:
-                tenant_user_db = SQLAlchemyUserAdminDB[User, uuid.UUID](
+                tenant_user_db = SQLAlchemyUserDatabase[User, uuid.UUID](
                     db_session, User, OAuthAccount
                 )
 
@@ -739,22 +739,16 @@ class UserManager(UUIDIDMixin, BaseUserManager[User, uuid.UUID]):
                     # Single-tenant: the gate self-skips when invite-only is off
                     verify_email_is_invited(user_create.email)
                 if MULTI_TENANT:
-                    tenant_user_db = SQLAlchemyUserAdminDB[User, uuid.UUID](
+                    tenant_user_db = SQLAlchemyUserDatabase[User, uuid.UUID](
                         db_session, User, OAuthAccount
                     )
                     self.user_db = tenant_user_db
 
-                if hasattr(user_create, "role"):
-                    user_create.role = UserRole.BASIC  # ty: ignore[invalid-assignment]
-
-                    user_count = await get_user_count()
-                    if (
-                        user_count == 0
-                        or user_create.email in get_default_admin_user_emails()
-                    ):
-                        user_create.role = (  # ty: ignore[invalid-assignment]
-                            UserRole.ADMIN
-                        )
+                user_count = await get_user_count()
+                is_admin = (
+                    user_count == 0
+                    or user_create.email in get_default_admin_user_emails()
+                )
 
                 # Lock + check on the same session that does the insert.
                 existing = await self.user_db.session.run_sync(
@@ -800,7 +794,7 @@ class UserManager(UUIDIDMixin, BaseUserManager[User, uuid.UUID]):
                     # object triggers a sync lazy-load which raises MissingGreenlet
                     # in this async context.
                     user_id = user.id
-                    self._upgrade_user_to_standard__sync(user_id, user_create)
+                    self._upgrade_user_to_standard__sync(user_id, user_create, is_admin)
                     # Expire so the async session re-fetches the row updated by
                     # the sync session above.
                     self.user_db.session.expire(user)
@@ -830,7 +824,7 @@ class UserManager(UUIDIDMixin, BaseUserManager[User, uuid.UUID]):
                     # object triggers a sync lazy-load which raises MissingGreenlet
                     # in this async context.
                     user_id = user.id
-                    self._upgrade_user_to_standard__sync(user_id, user_create)
+                    self._upgrade_user_to_standard__sync(user_id, user_create, is_admin)
                     # Expire so the async session re-fetches the row updated by
                     # the sync session above.
                     self.user_db.session.expire(user)
@@ -877,6 +871,7 @@ class UserManager(UUIDIDMixin, BaseUserManager[User, uuid.UUID]):
         self,
         user_id: uuid.UUID,
         user_create: UserCreate,
+        is_admin: bool,
     ) -> None:
         """Upgrade a non-web user to STANDARD + assign groups in one tx.
 
@@ -901,12 +896,11 @@ class UserManager(UUIDIDMixin, BaseUserManager[User, uuid.UUID]):
                     user_create.password
                 )
                 sync_user.is_verified = user_create.is_verified or False
-                sync_user.role = user_create.role
                 sync_user.account_type = AccountType.STANDARD
                 assign_user_to_default_groups__no_commit(
                     sync_db,
                     sync_user,
-                    is_admin=(user_create.role == UserRole.ADMIN),
+                    is_admin=is_admin,
                 )
                 sync_db.commit()
             else:
@@ -1010,7 +1004,7 @@ class UserManager(UUIDIDMixin, BaseUserManager[User, uuid.UUID]):
             # NOTE(rkuo): If this UserManager is instantiated per connection
             # should we even be doing this here?
             if MULTI_TENANT:
-                tenant_user_db = SQLAlchemyUserAdminDB[User, uuid.UUID](
+                tenant_user_db = SQLAlchemyUserDatabase[User, uuid.UUID](
                     db_session, User, OAuthAccount
                 )
                 self.user_db = tenant_user_db
@@ -1175,7 +1169,6 @@ class UserManager(UUIDIDMixin, BaseUserManager[User, uuid.UUID]):
                             enforce_seat_limit_locked(sync_db, seats_needed=1)
                             seat_added = True
                         sync_user.is_verified = is_verified_by_default
-                        sync_user.role = UserRole.BASIC
                         sync_user.account_type = AccountType.STANDARD
                         if was_inactive:
                             sync_user.is_active = True
@@ -1313,7 +1306,7 @@ class UserManager(UUIDIDMixin, BaseUserManager[User, uuid.UUID]):
                 "email": user.email,
                 "onyx_cloud_user_id": str(user.id),
                 "tenant_id": str(tenant_id) if tenant_id else None,
-                "role": user.role.value,
+                "account_type": user.account_type.value,
                 "is_first_user": user_count == 1,
                 "source": "marketing_site_signup",
                 "conversion_timestamp": datetime.now(timezone.utc).isoformat(),
@@ -2002,7 +1995,7 @@ async def _get_or_create_user_from_jwt(
         valid_email_domains=get_security_settings().valid_email_domains,
     )
 
-    user_db: SQLAlchemyUserAdminDB[User, uuid.UUID] = SQLAlchemyUserAdminDB(
+    user_db: SQLAlchemyUserDatabase[User, uuid.UUID] = SQLAlchemyUserDatabase(
         async_db_session, User, OAuthAccount
     )
     user_manager = UserManager(user_db)
@@ -2222,7 +2215,6 @@ def get_anonymous_user() -> User:
         is_active=True,
         is_verified=True,
         is_superuser=False,
-        role=UserRole.LIMITED,
         account_type=AccountType.ANONYMOUS,
         effective_permissions=[Permission.BASIC_ACCESS.value],
         use_memories=False,
@@ -2302,26 +2294,6 @@ async def current_user(
         raise BasicAuthenticationError(
             detail="Access denied. User has limited permissions.",
         )
-    return user
-
-
-_CURATOR_OR_ADMIN_ROLES = frozenset(
-    {UserRole.GLOBAL_CURATOR, UserRole.CURATOR, UserRole.ADMIN}
-)
-
-
-def is_user_curator_or_admin(user: User) -> bool:
-    return user.role in _CURATOR_OR_ADMIN_ROLES
-
-
-async def current_curator_or_admin_user(
-    user: User = Depends(current_user),
-) -> User:
-    if not is_user_curator_or_admin(user):
-        raise BasicAuthenticationError(
-            detail="Access denied. User is not a curator or admin.",
-        )
-
     return user
 
 

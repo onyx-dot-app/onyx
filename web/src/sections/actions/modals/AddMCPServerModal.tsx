@@ -15,6 +15,9 @@ import {
   MCPServer,
 } from "@/lib/tools/interfaces";
 import { useModal } from "@opal/components";
+import { useUser } from "@/providers/UserProvider";
+import { hasPermission } from "@/lib/permissions";
+import { Permission } from "@/lib/types";
 import { Button, Divider } from "@opal/components";
 import type { ModalCreationInterface } from "@opal/components";
 import { SvgCheckCircle, SvgServer, SvgUnplug } from "@opal/icons";
@@ -53,6 +56,8 @@ export default function AddMCPServerModal({
   const { isOpen, toggle } = useModal();
   const [isSubmitting, setIsSubmitting] = useState(false);
   const focusOnMount = useFocusOnMount<HTMLInputElement>();
+
+  const { permissions } = useUser();
 
   // Use activeServer from props
   const server = activeServer;
@@ -197,6 +202,10 @@ export default function AddMCPServerModal({
                 <IsPublicGroupSelector
                   formikProps={formikProps}
                   objectName="MCP server"
+                  isGlobalHolder={hasPermission(
+                    permissions,
+                    Permission.MANAGE_ACTIONS
+                  )}
                   publicToWhom="Users"
                 />
 

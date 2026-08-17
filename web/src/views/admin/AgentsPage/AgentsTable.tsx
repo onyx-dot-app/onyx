@@ -17,6 +17,7 @@ import { SvgUser } from "@opal/icons";
 import { DEFAULT_PAGE_SIZE } from "@/lib/constants";
 import { Section } from "@/layouts/general-layouts";
 import { useAgentsFilters } from "@/sections/agents/AgentsFilters";
+import { can } from "@/lib/permissions/resource-actions";
 
 // ---------------------------------------------------------------------------
 // Column renderers
@@ -123,6 +124,8 @@ export default function AgentsTable() {
   const { filtered: filteredAgents, filterBar } =
     useAgentsFilters(nonBuiltinAgents);
 
+  const canReorder = nonBuiltinAgents.some((agent) => can(agent, "reorder"));
+
   async function handleReorder(
     _orderedIds: string[],
     changedOrders: Record<string, number>
@@ -161,9 +164,7 @@ export default function AgentsTable() {
         getRowId={(row) => String(row.id)}
         pageSize={DEFAULT_PAGE_SIZE}
         searchTerm={searchTerm}
-        draggable={{
-          onReorder: handleReorder,
-        }}
+        draggable={canReorder ? { onReorder: handleReorder } : undefined}
         emptyState={
           <IllustrationContent
             illustration={SvgNoResult}

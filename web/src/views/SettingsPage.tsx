@@ -33,7 +33,7 @@ import InputSelect from "@/refresh-components/inputs/InputSelect";
 import { Switch } from "@opal/components";
 import { useUser } from "@/providers/UserProvider";
 import { useTheme } from "next-themes";
-import { MemoryItem, ThemePreference } from "@/lib/types";
+import { MemoryItem, Permission, ThemePreference } from "@/lib/types";
 import useUserPersonalization from "@/hooks/useUserPersonalization";
 import ModelSelector from "@/sections/model-selector/ModelSelector";
 import { structureValue } from "@/lib/languageModels/utils";
@@ -74,6 +74,7 @@ import { tierAtLeast } from "@/lib/tiers";
 import { Tooltip } from "@opal/components";
 import { useCloudSubscription } from "@/hooks/useCloudSubscription";
 import { useSmoothStreaming } from "@/hooks/useSmoothStreaming";
+import { hasPermission } from "@/lib/permissions";
 import { findModelConfigId } from "@/lib/languageModels/options";
 import { useLLMProviders } from "@/lib/languageModels/hooks";
 import { DOCS_BASE_URL } from "@/lib/constants";
@@ -1625,6 +1626,12 @@ function GatewayAccessSection({
 }
 
 function LLMGatewaySettings() {
+  const { permissions } = useUser();
+  // Same gate as the Access Tokens section: this is a second PAT-minting path.
+  const canCreatePAT = hasPermission(
+    permissions,
+    Permission.CREATE_USER_API_KEYS
+  );
   const canCreateTokens = useCloudSubscription();
   const tokenCreation = usePATCreation({
     defaultName: "LLM Gateway",
@@ -1646,6 +1653,7 @@ function LLMGatewaySettings() {
   );
   const canCreateGatewayToken =
     canCreateTokens &&
+    canCreatePAT &&
     scopeOptions.some((option) => option.scope === "use:llm_gateway");
 
   return (
@@ -1678,7 +1686,7 @@ function LLMGatewaySettings() {
 }
 
 function AccountsAccessSettings() {
-  const { user, authTypeMetadata } = useUser();
+  const { user, authTypeMetadata, permissions } = useUser();
   const isMultiTenant = useIsMultiTenant();
   const [showPasswordModal, setShowPasswordModal] = useState(false);
 
@@ -1701,18 +1709,21 @@ function AccountsAccessSettings() {
   const [tokenToDelete, setTokenToDelete] = useState<PAT | null>(null);
 
   const canCreateTokens = useCloudSubscription();
+  const canCreatePAT = hasPermission(
+    permissions,
+    Permission.CREATE_USER_API_KEYS
+  );
 
   const showPasswordSection = Boolean(user?.password_configured);
-  const showTokensSection = isMultiTenant !== null;
 
-  // Fetch PATs with SWR
+  // Fetch PATs with SWR — always fetch when auth is available
   const {
     data: pats = [],
     mutate,
     error,
     isLoading,
   } = useSWR<PAT[]>(
-    showTokensSection ? SWR_KEYS.userPats : null,
+    isMultiTenant !== null ? SWR_KEYS.userPats : null,
     errorHandlingFetcher,
     {
       revalidateOnFocus: true,
@@ -1720,6 +1731,10 @@ function AccountsAccessSettings() {
       fallbackData: [],
     }
   );
+
+  // Hide the section entirely if user has no permission AND no existing tokens
+  const showTokensSection =
+    isMultiTenant !== null && (isLoading || canCreatePAT || pats.length > 0);
 
   const { data: allScopeOptions = [], error: scopeOptionsError } = useSWR<
     PatScopeOption[]
@@ -2054,6 +2069,12 @@ function AccountsAccessSettings() {
                             tokenCreation.showCreateModal ? "active" : "rest"
                           }
                           onClick={tokenCreation.openTokenModal}
+                          disabled={!canCreatePAT}
+                          tooltip={
+                            !canCreatePAT
+                              ? "You don't have permission to create access tokens"
+                              : undefined
+                          }
                         >
                           New Access Token
                         </Button>

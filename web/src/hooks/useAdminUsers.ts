@@ -20,7 +20,7 @@ function toUserRow(snapshot: FullUserSnapshot): UserRow {
   return {
     id: snapshot.id,
     email: snapshot.email,
-    role: snapshot.role,
+    account_type: snapshot.account_type,
     status: snapshot.is_active ? UserStatus.ACTIVE : UserStatus.INACTIVE,
     is_active: snapshot.is_active,
     is_scim_synced: snapshot.is_scim_synced,
@@ -39,7 +39,7 @@ function emailToUserRow(
   return {
     id: null,
     email,
-    role: null,
+    account_type: null,
     status,
     is_active: false,
     is_scim_synced: false,

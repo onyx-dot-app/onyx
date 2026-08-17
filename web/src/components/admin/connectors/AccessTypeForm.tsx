@@ -12,6 +12,8 @@ import { Tier } from "@/lib/settings/types";
 import { useEffect, useMemo } from "react";
 import { Credential } from "@/lib/connectors/credentials";
 import { credentialTemplates } from "@/lib/connectors/credentials";
+import { usePermissionAuthority } from "@/lib/permissions/hooks";
+import { Permission } from "@/lib/types";
 
 function isValidAutoSyncSource(
   value: ConfigurableSources
@@ -28,6 +30,9 @@ export function AccessTypeForm({
 }) {
   const [access_type, meta, access_type_helpers] =
     useField<AccessType>("access_type");
+  const { isScopedManager } = usePermissionAuthority(
+    Permission.MANAGE_CONNECTORS
+  );
 
   // Private requires User Groups, Auto Sync requires permission-sync —
   // both are Business+ features.
@@ -53,57 +58,75 @@ export function AccessTypeForm({
   // Public. Mirrors the option-availability rules below.
   const defaultAccess: AccessType = showAutoSync
     ? "sync"
-    : businessTier
+    : businessTier || isScopedManager
       ? "private"
       : "public";
 
-  useEffect(() => {
-    if (!access_type.value) access_type_helpers.setValue(defaultAccess);
-  }, [
-    // Only run this effect once when the component mounts
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  ]);
-
   // Build options in display order: Private, Public, Auto Sync.
-  const options: {
-    name: string;
-    value: string;
-    description: string;
-    disabled: boolean;
-    disabledReason: string;
-  }[] = [];
+  const options = useMemo(() => {
+    const built: {
+      name: string;
+      value: string;
+      description: string;
+      disabled: boolean;
+      disabledReason: string;
+    }[] = [];
 
-  if (businessTier) {
-    options.push({
-      name: "Private",
-      value: "private",
-      description:
-        "Only users who have explicitly been given access to this connector (through the User Groups page) can access the documents pulled in by this connector",
-      disabled: false,
-      disabledReason: "",
-    });
-  }
+    if (businessTier) {
+      built.push({
+        name: "Private",
+        value: "private",
+        description:
+          "Only users who have explicitly been given access to this connector (through the User Groups page) can access the documents pulled in by this connector",
+        disabled: false,
+        disabledReason: "",
+      });
+    }
 
-  options.push({
-    name: "Public",
-    value: "public",
-    description:
-      "Everyone with an account on Onyx can access the documents pulled in by this connector",
-    disabled: false,
-    disabledReason: "",
-  });
+    // A scoped manager's authority stops at the groups they manage, so GATE 2
+    // rejects a public connector outright (`within_scope` requires non-public).
+    // Offering the option would only produce a 403 on submit.
+    if (!isScopedManager) {
+      built.push({
+        name: "Public",
+        value: "public",
+        description:
+          "Everyone with an account on Onyx can access the documents pulled in by this connector",
+        disabled: false,
+        disabledReason: "",
+      });
+    }
 
-  if (showAutoSync) {
-    options.push({
-      name: "Auto Sync Permissions",
-      value: "sync",
-      description:
-        "We will automatically sync permissions from the source. A document will be searchable in Onyx if and only if the user performing the search has permission to access the document in the source.",
-      disabled: isSyncDisabledByAuth,
-      disabledReason:
-        "Current credential auth method doesn't support Auto Sync Permissions. Please change the credential auth method to a supported one.",
-    });
-  }
+    if (showAutoSync) {
+      built.push({
+        name: "Auto Sync Permissions",
+        value: "sync",
+        description:
+          "We will automatically sync permissions from the source. A document will be searchable in Onyx if and only if the user performing the search has permission to access the document in the source.",
+        disabled: isSyncDisabledByAuth,
+        disabledReason:
+          "Current credential auth method doesn't support Auto Sync Permissions. Please change the credential auth method to a supported one.",
+      });
+    }
+
+    return built;
+  }, [businessTier, isScopedManager, showAutoSync, isSyncDisabledByAuth]);
+
+  useEffect(() => {
+    if (!businessTier || !options.length) return;
+    if (options.some((option) => option.value === access_type.value)) return;
+    const fallback =
+      options.find(
+        (option) => option.value === defaultAccess && !option.disabled
+      ) ?? options.find((option) => !option.disabled);
+    if (fallback) access_type_helpers.setValue(fallback.value as AccessType);
+  }, [
+    businessTier,
+    options,
+    defaultAccess,
+    access_type.value,
+    access_type_helpers,
+  ]);
 
   if (!businessTier) return null;
 

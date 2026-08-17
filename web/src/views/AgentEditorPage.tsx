@@ -101,9 +101,11 @@ import ShareAgentModal, {
   ShareDraftState,
 } from "@/sections/modals/ShareAgentModal";
 import AgentKnowledgePane from "@/sections/knowledge/AgentKnowledgePane";
-import { ValidSources } from "@/lib/types";
+import { Permission, ValidSources } from "@/lib/types";
 import { useSettings } from "@/lib/settings/hooks";
 import { useUser } from "@/providers/UserProvider";
+import { hasPermission } from "@/lib/permissions";
+import { can } from "@/lib/permissions/resource-actions";
 import { useDraft, draftKey } from "@/hooks/useDraft";
 
 interface AgentIconEditorProps {
@@ -553,10 +555,14 @@ export default function AgentEditorPage({
   const { refresh: refreshAgents } = useAgents();
   const shareAgentModal = useCreateModal();
   const deleteAgentModal = useCreateModal();
-  const { isAdmin } = useUser();
-  // Feature/unlist are admin-only surfaces — never shown to non-admin
-  // owners or editors (ENG-4179)
-  const canUpdateFeaturedStatus = isAdmin;
+  const { permissions } = useUser();
+  // Prefer the server's per-agent answer; a new agent has none yet, so fall back to the
+  // global token — which is exactly what the projection stamps for `feature`.
+  const canShare = !existingAgent || can(existingAgent, "share");
+  const canDelete = can(existingAgent, "delete");
+  const canUpdateFeaturedStatus = existingAgent
+    ? can(existingAgent, "feature")
+    : hasPermission(permissions, Permission.MANAGE_AGENTS);
   const { vectorDbEnabled } = useSettings();
   const businessTier = useTierAtLeast(Tier.BUSINESS);
 
@@ -1504,19 +1510,21 @@ export default function AgentEditorPage({
                         />
                         <Card border="solid" rounding="lg">
                           <GeneralLayouts.Section>
-                            <InputHorizontal
-                              title="Share This Agent"
-                              description="with other users, groups, or everyone in your organization."
-                              center
-                            >
-                              <Button
-                                prominence="secondary"
-                                icon={shareStatusIcon}
-                                onClick={() => shareAgentModal.toggle(true)}
+                            {canShare && (
+                              <InputHorizontal
+                                title="Share This Agent"
+                                description="with other users, groups, or everyone in your organization."
+                                center
                               >
-                                Share
-                              </Button>
-                            </InputHorizontal>
+                                <Button
+                                  prominence="secondary"
+                                  icon={shareStatusIcon}
+                                  onClick={() => shareAgentModal.toggle(true)}
+                                >
+                                  Share
+                                </Button>
+                              </InputHorizontal>
+                            )}
                             {canUpdateFeaturedStatus && (
                               <>
                                 <InputHorizontal
@@ -1799,7 +1807,7 @@ export default function AgentEditorPage({
                         </SimpleCollapsible.Content>
                       </SimpleCollapsible>
 
-                      {existingAgent && (
+                      {existingAgent && canDelete && (
                         <>
                           <Divider
                             paddingParallel={0}

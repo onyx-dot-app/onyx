@@ -30,7 +30,6 @@ from ee.onyx.server.scim.models import (
 from ee.onyx.server.scim.patch import ScimPatchError
 from ee.onyx.server.scim.providers.base import ScimProvider
 from onyx.db.enums import AccountType
-from onyx.db.models import UserRole
 from tests.unit.onyx.server.scim.conftest import (
     assert_scim_error,
     make_db_user,
@@ -305,7 +304,6 @@ class TestCreateUser:
         mock_dal.update_user.assert_called_once_with(
             existing,
             is_active=True,
-            role=None,
             account_type=None,
             personal_name="Test User",
         )
@@ -331,7 +329,7 @@ class TestCreateUser:
         existing = make_db_user(
             email="champion@example.com",
             personal_name=None,
-            role=UserRole.EXT_PERM_USER,
+            account_type=AccountType.EXT_PERM_USER,
             is_active=True,
         )
         mock_dal.get_user_by_email.return_value = existing
@@ -354,7 +352,6 @@ class TestCreateUser:
         mock_dal.update_user.assert_called_once_with(
             existing,
             is_active=True,
-            role=UserRole.BASIC,
             account_type=AccountType.STANDARD,
             personal_name="Test User",
         )
@@ -376,7 +373,7 @@ class TestCreateUser:
         mock_seats.return_value = "Seat limit reached"
         existing = make_db_user(
             email="champion@example.com",
-            role=UserRole.EXT_PERM_USER,
+            account_type=AccountType.EXT_PERM_USER,
             is_active=True,
         )
         mock_dal.get_user_by_email.return_value = existing
@@ -411,7 +408,7 @@ class TestCreateUser:
         return a structured SCIM 500 instead of leaking a raw 500."""
         existing = make_db_user(
             email="champion@example.com",
-            role=UserRole.EXT_PERM_USER,
+            account_type=AccountType.EXT_PERM_USER,
             is_active=True,
         )
         mock_dal.get_user_by_email.return_value = existing
@@ -642,7 +639,7 @@ class TestReplaceUser:
     ) -> None:
         """An already-active EXT_PERM_USER re-synced via PUT is promoted to
         STANDARD, seat-checked, and added to the Basic default group."""
-        user = make_db_user(role=UserRole.EXT_PERM_USER, is_active=True)
+        user = make_db_user(account_type=AccountType.EXT_PERM_USER, is_active=True)
         mock_dal.get_user.return_value = user
         resource = make_scim_user(active=True)
 
@@ -658,7 +655,6 @@ class TestReplaceUser:
         # Promotion consumes a seat even though the user was already active
         mock_seats.assert_called_once()
         _, kwargs = mock_dal.update_user.call_args
-        assert kwargs["role"] == UserRole.BASIC
         assert kwargs["account_type"] == AccountType.STANDARD
         mock_assign.assert_called_once()
 
@@ -673,7 +669,7 @@ class TestReplaceUser:
     ) -> None:
         """Promoting an already-active shadow user past the cap returns 403."""
         mock_seats.return_value = "No seats"
-        user = make_db_user(role=UserRole.EXT_PERM_USER, is_active=True)
+        user = make_db_user(account_type=AccountType.EXT_PERM_USER, is_active=True)
         mock_dal.get_user.return_value = user
 
         result = replace_user(
@@ -765,7 +761,7 @@ class TestPatchUser:
     ) -> None:
         """PATCH on an already-active EXT_PERM_USER promotes it to STANDARD,
         seat-checks the promotion, and assigns the Basic default group."""
-        user = make_db_user(role=UserRole.EXT_PERM_USER, is_active=True)
+        user = make_db_user(account_type=AccountType.EXT_PERM_USER, is_active=True)
         mock_dal.get_user.return_value = user
         patch_req = ScimPatchRequest(
             Operations=[
@@ -788,7 +784,6 @@ class TestPatchUser:
         parse_scim_user(result)
         mock_seats.assert_called_once()
         _, kwargs = mock_dal.update_user.call_args
-        assert kwargs["role"] == UserRole.BASIC
         assert kwargs["account_type"] == AccountType.STANDARD
         mock_assign.assert_called_once()
 

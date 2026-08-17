@@ -328,8 +328,11 @@ class User(SQLAlchemyBaseUserTableUUID, Base):
     oauth_accounts: Mapped[list[OAuthAccount]] = relationship(
         "OAuthAccount", lazy="joined", cascade="all, delete-orphan"
     )
-    role: Mapped[UserRole] = mapped_column(
-        Enum(UserRole, native_enum=False, default=UserRole.BASIC)
+    # Legacy tombstone column: no longer read or written by application code.
+    # Kept nullable so a pure-code rollback keeps working.
+    role: Mapped[UserRole | None] = mapped_column(
+        Enum(UserRole, native_enum=False),
+        nullable=True,
     )
     account_type: Mapped[AccountType] = mapped_column(
         Enum(AccountType, native_enum=False),
@@ -406,6 +409,10 @@ class User(SQLAlchemyBaseUserTableUUID, Base):
         nullable=False,
         default=list,
         server_default=text("'[]'::jsonb"),
+    )
+    # Cached for a zero-query route gate; the managed-group list stays live.
+    is_group_manager: Mapped[bool] = mapped_column(
+        Boolean, nullable=False, default=False, server_default=text("false")
     )
 
     oidc_expiry: Mapped[datetime.datetime] = mapped_column(
@@ -4859,6 +4866,10 @@ class User__UserGroup(Base):
     __table_args__ = (Index("ix_user__user_group_user_id", "user_id"),)
 
     is_curator: Mapped[bool] = mapped_column(Boolean, nullable=False, default=False)
+    # Group-manager role binding for this (user, group) edge.
+    is_manager: Mapped[bool] = mapped_column(
+        Boolean, nullable=False, default=False, server_default=text("false")
+    )
 
     user_group_id: Mapped[int] = mapped_column(
         ForeignKey("user_group.id"), primary_key=True

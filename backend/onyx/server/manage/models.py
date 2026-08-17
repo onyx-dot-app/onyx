@@ -5,9 +5,10 @@ from typing import TYPE_CHECKING, Any
 
 from pydantic import BaseModel, ConfigDict, Field, field_validator, model_validator
 
-from onyx.auth.schemas import UserRole
+from onyx.auth.permissions import SCOPED_MANAGER_PERMISSIONS_EXPANDED
 from onyx.context.search.models import SavedSearchSettings
 from onyx.db.enums import (
+    AccountType,
     DefaultAppMode,
     SSOProviderType,
     SupportedLanguage,
@@ -37,6 +38,15 @@ class EmailInviteStatus(str, Enum):
 class BulkInviteResponse(BaseModel):
     invited_count: int
     email_invite_status: EmailInviteStatus
+
+
+class UserPermissionsResponse(BaseModel):
+    # The user's global effective permissions (implication-expanded).
+    permissions: list[str]
+    # Whether the user manages any group, plus the ids of those groups — lets the
+    # frontend reveal manager nav. Not a security boundary (backend GATE 2 enforces).
+    is_manager: bool
+    managed_group_ids: list[int]
 
 
 class VersionResponse(BaseModel):
@@ -135,13 +145,25 @@ class TenantInfo(BaseModel):
     new_tenant: TenantSnapshot | None = None
 
 
+def _admin_capabilities(
+    effective_permissions: list[str], is_group_manager: bool
+) -> list[str]:
+    """Admin-area reach = effective tokens plus the scoped manager bundle when the user
+    manages any group. ``effective_permissions`` itself stays global-only, so org-wide
+    gates that read it still exclude managers. Affordance hint, never an authz input."""
+    caps = set(effective_permissions)
+    if is_group_manager:
+        caps |= SCOPED_MANAGER_PERMISSIONS_EXPANDED
+    return sorted(caps)
+
+
 class UserInfo(BaseModel):
     id: str
     email: str
     is_active: bool
     is_superuser: bool
     is_verified: bool
-    role: UserRole
+    account_type: AccountType = AccountType.STANDARD
     preferences: UserPreferences
     personalization: UserPersonalization = Field(default_factory=UserPersonalization)
     token_expires_at: datetime | None = None
@@ -150,6 +172,12 @@ class UserInfo(BaseModel):
     is_anonymous_user: bool | None = None
     password_configured: bool | None = None
     tenant_info: TenantInfo | None = None
+    effective_permissions: list[str] = Field(default_factory=list)
+    # True if the user manages any group — lets the client reveal manager nav.
+    # Not a security boundary (backend GATE 2 enforces scope).
+    is_group_manager: bool = False
+    # effective tokens plus the scoped bundle for a manager; drives admin-nav reveal
+    admin_capabilities: list[str] = Field(default_factory=list)
 
     @classmethod
     def from_model(
@@ -163,6 +191,7 @@ class UserInfo(BaseModel):
         tenant_info: TenantInfo | None = None,
         assistant_specific_configs: UserSpecificAssistantPreferences | None = None,
         memories: list[MemoryItem] | None = None,
+        effective_permissions: list[str] | None = None,
     ) -> "UserInfo":
         return cls(
             id=str(user.id),
@@ -170,7 +199,7 @@ class UserInfo(BaseModel):
             is_active=user.is_active,
             is_superuser=user.is_superuser,
             is_verified=user.is_verified,
-            role=user.role,
+            account_type=user.account_type,
             password_configured=user.password_configured,
             preferences=(
                 UserPreferences(
@@ -198,6 +227,11 @@ class UserInfo(BaseModel):
             is_cloud_superuser=is_cloud_superuser,
             is_anonymous_user=is_anonymous_user,
             tenant_info=tenant_info,
+            effective_permissions=effective_permissions or [],
+            is_group_manager=user.is_group_manager,
+            admin_capabilities=_admin_capabilities(
+                effective_permissions or [], user.is_group_manager
+            ),
             personalization=UserPersonalization(
                 name=user.personal_name or "",
                 role=user.personal_role or "",
@@ -213,21 +247,11 @@ class UserByEmail(BaseModel):
     user_email: str
 
 
-class UserRoleUpdateRequest(BaseModel):
-    user_email: str
-    new_role: UserRole
-    explicit_override: bool = False
-
-
 class UserCraftAccessUpdateRequest(BaseModel):
     user_emails: list[str] = Field(min_length=1)
     # True/False = explicit override; None = clear the override (follow the
     # workspace default).
     craft_enabled: bool | None
-
-
-class UserRoleResponse(BaseModel):
-    role: str
 
 
 class BoostDoc(BaseModel):

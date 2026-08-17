@@ -232,6 +232,10 @@ class MinimalPersonaSnapshot(BaseModel):
     owner_group: PersonaOwnerGroupSnapshot | None
     # Computed for the requesting user when the list endpoint provides it
     user_permission: PersonaAccessLevel | None = None
+    # Per-action affordance map for the requesting user; empty on paths that don't
+    # stamp it (fail-closed on the client). List endpoints stamp it so each card
+    # doesn't refetch the full agent just to gate its icons.
+    permissions: dict[str, bool] = Field(default_factory=dict)
 
     @classmethod
     def from_model(
@@ -338,6 +342,9 @@ class PersonaSnapshot(BaseModel):
     hierarchy_nodes: list[HierarchyNodeSnapshot] = Field(default_factory=list)
     # Individual documents attached for scoped search
     attached_documents: list[AttachedDocumentSnapshot] = Field(default_factory=list)
+    # Per-action affordance map for the requesting user, stamped by the endpoint. Empty
+    # where unstamped, so the client fails closed. Inherited by FullPersonaSnapshot.
+    permissions: dict[str, bool] = Field(default_factory=dict)
 
     # Embedded prompt fields (no longer separate prompt_ids)
     system_prompt: str | None = None
