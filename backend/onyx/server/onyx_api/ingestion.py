@@ -1,4 +1,5 @@
 from datetime import datetime, timezone
+from uuid import UUID
 
 from fastapi import APIRouter, Depends
 from sqlalchemy.orm import Session
@@ -30,6 +31,7 @@ from onyx.db.search_settings import (
     get_current_search_settings,
     get_secondary_search_settings,
 )
+from onyx.db.user_file import get_user_file_by_id
 from onyx.document_index.factory import get_all_document_indices
 from onyx.error_handling.error_codes import OnyxErrorCode
 from onyx.error_handling.exceptions import OnyxError
@@ -129,6 +131,31 @@ def upsert_ingestion_doc(
         raise OnyxError(
             OnyxErrorCode.INSUFFICIENT_PERMISSIONS,
             "Connection not found for current user's permissions",
+        )
+
+    # GATE 2 on every pair serving this id — the upsert rewrites the shared doc row and
+    # replaces its chunks. Must run before the pipeline, which adds the target as owner.
+    existing_cc_pair_ids = get_cc_pair_ids_for_document(db_session, document.id)
+    if existing_cc_pair_ids and not verify_user_can_edit_all_cc_pairs(
+        existing_cc_pair_ids, db_session, user
+    ):
+        raise OnyxError(
+            OnyxErrorCode.INSUFFICIENT_PERMISSIONS,
+            "Connection not found for current user's permissions",
+        )
+
+    # a user file has no doc row or cc_pair link, so the gate above sees an empty set
+    # and would let this replace its chunks. get_user_file_by_id raises on a non-uuid
+    try:
+        posted_user_file_id: UUID | None = UUID(document.id)
+    except ValueError:
+        posted_user_file_id = None
+    if posted_user_file_id is not None and get_user_file_by_id(
+        posted_user_file_id, db_session
+    ):
+        raise OnyxError(
+            OnyxErrorCode.VALIDATION_ERROR,
+            "Document ID is reserved for a user file",
         )
 
     # Need to index for both the primary and secondary index if possible

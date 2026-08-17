@@ -466,6 +466,16 @@ def get_cc_pair_ids_for_document(db_session: Session, document_id: str) -> set[i
     )
 
 
+def get_cc_pair_ids_for_connector(db_session: Session, connector_id: int) -> set[int]:
+    return set(
+        db_session.scalars(
+            select(ConnectorCredentialPair.id).where(
+                ConnectorCredentialPair.connector_id == connector_id
+            )
+        )
+    )
+
+
 def verify_user_can_edit_all_cc_pairs(
     cc_pair_ids: set[int],
     db_session: Session,

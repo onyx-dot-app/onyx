@@ -1,4 +1,4 @@
-"""Escalation suite for two-gate scoping on connectors + document sets.
+"""Escalation suite for two-gate scoping on connectors, document sets + ingestion.
 
 A scoped group manager may only create/edit non-PUBLIC resources (PRIVATE or SYNC
 connectors; PRIVATE document sets) whose every group is one they manage; they can
@@ -13,6 +13,7 @@ denied actions go through the shared ``_access_matrix`` helpers, which verify th
 403 is a genuine permission-gate denial rather than any incidental 403.
 """
 
+import io
 import os
 from typing import Any, NamedTuple
 from uuid import uuid4
@@ -20,14 +21,21 @@ from uuid import uuid4
 import pytest
 from sqlalchemy import select, update
 
+from onyx.configs.constants import DocumentSource
 from onyx.db.engine.sql_engine import get_session_with_current_tenant
 from onyx.db.enums import AccessType
-from onyx.db.models import ConnectorCredentialPair, User__UserGroup
+from onyx.db.models import (
+    ConnectorCredentialPair,
+    Document,
+    DocumentByConnectorCredentialPair,
+    User__UserGroup,
+)
 from onyx.db.permissions import recompute_user_permissions__no_commit
 from tests.integration.common_utils.managers.cc_pair import CCPairManager
 from tests.integration.common_utils.managers.connector import ConnectorManager
 from tests.integration.common_utils.managers.credential import CredentialManager
 from tests.integration.common_utils.managers.document_set import DocumentSetManager
+from tests.integration.common_utils.managers.file import FileManager
 from tests.integration.common_utils.managers.index_attempt import IndexAttemptManager
 from tests.integration.common_utils.managers.user import UserManager
 from tests.integration.common_utils.managers.user_group import UserGroupManager
@@ -47,6 +55,9 @@ pytestmark = pytest.mark.skipif(
 )
 
 _DOC_SET_PATH = "/manage/admin/document-set"
+_INGESTION_PATH = "/onyx-api/ingestion"
+# GATE 1 has its own wording, so asserting on this pins the denial to the scope check
+_CC_PAIR_SCOPE_DETAIL = "Connection not found for current user's permissions"
 
 
 class _ScopedEnv(NamedTuple):
@@ -187,6 +198,52 @@ def _patch_doc_set_ok(
     DocumentSetManager.wait_for_sync(
         user_performing_action=env.manager, document_sets_to_check=[doc_set]
     )
+
+
+def _ingestion_body(document_id: str, cc_pair_id: int, marker: str) -> dict[str, Any]:
+    return {
+        "document": {
+            "id": document_id,
+            "sections": [{"text": marker, "link": document_id}],
+            "source": DocumentSource.NOT_APPLICABLE.value,
+            "metadata": {},
+            "semantic_identifier": marker,
+        },
+        "cc_pair_id": cc_pair_id,
+    }
+
+
+def _ingest_ok(
+    user: DATestUser, document_id: str, cc_pair_id: int, marker: str
+) -> None:
+    resp = call_endpoint(
+        "POST",
+        _INGESTION_PATH,
+        _ingestion_body(document_id, cc_pair_id, marker),
+        user.headers,
+        user.cookies,
+    )
+    assert resp.status_code == 200, resp.text
+
+
+def _document_semantic_id(document_id: str) -> str | None:
+    with get_session_with_current_tenant() as db_session:
+        return db_session.execute(
+            select(Document.semantic_id).where(Document.id == document_id)
+        ).scalar_one_or_none()
+
+
+def _owning_connector_keys(document_id: str) -> set[tuple[int, int]]:
+    with get_session_with_current_tenant() as db_session:
+        return {
+            (connector_id, credential_id)
+            for connector_id, credential_id in db_session.execute(
+                select(
+                    DocumentByConnectorCredentialPair.connector_id,
+                    DocumentByConnectorCredentialPair.credential_id,
+                ).where(DocumentByConnectorCredentialPair.id == document_id)
+            )
+        }
 
 
 def test_admin_creates_public_cc_pair_bypasses_gate(env: _ScopedEnv) -> None:
@@ -843,3 +900,191 @@ def test_manager_doc_set_listing_isolates_unmanaged_groups(env: _ScopedEnv) -> N
     assert mine.id in listed, "manager lost a set in their own group"
     assert public.id in listed, "manager lost a public set"
     assert foreign.id not in listed, "unmanaged group's set leaked"
+
+
+def test_manager_cannot_ingest_over_unmanaged_pairs_document(env: _ScopedEnv) -> None:
+    """Upsert is keyed on the caller-supplied doc id, so gating only the target pair
+    lets a manager rewrite — and co-own — a document another group serves."""
+    victim_pair = CCPairManager.create_from_scratch(
+        user_performing_action=env.admin,
+        access_type=AccessType.PRIVATE,
+        groups=[env.other_group.id],
+    )
+    managed_pair = CCPairManager.create_from_scratch(
+        user_performing_action=env.manager,
+        access_type=AccessType.PRIVATE,
+        groups=[env.managed_group.id],
+    )
+    document_id = f"ingest-{uuid4()}"
+    _ingest_ok(env.admin, document_id, victim_pair.id, "original")
+
+    resp = call_endpoint(
+        "POST",
+        _INGESTION_PATH,
+        _ingestion_body(document_id, managed_pair.id, "overwritten"),
+        env.manager.headers,
+        env.manager.cookies,
+    )
+    assert resp.status_code == 403, resp.text
+    assert resp.json()["detail"] == _CC_PAIR_SCOPE_DETAIL, resp.text
+
+    # side effects too: a gate placed after the pipeline would still 403
+    assert _document_semantic_id(document_id) == "original"
+    assert (
+        managed_pair.connector_id,
+        managed_pair.credential_id,
+    ) not in _owning_connector_keys(document_id)
+
+
+def test_manager_ingests_and_reingests_own_pairs_document(env: _ScopedEnv) -> None:
+    """A new id owns no pairs, so the owning-pair gate must not fire on it — and once
+    the manager's own pair owns it, re-ingesting must still pass."""
+    managed_pair = CCPairManager.create_from_scratch(
+        user_performing_action=env.manager,
+        access_type=AccessType.PRIVATE,
+        groups=[env.managed_group.id],
+    )
+    document_id = f"ingest-{uuid4()}"
+
+    _ingest_ok(env.manager, document_id, managed_pair.id, "first")
+    _ingest_ok(env.manager, document_id, managed_pair.id, "second")
+
+    assert _document_semantic_id(document_id) == "second"
+
+
+def test_manager_cannot_attach_credential_to_foreign_connector(
+    env: _ScopedEnv,
+) -> None:
+    """A managed group satisfies assert_within_scope, so without a gate on the connector
+    itself a manager can land a pair on anyone's connector."""
+    foreign_pair = CCPairManager.create_from_scratch(
+        user_performing_action=env.admin, access_type=AccessType.PUBLIC, groups=[]
+    )
+    credential = CredentialManager.create(
+        user_performing_action=env.manager, curator_public=False
+    )
+    path = f"/manage/connector/{foreign_pair.connector_id}/credential/{credential.id}"
+    resp = call_endpoint(
+        "PUT",
+        path,
+        _associate_body(AccessType.PRIVATE, [env.managed_group.id]),
+        env.manager.headers,
+        env.manager.cookies,
+    )
+    assert_response(resp, "PUT", path, "manager", "denied")
+
+
+def test_manager_attaches_second_credential_to_own_connector(
+    env: _ScopedEnv,
+) -> None:
+    # The connector gate must not block the legitimate multi-credential flow.
+    own_pair = CCPairManager.create_from_scratch(
+        user_performing_action=env.manager,
+        access_type=AccessType.PRIVATE,
+        groups=[env.managed_group.id],
+    )
+    credential = CredentialManager.create(
+        user_performing_action=env.manager, curator_public=False
+    )
+    path = f"/manage/connector/{own_pair.connector_id}/credential/{credential.id}"
+    resp = call_endpoint(
+        "PUT",
+        path,
+        _associate_body(AccessType.PRIVATE, [env.managed_group.id]),
+        env.manager.headers,
+        env.manager.cookies,
+    )
+    assert resp.status_code == 200, resp.text
+
+
+def test_manager_cannot_set_property_on_shared_connector(env: _ScopedEnv) -> None:
+    """refresh_freq lives on the Connector, so a second pair in a group the manager
+    does not manage makes the write reach outside their scope."""
+    own_pair = CCPairManager.create_from_scratch(
+        user_performing_action=env.manager,
+        access_type=AccessType.PRIVATE,
+        groups=[env.managed_group.id],
+    )
+    foreign_credential = CredentialManager.create(
+        user_performing_action=env.admin, curator_public=False
+    )
+    CCPairManager.create(
+        connector_id=own_pair.connector_id,
+        credential_id=foreign_credential.id,
+        access_type=AccessType.PRIVATE,
+        groups=[env.other_group.id],
+        user_performing_action=env.admin,
+    )
+
+    path = f"/manage/admin/cc-pair/{own_pair.id}/property"
+    resp = call_endpoint(
+        "PUT",
+        path,
+        {"name": "refresh_frequency", "value": "60"},
+        env.manager.headers,
+        env.manager.cookies,
+    )
+    assert_response(resp, "PUT", path, "manager", "denied")
+
+
+def test_manager_sets_property_on_own_connector(env: _ScopedEnv) -> None:
+    # Control: the 1:1 case must still work, or every manager loses cadence editing.
+    own_pair = CCPairManager.create_from_scratch(
+        user_performing_action=env.manager,
+        access_type=AccessType.PRIVATE,
+        groups=[env.managed_group.id],
+    )
+    path = f"/manage/admin/cc-pair/{own_pair.id}/property"
+    resp = call_endpoint(
+        "PUT",
+        path,
+        {"name": "refresh_frequency", "value": "60"},
+        env.manager.headers,
+        env.manager.cookies,
+    )
+    assert resp.status_code == 200, resp.text
+
+
+def test_manager_cannot_ingest_over_a_user_file(env: _ScopedEnv) -> None:
+    """A user file has no document row and no cc_pair link, so the owning-pair gate
+    sees an empty set. Without its own check the ingest would replace its chunks."""
+    managed_pair = CCPairManager.create_from_scratch(
+        user_performing_action=env.manager,
+        access_type=AccessType.PRIVATE,
+        groups=[env.managed_group.id],
+    )
+    descriptors, error = FileManager.upload_files(
+        files=[("victim.txt", io.BytesIO(b"user file contents"))],
+        user_performing_action=env.admin,
+    )
+    assert not error, error
+    user_file_id = descriptors[0]["user_file_id"]
+    assert user_file_id is not None
+
+    resp = call_endpoint(
+        "POST",
+        _INGESTION_PATH,
+        _ingestion_body(user_file_id, managed_pair.id, "overwritten"),
+        env.manager.headers,
+        env.manager.cookies,
+    )
+    assert resp.status_code == 400, resp.text
+    assert _document_semantic_id(user_file_id) is None
+
+
+def test_admin_ingests_over_any_pairs_document(env: _ScopedEnv) -> None:
+    # Control: a global holder is not scope-restricted by the owning-pair gate.
+    victim_pair = CCPairManager.create_from_scratch(
+        user_performing_action=env.admin,
+        access_type=AccessType.PRIVATE,
+        groups=[env.other_group.id],
+    )
+    document_id = f"ingest-{uuid4()}"
+    _ingest_ok(env.admin, document_id, victim_pair.id, "original")
+
+    admin_pair = CCPairManager.create_from_scratch(
+        user_performing_action=env.admin, access_type=AccessType.PUBLIC, groups=[]
+    )
+    _ingest_ok(env.admin, document_id, admin_pair.id, "overwritten")
+
+    assert _document_semantic_id(document_id) == "overwritten"

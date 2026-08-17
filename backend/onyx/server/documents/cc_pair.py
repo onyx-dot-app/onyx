@@ -25,11 +25,13 @@ from onyx.connectors.models import InputType
 from onyx.db.connector import delete_connector
 from onyx.db.connector_credential_pair import (
     add_credential_to_connector,
+    get_cc_pair_ids_for_connector,
     get_connector_credential_pair_for_user,
     get_connector_credential_pair_from_id_for_user,
     remove_credential_from_connector,
     update_connector_credential_pair_from_id,
     user_owns_groupless_cc_pair,
+    verify_user_can_edit_all_cc_pairs,
 )
 from onyx.db.document import get_document_counts_for_cc_pairs, get_documents_for_cc_pair
 from onyx.db.engine.sql_engine import get_session
@@ -617,6 +619,18 @@ def update_cc_pair_property(
             "CC Pair not found for current user's permissions",
         )
 
+    # GATE 2 on every pair on this connector: refresh_freq and prune_freq live on the
+    # shared Connector row. No empty guard — empty is the right side to fail on here
+    if not verify_user_can_edit_all_cc_pairs(
+        get_cc_pair_ids_for_connector(db_session, cc_pair.connector_id),
+        db_session,
+        user,
+    ):
+        raise OnyxError(
+            OnyxErrorCode.INSUFFICIENT_PERMISSIONS,
+            "This setting is shared across all connections on this connector.",
+        )
+
     # Can we centralize logic for updating connector properties
     # so that we don't need to manually validate everywhere?
     if update_request.name == "refresh_frequency":
@@ -808,6 +822,17 @@ def associate_credential_to_connector(
             is_non_public=metadata.access_type != AccessType.PUBLIC,
         )
 
+    # GATE 2 on the connector: it carries no creator or groups, so its pairs are what
+    # says who may edit it. Empty means nobody owns it yet (create-then-associate)
+    existing_cc_pair_ids = get_cc_pair_ids_for_connector(db_session, connector_id)
+    if existing_cc_pair_ids and not verify_user_can_edit_all_cc_pairs(
+        existing_cc_pair_ids, db_session, user
+    ):
+        raise OnyxError(
+            OnyxErrorCode.INSUFFICIENT_PERMISSIONS,
+            "Connection not found for current user's permissions",
+        )
+
     try:
         validate_ccpair_for_user(
             connector_id, credential_id, metadata.access_type, db_session
@@ -854,12 +879,12 @@ def associate_credential_to_connector(
             )
         return response
     except ValidationError as e:
-        # If validation fails, delete the connector and commit the changes
-        # Ensures we don't leave invalid connectors in the database
-        # NOTE: consensus is that it makes sense to unify connector and ccpair creation flows
-        # which would rid us of needing to handle cases like these
-        delete_connector(db_session, connector_id)
-        db_session.commit()
+        # only delete the orphan this flow owns; the cascade would take others' pairs
+        # NOTE: consensus is that it makes sense to unify connector and ccpair creation
+        # flows which would rid us of needing to handle cases like these
+        if not existing_cc_pair_ids:
+            delete_connector(db_session, connector_id)
+            db_session.commit()
 
         raise OnyxError(
             OnyxErrorCode.INVALID_INPUT,
