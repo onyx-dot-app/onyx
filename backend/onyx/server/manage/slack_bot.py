@@ -216,12 +216,11 @@ def patch_slack_channel_config(
 def delete_slack_channel_config(
     slack_channel_config_id: int,
     db_session: Session = Depends(get_session),
-    user: User = Depends(require_permission(Permission.MANAGE_BOTS)),
+    _: User = Depends(require_permission(Permission.MANAGE_BOTS)),
 ) -> None:
     remove_slack_channel_config(
         db_session=db_session,
         slack_channel_config_id=slack_channel_config_id,
-        user=user,
     )
 
 

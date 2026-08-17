@@ -1405,7 +1405,7 @@ def get_personas(db_session: Session) -> Sequence[Persona]:
 
 def mark_persona_as_deleted(
     persona_id: int,
-    user: User,
+    user: User | None,
     db_session: Session,
 ) -> None:
     persona = get_persona_by_id(persona_id=persona_id, user=user, db_session=db_session)

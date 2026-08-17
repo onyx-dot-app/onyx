@@ -16,10 +16,7 @@ from onyx.db.models import (
     DiscordGuildConfig,
     User,
 )
-from onyx.db.users import (
-    assign_user_to_default_groups__no_commit,
-    delete_user_from_db__no_commit,
-)
+from onyx.db.users import delete_user_from_db__no_commit
 from onyx.db.utils import DiscordChannelView
 from onyx.server.api_key.models import APIKeyArgs
 from onyx.utils.logger import setup_logger
@@ -119,18 +116,6 @@ def get_or_create_discord_service_api_key(
         api_key_args=api_key_args,
         user_id=None,  # Service account, no owner
     )
-
-    # Chat APIs are permission-scoped; put the service account in the default
-    # Basic group, which grants BASIC_ACCESS (implies the chat scopes). Deriving
-    # access from group membership keeps effective_permissions correct across
-    # later recomputes, unlike a hardcoded grant.
-    service_user = db_session.scalar(
-        select(User).where(
-            User.id == api_key_descriptor.user_id  # ty: ignore[invalid-argument-type]
-        )
-    )
-    if service_user is not None:
-        assign_user_to_default_groups__no_commit(db_session, service_user)
 
     if not api_key_descriptor.api_key:
         raise RuntimeError(
