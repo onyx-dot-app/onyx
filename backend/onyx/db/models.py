@@ -72,6 +72,8 @@ from onyx.db.enums import (
     ApprovalDecision,
     ArtifactType,
     BuildSessionStatus,
+    CapabilityCheckTrigger,
+    CapabilityReportRunStatus,
     ChatSessionSharedStatus,
     ConnectorCredentialPairStatus,
     DefaultAppMode,
@@ -2060,6 +2062,70 @@ class Credential(Base):
     )
 
     user: Mapped[User | None] = relationship("User", back_populates="credentials")
+
+
+class CredentialCapabilityReportRow(Base):
+    """Latest capability-check report per (credential, connector-scope).
+
+    One config-less credential-time row (``connector_id`` NULL) plus one row per
+    attached connector; latest-only upsert semantics are enforced by the two
+    partial unique indexes. ``report`` holds the last COMPLETED report so it
+    stays readable while a re-run is RUNNING.
+    """
+
+    __tablename__ = "credential_capability_report"
+
+    id: Mapped[int] = mapped_column(primary_key=True)
+    credential_id: Mapped[int] = mapped_column(
+        ForeignKey("credential.id", ondelete="CASCADE"), nullable=False, index=True
+    )
+    # NULL marks the config-less credential-time report.
+    connector_id: Mapped[int | None] = mapped_column(
+        ForeignKey("connector.id", ondelete="CASCADE"), nullable=True
+    )
+    # Denormalized for support queries by source.
+    source: Mapped[DocumentSource] = mapped_column(
+        Enum(DocumentSource, native_enum=False), nullable=False
+    )
+    # sha256 of the canonical config JSON the report ran with; staleness signal
+    # for connector-scoped reports.
+    connector_config_hash: Mapped[str | None] = mapped_column(String, nullable=True)
+    # What initiated the run this row reflects (last write wins).
+    trigger: Mapped[CapabilityCheckTrigger] = mapped_column(
+        Enum(CapabilityCheckTrigger, native_enum=False), nullable=False
+    )
+    # Serialized ``CredentialCapabilityReport``; None until a run completes.
+    report: Mapped[dict[str, Any] | None] = mapped_column(
+        postgresql.JSONB(), nullable=True
+    )
+    run_status: Mapped[CapabilityReportRunStatus] = mapped_column(
+        Enum(CapabilityReportRunStatus, native_enum=False), nullable=False
+    )
+    run_started_at: Mapped[datetime.datetime | None] = mapped_column(
+        DateTime(timezone=True), nullable=True
+    )
+    time_created: Mapped[datetime.datetime] = mapped_column(
+        DateTime(timezone=True), server_default=func.now()
+    )
+    time_updated: Mapped[datetime.datetime] = mapped_column(
+        DateTime(timezone=True), server_default=func.now(), onupdate=func.now()
+    )
+
+    __table_args__ = (
+        Index(
+            "uq_capability_report_connector_scope",
+            "credential_id",
+            "connector_id",
+            unique=True,
+            postgresql_where=text("connector_id IS NOT NULL"),
+        ),
+        Index(
+            "uq_capability_report_credential_scope",
+            "credential_id",
+            unique=True,
+            postgresql_where=text("connector_id IS NULL"),
+        ),
+    )
 
 
 class FederatedConnector(Base):

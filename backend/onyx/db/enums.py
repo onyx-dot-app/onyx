@@ -805,3 +805,26 @@ class IncognitoRecordMode(str, PyEnum):
 def record_mode_persists_content(mode: IncognitoRecordMode | None) -> bool:
     """None is an ordinary chat, which always persists content."""
     return mode is None or mode.persists_content
+
+
+class CapabilityCheckTrigger(str, PyEnum):
+    """What initiated a capability-check run."""
+
+    MANUAL = "manual"
+    CREDENTIAL_CREATED = "credential_created"
+    # Recorded from the blocking validation at cc-pair creation/swap time.
+    CC_PAIR_VALIDATION = "cc_pair_validation"
+    # Recorded from the blocking validation at indexing-run start.
+    INDEXING_ATTEMPT = "indexing_attempt"
+
+
+class CapabilityReportRunStatus(str, PyEnum):
+    """Lifecycle of one persisted capability-report row.
+
+    Kept separate from the report payload so the last COMPLETED report stays
+    readable while a re-run is RUNNING.
+    """
+
+    RUNNING = "running"
+    COMPLETED = "completed"
+    FAILED_TO_RUN = "failed_to_run"
