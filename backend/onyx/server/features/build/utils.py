@@ -186,15 +186,17 @@ def is_craft_enabled_for_user(
     return deployment_available
 
 
-def get_opencode_disabled_tools(user: User) -> list[str]:
+def get_opencode_disabled_tools() -> list[str]:
+    """Deployment-wide, not per-user: every user in a tenant/deployment gets
+    the same answer, so PostHog release conditions target tenant_id rather
+    than a per-user rollout."""
     feature_flag_provider = get_default_feature_flag_provider()
 
     if isinstance(feature_flag_provider, NoOpFeatureFlagProvider):
         return OPENCODE_DISABLED_TOOLS
 
-    variant = feature_flag_provider.feature_variant_for_user_tenant(
+    variant = feature_flag_provider.feature_variant_for_tenant(
         OPENCODE_DISABLED_TOOLS_FLAG,
-        user,
         get_current_tenant_id(),
     )
 

@@ -601,7 +601,7 @@ def reconcile_sandbox(
                 tenant_id=tenant_id,
                 onyx_pat=onyx_pat,
                 provisioning_attempt_number=attempt_number,
-                disabled_tools=get_opencode_disabled_tools(user),
+                disabled_tools=get_opencode_disabled_tools(),
             )
     except SandboxProvisionContentionError as e:
         # A superseded attempt's tail still holds the backend lock. Record

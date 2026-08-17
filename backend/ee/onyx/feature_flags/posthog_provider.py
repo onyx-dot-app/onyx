@@ -56,30 +56,23 @@ class PostHogFeatureFlagProvider(FeatureFlagProvider):
             )
             return False
 
-    def feature_variant(
-        self,
-        flag_key: str,
-        user_id: UUID,
-        user_properties: dict[str, Any] | None = None,
+    def feature_variant_for_tenant(
+        self, flag_key: str, tenant_id: str
     ) -> str | bool | None:
         if not posthog:
             return None
 
         try:
-            posthog.set(
-                distinct_id=user_id,
-                properties=user_properties,
-            )
             return posthog.get_feature_flag(
                 flag_key,
-                str(user_id),
-                person_properties=user_properties,
+                tenant_id,
+                person_properties={"tenant_id": tenant_id},
             )
         except Exception as e:
             logger.error(
-                "Error fetching feature flag variant %s for user %s: %s",
+                "Error fetching feature flag variant %s for tenant %s: %s",
                 flag_key,
-                user_id,
+                tenant_id,
                 e,
             )
             return None

@@ -133,7 +133,7 @@ def ensure_session_ready(
     # (a no-op on a freshly provisioned pod).
     mark_opencode_dispose_pending(session_id)
 
-    disabled_tools = get_opencode_disabled_tools(user)
+    disabled_tools = get_opencode_disabled_tools()
     try:
         if snapshot:
             sandbox_manager.restore_snapshot(

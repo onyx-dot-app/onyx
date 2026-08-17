@@ -268,7 +268,7 @@ class SessionManager:
     ) -> None:
         llm_config = self.session_llm_config(session, user)
         mcp_servers = resolve_craft_mcp_servers(self._db_session, user)
-        disabled_tools = get_opencode_disabled_tools(user)
+        disabled_tools = get_opencode_disabled_tools()
         expected = json.dumps(
             build_provider_opencode_config(
                 llm_config,
@@ -399,7 +399,7 @@ class SessionManager:
                         user_name=user.personal_name,
                         llm_config=llm_config,
                         mcp_servers=mcp_servers,
-                        disabled_tools=get_opencode_disabled_tools(user),
+                        disabled_tools=get_opencode_disabled_tools(),
                     )
                     if session.opencode_session_id is not None:
                         self._sandbox_manager.dispose_opencode_instance(
@@ -692,7 +692,7 @@ class SessionManager:
                 connectable_apps_section=connectable_apps_section,
                 user_name=user_name,
                 mcp_servers=mcp_servers,
-                disabled_tools=get_opencode_disabled_tools(user),
+                disabled_tools=get_opencode_disabled_tools(),
             )
             minted_opencode_session_id = self._sandbox_manager.ensure_opencode_session(
                 sandbox_id=sandbox.id,

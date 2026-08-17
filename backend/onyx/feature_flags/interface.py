@@ -50,29 +50,20 @@ class FeatureFlagProvider(abc.ABC):
             },
         )
 
-    def feature_variant(
+    def feature_variant_for_tenant(
         self,
         flag_key: str,  # noqa: ARG002
-        user_id: UUID,  # noqa: ARG002
-        user_properties: dict[str, Any] | None = None,  # noqa: ARG002
+        tenant_id: str,  # noqa: ARG002
     ) -> str | bool | None:
         """
-        Get a multivariate flag's variant key for a user (or its bool value
-        for a simple flag). Returns None if unsupported, unset, or on error.
+        Get a multivariate flag's variant for a tenant/deployment as a whole,
+        rather than an individual user. Keys PostHog's distinct_id on
+        tenant_id directly, so every user in the tenant/deployment resolves
+        to the same variant and PostHog release conditions target tenant_id
+        instead of a per-user rollout. Returns None if unsupported, unset,
+        or on error.
         """
         return None
-
-    def feature_variant_for_user_tenant(
-        self, flag_key: str, user: User, tenant_id: str
-    ) -> str | bool | None:
-        return self.feature_variant(
-            flag_key,
-            user.id if user else UUID("caa1e0cd-6ee6-4550-b1ec-8affaef4bf83"),
-            user_properties={
-                "tenant_id": tenant_id,
-                "email": user.email if user else "anonymous@onyx.app",
-            },
-        )
 
 
 class NoOpFeatureFlagProvider(FeatureFlagProvider):

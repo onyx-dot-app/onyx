@@ -26,17 +26,15 @@ class TestNoOpFeatureFlagProvider:
         my_uuid = UUID("79a75f76-6b63-43ee-b04c-a0c6806900bd")
         assert provider.feature_enabled("another-flag", my_uuid) is False
 
-    def test_variant_always_returns_none(self) -> None:
+    def test_variant_for_tenant_always_returns_none(self) -> None:
         provider = NoOpFeatureFlagProvider()
 
-        my_uuid = UUID("79a75f76-6b63-43ee-b04c-a0c6806900bd")
-        assert provider.feature_variant("another-flag", my_uuid) is None
+        assert provider.feature_variant_for_tenant("another-flag", "tenant_dev") is None
 
 
-class TestPostHogFeatureFlagProviderVariant:
-    """Tests for `PostHogFeatureFlagProvider.feature_variant`."""
-
-    my_uuid = UUID("79a75f76-6b63-43ee-b04c-a0c6806900bd")
+class TestPostHogFeatureFlagProviderVariantForTenant:
+    """Tests for `PostHogFeatureFlagProvider.feature_variant_for_tenant` —
+    the deployment-wide (not per-user) lookup, keyed on tenant_id."""
 
     def test_returns_none_when_posthog_unconfigured(
         self, monkeypatch: pytest.MonkeyPatch
@@ -44,7 +42,7 @@ class TestPostHogFeatureFlagProviderVariant:
         monkeypatch.setattr(posthog_provider_module, "posthog", None)
         provider = PostHogFeatureFlagProvider()
 
-        assert provider.feature_variant("some-flag", self.my_uuid) is None
+        assert provider.feature_variant_for_tenant("some-flag", "tenant_dev") is None
 
     def test_returns_variant_from_posthog(
         self, monkeypatch: pytest.MonkeyPatch
@@ -54,7 +52,10 @@ class TestPostHogFeatureFlagProviderVariant:
         monkeypatch.setattr(posthog_provider_module, "posthog", mock_posthog)
         provider = PostHogFeatureFlagProvider()
 
-        assert provider.feature_variant("some-flag", self.my_uuid) == "none"
+        assert provider.feature_variant_for_tenant("some-flag", "tenant_dev") == "none"
+        mock_posthog.get_feature_flag.assert_called_once_with(
+            "some-flag", "tenant_dev", person_properties={"tenant_id": "tenant_dev"}
+        )
 
     def test_returns_none_on_posthog_error(
         self, monkeypatch: pytest.MonkeyPatch
@@ -65,7 +66,7 @@ class TestPostHogFeatureFlagProviderVariant:
         monkeypatch.setattr(posthog_provider_module, "posthog", mock_posthog)
         provider = PostHogFeatureFlagProvider()
 
-        assert provider.feature_variant("some-flag", self.my_uuid) is None
+        assert provider.feature_variant_for_tenant("some-flag", "tenant_dev") is None
 
 
 class TestFeatureFlagFactory:
