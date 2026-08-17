@@ -108,6 +108,12 @@ fn print_debug_startup_banner() {
 /// window's platform tweaks, and Alt-menu/devtools wiring. Every failure here
 /// is logged and non-fatal, so this never needs to return a `Result`.
 fn setup_app(app: &tauri::AppHandle) {
+    // The config declares the main window with `"create": false`, so build it
+    // here -- before anything below looks it up.
+    if let Err(e) = window::build_main_window(app) {
+        debug_log::log_backend_error(app, &format!("Failed to build main window: {e}"));
+    }
+
     // Before the tray, so its menu can reflect whether the shortcut registered.
     shortcuts::setup_global_shortcuts(app);
 
@@ -188,7 +194,8 @@ fn main() {
                             debug_log::log_backend_error(
                                 webview.app_handle(),
                                 &format!(
-                                    "Failed to open external URL in default browser: {destination_url}"
+                                    "Failed to open external URL in default browser: {}",
+                                    window::redact_url(destination_url)
                                 ),
                             );
                         }
@@ -245,8 +252,6 @@ fn main() {
             Ok(())
         })
         .on_page_load(|webview: &Webview, _payload: &PageLoadPayload| {
-            window::inject_chat_link_intercept(webview);
-
             if webview.app_handle().state::<ConfigState>().debug_mode {
                 debug_log::inject_console_capture(webview);
             }
