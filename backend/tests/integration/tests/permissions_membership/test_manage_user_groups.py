@@ -241,3 +241,68 @@ def test_global_holder_shares_document_set(
     assert resp.status_code == 200, resp.text
     snapshot = _group_snapshot(target_group.id, permission_admin_user)
     assert doc_set.id in {document_set.id for document_set in snapshot.document_sets}
+
+
+# ---------------------------------------------------------------------------
+# Privilege amplification. The seeded "Admin" group grants FULL_ADMIN_PANEL_ACCESS.
+# ---------------------------------------------------------------------------
+
+
+def test_holder_cannot_add_self_to_admin_group(
+    permission_admin_user: DATestUser,
+    holder_user: DATestUser,
+) -> None:
+    admin_group = UserGroupManager.get_default(
+        user_performing_action=permission_admin_user, name="Admin"
+    )
+    resp = call_endpoint(
+        "POST",
+        f"/manage/admin/user-group/{admin_group.id}/add-users",
+        {"user_ids": [holder_user.id]},
+        holder_user.headers,
+        holder_user.cookies,
+    )
+    assert resp.status_code == 403, resp.text
+
+    # 403 alone isn't enough — prove the grant never landed
+    me = call_endpoint("GET", "/me", None, holder_user.headers, holder_user.cookies)
+    assert me.status_code == 200, me.text
+    assert Permission.FULL_ADMIN_PANEL_ACCESS.value not in me.json().get(
+        "effective_permissions", []
+    )
+
+
+def test_holder_cannot_add_self_to_admin_group_via_patch(
+    permission_admin_user: DATestUser,
+    holder_user: DATestUser,
+) -> None:
+    """add-users delegates to update_user_group, so PATCH is the same door."""
+    admin_group = UserGroupManager.get_default(
+        user_performing_action=permission_admin_user, name="Admin"
+    )
+    resp = call_endpoint(
+        "PATCH",
+        f"/manage/admin/user-group/{admin_group.id}",
+        {
+            "user_ids": [user.id for user in admin_group.users] + [holder_user.id],
+            "cc_pair_ids": [cc_pair.id for cc_pair in admin_group.cc_pairs],
+        },
+        holder_user.headers,
+        holder_user.cookies,
+    )
+    assert resp.status_code == 403, resp.text
+
+
+def test_holder_can_still_add_users_to_an_ordinary_group(
+    holder_user: DATestUser,
+    target_group: DATestUserGroup,
+) -> None:
+    resp = call_endpoint(
+        "POST",
+        f"/manage/admin/user-group/{target_group.id}/add-users",
+        {"user_ids": [holder_user.id]},
+        holder_user.headers,
+        holder_user.cookies,
+    )
+    assert resp.status_code == 200, resp.text
+    assert holder_user.id in {user["id"] for user in resp.json()["users"]}

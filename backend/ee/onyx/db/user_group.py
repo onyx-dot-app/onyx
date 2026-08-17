@@ -13,6 +13,7 @@ from ee.onyx.server.user_group.models import (
 )
 from onyx.auth.permissions import (
     NON_TOGGLEABLE_PERMISSIONS,
+    get_effective_permissions,
     has_permission,
     resolve_effective_permissions,
 )
@@ -604,6 +605,37 @@ def add_users_to_user_group(
     )
 
 
+def _assert_no_privilege_amplification(
+    db_session: Session,
+    user: User,
+    user_group_id: int,
+    added_user_ids: list[UUID],
+) -> None:
+    """Adding a member hands them the group's grants, so a MANAGE_USER_GROUPS holder
+    could otherwise join the seeded Admin group and become admin. Never blocks a
+    group's own manager: a manager is always a member, so already holds its grants."""
+    if not added_user_ids:
+        return
+
+    group_permissions = set(
+        db_session.scalars(
+            select(PermissionGrant.permission).where(
+                PermissionGrant.group_id == user_group_id,
+                PermissionGrant.is_deleted.is_(False),
+            )
+        )
+    )
+    # seeded into every group, so requiring it would block group-less actors
+    group_permissions.discard(Permission.BASIC_ACCESS)
+    excess = group_permissions - get_effective_permissions(user)
+    if excess:
+        raise OnyxError(
+            OnyxErrorCode.INSUFFICIENT_PERMISSIONS,
+            "You can't add members to a group that grants permissions you don't "
+            "hold: " + ", ".join(sorted(permission.value for permission in excess)),
+        )
+
+
 def _assert_group_update_within_scope(
     db_session: Session,
     user: User,
@@ -715,6 +747,8 @@ def update_user_group(
     updated_user_ids = set(user_group_update.user_ids)
     added_user_ids = list(updated_user_ids - current_user_ids)
     removed_user_ids = list(current_user_ids - updated_user_ids)
+
+    _assert_no_privilege_amplification(db_session, user, user_group_id, added_user_ids)
 
     # Removing yourself drops the membership row carrying is_manager, and
     # effective_permissions is derived from group grants — so leaving can revoke the very
