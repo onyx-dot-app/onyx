@@ -132,10 +132,16 @@ def test_set_permissions_requires_full_admin(
 def target_group(permission_admin_user: DATestUser) -> DATestUserGroup:
     """A group ``holder_user`` administers but does not belong to — global authority,
     never membership. Uniquely named because each test mutates it."""
-    return UserGroupManager.create(
+    group = UserGroupManager.create(
         name=f"share-target-{uuid4()}",
         user_performing_action=permission_admin_user,
     )
+    # create returns mid-sync, and the membership endpoints refuse a syncing group
+    UserGroupManager.wait_for_sync(
+        user_performing_action=permission_admin_user,
+        user_groups_to_check=[group],
+    )
+    return group
 
 
 def _group_snapshot(

@@ -809,6 +809,10 @@ def update_user_group(
 
     db_session.commit()
 
+    # Core writes above leave the loaded ORM collections stale, and sessions run
+    # expire_on_commit=False — without this the caller serializes pre-update membership.
+    db_session.expire(db_user_group)
+
     if added_user_ids or removed_user_ids:
         emit_audit_event(
             AuditAction.USER_GROUP_CHANGE,
