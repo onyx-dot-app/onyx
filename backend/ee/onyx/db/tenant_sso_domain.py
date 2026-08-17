@@ -22,7 +22,7 @@ from sqlalchemy.exc import IntegrityError
 
 from onyx.db.engine.sql_engine import get_catalog_session, get_session_with_tenant
 from onyx.db.models import TenantSSODomain
-from onyx.db.sso_provider import enabled_provider_domains
+from onyx.db.sso_provider import enabled_provider_domains, normalize_email_domains
 from onyx.error_handling.error_codes import OnyxErrorCode
 from onyx.error_handling.exceptions import OnyxError
 from onyx.utils.logger import setup_logger
@@ -31,10 +31,15 @@ from shared_configs.configs import MULTI_TENANT
 logger = setup_logger()
 
 
+def _catalog_key(domain: str) -> str:
+    """Keys are stored lowercase and trimmed, so raw input cannot miss a claim."""
+    return domain.strip().lower()
+
+
 def _email_domain(email: str) -> str | None:
     """The normalized domain of an address, or None when it has none."""
     _, _, domain = email.rpartition("@")
-    return domain.strip().lower() or None
+    return _catalog_key(domain) or None
 
 
 def lookup_tenant_id_for_email_domain(email: str) -> str | None:
@@ -94,7 +99,7 @@ def claim_email_domains(tenant_id: str, domains: list[str]) -> None:
     if not MULTI_TENANT:
         return
 
-    wanted = {domain.strip().lower() for domain in domains if domain.strip()}
+    wanted = set(normalize_email_domains(domains))
 
     with get_catalog_session() as db_session:
         held = set(
@@ -147,7 +152,10 @@ def is_claimed_domain(tenant_id: str, domain: str) -> bool:
     if not MULTI_TENANT:
         return False
     with get_catalog_session() as db_session:
-        return db_session.get(TenantSSODomain, (tenant_id, domain)) is not None
+        return (
+            db_session.get(TenantSSODomain, (tenant_id, _catalog_key(domain)))
+            is not None
+        )
 
 
 def mark_domain_verified(tenant_id: str, domain: str) -> None:
@@ -157,7 +165,7 @@ def mark_domain_verified(tenant_id: str, domain: str) -> None:
         return
 
     with get_catalog_session() as db_session:
-        row = db_session.get(TenantSSODomain, (tenant_id, domain))
+        row = db_session.get(TenantSSODomain, (tenant_id, _catalog_key(domain)))
         if row is None:
             raise OnyxError(
                 OnyxErrorCode.NOT_FOUND, "This workspace has not claimed that domain."
@@ -182,7 +190,7 @@ def mark_domain_unverified(tenant_id: str, domain: str) -> None:
         return
 
     with get_catalog_session() as db_session:
-        row = db_session.get(TenantSSODomain, (tenant_id, domain))
+        row = db_session.get(TenantSSODomain, (tenant_id, _catalog_key(domain)))
         if row is None or row.verified_at is None:
             return
         row.verified_at = None
