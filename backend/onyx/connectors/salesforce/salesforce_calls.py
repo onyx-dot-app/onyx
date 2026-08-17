@@ -1,13 +1,19 @@
+from __future__ import annotations
+
 import gc
 import os
 import time
 from concurrent.futures import ThreadPoolExecutor
 from datetime import datetime
+from typing import TYPE_CHECKING
 
 from pytz import UTC
 from simple_salesforce import Salesforce
-from simple_salesforce.bulk2 import SFBulk2Handler, SFBulk2Type
-from simple_salesforce.exceptions import SalesforceRefusedRequest
+from simple_salesforce.bulk2 import QueryResult, SFBulk2Handler, SFBulk2Type
+from simple_salesforce.exceptions import (
+    SalesforceExpiredSession,
+    SalesforceRefusedRequest,
+)
 from simple_salesforce.format import format_soql
 
 from onyx.connectors.cross_connector_utils.rate_limit_wrapper import rate_limit_builder
@@ -15,6 +21,9 @@ from onyx.connectors.interfaces import SecondsSinceUnixEpoch
 from onyx.connectors.salesforce.utils import MODIFIED_FIELD, validate_sf_identifier
 from onyx.utils.logger import setup_logger
 from onyx.utils.retry_wrapper import retry_builder
+
+if TYPE_CHECKING:
+    from onyx.connectors.salesforce.onyx_salesforce import OnyxSalesforce
 
 logger = setup_logger()
 
@@ -128,50 +137,44 @@ def _bulk_retrieve_from_salesforce(
     sf_type: str,
     query: str,
     target_dir: str,
-    sf_client: Salesforce,
+    sf_client: OnyxSalesforce,
 ) -> tuple[str, list[str] | None]:
     """Returns a tuple of
     1. the salesforce object type (NOTE: seems redundant)
     2. the list of CSV's written into the target directory
     """
 
-    bulk_2_handler: SFBulk2Handler | None = SFBulk2Handler(
-        session_id=sf_client.session_id,
-        bulk2_url=sf_client.bulk2_url,
-        proxies=sf_client.proxies,
-        session=sf_client.session,
-    )
-    if not bulk_2_handler:
-        return sf_type, None
+    def build_bulk_type() -> SFBulk2Type:
+        bulk_2_handler = SFBulk2Handler(
+            session_id=sf_client.session_id,
+            bulk2_url=sf_client.bulk2_url,
+            proxies=sf_client.proxies,
+            session=sf_client.session,
+        )
+        return SFBulk2Type(
+            object_name=sf_type,
+            bulk2_url=bulk_2_handler.bulk2_url,
+            headers=bulk_2_handler.headers,
+            session=bulk_2_handler.session,
+        )
 
-    # NOTE(rkuo): there are signs this download is allocating large
-    # amounts of memory instead of streaming the results to disk.
-    # we're doing a gc.collect to try and mitigate this.
-
-    # see https://github.com/simple-salesforce/simple-salesforce/issues/428 for a
-    # possible solution
-    bulk_2_type: SFBulk2Type | None = SFBulk2Type(
-        object_name=sf_type,
-        bulk2_url=bulk_2_handler.bulk2_url,
-        headers=bulk_2_handler.headers,
-        session=bulk_2_handler.session,
-    )
-    if not bulk_2_type:
-        return sf_type, None
-
-    logger.info("Downloading %s", sf_type)
-
-    logger.debug("Query: %s", query)
-
-    try:
-        # This downloads the file to a file in the target path with a random name
-        results = bulk_2_type.download(
+    def download() -> list[QueryResult]:
+        return build_bulk_type().download(
             query=query,
             path=target_dir,
             max_records=500000,
         )
 
-        # prepend each downloaded csv with the object type (delimiter = '.')
+    logger.info("Downloading %s", sf_type)
+    logger.debug("Query: %s", query)
+
+    try:
+        try:
+            results = download()
+        except SalesforceExpiredSession:
+            sf_client.refresh_session()
+            results = download()
+
         all_download_paths: list[str] = []
         for result in results:
             original_file_path = result["file"]
@@ -187,8 +190,6 @@ def _bulk_retrieve_from_salesforce(
         logger.warning("Exceptioning query for object type %s: %s", sf_type, query)
         return sf_type, None
     finally:
-        bulk_2_handler = None
-        bulk_2_type = None
         gc.collect()
 
     logger.info("Downloaded %s to %s", sf_type, all_download_paths)
@@ -196,7 +197,7 @@ def _bulk_retrieve_from_salesforce(
 
 
 def fetch_all_csvs_in_parallel(
-    sf_client: Salesforce,
+    sf_client: OnyxSalesforce,
     all_types_to_filter: dict[str, bool],
     queryable_fields_by_type: dict[str, set[str]],
     start: SecondsSinceUnixEpoch | None,

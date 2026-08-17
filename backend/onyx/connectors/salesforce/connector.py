@@ -11,8 +11,12 @@ from pathlib import Path
 from typing import Any
 
 from onyx.configs.app_configs import INDEX_BATCH_SIZE
+from onyx.configs.constants import DocumentSource
+from onyx.connectors.credentials_provider import OnyxStaticCredentialsProvider
 from onyx.connectors.cross_connector_utils.miscellaneous_utils import time_str_to_utc
 from onyx.connectors.interfaces import (
+    CredentialsConnector,
+    CredentialsProviderInterface,
     GenerateDocumentsOutput,
     GenerateSlimDocumentOutput,
     LoadConnector,
@@ -29,6 +33,7 @@ from onyx.connectors.models import (
     SlimDocument,
     TextSection,
 )
+from onyx.connectors.salesforce.auth import build_salesforce_client
 from onyx.connectors.salesforce.doc_conversion import (
     ID_PREFIX,
     convert_sf_object_to_doc,
@@ -171,7 +176,12 @@ def _validate_custom_query_config(config: dict[str, Any]) -> None:
                         )
 
 
-class SalesforceConnector(LoadConnector, PollConnector, SlimConnectorWithPermSync):
+class SalesforceConnector(
+    LoadConnector,
+    PollConnector,
+    SlimConnectorWithPermSync,
+    CredentialsConnector,
+):
     """Approach outline
 
     Goal
@@ -224,6 +234,7 @@ class SalesforceConnector(LoadConnector, PollConnector, SlimConnectorWithPermSyn
             requested_objects = []
         self.batch_size = batch_size
         self._sf_client: OnyxSalesforce | None = None
+        self._credentials_provider: CredentialsProviderInterface | None = None
 
         # Validate and store custom query config
         if custom_query_config:
@@ -244,14 +255,20 @@ class SalesforceConnector(LoadConnector, PollConnector, SlimConnectorWithPermSyn
         self,
         credentials: dict[str, Any],
     ) -> dict[str, Any] | None:
-        domain = "test" if credentials.get("is_sandbox") else None
-        self._sf_client = OnyxSalesforce(
-            username=credentials["sf_username"],
-            password=credentials["sf_password"],
-            security_token=credentials["sf_security_token"],
-            domain=domain,
+        self.set_credentials_provider(
+            OnyxStaticCredentialsProvider(
+                tenant_id=None,
+                connector_name=str(DocumentSource.SALESFORCE),
+                credential_json=credentials,
+            )
         )
         return None
+
+    def set_credentials_provider(
+        self, credentials_provider: CredentialsProviderInterface
+    ) -> None:
+        self._credentials_provider = credentials_provider
+        self._sf_client = build_salesforce_client(credentials_provider)
 
     @property
     def sf_client(self) -> OnyxSalesforce:
