@@ -248,6 +248,14 @@ def test_global_holder_shares_document_set(
 # ---------------------------------------------------------------------------
 
 
+def _effective_permissions(user: DATestUser) -> list[str]:
+    """Indexed, not ``.get`` — a renamed field must fail here, not silently
+    hand back an empty list that passes every ``not in`` assertion."""
+    resp = call_endpoint("GET", "/me", None, user.headers, user.cookies)
+    assert resp.status_code == 200, resp.text
+    return resp.json()["effective_permissions"]
+
+
 def test_holder_cannot_add_self_to_admin_group(
     permission_admin_user: DATestUser,
     holder_user: DATestUser,
@@ -265,10 +273,12 @@ def test_holder_cannot_add_self_to_admin_group(
     assert resp.status_code == 403, resp.text
 
     # 403 alone isn't enough — prove the grant never landed
-    me = call_endpoint("GET", "/me", None, holder_user.headers, holder_user.cookies)
-    assert me.status_code == 200, me.text
-    assert Permission.FULL_ADMIN_PANEL_ACCESS.value not in me.json().get(
-        "effective_permissions", []
+    assert Permission.FULL_ADMIN_PANEL_ACCESS.value not in _effective_permissions(
+        holder_user
+    )
+    # ...and that this probe can see the grant when it really is there
+    assert Permission.FULL_ADMIN_PANEL_ACCESS.value in _effective_permissions(
+        permission_admin_user
     )
 
 
