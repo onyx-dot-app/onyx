@@ -3,10 +3,16 @@
 import { useState } from "react";
 import { Form, Formik, useField } from "formik";
 import * as Yup from "yup";
-import { Button, InputTags, type TagItem, Text } from "@opal/components";
-import { SvgCopy, SvgSimpleLoader } from "@opal/icons";
-import { InputErrorText, InputVertical, toast } from "@opal/layouts";
-import { cn } from "@opal/utils";
+import {
+  Button,
+  Card,
+  CopyButton,
+  InputTags,
+  type TagItem,
+  Text,
+} from "@opal/components";
+import { SvgSimpleLoader } from "@opal/icons";
+import { InputErrorText, InputVertical, Section, toast } from "@opal/layouts";
 import type {
   SSOProviderCreateRequest,
   SSOProviderResponse,
@@ -16,9 +22,9 @@ import type {
 import { useSupportedSSOProviderTypes } from "@/lib/sso/hooks";
 import { NEXT_PUBLIC_CLOUD_ENABLED } from "@/lib/constants";
 import { createSSOProvider, updateSSOProvider } from "@/lib/sso/svc";
+import SSODomainVerification from "@/sections/modals/sso/SSODomainVerification";
 import {
   CONFIG_FIELDS_BY_TYPE,
-  copyRedirectUri,
   CREATABLE_SSO_PROVIDER_TYPES,
   SSO_PROVIDER_DETAILS,
   type SSOConfigField,
@@ -404,12 +410,12 @@ export function SSOProviderModal({ provider, onSaved }: SSOProviderModalProps) {
                     title={
                       NEXT_PUBLIC_CLOUD_ENABLED
                         ? "Allowed Email Domains"
-                        : "Allowed Email Domains (Optional)"
+                        : "Allowed Email Domains (Recommended)"
                     }
                     description={
                       NEXT_PUBLIC_CLOUD_ENABLED
                         ? "Only emails in these domains may sign in through this provider."
-                        : "Only emails in these domains may sign in through this provider. Empty allows any."
+                        : "Only emails in these domains may sign in through this provider. Recommended, but you can leave it empty to allow any."
                     }
                     withLabel
                   >
@@ -420,30 +426,38 @@ export function SSOProviderModal({ provider, onSaved }: SSOProviderModalProps) {
                     />
                   </InputVertical>
 
+                  {NEXT_PUBLIC_CLOUD_ENABLED && (
+                    <SSODomainVerification
+                      domains={values.allowed_email_domains}
+                    />
+                  )}
+
                   {provider?.redirect_uri && (
                     <InputVertical
                       title={redirectLabel}
                       description="Register this URL in your IdP as the callback."
                       withLabel
                     >
-                      <div
-                        className={cn(
-                          "flex items-start justify-between gap-2 rounded-12 border border-border-03 bg-background-neutral-02 p-3"
-                        )}
-                      >
-                        <Text font="secondary-body" color="text-04" as="p">
-                          {provider.redirect_uri}
-                        </Text>
-                        <Button
-                          icon={SvgCopy}
-                          prominence="tertiary"
-                          size="sm"
-                          tooltip={`Copy ${redirectLabel}`}
-                          onClick={() => {
-                            void copyRedirectUri(provider.redirect_uri);
-                          }}
-                        />
-                      </div>
+                      <Card border="solid" rounding="md">
+                        <Section
+                          flexDirection="row"
+                          alignItems="center"
+                          justifyContent="between"
+                          height="fit"
+                          gap={2}
+                        >
+                          <div className="min-w-0 break-all">
+                            <Text font="main-ui-mono" color="text-04" as="span">
+                              {provider.redirect_uri}
+                            </Text>
+                          </div>
+                          <CopyButton
+                            getCopyText={() => provider.redirect_uri}
+                            size="sm"
+                            tooltip={`Copy ${redirectLabel}`}
+                          />
+                        </Section>
+                      </Card>
                     </InputVertical>
                   )}
                 </Modal.Body>

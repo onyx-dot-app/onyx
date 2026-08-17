@@ -86,3 +86,33 @@ export function setSSOProviderEnabled(
     { enabled }
   );
 }
+
+export interface SSOLoginDomainStatus {
+  domain: string;
+  verified: boolean;
+  // The TXT record to publish. Unset once the domain is verified.
+  record_host?: string | null;
+  record_value?: string | null;
+}
+
+export interface SSOLoginDomains {
+  domains: SSOLoginDomainStatus[];
+}
+
+export function fetchDomainRecords(
+  domains: string[]
+): Promise<SSOLoginDomains> {
+  return ssoRequest<SSOLoginDomains>(
+    `${SWR_KEYS.adminSsoDomains}/records`,
+    "POST",
+    { domains }
+  );
+}
+
+export function verifyDomainViaDns(domain: string): Promise<SSOLoginDomains> {
+  return ssoRequest<SSOLoginDomains>(
+    `${SWR_KEYS.adminSsoDomains}/verify-dns`,
+    "POST",
+    { domain }
+  );
+}

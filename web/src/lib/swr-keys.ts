@@ -23,6 +23,12 @@ export const SWR_KEYS = {
   incognitoAvailability: "/api/chat/incognito-availability",
   adminSsoProviders: "/api/admin/sso/provider",
   adminSsoProviderTypes: "/api/admin/sso/provider-type",
+  adminSsoDomains: "/api/admin/sso/domain",
+  // Cache key for the POST /records lookup, keyed by the domains being configured.
+  adminSsoDomainRecords: (domains: string[]) => [
+    "sso-domain-records",
+    ...domains,
+  ],
 
   // ── Agents / Personas ─────────────────────────────────────────────────────
   personas: "/api/persona",

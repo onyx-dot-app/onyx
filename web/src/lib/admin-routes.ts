@@ -417,8 +417,8 @@ export const ADMIN_ROUTES = {
     requiredTier: null,
     visibleWhen: null,
   },
-  // Hidden on cloud until cloud login can use these providers. Business tier gates
-  // having *multiple* providers, inside the page itself, not reaching it.
+  // Business tier gates having *multiple* providers, inside the page itself,
+  // not reaching it.
   SSO_PROVIDERS: {
     path: "/admin/sso-providers",
     icon: SvgUserKey,
@@ -427,7 +427,7 @@ export const ADMIN_ROUTES = {
     requiredPermission: Permission.FULL_ADMIN_PANEL_ACCESS,
     section: "Organization",
     requiredTier: null,
-    visibleWhen: (f: FeatureFlags) => !f.enableCloud,
+    visibleWhen: null,
   },
 
   // ── Usage ─────────────────────────────────────────────────────────
