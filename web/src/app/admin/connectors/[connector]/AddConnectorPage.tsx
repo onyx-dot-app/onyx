@@ -238,9 +238,7 @@ export default function AddConnector({
   const displayName = getSourceDisplayName(connector) || connector;
   const sourceMetadata = getSourceMetadata(connector);
   const hasFederatedOption = sourceMetadata.federated === true;
-  const credentialCreationMethods = oauthDetails
-    ? getCredentialCreationMethods(oauthDetails)
-    : [];
+  const credentialCreationMethods = getCredentialCreationMethods(oauthDetails);
   const showExplicitCredentialMethods = credentialCreationMethods.length > 1;
 
   if (!credentials || !editableCredentials) {
@@ -291,14 +289,15 @@ export default function AddConnector({
   const openCredentialCreationMethod = async (
     method: CredentialCreationMethod
   ) => {
-    if (!oauthDetails) {
-      return;
-    }
     if (
       method === CredentialCreationMethod.OAuth &&
+      oauthDetails &&
       shouldRedirectToOAuth(oauthDetails)
     ) {
       await attemptOauthRedirect();
+      return;
+    }
+    if (method === CredentialCreationMethod.OAuth && !oauthDetails) {
       return;
     }
     setCredentialCreationMethod(method);
@@ -646,10 +645,10 @@ export default function AddConnector({
                         onClose={closeCredentialModal}
                       />
                       <Modal.Body alignItems="stretch">
-                        {oauthDetailsLoading || !oauthDetails ? (
+                        {oauthDetailsLoading ? (
                           <Spinner />
                         ) : credentialCreationMethod ===
-                          CredentialCreationMethod.OAuth ? (
+                            CredentialCreationMethod.OAuth && oauthDetails ? (
                           shouldRedirectToOAuth(oauthDetails) ? (
                             <Section alignItems="start">
                               <OpalText

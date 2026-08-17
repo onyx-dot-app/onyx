@@ -79,6 +79,8 @@ def _make_query(request_body: dict[str, Any], api_key: str) -> requests.Response
 
 
 class LinearConnector(LoadConnector, PollConnector, OAuthConnector):
+    supports_manual_credentials = True
+
     def __init__(
         self,
         batch_size: int = INDEX_BATCH_SIZE,

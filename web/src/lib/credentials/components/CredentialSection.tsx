@@ -64,20 +64,15 @@ export default function CredentialSection({
   const { data: oauthDetails, isLoading: oauthDetailsLoading } =
     useOAuthDetails(sourceType);
 
-  const credentialCreationMethods = oauthDetails
-    ? getCredentialCreationMethods(oauthDetails)
-    : [];
+  const credentialCreationMethods = getCredentialCreationMethods(oauthDetails);
   const sourceDisplayName = getSourceDisplayName(sourceType) || sourceType;
 
   const openCredentialCreationMethod = async (
     method: CredentialCreationMethod
   ) => {
-    if (!oauthDetails) {
-      return;
-    }
-
     if (
       method === CredentialCreationMethod.OAuth &&
+      oauthDetails &&
       shouldRedirectToOAuth(oauthDetails)
     ) {
       const redirectUrl = await getConnectorOauthRedirectUrl(sourceType, {});
@@ -85,6 +80,9 @@ export default function CredentialSection({
         window.location.href = redirectUrl;
         return;
       }
+    }
+    if (method === CredentialCreationMethod.OAuth && !oauthDetails) {
+      return;
     }
 
     setShowModifyCredential(false);
@@ -94,7 +92,7 @@ export default function CredentialSection({
   };
 
   const makeShowCreateCredential = async () => {
-    if (oauthDetailsLoading || !oauthDetails) {
+    if (oauthDetailsLoading) {
       return;
     }
 
@@ -309,7 +307,7 @@ export default function CredentialSection({
             />
             <Modal.Body alignItems="stretch">
               {showCreateCredential ? (
-                oauthDetailsLoading || !oauthDetails ? (
+                oauthDetailsLoading ? (
                   <Spinner />
                 ) : credentialCreationMethod === null ? (
                   <Section alignItems="start" gap={1}>
@@ -327,7 +325,7 @@ export default function CredentialSection({
                     ))}
                   </Section>
                 ) : credentialCreationMethod ===
-                  CredentialCreationMethod.OAuth ? (
+                    CredentialCreationMethod.OAuth && oauthDetails ? (
                   shouldRedirectToOAuth(oauthDetails) ? (
                     <Section alignItems="start">
                       <Text as="p" font="main-ui-body" color="text-03">

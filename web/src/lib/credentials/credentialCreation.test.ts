@@ -42,6 +42,12 @@ test.each([
   }
 );
 
+test("falls back to manual credentials without OAuth details", () => {
+  expect(getCredentialCreationMethods()).toEqual([
+    CredentialCreationMethod.Manual,
+  ]);
+});
+
 test("redirects OAuth providers without additional fields", () => {
   expect(shouldRedirectToOAuth(oauthDetails(true, false))).toBe(true);
   expect(shouldRedirectToOAuth(oauthDetails(true, false, true))).toBe(false);

@@ -6,8 +6,12 @@ export enum CredentialCreationMethod {
 }
 
 export function getCredentialCreationMethods(
-  details: OAuthDetails
+  details?: OAuthDetails
 ): CredentialCreationMethod[] {
+  if (!details) {
+    return [CredentialCreationMethod.Manual];
+  }
+
   const methods: CredentialCreationMethod[] = [];
   if (details.oauth_enabled) {
     methods.push(CredentialCreationMethod.OAuth);

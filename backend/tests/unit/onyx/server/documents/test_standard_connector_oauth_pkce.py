@@ -8,6 +8,7 @@ from sqlalchemy.orm import Session
 
 from onyx.auth.pkce import compute_s256_challenge, generate_pkce_pair
 from onyx.configs.constants import DocumentSource
+from onyx.connectors.egnyte.connector import EgnyteConnector
 from onyx.connectors.interfaces import OAuthConnector
 from onyx.connectors.linear.connector import LinearConnector
 from onyx.db.models import User
@@ -234,6 +235,29 @@ def test_oauth_details_reports_manual_capability_when_oauth_is_disabled(
     assert details.oauth_enabled is False
     assert details.supports_manual_credentials is True
     assert details.additional_kwargs == []
+
+
+@pytest.mark.parametrize(
+    ("source", "connector_cls"),
+    [
+        (DocumentSource.EGNYTE, EgnyteConnector),
+        (DocumentSource.LINEAR, LinearConnector),
+    ],
+)
+def test_existing_oauth_connectors_report_manual_capability(
+    monkeypatch: pytest.MonkeyPatch,
+    source: DocumentSource,
+    connector_cls: type[OAuthConnector],
+) -> None:
+    monkeypatch.setattr(
+        standard_oauth,
+        "_discover_oauth_connectors",
+        lambda: {source: connector_cls},
+    )
+
+    details = standard_oauth.oauth_details(source=source, _=cast(User, object()))
+
+    assert details.supports_manual_credentials is True
 
 
 def test_oauth_details_defaults_non_oauth_sources_to_manual(

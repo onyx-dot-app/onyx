@@ -52,7 +52,7 @@ export function CreateStdOAuthCredential({
     >
       {({ isSubmitting }) => (
         <Form className="w-full">
-          <Section alignItems="stretch" gap={1.5}>
+          <Section alignItems="stretch" gap={6}>
             {additionalFields.map((field) => (
               <InputVertical
                 key={field.name}
