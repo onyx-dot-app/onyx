@@ -18,6 +18,8 @@ interface SSODomainVerificationProps {
   domains: string[];
 }
 
+// Both stay plain text: the label is interpolated into a "label: " prefix, and
+// the value is copied verbatim into the reader's DNS record.
 interface RecordRowProps {
   label: string;
   value: string;
@@ -141,7 +143,7 @@ function DomainCard({ status, busy, onVerify }: DomainCardProps) {
 export default function SSODomainVerification({
   domains,
 }: SSODomainVerificationProps) {
-  const { data, mutate, isLoading } = useSWR<SSOLoginDomains>(
+  const { data, mutate, isLoading, error } = useSWR<SSOLoginDomains>(
     domains.length > 0 ? SWR_KEYS.adminSsoDomainRecords(domains) : null,
     () => fetchDomainRecords(domains)
   );
@@ -171,7 +173,26 @@ export default function SSODomainVerification({
       withLabel
     >
       <Section flexDirection="column" alignItems="stretch" height="fit" gap={3}>
-        {isLoading && rows.length === 0 ? (
+        {error && rows.length === 0 ? (
+          // Without the records there is nothing to publish, so say so and offer
+          // the retry rather than rendering an empty section.
+          <Card border="solid" rounding="lg">
+            <Section
+              flexDirection="row"
+              alignItems="center"
+              justifyContent="between"
+              height="fit"
+              gap={2}
+            >
+              <Text font="main-ui-body" color="text-03" as="span">
+                We couldn&apos;t load the DNS records.
+              </Text>
+              <Button prominence="secondary" onClick={() => void mutate()}>
+                Try again
+              </Button>
+            </Section>
+          </Card>
+        ) : isLoading && rows.length === 0 ? (
           <Section flexDirection="row" alignItems="center" height="fit" gap={2}>
             <SvgSimpleLoader className="text-text-03" />
             <Text font="main-ui-body" color="text-03">
