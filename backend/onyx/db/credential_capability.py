@@ -4,6 +4,13 @@ One row per (credential, connector-scope): ``connector_id`` NULL is the
 config-less credential-time report, non-NULL is one per attached connector.
 Writers upsert against the scope's partial unique index, so concurrent writers
 resolve to one row instead of racing an insert.
+
+Two writer classes share these rows, with fixed precedence: granular named-check
+runs write through ``upsert_completed_capability_report`` and replace whatever
+is stored (latest-only truth); the coarse blocking-validation recorder writes
+through the ``unless_granular`` variant and never replaces a granular report.
+``mark_capability_report_running`` belongs to the check-runner lifecycle: it
+flags a run in flight while the last completed report stays readable.
 """
 
 from datetime import datetime
