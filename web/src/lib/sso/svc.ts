@@ -90,6 +90,9 @@ export function setSSOProviderEnabled(
 export interface SSOLoginDomainStatus {
   domain: string;
   verified: boolean;
+  // Whether the provider holding this domain is saved. Verifying needs a saved
+  // claim, so the record shows first and verifying unlocks on save.
+  claimed: boolean;
   // The TXT record to publish. Unset once the domain is verified.
   record_host?: string | null;
   record_value?: string | null;

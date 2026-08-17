@@ -121,8 +121,13 @@ function DomainCard({
               <Button
                 prominence="secondary"
                 onClick={onVerify}
-                disabled={busy}
+                disabled={busy || !status.claimed}
                 icon={busy ? SvgSimpleLoader : undefined}
+                tooltip={
+                  status.claimed
+                    ? undefined
+                    : "Save the provider with this domain first."
+                }
               >
                 Verify domain
               </Button>
@@ -135,7 +140,8 @@ function DomainCard({
 }
 
 // Cloud only: a domain routes no one until the workspace proves ownership with a
-// DNS TXT record. Records populate before the provider is saved, so setup is one pass.
+// DNS TXT record. The record shows for an unsaved domain so it can be published
+// early, but verifying it needs the saved claim the backend checks against.
 export default function SSODomainVerification({
   domains,
 }: SSODomainVerificationProps) {
