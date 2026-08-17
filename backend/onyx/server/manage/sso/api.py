@@ -284,7 +284,7 @@ def _list_login_domains(tenant_id: str) -> list[Any]:
 
 
 def _build_statuses(
-    tenant_id: str, domains: list[str], verified: set[str]
+    tenant_id: str, domains: list[str], verified: set[str], claimed: set[str]
 ) -> SSOLoginDomainsResponse:
     """Pair each domain with its status. A verified domain routes and needs no
     record. A pending one carries the TXT record to publish."""
@@ -296,10 +296,14 @@ def _build_statuses(
 
     def _status(domain: str) -> SSOLoginDomainStatus:
         if domain in verified:
-            return SSOLoginDomainStatus(domain=domain, verified=True)
+            return SSOLoginDomainStatus(domain=domain, verified=True, claimed=True)
         host, value = verification_record(tenant_id, domain)
         return SSOLoginDomainStatus(
-            domain=domain, verified=False, record_host=host, record_value=value
+            domain=domain,
+            verified=False,
+            claimed=domain in claimed,
+            record_host=host,
+            record_value=value,
         )
 
     return SSOLoginDomainsResponse(domains=[_status(domain) for domain in domains])
@@ -307,8 +311,9 @@ def _build_statuses(
 
 def _login_domains_response(tenant_id: str) -> SSOLoginDomainsResponse:
     records = _list_login_domains(tenant_id)
+    domains = [record.domain for record in records]
     verified = {record.domain for record in records if record.verified}
-    return _build_statuses(tenant_id, [record.domain for record in records], verified)
+    return _build_statuses(tenant_id, domains, verified, set(domains))
 
 
 def _domain_statuses(tenant_id: str, domains: list[str]) -> SSOLoginDomainsResponse:
@@ -316,10 +321,11 @@ def _domain_statuses(tenant_id: str, domains: list[str]) -> SSOLoginDomainsRespo
     be shown before the provider is saved. Domains are normalized so a mixed-case
     entry matches the lowercased catalog."""
     normalized = [domain.strip().lower() for domain in domains]
-    verified = {
-        record.domain for record in _list_login_domains(tenant_id) if record.verified
-    }
-    return _build_statuses(tenant_id, normalized, verified)
+    records = _list_login_domains(tenant_id)
+    verified = {record.domain for record in records if record.verified}
+    return _build_statuses(
+        tenant_id, normalized, verified, {record.domain for record in records}
+    )
 
 
 @admin_router.post("/domain/records")
