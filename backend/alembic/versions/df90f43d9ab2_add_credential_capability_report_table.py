@@ -6,7 +6,7 @@ per attached connector. The two partial unique indexes enforce the upsert
 semantics.
 
 Revision ID: df90f43d9ab2
-Revises: c71a18ea7d07
+Revises: c5d9662b3c50
 Create Date: 2026-08-13 10:57:12.982708
 
 """
@@ -20,7 +20,7 @@ from onyx.db.enums import CapabilityCheckTrigger, CapabilityReportRunStatus
 
 # revision identifiers, used by Alembic.
 revision = "df90f43d9ab2"
-down_revision = "c71a18ea7d07"
+down_revision = "c5d9662b3c50"
 branch_labels = None
 depends_on = None
 
