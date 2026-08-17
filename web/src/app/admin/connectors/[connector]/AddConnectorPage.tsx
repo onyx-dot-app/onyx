@@ -78,6 +78,7 @@ export interface AdvancedConfig {
 
 const BASE_CONNECTOR_URL = "/api/manage/admin/connector";
 const CONNECTOR_CREATION_TIMEOUT_MS = 10000; // ~10 seconds is reasonable for longer connector validation
+const OAUTH_REDIRECT_ERROR = "Unable to start OAuth";
 
 export async function submitConnector<T>(
   connector: ConnectorBase<T>,
@@ -273,16 +274,14 @@ export default function AddConnector({
 
   const closeCredentialModal = () => setCredentialCreationMethod(null);
 
-  // Used when the connector supports OAuth but needs no additional_kwargs,
-  // so credential creation should redirect straight into OAuth rather than
-  // show a form. If the redirect fails, open the modal to surface a
-  // retryable error instead of falling back to a contentless form.
   const attemptOauthRedirect = async () => {
-    const redirectUrl = await getConnectorOauthRedirectUrl(connector, {});
-    if (redirectUrl) {
+    try {
+      const redirectUrl = await getConnectorOauthRedirectUrl(connector, {});
       window.location.href = redirectUrl;
-    } else {
-      setCredentialCreationMethod(CredentialCreationMethod.OAuth);
+    } catch (error) {
+      toast.error(
+        error instanceof Error ? error.message : OAUTH_REDIRECT_ERROR
+      );
     }
   };
 

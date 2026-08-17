@@ -40,6 +40,8 @@ import {
 import EditCredential from "@/lib/credentials/components/EditCredential";
 import ModifyCredential from "@/lib/credentials/components/ModifyCredential";
 
+const OAUTH_REDIRECT_ERROR = "Unable to start OAuth";
+
 export interface CredentialSectionProps {
   ccPair: CCPairFullInfo;
   sourceType: ValidSources;
@@ -75,11 +77,15 @@ export default function CredentialSection({
       oauthDetails &&
       shouldRedirectToOAuth(oauthDetails)
     ) {
-      const redirectUrl = await getConnectorOauthRedirectUrl(sourceType, {});
-      if (redirectUrl) {
+      try {
+        const redirectUrl = await getConnectorOauthRedirectUrl(sourceType, {});
         window.location.href = redirectUrl;
-        return;
+      } catch (error) {
+        toast.error(
+          error instanceof Error ? error.message : OAUTH_REDIRECT_ERROR
+        );
       }
+      return;
     }
     if (method === CredentialCreationMethod.OAuth && !oauthDetails) {
       return;

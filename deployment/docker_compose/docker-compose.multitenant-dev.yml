@@ -96,6 +96,9 @@ services:
       # Linear OAuth Configs
       - LINEAR_CLIENT_ID=${LINEAR_CLIENT_ID:-}
       - LINEAR_CLIENT_SECRET=${LINEAR_CLIENT_SECRET:-}
+      # Salesforce OAuth Configs
+      - SALESFORCE_CLIENT_ID=${SALESFORCE_CLIENT_ID:-}
+      - SALESFORCE_CLIENT_SECRET=${SALESFORCE_CLIENT_SECRET:-}
       # Analytics Configs
       - SENTRY_DSN=${SENTRY_DSN:-}
       # Chat Configs
@@ -224,9 +227,12 @@ services:
       # Egnyte OAuth Configs
       - EGNYTE_CLIENT_ID=${EGNYTE_CLIENT_ID:-}
       - EGNYTE_CLIENT_SECRET=${EGNYTE_CLIENT_SECRET:-}
-      # Lienar OAuth Configs
+      # Linear OAuth Configs
       - LINEAR_CLIENT_ID=${LINEAR_CLIENT_ID:-}
       - LINEAR_CLIENT_SECRET=${LINEAR_CLIENT_SECRET:-}
+      # Salesforce OAuth Configs
+      - SALESFORCE_CLIENT_ID=${SALESFORCE_CLIENT_ID:-}
+      - SALESFORCE_CLIENT_SECRET=${SALESFORCE_CLIENT_SECRET:-}
       # Celery Configs (defaults are set in the supervisord.conf file.
       # prefer doing that to have one source of defaults)
       - CELERY_WORKER_DOCFETCHING_CONCURRENCY=${CELERY_WORKER_DOCFETCHING_CONCURRENCY:-}
