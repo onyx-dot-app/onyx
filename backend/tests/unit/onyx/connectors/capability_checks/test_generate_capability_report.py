@@ -9,7 +9,6 @@ from onyx.connectors.capability_checks.models import (
     CapabilityCheck,
     CapabilityCheckContext,
     CapabilityCheckStatus,
-    CapabilityCheckTrigger,
     CapabilityVerdict,
     CredentialCapability,
 )
@@ -17,6 +16,7 @@ from onyx.connectors.capability_checks.runner import generate_capability_report
 from onyx.connectors.exceptions import CredentialInvalidError
 from onyx.connectors.interfaces import BaseConnector
 from onyx.connectors.source_operations import SourceOperations
+from onyx.db.enums import CapabilityCheckTrigger
 
 
 class _CallableCheck(CapabilityCheck):

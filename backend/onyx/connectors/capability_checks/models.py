@@ -10,10 +10,7 @@ from onyx.configs.constants import DocumentSource
 from onyx.connectors.capabilities import CredentialCapability
 from onyx.connectors.interfaces import BaseConnector
 from onyx.connectors.source_operations import SourceOperations
-
-# Re-exported: the enum lives in ``onyx.db.enums`` so the DB report row can type
-# its trigger column without importing this framework module.
-from onyx.db.enums import CapabilityCheckTrigger as CapabilityCheckTrigger
+from onyx.db.enums import CapabilityCheckTrigger
 
 
 class CapabilityCheckStatus(str, Enum):
