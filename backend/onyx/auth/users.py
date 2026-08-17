@@ -1,4 +1,3 @@
-import base64
 import hashlib
 import os
 import random
@@ -79,6 +78,7 @@ from onyx.auth.mobile_sso.sso_completion import (
 )
 from onyx.auth.pat import get_hashed_pat_from_request
 from onyx.auth.permissions import has_global_permission
+from onyx.auth.pkce import generate_pkce_pair
 from onyx.auth.schemas import AuthBackend, UserCreate
 from onyx.auth.session_tokens import (
     SESSION_TOKEN_GRACE_PERIOD_SECONDS,
@@ -2450,16 +2450,6 @@ def generate_state_token(
 
 def generate_csrf_token() -> str:
     return secrets.token_urlsafe(32)
-
-
-def _base64url_encode(data: bytes) -> str:
-    return base64.urlsafe_b64encode(data).rstrip(b"=").decode("ascii")
-
-
-def generate_pkce_pair() -> tuple[str, str]:
-    verifier = secrets.token_urlsafe(64)
-    challenge = _base64url_encode(hashlib.sha256(verifier.encode("ascii")).digest())
-    return verifier, challenge
 
 
 def get_pkce_cookie_name(state: str) -> str:
