@@ -63,14 +63,13 @@ def _relate_credential_to_user_groups__no_commit(
     credential_id: int,
     user_group_ids: list[int],
 ) -> None:
-    credential_user_groups = []
-    for group_id in user_group_ids:
-        credential_user_groups.append(
-            Credential__UserGroup(
-                credential_id=credential_id,
-                user_group_id=group_id,
-            )
+    credential_user_groups = [
+        Credential__UserGroup(
+            credential_id=credential_id,
+            user_group_id=group_id,
         )
+        for group_id in user_group_ids
+    ]
     db_session.add_all(credential_user_groups)
 
 

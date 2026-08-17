@@ -1152,23 +1152,23 @@ def slack_retrieval(
             ),  # ALWAYS apply exclude_channels
         }
 
-        for query_string in query_strings:
-            search_tasks.append(
+        search_tasks.extend(
+            (
+                query_slack,
                 (
-                    query_slack,
-                    (
-                        query_string,
-                        access_token,
-                        query_limit,
-                        allowed_private_channel,
-                        bot_token,
-                        include_dm,
-                        dm_entities,
-                        available_channels,
-                        channel_metadata_dict,
-                    ),
-                )
+                    query_string,
+                    access_token,
+                    query_limit,
+                    allowed_private_channel,
+                    bot_token,
+                    include_dm,
+                    dm_entities,
+                    available_channels,
+                    channel_metadata_dict,
+                ),
             )
+            for query_string in query_strings
+        )
 
     # Execute searches in parallel
     results = run_functions_tuples_in_parallel(search_tasks)

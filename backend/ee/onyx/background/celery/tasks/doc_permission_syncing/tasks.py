@@ -220,9 +220,11 @@ def check_for_doc_permissions_sync(self: Task, *, tenant_id: str) -> bool | None
         with get_session_with_current_tenant() as db_session:
             cc_pairs = get_all_auto_sync_cc_pairs(db_session)
 
-            for cc_pair in cc_pairs:
-                if _is_external_doc_permissions_sync_due(cc_pair):
-                    cc_pair_ids_to_sync.append(cc_pair.id)
+            cc_pair_ids_to_sync.extend(
+                cc_pair.id
+                for cc_pair in cc_pairs
+                if _is_external_doc_permissions_sync_due(cc_pair)
+            )
 
         # Tenant-work-gating hook: refresh this tenant's active-set membership
         # whenever doc-permission sync has any due cc_pairs to dispatch.

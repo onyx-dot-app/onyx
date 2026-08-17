@@ -541,17 +541,14 @@ def get_federated_connector_detail(
             break
 
     # Get document set mappings
-    document_sets = []
-    for mapping in federated_connector.document_sets:
-        document_sets.append(
-            {
-                "id": mapping.document_set_id,
-                "name": (
-                    mapping.document_set.name if mapping.document_set else "Unknown"
-                ),
-                "entities": mapping.entities,
-            }
-        )
+    document_sets = [
+        {
+            "id": mapping.document_set_id,
+            "name": (mapping.document_set.name if mapping.document_set else "Unknown"),
+            "entities": mapping.entities,
+        }
+        for mapping in federated_connector.document_sets
+    ]
 
     return FederatedConnectorDetail(
         id=federated_connector.id,

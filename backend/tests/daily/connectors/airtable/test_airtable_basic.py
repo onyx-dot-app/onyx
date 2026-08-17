@@ -345,9 +345,7 @@ def test_airtable_connector_index_all(
 
     all_docs: list[Document] = []
     for batch in connector.load_from_state():
-        for item in batch:
-            if isinstance(item, Document):
-                all_docs.append(item)
+        all_docs.extend(item for item in batch if isinstance(item, Document))
 
     # 2 from Tickets + 4 from Support Categories + 1 from Table 3 = 7
     assert len(all_docs) == 7

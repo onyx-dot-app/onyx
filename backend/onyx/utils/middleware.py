@@ -88,10 +88,11 @@ def _build_route_map(app: FastAPI) -> list[tuple[re.Pattern[str], str]]:
     Used by endpoint context middleware to resolve request paths to route
     templates, avoiding high-cardinality raw paths in metrics labels.
     """
-    route_map: list[tuple[re.Pattern[str], str]] = []
-    for route in app.routes:
-        if isinstance(route, APIRoute):
-            route_map.append((route.path_regex, route.path))
+    route_map: list[tuple[re.Pattern[str], str]] = [
+        (route.path_regex, route.path)
+        for route in app.routes
+        if isinstance(route, APIRoute)
+    ]
     return route_map
 
 

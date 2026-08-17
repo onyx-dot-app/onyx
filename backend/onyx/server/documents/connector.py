@@ -1183,14 +1183,14 @@ def get_connector_indexing_status(
     # route is global, so a scoped manager would just 403 on click.
     federated_statuses: list[FederatedConnectorStatus] = []
     if is_connectors_admin:
-        for federated_connector in federated_connectors:
-            federated_statuses.append(
-                FederatedConnectorStatus(
-                    id=federated_connector.id,
-                    source=federated_connector.source,
-                    name=f"{federated_connector.source.replace('_', ' ').title()}",
-                )
+        federated_statuses.extend(
+            FederatedConnectorStatus(
+                id=federated_connector.id,
+                source=federated_connector.source,
+                name=f"{federated_connector.source.replace('_', ' ').title()}",
             )
+            for federated_connector in federated_connectors
+        )
 
     source_to_summary: dict[DocumentSource, SourceSummary] = {}
 

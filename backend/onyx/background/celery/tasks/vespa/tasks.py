@@ -159,8 +159,7 @@ def check_for_vespa_sync_task(self: Task, *, tenant_id: str) -> bool | None:
                         db_session=db_session, only_up_to_date=False
                     )
 
-                    for usergroup in user_groups:
-                        usergroup_ids.append(usergroup.id)
+                    usergroup_ids.extend(usergroup.id for usergroup in user_groups)
 
                 for usergroup_id in usergroup_ids:
                     lock_beat.reacquire()

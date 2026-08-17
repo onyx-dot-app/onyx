@@ -527,13 +527,9 @@ class TestDefaultProviderEndpoint:
             existing_providers = fetch_existing_llm_providers(
                 db_session, flow_type_filter=[LLMModelFlowType.CHAT]
             )
-            provider_names_to_restore: list[str] = []
 
-            for provider in existing_providers:
-                if provider.name is not None:
-                    provider_names_to_restore.append(provider.name)
-
-            # Remove all providers temporarily
+            # Remove all providers temporarily. The `finally` rollback restores
+            # them, since none of these deletes are committed.
             for provider in existing_providers:
                 remove_llm_provider(db_session, provider.id)
 

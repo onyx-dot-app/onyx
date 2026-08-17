@@ -893,9 +893,10 @@ def get_sharepoint_external_groups(
         return external_user_groups
 
     already_resolved = set(groups_and_members.groups_to_emails.keys())
-    for group in _enumerate_ad_groups_paginated(
-        get_access_token, already_resolved, graph_api_base
-    ):
-        external_user_groups.append(group)
+    external_user_groups.extend(
+        _enumerate_ad_groups_paginated(
+            get_access_token, already_resolved, graph_api_base
+        )
+    )
 
     return external_user_groups

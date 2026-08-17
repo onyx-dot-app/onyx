@@ -301,14 +301,13 @@ class BaseSchemaValidator:
                 print("PASSED - No .rels files found")
             return True
 
-        all_files = []
-        for file_path in self.unpacked_dir.rglob("*"):
-            if (
-                file_path.is_file()
-                and file_path.name != "[Content_Types].xml"
-                and not file_path.name.endswith(".rels")
-            ):
-                all_files.append(file_path.resolve())
+        all_files = [
+            file_path.resolve()
+            for file_path in self.unpacked_dir.rglob("*")
+            if file_path.is_file()
+            and file_path.name != "[Content_Types].xml"
+            and not file_path.name.endswith(".rels")
+        ]
 
         all_referenced_files = set()
 
@@ -665,10 +664,10 @@ class BaseSchemaValidator:
                 continue
 
             new_errors.append(f"  {relative_path}: {len(new_file_errors)} new error(s)")
-            for error in list(new_file_errors)[:3]:
-                new_errors.append(
-                    f"    - {error[:250]}..." if len(error) > 250 else f"    - {error}"
-                )
+            new_errors.extend(
+                f"    - {error[:250]}..." if len(error) > 250 else f"    - {error}"
+                for error in list(new_file_errors)[:3]
+            )
 
         if self.verbose:
             print(f"Validated {len(self.xml_files)} files:")
@@ -831,10 +830,10 @@ class BaseSchemaValidator:
                 return text
             matches = list(template_pattern.finditer(text))
             if matches:
-                for match in matches:
-                    warnings.append(
-                        f"Found template tag in {content_type}: {match.group()}"
-                    )
+                warnings.extend(
+                    f"Found template tag in {content_type}: {match.group()}"
+                    for match in matches
+                )
                 return template_pattern.sub("", text)
             return text
 

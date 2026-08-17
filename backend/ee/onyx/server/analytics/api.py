@@ -267,15 +267,14 @@ def get_assistant_stats(
     all_dates = set(daily_messages_map.keys()) | set(daily_unique_users_map.keys())
 
     # Merge both sets of metrics by date
-    daily_results: list[AssistantDailyUsageResponse] = []
-    for date in sorted(all_dates):
-        daily_results.append(
-            AssistantDailyUsageResponse(
-                date=date,
-                total_messages=daily_messages_map.get(date, 0),
-                total_unique_users=daily_unique_users_map.get(date, 0),
-            )
+    daily_results: list[AssistantDailyUsageResponse] = [
+        AssistantDailyUsageResponse(
+            date=date,
+            total_messages=daily_messages_map.get(date, 0),
+            total_unique_users=daily_unique_users_map.get(date, 0),
         )
+        for date in sorted(all_dates)
+    ]
 
     # Now pull a single total distinct user count across the entire time range
     total_msgs = sum(d.total_messages for d in daily_results)

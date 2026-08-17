@@ -101,15 +101,15 @@ def compute_uncovered_units(
         if spec.untested is not None:
             continue
         for variant in spec.variants or (None,):
-            for capability in spec.capabilities:
-                if (operation, variant, capability) not in exercised:
-                    uncovered.append(
-                        UncoveredUnit(
-                            operation=operation,
-                            variant=variant,
-                            capability=capability,
-                        )
-                    )
+            uncovered.extend(
+                UncoveredUnit(
+                    operation=operation,
+                    variant=variant,
+                    capability=capability,
+                )
+                for capability in spec.capabilities
+                if (operation, variant, capability) not in exercised
+            )
     return uncovered
 
 
@@ -171,13 +171,13 @@ def find_import_fence_violations(
                     imported = [node.module]
                 else:
                     continue
-                for module in imported:
-                    if module.split(".")[0] in roots:
-                        violations.append(
-                            FenceViolation(
-                                file=str(path),
-                                line=node.lineno,
-                                module=module,
-                            )
-                        )
+                violations.extend(
+                    FenceViolation(
+                        file=str(path),
+                        line=node.lineno,
+                        module=module,
+                    )
+                    for module in imported
+                    if module.split(".")[0] in roots
+                )
     return violations
