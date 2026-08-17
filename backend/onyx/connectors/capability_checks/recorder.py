@@ -78,19 +78,19 @@ def _synthesize_results(
         )
     ]
     if perm_sync_validated:
-        for capability in applicable - {CredentialCapability.INDEXING}:
-            results.append(
-                CapabilityCheckResult(
-                    capability=capability,
-                    check_id=f"{source.value}_perm_sync",
-                    display_name="Permission sync validation",
-                    required=True,
-                    status=status,
-                    message=message,
-                    error_type=error_type,
-                    is_fallback=True,
-                )
+        results.extend(
+            CapabilityCheckResult(
+                capability=capability,
+                check_id=f"{source.value}_perm_sync",
+                display_name="Permission sync validation",
+                required=True,
+                status=status,
+                message=message,
+                error_type=error_type,
+                is_fallback=True,
             )
+            for capability in applicable - {CredentialCapability.INDEXING}
+        )
     return results
 
 
