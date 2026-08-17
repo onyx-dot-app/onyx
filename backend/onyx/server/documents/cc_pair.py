@@ -879,13 +879,6 @@ def associate_credential_to_connector(
             )
         return response
     except ValidationError as e:
-        # only delete the orphan this flow owns; the cascade would take others' pairs
-        # NOTE: consensus is that it makes sense to unify connector and ccpair creation
-        # flows which would rid us of needing to handle cases like these
-        if not existing_cc_pair_ids:
-            delete_connector(db_session, connector_id)
-            db_session.commit()
-
         raise OnyxError(
             OnyxErrorCode.INVALID_INPUT,
             "Connector validation error: " + str(e),
