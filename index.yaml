@@ -24,6 +24,75 @@ entries:
       org.opencontainers.image.source: https://github.com/onyx-dot-app/onyx
     apiVersion: v2
     appVersion: latest
+    created: "2026-08-17T18:43:31.177550358Z"
+    dependencies:
+    - alias: postgresql
+      condition: postgresqlOperator.enabled,postgresql.enabled
+      name: cloudnative-pg
+      repository: https://cloudnative-pg.github.io/charts
+      version: 0.26.0
+    - condition: postgresql.installCRDs,postgresqlOperator.enabled,postgresql.enabled
+      name: onyx-cnpg-crds
+      repository: file://../onyx-cnpg-crds
+      version: 0.1.0
+    - condition: opensearch.enabled
+      name: opensearch
+      repository: https://opensearch-project.github.io/helm-charts
+      version: 3.6.0
+    - alias: nginx
+      condition: nginx.enabled
+      name: ingress-nginx
+      repository: https://kubernetes.github.io/ingress-nginx
+      version: 4.13.3
+    - condition: redisOperator.enabled,redis.enabled
+      name: redis-operator
+      repository: https://ot-container-kit.github.io/helm-charts
+      version: 0.24.0
+    - condition: redis.enabled
+      name: redis
+      repository: https://ot-container-kit.github.io/helm-charts
+      version: 0.16.6
+    - condition: minio.enabled
+      name: minio
+      repository: https://charts.min.io/
+      version: 5.4.0
+    - condition: codeInterpreter.enabled
+      name: code-interpreter
+      repository: https://onyx-dot-app.github.io/python-sandbox/
+      version: 0.4.6
+    description: Onyx application and Craft sandbox deployment chart
+    digest: 23833e2a00f6d8f975177b96c11a16c0b8e056a529a92f189ebc777a5e3deb39
+    home: https://www.onyx.app/
+    name: onyx
+    sources:
+    - https://github.com/onyx-dot-app/onyx
+    type: application
+    urls:
+    - https://github.com/onyx-dot-app/onyx/releases/download/helm/onyx-0.8.17/onyx-0.8.17.tgz
+    version: 0.8.17
+  - annotations:
+      artifacthub.io/changes: |
+        - kind: added
+          description: The chart is now also published as an OCI artifact at
+            `oci://ghcr.io/onyx-dot-app/charts/onyx`. Install it with
+            `helm install onyx oci://ghcr.io/onyx-dot-app/charts/onyx --version <version>`.
+            The existing repository at https://onyx-dot-app.github.io/onyx keeps working
+            and stays the default install path; no action is needed to keep using it.
+        - kind: changed
+          description: Chart tarballs are now attached to GitHub releases
+            (`helm/onyx-<version>`) instead of being committed to the gh-pages branch.
+            `helm repo add` and `helm install` are unaffected — only the download URL
+            behind index.yaml changed.
+      category: Productivity
+      images: |
+        - name: webserver
+          image: docker.io/onyxdotapp/onyx-web-server:latest
+        - name: background
+          image: docker.io/onyxdotapp/onyx-backend:latest
+      licenses: MIT
+      org.opencontainers.image.source: https://github.com/onyx-dot-app/onyx
+    apiVersion: v2
+    appVersion: latest
     created: "2026-08-14T16:55:54.192528213Z"
     dependencies:
     - alias: postgresql
@@ -7390,4 +7459,4 @@ entries:
     urls:
     - https://github.com/onyx-dot-app/onyx/releases/download/onyx-stack-0.2.4/onyx-stack-0.2.4.tgz
     version: 0.2.4
-generated: "2026-08-14T16:55:54.192797137Z"
+generated: "2026-08-17T18:43:31.177927644Z"
