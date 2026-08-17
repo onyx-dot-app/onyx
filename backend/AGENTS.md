@@ -150,6 +150,13 @@ verification is necessary) over any other type of test.
 
 Tests are parallelized at a directory level.
 
+Careful: these tests call `reset_all()`, which wipes Postgres and the file store for the current
+project. Do not point them at data you want to keep.
+
+`ods test integration` runs `backend/tests/integration/tests`, the same set CI shards. The sibling
+directories need a setup of their own, so give a path to run one, for example
+`ods test backend/tests/integration/multitenant_tests`.
+
 When writing integration tests, make sure to check the root `conftest.py` for useful fixtures + the `backend/tests/integration/common_utils` directory for utilities. Prefer (if one exists), calling the appropriate Manager
 class in the utils over directly calling the APIs with a library like `requests`. Prefer using fixtures rather than
 calling the utilities directly (e.g. do NOT create admin users with

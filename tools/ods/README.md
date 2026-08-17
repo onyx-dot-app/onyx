@@ -272,6 +272,15 @@ need credentials read `.vscode/.env`, which is created from
 `.vscode/env_template.txt` on first use. Enterprise Edition features are on by
 default; use `--no-ee` to turn them off.
 
+A bare `ods test integration` runs `backend/tests/integration/tests`, which is
+what CI shards. The sibling directories under `backend/tests/integration` each
+need a setup of their own — `multitenant_tests` a multi-tenant deployment,
+`connector_job_tests` connector credentials — so give a path to run one.
+
+**Careful:** the integration suite calls `reset_all()`, which wipes Postgres and
+the file store for the current project. Do not point it at data you want to
+keep.
+
 **Examples:**
 
 ```shell

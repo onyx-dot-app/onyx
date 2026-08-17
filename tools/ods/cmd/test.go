@@ -106,11 +106,12 @@ func runPytestSuite(root string, suite *testsuite.Suite, suiteArgs []string, opt
 	if opts.Parallel {
 		pytestArgs = append(pytestArgs, "-n", "auto")
 	}
-	if len(suiteArgs) > 0 {
-		pytestArgs = append(pytestArgs, suiteArgs...)
-	} else {
-		pytestArgs = append(pytestArgs, suite.Target)
+	// The target goes first so that a user argument for the same option still
+	// wins. Without one, pytest would collect from all of backend/.
+	if !testsuite.HasTarget(suiteArgs) {
+		pytestArgs = append(pytestArgs, suite.DefaultTarget())
 	}
+	pytestArgs = append(pytestArgs, suiteArgs...)
 
 	envVars := eeEnvDefaults(opts.NoEE)
 	if suite.NeedsBackendEnv {
@@ -120,6 +121,9 @@ func runPytestSuite(root string, suite *testsuite.Suite, suiteArgs []string, opt
 	}
 
 	suiteDir := filepath.Join(root, suite.Dir)
+	if suite.Caution != "" {
+		log.Warnf("Careful: %s", suite.Caution)
+	}
 	log.Infof("Running %s tests...", suite.Name)
 	log.Debugf("Running in %s: uv %v", suiteDir, pytestArgs)
 
@@ -186,6 +190,9 @@ func testHelpDescription() string {
 The first argument is a suite name or a path inside a suite. A path picks the
 suite that covers it, so you can pass a file straight from an editor. Every
 later argument goes to the underlying runner.
+
+Careful: the integration suite calls reset_all(), which wipes Postgres and the
+file store for this project. Do not point it at data you want to keep.
 
 Examples:
   ods test unit

@@ -36,10 +36,17 @@ type Suite struct {
 	Runner Runner
 	// Dir is the working directory for the runner, relative to the git root.
 	Dir string
-	// Target is the suite's root test path, relative to Dir. It doubles as
-	// the default argument for pytest and as the prefix used to infer the
-	// suite from a path.
+	// Target is the suite's root test path, relative to Dir. It is the prefix
+	// used to infer the suite from a path, and the default argument for
+	// pytest unless Default overrides it.
 	Target string
+	// Default overrides Target as the argument used when the caller gives no
+	// path. Set it where the suite root holds more than a plain run should
+	// take on.
+	Default string
+	// Caution is a one-line warning printed before the suite runs. Set it
+	// where a run changes state outside the test process.
+	Caution string
 	// NeedsBackendEnv marks suites that need credentials from .vscode/.env.
 	NeedsBackendEnv bool
 	// DefaultArgs are passed to the runner before any user arguments, so a
@@ -52,6 +59,14 @@ type Suite struct {
 // Prefix returns the suite's test path relative to the git root.
 func (s *Suite) Prefix() string {
 	return path(s.Dir, s.Target)
+}
+
+// DefaultTarget returns the path to run when the caller gives no path.
+func (s *Suite) DefaultTarget() string {
+	if s.Default != "" {
+		return s.Default
+	}
+	return s.Target
 }
 
 // suites is the routing table. Order here is the order shown in help.
@@ -76,12 +91,18 @@ var suites = []Suite{
 		Short:       "External dependency unit tests (needs Postgres, Redis, OpenSearch, MinIO)",
 	},
 	{
-		Name:            "integration",
-		Aliases:         []string{"int"},
-		Runner:          RunnerPytest,
-		Dir:             "backend",
-		Target:          "tests/integration",
+		Name:    "integration",
+		Aliases: []string{"int"},
+		Runner:  RunnerPytest,
+		Dir:     "backend",
+		Target:  "tests/integration",
+		// A bare run covers what CI shards. The sibling directories need a
+		// setup of their own — multitenant_tests a multi-tenant deployment,
+		// connector_job_tests connector credentials — so they are reachable
+		// by path but are not part of a plain `ods test integration`.
+		Default:         "tests/integration/tests",
 		NeedsBackendEnv: true,
+		Caution:         "these tests call reset_all(), which wipes Postgres and the file store for this project",
 		Short:           "Backend integration tests (needs a full Onyx deployment)",
 	},
 	{
@@ -186,6 +207,22 @@ func Resolve(root, cwd string, args []string) (*Suite, []string, error) {
 	// the bare-word caution that applies to later arguments is not needed.
 	rest := relocate(root, cwd, suite, args[1:])
 	return suite, append([]string{path(target)}, rest...), nil
+}
+
+// HasTarget reports whether args already name a test target. It takes the
+// suite-relative arguments returned by Resolve, where a target always carries a
+// path separator or a node id.
+//
+// Callers need this because pytest with no target collects from its working
+// directory. For a backend suite that is the whole of backend/, so
+// `ods test unit -k foo` would reach every backend test, integration included.
+func HasTarget(args []string) bool {
+	for _, arg := range args {
+		if looksLikePath(arg) {
+			return true
+		}
+	}
+	return false
 }
 
 // relocate rewrites arguments that name an existing path into paths relative

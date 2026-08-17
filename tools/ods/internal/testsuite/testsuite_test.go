@@ -334,3 +334,64 @@ func TestSuitePrefixes(t *testing.T) {
 		}
 	}
 }
+
+func TestHasTarget(t *testing.T) {
+	tests := []struct {
+		name string
+		args []string
+		want bool
+	}{
+		{name: "no args", args: nil, want: false},
+		{name: "flags only", args: []string{"-k", "web"}, want: false},
+		{name: "long flag only", args: []string{"--collect-only"}, want: false},
+		{name: "directory", args: []string{"tests/unit/onyx"}, want: true},
+		{name: "file", args: []string{"tests/unit/onyx/test_foo.py"}, want: true},
+		{name: "node id", args: []string{"tests/unit/test_foo.py::test_bar"}, want: true},
+		{name: "target after a flag", args: []string{"-x", "tests/unit/onyx"}, want: true},
+	}
+
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			if got := HasTarget(tc.args); got != tc.want {
+				t.Errorf("HasTarget(%v) = %v, want %v", tc.args, got, tc.want)
+			}
+		})
+	}
+}
+
+func TestSuiteDefaultTargets(t *testing.T) {
+	want := map[string]string{
+		"unit":     "tests/unit",
+		"external": "tests/external_dependency_unit",
+		// Narrower than the prefix: the sibling directories under
+		// tests/integration need a setup a plain run does not provide.
+		"integration": "tests/integration/tests",
+		"web":         "",
+		"e2e":         "tests/e2e",
+		"mobile":      "",
+		"backend":     "tests",
+	}
+	for _, suite := range All() {
+		if got := suite.DefaultTarget(); got != want[suite.Name] {
+			t.Errorf("%s default target = %q, want %q", suite.Name, got, want[suite.Name])
+		}
+	}
+}
+
+// A narrowed default must not narrow inference: a path under a sibling
+// directory still resolves to the suite that owns it.
+func TestResolveReachesPathsOutsideTheDefaultTarget(t *testing.T) {
+	root := newRepo(t, "backend/tests/integration/multitenant_tests/test_tenant.py")
+
+	suite, args, err := Resolve(root, root, []string{"backend/tests/integration/multitenant_tests/test_tenant.py"})
+	if err != nil {
+		t.Fatalf("Resolve returned error: %v", err)
+	}
+	if suite.Name != "integration" {
+		t.Fatalf("suite = %q, want integration", suite.Name)
+	}
+	want := []string{"tests/integration/multitenant_tests/test_tenant.py"}
+	if len(args) != 1 || args[0] != want[0] {
+		t.Errorf("args = %v, want %v", args, want)
+	}
+}
