@@ -2096,14 +2096,18 @@ class GoogleDriveConnector(
             )
 
             # Build slim documents
-            for file in files_batch:
-                if doc := build_slim_document(
-                    self.creds,
-                    file.drive_file,
-                    permission_sync_context,
-                    retriever_email=file.user_email,
-                ):
-                    slim_batch.append(doc)
+            slim_batch.extend(
+                doc
+                for file in files_batch
+                if (
+                    doc := build_slim_document(
+                        self.creds,
+                        file.drive_file,
+                        permission_sync_context,
+                        retriever_email=file.user_email,
+                    )
+                )
+            )
 
             # Combine: hierarchy nodes first, then slim docs
             result: list[SlimDocument | HierarchyNode] = []

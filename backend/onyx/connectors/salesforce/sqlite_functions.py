@@ -466,7 +466,7 @@ class OnyxSalesforceSQLite:
             parent_relationship_fields = parent_relationship_fields_by_type[
                 changed_type
             ]
-            for field_name, _ in parent_relationship_fields.items():
+            for field_name in parent_relationship_fields:
                 if field_name not in sf_object.data:
                     logger.warning(
                         "field_name=%r not in data for changed_type=%r!",

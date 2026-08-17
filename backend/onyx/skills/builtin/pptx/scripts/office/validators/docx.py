@@ -332,20 +332,20 @@ class DOCXSchemaValidator(BaseSchemaValidator):
             }
 
             orphaned_ends = range_ends - range_starts
-            for comment_id in sorted(
-                orphaned_ends, key=lambda x: int(x) if x and x.isdigit() else 0
-            ):
-                errors.append(
-                    f'  document.xml: commentRangeEnd id="{comment_id}" has no matching commentRangeStart'
+            errors.extend(
+                f'  document.xml: commentRangeEnd id="{comment_id}" has no matching commentRangeStart'
+                for comment_id in sorted(
+                    orphaned_ends, key=lambda x: int(x) if x and x.isdigit() else 0
                 )
+            )
 
             orphaned_starts = range_starts - range_ends
-            for comment_id in sorted(
-                orphaned_starts, key=lambda x: int(x) if x and x.isdigit() else 0
-            ):
-                errors.append(
-                    f'  document.xml: commentRangeStart id="{comment_id}" has no matching commentRangeEnd'
+            errors.extend(
+                f'  document.xml: commentRangeStart id="{comment_id}" has no matching commentRangeEnd'
+                for comment_id in sorted(
+                    orphaned_starts, key=lambda x: int(x) if x and x.isdigit() else 0
                 )
+            )
 
             comment_ids = set()
             if comments_xml and comments_xml.exists():
@@ -359,13 +359,13 @@ class DOCXSchemaValidator(BaseSchemaValidator):
 
                 marker_ids = range_starts | range_ends | references
                 invalid_refs = marker_ids - comment_ids
-                for comment_id in sorted(
-                    invalid_refs, key=lambda x: int(x) if x and x.isdigit() else 0
-                ):
-                    if comment_id:
-                        errors.append(
-                            f'  document.xml: marker id="{comment_id}" references non-existent comment'
-                        )
+                errors.extend(
+                    f'  document.xml: marker id="{comment_id}" references non-existent comment'
+                    for comment_id in sorted(
+                        invalid_refs, key=lambda x: int(x) if x and x.isdigit() else 0
+                    )
+                    if comment_id
+                )
 
         except (lxml.etree.XMLSyntaxError, Exception) as e:
             errors.append(f"  Error parsing XML: {e}")

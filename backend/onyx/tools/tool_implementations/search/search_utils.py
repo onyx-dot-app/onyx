@@ -243,7 +243,7 @@ def merge_overlapping_sections(
     merged_sections: dict[tuple[str, int], InferenceSection] = {}
 
     # Process each document's sections
-    for _doc_id, doc_section_list in doc_sections.items():
+    for doc_section_list in doc_sections.values():
         if not doc_section_list:
             continue
 

@@ -329,13 +329,13 @@ class LinearConnector(LoadConnector, PollConnector, OAuthConnector):
                 ]
 
                 # Add comment sections
-                for comment in node["comments"]["nodes"]:
-                    sections.append(
-                        TextSection(
-                            link=node["url"],
-                            text=comment["body"] or "",
-                        )
+                sections.extend(
+                    TextSection(
+                        link=node["url"],
+                        text=comment["body"] or "",
                     )
+                    for comment in node["comments"]["nodes"]
+                )
 
                 # Cast the sections list to the expected type
                 typed_sections = cast(list[TextSection | ImageSection], sections)

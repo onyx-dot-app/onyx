@@ -292,7 +292,7 @@ ignore = [
     "B904", # raise-without-from-inside-except (~465 existing violations).
 ]
 # G004: f-strings in logging break Sentry's message-pattern grouping.
-select = ["ARG", "B", "E", "F", "G004", "I", "S", "W"]
+select = ["ARG", "B", "E", "F", "G004", "I", "PERF", "S", "W"]
 
 [tool.ruff.lint.flake8-bugbear]
 # FastAPI dependency-injection markers are the intended way to write these

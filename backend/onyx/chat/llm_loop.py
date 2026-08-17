@@ -512,7 +512,6 @@ def construct_message_history(
     # Track dropped file messages so we can provide their metadata to the
     # FileReaderTool instead.
     truncated_history_before: list[ChatMessageSimple] = []
-    dropped_file_ids: list[str] = []
     current_token_count = 0
 
     for msg in reversed(history_before_last_user):
@@ -531,9 +530,11 @@ def construct_message_history(
     # recent messages, so the dropped ones are at the start of the original
     # list up to (len(history) - len(kept)).
     num_kept = len(truncated_history_before)
-    for msg in history_before_last_user[: len(history_before_last_user) - num_kept]:
-        if msg.file_id is not None:
-            dropped_file_ids.append(msg.file_id)
+    dropped_file_ids: list[str] = [
+        msg.file_id
+        for msg in history_before_last_user[: len(history_before_last_user) - num_kept]
+        if msg.file_id is not None
+    ]
 
     # Also treat "orphaned" metadata entries as dropped -- these are files
     # from messages removed by summary truncation (before convert_chat_history
@@ -663,10 +664,10 @@ def _create_file_tool_metadata_message(
         "read sections of any file. You MUST pass the file_id UUID (not the "
         "filename) to read_file:"
     ]
-    for meta in file_metadata:
-        lines.append(
-            f'- file_id="{meta.file_id}" filename="{meta.filename}" (~{meta.approx_char_count:,} chars)'
-        )
+    lines.extend(
+        f'- file_id="{meta.file_id}" filename="{meta.filename}" (~{meta.approx_char_count:,} chars)'
+        for meta in file_metadata
+    )
 
     message_content = "\n".join(lines)
     return ChatMessageSimple(

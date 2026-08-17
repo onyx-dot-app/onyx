@@ -955,25 +955,28 @@ class JiraConnector(
 
                 # Yield hierarchy nodes BEFORE the slim document (parent-before-child)
                 # 1. Yield project hierarchy node (if not already yielded)
-                for node in self._yield_project_hierarchy_node(
-                    project_key, project_name, seen_hierarchy_node_ids
-                ):
-                    slim_doc_batch.append(node)
+                slim_doc_batch.extend(
+                    self._yield_project_hierarchy_node(
+                        project_key, project_name, seen_hierarchy_node_ids
+                    )
+                )
 
                 # 2. If parent is an Epic, yield hierarchy node for it
                 parent = best_effort_get_field_from_issue(issue, _FIELD_PARENT)
                 if parent:
-                    for node in self._yield_parent_hierarchy_node_if_epic(
-                        parent, project_key, seen_hierarchy_node_ids
-                    ):
-                        slim_doc_batch.append(node)
+                    slim_doc_batch.extend(
+                        self._yield_parent_hierarchy_node_if_epic(
+                            parent, project_key, seen_hierarchy_node_ids
+                        )
+                    )
 
                 # 3. If this issue IS an Epic, yield it as hierarchy node
                 if self._is_epic(issue):
-                    for node in self._yield_epic_hierarchy_node(
-                        issue, project_key, seen_hierarchy_node_ids
-                    ):
-                        slim_doc_batch.append(node)
+                    slim_doc_batch.extend(
+                        self._yield_epic_hierarchy_node(
+                            issue, project_key, seen_hierarchy_node_ids
+                        )
+                    )
 
                 # Now add the slim document
                 issue_key = best_effort_get_field_from_issue(issue, _FIELD_KEY)

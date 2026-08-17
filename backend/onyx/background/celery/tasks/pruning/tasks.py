@@ -238,8 +238,7 @@ def check_for_pruning(self: Task, *, tenant_id: str) -> bool | None:
             cc_pair_ids: list[int] = []
             with get_session_with_current_tenant() as db_session:
                 cc_pairs = get_connector_credential_pairs(db_session)
-                for cc_pair_entry in cc_pairs:
-                    cc_pair_ids.append(cc_pair_entry.id)
+                cc_pair_ids.extend(cc_pair_entry.id for cc_pair_entry in cc_pairs)
 
             prune_dispatched = False
             for cc_pair_id in cc_pair_ids:

@@ -882,19 +882,19 @@ def list_llm_provider_basics(
 
     all_providers = fetch_existing_llm_providers(db_session, [])
 
-    accessible_providers = []
-
-    for provider in all_providers:
-        # Use centralized access control logic with persona=None since we're
-        # listing providers without a specific persona context. This correctly:
-        # - Includes public providers WITHOUT persona restrictions
-        # - Includes providers user can access via group membership
-        # - Excludes providers with persona restrictions (requires specific persona)
-        # - Excludes non-public providers with no restrictions (admin-only)
+    # Use centralized access control logic with persona=None since we're
+    # listing providers without a specific persona context. This correctly:
+    # - Includes public providers WITHOUT persona restrictions
+    # - Includes providers user can access via group membership
+    # - Excludes providers with persona restrictions (requires specific persona)
+    # - Excludes non-public providers with no restrictions (admin-only)
+    accessible_providers = [
+        LLMProviderDescriptor.from_model(provider)
+        for provider in all_providers
         if can_user_access_llm_provider(
             provider, user_group_ids, persona=None, can_manage_llms=can_manage_llms
-        ):
-            accessible_providers.append(LLMProviderDescriptor.from_model(provider))
+        )
+    ]
 
     end_time = datetime.now(timezone.utc)
     duration = (end_time - start_time).total_seconds()
@@ -956,9 +956,11 @@ def get_valid_model_names_for_persona(
             llm_provider_model, user_group_ids, persona, can_manage_llms=can_manage_llms
         ):
             # Collect all model names from this provider
-            for model_config in llm_provider_model.model_configurations:
-                if model_config.is_visible:
-                    valid_models.append(model_config.name)
+            valid_models.extend(
+                model_config.name
+                for model_config in llm_provider_model.model_configurations
+                if model_config.is_visible
+            )
 
     return valid_models
 
@@ -1036,16 +1038,14 @@ def list_llm_providers_for_persona(
         db_session, [LLMModelFlowType.CHAT, LLMModelFlowType.VISION]
     )
 
-    llm_provider_list: list[LLMProviderDescriptor] = []
-
-    for llm_provider_model in all_providers:
-        # Check access with persona context — respects persona restrictions
+    # Check access with persona context — respects persona restrictions
+    llm_provider_list: list[LLMProviderDescriptor] = [
+        LLMProviderDescriptor.from_model(llm_provider_model)
+        for llm_provider_model in all_providers
         if can_user_access_llm_provider(
             llm_provider_model, user_group_ids, persona, can_manage_llms=can_manage_llms
-        ):
-            llm_provider_list.append(
-                LLMProviderDescriptor.from_model(llm_provider_model)
-            )
+        )
+    ]
 
     end_time = datetime.now(timezone.utc)
     duration = (end_time - start_time).total_seconds()
