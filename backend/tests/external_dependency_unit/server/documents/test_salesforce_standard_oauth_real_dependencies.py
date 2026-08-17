@@ -17,14 +17,14 @@ from onyx.connectors.cross_connector_utils.miscellaneous_utils import (
 from onyx.connectors.salesforce import auth as salesforce_auth
 from onyx.connectors.salesforce import connector as salesforce_connector
 from onyx.connectors.salesforce.models import SalesforceAuthenticationMethod
-from onyx.db.models import Credential, UserRole
+from onyx.db.models import Credential
 from onyx.error_handling.exceptions import OnyxError
 from onyx.redis.redis_pool import get_redis_client
 from onyx.server.documents import standard_oauth
 from onyx.server.documents.standard_oauth import OAuthState
 from onyx.utils.sensitive import SensitiveValue
 from shared_configs.contextvars import get_current_tenant_id
-from tests.external_dependency_unit.conftest import create_test_user
+from tests.external_dependency_unit.conftest import create_test_user, delete_test_user
 
 _CLIENT_ID = "salesforce-edu-client"
 _CLIENT_SECRET = "salesforce-edu-secret"
@@ -92,9 +92,7 @@ def test_salesforce_standard_oauth_real_redis_postgres_flow(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     token_request = _configure_salesforce_oauth(monkeypatch)
-    admin_user = create_test_user(
-        db_session, "salesforce_oauth_admin", role=UserRole.ADMIN
-    )
+    admin_user = create_test_user(db_session, "salesforce_oauth_admin", is_admin=True)
     redis_client = get_redis_client()
     credential_id: int | None = None
     state: str | None = None
@@ -214,7 +212,7 @@ def test_salesforce_standard_oauth_real_redis_postgres_flow(
             credential = db_session.get(Credential, credential_id)
             if credential is not None:
                 db_session.delete(credential)
-        db_session.delete(admin_user)
+        delete_test_user(db_session, admin_user)
         db_session.commit()
 
 
@@ -225,7 +223,7 @@ def test_salesforce_standard_oauth_invalid_domain_and_disabled_config(
 ) -> None:
     _configure_salesforce_oauth(monkeypatch)
     admin_user = create_test_user(
-        db_session, "salesforce_oauth_disabled_admin", role=UserRole.ADMIN
+        db_session, "salesforce_oauth_disabled_admin", is_admin=True
     )
     redis_client = get_redis_client()
     invalid_state_key = _state_key(str(_INVALID_STATE))
@@ -272,5 +270,5 @@ def test_salesforce_standard_oauth_invalid_domain_and_disabled_config(
         )
     finally:
         redis_client.delete(invalid_state_key)
-        db_session.delete(admin_user)
+        delete_test_user(db_session, admin_user)
         db_session.commit()
