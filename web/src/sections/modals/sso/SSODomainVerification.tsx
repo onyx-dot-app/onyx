@@ -18,15 +18,13 @@ interface SSODomainVerificationProps {
   domains: string[];
 }
 
-function RecordRow({
-  label,
-  value,
-  copyable,
-}: {
+interface RecordRowProps {
   label: string;
   value: string;
   copyable?: boolean;
-}) {
+}
+
+function RecordRow({ label, value, copyable }: RecordRowProps) {
   const group = useId();
   const row = (
     <Section
@@ -59,15 +57,13 @@ function RecordRow({
   return copyable ? <Hoverable.Root group={group}>{row}</Hoverable.Root> : row;
 }
 
-function DomainCard({
-  status,
-  busy,
-  onVerify,
-}: {
+interface DomainCardProps {
   status: SSOLoginDomainStatus;
   busy: boolean;
   onVerify: () => void;
-}) {
+}
+
+function DomainCard({ status, busy, onVerify }: DomainCardProps) {
   return (
     <Card border="solid" rounding="lg">
       <Section flexDirection="column" alignItems="stretch" height="fit" gap={3}>
