@@ -173,9 +173,10 @@ export default function SSODomainVerification({
       withLabel
     >
       <Section flexDirection="column" alignItems="stretch" height="fit" gap={3}>
-        {error && rows.length === 0 ? (
-          // Without the records there is nothing to publish, so say so and offer
-          // the retry rather than rendering an empty section.
+        {/* Sits above the rows rather than replacing them: a failed refresh
+            keeps the last rows, and showing them as current would hide that
+            their verified state is no longer known. */}
+        {error && (
           <Card border="solid" rounding="lg">
             <Section
               flexDirection="row"
@@ -185,14 +186,17 @@ export default function SSODomainVerification({
               gap={2}
             >
               <Text font="main-ui-body" color="text-03" as="span">
-                We couldn&apos;t load the DNS records.
+                {rows.length > 0
+                  ? "We couldn't refresh these records, so they may be out of date."
+                  : "We couldn't load the DNS records."}
               </Text>
               <Button prominence="secondary" onClick={() => void mutate()}>
                 Try again
               </Button>
             </Section>
           </Card>
-        ) : isLoading && rows.length === 0 ? (
+        )}
+        {isLoading && rows.length === 0 ? (
           <Section flexDirection="row" alignItems="center" height="fit" gap={2}>
             <SvgSimpleLoader className="text-text-03" />
             <Text font="main-ui-body" color="text-03">
