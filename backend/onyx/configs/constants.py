@@ -680,6 +680,9 @@ class OnyxCeleryTask:
 
     GENERATE_USAGE_REPORT_TASK = "generate_usage_report_task"
 
+    # cloud SSO: re-resolve verified domains' DNS proof and re-project routing
+    REVALIDATE_SSO_DOMAINS_TASK = "revalidate_sso_domains_task"
+
     EVAL_RUN_TASK = "eval_run_task"
     SCHEDULED_EVAL_TASK = "scheduled_eval_task"
 

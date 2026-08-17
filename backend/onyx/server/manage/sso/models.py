@@ -27,6 +27,26 @@ class SSOProviderEnabledRequest(BaseModel):
     enabled: bool
 
 
+class SSOLoginDomainStatus(BaseModel):
+    domain: str
+    verified: bool
+    # The TXT record to publish to prove control. Unset once verified.
+    record_host: str | None = None
+    record_value: str | None = None
+
+
+class SSOLoginDomainsResponse(BaseModel):
+    domains: list[SSOLoginDomainStatus]
+
+
+class SSODomainVerifyRequest(BaseModel):
+    domain: str
+
+
+class SSODomainRecordsRequest(BaseModel):
+    domains: list[str]
+
+
 class SSOProviderResponse(BaseModel):
     id: int
     name: str
