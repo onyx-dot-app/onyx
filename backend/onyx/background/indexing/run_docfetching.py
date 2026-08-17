@@ -32,6 +32,9 @@ from onyx.configs.constants import (
     OnyxCeleryQueues,
     OnyxCeleryTask,
 )
+from onyx.connectors.capability_checks.recorder import (
+    record_blocking_validation_outcome,
+)
 from onyx.connectors.connector_runner import ConnectorRunner
 from onyx.connectors.exceptions import (
     ConnectorValidationError,
@@ -57,6 +60,7 @@ from onyx.db.constants import CONNECTOR_VALIDATION_ERROR_MESSAGE_PREFIX
 from onyx.db.engine.sql_engine import get_session_with_current_tenant
 from onyx.db.enums import (
     AccessType,
+    CapabilityCheckTrigger,
     ConnectorCredentialPairStatus,
     IndexingStatus,
     IndexModelStatus,
@@ -127,11 +131,38 @@ def _get_connector_runner(
     NOTE: `start_time` and `end_time` are only used for poll connectors
 
     Returns an iterator of document batches and whether the returned documents
-    are the complete list of existing documents of the connector. If the task
-    of type LOAD_STATE, the list will be considered complete and otherwise incomplete.
+    are the complete list of existing documents of the connector. If the task of
+    type LOAD_STATE, the list will be considered complete and otherwise
+    incomplete.
     """
 
     task = attempt.connector_credential_pair.connector.input_type
+
+    # Plain values for the closure: it runs inside exception handlers, where
+    # lazy ORM attribute loads can raise (e.g. ``PendingRollbackError``) and
+    # replace the exception being handled.
+    credential_id = attempt.connector_credential_pair.credential.id
+    connector_id = attempt.connector_credential_pair.connector.id
+    source = attempt.connector_credential_pair.connector.source
+    connector_specific_config = (
+        attempt.connector_credential_pair.connector.connector_specific_config
+    )
+
+    def _record_outcome(error: Exception | None, perm_sync_validated: bool) -> None:
+        # Best-effort scribe for the validation outcome below; never raises.
+        # INTEGRATION_TESTS_MODE skips the validation itself, so there is no
+        # outcome to record.
+        if INTEGRATION_TESTS_MODE:
+            return
+        record_blocking_validation_outcome(
+            credential_id=credential_id,
+            connector_id=connector_id,
+            source=source,
+            trigger=CapabilityCheckTrigger.INDEXING_ATTEMPT,
+            error=error,
+            perm_sync_validated=perm_sync_validated,
+            connector_specific_config=connector_specific_config,
+        )
 
     try:
         with time_stage(IndexAttemptStage.CONNECTOR_VALIDATION, attempt.id):
@@ -144,24 +175,29 @@ def _get_connector_runner(
                 raw_file_callback=raw_file_callback,
             )
 
-            # validate the connector settings
+            # Validate the connector settings.
             if not INTEGRATION_TESTS_MODE:
                 runnable_connector.validate_connector_settings()
 
-        if (
+        perm_sync_validated = (
             not INTEGRATION_TESTS_MODE
             and attempt.connector_credential_pair.access_type == AccessType.SYNC
-        ):
+        )
+        if perm_sync_validated:
             with time_stage(IndexAttemptStage.PERMISSION_VALIDATION, attempt.id):
                 runnable_connector.validate_perm_sync()
+
+        _record_outcome(None, perm_sync_validated=perm_sync_validated)
 
     except UnexpectedValidationError as e:
         logger.exception(
             "Unable to instantiate connector due to an unexpected temporary issue."
         )
+        _record_outcome(e, perm_sync_validated=False)
         raise e
     except Exception as e:
         logger.exception("Unable to instantiate connector. Pausing until fixed.")
+        _record_outcome(e, perm_sync_validated=False)
         # since we failed to even instantiate the connector, we pause the CCPair since
         # it will never succeed
 

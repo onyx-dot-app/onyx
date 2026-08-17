@@ -24,6 +24,7 @@ from onyx.db.credential_capability import (
     get_capability_report_rows_for_source,
     mark_capability_report_running,
     upsert_completed_capability_report,
+    upsert_completed_capability_report_unless_granular,
 )
 from onyx.db.enums import CapabilityCheckTrigger, CapabilityReportRunStatus
 from onyx.db.models import Credential
@@ -34,6 +35,7 @@ def _report(
     credential_id: int,
     connector_id: int | None = None,
     check_id: str = "slack_token_auth",
+    is_fallback: bool = False,
 ) -> CredentialCapabilityReport:
     return CredentialCapabilityReport(
         credential_id=credential_id,
@@ -53,6 +55,7 @@ def _report(
                 display_name="Test check",
                 required=True,
                 status=CapabilityCheckStatus.PASSED,
+                is_fallback=is_fallback,
             )
         ],
     )
@@ -258,6 +261,82 @@ def test_rows_for_source_lists_most_recently_updated_first(
     second_index = row_credential_ids.index(second_pair.credential_id)
     assert third_index < first_index < second_index
     assert all(row.source == DocumentSource.SLACK for row in rows)
+
+
+@pytest.mark.usefixtures("tenant_context")
+def test_unless_granular_preserves_a_granular_report(db_session: Session) -> None:
+    """
+    Verifies the no-clobber guard: the guarded upsert is a no-op against a
+    stored named-checks report and signals it by returning None.
+    """
+    # Precondition.
+    cc_pair = make_cc_pair(db_session, source=DocumentSource.SLACK, commit=False)
+    credential_id = cc_pair.credential_id
+    upsert_completed_capability_report(
+        db_session,
+        credential_id=credential_id,
+        connector_id=None,
+        source=DocumentSource.SLACK,
+        trigger=CapabilityCheckTrigger.MANUAL,
+        report=_report(credential_id, check_id="granular"),
+    )
+
+    # Under test.
+    result = upsert_completed_capability_report_unless_granular(
+        db_session,
+        credential_id=credential_id,
+        connector_id=None,
+        source=DocumentSource.SLACK,
+        trigger=CapabilityCheckTrigger.CC_PAIR_VALIDATION,
+        report=_report(credential_id, check_id="fallback", is_fallback=True),
+    )
+
+    # Postcondition.
+    assert result is None
+    row = get_capability_report_row(db_session, credential_id, None)
+    assert row is not None
+    assert row.trigger == CapabilityCheckTrigger.MANUAL
+    assert row.report is not None
+    assert row.report["check_results"][0]["check_id"] == "granular"
+
+
+@pytest.mark.usefixtures("tenant_context")
+def test_unless_granular_inserts_and_replaces_fallback_reports(
+    db_session: Session,
+) -> None:
+    """
+    Verifies the guard only protects granular state: the guarded upsert still
+    inserts into an empty scope and replaces fallback-shaped reports.
+    """
+    # Precondition.
+    cc_pair = make_cc_pair(db_session, source=DocumentSource.SLACK, commit=False)
+    credential_id = cc_pair.credential_id
+
+    # Under test.
+    inserted = upsert_completed_capability_report_unless_granular(
+        db_session,
+        credential_id=credential_id,
+        connector_id=None,
+        source=DocumentSource.SLACK,
+        trigger=CapabilityCheckTrigger.CC_PAIR_VALIDATION,
+        report=_report(credential_id, check_id="first", is_fallback=True),
+    )
+    replaced = upsert_completed_capability_report_unless_granular(
+        db_session,
+        credential_id=credential_id,
+        connector_id=None,
+        source=DocumentSource.SLACK,
+        trigger=CapabilityCheckTrigger.INDEXING_ATTEMPT,
+        report=_report(credential_id, check_id="second", is_fallback=True),
+    )
+
+    # Postcondition.
+    assert inserted is not None
+    assert replaced is not None
+    assert replaced.id == inserted.id
+    assert replaced.trigger == CapabilityCheckTrigger.INDEXING_ATTEMPT
+    assert replaced.report is not None
+    assert replaced.report["check_results"][0]["check_id"] == "second"
 
 
 @pytest.mark.usefixtures("tenant_context")
