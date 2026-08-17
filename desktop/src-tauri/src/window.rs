@@ -4,7 +4,9 @@ use std::process::Command;
 #[cfg(target_os = "macos")]
 use std::time::Duration;
 use tauri::webview::{NewWindowFeatures, NewWindowResponse};
-use tauri::{AppHandle, Manager, Webview, WebviewUrl, WebviewWindow, WebviewWindowBuilder, Wry};
+#[cfg(target_os = "macos")]
+use tauri::Webview;
+use tauri::{AppHandle, Manager, WebviewUrl, WebviewWindow, WebviewWindowBuilder, Wry};
 #[cfg(target_os = "macos")]
 use tokio::time::sleep;
 use url::Url;
@@ -204,22 +206,30 @@ pub fn should_open_in_external_browser(current_url: &Url, destination_url: &Url)
     }
 }
 
+/// `is_ok` only says the opener ran; a non-zero exit still means the URL never
+/// reached a browser, so callers need `success()` to report that truthfully.
+fn spawned_opener_succeeded(mut command: Command) -> bool {
+    command.status().is_ok_and(|status| status.success())
+}
+
 pub fn open_in_default_browser(url: &str) -> bool {
     #[cfg(target_os = "macos")]
     {
-        return Command::new("open").arg(url).status().is_ok();
+        let mut command = Command::new("open");
+        command.arg(url);
+        return spawned_opener_succeeded(command);
     }
     #[cfg(target_os = "linux")]
     {
-        return Command::new("xdg-open").arg(url).status().is_ok();
+        let mut command = Command::new("xdg-open");
+        command.arg(url);
+        return spawned_opener_succeeded(command);
     }
     #[cfg(target_os = "windows")]
     {
-        return Command::new("rundll32")
-            .arg("url.dll,FileProtocolHandler")
-            .arg(url)
-            .status()
-            .is_ok();
+        let mut command = Command::new("rundll32");
+        command.arg("url.dll,FileProtocolHandler").arg(url);
+        return spawned_opener_succeeded(command);
     }
     #[allow(unreachable_code)]
     false
@@ -229,6 +239,15 @@ pub fn open_in_default_browser(url: &str) -> bool {
 /// anything outside this list (`file:`, custom app schemes) must not reach it.
 pub fn is_externally_openable(url: &Url) -> bool {
     matches!(url.scheme(), "http" | "https" | "mailto" | "tel")
+}
+
+/// Enough of a URL to identify it in a log, without the path, query or
+/// userinfo -- those are web-controlled and routinely carry signed tokens.
+pub fn redact_url(url: &Url) -> String {
+    url.host_str().map_or_else(
+        || url.scheme().to_string(),
+        |host| format!("{}://{host}", url.scheme()),
+    )
 }
 
 /// Send every popup request -- `window.open` and `target="_blank"` alike -- to
@@ -242,7 +261,10 @@ fn open_new_window_externally(app: &AppHandle, url: &Url) -> NewWindowResponse<W
     if is_externally_openable(url) && !open_in_default_browser(url.as_str()) {
         log_backend_error(
             app,
-            &format!("Failed to open external URL in default browser: {url}"),
+            &format!(
+                "Failed to open external URL in default browser: {}",
+                redact_url(url)
+            ),
         );
     }
 
@@ -378,6 +400,21 @@ mod tests {
         assert!(!is_externally_openable(&url("file:///etc/passwd")));
         assert!(!is_externally_openable(&url("ftp://example.com")));
         assert!(!is_externally_openable(&url("javascript:alert(1)")));
+    }
+
+    #[test]
+    fn redact_url_drops_path_query_and_userinfo() {
+        assert_eq!(
+            redact_url(&url("https://example.com/doc?token=secret#frag")),
+            "https://example.com"
+        );
+        assert_eq!(
+            redact_url(&url("https://user:pw@example.com/a")),
+            "https://example.com"
+        );
+        // Hostless schemes keep only the scheme.
+        assert_eq!(redact_url(&url("mailto:someone@example.com")), "mailto");
+        assert_eq!(redact_url(&url("tel:12345")), "tel");
     }
 
     #[test]

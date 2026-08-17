@@ -194,7 +194,8 @@ fn main() {
                             debug_log::log_backend_error(
                                 webview.app_handle(),
                                 &format!(
-                                    "Failed to open external URL in default browser: {destination_url}"
+                                    "Failed to open external URL in default browser: {}",
+                                    window::redact_url(destination_url)
                                 ),
                             );
                         }
