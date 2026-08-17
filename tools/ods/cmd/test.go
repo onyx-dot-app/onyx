@@ -78,6 +78,8 @@ func runTest(cmd *cobra.Command, args []string, opts *TestOptions) {
 		runJestSuite(root, suite, suiteArgs)
 	case testsuite.RunnerPlaywright:
 		runPlaywrightSuite(root, suite, suiteArgs)
+	case testsuite.RunnerGo:
+		runGoSuite(root, suite, suiteArgs)
 	default:
 		log.Fatalf("Suite %s has no runner", suite.Name)
 	}
@@ -131,6 +133,25 @@ func runPytestSuite(root string, suite *testsuite.Suite, suiteArgs []string, opt
 	pytestCmd.Dir = suiteDir
 	pytestCmd.Env = mergeEnv(os.Environ(), envVars)
 	runChild(pytestCmd, "pytest")
+}
+
+// runGoSuite runs a Go module's tests from the module directory, which is where
+// go test resolves its "./..." package patterns.
+func runGoSuite(root string, suite *testsuite.Suite, suiteArgs []string) {
+	goArgs := []string{"test"}
+	goArgs = append(goArgs, suite.DefaultArgs...)
+	if !testsuite.HasTarget(suiteArgs) {
+		goArgs = append(goArgs, suite.DefaultTarget())
+	}
+	goArgs = append(goArgs, suiteArgs...)
+
+	suiteDir := filepath.Join(root, suite.Dir)
+	log.Infof("Running %s tests...", suite.Name)
+	log.Debugf("Running in %s: go %v", suiteDir, goArgs)
+
+	goCmd := exec.Command("go", goArgs...)
+	goCmd.Dir = suiteDir
+	runChild(goCmd, "go test")
 }
 
 func runJestSuite(root string, suite *testsuite.Suite, suiteArgs []string) {
@@ -201,6 +222,8 @@ Examples:
   ods test external --parallel
   ods test web -- --watch
   ods test web/tests/e2e/chat.spec.ts
+  ods test ods
+  ods test tools/ods/internal/testsuite
 
 Suites:`
 

@@ -1,8 +1,7 @@
 // Package testsuite maps a suite name or a file path onto the test runner that
-// knows how to execute it. The repo has four runners (pytest, jest for web,
-// jest for mobile, playwright) with different working directories and
-// arguments; this package holds the routing table and the pure logic that
-// picks an entry from it.
+// knows how to execute it. The repo has four runners (pytest, jest, playwright,
+// go test) with different working directories and arguments; this package holds
+// the routing table and the pure logic that picks an entry from it.
 package testsuite
 
 import (
@@ -21,6 +20,7 @@ const (
 	RunnerPytest     Runner = "pytest"
 	RunnerJest       Runner = "jest"
 	RunnerPlaywright Runner = "playwright"
+	RunnerGo         Runner = "go"
 )
 
 // ErrNoArgs is returned when no suite or path was given.
@@ -127,6 +127,32 @@ var suites = []Suite{
 		Short:  "Mobile tests (jest-expo)",
 	},
 	{
+		Name:    "ods",
+		Runner:  RunnerGo,
+		Dir:     "tools/ods",
+		Default: "./...",
+		// -race matches pr-golang-tests.yml, which runs every Go module.
+		DefaultArgs: []string{"-race"},
+		Short:       "Tests for this tool (go)",
+	},
+	{
+		Name:        "cli",
+		Runner:      RunnerGo,
+		Dir:         "cli",
+		Default:     "./...",
+		DefaultArgs: []string{"-race"},
+		Short:       "Onyx CLI tests (go)",
+	},
+	{
+		Name:        "terraform",
+		Aliases:     []string{"tf"},
+		Runner:      RunnerGo,
+		Dir:         "terraform-provider-onyx",
+		Default:     "./...",
+		DefaultArgs: []string{"-race"},
+		Short:       "Terraform provider tests (go)",
+	},
+	{
 		Name:            "backend",
 		Aliases:         []string{"py"},
 		Runner:          RunnerPytest,
@@ -206,7 +232,37 @@ func Resolve(root, cwd string, args []string) (*Suite, []string, error) {
 	// The first argument is always rewritten: it is known to be a target, so
 	// the bare-word caution that applies to later arguments is not needed.
 	rest := relocate(root, cwd, suite, args[1:])
-	return suite, append([]string{path(target)}, rest...), nil
+	return suite, append(runnerTarget(root, suite, path(target)), rest...), nil
+}
+
+// runnerTarget shapes a suite-relative path into what the runner accepts.
+// pytest, jest, and playwright all take paths. go test takes packages, so a
+// file becomes the directory that holds it, and a node id becomes a -run
+// filter, which keeps "<file>::<test>" working across every suite.
+func runnerTarget(root string, suite *Suite, rel string) []string {
+	if suite.Runner != RunnerGo {
+		return []string{rel}
+	}
+
+	file := stripNodeID(rel)
+	pkg := goPackage(root, suite, file)
+	if name := strings.TrimPrefix(rel[len(file):], "::"); name != "" {
+		return []string{pkg, "-run", "^" + name + "$"}
+	}
+	return []string{pkg}
+}
+
+// goPackage turns a suite-relative path into the "./..." pattern go test
+// accepts. Go tests one package at a time, so a file argument runs the package
+// that holds it.
+func goPackage(root string, suite *Suite, rel string) string {
+	if info, err := os.Stat(filepath.Join(root, suite.Dir, rel)); err == nil && !info.IsDir() {
+		rel = filepath.Dir(rel)
+	}
+	if rel == "." || rel == "" {
+		return "./..."
+	}
+	return "./" + path(rel)
 }
 
 // HasTarget reports whether args already name a test target. It takes the
@@ -232,29 +288,29 @@ func HasTarget(args []string) bool {
 func relocate(root, cwd string, suite *Suite, args []string) []string {
 	out := make([]string, 0, len(args))
 	for _, arg := range args {
-		out = append(out, relocateArg(root, cwd, suite, arg))
+		out = append(out, relocateArg(root, cwd, suite, arg)...)
 	}
 	return out
 }
 
-func relocateArg(root, cwd string, suite *Suite, arg string) string {
+func relocateArg(root, cwd string, suite *Suite, arg string) []string {
 	if !looksLikePath(arg) {
-		return arg
+		return []string{arg}
 	}
 	repoPath, ok := repoRelative(root, cwd, arg)
 	if !ok {
-		return arg
+		return []string{arg}
 	}
 	// A path outside this suite is left alone, so the runner reports it
 	// rather than us silently pointing somewhere else.
 	if !underPrefix(stripNodeID(repoPath), suite.Dir) {
-		return arg
+		return []string{arg}
 	}
 	rel, err := filepath.Rel(suite.Dir, repoPath)
 	if err != nil {
-		return arg
+		return []string{arg}
 	}
-	return path(rel)
+	return runnerTarget(root, suite, path(rel))
 }
 
 // suiteForPath returns the suite whose prefix is the longest match for a

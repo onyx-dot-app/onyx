@@ -44,6 +44,10 @@ func TestResolveByName(t *testing.T) {
 		{"playwright", "e2e"},
 		{"pw", "e2e"},
 		{"mobile", "mobile"},
+		{"ods", "ods"},
+		{"cli", "cli"},
+		{"terraform", "terraform"},
+		{"tf", "terraform"},
 		{"backend", "backend"},
 		{"py", "backend"},
 	}
@@ -326,12 +330,91 @@ func TestSuitePrefixes(t *testing.T) {
 		"web":         "web",
 		"e2e":         "web/tests/e2e",
 		"mobile":      "mobile",
+		"ods":         "tools/ods",
+		"cli":         "cli",
+		"terraform":   "terraform-provider-onyx",
 		"backend":     "backend/tests",
 	}
 	for _, suite := range All() {
 		if got := suite.Prefix(); got != want[suite.Name] {
 			t.Fatalf("%s prefix = %q, want %q", suite.Name, got, want[suite.Name])
 		}
+	}
+}
+
+// go test takes packages, not files, so a Go suite shapes its targets
+// differently from the path-based runners.
+func TestResolveGoTargets(t *testing.T) {
+	root := newRepo(t,
+		"tools/ods/main.go",
+		"tools/ods/cmd/web_test.go",
+		"tools/ods/internal/testsuite/testsuite_test.go",
+		"cli/internal/tui/tui_test.go",
+	)
+
+	cases := []struct {
+		name      string
+		args      []string
+		wantSuite string
+		want      []string
+	}{
+		{
+			name:      "package directory",
+			args:      []string{"tools/ods/internal/testsuite"},
+			wantSuite: "ods",
+			want:      []string{"./internal/testsuite"},
+		},
+		{
+			name:      "file runs its package",
+			args:      []string{"tools/ods/internal/testsuite/testsuite_test.go"},
+			wantSuite: "ods",
+			want:      []string{"./internal/testsuite"},
+		},
+		{
+			name:      "module root",
+			args:      []string{"tools/ods"},
+			wantSuite: "ods",
+			want:      []string{"./..."},
+		},
+		{
+			name:      "node id becomes a run filter",
+			args:      []string{"tools/ods/cmd/web_test.go::TestWebDir"},
+			wantSuite: "ods",
+			want:      []string{"./cmd", "-run", "^TestWebDir$"},
+		},
+		{
+			name:      "path after a suite name",
+			args:      []string{"ods", "tools/ods/cmd"},
+			wantSuite: "ods",
+			want:      []string{"./cmd"},
+		},
+		{
+			name:      "a second module",
+			args:      []string{"cli/internal/tui"},
+			wantSuite: "cli",
+			want:      []string{"./internal/tui"},
+		},
+		{
+			name:      "flags pass through",
+			args:      []string{"ods", "-run", "TestResolve", "-v"},
+			wantSuite: "ods",
+			want:      []string{"-run", "TestResolve", "-v"},
+		},
+	}
+
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			suite, args, err := Resolve(root, root, tc.args)
+			if err != nil {
+				t.Fatalf("Resolve(%v) failed: %v", tc.args, err)
+			}
+			if suite.Name != tc.wantSuite {
+				t.Fatalf("suite = %q, want %q", suite.Name, tc.wantSuite)
+			}
+			if !reflect.DeepEqual(args, tc.want) {
+				t.Errorf("args = %v, want %v", args, tc.want)
+			}
+		})
 	}
 }
 
@@ -369,6 +452,9 @@ func TestSuiteDefaultTargets(t *testing.T) {
 		"web":         "",
 		"e2e":         "tests/e2e",
 		"mobile":      "",
+		"ods":         "./...",
+		"cli":         "./...",
+		"terraform":   "./...",
 		"backend":     "tests",
 	}
 	for _, suite := range All() {

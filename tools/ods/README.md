@@ -265,12 +265,20 @@ later arguments go to the underlying runner.
 | `web` | `jest` | jest | no |
 | `e2e` | `playwright`, `pw` | playwright | full deployment |
 | `mobile` | | jest-expo | no |
+| `ods` | | go test | no |
+| `cli` | | go test | no |
+| `terraform` | `tf` | go test | no |
 | `backend` | `py` | pytest | any other `backend/tests` path |
 
 Backend suites run from `backend/`, so `backend/pytest.ini` applies. Suites that
 need credentials read `.vscode/.env`, which is created from
 `.vscode/env_template.txt` on first use. Enterprise Edition features are on by
 default; use `--no-ee` to turn them off.
+
+The Go suites cover the repo's three Go modules. They run with `-race`, the same
+as `pr-golang-tests.yml`. `go test` takes packages rather than files, so a file
+argument runs the package that holds it, and `<file>::<TestName>` becomes a
+`-run` filter.
 
 A bare `ods test integration` runs `backend/tests/integration/tests`, which is
 what CI shards. The sibling directories under `backend/tests/integration` each
@@ -300,6 +308,11 @@ ods test external --parallel
 
 # Web end-to-end tests
 ods test e2e chat
+
+# Go modules
+ods test ods
+ods test tools/ods/internal/testsuite
+ods test cli/internal/tui/viewport_test.go::TestAddUserMessage
 ```
 
 ### `dev` - Devcontainer Management
