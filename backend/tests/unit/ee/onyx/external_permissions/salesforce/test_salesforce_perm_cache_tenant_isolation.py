@@ -1,6 +1,8 @@
 """Salesforce query-time permission cache isolation coverage."""
 
+from concurrent.futures import ThreadPoolExecutor
 from datetime import UTC, datetime, timedelta
+from threading import Barrier
 from unittest.mock import MagicMock, call, patch
 
 import pytest
@@ -19,6 +21,35 @@ def _cc_pair(credential_id: int) -> MagicMock:
     cc_pair.credential.id = credential_id
     cc_pair.credential.time_updated = _CREDENTIAL_UPDATED_AT
     return cc_pair
+
+
+def test_salesforce_permission_caches_are_bounded() -> None:
+    assert (
+        sf_utils._SALESFORCE_CLIENT_CACHE.maxsize
+        == sf_utils._SALESFORCE_CLIENT_CACHE_MAX_SIZE
+    )
+    assert (
+        sf_utils._CACHED_SF_EMAIL_TO_ID_MAP.maxsize
+        == sf_utils._SALESFORCE_USER_ID_CACHE_MAX_SIZE
+    )
+
+
+def test_concurrent_client_builds_cache_one_client() -> None:
+    sf_utils._SALESFORCE_CLIENT_CACHE.clear()
+    barrier = Barrier(2)
+    clients = [MagicMock(), MagicMock()]
+
+    def cache_client(client: MagicMock) -> object:
+        barrier.wait()
+        return sf_utils._cache_salesforce_client(
+            ("tenant_a", 11), _CREDENTIAL_UPDATED_AT, client
+        )
+
+    with ThreadPoolExecutor(max_workers=2) as executor:
+        results = list(executor.map(cache_client, clients))
+
+    assert results[0] is results[1]
+    assert sum(client.session.close.call_count for client in clients) == 1
 
 
 def test_email_to_id_cache_is_tenant_isolated() -> None:
@@ -239,9 +270,9 @@ def test_credential_revision_replacement_clears_cached_user_ids() -> None:
         finally:
             CURRENT_TENANT_ID_CONTEXTVAR.reset(token)
 
-    [(tenant_id, cached_client, cached_email)] = sf_utils._CACHED_SF_EMAIL_TO_ID_MAP
+    [(tenant_id, cached_client_ref, cached_email)] = sf_utils._CACHED_SF_EMAIL_TO_ID_MAP
     assert tenant_id == "tenant_a"
-    assert cached_client is client_b
+    assert cached_client_ref() is client_b
     assert cached_email == email
 
 
