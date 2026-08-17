@@ -199,8 +199,9 @@ def get_tool_ids_on_editable_personas(user: User, db_session: Session) -> set[in
     # _add_user_filters short-circuits anonymous to public+listed before reading get_editable
     if user.is_anonymous:
         return set()
+    # deleted agents keep their tool rows, and MANAGE_AGENTS skips _add_user_filters
     editable_persona_ids = _add_user_filters(
-        select(Persona), user, get_editable=True
+        select(Persona).where(Persona.deleted.is_(False)), user, get_editable=True
     ).with_only_columns(Persona.id)
     return set(
         db_session.scalars(

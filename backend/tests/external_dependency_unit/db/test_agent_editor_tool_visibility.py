@@ -14,7 +14,7 @@ from sqlalchemy.orm import Session
 from onyx.configs.constants import ANONYMOUS_USER_UUID
 from onyx.db.enums import PersonaSharePermission
 from onyx.db.models import Persona, Persona__Tool, Tool, User
-from onyx.db.persona import get_tool_ids_on_editable_personas
+from onyx.db.persona import get_tool_ids_on_editable_personas, mark_persona_as_deleted
 from tests.external_dependency_unit.conftest import create_test_user
 from tests.external_dependency_unit.db.agent_sharing_helpers import (
     create_test_persona,
@@ -113,6 +113,32 @@ def test_group_editor_share_exposes_tool(db_session: Session) -> None:
     share_persona_with_group(db_session, persona, group, PersonaSharePermission.EDITOR)
 
     assert tool.id in get_tool_ids_on_editable_personas(member, db_session)
+
+
+def test_deleted_agent_does_not_expose_tool(db_session: Session) -> None:
+    """Soft-delete keeps the persona__tool rows, so the subquery has to drop the
+    agent itself — otherwise a deleted agent keeps widening the action read gate."""
+    owner = create_test_user(db_session, "editor_deleted_owner")
+
+    persona = create_test_persona(db_session, owner=owner)
+    tool = _create_tool(db_session, owner=owner)
+    _attach(db_session, persona, tool)
+    mark_persona_as_deleted(persona.id, owner, db_session)
+
+    assert tool.id not in get_tool_ids_on_editable_personas(owner, db_session)
+
+
+def test_deleted_agent_does_not_expose_tool_to_admin(db_session: Session) -> None:
+    """MANAGE_AGENTS short-circuits the user filters entirely, so the deleted check
+    cannot live inside them."""
+    admin = create_test_user(db_session, "editor_deleted_admin", is_admin=True)
+
+    persona = create_test_persona(db_session, owner=admin)
+    tool = _create_tool(db_session, owner=admin)
+    _attach(db_session, persona, tool)
+    mark_persona_as_deleted(persona.id, admin, db_session)
+
+    assert tool.id not in get_tool_ids_on_editable_personas(admin, db_session)
 
 
 def test_anonymous_user_sees_nothing(db_session: Session) -> None:
