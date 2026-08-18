@@ -29,6 +29,9 @@ from mcp.shared.auth import (
     OAuthToken,
 )
 from pydantic import AnyUrl, BaseModel, ValidationError
+from redis.exceptions import BusyLoadingError
+from redis.exceptions import ConnectionError as RedisConnectionError
+from redis.exceptions import TimeoutError as RedisTimeoutError
 from sqlalchemy.orm import Session
 
 from onyx.auth.oauth_token_manager import ensure_offline_access_auth_params
@@ -961,10 +964,23 @@ def make_oauth_provider(
             OAUTH_USER_AUTHORIZATION_TIMEOUT_SECONDS
         )
         code_payload_raw: bytes | None = None
+        redis_error_active = False
         while code_payload_raw is None:
-            code_payload_raw = await cast(
-                Awaitable[bytes | None], async_redis.lpop(tenant_key)
-            )
+            try:
+                code_payload_raw = await cast(
+                    Awaitable[bytes | None], async_redis.lpop(tenant_key)
+                )
+            except (BusyLoadingError, RedisConnectionError, RedisTimeoutError) as e:
+                if not redis_error_active:
+                    logger.warning(
+                        "Transient Redis error while waiting for MCP OAuth callback",
+                        exc_info=e,
+                    )
+                redis_error_active = True
+            else:
+                if redis_error_active:
+                    logger.info("Redis recovered while waiting for MCP OAuth callback")
+                redis_error_active = False
             remaining_seconds = deadline - asyncio.get_running_loop().time()
             if code_payload_raw is None and remaining_seconds <= 0:
                 break

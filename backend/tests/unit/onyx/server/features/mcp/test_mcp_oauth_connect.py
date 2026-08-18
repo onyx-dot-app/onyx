@@ -7,6 +7,7 @@ from uuid import uuid4
 
 import httpx
 import pytest
+from redis.exceptions import ConnectionError as RedisConnectionError
 
 from onyx.db.enums import (
     MCPAuthenticationPerformer,
@@ -23,6 +24,9 @@ from onyx.server.features.mcp.models import (
     MCPUserOAuthConnectRequest,
 )
 from onyx.server.features.mcp.ssrf import _OAuthChallengeTransport
+
+_TEST_OAUTH_STATE = "test-state"
+_TEST_OAUTH_CODE = "test-code"
 
 
 def _install_discovery_responses(
@@ -159,6 +163,67 @@ def _connect(
             force_reauthentication=force_reauthentication,
         )
     )
+
+
+def _oauth_callback_payload() -> bytes:
+    return (
+        oauth.MCPOAuthCodePayload(
+            code=_TEST_OAUTH_CODE,
+            state=_TEST_OAUTH_STATE,
+        )
+        .model_dump_json()
+        .encode()
+    )
+
+
+def _setup_browser_oauth_flow(
+    monkeypatch: pytest.MonkeyPatch,
+    async_redis: MagicMock,
+) -> tuple[
+    Callable[[str], Awaitable[None]],
+    Callable[[], Awaitable[tuple[str, str | None]]],
+    MagicMock,
+]:
+    user_id = str(uuid4())
+    state_data = oauth.MCPOauthState(
+        server_id=42,
+        return_path="/admin/actions/mcp",
+        is_admin=True,
+        state=_TEST_OAUTH_STATE,
+    )
+    redis_client = MagicMock()
+    redis_client.tenant_id = "test-tenant"
+    redis_client.get.return_value = state_data.model_dump_json()
+    monkeypatch.setattr(oauth, "get_redis_client", lambda: redis_client)
+    monkeypatch.setattr(
+        oauth,
+        "get_async_redis_connection",
+        AsyncMock(return_value=async_redis),
+    )
+
+    provider = oauth.make_oauth_provider(
+        mcp_server=cast(MCPServer, _server()),
+        user_id=user_id,
+        return_path="/admin/actions/mcp",
+        connection_config_id=101,
+        admin_config_id=100,
+        authorization_url_callback=AsyncMock(),
+    )
+    redirect_handler = provider.context.redirect_handler
+    callback_handler = provider.context.callback_handler
+    assert redirect_handler is not None
+    assert callback_handler is not None
+    return redirect_handler, callback_handler, redis_client
+
+
+async def _complete_browser_oauth_flow(
+    redirect_handler: Callable[[str], Awaitable[None]],
+    callback_handler: Callable[[], Awaitable[tuple[str, str | None]]],
+) -> tuple[str, str | None]:
+    await redirect_handler(
+        f"https://accounts.example.com/oauth?state={_TEST_OAUTH_STATE}"
+    )
+    return await callback_handler()
 
 
 def test_challenge_redirect_skips_well_known_fallback(
@@ -310,67 +375,75 @@ def test_oauth_redirect_wait_is_bounded_and_cancels_probe(
     assert probe_cancelled
 
 
-def test_browser_oauth_polls_without_holding_redis_connection(
+def test_browser_oauth_callback_outlives_machine_timeout(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
-    user_id = str(uuid4())
-    state = "test-state"
-    state_data = oauth.MCPOauthState(
-        server_id=42,
-        return_path="/admin/actions/mcp",
-        is_admin=True,
-        state=state,
-    )
-    redis_client = MagicMock()
-    redis_client.tenant_id = "test-tenant"
-    redis_client.get.return_value = state_data.model_dump_json()
     async_redis = MagicMock()
-    callback_payload = (
-        oauth.MCPOAuthCodePayload(code="test-code", state=state)
-        .model_dump_json()
-        .encode()
+    first_poll_at: float | None = None
+
+    async def callback_after_operation_timeout(_key: str) -> bytes | None:
+        nonlocal first_poll_at
+        now = asyncio.get_running_loop().time()
+        if first_poll_at is None:
+            first_poll_at = now
+        if now - first_poll_at > 2 * oauth.OAUTH_OPERATION_TIMEOUT_SECONDS:
+            return _oauth_callback_payload()
+        return None
+
+    async_redis.lpop = AsyncMock(side_effect=callback_after_operation_timeout)
+    monkeypatch.setattr(oauth, "OAUTH_OPERATION_TIMEOUT_SECONDS", 0.01)
+    monkeypatch.setattr(oauth, "OAUTH_CALLBACK_POLL_INTERVAL_SECONDS", 0.005)
+    redirect_handler, callback_handler, redis_client = _setup_browser_oauth_flow(
+        monkeypatch, async_redis
     )
-    async_redis.lpop = AsyncMock(side_effect=[None, callback_payload])
-    monkeypatch.setattr(oauth, "get_redis_client", lambda: redis_client)
-    monkeypatch.setattr(
-        oauth,
-        "get_async_redis_connection",
-        AsyncMock(return_value=async_redis),
+
+    callback_result = asyncio.run(
+        _complete_browser_oauth_flow(redirect_handler, callback_handler)
+    )
+
+    assert redis_client.set.call_args.kwargs["ex"] == 5 * 60
+    assert callback_result == (_TEST_OAUTH_CODE, _TEST_OAUTH_STATE)
+    assert async_redis.lpop.await_count >= 2
+    async_redis.blpop.assert_not_called()
+
+
+def test_browser_oauth_callback_retries_transient_redis_error(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    async_redis = MagicMock()
+    async_redis.lpop = AsyncMock(
+        side_effect=[
+            RedisConnectionError("transient test failure"),
+            _oauth_callback_payload(),
+        ]
     )
     monkeypatch.setattr(oauth, "OAUTH_CALLBACK_POLL_INTERVAL_SECONDS", 0)
-    authorization_url_callback = AsyncMock()
-
-    provider = oauth.make_oauth_provider(
-        mcp_server=cast(MCPServer, _server()),
-        user_id=user_id,
-        return_path="/admin/actions/mcp",
-        connection_config_id=101,
-        admin_config_id=100,
-        authorization_url_callback=authorization_url_callback,
+    redirect_handler, callback_handler, _ = _setup_browser_oauth_flow(
+        monkeypatch, async_redis
     )
-    redirect_handler = provider.context.redirect_handler
-    callback_handler = provider.context.callback_handler
-    assert redirect_handler is not None
-    assert callback_handler is not None
 
-    async def complete_browser_flow() -> tuple[str, str | None]:
-        await redirect_handler(f"https://accounts.example.com/oauth?state={state}")
-        return await callback_handler()
+    callback_result = asyncio.run(
+        _complete_browser_oauth_flow(redirect_handler, callback_handler)
+    )
 
-    callback_result = asyncio.run(complete_browser_flow())
-    assert redis_client.set.call_args.kwargs["ex"] == 5 * 60
-    assert callback_result == ("test-code", state)
+    assert callback_result == (_TEST_OAUTH_CODE, _TEST_OAUTH_STATE)
     assert async_redis.lpop.await_count == 2
-    assert async_redis.blpop.call_count == 0
 
+
+def test_browser_oauth_callback_times_out_at_authorization_deadline(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    async_redis = MagicMock()
     async_redis.lpop = AsyncMock(return_value=None)
     monkeypatch.setattr(oauth, "OAUTH_USER_AUTHORIZATION_TIMEOUT_SECONDS", 0)
-
-    async def time_out_browser_flow() -> None:
-        await callback_handler()
+    monkeypatch.setattr(oauth, "OAUTH_OPERATION_TIMEOUT_SECONDS", 0.05)
+    monkeypatch.setattr(oauth, "OAUTH_CALLBACK_POLL_INTERVAL_SECONDS", 0)
+    redirect_handler, callback_handler, _ = _setup_browser_oauth_flow(
+        monkeypatch, async_redis
+    )
 
     with pytest.raises(RuntimeError, match="Timed out waiting for OAuth callback"):
-        asyncio.run(time_out_browser_flow())
+        asyncio.run(_complete_browser_oauth_flow(redirect_handler, callback_handler))
     async_redis.lpop.assert_awaited_once()
 
 
