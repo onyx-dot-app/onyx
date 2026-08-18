@@ -95,6 +95,14 @@ _UNREADY_AFTER_SECONDS = 10.0
 # Tracks when the threadpool was first observed saturated, so brief queueing
 # under bursty load does not flip readiness. Only ever touched from the event
 # loop inside `healthcheck`, with no await between the read and the write.
+#
+# The window is sampled at probe frequency, not observed continuously, so a pool
+# that drains and re-saturates between two probes reads as continuously
+# saturated. Accepted: readiness is reversible, so the next healthy sample
+# restores the pod one interval later. Restarting the streak on a large sample
+# gap would be worse — any probe interval above the threshold would then never
+# accumulate a streak, and Compose probes every 30s. Fixing it properly needs a
+# background sampler, which is not worth an always-on loop per process.
 _SATURATED_SINCE: float | None = None
 
 # Probes can hit /health many times a second, so log only when readiness
