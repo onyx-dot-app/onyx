@@ -21,10 +21,10 @@ const widthClasses: Record<
   Extract<SizeVariants, "sm" | "md" | "lg" | "full">,
   string
 > = {
-  sm: "w-[min(var(--app-container-sm),100%)]",
-  md: "w-[min(var(--app-container-md),100%)]",
-  lg: "w-[min(var(--app-container-lg),100%)]",
-  full: "w-(--app-container-full)",
+  sm: "min-w-0 w-[min(var(--app-container-sm),100%)]",
+  md: "min-w-0 w-[min(var(--app-container-md),100%)]",
+  lg: "min-w-0 w-[min(var(--app-container-lg),100%)]",
+  full: "min-w-0 w-(--app-container-full)",
 };
 
 interface SettingsRootProps extends WithoutStyles<
@@ -44,7 +44,7 @@ function SettingsRoot({ width = "md", ...props }: SettingsRootProps) {
       id="page-wrapper-scroll-container"
       className="w-full h-full flex flex-col items-center overflow-y-auto"
     >
-      <div className={cn("h-full", widthClasses[width])}>
+      <div className={cn("min-h-full", widthClasses[width])}>
         <div {...props} />
       </div>
     </div>
