@@ -167,9 +167,8 @@ def test_cached_naive_trial_end_is_treated_as_none() -> None:
     assert tier_module.get_tier(POSTGRES_DEFAULT_SCHEMA_STANDARD_VALUE) == Tier.BUSINESS
 
 
-def test_cp_returns_naive_trial_end_falls_back_to_business() -> None:
-    """If CP ever returns a naive `trial_end` in BillingInformation, the
-    lazy-refresh path must drop it instead of crashing tier resolution."""
+def test_cp_naive_trial_end_is_not_cached() -> None:
+    """The lazy-refresh path drops a naive CP trial_end before caching."""
     naive_future = datetime(2099, 1, 1, 12, 0, 0)  # no tzinfo
     now = datetime.now(timezone.utc)
     billing = BillingInformation(
@@ -191,6 +190,10 @@ def test_cp_returns_naive_trial_end_falls_back_to_business() -> None:
         result = tier_module.get_tier(POSTGRES_DEFAULT_SCHEMA_STANDARD_VALUE)
 
     assert result == Tier.BUSINESS
+    redis_client = get_redis_client(tenant_id=POSTGRES_DEFAULT_SCHEMA_STANDARD_VALUE)
+    raw_cached = redis_client.get(TENANT_TIER_KEY)
+    assert raw_cached is not None
+    assert json.loads(raw_cached)["trial_end"] is None
 
 
 def test_cache_miss_subscription_status_response_falls_back_to_business() -> None:
