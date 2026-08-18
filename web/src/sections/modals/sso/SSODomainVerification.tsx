@@ -155,8 +155,10 @@ export default function SSODomainVerification({
     setBusyDomain(domain);
     try {
       await verifyDomainViaDns(domain);
-      await mutate();
       toast.success(`${domain} verified`);
+      // The backend already persisted the verification, so a failed refresh is
+      // not a failed verification. The next load picks up the new state.
+      await mutate().catch(() => undefined);
     } catch (exc) {
       toast.error(exc instanceof Error ? exc.message : String(exc));
     } finally {
