@@ -694,7 +694,7 @@ class LitellmLLM(LLM):
         # LiteLLM's drop_params is not reliable here because the upstream
         # provider config can still claim the param is supported.
         # https://github.com/BerriAI/litellm/issues/26444
-        # TODO(litellm): Consider removing this once the above is resolved,
+        # TODO(acaprau): Consider removing this once the above is resolved,
         # although this assumes users have upgraded their litellm if relevant.
         omits_sampling_params = any(
             anthropic_omits_sampling_params(name) for name in model_identity_names
