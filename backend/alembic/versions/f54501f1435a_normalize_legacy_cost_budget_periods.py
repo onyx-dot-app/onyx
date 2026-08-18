@@ -2,7 +2,8 @@
 
 Cost budgets only support daily/weekly/monthly (24/168/720h) periods, but rows
 can hold any whole-day period. Enforcement skips unsupported rows, so snap them
-to the nearest supported period to keep them active.
+to the nearest supported period to keep them active. A row carrying both budgets
+shares period_hours, so its token window moves with it.
 
 Revision ID: f54501f1435a
 Revises: df90f43d9ab2
@@ -20,7 +21,7 @@ depends_on = None
 DAILY_HOURS = 24
 WEEKLY_HOURS = 168
 MONTHLY_HOURS = 720
-# Midpoints between the supported periods, so each row snaps to its nearest one.
+# Each row snaps to its nearest supported period.
 DAILY_WEEKLY_MIDPOINT = (DAILY_HOURS + WEEKLY_HOURS) // 2
 WEEKLY_MONTHLY_MIDPOINT = (WEEKLY_HOURS + MONTHLY_HOURS) // 2
 

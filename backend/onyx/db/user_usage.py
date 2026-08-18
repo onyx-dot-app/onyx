@@ -31,6 +31,8 @@ COST_BUDGET_PERIOD_ERROR = "Cost budget periods must be whole UTC days"
 COST_BUDGET_PERIOD_HOURS = {24, 168, 720}
 _INVALID_COST_BUDGET_WARNING_TTL_SECONDS = 5 * 60
 _invalid_cost_budget_warning_lock = RLock()
+# Keyed by the raw contextvar value, not get_current_tenant_id, which raises when
+# the contextvar is unset (non-request callers). A warn path must never raise.
 _invalid_cost_budget_warning_cache: TTLCache[tuple[str | None, int, int], None] = (
     TTLCache(maxsize=10_000, ttl=_INVALID_COST_BUDGET_WARNING_TTL_SECONDS)
 )
@@ -105,6 +107,13 @@ def get_cost_window_start(now: datetime, period_hours: int) -> datetime:
     if period_hours == 168:
         return current_bucket - timedelta(days=current_bucket.weekday())
     return current_bucket.replace(day=1)
+
+
+def cost_budget_fetch_cutoff(
+    now: datetime, cost_limits: Sequence[TokenRateLimit]
+) -> datetime:
+    """Earliest window start across the limits, so one fetch covers every window."""
+    return min(get_cost_window_start(now, limit.period_hours) for limit in cost_limits)
 
 
 def get_token_window_reset(now: datetime, period_hours: int) -> datetime:

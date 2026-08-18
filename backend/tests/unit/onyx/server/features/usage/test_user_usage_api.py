@@ -24,6 +24,7 @@ from onyx.db.models import (
     ModelCostOverride,
     TokenRateLimit,
     TokenRateLimit__UserGroup,
+    TokenRateLimitScope,
     User__UserGroup,
     UserUsage,
 )
@@ -507,7 +508,6 @@ class TestGetModelPricePerMillion:
 def test_budget_reflects_user_cost_limit(
     db_session: Session, monkeypatch: pytest.MonkeyPatch
 ) -> None:
-    from onyx.db.models import TokenRateLimitScope
 
     caller = str(uuid4())
     _seed_current_window(db_session, caller)  # records 1.25c of cost
@@ -538,7 +538,6 @@ def test_budget_reflects_user_cost_limit(
 def test_budget_reflects_global_cost_limit(
     db_session: Session, monkeypatch: pytest.MonkeyPatch
 ) -> None:
-    from onyx.db.models import TokenRateLimitScope
 
     caller = str(uuid4())
     other = str(uuid4())
@@ -607,7 +606,6 @@ def test_available_model_prices_lists_priced_models(
 def test_budget_reflects_group_cost_limit(
     db_session: Session, monkeypatch: pytest.MonkeyPatch
 ) -> None:
-    from onyx.db.models import TokenRateLimitScope
 
     caller = str(uuid4())
     _seed_current_window(db_session, caller)  # records 1.25c of cost
@@ -638,7 +636,6 @@ def test_budget_ignores_legacy_cost_period(
     db_session: Session, monkeypatch: pytest.MonkeyPatch
 ) -> None:
     """The usage endpoint excludes an unsupported stored cost period."""
-    from onyx.db.models import TokenRateLimitScope
 
     caller = str(uuid4())
     _seed_current_window(db_session, caller)

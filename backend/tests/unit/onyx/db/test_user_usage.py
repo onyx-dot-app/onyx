@@ -13,6 +13,7 @@ from unittest.mock import MagicMock
 from uuid import uuid4
 
 import pytest
+from cachetools import TTLCache
 from sqlalchemy import Table, create_engine, event, text
 from sqlalchemy.dialects import postgresql
 from sqlalchemy.dialects.postgresql import JSONB as PGJSONB
@@ -21,7 +22,13 @@ from sqlalchemy.engine import Engine
 from sqlalchemy.ext.compiler import compiles
 from sqlalchemy.orm import Session, sessionmaker
 
-from onyx.db.models import TokenRateLimit, User__UserGroup, UserUsage
+import onyx.db.user_usage as user_usage_module
+from onyx.db.models import (
+    TokenRateLimit,
+    TokenRateLimitScope,
+    User__UserGroup,
+    UserUsage,
+)
 from onyx.db.user_usage import (
     DELETED_USER_EXPORT_EMAIL,
     TokenUsageBucket,
@@ -572,9 +579,7 @@ class TestGroupCostSince:
 
 
 def test_usage_reset_window_start_skips_legacy_cost_period() -> None:
-    """An unsupported stored cost period does not widen the reset window."""
-    from onyx.configs.constants import TokenRateLimitScope
-
+    """An unsupported stored cost period is skipped instead of raising."""
     now = datetime.datetime(2026, 8, 12, 15, tzinfo=datetime.timezone.utc)
     legacy = TokenRateLimit(
         enabled=True,
@@ -589,12 +594,15 @@ def test_usage_reset_window_start_skips_legacy_cost_period() -> None:
 
 
 def test_invalid_cost_period_warning_is_rate_limited(
-    caplog: pytest.LogCaptureFixture,
+    caplog: pytest.LogCaptureFixture, monkeypatch: pytest.MonkeyPatch
 ) -> None:
-    from onyx.configs.constants import TokenRateLimitScope
-
+    monkeypatch.setattr(
+        user_usage_module,
+        "_invalid_cost_budget_warning_cache",
+        TTLCache(maxsize=10, ttl=300),
+    )
     legacy = TokenRateLimit(
-        id=2_136_000_001,
+        id=1,
         enabled=True,
         token_budget=None,
         cost_budget_cents=100.0,
