@@ -87,6 +87,7 @@ import {
 import { useLlmDefaults } from "@/lib/languageModels/hooks";
 import useFilter from "@/hooks/useFilter";
 import ModelSelector from "@/sections/model-selector/ModelSelector";
+import type { LLMOption } from "@/lib/languageModels/options";
 import type { RichStr } from "@opal/types";
 import { ProviderCredentialsModal } from "@/views/admin/IndexSettingsPage/modals";
 import ReindexProgressBanner from "@/views/admin/IndexSettingsPage/ReindexProgressBanner";
@@ -731,14 +732,12 @@ export default function IndexSettingsPage() {
    * embeddings of already-indexed documents.
    */
   const handleCaptioningModelChange = useCallback(
-    async ({
-      modelName,
-      providerName,
-    }: {
-      modelName: string;
-      providerName: string | null;
-    }) => {
-      const provider = llmProviders?.find((p) => p.name === providerName);
+    async (option: LLMOption) => {
+      const provider = llmProviders?.find((p) =>
+        p.model_configurations.some(
+          (mc) => mc.id === option.modelConfigurationId
+        )
+      );
       if (!provider) {
         toast.error("Could not resolve provider");
         return;
@@ -749,7 +748,7 @@ export default function IndexSettingsPage() {
           headers: { "Content-Type": "application/json" },
           body: JSON.stringify({
             provider_id: provider.id,
-            model_name: modelName,
+            model_name: option.modelName,
           }),
         });
         if (!response.ok) {
@@ -772,7 +771,12 @@ export default function IndexSettingsPage() {
   const captioningModelConfigId = useMemo(() => {
     if (!defaultVision?.modelName || !llmProviders) return null;
     for (const p of llmProviders) {
-      if (p.name !== defaultVision.providerName) continue;
+      if (
+        p.name !== defaultVision.providerName &&
+        p.provider !== defaultVision.providerName
+      ) {
+        continue;
+      }
       const mc = p.model_configurations.find(
         (m) => m.name === defaultVision.modelName
       );
@@ -1751,13 +1755,11 @@ export default function IndexSettingsPage() {
                                 >
                                   <ModelSelector
                                     value={captioningModelConfigId}
+                                    providerOptions={llmProviders}
                                     disabled={!imageProcessingEnabled}
                                     requiresImageInput
                                     onChange={(opt) =>
-                                      void handleCaptioningModelChange({
-                                        modelName: opt.modelName,
-                                        providerName: opt.name,
-                                      })
+                                      void handleCaptioningModelChange(opt)
                                     }
                                   />
                                 </InputHorizontal>
