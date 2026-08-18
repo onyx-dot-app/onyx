@@ -16,7 +16,7 @@ An Onyx API key. The key material is returned by the API exactly once at creatio
 # A key for an internal integration. The key material is in
 # onyx_api_key.ingest.api_key (sensitive, state-only).
 resource "onyx_api_key" "ingest" {
-  name = "ingest-pipeline"
+  name      = "ingest-pipeline"
   group_ids = [3]
 }
 ```
