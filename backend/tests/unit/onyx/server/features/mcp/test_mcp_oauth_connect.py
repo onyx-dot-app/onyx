@@ -301,13 +301,63 @@ def test_oauth_redirect_wait_is_bounded_and_cancels_probe(
         raise RuntimeError("unreachable")
 
     monkeypatch.setattr(oauth, "initialize_mcp_client", initialize_forever)
-    monkeypatch.setattr(oauth, "OAUTH_WAIT_SECONDS", 0.01)
+    monkeypatch.setattr(oauth, "OAUTH_OPERATION_TIMEOUT_SECONDS", 0.01)
 
     with pytest.raises(OnyxError, match="Timed out waiting"):
         _connect(server)
 
     assert probe_started.is_set()
     assert probe_cancelled
+
+
+def test_browser_oauth_uses_user_authorization_timeout(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    user_id = str(uuid4())
+    state = "test-state"
+    state_data = oauth.MCPOauthState(
+        server_id=42,
+        return_path="/admin/actions/mcp",
+        is_admin=True,
+        state=state,
+    )
+    redis_client = MagicMock()
+    redis_client.get.return_value = state_data.model_dump_json()
+    redis_client.blpop.return_value = (
+        oauth.key_code(user_id, state).encode(),
+        oauth.MCPOAuthCodePayload(code="test-code", state=state)
+        .model_dump_json()
+        .encode(),
+    )
+    monkeypatch.setattr(oauth, "get_redis_client", lambda: redis_client)
+    authorization_url_callback = AsyncMock()
+
+    provider = oauth.make_oauth_provider(
+        mcp_server=cast(MCPServer, _server()),
+        user_id=user_id,
+        return_path="/admin/actions/mcp",
+        connection_config_id=101,
+        admin_config_id=100,
+        authorization_url_callback=authorization_url_callback,
+    )
+    redirect_handler = provider.context.redirect_handler
+    callback_handler = provider.context.callback_handler
+    assert redirect_handler is not None
+    assert callback_handler is not None
+
+    async def complete_browser_flow() -> tuple[str, str | None]:
+        await redirect_handler(f"https://accounts.example.com/oauth?state={state}")
+        return await callback_handler()
+
+    callback_result = asyncio.run(complete_browser_flow())
+    assert redis_client.set.call_args.kwargs["ex"] == (
+        oauth.OAUTH_USER_AUTHORIZATION_TIMEOUT_SECONDS
+    )
+
+    assert callback_result == ("test-code", state)
+    assert redis_client.blpop.call_args.kwargs["timeout"] == (
+        oauth.OAUTH_USER_AUTHORIZATION_TIMEOUT_SECONDS
+    )
 
 
 def test_probe_failure_after_token_refresh_is_not_treated_as_connected(

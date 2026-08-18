@@ -87,8 +87,10 @@ _REFRESH_LOCK_WAIT_S = _REFRESH_POST_TIMEOUT_S + 5.0
 _REFRESH_LOCK_LEASE_S = 60.0
 
 
-STATE_TTL_SECONDS = 60 * 5  # 5 minutes
-OAUTH_WAIT_SECONDS = 30  # Give the user 30 seconds to complete the OAuth flow
+# Machine-to-machine OAuth work should fail promptly, while the browser flow
+# must leave enough time for sign-in, consent, and MFA.
+OAUTH_OPERATION_TIMEOUT_SECONDS = 30
+OAUTH_USER_AUTHORIZATION_TIMEOUT_SECONDS = 10 * 60
 UNUSED_RETURN_PATH = "unused_path"
 
 
@@ -153,7 +155,7 @@ async def _run_until_oauth_redirect(
         # Wait until the SDK either produces a consent URL or completes without
         # one because the connection is already authenticated. Bound the wait in
         # case the MCP server does neither.
-        async with asyncio.timeout(OAUTH_WAIT_SECONDS):
+        async with asyncio.timeout(OAUTH_OPERATION_TIMEOUT_SECONDS):
             done, _ = await asyncio.wait(
                 [operation_task, redirect_future],
                 return_when=asyncio.FIRST_COMPLETED,
@@ -681,7 +683,10 @@ class OnyxTokenStorage(TokenStorage):
         if self.alt_config_id:
             r = get_redis_client()
             r.rpush(key_tokens(str(self.alt_config_id)), tokens.model_dump_json())
-            r.expire(key_tokens(str(self.alt_config_id)), OAUTH_WAIT_SECONDS)
+            r.expire(
+                key_tokens(str(self.alt_config_id)),
+                OAUTH_OPERATION_TIMEOUT_SECONDS,
+            )
 
     async def discard_persisted_tokens(
         self, redeemed_refresh_token: str | None
@@ -926,7 +931,11 @@ def make_oauth_provider(
             is_admin=admin_config_id is not None,
             state=state,
         )
-        r.set(key_state(user_id), state_obj.model_dump_json(), ex=STATE_TTL_SECONDS)
+        r.set(
+            key_state(user_id),
+            state_obj.model_dump_json(),
+            ex=OAUTH_USER_AUTHORIZATION_TIMEOUT_SECONDS,
+        )
         if authorization_url_callback is None:
             raise RuntimeError("OAuth authorization URL callback is not configured")
         await authorization_url_callback(auth_url)
@@ -942,11 +951,12 @@ def make_oauth_provider(
         # Block on Redis for (code, state). BLPOP returns (key, value).
         key = key_code(user_id, state_obj.state)
 
-        # requests CAN block here for up to a minute if the user doesn't resolve the OAuth flow
-        # Run the blocking blpop operation in a thread pool to avoid blocking the event loop
+        # Run the blocking operation in a thread pool so the user can complete
+        # sign-in, consent, and MFA without blocking the event loop.
         loop = asyncio.get_running_loop()
         pop = await loop.run_in_executor(
-            None, lambda: r.blpop([key], timeout=OAUTH_WAIT_SECONDS)
+            None,
+            lambda: r.blpop([key], timeout=OAUTH_USER_AUTHORIZATION_TIMEOUT_SECONDS),
         )
         # TODO(evan): gracefully handle "user says no"
         if not pop:

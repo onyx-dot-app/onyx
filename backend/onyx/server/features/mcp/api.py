@@ -126,9 +126,9 @@ from onyx.server.features.mcp.models import (
     merge_mcp_headers,
 )
 from onyx.server.features.mcp.oauth import (
-    OAUTH_WAIT_SECONDS,
+    OAUTH_OPERATION_TIMEOUT_SECONDS,
+    OAUTH_USER_AUTHORIZATION_TIMEOUT_SECONDS,
     REQUESTED_SCOPE,
-    STATE_TTL_SECONDS,
     UNUSED_RETURN_PATH,
     MCPOauthState,
     _absolute_token_expiry,
@@ -878,7 +878,7 @@ async def _connect_oauth(
         redis_client.set(
             state_key,
             state_obj.model_dump_json(),
-            ex=STATE_TTL_SECONDS,
+            ex=OAUTH_USER_AUTHORIZATION_TIMEOUT_SECONDS,
         )
 
         oauth_url = build_oauth_authorization_url(
@@ -1062,7 +1062,7 @@ async def process_oauth_callback(
 
     # Unblock the callback_handler in the asyncio background task
     r.rpush(key_code(user_id, state), json.dumps({"code": code, "state": state}))
-    r.expire(key_code(user_id, state), OAUTH_WAIT_SECONDS)
+    r.expire(key_code(user_id, state), OAUTH_OPERATION_TIMEOUT_SECONDS)
 
     admin_config = mcp_server.admin_connection_config
     if admin_config is None:
@@ -1077,7 +1077,10 @@ async def process_oauth_callback(
     loop = asyncio.get_running_loop()
     tokens_raw = await loop.run_in_executor(
         None,
-        lambda: r.blpop([key_tokens(str(admin_config_id))], timeout=OAUTH_WAIT_SECONDS),
+        lambda: r.blpop(
+            [key_tokens(str(admin_config_id))],
+            timeout=OAUTH_OPERATION_TIMEOUT_SECONDS,
+        ),
     )
     if tokens_raw is None:
         raise HTTPException(status_code=400, detail="No tokens found")
