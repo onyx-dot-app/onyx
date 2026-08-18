@@ -9,6 +9,7 @@ Create Date: 2026-08-13 15:10:53.661660
 import sqlalchemy as sa
 from alembic import op
 from sqlalchemy.dialects import postgresql
+from sqlalchemy.dialects.postgresql import aggregate_order_by
 
 
 # revision identifiers, used by Alembic.
@@ -16,6 +17,31 @@ revision = "4d93b0fd5ca8"
 down_revision = "f54501f1435a"
 branch_labels = None
 depends_on = None
+
+# Stubs rather than the ORM models, and duplicating
+# `build_seed_pinned_personas_stmt` is deliberate: a migration stays pinned to
+# the schema at its own revision, so it can import neither the models nor the
+# app helper. `pinned_assistants` only exists on either side of this revision.
+user = sa.table(
+    "user",
+    sa.column("id", sa.UUID()),
+    sa.column("pinned_assistants", postgresql.JSONB()),
+)
+persona = sa.table(
+    "persona",
+    sa.column("id", sa.Integer()),
+    sa.column("display_priority", sa.Integer()),
+    sa.column("is_featured", sa.Boolean()),
+    sa.column("is_public", sa.Boolean()),
+    sa.column("is_listed", sa.Boolean()),
+    sa.column("deleted", sa.Boolean()),
+)
+pinned_persona = sa.table(
+    "user__pinned_persona",
+    sa.column("user_id", sa.UUID()),
+    sa.column("persona_id", sa.Integer()),
+    sa.column("display_order", sa.Integer()),
+)
 
 
 def upgrade() -> None:
@@ -27,31 +53,6 @@ def upgrade() -> None:
         sa.ForeignKeyConstraint(["user_id"], ["user.id"], ondelete="CASCADE"),
         sa.ForeignKeyConstraint(["persona_id"], ["persona.id"], ondelete="CASCADE"),
         sa.PrimaryKeyConstraint("user_id", "persona_id"),
-    )
-
-    # The stubs are local, and duplicating `build_seed_pinned_personas_stmt` is
-    # deliberate: a migration stays pinned to the schema at its own revision, so
-    # it can import neither the ORM models nor the app helper.
-    # `pinned_assistants` also stops existing at the end of this function.
-    user = sa.table(
-        "user",
-        sa.column("id", sa.UUID()),
-        sa.column("pinned_assistants", postgresql.JSONB()),
-    )
-    persona = sa.table(
-        "persona",
-        sa.column("id", sa.Integer()),
-        sa.column("display_priority", sa.Integer()),
-        sa.column("is_featured", sa.Boolean()),
-        sa.column("is_public", sa.Boolean()),
-        sa.column("is_listed", sa.Boolean()),
-        sa.column("deleted", sa.Boolean()),
-    )
-    pinned_persona = sa.table(
-        "user__pinned_persona",
-        sa.column("user_id", sa.UUID()),
-        sa.column("persona_id", sa.Integer()),
-        sa.column("display_order", sa.Integer()),
     )
 
     # Carry existing pins over, dropping three kinds of entry the array allowed
@@ -159,18 +160,24 @@ def downgrade() -> None:
     # nullable and the difference mattered - null meant "never seeded" - but
     # that distinction is exactly what this revision removed, and it cannot be
     # recovered from rows.
-    op.execute(
-        """
-        UPDATE "user" AS u
-        SET pinned_assistants = COALESCE(
-            (
-                SELECT jsonb_agg(pp.persona_id ORDER BY pp.display_order)
-                FROM user__pinned_persona AS pp
-                WHERE pp.user_id = u.id
-            ),
-            '[]'::jsonb
+    ordered_pins = (
+        sa.select(
+            sa.func.jsonb_agg(
+                aggregate_order_by(
+                    pinned_persona.c.persona_id, pinned_persona.c.display_order
+                )
+            )
         )
-        """
+        .where(pinned_persona.c.user_id == user.c.id)
+        .scalar_subquery()
+    )
+
+    op.execute(
+        sa.update(user).values(
+            pinned_assistants=sa.func.coalesce(
+                ordered_pins, sa.cast(sa.literal("[]"), postgresql.JSONB)
+            )
+        )
     )
 
     op.drop_table("user__pinned_persona")
