@@ -235,8 +235,9 @@ def test_salesforce_standard_oauth_invalid_domain_and_disabled_config(
             standard_oauth.oauth_authorize(
                 request=_request(
                     {
+                        # http:// so the URL parses and the HTTPS check rejects it.
                         "salesforce_my_domain_url": (
-                            "danswer-dev-ed.develop.my.salesforce.com"
+                            "http://danswer-dev-ed.develop.my.salesforce.com"
                         )
                     }
                 ),
