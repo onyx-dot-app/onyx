@@ -15,6 +15,7 @@ from onyx.configs.constants import DocumentSource
 from onyx.db.enums import Permission
 from tests.integration.common_utils.constants import API_SERVER_URL
 from tests.integration.common_utils.http_client import client
+from tests.integration.common_utils.managers.cc_pair import CCPairManager
 from tests.integration.common_utils.managers.user import UserManager
 from tests.integration.common_utils.managers.user_group import UserGroupManager
 from tests.integration.common_utils.test_models import DATestUser
@@ -204,12 +205,15 @@ def test_resources_cannot_be_shared_with_a_default_group(
     assert credential.status_code == 400, credential.text
     assert "Basic" in credential.text
 
+    # a real connector, or the route rejects the set for being empty before it ever
+    # reaches the share guard
+    cc_pair = CCPairManager.create_from_scratch(user_performing_action=admin_user)
     document_set = client.post(
         f"{API_SERVER_URL}/manage/admin/document-set",
         json={
             "name": f"default-group-docset-{uuid4().hex[:8]}",
             "description": "",
-            "cc_pair_ids": [],
+            "cc_pair_ids": [cc_pair.id],
             "is_public": False,
             "users": [],
             "groups": [basic.id],
