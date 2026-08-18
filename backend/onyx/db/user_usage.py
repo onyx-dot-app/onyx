@@ -57,6 +57,26 @@ def _get_cost_period_seconds(period_hours: int) -> int:
     return period_seconds
 
 
+def cost_budget_limits(rate_limits: Sequence[TokenRateLimit]) -> list[TokenRateLimit]:
+    """Limits that carry an enforceable cost budget. Rows written before the
+    daily/weekly/monthly restriction can hold any whole-day period; those are
+    skipped with a warning because a bad stored row must never block requests."""
+    valid: list[TokenRateLimit] = []
+    for rate_limit in rate_limits:
+        if rate_limit.cost_budget_cents is None:
+            continue
+        if rate_limit.period_hours not in COST_BUDGET_PERIOD_HOURS:
+            logger.warning(
+                "Skipping cost budget on token_rate_limit id=%s: "
+                "unsupported period_hours=%s",
+                rate_limit.id,
+                rate_limit.period_hours,
+            )
+            continue
+        valid.append(rate_limit)
+    return valid
+
+
 def get_cost_window_start(now: datetime, period_hours: int) -> datetime:
     """Start of the current fixed UTC cost-budget period."""
     _get_cost_period_seconds(period_hours)
@@ -342,11 +362,15 @@ def get_usage_reset_window_start(
 ) -> datetime:
     """Return the earliest bucket included by any applicable limit."""
     window_starts = [get_window_start(now, USER_USAGE_BUCKET_SECONDS)]
-    for rate_limit in rate_limits:
-        if rate_limit.token_budget is not None:
-            window_starts.append(get_token_window_start(now, rate_limit.period_hours))
-        if rate_limit.cost_budget_cents is not None:
-            window_starts.append(get_cost_window_start(now, rate_limit.period_hours))
+    window_starts.extend(
+        get_token_window_start(now, rate_limit.period_hours)
+        for rate_limit in rate_limits
+        if rate_limit.token_budget is not None
+    )
+    window_starts.extend(
+        get_cost_window_start(now, rate_limit.period_hours)
+        for rate_limit in cost_budget_limits(rate_limits)
+    )
     return min(window_starts)
 
 

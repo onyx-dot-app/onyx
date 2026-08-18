@@ -20,7 +20,7 @@ from sqlalchemy.engine import Engine
 from sqlalchemy.ext.compiler import compiles
 from sqlalchemy.orm import Session, sessionmaker
 
-from onyx.db.models import User__UserGroup, UserUsage
+from onyx.db.models import TokenRateLimit, User__UserGroup, UserUsage
 from onyx.db.user_usage import (
     DELETED_USER_EXPORT_EMAIL,
     TokenUsageBucket,
@@ -33,6 +33,7 @@ from onyx.db.user_usage import (
     get_total_cost_cents_since,
     get_total_token_buckets_since,
     get_usage_export,
+    get_usage_reset_window_start,
     get_user_cost_cents_buckets_since,
     get_user_cost_cents_in_window,
     get_user_cost_cents_since,
@@ -566,3 +567,22 @@ class TestGroupCostSince:
         assert get_group_token_buckets_since(session, [10], window) == {
             10: [TokenUsageBucket(window_start=window, tokens=125)]
         }
+
+
+def test_usage_reset_window_start_skips_legacy_cost_period() -> None:
+    """A stored cost period outside the supported calendar set (possible on rows
+    written before the daily/weekly/monthly restriction) must not fail the reset
+    window computation — the cost window is simply not widened by that row."""
+    from onyx.configs.constants import TokenRateLimitScope
+
+    now = datetime.datetime(2026, 8, 12, 15, tzinfo=datetime.timezone.utc)
+    legacy = TokenRateLimit(
+        enabled=True,
+        token_budget=None,
+        cost_budget_cents=100.0,
+        period_hours=2136,
+        scope=TokenRateLimitScope.GLOBAL,
+    )
+    assert get_usage_reset_window_start(now, [legacy]) == datetime.datetime(
+        2026, 8, 12, tzinfo=datetime.timezone.utc
+    )

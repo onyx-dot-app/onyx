@@ -25,6 +25,7 @@ from onyx.db.token_limit import (
     fetch_user_group_token_rate_limits,
 )
 from onyx.db.user_usage import (
+    cost_budget_limits,
     get_cost_window_reset,
     get_cost_window_start,
     get_group_cost_cents_buckets_since,
@@ -122,7 +123,7 @@ def _user_cost_budget(db_session: Session, user_id: str) -> EffectiveCostBudget 
             )
 
     user_rls = fetch_all_user_token_rate_limits(db_session, enabled_only=True)
-    user_cost_rls = [rl for rl in user_rls if rl.cost_budget_cents is not None]
+    user_cost_rls = cost_budget_limits(user_rls)
     if user_cost_rls:
         fetch_cutoff = min(
             get_cost_window_start(now, rl.period_hours) for rl in user_cost_rls
@@ -133,7 +134,7 @@ def _user_cost_budget(db_session: Session, user_id: str) -> EffectiveCostBudget 
         )
 
     global_rls = fetch_all_global_token_rate_limits(db_session, enabled_only=True)
-    global_cost_rls = [rl for rl in global_rls if rl.cost_budget_cents is not None]
+    global_cost_rls = cost_budget_limits(global_rls)
     if global_cost_rls:
         fetch_cutoff = min(
             get_cost_window_start(now, rl.period_hours) for rl in global_cost_rls
@@ -167,12 +168,7 @@ def _group_cost_budget_candidate(
     if not group_limits:
         return None
 
-    cost_rls = [
-        rl
-        for rls in group_limits.values()
-        for rl in rls
-        if rl.cost_budget_cents is not None
-    ]
+    cost_rls = cost_budget_limits([rl for rls in group_limits.values() for rl in rls])
     if not cost_rls:
         return None
 
@@ -186,7 +182,7 @@ def _group_cost_budget_candidate(
     for group_id, limits in group_limits.items():
         group_buckets = buckets.get(group_id, [])
         group_binding: EffectiveCostBudget | None = None
-        for rl in limits:
+        for rl in cost_budget_limits(limits):
             if rl.cost_budget_cents is None:
                 continue
             cutoff = get_cost_window_start(now, rl.period_hours)
