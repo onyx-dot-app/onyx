@@ -1,9 +1,11 @@
-"""External-dependency unit tests for the trial-business → enterprise promotion.
+"""External-dependency unit tests for cloud tier resolution.
 
 Covers `ee.onyx.utils.tier.get_tier()` end-to-end against real Redis. The CP
 boundary (`fetch_billing_information`) is the only thing mocked — everything
-else (cache reads/writes, JSON serialization, datetime comparisons) runs for
-real.
+else (cache reads/writes, JSON serialization, datetime parsing) runs for real.
+
+A trial grants no tier promotion: a trialing tenant resolves to the same tier
+it will hold when the trial expires.
 """
 
 import json
@@ -69,22 +71,19 @@ def _billing_info(
     )
 
 
-def test_trial_business_resolves_to_enterprise() -> None:
-    """A BUSINESS tenant with a future trial_end is promoted to ENTERPRISE."""
+def test_trial_business_stays_business() -> None:
+    """A BUSINESS tenant with a future trial_end resolves to BUSINESS. Trials
+    run with the feature set the tenant will keep after the trial expires."""
     future = datetime.now(timezone.utc) + timedelta(days=1)
     update_tenant_tier(
         POSTGRES_DEFAULT_SCHEMA_STANDARD_VALUE, CustomerTier.BUSINESS, future
     )
 
-    assert (
-        tier_module.get_tier(POSTGRES_DEFAULT_SCHEMA_STANDARD_VALUE) == Tier.ENTERPRISE
-    )
+    assert tier_module.get_tier(POSTGRES_DEFAULT_SCHEMA_STANDARD_VALUE) == Tier.BUSINESS
 
 
-def test_expired_trial_business_drops_back_to_business() -> None:
-    """Once trial_end is in the past, the cached entry resolves to BUSINESS
-    without waiting on the next webhook — this is the core defense against
-    a delayed CP push."""
+def test_expired_trial_business_stays_business() -> None:
+    """A past trial_end changes nothing about the resolved tier."""
     past = datetime.now(timezone.utc) - timedelta(days=1)
     update_tenant_tier(
         POSTGRES_DEFAULT_SCHEMA_STANDARD_VALUE, CustomerTier.BUSINESS, past
@@ -94,7 +93,7 @@ def test_expired_trial_business_drops_back_to_business() -> None:
 
 
 def test_non_trial_business_resolves_to_business() -> None:
-    """BUSINESS with no trial_end is unaffected by the promotion rule."""
+    """BUSINESS with no trial_end resolves to BUSINESS."""
     update_tenant_tier(
         POSTGRES_DEFAULT_SCHEMA_STANDARD_VALUE, CustomerTier.BUSINESS, None
     )
@@ -115,7 +114,7 @@ def test_enterprise_without_trial_resolves_to_enterprise() -> None:
 
 def test_enterprise_with_future_trial_remains_enterprise() -> None:
     """ENTERPRISE + a (nonsense in practice) future trial_end is still
-    ENTERPRISE — the promotion rule only fires on BUSINESS."""
+    ENTERPRISE — trial state never changes a resolved tier."""
     future = datetime.now(timezone.utc) + timedelta(days=1)
     update_tenant_tier(
         POSTGRES_DEFAULT_SCHEMA_STANDARD_VALUE, CustomerTier.ENTERPRISE, future
@@ -126,16 +125,16 @@ def test_enterprise_with_future_trial_remains_enterprise() -> None:
     )
 
 
-def test_cache_miss_lazy_refresh_promotes_and_caches() -> None:
-    """A cold cache that pulls BUSINESS + future trial_end from CP should
-    return ENTERPRISE and write both fields back to the cache as JSON."""
+def test_cache_miss_lazy_refresh_caches_contractual_tier() -> None:
+    """A cold cache that pulls BUSINESS + future trial_end from CP returns
+    BUSINESS and writes both fields back to the cache as JSON."""
     future = datetime.now(timezone.utc) + timedelta(days=3)
     billing = _billing_info(CustomerTier.BUSINESS, future)
 
     with patch.object(tier_module, "fetch_billing_information", return_value=billing):
         result = tier_module.get_tier(POSTGRES_DEFAULT_SCHEMA_STANDARD_VALUE)
 
-    assert result == Tier.ENTERPRISE
+    assert result == Tier.BUSINESS
 
     cached = get_cached_tier(POSTGRES_DEFAULT_SCHEMA_STANDARD_VALUE)
     assert cached is not None
@@ -146,9 +145,9 @@ def test_cache_miss_lazy_refresh_promotes_and_caches() -> None:
 
 
 def test_cached_naive_trial_end_is_treated_as_none() -> None:
-    """A cache entry with a naive `trial_end` ISO string must not crash the
-    tz-aware comparison in `_effective_tier`. It should be parsed as `None`
-    (logged) and the tenant should resolve to their unpromoted tier."""
+    """A cache entry with a naive `trial_end` ISO string must not crash tier
+    resolution. It is parsed as `None` (logged) and the tenant resolves to
+    their contractual tier."""
     redis_client = get_redis_client(tenant_id=POSTGRES_DEFAULT_SCHEMA_STANDARD_VALUE)
     payload = json.dumps(
         {
@@ -164,13 +163,13 @@ def test_cached_naive_trial_end_is_treated_as_none() -> None:
     assert cached.customer_tier == CustomerTier.BUSINESS
     assert cached.trial_end is None
 
-    # End-to-end: must not raise, must fall back to unpromoted BUSINESS.
+    # End-to-end: must not raise, must resolve the contractual BUSINESS.
     assert tier_module.get_tier(POSTGRES_DEFAULT_SCHEMA_STANDARD_VALUE) == Tier.BUSINESS
 
 
 def test_cp_returns_naive_trial_end_falls_back_to_business() -> None:
     """If CP ever returns a naive `trial_end` in BillingInformation, the
-    lazy-refresh path must drop it instead of crashing `_effective_tier`."""
+    lazy-refresh path must drop it instead of crashing tier resolution."""
     naive_future = datetime(2099, 1, 1, 12, 0, 0)  # no tzinfo
     now = datetime.now(timezone.utc)
     billing = BillingInformation(
