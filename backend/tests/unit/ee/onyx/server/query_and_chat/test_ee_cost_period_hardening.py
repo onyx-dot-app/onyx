@@ -110,3 +110,38 @@ def test_user_path_fetch_cutoff_covers_every_window(
     assert captured == [
         min(get_cost_window_start(now, 168), get_cost_window_start(now, 720))
     ]
+
+
+def test_group_path_fetch_cutoff_covers_every_window(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    weekly, monthly = _cost_limit(period_hours=168), _cost_limit(period_hours=720)
+    weekly.scope = TokenRateLimitScope.USER_GROUP
+    monthly.scope = TokenRateLimitScope.USER_GROUP
+    captured: list[datetime] = []
+
+    def _capture_cutoff(
+        _db: object, _group_ids: object, cutoff: datetime
+    ) -> dict[int, list[tuple[datetime, float]]]:
+        captured.append(cutoff)
+        return {}
+
+    monkeypatch.setattr(ee_token_limit, "datetime", _FixedDatetime)
+    monkeypatch.setattr(
+        ee_token_limit, "get_session_with_current_tenant", lambda: _SessionCtx()
+    )
+    monkeypatch.setattr(
+        ee_token_limit,
+        "fetch_user_group_token_rate_limits",
+        lambda *_: {1: [weekly, monthly]},
+    )
+    monkeypatch.setattr(
+        ee_token_limit, "get_group_cost_cents_buckets_since", _capture_cutoff
+    )
+
+    ee_token_limit._user_is_rate_limited_by_group(uuid4())
+
+    now = _FixedDatetime.now(timezone.utc)
+    assert captured == [
+        min(get_cost_window_start(now, 168), get_cost_window_start(now, 720))
+    ]
