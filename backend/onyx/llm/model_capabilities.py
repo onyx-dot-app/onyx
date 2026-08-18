@@ -671,7 +671,11 @@ def supported_reasoning_efforts(
     derive their answer from `resolve_reasoning_param_style`, so a greyed-out
     slider stop and a dropped request parameter should never disagree.
     """
-    if any(openai_model_rejects_reasoning_effort(name) for name in model_names):
+    if any(
+        openai_model_rejects_reasoning_effort(name)
+        or openai_chat_variant_rejects_reasoning(name)
+        for name in model_names
+    ):
         return []
 
     style = resolve_reasoning_param_style(model_provider, model_names, api_surface)
