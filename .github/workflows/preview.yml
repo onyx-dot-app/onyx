@@ -32,10 +32,15 @@ jobs:
 
   # Per-commit previews on the self-hosted local-preview server, which runs
   # the Next.js frontend and the FastAPI backend together at
-  # <sha>-onyx.preview.onyxcorp.dev. Only the frontend is uploaded: this
-  # workflow already builds it, and an uploaded side lands in the exact
-  # content-addressed slot the server's own build would have targeted, so the
-  # deploy skips it. The backend is built server-side from the same commit.
+  # <sha>-onyx.<the server's preview domain>. Which server that is lives
+  # entirely in vars.PREVIEW_URL, managed in onyx-infra
+  # (internal-tools/terraform/github-org) — nothing here names a host, so
+  # pointing this at a different deployment is a variable change, not a PR.
+  #
+  # Only the frontend is uploaded: this workflow already builds it, and an
+  # uploaded side lands in the exact content-addressed slot the server's own
+  # build would have targeted, so the deploy skips it. The backend is built
+  # server-side from the same commit.
   #
   # Auth: uploads authenticate with a GitHub Actions OIDC token (hence
   # id-token: write) bound to this repository, which is the one the "onyx"
@@ -113,6 +118,9 @@ jobs:
         env:
           GH_TOKEN: ${{ github.token }}
           PREVIEW_DEPLOYMENT_URL: ${{ steps.deploy.outputs.url }}
+          # Which GitHub org the server admits, only so the comment can say
+          # so. Optional — the sign-in line drops the clause when it is unset.
+          PREVIEW_SSO_ORG: ${{ vars.PREVIEW_SSO_ORG }}
         run: |
           PR_NUMBER=$(gh pr list --head "$GITHUB_REF_NAME" --json number --jq '.[0].number')
           if [ -z "$PR_NUMBER" ]; then
@@ -128,7 +136,7 @@ jobs:
           | --- | --- | --- | --- |
           | ✅ | $PREVIEW_DEPLOYMENT_URL | \`${GITHUB_SHA::7}\` | $(date -u '+%Y-%m-%d %H:%M:%S UTC') |
 
-          Sign in with GitHub as an \`onyx-dot-app\` member to view it."
+          Sign in with GitHub${PREVIEW_SSO_ORG:+ as an \`$PREVIEW_SSO_ORG\` member} to view it."
 
           EXISTING_COMMENT_ID=$(gh api "repos/$GITHUB_REPOSITORY/issues/$PR_NUMBER/comments" \
             --jq ".[] | select(.body | startswith(\"$COMMENT_MARKER\")) | .id" | head -1)
