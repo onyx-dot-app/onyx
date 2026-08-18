@@ -38,7 +38,7 @@ variable "auth_token" {
 }
 
 variable "enable_redis_iam_auth" {
-  description = "Enable IAM authentication for Redis ElastiCache"
+  description = "Omit the auth token so the replication group can be used with IAM authentication. This module does not create the ElastiCache user or user group; provision and associate those separately before enabling."
   type        = bool
   default     = false
 }

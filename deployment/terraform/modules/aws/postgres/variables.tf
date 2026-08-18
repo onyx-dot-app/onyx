@@ -279,6 +279,8 @@ variable "maintenance_window" {
   default     = null
 }
 
+# When true, RDS generates and rotates the master password in Secrets Manager and
+# any value passed to var.password is ignored.
 variable "manage_master_user_password" {
   type        = bool
   description = "Let RDS generate and rotate the master password in Secrets Manager. Mutually exclusive with `password`."

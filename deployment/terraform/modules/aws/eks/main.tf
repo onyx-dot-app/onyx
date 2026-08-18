@@ -1,3 +1,11 @@
+# The Craft sandbox node group's map key was `craft_sandbox`; it is now
+# `sandbox`. The key is part of the upstream module's instance address, so
+# without this the group is destroyed and recreated, evicting its workloads.
+moved {
+  from = module.eks.module.eks_managed_node_group["craft_sandbox"]
+  to   = module.eks.module.eks_managed_node_group["sandbox"]
+}
+
 locals {
   s3_bucket_arns = [for name in var.s3_bucket_names : {
     bucket_arn     = "arn:aws:s3:::${name}"

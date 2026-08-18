@@ -52,13 +52,13 @@ variable "tags" {
 }
 
 variable "allowed_vpc_ids" {
-  description = "List of VPC IDs allowed to access the bucket. Leave empty to allow all."
+  description = "VPC IDs allowed anonymous read. Only used when allow_anonymous_read is true; leaving both this and allowed_source_ips empty grants nothing rather than granting everything."
   type        = list(string)
   default     = []
 }
 
 variable "allowed_source_ips" {
-  description = "List of CIDR blocks allowed to access the bucket. Leave empty to allow all."
+  description = "CIDR blocks allowed anonymous read. Only used when allow_anonymous_read is true; leaving both this and allowed_vpc_ids empty grants nothing rather than granting everything."
   type        = list(string)
   default     = []
 }

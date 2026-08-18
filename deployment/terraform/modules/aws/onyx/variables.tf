@@ -16,6 +16,12 @@ variable "create_vpc" {
   default     = true
 }
 
+variable "single_nat_gateway" {
+  type        = bool
+  description = "Route all private subnets through one NAT gateway. Cheaper, but the NAT becomes a single-AZ dependency. False provisions one per AZ."
+  default     = false
+}
+
 variable "vpc_id" {
   type        = string
   description = "ID of the VPC. Required if create_vpc is false."
@@ -309,7 +315,7 @@ variable "gpu_node_instance_types" {
   default     = ["g4dn.xlarge"]
 }
 
-variable "craft_enabled" {
+variable "enable_craft" {
   type        = bool
   description = "Create a dedicated Craft sandbox node group (labeled onyx.app/workload=sandbox, tainted workload=sandbox:NoSchedule, IMDSv2 hop-limit 1). Opt-in per workspace."
   default     = false

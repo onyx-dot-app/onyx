@@ -145,9 +145,10 @@ provider "aws" {
 module "vpc" {
   source = "../vpc"
 
-  count    = var.create_vpc ? 1 : 0
-  vpc_name = local.vpc_name
-  tags     = local.merged_tags
+  count              = var.create_vpc ? 1 : 0
+  vpc_name           = local.vpc_name
+  single_nat_gateway = var.single_nat_gateway
+  tags               = local.merged_tags
 }
 
 module "redis" {
@@ -247,7 +248,7 @@ module "eks" {
   enable_gpu_node         = var.enable_gpu_node
   gpu_node_instance_types = var.gpu_node_instance_types
 
-  craft_enabled                     = var.craft_enabled
+  craft_enabled                     = var.enable_craft
   craft_sandbox_node_instance_types = var.craft_sandbox_node_instance_types
   craft_sandbox_node_min_size       = var.craft_sandbox_node_min_size
   craft_sandbox_node_max_size       = var.craft_sandbox_node_max_size

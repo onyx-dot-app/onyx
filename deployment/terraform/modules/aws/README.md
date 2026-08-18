@@ -81,7 +81,7 @@ output "cluster_name" {
   value = module.onyx.cluster_name
 }
 output "postgres_connection_url" {
-  value     = module.onyx.postgres_connection_url
+  value     = "postgres://${module.onyx.postgres_username}@${module.onyx.postgres_endpoint}/${module.onyx.postgres_db_name}"
   sensitive = true
 }
 output "redis_connection_url" {
@@ -191,9 +191,10 @@ module "onyx" {
 - Orchestrates `vpc`, `eks`, `postgres`, `redis`, and `s3`
 - Names resources using `name` and the current Terraform workspace
 - Exposes convenient outputs:
-  - `cluster_name`: EKS cluster name
-  - `postgres_connection_url` (sensitive): `postgres://...`
+  - `cluster_name`, `oidc_provider`, `oidc_provider_arn`, `workload_irsa_role_arn`
+  - `postgres_endpoint`, `postgres_port`, `postgres_db_name`, `postgres_username` (sensitive), `postgres_dbi_resource_id`
   - `redis_connection_url` (sensitive): hostname:port
+  - `opensearch_endpoint`, `opensearch_dashboard_endpoint`, `opensearch_domain_arn` (null unless `enable_opensearch`)
 
 Inputs (common):
 - `name` (default `onyx`), `region` (default `us-west-2`), `tags`
@@ -202,6 +203,7 @@ Inputs (common):
 - `redis_auth_token`: required unless `enable_redis_iam_auth` is true, because the
   Redis module enables transit encryption and AWS requires a token in that case
 - `create_vpc` (default true) or existing VPC details and `s3_vpc_endpoint_id`
+- `single_nat_gateway` (default false): one NAT gateway per AZ. Set true to trade AZ independence for cost
 - WAF controls such as `waf_allowed_ip_cidrs`, `waf_common_rule_set_count_rules`, rate limits, geo restrictions, and logging retention
 - Optional OpenSearch controls such as `enable_opensearch`, sizing, credentials, and log retention
 - `alarm_actions`: SNS topic ARNs for the CloudWatch alarms created by the data-plane modules. Empty (the default) leaves the alarms in place but notifying nothing
@@ -278,9 +280,16 @@ modules add settings the old ones did not manage:
 - `s3` now manages versioning, encryption, a public access block, and lifecycle rules
 - `vpc` now creates flow logs and their IAM role
 - `postgres`, `redis`, and `opensearch` now create CloudWatch alarms
+- `postgres` now manages `multi_az` (default false). If you enabled a standby
+  outside Terraform, set `multi_az = true` before applying or the standby is removed
+- `eks` now enables the private API endpoint by default (`private_cluster_enabled`).
+  This is additive and does not remove public access
 
 **`cluster_endpoint_public_access_cidrs` now defaults to `[]`.** If you relied on
 the previous default, set the value explicitly before applying.
+
+**The Craft sandbox node group's key changed** from `craft_sandbox` to `sandbox`.
+A `moved` block handles the relabel, so the group is not recreated.
 
 ## Installing the Onyx Helm chart (after Terraform)
 Once the cluster is active, deploy application workloads via Helm. You can use the chart in `deployment/helm/charts/onyx`.

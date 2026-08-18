@@ -21,7 +21,8 @@ from pathlib import Path
 
 ROOT = Path(__file__).resolve().parent.parent
 
-ALLOW_MARKER = "public-safe: ok"
+# Must be the whole trailing comment token: "# public-safe: okay" does not count.
+ALLOW_MARKER = re.compile(r"#\s*public-safe:\s*ok\s*$")
 
 ACCOUNT_ID = re.compile(r"(?<!\d)\d{12}(?!\d)")
 ACCESS_KEY = re.compile(r"\b(?:AKIA|ASIA)[0-9A-Z]{16}\b")
@@ -39,7 +40,7 @@ def _is_publishable(network: ipaddress.IPv4Network) -> bool:
 def scan(path: Path) -> list[str]:
     findings: list[str] = []
     for lineno, line in enumerate(path.read_text().splitlines(), start=1):
-        if ALLOW_MARKER in line:
+        if ALLOW_MARKER.search(line):
             continue
         try:
             shown = path.relative_to(ROOT)
@@ -74,12 +75,15 @@ def main(argv: list[str]) -> int:
         findings.extend(scan(path))
 
     if findings:
-        print("Internal values found in published Terraform modules:\n")
+        print(
+            "Internal values found in published Terraform modules:\n", file=sys.stderr
+        )
         for finding in findings:
-            print(f"  {finding}")
+            print(f"  {finding}", file=sys.stderr)
         print(
             "\nMove the value to the caller, or append '# public-safe: ok' if the "
-            "line is genuinely safe to publish."
+            "line is genuinely safe to publish.",
+            file=sys.stderr,
         )
         return 1
     return 0
