@@ -13,10 +13,12 @@ from onyx.server.manage import get_state
 
 @pytest.fixture(autouse=True)
 def reset_saturation_latch() -> Iterator[None]:
-    """The latch is module state, so clear it around every test."""
+    """The latches are module state, so clear them around every test."""
     get_state._SATURATED_SINCE = None
+    get_state._REPORTED_NOT_READY = False
     yield
     get_state._SATURATED_SINCE = None
+    get_state._REPORTED_NOT_READY = False
 
 
 def _limiter(borrowed: float, total: float, waiting: int) -> MagicMock:
@@ -97,6 +99,27 @@ def test_recovery_between_samples_restarts_the_timer() -> None:
 
     assert response.success is True
     assert get_state._SATURATED_SINCE == 200.0
+
+
+def test_not_ready_is_logged_once_per_streak() -> None:
+    """Probes are frequent, so only readiness changes may write to the log."""
+    with patch.object(get_state, "logger") as mock_logger:
+        _healthcheck(borrowed=40, total=40, waiting=5, now=100.0)
+        for offset in range(3):
+            with pytest.raises(OnyxError):
+                _healthcheck(
+                    borrowed=40,
+                    total=40,
+                    waiting=5,
+                    now=100.0 + get_state._UNREADY_AFTER_SECONDS + offset,
+                )
+
+        assert mock_logger.warning.call_count == 1
+
+        _healthcheck(borrowed=0, total=40, waiting=0, now=200.0)
+        _healthcheck(borrowed=0, total=40, waiting=0, now=201.0)
+
+        assert mock_logger.notice.call_count == 1
 
 
 def test_liveness_stays_up_while_saturated() -> None:

@@ -96,6 +96,12 @@ _UNREADY_AFTER_SECONDS = 10.0
 # loop inside `healthcheck`, with no await between the read and the write.
 _SATURATED_SINCE: float | None = None
 
+# Probes can hit /health many times a second, so log only when readiness
+# changes. Logging every not-ready probe would flood the log with one line per
+# probe per replica, and add synchronous I/O exactly when the server is already
+# out of capacity.
+_REPORTED_NOT_READY = False
+
 
 def _threadpool_saturation() -> tuple[bool, dict[str, float]]:
     """Report whether the sync-endpoint threadpool has no capacity left.
@@ -125,12 +131,15 @@ async def healthcheck() -> StatusResponse[dict[str, float]]:
     the pool it is measuring, adding load exactly when there is none to spare,
     and would queue rather than answer. Liveness lives at /health/live.
     """
-    global _SATURATED_SINCE
+    global _SATURATED_SINCE, _REPORTED_NOT_READY
 
     saturated, depth = _threadpool_saturation()
     now = time.monotonic()
 
     if not saturated:
+        if _REPORTED_NOT_READY:
+            logger.notice("Threadpool recovered; reporting ready again")
+            _REPORTED_NOT_READY = False
         _SATURATED_SINCE = None
         return StatusResponse(success=True, message="ok", data=depth)
 
@@ -141,14 +150,17 @@ async def healthcheck() -> StatusResponse[dict[str, float]]:
     if saturated_for < _UNREADY_AFTER_SECONDS:
         return StatusResponse(success=True, message="ok", data=depth)
 
-    logger.warning(
-        "Threadpool saturated for %.1fs (%s/%s tokens borrowed, %s waiting); "
-        "reporting not ready",
-        saturated_for,
-        depth["threadpool_borrowed_tokens"],
-        depth["threadpool_total_tokens"],
-        depth["threadpool_tasks_waiting"],
-    )
+    if not _REPORTED_NOT_READY:
+        logger.warning(
+            "Threadpool saturated for %.1fs (%s/%s tokens borrowed, %s waiting); "
+            "reporting not ready",
+            saturated_for,
+            depth["threadpool_borrowed_tokens"],
+            depth["threadpool_total_tokens"],
+            depth["threadpool_tasks_waiting"],
+        )
+        _REPORTED_NOT_READY = True
+
     raise OnyxError(
         OnyxErrorCode.SERVICE_UNAVAILABLE,
         f"Request threadpool saturated for {saturated_for:.1f}s "
