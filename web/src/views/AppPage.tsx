@@ -429,32 +429,6 @@ export default function AppPage({ firstMessage }: ChatPageProps) {
     return () => window.removeEventListener("pagehide", handlePageHide);
   }, [incognitoEnabled, currentChatSessionId]);
 
-  // Block input when the last turn is multi-model and the user hasn't
-  // selected a preferred response yet. Without a selection, it's ambiguous
-  // which model's response should be used as context for the next message.
-  const awaitingPreferredSelection = useMemo(() => {
-    if (!messageTree || currentChatState !== "input") return false;
-    // Find the last user message in the history
-    const lastUserMsg = [...messageHistory]
-      .reverse()
-      .find((m) => m.type === "user");
-    if (!lastUserMsg) return false;
-    const childIds = lastUserMsg.childrenNodeIds ?? [];
-    if (childIds.length < 2) return false;
-    // Check if children are multi-model (have modelDisplayName)
-    const multiModelChildren = childIds
-      .map((id) => messageTree.get(id))
-      .filter(
-        (m) =>
-          m &&
-          (m.type === "assistant" || m.type === "error") &&
-          (m.modelDisplayName || m.overridden_model)
-      );
-    if (multiModelChildren.length < 2) return false;
-    // Check if a preferred response has been set on this user message
-    return lastUserMsg.preferredResponseId == null;
-  }, [messageHistory, messageTree, currentChatState]);
-
   // Determine anchor: second-to-last message (last user message before current response)
   const anchorMessage = messageHistory.at(-2) ?? messageHistory[0];
   const anchorNodeId = anchorMessage?.nodeId;
@@ -1127,7 +1101,6 @@ export default function AppPage({ firstMessage }: ChatPageProps) {
                             onboardingState.currentStep !==
                               OnboardingStep.Complete)
                         }
-                        awaitingPreferredSelection={awaitingPreferredSelection}
                       />
                       <div
                         className={cn(

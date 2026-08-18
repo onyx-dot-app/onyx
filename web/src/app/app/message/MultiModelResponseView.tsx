@@ -78,18 +78,29 @@ export default function MultiModelResponseView({
   onHiddenPanelsChange,
   readOnly = false,
 }: MultiModelResponseViewProps) {
-  // Initialize preferredIndex from the backend's preferred_response_id. When a
-  // preferred response is picked the backend also points latest_child at it, so
-  // this marks the response the flow continued through. A turn the user never
+  // preferredIndex mirrors the tree's preferred_response_id. When a preferred
+  // response is picked the backend also points latest_child at it, so this
+  // marks the response the flow continued through. A turn the user never
   // picked from (e.g. a final multi-model turn) has no preference and stays
   // unhighlighted.
-  const [preferredIndex, setPreferredIndex] = useState<number | null>(() => {
+  const preferredIndexFromTree = useMemo(() => {
     if (parentMessage?.preferredResponseId == null) return null;
     const match = responses.find(
       (r) => r.messageId === parentMessage.preferredResponseId
     );
     return match?.modelIndex ?? null;
-  });
+  }, [parentMessage?.preferredResponseId, responses]);
+  const [preferredIndex, setPreferredIndex] = useState<number | null>(
+    preferredIndexFromTree
+  );
+  // Re-sync when the preference lands after mount (session hydration, or the
+  // implicit pick made at send time). Clearing is owned by the deselect flow's
+  // animation, so only non-null values sync in.
+  useEffect(() => {
+    if (preferredIndexFromTree != null) {
+      setPreferredIndex(preferredIndexFromTree);
+    }
+  }, [preferredIndexFromTree]);
   const [hiddenPanels, setHiddenPanels] = useState<Set<number>>(new Set());
   // Controls animation: false = panels at start position, true = panels at peek position
   const [selectionEntered, setSelectionEntered] = useState(
