@@ -272,6 +272,7 @@ def filter_model_configurations(
     provider: str,
     use_stored_display_name: bool = False,
     custom_config: dict[str, str] | None = None,
+    deployment_name: str | None = None,
 ) -> list:
     """Filter out obsolete and dated duplicate models from configurations.
 
@@ -282,6 +283,9 @@ def filter_model_configurations(
             DB over LiteLLM enrichments. Set for custom-config providers.
         custom_config: The provider's custom config, which for a gateway holds
             the admin-selected API surface.
+        deployment_name: The provider-level deployment alias (e.g. Azure AI
+            Foundry), which is the string actually sent to LiteLLM when a
+            model's own name doesn't carry its identity.
 
     Returns:
         List of ModelConfigurationView objects with obsolete/duplicate models removed
@@ -302,7 +306,11 @@ def filter_model_configurations(
             continue
         filtered_configs.append(
             ModelConfigurationView.from_model(
-                model_configuration, provider, use_stored_display_name, custom_config
+                model_configuration,
+                provider,
+                use_stored_display_name,
+                custom_config,
+                deployment_name,
             )
         )
 

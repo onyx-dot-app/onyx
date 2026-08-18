@@ -440,6 +440,29 @@ class TestLLMProviderDescriptorRecommendedDefault:
             not m.is_recommended_default for m in descriptor.model_configurations
         )
 
+    def test_threads_provider_deployment_name_into_filter(self) -> None:
+        # The provider row's deployment alias must reach
+        # filter_model_configurations, or a model whose identity lives only
+        # in that alias would silently lose its resolved reasoning efforts.
+        provider_model = self._provider_model("azure")
+        provider_model.deployment_name = "gpt-5.1"
+        provider_model.model_configurations = []
+
+        with (
+            patch(
+                "onyx.server.manage.llm.models.filter_model_configurations",
+                return_value=[],
+            ) as mock_filter,
+            patch(
+                "onyx.llm.well_known_providers.llm_provider_options."
+                "fetch_default_model_for_provider",
+                return_value=None,
+            ),
+        ):
+            LLMProviderDescriptor.from_model(provider_model)
+
+        assert mock_filter.call_args.kwargs["deployment_name"] == "gpt-5.1"
+
 
 class TestSupportedReasoningEfforts:
     """The picker offers exactly the levels the request builder can deliver, so
@@ -470,6 +493,19 @@ class TestSupportedReasoningEfforts:
         """The LiteLLM-enriched branch answers too, not just the dynamic one."""
         view = ModelConfigurationView.from_model(
             _make_model_config(name="gpt-5.1", display_name=None), "openai"
+        )
+
+        assert ReasoningEffort.XHIGH in view.supported_reasoning_efforts
+
+    def test_deployment_alias_reveals_openai_family_and_xhigh(self) -> None:
+        """A custom provider (e.g. Azure AI Foundry) may carry the model
+        identity only in the deployment alias, while the model row's own
+        name is an opaque label. Mirrors the request builder's
+        model_identity_names handling in multi_llm.py."""
+        view = ModelConfigurationView.from_model(
+            _make_model_config(name="foundry-deploy-1", display_name="Deploy 1"),
+            "azure",
+            deployment_name="gpt-5.1",
         )
 
         assert ReasoningEffort.XHIGH in view.supported_reasoning_efforts

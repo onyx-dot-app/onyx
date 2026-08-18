@@ -978,6 +978,38 @@ def test_reasoning_effort_sent_for_o1() -> None:
         assert kwargs["reasoning"]["effort"] == "medium"
 
 
+def test_o1_mini_only_in_deployment_name_omits_reasoning_effort() -> None:
+    """The o1-mini/o1-preview rejection guard is name-only by design and must
+    consider the deployment alias too, not just model_name. Same identity
+    gap as test_claude_only_in_deployment_name_omits_temperature_and_reasons."""
+    llm = LitellmLLM(
+        api_key="test_key",
+        timeout=30,
+        model_provider=LlmProviderNames.AZURE,
+        model_name="foundry-deploy-2",
+        deployment_name="o1-mini",
+        api_base="https://my-resource.openai.azure.us",
+        api_version="2025-03-01-preview",
+        max_input_tokens=get_max_input_tokens(
+            model_provider=LlmProviderNames.AZURE,
+            model_name="foundry-deploy-2",
+        ),
+    )
+
+    with (
+        patch("litellm.completion") as mock_completion,
+        patch("onyx.llm.multi_llm.model_is_reasoning_model", return_value=True),
+        patch("onyx.llm.multi_llm.is_true_openai_model", return_value=True),
+    ):
+        mock_completion.return_value = []
+        messages: LanguageModelInput = [UserMessage(content="Hi")]
+        list(llm.stream(messages, reasoning_effort=ReasoningEffort.AUTO))
+
+        kwargs = mock_completion.call_args.kwargs
+        assert "reasoning" not in kwargs
+        assert "reasoning_effort" not in kwargs
+
+
 def test_user_identity_metadata_enabled(default_multi_llm: LitellmLLM) -> None:
     with (
         patch("litellm.completion") as mock_completion,

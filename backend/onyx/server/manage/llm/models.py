@@ -86,6 +86,7 @@ class LLMProviderDescriptor(BaseModel):
             provider,
             use_stored_display_name=llm_provider_model.custom_config is not None,
             custom_config=llm_provider_model.custom_config,
+            deployment_name=llm_provider_model.deployment_name,
         )
         default_model = fetch_default_model_for_provider(provider)
         for model_configuration in model_configurations:
@@ -194,6 +195,7 @@ class LLMProviderView(LLMProvider):
                 provider,
                 use_stored_display_name=llm_provider_model.custom_config is not None,
                 custom_config=llm_provider_model.custom_config,
+                deployment_name=llm_provider_model.deployment_name,
             ),
         )
 
@@ -256,12 +258,19 @@ class ModelConfigurationView(BaseModel):
         provider_name: str,
         use_stored_display_name: bool = False,
         custom_config: dict[str, str] | None = None,
+        deployment_name: str | None = None,
     ) -> "ModelConfigurationView":
+        # A custom provider's model identity may live only in the deployment
+        # alias, the string LiteLLM actually receives. Mirrors multi_llm.py's
+        # model_identity_names so the picker matches the request builder.
+        model_identity_names = [
+            name for name in (model_configuration_model.name, deployment_name) if name
+        ]
         # The admin's chosen wire protocol decides which reasoning parameters
         # reach the model, so it decides which effort levels are selectable.
         reasoning_efforts = supported_reasoning_efforts(
             provider_name,
-            [model_configuration_model.name],
+            model_identity_names,
             resolve_api_surface(provider_name, custom_config),
         )
 

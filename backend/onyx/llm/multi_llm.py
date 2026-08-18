@@ -713,7 +713,10 @@ class LitellmLLM(LLM):
             is_reasoning
             # The default of this parameter not set is surprisingly not the equivalent of an Auto but is actually Off
             and reasoning_effort != ReasoningEffort.OFF
-            and not openai_model_rejects_reasoning_effort(self.config.model_name)
+            and not any(
+                openai_model_rejects_reasoning_effort(name)
+                for name in model_identity_names
+            )
         ):
             openai_style_reasoning = {
                 "effort": OPENAI_REASONING_EFFORT[reasoning_effort],
