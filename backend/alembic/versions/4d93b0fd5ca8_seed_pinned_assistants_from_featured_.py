@@ -29,51 +29,10 @@ def upgrade() -> None:
         sa.PrimaryKeyConstraint("user_id", "persona_id"),
     )
 
-    # Carry existing pins over, dropping three kinds of entry the array allowed
-    # and the table will not: ids of agents that no longer exist, the built-in
-    # Assistant, which the sidebar never renders - so pinning it left a row the
-    # user could neither see nor remove - and repeats of an id already pinned.
-    #
-    # Number after the drops, not from the array position, so `display_order`
-    # comes out dense. Taking `ord` directly would leave a hole wherever an
-    # entry was dropped.
-    op.execute(
-        """
-        INSERT INTO user__pinned_persona (user_id, persona_id, display_order)
-        SELECT
-            user_id,
-            persona_id,
-            (ROW_NUMBER() OVER (PARTITION BY user_id ORDER BY ord) - 1)::int
-        FROM (
-            SELECT DISTINCT ON (u.id, (elem #>> '{}')::int)
-                u.id AS user_id,
-                (elem #>> '{}')::int AS persona_id,
-                ord
-            FROM "user" AS u
-            CROSS JOIN LATERAL jsonb_array_elements(u.pinned_assistants)
-                WITH ORDINALITY AS t(elem, ord)
-            JOIN persona AS p ON p.id = (elem #>> '{}')::int
-            WHERE u.pinned_assistants IS NOT NULL
-              AND p.id <> 0
-              AND NOT p.deleted
-            ORDER BY u.id, (elem #>> '{}')::int, ord
-        ) AS deduped
-        ON CONFLICT DO NOTHING
-        """
-    )
-
-    # Seed the users who predate seeding entirely. They are the ones the
-    # frontend was covering for by substituting featured agents at render time,
-    # and that fallback is going away: the API no longer returns null, so
-    # without this they would be left with a permanently empty sidebar.
-    #
-    # This is the only time seeding is applied to an existing user. From here it
-    # happens once, at account creation.
-    #
     # The stubs are local, and duplicating `build_seed_pinned_personas_stmt` is
     # deliberate: a migration stays pinned to the schema at its own revision, so
-    # it can import neither the ORM models nor the app helper. `pinned_assistants`
-    # also stops existing a few lines below.
+    # it can import neither the ORM models nor the app helper.
+    # `pinned_assistants` also stops existing at the end of this function.
     user = sa.table(
         "user",
         sa.column("id", sa.UUID()),
@@ -95,6 +54,63 @@ def upgrade() -> None:
         sa.column("display_order", sa.Integer()),
     )
 
+    # Carry existing pins over, dropping three kinds of entry the array allowed
+    # and the table will not: ids of agents that no longer exist, the built-in
+    # Assistant, which the sidebar never renders - so pinning it left a row the
+    # user could neither see nor remove - and repeats of an id already pinned.
+    #
+    # Number after the drops, not from the array position, so `display_order`
+    # comes out dense. Taking `ord` directly would leave a hole wherever an
+    # entry was dropped.
+    elements = (
+        sa.func.jsonb_array_elements_text(user.c.pinned_assistants)
+        .table_valued("elem", with_ordinality="ord")
+        .render_derived(name="t")
+        .lateral()
+    )
+    carried_id = sa.cast(elements.c.elem, sa.Integer)
+    deduped = (
+        sa.select(
+            user.c.id.label("user_id"),
+            carried_id.label("persona_id"),
+            elements.c.ord.label("ord"),
+        )
+        .select_from(user)
+        .join(elements, sa.true())
+        .join(persona, persona.c.id == carried_id)
+        .where(
+            user.c.pinned_assistants.is_not(None),
+            persona.c.id != 0,
+            sa.not_(persona.c.deleted),
+        )
+        .distinct(user.c.id, carried_id)
+        .order_by(user.c.id, carried_id, elements.c.ord)
+        .subquery()
+    )
+
+    op.execute(
+        postgresql.insert(pinned_persona)
+        .from_select(
+            ["user_id", "persona_id", "display_order"],
+            sa.select(
+                deduped.c.user_id,
+                deduped.c.persona_id,
+                sa.func.row_number().over(
+                    partition_by=deduped.c.user_id, order_by=deduped.c.ord
+                )
+                - 1,
+            ),
+        )
+        .on_conflict_do_nothing()
+    )
+
+    # Seed the users who predate seeding entirely. They are the ones the
+    # frontend was covering for by substituting featured agents at render time,
+    # and that fallback is going away: the API no longer returns null, so
+    # without this they would be left with a permanently empty sidebar.
+    #
+    # This is the only time seeding is applied to an existing user. From here it
+    # happens once, at account creation.
     featured = (
         sa.select(
             persona.c.id.label("persona_id"),
