@@ -199,9 +199,23 @@ repos:
     hooks:
       - id: terraform_fmt
         files: \.tf$
+      - id: terraform_validate
+        files: ^deployment/terraform/.*\.tf$
+        args:
+          - --tf-init-args=-backend=false
 
   - repo: local
     hooks:
+      # These modules are published but stay in sync with what Onyx runs, so an
+      # internal value can travel across by accident. See the script's docstring.
+      - id: terraform-public-safe
+        name: terraform public-safe values
+        description: "Fail on internal values (account ids, keys, routable IPs) in published Terraform"
+        language: system
+        entry: python3 deployment/terraform/scripts/check_public_safe.py
+        files: ^deployment/terraform/.*\.tf$
+        stages: [pre-commit]
+
       # Regenerate the baseline with `env_inventory.py --write-baseline`.
       - id: env-drift-baseline
         name: env drift baseline

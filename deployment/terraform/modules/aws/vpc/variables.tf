@@ -27,3 +27,9 @@ variable "tags" {
   description = "Tags to apply to all VPC-related resources"
   default     = {}
 }
+
+variable "create_s3_vpc_endpoint" {
+  type        = bool
+  description = "Whether to create a gateway VPC endpoint for S3"
+  default     = true
+}

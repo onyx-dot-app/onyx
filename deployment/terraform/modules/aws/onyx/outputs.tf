@@ -16,7 +16,7 @@ output "oidc_provider" {
 }
 
 output "workload_irsa_role_arn" {
-  description = "ARN of the IAM role for workloads (S3 + optional RDS)"
+  description = "ARN of the IAM role for workloads (S3 + RDS)"
   value       = module.eks.workload_irsa_role_arn
 }
 
