@@ -7,8 +7,10 @@ from collections import defaultdict
 from collections.abc import Iterator, Sequence
 from datetime import datetime, timedelta
 from math import ceil
+from threading import RLock
 from typing import Any, cast
 
+from cachetools import TTLCache
 from pydantic import BaseModel
 from sqlalchemy import delete, func, select
 from sqlalchemy.dialects.postgresql import insert as pg_insert
@@ -18,6 +20,7 @@ from sqlalchemy.orm import Session
 from onyx.db.models import TokenRateLimit, User, User__UserGroup, UserUsage
 from onyx.utils.datetime import datetime_to_utc, get_window_start
 from onyx.utils.logger import setup_logger
+from shared_configs.contextvars import CURRENT_TENANT_ID_CONTEXTVAR
 
 logger = setup_logger()
 
@@ -26,6 +29,13 @@ USER_USAGE_BUCKET_HOURS = USER_USAGE_BUCKET_SECONDS // (60 * 60)
 TOKEN_BUDGET_PERIOD_ERROR = "Token budget periods must be whole UTC days"
 COST_BUDGET_PERIOD_ERROR = "Cost budget periods must be whole UTC days"
 COST_BUDGET_PERIOD_HOURS = {24, 168, 720}
+_INVALID_COST_BUDGET_WARNING_TTL_SECONDS = 5 * 60
+_invalid_cost_budget_warning_lock = RLock()
+# Keyed by the raw contextvar value, not get_current_tenant_id, which raises when
+# the contextvar is unset (non-request callers). A warn path must never raise.
+_invalid_cost_budget_warning_cache: TTLCache[tuple[str | None, int, int], None] = (
+    TTLCache(maxsize=10_000, ttl=_INVALID_COST_BUDGET_WARNING_TTL_SECONDS)
+)
 # Not email-shaped on purpose: it can never collide with a real address.
 DELETED_USER_EXPORT_EMAIL = "(deleted user)"
 _CONFLICT_COLS = ["user_id", "window_start", "model", "flow", "provider", "incognito"]
@@ -57,6 +67,37 @@ def _get_cost_period_seconds(period_hours: int) -> int:
     return period_seconds
 
 
+def _warn_for_invalid_cost_budget_period(rate_limit: TokenRateLimit) -> None:
+    cache_key = (
+        CURRENT_TENANT_ID_CONTEXTVAR.get(),
+        rate_limit.id,
+        rate_limit.period_hours,
+    )
+    with _invalid_cost_budget_warning_lock:
+        if cache_key in _invalid_cost_budget_warning_cache:
+            return
+        _invalid_cost_budget_warning_cache[cache_key] = None
+
+    logger.warning(
+        "Skipping cost budget on token_rate_limit id=%s: unsupported period_hours=%s",
+        rate_limit.id,
+        rate_limit.period_hours,
+    )
+
+
+def cost_budget_limits(rate_limits: Sequence[TokenRateLimit]) -> list[TokenRateLimit]:
+    """Return enforceable cost limits and warn about unsupported stored periods."""
+    valid: list[TokenRateLimit] = []
+    for rate_limit in rate_limits:
+        if rate_limit.cost_budget_cents is None:
+            continue
+        if rate_limit.period_hours not in COST_BUDGET_PERIOD_HOURS:
+            _warn_for_invalid_cost_budget_period(rate_limit)
+            continue
+        valid.append(rate_limit)
+    return valid
+
+
 def get_cost_window_start(now: datetime, period_hours: int) -> datetime:
     """Start of the current fixed UTC cost-budget period."""
     _get_cost_period_seconds(period_hours)
@@ -66,6 +107,13 @@ def get_cost_window_start(now: datetime, period_hours: int) -> datetime:
     if period_hours == 168:
         return current_bucket - timedelta(days=current_bucket.weekday())
     return current_bucket.replace(day=1)
+
+
+def cost_budget_fetch_cutoff(
+    now: datetime, cost_limits: Sequence[TokenRateLimit]
+) -> datetime:
+    """Earliest window start across the limits, so one fetch covers every window."""
+    return min(get_cost_window_start(now, limit.period_hours) for limit in cost_limits)
 
 
 def get_token_window_reset(now: datetime, period_hours: int) -> datetime:
@@ -342,11 +390,15 @@ def get_usage_reset_window_start(
 ) -> datetime:
     """Return the earliest bucket included by any applicable limit."""
     window_starts = [get_window_start(now, USER_USAGE_BUCKET_SECONDS)]
-    for rate_limit in rate_limits:
-        if rate_limit.token_budget is not None:
-            window_starts.append(get_token_window_start(now, rate_limit.period_hours))
-        if rate_limit.cost_budget_cents is not None:
-            window_starts.append(get_cost_window_start(now, rate_limit.period_hours))
+    window_starts.extend(
+        get_token_window_start(now, rate_limit.period_hours)
+        for rate_limit in rate_limits
+        if rate_limit.token_budget is not None
+    )
+    window_starts.extend(
+        get_cost_window_start(now, rate_limit.period_hours)
+        for rate_limit in cost_budget_limits(rate_limits)
+    )
     return min(window_starts)
 
 
