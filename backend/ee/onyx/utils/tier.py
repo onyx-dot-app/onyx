@@ -120,7 +120,7 @@ def _lazy_refresh_from_cp(
         billing = fetch_billing_information(tenant_id)
     except (requests.RequestException, ValueError) as e:
         logger.warning(
-            "Tier lazy-refresh failed for tenant %s; CP unreachable: %s",
+            "Tier lazy-refresh failed for tenant %s. CP request or payload failed: %s",
             tenant_id,
             e,
         )
