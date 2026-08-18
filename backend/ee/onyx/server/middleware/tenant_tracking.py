@@ -43,7 +43,10 @@ def add_api_server_tenant_id_middleware(
         to use elsewhere.
         """
         try:
-            if request.url.path in TENANT_RESOLUTION_SKIP_PATHS:
+            # Strip the prefix first: with APP_API_PREFIX set these arrive as
+            # /<prefix>/health, which would otherwise miss the skip list and
+            # send probes through the Redis session lookup.
+            if strip_api_prefix(request.url.path) in TENANT_RESOLUTION_SKIP_PATHS:
                 CURRENT_TENANT_ID_CONTEXTVAR.set(POSTGRES_DEFAULT_SCHEMA)
                 return await call_next(request)
 

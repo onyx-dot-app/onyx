@@ -8,6 +8,7 @@ from anyio import to_thread
 from cachetools import TTLCache
 from fastapi import APIRouter, HTTPException, Response
 from fastapi.concurrency import run_in_threadpool
+from fastapi.responses import JSONResponse
 
 from onyx import __version__
 from onyx.auth.users import anonymous_user_enabled, user_needs_to_be_verified
@@ -21,7 +22,7 @@ from onyx.db.auth import get_user_count
 from onyx.db.engine.sql_engine import get_session_with_shared_schema
 from onyx.db.sso_provider import fetch_sso_providers, sso_authorize_path
 from onyx.error_handling.error_codes import OnyxErrorCode
-from onyx.error_handling.exceptions import OnyxError
+from onyx.error_handling.exceptions import OnyxError, onyx_error_to_json_response
 from onyx.server.manage.models import (
     AllVersions,
     AuthConfigResponse,
@@ -121,8 +122,10 @@ def _threadpool_saturation() -> tuple[bool, dict[str, float]]:
     return saturated, depth
 
 
-@router.get("/health", tags=PUBLIC_API_TAGS)
-async def healthcheck() -> StatusResponse[dict[str, float]]:
+# response_model=None only disables schema inference for the Response union
+# below. It does not declare a response model.
+@router.get("/health", tags=PUBLIC_API_TAGS, response_model=None)
+async def healthcheck() -> StatusResponse[dict[str, float]] | JSONResponse:
     """Readiness probe. Wire this to readinessProbe and to load balancers.
 
     Sync endpoints run in the anyio threadpool, so a saturated pool means the
@@ -161,10 +164,15 @@ async def healthcheck() -> StatusResponse[dict[str, float]]:
         )
         _REPORTED_NOT_READY = True
 
-    raise OnyxError(
-        OnyxErrorCode.SERVICE_UNAVAILABLE,
-        f"Request threadpool saturated for {saturated_for:.1f}s "
-        f"({depth['threadpool_tasks_waiting']:.0f} requests queued)",
+    # Returned rather than raised: the global OnyxError handler logs every 5xx,
+    # which would put one line per probe per replica back in the log. The
+    # response body and status are identical either way.
+    return onyx_error_to_json_response(
+        OnyxError(
+            OnyxErrorCode.SERVICE_UNAVAILABLE,
+            f"Request threadpool saturated for {saturated_for:.1f}s "
+            f"({depth['threadpool_tasks_waiting']:.0f} requests queued)",
+        )
     )
 
 

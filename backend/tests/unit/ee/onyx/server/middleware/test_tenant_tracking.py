@@ -31,6 +31,16 @@ def test_custom_api_prefix_allowlist(monkeypatch: pytest.MonkeyPatch) -> None:
     assert tenant_tracking._is_path_allowed("/v2/chat") is False
 
 
+@pytest.mark.parametrize("path", ["/health", "/health/live", "/metrics"])
+def test_probe_paths_skip_tenant_resolution_under_api_prefix(
+    monkeypatch: pytest.MonkeyPatch, path: str
+) -> None:
+    """Probes must never reach the Redis session lookup, prefixed or not."""
+    monkeypatch.setattr(api_prefix, "APP_API_PREFIX", "v2")
+    stripped = api_prefix.strip_api_prefix(f"/v2{path}")
+    assert stripped in tenant_tracking.TENANT_RESOLUTION_SKIP_PATHS
+
+
 @pytest.mark.asyncio
 @patch(f"{MODULE}.retrieve_auth_token_data_from_bearer")
 @patch(f"{MODULE}.retrieve_auth_token_data_from_redis")
