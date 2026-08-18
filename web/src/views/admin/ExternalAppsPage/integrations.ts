@@ -21,7 +21,7 @@ function countLabel(count: number, noun: string): string {
 function customCredentialFact(app: ExternalAppAdminResponse): string {
   const keys = app.credential_placeholder_keys;
   if (keys.length === 0) return "no credentials";
-  return keys.every((key) => key in app.organization_credentials)
+  return keys.every((key) => Object.hasOwn(app.organization_credentials, key))
     ? "org credentials set"
     : "per-user credentials";
 }
@@ -40,8 +40,8 @@ function externalAppFacts(app: ExternalAppAdminResponse): string[] {
   }
   facts.push(
     app.associated_skills.length > 0
-      ? countLabel(app.associated_skills.length, "skill")
-      : "no skills"
+      ? countLabel(app.associated_skills.length, "custom skill")
+      : "no custom skills"
   );
   return facts;
 }

@@ -1,7 +1,7 @@
 "use client";
 
 import { Button, Card, Divider, Modal, Text } from "@opal/components";
-import type { IconFunctionComponent } from "@opal/types";
+import type { IconFunctionComponent, RichStr } from "@opal/types";
 import { SvgPlug, SvgPlus, SvgSettings } from "@opal/icons";
 import {
   BuiltInExternalAppDescriptor,
@@ -74,8 +74,9 @@ export default function AddAppCatalogModal({
 
 interface CatalogCardProps {
   icon: IconFunctionComponent;
-  title: string;
-  description?: string;
+  title: string | RichStr;
+  description?: string | RichStr;
+  /** Plain string — Button children don't accept RichStr. */
   actionLabel: string;
   onClick: () => void;
 }

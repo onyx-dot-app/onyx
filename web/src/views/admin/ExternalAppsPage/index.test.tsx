@@ -167,7 +167,9 @@ describe("ExternalAppsPage", () => {
     expect(screen.getByRole("tab", { name: "Apps · 1" })).toBeInTheDocument();
     expect(screen.getByText("Custom")).toBeInTheDocument();
     expect(
-      screen.getByText("0 upstream patterns · no credentials · no skills")
+      screen.getByText(
+        "0 upstream patterns · no credentials · no custom skills"
+      )
     ).toBeInTheDocument();
     expect(screen.queryByText(/12 tools/)).not.toBeInTheDocument();
 
