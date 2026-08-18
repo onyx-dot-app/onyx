@@ -2506,6 +2506,35 @@ def test_required_tool_choice_downgraded_to_auto(
         assert kwargs["tool_choice"] == ToolChoiceOptions.AUTO
 
 
+def test_qwen_only_in_deployment_name_downgrades_tool_choice() -> None:
+    """is_qwen_model must also check deployment_name, same identity gap as
+    is_claude_model above it. A Qwen model reachable only by alias must
+    still get the required->auto downgrade or the provider 400s."""
+    llm = LitellmLLM(
+        api_key="test_key",
+        timeout=30,
+        model_provider=LlmProviderNames.LITELLM_PROXY,
+        model_name="foundry-deploy-3",
+        deployment_name="qwen/qwen3.7-plus",
+        max_input_tokens=32000,
+    )
+
+    with patch("litellm.completion") as mock_completion:
+        mock_completion.return_value = []
+
+        messages: LanguageModelInput = [UserMessage(content="Weather in NYC?")]
+        list(
+            llm.stream(
+                messages,
+                tools=_TOOL_CHOICE_DOWNGRADE_TOOLS,
+                tool_choice=ToolChoiceOptions.REQUIRED,
+            )
+        )
+
+        kwargs = mock_completion.call_args.kwargs
+        assert kwargs["tool_choice"] == ToolChoiceOptions.AUTO
+
+
 def test_required_tool_choice_preserved_for_other_models(
     default_multi_llm: LitellmLLM,
 ) -> None:

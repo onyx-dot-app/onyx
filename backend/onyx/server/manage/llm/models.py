@@ -310,9 +310,11 @@ class ModelConfigurationView(BaseModel):
                         model_is_reasoning_model(name, provider_name)
                         for name in model_identity_names
                     )
-                    or is_reasoning_model(
-                        model_configuration_model.name,
-                        model_configuration_model.display_name or "",
+                    or any(
+                        is_reasoning_model(
+                            name, model_configuration_model.display_name or ""
+                        )
+                        for name in model_identity_names
                     )
                 ),
                 supported_reasoning_efforts=reasoning_efforts,

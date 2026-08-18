@@ -594,7 +594,7 @@ class LitellmLLM(LLM):
             self.config.model_name, self.config.deployment_name
         )
         is_claude_model = any("claude" in name.lower() for name in model_identity_names)
-        is_qwen_model = "qwen" in self.config.model_name.lower()
+        is_qwen_model = any("qwen" in name.lower() for name in model_identity_names)
         uses_adaptive_thinking = any(
             anthropic_uses_adaptive_thinking(name) for name in model_identity_names
         )
@@ -689,9 +689,9 @@ class LitellmLLM(LLM):
             tool_choice = None
 
         # Temperature
-        # Some models reject any non-default sampling parameter (e.g. Claude
-        # Opus 4.7/4.8 return a 400 invalid_request_error if temperature is set
-        # to anything). For those models we must omit the param entirely —
+        # Some models (e.g. Claude Opus 4.7/4.8) reject a non-default
+        # temperature with a 400 invalid_request_error. For those models we
+        # must omit the param entirely.
         # LiteLLM's drop_params is not reliable here because the upstream
         # provider config can still claim the param is supported.
         # https://github.com/BerriAI/litellm/issues/26444
