@@ -59,6 +59,6 @@ variable "enable_logging" {
 
 variable "log_retention_days" {
   type        = number
-  description = "Number of days to retain WAF logs. Default 400 = 12 months + 30-day buffer for Vanta `logs-retained-for-twelve-months-config`."
+  description = "Number of days to retain WAF logs. Default 400 = 12 months + 30-day buffer for the common twelve-month log-retention control."
   default     = 400
 }

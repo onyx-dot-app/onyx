@@ -101,6 +101,11 @@ variable "craft_enabled" {
   type        = bool
   description = "Create a dedicated Craft sandbox node group (labeled onyx.app/workload=sandbox, tainted workload=sandbox:NoSchedule, IMDSv2 hop-limit 1). Opt-in per workspace."
   default     = false
+
+  validation {
+    condition     = !var.craft_enabled || !contains(keys(var.eks_managed_node_groups), "sandbox")
+    error_message = "craft_enabled injects a node group under the key \"sandbox\", which eks_managed_node_groups already defines. Rename your group so the Craft group does not replace it."
+  }
 }
 
 variable "craft_sandbox_node_instance_types" {
@@ -259,7 +264,7 @@ variable "cluster_enabled_log_types" {
 
 variable "cloudwatch_log_group_retention_in_days" {
   type        = number
-  description = "Number of days to retain EKS control plane logs in CloudWatch (0 = never expire). Default 400 = 12 months + 30-day buffer for Vanta `logs-retained-for-twelve-months-config`."
+  description = "Number of days to retain EKS control plane logs in CloudWatch (0 = never expire). Default 400 = 12 months + 30-day buffer for the common twelve-month log-retention control."
   default     = 400
 
   validation {

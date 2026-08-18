@@ -116,4 +116,8 @@ resource "aws_flow_log" "vpc_flow_log" {
   tags = merge(var.tags, {
     Name = "${var.vpc_name}-flow-logs"
   })
+
+  # Without this the flow log can be created before the role can write to
+  # CloudWatch, and delivery silently fails until the next apply.
+  depends_on = [aws_iam_role_policy.vpc_flow_logs]
 }

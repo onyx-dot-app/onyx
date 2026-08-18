@@ -6,7 +6,7 @@ Onyx runs. That makes it easy to carry an internal value across by accident --
 an office IP in a variable default is the case this guard was written for.
 
 The guard looks for objective patterns only: AWS account ids, access key ids,
-and routable IPv4 CIDRs. It cannot screen for customer names, because listing
+routable IPv4 CIDRs, and email addresses. It cannot screen for customer names, because listing
 them here would leak them; that stays a review step.
 
 Add a trailing `# public-safe: ok` comment to accept a specific line.
@@ -27,6 +27,9 @@ ALLOW_MARKER = re.compile(r"#\s*public-safe:\s*ok\s*$")
 ACCOUNT_ID = re.compile(r"(?<!\d)\d{12}(?!\d)")
 ACCESS_KEY = re.compile(r"\b(?:AKIA|ASIA)[0-9A-Z]{16}\b")
 IPV4_CIDR = re.compile(r"\b(\d{1,3}(?:\.\d{1,3}){3})/(\d{1,2})\b")
+# An internal owner email in a variable default gets stamped on every resource a
+# self-hoster creates. Kubernetes labels like `onyx.app/gpu` are not addresses.
+EMAIL = re.compile(r"\b[A-Za-z0-9._%+-]+@[A-Za-z0-9.-]+\.[A-Za-z]{2,}\b")
 
 
 # Ranges that are safe to ship: private, loopback, link-local, carrier NAT,
@@ -47,6 +50,10 @@ def scan(path: Path) -> list[str]:
         except ValueError:
             shown = path
         where = f"{shown}:{lineno}"
+
+        findings.extend(
+            f"{where}: email address {address}" for address in EMAIL.findall(line)
+        )
 
         if ACCESS_KEY.search(line):
             findings.append(f"{where}: AWS access key id")

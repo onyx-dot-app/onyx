@@ -75,6 +75,11 @@ variable "password" {
   description = "Password for the database"
   default     = null
   sensitive   = true
+
+  validation {
+    condition     = var.password == null || !var.manage_master_user_password
+    error_message = "password cannot be set when manage_master_user_password is true: RDS generates and rotates the master password in Secrets Manager, and the supplied value would be discarded."
+  }
 }
 
 variable "tags" {

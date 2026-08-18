@@ -16,15 +16,27 @@ variable "enable_versioning" {
 }
 
 variable "kms_key_id" {
+  # Guarded below: anonymous reads cannot use SigV4, so allow_anonymous_read
+  # forces AES256 and a KMS key would be silently dropped.
   description = "Optional KMS key for bucket encryption. Defaults to AWS-managed S3 key."
   type        = string
   default     = null
+
+  validation {
+    condition     = var.kms_key_id == "" || var.kms_key_id == null || !var.allow_anonymous_read
+    error_message = "kms_key_id cannot be combined with allow_anonymous_read: anonymous requests cannot sign with SigV4, so the bucket is forced to AES256."
+  }
 }
 
 variable "expiration_days" {
   description = "Number of days after which current objects are expired. Set to 0 to disable."
   type        = number
   default     = 0
+
+  validation {
+    condition     = var.expiration_days >= 0
+    error_message = "expiration_days must be 0 (disabled) or a positive number of days."
+  }
 }
 
 variable "noncurrent_expiration_days" {

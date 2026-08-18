@@ -49,13 +49,11 @@ variable "vpc_cidr_block" {
 variable "tags" {
   type        = map(string)
   description = "Base tags applied to all AWS resources"
+  # Add an `Owner` tag here if your asset inventory expects one. Everything set
+  # here is stamped on every resource this module creates (EKS cluster + node
+  # groups/ASGs, RDS, S3, Redis, OpenSearch, WAF, VPC).
   default = {
     "project" = "onyx"
-    # Vanta reads inventory ownership from the `Owner` tag. Setting it here
-    # stamps every resource this module creates (EKS cluster + node
-    # groups/ASGs, RDS, S3, Redis, OpenSearch, WAF, VPC) so they pass the
-    # "Inventory items have active owners" test.
-    "Owner" = "justin@onyx.app"
   }
 }
 
@@ -251,7 +249,7 @@ variable "waf_enable_logging" {
 
 variable "waf_log_retention_days" {
   type        = number
-  description = "Number of days to retain WAF logs. Default 400 = 12 months + 30-day buffer for Vanta `logs-retained-for-twelve-months-config`."
+  description = "Number of days to retain WAF logs. Default 400 = 12 months + 30-day buffer for the common twelve-month log-retention control."
   default     = 400
 }
 
@@ -501,7 +499,7 @@ variable "eks_cluster_enabled_log_types" {
 
 variable "eks_cloudwatch_log_group_retention_in_days" {
   type        = number
-  description = "Number of days to retain EKS control plane logs in CloudWatch (0 = never expire). Default 400 = 12 months + 30-day buffer for Vanta `logs-retained-for-twelve-months-config`."
+  description = "Number of days to retain EKS control plane logs in CloudWatch (0 = never expire). Default 400 = 12 months + 30-day buffer for the common twelve-month log-retention control."
   default     = 400
 
   validation {
