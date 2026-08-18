@@ -305,8 +305,9 @@ class ModelConfigurationView(BaseModel):
                 supports_reasoning=(
                     LLMModelFlowType.REASONING
                     in model_configuration_model.llm_model_flow_types
-                    or model_is_reasoning_model(
-                        model_configuration_model.name, provider_name
+                    or any(
+                        model_is_reasoning_model(name, provider_name)
+                        for name in model_identity_names
                     )
                     or is_reasoning_model(
                         model_configuration_model.name,
@@ -364,8 +365,9 @@ class ModelConfigurationView(BaseModel):
             supports_reasoning=(
                 LLMModelFlowType.REASONING
                 in model_configuration_model.llm_model_flow_types
-                or model_is_reasoning_model(
-                    model_configuration_model.name, provider_name
+                or any(
+                    model_is_reasoning_model(name, provider_name)
+                    for name in model_identity_names
                 )
             ),
             supported_reasoning_efforts=reasoning_efforts,
