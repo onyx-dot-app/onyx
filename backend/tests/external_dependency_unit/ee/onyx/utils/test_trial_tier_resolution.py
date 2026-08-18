@@ -1,8 +1,8 @@
 """External-dependency unit tests for cloud tier resolution.
 
 Covers `ee.onyx.utils.tier.get_tier()` end-to-end against real Redis. The CP
-boundary (`fetch_billing_information`) is the only thing mocked — everything
-else (cache reads/writes, JSON serialization, datetime parsing) runs for real.
+boundary (`fetch_billing_information`) is the only mocked dependency. Cache
+reads, writes, JSON serialization, and datetime parsing run for real.
 
 A trial grants no tier promotion: a trialing tenant resolves to the same tier
 it will hold when the trial expires.
@@ -102,7 +102,7 @@ def test_non_trial_business_resolves_to_business() -> None:
 
 
 def test_enterprise_without_trial_resolves_to_enterprise() -> None:
-    """A contractual ENTERPRISE tenant is unaffected by the rule (no-op)."""
+    """A contractual ENTERPRISE tenant resolves to ENTERPRISE."""
     update_tenant_tier(
         POSTGRES_DEFAULT_SCHEMA_STANDARD_VALUE, CustomerTier.ENTERPRISE, None
     )
@@ -113,8 +113,7 @@ def test_enterprise_without_trial_resolves_to_enterprise() -> None:
 
 
 def test_enterprise_with_future_trial_remains_enterprise() -> None:
-    """ENTERPRISE + a (nonsense in practice) future trial_end is still
-    ENTERPRISE — trial state never changes a resolved tier."""
+    """An ENTERPRISE tenant stays ENTERPRISE with a future trial_end."""
     future = datetime.now(timezone.utc) + timedelta(days=1)
     update_tenant_tier(
         POSTGRES_DEFAULT_SCHEMA_STANDARD_VALUE, CustomerTier.ENTERPRISE, future
@@ -197,14 +196,13 @@ def test_cp_naive_trial_end_is_not_cached() -> None:
 
 
 def test_cache_miss_subscription_status_response_falls_back_to_business() -> None:
-    """When CP returns the no-subscription shape, we cannot establish a tier;
-    `get_tier()` falls back to BUSINESS without caching."""
+    """A no-subscription response falls back to BUSINESS without caching."""
     response = SubscriptionStatusResponse(subscribed=False, customer_tier=None)
 
     with patch.object(tier_module, "fetch_billing_information", return_value=response):
         result = tier_module.get_tier(POSTGRES_DEFAULT_SCHEMA_STANDARD_VALUE)
 
     assert result == Tier.BUSINESS
-    # No-op cache write expected on this path.
+    # The resolver does not cache this fallback.
     redis_client = get_redis_client(tenant_id=POSTGRES_DEFAULT_SCHEMA_STANDARD_VALUE)
     assert redis_client.get(TENANT_TIER_KEY) is None

@@ -44,8 +44,7 @@ _CUSTOMER_TIER_TO_TIER: dict[CustomerTier, Tier] = {
 
 
 def _effective_tier(customer_tier: CustomerTier) -> Tier:
-    # Unknown tier (e.g. a future CustomerTier value): fall back to the
-    # cloud floor — BUSINESS — rather than over-granting ENTERPRISE.
+    # Use the BUSINESS floor for an unknown cloud tier.
     return _CUSTOMER_TIER_TO_TIER.get(customer_tier, Tier.BUSINESS)
 
 
@@ -109,8 +108,6 @@ def _extract_billing_state(
     if not isinstance(trial_end, datetime):
         trial_end = None
     elif trial_end.tzinfo is None or trial_end.tzinfo.utcoffset(trial_end) is None:
-        # Mirrors the cache-read guard: only tz-aware datetimes enter the
-        # cache. Drop naive values and log so a CP-side regression is visible.
         logger.warning("CP returned naive trial_end; dropping: %r", trial_end)
         trial_end = None
     return customer_tier, trial_end
