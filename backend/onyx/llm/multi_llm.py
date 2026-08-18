@@ -52,7 +52,10 @@ from onyx.llm.models import (
 )
 from onyx.llm.request_context import get_llm_mock_response
 from onyx.llm.utils import build_litellm_passthrough_kwargs
-from onyx.llm.well_known_providers.constants import VERTEX_LOCATION_KWARG
+from onyx.llm.well_known_providers.constants import (
+    MINIMAX_DEFAULT_API_BASE,
+    VERTEX_LOCATION_KWARG,
+)
 from onyx.tracing.llm_utils import record_llm_request_params
 from onyx.utils.encryption import mask_env_value_for_logging, mask_string
 from onyx.utils.logger import setup_logger
@@ -543,6 +546,18 @@ class LitellmLLM(LLM):
                 self._api_base = base if base.endswith("/v1") else f"{base}/v1"
                 model_kwargs["api_base"] = self._api_base
 
+        if model_provider == LlmProviderNames.MINIMAX:
+            base = (self._api_base or MINIMAX_DEFAULT_API_BASE).rstrip("/")
+            if base.endswith("/anthropic/v1"):
+                base = base.removesuffix("/v1")
+            if base.endswith("/anthropic"):
+                self._custom_llm_provider = "anthropic"
+            else:
+                self._custom_llm_provider = "openai"
+                base = base if base.endswith("/v1") else f"{base}/v1"
+                model_kwargs["api_base"] = base
+            self._api_base = base
+
         # Default vertex_location to "global" if not provided for Vertex AI
         # Latest gemini models are only available through the global region
         if (
@@ -695,6 +710,12 @@ class LitellmLLM(LLM):
         )
         is_ollama = self._model_provider == LlmProviderNames.OLLAMA_CHAT
         is_mistral = self._model_provider == LlmProviderNames.MISTRAL
+        is_minimax = self._model_provider == LlmProviderNames.MINIMAX
+        is_minimax_m3 = is_minimax and self.config.model_name == "MiniMax-M3"
+        minimax_thinking_disabled = is_minimax_m3 and (
+            reasoning_effort == ReasoningEffort.OFF
+            or _prompt_contains_tool_call_history(prompt)
+        )
         is_vertex_ai = self._model_provider == LlmProviderNames.VERTEX_AI
         # Some Vertex Anthropic models reject stream_options. Reasoning params
         # are sent regardless: a provider that rejects one answers with a 400
@@ -711,6 +732,12 @@ class LitellmLLM(LLM):
         optional_kwargs: dict[str, Any] = {}
 
         # Model name
+        uses_direct_model_name = self._model_provider in (
+            LlmProviderNames.BIFROST,
+            LlmProviderNames.OPENAI_COMPATIBLE,
+            LlmProviderNames.MINIMAX,
+            LlmProviderNames.NEBIUS_TOKENFACTORY,
+        )
         is_openai_compatible_proxy = self._api_surface in OPENAI_COMPATIBLE_SURFACES
         model_provider = (
             f"{self.config.model_provider}/responses"
@@ -742,6 +769,11 @@ class LitellmLLM(LLM):
             # Drives LiteLLM's completions -> responses bridge.
             model = f"responses/{model_bare}"
         elif self._api_surface is not None:
+            model = model_bare
+        elif uses_direct_model_name:
+            # Compatibility endpoints (e.g. MiniMax) expect model names
+            # without an Onyx provider prefix and select their LiteLLM
+            # protocol separately.
             model = model_bare
         else:
             model = f"{model_provider}/{model_bare}"
@@ -790,6 +822,7 @@ class LitellmLLM(LLM):
             is_reasoning
             # The default of this parameter not set is surprisingly not the equivalent of an Auto but is actually Off
             and reasoning_effort != ReasoningEffort.OFF
+            and not is_minimax
             and not openai_model_rejects_reasoning_effort(self.config.model_name)
         ):
             openai_style_reasoning = {
@@ -886,6 +919,7 @@ class LitellmLLM(LLM):
         if (
             not (is_claude_model or is_ollama or is_mistral)
             or is_openai_compatible_proxy
+            or uses_direct_model_name
         ):
             # Litellm bug: tool_choice is dropped silently if not specified here for OpenAI
             # However, this param breaks Anthropic and Mistral models,
@@ -893,13 +927,36 @@ class LitellmLLM(LLM):
             # routed through Bifrost's OpenAI-compatible endpoint.
             # Additionally, tool_choice is not supported by Ollama and causes warnings if included.
             # See also, https://github.com/ollama/ollama/issues/11171
-            optional_kwargs["allowed_openai_params"] = ["tool_choice"]
+            allowed_openai_params = ["tool_choice"]
+            if is_minimax_m3 and self._custom_llm_provider == "anthropic":
+                allowed_openai_params.append("thinking")
+            optional_kwargs["allowed_openai_params"] = allowed_openai_params
 
         # Passthrough kwargs
         passthrough_kwargs = build_litellm_passthrough_kwargs(
             model_kwargs=self._model_kwargs,
             user_identity=user_identity,
         )
+
+        if is_minimax and self._custom_llm_provider == "openai":
+            if passthrough_kwargs is self._model_kwargs:
+                passthrough_kwargs = copy.deepcopy(self._model_kwargs)
+            existing_extra_body = passthrough_kwargs.get("extra_body")
+            minimax_extra_body = (
+                dict(existing_extra_body)
+                if isinstance(existing_extra_body, dict)
+                else {}
+            )
+            minimax_extra_body["reasoning_split"] = True
+            if is_minimax_m3:
+                minimax_extra_body["thinking"] = {
+                    "type": ("disabled" if minimax_thinking_disabled else "adaptive")
+                }
+            passthrough_kwargs["extra_body"] = minimax_extra_body
+        elif is_minimax_m3:
+            optional_kwargs["thinking"] = {
+                "type": "disabled" if minimax_thinking_disabled else "adaptive"
+            }
 
         # OpenRouter: inject session_id and user into extra_body.
         #

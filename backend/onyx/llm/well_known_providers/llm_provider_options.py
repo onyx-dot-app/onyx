@@ -21,6 +21,7 @@ from onyx.llm.well_known_providers.constants import (
     BIFROST_PROVIDER_NAME,
     LITELLM_PROXY_PROVIDER_NAME,
     LM_STUDIO_PROVIDER_NAME,
+    MINIMAX_PROVIDER_NAME,
     NEBIUS_TOKENFACTORY_PROVIDER_NAME,
     OLLAMA_PROVIDER_NAME,
     OPENAI_COMPATIBLE_PROVIDER_NAME,
@@ -59,6 +60,7 @@ def _get_provider_to_models_map() -> dict[str, list[str]]:
         LITELLM_PROXY_PROVIDER_NAME: [],  # Dynamic - fetched from LiteLLM proxy API
         BIFROST_PROVIDER_NAME: [],  # Dynamic - fetched from Bifrost API
         OPENAI_COMPATIBLE_PROVIDER_NAME: [],  # Dynamic - fetched from OpenAI-compatible API
+        MINIMAX_PROVIDER_NAME: ["MiniMax-M3", "MiniMax-M2.7"],
         NEBIUS_TOKENFACTORY_PROVIDER_NAME: [],  # Dynamic - fetched from /v1/models
         PORTKEY_PROVIDER_NAME: [],  # Dynamic - fetched from the Portkey gateway
     }
@@ -355,6 +357,7 @@ def get_provider_display_name(provider_name: str) -> str:
         OPENROUTER_PROVIDER_NAME: "OpenRouter",
         LITELLM_PROXY_PROVIDER_NAME: "LiteLLM Proxy",
         OPENAI_COMPATIBLE_PROVIDER_NAME: "OpenAI-Compatible",
+        MINIMAX_PROVIDER_NAME: "MiniMax",
         NEBIUS_TOKENFACTORY_PROVIDER_NAME: "Nebius TokenFactory",
         PORTKEY_PROVIDER_NAME: "Portkey",
     }

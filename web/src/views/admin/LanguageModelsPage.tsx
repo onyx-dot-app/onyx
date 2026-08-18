@@ -67,6 +67,7 @@ const PROVIDER_GROUPS: ProviderGroup[] = [
       LLMProviderName.VERTEX_AI,
       LLMProviderName.BEDROCK,
       LLMProviderName.AZURE,
+      LLMProviderName.MINIMAX,
     ],
   },
   {

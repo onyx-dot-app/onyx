@@ -37,6 +37,7 @@ import LMStudioModal from "@/sections/modals/languageModels/LMStudioModal";
 import LiteLLMProxyModal from "@/sections/modals/languageModels/LiteLLMProxyModal";
 import BifrostModal from "@/sections/modals/languageModels/BifrostModal";
 import OpenAICompatibleModal from "@/sections/modals/languageModels/OpenAICompatibleModal";
+import MiniMaxModal from "@/sections/modals/languageModels/MiniMaxModal";
 import NebiusTokenfactoryModal from "@/sections/modals/languageModels/NebiusTokenfactoryModal";
 import PortkeyModal from "@/sections/modals/languageModels/PortkeyModal";
 
@@ -122,6 +123,12 @@ const PROVIDERS: Record<string, ProviderEntry> = {
     companyName: "OpenAI-Compatible",
     Modal: OpenAICompatibleModal,
   },
+  [LLMProviderName.MINIMAX]: {
+    icon: SvgPlug,
+    productName: "MiniMax",
+    companyName: "MiniMax",
+    Modal: MiniMaxModal,
+  },
   [LLMProviderName.NEBIUS_TOKENFACTORY]: {
     icon: SvgNebius,
     productName: "Nebius TokenFactory",
@@ -156,6 +163,7 @@ const CUSTOM_CONFIG_OVERRIDES = new Set<string>([
   LLMProviderName.ANTHROPIC,
   LLMProviderName.AZURE,
   LLMProviderName.OPENROUTER,
+  LLMProviderName.MINIMAX,
 ]);
 
 export function getProvider(
@@ -209,6 +217,7 @@ const MODEL_ICON_MAP: Record<string, IconFunctionComponent> = {
   [LLMProviderName.LITELLM_PROXY]: SvgLitellm,
   [LLMProviderName.BIFROST]: SvgBifrost,
   [LLMProviderName.OPENAI_COMPATIBLE]: SvgPlug,
+  [LLMProviderName.MINIMAX]: SvgPlug,
   [LLMProviderName.NEBIUS_TOKENFACTORY]: SvgNebius,
   [LLMProviderName.PORTKEY]: SvgPortkey,
 
