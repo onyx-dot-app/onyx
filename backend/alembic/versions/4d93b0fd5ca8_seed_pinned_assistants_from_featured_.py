@@ -69,27 +69,65 @@ def upgrade() -> None:
     #
     # This is the only time seeding is applied to an existing user. From here it
     # happens once, at account creation.
+    #
+    # The stubs are local, and duplicating `build_seed_pinned_personas_stmt` is
+    # deliberate: a migration stays pinned to the schema at its own revision, so
+    # it can import neither the ORM models nor the app helper. `pinned_assistants`
+    # also stops existing a few lines below.
+    user = sa.table(
+        "user",
+        sa.column("id", sa.UUID()),
+        sa.column("pinned_assistants", postgresql.JSONB()),
+    )
+    persona = sa.table(
+        "persona",
+        sa.column("id", sa.Integer()),
+        sa.column("display_priority", sa.Integer()),
+        sa.column("is_featured", sa.Boolean()),
+        sa.column("is_public", sa.Boolean()),
+        sa.column("is_listed", sa.Boolean()),
+        sa.column("deleted", sa.Boolean()),
+    )
+    pinned_persona = sa.table(
+        "user__pinned_persona",
+        sa.column("user_id", sa.UUID()),
+        sa.column("persona_id", sa.Integer()),
+        sa.column("display_order", sa.Integer()),
+    )
+
+    featured = (
+        sa.select(
+            persona.c.id.label("persona_id"),
+            (
+                sa.func.row_number().over(
+                    order_by=[
+                        sa.nulls_last(persona.c.display_priority.asc()),
+                        persona.c.id.asc(),
+                    ]
+                )
+                - 1
+            ).label("display_order"),
+        )
+        .where(
+            persona.c.id != 0,
+            persona.c.is_featured,
+            persona.c.is_public,
+            persona.c.is_listed,
+            sa.not_(persona.c.deleted),
+        )
+        .subquery()
+    )
+
     op.execute(
-        """
-        INSERT INTO user__pinned_persona (user_id, persona_id, display_order)
-        SELECT u.id, f.id, f.display_order
-        FROM "user" AS u
-        CROSS JOIN (
-            SELECT
-                p.id,
-                (ROW_NUMBER() OVER (
-                    ORDER BY p.display_priority ASC NULLS LAST, p.id ASC
-                ) - 1)::int AS display_order
-            FROM persona AS p
-            WHERE p.id <> 0
-              AND p.is_featured
-              AND p.is_public
-              AND p.is_listed
-              AND NOT p.deleted
-        ) AS f
-        WHERE u.pinned_assistants IS NULL
-        ON CONFLICT DO NOTHING
-        """
+        postgresql.insert(pinned_persona)
+        .from_select(
+            ["user_id", "persona_id", "display_order"],
+            sa.select(user.c.id, featured.c.persona_id, featured.c.display_order)
+            .select_from(user)
+            .join(featured, sa.true())
+            .where(user.c.pinned_assistants.is_(None)),
+        )
+        .on_conflict_do_nothing()
     )
 
     op.drop_column("user", "pinned_assistants")
