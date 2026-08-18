@@ -310,7 +310,7 @@ def test_oauth_redirect_wait_is_bounded_and_cancels_probe(
     assert probe_cancelled
 
 
-def test_browser_oauth_outlives_machine_operation_timeout(
+def test_browser_oauth_polls_without_holding_redis_connection(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     user_id = str(uuid4())
@@ -322,23 +322,22 @@ def test_browser_oauth_outlives_machine_operation_timeout(
         state=state,
     )
     redis_client = MagicMock()
+    redis_client.tenant_id = "test-tenant"
     redis_client.get.return_value = state_data.model_dump_json()
+    async_redis = MagicMock()
     callback_payload = (
-        oauth.key_code(user_id, state).encode(),
         oauth.MCPOAuthCodePayload(code="test-code", state=state)
         .model_dump_json()
-        .encode(),
+        .encode()
     )
-
-    def deliver_callback_after_operation_window(
-        _keys: list[str], timeout: int
-    ) -> tuple[bytes, bytes] | None:
-        if timeout <= oauth.OAUTH_OPERATION_TIMEOUT_SECONDS:
-            return None
-        return callback_payload
-
-    redis_client.blpop.side_effect = deliver_callback_after_operation_window
+    async_redis.lpop = AsyncMock(side_effect=[None, callback_payload])
     monkeypatch.setattr(oauth, "get_redis_client", lambda: redis_client)
+    monkeypatch.setattr(
+        oauth,
+        "get_async_redis_connection",
+        AsyncMock(return_value=async_redis),
+    )
+    monkeypatch.setattr(oauth, "OAUTH_CALLBACK_POLL_INTERVAL_SECONDS", 0)
     authorization_url_callback = AsyncMock()
 
     provider = oauth.make_oauth_provider(
@@ -359,8 +358,20 @@ def test_browser_oauth_outlives_machine_operation_timeout(
         return await callback_handler()
 
     callback_result = asyncio.run(complete_browser_flow())
-    assert redis_client.set.call_args.kwargs["ex"] == 10 * 60
+    assert redis_client.set.call_args.kwargs["ex"] == 5 * 60
     assert callback_result == ("test-code", state)
+    assert async_redis.lpop.await_count == 2
+    assert async_redis.blpop.call_count == 0
+
+    async_redis.lpop = AsyncMock(return_value=None)
+    monkeypatch.setattr(oauth, "OAUTH_USER_AUTHORIZATION_TIMEOUT_SECONDS", 0)
+
+    async def time_out_browser_flow() -> None:
+        await callback_handler()
+
+    with pytest.raises(RuntimeError, match="Timed out waiting for OAuth callback"):
+        asyncio.run(time_out_browser_flow())
+    async_redis.lpop.assert_awaited_once()
 
 
 def test_probe_failure_after_token_refresh_is_not_treated_as_connected(

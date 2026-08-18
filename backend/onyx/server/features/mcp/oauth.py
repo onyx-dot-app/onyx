@@ -10,7 +10,7 @@ import asyncio
 import json
 import time
 from collections.abc import Awaitable, Callable
-from typing import Any, TypedDict
+from typing import Any, TypedDict, cast
 from urllib.parse import parse_qs, urlparse
 from uuid import uuid4
 
@@ -43,7 +43,7 @@ from onyx.db.mcp import (
 from onyx.db.models import MCPConnectionConfig, MCPServer
 from onyx.error_handling.error_codes import OnyxErrorCode
 from onyx.error_handling.exceptions import OnyxError
-from onyx.redis.redis_pool import get_redis_client
+from onyx.redis.redis_pool import get_async_redis_connection, get_redis_client
 from onyx.server.features.mcp.client import initialize_mcp_client
 from onyx.server.features.mcp.client_metadata import (
     mcp_oauth_redirect_uri,
@@ -90,7 +90,8 @@ _REFRESH_LOCK_LEASE_S = 60.0
 # Machine-to-machine OAuth work should fail promptly, while the browser flow
 # must leave enough time for sign-in, consent, and MFA.
 OAUTH_OPERATION_TIMEOUT_SECONDS = 30
-OAUTH_USER_AUTHORIZATION_TIMEOUT_SECONDS = 10 * 60
+OAUTH_USER_AUTHORIZATION_TIMEOUT_SECONDS = 5 * 60
+OAUTH_CALLBACK_POLL_INTERVAL_SECONDS = 1.0
 UNUSED_RETURN_PATH = "unused_path"
 
 
@@ -942,27 +943,40 @@ def make_oauth_provider(
 
     async def callback_handler() -> tuple[str, str | None]:
         r = get_redis_client()
-        # Wait up to TTL for the code published by the /oauth/callback route
-        state = r.get(key_state(user_id))
-        if not state:
+        # Wait up to TTL for the code published by the /oauth/callback route.
+        stored_state = r.get(key_state(user_id))
+        if not stored_state:
             raise RuntimeError("No pending OAuth state for user")
-        state_obj = MCPOauthState.model_validate_json(state)
+        state_obj = MCPOauthState.model_validate_json(stored_state)
 
-        # Block on Redis for (code, state). BLPOP returns (key, value).
+        # Wait for the callback route to publish the authorization code.
         key = key_code(user_id, state_obj.state)
 
-        # Run the blocking operation in a thread pool so the user can complete
-        # sign-in, consent, and MFA without blocking the event loop.
-        loop = asyncio.get_running_loop()
-        pop = await loop.run_in_executor(
-            None,
-            lambda: r.blpop([key], timeout=OAUTH_USER_AUTHORIZATION_TIMEOUT_SECONDS),
+        # Poll with short nonblocking reads. A blocking Redis command would
+        # reserve either an executor thread or a shared Redis connection for
+        # the entire human authorization window.
+        async_redis = await get_async_redis_connection()
+        tenant_key = f"{r.tenant_id}:{key}"
+        deadline = asyncio.get_running_loop().time() + (
+            OAUTH_USER_AUTHORIZATION_TIMEOUT_SECONDS
         )
+        code_payload_raw: bytes | None = None
+        while code_payload_raw is None:
+            code_payload_raw = await cast(
+                Awaitable[bytes | None], async_redis.lpop(tenant_key)
+            )
+            remaining_seconds = deadline - asyncio.get_running_loop().time()
+            if code_payload_raw is None and remaining_seconds <= 0:
+                break
+            if code_payload_raw is None:
+                await asyncio.sleep(
+                    min(OAUTH_CALLBACK_POLL_INTERVAL_SECONDS, remaining_seconds)
+                )
         # TODO(evan): gracefully handle "user says no"
-        if not pop:
+        if code_payload_raw is None:
             raise RuntimeError("Timed out waiting for OAuth callback")
 
-        code_payload = MCPOAuthCodePayload.model_validate_json(pop[1])
+        code_payload = MCPOAuthCodePayload.model_validate_json(code_payload_raw)
         if code_payload.state != state_obj.state:
             raise RuntimeError("Invalid state in OAuth callback")
 
