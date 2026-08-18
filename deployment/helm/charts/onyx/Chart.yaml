@@ -5,7 +5,7 @@ home: https://www.onyx.app/
 sources:
   - "https://github.com/onyx-dot-app/onyx"
 type: application
-version: 0.8.17
+version: 0.8.18
 appVersion: latest
 annotations:
   category: Productivity
@@ -20,17 +20,16 @@ annotations:
     - name: background
       image: docker.io/onyxdotapp/onyx-backend:latest
   artifacthub.io/changes: |
-    - kind: added
-      description: The chart is now also published as an OCI artifact at
-        `oci://ghcr.io/onyx-dot-app/charts/onyx`. Install it with
-        `helm install onyx oci://ghcr.io/onyx-dot-app/charts/onyx --version <version>`.
-        The existing repository at https://onyx-dot-app.github.io/onyx keeps working
-        and stays the default install path; no action is needed to keep using it.
     - kind: changed
-      description: Chart tarballs are now attached to GitHub releases
-        (`helm/onyx-<version>`) instead of being committed to the gh-pages branch.
-        `helm repo add` and `helm install` are unaffected — only the download URL
-        behind index.yaml changed.
+      description: The api server `/health` endpoint now reports not-ready (503)
+        while its request threadpool stays saturated, so a wedged pod leaves the
+        Service. It previously returned 200 in that state. Move `/health` off any
+        `livenessProbe` you configured — saturation is load-induced and hits every
+        replica at once, so restarting on it turns a slowdown into an outage.
+    - kind: added
+      description: New api server endpoint `/health/live` reports only that the
+        process runs. Use it for `livenessProbe`, and keep `/health` for
+        `readinessProbe`. `values.yaml` documents both under `api`.
 dependencies:
   # Helm uses the first condition path that exists: `postgresqlOperator.enabled`
   # is unset by default, so this falls through to `postgresql.enabled`. Set it
