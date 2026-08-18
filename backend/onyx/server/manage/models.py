@@ -98,7 +98,9 @@ class UserPreferences(BaseModel):
     hidden_assistants: list[int] = []
     visible_assistants: list[int] = []
     default_model: str | None = None
-    pinned_assistants: list[int] | None = None
+    # Always a list. A user with no pins has an empty one; there is no
+    # meaningful null here, and the frontend used to branch on it.
+    pinned_assistants: list[int] = []
     shortcut_enabled: bool | None = None
 
     # These will default to workspace settings on the frontend if not set
@@ -207,7 +209,9 @@ class UserInfo(BaseModel):
                     chosen_assistants=user.chosen_assistants,
                     default_model=user.default_model,
                     hidden_assistants=user.hidden_assistants,
-                    pinned_assistants=user.pinned_assistants,
+                    pinned_assistants=[
+                        pinned.persona_id for pinned in user.pinned_personas
+                    ],
                     visible_assistants=user.visible_assistants,
                     auto_scroll=user.auto_scroll,
                     temperature_override_enabled=user.temperature_override_enabled,

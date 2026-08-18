@@ -8,6 +8,7 @@ Tests cover:
 4. Case-insensitive email matching for existing user checks
 """
 
+from collections.abc import Iterator
 from types import SimpleNamespace, TracebackType
 from typing import cast
 from unittest.mock import AsyncMock, MagicMock, patch
@@ -65,9 +66,17 @@ class _AsyncSessionContextManager:
         return False
 
 
+@pytest.fixture(autouse=True)
+def _no_pinned_persona_seeding() -> Iterator[None]:
+    """Seeding needs a real session; these tests only cover registration logic."""
+    with patch(
+        "onyx.auth.users.seed_pinned_personas_from_featured", new_callable=AsyncMock
+    ):
+        yield
+
+
 def _mock_user_manager_methods(user_manager: UserManager) -> None:
     user_manager.validate_password = AsyncMock()
-    user_manager._assign_default_pinned_assistants = AsyncMock()
 
 
 class TestDisposableEmailValidation:

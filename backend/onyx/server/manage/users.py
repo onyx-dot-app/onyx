@@ -49,6 +49,7 @@ from onyx.db.auth import get_live_users_count
 from onyx.db.engine.sql_engine import get_session, get_session_with_shared_schema
 from onyx.db.enums import AccountType, Permission, UserFileStatus
 from onyx.db.models import User, UserFile
+from onyx.db.pinned_personas import set_pinned_personas
 from onyx.db.tenant_invite_counter import release_trial_invites, reserve_trial_invites
 from onyx.db.user_preferences import (
     activate_user,
@@ -65,7 +66,6 @@ from onyx.db.user_preferences import (
     update_user_language,
     update_user_paste_as_tile,
     update_user_personalization,
-    update_user_pinned_assistants,
     update_user_shortcut_enabled,
     update_user_temperature_override_enabled,
     update_user_theme_preference,
@@ -1213,13 +1213,15 @@ class ReorderPinnedAssistantsRequest(BaseModel):
 
 
 @router.patch("/user/pinned-assistants")
-def update_user_pinned_assistants_api(
+def set_pinned_personas_api(
     request: ReorderPinnedAssistantsRequest,
     user: User = Depends(require_permission(Permission.BASIC_ACCESS)),
     db_session: Session = Depends(get_session),
 ) -> None:
     ordered_assistant_ids = request.ordered_assistant_ids
-    update_user_pinned_assistants(user.id, ordered_assistant_ids, db_session)
+    set_pinned_personas(
+        db_session=db_session, user=user, persona_ids=ordered_assistant_ids
+    )
 
 
 class ChosenAssistantsRequest(BaseModel):
