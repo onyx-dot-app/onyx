@@ -128,9 +128,15 @@ func bootstrapAPIKey(serverURL, apiPrefix string) (string, error) {
 		return "", fmt.Errorf("login succeeded but no %q cookie was returned", cookieName)
 	}
 
-	keyBody, _ := json.Marshal(map[string]string{
-		"name": "terraform-provider-acceptance-tests",
-		"role": "admin",
+	// permissions come from group membership now — must join the seeded "Admin" group.
+	// A `role` field silently yields a group-less key that 403s on every admin route.
+	adminGroupID, err := findAdminGroupID(httpClient, base, sessionCookie)
+	if err != nil {
+		return "", err
+	}
+	keyBody, _ := json.Marshal(map[string]any{
+		"name":      "terraform-provider-acceptance-tests",
+		"group_ids": []int64{adminGroupID},
 	})
 	keyReq, err := http.NewRequest(http.MethodPost, base+"/admin/api-key", bytes.NewReader(keyBody))
 	if err != nil {
@@ -158,4 +164,37 @@ func bootstrapAPIKey(serverURL, apiPrefix string) (string, error) {
 		return "", fmt.Errorf("API key creation response did not include the key material")
 	}
 	return *descriptor.APIKey, nil
+}
+
+// findAdminGroupID looks up the seeded "Admin" group — hidden from the default listing
+// unless include_default=true.
+func findAdminGroupID(httpClient *http.Client, base string, sessionCookie *http.Cookie) (int64, error) {
+	req, err := http.NewRequest(http.MethodGet, base+"/manage/admin/user-group?include_default=true", nil)
+	if err != nil {
+		return 0, err
+	}
+	req.AddCookie(sessionCookie)
+
+	resp, err := httpClient.Do(req)
+	if err != nil {
+		return 0, fmt.Errorf("user group listing request failed: %w", err)
+	}
+	defer func() { _ = resp.Body.Close() }()
+	if resp.StatusCode >= 300 {
+		return 0, fmt.Errorf("user group listing failed with HTTP %d", resp.StatusCode)
+	}
+
+	var groups []struct {
+		ID   int64  `json:"id"`
+		Name string `json:"name"`
+	}
+	if err := json.NewDecoder(resp.Body).Decode(&groups); err != nil {
+		return 0, err
+	}
+	for _, group := range groups {
+		if group.Name == "Admin" {
+			return group.ID, nil
+		}
+	}
+	return 0, fmt.Errorf("no seeded \"Admin\" group found; has the seed_default_groups migration run?")
 }

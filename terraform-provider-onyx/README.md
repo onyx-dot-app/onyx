@@ -25,14 +25,15 @@ Generated per-resource docs live in [`docs/`](./docs/).
 
 ## Authentication
 
-The provider needs an **admin-role API key** (or an unrestricted PAT created by an admin
-user). Create one in the Onyx admin panel (*API Keys*) or via the API:
+The provider needs an API key in the seeded **Admin** group (or an unrestricted PAT created
+by an admin user). Create one in the Onyx admin panel (*API Keys*) or via the API — pass the
+Admin group id, since a key with no group has no admin permissions:
 
 ```bash
 curl -X POST https://your-onyx/api/admin/api-key \
   -H "Cookie: fastapiusersauth=<admin session>" \
   -H "Content-Type: application/json" \
-  -d '{"name": "terraform", "role": "admin"}'
+  -d '{"name": "terraform", "group_ids": [<admin group id>]}'
 ```
 
 This first key is inherently chicken-and-egg: it must exist before Terraform can run, so

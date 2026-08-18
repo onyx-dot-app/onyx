@@ -7,20 +7,26 @@ import (
 )
 
 // APIKeyArgs mirrors APIKeyArgs (backend/onyx/server/api_key/models.py).
+// GroupIDs must never be nil — it marshals to JSON null, which the backend rejects with a 422.
 type APIKeyArgs struct {
-	Name *string `json:"name"`
-	Role string  `json:"role"`
+	Name     *string `json:"name"`
+	GroupIDs []int64 `json:"group_ids"`
 }
 
-// APIKeyDescriptor mirrors the backend model. APIKey (the plaintext
-// credential) is only present in create/regenerate responses.
+// UserGroupInfo mirrors UserGroupInfo (backend/onyx/server/models.py).
+type UserGroupInfo struct {
+	ID   int64  `json:"id"`
+	Name string `json:"name"`
+}
+
+// APIKeyDescriptor mirrors the backend model; APIKey (plaintext) is set only on create/regenerate.
 type APIKeyDescriptor struct {
-	APIKeyID      int64   `json:"api_key_id"`
-	APIKeyDisplay string  `json:"api_key_display"`
-	APIKey        *string `json:"api_key"`
-	APIKeyName    *string `json:"api_key_name"`
-	APIKeyRole    string  `json:"api_key_role"`
-	UserID        string  `json:"user_id"`
+	APIKeyID      int64           `json:"api_key_id"`
+	APIKeyDisplay string          `json:"api_key_display"`
+	APIKey        *string         `json:"api_key"`
+	APIKeyName    *string         `json:"api_key_name"`
+	Groups        []UserGroupInfo `json:"groups"`
+	UserID        string          `json:"user_id"`
 }
 
 // CreateAPIKey creates an API key. The response carries the plaintext key —
@@ -61,7 +67,7 @@ func (c *Client) GetAPIKey(ctx context.Context, id int64) (*APIKeyDescriptor, er
 	}
 }
 
-// UpdateAPIKey updates an API key's name and role.
+// UpdateAPIKey updates an API key's name and group membership.
 func (c *Client) UpdateAPIKey(ctx context.Context, id int64, args APIKeyArgs) (*APIKeyDescriptor, error) {
 	var desc APIKeyDescriptor
 	path := fmt.Sprintf("/admin/api-key/%d", id)

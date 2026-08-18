@@ -5,14 +5,13 @@ import (
 	"fmt"
 	"strconv"
 
-	"github.com/hashicorp/terraform-plugin-framework-validators/stringvalidator"
+	"github.com/hashicorp/terraform-plugin-framework/attr"
+	"github.com/hashicorp/terraform-plugin-framework/diag"
 	"github.com/hashicorp/terraform-plugin-framework/path"
 	"github.com/hashicorp/terraform-plugin-framework/resource"
 	"github.com/hashicorp/terraform-plugin-framework/resource/schema"
 	"github.com/hashicorp/terraform-plugin-framework/resource/schema/planmodifier"
-	"github.com/hashicorp/terraform-plugin-framework/resource/schema/stringdefault"
 	"github.com/hashicorp/terraform-plugin-framework/resource/schema/stringplanmodifier"
-	"github.com/hashicorp/terraform-plugin-framework/schema/validator"
 	"github.com/hashicorp/terraform-plugin-framework/types"
 	"github.com/onyx-dot-app/onyx/terraform-provider-onyx/internal/client"
 )
@@ -35,10 +34,29 @@ type apiKeyResource struct {
 type apiKeyResourceModel struct {
 	ID            types.String `tfsdk:"id"`
 	Name          types.String `tfsdk:"name"`
-	Role          types.String `tfsdk:"role"`
+	GroupIDs      types.Set    `tfsdk:"group_ids"`
 	APIKey        types.String `tfsdk:"api_key"`
 	APIKeyDisplay types.String `tfsdk:"api_key_display"`
 	UserID        types.String `tfsdk:"user_id"`
+}
+
+// groupIDsFromDescriptor always returns a known (non-null) set, even for zero groups.
+func groupIDsFromDescriptor(desc *client.APIKeyDescriptor) (types.Set, diag.Diagnostics) {
+	ids := make([]attr.Value, 0, len(desc.Groups))
+	for _, group := range desc.Groups {
+		ids = append(ids, types.Int64Value(group.ID))
+	}
+	return types.SetValue(types.Int64Type, ids)
+}
+
+// groupIDsToArgs: a null or unknown set becomes `[]`, which clears the key's groups.
+func groupIDsToArgs(ctx context.Context, set types.Set) ([]int64, diag.Diagnostics) {
+	ids := []int64{}
+	if set.IsNull() || set.IsUnknown() {
+		return ids, nil
+	}
+	diags := set.ElementsAs(ctx, &ids, false)
+	return ids, diags
 }
 
 func (r *apiKeyResource) Metadata(_ context.Context, req resource.MetadataRequest, resp *resource.MetadataResponse) {
@@ -63,15 +81,12 @@ func (r *apiKeyResource) Schema(_ context.Context, _ resource.SchemaRequest, res
 				Optional:            true,
 				MarkdownDescription: "Display name for the key.",
 			},
-			"role": schema.StringAttribute{
-				Optional: true,
-				Computed: true,
-				Default:  stringdefault.StaticString("basic"),
-				MarkdownDescription: "Role of the service account backing the key: `basic`, `admin`, " +
-					"`curator`, `global_curator`, or `limited`.",
-				Validators: []validator.String{
-					stringvalidator.OneOf("basic", "admin", "curator", "global_curator", "limited"),
-				},
+			"group_ids": schema.SetAttribute{
+				Optional:    true,
+				ElementType: types.Int64Type,
+				MarkdownDescription: "Ids of the user groups the backing service account belongs to. The " +
+					"key resolves the union of those groups' permissions. Omit for a key with no group " +
+					"permissions. This replaces the whole group set on every apply.",
 			},
 			"api_key": schema.StringAttribute{
 				Computed:  true,
@@ -111,9 +126,15 @@ func (r *apiKeyResource) Create(ctx context.Context, req resource.CreateRequest,
 		return
 	}
 
+	groupIDs, diags := groupIDsToArgs(ctx, plan.GroupIDs)
+	resp.Diagnostics.Append(diags...)
+	if resp.Diagnostics.HasError() {
+		return
+	}
+
 	desc, err := r.client.CreateAPIKey(ctx, client.APIKeyArgs{
-		Name: plan.Name.ValueStringPointer(),
-		Role: plan.Role.ValueString(),
+		Name:     plan.Name.ValueStringPointer(),
+		GroupIDs: groupIDs,
 	})
 	if err != nil {
 		resp.Diagnostics.AddError("Failed to create Onyx API key", err.Error())
@@ -150,11 +171,20 @@ func (r *apiKeyResource) Read(ctx context.Context, req resource.ReadRequest, res
 	}
 
 	state.Name = types.StringPointerValue(desc.APIKeyName)
-	state.Role = types.StringValue(desc.APIKeyRole)
 	state.APIKeyDisplay = types.StringValue(desc.APIKeyDisplay)
 	state.UserID = types.StringValue(desc.UserID)
-	// state.APIKey is carried forward: the plaintext key is never returned
-	// after creation, so prior state is the only source of truth.
+
+	// Terraform treats null and an empty set as different; only overwrite group_ids when
+	// the API actually reports groups, or a no-group key drifts null → [].
+	if len(desc.Groups) > 0 || !state.GroupIDs.IsNull() {
+		groupIDs, diags := groupIDsFromDescriptor(desc)
+		resp.Diagnostics.Append(diags...)
+		if resp.Diagnostics.HasError() {
+			return
+		}
+		state.GroupIDs = groupIDs
+	}
+
 	resp.Diagnostics.Append(resp.State.Set(ctx, state)...)
 }
 
@@ -171,9 +201,15 @@ func (r *apiKeyResource) Update(ctx context.Context, req resource.UpdateRequest,
 		return
 	}
 
+	groupIDs, diags := groupIDsToArgs(ctx, plan.GroupIDs)
+	resp.Diagnostics.Append(diags...)
+	if resp.Diagnostics.HasError() {
+		return
+	}
+
 	desc, err := r.client.UpdateAPIKey(ctx, id, client.APIKeyArgs{
-		Name: plan.Name.ValueStringPointer(),
-		Role: plan.Role.ValueString(),
+		Name:     plan.Name.ValueStringPointer(),
+		GroupIDs: groupIDs,
 	})
 	if err != nil {
 		resp.Diagnostics.AddError("Failed to update Onyx API key", err.Error())

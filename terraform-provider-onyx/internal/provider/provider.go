@@ -54,8 +54,9 @@ func (p *onyxProvider) Schema(_ context.Context, _ provider.SchemaRequest, resp 
 			"api_key": schema.StringAttribute{
 				Optional:  true,
 				Sensitive: true,
-				MarkdownDescription: "Admin-role Onyx API key (`on_...`) or unrestricted personal access token " +
-					"(`onyx_pat_...`). May also be set via the `ONYX_API_KEY` environment variable.",
+				MarkdownDescription: "Onyx API key (`on_...`) in the seeded `Admin` group, or unrestricted " +
+					"personal access token (`onyx_pat_...`). May also be set via the `ONYX_API_KEY` " +
+					"environment variable.",
 			},
 			"api_prefix": schema.StringAttribute{
 				Optional: true,
@@ -120,7 +121,8 @@ func (p *onyxProvider) Configure(ctx context.Context, req provider.ConfigureRequ
 		resp.Diagnostics.AddError(
 			"Missing Onyx API key",
 			"Set the provider's api_key attribute or the ONYX_API_KEY environment variable. "+
-				"Create an admin-role API key in the Onyx admin panel (or via POST /admin/api-key).",
+				"Create an API key in the Onyx admin panel, assigned to the Admin group "+
+				"(or via POST /admin/api-key with group_ids set to the Admin group's id).",
 		)
 	}
 	if resp.Diagnostics.HasError() {

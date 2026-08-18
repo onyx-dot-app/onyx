@@ -26,7 +26,6 @@ resource "onyx_api_key" "test" {
 				Check: resource.ComposeAggregateTestCheckFunc(
 					resource.TestCheckResourceAttrSet("onyx_api_key.test", "id"),
 					resource.TestCheckResourceAttr("onyx_api_key.test", "name", "tf-acc-test-key"),
-					resource.TestCheckResourceAttr("onyx_api_key.test", "role", "basic"),
 					resource.TestCheckResourceAttrSet("onyx_api_key.test", "api_key"),
 					resource.TestCheckResourceAttrSet("onyx_api_key.test", "api_key_display"),
 					resource.TestCheckResourceAttrSet("onyx_api_key.test", "user_id"),
@@ -36,21 +35,18 @@ resource "onyx_api_key" "test" {
 				ResourceName:      "onyx_api_key.test",
 				ImportState:       true,
 				ImportStateVerify: true,
-				// The plaintext key is returned exactly once at creation and
-				// can never be re-read, so the imported state has it null.
+				// plaintext key is write-once and never re-read, so import leaves it null
 				ImportStateVerifyIgnore: []string{"api_key"},
 			},
 			{
 				Config: `
 resource "onyx_api_key" "test" {
   name = "tf-acc-test-key-renamed"
-  role = "limited"
 }
 `,
 				Check: resource.ComposeAggregateTestCheckFunc(
 					resource.TestCheckResourceAttr("onyx_api_key.test", "name", "tf-acc-test-key-renamed"),
-					resource.TestCheckResourceAttr("onyx_api_key.test", "role", "limited"),
-					// In-place update: key material must survive name/role changes.
+					// In-place update: key material must survive a name change.
 					resource.TestCheckResourceAttrSet("onyx_api_key.test", "api_key"),
 				),
 			},
