@@ -9,7 +9,7 @@ const APP: ConfiguredIntegration = {
   isCustom: false,
   logo: SvgSlack,
   name: "Slack",
-  facts: ["7 actions", "2 skills"],
+  facts: ["7 actions", "2 custom skills"],
   warnings: [],
   enabled: true,
   toggleEnabled: async () => {},
@@ -51,7 +51,7 @@ export const CustomApp: Story = {
       isCustom: true,
       logo: SvgPlug,
       name: "Internal billing API",
-      facts: ["2 upstream patterns", "org credentials set", "1 skill"],
+      facts: ["2 upstream patterns", "org credentials set", "1 custom skill"],
     },
   },
 };
@@ -76,7 +76,7 @@ export const OnyxManaged: Story = {
   args: {
     integration: {
       ...APP,
-      facts: ["provided by Onyx", "7 actions", "no skills"],
+      facts: ["provided by Onyx", "7 actions", "no custom skills"],
       remove: null,
     },
   },
