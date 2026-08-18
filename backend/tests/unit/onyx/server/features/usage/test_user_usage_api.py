@@ -637,9 +637,7 @@ def test_budget_reflects_group_cost_limit(
 def test_budget_ignores_legacy_cost_period(
     db_session: Session, monkeypatch: pytest.MonkeyPatch
 ) -> None:
-    """A stored cost period outside the supported calendar set (possible on rows
-    written before the daily/weekly/monthly restriction) must not fail the
-    endpoint — the row is excluded from the effective budget."""
+    """The usage endpoint excludes an unsupported stored cost period."""
     from onyx.db.models import TokenRateLimitScope
 
     caller = str(uuid4())

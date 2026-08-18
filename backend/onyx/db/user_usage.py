@@ -84,9 +84,7 @@ def _warn_for_invalid_cost_budget_period(rate_limit: TokenRateLimit) -> None:
 
 
 def cost_budget_limits(rate_limits: Sequence[TokenRateLimit]) -> list[TokenRateLimit]:
-    """Limits that carry an enforceable cost budget. Rows written before the
-    daily/weekly/monthly restriction can hold any whole-day period; those are
-    skipped with a warning because a bad stored row must never block requests."""
+    """Return enforceable cost limits and warn about unsupported stored periods."""
     valid: list[TokenRateLimit] = []
     for rate_limit in rate_limits:
         if rate_limit.cost_budget_cents is None:

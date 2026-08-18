@@ -1,6 +1,4 @@
-"""EE user/group cost-budget paths: legacy stored periods (any whole-day value,
-possible on rows written before the daily/weekly/monthly restriction) must be
-skipped, and the usage fetch cutoff must cover every valid limit's window."""
+"""EE cost-budget paths skip unsupported periods and fetch every valid window."""
 
 from datetime import datetime, timezone, tzinfo
 from uuid import uuid4
@@ -22,8 +20,7 @@ class _SessionCtx:
 
 
 class _FixedDatetime(datetime):
-    """2026-08-01 is a Saturday: the weekly window (Mon 07-27) starts before the
-    monthly window (08-01), so a max-period cutoff would under-fetch weekly usage."""
+    """The fixed month starts on Saturday, after the weekly window starts."""
 
     @classmethod
     def now(cls, tz: tzinfo | None = None) -> "_FixedDatetime":

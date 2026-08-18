@@ -572,9 +572,7 @@ class TestGroupCostSince:
 
 
 def test_usage_reset_window_start_skips_legacy_cost_period() -> None:
-    """A stored cost period outside the supported calendar set (possible on rows
-    written before the daily/weekly/monthly restriction) must not fail the reset
-    window computation — the cost window is simply not widened by that row."""
+    """An unsupported stored cost period does not widen the reset window."""
     from onyx.configs.constants import TokenRateLimitScope
 
     now = datetime.datetime(2026, 8, 12, 15, tzinfo=datetime.timezone.utc)

@@ -605,8 +605,7 @@ class TestTokenRateLimitArgsValidation:
 
 
 class TestLegacyCostPeriodHardening:
-    """Rows written before the daily/weekly/monthly restriction can hold any
-    whole-day period. Enforcement must skip them, never fail the chat gate."""
+    """Unsupported stored cost periods do not fail the chat gate."""
 
     def _patch_global(
         self,

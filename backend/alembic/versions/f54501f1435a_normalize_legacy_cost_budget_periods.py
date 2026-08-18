@@ -1,13 +1,11 @@
 """normalize legacy cost budget periods
 
 Cost budgets only support daily/weekly/monthly (24/168/720h) periods, but rows
-written before that restriction can hold any whole-day period. Enforcement skips
-such rows, so snap them to the nearest supported period to keep them active.
+can hold any whole-day period. Enforcement skips unsupported rows, so snap them
+to the nearest supported period to keep them active.
 
 Revision ID: f54501f1435a
 Revises: df90f43d9ab2
-Create Date: 2026-08-18 10:22:40.535792
-
 """
 
 import sqlalchemy as sa
