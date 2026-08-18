@@ -21,6 +21,7 @@ func NewReleaseCommand() *cobra.Command {
 
 	cmd.AddCommand(NewReleaseOpalCommand())
 	cmd.AddCommand(NewReleaseCloudCommand())
+	cmd.AddCommand(NewReleaseWatchCommand())
 
 	return cmd
 }

@@ -4,9 +4,11 @@ import (
 	"encoding/json"
 	"fmt"
 	"os/exec"
+	"regexp"
 	"time"
 
 	log "github.com/sirupsen/logrus"
+	"github.com/spf13/cobra"
 )
 
 const (
@@ -27,7 +29,70 @@ const (
 	// timeout plus runner queue delay.
 	bumpPRDiscoveryTimeout = 20 * time.Minute
 	bumpPRPollInterval     = 15 * time.Second
+
+	// How many recent deployment runs to scan for the newest cloud tag.
+	cloudTagLookbackRuns = 20
 )
+
+// cloudTagRe matches complete cloud release tags. It mirrors the validation in
+// the bump workflow.
+var cloudTagRe = regexp.MustCompile(`^v\d+\.\d+\.\d+-cloud\.\d+$`)
+
+// NewReleaseWatchCommand creates the ods release watch command.
+func NewReleaseWatchCommand() *cobra.Command {
+	cmd := &cobra.Command{
+		Use:   "watch [tag]",
+		Short: "Watch a cloud release build and print its bump PR",
+		Long: `Watch the deployment run for a cloud tag and print the bump PR once it exists.
+
+With no argument, the newest cloud tag that has a deployment run is watched.
+The command only reads GitHub state through the gh CLI, so it is safe to
+interrupt and re-run at any time, including for releases that already
+finished.
+
+Example usage:
+
+    $ ods release watch
+    $ ods release watch v4.7.0-cloud.3`,
+		Args:         cobra.MaximumNArgs(1),
+		SilenceUsage: true,
+		RunE: func(cmd *cobra.Command, args []string) error {
+			var tag string
+			if len(args) == 1 {
+				tag = args[0]
+				if !cloudTagRe.MatchString(tag) {
+					return fmt.Errorf("%q is not a cloud tag (expected vX.Y.Z-cloud.N)", tag)
+				}
+			} else {
+				var err error
+				tag, err = latestCloudTag()
+				if err != nil {
+					return err
+				}
+				log.Infof("Watching the newest cloud release: %s", tag)
+			}
+			return watchCloudRelease(tag)
+		},
+	}
+
+	return cmd
+}
+
+// latestCloudTag returns the cloud tag of the newest deployment run that a
+// cloud tag push triggered.
+func latestCloudTag() (string, error) {
+	// Runs are sorted newest-first, so the first match is the newest tag.
+	runs, err := listWorkflowRuns(onyxRepo, deploymentWorkflowFile, "push", "", cloudTagLookbackRuns)
+	if err != nil {
+		return "", err
+	}
+	for _, run := range runs {
+		if cloudTagRe.MatchString(run.HeadBranch) {
+			return run.HeadBranch, nil
+		}
+	}
+	return "", fmt.Errorf("no cloud release found in the last %d deployment runs", cloudTagLookbackRuns)
+}
 
 // watchCloudRelease follows the release pipeline of an already-pushed cloud
 // tag: the deployment.yml build, then the bump PR that the dispatched bump

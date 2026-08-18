@@ -45,8 +45,9 @@ Pushing the tag triggers deployment.yml, which builds the cloud images.
 After the push, the command prints the URL of that deployment run, waits for
 it to finish, and then prints the URL of the version bump PR that the infra
 repo opens for the new tag. All of this is read-only polling through the gh
-CLI: Ctrl-C is safe at any point (the tag is already pushed). Pass --no-watch
-to print the run URL and exit immediately.
+CLI: Ctrl-C is safe at any point (the tag is already pushed), and
+"ods release watch" re-attaches later. Pass --no-watch to print the run URL
+and exit immediately.
 
 Example usage:
 
@@ -66,7 +67,7 @@ Example usage:
 				announceCloudRun(tag)
 				return nil
 			}
-			log.Info("Watching the release; Ctrl-C is safe, the tag is already pushed.")
+			log.Infof("Watching the release; Ctrl-C is safe, re-attach with: ods release watch %s", tag)
 			return watchCloudRelease(tag)
 		},
 	}
