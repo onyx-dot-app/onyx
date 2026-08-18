@@ -25,7 +25,9 @@ from shared_configs.contextvars import CURRENT_TENANT_ID_CONTEXTVAR
 
 # Unauthenticated, non-tenant-scoped endpoints (LB/Prometheus probes, API docs),
 # so tenant resolution is skipped for them.
-TENANT_RESOLUTION_SKIP_PATHS = frozenset({"/health", "/metrics", "/openapi.json"})
+TENANT_RESOLUTION_SKIP_PATHS = frozenset(
+    {"/health", "/health/live", "/metrics", "/openapi.json"}
+)
 
 
 def add_api_server_tenant_id_middleware(
