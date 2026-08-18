@@ -199,7 +199,7 @@ module "onyx" {
 Inputs (common):
 - `name` (default `onyx`), `region` (default `us-west-2`), `tags`
 - `size` (`small`/`medium`/`large`, default `medium`) — see "T-shirt sizing" above — plus per-setting overrides (`main_node_*`, `vespa_node_*`, `postgres_instance_type`, `postgres_storage_gb`, `redis_instance_type`, `opensearch_*`)
-- `postgres_username`, `postgres_password`
+- `postgres_username`, `postgres_password`, `postgres_multi_az`
 - `redis_auth_token`: required unless `enable_redis_iam_auth` is true, because the
   Redis module enables transit encryption and AWS requires a token in that case
 - `create_vpc` (default true) or existing VPC details and `s3_vpc_endpoint_id`
@@ -219,7 +219,9 @@ Inputs (common):
 - Creates the EKS cluster and node groups
 - Enables addons: EBS CSI driver, metrics server, cluster autoscaler
 - Optionally configures IRSA for S3 access to specified buckets
-- Outputs: `cluster_name`, `cluster_endpoint`, `cluster_certificate_authority_data`, `s3_access_role_arn` (if created)
+- Outputs: `cluster_name`, `cluster_endpoint`, `cluster_certificate_authority_data`,
+  `oidc_provider`, `oidc_provider_arn`, `cluster_security_group_id`, `node_security_group_id`,
+  and `workload_irsa_role_arn` / `workload_irsa_service_account_subjects` when `s3_bucket_names` is set
 
 Key inputs include:
 - `cluster_name`, `cluster_version` (default `1.33`)
@@ -280,8 +282,9 @@ modules add settings the old ones did not manage:
 - `s3` now manages versioning, encryption, a public access block, and lifecycle rules
 - `vpc` now creates flow logs and their IAM role
 - `postgres`, `redis`, and `opensearch` now create CloudWatch alarms
-- `postgres` now manages `multi_az` (default false). If you enabled a standby
-  outside Terraform, set `multi_az = true` before applying or the standby is removed
+- `postgres` now manages Multi-AZ (default false). If you enabled a standby
+  outside Terraform, set `postgres_multi_az = true` on the `onyx` module (or
+  `multi_az` on the `postgres` module) before applying, or the standby is removed
 - `eks` now enables the private API endpoint by default (`private_cluster_enabled`).
   This is additive and does not remove public access
 

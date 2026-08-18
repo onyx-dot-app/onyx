@@ -181,6 +181,7 @@ module "postgres" {
   storage_gb     = local.postgres_storage_gb
   max_storage_gb = local.postgres_max_storage_gb
   storage_type   = var.postgres_storage_type
+  multi_az       = var.postgres_multi_az
 
   username            = var.postgres_username
   password            = var.postgres_password

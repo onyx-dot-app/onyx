@@ -102,6 +102,12 @@ variable "postgres_storage_type" {
   default     = null
 }
 
+variable "postgres_multi_az" {
+  type        = bool
+  description = "Run an RDS standby in a second AZ. Roughly doubles database cost. Set true if a standby already exists, or Terraform removes it."
+  default     = false
+}
+
 variable "postgres_username" {
   type        = string
   description = "Username for the postgres database"
