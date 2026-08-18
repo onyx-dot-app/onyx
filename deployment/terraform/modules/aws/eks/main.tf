@@ -67,7 +67,7 @@ locals {
   # The root disk is sized via craft_sandbox_node_disk_size_gb so ephemeral-storage
   # stops being the binding scheduling dimension (each sandbox pod reserves ~5.5Gi
   # eph; the AMI default ~20Gi caps a node at ~3 sandboxes vs ~7 by CPU).
-  craft_sandbox_node_groups = var.craft_enabled ? {
+  craft_sandbox_node_groups = var.enable_craft ? {
     sandbox = {
       name           = "sandbox-node-group"
       instance_types = var.craft_sandbox_node_instance_types

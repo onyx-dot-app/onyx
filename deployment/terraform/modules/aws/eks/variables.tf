@@ -97,13 +97,13 @@ variable "gpu_node_instance_types" {
   default     = ["g4dn.xlarge"]
 }
 
-variable "craft_enabled" {
+variable "enable_craft" {
   type        = bool
   description = "Create a dedicated Craft sandbox node group (labeled onyx.app/workload=sandbox, tainted workload=sandbox:NoSchedule, IMDSv2 hop-limit 1). Opt-in per workspace."
   default     = false
 
   validation {
-    condition     = !var.craft_enabled || !contains(keys(var.eks_managed_node_groups), "sandbox")
+    condition     = !var.enable_craft || !contains(keys(var.eks_managed_node_groups), "sandbox")
     error_message = "craft_enabled injects a node group under the key \"sandbox\", which eks_managed_node_groups already defines. Rename your group so the Craft group does not replace it."
   }
 }
@@ -136,6 +136,11 @@ variable "craft_sandbox_node_disk_size_gb" {
   type        = number
   description = "Root EBS volume (GiB) for Craft sandbox nodes. Size so ephemeral-storage is NOT the binding scheduling dimension: each sandbox pod reserves ~5.5Gi eph, so allow (max_sandboxes_per_node * 5.5Gi) + system/image headroom. The AMI default (~20Gi) caps a node at ~3 sandboxes despite ~7 by CPU."
   default     = 200
+
+  validation {
+    condition     = var.craft_sandbox_node_disk_size_gb >= 20
+    error_message = "craft_sandbox_node_disk_size_gb must be at least 20 GiB; the AL2023 AMI and OS overlay consume ~8 GiB, leaving too little ephemeral storage for even one sandbox pod (5Gi request) below that threshold."
+  }
 }
 
 variable "eks_managed_node_groups" {
@@ -281,6 +286,6 @@ variable "enable_network_policy" {
 
 variable "vpc_cni_addon_version" {
   type        = string
-  description = "VPC CNI addon version to pin when enable_network_policy is true. Set to the cluster's currently-running version (aws eks describe-addon --addon-name vpc-cni) to avoid an unintended CNI upgrade on adoption."
+  description = "VPC CNI addon version to pin when enable_network_policy is true. Set to the cluster's currently-running version (aws eks describe-addon --cluster-name <cluster> --addon-name vpc-cni --query 'addon.addonVersion') to avoid an unintended CNI upgrade on adoption."
   default     = "v1.20.4-eksbuild.2"
 }

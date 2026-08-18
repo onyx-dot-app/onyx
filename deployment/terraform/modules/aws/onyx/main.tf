@@ -249,7 +249,7 @@ module "eks" {
   enable_gpu_node         = var.enable_gpu_node
   gpu_node_instance_types = var.gpu_node_instance_types
 
-  craft_enabled                     = var.enable_craft
+  enable_craft                      = var.enable_craft
   craft_sandbox_node_instance_types = var.craft_sandbox_node_instance_types
   craft_sandbox_node_min_size       = var.craft_sandbox_node_min_size
   craft_sandbox_node_max_size       = var.craft_sandbox_node_max_size

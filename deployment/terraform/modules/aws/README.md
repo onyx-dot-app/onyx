@@ -26,7 +26,10 @@ The snippet below shows a minimal working example that:
 
 ```hcl
 locals {
-  region = "us-west-2"
+  region            = "us-west-2"
+  postgres_username = "pgusername"
+  # Supply this from a secret store or TF_VAR_ in anything but a scratch stack.
+  postgres_password = "your-postgres-password"
 }
 
 provider "aws" {
@@ -41,8 +44,8 @@ module "onyx" {
 
   region            = local.region
   name              = "onyx"            # used as a prefix and workspace-aware
-  postgres_username = "pgusername"
-  postgres_password = "your-postgres-password"
+  postgres_username = local.postgres_username
+  postgres_password = local.postgres_password
   # create_vpc    = true  # default true; set to false to use an existing VPC (see below)
 }
 
@@ -81,7 +84,7 @@ output "cluster_name" {
   value = module.onyx.cluster_name
 }
 output "postgres_connection_url" {
-  value     = "postgres://${module.onyx.postgres_username}@${module.onyx.postgres_endpoint}/${module.onyx.postgres_db_name}"
+  value     = "postgres://${local.postgres_username}:${local.postgres_password}@${module.onyx.postgres_endpoint}:${module.onyx.postgres_port}/${module.onyx.postgres_db_name}"
   sensitive = true
 }
 output "redis_connection_url" {
@@ -207,7 +210,7 @@ Inputs (common):
 - WAF controls such as `waf_allowed_ip_cidrs`, `waf_common_rule_set_count_rules`, rate limits, geo restrictions, and logging retention
 - Optional OpenSearch controls such as `enable_opensearch`, sizing, credentials, and log retention
 - `alarm_actions`: SNS topic ARNs for the CloudWatch alarms created by the data-plane modules. Empty (the default) leaves the alarms in place but notifying nothing
-- Optional extras: `enable_upload_bucket`, `enable_gpu_node`, `enable_network_policy`, `craft_enabled`
+- Optional extras: `enable_upload_bucket`, `enable_gpu_node`, `enable_network_policy`, `enable_craft`
 
 ### `vpc`
 - Builds a VPC sized for EKS with multiple private and public subnets
@@ -226,7 +229,7 @@ Inputs (common):
 Key inputs include:
 - `cluster_name`, `cluster_version` (default `1.33`)
 - `vpc_id`, `subnet_ids`
-- `public_cluster_enabled` (default true), `private_cluster_enabled` (default false)
+- `public_cluster_enabled` (default true), `private_cluster_enabled` (default true)
 - `cluster_endpoint_public_access_cidrs` (default `[]`). Empty denies all public API access. Set it when `public_cluster_enabled` is true and you need to reach the API server
 - `eks_managed_node_groups` (defaults include a main and a vespa-dedicated group with GP3 volumes)
 - `s3_bucket_names` (optional list). If set, creates an IRSA role and Kubernetes service account for S3 access
