@@ -156,9 +156,26 @@ export default function SSODomainVerification({
     try {
       await verifyDomainViaDns(domain);
       toast.success(`${domain} verified`);
-      // The backend already persisted the verification, so a failed refresh is
-      // not a failed verification. The next load picks up the new state.
-      await mutate().catch(() => undefined);
+      // The backend persisted it, so apply the result locally before asking for
+      // a refresh. A failed refresh then cannot report success as a failure or
+      // leave the row sitting on its old pending state.
+      await mutate(
+        (current) =>
+          current && {
+            domains: current.domains.map((row) =>
+              row.domain === domain
+                ? {
+                    ...row,
+                    verified: true,
+                    claimed: true,
+                    record_host: null,
+                    record_value: null,
+                  }
+                : row
+            ),
+          },
+        { revalidate: true, rollbackOnError: false }
+      ).catch(() => undefined);
     } catch (exc) {
       toast.error(exc instanceof Error ? exc.message : String(exc));
     } finally {
