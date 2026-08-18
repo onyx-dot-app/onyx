@@ -51,6 +51,12 @@ import { can } from "@/lib/permissions/resource-actions";
 const HOURS_PER_DAY = 24;
 const addModeColumns = memberTableColumns;
 
+function setsEqual<T>(a: T[], b: T[]): boolean {
+  if (a.length !== b.length) return false;
+  const setB = new Set(b);
+  return a.every((item) => setB.has(item));
+}
+
 // ---------------------------------------------------------------------------
 // Component
 // ---------------------------------------------------------------------------
@@ -150,6 +156,8 @@ function EditGroupPage({ groupId }: EditGroupPageProps) {
   const [isDeleting, setIsDeleting] = useState(false);
   const [initialized, setInitialized] = useState(false);
   const [isAddingMembers, setIsAddingMembers] = useState(false);
+  const initialUserIdsRef = useRef<string[]>([]);
+  const initialCcPairIdsRef = useRef<number[]>([]);
   const initialAgentIdsRef = useRef<number[]>([]);
   const initialDocSetIdsRef = useRef<number[]>([]);
 
@@ -171,8 +179,12 @@ function EditGroupPage({ groupId }: EditGroupPageProps) {
   useEffect(() => {
     if (group && !initialized) {
       setGroupName(group.name);
-      setSelectedUserIds(group.users.map((u) => u.id));
-      setSelectedCcPairIds(group.cc_pairs.map((cc) => cc.id));
+      const userIds = group.users.map((u) => u.id);
+      setSelectedUserIds(userIds);
+      initialUserIdsRef.current = userIds;
+      const ccPairIds = group.cc_pairs.map((cc) => cc.id);
+      setSelectedCcPairIds(ccPairIds);
+      initialCcPairIdsRef.current = ccPairIds;
       const docSetIds = group.document_sets.map((ds) => ds.id);
       setSelectedDocSetIds(docSetIds);
       initialDocSetIdsRef.current = docSetIds;
@@ -396,8 +408,15 @@ function EditGroupPage({ groupId }: EditGroupPageProps) {
         await renameGroup(group.id, trimmed);
       }
 
-      // Update members and cc_pairs
-      await updateGroup(groupId, selectedUserIds, selectedCcPairIds);
+      // Update members and cc_pairs only if changed
+      const membersOrConnectorsChanged =
+        !setsEqual(selectedUserIds, initialUserIdsRef.current) ||
+        !setsEqual(selectedCcPairIds, initialCcPairIdsRef.current);
+      if (membersOrConnectorsChanged) {
+        await updateGroup(groupId, selectedUserIds, selectedCcPairIds);
+        initialUserIdsRef.current = selectedUserIds;
+        initialCcPairIdsRef.current = selectedCcPairIds;
+      }
 
       // Update agent sharing (add/remove this group from changed agents)
       await updateAgentGroupSharing(
