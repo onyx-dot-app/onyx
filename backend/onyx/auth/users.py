@@ -833,14 +833,13 @@ class UserManager(UUIDIDMixin, BaseUserManager[User, uuid.UUID]):
                         user_id
                     )
                 if user_created:
-                    await self._seed_pinned_personas(user, db_session)
+                    await seed_pinned_personas_from_featured(
+                        db_session=db_session, user=user
+                    )
                 remove_user_from_invited_users(user_create.email)
         finally:
             CURRENT_TENANT_ID_CONTEXTVAR.reset(token)
         return user
-
-    async def _seed_pinned_personas(self, user: User, db_session: AsyncSession) -> None:
-        await seed_pinned_personas_from_featured(db_session=db_session, user=user)
 
     def _upgrade_user_to_standard__sync(
         self,
@@ -1065,7 +1064,9 @@ class UserManager(UUIDIDMixin, BaseUserManager[User, uuid.UUID]):
 
                     user = await self.user_db.create(user_dict)
                     await self.user_db.add_oauth_account(user, oauth_account_dict)
-                    await self._seed_pinned_personas(user, db_session)
+                    await seed_pinned_personas_from_featured(
+                        db_session=db_session, user=user
+                    )
                     await self.on_after_register(user, request)
 
             else:
