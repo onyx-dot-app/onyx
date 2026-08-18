@@ -14,6 +14,9 @@ from onyx.llm.model_capabilities import (
     model_is_reasoning_model,
     supported_reasoning_efforts,
 )
+from onyx.llm.model_capabilities import (
+    model_identity_names as resolve_model_identity_names,
+)
 from onyx.llm.models import ReasoningEffort
 from onyx.server.manage.llm.utils import (
     extract_vendor_from_model_name,
@@ -260,12 +263,9 @@ class ModelConfigurationView(BaseModel):
         custom_config: dict[str, str] | None = None,
         deployment_name: str | None = None,
     ) -> "ModelConfigurationView":
-        # A custom provider's model identity may live only in the deployment
-        # alias, the string LiteLLM actually receives. Mirrors multi_llm.py's
-        # model_identity_names so the picker matches the request builder.
-        model_identity_names = [
-            name for name in (model_configuration_model.name, deployment_name) if name
-        ]
+        model_identity_names = resolve_model_identity_names(
+            model_configuration_model.name, deployment_name
+        )
         # The admin's chosen wire protocol decides which reasoning parameters
         # reach the model, so it decides which effort levels are selectable.
         reasoning_efforts = supported_reasoning_efforts(

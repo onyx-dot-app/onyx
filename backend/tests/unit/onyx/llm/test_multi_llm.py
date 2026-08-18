@@ -996,16 +996,13 @@ def test_o1_mini_only_in_deployment_name_omits_reasoning_effort() -> None:
         ),
     )
 
-    with (
-        patch("litellm.completion") as mock_completion,
-        patch("onyx.llm.multi_llm.model_is_reasoning_model", return_value=True),
-        patch("onyx.llm.multi_llm.is_true_openai_model", return_value=True),
-    ):
+    with patch("litellm.completion") as mock_completion:
         mock_completion.return_value = []
         messages: LanguageModelInput = [UserMessage(content="Hi")]
         list(llm.stream(messages, reasoning_effort=ReasoningEffort.AUTO))
 
         kwargs = mock_completion.call_args.kwargs
+        assert kwargs["temperature"] == 1  # confirms is_reasoning resolved True
         assert "reasoning" not in kwargs
         assert "reasoning_effort" not in kwargs
 

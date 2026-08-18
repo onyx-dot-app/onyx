@@ -110,11 +110,10 @@ const REASONING_STOP_LABELS: Record<ReasoningEffortOverride, string> = {
 function maxSupportedReasoningStop(option: LLMOption): number {
   const supported = option.supportedReasoningEfforts;
   if (!supported) return BASE_REASONING_STOPS.length - 1;
-  let maxStop = -1;
-  supported.forEach((effort) => {
-    maxStop = Math.max(maxStop, ALL_REASONING_STOPS.indexOf(effort));
-  });
-  return maxStop;
+  return Math.max(
+    -1,
+    ...supported.map((effort) => ALL_REASONING_STOPS.indexOf(effort))
+  );
 }
 
 function formatContextWindow(tokens: number): string {

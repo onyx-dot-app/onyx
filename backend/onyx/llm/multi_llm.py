@@ -46,6 +46,9 @@ from onyx.llm.model_capabilities import (
     openai_model_rejects_reasoning_effort,
     resolve_reasoning_param_style,
 )
+from onyx.llm.model_capabilities import (
+    model_identity_names as resolve_model_identity_names,
+)
 from onyx.llm.model_response import ModelResponse, ModelResponseStream, Usage
 from onyx.llm.models import (
     ANTHROPIC_ADAPTIVE_REASONING_EFFORT,
@@ -587,14 +590,9 @@ class LitellmLLM(LLM):
         #########################
         # Flags that modify the final arguments
         #########################
-        # Custom providers (e.g. Azure AI Foundry) may carry the model identity
-        # only in the deployment alias, which is also the string actually sent
-        # to LiteLLM — so model detection must consider both names.
-        model_identity_names = [
-            name
-            for name in (self.config.model_name, self.config.deployment_name)
-            if name
-        ]
+        model_identity_names = resolve_model_identity_names(
+            self.config.model_name, self.config.deployment_name
+        )
         is_claude_model = any("claude" in name.lower() for name in model_identity_names)
         is_qwen_model = "qwen" in self.config.model_name.lower()
         uses_adaptive_thinking = any(

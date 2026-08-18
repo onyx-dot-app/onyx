@@ -308,9 +308,9 @@ def filter_model_configurations(
             ModelConfigurationView.from_model(
                 model_configuration,
                 provider,
-                use_stored_display_name,
-                custom_config,
-                deployment_name,
+                use_stored_display_name=use_stored_display_name,
+                custom_config=custom_config,
+                deployment_name=deployment_name,
             )
         )
 

@@ -514,15 +514,9 @@ def is_openai_registry_model_name(model_name: str) -> bool:
 _ANTHROPIC_MODEL_TIERS = ("opus", "sonnet", "haiku", "fable", "mythos")
 _ANTHROPIC_VERSION_PATTERN = r"\d+(?:[.-]\d+)?"
 
-# Starting with Claude Opus 4.7, Anthropic requires the adaptive thinking API
-# (thinking.type.adaptive + output_config.effort) in place of the legacy
-# thinking.type.enabled + budget_tokens, and rejects any non-default sampling
-# parameter (temperature/top_p/top_k) with a 400 invalid_request_error. Every
-# later model — Opus 4.8, the Claude 5 line (fable/mythos/sonnet), and beyond —
-# inherits both behaviors, so we gate on the parsed model version rather than an
-# explicit list. This lets new releases be handled without a code change, and
-# avoids relying on LiteLLM's drop_params (unreliable here, since AnthropicConfig
-# still advertises temperature as supported).
+# Claude Opus 4.7+ (and later releases by version) requires adaptive thinking
+# and rejects a non-default temperature with a 400. Version-gated, not listed,
+# so new releases need no code change. LiteLLM's drop_params can't help here.
 _ANTHROPIC_ADAPTIVE_THINKING_MIN_VERSION = (4, 7)
 
 # Extended thinking landed in Claude 3.7. Parsing the version off the name
@@ -591,6 +585,13 @@ def anthropic_omits_sampling_params(model_name: str) -> bool:
     )
 
 
+def model_identity_names(model_name: str, deployment_name: str | None) -> list[str]:
+    """Every string that could carry a model's identity: model_name, plus a
+    custom provider's deployment alias when set (e.g. Azure AI Foundry, where
+    the alias is the string actually sent to LiteLLM)."""
+    return [name for name in (model_name, deployment_name) if name]
+
+
 class ReasoningParamStyle(str, Enum):
     """The shape of the reasoning parameters a model accepts."""
 
@@ -640,10 +641,9 @@ def resolve_reasoning_param_style(
     return ReasoningParamStyle.LITELLM_EFFORT
 
 
-# Styles that carry XHIGH to the provider. Everywhere else it is indistinct:
-# LiteLLM's per-provider mappings reject it (Gemini) or silently drop it
-# (gpt-5.x rejects "xhigh" as a reasoning_effort value), and Anthropic's legacy
-# budget for XHIGH equals HIGH's.
+# Styles that carry XHIGH to the provider. Elsewhere it's indistinct from HIGH:
+# LiteLLM's per-provider mappings reject or silently drop it, and Anthropic's
+# legacy budget for XHIGH equals HIGH's.
 _XHIGH_REASONING_STYLES = frozenset(
     {ReasoningParamStyle.OPENAI, ReasoningParamStyle.ANTHROPIC_ADAPTIVE}
 )
