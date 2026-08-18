@@ -30,6 +30,8 @@ var (
 	bootstrapOnce   sync.Once
 	bootstrapKey    string
 	bootstrapKeyErr error
+	// 0 means unresolved — real ids come from a sequence starting at 1.
+	bootstrapAdminGroupID int64
 )
 
 func envOr(key, fallback string) string {
@@ -69,6 +71,29 @@ func testAccPreCheck(t *testing.T) {
 	t.Setenv("ONYX_SERVER_URL", serverURL)
 	t.Setenv("ONYX_API_KEY", bootstrapKey)
 	t.Setenv("ONYX_API_PREFIX", testAccAPIPrefix())
+}
+
+// testAccAdminGroupID returns the seeded "Admin" group id, the one group that
+// exists on any deployment. Must run after testAccPreCheck.
+func testAccAdminGroupID(t *testing.T) int64 {
+	t.Helper()
+	if bootstrapAdminGroupID != 0 {
+		return bootstrapAdminGroupID
+	}
+	if bootstrapKey == "" {
+		t.Fatal("testAccAdminGroupID called before testAccPreCheck")
+	}
+	// Only reached when ONYX_TF_ACC_API_KEY short-circuited the bootstrap.
+	base := strings.TrimRight(testAccServerURL(), "/")
+	if p := strings.Trim(testAccAPIPrefix(), "/"); p != "" {
+		base += "/" + p
+	}
+	id, err := findAdminGroupID(&http.Client{Timeout: 30 * time.Second}, base, nil, bootstrapKey)
+	if err != nil {
+		t.Fatalf("failed to resolve the Admin group id: %v", err)
+	}
+	bootstrapAdminGroupID = id
+	return id
 }
 
 // testAccClient returns an API client for pre/post-condition checks.
@@ -130,10 +155,11 @@ func bootstrapAPIKey(serverURL, apiPrefix string) (string, error) {
 
 	// permissions come from group membership now — must join the seeded "Admin" group.
 	// A `role` field silently yields a group-less key that 403s on every admin route.
-	adminGroupID, err := findAdminGroupID(httpClient, base, sessionCookie)
+	adminGroupID, err := findAdminGroupID(httpClient, base, sessionCookie, "")
 	if err != nil {
 		return "", err
 	}
+	bootstrapAdminGroupID = adminGroupID
 	keyBody, _ := json.Marshal(map[string]any{
 		"name":      "terraform-provider-acceptance-tests",
 		"group_ids": []int64{adminGroupID},
@@ -167,13 +193,18 @@ func bootstrapAPIKey(serverURL, apiPrefix string) (string, error) {
 }
 
 // findAdminGroupID looks up the seeded "Admin" group — hidden from the default listing
-// unless include_default=true.
-func findAdminGroupID(httpClient *http.Client, base string, sessionCookie *http.Cookie) (int64, error) {
+// unless include_default=true. Auth is by cookie during bootstrap, by API key after.
+func findAdminGroupID(httpClient *http.Client, base string, sessionCookie *http.Cookie, apiKey string) (int64, error) {
 	req, err := http.NewRequest(http.MethodGet, base+"/manage/admin/user-group?include_default=true", nil)
 	if err != nil {
 		return 0, err
 	}
-	req.AddCookie(sessionCookie)
+	if sessionCookie != nil {
+		req.AddCookie(sessionCookie)
+	}
+	if apiKey != "" {
+		req.Header.Set("Authorization", "Bearer "+apiKey)
+	}
 
 	resp, err := httpClient.Do(req)
 	if err != nil {
