@@ -50,5 +50,5 @@ def upgrade() -> None:
 
 
 def downgrade() -> None:
-    # Lossy normalization; the original periods cannot be restored.
+    # Lossy normalization. The original periods cannot be restored.
     pass
