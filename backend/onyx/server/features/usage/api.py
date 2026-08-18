@@ -25,6 +25,8 @@ from onyx.db.token_limit import (
     fetch_user_group_token_rate_limits,
 )
 from onyx.db.user_usage import (
+    cost_budget_fetch_cutoff,
+    cost_budget_limits,
     get_cost_window_reset,
     get_cost_window_start,
     get_group_cost_cents_buckets_since,
@@ -122,22 +124,18 @@ def _user_cost_budget(db_session: Session, user_id: str) -> EffectiveCostBudget 
             )
 
     user_rls = fetch_all_user_token_rate_limits(db_session, enabled_only=True)
-    user_cost_rls = [rl for rl in user_rls if rl.cost_budget_cents is not None]
+    user_cost_rls = cost_budget_limits(user_rls)
     if user_cost_rls:
-        fetch_cutoff = min(
-            get_cost_window_start(now, rl.period_hours) for rl in user_cost_rls
-        )
+        fetch_cutoff = cost_budget_fetch_cutoff(now, user_cost_rls)
         _add_from_limits(
             user_cost_rls,
             get_user_cost_cents_buckets_since(db_session, user_id, fetch_cutoff),
         )
 
     global_rls = fetch_all_global_token_rate_limits(db_session, enabled_only=True)
-    global_cost_rls = [rl for rl in global_rls if rl.cost_budget_cents is not None]
+    global_cost_rls = cost_budget_limits(global_rls)
     if global_cost_rls:
-        fetch_cutoff = min(
-            get_cost_window_start(now, rl.period_hours) for rl in global_cost_rls
-        )
+        fetch_cutoff = cost_budget_fetch_cutoff(now, global_cost_rls)
         _add_from_limits(
             global_cost_rls,
             get_total_cost_cents_buckets_since(db_session, fetch_cutoff),
@@ -167,23 +165,21 @@ def _group_cost_budget_candidate(
     if not group_limits:
         return None
 
-    cost_rls = [
-        rl
-        for rls in group_limits.values()
-        for rl in rls
-        if rl.cost_budget_cents is not None
-    ]
+    cost_limits_by_group = {
+        group_id: cost_budget_limits(rls) for group_id, rls in group_limits.items()
+    }
+    cost_rls = [rl for rls in cost_limits_by_group.values() for rl in rls]
     if not cost_rls:
         return None
 
     # One batched query for every group's cost buckets, then window in Python.
-    fetch_cutoff = min(get_cost_window_start(now, rl.period_hours) for rl in cost_rls)
+    fetch_cutoff = cost_budget_fetch_cutoff(now, cost_rls)
     buckets = get_group_cost_cents_buckets_since(
         db_session, list(group_limits.keys()), fetch_cutoff
     )
 
     most_permissive: EffectiveCostBudget | None = None
-    for group_id, limits in group_limits.items():
+    for group_id, limits in cost_limits_by_group.items():
         group_buckets = buckets.get(group_id, [])
         group_binding: EffectiveCostBudget | None = None
         for rl in limits:
