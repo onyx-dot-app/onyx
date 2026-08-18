@@ -29,6 +29,7 @@ def _make_db_session(
     existing_user_ids: list[Any], existing_cc_pair_ids: list[int]
 ) -> MagicMock:
     group = MagicMock()
+    group.is_default = False
     group.users = [MagicMock(id=uid) for uid in existing_user_ids]
     group.cc_pairs = [MagicMock(id=cid) for cid in existing_cc_pair_ids]
     db_session = MagicMock()
