@@ -1,3 +1,4 @@
+import contextvars
 import hashlib
 import os
 import random
@@ -1431,23 +1432,39 @@ class UserManager(UUIDIDMixin, BaseUserManager[User, uuid.UUID]):
         # marks the account verified, and the log stream is a wider audience
         # than the intended email channel.
         logger.notice("Verification requested for user %s", user.id)
-        user_count = await get_user_count()
+
+        # This endpoint is unauthenticated, so the request resolves to the
+        # default schema. On multi-tenant that schema owns neither the user rows
+        # nor the branding the email is built from, and the audit event reads
+        # the tenant off the contextvar, so bind the address's own workspace.
+        tenant_id: str = fetch_ee_implementation_or_noop(
+            "onyx.db.user_tenant_mapping",
+            "get_tenant_id_for_email",
+            POSTGRES_DEFAULT_SCHEMA,
+        )(user.email)
+        contextvar_token: contextvars.Token[str | None] = (
+            CURRENT_TENANT_ID_CONTEXTVAR.set(tenant_id)
+        )
         try:
+            user_count = await get_user_count()
             send_user_verification_email(
                 user.email, token, new_organization=user_count == 1
             )
+            emit_audit_event(
+                AuditAction.EMAIL_VERIFY,
+                AuditOutcome.SUCCESS,
+                actor=AuditActor(user_id=str(user.id), email=user.email),
+            )
         except Exception as e:
-            logger.error("Failed to send verification email to %s: %s", user.email, e)
+            # The count, the branding lookup and the SMTP call all land here,
+            # so on-call needs the traceback to tell which one broke.
+            logger.exception("Failed to send verification email to %s", user.email)
             raise OnyxError(
                 OnyxErrorCode.SERVICE_UNAVAILABLE,
                 "Failed to send the verification email.",
             ) from e
-
-        emit_audit_event(
-            AuditAction.EMAIL_VERIFY,
-            AuditOutcome.SUCCESS,
-            actor=AuditActor(user_id=str(user.id), email=user.email),
-        )
+        finally:
+            CURRENT_TENANT_ID_CONTEXTVAR.reset(contextvar_token)
 
     @log_function_time(print_only=True)
     async def authenticate(
