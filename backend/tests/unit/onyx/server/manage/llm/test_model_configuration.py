@@ -270,6 +270,24 @@ class TestModelConfigurationViewReasoningFallback:
 
         assert view.supports_reasoning is True
 
+    def test_unregistered_claude_alias_reasons_via_version_parse(self) -> None:
+        """A Claude deployment alias that misses both LiteLLM's registry and
+        the substring heuristic must still resolve True via the version
+        parse multi_llm.py's request builder already relies on."""
+        mc = _make_model_config(
+            name="foundry-deploy-10",
+            display_name="Foundry Deploy 10",
+            flow_types=[LLMModelFlowType.CHAT],
+        )
+
+        view = ModelConfigurationView.from_model(
+            mc,
+            self.DYNAMIC_PROVIDER,
+            deployment_name="prod-deployment-claude-5-opus",
+        )
+
+        assert view.supports_reasoning is True
+
 
 # ModelConfigurationView.from_model — static provider branch
 
@@ -416,6 +434,45 @@ class TestModelConfigurationViewFromModelStatic:
             )
 
         assert view.supports_image_input is True
+
+    def test_unregistered_claude_alias_reasons_via_version_parse(self) -> None:
+        """Same gap as the dynamic branch's version above: a Claude alias
+        LiteLLM's registry and model_is_reasoning_model both miss (patched
+        False here) must still resolve True via the version parse."""
+        mc = _make_model_config(
+            name="foundry-deploy-11",
+            display_name=None,
+            flow_types=[LLMModelFlowType.CHAT],
+        )
+
+        with (
+            patch(
+                "onyx.server.manage.llm.models.get_max_input_tokens",
+                return_value=128000,
+            ),
+            patch(
+                "onyx.server.manage.llm.models.model_is_reasoning_model",
+                return_value=False,
+            ),
+            patch(
+                "onyx.llm.model_name_parser.parse_litellm_model_name",
+            ) as mock_parse,
+        ):
+            mock_parsed = MagicMock()
+            mock_parsed.display_name = mc.name
+            mock_parsed.provider_display_name = self.STATIC_PROVIDER
+            mock_parsed.vendor = None
+            mock_parsed.version = None
+            mock_parsed.region = None
+            mock_parse.return_value = mock_parsed
+
+            view = ModelConfigurationView.from_model(
+                mc,
+                self.STATIC_PROVIDER,
+                deployment_name="prod-deployment-claude-5-opus",
+            )
+
+        assert view.supports_reasoning is True
 
     def _patched_static_view(
         self,

@@ -9,6 +9,7 @@ from onyx.db.enums import LLMModelFlowType
 from onyx.llm.api_surfaces import resolve_api_surface
 from onyx.llm.constants import DYNAMIC_LLM_PROVIDERS
 from onyx.llm.model_capabilities import (
+    anthropic_supports_thinking,
     get_max_input_tokens,
     litellm_thinks_model_supports_image_input,
     model_is_reasoning_model,
@@ -300,12 +301,16 @@ class ModelConfigurationView(BaseModel):
                         for name in model_identity_names
                     )
                 ),
-                # Prefer the stored REASONING flow; fall back to the LiteLLM
-                # cost map, then a substring heuristic on model name/display
-                # name for models LiteLLM doesn't know.
+                # Prefer the stored flow, then the Claude version parse, then
+                # the LiteLLM cost map, then a name/display-name substring
+                # heuristic. Mirrors multi_llm.py's is_reasoning.
                 supports_reasoning=(
                     LLMModelFlowType.REASONING
                     in model_configuration_model.llm_model_flow_types
+                    or any(
+                        anthropic_supports_thinking(name)
+                        for name in model_identity_names
+                    )
                     or any(
                         model_is_reasoning_model(name, provider_name)
                         for name in model_identity_names
@@ -364,11 +369,15 @@ class ModelConfigurationView(BaseModel):
                     for name in model_identity_names
                 )
             ),
-            # Prefer the stored REASONING flow; fall back to LiteLLM-based
-            # detection for legacy rows that were saved before the flow existed.
+            # Prefer the stored flow, then the Claude version parse, then
+            # LiteLLM-based detection for legacy rows saved before the flow
+            # existed. Mirrors multi_llm.py's is_reasoning.
             supports_reasoning=(
                 LLMModelFlowType.REASONING
                 in model_configuration_model.llm_model_flow_types
+                or any(
+                    anthropic_supports_thinking(name) for name in model_identity_names
+                )
                 or any(
                     model_is_reasoning_model(name, provider_name)
                     for name in model_identity_names
