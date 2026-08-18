@@ -4,8 +4,8 @@ Covers `ee.onyx.utils.tier.get_tier()` end-to-end against real Redis. The CP
 boundary (`fetch_billing_information`) is the only mocked dependency. Cache
 reads, writes, JSON serialization, and datetime parsing run for real.
 
-A trial grants no tier promotion: a trialing tenant resolves to the same tier
-it will hold when the trial expires.
+A trialing tenant resolves to the same tier it will hold when the trial
+expires.
 """
 
 import json
@@ -51,13 +51,14 @@ def _force_multi_tenant() -> Generator[None, None, None]:
 def _billing_info(
     customer_tier: CustomerTier,
     trial_end: datetime | None,
+    status: str = "active",
 ) -> BillingInformation:
     """Build a `BillingInformation` payload with sensible defaults for fields
     the tier resolver does not inspect."""
     now = datetime.now(timezone.utc)
     return BillingInformation(
         stripe_subscription_id="sub_test",
-        status="trialing" if trial_end and trial_end > now else "active",
+        status=status,
         current_period_start=now - timedelta(days=1),
         current_period_end=now + timedelta(days=30),
         number_of_seats=1,
@@ -71,64 +72,41 @@ def _billing_info(
     )
 
 
-def test_trial_business_stays_business() -> None:
-    """A BUSINESS tenant with a future trial_end resolves to BUSINESS. Trials
-    run with the feature set the tenant will keep after the trial expires."""
-    future = datetime.now(timezone.utc) + timedelta(days=1)
-    update_tenant_tier(
-        POSTGRES_DEFAULT_SCHEMA_STANDARD_VALUE, CustomerTier.BUSINESS, future
+@pytest.mark.parametrize(
+    ("customer_tier", "trial_offset", "expected"),
+    [
+        (CustomerTier.BUSINESS, timedelta(days=1), Tier.BUSINESS),
+        (CustomerTier.BUSINESS, timedelta(days=-1), Tier.BUSINESS),
+        (CustomerTier.BUSINESS, None, Tier.BUSINESS),
+        (CustomerTier.ENTERPRISE, timedelta(days=1), Tier.ENTERPRISE),
+        (CustomerTier.ENTERPRISE, None, Tier.ENTERPRISE),
+    ],
+    ids=[
+        "business_active_trial",
+        "business_expired_trial",
+        "business_no_trial",
+        "enterprise_active_trial",
+        "enterprise_no_trial",
+    ],
+)
+def test_cached_tier_ignores_trial_state(
+    customer_tier: CustomerTier, trial_offset: timedelta | None, expected: Tier
+) -> None:
+    """A cache hit resolves to the contractual tier. `trial_end` is cached but
+    never consulted, so every trial state maps to the same result."""
+    trial_end = (
+        datetime.now(timezone.utc) + trial_offset if trial_offset is not None else None
     )
+    update_tenant_tier(POSTGRES_DEFAULT_SCHEMA_STANDARD_VALUE, customer_tier, trial_end)
 
-    assert tier_module.get_tier(POSTGRES_DEFAULT_SCHEMA_STANDARD_VALUE) == Tier.BUSINESS
-
-
-def test_expired_trial_business_stays_business() -> None:
-    """A past trial_end changes nothing about the resolved tier."""
-    past = datetime.now(timezone.utc) - timedelta(days=1)
-    update_tenant_tier(
-        POSTGRES_DEFAULT_SCHEMA_STANDARD_VALUE, CustomerTier.BUSINESS, past
-    )
-
-    assert tier_module.get_tier(POSTGRES_DEFAULT_SCHEMA_STANDARD_VALUE) == Tier.BUSINESS
-
-
-def test_non_trial_business_resolves_to_business() -> None:
-    """BUSINESS with no trial_end resolves to BUSINESS."""
-    update_tenant_tier(
-        POSTGRES_DEFAULT_SCHEMA_STANDARD_VALUE, CustomerTier.BUSINESS, None
-    )
-
-    assert tier_module.get_tier(POSTGRES_DEFAULT_SCHEMA_STANDARD_VALUE) == Tier.BUSINESS
-
-
-def test_enterprise_without_trial_resolves_to_enterprise() -> None:
-    """A contractual ENTERPRISE tenant resolves to ENTERPRISE."""
-    update_tenant_tier(
-        POSTGRES_DEFAULT_SCHEMA_STANDARD_VALUE, CustomerTier.ENTERPRISE, None
-    )
-
-    assert (
-        tier_module.get_tier(POSTGRES_DEFAULT_SCHEMA_STANDARD_VALUE) == Tier.ENTERPRISE
-    )
-
-
-def test_enterprise_with_future_trial_remains_enterprise() -> None:
-    """An ENTERPRISE tenant stays ENTERPRISE with a future trial_end."""
-    future = datetime.now(timezone.utc) + timedelta(days=1)
-    update_tenant_tier(
-        POSTGRES_DEFAULT_SCHEMA_STANDARD_VALUE, CustomerTier.ENTERPRISE, future
-    )
-
-    assert (
-        tier_module.get_tier(POSTGRES_DEFAULT_SCHEMA_STANDARD_VALUE) == Tier.ENTERPRISE
-    )
+    assert tier_module.get_tier(POSTGRES_DEFAULT_SCHEMA_STANDARD_VALUE) == expected
 
 
 def test_cache_miss_lazy_refresh_caches_contractual_tier() -> None:
     """A cold cache that pulls BUSINESS + future trial_end from CP returns
     BUSINESS and writes both fields back to the cache as JSON."""
     future = datetime.now(timezone.utc) + timedelta(days=3)
-    billing = _billing_info(CustomerTier.BUSINESS, future)
+    billing = _billing_info(CustomerTier.BUSINESS, future, status="trialing")
 
     with patch.object(tier_module, "fetch_billing_information", return_value=billing):
         result = tier_module.get_tier(POSTGRES_DEFAULT_SCHEMA_STANDARD_VALUE)
@@ -144,9 +122,8 @@ def test_cache_miss_lazy_refresh_caches_contractual_tier() -> None:
 
 
 def test_cached_naive_trial_end_is_treated_as_none() -> None:
-    """A cache entry with a naive `trial_end` ISO string must not crash tier
-    resolution. It is parsed as `None` (logged) and the tenant resolves to
-    their contractual tier."""
+    """A cache entry with a naive `trial_end` ISO string is parsed as `None`
+    (logged). The tenant resolves to their contractual tier."""
     redis_client = get_redis_client(tenant_id=POSTGRES_DEFAULT_SCHEMA_STANDARD_VALUE)
     payload = json.dumps(
         {
@@ -162,28 +139,14 @@ def test_cached_naive_trial_end_is_treated_as_none() -> None:
     assert cached.customer_tier == CustomerTier.BUSINESS
     assert cached.trial_end is None
 
-    # End-to-end: must not raise, must resolve the contractual BUSINESS.
+    # End-to-end: resolves the contractual BUSINESS.
     assert tier_module.get_tier(POSTGRES_DEFAULT_SCHEMA_STANDARD_VALUE) == Tier.BUSINESS
 
 
 def test_cp_naive_trial_end_is_not_cached() -> None:
     """The lazy-refresh path drops a naive CP trial_end before caching."""
     naive_future = datetime(2099, 1, 1, 12, 0, 0)  # no tzinfo
-    now = datetime.now(timezone.utc)
-    billing = BillingInformation(
-        stripe_subscription_id="sub_test",
-        status="trialing",
-        current_period_start=now - timedelta(days=1),
-        current_period_end=now + timedelta(days=30),
-        number_of_seats=1,
-        cancel_at_period_end=False,
-        canceled_at=None,
-        trial_start=None,
-        trial_end=naive_future,
-        seats=1,
-        payment_method_enabled=False,
-        customer_tier=CustomerTier.BUSINESS,
-    )
+    billing = _billing_info(CustomerTier.BUSINESS, naive_future, status="trialing")
 
     with patch.object(tier_module, "fetch_billing_information", return_value=billing):
         result = tier_module.get_tier(POSTGRES_DEFAULT_SCHEMA_STANDARD_VALUE)

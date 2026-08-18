@@ -5,8 +5,9 @@ Self-hosted: license_payload.customer_tier (legacy licenses lacking the
 field default to ENTERPRISE).
 
 Trial state never changes the resolved tier: a trialing tenant gets exactly
-the feature set it will hold when the trial expires. `trial_end` stays in
-the CP push and the cache entry for contract stability, not for resolution.
+the feature set it will hold when the trial expires. Both writers of the
+cache entry (the CP tier push and the lazy refresh) carry `trial_end` so the
+cached shape stays uniform. Resolution never reads it.
 """
 
 from __future__ import annotations
@@ -43,7 +44,7 @@ _CUSTOMER_TIER_TO_TIER: dict[CustomerTier, Tier] = {
 }
 
 
-def _effective_tier(customer_tier: CustomerTier) -> Tier:
+def _cloud_tier(customer_tier: CustomerTier) -> Tier:
     # Use the BUSINESS floor for an unknown cloud tier.
     return _CUSTOMER_TIER_TO_TIER.get(customer_tier, Tier.BUSINESS)
 
@@ -147,7 +148,7 @@ def get_tier(tenant_id: str | None = None) -> Tier:
         return Tier.BUSINESS
 
     if cached is not None:
-        return _effective_tier(cached.customer_tier)
+        return _cloud_tier(cached.customer_tier)
 
     fresh = _lazy_refresh_from_cp(tid)
     if fresh is not None:
@@ -160,7 +161,7 @@ def get_tier(tenant_id: str | None = None) -> Tier:
                 tid,
                 e,
             )
-        return _effective_tier(fresh_tier)
+        return _cloud_tier(fresh_tier)
 
     # Don't cache the fallback — next call retries the refresh.
     return Tier.BUSINESS
