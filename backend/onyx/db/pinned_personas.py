@@ -90,23 +90,16 @@ def set_pinned_personas(
 def build_seed_pinned_personas_stmt(user_id: UUID) -> Insert:
     """Insert this user's starting pins, straight from the featured agents.
 
-    One statement rather than a read followed by inserts, so a user is never
-    half-seeded.
+    One statement, so a user is never half-seeded.
 
-    The rule is "featured and viewable by this user". Viewable means public,
-    shared directly, or shared with one of the user's groups - but seeding runs
-    at the instant the user row is created, and both share tables key on
-    `user.id`, so the latter two are empty by construction. The rule reduces
-    exactly, not approximately, to `is_public`.
+    "Featured and viewable by this user" reduces exactly to `is_public` here:
+    seeding runs the instant the user row is created, so both share tables,
+    keyed on `user.id`, are still empty.
 
-    Resist generalising this to the shared persona access filter. It returns the
-    same rows for everyone except admins, who bypass it entirely and would be
-    seeded with featured agents that are private to other people. Revisit only
-    if invitations ever gain the ability to place a user in groups before that
-    user exists.
+    Do not substitute the shared persona access filter. Admins bypass it, and
+    would be seeded with featured agents private to other people.
 
-    The built-in Assistant is excluded: the sidebar never renders id 0, so
-    pinning it leaves a row the user can neither see nor remove.
+    Id 0 is excluded because the sidebar never renders it.
     """
     featured = (
         select(
