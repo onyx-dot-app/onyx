@@ -5,6 +5,7 @@ session like tenant usage. Read-path helpers still run against in-memory SQLite
 seeded with ORM inserts."""
 
 import datetime
+import logging
 import sqlite3
 from collections.abc import Generator
 from typing import cast
@@ -25,6 +26,7 @@ from onyx.db.user_usage import (
     DELETED_USER_EXPORT_EMAIL,
     TokenUsageBucket,
     UserUsageByDay,
+    cost_budget_limits,
     get_cost_window_start,
     get_group_cost_cents_since,
     get_group_token_buckets_since,
@@ -586,3 +588,29 @@ def test_usage_reset_window_start_skips_legacy_cost_period() -> None:
     assert get_usage_reset_window_start(now, [legacy]) == datetime.datetime(
         2026, 8, 12, tzinfo=datetime.timezone.utc
     )
+
+
+def test_invalid_cost_period_warning_is_rate_limited(
+    caplog: pytest.LogCaptureFixture,
+) -> None:
+    from onyx.configs.constants import TokenRateLimitScope
+
+    legacy = TokenRateLimit(
+        id=2_136_000_001,
+        enabled=True,
+        token_budget=None,
+        cost_budget_cents=100.0,
+        period_hours=2136,
+        scope=TokenRateLimitScope.GLOBAL,
+    )
+
+    with caplog.at_level(logging.WARNING):
+        assert cost_budget_limits([legacy]) == []
+        assert cost_budget_limits([legacy]) == []
+
+    warnings = [
+        record
+        for record in caplog.records
+        if "Skipping cost budget" in record.getMessage()
+    ]
+    assert len(warnings) == 1

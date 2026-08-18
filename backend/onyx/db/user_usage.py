@@ -7,8 +7,10 @@ from collections import defaultdict
 from collections.abc import Iterator, Sequence
 from datetime import datetime, timedelta
 from math import ceil
+from threading import RLock
 from typing import Any, cast
 
+from cachetools import TTLCache
 from pydantic import BaseModel
 from sqlalchemy import delete, func, select
 from sqlalchemy.dialects.postgresql import insert as pg_insert
@@ -18,6 +20,7 @@ from sqlalchemy.orm import Session
 from onyx.db.models import TokenRateLimit, User, User__UserGroup, UserUsage
 from onyx.utils.datetime import datetime_to_utc, get_window_start
 from onyx.utils.logger import setup_logger
+from shared_configs.contextvars import CURRENT_TENANT_ID_CONTEXTVAR
 
 logger = setup_logger()
 
@@ -26,6 +29,11 @@ USER_USAGE_BUCKET_HOURS = USER_USAGE_BUCKET_SECONDS // (60 * 60)
 TOKEN_BUDGET_PERIOD_ERROR = "Token budget periods must be whole UTC days"
 COST_BUDGET_PERIOD_ERROR = "Cost budget periods must be whole UTC days"
 COST_BUDGET_PERIOD_HOURS = {24, 168, 720}
+_INVALID_COST_BUDGET_WARNING_TTL_SECONDS = 5 * 60
+_invalid_cost_budget_warning_lock = RLock()
+_invalid_cost_budget_warning_cache: TTLCache[tuple[str | None, int, int], None] = (
+    TTLCache(maxsize=10_000, ttl=_INVALID_COST_BUDGET_WARNING_TTL_SECONDS)
+)
 # Not email-shaped on purpose: it can never collide with a real address.
 DELETED_USER_EXPORT_EMAIL = "(deleted user)"
 _CONFLICT_COLS = ["user_id", "window_start", "model", "flow", "provider", "incognito"]
@@ -57,6 +65,24 @@ def _get_cost_period_seconds(period_hours: int) -> int:
     return period_seconds
 
 
+def _warn_for_invalid_cost_budget_period(rate_limit: TokenRateLimit) -> None:
+    cache_key = (
+        CURRENT_TENANT_ID_CONTEXTVAR.get(),
+        rate_limit.id,
+        rate_limit.period_hours,
+    )
+    with _invalid_cost_budget_warning_lock:
+        if cache_key in _invalid_cost_budget_warning_cache:
+            return
+        _invalid_cost_budget_warning_cache[cache_key] = None
+
+    logger.warning(
+        "Skipping cost budget on token_rate_limit id=%s: unsupported period_hours=%s",
+        rate_limit.id,
+        rate_limit.period_hours,
+    )
+
+
 def cost_budget_limits(rate_limits: Sequence[TokenRateLimit]) -> list[TokenRateLimit]:
     """Limits that carry an enforceable cost budget. Rows written before the
     daily/weekly/monthly restriction can hold any whole-day period; those are
@@ -66,12 +92,7 @@ def cost_budget_limits(rate_limits: Sequence[TokenRateLimit]) -> list[TokenRateL
         if rate_limit.cost_budget_cents is None:
             continue
         if rate_limit.period_hours not in COST_BUDGET_PERIOD_HOURS:
-            logger.warning(
-                "Skipping cost budget on token_rate_limit id=%s: "
-                "unsupported period_hours=%s",
-                rate_limit.id,
-                rate_limit.period_hours,
-            )
+            _warn_for_invalid_cost_budget_period(rate_limit)
             continue
         valid.append(rate_limit)
     return valid
