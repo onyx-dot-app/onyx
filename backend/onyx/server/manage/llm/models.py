@@ -295,8 +295,9 @@ class ModelConfigurationView(BaseModel):
                 supports_image_input=(
                     LLMModelFlowType.VISION
                     in model_configuration_model.llm_model_flow_types
-                    or litellm_thinks_model_supports_image_input(
-                        model_configuration_model.name, provider_name
+                    or any(
+                        litellm_thinks_model_supports_image_input(name, provider_name)
+                        for name in model_identity_names
                     )
                 ),
                 # Prefer the stored REASONING flow; fall back to the LiteLLM
@@ -356,8 +357,9 @@ class ModelConfigurationView(BaseModel):
                 True
                 if LLMModelFlowType.VISION
                 in model_configuration_model.llm_model_flow_types
-                else litellm_thinks_model_supports_image_input(
-                    model_configuration_model.name, provider_name
+                else any(
+                    litellm_thinks_model_supports_image_input(name, provider_name)
+                    for name in model_identity_names
                 )
             ),
             # Prefer the stored REASONING flow; fall back to LiteLLM-based

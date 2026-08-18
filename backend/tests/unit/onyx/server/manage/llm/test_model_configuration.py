@@ -170,6 +170,24 @@ class TestModelConfigurationViewVisionFallback:
 
         assert view.supports_image_input is False
 
+    def test_deployment_alias_reveals_vision_support(self) -> None:
+        """The model row's own name is opaque; only the deployment alias,
+        left unpatched here, is what the real cost map recognizes."""
+        mc = _make_model_config(
+            name="friendly-deploy-6",
+            display_name="Friendly Deploy",
+            flow_types=[LLMModelFlowType.CHAT],
+        )
+
+        view = ModelConfigurationView.from_model(
+            mc,
+            self.CUSTOM_CONFIG_PROVIDER,
+            use_stored_display_name=True,
+            deployment_name="gpt-5.1",
+        )
+
+        assert view.supports_image_input is True
+
 
 # ModelConfigurationView.from_model — reasoning fallback (dynamic providers)
 
@@ -361,6 +379,43 @@ class TestModelConfigurationViewFromModelStatic:
             )
 
         assert view.supports_reasoning is True
+
+    def test_deployment_alias_reveals_vision_support(self) -> None:
+        """The model row's own name is opaque; only the deployment alias
+        (litellm_thinks_model_supports_image_input left unpatched) is what
+        the cost map recognizes."""
+        mc = _make_model_config(
+            name="foundry-deploy-7",
+            display_name=None,
+            flow_types=[LLMModelFlowType.CHAT],
+        )
+
+        with (
+            patch(
+                "onyx.server.manage.llm.models.get_max_input_tokens",
+                return_value=128000,
+            ),
+            patch(
+                "onyx.server.manage.llm.models.model_is_reasoning_model",
+                return_value=False,
+            ),
+            patch(
+                "onyx.llm.model_name_parser.parse_litellm_model_name",
+            ) as mock_parse,
+        ):
+            mock_parsed = MagicMock()
+            mock_parsed.display_name = mc.name
+            mock_parsed.provider_display_name = self.STATIC_PROVIDER
+            mock_parsed.vendor = None
+            mock_parsed.version = None
+            mock_parsed.region = None
+            mock_parse.return_value = mock_parsed
+
+            view = ModelConfigurationView.from_model(
+                mc, self.STATIC_PROVIDER, deployment_name="gpt-5.1"
+            )
+
+        assert view.supports_image_input is True
 
     def _patched_static_view(
         self,
