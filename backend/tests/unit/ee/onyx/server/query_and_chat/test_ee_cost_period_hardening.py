@@ -2,8 +2,7 @@
 possible on rows written before the daily/weekly/monthly restriction) must be
 skipped, and the usage fetch cutoff must cover every valid limit's window."""
 
-from datetime import datetime, timezone
-from typing import Any
+from datetime import datetime, timezone, tzinfo
 from uuid import uuid4
 
 import pytest
@@ -27,7 +26,7 @@ class _FixedDatetime(datetime):
     monthly window (08-01), so a max-period cutoff would under-fetch weekly usage."""
 
     @classmethod
-    def now(cls, tz: Any = None) -> "_FixedDatetime":
+    def now(cls, tz: tzinfo | None = None) -> "_FixedDatetime":
         return cls(2026, 8, 1, 12, tzinfo=tz or timezone.utc)
 
 
