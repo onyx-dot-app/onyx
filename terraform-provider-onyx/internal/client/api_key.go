@@ -7,10 +7,18 @@ import (
 )
 
 // APIKeyArgs mirrors APIKeyArgs (backend/onyx/server/api_key/models.py).
-// GroupIDs must never be nil — it marshals to JSON null, which the backend rejects with a 422.
 type APIKeyArgs struct {
 	Name     *string `json:"name"`
 	GroupIDs []int64 `json:"group_ids"`
+}
+
+// normalized returns args safe to send: a nil GroupIDs marshals to JSON null,
+// which the backend rejects with a 422 rather than reading as "no groups".
+func (a APIKeyArgs) normalized() APIKeyArgs {
+	if a.GroupIDs == nil {
+		a.GroupIDs = []int64{}
+	}
+	return a
 }
 
 // UserGroupInfo mirrors UserGroupInfo (backend/onyx/server/models.py).
@@ -33,7 +41,7 @@ type APIKeyDescriptor struct {
 // the only time it is ever returned.
 func (c *Client) CreateAPIKey(ctx context.Context, args APIKeyArgs) (*APIKeyDescriptor, error) {
 	var desc APIKeyDescriptor
-	if err := c.doJSON(ctx, http.MethodPost, "/admin/api-key", args, &desc); err != nil {
+	if err := c.doJSON(ctx, http.MethodPost, "/admin/api-key", args.normalized(), &desc); err != nil {
 		return nil, err
 	}
 	return &desc, nil
@@ -71,7 +79,7 @@ func (c *Client) GetAPIKey(ctx context.Context, id int64) (*APIKeyDescriptor, er
 func (c *Client) UpdateAPIKey(ctx context.Context, id int64, args APIKeyArgs) (*APIKeyDescriptor, error) {
 	var desc APIKeyDescriptor
 	path := fmt.Sprintf("/admin/api-key/%d", id)
-	if err := c.doJSON(ctx, http.MethodPatch, path, args, &desc); err != nil {
+	if err := c.doJSON(ctx, http.MethodPatch, path, args.normalized(), &desc); err != nil {
 		return nil, err
 	}
 	return &desc, nil

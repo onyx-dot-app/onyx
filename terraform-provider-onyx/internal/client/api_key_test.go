@@ -75,18 +75,19 @@ func TestUpdateAPIKey(t *testing.T) {
 	}
 }
 
-// A nil (vs empty) group_ids marshals to JSON null, which the backend rejects with a 422.
+// Args with no GroupIDs set: nil marshals to JSON null, which the backend rejects
+// with a 422 instead of reading as "no groups".
 func TestAPIKeyArgsAlwaysSendGroupIDs(t *testing.T) {
 	for _, tc := range []struct {
 		name string
 		call func(*Client) error
 	}{
 		{"create", func(c *Client) error {
-			_, err := c.CreateAPIKey(context.Background(), APIKeyArgs{GroupIDs: []int64{}})
+			_, err := c.CreateAPIKey(context.Background(), APIKeyArgs{})
 			return err
 		}},
 		{"update", func(c *Client) error {
-			_, err := c.UpdateAPIKey(context.Background(), 7, APIKeyArgs{GroupIDs: []int64{}})
+			_, err := c.UpdateAPIKey(context.Background(), 7, APIKeyArgs{})
 			return err
 		}},
 	} {
