@@ -13,11 +13,16 @@ An Onyx API key. The key material is returned by the API exactly once at creatio
 ## Example Usage
 
 ```terraform
+variable "ingest_group_id" {
+  type        = number
+  description = "Id of an existing Onyx user group; ids are assigned per deployment."
+}
+
 # A key for an internal integration. The key material is in
 # onyx_api_key.ingest.api_key (sensitive, state-only).
 resource "onyx_api_key" "ingest" {
-  name = "ingest-pipeline"
-  role = "basic"
+  name      = "ingest-pipeline"
+  group_ids = [var.ingest_group_id]
 }
 ```
 
@@ -27,7 +32,7 @@ resource "onyx_api_key" "ingest" {
 ### Optional
 
 - `name` (String) Display name for the key.
-- `role` (String) Role of the service account backing the key: `basic`, `admin`, `curator`, `global_curator`, or `limited`.
+- `group_ids` (Set of Number) Ids of the user groups the backing service account belongs to. The key resolves the union of those groups' permissions. Omit for a key with no group permissions. This replaces the whole group set on every apply.
 
 ### Read-Only
 

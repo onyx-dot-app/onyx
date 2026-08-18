@@ -12,21 +12,27 @@ import (
 )
 
 func TestAccAPIKeyResource(t *testing.T) {
+	// Configs are built before PreCheck runs, so bootstrap here to get a real group id.
+	testAccPreCheck(t)
+	adminGroupID := strconv.FormatInt(testAccAdminGroupID(t), 10)
+
 	resource.Test(t, resource.TestCase{
 		PreCheck:                 func() { testAccPreCheck(t) },
 		ProtoV6ProviderFactories: testAccProtoV6ProviderFactories,
 		CheckDestroy:             testAccCheckAPIKeyDestroyed(t),
 		Steps: []resource.TestStep{
 			{
-				Config: `
+				Config: fmt.Sprintf(`
 resource "onyx_api_key" "test" {
-  name = "tf-acc-test-key"
+  name      = "tf-acc-test-key"
+  group_ids = [%s]
 }
-`,
+`, adminGroupID),
 				Check: resource.ComposeAggregateTestCheckFunc(
 					resource.TestCheckResourceAttrSet("onyx_api_key.test", "id"),
 					resource.TestCheckResourceAttr("onyx_api_key.test", "name", "tf-acc-test-key"),
-					resource.TestCheckResourceAttr("onyx_api_key.test", "role", "basic"),
+					resource.TestCheckResourceAttr("onyx_api_key.test", "group_ids.#", "1"),
+					resource.TestCheckTypeSetElemAttr("onyx_api_key.test", "group_ids.*", adminGroupID),
 					resource.TestCheckResourceAttrSet("onyx_api_key.test", "api_key"),
 					resource.TestCheckResourceAttrSet("onyx_api_key.test", "api_key_display"),
 					resource.TestCheckResourceAttrSet("onyx_api_key.test", "user_id"),
@@ -36,22 +42,34 @@ resource "onyx_api_key" "test" {
 				ResourceName:      "onyx_api_key.test",
 				ImportState:       true,
 				ImportStateVerify: true,
-				// The plaintext key is returned exactly once at creation and
-				// can never be re-read, so the imported state has it null.
+				// plaintext key is write-once and never re-read, so import leaves it null
 				ImportStateVerifyIgnore: []string{"api_key"},
+			},
+			{
+				Config: fmt.Sprintf(`
+resource "onyx_api_key" "test" {
+  name      = "tf-acc-test-key-renamed"
+  group_ids = [%s]
+}
+`, adminGroupID),
+				Check: resource.ComposeAggregateTestCheckFunc(
+					resource.TestCheckResourceAttr("onyx_api_key.test", "name", "tf-acc-test-key-renamed"),
+					// Update replaces the whole group set, so a rename must not drop it.
+					resource.TestCheckResourceAttr("onyx_api_key.test", "group_ids.#", "1"),
+					resource.TestCheckTypeSetElemAttr("onyx_api_key.test", "group_ids.*", adminGroupID),
+					// In-place update: key material must survive a name change.
+					resource.TestCheckResourceAttrSet("onyx_api_key.test", "api_key"),
+				),
 			},
 			{
 				Config: `
 resource "onyx_api_key" "test" {
   name = "tf-acc-test-key-renamed"
-  role = "limited"
 }
 `,
 				Check: resource.ComposeAggregateTestCheckFunc(
-					resource.TestCheckResourceAttr("onyx_api_key.test", "name", "tf-acc-test-key-renamed"),
-					resource.TestCheckResourceAttr("onyx_api_key.test", "role", "limited"),
-					// In-place update: key material must survive name/role changes.
-					resource.TestCheckResourceAttrSet("onyx_api_key.test", "api_key"),
+					// Dropping group_ids clears the groups rather than leaving them.
+					resource.TestCheckResourceAttr("onyx_api_key.test", "group_ids.#", "0"),
 				),
 			},
 		},
