@@ -1037,7 +1037,12 @@ class LitellmLLM(LLM):
         """Providers whose sync calls need a fresh per-call HTTPHandler instead of
         litellm's shared module_level_client (see threading notes in invoke())."""
         return (
-            is_true_openai_model(self.config.model_provider, self.config.model_name)
+            any(
+                is_true_openai_model(self.config.model_provider, name)
+                for name in resolve_model_identity_names(
+                    self.config.model_name, self.config.deployment_name
+                )
+            )
             or self.config.model_provider == LlmProviderNames.ANTHROPIC
         )
 

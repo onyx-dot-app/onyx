@@ -1339,6 +1339,36 @@ def test_azure_openai_model_uses_httphandler_client() -> None:
         assert isinstance(kwargs["client"], HTTPHandler)
 
 
+def test_openai_only_in_deployment_name_gets_isolated_client() -> None:
+    """_uses_isolated_client() must also check deployment_name: an Azure
+    Foundry model identified solely by its alias still needs the per-call
+    HTTPHandler, or it silently rejoins litellm's shared connection pool."""
+    from litellm import HTTPHandler
+
+    llm = LitellmLLM(
+        api_key="test_key",
+        timeout=30,
+        model_provider=LlmProviderNames.AZURE,
+        model_name="foundry-deploy-5",
+        deployment_name="gpt-5.1",
+        api_base="https://my-resource.openai.azure.us",
+        api_version="2025-03-01-preview",
+        max_input_tokens=get_max_input_tokens(
+            model_provider=LlmProviderNames.AZURE,
+            model_name="foundry-deploy-5",
+        ),
+    )
+
+    with patch("litellm.completion") as mock_completion:
+        mock_completion.return_value = []
+        messages: LanguageModelInput = [UserMessage(content="Hi")]
+        list(llm.stream(messages))
+
+        mock_completion.assert_called_once()
+        kwargs = mock_completion.call_args.kwargs
+        assert isinstance(kwargs["client"], HTTPHandler)
+
+
 def test_temporary_env_cleanup(monkeypatch: pytest.MonkeyPatch) -> None:
     # Assign some environment variables
     EXPECTED_ENV_VARS = {
