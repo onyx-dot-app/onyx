@@ -146,7 +146,7 @@ _CELERY_WORKER_PROGRAMS: list[tuple[str, str]] = [
     (
         "heavy",
         "connector_pruning,connector_doc_permissions_sync,"
-        "connector_external_group_sync,csv_generation,sandbox",
+        "connector_external_group_sync,csv_generation,sandbox,capability_checks",
     ),
     ("docprocessing", "docprocessing,port"),
     (

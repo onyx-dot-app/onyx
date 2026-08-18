@@ -134,6 +134,7 @@ celery_app.autodiscover_tasks(
             # Sandbox tasks (file sync, cleanup; build feature)
             "onyx.background.celery.tasks.build",
             "onyx.background.celery.tasks.hierarchyfetching",
+            "onyx.background.celery.tasks.capability_checks",
         ]
     )
 )

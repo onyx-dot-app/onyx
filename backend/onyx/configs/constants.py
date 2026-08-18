@@ -462,6 +462,9 @@ class OnyxCeleryQueues:
     CONNECTOR_EXTERNAL_GROUP_SYNC = "connector_external_group_sync"
     CONNECTOR_HIERARCHY_FETCHING = "connector_hierarchy_fetching"
     CSV_GENERATION = "csv_generation"
+    # Manual credential capability check runs; probes may legitimately hang up
+    # to their per-check guard, so they live with the long-running work.
+    CAPABILITY_CHECKS = "capability_checks"
 
     # Chat retention (TTL) hard-deletion queue, consumed by the light worker.
     # Kept off the primary "celery" queue so cleanup never starves check_for_indexing.
@@ -677,6 +680,9 @@ class OnyxCeleryTask:
     CONNECTOR_HIERARCHY_FETCHING_TASK = "connector_hierarchy_fetching_task"
     DOCUMENT_BY_CC_PAIR_CLEANUP_TASK = "document_by_cc_pair_cleanup_task"
     DOCUMENT_INDEX_METADATA_SYNC_TASK = "document_index_metadata_sync_task"
+
+    # Credential capability checks (granular runs of the registered checks)
+    RUN_CAPABILITY_CHECKS = "run_capability_checks"
 
     # chat retention
     CHECK_TTL_MANAGEMENT_TASK = "check_ttl_management_task"
