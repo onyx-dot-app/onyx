@@ -43,6 +43,7 @@ from onyx.llm.model_capabilities import (
     anthropic_uses_adaptive_thinking,
     is_true_openai_model,
     model_is_reasoning_model,
+    openai_chat_variant_rejects_reasoning,
     openai_model_rejects_reasoning_effort,
     resolve_reasoning_param_style,
 )
@@ -621,9 +622,9 @@ class LitellmLLM(LLM):
         # Some Vertex Anthropic models reject stream_options. Reasoning params
         # are sent regardless: a provider that rejects one answers with a 400
         # naming the kwarg, which the retry ladder below strips.
-        is_vertex_model_rejecting_stream_options = (
-            is_vertex_ai
-            and _is_vertex_model_rejecting_stream_options(self.config.model_name)
+        is_vertex_model_rejecting_stream_options = is_vertex_ai and any(
+            _is_vertex_model_rejecting_stream_options(name)
+            for name in model_identity_names
         )
 
         #########################
@@ -737,7 +738,10 @@ class LitellmLLM(LLM):
                     # OpenAI API does not accept reasoning params for GPT 5 chat
                     # models (neither reasoning nor reasoning_effort are accepted)
                     # even though they are reasoning models (bug in OpenAI)
-                    send_reasoning = "-chat" not in model
+                    send_reasoning = not any(
+                        openai_chat_variant_rejects_reasoning(name)
+                        for name in model_identity_names
+                    )
                 if send_reasoning:
                     optional_kwargs["reasoning"] = openai_style_reasoning
 
@@ -788,9 +792,6 @@ class LitellmLLM(LLM):
                             "type": "enabled",
                             "budget_tokens": budget_tokens,
                         }
-
-                # LiteLLM just does some mapping like this anyway but is incomplete for Anthropic
-                optional_kwargs.pop("reasoning_effort", None)
 
             else:
                 # Hope for the best from LiteLLM

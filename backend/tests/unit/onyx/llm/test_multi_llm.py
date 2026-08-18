@@ -872,6 +872,56 @@ def test_openai_chat_omits_reasoning_params() -> None:
         assert mock_is_openai.called
 
 
+def test_chat_variant_only_in_deployment_name_omits_reasoning() -> None:
+    """The "-chat" guard reads the wire string (deployment_name takes
+    priority), so a real gpt-5-chat model hidden behind an opaque alias
+    must still have reasoning omitted or OpenAI 400s it."""
+    llm = LitellmLLM(
+        api_key="test_key",
+        timeout=30,
+        model_provider=LlmProviderNames.AZURE,
+        model_name="gpt-5-chat",
+        deployment_name="prod-deploy-1",
+        api_base="https://my-resource.openai.azure.us",
+        max_input_tokens=get_max_input_tokens(
+            model_provider=LlmProviderNames.AZURE, model_name="gpt-5-chat"
+        ),
+    )
+
+    with patch("litellm.completion") as mock_completion:
+        mock_completion.return_value = []
+        messages: LanguageModelInput = [UserMessage(content="Hi")]
+        list(llm.stream(messages, reasoning_effort=ReasoningEffort.HIGH))
+
+        kwargs = mock_completion.call_args.kwargs
+        assert "reasoning" not in kwargs
+
+
+def test_coincidental_chat_alias_does_not_silence_reasoning() -> None:
+    """A deployment alias merely containing "-chat" (not a real gpt-5-chat
+    registry model) must not silently suppress reasoning for a model that
+    otherwise supports it."""
+    llm = LitellmLLM(
+        api_key="test_key",
+        timeout=30,
+        model_provider=LlmProviderNames.AZURE,
+        model_name="gpt-5.1",
+        deployment_name="prod-chat-1",
+        api_base="https://my-resource.openai.azure.us",
+        max_input_tokens=get_max_input_tokens(
+            model_provider=LlmProviderNames.AZURE, model_name="gpt-5.1"
+        ),
+    )
+
+    with patch("litellm.completion") as mock_completion:
+        mock_completion.return_value = []
+        messages: LanguageModelInput = [UserMessage(content="Hi")]
+        list(llm.stream(messages, reasoning_effort=ReasoningEffort.HIGH))
+
+        kwargs = mock_completion.call_args.kwargs
+        assert kwargs["reasoning"]["effort"] == "high"
+
+
 def _azure_llm(model_name: str, api_version: str | None) -> LitellmLLM:
     return LitellmLLM(
         api_key="test_key",

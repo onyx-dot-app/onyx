@@ -504,6 +504,13 @@ def is_openai_registry_model_name(model_name: str) -> bool:
         return False
 
 
+def openai_chat_variant_rejects_reasoning(model_name: str) -> bool:
+    """True for the GPT-5 "-chat" registry variants, which reject reasoning
+    params on every surface despite being reasoning models (an OpenAI bug).
+    Registry-gated so a name merely containing "-chat" doesn't false-positive."""
+    return "-chat" in model_name and is_openai_registry_model_name(model_name)
+
+
 # ---------------------------------------------------------------------------
 # Reasoning effort
 # ---------------------------------------------------------------------------
@@ -660,9 +667,9 @@ def supported_reasoning_efforts(
     the range. An empty list means the model reasons but takes no effort
     parameter at all.
 
-    The chat request builder (`onyx.llm.multi_llm`) and the model picker both
-    read this, so a greyed-out slider stop and a dropped request parameter can
-    never disagree.
+    Both this function and the chat request builder (`onyx.llm.multi_llm`)
+    derive their answer from `resolve_reasoning_param_style`, so a greyed-out
+    slider stop and a dropped request parameter should never disagree.
     """
     if any(openai_model_rejects_reasoning_effort(name) for name in model_names):
         return []
