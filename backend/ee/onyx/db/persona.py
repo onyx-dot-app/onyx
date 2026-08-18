@@ -13,6 +13,7 @@ from onyx.db.persona import (
     mark_persona_user_files_for_sync,
     resolve_desired_user_shares,
 )
+from onyx.db.user_group import assert_not_shared_with_default_group
 from onyx.error_handling.error_codes import OnyxErrorCode
 from onyx.error_handling.exceptions import OnyxError
 
@@ -55,6 +56,8 @@ def _apply_persona_group_share_diff(
         .all()
     )
     existing_by_group = {row.user_group_id: row for row in existing_rows}
+
+    assert_not_shared_with_default_group(db_session, list(desired_shares))
 
     for group_id, row in existing_by_group.items():
         if group_id not in desired_shares:

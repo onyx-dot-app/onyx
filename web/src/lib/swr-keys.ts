@@ -128,6 +128,8 @@ export const SWR_KEYS = {
 
   // ── Groups ────────────────────────────────────────────────────────────────
   adminUserGroups: "/api/manage/admin/user-group",
+  adminUserGroupsWithDefault:
+    "/api/manage/admin/user-group?include_default=true",
   shareableGroups: "/api/manage/user-groups/minimal",
   userGroupPermissions: (groupId: number) =>
     `/api/manage/admin/user-group/${groupId}/permissions`,

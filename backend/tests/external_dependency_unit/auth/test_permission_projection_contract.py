@@ -1254,8 +1254,10 @@ def test_user_group_projection_matches_gates(db_session: Session) -> None:
             is_full_admin=has_global_permission(
                 actor, Permission.FULL_ADMIN_PANEL_ACCESS
             ),
+            is_default=False,
         )
         assert tags["manage"] == manage_enforced, actor.email
+        assert tags["manage_members"] == manage_enforced, actor.email
         assert tags["delete"] == _route_admits(delete_user_group, "_", actor), (
             actor.email
         )
@@ -1277,8 +1279,10 @@ def test_user_group_projection_matches_gates(db_session: Session) -> None:
         is_full_admin=has_global_permission(
             in_scope, Permission.FULL_ADMIN_PANEL_ACCESS
         ),
+        is_default=False,
     ) == {
         "manage": True,
+        "manage_members": True,
         "delete": False,
         "edit_permissions": False,
         # scoped manager now fully manages its group's token limits
@@ -1295,18 +1299,64 @@ def test_user_group_projection_matches_gates(db_session: Session) -> None:
         is_full_admin=has_global_permission(
             groups_admin, Permission.FULL_ADMIN_PANEL_ACCESS
         ),
+        is_default=False,
     ) == {
         "manage": True,
+        "manage_members": True,
         "delete": True,
         "edit_permissions": False,
         "edit_token_limits": True,
     }
 
 
+def test_default_user_group_projection_is_membership_only(db_session: Session) -> None:
+    """A seeded default group keeps exactly one affordance — manage_members, and only for
+    a full admin. Everything else is denied, matching the CONFLICT the routes raise."""
+    default_group = UserGroup(name=f"proj-default-{uuid4().hex[:12]}", is_default=True)
+    db_session.add(default_group)
+    db_session.flush()
+
+    groups_admin = create_test_user(db_session, "proj-ug-default-groupsadmin")
+    groups_admin.effective_permissions = [Permission.MANAGE_USER_GROUPS.value]
+    admin = create_test_user(db_session, "proj-ug-default-admin", is_admin=True)
+    db_session.commit()
+
+    def _tags(actor: User) -> dict[str, bool]:
+        return user_group_permissions(
+            can_manage=manages_group(actor, db_session, group_id=default_group.id),
+            is_user_groups_admin=has_global_permission(
+                actor, Permission.MANAGE_USER_GROUPS
+            ),
+            is_full_admin=has_global_permission(
+                actor, Permission.FULL_ADMIN_PANEL_ACCESS
+            ),
+            is_default=True,
+        )
+
+    assert _tags(admin) == {
+        "manage": False,
+        "manage_members": True,
+        "delete": False,
+        "edit_permissions": False,
+        "edit_token_limits": False,
+    }
+    # global MANAGE_USER_GROUPS is not enough — default groups are full-admin only
+    assert _tags(groups_admin) == {
+        "manage": False,
+        "manage_members": False,
+        "delete": False,
+        "edit_permissions": False,
+        "edit_token_limits": False,
+    }
+
+
 def test_user_group_key_coverage() -> None:
     assert set(
         user_group_permissions(
-            can_manage=True, is_user_groups_admin=True, is_full_admin=True
+            can_manage=True,
+            is_user_groups_admin=True,
+            is_full_admin=True,
+            is_default=False,
         )
     ) == set(USER_GROUP_ACTIONS)
 

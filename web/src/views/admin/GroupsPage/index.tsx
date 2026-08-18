@@ -35,12 +35,17 @@ function GroupsPage() {
     data: groups,
     error,
     isLoading,
-  } = useSWR<UserGroup[]>(SWR_KEYS.adminUserGroups, errorHandlingFetcher);
+  } = useSWR<UserGroup[]>(
+    SWR_KEYS.adminUserGroupsWithDefault,
+    errorHandlingFetcher
+  );
 
   // The list is READ_USER_GROUPS-scoped (implied by MANAGE_LLMS etc.), so filter to
   // manageable groups — else a read-only holder sees groups with no open action.
+  // `manage_members` is the broadest action, and the only one a default group keeps —
+  // so this also hides Admin/Basic from non-full-admins.
   const manageableGroups = useMemo(
-    () => (groups ?? []).filter((group) => can(group, "manage")),
+    () => (groups ?? []).filter((group) => can(group, "manage_members")),
     [groups]
   );
 
