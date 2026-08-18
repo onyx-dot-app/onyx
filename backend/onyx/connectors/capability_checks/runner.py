@@ -1,11 +1,12 @@
 import time
 from collections.abc import Sequence
-from datetime import datetime, timezone
+from datetime import datetime, timedelta, timezone
 from typing import Any
 
 from pydantic import BaseModel
 from sqlalchemy.orm import Session
 
+from onyx.configs.constants import DocumentSource
 from onyx.connectors.capability_checks.models import (
     CapabilityCheck,
     CapabilityCheckContext,
@@ -45,12 +46,6 @@ logger = setup_logger()
 # forever. Known-slow probes override it via
 # ``CapabilityCheck.timeout_seconds``.
 CAPABILITY_CHECK_TIMEOUT_SECONDS = 600
-
-# Crude ceiling on one run's legitimate wall time: checks run sequentially and
-# no source registers more than a handful, so a RUNNING mark older than this is
-# a crashed or expired run and stops blocking re-triggers. Stuck-run recovery
-# will replace it with a per-scope ceiling derived from the actual checks.
-CAPABILITY_CHECK_RUN_STALENESS_SECONDS = 6 * CAPABILITY_CHECK_TIMEOUT_SECONDS
 
 _SKIP_NEEDS_INSTANCE_MESSAGE = (
     "Requires a connector instance -- will re-run automatically when the "
@@ -186,6 +181,32 @@ def _execute_check(
             duration_ms=elapsed_ms(),
         )
     return _CheckOutcome(status=CapabilityCheckStatus.PASSED, duration_ms=elapsed_ms())
+
+
+def capability_check_run_ceiling_seconds(source: DocumentSource) -> int:
+    """Upper bound on one run's legitimate execution time, in seconds.
+
+    Checks run sequentially and mirrored checks (one check surfaced under
+    several capabilities) execute once, so the bound sums the distinct
+    per-check hang guards. One extra default guard covers the work outside any
+    check's guard: connector instantiation can itself probe the source.
+    """
+    timeout_by_check_id = {
+        check.check_id: check.timeout_seconds or CAPABILITY_CHECK_TIMEOUT_SECONDS
+        for check in get_capability_checks(source)
+    }
+    return int(CAPABILITY_CHECK_TIMEOUT_SECONDS + sum(timeout_by_check_id.values()))
+
+
+def capability_check_run_stale_after(source: DocumentSource) -> timedelta:
+    """Age past which a RUNNING mark is a dead run, not a slow one.
+
+    The mark is set at trigger time, so a legitimate run's wall clock is queue
+    wait plus execution; the task expiry bounds the wait at one execution
+    ceiling, leaving two ceilings in total. Both the re-trigger guard and the
+    stale-run sweep use this cutoff.
+    """
+    return timedelta(seconds=2 * capability_check_run_ceiling_seconds(source))
 
 
 def run_capability_checks(

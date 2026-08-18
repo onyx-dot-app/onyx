@@ -9,8 +9,10 @@ Two writer classes share these rows, with fixed precedence: granular named-check
 runs write through ``upsert_completed_capability_report`` and replace whatever
 is stored (latest-only truth); the coarse blocking-validation recorder writes
 through the ``unless_granular`` variant and never replaces a granular report.
-``mark_capability_report_running`` belongs to the check-runner lifecycle: it
-flags a run in flight while the last completed report stays readable.
+``mark_capability_report_running`` and ``mark_stale_capability_runs_failed``
+belong to the check-runner lifecycle: the mark flags a run in flight while the
+last completed report stays readable, and the sweep retires marks that outlived
+their run ceiling to FAILED_TO_RUN.
 """
 
 from datetime import datetime, timedelta
@@ -252,6 +254,57 @@ def mark_capability_run_failed(
         )
     )
     db_session.execute(stmt)
+
+
+def get_sources_with_running_capability_runs(
+    db_session: Session,
+) -> list[DocumentSource]:
+    """Returns the distinct sources holding a row currently marked RUNNING."""
+    stmt = (
+        select(CredentialCapabilityReportRow.source)
+        .where(
+            CredentialCapabilityReportRow.run_status
+            == CapabilityReportRunStatus.RUNNING
+        )
+        .distinct()
+    )
+    return list(db_session.scalars(stmt).all())
+
+
+def mark_stale_capability_runs_failed(
+    db_session: Session,
+    *,
+    source: DocumentSource,
+    stale_after: timedelta,
+) -> int:
+    """Retires dead runs: RUNNING rows older than ``stale_after`` turn
+    FAILED_TO_RUN.
+
+    Only the lifecycle fields change; the stored report (the last completed
+    run) stays readable. The cutoff is evaluated by Postgres against statement
+    time, mirroring the mark's guard, so a scope re-marked concurrently is
+    never retired. Returns the number of rows retired.
+    """
+    stmt = (
+        update(CredentialCapabilityReportRow)
+        .where(
+            CredentialCapabilityReportRow.source == source,
+            CredentialCapabilityReportRow.run_status
+            == CapabilityReportRunStatus.RUNNING,
+            or_(
+                CredentialCapabilityReportRow.run_started_at.is_(None),
+                CredentialCapabilityReportRow.run_started_at
+                < func.statement_timestamp() - stale_after,
+            ),
+        )
+        .values(
+            run_status=CapabilityReportRunStatus.FAILED_TO_RUN,
+            # Model ``onupdate`` does not apply to bulk updates.
+            time_updated=func.statement_timestamp(),
+        )
+    )
+    result = db_session.execute(stmt)
+    return int(result.rowcount)  # ty: ignore[unresolved-attribute]
 
 
 def get_capability_report_row(
