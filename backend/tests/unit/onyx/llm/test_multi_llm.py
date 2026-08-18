@@ -524,6 +524,35 @@ def test_claude_only_in_deployment_name_omits_temperature_and_reasons() -> None:
         assert kwargs["output_config"] == {"effort": "high"}
 
 
+def test_openai_only_in_deployment_name_uses_responses_bridge() -> None:
+    # is_openai_model must also check deployment_name: an Azure Foundry model
+    # identified only by its alias must still route through the responses
+    # bridge (and get the api-version override), not the plain chat surface.
+    llm = LitellmLLM(
+        api_key="test_key",
+        timeout=30,
+        model_provider=LlmProviderNames.AZURE,
+        model_name="foundry-deploy-4",
+        deployment_name="gpt-5.1",
+        api_base="https://my-resource.openai.azure.us",
+        api_version="2025-03-01-preview",
+        max_input_tokens=get_max_input_tokens(
+            model_provider=LlmProviderNames.AZURE,
+            model_name="foundry-deploy-4",
+        ),
+    )
+
+    with patch("litellm.completion") as mock_completion:
+        mock_completion.return_value = []
+        messages: LanguageModelInput = [UserMessage(content="Hi")]
+        list(llm.stream(messages, reasoning_effort=ReasoningEffort.HIGH))
+
+        kwargs = mock_completion.call_args.kwargs
+        assert kwargs["model"] == "azure/responses/gpt-5.1"
+        assert kwargs["api_version"] is None
+        assert kwargs["reasoning"]["effort"] == "high"
+
+
 @pytest.mark.parametrize(
     "model_name",
     [

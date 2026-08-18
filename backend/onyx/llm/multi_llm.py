@@ -611,8 +611,9 @@ class LitellmLLM(LLM):
         )
         # All OpenAI models will use responses API for consistency
         # Responses API is needed to get reasoning packets from OpenAI models
-        is_openai_model = is_true_openai_model(
-            self.config.model_provider, self.config.model_name
+        is_openai_model = any(
+            is_true_openai_model(self.config.model_provider, name)
+            for name in model_identity_names
         )
         is_ollama = self._model_provider == LlmProviderNames.OLLAMA_CHAT
         is_mistral = self._model_provider == LlmProviderNames.MISTRAL
