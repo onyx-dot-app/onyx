@@ -214,7 +214,7 @@ def celery_inspect_get_reserved(worker_names: list[str], app: Celery) -> set[str
     # get the list of reserved tasks
     reserved_tasks: dict[str, list] | None = inspect.reserved()
     if reserved_tasks:
-        for _, task_list in reserved_tasks.items():
+        for task_list in reserved_tasks.values():
             for task in task_list:
                 reserved_task_ids.add(task["id"])
 
@@ -235,7 +235,7 @@ def celery_inspect_get_active(worker_names: list[str], app: Celery) -> set[str]:
     # get the list of reserved tasks
     active_tasks: dict[str, list] | None = inspect.active()
     if active_tasks:
-        for _, task_list in active_tasks.items():
+        for task_list in active_tasks.values():
             for task in task_list:
                 active_task_ids.add(task["id"])
 

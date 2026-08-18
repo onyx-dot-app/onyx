@@ -42,9 +42,14 @@ from sqlalchemy.dialects.postgresql import insert
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session, selectinload
 
-from onyx.auth.schemas import UserRole
+from onyx.auth.permissions import has_global_permission, has_permission
 from onyx.db.engine.sql_engine import get_session_with_current_tenant
-from onyx.db.enums import SandboxStatus, SkillSharePermission
+from onyx.db.enums import (
+    Permission,
+    PermissionAuthority,
+    SandboxStatus,
+    SkillSharePermission,
+)
 from onyx.db.external_app import (
     SkillExternalAppDependencyState,
     get_skill_external_app_dependencies,
@@ -58,6 +63,10 @@ from onyx.db.models import (
     User,
     User__UserGroup,
     UserSkillPreference,
+)
+from onyx.db.scoped_permissions import (
+    scoped_group_ids_subquery,
+    within_managed_scope_clause,
 )
 from onyx.db.utils import is_fk_violation
 from onyx.error_handling.error_codes import OnyxErrorCode
@@ -116,35 +125,17 @@ def _is_shared_with_user_group(
     return stmt.exists()
 
 
-def _is_group_shared_only_with_curator_scope(user: User) -> ColumnElement[bool]:
-    """Curators can manage skills only when all group shares are in their scope."""
-    curator_scope_group_ids = select(User__UserGroup.user_group_id).where(
-        User__UserGroup.user_id == user.id
+def _is_group_shared_only_within_managed_scope(user: User) -> ColumnElement[bool]:
+    """A scoped manager may edit a skill only when every group it is shared with
+    is one they manage, and it isn't published org-wide. Delegates to the shared
+    read-side helper so this can't drift from the write-side GATE 2."""
+    return within_managed_scope_clause(
+        resource_id_col=Skill.id,
+        junction_resource_col=Skill__UserGroup.skill_id,
+        junction_group_col=Skill__UserGroup.user_group_id,
+        non_public_clause=Skill.public_permission.is_(None),
+        managed_subq=scoped_group_ids_subquery(user),
     )
-    share_in_curator_scope_exists = (
-        select(Skill__UserGroup.skill_id)
-        .join(
-            User__UserGroup,
-            User__UserGroup.user_group_id == Skill__UserGroup.user_group_id,
-        )
-        .where(Skill__UserGroup.skill_id == Skill.id)
-        .where(User__UserGroup.user_id == user.id)
-    )
-
-    if user.role == UserRole.CURATOR:
-        curator_scope_group_ids = curator_scope_group_ids.where(
-            User__UserGroup.is_curator.is_(True)
-        )
-        share_in_curator_scope_exists = share_in_curator_scope_exists.where(
-            User__UserGroup.is_curator.is_(True)
-        )
-
-    no_group_share_outside_scope = ~exists().where(
-        Skill__UserGroup.skill_id == Skill.id
-    ).where(Skill__UserGroup.user_group_id.notin_(curator_scope_group_ids)).correlate(
-        Skill
-    )
-    return and_(share_in_curator_scope_exists.exists(), no_group_share_outside_scope)
 
 
 def _is_owned_custom_skill(user: User) -> ColumnElement[bool]:
@@ -170,8 +161,8 @@ def _is_editable_by_user(user: User) -> ColumnElement[bool]:
         _is_shared_with_user_group(user, SkillSharePermission.EDITOR),
         Skill.public_permission == SkillSharePermission.EDITOR,
     )
-    if user.role in (UserRole.CURATOR, UserRole.GLOBAL_CURATOR):
-        editable = or_(editable, _is_group_shared_only_with_curator_scope(user))
+    if has_permission(user, Permission.MANAGE_SKILLS) is PermissionAuthority.SCOPED:
+        editable = or_(editable, _is_group_shared_only_within_managed_scope(user))
     return editable
 
 
@@ -235,18 +226,29 @@ def _skill_select_for_management_policy(
                 ~exists().where(ExternalApp__Skill.skill_id == Skill.id),
             )
         )
-        if user.role == UserRole.ADMIN:
+        if has_global_permission(user, Permission.MANAGE_SKILLS):
             return stmt
         stmt = stmt.where(skill_visible_to_user(user))
         return _exclude_unavailable_built_in_skills(stmt, db_session)
 
     if policy == SkillManagementPolicy.EDIT:
         stmt = stmt.where(Skill.built_in_skill_id.is_(None))
-        if user.role == UserRole.ADMIN:
+        if has_global_permission(user, Permission.MANAGE_SKILLS):
             return stmt
         return stmt.where(_is_editable_by_user(user))
 
     raise ValueError(f"Unknown skill management policy: {policy}")
+
+
+def get_group_ids_for_skill(skill_id: UUID, db_session: Session) -> list[int]:
+    """Group ids a skill is shared with — the scope input for GATE 2 checks."""
+    return list(
+        db_session.scalars(
+            select(Skill__UserGroup.user_group_id).where(
+                Skill__UserGroup.skill_id == skill_id
+            )
+        )
+    )
 
 
 def affected_user_ids_for_skill(skill: Skill, db_session: Session) -> set[UUID]:

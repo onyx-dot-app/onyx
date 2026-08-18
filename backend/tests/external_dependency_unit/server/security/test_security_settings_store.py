@@ -165,8 +165,9 @@ def test_thread_safe_concurrent_reads() -> None:
 
     def worker() -> None:
         try:
-            for _ in range(50):
-                results.append(get_security_settings().user_directory_admin_only)
+            results.extend(
+                get_security_settings().user_directory_admin_only for _ in range(50)
+            )
         except BaseException as e:  # noqa: BLE001
             errors.append(e)
 

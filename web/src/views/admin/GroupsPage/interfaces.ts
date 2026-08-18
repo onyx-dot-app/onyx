@@ -1,11 +1,13 @@
-import type { UserRole } from "@/lib/types";
-import type { UserRow } from "@/views/admin/UsersPage/interfaces";
+import type {
+  UserGroupInfo,
+  UserRow,
+} from "@/views/admin/UsersPage/interfaces";
 
 export interface ApiKeyDescriptor {
   api_key_id: number;
   api_key_display: string;
   api_key_name: string | null;
-  api_key_role: UserRole;
+  groups: UserGroupInfo[];
   user_id: string;
 }
 
@@ -21,4 +23,13 @@ export interface TokenRateLimitDisplay {
   token_budget: number | null;
   period_hours: number;
   cost_budget_cents: number | null;
+}
+
+/** Mirrors backend PermissionRegistryEntry from onyx.auth.permissions. */
+export interface PermissionRegistryEntry {
+  id: string;
+  display_name: string;
+  description: string;
+  permissions: string[];
+  group: number;
 }

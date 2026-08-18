@@ -1,6 +1,6 @@
 {
-  "version": "1.11",
-  "updated_at": "2026-08-10T00:00:00Z",
+  "version": "1.12",
+  "updated_at": "2026-08-17T00:00:00Z",
   "providers": {
     "openai": {
       "default_model": "gpt-5.6-sol",
@@ -48,8 +48,8 @@
           "display_name": "Gemini 3.1 Pro"
         },
         {
-          "name": "gemini-3.6-flash",
-          "display_name": "Gemini 3.6 Flash"
+          "name": "gemini-3.7-flash",
+          "display_name": "Gemini 3.7 Flash"
         }
       ]
     },
@@ -62,7 +62,7 @@
         },
         {
           "name": "deepseek/deepseek-v4-pro",
-          "display_name": "DeepSeek V4 Pro"
+          "display_name": "DeepSeek V4 Pro 0423"
         },
         {
           "name": "qwen/qwen3.8-max",

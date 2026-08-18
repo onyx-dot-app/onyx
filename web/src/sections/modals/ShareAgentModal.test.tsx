@@ -20,6 +20,14 @@ jest.mock("@/hooks/useShareableGroups", () => ({
   default: jest.fn(() => ({ data: [] })),
 }));
 
+jest.mock("@/providers/UserProvider", () => ({
+  useUser: jest.fn(() => ({
+    isAdmin: false,
+    user: { id: "owner-id", email: "owner@example.com" },
+    adminCapabilities: [],
+  })),
+}));
+
 jest.mock("@/lib/agents/hooks", () => ({
   useAgent: jest.fn(() => ({
     agent: {

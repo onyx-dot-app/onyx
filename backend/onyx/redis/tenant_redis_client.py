@@ -146,6 +146,10 @@ class TenantRedisClient:
         """
         return cast("bytes | None", self._r.get(_prefix_key(self._prefix, name)))
 
+    def getdel(self, name: KeyArg) -> bytes | None:
+        """Atomically gets and deletes a tenant-prefixed key."""
+        return cast("bytes | None", self._r.getdel(_prefix_key(self._prefix, name)))
+
     def mget(self, names: Sequence[KeyArg]) -> list[bytes | None]:
         """Issues an MGET against tenant-prefixed keys.
 

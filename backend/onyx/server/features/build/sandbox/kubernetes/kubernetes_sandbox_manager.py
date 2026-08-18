@@ -603,14 +603,14 @@ class KubernetesSandboxManager(SandboxManager):
         ]
 
         # Add ports for session Next.js servers (one port per potential session)
-        for port in range(SANDBOX_NEXTJS_PORT_START, SANDBOX_NEXTJS_PORT_END):
-            ports.append(
-                client.V1ServicePort(
-                    name=f"nextjs-{port}",
-                    port=port,
-                    target_port=port,
-                )
+        ports.extend(
+            client.V1ServicePort(
+                name=f"nextjs-{port}",
+                port=port,
+                target_port=port,
             )
+            for port in range(SANDBOX_NEXTJS_PORT_START, SANDBOX_NEXTJS_PORT_END)
+        )
 
         return client.V1Service(
             api_version="v1",

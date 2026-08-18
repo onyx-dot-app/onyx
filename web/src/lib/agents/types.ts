@@ -1,6 +1,7 @@
 import { ValidSources } from "@/lib/types";
 import { ToolSnapshot } from "@/lib/tools/interfaces";
 import { DocumentSetSummary, MinimalUserSnapshot } from "@/lib/types";
+import type { PermissionsOf } from "@/lib/permissions/resource-actions";
 
 // ── Domain / application types ────────────────────────────────────────────────
 
@@ -75,6 +76,8 @@ export interface MinimalAgent {
   builtin_persona: boolean;
   labels?: AgentLabel[];
   owner: MinimalUserSnapshot | null;
+  // per-action affordance map stamped by the list endpoints; empty/absent → fail-closed
+  permissions?: PermissionsOf<"Agent">;
   owner_group: PersonaOwnerGroup | null;
   // Requesting user's computed access, set by the list/detail endpoints
   user_permission: PersonaAccessLevel | null;
@@ -94,6 +97,8 @@ export interface Agent extends MinimalAgent {
 
 export interface FullAgent extends Agent {
   search_start_date: string | null;
+  // per-action affordance map for the requesting user; stamped by GET /persona/{id}
+  permissions: PermissionsOf<"Agent">;
   user_shares: PersonaUserShare[];
   group_shares: PersonaGroupShare[];
   public_permission: PersonaSharePermission;

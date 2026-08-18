@@ -1,10 +1,10 @@
 import json
 
-from fastapi import APIRouter, Depends, File, Form, HTTPException, Query, UploadFile
+from fastapi import APIRouter, Depends, File, Form, HTTPException, UploadFile
 from sqlalchemy.orm import Session
 
 from onyx.auth.permissions import require_permission
-from onyx.auth.users import current_curator_or_admin_user
+from onyx.auth.scoped_permissions import assert_within_scope
 from onyx.configs.constants import PUBLIC_API_TAGS
 from onyx.connectors.factory import validate_ccpair_for_user
 from onyx.db.credentials import (
@@ -43,7 +43,6 @@ from onyx.utils.audit import (
     emit_audit_event,
 )
 from onyx.utils.logger import setup_logger
-from onyx.utils.variable_functionality import fetch_ee_implementation_or_noop
 
 logger = setup_logger()
 
@@ -51,23 +50,20 @@ logger = setup_logger()
 router = APIRouter(prefix="/manage", tags=PUBLIC_API_TAGS)
 
 
-def _ignore_credential_permissions(source: DocumentSource) -> bool:
-    return source in CREDENTIAL_PERMISSIONS_TO_IGNORE
-
-
 """Admin-only endpoints"""
 
 
 @router.get("/admin/credential")
 def list_credentials_admin(
-    user: User = Depends(current_curator_or_admin_user),
+    user: User = Depends(
+        require_permission(Permission.MANAGE_CONNECTORS, allow_scope=True)
+    ),
     db_session: Session = Depends(get_session),
 ) -> list[CredentialSnapshot]:
     """Lists all public credentials"""
     credentials = fetch_credentials_for_user(
         db_session=db_session,
         user=user,
-        get_editable=False,
     )
     mask_credential_prefix = get_security_settings().mask_credential_prefix
     return [
@@ -81,17 +77,15 @@ def list_credentials_admin(
 @router.get("/admin/similar-credentials/{source_type}")
 def get_cc_source_full_info(
     source_type: DocumentSource,
-    user: User = Depends(current_curator_or_admin_user),
-    db_session: Session = Depends(get_session),
-    get_editable: bool = Query(
-        False, description="If true, return editable credentials"
+    user: User = Depends(
+        require_permission(Permission.MANAGE_CONNECTORS, allow_scope=True)
     ),
+    db_session: Session = Depends(get_session),
 ) -> list[CredentialSnapshot]:
     credentials = fetch_credentials_by_source_for_user(
         db_session=db_session,
         user=user,
         document_source=source_type,
-        get_editable=get_editable,
     )
 
     mask_credential_prefix = get_security_settings().mask_credential_prefix
@@ -106,7 +100,7 @@ def get_cc_source_full_info(
 @router.delete("/admin/credential/{credential_id}")
 def delete_credential_by_id_admin(
     credential_id: int,
-    user: User = Depends(require_permission(Permission.FULL_ADMIN_PANEL_ACCESS)),
+    user: User = Depends(require_permission(Permission.MANAGE_CONNECTORS)),
     db_session: Session = Depends(get_session),
 ) -> StatusResponse:
     """Same as the user endpoint, but can delete any credential (not just the user's own)"""
@@ -126,7 +120,7 @@ def delete_credential_by_id_admin(
 @router.put("/admin/credential/swap")
 def swap_credentials_for_connector(
     credential_swap_req: CredentialSwapRequest,
-    user: User = Depends(require_permission(Permission.BASIC_ACCESS)),
+    user: User = Depends(require_permission(Permission.MANAGE_CONNECTORS)),
     db_session: Session = Depends(get_session),
 ) -> StatusResponse:
     validate_ccpair_for_user(
@@ -150,21 +144,34 @@ def swap_credentials_for_connector(
     )
 
 
+def _assert_credential_share_within_scope(
+    credential_info: CredentialBase, user: User, db_session: Session
+) -> None:
+    """GATE 2 for both create paths — they build the same CredentialBase, so the gate
+    can't differ by transport. Only sharing needs bounding: an unshared credential is
+    private to its creator. CREDENTIAL_PERMISSIONS_TO_IGNORE sources (file, web, wiki)
+    carry no real secret and stay exempt."""
+    is_shared = bool(credential_info.groups) or credential_info.curator_public
+    if is_shared and credential_info.source not in CREDENTIAL_PERMISSIONS_TO_IGNORE:
+        assert_within_scope(
+            user,
+            db_session,
+            permission=Permission.MANAGE_CONNECTORS,
+            current_group_ids=[],
+            requested_group_ids=credential_info.groups,
+            is_non_public=not credential_info.curator_public,
+        )
+
+
 @router.post("/credential")
 def create_credential_from_model(
     credential_info: CredentialBase,
-    user: User = Depends(current_curator_or_admin_user),
+    user: User = Depends(
+        require_permission(Permission.MANAGE_CONNECTORS, allow_scope=True)
+    ),
     db_session: Session = Depends(get_session),
 ) -> ObjectCreationIdResponse:
-    if not _ignore_credential_permissions(credential_info.source):
-        fetch_ee_implementation_or_noop(
-            "onyx.db.user_group", "validate_object_creation_for_user", None
-        )(
-            db_session=db_session,
-            user=user,
-            target_group_ids=credential_info.groups,
-            object_is_public=credential_info.curator_public,
-        )
+    _assert_credential_share_within_scope(credential_info, user, db_session)
 
     credential = create_credential(credential_info, user, db_session)
     emit_audit_event(
@@ -192,7 +199,9 @@ def create_credential_with_private_key(
     groups: list[int] = Form([]),
     name: str | None = Form(None),
     source: str = Form(...),
-    user: User = Depends(current_curator_or_admin_user),
+    user: User = Depends(
+        require_permission(Permission.MANAGE_CONNECTORS, allow_scope=True)
+    ),
     uploaded_file: UploadFile = File(...),
     field_key: str = Form(...),
     type_definition_key: str = Form(...),
@@ -226,16 +235,7 @@ def create_credential_with_private_key(
         name=name,
         source=DocumentSource(source),
     )
-
-    if not _ignore_credential_permissions(DocumentSource(source)):
-        fetch_ee_implementation_or_noop(
-            "onyx.db.user_group", "validate_object_creation_for_user", None
-        )(
-            db_session=db_session,
-            user=user,
-            target_group_ids=groups,
-            object_is_public=curator_public,
-        )
+    _assert_credential_share_within_scope(credential_info, user, db_session)
 
     credential = create_credential(credential_info, user, db_session)
     emit_audit_event(
@@ -283,7 +283,6 @@ def get_credential_by_id(
         credential_id,
         user,
         db_session,
-        get_editable=False,
     )
     if credential is None:
         raise HTTPException(
@@ -301,7 +300,7 @@ def get_credential_by_id(
 def update_credential_data(
     credential_id: int,
     credential_update: CredentialDataUpdateRequest,
-    user: User = Depends(require_permission(Permission.BASIC_ACCESS)),
+    user: User = Depends(require_permission(Permission.MANAGE_CONNECTORS)),
     db_session: Session = Depends(get_session),
 ) -> CredentialBase:
     credential = alter_credential(
@@ -332,7 +331,7 @@ def update_credential_private_key(
     uploaded_file: UploadFile = File(...),
     field_key: str = Form(...),
     type_definition_key: str = Form(...),
-    user: User = Depends(require_permission(Permission.BASIC_ACCESS)),
+    user: User = Depends(require_permission(Permission.MANAGE_CONNECTORS)),
     db_session: Session = Depends(get_session),
 ) -> CredentialBase:
     try:

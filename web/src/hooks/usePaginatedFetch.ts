@@ -88,6 +88,11 @@ function usePaginatedFetch<T extends PaginatedType>({
     return { batchNum, batchPageNum };
   }, [currentPage, pagesPerBatch]);
 
+  const currentBatchRef = useRef(batchAndPageIndices.batchNum);
+  useEffect(() => {
+    currentBatchRef.current = batchAndPageIndices.batchNum;
+  }, [batchAndPageIndices]);
+
   // Fetches a batch of data and stores it in the cache
   const fetchBatchData = useCallback(
     async (batchNum: number) => {
@@ -152,7 +157,17 @@ function usePaginatedFetch<T extends PaginatedType>({
           [batchNum]: pagesInBatch,
         }));
       } catch (error) {
+        console.error("Paginated fetch failed", { endpoint, batchNum, error });
+        if (
+          requestKeyRef.current !== requestKey ||
+          batchNum !== currentBatchRef.current
+        ) {
+          return;
+        }
         setError(error instanceof Error ? error : new Error(String(error)));
+        // no batch will land in the cache now, and that is the only other place
+        // isLoading is cleared — without this a denied fetch spins forever
+        setIsLoading(false);
       } finally {
         ongoingRequestsRef.current.delete(requestId);
       }

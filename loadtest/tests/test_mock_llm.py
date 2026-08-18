@@ -131,9 +131,11 @@ def stream_chunks(
     chunks = []
     with client.stream("POST", "/v1/chat/completions", json=body) as response:
         assert response.status_code == 200
-        for line in response.iter_lines():
-            if line.startswith("data: ") and line != "data: [DONE]":
-                chunks.append(json.loads(line[len("data: ") :]))
+        chunks.extend(
+            json.loads(line[len("data: ") :])
+            for line in response.iter_lines()
+            if line.startswith("data: ") and line != "data: [DONE]"
+        )
     return chunks
 
 

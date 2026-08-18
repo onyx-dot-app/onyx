@@ -16,7 +16,7 @@ import pytest
 from fastapi.security import OAuth2PasswordRequestForm
 from fastapi_users import exceptions
 
-from onyx.auth.schemas import UserCreate, UserRole
+from onyx.auth.schemas import UserCreate
 from onyx.auth.users import UserManager
 from onyx.db.enums import AccountType
 from onyx.error_handling.error_codes import OnyxErrorCode
@@ -151,7 +151,7 @@ class TestDisposableEmailValidation:
 class TestMultiTenantInviteLogic:
     """Test invite logic for multi-tenant environments."""
 
-    @patch("onyx.auth.users.SQLAlchemyUserAdminDB")
+    @patch("onyx.auth.users.SQLAlchemyUserDatabase")
     @patch("onyx.auth.users.is_disposable_email", return_value=False)
     @patch("onyx.auth.users.verify_email_domain")
     @patch("onyx.auth.users.fetch_ee_implementation_or_noop")
@@ -199,7 +199,7 @@ class TestMultiTenantInviteLogic:
         # Verify invite check was NOT called (user_count = 0)
         mock_verify_invited.assert_not_called()
 
-    @patch("onyx.auth.users.SQLAlchemyUserAdminDB")
+    @patch("onyx.auth.users.SQLAlchemyUserDatabase")
     @patch("onyx.auth.users.is_disposable_email", return_value=False)
     @patch("onyx.auth.users.verify_email_domain")
     @patch("onyx.auth.users.fetch_ee_implementation_or_noop")
@@ -444,7 +444,7 @@ class TestCaseInsensitiveEmailMatching:
     @patch("onyx.auth.users.fetch_ee_implementation_or_noop")
     @patch("onyx.auth.users.get_async_session_context_manager")
     @patch("onyx.auth.users.get_user_count", new_callable=AsyncMock)
-    @patch("onyx.auth.users.SQLAlchemyUserAdminDB")
+    @patch("onyx.auth.users.SQLAlchemyUserDatabase")
     @patch("onyx.auth.users.MULTI_TENANT", True)
     @patch("onyx.auth.users.CURRENT_TENANT_ID_CONTEXTVAR")
     @pytest.mark.asyncio
@@ -506,7 +506,7 @@ class TestCaseInsensitiveEmailMatching:
     @patch("onyx.auth.users.get_async_session_context_manager")
     @patch("onyx.auth.users.get_user_count", new_callable=AsyncMock)
     @patch("onyx.auth.users.verify_email_is_invited")
-    @patch("onyx.auth.users.SQLAlchemyUserAdminDB")
+    @patch("onyx.auth.users.SQLAlchemyUserDatabase")
     @patch("onyx.auth.users.MULTI_TENANT", True)
     @patch("onyx.auth.users.CURRENT_TENANT_ID_CONTEXTVAR")
     @pytest.mark.asyncio
@@ -732,7 +732,6 @@ class TestOAuthNoAutoLinkExemptions:
         # The oauth account attaches instead of UserAlreadyExists, and the
         # existing non-web-login upgrade block promotes the placeholder.
         cast(AsyncMock, user_manager.user_db.add_oauth_account).assert_awaited_once()
-        assert sync_user.role == UserRole.BASIC
         assert sync_user.account_type == AccountType.STANDARD
         assert sync_user.is_verified is True
         # Promotion reactivates, so the web-login deactivation check must not

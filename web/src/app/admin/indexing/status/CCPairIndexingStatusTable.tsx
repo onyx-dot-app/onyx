@@ -37,6 +37,7 @@ import { PageSelector } from "@/components/PageSelector";
 import { ConnectorStaggeredSkeleton } from "./ConnectorRowSkeleton";
 import { Button } from "@opal/components";
 import { SvgSettings } from "@opal/icons";
+import { can } from "@/lib/permissions/resource-actions";
 
 // Helper to handle navigation with cmd/ctrl+click support
 // NOTE: using this rather than Next/Link (or similar) since shadcn
@@ -302,6 +303,7 @@ export function CCPairIndexingStatusTable({
             last_status: "success",
             source: ValidSources.File,
             access_type: "public",
+            permissions: {},
             docs_indexed: 1000,
             last_success: "2023-07-01T12:00:00Z",
             last_finished_status: "success",
@@ -364,7 +366,7 @@ export function CCPairIndexingStatusTable({
                           <ConnectorRow
                             key={status.cc_pair_id}
                             ccPairsIndexingStatus={status}
-                            isEditable={status.is_editable}
+                            isEditable={can(status, "edit")}
                           />
                         );
                       }

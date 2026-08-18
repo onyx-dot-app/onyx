@@ -602,3 +602,59 @@ class TestTokenRateLimitArgsValidation:
 
         args = TokenRateLimitArgs(enabled=True, token_budget=1000, period_hours=24)
         assert args.token_budget == 1000 and args.cost_budget_cents is None
+
+
+class TestLegacyCostPeriodHardening:
+    """Unsupported stored cost periods do not fail the chat gate."""
+
+    def _patch_global(
+        self,
+        monkeypatch: pytest.MonkeyPatch,
+        limits: list[TokenRateLimit],
+        cost_total: float,
+    ) -> None:
+        monkeypatch.setattr(
+            token_limit, "get_session_with_current_tenant", lambda: _SessionCtx()
+        )
+        monkeypatch.setattr(
+            token_limit, "fetch_all_global_token_rate_limits", lambda **_: limits
+        )
+        monkeypatch.setattr(
+            token_limit,
+            "get_total_cost_cents_buckets_since",
+            lambda *_: _recent_cost_buckets(cost_total),
+        )
+
+    def test_legacy_period_row_never_blocks(
+        self, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        legacy = _cost_limit(
+            500.0, TokenRateLimitScope.GLOBAL, period_hours=2136, token_budget=None
+        )
+        self._patch_global(monkeypatch, [legacy], 600.0)
+
+        token_limit._user_is_rate_limited_by_global()  # skipped, no raise
+
+    def test_valid_limit_enforced_alongside_legacy_row(
+        self, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        legacy = _cost_limit(
+            10**9, TokenRateLimitScope.GLOBAL, period_hours=2136, token_budget=None
+        )
+        valid = _cost_limit(
+            500.0, TokenRateLimitScope.GLOBAL, period_hours=24, token_budget=None
+        )
+        self._patch_global(monkeypatch, [legacy, valid], 600.0)
+
+        with pytest.raises(OnyxError) as ei:
+            token_limit._user_is_rate_limited_by_global()
+        _assert_cost_reset(ei.value, TokenRateLimitScope.GLOBAL)
+
+    def test_cost_budget_reset_skips_legacy_period(self) -> None:
+        legacy = _cost_limit(
+            100.0, TokenRateLimitScope.USER, period_hours=2136, token_budget=None
+        )
+        assert (
+            token_limit._cost_budget_reset([legacy], _recent_cost_buckets(10**9))
+            is None
+        )

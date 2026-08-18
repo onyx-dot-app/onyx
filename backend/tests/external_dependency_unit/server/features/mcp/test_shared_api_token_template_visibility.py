@@ -9,7 +9,6 @@ from uuid import uuid4
 import pytest
 from sqlalchemy.orm import Session
 
-from onyx.auth.schemas import UserRole
 from onyx.db.enums import (
     MCPAuthenticationPerformer,
     MCPAuthenticationType,
@@ -37,7 +36,7 @@ _LITERAL_HEADER_VALUE = "literal-secret-value"
 
 
 def _create_shared_api_token_server(db_session: Session, admin_email: str) -> int:
-    admin = create_test_user(db_session, admin_email, role=UserRole.ADMIN)
+    admin = create_test_user(db_session, admin_email, is_admin=True)
     request = MCPToolCreateRequest(
         name=f"shared-token-{uuid4().hex[:8]}",
         description="shared token server",
@@ -74,7 +73,7 @@ def test_admin_receives_shared_template_with_auth_config(
     db_session: Session,
 ) -> None:
     server_id = _create_shared_api_token_server(db_session, "admin_shared_vis_owner")
-    admin = create_test_user(db_session, "admin_shared_vis_viewer", role=UserRole.ADMIN)
+    admin = create_test_user(db_session, "admin_shared_vis_viewer", is_admin=True)
 
     server = get_mcp_server_by_id(server_id, db_session)
     view = _db_mcp_server_to_api_mcp_server(
@@ -89,7 +88,7 @@ def test_admin_receives_shared_template_with_auth_config(
 def test_basic_user_receives_only_per_user_placeholder_names(
     db_session: Session,
 ) -> None:
-    admin = create_test_user(db_session, "admin_per_user_vis", role=UserRole.ADMIN)
+    admin = create_test_user(db_session, "admin_per_user_vis", is_admin=True)
     request = MCPToolCreateRequest(
         name=f"per-user-token-{uuid4().hex[:8]}",
         description="per-user token server",
@@ -127,7 +126,7 @@ def test_header_template_persists_for_every_auth_type(
     auth_type: MCPAuthenticationType,
 ) -> None:
     admin = create_test_user(
-        db_session, f"admin_cross_auth_{auth_type.value}", role=UserRole.ADMIN
+        db_session, f"admin_cross_auth_{auth_type.value}", is_admin=True
     )
     server = _upsert_mcp_server(
         MCPToolCreateRequest(
@@ -150,7 +149,7 @@ def test_header_template_persists_for_every_auth_type(
 
 
 def test_template_change_requires_users_to_reconnect(db_session: Session) -> None:
-    admin = create_test_user(db_session, "admin_template_reauth", role=UserRole.ADMIN)
+    admin = create_test_user(db_session, "admin_template_reauth", is_admin=True)
     other_user = create_test_user(db_session, "user_template_reauth")
     server = _upsert_mcp_server(
         MCPToolCreateRequest(

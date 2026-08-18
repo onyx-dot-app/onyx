@@ -3,10 +3,10 @@ from typing import Any
 
 from sqlalchemy.orm import Session
 
-from onyx.auth.schemas import UserRole
+from onyx.auth.permissions import has_global_permission
 from onyx.configs.model_configs import GEN_AI_TEMPERATURE
 from onyx.db.engine.sql_engine import get_session_with_current_tenant
-from onyx.db.enums import LLMModelFlowType
+from onyx.db.enums import LLMModelFlowType, Permission
 from onyx.db.llm import (
     can_user_access_llm_provider,
     fetch_default_contextual_rag_model,
@@ -205,7 +205,11 @@ def get_llm_for_persona(
         user_group_ids = fetch_user_group_ids(db_session, user)
 
         if not can_user_access_llm_provider(
-            provider_model, user_group_ids, persona, user.role == UserRole.ADMIN
+            provider_model,
+            user_group_ids,
+            persona,
+            # must match db/llm.py's gate; a mismatch silently swaps in the default model
+            has_global_permission(user, Permission.MANAGE_LLMS),
         ):
             logger.warning(
                 "User %s with persona %s cannot access provider %s. Falling back to default provider.",

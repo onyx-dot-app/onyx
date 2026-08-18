@@ -5,6 +5,7 @@ session like tenant usage. Read-path helpers still run against in-memory SQLite
 seeded with ORM inserts."""
 
 import datetime
+import logging
 import sqlite3
 from collections.abc import Generator
 from typing import cast
@@ -12,6 +13,7 @@ from unittest.mock import MagicMock
 from uuid import uuid4
 
 import pytest
+from cachetools import TTLCache
 from sqlalchemy import Table, create_engine, event, text
 from sqlalchemy.dialects import postgresql
 from sqlalchemy.dialects.postgresql import JSONB as PGJSONB
@@ -20,11 +22,18 @@ from sqlalchemy.engine import Engine
 from sqlalchemy.ext.compiler import compiles
 from sqlalchemy.orm import Session, sessionmaker
 
-from onyx.db.models import User__UserGroup, UserUsage
+import onyx.db.user_usage as user_usage_module
+from onyx.db.models import (
+    TokenRateLimit,
+    TokenRateLimitScope,
+    User__UserGroup,
+    UserUsage,
+)
 from onyx.db.user_usage import (
     DELETED_USER_EXPORT_EMAIL,
     TokenUsageBucket,
     UserUsageByDay,
+    cost_budget_limits,
     get_cost_window_start,
     get_group_cost_cents_since,
     get_group_token_buckets_since,
@@ -33,6 +42,7 @@ from onyx.db.user_usage import (
     get_total_cost_cents_since,
     get_total_token_buckets_since,
     get_usage_export,
+    get_usage_reset_window_start,
     get_user_cost_cents_buckets_since,
     get_user_cost_cents_in_window,
     get_user_cost_cents_since,
@@ -566,3 +576,47 @@ class TestGroupCostSince:
         assert get_group_token_buckets_since(session, [10], window) == {
             10: [TokenUsageBucket(window_start=window, tokens=125)]
         }
+
+
+def test_usage_reset_window_start_skips_legacy_cost_period() -> None:
+    """An unsupported stored cost period is skipped instead of raising."""
+    now = datetime.datetime(2026, 8, 12, 15, tzinfo=datetime.timezone.utc)
+    legacy = TokenRateLimit(
+        enabled=True,
+        token_budget=None,
+        cost_budget_cents=100.0,
+        period_hours=2136,
+        scope=TokenRateLimitScope.GLOBAL,
+    )
+    assert get_usage_reset_window_start(now, [legacy]) == datetime.datetime(
+        2026, 8, 12, tzinfo=datetime.timezone.utc
+    )
+
+
+def test_invalid_cost_period_warning_is_rate_limited(
+    caplog: pytest.LogCaptureFixture, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    monkeypatch.setattr(
+        user_usage_module,
+        "_invalid_cost_budget_warning_cache",
+        TTLCache(maxsize=10, ttl=300),
+    )
+    legacy = TokenRateLimit(
+        id=1,
+        enabled=True,
+        token_budget=None,
+        cost_budget_cents=100.0,
+        period_hours=2136,
+        scope=TokenRateLimitScope.GLOBAL,
+    )
+
+    with caplog.at_level(logging.WARNING):
+        assert cost_budget_limits([legacy]) == []
+        assert cost_budget_limits([legacy]) == []
+
+    warnings = [
+        record
+        for record in caplog.records
+        if "Skipping cost budget" in record.getMessage()
+    ]
+    assert len(warnings) == 1

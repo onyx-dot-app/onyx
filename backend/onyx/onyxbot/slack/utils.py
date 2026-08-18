@@ -401,7 +401,7 @@ def get_view_values(state_values: dict[str, Any]) -> dict[str, Any]:
         dict: keys/values of the view state content
     """
     view_values = {}
-    for _, view_data in state_values.items():
+    for view_data in state_values.values():
         for k, v in view_data.items():
             if (
                 "selected_option" in v

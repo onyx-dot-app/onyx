@@ -235,10 +235,11 @@ def _extract_text_from_content(content: Any) -> str:
     if hasattr(content, "type") and content.type == "text":
         return getattr(content, "text", "") or ""
     if isinstance(content, list):
-        texts = []
-        for block in content:
-            if hasattr(block, "type") and block.type == "text":
-                texts.append(getattr(block, "text", "") or "")
+        texts = [
+            getattr(block, "text", "") or ""
+            for block in content
+            if hasattr(block, "type") and block.type == "text"
+        ]
         return "".join(texts)
     return ""
 

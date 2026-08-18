@@ -570,8 +570,10 @@ class ConfluenceConnector(
             # Extract labels
             labels = []
             if "metadata" in page and "labels" in page["metadata"]:
-                for label in page["metadata"]["labels"].get("results", []):
-                    labels.append(label.get("name", ""))
+                labels.extend(
+                    label.get("name", "")
+                    for label in page["metadata"]["labels"].get("results", [])
+                )
             if labels:
                 metadata["labels"] = labels
 
@@ -722,10 +724,12 @@ class ConfluenceConnector(
                         )
                     labels: list[str] = []
                     if "metadata" in attachment and "labels" in attachment["metadata"]:
-                        for label in attachment["metadata"]["labels"].get(
-                            "results", []
-                        ):
-                            labels.append(label.get("name", ""))
+                        labels.extend(
+                            label.get("name", "")
+                            for label in attachment["metadata"]["labels"].get(
+                                "results", []
+                            )
+                        )
                     if labels:
                         attachment_metadata["labels"] = labels
                     page_url = page_url or build_confluence_document_id(
@@ -1187,8 +1191,7 @@ class ConfluenceConnector(
             )
 
         # Yield space hierarchy nodes first
-        for node in self._yield_space_hierarchy_nodes():
-            doc_metadata_list.append(node)
+        doc_metadata_list.extend(self._yield_space_hierarchy_nodes())
 
         # Per-page mode only: collapse shared ancestors to one GET each.
         ancestor_restrictions_cache: dict[str, dict[str, Any] | None] = {}
@@ -1223,8 +1226,7 @@ class ConfluenceConnector(
             limit=_SLIM_DOC_BATCH_SIZE,
         ):
             # Yield ancestor hierarchy nodes for this page
-            for node in self._yield_ancestor_hierarchy_nodes(page):
-                doc_metadata_list.append(node)
+            doc_metadata_list.extend(self._yield_ancestor_hierarchy_nodes(page))
 
             page_restrictions = page.get("restrictions") or {}
             page_space_key = page.get("space", {}).get("key")

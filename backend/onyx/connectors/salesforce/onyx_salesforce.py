@@ -1,10 +1,15 @@
 import time
+from collections.abc import Callable
 from typing import Any
+from urllib.parse import urlsplit, urlunsplit
 
+from requests import Response
 from requests.adapters import HTTPAdapter
 from simple_salesforce import Salesforce, SFType
+from simple_salesforce.api import exception_handler
 from simple_salesforce.exceptions import SalesforceRefusedRequest
 from simple_salesforce.format import format_soql
+from typing_extensions import override
 from urllib3.util.retry import Retry
 
 from onyx.connectors.cross_connector_utils.rate_limit_wrapper import rate_limit_builder
@@ -13,6 +18,7 @@ from onyx.connectors.salesforce.blacklist import (
     SALESFORCE_BLACKLISTED_PREFIXES,
     SALESFORCE_BLACKLISTED_SUFFIXES,
 )
+from onyx.connectors.salesforce.models import SalesforceSessionCredentials
 from onyx.connectors.salesforce.salesforce_calls import get_object_by_id_query
 from onyx.connectors.salesforce.utils import ID_FIELD, validate_sf_identifier
 from onyx.utils.logger import setup_logger
@@ -20,15 +26,29 @@ from onyx.utils.retry_wrapper import retry_builder
 
 logger = setup_logger()
 
-# A Salesforce sync holds its connection pool idle for hours during the local
-# CSV->sqlite phase. Salesforce's edge / intermediary load balancers silently
-# close idle keep-alive sockets, so the next REST query or bulk-result fetch
-# reuses a dead pooled connection and fails with "Connection reset by peer".
-# Mounting a urllib3 Retry makes the shared session transparently reopen and
-# retry idempotent (GET) requests instead of failing the whole indexing attempt.
+# Reopen pooled GET connections closed during long local CSV processing.
 _SF_RETRY_TOTAL = 5
 _SF_RETRY_BACKOFF_FACTOR = 1.0
 _SF_RETRY_STATUS_FORCELIST = (500, 502, 503, 504)
+_SALESFORCE_ERROR_CODE_FIELD = "errorCode"
+_INVALID_SESSION_ERROR_CODE = "INVALID_SESSION_ID"
+
+
+def _salesforce_error_code(response: Response) -> str | None:
+    try:
+        payload = response.json()
+    except (TypeError, ValueError):
+        return None
+    if isinstance(payload, dict):
+        error_code = payload.get(_SALESFORCE_ERROR_CODE_FIELD)
+        return error_code if isinstance(error_code, str) else None
+    if not isinstance(payload, list) or not payload:
+        return None
+    first_error = payload[0]
+    if not isinstance(first_error, dict):
+        return None
+    error_code = first_error.get(_SALESFORCE_ERROR_CODE_FIELD)
+    return error_code if isinstance(error_code, str) else None
 
 
 def is_salesforce_rate_limit_error(exception: Exception) -> bool:
@@ -41,7 +61,13 @@ def is_salesforce_rate_limit_error(exception: Exception) -> bool:
 class OnyxSalesforce(Salesforce):
     SOQL_MAX_SUBQUERIES = 20
 
-    def __init__(self, *args: Any, **kwargs: Any) -> None:
+    def __init__(
+        self,
+        *args: Any,
+        refresh_callback: Callable[[str], SalesforceSessionCredentials] | None = None,
+        **kwargs: Any,
+    ) -> None:
+        self._oauth_refresh_callback = refresh_callback
         super().__init__(*args, **kwargs)
 
         self._mount_retry_adapter()
@@ -60,11 +86,77 @@ class OnyxSalesforce(Salesforce):
             str, str
         ] = {}  # infer the object type of an id immediately
 
+    def _set_instance_urls(self) -> None:
+        self.base_url = f"https://{self.sf_instance}/services/data/v{self.sf_version}/"
+        self.apex_url = f"https://{self.sf_instance}/services/apexrest/"
+        self.bulk_url = f"https://{self.sf_instance}/services/async/{self.sf_version}/"
+        self.bulk2_url = (
+            f"https://{self.sf_instance}/services/data/v{self.sf_version}/jobs/"
+        )
+        self.metadata_url = (
+            f"https://{self.sf_instance}/services/Soap/m/{self.sf_version}/"
+        )
+        self.tooling_url = f"{self.base_url}tooling/"
+        self.oauth2_url = f"https://{self.sf_instance}/services/oauth2/"
+
+    def refresh_session(self) -> None:
+        if self._oauth_refresh_callback is None:
+            self._refresh_session()
+            return
+        refreshed = self._oauth_refresh_callback(self.session_id)
+        self.session_id = refreshed.sf_access_token
+        self.sf_instance = refreshed.sf_instance_host
+        self._generate_headers()
+        self._set_instance_urls()
+
+    @override
+    def _call_salesforce(
+        self,
+        method: str,
+        url: str,
+        name: str = "",
+        retries: int = 0,
+        max_retries: int = 3,
+        **kwargs: Any,
+    ) -> Response:
+        if self._oauth_refresh_callback is None:
+            return super()._call_salesforce(
+                method, url, name, retries, max_retries, **kwargs
+            )
+
+        headers = self.headers.copy()
+        headers.update(kwargs.pop("headers", {}))
+        result = self.session.request(method, url, headers=headers, **kwargs)
+
+        if (
+            result.status_code == 401
+            and _salesforce_error_code(result) == _INVALID_SESSION_ERROR_CODE
+        ):
+            if retries >= max_retries:
+                exception_handler(result, name=name)
+            previous_host = self.sf_instance
+            self.refresh_session()
+            parsed_url = urlsplit(url)
+            if parsed_url.hostname == previous_host:
+                url = urlunsplit(parsed_url._replace(netloc=self.sf_instance))
+            return self._call_salesforce(
+                method,
+                url,
+                name,
+                retries=retries + 1,
+                max_retries=max_retries,
+                **kwargs,
+            )
+
+        if result.status_code >= 300:
+            exception_handler(result, name=name)
+
+        if sforce_limit_info := result.headers.get("Sforce-Limit-Info"):
+            self.api_usage = self.parse_api_usage(sforce_limit_info)
+        return result
+
     def _mount_retry_adapter(self) -> None:
-        """Make the shared requests session resilient to stale keep-alive
-        sockets that Salesforce's edge closes during long idle gaps. The same
-        session is reused for bulk-result downloads (see salesforce_calls.py),
-        so this covers both REST queries and bulk fetches."""
+        """Retry idempotent requests after stale connections or transient 5xx errors."""
         retry = Retry(
             total=_SF_RETRY_TOTAL,
             connect=_SF_RETRY_TOTAL,
@@ -72,9 +164,7 @@ class OnyxSalesforce(Salesforce):
             status=_SF_RETRY_TOTAL,
             backoff_factor=_SF_RETRY_BACKOFF_FACTOR,
             status_forcelist=_SF_RETRY_STATUS_FORCELIST,
-            # Only idempotent methods (the urllib3 default) are retried, so job
-            # creation (POST) is never double-submitted. raise_on_status=False
-            # lets simple_salesforce surface the final HTTP error normally.
+            # urllib3 defaults to idempotent methods; let the SDK raise final errors.
             raise_on_status=False,
         )
         adapter = HTTPAdapter(max_retries=retry)

@@ -460,6 +460,12 @@ async def oidc_login_callback_for_provider(
             client = await _get_oauth_client(provider, config)
             redirect_uri = _callback_uri(provider, config)
             allowed_email_domains = list(provider.allowed_email_domains)
+            # A tenant-controlled OIDC IdP can assert any address, so its login
+            # may only vouch for a domain the workspace has verified. Google
+            # cannot assert a domain it does not own, so it is trusted as-is.
+            enforce_verified_domain = (
+                provider.provider_type is not SSOProviderType.GOOGLE_OAUTH
+            )
 
         # The state pins the flow's PKCE mode. States without the claim fall
         # back to the row's setting so logins in flight across a deploy complete.
@@ -494,6 +500,7 @@ async def oidc_login_callback_for_provider(
             associate_by_email=_ALLOW_AUTO_LINK,
             is_verified_by_default=True,
             allowed_email_domains_override=allowed_email_domains,
+            enforce_verified_domain=enforce_verified_domain,
         )
 
     if use_pkce:

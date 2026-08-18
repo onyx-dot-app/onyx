@@ -7,7 +7,6 @@ import pytest
 from sqlalchemy import select
 from sqlalchemy.orm import Session
 
-from onyx.auth.schemas import UserRole
 from onyx.configs.constants import NotificationType
 from onyx.db.connector_alerts import (
     clear_connector_alerts__no_commit,
@@ -806,12 +805,8 @@ def test_connector_alert_lifecycle_producer_and_recovery_agree(
     """The producer and the recovery cleanup must target the same dedup key:
     fan-out on entering the error state, exact-match delete on recovery,
     fresh row on the next incident."""
-    admin_one = create_test_user(
-        db_session, "alert_lifecycle_admin1", role=UserRole.ADMIN
-    )
-    admin_two = create_test_user(
-        db_session, "alert_lifecycle_admin2", role=UserRole.ADMIN
-    )
+    admin_one = create_test_user(db_session, "alert_lifecycle_admin1", is_admin=True)
+    admin_two = create_test_user(db_session, "alert_lifecycle_admin2", is_admin=True)
     admin_ids = [admin_one.id, admin_two.id]
     cc_pair_id = 424242
     notif_type = NotificationType.CONNECTOR_REPEATED_ERRORS

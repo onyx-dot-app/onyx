@@ -79,6 +79,8 @@ def _make_query(request_body: dict[str, Any], api_key: str) -> requests.Response
 
 
 class LinearConnector(LoadConnector, PollConnector, OAuthConnector):
+    supports_manual_credentials = True
+
     def __init__(
         self,
         batch_size: int = INDEX_BATCH_SIZE,
@@ -96,6 +98,7 @@ class LinearConnector(LoadConnector, PollConnector, OAuthConnector):
         base_domain: str,
         state: str,
         additional_kwargs: dict[str, str],  # noqa: ARG003
+        code_challenge: str | None = None,  # noqa: ARG003
     ) -> str:
         if not LINEAR_CLIENT_ID:
             raise ValueError("LINEAR_CLIENT_ID environment variable must be set")
@@ -117,6 +120,7 @@ class LinearConnector(LoadConnector, PollConnector, OAuthConnector):
         base_domain: str,
         code: str,
         additional_kwargs: dict[str, str],  # noqa: ARG003
+        code_verifier: str | None = None,  # noqa: ARG003
     ) -> dict[str, Any]:
         data = {
             "code": code,
@@ -329,13 +333,13 @@ class LinearConnector(LoadConnector, PollConnector, OAuthConnector):
                 ]
 
                 # Add comment sections
-                for comment in node["comments"]["nodes"]:
-                    sections.append(
-                        TextSection(
-                            link=node["url"],
-                            text=comment["body"] or "",
-                        )
+                sections.extend(
+                    TextSection(
+                        link=node["url"],
+                        text=comment["body"] or "",
                     )
+                    for comment in node["comments"]["nodes"]
+                )
 
                 # Cast the sections list to the expected type
                 typed_sections = cast(list[TextSection | ImageSection], sections)

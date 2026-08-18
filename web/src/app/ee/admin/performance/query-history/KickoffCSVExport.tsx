@@ -67,10 +67,12 @@ export default function KickoffCSVExport({
 
     const { request_id } =
       (await response.json()) as StartQueryHistoryExportResponse;
-    const timer = setInterval(
+    // `window.setInterval` returns a number; the bare global resolves to the
+    // Node overload, which returns a `Timeout` object.
+    const timer = window.setInterval(
       () => checkStatus(request_id),
       RETRY_COOLDOWN_MILLISECONDS
-    ) as unknown as number;
+    );
     timerIdRef.current = timer;
     rerender();
   };

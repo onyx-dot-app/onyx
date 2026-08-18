@@ -30,20 +30,24 @@ import CardSection from "@/components/admin/CardSection";
 import { CredentialFieldsRenderer } from "@/lib/credentials/components/CredentialFieldsRenderer";
 import { TypedFile } from "@/lib/connectors/fileTypes";
 import ConnectorDocsLink from "@/components/admin/connectors/ConnectorDocsLink";
+import { usePermissionAuthority } from "@/lib/permissions/hooks";
+import { Permission } from "@/lib/types";
 import { SvgPlusCircle } from "@opal/icons";
 const CreateButton = ({
   onClick,
   isSubmitting,
-  isAdmin,
+  requiresGroup,
   groups,
 }: {
   onClick: () => void;
   isSubmitting: boolean;
-  isAdmin: boolean;
+  // Only a scoped manager must land the credential in a group — GATE 2 requires
+  // it of them and of nobody else.
+  requiresGroup: boolean;
   groups: number[];
 }) => (
   <OpalButton
-    disabled={isSubmitting || (!isAdmin && groups.length === 0)}
+    disabled={isSubmitting || (requiresGroup && groups.length === 0)}
     onClick={onClick}
     icon={SvgPlusCircle}
   >
@@ -96,7 +100,9 @@ export default function CreateCredential({
   const [authMethod, setAuthMethod] = useState<string>();
   const businessTier = useTierAtLeast(Tier.BUSINESS);
 
-  const { isAdmin } = useUser();
+  const { isGlobalHolder, isScopedManager } = usePermissionAuthority(
+    Permission.MANAGE_CONNECTORS
+  );
 
   const handleSubmit = async (
     values: CreateCredentialFormValues,
@@ -198,7 +204,7 @@ export default function CreateCredential({
       initialValues={
         {
           name: "",
-          is_public: isAdmin || !businessTier,
+          is_public: isGlobalHolder || !businessTier,
           groups: [],
           ...(initialAuthMethod && {
             authentication_method: initialAuthMethod,
@@ -237,17 +243,17 @@ export default function CreateCredential({
                 <div className="w-full sm:w-3/4 mb-4 sm:mb-0">
                   {businessTier && (
                     <div className="flex flex-col items-start">
-                      {isAdmin && (
+                      {isGlobalHolder && (
                         <AdvancedOptionsToggle
                           showAdvancedOptions={showAdvancedOptions}
                           setShowAdvancedOptions={setShowAdvancedOptions}
                         />
                       )}
-                      {(showAdvancedOptions || !isAdmin) && (
+                      {(showAdvancedOptions || !isGlobalHolder) && (
                         <IsPublicGroupSelector
                           formikProps={formikProps}
                           objectName="credential"
-                          publicToWhom="Curators"
+                          isGlobalHolder={isGlobalHolder}
                         />
                       )}
                     </div>
@@ -262,7 +268,7 @@ export default function CreateCredential({
                     )
                   }
                   isSubmitting={formikProps.isSubmitting}
-                  isAdmin={isAdmin}
+                  requiresGroup={isScopedManager}
                   groups={formikProps.values.groups}
                 />
               </div>

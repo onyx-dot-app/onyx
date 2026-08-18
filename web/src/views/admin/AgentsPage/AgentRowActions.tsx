@@ -32,6 +32,7 @@ import ShareAgentModal from "@/sections/modals/ShareAgentModal";
 import { useCreateModal } from "@opal/components";
 import { useTierAtLeast } from "@/hooks/useTierAtLeast";
 import { Tier } from "@/lib/settings/types";
+import { can } from "@/lib/permissions/resource-actions";
 
 // ---------------------------------------------------------------------------
 // Types
@@ -53,6 +54,17 @@ export default function AgentRowActions({
   const router = useRouter();
   const businessTier = useTierAtLeast(Tier.BUSINESS);
   const shareModal = useCreateModal();
+
+  // Gate on the list row's stamped permissions so controls render immediately, rather
+  // than waiting on a per-row fetch.
+  const canEdit = can(agent, "edit");
+  const canList = can(agent, "list");
+  const canUpdateFeaturedStatus = can(agent, "feature");
+  const canShare = can(agent, "share");
+  const canViewStats = can(agent, "view_stats");
+  const canDeleteRow = !agent.builtin_persona && can(agent, "delete");
+  const hasOverflowItems =
+    canList || canShare || (businessTier && canViewStats) || canDeleteRow;
 
   const [popoverOpen, setPopoverOpen] = useState(false);
   const [isSubmitting, setIsSubmitting] = useState(false);
@@ -81,17 +93,22 @@ export default function AgentRowActions({
         <ShareAgentModal agentId={agent.id} />
       </shareModal.Provider>
 
-      <div className="flex items-center gap-0.5">
+      <div
+        className="flex items-center gap-0.5"
+        data-testid={`agent-row-actions-${agent.id}`}
+      >
         {/* TODO(@raunakab): abstract a more standardized way of doing this
             appear-on-hover animation. Making Hoverable more extensible
             (e.g. supporting table row groups) would let us use it here
             instead of raw Tailwind group-hover. */}
-        {!agent.builtin_persona && (
+        {!agent.builtin_persona && canEdit && (
           <div className="opacity-0 group-hover/row:opacity-100 transition-opacity">
             <Button
               prominence="tertiary"
               icon={SvgEdit}
               tooltip="Edit Agent"
+              aria-label="Edit Agent"
+              data-testid={`edit-agent-${agent.id}`}
               onClick={() =>
                 router.push(
                   `/app/agents/edit/${
@@ -102,112 +119,127 @@ export default function AgentRowActions({
             />
           </div>
         )}
-        {!agent.is_listed ? (
-          <Button
-            prominence="tertiary"
-            icon={SvgEyeOff}
-            tooltip="Re-list Agent"
-            onClick={() =>
-              handleAction(
-                () => toggleAgentListed(agent.id, agent.is_listed),
-                () => {}
-              )
-            }
-          />
-        ) : (
-          <div
-            className={cn(
-              !agent.is_featured &&
-                "opacity-0 group-hover/row:opacity-100 transition-opacity"
+        {!agent.is_listed
+          ? canList && (
+              <Button
+                prominence="tertiary"
+                icon={SvgEyeOff}
+                tooltip="Re-list Agent"
+                aria-label="Re-list Agent"
+                onClick={() =>
+                  handleAction(
+                    () => toggleAgentListed(agent.id, agent.is_listed),
+                    () => {}
+                  )
+                }
+              />
+            )
+          : canUpdateFeaturedStatus && (
+              <div
+                className={cn(
+                  !agent.is_featured &&
+                    "opacity-0 group-hover/row:opacity-100 transition-opacity"
+                )}
+              >
+                <Button
+                  prominence="tertiary"
+                  icon={SvgStar}
+                  interaction={featuredOpen ? "hover" : "rest"}
+                  tooltip={
+                    agent.is_featured ? "Remove Featured" : "Set as Featured"
+                  }
+                  aria-label={
+                    agent.is_featured ? "Remove Featured" : "Set as Featured"
+                  }
+                  onClick={() => {
+                    setPopoverOpen(false);
+                    setFeaturedOpen(true);
+                  }}
+                />
+              </div>
             )}
-          >
-            <Button
-              prominence="tertiary"
-              icon={SvgStar}
-              interaction={featuredOpen ? "hover" : "rest"}
-              tooltip={
-                agent.is_featured ? "Remove Featured" : "Set as Featured"
-              }
-              onClick={() => {
-                setPopoverOpen(false);
-                setFeaturedOpen(true);
-              }}
-            />
-          </div>
-        )}
 
         {/* Overflow menu */}
-        <Popover open={popoverOpen} onOpenChange={setPopoverOpen}>
-          <div
-            className={cn(
-              !popoverOpen &&
-                "opacity-0 group-hover/row:opacity-100 transition-opacity"
-            )}
-          >
-            <Popover.Trigger asChild>
-              <Button prominence="tertiary" icon={SvgMoreHorizontal} />
-            </Popover.Trigger>
-          </div>
-          <Popover.Content align="end" width="sm">
-            <PopoverMenu>
-              {[
-                <LineItem
-                  key="visibility"
-                  icon={agent.is_listed ? SvgEyeOff : SvgEye}
-                  onClick={() => {
-                    setPopoverOpen(false);
-                    if (agent.is_listed) {
-                      setUnlistOpen(true);
-                    } else {
-                      handleAction(
-                        () => toggleAgentListed(agent.id, agent.is_listed),
-                        () => {}
-                      );
-                    }
-                  }}
-                >
-                  {agent.is_listed ? "Unlist Agent" : "List Agent"}
-                </LineItem>,
-                <LineItem
-                  key="share"
-                  icon={SvgShare}
-                  onClick={() => {
-                    setPopoverOpen(false);
-                    shareModal.toggle(true);
-                  }}
-                >
-                  Share
-                </LineItem>,
-                businessTier ? (
-                  <LineItem
-                    key="stats"
-                    icon={SvgBarChart}
-                    onClick={() => {
-                      setPopoverOpen(false);
-                      router.push(`/ee/agents/stats/${agent.id}` as Route);
-                    }}
-                  >
-                    Stats
-                  </LineItem>
-                ) : undefined,
-                !agent.builtin_persona ? null : undefined,
-                !agent.builtin_persona ? (
-                  <LineItem
-                    key="delete"
-                    icon={SvgTrash}
-                    danger
-                    onClick={() => {
-                      setPopoverOpen(false);
-                      setDeleteOpen(true);
-                    }}
-                  >
-                    Delete
-                  </LineItem>
-                ) : undefined,
-              ]}
-            </PopoverMenu>
-          </Popover.Content>
-        </Popover>
+        {hasOverflowItems && (
+          <Popover open={popoverOpen} onOpenChange={setPopoverOpen}>
+            <div
+              className={cn(
+                !popoverOpen &&
+                  "opacity-0 group-hover/row:opacity-100 transition-opacity"
+              )}
+            >
+              <Popover.Trigger asChild>
+                <Button
+                  prominence="tertiary"
+                  icon={SvgMoreHorizontal}
+                  aria-label="Agent actions"
+                />
+              </Popover.Trigger>
+            </div>
+            <Popover.Content align="end" width="sm">
+              <PopoverMenu>
+                {[
+                  canList ? (
+                    <LineItem
+                      key="visibility"
+                      icon={agent.is_listed ? SvgEyeOff : SvgEye}
+                      onClick={() => {
+                        setPopoverOpen(false);
+                        if (agent.is_listed) {
+                          setUnlistOpen(true);
+                        } else {
+                          handleAction(
+                            () => toggleAgentListed(agent.id, agent.is_listed),
+                            () => {}
+                          );
+                        }
+                      }}
+                    >
+                      {agent.is_listed ? "Unlist Agent" : "List Agent"}
+                    </LineItem>
+                  ) : undefined,
+                  canShare ? (
+                    <LineItem
+                      key="share"
+                      icon={SvgShare}
+                      onClick={() => {
+                        setPopoverOpen(false);
+                        shareModal.toggle(true);
+                      }}
+                    >
+                      Share
+                    </LineItem>
+                  ) : undefined,
+                  businessTier && canViewStats ? (
+                    <LineItem
+                      key="stats"
+                      icon={SvgBarChart}
+                      onClick={() => {
+                        setPopoverOpen(false);
+                        router.push(`/ee/agents/stats/${agent.id}` as Route);
+                      }}
+                    >
+                      Stats
+                    </LineItem>
+                  ) : undefined,
+                  canDeleteRow ? (
+                    <LineItem
+                      key="delete"
+                      icon={SvgTrash}
+                      danger
+                      onClick={() => {
+                        setPopoverOpen(false);
+                        setDeleteOpen(true);
+                      }}
+                    >
+                      Delete
+                    </LineItem>
+                  ) : undefined,
+                ]}
+              </PopoverMenu>
+            </Popover.Content>
+          </Popover>
+        )}
       </div>
 
       {deleteOpen && (

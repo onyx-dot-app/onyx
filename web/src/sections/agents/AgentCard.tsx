@@ -11,10 +11,9 @@ import { noProp } from "@/lib/utils";
 import { cn } from "@opal/utils";
 import { useRouter } from "next/navigation";
 import type { Route } from "next";
-import { checkUserCanEditAgent, checkUserOwnsAgent } from "@/lib/agents/utils";
+import { can } from "@/lib/permissions/resource-actions";
 import { useTierAtLeast } from "@/hooks/useTierAtLeast";
 import { Tier } from "@/lib/settings/types";
-import { useUser } from "@/providers/UserProvider";
 import {
   SvgActions,
   SvgBarChart,
@@ -45,12 +44,11 @@ export default function AgentCard({ agent }: AgentCardProps) {
     () => pinnedAgents.some((pinnedAgent) => pinnedAgent.id === agent.id),
     [agent.id, pinnedAgents]
   );
-  const { user } = useUser();
   const businessTier = useTierAtLeast(Tier.BUSINESS);
-  const isOwnedByUser = checkUserOwnsAgent(user, agent);
-  const canEditAgent = checkUserCanEditAgent(user, agent);
   const shareAgentModal = useCreateModal();
   const agentViewerModal = useCreateModal();
+  // Affordances read the map the list endpoint stamped on `agent`, so icons render with
+  // the card instead of popping in after the per-card fullAgent fetch resolves.
   const { agent: fullAgent } = useAgent(agent.id);
 
   // Start chat and auto-pin unpinned agents to the sidebar
@@ -89,7 +87,7 @@ export default function AgentCard({ agent }: AgentCardProps) {
               description={agent.description}
               rightChildren={
                 <>
-                  {isOwnedByUser &&
+                  {can(agent, "view_stats") &&
                     businessTier && (
                       // TODO(@raunakab): migrate to opal Button once className/iconClassName is resolved
                       <IconButton
@@ -102,7 +100,7 @@ export default function AgentCard({ agent }: AgentCardProps) {
                         className="hidden group-hover/AgentCard:flex"
                       />
                     )}
-                  {canEditAgent && (
+                  {can(agent, "edit") && (
                     // TODO(@raunakab): migrate to opal Button once className/iconClassName is resolved
                     <IconButton
                       icon={SvgEdit}
@@ -114,7 +112,7 @@ export default function AgentCard({ agent }: AgentCardProps) {
                       className="hidden group-hover/AgentCard:flex"
                     />
                   )}
-                  {canEditAgent && (
+                  {can(agent, "share") && (
                     // TODO(@raunakab): migrate to opal Button once className/iconClassName is resolved
                     <IconButton
                       icon={SvgShare}

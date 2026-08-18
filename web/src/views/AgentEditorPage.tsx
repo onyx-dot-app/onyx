@@ -46,6 +46,7 @@ import { useProjectsContext } from "@/providers/ProjectsContext";
 import { useCreateModal } from "@opal/components";
 import UserFilesModal from "@/sections/modals/UserFilesModal";
 import { ProjectFile, UserFileStatus } from "@/lib/projects/types";
+import { ChatFileType } from "@/app/app/interfaces";
 import { Popover, PopoverMenu } from "@opal/components";
 import LineItem from "@/refresh-components/buttons/LineItem";
 import {
@@ -100,9 +101,11 @@ import ShareAgentModal, {
   ShareDraftState,
 } from "@/sections/modals/ShareAgentModal";
 import AgentKnowledgePane from "@/sections/knowledge/AgentKnowledgePane";
-import { ValidSources } from "@/lib/types";
+import { Permission, ValidSources } from "@/lib/types";
 import { useSettings } from "@/lib/settings/hooks";
 import { useUser } from "@/providers/UserProvider";
+import { hasPermission } from "@/lib/permissions";
+import { can } from "@/lib/permissions/resource-actions";
 import { useDraft, draftKey } from "@/hooks/useDraft";
 
 interface AgentIconEditorProps {
@@ -552,10 +555,14 @@ export default function AgentEditorPage({
   const { refresh: refreshAgents } = useAgents();
   const shareAgentModal = useCreateModal();
   const deleteAgentModal = useCreateModal();
-  const { isAdmin } = useUser();
-  // Feature/unlist are admin-only surfaces — never shown to non-admin
-  // owners or editors (ENG-4179)
-  const canUpdateFeaturedStatus = isAdmin;
+  const { permissions } = useUser();
+  // Prefer the server's per-agent answer; a new agent has none yet, so fall back to the
+  // global token — which is exactly what the projection stamps for `feature`.
+  const canShare = !existingAgent || can(existingAgent, "share");
+  const canDelete = can(existingAgent, "delete");
+  const canUpdateFeaturedStatus = existingAgent
+    ? can(existingAgent, "feature")
+    : hasPermission(permissions, Permission.MANAGE_AGENTS);
   const { vectorDbEnabled } = useSettings();
   const businessTier = useTierAtLeast(Tier.BUSINESS);
 
@@ -1173,6 +1180,10 @@ export default function AgentEditorPage({
             description:
               initialValues.description.length >
               MAX_CHARACTERS_AGENT_DESCRIPTION,
+            // SAFETY: Formik collapses `FormikTouched` for an array of
+            // primitives to a single `boolean`, but it reads a `boolean[]` at
+            // runtime — one entry per element. The value below is that array.
+            // oxlint-disable-next-line anti-slop/no-chained-type-assertions
             starter_messages: initialValues.starter_messages.map(
               (msg) => msg.length > MAX_CHARACTERS_STARTER_MESSAGE
             ) as unknown as boolean,
@@ -1226,13 +1237,16 @@ export default function AgentEditorPage({
                   <UserFilesModal
                     title="User Files"
                     description="All files selected for this agent"
-                    recentFiles={values.user_file_ids
-                      .map((userFileId: string) => {
+                    recentFiles={values.user_file_ids.map(
+                      (userFileId: string) => {
                         const rf = allRecentFiles.find(
                           (f) => f.id === userFileId
                         );
                         if (rf) return rf;
-                        return {
+                        // Placeholder for a selected file that is not in the
+                        // recent-files list. Mirrors the optimistic upload
+                        // placeholder built in `ProjectsContext`.
+                        const placeholder: ProjectFile = {
                           id: userFileId,
                           name: `File ${userFileId.slice(0, 8)}`,
                           status: UserFileStatus.COMPLETED,
@@ -1242,10 +1256,13 @@ export default function AgentEditorPage({
                           user_id: null,
                           file_type: "",
                           last_accessed_at: new Date().toISOString(),
-                          chat_file_type: "file" as const,
-                        } as unknown as ProjectFile;
-                      })
-                      .filter((f): f is ProjectFile => f !== null)}
+                          chat_file_type: ChatFileType.DOCUMENT,
+                          token_count: null,
+                          chunk_count: null,
+                        };
+                        return placeholder;
+                      }
+                    )}
                     selectedFileIds={values.user_file_ids}
                     onPickRecent={(file: ProjectFile) => {
                       if (!values.user_file_ids.includes(file.id)) {
@@ -1493,19 +1510,21 @@ export default function AgentEditorPage({
                         />
                         <Card border="solid" rounding="lg">
                           <GeneralLayouts.Section>
-                            <InputHorizontal
-                              title="Share This Agent"
-                              description="with other users, groups, or everyone in your organization."
-                              center
-                            >
-                              <Button
-                                prominence="secondary"
-                                icon={shareStatusIcon}
-                                onClick={() => shareAgentModal.toggle(true)}
+                            {canShare && (
+                              <InputHorizontal
+                                title="Share This Agent"
+                                description="with other users, groups, or everyone in your organization."
+                                center
                               >
-                                Share
-                              </Button>
-                            </InputHorizontal>
+                                <Button
+                                  prominence="secondary"
+                                  icon={shareStatusIcon}
+                                  onClick={() => shareAgentModal.toggle(true)}
+                                >
+                                  Share
+                                </Button>
+                              </InputHorizontal>
+                            )}
                             {canUpdateFeaturedStatus && (
                               <>
                                 <InputHorizontal
@@ -1788,7 +1807,7 @@ export default function AgentEditorPage({
                         </SimpleCollapsible.Content>
                       </SimpleCollapsible>
 
-                      {existingAgent && (
+                      {existingAgent && canDelete && (
                         <>
                           <Divider
                             paddingParallel={0}

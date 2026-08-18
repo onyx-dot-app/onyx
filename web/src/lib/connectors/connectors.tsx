@@ -2033,13 +2033,21 @@ export function createConnectorInitialValues(
 }
 
 export function createConnectorValidationSchema(
-  connector: ConfigurableSources
+  connector: ConfigurableSources,
+  requireGroups: boolean = false
 ): Yup.ObjectSchema<Record<string, any>> {
   const configuration = connectorConfigs[connector];
 
   const object = Yup.object().shape({
     access_type: Yup.string().required("Access Type is required"),
     name: Yup.string().required("Connector Name is required"),
+    groups: Yup.array()
+      .of(Yup.number())
+      .when("access_type", ([accessType], schema) =>
+        requireGroups && accessType !== "sync"
+          ? schema.min(1, "Select at least one group you manage")
+          : schema
+      ),
     ...[...configuration.values, ...configuration.advanced_values].reduce(
       (acc, field) => {
         let schema: any =

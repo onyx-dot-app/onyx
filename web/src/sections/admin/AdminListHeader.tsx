@@ -16,10 +16,10 @@ interface AdminListHeaderProps {
   placeholder?: string;
   /** Text shown in the empty-state card when no items exist. */
   emptyStateText: string;
-  /** Called when the action button is clicked. */
-  onAction: () => void;
-  /** Label for the action button. */
-  actionLabel: string;
+  /** Action button click handler. Omit (with actionLabel) to hide the button. */
+  onAction?: () => void;
+  /** Label for the action button. Omit (with onAction) to hide it. */
+  actionLabel?: string;
 }
 
 /**
@@ -61,13 +61,14 @@ export default function AdminListHeader({
 }: AdminListHeaderProps) {
   // Pin the button to its label width — the flexible sibling (search input /
   // empty-state text) absorbs the row shrink; otherwise the button clips its label.
-  const actionButton = (
-    <div className="shrink-0">
-      <Button rightIcon={SvgPlusCircle} onClick={onAction}>
-        {actionLabel}
-      </Button>
-    </div>
-  );
+  const actionButton =
+    onAction && actionLabel ? (
+      <div className="shrink-0">
+        <Button rightIcon={SvgPlusCircle} onClick={onAction}>
+          {actionLabel}
+        </Button>
+      </div>
+    ) : null;
 
   if (!hasItems) {
     return (

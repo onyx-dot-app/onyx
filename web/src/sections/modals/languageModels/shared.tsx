@@ -52,7 +52,6 @@ import { Card, EmptyMessageCard } from "@opal/components";
 import { ContentAction } from "@opal/layouts";
 import AgentAvatar from "@/refresh-components/avatars/AgentAvatar";
 import useUsers from "@/hooks/useUsers";
-import { UserRole } from "@/lib/types";
 import { Modal } from "@opal/components";
 import { getProvider } from "@/lib/languageModels";
 import { useSettings } from "@/lib/settings/hooks";
@@ -191,8 +190,7 @@ export function ModelAccessField() {
   const { data: usersData } = useUsers({ includeApiKeys: false });
   const businessTier = useTierAtLeast(Tier.BUSINESS);
 
-  const adminCount =
-    usersData?.accepted.filter((u) => u.role === UserRole.ADMIN).length ?? 0;
+  const adminCount = usersData?.accepted.filter((u) => u.is_admin).length ?? 0;
 
   const isPublic = formikProps.values.is_public;
   const selectedGroupIds = formikProps.values.groups ?? [];

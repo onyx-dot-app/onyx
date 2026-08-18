@@ -6,11 +6,10 @@ implementations stay in the OSS connector modules, mirroring the
 ``perm_sync_valid.py`` pattern.
 """
 
-from ee.onyx.connectors.perm_sync_valid import source_has_perm_sync_probe
-from ee.onyx.external_permissions.sync_params import (
-    source_requires_doc_sync,
-    source_requires_external_group_sync,
+from ee.onyx.connectors.capability_applicability import (
+    get_applicable_perm_sync_capabilities,
 )
+from ee.onyx.connectors.perm_sync_valid import source_has_perm_sync_probe
 from onyx.configs.constants import DocumentSource
 from onyx.connectors.capability_checks.models import (
     CapabilityCheck,
@@ -60,18 +59,6 @@ class _PermSyncFallbackCheck(CapabilityCheck):
             "The runner guarantees an instance of a connector."
         )
         context.connector.validate_perm_sync()
-
-
-def get_applicable_perm_sync_capabilities(
-    source: DocumentSource,
-) -> set[CredentialCapability]:
-    """Returns which perm-sync capabilities exist for this source."""
-    applicable: set[CredentialCapability] = set()
-    if source_requires_doc_sync(source):
-        applicable.add(CredentialCapability.DOC_PERMISSION_SYNC)
-    if source_requires_external_group_sync(source):
-        applicable.add(CredentialCapability.EXTERNAL_GROUP_SYNC)
-    return applicable
 
 
 def get_perm_sync_capability_checks(source: DocumentSource) -> list[CapabilityCheck]:

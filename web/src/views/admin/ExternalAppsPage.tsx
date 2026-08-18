@@ -166,7 +166,9 @@ function AppsAdminContent() {
                         setModalState({ descriptor, existingApp: app }),
                       onEditCustom: (customApp) =>
                         setCustomModal({ existingApp: customApp }),
-                      onChange: () => mutateApps(),
+                      onChange: async () => {
+                        await mutateApps();
+                      },
                     }
                   )}
                 />
@@ -270,7 +272,9 @@ function McpServersSection() {
               key={server.id}
               integration={mcpServerToIntegration(server, {
                 onEdit: () => setEditServer(server),
-                onChange: () => mutate(),
+                onChange: async () => {
+                  await mutate();
+                },
               })}
             />
           ))}
@@ -314,7 +318,7 @@ interface ExternalAppHandlers {
   onEdit: (descriptor: BuiltInExternalAppDescriptor) => void;
   /** Edit a custom app (no descriptor — config is on the row itself). */
   onEditCustom: (app: ExternalAppAdminResponse) => void;
-  onChange: () => Promise<unknown>;
+  onChange: () => Promise<void>;
 }
 
 function externalAppToIntegration(
@@ -357,7 +361,7 @@ function externalAppToIntegration(
 
 interface McpServerHandlers {
   onEdit: () => void;
-  onChange: () => Promise<unknown>;
+  onChange: () => Promise<void>;
 }
 
 function mcpServerToIntegration(

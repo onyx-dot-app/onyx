@@ -5,6 +5,7 @@ import { errorHandlingFetcher } from "@/lib/fetcher";
 import { UserGroup } from "@/lib/types";
 import { useSettings } from "@/lib/settings/hooks";
 import { SWR_KEYS } from "@/lib/swr-keys";
+import { buildApiPath } from "@/lib/urlBuilder";
 
 /**
  * Fetches all user groups in the organization.
@@ -34,18 +35,25 @@ import { SWR_KEYS } from "@/lib/swr-keys";
  * // Later...
  * await createNewGroup(...);
  * refreshGroups(); // Refresh the group list
+ *
+ * @param includeDefault Include the seeded Admin and Basic groups, which group
+ *   management hides. The service-account forms opt in to grant a key any access.
  */
-export default function useGroups() {
+export default function useGroups(includeDefault = false) {
   const settings = useSettings();
   const isPaidEnterpriseFeaturesEnabled =
     !settings.isLoading && settings.enterprise !== null;
 
+  const url = includeDefault
+    ? buildApiPath(SWR_KEYS.adminUserGroups, { include_default: true })
+    : SWR_KEYS.adminUserGroups;
+
   const { data, error, isLoading } = useSWR<UserGroup[]>(
-    isPaidEnterpriseFeaturesEnabled ? SWR_KEYS.adminUserGroups : null,
+    isPaidEnterpriseFeaturesEnabled ? url : null,
     errorHandlingFetcher
   );
 
-  const refreshGroups = () => mutate(SWR_KEYS.adminUserGroups);
+  const refreshGroups = () => mutate(url);
 
   if (settings.isLoading) {
     return {

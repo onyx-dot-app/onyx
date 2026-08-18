@@ -78,9 +78,8 @@ async def test_code_expires_after_ttl(monkeypatch: pytest.MonkeyPatch) -> None:
     assert await consume_sso_code(code, verifier) is None
 
 
-def test_s256_matches_generate_pkce_pair() -> None:
-    # The store's S256 transform must agree with the app-facing PKCE generator,
-    # otherwise a verifier produced by the client would never validate.
+def test_users_pkce_generator_uses_shared_s256_transform() -> None:
+    # Keep the app-facing import bound to the shared PKCE helpers.
     verifier, challenge = generate_pkce_pair()
     assert compute_s256_challenge(verifier) == challenge
 

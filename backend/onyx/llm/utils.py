@@ -28,6 +28,7 @@ from onyx.prompts.contextual_retrieval import (
     DOCUMENT_SUMMARY_TOKEN_ESTIMATE,
 )
 from onyx.utils.logger import setup_logger
+from onyx.utils.redaction import scrub_sensitive_values
 from shared_configs.configs import DOC_EMBEDDING_CONTEXT_SIZE
 
 if TYPE_CHECKING:
@@ -363,34 +364,6 @@ def is_sensitive_custom_config_key(key: str) -> bool:
     return any(
         fragment in key_lower for fragment in SENSITIVE_CUSTOM_CONFIG_KEY_FRAGMENTS
     )
-
-
-_SCRUB_PLACEHOLDER = "[REDACTED]"
-
-
-def scrub_sensitive_values(message: str, secrets: Iterable[str | None]) -> str:
-    """Replace every literal secret in `message` with `[REDACTED]`.
-
-    Defense in depth on top of `litellm_exception_to_error_msg` — that helper
-    already maps known LiteLLM exception types to friendly messages and
-    swallows unknown ones, but a few branches (`RateLimitError`, `APIError`,
-    `ServiceUnavailableError`) still embed `str(core_exception)`. This pass
-    strips any credential we already know about before the message is surfaced
-    to a client.
-
-    Short / empty secrets are ignored so we don't accidentally eat common
-    substrings.
-    """
-    if not message:
-        return message
-
-    scrubbed = message
-    for secret in secrets:
-        if not secret or len(secret) < 3:
-            continue
-        scrubbed = scrubbed.replace(secret, _SCRUB_PLACEHOLDER)
-
-    return scrubbed
 
 
 def collect_credential_values(

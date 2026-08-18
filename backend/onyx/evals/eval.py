@@ -292,19 +292,18 @@ def _get_multi_turn_answer_with_tools(
         raise ValueError("Multi-turn eval requires 'messages' array in input")
 
     # Parse messages into EvalMessage objects
-    messages: list[EvalMessage] = []
-    for msg_data in messages_data:
-        messages.append(
-            EvalMessage(
-                message=msg_data["message"],
-                expected_tools=msg_data.get("expected_tools", []),
-                require_all_tools=msg_data.get("require_all_tools", False),
-                model=msg_data.get("model"),
-                model_provider=msg_data.get("model_provider"),
-                temperature=msg_data.get("temperature"),
-                force_tools=msg_data.get("force_tools", []),
-            )
+    messages: list[EvalMessage] = [
+        EvalMessage(
+            message=msg_data["message"],
+            expected_tools=msg_data.get("expected_tools", []),
+            require_all_tools=msg_data.get("require_all_tools", False),
+            model=msg_data.get("model"),
+            model_provider=msg_data.get("model_provider"),
+            temperature=msg_data.get("temperature"),
+            force_tools=msg_data.get("force_tools", []),
         )
+        for msg_data in messages_data
+    ]
 
     turn_results: list[EvalToolResult] = []
 

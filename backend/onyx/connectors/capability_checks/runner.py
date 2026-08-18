@@ -11,7 +11,6 @@ from onyx.connectors.capability_checks.models import (
     CapabilityCheckContext,
     CapabilityCheckResult,
     CapabilityCheckStatus,
-    CapabilityCheckTrigger,
     CredentialCapability,
     CredentialCapabilityReport,
     compute_capability_verdicts,
@@ -32,6 +31,7 @@ from onyx.connectors.source_operations import (
     SourceOperations,
     get_source_operations_class,
 )
+from onyx.db.enums import CapabilityCheckTrigger
 from onyx.db.models import Credential
 from onyx.utils.credential_audit import emit_credential_access
 from onyx.utils.logger import setup_logger
