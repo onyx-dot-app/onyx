@@ -19,6 +19,14 @@ on:
     paths:
       - "web/**"
       - "backend/**"
+  # Redeploy a branch without pushing to it — for a preview lost to a server
+  # rebuild, or a commit whose only changes fell outside the paths above.
+  # Path filters do not apply to a dispatch, so this always builds.
+  #
+  # GitHub resolves dispatchable workflows from the default branch, so this
+  # appears in the Actions tab only once this file is on main; the ref picker
+  # then still runs the chosen branch's copy.
+  workflow_dispatch:
 
 permissions:
   contents: read
