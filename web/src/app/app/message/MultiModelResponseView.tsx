@@ -29,6 +29,9 @@ export interface MultiModelResponseViewProps {
   onMessageSelection?: (nodeId: number) => void;
   /** Called whenever the set of hidden panel indices changes */
   onHiddenPanelsChange?: (hidden: Set<number>) => void;
+  // Blocks picking while a send is in flight, so an explicit pick can't race
+  // the send's preference write and strand it off the backend mainline.
+  selectionDisabled?: boolean;
   /**
    * Read-only mode for the shared view: every response stays equal-width and
    * fully visible (no selection carousel), select/hide interactions are
@@ -77,6 +80,7 @@ export default function MultiModelResponseView({
   otherMessagesCanSwitchTo,
   onMessageSelection,
   onHiddenPanelsChange,
+  selectionDisabled = false,
   readOnly = false,
 }: MultiModelResponseViewProps) {
   // preferredIndex mirrors the tree's preferred_response_id, which the backend
@@ -221,7 +225,7 @@ export default function MultiModelResponseView({
 
   const handleSelectPreferred = useCallback(
     (modelIndex: number) => {
-      if (isGenerating) return;
+      if (isGenerating || selectionDisabled) return;
 
       // Cancel any pending deselect animation so it doesn't overwrite this selection
       if (deselectTimeoutRef.current !== null) {
@@ -277,6 +281,7 @@ export default function MultiModelResponseView({
     },
     [
       isGenerating,
+      selectionDisabled,
       responses,
       preferredIndex,
       parentMessage,
@@ -455,11 +460,13 @@ export default function MultiModelResponseView({
       errorStackTrace: response.errorStackTrace,
       errorDetails: response.errorDetails,
       isGenerating,
+      selectionDisabled,
     }),
     [
       preferredIndex,
       hiddenPanels,
       readOnly,
+      selectionDisabled,
       handleSelectPreferred,
       handleDeselectPreferred,
       toggleVisibility,

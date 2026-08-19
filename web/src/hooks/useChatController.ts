@@ -687,6 +687,15 @@ export default function useChatController({
               chosen.messageId
             ).catch(() => null),
             revert: () => {
+              // A newer explicit pick may have replaced the assumption while
+              // the PUT was in flight. Never clobber it with this snapshot.
+              const live = useChatSessionStore
+                .getState()
+                .sessions.get(frozenSessionId)
+                ?.messageTree?.get(originalUserMessage.nodeId);
+              if (live && live.preferredResponseId !== chosen.messageId) {
+                return;
+              }
               currentMessageTreeLocal = new Map(currentMessageTreeLocal);
               currentMessageTreeLocal.set(
                 originalUserMessage.nodeId,
