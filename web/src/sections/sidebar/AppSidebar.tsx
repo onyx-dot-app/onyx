@@ -14,7 +14,7 @@ import { useSettings } from "@/lib/settings/hooks";
 import { MinimalAgent } from "@/lib/agents/types";
 import Text from "@/refresh-components/texts/Text";
 import ChatButton from "@/sections/sidebar/ChatButton";
-import AgentButton from "@/sections/sidebar/AgentButton";
+import { AgentButton } from "@/lib/agents/components";
 import { DragEndEvent } from "@dnd-kit/core";
 import {
   DndContext,

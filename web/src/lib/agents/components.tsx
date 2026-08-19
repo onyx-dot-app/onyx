@@ -64,7 +64,7 @@ export interface AgentButtonProps {
   agent: MinimalAgent;
 }
 
-export default function AgentButton({ agent }: AgentButtonProps) {
+export function AgentButton({ agent }: AgentButtonProps) {
   const activeAgent = useActiveAgent();
   const { pinnedAgents, togglePinnedAgent } = usePinnedAgents();
   const isActuallyPinned = pinnedAgents.some((a) => a.id === agent.id);
