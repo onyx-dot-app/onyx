@@ -1,11 +1,12 @@
-"""EE-only visibility tests: connector-scoped reports are cc-pair data.
+"""EE-only visibility tests: connector-scoped reports are management data.
 
 A scoped group manager reaches the report endpoints via ``allow_scope`` GATE 1
 and passes the credential gate only for credentials they own. The connector
-scope needs its own GATE 2: without it, the caller-picked ``connector_id``
-would surface pairing outcomes (verdicts, probe errors, config hash) from
-groups the caller does not belong to. Failed-creation orphan rows (no cc-pair
-was ever created) stay a global-manager support surface.
+scope needs its own GATE 2 bound to the caller's MANAGED scope: read
+visibility would surface pairing outcomes (verdicts, probe errors, config
+hash) from every public or sync pairing, and is skipped entirely for
+READ_CONNECTORS holders. Failed-creation orphan rows (no cc-pair was ever
+created) stay a global-manager support surface.
 """
 
 import os
@@ -19,7 +20,7 @@ from onyx.connectors.capability_checks.recorder import (
     record_blocking_validation_outcome,
 )
 from onyx.connectors.models import InputType
-from onyx.db.enums import AccessType, CapabilityCheckTrigger
+from onyx.db.enums import AccessType, CapabilityCheckTrigger, Permission
 from tests.integration.common_utils.constants import API_SERVER_URL
 from tests.integration.common_utils.http_client import client
 from tests.integration.common_utils.managers.cc_pair import CCPairManager
@@ -66,9 +67,10 @@ def _get_report(
 def test_scoped_manager_sees_only_their_groups_pairings(
     admin_user: DATestUser,
 ) -> None:
-    # Precondition. A scoped manager owning a credential probed against three
-    # connectors: one paired inside their group, one paired in a foreign
-    # group, and one whose pairing was never created (failed-creation orphan).
+    # Precondition. A scoped manager owning a credential probed against four
+    # connectors: paired in their managed group, paired in a foreign group,
+    # paired publicly (read-visible to everyone, managed by nobody here), and
+    # never successfully paired (failed-creation orphan).
     # Run-unique names keep re-runs against a shared DB collision-free.
     suffix = uuid4().hex[:8]
     manager = UserManager.create(name=f"scoped_manager_{suffix}")
@@ -130,6 +132,12 @@ def test_scoped_manager_sees_only_their_groups_pairings(
         connector_specific_config=_CONNECTOR_CONFIG,
         user_performing_action=admin_user,
     )
+    public_connector = ConnectorManager.create(
+        source=DocumentSource.SLACK,
+        input_type=InputType.POLL,
+        connector_specific_config=_CONNECTOR_CONFIG,
+        user_performing_action=admin_user,
+    )
     CCPairManager.create(
         connector_id=in_group_connector.id,
         credential_id=credential.id,
@@ -144,18 +152,26 @@ def test_scoped_manager_sees_only_their_groups_pairings(
         groups=[foreign_group.id],
         user_performing_action=admin_user,
     )
-    for connector_id in (
-        in_group_connector.id,
+    CCPairManager.create(
+        connector_id=public_connector.id,
+        credential_id=credential.id,
+        access_type=AccessType.PUBLIC,
+        user_performing_action=admin_user,
+    )
+    hidden_connector_ids = (
         foreign_connector.id,
+        public_connector.id,
         orphan_connector.id,
-    ):
+    )
+    for connector_id in (in_group_connector.id, *hidden_connector_ids):
         _seed_report_row(credential.id, connector_id)
 
-    # Under test and postcondition. The manager sees only their group's
-    # pairing; hidden pairings read as absent, like rows that never existed.
+    # Under test and postcondition. The manager sees only the pairing they
+    # manage; everything else -- foreign group, public (merely read-visible),
+    # orphan -- reads as absent, like rows that never existed.
     assert _get_report(credential.id, in_group_connector.id, manager) is not None
-    assert _get_report(credential.id, foreign_connector.id, manager) is None
-    assert _get_report(credential.id, orphan_connector.id, manager) is None
+    for connector_id in hidden_connector_ids:
+        assert _get_report(credential.id, connector_id, manager) is None
 
     # The per-source listing applies the same gate.
     response = client.get(
@@ -166,13 +182,27 @@ def test_scoped_manager_sees_only_their_groups_pairings(
     response.raise_for_status()
     listed_connector_ids = {row["connector_id"] for row in response.json()}
     assert in_group_connector.id in listed_connector_ids
-    assert foreign_connector.id not in listed_connector_ids
-    assert orphan_connector.id not in listed_connector_ids
+    for connector_id in hidden_connector_ids:
+        assert connector_id not in listed_connector_ids
+
+    # A global grant that only implies READ_CONNECTORS (which skips the
+    # cc-pair read filter entirely) must not widen the gate: read visibility
+    # is not management scope.
+    UserGroupManager.wait_for_sync(
+        user_groups_to_check=[managed_group],
+        user_performing_action=admin_user,
+    )
+    set_permissions_response = UserGroupManager.set_permissions(
+        user_group=managed_group,
+        permissions=[Permission.MANAGE_DOCUMENT_SETS.value],
+        user_performing_action=admin_user,
+    )
+    assert set_permissions_response.status_code == 200
+    assert Permission.READ_CONNECTORS.value in UserManager.get_permissions(manager)
+    assert _get_report(credential.id, in_group_connector.id, manager) is not None
+    for connector_id in hidden_connector_ids:
+        assert _get_report(credential.id, connector_id, manager) is None
 
     # Global managers are unaffected, the orphan included (support surface).
-    for connector_id in (
-        in_group_connector.id,
-        foreign_connector.id,
-        orphan_connector.id,
-    ):
+    for connector_id in (in_group_connector.id, *hidden_connector_ids):
         assert _get_report(credential.id, connector_id, admin_user) is not None

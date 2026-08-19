@@ -70,11 +70,13 @@ class CapabilityReportSnapshot(BaseModel):
 def _connector_pairing_visible(
     db_session: Session, connector_id: int, credential_id: int, user: User
 ) -> bool:
-    """GATE 2 for the connector scope: pairing outcomes are cc-pair data.
+    """GATE 2 for the connector scope: pairing outcomes are management data.
 
     Global managers see every pairing, including failed-creation orphans whose
     cc-pair was never created (a support surface). Scoped managers see only
-    pairings inside groups they belong to, per the cc-pair read filter.
+    pairings within their managed scope: the read filter (``get_editable=False``)
+    would admit every public and sync pair, and is skipped outright for
+    READ_CONNECTORS holders, so it must not authorize report internals.
     """
     if has_global_permission(user, Permission.MANAGE_CONNECTORS):
         return True
@@ -84,7 +86,7 @@ def _connector_pairing_visible(
             connector_id=connector_id,
             credential_id=credential_id,
             user=user,
-            get_editable=False,
+            get_editable=True,
         )
         is not None
     )
@@ -150,14 +152,15 @@ def list_capability_reports_for_source(
         if row.credential_id in visible_credential_ids
     ]
     # GATE 2 for the connector scope, mirroring the single-report endpoint:
-    # scoped managers only see connector rows for pairings in their groups.
+    # scoped managers only see connector rows for pairings they manage (the
+    # read filter would admit every public and sync pair).
     if not has_global_permission(user, Permission.MANAGE_CONNECTORS):
         visible_pairings = {
             (pair.connector_id, pair.credential_id)
             for pair in get_connector_credential_pairs_for_user(
                 db_session=db_session,
                 user=user,
-                get_editable=False,
+                get_editable=True,
                 source=source,
                 # Every pairing counts as visibility truth, whatever its mode.
                 processing_mode=None,
