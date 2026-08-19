@@ -24,16 +24,23 @@ ROOT = Path(__file__).resolve().parent.parent
 # Must be the whole trailing comment token: "# public-safe: okay" does not count.
 ALLOW_MARKER = re.compile(r"#\s*public-safe:\s*ok\s*$")
 
-ACCOUNT_ID = re.compile(r"(?<!\d)\d{12}(?!\d)")
-ACCESS_KEY = re.compile(r"\b(?:AKIA|ASIA)[0-9A-Z]{16}\b")
-IPV4_CIDR = re.compile(r"\b(\d{1,3}(?:\.\d{1,3}){3})/(\d{1,2})\b")
-# An internal owner email in a variable default gets stamped on every resource a
-# self-hoster creates. Kubernetes labels like `onyx.app/gpu` are not addresses.
-EMAIL = re.compile(r"\b[A-Za-z0-9._%+-]+@[A-Za-z0-9.-]+\.[A-Za-z]{2,}\b")
+# One pass per line. Alternatives are ordered so the more specific pattern wins
+# at a given position; the group name selects the message.
+SUSPECT = re.compile(
+    r"(?P<access_key>\b(?:AKIA|ASIA)[0-9A-Z]{16}\b)"
+    r"|(?P<email>\b[A-Za-z0-9._%+-]+@[A-Za-z0-9.-]+\.[A-Za-z]{2,}\b)"
+    r"|(?P<cidr>\b\d{1,3}(?:\.\d{1,3}){3}/\d{1,2}\b)"
+    r"|(?P<account_id>(?<!\d)\d{12}(?!\d))"
+)
+
+MESSAGES = {
+    "access_key": "AWS access key id",
+    "email": "email address",
+    "account_id": "12-digit value that looks like an AWS account id",
+    "cidr": "routable IPv4 CIDR",
+}
 
 
-# Ranges that are safe to ship: private, loopback, link-local, carrier NAT,
-# documentation, and the explicit "everywhere" wildcard.
 def _is_publishable(network: ipaddress.IPv4Network) -> bool:
     if str(network) == "0.0.0.0/0":
         return True
@@ -45,31 +52,26 @@ def scan(path: Path) -> list[str]:
     for lineno, line in enumerate(path.read_text().splitlines(), start=1):
         if ALLOW_MARKER.search(line):
             continue
-        try:
-            shown = path.relative_to(ROOT)
-        except ValueError:
-            shown = path
-        where = f"{shown}:{lineno}"
 
-        findings.extend(
-            f"{where}: email address {address}" for address in EMAIL.findall(line)
-        )
+        for match in SUSPECT.finditer(line):
+            kind = match.lastgroup
+            assert kind is not None
+            value = match.group()
 
-        if ACCESS_KEY.search(line):
-            findings.append(f"{where}: AWS access key id")
+            # A private or reserved range is fine to ship; a routable one is not.
+            if kind == "cidr":
+                try:
+                    network = ipaddress.IPv4Network(value, strict=False)
+                except ValueError:
+                    continue
+                if _is_publishable(network):
+                    continue
 
-        if ACCOUNT_ID.search(line):
-            findings.append(
-                f"{where}: 12-digit value that looks like an AWS account id"
-            )
-
-        for addr, prefix in IPV4_CIDR.findall(line):
             try:
-                network = ipaddress.IPv4Network(f"{addr}/{prefix}", strict=False)
+                shown = path.relative_to(ROOT)
             except ValueError:
-                continue
-            if not _is_publishable(network):
-                findings.append(f"{where}: routable IPv4 CIDR {addr}/{prefix}")
+                shown = path
+            findings.append(f"{shown}:{lineno}: {MESSAGES[kind]} {value}".rstrip())
     return findings
 
 
