@@ -9,6 +9,7 @@ import {
 } from "@/app/app/services/lib";
 import {
   chooseImplicitPreferred,
+  getMultiModelChildren,
   getUnresolvedMultiModelTurn,
 } from "@/app/app/message/multiModel";
 import { getMaxSelectedDocumentTokens } from "@/lib/projects/svc";
@@ -424,11 +425,27 @@ export default function useChatController({
       let currentHistory = getLatestMessageChain(currentMessageTreeLocal);
       let lastMessage = currentHistory[currentHistory.length - 1];
 
+      // A multi-model turn whose chain-tip panel errored still has usable
+      // siblings. Keep the turn so the implicit-preferred pick below can
+      // continue the chain through a successful sibling.
+      const errorTurnUserMsg =
+        lastMessage?.type === "error" && lastMessage.parentNodeId != null
+          ? currentMessageTreeLocal.get(lastMessage.parentNodeId)
+          : undefined;
+      const errorTurnHasUsableSibling = errorTurnUserMsg
+        ? (getMultiModelChildren(
+            errorTurnUserMsg,
+            currentMessageTreeLocal
+          )?.some((m) => m.type === "assistant" && m.messageId != null) ??
+          false)
+        : false;
+
       if (
         lastMessage &&
         lastMessage.type === "error" &&
         !messageIdToResend &&
-        !regenerationRequest
+        !regenerationRequest &&
+        !errorTurnHasUsableSibling
       ) {
         const newMessageTree = new Map(currentMessageTreeLocal);
         const parentNodeId = lastMessage.parentNodeId;
@@ -636,6 +653,7 @@ export default function useChatController({
       // pick already set preferredResponseId, making this a no-op.
       let implicitPreferred: Message | null = null;
       let implicitPreferredPersist: Promise<Response> | null = null;
+      let implicitPreferredRevert: (() => void) | null = null;
       if (!regenerationRequest && !messageToResend) {
         const chain = getLatestMessageChain(currentMessageTreeLocal);
         const unresolvedTurn = getUnresolvedMultiModelTurn(
@@ -667,6 +685,18 @@ export default function useChatController({
             preferredResponseId: chosen.messageId,
             latestChildNodeId: chosen.nodeId,
           });
+          // A failed PUT must undo the mirror, or the turn reads resolved
+          // locally, retries skip the PUT, and the send's parent stays off
+          // the backend mainline until a reload.
+          const originalUserMessage = unresolvedTurn.userMessage;
+          implicitPreferredRevert = () => {
+            currentMessageTreeLocal = new Map(currentMessageTreeLocal);
+            currentMessageTreeLocal.set(
+              originalUserMessage.nodeId,
+              originalUserMessage
+            );
+            updateSessionMessageTree(frozenSessionId, currentMessageTreeLocal);
+          };
         }
       }
 
@@ -954,9 +984,10 @@ export default function useChatController({
         // The send's mainline walk must see the assumed preference. An
         // unconfirmed write would 400 with "not on the latest mainline".
         if (implicitPreferredPersist) {
-          const res = await implicitPreferredPersist;
-          if (!res.ok) {
-            const data = await res.json().catch(() => ({}));
+          const res = await implicitPreferredPersist.catch(() => null);
+          if (!res?.ok) {
+            implicitPreferredRevert?.();
+            const data = res ? await res.json().catch(() => ({})) : {};
             throw new Error(
               data.detail ?? "Failed to set the preferred response"
             );

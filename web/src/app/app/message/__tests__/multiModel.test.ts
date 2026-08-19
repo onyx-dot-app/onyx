@@ -4,6 +4,7 @@ import {
   getMultiModelChildren,
   getUnresolvedMultiModelTurn,
 } from "@/app/app/message/multiModel";
+import { getLatestMessageChain } from "@/app/app/services/messageTree";
 
 let nextNodeId = 1;
 
@@ -49,13 +50,22 @@ function buildTurn(
   userMessage.preferredResponseId = preferred?.messageId ?? null;
   userMessage.latestChildNodeId =
     preferred?.nodeId ?? responses.at(-1)?.nodeId ?? null;
+  if (options.parent) {
+    options.parent.childrenNodeIds = [
+      ...(options.parent.childrenNodeIds ?? []),
+      userMessage.nodeId,
+    ];
+    options.parent.latestChildNodeId = userMessage.nodeId;
+  }
   tree.set(userMessage.nodeId, userMessage);
   responses.forEach((r) => tree.set(r.nodeId, r));
   return { userMessage, responses };
 }
 
+// The production chain walk, so tests exercise the same traversal onSubmit
+// feeds the helpers.
 function chainOf(tree: Map<number, Message>): Message[] {
-  return Array.from(tree.values());
+  return getLatestMessageChain(tree);
 }
 
 beforeEach(() => {
