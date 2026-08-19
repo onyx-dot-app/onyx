@@ -22,8 +22,11 @@ async function openFirstModelDetailPane(page: Page): Promise<boolean> {
   // Scoped to the popover so no page-level control can satisfy it. This button
   // renders only when some detail control survives its admin gate, so absence
   // is the both-disabled case rather than a lookup failure.
-  // Settle on always-present popover content before the snapshot presence check.
-  await expect(popover.getByRole("searchbox").first()).toBeVisible();
+  // Settle on always-present popover content first: the presence check below
+  // reads false the instant the popover opens with its rows unpainted, which
+  // would look like both controls being disabled. The filter renders type=text,
+  // so it is a textbox rather than a searchbox - match the placeholder instead.
+  await expect(popover.getByPlaceholder("Search models...")).toBeVisible();
   const settingsButton = popover
     .getByRole("button", { name: /settings$/ })
     .first();
