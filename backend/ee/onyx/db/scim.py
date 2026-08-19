@@ -211,6 +211,12 @@ class ScimDAL(DAL):
         mapping.external_id = external_id
         return mapping
 
+    def reassign_user_mapping(
+        self, mapping: ScimUserMapping, new_user_id: UUID
+    ) -> None:
+        """Point a SCIM mapping at a different user (rename-collision adoption)."""
+        mapping.user_id = new_user_id
+
     def delete_user_mapping(self, mapping_id: int) -> None:
         """Delete a user mapping by ID. No-op if already deleted."""
         mapping = self._session.get(ScimUserMapping, mapping_id)

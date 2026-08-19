@@ -1023,6 +1023,21 @@ export default function ChatPreferencesPage() {
                 />
               </InputHorizontal>
               <InputHorizontal
+                title="Reasoning Control"
+                description="Let users adjust how much reasoning the model performs before answering, from the model picker in chat."
+                withLabel
+              >
+                <Switch
+                  id="reasoning_override_enabled"
+                  checked={s.reasoning_override_enabled ?? true}
+                  onCheckedChange={(checked) => {
+                    void saveSettings({
+                      reasoning_override_enabled: checked,
+                    });
+                  }}
+                />
+              </InputHorizontal>
+              <InputHorizontal
                 title="Chat Naming Model"
                 description="Model used to auto-name chat sessions. Defaults to each session's own model — pin a small, fast model here if your main model can't serve concurrent requests."
                 withLabel

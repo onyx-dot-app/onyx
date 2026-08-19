@@ -90,6 +90,9 @@ export interface ExternalAppAdminResponse {
   upstream_url_patterns: string[];
   auth_template: Record<string, string>;
   organization_credentials: Record<string, string>;
+  // Sorted `{placeholder}` names in the auth-template values; the backend owns
+  // the placeholder grammar.
+  credential_placeholder_keys: string[];
   enabled: boolean;
   actions: ActionPolicyView[];
   associated_skills: {

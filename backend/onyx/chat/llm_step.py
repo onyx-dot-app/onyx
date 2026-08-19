@@ -874,7 +874,9 @@ def translate_history_to_llm_format(
     supports_image_input = True
     if any(msg.message_type == MessageType.USER and msg.image_files for msg in history):
         supports_image_input = model_supports_image_input(
-            llm_config.model_name, llm_config.model_provider
+            llm_config.model_name,
+            llm_config.model_provider,
+            llm_config.deployment_name,
         )
 
     # Per-request image cap (provider-aware). When the cap is enforced and
@@ -1029,7 +1031,9 @@ def translate_history_to_llm_format(
 
     # Apply model-specific formatting when translating to LLM format (e.g. OpenAI
     # reasoning models need CODE_BLOCK_MARKDOWN prefix for correct markdown generation)
-    if model_needs_formatting_reenabled(llm_config.model_name):
+    if model_needs_formatting_reenabled(
+        llm_config.model_name, llm_config.deployment_name
+    ):
         for i, m in enumerate(messages):
             if isinstance(m, SystemMessage):
                 messages[i] = SystemMessage(

@@ -22,6 +22,7 @@ from onyx.db.external_app import (
     get_external_apps,
     get_skills_for_external_app,
     get_user_credentials_by_app_id,
+    placeholders_in_template,
     replace_custom_skill_associations__no_commit,
     required_user_credential_keys,
     update_external_app,
@@ -95,6 +96,9 @@ def _to_admin_response(
         auth_template={} if managed else app.auth_template,
         organization_credentials=(
             {} if managed else app.organization_credentials.get_value(apply_mask=True)
+        ),
+        credential_placeholder_keys=(
+            [] if managed else sorted(placeholders_in_template(app.auth_template))
         ),
         enabled=app.enabled,
         actions=action_policy_views(app.app_type, stored),

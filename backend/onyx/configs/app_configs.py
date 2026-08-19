@@ -211,11 +211,10 @@ DISPOSABLE_EMAIL_DOMAINS_URL = os.environ.get(
 # lifetime, so a paired-up cookie + token never outlive each other.
 CAPTCHA_COOKIE_TTL_SECONDS = int(os.environ.get("CAPTCHA_COOKIE_TTL_SECONDS", "120"))
 
-# Redis TTL for cached control-plane billing/trial lookups. 24h default —
-# trial→paid conversions propagate within this window in the worst case,
-# and the admin panel call sites invalidate on write so immediate UI
-# refreshes are not stale. Env-tunable for emergency tightening.
-BILLING_CACHE_TTL_SECONDS = int(os.environ.get("BILLING_CACHE_TTL_SECONDS", "86400"))
+# Redis TTL for cached control-plane billing/trial lookups. Backstop only:
+# successful /tenants/tier-update pushes and admin-panel billing mutations
+# drop this cache, so 1h bounds staleness when a push is missed or fails.
+BILLING_CACHE_TTL_SECONDS = int(os.environ.get("BILLING_CACHE_TTL_SECONDS", "3600"))
 
 # OAuth Login Flow
 # Used for both Google OAuth2 and OIDC flows
