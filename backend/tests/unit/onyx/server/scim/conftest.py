@@ -22,6 +22,7 @@ from ee.onyx.server.scim.models import (
 from ee.onyx.server.scim.providers.base import ScimProvider
 from ee.onyx.server.scim.providers.entra import EntraProvider
 from ee.onyx.server.scim.providers.okta import OktaProvider
+from onyx.db.enums import AccountType
 from onyx.db.models import ScimToken, ScimUserMapping, User, UserGroup, UserRole
 
 # Every supported SCIM provider must appear here so that all endpoint tests
@@ -100,6 +101,10 @@ def make_db_user(**kwargs: Any) -> MagicMock:
     user.is_active = kwargs.get("is_active", True)
     user.personal_name = kwargs.get("personal_name", "Test User")
     user.role = kwargs.get("role", UserRole.BASIC)
+    # A bare MagicMock never equals an AccountType, so shadow detection would miss.
+    user.account_type = kwargs.get("account_type", AccountType.STANDARD)
+    # Real values so privilege predicates (`in`, bool) work on the mock.
+    user.effective_permissions = kwargs.get("effective_permissions", [])
     return user
 
 
