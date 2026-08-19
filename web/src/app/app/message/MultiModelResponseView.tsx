@@ -15,7 +15,10 @@ import { RegenerationFactory } from "@/app/app/message/messageComponents/AgentMe
 import MultiModelPanel from "@/app/app/message/MultiModelPanel";
 import { MultiModelResponse } from "@/app/app/message/interfaces";
 import { setPreferredResponse } from "@/app/app/services/lib";
-import { applyPreferredResponse } from "@/app/app/message/multiModel";
+import {
+  applyPreferredResponse,
+  setMostVisibleResponseId,
+} from "@/app/app/message/multiModel";
 import { useChatSessionStore } from "@/app/app/stores/useChatSessionStore";
 import { cn } from "@opal/utils";
 
@@ -51,8 +54,10 @@ const GEN_PANEL_W_2 = 720; // 2 panels side-by-side
 const GEN_PANEL_W_3 = 436; // 3 panels side-by-side
 // Gap between panels — matches CSS gap-6 (24px)
 const PANEL_GAP = 24;
-// Minimum panel width before horizontal scroll kicks in
+// Minimum panel width. Below it the interactive layout drops to the carousel, the shared view scrolls
 const MIN_PANEL_W = 300;
+// Gap between full-width cards in the narrow carousel (from Figma)
+const NARROW_CAROUSEL_GAP = 4;
 
 /**
  * Renders N model responses side-by-side with two layout modes:
@@ -97,13 +102,34 @@ export default function MultiModelResponseView({
     preferredIndexFromTree
   );
   // Re-sync when the preference lands after mount (session hydration, or the
-  // implicit pick made at send time). Clearing is owned by the deselect flow's
-  // animation, so only non-null values sync in.
+  // implicit pick made at send time), scrolling an off-screen pick into view.
+  // Deselect's animation owns clearing, so only non-null values sync in.
   useEffect(() => {
-    if (preferredIndexFromTree != null) {
-      setPreferredIndex(preferredIndexFromTree);
+    if (preferredIndexFromTree == null) return;
+    setPreferredIndex(preferredIndexFromTree);
+    if (!mountedRef.current) return;
+    const el = panelElsRef.current.get(preferredIndexFromTree);
+    // Scroll only the chat container. scrollIntoView would also scroll the
+    // carousel's overflow-hidden track, permanently offsetting its transform
+    // centering (see BuildMessageList and CommandMenu for the same choice).
+    const scroller = el?.closest("[data-chat-scroll]") as HTMLElement | null;
+    if (!el || !scroller) return;
+    const elRect = el.getBoundingClientRect();
+    const scRect = scroller.getBoundingClientRect();
+    if (elRect.bottom < scRect.top || elRect.top > scRect.bottom) {
+      scroller.scrollTo({
+        top: scroller.scrollTop + elRect.top - scRect.top - 16,
+        behavior: "smooth",
+      });
     }
   }, [preferredIndexFromTree]);
+  // Declared after the sync effect so its mount run still sees false and
+  // skips the scroll for a preference that was already set at mount.
+  const mountedRef = useRef(false);
+  useEffect(() => {
+    mountedRef.current = true;
+  }, []);
+  const parentNodeId = parentMessage?.nodeId;
   const [hiddenPanels, setHiddenPanels] = useState<Set<number>>(new Set());
   // Controls animation: false = panels at start position, true = panels at peek position
   const [selectionEntered, setSelectionEntered] = useState(
@@ -130,8 +156,33 @@ export default function MultiModelResponseView({
   >(null);
   const [preferredPanelEl, setPreferredPanelEl] =
     useState<HTMLDivElement | null>(null);
-  // Refs to each panel wrapper for height animation on deselect
+  // Refs to each panel wrapper: deselect height animation, overflow capping,
+  // and the late-pick scroll all read this map.
   const panelElsRef = useRef<Map<number, HTMLDivElement>>(new Map());
+  const setPanelEl = useCallback(
+    (modelIndex: number, el: HTMLDivElement | null) => {
+      if (el) {
+        panelElsRef.current.set(modelIndex, el);
+      } else {
+        panelElsRef.current.delete(modelIndex);
+      }
+    },
+    []
+  );
+
+  // Measures the root container so the layout can drop to the one-at-a-time
+  // carousel when the panels can't all fit side by side.
+  const [containerW, setContainerW] = useState(0);
+  const [rootEl, setRootEl] = useState<HTMLDivElement | null>(null);
+  useLayoutEffect(() => {
+    if (!rootEl) return;
+    const ro = new ResizeObserver(([entry]) => {
+      setContainerW(entry?.contentRect.width ?? 0);
+    });
+    ro.observe(rootEl);
+    setContainerW(rootEl.offsetWidth);
+    return () => ro.disconnect();
+  }, [rootEl]);
 
   // Tracks which non-preferred panels overflow the preferred height cap.
   // Measured via useLayoutEffect after maxHeight is applied to the DOM —
@@ -428,6 +479,33 @@ export default function MultiModelResponseView({
     return () => cancelAnimationFrame(raf);
   }, [isActivelySelected]);
 
+  // One-at-a-time carousel when the panels can't all fit side by side (the
+  // spec's smaller-screen layout). Starts on the first model, the right-most
+  // panel in the side-by-side layout.
+  const requiredSideBySideW =
+    visibleResponses.length * MIN_PANEL_W +
+    (visibleResponses.length - 1) * PANEL_GAP;
+  const showNarrowCarousel =
+    !readOnly &&
+    !showSelectionMode &&
+    visibleResponses.length > 1 &&
+    containerW > 0 &&
+    containerW < requiredSideBySideW;
+  const lastCarouselPos = Math.max(0, visibleResponses.length - 1);
+  const [carouselPos, setCarouselPos] = useState(lastCarouselPos);
+  const clampedCarouselPos = Math.min(carouselPos, lastCarouselPos);
+  const currentCarouselResponse = visibleResponses[clampedCarouselPos];
+
+  // Feed the send path's response-in-view rule from the carousel position.
+  const currentCarouselMessageId = currentCarouselResponse?.messageId ?? null;
+  useEffect(() => {
+    if (readOnly || parentNodeId == null || !showNarrowCarousel) return;
+    if (currentCarouselMessageId != null) {
+      setMostVisibleResponseId(parentNodeId, currentCarouselMessageId);
+    }
+    return () => setMostVisibleResponseId(parentNodeId, null);
+  }, [readOnly, parentNodeId, showNarrowCarousel, currentCarouselMessageId]);
+
   // Build panel props — isHidden reflects actual hidden state
   const buildPanelProps = useCallback(
     (response: MultiModelResponse, isNonPreferred: boolean) => ({
@@ -557,11 +635,7 @@ export default function MultiModelResponseView({
               <div
                 key={r.modelIndex}
                 ref={(el) => {
-                  if (el) {
-                    panelElsRef.current.set(r.modelIndex, el);
-                  } else {
-                    panelElsRef.current.delete(r.modelIndex);
-                  }
+                  setPanelEl(r.modelIndex, el);
                   if (isPref) setPreferredPanelEl(el);
                 }}
                 style={{
@@ -594,19 +668,83 @@ export default function MultiModelResponseView({
     );
   }
 
+  if (showNarrowCarousel) {
+    // ── Narrow Carousel Layout (one response in view) ──
+    // Full-width cards with off-canvas neighbors, per the mobile design. The
+    // current card's header carries the prev/next model nav.
+    const prevResponse =
+      clampedCarouselPos > 0
+        ? visibleResponses[clampedCarouselPos - 1]
+        : undefined;
+    const nextResponse =
+      clampedCarouselPos < lastCarouselPos
+        ? visibleResponses[clampedCarouselPos + 1]
+        : undefined;
+    const prevNav = prevResponse
+      ? {
+          provider: prevResponse.provider,
+          modelName: prevResponse.modelName,
+          displayName: prevResponse.displayName,
+          onClick: () => setCarouselPos(clampedCarouselPos - 1),
+        }
+      : undefined;
+    const nextNav = nextResponse
+      ? {
+          provider: nextResponse.provider,
+          modelName: nextResponse.modelName,
+          displayName: nextResponse.displayName,
+          onClick: () => setCarouselPos(clampedCarouselPos + 1),
+        }
+      : undefined;
+    return (
+      <div ref={setRootEl} className="w-full overflow-hidden">
+        {/* raw-ok: transform-driven carousel track matching the sibling selection-layout track. Section's inline gap/width styles fight the px-precise animated geometry */}
+        <div
+          className="flex items-start"
+          style={{
+            gap: `${NARROW_CAROUSEL_GAP}px`,
+            transform: `translateX(-${
+              clampedCarouselPos * (containerW + NARROW_CAROUSEL_GAP)
+            }px)`,
+            transition: "transform 0.45s cubic-bezier(0.2, 0, 0, 1)",
+          }}
+        >
+          {visibleResponses.map((r, i) => {
+            const isCurrent = i === clampedCarouselPos;
+            return (
+              <div
+                key={r.modelIndex}
+                ref={(el) => setPanelEl(r.modelIndex, el)}
+                style={{ width: `${containerW}px`, flexShrink: 0 }}
+              >
+                <MultiModelPanel
+                  {...buildPanelProps(r, false)}
+                  carouselPrev={isCurrent ? prevNav : undefined}
+                  carouselNext={isCurrent ? nextNav : undefined}
+                />
+              </div>
+            );
+          })}
+        </div>
+      </div>
+    );
+  }
+
   // ── Generation Layout (equal panels side-by-side) ──
   // Panel width based on number of visible (non-hidden) panels.
   const panelWidth =
     visibleResponses.length <= 2 ? GEN_PANEL_W_2 : GEN_PANEL_W_3;
 
   return (
-    <div className="overflow-x-auto">
+    <div ref={setRootEl} className="overflow-x-auto">
+      {/* raw-ok: equal-width panel row whose children carry px min/max widths, outside Section's rem spacing steps */}
       <div className="flex gap-6 items-start justify-center w-full">
         {responses.map((r) => {
           const isHidden = hiddenPanels.has(r.modelIndex);
           return (
             <div
               key={r.modelIndex}
+              ref={(el) => setPanelEl(r.modelIndex, el)}
               style={
                 isHidden
                   ? {
