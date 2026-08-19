@@ -3,12 +3,16 @@ import pathlib
 import threading
 import time
 
+from onyx.llm.api_surfaces import resolve_api_surface
 from onyx.llm.constants import (
     PROVIDER_DISPLAY_NAMES,
     WELL_KNOWN_PROVIDER_NAMES,
     LlmProviderNames,
 )
-from onyx.llm.model_capabilities import get_max_input_tokens
+from onyx.llm.model_capabilities import (
+    get_max_input_tokens,
+    supported_reasoning_efforts,
+)
 from onyx.llm.utils import model_supports_image_input
 from onyx.llm.well_known_providers.auto_update_models import LLMRecommendations
 from onyx.llm.well_known_providers.auto_update_service import (
@@ -289,6 +293,12 @@ def model_configurations_for_provider(
             is_recommended_default=model_name == default_model_name,
             max_input_tokens=get_max_input_tokens(model_name, provider_name),
             supports_image_input=model_supports_image_input(model_name, provider_name),
+            # No provider row exists yet, so the surface is the provider default.
+            supported_reasoning_efforts=supported_reasoning_efforts(
+                provider_name,
+                [model_name],
+                resolve_api_surface(provider_name, None),
+            ),
             display_name=display_name_by_name.get(model_name),
         )
         for model_name in model_names

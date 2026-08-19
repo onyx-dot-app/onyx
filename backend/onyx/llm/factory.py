@@ -262,7 +262,9 @@ def get_default_llm_with_vision(
         default_model = fetch_default_vision_model(db_session)
         if default_model:
             if model_supports_image_input(
-                default_model.name, default_model.llm_provider.provider
+                default_model.name,
+                default_model.llm_provider.provider,
+                default_model.llm_provider.deployment_name,
             ):
                 logger.info(
                     "Using default vision model: %s (provider=%s)",
@@ -312,7 +314,9 @@ def get_default_llm_with_vision(
     )
 
     for model in sorted_models:
-        if model_supports_image_input(model.name, model.llm_provider.provider):
+        if model_supports_image_input(
+            model.name, model.llm_provider.provider, model.llm_provider.deployment_name
+        ):
             logger.info(
                 "Using fallback vision model: %s (provider=%s)",
                 model.name,
