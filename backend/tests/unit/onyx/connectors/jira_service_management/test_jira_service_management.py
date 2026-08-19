@@ -183,6 +183,29 @@ def test_validate_connector_settings_missing_project_type_key_is_permissive(
     jsm_connector.validate_connector_settings()  # should not raise
 
 
+def test_validate_connector_settings_prioritizes_jql_over_project_type_check(
+    jira_base_url: str, project_key: str, mock_jira_client: MagicMock
+) -> None:
+    """The constructor accepts jql_query alongside project_key even though
+    the UI form never sets both. JiraConnector._get_jql_query gives
+    jql_query absolute priority over jira_project for the actual fetch, so
+    validation must match that precedence: skip the project-type check
+    (which would validate a project the real query never touches) and
+    validate the JQL instead, via the parent."""
+    connector = JiraServiceManagementConnector(
+        jira_base_url=jira_base_url,
+        project_key=project_key,
+        jql_query="status = Open",
+    )
+    connector._jira_client = mock_jira_client
+    _search_issues_mock(connector).return_value = []
+
+    connector.validate_connector_settings()  # should not raise
+
+    _search_issues_mock(connector).assert_called_once()
+    _project_mock(connector).assert_not_called()
+
+
 # --------------------------------------------------------------------------
 # validate_connector_settings: credential and API-error paths
 # --------------------------------------------------------------------------

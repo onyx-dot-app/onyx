@@ -73,11 +73,24 @@ class JiraServiceManagementConnector(JiraConnector):
         if self._jira_client is None:
             raise ConnectorMissingCredentialError("Jira")
 
+        if self.jql_query:
+            # A custom JQL query takes priority over project_key for the
+            # actual fetch — see JiraConnector._get_jql_query's own
+            # docstring: "If a custom JQL query is provided, it will be
+            # used... Otherwise, the query will be constructed based on
+            # project key." The UI never sets both (this connector's form
+            # only exposes project_key, no JQL field), but the constructor
+            # accepts both, so: if a caller sets both directly, validating
+            # the project's type would be checking something the real query
+            # never touches. Validate the JQL instead, via the parent, and
+            # skip the project-type check entirely.
+            super().validate_connector_settings()
+            return
+
         if not self.jira_project:
-            # No specific project configured (indexing everything, or a
-            # custom JQL query) — nothing to check the project type of, so
-            # the parent's own validation (JQL syntax check / API access
-            # check) is all there is to do.
+            # Neither a JQL query nor a specific project configured
+            # (indexing everything) — the parent's own API-access check is
+            # all there is to do.
             super().validate_connector_settings()
             return
 
