@@ -149,6 +149,7 @@ def test_table_malformed_records_and_unresolved_fragment_ids() -> None:
         "data": {
             "records": {
                 "bad": "not-a-dict",
+                "bad-values": {"orderIndex": "a1", "values": "not-a-mapping"},
                 "rec1": {
                     "orderIndex": "a0",
                     "values": {"col1": "frag1", "col2": "missing-fragment-id"},
@@ -175,6 +176,7 @@ def test_table_malformed_records_and_unresolved_fragment_ids() -> None:
     assert "| resolved cell |  |" in text
     assert "missing-fragment-id" not in text
     assert "not-a-dict" not in text
+    assert "not-a-mapping" not in text
 
 
 def test_empty_heading_renders_nothing() -> None:

@@ -262,7 +262,8 @@ def _render_table(node: dict[str, Any]) -> str:
         key=lambda kv: str(kv[1].get("orderIndex", "")),
     )
     for _record_id, record in sorted_records:
-        values = record.get("values") or {}
+        raw_values = record.get("values")
+        values: dict[str, Any] = raw_values if isinstance(raw_values, dict) else {}
         cells = [
             _render_table_cell(
                 values.get(col), definition.get(col) or {}, fragments_by_id
