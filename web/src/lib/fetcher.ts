@@ -14,10 +14,31 @@ export class RedirectError extends FetchError {
   }
 }
 
+/** Extract the backend error `detail` from a failed Response, falling back
+ * to `fallback` when the body isn't JSON or carries no detail. */
+export async function parseErrorDetail(
+  res: Response,
+  fallback: string
+): Promise<string> {
+  try {
+    const body = await res.json();
+    return body?.detail ?? fallback;
+  } catch {
+    return fallback;
+  }
+}
+
 const DEFAULT_AUTH_ERROR_MSG =
   "An error occurred while fetching the data, related to the user's authentication status.";
 
 const DEFAULT_ERROR_MSG = "An error occurred while fetching the data.";
+
+export function isAuthStatusError(error: unknown): boolean {
+  return (
+    error instanceof FetchError &&
+    (error.status === 401 || error.status === 402 || error.status === 403)
+  );
+}
 
 /**
  * SWR `onErrorRetry` callback that suppresses automatic retries for
@@ -28,11 +49,7 @@ const DEFAULT_ERROR_MSG = "An error occurred while fetching the data.";
 export const skipRetryOnAuthError: NonNullable<
   import("swr").SWRConfiguration["onErrorRetry"]
 > = (error, _key, _config, revalidate, { retryCount }) => {
-  if (
-    error instanceof FetchError &&
-    (error.status === 401 || error.status === 402 || error.status === 403)
-  )
-    return;
+  if (isAuthStatusError(error)) return;
   // For non-auth errors, retry with exponential backoff
   if (
     _config.errorRetryCount !== undefined &&
@@ -40,7 +57,21 @@ export const skipRetryOnAuthError: NonNullable<
   )
     return;
   const delay = Math.min(2000 * 2 ** retryCount, 30000);
-  setTimeout(() => revalidate({ retryCount }), delay);
+  setTimeout(() => {
+    if (typeof document === "undefined" || !document.hidden) {
+      revalidate({ retryCount });
+      return;
+    }
+    // Hidden at retry time: defer until the tab is visible again, so hidden
+    // tabs stay quiet without permanently dropping the retry chain (which
+    // would strand consumers that disable revalidateOnFocus).
+    const retryOnVisible = () => {
+      if (document.hidden) return;
+      document.removeEventListener("visibilitychange", retryOnVisible);
+      revalidate({ retryCount });
+    };
+    document.addEventListener("visibilitychange", retryOnVisible);
+  }, delay);
 };
 
 export const errorHandlingFetcher = async <T>(url: string): Promise<T> => {

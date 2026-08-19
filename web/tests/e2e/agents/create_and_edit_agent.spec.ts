@@ -1,7 +1,12 @@
 import { test, expect, Page, Browser } from "@playwright/test";
 import { loginAs, loginAsWorkerUser } from "@tests/e2e/utils/auth";
 import { OnyxApiClient } from "@tests/e2e/utils/onyxApiClient";
-import { expectScreenshot } from "@tests/e2e/utils/visualRegression";
+import { expectElementScreenshot } from "@tests/e2e/utils/visualRegression";
+import { Permission } from "@/lib/types";
+import {
+  grantWorkerPermissions,
+  cleanupPermissionGroup,
+} from "@tests/e2e/utils/permissions";
 
 // --- Locator Helper Functions ---
 const getNameInput = (page: Page) => page.locator('input[name="name"]');
@@ -121,6 +126,7 @@ test.describe("Assistant Creation and Edit Verification", () => {
 
   test.describe("User Files Only", () => {
     let userFilesAssistantId: number | null = null;
+    let permGroupId: number | undefined;
 
     test.afterAll(async ({ browser }: { browser: Browser }) => {
       if (userFilesAssistantId !== null) {
@@ -135,11 +141,16 @@ test.describe("Assistant Creation and Edit Verification", () => {
           "[test] Cleanup completed - deleted User Files Only assistant"
         );
       }
+      await cleanupPermissionGroup(browser, permGroupId);
     });
 
     test("should create assistant with user files when no connectors exist @exclusive", async ({
       page,
     }, testInfo) => {
+      permGroupId = await grantWorkerPermissions(page, testInfo.workerIndex, [
+        Permission.ADD_AGENTS,
+      ]);
+
       await page.context().clearCookies();
       await loginAsWorkerUser(page, testInfo.workerIndex);
 
@@ -193,6 +204,7 @@ test.describe("Assistant Creation and Edit Verification", () => {
     let ccPairId: number;
     let documentSetId: number;
     let knowledgeAssistantId: number | null = null;
+    let permGroupId: number | undefined;
 
     test.afterAll(async ({ browser }: { browser: Browser }) => {
       // Cleanup using browser fixture (worker-scoped) to avoid per-test fixture limitation
@@ -214,11 +226,17 @@ test.describe("Assistant Creation and Edit Verification", () => {
       console.log(
         "[test] Cleanup completed - deleted assistant, connector, and document set"
       );
+      await cleanupPermissionGroup(browser, permGroupId);
     });
 
     test("should create and edit assistant with Knowledge enabled", async ({
       page,
     }, testInfo) => {
+      permGroupId = await grantWorkerPermissions(page, testInfo.workerIndex, [
+        Permission.ADD_AGENTS,
+        Permission.MANAGE_DOCUMENT_SETS,
+      ]);
+
       // Login as admin to create connector and document set (requires admin permissions)
       await page.context().clearCookies();
       await loginAs(page, "admin");
@@ -292,8 +310,27 @@ test.describe("Assistant Creation and Edit Verification", () => {
       expect(agentIdMatch).toBeTruthy();
       const agentId = agentIdMatch ? agentIdMatch[1] : null;
       expect(agentId).not.toBeNull();
-      await expectScreenshot(page, {
-        name: "welcome-page-with-assistant",
+      // Split the previous full-page screenshot into two scoped element
+      // screenshots. The full-page variant was flaky because the sidebar can
+      // pick up agents/projects/recents created by other tests; scoping to the
+      // Agents section and the main container isolates the relevant UI.
+      //
+      // Locate the Agents SidebarSection by its title rather than a dedicated
+      // test id: SidebarSection roots are the only elements carrying
+      // `data-hover-group="sidebar-section"`, and we filter to the one whose
+      // section title is exactly "Agents".
+      const agentsSidebarSection = page
+        .locator('[data-hover-group="sidebar-section"]')
+        .filter({ has: page.getByText("Agents", { exact: true }) });
+      await expect(agentsSidebarSection).toBeVisible();
+      await expectElementScreenshot(agentsSidebarSection, {
+        name: "welcome-page-with-assistant-agents-sidebar",
+      });
+
+      const mainContainer = page.locator("[data-main-container]");
+      await expect(mainContainer).toBeVisible();
+      await expectElementScreenshot(mainContainer, {
+        name: "welcome-page-with-assistant-main",
         hide: ["[data-testid='model-selector']"],
       });
 

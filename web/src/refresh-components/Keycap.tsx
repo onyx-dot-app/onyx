@@ -3,14 +3,13 @@ import { cn } from "@opal/utils";
 
 interface KeycapProps {
   children: string;
-  /** "Armed" state — renders as a stronger neutral-filled cap. */
+  /** Filled state for active shortcut hints. */
   filled?: boolean;
 }
 
 /**
  * A small boxed keyboard-key glyph (e.g. `esc`, `↵`, `⌫`) for inline shortcut
- * hints. The `filled` state renders a stronger neutral cap (e.g. an armed
- * shortcut).
+ * hints. The `filled` state renders a stronger neutral cap.
  */
 export default function Keycap({ children, filled = false }: KeycapProps) {
   return (

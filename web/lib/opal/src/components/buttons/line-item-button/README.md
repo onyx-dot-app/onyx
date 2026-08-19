@@ -8,13 +8,17 @@ A composite component that wraps `Interactive.Stateful > Interactive.Container >
 
 ```
 Interactive.Stateful         <- selectVariant, state, interaction, onClick, href, ref
-  └─ Interactive.Container   <- type, width, rounding
-       └─ ContentAction      <- withInteractive, padding="lg"
+  └─ Interactive.Container   <- width, rounding
+       └─ ContentAction      <- withInteractive, padding={2}
             ├─ Content       <- icon, title, description, sizePreset, variant, ...
             └─ rightChildren
 ```
 
-`padding` is hardcoded to `"lg"` and `withInteractive` is always `true`. These are not exposed as props.
+The row renders as a focusable `<div role="button">` (with Enter/Space activation) rather than a
+native `<button>`, so interactive `rightChildren` such as action buttons don't produce invalid
+button-in-button nesting. With `href` it renders an anchor instead.
+
+`padding` is hardcoded to `2` and `withInteractive` is always `true`. These are not exposed as props.
 
 ## Props
 
@@ -37,7 +41,6 @@ Interactive.Stateful         <- selectVariant, state, interaction, onClick, href
 |------|------|---------|-------------|
 | `rounding` | `InteractiveContainerRoundingVariant` | `"md"` | Corner rounding preset (height is content-driven) |
 | `width` | `WidthVariant` | `"full"` | Container width |
-| `type` | `"submit" \| "button" \| "reset"` | `"button"` | HTML button type |
 | `tooltip` | `string` | — | Tooltip text shown on hover |
 | `tooltipSide` | `TooltipSide` | `"top"` | Tooltip side |
 

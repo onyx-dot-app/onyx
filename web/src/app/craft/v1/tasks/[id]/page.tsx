@@ -3,10 +3,9 @@
 import { useCallback, useState } from "react";
 import { useParams, useRouter } from "next/navigation";
 import useSWR, { useSWRConfig } from "swr";
-import { SettingsLayouts } from "@opal/layouts";
+import { SettingsLayouts, toast } from "@opal/layouts";
 import { Button, Text } from "@opal/components";
-import { toast } from "@/hooks/useToast";
-import ConfirmationModalLayout from "@/refresh-components/layouts/ConfirmationModalLayout";
+import { ConfirmationModalLayout } from "@opal/layouts";
 import {
   SvgClock,
   SvgEdit,
@@ -21,7 +20,7 @@ import {
   updateScheduledTask,
 } from "@/app/craft/v1/tasks/api";
 import RunHistoryTable from "@/app/craft/v1/tasks/components/RunHistoryTable";
-import PreApprovedAppsSummary from "@/app/craft/v1/tasks/components/PreApprovedAppsSummary";
+import PreApprovalSummary from "@/app/craft/v1/tasks/components/PreApprovalSummary";
 import { TaskStatusBadge } from "@/app/craft/v1/tasks/components/StatusBadge";
 import { TASKS_PATH, taskEditPath } from "@/app/craft/v1/tasks/constants";
 import type {
@@ -188,8 +187,12 @@ export default function ScheduledTaskDetailPage() {
           </Text>
         ) : (
           <div className="flex flex-col gap-6">
-            {data.pre_approved_app_ids.length > 0 && (
-              <PreApprovedAppsSummary appIds={data.pre_approved_app_ids} />
+            {(data.pre_approved_app_ids.length > 0 ||
+              data.pre_approved_mcp_server_ids.length > 0) && (
+              <PreApprovalSummary
+                appIds={data.pre_approved_app_ids}
+                mcpServerIds={data.pre_approved_mcp_server_ids}
+              />
             )}
             <RunHistoryTable taskId={data.id} />
           </div>

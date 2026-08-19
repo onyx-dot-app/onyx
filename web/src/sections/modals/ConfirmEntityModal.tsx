@@ -1,4 +1,4 @@
-import Modal from "@/refresh-components/layouts/ConfirmationModalLayout";
+import { ConfirmationModalLayout as Modal } from "@opal/layouts";
 import { Button } from "@opal/components";
 import Text from "@/refresh-components/texts/Text";
 import { SvgAlertCircle } from "@opal/icons";

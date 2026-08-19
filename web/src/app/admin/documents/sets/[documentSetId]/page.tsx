@@ -3,20 +3,20 @@ import { use } from "react";
 
 import { ErrorCallout } from "@/components/ErrorCallout";
 import { refreshDocumentSets, useDocumentSets } from "../hooks";
-import { useConnectorStatus, useUserGroups } from "@/lib/hooks";
-import { ThreeDotsLoader } from "@/components/Loading";
+import { useConnectorStatus } from "@/lib/hooks";
+import { PageLoader } from "@opal/layouts";
 import { SettingsLayouts } from "@opal/layouts";
 import { ADMIN_ROUTES } from "@/lib/admin-routes";
 import CardSection from "@/components/admin/CardSection";
 import { DocumentSetCreationForm } from "../DocumentSetCreationForm";
 import { useRouter } from "next/navigation";
-import { useVectorDbEnabled } from "@/providers/SettingsProvider";
+import { useSettings } from "@/lib/settings/hooks";
 
 const route = ADMIN_ROUTES.DOCUMENT_SETS;
 
 function Main({ documentSetId }: { documentSetId: number }) {
   const router = useRouter();
-  const vectorDbEnabled = useVectorDbEnabled();
+  const { vectorDbEnabled } = useSettings();
 
   const {
     data: documentSets,
@@ -30,17 +30,10 @@ function Main({ documentSetId }: { documentSetId: number }) {
     error: ccPairsError,
   } = useConnectorStatus(30000, vectorDbEnabled);
 
-  // EE only
-  const { data: userGroups, isLoading: userGroupsIsLoading } = useUserGroups();
-
-  if (
-    isDocumentSetsLoading ||
-    (vectorDbEnabled && isCCPairsLoading) ||
-    userGroupsIsLoading
-  ) {
+  if (isDocumentSetsLoading || (vectorDbEnabled && isCCPairsLoading)) {
     return (
       <div className="flex justify-center items-center min-h-[400px]">
-        <ThreeDotsLoader />
+        <PageLoader />
       </div>
     );
   }
@@ -79,7 +72,6 @@ function Main({ documentSetId }: { documentSetId: number }) {
     <CardSection>
       <DocumentSetCreationForm
         ccPairs={ccPairs ?? []}
-        userGroups={userGroups}
         onClose={() => {
           refreshDocumentSets();
           router.push("/admin/documents/sets");

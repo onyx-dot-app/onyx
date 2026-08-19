@@ -1,9 +1,8 @@
 "use client";
 
-import { markdown } from "@opal/utils";
 import { useSWRConfig } from "swr";
 import { useFormikContext } from "formik";
-import { InputDivider } from "@opal/layouts";
+import { InputDivider, toast } from "@opal/layouts";
 import {
   LLMProviderFormProps,
   LLMProviderName,
@@ -17,7 +16,7 @@ import {
   mergeFetchedModelConfigurations,
 } from "@/sections/modals/languageModels/utils";
 import { submitProvider } from "@/sections/modals/languageModels/svc";
-import { LLMProviderConfiguredSource } from "@/lib/analytics";
+import { LLMProviderConfiguredSource } from "@/lib/analytics/utils";
 import {
   APIBaseField,
   APIKeyField,
@@ -25,8 +24,8 @@ import {
   DisplayNameField,
   ModelAccessField,
   ModalWrapper,
+  useApiBaseSubDescription,
 } from "@/sections/modals/languageModels/shared";
-import { toast } from "@/hooks/useToast";
 import { refreshLlmProviderCaches } from "@/lib/languageModels/cache";
 
 interface OpenAICompatibleModalValues extends BaseLLMFormValues {
@@ -44,6 +43,10 @@ function OpenAICompatibleModalInternals({
   isOnboarding,
 }: OpenAICompatibleModalInternalsProps) {
   const formikProps = useFormikContext<OpenAICompatibleModalValues>();
+  const apiBaseSubDescription = useApiBaseSubDescription(
+    "Paste your OpenAI-compatible endpoint URL.",
+    "[Learn More](https://docs.litellm.ai/docs/providers/openai_compatible)"
+  );
 
   const isFetchDisabled = !formikProps.values.api_base;
 
@@ -51,7 +54,7 @@ function OpenAICompatibleModalInternals({
     const { models, error } = await fetchOpenAICompatibleModels({
       api_base: formikProps.values.api_base,
       api_key: formikProps.values.api_key || undefined,
-      provider_name: existingLlmProvider?.name ?? undefined,
+      provider_id: existingLlmProvider?.id ?? undefined,
     });
     if (error) {
       throw new Error(error);
@@ -68,9 +71,7 @@ function OpenAICompatibleModalInternals({
   return (
     <>
       <APIBaseField
-        subDescription={markdown(
-          "Paste your OpenAI-compatible endpoint URL. [Learn More](https://docs.litellm.ai/docs/providers/openai_compatible)"
-        )}
+        subDescription={apiBaseSubDescription}
         placeholder="http://localhost:8000/v1"
       />
 
@@ -108,6 +109,7 @@ export default function OpenAICompatibleModal({
   shouldMarkAsDefault,
   onOpenChange,
   onSuccess,
+  analyticsSource,
 }: LLMProviderFormProps) {
   const isOnboarding = variant === "onboarding";
   const { mutate } = useSWRConfig();
@@ -134,9 +136,11 @@ export default function OpenAICompatibleModal({
       validationSchema={validationSchema}
       onSubmit={async (values, { setSubmitting, setStatus }) => {
         await submitProvider({
-          analyticsSource: isOnboarding
-            ? LLMProviderConfiguredSource.CHAT_ONBOARDING
-            : LLMProviderConfiguredSource.ADMIN_PAGE,
+          analyticsSource:
+            analyticsSource ??
+            (isOnboarding
+              ? LLMProviderConfiguredSource.CHAT_ONBOARDING
+              : LLMProviderConfiguredSource.ADMIN_PAGE),
           providerName: LLMProviderName.OPENAI_COMPATIBLE,
           values,
           initialValues,

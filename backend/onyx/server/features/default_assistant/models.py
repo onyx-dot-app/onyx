@@ -1,7 +1,6 @@
 """Models for default assistant configuration API."""
 
-from pydantic import BaseModel
-from pydantic import Field
+from pydantic import BaseModel, Field
 
 
 class DefaultAssistantConfiguration(BaseModel):
@@ -30,6 +29,3 @@ class DefaultAssistantUpdateRequest(BaseModel):
         default=None,
         description="New system prompt (instructions). None resets to default, empty string is allowed.",
     )
-
-
-3

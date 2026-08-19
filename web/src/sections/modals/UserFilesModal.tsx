@@ -3,14 +3,13 @@
 import React, { useRef, useState, useEffect, useMemo } from "react";
 import { InputTypeIn } from "@opal/components";
 import { ProjectFile } from "@/providers/ProjectsContext";
-import { formatRelativeTime } from "@/app/app/components/projects/project_utils";
 import Text from "@/refresh-components/texts/Text";
 import type { IconProps } from "@opal/types";
 import { getFileExtension, isImageExtension } from "@/lib/utils";
-import { UserFileStatus } from "@/app/app/projects/projectsService";
+import { UserFileStatus } from "@/lib/projects/types";
 import AttachmentButton from "@/refresh-components/buttons/AttachmentButton";
-import Modal from "@/refresh-components/Modal";
-import { useModal } from "@/refresh-components/contexts/ModalContext";
+import { Modal } from "@opal/components";
+import { useModal } from "@opal/components";
 import TextSeparator from "@/refresh-components/TextSeparator";
 import {
   SvgEye,
@@ -26,6 +25,7 @@ import { Section } from "@/layouts/general-layouts";
 import useFilter from "@/hooks/useFilter";
 import { Button } from "@opal/components";
 import ScrollIndicatorDiv from "@/refresh-components/ScrollIndicatorDiv";
+import { timeAgo } from "@opal/time";
 
 function getIcon(
   file: ProjectFile,
@@ -70,7 +70,7 @@ function FileAttachment({
   const Icon = getIcon(file, isProcessing);
   const description = getDescription(file);
   const rightText = file.last_accessed_at
-    ? formatRelativeTime(file.last_accessed_at)
+    ? (timeAgo(file.last_accessed_at) ?? "")
     : "";
 
   return (
@@ -178,7 +178,7 @@ export default function UserFilesModal({
         >
           <Modal.Header icon={SvgFiles} title={title} description={description}>
             {/* Search bar section */}
-            <Section flexDirection="row" gap={0.5}>
+            <Section flexDirection="row" gap={2}>
               <InputTypeIn
                 ref={searchInputRef}
                 placeholder="Search files..."
@@ -204,8 +204,8 @@ export default function UserFilesModal({
           </Modal.Header>
 
           <Modal.Body
-            padding={filtered.length === 0 ? 0.5 : 0}
-            gap={0.5}
+            padding={filtered.length === 0 ? 2 : 0}
+            gap={2}
             alignItems="center"
           >
             {/* File display section */}
@@ -263,7 +263,7 @@ export default function UserFilesModal({
           <Modal.Footer>
             {/* Left side: file count and controls */}
             {onPickRecent && (
-              <Section flexDirection="row" justifyContent="start" gap={0.5}>
+              <Section flexDirection="row" justifyContent="start" gap={2}>
                 <Text as="p" text03>
                   {selectedCount} {selectedCount === 1 ? "file" : "files"}{" "}
                   selected

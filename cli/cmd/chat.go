@@ -1,7 +1,7 @@
 package cmd
 
 import (
-	tea "github.com/charmbracelet/bubbletea"
+	tea "charm.land/bubbletea/v2"
 	"github.com/onyx-dot-app/onyx/cli/internal/api"
 	"github.com/onyx-dot-app/onyx/cli/internal/config"
 	"github.com/onyx-dot-app/onyx/cli/internal/starprompt"
@@ -36,7 +36,7 @@ On first run, an interactive setup wizard will guide you through configuration.`
 				m = tui.NewModel(cfg, api.NewClient(cfg))
 			}
 
-			p := tea.NewProgram(m, tea.WithAltScreen(), tea.WithMouseCellMotion())
+			p := tea.NewProgram(m)
 			_, err := p.Run()
 			return err
 		},

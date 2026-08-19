@@ -2,73 +2,67 @@ import contextvars
 import copy
 import itertools
 import re
-from collections.abc import Callable
-from collections.abc import Generator
-from concurrent.futures import as_completed
-from concurrent.futures import Future
-from concurrent.futures import ThreadPoolExecutor
-from datetime import datetime
-from datetime import timezone
+import threading
+from collections.abc import Callable, Generator
+from concurrent.futures import Future, ThreadPoolExecutor, as_completed
+from datetime import datetime, timezone
 from enum import Enum
-from http.client import IncompleteRead
-from http.client import RemoteDisconnected
-from typing import Any
-from typing import cast
-from urllib.error import URLError
+from typing import Any, cast
 from urllib.parse import urlparse
 
-from pydantic import BaseModel
-from slack_sdk import WebClient
-from slack_sdk.errors import SlackApiError
-from slack_sdk.http_retry import ConnectionErrorRetryHandler
-from slack_sdk.http_retry import RetryHandler
-from slack_sdk.http_retry.builtin_interval_calculators import (
-    FixedValueRetryIntervalCalculator,
-)
+from pydantic import BaseModel, ConfigDict
 from typing_extensions import override
 
 from onyx.access.models import ExternalAccess
-from onyx.configs.app_configs import ENABLE_EXPENSIVE_EXPERT_CALLS
-from onyx.configs.app_configs import INDEX_BATCH_SIZE
-from onyx.configs.app_configs import SLACK_NUM_THREADS
+from onyx.configs.app_configs import (
+    ENABLE_EXPENSIVE_EXPERT_CALLS,
+    INDEX_BATCH_SIZE,
+    SLACK_NUM_THREADS,
+)
 from onyx.configs.constants import DocumentSource
-from onyx.connectors.exceptions import ConnectorValidationError
-from onyx.connectors.exceptions import CredentialExpiredError
-from onyx.connectors.exceptions import InsufficientPermissionsError
-from onyx.connectors.exceptions import UnexpectedValidationError
-from onyx.connectors.interfaces import CheckpointedConnectorWithPermSync
-from onyx.connectors.interfaces import CheckpointOutput
-from onyx.connectors.interfaces import CredentialsConnector
-from onyx.connectors.interfaces import CredentialsProviderInterface
-from onyx.connectors.interfaces import GenerateSlimDocumentOutput
-from onyx.connectors.interfaces import NormalizationResult
-from onyx.connectors.interfaces import SecondsSinceUnixEpoch
-from onyx.connectors.interfaces import SlimConnectorWithPermSync
-from onyx.connectors.models import BasicExpertInfo
-from onyx.connectors.models import ConnectorCheckpoint
-from onyx.connectors.models import ConnectorFailure
-from onyx.connectors.models import ConnectorMissingCredentialError
-from onyx.connectors.models import Document
-from onyx.connectors.models import DocumentFailure
-from onyx.connectors.models import EntityFailure
-from onyx.connectors.models import HierarchyNode
-from onyx.connectors.models import SlimDocument
-from onyx.connectors.models import TextSection
+from onyx.connectors.exceptions import (
+    ConnectorValidationError,
+    CredentialExpiredError,
+    InsufficientPermissionsError,
+    UnexpectedValidationError,
+)
+from onyx.connectors.interfaces import (
+    CheckpointedConnectorWithPermSync,
+    CheckpointOutput,
+    CredentialsConnector,
+    CredentialsProviderInterface,
+    GenerateSlimDocumentOutput,
+    NormalizationResult,
+    SecondsSinceUnixEpoch,
+    SlimConnectorWithPermSync,
+)
+from onyx.connectors.models import (
+    BasicExpertInfo,
+    ConnectorCheckpoint,
+    ConnectorFailure,
+    ConnectorMissingCredentialError,
+    Document,
+    DocumentFailure,
+    EntityFailure,
+    HierarchyNode,
+    SlimDocument,
+    TextSection,
+)
 from onyx.connectors.slack.access import get_channel_access
-from onyx.connectors.slack.models import ChannelType
-from onyx.connectors.slack.models import MessageType
-from onyx.connectors.slack.models import ThreadType
-from onyx.connectors.slack.onyx_retry_handler import OnyxRedisSlackRetryHandler
-from onyx.connectors.slack.onyx_slack_web_client import OnyxSlackWebClient
-from onyx.connectors.slack.utils import expert_info_from_slack_id
-from onyx.connectors.slack.utils import fetch_team_user_emails
-from onyx.connectors.slack.utils import get_message_link
-from onyx.connectors.slack.utils import make_paginated_slack_api_call
-from onyx.connectors.slack.utils import SlackTextCleaner
+from onyx.connectors.slack.models import ChannelType, MessageType, ThreadType
+from onyx.connectors.slack.source_operations import (
+    SlackApiError,
+    SlackChannelVariant,
+    SlackSourceOperations,
+)
+from onyx.connectors.slack.utils import (
+    SlackTextCleaner,
+    expert_info_from_slack_id,
+    fetch_team_user_emails,
+    get_message_link,
+)
 from onyx.db.enums import HierarchyNodeType
 from onyx.indexing.indexing_heartbeat import IndexingHeartbeatInterface
-from onyx.redis.redis_pool import get_redis_client
-from onyx.redis.tenant_redis_client import TenantRedisClient
 from onyx.utils.logger import setup_logger
 from onyx.utils.retry_after import parse_retry_after_seconds
 
@@ -93,29 +87,33 @@ class SlackCheckpoint(ConnectorCheckpoint):
 
 
 def _collect_paginated_channels(
-    client: WebClient,
+    slack_client: SlackSourceOperations,
     exclude_archived: bool,
     channel_types: list[str],
     team_id: str | None = None,
 ) -> list[ChannelType]:
     channels: list[ChannelType] = []
-    extra_kwargs: dict[str, Any] = {}
-    if team_id is not None:
-        extra_kwargs["team_id"] = team_id
-    for result in make_paginated_slack_api_call(
-        client.conversations_list,
-        exclude_archived=exclude_archived,
+    # The variant names the permission class of the call: any request that
+    # includes private channels needs ``groups:read``.
+    variant = (
+        SlackChannelVariant.PRIVATE
+        if "private_channel" in channel_types
+        else SlackChannelVariant.PUBLIC
+    )
+    for result in slack_client.list_channels(
+        variant=variant,
         # also get private channels the bot is added to
-        types=channel_types,
-        **extra_kwargs,
+        channel_types=channel_types,
+        exclude_archived=exclude_archived,
+        team_id=team_id,
     ):
-        channels.extend(result["channels"])
+        channels.extend(cast(list[ChannelType], result.channels))
 
     return channels
 
 
 def get_channels(
-    client: WebClient,
+    slack_client: SlackSourceOperations,
     exclude_archived: bool = True,
     get_public: bool = True,
     get_private: bool = True,
@@ -131,7 +129,7 @@ def get_channels(
     # Try fetching both public and private channels first:
     try:
         channels = _collect_paginated_channels(
-            client=client,
+            slack_client=slack_client,
             exclude_archived=exclude_archived,
             channel_types=channel_types,
             team_id=team_id,
@@ -145,7 +143,7 @@ def get_channels(
         logger.warning(msg + " Trying again with public channels only.")
         channel_types = ["public_channel"]
         channels = _collect_paginated_channels(
-            client=client,
+            slack_client=slack_client,
             exclude_archived=exclude_archived,
             channel_types=channel_types,
             team_id=team_id,
@@ -153,33 +151,33 @@ def get_channels(
     return channels
 
 
-def list_grid_team_ids(client: WebClient) -> list[str]:
+def list_grid_team_ids(slack_client: SlackSourceOperations) -> list[str]:
     """Return Grid org team IDs via ``auth.teams.list`` (needs ``team:read``)."""
     team_ids: list[str] = []
-    for result in make_paginated_slack_api_call(client.auth_teams_list):
-        for team in result.get("teams", []):
+    for result in slack_client.list_teams():
+        for team in result.teams:
             team_id = team.get("id")
             if team_id:
                 team_ids.append(team_id)
     return team_ids
 
 
-def fetch_team_url(client: WebClient, team_id: str) -> str | None:
+def fetch_team_url(slack_client: SlackSourceOperations, team_id: str) -> str | None:
     """Fetch a workspace URL for a given Grid team id via ``team.info``."""
     try:
-        response = client.team_info(team=team_id)
+        response = slack_client.fetch_team_info(team_id=team_id)
     except SlackApiError as e:
         logger.warning(
             "team_info failed for team_id=%s: %s", team_id, e.response.get("error", "")
         )
         return None
-    team = cast(dict[str, Any], response.get("team", {}))
+    team = response.team
     url = team.get("url")
     return cast(str, url) if isinstance(url, str) else None
 
 
 def get_channels_across_teams(
-    client: WebClient,
+    slack_client: SlackSourceOperations,
     team_ids: list[str],
     exclude_archived: bool = True,
     get_public: bool = True,
@@ -190,7 +188,7 @@ def get_channels_across_teams(
     merged: list[ChannelType] = []
     for team_id in team_ids:
         per_team = get_channels(
-            client=client,
+            slack_client=slack_client,
             exclude_archived=exclude_archived,
             get_public=get_public,
             get_private=get_private,
@@ -207,8 +205,17 @@ def get_channels_across_teams(
     return merged
 
 
+def _channel_history_variant(channel: ChannelType) -> SlackChannelVariant:
+    """The permission class of history/replies calls for this channel."""
+    return (
+        SlackChannelVariant.PRIVATE
+        if channel["is_private"]
+        else SlackChannelVariant.PUBLIC
+    )
+
+
 def get_channel_messages(
-    client: WebClient,
+    slack_client: SlackSourceOperations,
     channel: ChannelType,
     oldest: str | None = None,
     latest: str | None = None,
@@ -217,15 +224,12 @@ def get_channel_messages(
     """Get all messages in a channel"""
     # join so that the bot can access messages
     if not channel["is_member"]:
-        client.conversations_join(
-            channel=channel["id"],
-            is_private=channel["is_private"],
-        )
+        slack_client.join_channel(channel_id=channel["id"])
         logger.info("Successfully joined '%s'", channel["name"])
 
-    for result in make_paginated_slack_api_call(
-        client.conversations_history,
-        channel=channel["id"],
+    for result in slack_client.fetch_channel_history(
+        variant=_channel_history_variant(channel),
+        channel_id=channel["id"],
         oldest=oldest,
         latest=latest,
     ):
@@ -234,16 +238,20 @@ def get_channel_messages(
                 raise RuntimeError("get_channel_messages: Stop signal detected")
 
             callback.progress("get_channel_messages", 0)
-        yield cast(list[MessageType], result["messages"])
+        yield cast(list[MessageType], result.messages)
 
 
-def get_thread(client: WebClient, channel_id: str, thread_id: str) -> ThreadType:
+def get_thread(
+    slack_client: SlackSourceOperations, channel: ChannelType, thread_id: str
+) -> ThreadType:
     """Get all messages in a thread"""
     threads: list[MessageType] = []
-    for result in make_paginated_slack_api_call(
-        client.conversations_replies, channel=channel_id, ts=thread_id
+    for result in slack_client.fetch_thread_replies(
+        variant=_channel_history_variant(channel),
+        channel_id=channel["id"],
+        thread_ts=thread_id,
     ):
-        threads.extend(result["messages"])
+        threads.extend(cast(list[MessageType], result.messages))
     return threads
 
 
@@ -276,7 +284,7 @@ def thread_to_doc(
     channel: ChannelType,
     thread: ThreadType,
     slack_cleaner: SlackTextCleaner,
-    client: WebClient,
+    slack_client: SlackSourceOperations,
     user_cache: dict[str, BasicExpertInfo | None],
     channel_access: ExternalAccess | None,
     team_id_to_url: dict[str, str] | None = None,
@@ -285,7 +293,9 @@ def thread_to_doc(
     channel_team = _channel_team_id(channel)
 
     initial_sender_expert_info = expert_info_from_slack_id(
-        user_id=thread[0].get("user"), client=client, user_cache=user_cache
+        user_id=thread[0].get("user"),
+        fetch_user_info=slack_client.fetch_user_info,
+        user_cache=user_cache,
     )
     initial_sender_name = (
         initial_sender_expert_info.get_semantic_name()
@@ -298,7 +308,9 @@ def thread_to_doc(
         all_sender_ids = [m.get("user") for m in thread]
         experts = [
             expert_info_from_slack_id(
-                user_id=sender_id, client=client, user_cache=user_cache
+                user_id=sender_id,
+                fetch_user_info=slack_client.fetch_user_info,
+                user_cache=user_cache,
             )
             for sender_id in all_sender_ids
             if sender_id
@@ -324,7 +336,7 @@ def thread_to_doc(
             TextSection(
                 link=get_message_link(
                     event=m,
-                    client=client,
+                    slack_client=slack_client,
                     channel_id=channel_id,
                     team_id=channel_team,
                     team_id_to_url=team_id_to_url,
@@ -336,6 +348,7 @@ def thread_to_doc(
         source=DocumentSource.SLACK,
         semantic_identifier=doc_sem_id,
         doc_updated_at=get_latest_message_time(thread),
+        doc_created_at=datetime.fromtimestamp(float(thread[0]["ts"]), tz=timezone.utc),
         primary_owners=valid_experts,
         doc_metadata={
             "hierarchy": {
@@ -364,9 +377,7 @@ _DISALLOWED_MSG_SUBTYPES = {
     "group_leave",
     "group_archive",
     "group_unarchive",
-    "channel_leave",
     "channel_name",
-    "channel_join",
 }
 
 
@@ -408,27 +419,52 @@ def _bot_inclusive_msg_filter(
 
 def filter_channels(
     all_channels: list[ChannelType],
-    channels_to_connect: list[str] | None,
-    regex_enabled: bool,
+    channels_to_include: list[str] | None,
+    include_regex_enabled: bool,
+    channels_to_exclude: list[str] | None = None,
+    exclude_regex_enabled: bool = False,
 ) -> list[ChannelType]:
-    if not channels_to_connect:
-        return all_channels
+    filtered_channels = all_channels
 
-    if regex_enabled:
-        return [
+    if channels_to_include:
+        if not include_regex_enabled:
+            _validate_channels_exist(all_channels, channels_to_include)
+        filtered_channels = [
             channel
-            for channel in all_channels
-            if any(
-                re.fullmatch(channel_to_connect, channel["name"])
-                for channel_to_connect in channels_to_connect
+            for channel in filtered_channels
+            if _channel_name_matches(
+                channel["name"], channels_to_include, include_regex_enabled
             )
         ]
 
-    # validate that all channels in `channels_to_connect` are valid
-    # fail loudly in the case of an invalid channel so that the user
-    # knows that one of the channels they've specified is typo'd or private
+    # unlike includes, exclude names aren't validated — excluding a missing channel is harmless
+    if channels_to_exclude:
+        filtered_channels = [
+            channel
+            for channel in filtered_channels
+            if not _channel_name_matches(
+                channel["name"], channels_to_exclude, exclude_regex_enabled
+            )
+        ]
+
+    return filtered_channels
+
+
+def _channel_name_matches(
+    channel_name: str, patterns: list[str], regex_enabled: bool
+) -> bool:
+    if regex_enabled:
+        return any(re.fullmatch(pattern, channel_name) for pattern in patterns)
+    return channel_name in patterns
+
+
+def _validate_channels_exist(
+    all_channels: list[ChannelType], channels_to_include: list[str]
+) -> None:
+    # fail loudly on an unknown channel so the user knows one of the
+    # channels they've specified is typo'd or private
     all_channel_names = {channel["name"] for channel in all_channels}
-    for channel in channels_to_connect:
+    for channel in channels_to_include:
         if channel not in all_channel_names:
             raise ValueError(
                 f"Channel '{channel}' not found in workspace. "
@@ -437,9 +473,15 @@ def filter_channels(
                 f"{list(itertools.islice(all_channel_names, SlackConnector.MAX_CHANNELS_TO_LOG))}"
             )
 
-    return [
-        channel for channel in all_channels if channel["name"] in channels_to_connect
-    ]
+
+def _validate_channel_regexes(patterns: list[str] | None, label: str) -> None:
+    for pattern in patterns or []:
+        try:
+            re.compile(pattern)
+        except re.error as e:
+            raise ConnectorValidationError(
+                f"Invalid {label} regex '{pattern}': {e}"
+            ) from e
 
 
 def _channel_to_hierarchy_node(
@@ -470,11 +512,13 @@ def _channel_to_hierarchy_node(
     )
 
 
-def _get_channel_by_id(client: WebClient, channel_id: str) -> ChannelType:
+def _get_channel_by_id(
+    slack_client: SlackSourceOperations, channel_id: str
+) -> ChannelType:
     """Get a channel by its ID.
 
     Args:
-        client: The Slack WebClient instance
+        slack_client: The Slack source-operations gateway
         channel_id: The ID of the channel to fetch
 
     Returns:
@@ -483,15 +527,13 @@ def _get_channel_by_id(client: WebClient, channel_id: str) -> ChannelType:
     Raises:
         SlackApiError: If the channel cannot be fetched
     """
-    response = client.conversations_info(
-        channel=channel_id,
-    )
-    return cast(ChannelType, response["channel"])
+    response = slack_client.fetch_channel_info(channel_id=channel_id)
+    return cast(ChannelType, response.channel)
 
 
 def _get_messages(
     channel: ChannelType,
-    client: WebClient,
+    slack_client: SlackSourceOperations,
     oldest: str | None = None,
     latest: str | None = None,
     limit: int = _SLACK_LIMIT,
@@ -501,10 +543,7 @@ def _get_messages(
     # have to be in the channel in order to read messages
     if not channel["is_member"]:
         try:
-            client.conversations_join(
-                channel=channel["id"],
-                is_private=channel["is_private"],
-            )
+            slack_client.join_channel(channel_id=channel["id"])
         except SlackApiError as e:
             if e.response["error"] == "is_archived":
                 logger.warning("Channel %s is archived. Skipping.", channel["name"])
@@ -514,26 +553,28 @@ def _get_messages(
             raise
         logger.info("Successfully joined '%s'", channel["name"])
 
-    response = client.conversations_history(
-        channel=channel["id"],
-        oldest=oldest,
-        latest=latest,
-        limit=limit,
+    # Single page: the gateway paginator is lazy, so taking one yield makes
+    # exactly one request, and the page still carries the cursor metadata.
+    response = next(
+        slack_client.fetch_channel_history(
+            variant=_channel_history_variant(channel),
+            channel_id=channel["id"],
+            oldest=oldest,
+            latest=latest,
+            limit=limit,
+        )
     )
-    response.validate()
 
-    messages = cast(list[MessageType], response.get("messages", []))
+    messages = cast(list[MessageType], response.messages)
 
-    cursor = cast(dict[str, Any], response.get("response_metadata", {})).get(
-        "next_cursor", ""
-    )
+    cursor = response.response_metadata.next_cursor
     has_more = bool(cursor)
     return messages, has_more
 
 
 def _message_to_doc(
     message: MessageType,
-    client: WebClient,
+    slack_client: SlackSourceOperations,
     channel: ChannelType,
     slack_cleaner: SlackTextCleaner,
     user_cache: dict[str, BasicExpertInfo | None],
@@ -560,7 +601,7 @@ def _message_to_doc(
             return None, None
 
         thread = get_thread(
-            client=client, channel_id=channel["id"], thread_id=thread_ts
+            slack_client=slack_client, channel=channel, thread_id=thread_ts
         )
 
         # we'll just set and use the last filter reason if
@@ -587,7 +628,7 @@ def _message_to_doc(
         channel=channel,
         thread=filtered_thread,
         slack_cleaner=slack_cleaner,
-        client=client,
+        slack_client=slack_client,
         user_cache=user_cache,
         channel_access=channel_access,
         team_id_to_url=team_id_to_url,
@@ -596,9 +637,11 @@ def _message_to_doc(
 
 
 def _get_all_doc_ids(
-    client: WebClient,
-    channels: list[str] | None = None,
-    channel_name_regex_enabled: bool = False,
+    slack_client: SlackSourceOperations,
+    channels_to_include: list[str] | None = None,
+    include_regex_enabled: bool = False,
+    channels_to_exclude: list[str] | None = None,
+    exclude_regex_enabled: bool = False,
     msg_filter_func: Callable[
         [MessageType], SlackMessageFilterReason | None
     ] = default_msg_filter,
@@ -617,11 +660,17 @@ def _get_all_doc_ids(
     """
 
     if team_ids:
-        all_channels = get_channels_across_teams(client=client, team_ids=team_ids)
+        all_channels = get_channels_across_teams(
+            slack_client=slack_client, team_ids=team_ids
+        )
     else:
-        all_channels = get_channels(client)
+        all_channels = get_channels(slack_client)
     filtered_channels = filter_channels(
-        all_channels, channels, channel_name_regex_enabled
+        all_channels,
+        channels_to_include,
+        include_regex_enabled,
+        channels_to_exclude,
+        exclude_regex_enabled,
     )
     user_cache: dict[str, BasicExpertInfo | None] = {}
 
@@ -630,7 +679,7 @@ def _get_all_doc_ids(
         # NOTE: external_access is a frozen object, so it's okay to safe to use a single
         # instance for all documents in the channel
         external_access = get_channel_access(
-            client=client,
+            slack_client=slack_client,
             channel=channel,
             user_cache=user_cache,
             team_id_to_user_emails=team_id_to_user_emails,
@@ -647,7 +696,7 @@ def _get_all_doc_ids(
         ]
 
         channel_message_batches = get_channel_messages(
-            client=client,
+            slack_client=slack_client,
             channel=channel,
             callback=callback,
             oldest=str(start) if start else None,  # 0.0 -> None intentionally
@@ -672,6 +721,10 @@ def _get_all_doc_ids(
                         ),
                         external_access=external_access,
                         parent_hierarchy_raw_node_id=channel_id,
+                        # Slack ts is the thread root's creation time (epoch seconds)
+                        doc_created_at=datetime.fromtimestamp(
+                            float(message["ts"]), tz=timezone.utc
+                        ),
                     )
                 )
 
@@ -693,7 +746,7 @@ class ProcessedSlackMessage(BaseModel):
 
 def _process_message(
     message: MessageType,
-    client: WebClient,
+    slack_client: SlackSourceOperations,
     channel: ChannelType,
     slack_cleaner: SlackTextCleaner,
     user_cache: dict[str, BasicExpertInfo | None],
@@ -714,7 +767,7 @@ def _process_message(
 
         doc, filter_reason = _message_to_doc(
             message=message,
-            client=client,
+            slack_client=slack_client,
             channel=channel,
             slack_cleaner=slack_cleaner,
             user_cache=user_cache,
@@ -742,7 +795,7 @@ def _process_message(
                     ),
                     document_link=get_message_link(
                         message,
-                        client,
+                        slack_client,
                         channel["id"],
                         team_id=_channel_team_id(channel),
                         team_id_to_url=team_id_to_url,
@@ -754,15 +807,23 @@ def _process_message(
         )
 
 
+class _WorkspaceMetadata(BaseModel):
+    """Workspace URL and Enterprise Grid topology for a single bot token."""
+
+    model_config = ConfigDict(frozen=True)
+
+    url: str | None = None
+    is_grid: bool = False
+    team_ids: list[str] = []
+    team_id_to_url: dict[str, str] = {}
+    team_id_to_user_emails: dict[str, set[str]] = {}
+
+
 class SlackConnector(
     SlimConnectorWithPermSync,
     CredentialsConnector,
     CheckpointedConnectorWithPermSync[SlackCheckpoint],
 ):
-    FAST_TIMEOUT = 1
-
-    MAX_RETRIES = 7  # arbitrarily selected
-
     MAX_CHANNELS_TO_LOG = 50
 
     # *** values to use when filtering bot channels ***
@@ -781,6 +842,11 @@ class SlackConnector(
         # if specified, will treat the specified channel strings as
         # regexes, and will only index channels that fully match the regexes
         channel_regex_enabled: bool = False,
+        # channels to skip; applied after the include filter above
+        exclude_channels: list[str] | None = None,
+        # if specified, will treat the excluded channel strings as
+        # regexes, and will skip channels that fully match the regexes
+        exclude_channel_regex_enabled: bool = False,
         # if True, messages from bots/apps will be indexed instead of filtered out
         include_bot_messages: bool = False,
         batch_size: int = INDEX_BATCH_SIZE,
@@ -789,39 +855,45 @@ class SlackConnector(
     ) -> None:
         self.channels = channels
         self.channel_regex_enabled = channel_regex_enabled
+        self.exclude_channels = exclude_channels
+        self.exclude_channel_regex_enabled = exclude_channel_regex_enabled
         self.include_bot_messages = include_bot_messages
         self.msg_filter_func = (
             _bot_inclusive_msg_filter if include_bot_messages else default_msg_filter
         )
         self.batch_size = batch_size
         self.num_threads = num_threads
-        self.client: WebClient | None = None
-        self.fast_client: WebClient | None = None
+        self.slack_client: SlackSourceOperations | None = None
         # just used for efficiency
         self.text_cleaner: SlackTextCleaner | None = None
         self.user_cache: dict[str, BasicExpertInfo | None] = {}
         self.credentials_provider: CredentialsProviderInterface | None = None
-        self.credential_prefix: str | None = None
         self.use_redis: bool = use_redis
-        self._workspace_url: str | None = None
-        self._is_grid: bool = False
-        self._team_ids: list[str] = []
-        self._team_id_to_url: dict[str, str] = {}
-        self._team_id_to_user_emails: dict[str, set[str]] = {}
-        # self.delay_lock: str | None = None  # the redis key for the shared lock
-        # self.delay_key: str | None = None  # the redis key for the shared delay
+        # None until _ensure_workspace_metadata() resolves it.
+        self._workspace_metadata: _WorkspaceMetadata | None = None
+        self._workspace_metadata_lock = threading.Lock()
+
+    @property
+    def workspace_url(self) -> str | None:
+        metadata = self._workspace_metadata
+        return metadata.url if metadata else None
 
     @property
     def grid_team_ids(self) -> list[str] | None:
-        return self._team_ids if self._is_grid else None
+        metadata = self._workspace_metadata
+        return metadata.team_ids if metadata and metadata.is_grid else None
 
     @property
     def grid_team_id_to_url(self) -> dict[str, str] | None:
-        return self._team_id_to_url if self._is_grid else None
+        metadata = self._workspace_metadata
+        return metadata.team_id_to_url if metadata and metadata.is_grid else None
 
     @property
     def grid_team_id_to_user_emails(self) -> dict[str, set[str]] | None:
-        return self._team_id_to_user_emails if self._is_grid else None
+        metadata = self._workspace_metadata
+        return (
+            metadata.team_id_to_user_emails if metadata and metadata.is_grid else None
+        )
 
     @classmethod
     @override
@@ -860,57 +932,6 @@ class SlackConnector(
         normalized = f"{channel_id}__{thread_ts}"
         return NormalizationResult(normalized_url=normalized, use_default=False)
 
-    @staticmethod
-    def make_credential_prefix(key: str) -> str:
-        return f"connector:slack:credential_{key}"
-
-    @staticmethod
-    def make_delay_lock(prefix: str) -> str:
-        return f"{prefix}:delay_lock"
-
-    @staticmethod
-    def make_delay_key(prefix: str) -> str:
-        return f"{prefix}:delay"
-
-    @staticmethod
-    def make_slack_web_client(
-        prefix: str, token: str, max_retry_count: int, r: TenantRedisClient
-    ) -> WebClient:
-        delay_lock = SlackConnector.make_delay_lock(prefix)
-        delay_key = SlackConnector.make_delay_key(prefix)
-
-        # NOTE: slack has a built in RateLimitErrorRetryHandler, but it isn't designed
-        # for concurrent workers. We've extended it with OnyxRedisSlackRetryHandler.
-        connection_error_retry_handler = ConnectionErrorRetryHandler(
-            max_retry_count=max_retry_count,
-            interval_calculator=FixedValueRetryIntervalCalculator(),
-            error_types=[
-                URLError,
-                ConnectionResetError,
-                RemoteDisconnected,
-                IncompleteRead,
-            ],
-        )
-
-        onyx_rate_limit_error_retry_handler = OnyxRedisSlackRetryHandler(
-            max_retry_count=max_retry_count,
-            delay_key=delay_key,
-            r=r,
-        )
-        custom_retry_handlers: list[RetryHandler] = [
-            connection_error_retry_handler,
-            onyx_rate_limit_error_retry_handler,
-        ]
-
-        client = OnyxSlackWebClient(
-            delay_lock=delay_lock,
-            delay_key=delay_key,
-            r=r,
-            token=token,
-            retry_handlers=custom_retry_handlers,
-        )
-        return client
-
     @property
     def channels(self) -> list[str] | None:
         return self._channels
@@ -927,106 +948,102 @@ class SlackConnector(
     def set_credentials_provider(
         self, credentials_provider: CredentialsProviderInterface
     ) -> None:
-        credentials = credentials_provider.get_credentials()
-        tenant_id = credentials_provider.get_tenant_id()
-        if not tenant_id:
-            raise ValueError("tenant_id cannot be None!")
-
-        bot_token = credentials["slack_bot_token"]
-
-        if self.use_redis:
-            self.redis = get_redis_client(tenant_id=tenant_id)
-            self.credential_prefix = SlackConnector.make_credential_prefix(
-                credentials_provider.get_provider_key()
-            )
-
-            self.client = SlackConnector.make_slack_web_client(
-                self.credential_prefix, bot_token, self.MAX_RETRIES, self.redis
-            )
-        else:
-            connection_error_retry_handler = ConnectionErrorRetryHandler(
-                max_retry_count=self.MAX_RETRIES,
-                interval_calculator=FixedValueRetryIntervalCalculator(),
-                error_types=[
-                    URLError,
-                    ConnectionResetError,
-                    RemoteDisconnected,
-                    IncompleteRead,
-                ],
-            )
-
-            self.client = WebClient(
-                token=bot_token, retry_handlers=[connection_error_retry_handler]
-            )
-
-        # use for requests that must return quickly (e.g. realtime flows where user is waiting)
-        self.fast_client = WebClient(
-            token=bot_token, timeout=SlackConnector.FAST_TIMEOUT
+        # The gateway owns client construction (coordinated + fast) and builds
+        # lazily on first operation, so the credential decrypt happens at first
+        # remote call rather than here.
+        self.slack_client = SlackSourceOperations(
+            credentials_provider=credentials_provider,
+            connector_specific_config={"use_redis": self.use_redis},
         )
-        self.text_cleaner = SlackTextCleaner(client=self.client)
+        self.text_cleaner = SlackTextCleaner(
+            fetch_user_info=self.slack_client.fetch_user_info
+        )
         self.credentials_provider = credentials_provider
 
-        is_grid = False
-        try:
-            auth_response = self.client.auth_test()
-            self._workspace_url = auth_response.get("url")
-            is_grid = bool(auth_response.get("enterprise_id"))
-        except Exception as e:
-            logger.warning("Failed to get workspace URL from auth_test: %s", e)
-            self._workspace_url = None
+        with self._workspace_metadata_lock:
+            self._workspace_metadata = None
 
-        self._is_grid = is_grid
-        self._team_ids = []
-        self._team_id_to_url = {}
-        self._team_id_to_user_emails = {}
-        if self._is_grid and self.client is not None:
-            try:
-                self._team_ids = list_grid_team_ids(self.client)
-            except SlackApiError as e:
-                logger.warning(
-                    "auth.teams.list failed on Grid org: %s",
-                    e.response.get("error", ""),
-                )
-                self._team_ids = []
-            if self._team_ids:
-                grid_client = self.client
-                with ThreadPoolExecutor(
-                    max_workers=min(8, len(self._team_ids))
-                ) as executor:
-                    url_futures = {
-                        executor.submit(fetch_team_url, grid_client, tid): tid
-                        for tid in self._team_ids
-                    }
-                    for future in as_completed(url_futures):
-                        tid = url_futures[future]
-                        try:
-                            url = future.result()
-                        except Exception as e:
-                            # swallow per-team failures so one bad team.info doesn't abort init
-                            logger.warning(
-                                "team.info failed for team_id=%s: %s", tid, e
-                            )
-                            continue
-                        if url:
-                            self._team_id_to_url[tid] = url
-                try:
-                    self._team_id_to_user_emails = fetch_team_user_emails(
-                        grid_client, self._team_ids
-                    )
-                except SlackApiError as e:
-                    # Public-channel access on Grid stays org-wide instead of
-                    # per-workspace if this fails. Surfaced via missing_scope etc.
-                    logger.warning(
-                        "users.list per-team failed on Grid org: %s",
-                        e.response.get("error", ""),
-                    )
-                    self._team_id_to_user_emails = {}
-            logger.info(
-                "Slack Enterprise Grid detected: teams=%s urls_resolved=%s users_scoped=%s",
-                len(self._team_ids),
-                len(self._team_id_to_url),
-                sum(len(v) for v in self._team_id_to_user_emails.values()),
+    def _ensure_workspace_metadata(self) -> None:
+        """Resolves workspace metadata once, for the indexing paths.
+
+        Deliberately not resolved in ``set_credentials_provider``: validation
+        instantiates the connector but never reads this metadata, and the
+        coordinated client serializes on a Redis lock shared with running
+        indexing jobs, so resolving eagerly lets a rate-limited indexing job
+        block connector creation for the length of its backoff.
+
+        ``workspace_url`` and the ``grid_*`` properties are plain accessors, so
+        every entry point that reads them must call this first.
+        """
+        if self._workspace_metadata is not None:
+            return
+
+        with self._workspace_metadata_lock:
+            if self._workspace_metadata is not None or self.slack_client is None:
+                return
+            self._workspace_metadata = self._resolve_workspace_metadata(
+                self.slack_client
             )
+
+    def _resolve_workspace_metadata(
+        self, slack_client: SlackSourceOperations
+    ) -> _WorkspaceMetadata:
+        """Fails closed: nothing is cached and the index attempt surfaces the error.
+
+        Grid public-channel ACLs derive from ``team_id_to_user_emails``, and
+        ``get_channel_access`` falls back to org-wide ``is_public=True`` when it
+        is empty. Swallowing a failure here would silently widen
+        workspace-scoped permissions, so only cosmetic lookups may degrade.
+        """
+        auth_response = slack_client.check_auth()
+
+        url = auth_response.url
+        if not auth_response.enterprise_id:
+            return _WorkspaceMetadata(url=url)
+
+        team_ids = list_grid_team_ids(slack_client)
+        team_id_to_url = (
+            self._fetch_team_urls(slack_client, team_ids) if team_ids else {}
+        )
+        team_id_to_user_emails = (
+            fetch_team_user_emails(slack_client, team_ids) if team_ids else {}
+        )
+
+        logger.info(
+            "Slack Enterprise Grid detected: teams=%s urls_resolved=%s users_scoped=%s",
+            len(team_ids),
+            len(team_id_to_url),
+            sum(len(v) for v in team_id_to_user_emails.values()),
+        )
+        return _WorkspaceMetadata(
+            url=url,
+            is_grid=True,
+            team_ids=team_ids,
+            team_id_to_url=team_id_to_url,
+            team_id_to_user_emails=team_id_to_user_emails,
+        )
+
+    @staticmethod
+    def _fetch_team_urls(
+        slack_client: SlackSourceOperations, team_ids: list[str]
+    ) -> dict[str, str]:
+        team_id_to_url: dict[str, str] = {}
+        with ThreadPoolExecutor(max_workers=min(8, len(team_ids))) as executor:
+            futures = {
+                executor.submit(fetch_team_url, slack_client, tid): tid
+                for tid in team_ids
+            }
+            for future in as_completed(futures):
+                tid = futures[future]
+                try:
+                    url = future.result()
+                except Exception as e:
+                    # one bad team.info must not abort the whole resolution
+                    logger.warning("team.info failed for team_id=%s: %s", tid, e)
+                    continue
+                if url:
+                    team_id_to_url[tid] = url
+        return team_id_to_url
 
     def retrieve_all_slim_docs_perm_sync(
         self,
@@ -1034,16 +1051,20 @@ class SlackConnector(
         end: SecondsSinceUnixEpoch | None = None,
         callback: IndexingHeartbeatInterface | None = None,
     ) -> GenerateSlimDocumentOutput:
-        if self.client is None:
+        if self.slack_client is None:
             raise ConnectorMissingCredentialError("Slack")
 
+        self._ensure_workspace_metadata()
+
         return _get_all_doc_ids(
-            client=self.client,
-            channels=self.channels,
-            channel_name_regex_enabled=self.channel_regex_enabled,
+            slack_client=self.slack_client,
+            channels_to_include=self.channels,
+            include_regex_enabled=self.channel_regex_enabled,
+            channels_to_exclude=self.exclude_channels,
+            exclude_regex_enabled=self.exclude_channel_regex_enabled,
             msg_filter_func=self.msg_filter_func,
             callback=callback,
-            workspace_url=self._workspace_url,
+            workspace_url=self.workspace_url,
             start=start,
             end=end,
             team_ids=self.grid_team_ids,
@@ -1072,22 +1093,29 @@ class SlackConnector(
         """
         num_channels_remaining = 0
 
-        if self.client is None or self.text_cleaner is None:
+        if self.slack_client is None or self.text_cleaner is None:
             raise ConnectorMissingCredentialError("Slack")
+
+        self._ensure_workspace_metadata()
 
         checkpoint = copy.deepcopy(checkpoint)
 
         # if this is the very first time we've called this, need to
         # get all relevant channels and save them into the checkpoint
         if checkpoint.channel_ids is None:
-            if self._is_grid and self._team_ids:
+            grid_team_ids = self.grid_team_ids
+            if grid_team_ids:
                 raw_channels = get_channels_across_teams(
-                    client=self.client, team_ids=self._team_ids
+                    slack_client=self.slack_client, team_ids=grid_team_ids
                 )
             else:
-                raw_channels = get_channels(self.client)
+                raw_channels = get_channels(self.slack_client)
             filtered_channels = filter_channels(
-                raw_channels, self.channels, self.channel_regex_enabled
+                raw_channels,
+                self.channels,
+                self.channel_regex_enabled,
+                self.exclude_channels,
+                self.exclude_channel_regex_enabled,
             )
             logger.info(
                 "Channels - initial checkpoint: all=%s post_filtering=%s",
@@ -1105,7 +1133,7 @@ class SlackConnector(
                 # checkpoint.current_channel is guaranteed to be non-None here since we just assigned it
                 assert checkpoint.current_channel is not None
                 channel_access = get_channel_access(
-                    client=self.client,
+                    slack_client=self.slack_client,
                     channel=checkpoint.current_channel,
                     user_cache=self.user_cache,
                     team_id_to_user_emails=(self.grid_team_id_to_user_emails),
@@ -1154,7 +1182,7 @@ class SlackConnector(
                 yield _channel_to_hierarchy_node(
                     channel,
                     checkpoint.current_channel_access,
-                    self._workspace_url,
+                    self.workspace_url,
                     team_id_to_url=self.grid_team_id_to_url,
                 )
 
@@ -1166,7 +1194,7 @@ class SlackConnector(
             )
 
             message_batch, has_more_in_channel = _get_messages(
-                channel, self.client, oldest, latest
+                channel, self.slack_client, oldest, latest
             )
 
             logger.info(
@@ -1197,7 +1225,7 @@ class SlackConnector(
                             current_context.run,
                             _process_message,
                             message=message,
-                            client=self.client,
+                            slack_client=self.slack_client,
                             channel=channel,
                             slack_cleaner=self.text_cleaner,
                             user_cache=self.user_cache,
@@ -1300,11 +1328,11 @@ class SlackConnector(
                 )
 
                 if new_channel_id:
-                    new_channel = _get_channel_by_id(self.client, new_channel_id)
+                    new_channel = _get_channel_by_id(self.slack_client, new_channel_id)
                     checkpoint.current_channel = new_channel
                     if include_permissions:
                         channel_access = get_channel_access(
-                            client=self.client,
+                            slack_client=self.slack_client,
                             channel=new_channel,
                             user_cache=self.user_cache,
                             team_id_to_user_emails=(self.grid_team_id_to_user_emails),
@@ -1364,28 +1392,46 @@ class SlackConnector(
 
     def validate_connector_settings(self) -> None:
         """
-        1. Verify the bot token is valid for the workspace (via auth_test).
-        2. Ensure the bot has enough scope to list channels.
-        3. Check that every channel specified in self.channels exists (only when regex is not enabled).
+        1. Verify any channel include/exclude regexes compile.
+        2. Verify the bot token is valid for the workspace (via auth_test).
+        3. Ensure the bot has enough scope to list channels.
+
+        Channel existence (for non-regex includes) is validated during indexing
+        via filter_channels, not here.
         """
-        if self.fast_client is None:
+        # Config-shape validation, load-bearing at creation time: unlike the
+        # credential probes below (mirrored as named capability checks in
+        # ``slack/capability_checks.py``), regex compilation is
+        # credential-invariant and has NO capability-check counterpart. This is
+        # the only thing that blocks a malformed regex from being created.
+        if self.channel_regex_enabled:
+            _validate_channel_regexes(self.channels, "channel")
+        if self.exclude_channel_regex_enabled:
+            _validate_channel_regexes(self.exclude_channels, "excluded channel")
+
+        if self.slack_client is None:
             raise ConnectorMissingCredentialError("Slack credentials not loaded.")
 
         try:
-            # 1) Validate connection to workspace
-            auth_response = self.fast_client.auth_test()
-            if not auth_response.get("ok", False):
-                error_msg = auth_response.get(
-                    "error", "Unknown error from Slack auth_test"
-                )
+            # 1) Validate connection to workspace. ``fast=True``: validation is
+            # a synchronous user-facing path, so it must not serialize on the
+            # coordinated client's shared rate-limit lock.
+            auth_response = self.slack_client.check_auth(fast=True)
+            if not auth_response.ok:
+                error_msg = auth_response.error or "Unknown error from Slack auth_test"
                 raise ConnectorValidationError(f"Failed Slack auth_test: {error_msg}")
 
             # 2) Minimal test to confirm listing channels works
-            test_resp = self.fast_client.conversations_list(
-                limit=1, types=["public_channel"]
+            test_resp = next(
+                self.slack_client.list_channels(
+                    variant=SlackChannelVariant.PUBLIC,
+                    channel_types=["public_channel"],
+                    limit=1,
+                    fast=True,
+                )
             )
-            if not test_resp.get("ok", False):
-                error_msg = test_resp.get("error", "Unknown error from Slack")
+            if not test_resp.ok:
+                error_msg = test_resp.error or "Unknown error from Slack"
                 if error_msg == "invalid_auth":
                     raise ConnectorValidationError(
                         f"Invalid Slack bot token ({error_msg})."
@@ -1398,9 +1444,17 @@ class SlackConnector(
                     f"Slack API returned a failure: {error_msg}"
                 )
 
-            # 3) Grid: verify team:read by calling auth.teams.list
-            if auth_response.get("enterprise_id"):
-                self.fast_client.auth_teams_list(limit=1)
+            # 3) Grid: verify team:read, and the users scopes that public-channel
+            # ACLs depend on, so a missing scope fails here instead of at index time.
+            if auth_response.enterprise_id:
+                teams_response = next(self.slack_client.list_teams(limit=1, fast=True))
+                teams = teams_response.teams
+                if teams:
+                    next(
+                        self.slack_client.list_users(
+                            team_id=teams[0]["id"], limit=1, fast=True
+                        )
+                    )
 
             # 4) If channels are specified and regex is not enabled, verify each is accessible
             # NOTE: removed this for now since it may be too slow for large workspaces which may
@@ -1408,7 +1462,7 @@ class SlackConnector(
 
             # if self.channels and not self.channel_regex_enabled:
             #     accessible_channels = get_channels(
-            #         client=self.fast_client,
+            #         slack_client=self.slack_client,
             #         exclude_archived=True,
             #         get_public=True,
             #         get_private=True,
@@ -1447,6 +1501,12 @@ class SlackConnector(
                         "Slack Enterprise Grid org detected but the bot token "
                         "lacks the `team:read` scope required to list workspaces "
                         "(auth.teams.list)."
+                    )
+                if needed_scope in ("users:read", "users:read.email"):
+                    raise InsufficientPermissionsError(
+                        "Slack Enterprise Grid org detected but the bot token "
+                        f"lacks the `{needed_scope}` scope required to scope "
+                        "public channels to workspace members (users.list)."
                     )
                 raise InsufficientPermissionsError(
                     "Slack bot token lacks the necessary scope to list/access channels. "

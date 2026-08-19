@@ -18,18 +18,18 @@ from sqlalchemy import delete
 from onyx.cache.interface import CacheBackend
 from onyx.cache.postgres_backend import PostgresCacheBackend
 from onyx.db.engine.sql_engine import get_session_with_tenant
-from onyx.db.models import CacheStore
-from onyx.db.models import KVStore
+from onyx.db.models import CacheStore, KVStore
 from onyx.key_value_store.interface import KvKeyNotFoundError
-from onyx.key_value_store.store import PgRedisKVStore
-from onyx.key_value_store.store import REDIS_KEY_PREFIX
-from tests.external_dependency_unit.constants import TEST_TENANT_ID
+from onyx.key_value_store.store import REDIS_KEY_PREFIX, PgRedisKVStore
+from shared_configs.configs import POSTGRES_DEFAULT_SCHEMA_STANDARD_VALUE
 
 
 @pytest.fixture(autouse=True)
 def _clean_kv() -> Generator[None, None, None]:
     yield
-    with get_session_with_tenant(tenant_id=TEST_TENANT_ID) as session:
+    with get_session_with_tenant(
+        tenant_id=POSTGRES_DEFAULT_SCHEMA_STANDARD_VALUE
+    ) as session:
         session.execute(delete(KVStore))
         session.execute(delete(CacheStore))
         session.commit()

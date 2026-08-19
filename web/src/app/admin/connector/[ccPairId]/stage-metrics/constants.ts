@@ -18,9 +18,15 @@ export const STAGE_LABELS: Record<IndexAttemptStage, string> = {
   CHUNKING: "Chunking",
   CONTEXTUAL_RAG: "Contextual RAG",
   EMBEDDING: "Embedding",
+  DOC_LOCK_ACQUIRE_WAIT: "Doc lock acquire wait",
+  ENRICHMENT_PREP: "Enrichment prep",
   VECTOR_DB_WRITE: "Vector DB write",
   POST_INDEX_DB_UPDATE: "Post-index DB update",
+  COORD_LOCK_ACQUIRE_WAIT: "Coord lock acquire wait",
   COORDINATION_UPDATE: "Coordination update",
+  FINALIZATION: "Finalization",
+  GC_COLLECT: "Garbage collection",
+  BATCH_UNACCOUNTED: "Unaccounted",
   BATCH_TOTAL: "Batch total",
 };
 
@@ -56,11 +62,23 @@ export const STAGE_DESCRIPTIONS: Record<IndexAttemptStage, string> = {
   CONTEXTUAL_RAG:
     "Optional LLM call that adds short contextual summaries to each chunk to improve retrieval quality.",
   EMBEDDING: "Calls the embedding model to produce vectors for each chunk.",
+  DOC_LOCK_ACQUIRE_WAIT:
+    "Time spent waiting to acquire the per-document row locks before writing — the wait only, not the write done while holding them (that is Vector DB write / Post-index DB update). High values mean documents are contended across connectors.",
+  ENRICHMENT_PREP:
+    "Per-batch DB lookups that enrich chunks before writing — access info, document sets, ancestors, and prior chunk counts.",
   VECTOR_DB_WRITE: "Writes the embedded chunks and their metadata to Vespa.",
   POST_INDEX_DB_UPDATE:
     "Updates Postgres with final document state after indexing (last-indexed timestamps, hashes, etc.).",
+  COORD_LOCK_ACQUIRE_WAIT:
+    "Time spent waiting to acquire the connector-wide coordination lock that every batch serializes on — the wait only, not the update done while holding it (that is Coordination update). High values mean batch-level contention.",
   COORDINATION_UPDATE:
     "Bookkeeping updates after a batch — progress counters, checkpoint advances, and similar.",
+  FINALIZATION:
+    "Post-coordination bookkeeping — failure recording, progress telemetry, and batch storage cleanup.",
+  GC_COLLECT:
+    "Per-batch garbage-collection pass (stop-the-world for the worker process).",
+  BATCH_UNACCOUNTED:
+    "Wall-clock inside the batch not attributed to any measured stage (BATCH_TOTAL minus the measured stages). A high value signals lock contention or an un-instrumented hotspot.",
   BATCH_TOTAL:
     "Total wall-clock time elapsed processing a single batch end-to-end.",
 };

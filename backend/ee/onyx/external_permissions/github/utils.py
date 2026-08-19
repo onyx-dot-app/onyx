@@ -1,12 +1,9 @@
 from collections.abc import Callable
 from enum import Enum
-from typing import List
-from typing import Optional
-from typing import Tuple
-from typing import TypeVar
+from functools import partial
+from typing import List, Optional, Tuple, TypeVar
 
-from github import Github
-from github import RateLimitExceededException
+from github import Github, RateLimitExceededException
 from github.GithubException import GithubException
 from github.NamedUser import NamedUser
 from github.Organization import Organization
@@ -155,7 +152,7 @@ def _fetch_repository_teams_detailed(
 
         members: PaginatedList[NamedUser] | list[NamedUser] = (
             _run_with_retry(
-                lambda: team.get_members(),
+                team.get_members,
                 f"get members for team {team.name}",
                 github_client,
             )
@@ -182,7 +179,6 @@ def fetch_repository_team_slugs(
 ) -> List[str]:
     """Fetch team slugs with access to the repository."""
     logger.info("Fetching team slugs for repository %s", repo.full_name)
-    teams_data: List[str] = []
 
     team_objs: PaginatedList[Team] | list[Team] = (
         _run_with_retry(
@@ -193,8 +189,7 @@ def fetch_repository_team_slugs(
         or []
     )
 
-    for team in team_objs:
-        teams_data.append(team.slug)
+    teams_data: List[str] = [team.slug for team in team_objs]
 
     logger.info(
         "Fetched %s team slugs for repository %s", len(teams_data), repo.full_name
@@ -234,7 +229,7 @@ def _get_collaborators_and_outside_collaborators(
             if org is not None:
                 org_obj = org
                 membership = _run_with_retry(
-                    lambda: org_obj.has_in_members(collaborator),
+                    partial(org_obj.has_in_members, collaborator),
                     f"check membership for {collaborator.login} in org {org_obj.login}",
                     github_client,
                 )

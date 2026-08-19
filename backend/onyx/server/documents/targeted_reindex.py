@@ -14,25 +14,25 @@ task with the pre-allocated task UUID.
 import datetime
 from typing import Any
 
-from fastapi import APIRouter
-from fastapi import Depends
+from fastapi import APIRouter, Depends
 from pydantic import BaseModel
 from sqlalchemy.orm import Session
 
-from onyx.auth.users import current_curator_or_admin_user
+from onyx.auth.permissions import Permission, has_permission, require_permission
 from onyx.background.celery.versioned_apps.client import app as client_app
-from onyx.configs.constants import OnyxCeleryPriority
-from onyx.configs.constants import OnyxCeleryQueues
-from onyx.configs.constants import OnyxCeleryTask
+from onyx.configs.constants import OnyxCeleryPriority, OnyxCeleryQueues, OnyxCeleryTask
+from onyx.db.connector_credential_pair import verify_user_can_edit_all_cc_pairs
 from onyx.db.engine.sql_engine import get_session
-from onyx.db.enums import IndexingStatus
+from onyx.db.enums import IndexingStatus, PermissionAuthority
 from onyx.db.models import User
-from onyx.db.targeted_reindex import count_targets_for_job
-from onyx.db.targeted_reindex import create_targeted_reindex_job
-from onyx.db.targeted_reindex import get_targeted_reindex_job
-from onyx.db.targeted_reindex import MAX_TARGETS_PER_REQUEST
-from onyx.db.targeted_reindex import resolve_error_ids_to_targets
-from onyx.db.targeted_reindex import TargetSpec
+from onyx.db.targeted_reindex import (
+    MAX_TARGETS_PER_REQUEST,
+    TargetSpec,
+    count_targets_for_job,
+    create_targeted_reindex_job,
+    get_targeted_reindex_job,
+    resolve_error_ids_to_targets,
+)
 from onyx.error_handling.error_codes import OnyxErrorCode
 from onyx.error_handling.exceptions import OnyxError
 from onyx.utils.logger import setup_logger
@@ -77,7 +77,9 @@ class TargetedReindexJobStatusResponse(BaseModel):
 @router.post("/admin/indexing/targeted-reindex")
 def submit_targeted_reindex(
     request: TargetedReindexRequest,
-    user: User = Depends(current_curator_or_admin_user),
+    user: User = Depends(
+        require_permission(Permission.MANAGE_CONNECTORS, allow_scope=True)
+    ),
     db_session: Session = Depends(get_session),
 ) -> TargetedReindexResponse:
     error_ids = request.error_ids or []
@@ -111,6 +113,15 @@ def submit_targeted_reindex(
             OnyxErrorCode.VALIDATION_ERROR,
             "Too many targets: %s > %s."
             % (len(target_specs_in), MAX_TARGETS_PER_REQUEST),
+        )
+
+    # GATE 2 after resolution — error_ids expand into cc_pairs the caller never named
+    if not verify_user_can_edit_all_cc_pairs(
+        {spec.cc_pair_id for spec in target_specs_in}, db_session, user
+    ):
+        raise OnyxError(
+            OnyxErrorCode.INSUFFICIENT_PERMISSIONS,
+            "Connection not found for current user's permissions",
         )
 
     try:
@@ -160,11 +171,21 @@ def submit_targeted_reindex(
 @router.get("/admin/indexing/targeted-reindex/{job_id}")
 def get_targeted_reindex_status(
     job_id: int,
-    _: User = Depends(current_curator_or_admin_user),
+    user: User = Depends(
+        require_permission(Permission.MANAGE_CONNECTORS, allow_scope=True)
+    ),
     db_session: Session = Depends(get_session),
 ) -> TargetedReindexJobStatusResponse:
     job = get_targeted_reindex_job(db_session, job_id)
     if job is None:
+        raise OnyxError(OnyxErrorCode.NOT_FOUND, "Job not found.")
+
+    # GATE 2 by submitter, not cc_pair: the submit gate already bounded what they started
+    if (
+        has_permission(user, Permission.MANAGE_CONNECTORS)
+        is not PermissionAuthority.GLOBAL
+        and job.requested_by_user_id != user.id
+    ):
         raise OnyxError(OnyxErrorCode.NOT_FOUND, "Job not found.")
 
     return TargetedReindexJobStatusResponse(

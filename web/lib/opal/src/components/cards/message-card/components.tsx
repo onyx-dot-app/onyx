@@ -3,17 +3,18 @@ import "@opal/components/cards/message-card/styles.css";
 import { cn } from "@opal/utils";
 import type {
   IconFunctionComponent,
-  PaddingVariants,
+  Spacing,
   RichStr,
   StatusVariants,
 } from "@opal/types";
-import { paddingVariants } from "@opal/shared";
+import { spacingToRem } from "@opal/shared";
 import { ContentAction } from "@opal/layouts";
 import { Button, Divider } from "@opal/components";
 import {
   SvgAlertCircle,
   SvgAlertTriangle,
   SvgCheckCircle,
+  SvgClock,
   SvgX,
   SvgXOctagon,
 } from "@opal/icons";
@@ -35,11 +36,19 @@ interface MessageCardBaseProps {
   /** Optional description below the title. */
   description?: string | RichStr;
 
-  /** Padding preset. @default "sm" */
-  padding?: Extract<PaddingVariants, "sm" | "xs">;
+  /** Clamp the title to N lines with ellipsis. Default: `1`. Pass `undefined` to wrap freely. */
+  titleMaxLines?: number;
 
-  /** Padding around the header Content area. @default "fit" */
-  headerPadding?: PaddingVariants;
+  /**
+   * Padding, as a spacing step (`N / 4` rem). Narrowed on purpose — a message
+   * card is a fixed-density surface, so only these two densities are offered.
+   *
+   * @default 2
+   */
+  padding?: 1 | 2;
+
+  /** Padding around the header Content area, as a spacing step. @default 0 */
+  headerPadding?: Spacing;
 
   /**
    * Content rendered below a divider, under the main content area.
@@ -77,6 +86,7 @@ const VARIANT_CONFIG: Record<
   info: { icon: SvgAlertCircle, iconClass: "stroke-status-info-05" },
   success: { icon: SvgCheckCircle, iconClass: "stroke-status-success-05" },
   warning: { icon: SvgAlertTriangle, iconClass: "stroke-status-warning-05" },
+  pending: { icon: SvgClock, iconClass: "stroke-theme-amber-05" },
   error: { icon: SvgXOctagon, iconClass: "stroke-status-error-05" },
 };
 
@@ -124,8 +134,9 @@ function MessageCard({
   icon: iconOverride,
   title,
   description,
-  padding = "sm",
-  headerPadding = "fit",
+  titleMaxLines,
+  padding = 2,
+  headerPadding = 0,
   bottomChildren,
   rightChildren,
   onClose,
@@ -148,28 +159,30 @@ function MessageCard({
 
   return (
     <div
-      className={cn("opal-message-card", paddingVariants[padding])}
+      className="opal-message-card"
+      style={{ padding: spacingToRem(padding) }}
       data-variant={variant}
       data-opal-status-border={variant}
       ref={ref}
     >
-      <div className={paddingVariants[headerPadding]}>
+      <div style={{ padding: spacingToRem(headerPadding) }}>
         <ContentAction
           icon={(props) => (
             <Icon {...props} className={cn(props.className, iconClass)} />
           )}
           title={title}
           description={description}
+          titleMaxLines={titleMaxLines}
           sizePreset="main-ui"
           variant="section"
-          padding="md"
+          padding={1}
           rightChildren={right}
         />
       </div>
 
       {bottomChildren && (
         <>
-          <Divider paddingParallel="sm" paddingPerpendicular="xs" />
+          <Divider paddingParallel={2} paddingPerpendicular={1} />
           {bottomChildren}
         </>
       )}

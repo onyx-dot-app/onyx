@@ -5,6 +5,7 @@ import {
   SvgGoogle,
   SvgSearxng,
   SvgSerper,
+  SvgTavily,
 } from "@opal/logos";
 import { markdown } from "@opal/utils";
 import type {
@@ -60,6 +61,13 @@ export const SEARCH_PROVIDER_DETAILS: Record<
     helper: "Connect to SearXNG to set up web search.",
     logo: SvgSearxng,
   },
+  tavily: {
+    label: "Tavily",
+    subtitle: "Tavily AI",
+    helper: "Connect to Tavily to set up web search.",
+    apiKeyUrl: "https://app.tavily.com/home",
+    logo: SvgTavily,
+  },
 };
 
 export const SEARCH_PROVIDER_ORDER = Object.keys(
@@ -113,6 +121,10 @@ const SEARCH_PROVIDER_CAPABILITIES: Record<
     requiresApiKey: false,
     requiredConfigKeys: ["searxng_base_url"],
     storedConfigAliases: { searxng_base_url: ["searxng_base_url"] },
+  },
+  tavily: {
+    requiresApiKey: true,
+    requiredConfigKeys: [],
   },
 };
 
@@ -232,6 +244,12 @@ export const CONTENT_PROVIDER_DETAILS: Record<string, ContentProviderDetail> = {
     description:
       "Use Exa to fetch and summarize page content from search results.",
     logo: SvgExa,
+  },
+  tavily: {
+    label: "Tavily",
+    subtitle: "Tavily AI",
+    description: "Use Tavily to extract page content from URLs.",
+    logo: SvgTavily,
   },
 };
 

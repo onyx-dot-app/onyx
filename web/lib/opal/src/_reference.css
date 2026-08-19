@@ -18,7 +18,13 @@
 @import "tailwindcss";
 @import "tw-animate-css";
 @config "../tailwind-preset.cjs";
-@import "./styles/colors.css";
+@import "@onyx-ai/shared/tokens.css";
+@import "@onyx-ai/shared/typography.css";
 @import "./styles/sizes.css";
 @import "./styles/typography.css";
-@import "./styles/dbg.css";
+
+/* Applies when the primary input cannot hover (touch devices) — the
+   complement of Tailwind v4's hover-gated `hover:`/`group-hover:` variants.
+   Use it to keep hover-revealed controls visible on mobile, e.g.
+   `opacity-0 group-hover:opacity-100 no-hover:opacity-100`. */
+@custom-variant no-hover (@media (hover: none));

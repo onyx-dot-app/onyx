@@ -9,28 +9,27 @@ Uses real PostgreSQL for UserFile/Persona/UserProject rows.
 Mocks the LLM tokenizer and file store since they are not relevant here.
 """
 
-from unittest.mock import MagicMock
-from unittest.mock import patch
+from unittest.mock import MagicMock, patch
 from uuid import uuid4
 
 from sqlalchemy.orm import Session
 
 from onyx.configs.constants import DocumentSource
-from onyx.connectors.models import Document
-from onyx.connectors.models import TextSection
+from onyx.connectors.models import Document, TextSection
 from onyx.db.enums import UserFileStatus
-from onyx.db.models import Persona
-from onyx.db.models import Persona__UserFile
-from onyx.db.models import Project__UserFile
-from onyx.db.models import User
-from onyx.db.models import UserFile
-from onyx.db.models import UserProject
+from onyx.db.models import (
+    Persona,
+    Persona__UserFile,
+    Project__UserFile,
+    User,
+    UserFile,
+    UserProject,
+)
 from onyx.indexing.adapters.user_file_indexing_adapter import UserFileIndexingAdapter
 from onyx.indexing.indexing_pipeline import DocumentBatchPrepareContext
-from onyx.indexing.models import ChunkEmbedding
-from onyx.indexing.models import IndexChunk
+from onyx.indexing.models import ChunkEmbedding, IndexChunk
+from shared_configs.configs import POSTGRES_DEFAULT_SCHEMA_STANDARD_VALUE
 from tests.external_dependency_unit.conftest import create_test_user
-from tests.external_dependency_unit.constants import TEST_TENANT_ID
 
 # ---------------------------------------------------------------------------
 # Helpers
@@ -147,7 +146,7 @@ class TestAdapterWritesBothMetadataFields:
         db_session.commit()
 
         adapter = UserFileIndexingAdapter(
-            tenant_id=TEST_TENANT_ID, db_session=db_session
+            tenant_id=POSTGRES_DEFAULT_SCHEMA_STANDARD_VALUE, db_session=db_session
         )
         chunk = _make_index_chunk(uf)
         doc = chunk.source_document
@@ -155,7 +154,7 @@ class TestAdapterWritesBothMetadataFields:
 
         enricher = adapter.prepare_enrichment(
             context=context,
-            tenant_id=TEST_TENANT_ID,
+            tenant_id=POSTGRES_DEFAULT_SCHEMA_STANDARD_VALUE,
             chunks=[chunk],
             db_session=db_session,
         )
@@ -182,7 +181,7 @@ class TestAdapterWritesBothMetadataFields:
         db_session.commit()
 
         adapter = UserFileIndexingAdapter(
-            tenant_id=TEST_TENANT_ID, db_session=db_session
+            tenant_id=POSTGRES_DEFAULT_SCHEMA_STANDARD_VALUE, db_session=db_session
         )
         chunk = _make_index_chunk(uf)
         context = DocumentBatchPrepareContext(
@@ -191,7 +190,7 @@ class TestAdapterWritesBothMetadataFields:
 
         enricher = adapter.prepare_enrichment(
             context=context,
-            tenant_id=TEST_TENANT_ID,
+            tenant_id=POSTGRES_DEFAULT_SCHEMA_STANDARD_VALUE,
             chunks=[chunk],
             db_session=db_session,
         )
@@ -220,7 +219,7 @@ class TestAdapterWritesBothMetadataFields:
         db_session.commit()
 
         adapter = UserFileIndexingAdapter(
-            tenant_id=TEST_TENANT_ID, db_session=db_session
+            tenant_id=POSTGRES_DEFAULT_SCHEMA_STANDARD_VALUE, db_session=db_session
         )
         chunk = _make_index_chunk(uf)
         context = DocumentBatchPrepareContext(
@@ -229,7 +228,7 @@ class TestAdapterWritesBothMetadataFields:
 
         enricher = adapter.prepare_enrichment(
             context=context,
-            tenant_id=TEST_TENANT_ID,
+            tenant_id=POSTGRES_DEFAULT_SCHEMA_STANDARD_VALUE,
             chunks=[chunk],
             db_session=db_session,
         )
@@ -252,7 +251,7 @@ class TestAdapterWritesBothMetadataFields:
         uf = _create_user_file(db_session, user)
 
         adapter = UserFileIndexingAdapter(
-            tenant_id=TEST_TENANT_ID, db_session=db_session
+            tenant_id=POSTGRES_DEFAULT_SCHEMA_STANDARD_VALUE, db_session=db_session
         )
         chunk = _make_index_chunk(uf)
         context = DocumentBatchPrepareContext(
@@ -261,7 +260,7 @@ class TestAdapterWritesBothMetadataFields:
 
         enricher = adapter.prepare_enrichment(
             context=context,
-            tenant_id=TEST_TENANT_ID,
+            tenant_id=POSTGRES_DEFAULT_SCHEMA_STANDARD_VALUE,
             chunks=[chunk],
             db_session=db_session,
         )
@@ -291,7 +290,7 @@ class TestAdapterWritesBothMetadataFields:
         db_session.commit()
 
         adapter = UserFileIndexingAdapter(
-            tenant_id=TEST_TENANT_ID, db_session=db_session
+            tenant_id=POSTGRES_DEFAULT_SCHEMA_STANDARD_VALUE, db_session=db_session
         )
         chunk = _make_index_chunk(uf)
         context = DocumentBatchPrepareContext(
@@ -300,7 +299,7 @@ class TestAdapterWritesBothMetadataFields:
 
         enricher = adapter.prepare_enrichment(
             context=context,
-            tenant_id=TEST_TENANT_ID,
+            tenant_id=POSTGRES_DEFAULT_SCHEMA_STANDARD_VALUE,
             chunks=[chunk],
             db_session=db_session,
         )

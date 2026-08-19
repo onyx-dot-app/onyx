@@ -43,7 +43,7 @@ export const csvVariant: PreviewVariant = {
     if (!ctx.fileContent) return null;
     const { headers, rows } = parseCsv(ctx.fileContent);
     return (
-      <Section justifyContent="start" alignItems="start" padding={1}>
+      <Section justifyContent="start" alignItems="start" padding={4}>
         <Table>
           <TableHeader className="sticky top-0 z-sticky bg-background-tint-01">
             <TableRow noHover>

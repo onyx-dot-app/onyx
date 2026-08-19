@@ -4,45 +4,60 @@ from enum import Enum
 from uuid import UUID
 
 from fastapi import HTTPException
-from sqlalchemy import exists
-from sqlalchemy import func
-from sqlalchemy import not_
-from sqlalchemy import or_
-from sqlalchemy import Select
-from sqlalchemy import select
-from sqlalchemy import update
-from sqlalchemy.orm import aliased
-from sqlalchemy.orm import selectinload
-from sqlalchemy.orm import Session
+from sqlalchemy import Select, func, not_, or_, select, update
+from sqlalchemy.orm import Session, aliased, selectinload
 
 from onyx.access.hierarchy_access import get_user_external_group_ids
-from onyx.auth.schemas import UserRole
-from onyx.configs.app_configs import CURATORS_CANNOT_VIEW_OR_EDIT_NON_OWNED_ASSISTANTS
-from onyx.configs.constants import DEFAULT_PERSONA_ID
-from onyx.configs.constants import NotificationType
+from onyx.auth.permission_projection import persona_permissions
+from onyx.auth.permissions import has_global_permission, has_permission
+from onyx.auth.scoped_permissions import assert_within_scope, within_scope
+from onyx.configs.constants import DEFAULT_PERSONA_ID, NotificationType
 from onyx.db.constants import SLACK_BOT_PERSONA_PREFIX
 from onyx.db.document_access import get_accessible_documents_by_ids
-from onyx.db.models import ConnectorCredentialPair
-from onyx.db.models import Document
-from onyx.db.models import DocumentSet
-from onyx.db.models import FederatedConnector__DocumentSet
-from onyx.db.models import HierarchyNode
-from onyx.db.models import Persona
-from onyx.db.models import Persona__User
-from onyx.db.models import Persona__UserGroup
-from onyx.db.models import PersonaLabel
-from onyx.db.models import StarterMessage
-from onyx.db.models import Tool
-from onyx.db.models import User
-from onyx.db.models import User__UserGroup
-from onyx.db.models import UserFile
-from onyx.db.models import UserGroup
+from onyx.db.document_set import filter_document_set_ids_by_user_access
+from onyx.db.enums import (
+    AccountType,
+    Permission,
+    PermissionAuthority,
+    PersonaSharePermission,
+)
+from onyx.db.hierarchy import filter_accessible_hierarchy_node_ids
+from onyx.db.models import (
+    ConnectorCredentialPair,
+    Document,
+    DocumentSet,
+    FederatedConnector__DocumentSet,
+    HierarchyNode,
+    Persona,
+    Persona__Tool,
+    Persona__User,
+    Persona__UserGroup,
+    PersonaLabel,
+    StarterMessage,
+    Tool,
+    User,
+    User__UserGroup,
+    UserFile,
+    UserGroup,
+)
 from onyx.db.notification import create_notification
-from onyx.server.features.persona.models import FullPersonaSnapshot
-from onyx.server.features.persona.models import MinimalPersonaSnapshot
-from onyx.server.features.persona.models import PersonaSharedNotificationData
-from onyx.server.features.persona.models import PersonaSnapshot
-from onyx.server.features.persona.models import PersonaUpsertRequest
+from onyx.db.persona_sharing import (
+    get_persona_access_level,
+    get_user_group_ids_for_user,
+    persona_ownership_is_vacant,
+)
+from onyx.db.scoped_permissions import (
+    fetch_managed_group_ids,
+    scoped_group_ids_subquery,
+    within_managed_scope_clause,
+)
+from onyx.server.features.persona.models import (
+    FullPersonaSnapshot,
+    MinimalPersonaSnapshot,
+    PersonaSharedNotificationData,
+    PersonaSnapshot,
+    PersonaUpsertRequest,
+)
 from onyx.server.features.tool.tool_visibility import should_expose_tool_to_fe
 from onyx.utils.logger import setup_logger
 from onyx.utils.variable_functionality import fetch_versioned_implementation
@@ -74,15 +89,18 @@ class PersonaLoadType(Enum):
 def _add_user_filters(
     stmt: Select[tuple[Persona]], user: User, get_editable: bool = True
 ) -> Select[tuple[Persona]]:
-    if user.role == UserRole.ADMIN:
+    if has_global_permission(user, Permission.MANAGE_AGENTS):
+        return stmt
+    if not get_editable and has_global_permission(user, Permission.READ_AGENTS):
         return stmt
 
     stmt = stmt.distinct()
     Persona__UG = aliased(Persona__UserGroup)
     User__UG = aliased(User__UserGroup)
     """
-    Here we select cc_pairs by relation:
-    User -> User__UserGroup -> Persona__UserGroup -> Persona
+    Join chain: Persona -> Persona__UserGroup (group share rows) ->
+    User__UserGroup (membership in the share group), plus direct
+    Persona__User share rows.
     """
     stmt = (
         stmt.outerjoin(Persona__UG)
@@ -95,17 +113,6 @@ def _add_user_filters(
             Persona__User.persona_id == Persona.id,
         )
     )
-    """
-    Filter Personas by:
-    - if the user is in the user_group that owns the Persona
-    - if the user is not a global_curator, they must also have a curator relationship
-    to the user_group
-    - if editing is being done, we also filter out Personas that are owned by groups
-    that the user isn't a curator for
-    - if we are not editing, we show all Personas in the groups the user is a curator
-    for (as well as public Personas)
-    - if we are not editing, we return all Personas directly connected to the user
-    """
 
     # Anonymous users only see public, listed Personas
     if user.is_anonymous:
@@ -114,49 +121,68 @@ def _add_user_filters(
         )
         return stmt.where(where_clause)
 
-    # If curator ownership restriction is enabled, curators can only access their own assistants
-    if CURATORS_CANNOT_VIEW_OR_EDIT_NON_OWNED_ASSISTANTS and user.role in [
-        UserRole.CURATOR,
-        UserRole.GLOBAL_CURATOR,
-    ]:
-        where_clause = (Persona.user_id == user.id) | (Persona.user_id.is_(None))
-        return stmt.where(where_clause)
+    user_group_ids = select(User__UG.user_group_id).where(User__UG.user_id == user.id)
 
-    where_clause = User__UserGroup.user_id == user.id
-    if user.role == UserRole.CURATOR and get_editable:
-        where_clause &= User__UserGroup.is_curator == True  # noqa: E712
+    # Owner: the owning user, or any member of the owning group
+    owner_clause = (Persona.user_id == user.id) | (
+        Persona.owner_group_id.in_(user_group_ids)
+    )
+
     if get_editable:
-        user_groups = select(User__UG.user_group_id).where(User__UG.user_id == user.id)
-        if user.role == UserRole.CURATOR:
-            user_groups = user_groups.where(User__UG.is_curator == True)  # noqa: E712
-        where_clause &= ~exists().where(Persona__UG.persona_id == Persona.id).where(
-            ~Persona__UG.user_group_id.in_(user_groups)
-        ).correlate(Persona)
+        where_clause = owner_clause
+        # EDITOR-level direct share
+        where_clause |= (Persona__User.user_id == user.id) & (
+            Persona__User.permission == PersonaSharePermission.EDITOR
+        )
+        # EDITOR-level group share (any member of the share group)
+        where_clause |= (User__UserGroup.user_id == user.id) & (
+            Persona__UG.permission == PersonaSharePermission.EDITOR
+        )
+        # Org-wide edit
+        where_clause |= (Persona.is_public == True) & (  # noqa: E712
+            Persona.public_permission == PersonaSharePermission.EDITOR
+        )
+        # Scoped group manager: PRIVATE agents whose every group they manage
+        # (empty managed subquery for a non-manager → contributes no rows).
+        where_clause |= within_managed_scope_clause(
+            resource_id_col=Persona.id,
+            junction_resource_col=Persona__UserGroup.persona_id,
+            junction_group_col=Persona__UserGroup.user_group_id,
+            non_public_clause=Persona.is_public.is_(False),
+            managed_subq=scoped_group_ids_subquery(user),
+        )
     else:
         listed = Persona.is_listed == True  # noqa: E712
 
-        # Group membership — only listed agents
-        where_clause &= listed
+        # Group share membership — only listed agents
+        where_clause = (User__UserGroup.user_id == user.id) & listed
 
         # Public agents — must be listed
-        public_condition = (Persona.is_public == True) & listed  # noqa: E712
+        where_clause |= (Persona.is_public == True) & listed  # noqa: E712
 
         # Directly shared — only listed agents
-        shared_condition = (Persona__User.user_id == user.id) & listed
+        where_clause |= (Persona__User.user_id == user.id) & listed
 
-        where_clause |= public_condition
-        where_clause |= shared_condition
-
-    # Owner always sees their own agents (regardless of is_listed)
-    where_clause |= Persona.user_id == user.id
+        # Owners always see their own agents (regardless of is_listed)
+        where_clause |= owner_clause
 
     return stmt.where(where_clause)
 
 
 def fetch_persona_by_id_for_user(
-    db_session: Session, persona_id: int, user: User, get_editable: bool = True
+    db_session: Session,
+    persona_id: int,
+    user: User,
+    get_editable: bool = True,
+    include_deleted: bool = False,
 ) -> Persona:
+    """Load an agent the user may act on. Soft-deleted rows are excluded by default —
+    every caller mutates the agent, and a deleted one shouldn't be reachable. The one
+    opt-in is ``upsert_persona`` *creating* over a deleted same-name row, which it
+    recycles; editing by id never opts in."""
     stmt = select(Persona).where(Persona.id == persona_id).distinct()
+    if not include_deleted:
+        stmt = stmt.where(Persona.deleted.is_(False))
     stmt = _add_user_filters(stmt=stmt, user=user, get_editable=get_editable)
     persona = db_session.scalars(stmt).one_or_none()
     if not persona:
@@ -165,6 +191,25 @@ def fetch_persona_by_id_for_user(
             detail=f"Persona with ID {persona_id} does not exist or user is not authorized to access it",
         )
     return persona
+
+
+def get_tool_ids_on_editable_personas(user: User, db_session: Session) -> set[int]:
+    """Tools on agents this user may edit. The editor rebuilds an agent's tool_ids
+    from this listing, so anything absent is dropped on the next save."""
+    # _add_user_filters short-circuits anonymous to public+listed before reading get_editable
+    if user.is_anonymous:
+        return set()
+    # deleted agents keep their tool rows, and MANAGE_AGENTS skips _add_user_filters
+    editable_persona_ids = _add_user_filters(
+        select(Persona).where(Persona.deleted.is_(False)), user, get_editable=True
+    ).with_only_columns(Persona.id)
+    return set(
+        db_session.scalars(
+            select(Persona__Tool.tool_id).where(
+                Persona__Tool.persona_id.in_(editable_persona_ids)
+            )
+        )
+    )
 
 
 def get_best_persona_id_for_user(
@@ -203,66 +248,364 @@ def _get_persona_by_name(
     - Non-admin users: can only see their own personas
     """
     stmt = select(Persona).where(Persona.name == persona_name)
-    if user and user.role != UserRole.ADMIN:
+    if user and not has_global_permission(user, Permission.MANAGE_AGENTS):
         stmt = stmt.where(Persona.user_id == user.id)
     result = db_session.execute(stmt).scalar_one_or_none()
     return result
+
+
+def apply_persona_user_share_diff(
+    persona_id: int,
+    desired_shares: dict[UUID, PersonaSharePermission],
+    creator_user_id: UUID | None,
+    db_session: Session,
+) -> None:
+    """Reconcile persona__user rows to ``desired_shares``: delete missing,
+    update changed levels in place, insert + notify genuinely new users.
+    Level-only changes never re-notify."""
+    existing_rows = (
+        db_session.query(Persona__User)
+        .filter(Persona__User.persona_id == persona_id)
+        .all()
+    )
+    existing_by_user = {row.user_id: row for row in existing_rows if row.user_id}
+
+    for user_id, row in existing_by_user.items():
+        if user_id not in desired_shares:
+            db_session.delete(row)
+        elif row.permission != desired_shares[user_id]:
+            row.permission = desired_shares[user_id]
+
+    for user_id, permission in desired_shares.items():
+        if user_id in existing_by_user:
+            continue
+        db_session.add(
+            Persona__User(persona_id=persona_id, user_id=user_id, permission=permission)
+        )
+        if user_id != creator_user_id:
+            create_notification(
+                user_id=user_id,
+                notif_type=NotificationType.PERSONA_SHARED,
+                title="A new agent was shared with you!",
+                db_session=db_session,
+                additional_data=PersonaSharedNotificationData(
+                    persona_id=persona_id,
+                ).model_dump(),
+            )
+
+
+def resolve_desired_user_shares(
+    persona_id: int,
+    user_ids: list[UUID] | None,
+    user_shares: dict[UUID, PersonaSharePermission] | None,
+    db_session: Session,
+) -> dict[UUID, PersonaSharePermission] | None:
+    """Merge the legacy id-list and leveled-share inputs into one desired map.
+    Legacy ids keep an existing row's level (new rows default to VIEWER) so
+    pre-permission callers can't downgrade editors."""
+    if user_shares is not None:
+        return dict(user_shares)
+    if user_ids is None:
+        return None
+    existing = {
+        row.user_id: row.permission
+        for row in db_session.query(Persona__User)
+        .filter(Persona__User.persona_id == persona_id)
+        .all()
+        if row.user_id
+    }
+    return {
+        user_id: existing.get(user_id, PersonaSharePermission.VIEWER)
+        for user_id in set(user_ids)
+    }
 
 
 def update_persona_access(
     persona_id: int,
     creator_user_id: UUID | None,
     db_session: Session,
+    acting_user: User,  # noqa: ARG001  (lockstep with EE; MIT has no group sharing)
     is_public: bool | None = None,
     user_ids: list[UUID] | None = None,
     group_ids: list[int] | None = None,
+    user_shares: dict[UUID, PersonaSharePermission] | None = None,
+    group_shares: dict[int, PersonaSharePermission] | None = None,
+    public_permission: PersonaSharePermission | None = None,
+    original_is_public: bool | None = None,  # noqa: ARG001  (lockstep with EE)
 ) -> None:
     """Updates the access settings for a persona including public status and user shares.
 
     NOTE: Callers are responsible for committing."""
 
     needs_sync = False
-    if is_public is not None:
+    if is_public is not None or public_permission is not None:
         needs_sync = True
         persona = db_session.query(Persona).filter(Persona.id == persona_id).first()
         if persona:
-            persona.is_public = is_public
+            if is_public is not None:
+                persona.is_public = is_public
+            if public_permission is not None:
+                persona.public_permission = public_permission
 
-    # NOTE: For user-ids and group-ids, `None` means "leave unchanged", `[]` means "clear all shares",
-    # and a non-empty list means "replace with these shares".
-    if user_ids is not None:
+    # NOTE: For share inputs, `None` means "leave unchanged", empty means
+    # "clear all shares", and non-empty means "replace with these shares".
+    desired_user_shares = resolve_desired_user_shares(
+        persona_id, user_ids, user_shares, db_session
+    )
+    if desired_user_shares is not None:
         needs_sync = True
-        db_session.query(Persona__User).filter(
-            Persona__User.persona_id == persona_id
-        ).delete(synchronize_session="fetch")
-
-        for user_uuid in user_ids:
-            db_session.add(Persona__User(persona_id=persona_id, user_id=user_uuid))
-            if user_uuid != creator_user_id:
-                create_notification(
-                    user_id=user_uuid,
-                    notif_type=NotificationType.PERSONA_SHARED,
-                    title="A new agent was shared with you!",
-                    db_session=db_session,
-                    additional_data=PersonaSharedNotificationData(
-                        persona_id=persona_id,
-                    ).model_dump(),
-                )
+        apply_persona_user_share_diff(
+            persona_id, desired_user_shares, creator_user_id, db_session
+        )
 
     # MIT doesn't support group-based sharing, so we allow clearing (no-op since
     # there shouldn't be any) but raise an error if trying to add actual groups.
-    if group_ids is not None:
+    if group_ids is not None or group_shares is not None:
         needs_sync = True
         db_session.query(Persona__UserGroup).filter(
             Persona__UserGroup.persona_id == persona_id
         ).delete(synchronize_session="fetch")
 
-        if group_ids:
+        if group_ids or group_shares:
             raise NotImplementedError("Onyx MIT does not support group-based sharing")
 
     # When sharing changes, user file ACLs need to be updated in the vector DB
     if needs_sync:
         mark_persona_user_files_for_sync(persona_id, db_session)
+
+
+def _assert_persona_update_within_managed_scope(
+    persona_id: int | None,
+    request: PersonaUpsertRequest,
+    user: User,
+    db_session: Session,
+) -> None:
+    """GATE 2 for a scoped group manager on the create/update path. Global holders and
+    non-managers are untouched. A SCOPED manager may only act on a currently-private agent
+    whose groups — current and requested — are ones they manage. Groups and privacy are
+    re-read from the DB, not trusted from the request.
+
+    Publishing is NOT gated here: it's owner-or-admin via ``can_delete_persona`` in
+    ``upsert_persona``, so an owner who happens to manage a group keeps that right."""
+    if has_permission(user, Permission.MANAGE_AGENTS) is not PermissionAuthority.SCOPED:
+        return
+    # Lock before reading — a content-only edit carries no groups, so update_persona_access
+    # skips its own gate and a reassignment could land between this check and the write.
+    # populate_existing stops an already-loaded row from serving pre-lock state.
+    persona = (
+        db_session.query(Persona)
+        .populate_existing()
+        .filter(Persona.id == persona_id)
+        .with_for_update()
+        .first()
+        if persona_id is not None
+        else None
+    )
+    current_group_ids: list[int] = []
+    current_is_public = False
+    if persona is not None:
+        current_group_ids = [group.id for group in persona.groups]
+        current_is_public = persona.is_public
+    requested_group_ids = (
+        list(request.groups) if request.groups is not None else current_group_ids
+    )
+    # Personal (no-group) agent: not a group-scoped resource, so nothing to authorize.
+    if not current_group_ids and not requested_group_ids:
+        return
+    # Managing a group never subtracts a right the actor holds as owner, so an edit that
+    # leaves the groups alone is theirs — the editor round-trips them on every save.
+    # Requesting a different set still hits the gate below, and the EE group-share gate
+    # re-checks the diff at the per-group levels this request can't carry.
+    if (
+        persona is not None
+        and set(requested_group_ids) == set(current_group_ids)
+        and can_delete_persona(user, persona, db_session)
+    ):
+        return
+    assert_within_scope(
+        user,
+        db_session,
+        permission=Permission.MANAGE_AGENTS,
+        current_group_ids=current_group_ids,
+        requested_group_ids=requested_group_ids,
+        # Current state only, matching persona_edit_within_scope: an already-public agent
+        # is in nobody's managed scope; publishing a private one is the owner's call.
+        is_non_public=not current_is_public,
+    )
+
+
+def persona_edit_within_scope(
+    user: User,
+    db_session: Session,
+    *,
+    group_ids: list[int],
+    is_public: bool,
+    is_owner: bool = False,
+    managed_group_ids: set[int] | None = None,
+) -> bool:
+    """Read-mode of ``_assert_persona_update_within_managed_scope`` (requested := current).
+    Non-SCOPED holders, personal (no-group) agents, and the owner pass — read-mode never
+    changes the groups, which is the guard's owner exemption. Otherwise a scoped manager
+    passes only when within_scope holds. Pinned to that guard by the contract test."""
+    if has_permission(user, Permission.MANAGE_AGENTS) is not PermissionAuthority.SCOPED:
+        return True
+    if not group_ids:
+        return True
+    if is_owner:
+        return True
+    return within_scope(
+        user,
+        db_session,
+        permission=Permission.MANAGE_AGENTS,
+        current_group_ids=group_ids,
+        requested_group_ids=group_ids,
+        is_non_public=not is_public,
+        managed_group_ids=managed_group_ids,
+    )
+
+
+def can_edit_persona(
+    user: User,
+    persona: Persona,
+    db_session: Session,
+    *,
+    is_editable: bool,
+    managed_group_ids: set[int] | None = None,
+    user_group_ids: set[int] | None = None,
+) -> bool:
+    """The get_editable filter is a superset (owner ∪ EDITOR-share ∪ managed-scope), so a
+    scoped manager EDITOR-shared on an out-of-scope grouped agent qualifies there but is
+    ANDed out by the managed-scope gate — matching the write path. ``is_editable`` is that
+    filter's result; ``user_group_ids`` preloads the owner check's group lookup."""
+    if not is_editable:
+        return False
+    return persona_edit_within_scope(
+        user,
+        db_session,
+        group_ids=[group.id for group in persona.groups],
+        is_public=persona.is_public,
+        is_owner=can_delete_persona(
+            user, persona, db_session, user_group_ids=user_group_ids
+        ),
+        managed_group_ids=managed_group_ids,
+    )
+
+
+def is_persona_editable_by_user(
+    db_session: Session, persona_id: int, user: User
+) -> bool:
+    """Non-raising editability check via the same get_editable filter the edit affordance
+    should reflect (superset: owner ∪ EDITOR-share ∪ managed-scope)."""
+    stmt = select(Persona).where(Persona.id == persona_id).distinct()
+    stmt = _add_user_filters(stmt=stmt, user=user, get_editable=True)
+    return db_session.scalars(stmt).one_or_none() is not None
+
+
+def can_view_persona_stats(
+    user: User,
+    persona: Persona,
+    db_session: Session,
+    *,
+    user_group_ids: set[int] | None = None,
+) -> bool:
+    """READ_AGENT_ANALYTICS plus ownership — a global MANAGE_AGENTS holder implies both,
+    so reads any agent. Mirrors ee ``user_can_view_assistant_stats`` (pinned by the
+    contract test); EE-only, but the gate is trivially MIT-computable."""
+    if not has_global_permission(user, Permission.READ_AGENT_ANALYTICS):
+        return False
+    return can_delete_persona(user, persona, db_session, user_group_ids=user_group_ids)
+
+
+def can_delete_persona(
+    user: User,
+    persona: Persona,
+    db_session: Session,
+    *,
+    user_group_ids: set[int] | None = None,
+) -> bool:
+    """Owner-or-admin — mirrors the delete/publish handlers' ownership check (via
+    ``get_persona_by_id(is_for_edit=True)``): a global MANAGE_AGENTS holder, the owner,
+    or an owner-group member. A scoped manager is NOT included: deleting or publishing a
+    managed-group agent is owner/admin only, not a manager scope.
+
+    ``user_group_ids`` lets a caller pass a preloaded set so per-row stamping issues no
+    DB query; ``None`` re-queries."""
+    if has_global_permission(user, Permission.MANAGE_AGENTS):
+        return True
+    if persona.user_id == user.id:
+        return True
+    if persona.owner_group_id is not None:
+        group_ids = (
+            user_group_ids
+            if user_group_ids is not None
+            else get_user_group_ids_for_user(db_session, user.id)
+        )
+        return persona.owner_group_id in group_ids
+    return False
+
+
+def _editable_persona_ids_among(
+    db_session: Session, user: User, persona_ids: list[int]
+) -> set[int]:
+    """Subset of ``persona_ids`` the user may edit, via the same get_editable filter the
+    write path enforces — one query for the whole page instead of a per-persona check."""
+    if not persona_ids:
+        return set()
+    stmt = select(Persona).where(Persona.id.in_(persona_ids))
+    stmt = _add_user_filters(stmt=stmt, user=user, get_editable=True)
+    return {persona.id for persona in db_session.scalars(stmt).all()}
+
+
+def stamp_persona_permissions(
+    snapshots: Sequence[MinimalPersonaSnapshot | PersonaSnapshot],
+    personas: Sequence[Persona],
+    user: User,
+    db_session: Session,
+    user_group_ids: set[int],
+) -> None:
+    """Stamp each list snapshot with the same affordance map the single-agent GET does,
+    so cards gate their icons without a per-card refetch. Shared inputs (editable set,
+    managed scope, admin flags) are batched so a page costs a fixed number of queries,
+    not one per persona. ``snapshots`` and ``personas`` must be in the same order."""
+    editable_ids = _editable_persona_ids_among(
+        db_session, user, [persona.id for persona in personas]
+    )
+    # Only scoped managers consult the managed set (GLOBAL/NONE short-circuit earlier);
+    # preload it once so per-row can_edit_persona issues no query.
+    managed_group_ids = (
+        fetch_managed_group_ids(user, db_session)
+        if has_permission(user, Permission.MANAGE_AGENTS) is PermissionAuthority.SCOPED
+        else None
+    )
+    is_manage_agents_admin = has_global_permission(user, Permission.MANAGE_AGENTS)
+    is_full_admin = has_global_permission(user, Permission.FULL_ADMIN_PANEL_ACCESS)
+    # delete/publish also gate on ADD_AGENTS (GATE 1); edit/share don't. Per-user, not per-row.
+    holds_add_agents = (
+        has_permission(user, Permission.ADD_AGENTS) is not PermissionAuthority.NONE
+    )
+    for snapshot, persona in zip(snapshots, personas, strict=True):
+        is_editable = persona.id in editable_ids
+        snapshot.permissions = persona_permissions(
+            can_edit=can_edit_persona(
+                user,
+                persona,
+                db_session,
+                is_editable=is_editable,
+                managed_group_ids=managed_group_ids,
+                user_group_ids=user_group_ids,
+            ),
+            # share tracks the share guard (get_editable), broader than edit's scope gate
+            can_share=is_editable,
+            can_view_stats=can_view_persona_stats(
+                user, persona, db_session, user_group_ids=user_group_ids
+            ),
+            can_delete=can_delete_persona(
+                user, persona, db_session, user_group_ids=user_group_ids
+            ),
+            holds_add_agents=holds_add_agents,
+            is_manage_agents_admin=is_manage_agents_admin,
+            is_full_admin=is_full_admin,
+        )
 
 
 def create_update_persona(
@@ -275,14 +618,24 @@ def create_update_persona(
     # Permission to actually use these is checked later
 
     try:
+        _assert_persona_update_within_managed_scope(
+            persona_id, create_persona_request, user, db_session
+        )
+
+        # Capture before upsert_persona stages the requested value: autoflush writes it
+        # before update_persona_access reads the row.
+        original_is_public: bool | None = (
+            db_session.scalar(select(Persona.is_public).where(Persona.id == persona_id))
+            if persona_id is not None
+            else None
+        )
+
         # Featured persona validation
         if create_persona_request.is_featured:
-            # Curators can edit featured personas, but not make them
-            # TODO this will be reworked soon with RBAC permissions feature
-            if user.role == UserRole.CURATOR or user.role == UserRole.GLOBAL_CURATOR:
-                pass
-            elif user.role != UserRole.ADMIN:
-                raise ValueError("Only admins can make a featured persona")
+            if not has_global_permission(user, Permission.MANAGE_AGENTS):
+                raise ValueError(
+                    "Only users with agent management permissions can make a featured persona"
+                )
 
         # Convert incoming string UUIDs to UUID objects for DB operations
         converted_user_file_ids = None
@@ -330,14 +683,30 @@ def create_update_persona(
             persona_id=persona.id,
             creator_user_id=user.id,
             db_session=db_session,
+            acting_user=user,
             user_ids=create_persona_request.users,
             group_ids=create_persona_request.groups,
+            original_is_public=original_is_public,
         )
         db_session.commit()
 
     except ValueError as e:
         logger.exception("Failed to create persona")
         raise HTTPException(status_code=400, detail=str(e))
+
+    # Eager-load the share relations the snapshot reads so from_model doesn't
+    # lazy-load each one separately after the commit expires the instance.
+    persona = db_session.scalars(
+        select(Persona)
+        .where(Persona.id == persona.id)
+        .options(
+            selectinload(Persona.user_shares).selectinload(Persona__User.user),
+            selectinload(Persona.group_shares).selectinload(
+                Persona__UserGroup.user_group
+            ),
+            selectinload(Persona.owner_group),
+        )
+    ).one()
 
     return FullPersonaSnapshot.from_model(persona)
 
@@ -350,16 +719,44 @@ def update_persona_shared(
     group_ids: list[int] | None = None,
     is_public: bool | None = None,
     label_ids: list[int] | None = None,
+    user_shares: dict[UUID, PersonaSharePermission] | None = None,
+    group_shares: dict[int, PersonaSharePermission] | None = None,
+    public_permission: PersonaSharePermission | None = None,
 ) -> None:
     """Simplified version of `create_update_persona` which only touches the
     accessibility rather than any of the logic (e.g. prompt, connected data sources,
-    etc.)."""
+    etc.). Allowed for the owner, EDITOR-level users, and admins — enforced by
+    the editable fetch.
+
+    The owner never appears in the share rows: incoming owner ids are dropped
+    silently so a dialog that went stale across an ownership transfer can
+    still save."""
     persona = fetch_persona_by_id_for_user(
         db_session=db_session, persona_id=persona_id, user=user, get_editable=True
     )
 
-    if user and user.role != UserRole.ADMIN and persona.user_id != user.id:
-        raise PermissionError("You don't have permission to modify this persona")
+    # Org-wide visibility is an owner/admin decision. EDITOR-level sharees may edit
+    # user/group shares but must not flip is_public / public_permission. Reuse the
+    # delete/publish predicate so this exactly matches the `publish` projection and the
+    # /public route (global MANAGE_AGENTS, owner, or owner-group) — not just FULL_ADMIN.
+    if not can_delete_persona(user, persona, db_session):
+        is_public = None
+        public_permission = None
+
+    owner_user_id: UUID | None = persona.user_id
+    owner_group_id: int | None = persona.owner_group_id
+    if user_ids is not None and owner_user_id is not None:
+        user_ids = [uid for uid in user_ids if uid != owner_user_id]
+    if user_shares is not None and owner_user_id is not None:
+        user_shares = {
+            uid: perm for uid, perm in user_shares.items() if uid != owner_user_id
+        }
+    if group_ids is not None and owner_group_id is not None:
+        group_ids = [gid for gid in group_ids if gid != owner_group_id]
+    if group_shares is not None and owner_group_id is not None:
+        group_shares = {
+            gid: perm for gid, perm in group_shares.items() if gid != owner_group_id
+        }
 
     versioned_update_persona_access = fetch_versioned_implementation(
         "onyx.db.persona", "update_persona_access"
@@ -368,9 +765,13 @@ def update_persona_shared(
         persona_id=persona_id,
         creator_user_id=user.id,
         db_session=db_session,
+        acting_user=user,
         is_public=is_public,
         user_ids=user_ids,
         group_ids=group_ids,
+        user_shares=user_shares,
+        group_shares=group_shares,
+        public_permission=public_permission,
     )
 
     if label_ids is not None:
@@ -394,10 +795,200 @@ def update_persona_public_status(
     persona = fetch_persona_by_id_for_user(
         db_session=db_session, persona_id=persona_id, user=user, get_editable=True
     )
-    if user.role != UserRole.ADMIN and persona.user_id != user.id:
+    is_owner_group_member = (
+        persona.owner_group_id is not None
+        and persona.owner_group_id in get_user_group_ids_for_user(db_session, user.id)
+    )
+    if (
+        not has_global_permission(user, Permission.MANAGE_AGENTS)
+        and persona.user_id != user.id
+        and not is_owner_group_member
+    ):
         raise ValueError("You don't have permission to modify this persona")
 
     persona.is_public = is_public
+    mark_persona_user_files_for_sync(persona_id, db_session)
+    db_session.commit()
+
+
+def user_can_transfer_persona(
+    persona: Persona, user: User, db_session: Session
+) -> bool:
+    """Only the owner may transfer; admins may transfer vacant personas."""
+    if persona.user_id is not None:
+        if persona.user_id == user.id:
+            return True
+    elif persona.owner_group_id is not None:
+        if persona.owner_group_id in get_user_group_ids_for_user(db_session, user.id):
+            return True
+    return has_global_permission(
+        user, Permission.MANAGE_AGENTS
+    ) and persona_ownership_is_vacant(persona)
+
+
+def _validate_transfer_target_user(target: User) -> None:
+    if not target.is_active:
+        raise ValueError("Ownership can only be transferred to an active user")
+    if target.account_type is not None and target.account_type != AccountType.STANDARD:
+        raise ValueError("Ownership cannot be transferred to bots or service accounts")
+
+
+def _transfer_persona_ownership(
+    persona_id: int,
+    user: User,
+    db_session: Session,
+    new_owner_user_id: UUID | None,
+    new_owner_group_id: int | None,
+) -> None:
+    """Shared MIT/EE transfer core. Demotes the previous owner to an EDITOR
+    share row (upsert) and removes the new owner's share row, all in one
+    transaction."""
+    if (new_owner_user_id is None) == (new_owner_group_id is None):
+        raise ValueError("Exactly one of a user or a group must be the new owner")
+
+    persona = (
+        db_session.query(Persona)
+        .filter(Persona.id == persona_id, Persona.deleted.is_(False))
+        .one_or_none()
+    )
+    if persona is None:
+        raise ValueError("Agent not found")
+    if persona.builtin_persona or persona.name.startswith(SLACK_BOT_PERSONA_PREFIX):
+        raise ValueError("Built-in agents cannot change ownership")
+    if not user_can_transfer_persona(persona, user, db_session):
+        raise PermissionError("Only the owner can transfer ownership of this agent")
+
+    prev_owner_user_id = persona.user_id
+    prev_owner_group_id = persona.owner_group_id
+
+    if new_owner_user_id is not None:
+        target = (
+            db_session.query(User)
+            .filter(User.id == new_owner_user_id)  # ty: ignore[invalid-argument-type]
+            .one_or_none()
+        )
+        if target is None:
+            raise ValueError("New owner not found")
+        _validate_transfer_target_user(target)
+        if target.id == prev_owner_user_id:
+            raise ValueError("This user already owns the agent")
+        persona.user_id = target.id
+        persona.owner_group_id = None
+        # The new owner leaves the share list
+        db_session.query(Persona__User).filter(
+            Persona__User.persona_id == persona_id,
+            Persona__User.user_id == target.id,
+        ).delete(synchronize_session="fetch")
+    else:
+        group = (
+            db_session.query(UserGroup)
+            .filter(UserGroup.id == new_owner_group_id)
+            .one_or_none()
+        )
+        if group is None:
+            raise ValueError("New owner group not found")
+        # A group whose deletion is already in flight would re-orphan the agent
+        # as soon as its sync worker runs.
+        if group.is_up_for_deletion:
+            raise ValueError("New owner group is being deleted")
+        if group.id == prev_owner_group_id:
+            raise ValueError("This group already owns the agent")
+        persona.owner_group_id = group.id
+        persona.user_id = None
+        db_session.query(Persona__UserGroup).filter(
+            Persona__UserGroup.persona_id == persona_id,
+            Persona__UserGroup.user_group_id == group.id,
+        ).delete(synchronize_session="fetch")
+
+    if prev_owner_user_id is not None and prev_owner_user_id != persona.user_id:
+        existing_share = (
+            db_session.query(Persona__User)
+            .filter(
+                Persona__User.persona_id == persona_id,
+                Persona__User.user_id == prev_owner_user_id,
+            )
+            .one_or_none()
+        )
+        if existing_share:
+            existing_share.permission = PersonaSharePermission.EDITOR
+        else:
+            db_session.add(
+                Persona__User(
+                    persona_id=persona_id,
+                    user_id=prev_owner_user_id,
+                    permission=PersonaSharePermission.EDITOR,
+                )
+            )
+    if (
+        prev_owner_group_id is not None
+        and prev_owner_group_id != persona.owner_group_id
+    ):
+        existing_group_share = (
+            db_session.query(Persona__UserGroup)
+            .filter(
+                Persona__UserGroup.persona_id == persona_id,
+                Persona__UserGroup.user_group_id == prev_owner_group_id,
+            )
+            .one_or_none()
+        )
+        if existing_group_share:
+            existing_group_share.permission = PersonaSharePermission.EDITOR
+        else:
+            db_session.add(
+                Persona__UserGroup(
+                    persona_id=persona_id,
+                    user_group_id=prev_owner_group_id,
+                    permission=PersonaSharePermission.EDITOR,
+                )
+            )
+
+    mark_persona_user_files_for_sync(persona_id, db_session)
+    db_session.commit()
+
+
+def transfer_persona_ownership(
+    persona_id: int,
+    user: User,
+    db_session: Session,
+    new_owner_user_id: UUID | None = None,
+    new_owner_group_id: int | None = None,
+) -> None:
+    """Move ownership to a single user. Group targets are EE-only (versioned
+    override in ee.onyx.db.persona)."""
+    if new_owner_group_id is not None:
+        raise NotImplementedError("Onyx MIT does not support group ownership")
+    _transfer_persona_ownership(
+        persona_id=persona_id,
+        user=user,
+        db_session=db_session,
+        new_owner_user_id=new_owner_user_id,
+        new_owner_group_id=None,
+    )
+
+
+def remove_user_from_persona_shares(
+    persona_id: int,
+    user: User,
+    db_session: Session,
+) -> None:
+    """Self-service removal from a persona's share list. Owners can't leave
+    their own agent; not gated on edit access so viewers can leave too."""
+    persona = db_session.query(Persona).filter(Persona.id == persona_id).one_or_none()
+    if persona is None or persona.deleted:
+        raise ValueError("Agent not found")
+    if persona.user_id == user.id:
+        raise ValueError("The owner cannot remove themselves from their own agent")
+    deleted_count = (
+        db_session.query(Persona__User)
+        .filter(
+            Persona__User.persona_id == persona_id,
+            Persona__User.user_id == user.id,
+        )
+        .delete(synchronize_session="fetch")
+    )
+    if not deleted_count:
+        raise ValueError("You are not in this agent's share list")
+    mark_persona_user_files_for_sync(persona_id, db_session)
     db_session.commit()
 
 
@@ -425,6 +1016,14 @@ def _build_persona_filters(
     if not include_deleted:
         stmt = stmt.where(Persona.deleted.is_(False))
     return stmt
+
+
+def _user_may_view_persona_owner_email(user: User, persona: Persona) -> bool:
+    """Owner email is PII — only the persona's owner or an admin may see it."""
+    return (
+        has_global_permission(user, Permission.MANAGE_AGENTS)
+        or persona.user_id == user.id
+    )
 
 
 def get_minimal_persona_snapshots_for_user(
@@ -458,9 +1057,25 @@ def get_minimal_persona_snapshots_for_user(
             Document.parent_hierarchy_node
         ),
         selectinload(Persona.user),
+        # groups feeds the per-agent edit affordance (persona_edit_within_scope);
+        # eager-load it so stamping the page's permissions isn't an N+1.
+        selectinload(Persona.groups),
+        selectinload(Persona.owner_group),
+        selectinload(Persona.user_shares),
+        selectinload(Persona.group_shares),
     )
     results = db_session.scalars(stmt).all()
-    return [MinimalPersonaSnapshot.from_model(persona) for persona in results]
+    user_group_ids = get_user_group_ids_for_user(db_session, user.id)
+    snapshots = [
+        MinimalPersonaSnapshot.from_model(
+            persona,
+            user_permission=get_persona_access_level(persona, user, user_group_ids),
+            include_owner_email=_user_may_view_persona_owner_email(user, persona),
+        )
+        for persona in results
+    ]
+    stamp_persona_permissions(snapshots, results, user, db_session, user_group_ids)
+    return snapshots
 
 
 def get_persona_snapshots_for_user(
@@ -497,10 +1112,16 @@ def get_persona_snapshots_for_user(
         selectinload(Persona.user_files),
         selectinload(Persona.users),
         selectinload(Persona.groups),
+        selectinload(Persona.owner_group),
+        selectinload(Persona.user_shares).selectinload(Persona__User.user),
+        selectinload(Persona.group_shares).selectinload(Persona__UserGroup.user_group),
     )
 
     results = db_session.scalars(stmt).all()
-    return [PersonaSnapshot.from_model(persona) for persona in results]
+    snapshots = [PersonaSnapshot.from_model(persona) for persona in results]
+    user_group_ids = get_user_group_ids_for_user(db_session, user.id)
+    stamp_persona_permissions(snapshots, results, user, db_session, user_group_ids)
+    return snapshots
 
 
 def get_persona_count_for_user(
@@ -600,10 +1221,26 @@ def get_minimal_persona_snapshots_paginated(
             ),
         ),
         selectinload(Persona.user),
+        # groups feeds the per-agent edit affordance (persona_edit_within_scope);
+        # eager-load it so stamping the page's permissions isn't an N+1.
+        selectinload(Persona.groups),
+        selectinload(Persona.owner_group),
+        selectinload(Persona.user_shares),
+        selectinload(Persona.group_shares),
     )
 
     results = db_session.scalars(stmt).all()
-    return [MinimalPersonaSnapshot.from_model(persona) for persona in results]
+    user_group_ids = get_user_group_ids_for_user(db_session, user.id)
+    snapshots = [
+        MinimalPersonaSnapshot.from_model(
+            persona,
+            user_permission=get_persona_access_level(persona, user, user_group_ids),
+            include_owner_email=_user_may_view_persona_owner_email(user, persona),
+        )
+        for persona in results
+    ]
+    stamp_persona_permissions(snapshots, results, user, db_session, user_group_ids)
+    return snapshots
 
 
 def get_persona_snapshots_paginated(
@@ -671,10 +1308,16 @@ def get_persona_snapshots_paginated(
         selectinload(Persona.user_files),
         selectinload(Persona.users),
         selectinload(Persona.groups),
+        selectinload(Persona.owner_group),
+        selectinload(Persona.user_shares).selectinload(Persona__User.user),
+        selectinload(Persona.group_shares).selectinload(Persona__UserGroup.user_group),
     )
 
     results = db_session.scalars(stmt).all()
-    return [PersonaSnapshot.from_model(persona) for persona in results]
+    snapshots = [PersonaSnapshot.from_model(persona) for persona in results]
+    user_group_ids = get_user_group_ids_for_user(db_session, user.id)
+    stamp_persona_permissions(snapshots, results, user, db_session, user_group_ids)
+    return snapshots
 
 
 def _get_paginated_persona_query(
@@ -782,7 +1425,7 @@ def get_personas(db_session: Session) -> Sequence[Persona]:
 
 def mark_persona_as_deleted(
     persona_id: int,
-    user: User,
+    user: User | None,
     db_session: Session,
 ) -> None:
     persona = get_persona_by_id(persona_id=persona_id, user=user, db_session=db_session)
@@ -914,7 +1557,7 @@ def upsert_persona(
     system_prompt: str | None,
     task_prompt: str | None,
     datetime_aware: bool | None,
-    is_public: bool,
+    is_public: bool | None,
     db_session: Session,
     default_model_configuration_id: int | None = None,
     document_set_ids: list[int] | None = None,
@@ -924,7 +1567,7 @@ def upsert_persona(
     uploaded_image_id: str | None = None,
     icon_name: str | None = None,
     display_priority: int | None = None,
-    is_listed: bool = True,
+    is_listed: bool | None = None,
     remove_image: bool | None = None,
     search_start_date: datetime | None = None,
     builtin_persona: bool = False,
@@ -941,6 +1584,10 @@ def upsert_persona(
     whether or not the assistant is a built-in / default assistant
     """
 
+    # Only a create that lands on a deleted same-name row recycles it; editing by id must
+    # not reach a deleted agent.
+    recycling_deleted = False
+
     if persona_id is not None:
         existing_persona = db_session.query(Persona).filter_by(id=persona_id).first()
     else:
@@ -954,6 +1601,7 @@ def upsert_persona(
             raise ValueError(
                 f"Assistant with name '{name}' already exists. Please rename your assistant."
             )
+        recycling_deleted = existing_persona is not None
 
     if existing_persona and user:
         # this checks if the user has permission to edit the persona
@@ -964,6 +1612,7 @@ def upsert_persona(
             persona_id=existing_persona.id,
             user=user,
             get_editable=True,
+            include_deleted=recycling_deleted,
         )
 
     # Fetch and attach tools by IDs
@@ -973,6 +1622,32 @@ def upsert_persona(
         if not tools and tool_ids:
             raise ValueError("Tools not found")
 
+        # Existing tools survive access revocation; newly attached tools require access.
+        if user is not None:
+            # local import to avoid circular import (mirrors built_in_tools below)
+            from onyx.db.mcp import user_can_access_mcp_server
+
+            existing_tool_ids = (
+                {tool.id for tool in existing_persona.tools}
+                if existing_persona
+                else set()
+            )
+            checked_servers: set[int] = set()
+            for tool in tools:
+                server_id = tool.mcp_server_id
+                if (
+                    tool.id in existing_tool_ids
+                    or server_id is None
+                    or server_id in checked_servers
+                ):
+                    continue
+                checked_servers.add(server_id)
+                if not user_can_access_mcp_server(user, server_id, db_session):
+                    raise ValueError(
+                        "You do not have access to one or more of the "
+                        "selected MCP servers."
+                    )
+
     # Fetch and attach document_sets by IDs
     document_sets = None
     if document_set_ids is not None:
@@ -981,8 +1656,28 @@ def upsert_persona(
             .filter(DocumentSet.id.in_(document_set_ids))
             .all()
         )
-        if not document_sets and document_set_ids:
+        if len(document_sets) != len(set(document_set_ids)):
             raise ValueError("document_sets not found")
+
+    # Editors may only ATTACH knowledge they can access themselves; anything
+    # already attached survives an update, but once removed it can't be
+    # re-added by someone without access (ENG-4180).
+    knowledge_guard_applies: bool = user is not None and not has_global_permission(
+        user, Permission.MANAGE_AGENTS
+    )
+    if document_set_ids is not None and knowledge_guard_applies and user is not None:
+        existing_set_ids = (
+            {ds.id for ds in existing_persona.document_sets}
+            if existing_persona
+            else set()
+        )
+        added_set_ids = set(document_set_ids) - existing_set_ids
+        if added_set_ids:
+            accessible_set_ids = filter_document_set_ids_by_user_access(
+                db_session, list(added_set_ids), user
+            )
+            if added_set_ids - accessible_set_ids:
+                raise ValueError("Cannot attach document sets you don't have access to")
 
     # Fetch and attach user_files by IDs
     user_files = None
@@ -990,8 +1685,22 @@ def upsert_persona(
         user_files = (
             db_session.query(UserFile).filter(UserFile.id.in_(user_file_ids)).all()
         )
-        if not user_files and user_file_ids:
+        if len(user_files) != len(set(user_file_ids)):
             raise ValueError("user_files not found")
+
+        # Editors may only attach files they own (admins bypass)
+        if knowledge_guard_applies and user is not None:
+            existing_file_ids = (
+                {uf.id for uf in existing_persona.user_files}
+                if existing_persona
+                else set()
+            )
+            for user_file in user_files:
+                if (
+                    user_file.id not in existing_file_ids
+                    and user_file.user_id != user.id
+                ):
+                    raise ValueError("Cannot attach files you don't own")
 
     labels = None
     if label_ids is not None:
@@ -1003,14 +1712,34 @@ def upsert_persona(
 
     # Fetch and attach hierarchy_nodes by IDs
     hierarchy_nodes = None
-    if hierarchy_node_ids:
+    if hierarchy_node_ids is not None:
         hierarchy_nodes = (
             db_session.query(HierarchyNode)
             .filter(HierarchyNode.id.in_(hierarchy_node_ids))
             .all()
         )
-        if not hierarchy_nodes and hierarchy_node_ids:
+        if len(hierarchy_nodes) != len(set(hierarchy_node_ids)):
             raise ValueError("hierarchy_nodes not found")
+
+    if hierarchy_node_ids is not None and knowledge_guard_applies and user is not None:
+        existing_node_ids = (
+            {node.id for node in existing_persona.hierarchy_nodes}
+            if existing_persona
+            else set()
+        )
+        added_node_ids = set(hierarchy_node_ids) - existing_node_ids
+        if added_node_ids:
+            accessible_node_ids = filter_accessible_hierarchy_node_ids(
+                db_session,
+                list(added_node_ids),
+                user.email,
+                get_user_external_group_ids(db_session, user),
+                user_id=user.id,
+            )
+            if added_node_ids - accessible_node_ids:
+                raise ValueError(
+                    "Cannot attach hierarchy nodes you don't have access to"
+                )
 
     # Fetch and attach documents by IDs, filtering for access permissions
     attached_documents = None
@@ -1024,6 +1753,7 @@ def upsert_persona(
             document_ids=document_ids,
             user_email=user_email,
             external_group_ids=external_group_ids,
+            user_id=user.id if user else None,
         )
         if not attached_documents and document_ids:
             raise ValueError("documents not found or not accessible")
@@ -1046,18 +1776,30 @@ def upsert_persona(
         existing_persona.default_model_configuration_id = default_model_configuration_id
         existing_persona.starter_messages = starter_messages
         existing_persona.deleted = False  # Un-delete if previously deleted
-        existing_persona.is_public = is_public
+        # Publishing (org-wide public) is owner-or-admin — matches the share route and the
+        # publish projection. An editor-shared user may edit content but not flip an agent
+        # they don't own to public; the change is silently dropped, like is_listed/is_featured.
+        if is_public is not None and (
+            user is None or can_delete_persona(user, existing_persona, db_session)
+        ):
+            existing_persona.is_public = is_public
         if remove_image or uploaded_image_id:
             existing_persona.uploaded_image_id = uploaded_image_id
         existing_persona.icon_name = icon_name
-        existing_persona.is_listed = is_listed
         existing_persona.search_start_date = search_start_date
         if label_ids is not None:
             existing_persona.labels.clear()
             existing_persona.labels = labels or []
-        existing_persona.is_featured = (
-            is_featured if is_featured is not None else existing_persona.is_featured
+        # Featured/listed changes are curator/admin-only (ENG-4179): shared
+        # editors saving the form must never flip them, so non-privileged
+        # updates silently preserve the stored values.
+        user_can_set_admin_flags = user is None or has_global_permission(
+            user, Permission.MANAGE_AGENTS
         )
+        if is_listed is not None and user_can_set_admin_flags:
+            existing_persona.is_listed = is_listed
+        if is_featured is not None and user_can_set_admin_flags:
+            existing_persona.is_featured = is_featured
         # Update embedded prompt fields if provided
         if system_prompt is not None:
             existing_persona.system_prompt = system_prompt
@@ -1106,7 +1848,7 @@ def upsert_persona(
         new_persona = Persona(
             id=persona_id,
             user_id=user.id if user else None,
-            is_public=is_public,
+            is_public=(is_public if is_public is not None else True),
             name=name,
             description=description,
             builtin_persona=builtin_persona,
@@ -1121,7 +1863,7 @@ def upsert_persona(
             uploaded_image_id=uploaded_image_id,
             icon_name=icon_name,
             display_priority=display_priority,
-            is_listed=is_listed,
+            is_listed=(is_listed if is_listed is not None else True),
             search_start_date=search_start_date,
             is_featured=(is_featured if is_featured is not None else False),
             user_files=user_files or [],
@@ -1215,6 +1957,7 @@ def get_persona_by_id(
     db_session: Session,
     include_deleted: bool = False,
     is_for_edit: bool = True,  # NOTE: assume true for safety
+    user_group_ids: set[int] | None = None,
 ) -> Persona:
     persona_stmt = (
         select(Persona)
@@ -1228,7 +1971,11 @@ def get_persona_by_id(
     if not include_deleted:
         persona_stmt = persona_stmt.where(Persona.deleted.is_(False))
 
-    if not user or user.role == UserRole.ADMIN:
+    if (
+        not user
+        or has_global_permission(user, Permission.MANAGE_AGENTS)
+        or (not is_for_edit and has_global_permission(user, Permission.READ_AGENTS))
+    ):
         result = db_session.execute(persona_stmt)
         persona = result.scalar_one_or_none()
         if persona is None:
@@ -1237,22 +1984,27 @@ def get_persona_by_id(
 
     # or check if user owns persona
     or_conditions = Persona.user_id == user.id
-    # allow access if persona user id is None
-    or_conditions |= Persona.user_id == None  # noqa: E711
+    # Builtin/system personas are ownerless and stay reachable for everyone
+    # (chat flows fetch them with this function's safe-default edit flag).
+    # Other ownerless personas are vacant — admin-managed, no blanket access.
+    or_conditions |= (Persona.user_id == None) & (  # noqa: E711
+        Persona.builtin_persona == True  # noqa: E712
+    )
+    # Members of the owning group hold owner rights. Reuse a caller-supplied
+    # set (the share-snapshot path already fetched it) to avoid a second query.
+    owner_group_ids = (
+        user_group_ids
+        if user_group_ids is not None
+        else get_user_group_ids_for_user(db_session, user.id)
+    )
+    if owner_group_ids:
+        or_conditions |= Persona.owner_group_id.in_(owner_group_ids)
     if not is_for_edit:
         # if the user is in a group related to the persona
         or_conditions |= User__UserGroup.user_id == user.id
         # if the user is in the .users of the persona
         or_conditions |= User.id == user.id
         or_conditions |= Persona.is_public == True  # noqa: E712
-    elif user.role == UserRole.GLOBAL_CURATOR:
-        # global curators can edit personas for the groups they are in
-        or_conditions |= User__UserGroup.user_id == user.id
-    elif user.role == UserRole.CURATOR:
-        # curators can edit personas for the groups they are curators of
-        or_conditions |= (User__UserGroup.user_id == user.id) & (
-            User__UserGroup.is_curator == True  # noqa: E712
-        )
 
     persona_stmt = persona_stmt.where(or_conditions)
     result = db_session.execute(persona_stmt)
@@ -1265,16 +2017,21 @@ def get_persona_by_id(
 
 
 def get_personas_by_ids(
-    persona_ids: list[int], db_session: Session
+    persona_ids: list[int], db_session: Session, for_update: bool = False
 ) -> Sequence[Persona]:
     """WARNING: Unsafe, can fetch personas from all users."""
     if not persona_ids:
         return []
-    personas = db_session.scalars(
-        select(Persona).where(Persona.id.in_(persona_ids))
-    ).all()
-
-    return personas
+    stmt = select(Persona).where(Persona.id.in_(persona_ids))
+    if for_update:
+        # Ordered so overlapping requests lock in the same order. FOR NO KEY UPDATE
+        # keeps FK takers, like a new chat session on the agent, unblocked.
+        stmt = (
+            stmt.order_by(Persona.id)
+            .execution_options(populate_existing=True)
+            .with_for_update(key_share=True)
+        )
+    return db_session.scalars(stmt).all()
 
 
 def delete_persona_by_name(

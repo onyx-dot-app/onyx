@@ -5,12 +5,12 @@ import { Project, useProjectsContext } from "@/providers/ProjectsContext";
 import { useDroppable } from "@dnd-kit/core";
 import { Button, LineItemButton, SidebarTab } from "@opal/components";
 import { Popover, PopoverMenu } from "@opal/components";
-import ConfirmationModalLayout from "@/refresh-components/layouts/ConfirmationModalLayout";
+import { ConfirmationModalLayout } from "@opal/layouts";
 import ChatButton from "@/sections/sidebar/ChatButton";
 import { useAppRouter } from "@/hooks/appNavigation";
 import { noProp } from "@/lib/utils";
 import { cn } from "@opal/utils";
-import { DRAG_TYPES } from "./constants";
+import { DRAG_TYPES } from "@/lib/sidebar/constants";
 import IconButton from "@/refresh-components/buttons/IconButton";
 import Truncated from "@/refresh-components/texts/Truncated";
 import ButtonRenaming from "@/refresh-components/buttons/ButtonRenaming";
@@ -152,7 +152,8 @@ const ProjectFolderButton = memo(({ project }: ProjectFolderButtonProps) => {
               activeSidebar.isProject() &&
               activeSidebar.getId() === String(project.id)
             }
-            onClick={noProp(handleTextClick)}
+            /* While renaming, drop the click target so the input stays usable. */
+            onClick={isEditing ? undefined : noProp(handleTextClick)}
             rightChildren={
               <>
                 <Popover.Trigger asChild onClick={noProp()}>

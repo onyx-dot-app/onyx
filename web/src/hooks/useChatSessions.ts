@@ -270,6 +270,7 @@ export default function useChatSessions(): UseChatSessionsOutput {
         project_id: projectId ?? null,
         current_alternate_model: "",
         current_temperature_override: null,
+        current_reasoning_effort_override: null,
       });
     },
     []

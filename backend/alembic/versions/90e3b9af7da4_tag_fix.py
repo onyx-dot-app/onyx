@@ -18,8 +18,7 @@ import sqlalchemy as sa
 
 from onyx.document_index.vespa_constants import DOCUMENT_ID_ENDPOINT
 from onyx.db.search_settings import SearchSettings
-from onyx.configs.app_configs import AUTH_TYPE
-from onyx.configs.constants import AuthType
+from shared_configs.configs import MULTI_TENANT
 from onyx.document_index.vespa.shared_utils.utils import get_vespa_http_client
 
 logger = logging.getLogger("alembic.runtime.migration")
@@ -34,7 +33,7 @@ depends_on = None
 SKIP_TAG_FIX = os.environ.get("SKIP_TAG_FIX", "true").lower() == "true"
 
 # override for cloud
-if AUTH_TYPE == AuthType.CLOUD:
+if MULTI_TENANT:
     SKIP_TAG_FIX = True
 
 

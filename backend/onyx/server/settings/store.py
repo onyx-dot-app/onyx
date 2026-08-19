@@ -1,30 +1,54 @@
+from collections.abc import Iterator
+from contextlib import contextmanager
+
 from onyx.cache.factory import get_cache_backend
-from onyx.configs.app_configs import DEFAULT_USER_FILE_MAX_UPLOAD_SIZE_MB
-from onyx.configs.app_configs import DISABLE_USER_KNOWLEDGE
-from onyx.configs.app_configs import DISABLE_VECTOR_DB
-from onyx.configs.app_configs import ENABLE_OPENSEARCH_INDEXING_FOR_ONYX
-from onyx.configs.app_configs import HIDE_QUERY_HISTORY_FROM_ADMIN_PANEL
-from onyx.configs.app_configs import MAX_ALLOWED_UPLOAD_SIZE_MB
-from onyx.configs.app_configs import ONYX_QUERY_HISTORY_TYPE
-from onyx.configs.app_configs import SHOW_EXTRA_CONNECTORS
-from onyx.configs.constants import KV_SETTINGS_KEY
-from onyx.configs.constants import OnyxRedisLocks
+from onyx.cache.locks import cache_shared_lock
+from onyx.configs.app_configs import (
+    DEFAULT_USER_FILE_MAX_UPLOAD_SIZE_MB,
+    DISABLE_USER_KNOWLEDGE,
+    DISABLE_VECTOR_DB,
+    ENABLE_OPENSEARCH_INDEXING_FOR_ONYX,
+    HIDE_QUERY_HISTORY_FROM_ADMIN_PANEL,
+    MAX_ALLOWED_UPLOAD_SIZE_MB,
+    ONYX_QUERY_HISTORY_TYPE,
+    SHOW_EXTRA_CONNECTORS,
+)
+from onyx.configs.constants import KV_SETTINGS_KEY, OnyxRedisLocks
 from onyx.key_value_store.factory import get_kv_store
 from onyx.key_value_store.interface import KvKeyNotFoundError
 from onyx.server.settings.models import (
     DEFAULT_FILE_TOKEN_COUNT_THRESHOLD_K_NO_VECTOR_DB,
+    DEFAULT_FILE_TOKEN_COUNT_THRESHOLD_K_VECTOR_DB,
+    Settings,
 )
-from onyx.server.settings.models import DEFAULT_FILE_TOKEN_COUNT_THRESHOLD_K_VECTOR_DB
-from onyx.server.settings.models import Settings
 from onyx.utils.logger import setup_logger
+from shared_configs.contextvars import get_current_tenant_id
 
 logger = setup_logger()
 
 # TTL for settings keys - 30 days
 SETTINGS_TTL = 30 * 24 * 60 * 60
 
+_SETTINGS_WRITE_LOCK_TIMEOUT_S = 10.0
 
-def load_settings() -> Settings:
+
+@contextmanager
+def settings_write_lock() -> Iterator[None]:
+    """Serialize read-modify-write of the workspace Settings record so concurrent
+    writers cannot each merge onto a stale snapshot and drop another's field. Any
+    code that loads the Settings record, mutates it, and stores it back must hold
+    this lock. Tenant-scoped, and works on both the Redis and Postgres cache
+    backends."""
+    with cache_shared_lock(
+        lock_name=f"settings_write:{get_current_tenant_id()}",
+        max_time_lock_held_s=_SETTINGS_WRITE_LOCK_TIMEOUT_S,
+        wait_for_lock_s=_SETTINGS_WRITE_LOCK_TIMEOUT_S,
+        logger=logger,
+    ):
+        yield
+
+
+def load_settings(raise_on_error: bool = False) -> Settings:
     kv_store = get_kv_store()
     try:
         stored_settings = kv_store.load(KV_SETTINGS_KEY)
@@ -37,6 +61,10 @@ def load_settings() -> Settings:
         settings = Settings()
     except Exception as e:
         logger.error("Error loading settings from KV store: %s", str(e))
+        # Callers guarding access control (e.g. the invite-only check) opt in to
+        # re-raise so they can fail closed instead of trusting the default.
+        if raise_on_error:
+            raise
         settings = Settings()
 
     cache = get_cache_backend()

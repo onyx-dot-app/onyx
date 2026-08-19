@@ -1,25 +1,25 @@
-from datetime import datetime
-from datetime import timezone
-from typing import Any
-from typing import List
-from typing import Optional
+from datetime import datetime, timezone
+from typing import Any, List, Optional
 
 import requests
 
-from onyx.configs.app_configs import INDEX_BATCH_SIZE
-from onyx.configs.app_configs import REQUEST_TIMEOUT_SECONDS
+from onyx.configs.app_configs import INDEX_BATCH_SIZE, REQUEST_TIMEOUT_SECONDS
 from onyx.configs.constants import DocumentSource
 from onyx.connectors.cross_connector_utils.rate_limit_wrapper import rate_limit_builder
 from onyx.connectors.document360.utils import flatten_child_categories
-from onyx.connectors.interfaces import GenerateDocumentsOutput
-from onyx.connectors.interfaces import LoadConnector
-from onyx.connectors.interfaces import PollConnector
-from onyx.connectors.interfaces import SecondsSinceUnixEpoch
-from onyx.connectors.models import BasicExpertInfo
-from onyx.connectors.models import ConnectorMissingCredentialError
-from onyx.connectors.models import Document
-from onyx.connectors.models import HierarchyNode
-from onyx.connectors.models import TextSection
+from onyx.connectors.interfaces import (
+    GenerateDocumentsOutput,
+    LoadConnector,
+    PollConnector,
+    SecondsSinceUnixEpoch,
+)
+from onyx.connectors.models import (
+    BasicExpertInfo,
+    ConnectorMissingCredentialError,
+    Document,
+    HierarchyNode,
+    TextSection,
+)
 from onyx.file_processing.html_utils import parse_html_page_basic
 from onyx.utils.retry_wrapper import retry_builder
 
@@ -96,20 +96,20 @@ class Document360Connector(LoadConnector, PollConnector):
 
         for category in all_categories:
             if not self.categories or category["name"] in self.categories:
-                for article in category["articles"]:
-                    articles_with_category.append(
-                        {"id": article["id"], "category_name": category["name"]}
-                    )
+                articles_with_category.extend(
+                    {"id": article["id"], "category_name": category["name"]}
+                    for article in category["articles"]
+                )
                 for child_category in category["child_categories"]:
                     all_nested_categories = flatten_child_categories(child_category)
                     for nested_category in all_nested_categories:
-                        for article in nested_category["articles"]:
-                            articles_with_category.append(
-                                {
-                                    "id": article["id"],
-                                    "category_name": nested_category["name"],
-                                }
-                            )
+                        articles_with_category.extend(
+                            {
+                                "id": article["id"],
+                                "category_name": nested_category["name"],
+                            }
+                            for article in nested_category["articles"]
+                        )
 
         return articles_with_category
 
@@ -131,6 +131,9 @@ class Document360Connector(LoadConnector, PollConnector):
 
             updated_at = datetime.strptime(
                 article_details["modified_at"], "%Y-%m-%dT%H:%M:%S.%fZ"
+            ).replace(tzinfo=timezone.utc)
+            created_at = datetime.strptime(
+                article_details["created_at"], "%Y-%m-%dT%H:%M:%S.%fZ"
             ).replace(tzinfo=timezone.utc)
             if start is not None and updated_at < start:
                 continue
@@ -165,6 +168,8 @@ class Document360Connector(LoadConnector, PollConnector):
                 source=DocumentSource.DOCUMENT360,
                 semantic_identifier=article_details["title"],
                 doc_updated_at=updated_at,
+                # NOTE: doc_created_at population not yet verified against live data
+                doc_created_at=created_at,
                 primary_owners=authors,
                 metadata={
                     "workspace": self.workspace,

@@ -1,29 +1,50 @@
 """Tests that search settings with contextual RAG are properly propagated
 to the indexing pipeline's LLM configuration."""
 
-from unittest.mock import MagicMock
-from unittest.mock import patch
+from unittest.mock import MagicMock, patch
 
 import pytest
 from sqlalchemy.orm import Session
 
-from onyx.context.search.models import SavedSearchSettings
-from onyx.context.search.models import SearchSettingsCreationRequest
-from onyx.db.enums import EmbeddingPrecision
-from onyx.db.llm import fetch_default_contextual_rag_model
-from onyx.db.llm import update_default_contextual_model
-from onyx.db.llm import upsert_llm_provider
-from onyx.db.models import IndexModelStatus
-from onyx.db.search_settings import create_search_settings
-from onyx.db.search_settings import update_search_settings
+from onyx.context.search.models import (
+    SavedSearchSettings,
+    SearchSettingsCreationRequest,
+)
+from onyx.db.enums import ConnectorCredentialPairStatus, EmbeddingPrecision
+from onyx.db.llm import (
+    fetch_default_contextual_rag_model,
+    update_default_contextual_model,
+    upsert_llm_provider,
+)
+from onyx.db.models import IndexAttempt, IndexModelStatus, SearchSettings
+from onyx.db.search_settings import (
+    create_search_settings,
+    get_current_search_settings,
+    get_secondary_search_settings,
+    update_search_settings,
+    update_search_settings_status,
+)
 from onyx.db.swap_index import check_and_perform_index_swap
-from onyx.indexing.indexing_pipeline import IndexingPipelineResult
-from onyx.indexing.indexing_pipeline import run_indexing_pipeline
-from onyx.server.manage.llm.models import LLMProviderUpsertRequest
-from onyx.server.manage.llm.models import ModelConfigurationUpsertRequest
-from onyx.server.manage.search_settings import set_new_search_settings
-from onyx.server.manage.search_settings import update_saved_search_settings
+from onyx.error_handling.error_codes import OnyxErrorCode
+from onyx.error_handling.exceptions import OnyxError
+from onyx.indexing.indexing_pipeline import (
+    IndexingPipelineResult,
+    run_indexing_pipeline,
+)
+from onyx.server.manage.llm.models import (
+    LLMProviderUpsertRequest,
+    ModelConfigurationUpsertRequest,
+)
+from onyx.server.manage.search_settings import (
+    set_new_search_settings,
+    update_saved_search_settings,
+)
+from onyx.utils.audit import AuditAction, AuditOutcome
 from shared_configs.configs import PRESERVED_SEARCH_FIELDS
+from tests.external_dependency_unit.indexing_helpers import (
+    cleanup_cc_pair,
+    make_cc_pair,
+)
 
 TEST_PROVIDER_NAME = "test-contextual-provider"
 TEST_MODEL_NAME = "test-contextual-model"
@@ -150,10 +171,191 @@ def baseline_search_settings(
     )
 
 
+def test_contextual_model_update_rejects_future_settings(
+    baseline_search_settings: None,  # noqa: ARG001
+    db_session: Session,
+) -> None:
+    current = get_current_search_settings(db_session)
+    future = create_search_settings(
+        search_settings=_make_saved_search_settings(enable_contextual_rag=False),
+        db_session=db_session,
+        status=IndexModelStatus.FUTURE,
+    )
+
+    try:
+        with pytest.raises(OnyxError) as exc:
+            update_saved_search_settings(
+                search_settings=SavedSearchSettings.from_db_model(current).model_copy(
+                    update={"contextual_rag_model_configuration_id": 1}
+                ),
+                user=MagicMock(),
+                db_session=db_session,
+            )
+
+        assert exc.value.error_code == OnyxErrorCode.CONFLICT
+    finally:
+        update_search_settings_status(
+            search_settings=future,
+            new_status=IndexModelStatus.PAST,
+            db_session=db_session,
+        )
+
+
+@patch("onyx.server.manage.search_settings._active_port_settings")
+def test_contextual_model_update_rejects_instant_backfill(
+    mock_active_port_settings: MagicMock,
+    baseline_search_settings: None,  # noqa: ARG001
+    db_session: Session,
+) -> None:
+    current = get_current_search_settings(db_session)
+    mock_active_port_settings.return_value = current
+
+    with pytest.raises(OnyxError) as exc:
+        update_saved_search_settings(
+            search_settings=SavedSearchSettings.from_db_model(current).model_copy(
+                update={"contextual_rag_model_configuration_id": 1}
+            ),
+            user=MagicMock(),
+            db_session=db_session,
+        )
+
+    assert exc.value.error_code == OnyxErrorCode.CONFLICT
+
+
+def test_contextual_model_update_rejects_other_changes(
+    baseline_search_settings: None,  # noqa: ARG001
+    db_session: Session,
+) -> None:
+    current = get_current_search_settings(db_session)
+    current.enable_contextual_rag = True
+    db_session.commit()
+    requested = SavedSearchSettings.from_db_model(current).model_copy(
+        update={
+            "model_name": "other-embedding-model",
+            "contextual_rag_model_configuration_id": 1,
+        }
+    )
+
+    with (
+        patch(
+            "onyx.server.manage.search_settings.get_secondary_search_settings",
+            return_value=None,
+        ),
+        patch(
+            "onyx.server.manage.search_settings._active_port_settings",
+            return_value=None,
+        ),
+        pytest.raises(OnyxError) as exc,
+    ):
+        update_saved_search_settings(
+            search_settings=requested,
+            user=MagicMock(),
+            db_session=db_session,
+        )
+
+    assert exc.value.error_code == OnyxErrorCode.INVALID_INPUT
+    assert "Only the Contextual Retrieval model" in exc.value.detail
+
+
+def test_contextual_model_update_rejects_unknown_model(
+    baseline_search_settings: None,  # noqa: ARG001
+    db_session: Session,
+) -> None:
+    current = get_current_search_settings(db_session)
+    current.enable_contextual_rag = True
+    db_session.commit()
+    unknown_model_configuration_id = 999999
+
+    with (
+        patch(
+            "onyx.server.manage.search_settings.get_secondary_search_settings",
+            return_value=None,
+        ),
+        patch(
+            "onyx.server.manage.search_settings._active_port_settings",
+            return_value=None,
+        ),
+        pytest.raises(OnyxError) as exc,
+    ):
+        update_saved_search_settings(
+            search_settings=SavedSearchSettings.from_db_model(current).model_copy(
+                update={
+                    "contextual_rag_model_configuration_id": (
+                        unknown_model_configuration_id
+                    )
+                }
+            ),
+            user=MagicMock(),
+            db_session=db_session,
+        )
+
+    assert exc.value.error_code == OnyxErrorCode.INVALID_INPUT
+    assert str(unknown_model_configuration_id) in exc.value.detail
+
+
+@patch("onyx.server.manage.search_settings.get_all_document_indices")
+@patch("onyx.server.manage.search_settings.get_default_document_index")
+def test_port_seed_excludes_invalid_cc_pair(
+    mock_get_default_doc_index: MagicMock,  # noqa: ARG001
+    mock_get_all_doc_indices: MagicMock,
+    baseline_search_settings: None,  # noqa: ARG001
+    db_session: Session,
+) -> None:
+    """The port seed loop must seed only cc_pairs the port will actually copy. An
+    INVALID cc_pair (excluded by the port's indexable_statuses scope) must NOT get a
+    synthetic seed — otherwise its backlog is never ported while the seed cursor
+    claims "already done", so its docs vanish from the live index once it's fixed."""
+    mock_get_all_doc_indices.return_value = []
+
+    active_pair = make_cc_pair(db_session)
+    invalid_pair = make_cc_pair(db_session)
+    active_pair.status = ConnectorCredentialPairStatus.ACTIVE
+    invalid_pair.status = ConnectorCredentialPairStatus.INVALID
+    db_session.commit()
+
+    future_id: int | None = None
+    try:
+        future_id = set_new_search_settings(
+            search_settings_new=_make_creation_request(enable_contextual_rag=False),
+            _=MagicMock(),
+            db_session=db_session,
+        ).id
+
+        seeded_cc_ids = {
+            row.connector_credential_pair_id
+            for row in db_session.query(IndexAttempt).filter(
+                IndexAttempt.search_settings_id == future_id,
+                IndexAttempt.is_synthetic_seed.is_(True),
+            )
+        }
+        assert active_pair.id in seeded_cc_ids  # portable -> seeded
+        assert invalid_pair.id not in seeded_cc_ids  # not portable -> NOT seeded
+    finally:
+        db_session.rollback()
+        db_session.query(IndexAttempt).filter(
+            IndexAttempt.connector_credential_pair_id.in_(
+                [active_pair.id, invalid_pair.id]
+            )
+        ).delete(synchronize_session="fetch")
+        db_session.commit()
+        if future_id is not None:
+            db_session.query(SearchSettings).filter(
+                SearchSettings.id == future_id
+            ).delete(synchronize_session="fetch")
+            db_session.commit()
+        cleanup_cc_pair(db_session, active_pair)
+        cleanup_cc_pair(db_session, invalid_pair)
+
+
+# port-flow swap gate: no cc_pair requires porting in this test, so it swaps now
+@patch(
+    "onyx.db.swap_index.fetch_indexable_standard_connector_credential_pair_ids",
+    new=lambda *_a, **_k: [],
+)
 @patch("onyx.db.swap_index.get_all_document_indices")
 @patch("onyx.server.manage.search_settings.get_all_document_indices")
 @patch("onyx.server.manage.search_settings.get_default_document_index")
-@patch("onyx.indexing.indexing_pipeline.get_llm_for_contextual_rag")
+@patch("onyx.indexing.indexing_pipeline.get_contextual_rag_llm_for_search_settings")
 @patch("onyx.indexing.indexing_pipeline.index_doc_batch_with_handler")
 def test_indexing_pipeline_uses_contextual_rag_settings_from_create(
     mock_index_handler: MagicMock,
@@ -165,8 +367,8 @@ def test_indexing_pipeline_uses_contextual_rag_settings_from_create(
     db_session: Session,
 ) -> None:
     """After creating FUTURE settings and swapping to PRESENT,
-    fetch_default_contextual_rag_model should match the PRESENT settings
-    and run_indexing_pipeline should call get_llm_for_contextual_rag."""
+    fetch_default_contextual_rag_model should match the PRESENT settings and
+    run_indexing_pipeline should resolve the LLM from those PRESENT settings."""
     mc_id = _create_llm_provider_and_model(
         db_session=db_session,
         provider_name=TEST_PROVIDER_NAME,
@@ -183,7 +385,9 @@ def test_indexing_pipeline_uses_contextual_rag_settings_from_create(
     default_model = fetch_default_contextual_rag_model(db_session)
     assert default_model is None
 
-    # Swap FUTURE → PRESENT (with 0 cc-pairs, REINDEX swaps immediately)
+    # Swap FUTURE → PRESENT. New settings use the port flow, whose swap gate waits
+    # for each portable cc_pair's port; none require porting here (patched empty),
+    # so the swap proceeds immediately.
     mock_get_all_doc_indices.return_value = []
     old_settings = check_and_perform_index_swap(db_session)
     assert old_settings is not None, "Swap should have occurred"
@@ -195,13 +399,21 @@ def test_indexing_pipeline_uses_contextual_rag_settings_from_create(
 
     _run_indexing_pipeline_with_mocks(mock_get_llm, mock_index_handler, db_session)
 
-    mock_get_llm.assert_called_once_with(mc_id)
+    # now resolved from the SearchSettings object, not a bare model-config id
+    mock_get_llm.assert_called_once()
+    (called_settings,) = mock_get_llm.call_args.args
+    assert called_settings.contextual_rag_model_configuration_id == mc_id
 
 
+# port-flow swap gate: no cc_pair requires porting in this test, so it swaps now
+@patch(
+    "onyx.db.swap_index.fetch_indexable_standard_connector_credential_pair_ids",
+    new=lambda *_a, **_k: [],
+)
 @patch("onyx.db.swap_index.get_all_document_indices")
 @patch("onyx.server.manage.search_settings.get_all_document_indices")
 @patch("onyx.server.manage.search_settings.get_default_document_index")
-@patch("onyx.indexing.indexing_pipeline.get_llm_for_contextual_rag")
+@patch("onyx.indexing.indexing_pipeline.get_contextual_rag_llm_for_search_settings")
 @patch("onyx.indexing.indexing_pipeline.index_doc_batch_with_handler")
 def test_indexing_pipeline_uses_updated_contextual_rag_settings(
     mock_index_handler: MagicMock,
@@ -237,7 +449,9 @@ def test_indexing_pipeline_uses_updated_contextual_rag_settings(
     default_model = fetch_default_contextual_rag_model(db_session)
     assert default_model is None
 
-    # Swap FUTURE → PRESENT (with 0 cc-pairs, REINDEX swaps immediately)
+    # Swap FUTURE → PRESENT. New settings use the port flow, whose swap gate waits
+    # for each portable cc_pair's port; none require porting here (patched empty),
+    # so the swap proceeds immediately.
     mock_get_all_doc_indices.return_value = []
     old_settings = check_and_perform_index_swap(db_session)
     assert old_settings is not None, "Swap should have occurred"
@@ -248,13 +462,35 @@ def test_indexing_pipeline_uses_updated_contextual_rag_settings(
     assert default_model.name == TEST_MODEL_NAME
 
     # Update the PRESENT model configuration
-    update_saved_search_settings(
-        search_settings=_make_saved_search_settings(
-            model_configuration_id=updated_mc_id,
-        ),
-        _=MagicMock(),
-        db_session=db_session,
+    current_settings = get_current_search_settings(db_session)
+    with patch(
+        "onyx.server.manage.search_settings.emit_audit_event"
+    ) as mock_emit_audit_event:
+        response = update_saved_search_settings(
+            search_settings=SavedSearchSettings.from_db_model(
+                current_settings
+            ).model_copy(
+                update={
+                    "contextual_rag_model_configuration_id": updated_mc_id,
+                }
+            ),
+            user=MagicMock(),
+            db_session=db_session,
+        )
+
+    assert response.contextual_rag_model_configuration_id == updated_mc_id
+    assert get_secondary_search_settings(db_session) is None
+    mock_emit_audit_event.assert_called_once()
+    audit_args, audit_kwargs = mock_emit_audit_event.call_args
+    assert audit_args == (
+        AuditAction.CONTEXTUAL_RAG_MODEL_UPDATE,
+        AuditOutcome.SUCCESS,
     )
+    assert audit_kwargs["resource_id"] == current_settings.id
+    assert audit_kwargs["extra"] == {
+        "previous_model_configuration_id": mc_id,
+        "model_configuration_id": updated_mc_id,
+    }
 
     default_model = fetch_default_contextual_rag_model(db_session)
     assert default_model is not None
@@ -262,12 +498,15 @@ def test_indexing_pipeline_uses_updated_contextual_rag_settings(
 
     _run_indexing_pipeline_with_mocks(mock_get_llm, mock_index_handler, db_session)
 
-    mock_get_llm.assert_called_once_with(updated_mc_id)
+    # resolved from the updated PRESENT SearchSettings
+    mock_get_llm.assert_called_once()
+    (called_settings,) = mock_get_llm.call_args.args
+    assert called_settings.contextual_rag_model_configuration_id == updated_mc_id
 
 
 @patch("onyx.server.manage.search_settings.get_all_document_indices")
 @patch("onyx.server.manage.search_settings.get_default_document_index")
-@patch("onyx.indexing.indexing_pipeline.get_llm_for_contextual_rag")
+@patch("onyx.indexing.indexing_pipeline.get_contextual_rag_llm_for_search_settings")
 @patch("onyx.indexing.indexing_pipeline.index_doc_batch_with_handler")
 def test_indexing_pipeline_skips_llm_when_contextual_rag_disabled(
     mock_index_handler: MagicMock,
@@ -277,8 +516,8 @@ def test_indexing_pipeline_skips_llm_when_contextual_rag_disabled(
     baseline_search_settings: None,  # noqa: ARG001
     db_session: Session,
 ) -> None:
-    """When contextual RAG is disabled in search settings,
-    get_llm_for_contextual_rag should not be called."""
+    """When contextual RAG is disabled in search settings, the pipeline should not
+    resolve a contextual-RAG LLM at all."""
     mc_id = _create_llm_provider_and_model(
         db_session=db_session,
         provider_name=TEST_PROVIDER_NAME,

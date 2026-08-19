@@ -25,28 +25,24 @@ from __future__ import annotations
 
 from uuid import UUID
 
+from sqlalchemy import Select, SQLColumnExpression, func, select
 from sqlalchemy import delete as sa_delete
-from sqlalchemy import func
-from sqlalchemy import Select
-from sqlalchemy import select
-from sqlalchemy import SQLColumnExpression
 from sqlalchemy.dialects.postgresql import insert as pg_insert
 
-from ee.onyx.server.scim.filtering import ScimFilter
-from ee.onyx.server.scim.filtering import ScimFilterOperator
+from ee.onyx.server.scim.filtering import ScimFilter, ScimFilterOperator
 from ee.onyx.server.scim.models import ScimMappingFields
 from onyx.db.dal import DAL
-from onyx.db.enums import AccountType
-from onyx.db.enums import GrantSource
-from onyx.db.enums import Permission
-from onyx.db.models import PermissionGrant
-from onyx.db.models import ScimGroupMapping
-from onyx.db.models import ScimToken
-from onyx.db.models import ScimUserMapping
-from onyx.db.models import User
-from onyx.db.models import User__UserGroup
-from onyx.db.models import UserGroup
-from onyx.db.models import UserRole
+from onyx.db.enums import AccountType, GrantSource, Permission
+from onyx.db.models import (
+    PermissionGrant,
+    ScimGroupMapping,
+    ScimToken,
+    ScimUserMapping,
+    User,
+    User__UserGroup,
+    UserGroup,
+)
+from onyx.db.users import reconcile_user_email__no_commit
 from onyx.utils.logger import setup_logger
 
 logger = setup_logger()
@@ -251,18 +247,20 @@ class ScimDAL(DAL):
         email: str | None = None,
         is_active: bool | None = None,
         personal_name: str | None = None,
-        role: UserRole | None = None,
         account_type: AccountType | None = None,
     ) -> None:
-        """Update user attributes. Only sets fields that are provided."""
+        """Update user attributes. Only sets fields that are provided.
+
+        A rename runs the same reconciliation a login-driven one does, so the
+        replaced address keeps reaching documents whose indexed ACLs still name
+        it and every other row keyed by the address moves with it.
+        """
         if email is not None:
-            user.email = email
+            reconcile_user_email__no_commit(user.id, email, self._session)
         if is_active is not None:
             user.is_active = is_active
         if personal_name is not None:
             user.personal_name = personal_name
-        if role is not None:
-            user.role = role
         if account_type is not None:
             user.account_type = account_type
 
@@ -685,11 +683,26 @@ class ScimDAL(DAL):
         )
 
     def replace_group_members(self, group_id: int, user_ids: list[UUID]) -> None:
-        """Replace all members of a group."""
-        self._session.execute(
-            sa_delete(User__UserGroup).where(User__UserGroup.user_group_id == group_id)
-        )
-        self.upsert_group_members(group_id, user_ids)
+        """Replace all members of a group, leaving retained members' rows untouched.
+
+        Diffs rather than delete-all-then-reinsert: the membership row carries
+        ``is_manager``, and ``upsert_group_members`` doesn't name that column, so
+        re-inserting a retained member silently demotes them to the server_default.
+        IdPs push a full ``PUT /Groups`` on routine reconciliation, so delete-all
+        would strip every group manager on each sync, unaudited.
+        """
+        requested = set(user_ids)
+        current = {
+            uid
+            for uid in self._session.scalars(
+                select(User__UserGroup.user_id).where(
+                    User__UserGroup.user_group_id == group_id
+                )
+            )
+            if uid is not None
+        }
+        self.remove_group_members(group_id, list(current - requested))
+        self.upsert_group_members(group_id, list(requested - current))
 
     def remove_group_members(self, group_id: int, user_ids: list[UUID]) -> None:
         """Remove specific members from a group."""

@@ -46,23 +46,6 @@ export type SizeVariants =
 export type ContainerSizeVariants = Exclude<SizeVariants, "full" | "xl">;
 
 /**
- * Padding size variants.
- *
- * | Variant | Class   |
- * |---------|---------|
- * | `lg`    | `p-6`   |
- * | `md`    | `p-4`   |
- * | `sm`    | `p-2`   |
- * | `xs`    | `p-1`   |
- * | `2xs`   | `p-0.5` |
- * | `fit`   | `p-0`   |
- */
-export type PaddingVariants = Extract<
-  SizeVariants,
-  "fit" | "lg" | "md" | "sm" | "xs" | "2xs"
->;
-
-/**
  * Rounding size variants.
  *
  * | Variant | Class        |
@@ -84,6 +67,36 @@ export type RoundingVariants = Extract<
  * Used for width and height properties that only support extremal values.
  */
 export type ExtremaSizeVariants = Extract<SizeVariants, "fit" | "full">;
+
+// ---------------------------------------------------------------------------
+// Spacing Scale
+// ---------------------------------------------------------------------------
+
+/**
+ * A spacing step. `N` is `N / 4` rem, so `4` is `1rem` and `2` is `0.5rem`.
+ *
+ * This borrows Tailwind's scale as an interface, not as an implementation — a
+ * step reads the same here as in a class name, so a `padding` of `2` is the same
+ * distance as `p-2`. The value is converted with {@link spacingToRem} rather
+ * than looked up as a class, which keeps the scale open: any step works,
+ * including ones Tailwind does not ship.
+ *
+ * Replaces the named scales. `PaddingVariants` meant one distance on a card and
+ * a different one on a container; a number cannot be ambiguous that way.
+ */
+export type Spacing = number;
+
+/**
+ * Shadow depth variants.
+ *
+ * | Variant  | Effect                          |
+ * |----------|---------------------------------|
+ * | `"none"` | No shadow (default)             |
+ * | `"sm"`   | Subtle lift (`--shadow-01`)     |
+ * | `"md"`   | Medium elevation (`--shadow-02`)|
+ * | `"lg"`   | Strong elevation (`--shadow-03`)|
+ */
+export type ShadowVariants = "none" | Extract<SizeVariants, "sm" | "md" | "lg">;
 
 /**
  * Size variants with numeric overrides.
@@ -133,9 +146,19 @@ export type BackgroundVariants = "none" | "light" | "heavy";
  * - `"default"` — standard text/border color (`text-04` / `border-01`)
  * - `"muted"` — de-emphasized color (`text-03`)
  * - `"danger"` — destructive / error state
+ * - `"muted-success"` / `"muted-warning"`: status glyph against muted body text,
+ *   for messages where the icon carries the state and the text stays secondary
  * - `"interactive"` — follows the interactive coloring system (`currentColor` / `--interactive-foreground`)
  */
-export type ColorTypes = "default" | "muted" | "danger" | "interactive";
+export type ColorTypes =
+  | "default"
+  | "muted"
+  | "success"
+  | "danger"
+  | "warning"
+  | "muted-success"
+  | "muted-warning"
+  | "interactive";
 
 // ---------------------------------------------------------------------------
 // Status Variants
@@ -151,6 +174,7 @@ export type StatusVariants =
   | "info"
   | "success"
   | "warning"
+  | "pending"
   | "error";
 
 // ---------------------------------------------------------------------------

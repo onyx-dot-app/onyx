@@ -3,20 +3,22 @@
 These tests mock the Discord API to test event handling logic.
 """
 
-from unittest.mock import AsyncMock
-from unittest.mock import MagicMock
-from unittest.mock import patch
+from unittest.mock import AsyncMock, MagicMock, patch
 
 import discord
 import pytest
 
-from onyx.onyxbot.discord.handle_commands import get_text_channels
-from onyx.onyxbot.discord.handle_commands import handle_dm
-from onyx.onyxbot.discord.handle_commands import handle_registration_command
-from onyx.onyxbot.discord.handle_commands import handle_sync_channels_command
-from onyx.onyxbot.discord.handle_message import process_chat_message
-from onyx.onyxbot.discord.handle_message import send_error_response
-from onyx.onyxbot.discord.handle_message import send_response
+from onyx.onyxbot.discord.handle_commands import (
+    get_text_channels,
+    handle_dm,
+    handle_registration_command,
+    handle_sync_channels_command,
+)
+from onyx.onyxbot.discord.handle_message import (
+    process_chat_message,
+    send_error_response,
+    send_response,
+)
 
 
 class TestGuildRegistrationCommand:

@@ -6,20 +6,22 @@ from uuid import uuid4
 import pytest
 
 from onyx.db.models import VoiceProvider
-from onyx.db.voice import deactivate_stt_provider
-from onyx.db.voice import deactivate_tts_provider
-from onyx.db.voice import delete_voice_provider
-from onyx.db.voice import fetch_default_stt_provider
-from onyx.db.voice import fetch_default_tts_provider
-from onyx.db.voice import fetch_voice_provider_by_id
-from onyx.db.voice import fetch_voice_provider_by_type
-from onyx.db.voice import fetch_voice_providers
-from onyx.db.voice import MAX_VOICE_PLAYBACK_SPEED
-from onyx.db.voice import MIN_VOICE_PLAYBACK_SPEED
-from onyx.db.voice import set_default_stt_provider
-from onyx.db.voice import set_default_tts_provider
-from onyx.db.voice import update_user_voice_settings
-from onyx.db.voice import upsert_voice_provider
+from onyx.db.voice import (
+    MAX_VOICE_PLAYBACK_SPEED,
+    MIN_VOICE_PLAYBACK_SPEED,
+    deactivate_stt_provider,
+    deactivate_tts_provider,
+    delete_voice_provider,
+    fetch_default_stt_provider,
+    fetch_default_tts_provider,
+    fetch_voice_provider_by_id,
+    fetch_voice_provider_by_type,
+    fetch_voice_providers,
+    set_default_stt_provider,
+    set_default_tts_provider,
+    update_user_voice_settings,
+    upsert_voice_provider,
+)
 from onyx.error_handling.exceptions import OnyxError
 
 
@@ -229,6 +231,53 @@ class TestUpsertVoiceProvider:
 
         # api_key should remain unchanged (same object reference)
         assert existing_provider.api_key is original_api_key
+
+    def test_preserves_custom_config_when_omitted(
+        self, mock_db_session: MagicMock
+    ) -> None:
+        existing_provider = _make_voice_provider(id=1, provider_type="azure")
+        existing_provider.custom_config = {
+            "speech_region": "swedencentral",
+            "stt_languages": ["en-US", "fr-FR"],
+        }
+        mock_db_session.scalar.return_value = existing_provider
+        mock_db_session.flush.return_value = None
+        mock_db_session.refresh.return_value = None
+
+        upsert_voice_provider(
+            db_session=mock_db_session,
+            provider_id=1,
+            name="Test",
+            provider_type="azure",
+            api_key=None,
+            api_key_changed=False,
+        )
+
+        assert existing_provider.custom_config == {
+            "speech_region": "swedencentral",
+            "stt_languages": ["en-US", "fr-FR"],
+        }
+
+    def test_clears_custom_config_with_empty_dict(
+        self, mock_db_session: MagicMock
+    ) -> None:
+        existing_provider = _make_voice_provider(id=1, provider_type="azure")
+        existing_provider.custom_config = {"speech_region": "swedencentral"}
+        mock_db_session.scalar.return_value = existing_provider
+        mock_db_session.flush.return_value = None
+        mock_db_session.refresh.return_value = None
+
+        upsert_voice_provider(
+            db_session=mock_db_session,
+            provider_id=1,
+            name="Test",
+            provider_type="azure",
+            api_key=None,
+            api_key_changed=False,
+            custom_config={},
+        )
+
+        assert existing_provider.custom_config == {}
 
     def test_activates_stt_when_requested(self, mock_db_session: MagicMock) -> None:
         existing_provider = _make_voice_provider(id=1)

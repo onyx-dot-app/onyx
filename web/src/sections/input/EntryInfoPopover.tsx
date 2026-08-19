@@ -91,6 +91,9 @@ function EntryInfoPopover({
     return () => observer.disconnect();
   }, [tileElement, onDismiss]);
 
+  // Browser-only: measures the viewport and portals into document.body.
+  if (typeof window === "undefined") return null;
+
   const POPOVER_MAX_H = 240;
   const POPOVER_MAX_W = 320;
   const GAP = 4;
@@ -111,7 +114,7 @@ function EntryInfoPopover({
         aria-label={`Skill: ${name}`}
         tabIndex={-1}
         data-testid="skill-info-popover"
-        className="fixed z-50 flex flex-col gap-1 bg-background-neutral-00 border border-border-01 rounded-08 shadow-02 p-3 overflow-y-auto outline-hidden"
+        className="fixed z-50 flex flex-col gap-1 bg-background-neutral-00 border border-border-01 rounded-08 shadow-box-02 p-3 overflow-y-auto outline-hidden"
         style={{
           left: Math.max(GAP, left),
           maxWidth: POPOVER_MAX_W,

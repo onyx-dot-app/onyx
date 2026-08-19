@@ -1,15 +1,15 @@
-from typing import Any
-from typing import cast
-from unittest.mock import MagicMock
-from unittest.mock import patch
+from typing import Any, cast
+from unittest.mock import MagicMock, patch
 
 import pytest
 from botocore.exceptions import ClientError
 
 from onyx.configs.constants import BlobType
 from onyx.connectors.blob.connector import BlobStorageConnector
-from onyx.connectors.exceptions import CredentialExpiredError
-from onyx.connectors.exceptions import InsufficientPermissionsError
+from onyx.connectors.exceptions import (
+    CredentialExpiredError,
+    InsufficientPermissionsError,
+)
 
 
 def _make_connector(region_name: str | None) -> BlobStorageConnector:

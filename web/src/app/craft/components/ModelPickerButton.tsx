@@ -3,13 +3,11 @@
 import { useMemo } from "react";
 import { SelectButton } from "@opal/components";
 import { BuildLLMPopover } from "@/app/craft/components/BuildLLMPopover";
-import { useOnboarding } from "@/app/craft/onboarding/BuildOnboardingProvider";
-import { useLLMProviders } from "@/hooks/useLanguageModels";
+import { useLLMProviders } from "@/lib/languageModels/hooks";
 import { getModelIcon } from "@/lib/languageModels";
-import {
-  BuildLlmSelection,
-  getDefaultLlmSelection,
-} from "@/app/craft/onboarding/constants";
+import { BuildLlmSelection } from "@/app/craft/onboarding/constants";
+import { getPreferredLlmSelection } from "@/app/craft/utils/llmPreferences";
+import { useUser } from "@/providers/UserProvider";
 
 interface ModelPickerButtonProps {
   // null → show the recommended default.
@@ -25,32 +23,34 @@ export default function ModelPickerButton({
   disabled = false,
 }: ModelPickerButtonProps) {
   const { llmProviders } = useLLMProviders();
-  const { openLlmSetup } = useOnboarding();
+  const { user } = useUser();
 
   const effective = useMemo(
-    () => selection ?? getDefaultLlmSelection(llmProviders),
-    [selection, llmProviders]
+    () => selection ?? getPreferredLlmSelection(user?.id, llmProviders),
+    [selection, user?.id, llmProviders]
   );
 
   const displayName = useMemo(() => {
     if (!effective) return "Select model";
-    for (const provider of llmProviders ?? []) {
-      const config = provider.model_configurations.find(
-        (m) => m.name === effective.modelName
-      );
-      if (config) return config.display_name || config.name;
-    }
+    const provider = llmProviders?.find(
+      (candidate) => candidate.id === effective.providerId
+    );
+    const config = provider?.model_configurations.find(
+      (model) => model.name === effective.modelName
+    );
+    if (config) return config.effectiveDisplayName;
     return effective.modelName;
   }, [effective, llmProviders]);
 
-  const ModelIcon = effective ? getModelIcon(effective.provider) : undefined;
+  const ModelIcon = effective
+    ? getModelIcon(effective.provider, effective.modelName)
+    : undefined;
 
   return (
     <BuildLLMPopover
       currentSelection={effective}
       onSelectionChange={onChange}
       llmProviders={llmProviders}
-      onOpenOnboarding={(providerKey) => openLlmSetup(providerKey)}
       disabled={disabled}
     >
       <div className="inline-flex">

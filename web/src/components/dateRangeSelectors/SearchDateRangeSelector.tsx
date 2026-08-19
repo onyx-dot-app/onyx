@@ -1,4 +1,4 @@
-import { DateRangePickerValue } from "@/components/dateRangeSelectors/AdminDateRangeSelector";
+import { DateRangePickerValue } from "@/refresh-components/DateRangePicker";
 import { FiCalendar, FiChevronDown, FiXCircle } from "react-icons/fi";
 import { CustomDropdown } from "../Dropdown";
 import { timeRangeValues } from "@/app/config/timeRange";
@@ -55,7 +55,9 @@ export function SearchDateRangeSelector({
             )}
           </p>
           {value?.selectValue ? (
-            <div
+            <button
+              type="button"
+              aria-label="Clear"
               className="my-auto ml-auto p-0.5 rounded-full w-fit"
               onClick={(e) => {
                 onValueChange(null);
@@ -63,7 +65,7 @@ export function SearchDateRangeSelector({
               }}
             >
               <FiXCircle />
-            </div>
+            </button>
           ) : (
             <FiChevronDown className="my-auto ml-auto" />
           )}

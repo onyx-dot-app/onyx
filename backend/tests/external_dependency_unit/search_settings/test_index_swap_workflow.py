@@ -18,19 +18,19 @@ from sqlalchemy.orm import Session
 
 from onyx.connectors.models import IndexAttemptMetadata
 from onyx.context.search.models import SavedSearchSettings
-from onyx.db.enums import EmbeddingPrecision
-from onyx.db.enums import SwitchoverType
-from onyx.db.models import ConnectorCredentialPair
-from onyx.db.models import IndexModelStatus
+from onyx.db.enums import EmbeddingPrecision, SwitchoverType
+from onyx.db.models import ConnectorCredentialPair, IndexModelStatus
 from onyx.db.search_settings import create_search_settings
 from onyx.db.swap_index import check_and_perform_index_swap
 from onyx.indexing.indexing_pipeline import index_doc_batch_prepare
-from tests.external_dependency_unit.indexing_helpers import cleanup_cc_pair
-from tests.external_dependency_unit.indexing_helpers import get_doc_row
-from tests.external_dependency_unit.indexing_helpers import get_filerecord
-from tests.external_dependency_unit.indexing_helpers import make_cc_pair
-from tests.external_dependency_unit.indexing_helpers import make_doc
-from tests.external_dependency_unit.indexing_helpers import stage_file
+from tests.external_dependency_unit.indexing_helpers import (
+    cleanup_cc_pair,
+    get_doc_row,
+    get_filerecord,
+    make_cc_pair,
+    make_doc,
+    stage_file,
+)
 
 # ---------------------------------------------------------------------------
 # Helpers (file-local)

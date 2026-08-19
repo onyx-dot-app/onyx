@@ -3,11 +3,10 @@
 import { useSWRConfig } from "swr";
 import { useFormikContext } from "formik";
 import InputTypeInField from "@/refresh-components/form/InputTypeInField";
-import { InputDivider, InputPadder, InputVertical } from "@opal/layouts";
+import { InputDivider, InputPadder, InputVertical, toast } from "@opal/layouts";
 import {
   LLMProviderFormProps,
   LLMProviderName,
-  LLMProviderView,
 } from "@/lib/languageModels/types";
 import * as Yup from "yup";
 import {
@@ -16,7 +15,7 @@ import {
   BaseLLMFormValues,
 } from "@/sections/modals/languageModels/utils";
 import { submitProvider } from "@/sections/modals/languageModels/svc";
-import { LLMProviderConfiguredSource } from "@/lib/analytics";
+import { LLMProviderConfiguredSource } from "@/lib/analytics/utils";
 import {
   APIKeyField,
   DisplayNameField,
@@ -25,10 +24,10 @@ import {
   ModalWrapper,
 } from "@/sections/modals/languageModels/shared";
 import {
+  buildTargetUri,
   isValidAzureTargetUri,
   parseAzureTargetUri,
 } from "@/lib/azureTargetUri";
-import { toast } from "@/hooks/useToast";
 import { refreshLlmProviderCaches } from "@/lib/languageModels/cache";
 
 interface AzureModalValues extends BaseLLMFormValues {
@@ -66,16 +65,6 @@ function AzureModelSelection() {
   );
 }
 
-function buildTargetUri(existingLlmProvider?: LLMProviderView): string {
-  if (!existingLlmProvider?.api_base || !existingLlmProvider?.api_version) {
-    return "";
-  }
-
-  const deploymentName =
-    existingLlmProvider.deployment_name || "your-deployment";
-  return `${existingLlmProvider.api_base}/openai/deployments/${deploymentName}/chat/completions?api-version=${existingLlmProvider.api_version}`;
-}
-
 const processValues = (values: AzureModalValues): AzureModalValues => {
   let processedValues = { ...values };
   if (values.target_uri) {
@@ -102,6 +91,7 @@ export default function AzureModal({
   shouldMarkAsDefault,
   onOpenChange,
   onSuccess,
+  analyticsSource,
 }: LLMProviderFormProps) {
   const isOnboarding = variant === "onboarding";
   const { mutate } = useSWRConfig();
@@ -141,9 +131,11 @@ export default function AzureModal({
         const processedValues = processValues(values);
 
         await submitProvider({
-          analyticsSource: isOnboarding
-            ? LLMProviderConfiguredSource.CHAT_ONBOARDING
-            : LLMProviderConfiguredSource.ADMIN_PAGE,
+          analyticsSource:
+            analyticsSource ??
+            (isOnboarding
+              ? LLMProviderConfiguredSource.CHAT_ONBOARDING
+              : LLMProviderConfiguredSource.ADMIN_PAGE),
           providerName: LLMProviderName.AZURE,
           values: processedValues,
           initialValues,

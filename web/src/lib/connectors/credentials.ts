@@ -9,6 +9,7 @@ export interface OAuthAdditionalKwargDescription {
 
 export interface OAuthDetails {
   oauth_enabled: boolean;
+  supports_manual_credentials: boolean;
   additional_kwargs: OAuthAdditionalKwargDescription[];
 }
 export interface AuthMethodOption<TFields> {
@@ -55,6 +56,12 @@ export interface GitbookCredentialJson {
 export interface GitlabCredentialJson {
   gitlab_url: string;
   gitlab_access_token: string;
+}
+
+export interface LumAppsCredentialJson {
+  lumapps_application_id: string;
+  lumapps_api_key: string;
+  lumapps_service_user: string;
 }
 
 export interface BitbucketCredentialJson {
@@ -141,6 +148,7 @@ export interface GuruCredentialJson {
 export interface GongCredentialJson {
   gong_access_key: string;
   gong_access_key_secret: string;
+  gong_base_url: string | null;
 }
 
 export interface LoopioCredentialJson {
@@ -150,7 +158,7 @@ export interface LoopioCredentialJson {
 }
 
 export interface LinearCredentialJson {
-  linear_access_token: string;
+  linear_api_key: string;
 }
 
 export interface HubSpotCredentialJson {
@@ -171,6 +179,13 @@ export interface ZendeskCredentialJson {
   zendesk_subdomain: string;
   zendesk_email: string;
   zendesk_token: string;
+}
+
+export interface BoxCredentialJson {
+  box_client_id: string;
+  box_client_secret: string;
+  box_enterprise_id: string;
+  box_user_email: string | null;
 }
 
 export interface DropboxCredentialJson {
@@ -200,12 +215,25 @@ export interface OCICredentialJson {
   access_key_id: string;
   secret_access_key: string;
 }
-export interface SalesforceCredentialJson {
+export interface SalesforceLegacyCredentialJson {
+  authentication_method?: "password";
   sf_username: string;
   sf_password: string;
   sf_security_token: string;
   is_sandbox: boolean;
 }
+
+export interface SalesforceOAuthCredentialJson {
+  authentication_method: "oauth";
+  sf_access_token: string;
+  sf_refresh_token: string;
+  sf_instance_url: string;
+  sf_login_url: string;
+}
+
+export type SalesforceCredentialJson =
+  | SalesforceLegacyCredentialJson
+  | SalesforceOAuthCredentialJson;
 
 export interface SharepointCredentialJson {
   sp_client_id: string;
@@ -248,6 +276,14 @@ export interface FirefliesCredentialJson {
   fireflies_api_key: string;
 }
 
+export interface BraintrustCredentialJson {
+  braintrust_api_key: string;
+}
+
+export interface CanvasCredentialJson {
+  canvas_access_token: string;
+}
+
 export interface MediaWikiCredentialJson {}
 export interface WikipediaCredentialJson extends MediaWikiCredentialJson {}
 
@@ -287,6 +323,11 @@ export const credentialTemplates: Record<ValidSources, any> = {
     gitlab_url: "",
     gitlab_access_token: "",
   } as GitlabCredentialJson,
+  lumapps: {
+    lumapps_application_id: "",
+    lumapps_api_key: "",
+    lumapps_service_user: "",
+  } as LumAppsCredentialJson,
   bitbucket: {
     bitbucket_email: "",
     bitbucket_api_token: "",
@@ -317,9 +358,10 @@ export const credentialTemplates: Record<ValidSources, any> = {
   gong: {
     gong_access_key: "",
     gong_access_key_secret: "",
+    gong_base_url: null,
   } as GongCredentialJson,
   zulip: { zuliprc_content: "" } as ZulipCredentialJson,
-  linear: { linear_access_token: "" } as LinearCredentialJson,
+  linear: { linear_api_key: "" } as LinearCredentialJson,
   hubspot: { hubspot_access_token: "" } as HubSpotCredentialJson,
   document360: {
     portal_id: "",
@@ -330,6 +372,12 @@ export const credentialTemplates: Record<ValidSources, any> = {
     loopio_client_id: "",
     loopio_client_token: "",
   } as LoopioCredentialJson,
+  box: {
+    box_client_id: "",
+    box_client_secret: "",
+    box_enterprise_id: "",
+    box_user_email: null,
+  } as BoxCredentialJson,
   dropbox: { dropbox_access_token: "" } as DropboxCredentialJson,
   salesforce: {
     sf_username: "",
@@ -445,6 +493,12 @@ export const credentialTemplates: Record<ValidSources, any> = {
   fireflies: {
     fireflies_api_key: "",
   } as FirefliesCredentialJson,
+  braintrust: {
+    braintrust_api_key: "",
+  } as BraintrustCredentialJson,
+  canvas: {
+    canvas_access_token: "",
+  } as CanvasCredentialJson,
   egnyte: {
     domain: "",
     access_token: "",
@@ -493,6 +547,11 @@ export const credentialTemplates: Record<ValidSources, any> = {
 export const credentialDisplayNames: Record<string, string> = {
   // Github
   github_access_token: "GitHub Access Token",
+
+  // LumApps
+  lumapps_application_id: "LumApps Application ID",
+  lumapps_api_key: "LumApps API Key",
+  lumapps_service_user: "Service User Email (to index on behalf of)",
 
   // Gitlab
   gitlab_url: "GitLab URL",
@@ -549,6 +608,8 @@ export const credentialDisplayNames: Record<string, string> = {
   // Gong
   gong_access_key: "Gong Access Key",
   gong_access_key_secret: "Gong Access Key Secret",
+  gong_base_url:
+    "Gong API Base URL (optional; set your region-specific host like https://<region>.api.gong.io for non-US data residency)",
 
   // Loopio
   loopio_subdomain: "Loopio Subdomain",
@@ -556,7 +617,7 @@ export const credentialDisplayNames: Record<string, string> = {
   loopio_client_token: "Loopio Client Token",
 
   // Linear
-  linear_access_token: "Linear Access Token",
+  linear_api_key: "Linear API Key",
 
   // HubSpot
   hubspot_access_token: "HubSpot Access Token",
@@ -572,6 +633,12 @@ export const credentialDisplayNames: Record<string, string> = {
   zendesk_subdomain: "Zendesk Subdomain",
   zendesk_email: "Zendesk Email",
   zendesk_token: "Zendesk Token",
+
+  // Box
+  box_client_id: "Box Client ID",
+  box_client_secret: "Box Client Secret",
+  box_enterprise_id: "Box Enterprise ID",
+  box_user_email: "Email of Box user to impersonate (optional)",
 
   // Dropbox
   dropbox_access_token: "Dropbox API Key",
@@ -639,6 +706,12 @@ export const credentialDisplayNames: Record<string, string> = {
 
   // Fireflies
   fireflies_api_key: "Fireflies API Key",
+
+  // Braintrust
+  braintrust_api_key: "Braintrust API Key",
+
+  // Canvas
+  canvas_access_token: "Canvas Access Token",
 
   // GitBook
   gitbook_space_id: "GitBook Space ID",

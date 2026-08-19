@@ -3,16 +3,16 @@ package tui
 import (
 	"strings"
 
-	"github.com/charmbracelet/lipgloss"
+	"charm.land/lipgloss/v2"
 )
 
 // statusBar manages the footer status display.
 type statusBar struct {
 	agentName string
-	serverURL   string
-	sessionID   string
-	streaming   bool
-	width       int
+	serverURL string
+	sessionID string
+	streaming bool
+	width     int
 }
 
 func newStatusBar() statusBar {
@@ -22,7 +22,7 @@ func newStatusBar() statusBar {
 }
 
 func (s *statusBar) setAgent(name string) { s.agentName = name }
-func (s *statusBar) setServer(url string)    { s.serverURL = url }
+func (s *statusBar) setServer(url string) { s.serverURL = url }
 func (s *statusBar) setSession(id string) {
 	if len(id) > 8 {
 		id = id[:8]
@@ -30,7 +30,7 @@ func (s *statusBar) setSession(id string) {
 	s.sessionID = id
 }
 func (s *statusBar) setStreaming(v bool) { s.streaming = v }
-func (s *statusBar) setWidth(w int)     { s.width = w }
+func (s *statusBar) setWidth(w int)      { s.width = w }
 
 func (s statusBar) view() string {
 	var leftParts []string

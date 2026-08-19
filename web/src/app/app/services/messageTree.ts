@@ -5,25 +5,6 @@ export const SYSTEM_NODE_ID = -3;
 
 export type MessageTreeState = Map<number, Message>; // key is nodeId
 
-export function createInitialMessageTreeState(
-  initialMessages?: Map<number, Message> | Message[]
-): MessageTreeState {
-  if (!initialMessages) {
-    return new Map();
-  }
-  if (initialMessages instanceof Map) {
-    return new Map(initialMessages); // Shallow copy
-  }
-  return new Map(initialMessages.map((msg) => [msg.nodeId, msg]));
-}
-
-export function getMessage(
-  messages: MessageTreeState,
-  nodeId: number
-): Message | undefined {
-  return messages.get(nodeId);
-}
-
 export function getMessageByMessageId(
   messages: MessageTreeState,
   messageId: number
@@ -163,60 +144,6 @@ export function upsertMessages(
   return newMessages;
 }
 
-export function removeMessage(
-  currentMessages: MessageTreeState,
-  nodeIdToRemove: number
-): MessageTreeState {
-  if (!currentMessages.has(nodeIdToRemove)) {
-    return currentMessages; // Return original if message doesn't exist
-  }
-
-  const newMessages = new Map(currentMessages);
-  const messageToRemove = newMessages.get(nodeIdToRemove)!;
-
-  // Collect all descendant IDs to remove
-  const idsToRemove = new Set<number>();
-  const queue: number[] = [nodeIdToRemove];
-
-  while (queue.length > 0) {
-    const currentId = queue.shift()!;
-    if (!newMessages.has(currentId) || idsToRemove.has(currentId)) continue;
-    idsToRemove.add(currentId);
-
-    const currentMsg = newMessages.get(currentId);
-    if (currentMsg?.childrenNodeIds) {
-      currentMsg.childrenNodeIds.forEach((childId) => queue.push(childId));
-    }
-  }
-
-  // Remove all descendants
-  idsToRemove.forEach((id) => newMessages.delete(id));
-
-  // Update the parent
-  if (messageToRemove.parentNodeId !== null) {
-    const parent = newMessages.get(messageToRemove.parentNodeId);
-    if (parent) {
-      const updatedChildren = (parent.childrenNodeIds || []).filter(
-        (id) => id !== nodeIdToRemove
-      );
-      const updatedParent = {
-        ...parent,
-        childrenNodeIds: updatedChildren,
-        // If the removed message was the latest, find the new latest (last in the updated children list)
-        latestChildNodeId:
-          parent.latestChildNodeId === nodeIdToRemove
-            ? updatedChildren.length > 0
-              ? updatedChildren[updatedChildren.length - 1]
-              : null
-            : parent.latestChildNodeId,
-      };
-      newMessages.set(parent.nodeId, updatedParent);
-    }
-  }
-
-  return newMessages;
-}
-
 export function setMessageAsLatest(
   currentMessages: MessageTreeState,
   nodeId: number
@@ -303,71 +230,6 @@ export function getLatestMessageChain(messages: MessageTreeState): Message[] {
   }
 
   return chain;
-}
-
-export function getHumanAndAIMessageFromMessageNumber(
-  messages: MessageTreeState,
-  messageNumber: number
-): { humanMessage: Message | null; aiMessage: Message | null } {
-  const latestChain = getLatestMessageChain(messages);
-  const messageIndex = latestChain.findIndex(
-    (msg) => msg.messageId === messageNumber
-  );
-
-  if (messageIndex === -1) {
-    // Maybe the message exists but isn't in the latest chain? Search the whole map.
-    const message = getMessageByMessageId(messages, messageNumber);
-    if (!message) return { humanMessage: null, aiMessage: null };
-
-    if (message.type === "user") {
-      // Find its latest child that is an agent
-      const potentialAiMessage =
-        message.latestChildNodeId !== null &&
-        message.latestChildNodeId !== undefined
-          ? messages.get(message.latestChildNodeId)
-          : undefined;
-      const aiMessage =
-        potentialAiMessage?.type === "assistant" ? potentialAiMessage : null;
-      return { humanMessage: message, aiMessage };
-    } else if (message.type === "assistant" || message.type === "error") {
-      const humanMessage =
-        message.parentNodeId !== null
-          ? messages.get(message.parentNodeId)
-          : null;
-      return {
-        humanMessage: humanMessage?.type === "user" ? humanMessage : null,
-        aiMessage: message,
-      };
-    }
-    return { humanMessage: null, aiMessage: null };
-  }
-
-  // Message is in the latest chain
-  const message = latestChain[messageIndex];
-  if (!message) {
-    console.error(`Message ${messageNumber} not found in the latest chain.`);
-    return { humanMessage: null, aiMessage: null };
-  }
-
-  if (message.type === "user") {
-    const potentialAiMessage = latestChain[messageIndex + 1];
-    const aiMessage =
-      potentialAiMessage?.type === "assistant" &&
-      potentialAiMessage.parentNodeId === message.nodeId
-        ? potentialAiMessage
-        : null;
-    return { humanMessage: message, aiMessage };
-  } else if (message.type === "assistant" || message.type === "error") {
-    const potentialHumanMessage = latestChain[messageIndex - 1];
-    const humanMessage =
-      potentialHumanMessage?.type === "user" &&
-      message.parentNodeId === potentialHumanMessage.nodeId
-        ? potentialHumanMessage
-        : null;
-    return { humanMessage, aiMessage: message };
-  }
-
-  return { humanMessage: null, aiMessage: null };
 }
 
 export function getLastSuccessfulMessageId(

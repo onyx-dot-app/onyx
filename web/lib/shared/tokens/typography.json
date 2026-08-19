@@ -1,0 +1,14 @@
+{
+  "font-hanken-grotesk": {
+    "value": "\"Hanken Grotesk\", -apple-system, BlinkMacSystemFont, \"Segoe UI\", Roboto,\n    sans-serif",
+    "type": "fontFamily"
+  },
+  "font-dm-mono": {
+    "value": "\"DM Mono\", \"SF Mono\", Monaco, \"Cascadia Code\", \"Roboto Mono\", Consolas,\n    \"Courier New\", monospace",
+    "type": "fontFamily"
+  },
+  "font-kh-teka": {
+    "value": "\"KH Teka\", -apple-system, BlinkMacSystemFont, \"Segoe UI\", Roboto, sans-serif",
+    "type": "fontFamily"
+  }
+}

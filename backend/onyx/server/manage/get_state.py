@@ -1,61 +1,239 @@
 import concurrent.futures
 import re
+import threading
+import time
 
 import requests
-from fastapi import APIRouter
-from fastapi import HTTPException
-from fastapi import Response
+from anyio import to_thread
+from cachetools import TTLCache
+from fastapi import APIRouter, HTTPException, Response
+from fastapi.concurrency import run_in_threadpool
+from fastapi.responses import JSONResponse
 
 from onyx import __version__
-from onyx.auth.users import anonymous_user_enabled
-from onyx.auth.users import user_needs_to_be_verified
-from onyx.configs.app_configs import AUTH_TYPE
+from onyx.auth.users import anonymous_user_enabled, user_needs_to_be_verified
 from onyx.configs.app_configs import OAUTH_ENABLED
-from onyx.configs.app_configs import PASSWORD_MIN_LENGTH
-from onyx.configs.constants import AuthType
-from onyx.configs.constants import DEV_VERSION_PATTERN
-from onyx.configs.constants import PUBLIC_API_TAGS
-from onyx.configs.constants import STABLE_VERSION_PATTERN
+from onyx.configs.constants import (
+    DEV_VERSION_PATTERN,
+    PUBLIC_API_TAGS,
+    STABLE_VERSION_PATTERN,
+)
 from onyx.db.auth import get_user_count
-from onyx.server.manage.models import AllVersions
-from onyx.server.manage.models import AuthTypeResponse
-from onyx.server.manage.models import ContainerVersions
-from onyx.server.manage.models import VersionResponse
+from onyx.db.engine.sql_engine import get_session_with_shared_schema
+from onyx.db.sso_provider import fetch_sso_providers, sso_authorize_path
+from onyx.error_handling.error_codes import OnyxErrorCode
+from onyx.error_handling.exceptions import OnyxError, onyx_error_to_json_response
+from onyx.server.manage.models import (
+    AllVersions,
+    AuthConfigResponse,
+    ContainerVersions,
+    SSOProviderOption,
+    VersionResponse,
+)
 from onyx.server.models import StatusResponse
+from onyx.server.security.store import get_security_settings
+from onyx.utils.logger import setup_logger
+from shared_configs.configs import MULTI_TENANT
+
+logger = setup_logger()
 
 router = APIRouter()
+
+# TTL matches the endpoint's HTTP max-age (60s). The two windows stack.
+# Admin mutations invalidate this pod directly. Other pods ride the TTL.
+_SSO_OPTIONS_TTL_SECONDS = 60
+_SSO_OPTIONS_CACHE: TTLCache[str, list[SSOProviderOption]] = TTLCache(
+    maxsize=1, ttl=_SSO_OPTIONS_TTL_SECONDS
+)
+_SSO_OPTIONS_KEY = "options"
+_SSO_OPTIONS_LOCK = threading.Lock()
+
+# Login-page traffic must not COUNT users on every request. Users are never
+# un-created in practice, so once a user exists the flag is latched for the
+# life of the process.
+_HAS_USERS_LATCHED = False
+
+
+def invalidate_sso_provider_options_cache() -> None:
+    """Call after any sso_provider mutation so admin edits show immediately."""
+    with _SSO_OPTIONS_LOCK:
+        _SSO_OPTIONS_CACHE.pop(_SSO_OPTIONS_KEY, None)
+
+
+def _fetch_sso_provider_options() -> list[SSOProviderOption]:
+    # One cached response for every visitor, so it can only speak for a
+    # deployment with one set of providers. Cloud uses /auth/sso/discover.
+    if MULTI_TENANT:
+        return []
+    # The lock spans the DB read so a mutation's invalidate cannot land between
+    # read and cache write, which would pin a pre-mutation snapshot for a TTL.
+    with _SSO_OPTIONS_LOCK:
+        cached = _SSO_OPTIONS_CACHE.get(_SSO_OPTIONS_KEY)
+        if cached is not None:
+            return cached
+        with get_session_with_shared_schema() as db_session:
+            options = [
+                SSOProviderOption(
+                    name=provider.name,
+                    display_name=provider.display_name,
+                    provider_type=provider.provider_type,
+                    authorize_url=sso_authorize_path(provider),
+                )
+                for provider in fetch_sso_providers(db_session, enabled_only=True)
+            ]
+        _SSO_OPTIONS_CACHE[_SSO_OPTIONS_KEY] = options
+        return options
+
+
+# Readiness thresholds. The server reports not-ready once every threadpool token
+# is borrowed AND at least this many requests are queued for a thread, for this
+# long. Bursty load queues briefly, so neither condition alone is a problem.
+# Constants until a deployment needs to tune them.
+_UNREADY_QUEUE_DEPTH = 1
+_UNREADY_AFTER_SECONDS = 10.0
+
+# Tracks when the threadpool was first observed saturated, so brief queueing
+# under bursty load does not flip readiness. Only ever touched from the event
+# loop inside `readiness`, with no await between the read and the write.
+#
+# The window is sampled at probe frequency, not observed continuously, so a pool
+# that drains and re-saturates between two probes reads as continuously
+# saturated. Accepted: readiness is reversible, so the next healthy sample
+# restores the pod one interval later. Restarting the streak on a large sample
+# gap would be worse — any probe interval above the threshold would then never
+# accumulate a streak, and Compose probes every 30s. Fixing it properly needs a
+# background sampler, which is not worth an always-on loop per process.
+_SATURATED_SINCE: float | None = None
+
+# Probes can hit /health/ready many times a second, so log only when readiness
+# changes. Logging every not-ready probe would flood the log with one line per
+# probe per replica, and add synchronous I/O exactly when the server is already
+# out of capacity.
+_REPORTED_NOT_READY = False
+
+
+def _threadpool_saturation() -> tuple[bool, dict[str, float]]:
+    """Report whether the sync-endpoint threadpool has no capacity left.
+
+    Must be called from the event loop — the limiter is per-loop.
+    """
+    stats = to_thread.current_default_thread_limiter().statistics()
+    depth = {
+        "threadpool_total_tokens": stats.total_tokens,
+        "threadpool_borrowed_tokens": stats.borrowed_tokens,
+        "threadpool_tasks_waiting": stats.tasks_waiting,
+    }
+    saturated = (
+        stats.borrowed_tokens >= stats.total_tokens
+        and stats.tasks_waiting >= _UNREADY_QUEUE_DEPTH
+    )
+    return saturated, depth
+
+
+# response_model=None only disables schema inference for the Response union
+# below. It does not declare a response model.
+@router.get("/health/ready", tags=PUBLIC_API_TAGS, response_model=None)
+async def readiness() -> StatusResponse[dict[str, float]] | JSONResponse:
+    """Readiness probe. Wire this to readinessProbe and to load balancers.
+
+    Sync endpoints run in the anyio threadpool, so a saturated pool means the
+    server cannot serve real traffic even though the event loop still turns.
+    This handler stays async on purpose: a sync handler would borrow a token of
+    the pool it is measuring, adding load exactly when there is none to spare,
+    and would queue rather than answer. Liveness lives at /health.
+    """
+    global _SATURATED_SINCE, _REPORTED_NOT_READY
+
+    saturated, depth = _threadpool_saturation()
+    now = time.monotonic()
+
+    if not saturated:
+        if _REPORTED_NOT_READY:
+            logger.notice("Threadpool recovered; reporting ready again")
+            _REPORTED_NOT_READY = False
+        _SATURATED_SINCE = None
+        return StatusResponse(success=True, message="ok", data=depth)
+
+    if _SATURATED_SINCE is None:
+        _SATURATED_SINCE = now
+
+    saturated_for = now - _SATURATED_SINCE
+    if saturated_for < _UNREADY_AFTER_SECONDS:
+        return StatusResponse(success=True, message="ok", data=depth)
+
+    if not _REPORTED_NOT_READY:
+        logger.warning(
+            "Threadpool saturated for %.1fs (%s/%s tokens borrowed, %s waiting); "
+            "reporting not ready",
+            saturated_for,
+            depth["threadpool_borrowed_tokens"],
+            depth["threadpool_total_tokens"],
+            depth["threadpool_tasks_waiting"],
+        )
+        _REPORTED_NOT_READY = True
+
+    # Returned rather than raised: the global OnyxError handler logs every 5xx,
+    # which would put one line per probe per replica back in the log. The
+    # response body and status are identical either way.
+    return onyx_error_to_json_response(
+        OnyxError(
+            OnyxErrorCode.SERVICE_UNAVAILABLE,
+            f"Request threadpool saturated for {saturated_for:.1f}s "
+            f"({depth['threadpool_tasks_waiting']:.0f} requests queued)",
+        )
+    )
 
 
 @router.get("/health", tags=PUBLIC_API_TAGS)
 async def healthcheck() -> StatusResponse:
+    """Liveness probe. Answers only "is this process still running".
+
+    Deliberately checks nothing else. Liveness failures restart the container,
+    and saturation is load-induced and correlated across replicas, so gating
+    restarts on it would turn a slowdown into an outage. Use /health/ready for
+    that.
+    """
     return StatusResponse(success=True, message="ok")
 
 
 @router.get("/auth/type", tags=PUBLIC_API_TAGS)
-async def get_auth_type(response: Response) -> AuthTypeResponse:
+async def get_auth_type(response: Response) -> AuthConfigResponse:
     # NOTE: This endpoint is critical for the multi-tenant flow and is hit before there is a tenant context
     # The reason is this is used during the login flow, but we don't know which tenant the user is supposed to be
     # associated with until they auth.
+    global _HAS_USERS_LATCHED
     has_users = True
-    if AUTH_TYPE != AuthType.CLOUD:
-        user_count = await get_user_count()
-        has_users = user_count > 0
+    if not MULTI_TENANT and not _HAS_USERS_LATCHED:
+        has_users = await get_user_count() > 0
+        _HAS_USERS_LATCHED = has_users
 
     # Cache only after bootstrap; the first user flow depends on a live
     # has_users flag so avoid serving a stale redirect. no-store in that
     # case prevents an intermediate CDN with a default TTL from pinning
-    # has_users=false past the first signup.
+    # has_users=false past the first signup. sso_providers rides this cache
+    # too, so a disabled provider's button can linger for the server TTL plus
+    # this max-age (~2 min worst case on pods the mutation did not touch). Clicking it
+    # still fails closed (authorize resolves enabled_only), so this is a UX
+    # blip, not an access path. Reduce the window if that is too slow.
     response.headers["Cache-Control"] = (
         "public, max-age=60" if has_users else "no-store"
     )
 
-    return AuthTypeResponse(
-        auth_type=AUTH_TYPE,
+    security = get_security_settings()
+    return AuthConfigResponse(
+        multi_tenant=MULTI_TENANT,
         requires_verification=user_needs_to_be_verified(),
         anonymous_user_enabled=anonymous_user_enabled(),
-        password_min_length=PASSWORD_MIN_LENGTH,
+        password_min_length=security.password_min_length,
+        password_max_length=security.password_max_length,
+        password_require_uppercase=security.password_require_uppercase,
+        password_require_lowercase=security.password_require_lowercase,
+        password_require_digit=security.password_require_digit,
+        password_require_special_char=security.password_require_special_char,
         has_users=has_users,
         oauth_enabled=OAUTH_ENABLED,
+        password_auth_enabled=security.password_auth_enabled,
+        sso_providers=await run_in_threadpool(_fetch_sso_provider_options),
     )
 
 

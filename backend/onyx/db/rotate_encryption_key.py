@@ -12,15 +12,11 @@ safely resumed by re-running.
 import json
 from typing import Any
 
-from sqlalchemy import LargeBinary
-from sqlalchemy import select
-from sqlalchemy import update
+from sqlalchemy import LargeBinary, select, update
 from sqlalchemy.orm import Session
 
 from onyx.configs.app_configs import ENCRYPTION_KEY_SECRET
-from onyx.db.models import Base
-from onyx.db.models import EncryptedJson
-from onyx.db.models import EncryptedString
+from onyx.db.models import Base, EncryptedJson, EncryptedString
 from onyx.utils.encryption import decrypt_bytes_to_string
 from onyx.utils.logger import setup_logger
 from onyx.utils.variable_functionality import global_version

@@ -2,7 +2,7 @@
 
 import React, { RefObject, useState, useCallback, useMemo } from "react";
 import { Packet, StreamingCitation } from "@/app/app/services/streamingModels";
-import { FeedbackType } from "@/app/app/interfaces";
+import { FeedbackType, Message } from "@/app/app/interfaces";
 import { OnyxDocument } from "@/lib/search/interfaces";
 import { TooltipGroup } from "@/components/tooltip/CustomTooltip";
 import {
@@ -14,24 +14,34 @@ import { convertMarkdownTablesToTsv } from "@/app/app/message/copyingUtils";
 import { getTextContent } from "@/app/app/services/packetUtils";
 import { removeThinkingTokens } from "@/app/app/services/thinkingTokens";
 import MessageSwitcher from "@/app/app/message/MessageSwitcher";
+import { useIncognitoOptional } from "@/providers/IncognitoProvider";
 import SourceTag from "@/refresh-components/buttons/source-tag/SourceTag";
 import { citationsToSourceInfoArray } from "@/refresh-components/buttons/source-tag/sourceTagUtils";
-import { CopyButton } from "@opal/components";
-import LLMPopover from "@/refresh-components/popovers/LLMPopover";
-import { parseLlmDescriptor } from "@/lib/languageModels/utils";
+import { CopyButton, OpenButton, SelectButton } from "@opal/components";
+import ModelSelector from "@/sections/model-selector/ModelSelector";
+import { SvgRefreshCw, SvgThumbsDown, SvgThumbsUp } from "@opal/icons";
 import { LlmManager } from "@/lib/hooks";
-import { Message } from "@/app/app/interfaces";
-import { SvgThumbsDown, SvgThumbsUp } from "@opal/icons";
-import { RegenerationFactory } from "./AgentMessage";
+import { RegenerationFactory } from "@/app/app/message/messageComponents/AgentMessage";
 import useFeedbackController from "@/hooks/useFeedbackController";
-import { useCreateModal } from "@/refresh-components/contexts/ModalContext";
+import { useCreateModal } from "@opal/components";
 import FeedbackModal, {
   FeedbackModalProps,
 } from "@/sections/modals/FeedbackModal";
-import { Button, SelectButton } from "@opal/components";
-import TTSButton from "./TTSButton";
+import TTSButton from "@/app/app/message/messageComponents/TTSButton";
 import { useVoiceMode } from "@/providers/VoiceModeProvider";
 import { useVoiceStatus } from "@/hooks/useVoiceStatus";
+import { findModelConfigId } from "@/lib/languageModels/options";
+import { getModelIcon } from "@/lib/languageModels";
+
+interface SouurcesTagWrapperProps {
+  citations: StreamingCitation[];
+  documentMap: Map<string, OnyxDocument>;
+  nodeId: number;
+  selectedMessageForDocDisplay: number | null;
+  documentSidebarVisible: boolean;
+  updateCurrentDocumentSidebarVisible: (visible: boolean) => void;
+  updateCurrentSelectedNodeForDocDisplay: (nodeId: number | null) => void;
+}
 
 // Wrapper component for SourceTag in toolbar to handle memoization
 const SourcesTagWrapper = React.memo(function SourcesTagWrapper({
@@ -42,15 +52,7 @@ const SourcesTagWrapper = React.memo(function SourcesTagWrapper({
   documentSidebarVisible,
   updateCurrentDocumentSidebarVisible,
   updateCurrentSelectedNodeForDocDisplay,
-}: {
-  citations: StreamingCitation[];
-  documentMap: Map<string, OnyxDocument>;
-  nodeId: number;
-  selectedMessageForDocDisplay: number | null;
-  documentSidebarVisible: boolean;
-  updateCurrentDocumentSidebarVisible: (visible: boolean) => void;
-  updateCurrentSelectedNodeForDocDisplay: (nodeId: number | null) => void;
-}) {
+}: SouurcesTagWrapperProps) {
   // Convert citations to SourceInfo array
   const sources = useMemo(
     () => citationsToSourceInfoArray(citations, documentMap),
@@ -112,6 +114,9 @@ export interface MessageToolbarProps {
   parentMessage?: Message | null;
   llmManager: LlmManager | null;
   currentModelName?: string;
+  /** Provider slug for `currentModelName`, used to resolve the model icon in
+   * the read-only footer chip shown when there's no `llmManager`. */
+  currentModelProvider?: string;
 
   // Citations
   citations: StreamingCitation[];
@@ -134,9 +139,19 @@ export default function MessageToolbar({
   parentMessage,
   llmManager,
   currentModelName,
+  currentModelProvider,
   citations,
   documentMap,
 }: MessageToolbarProps) {
+  // Incognito responses take no feedback: votes would persist reviewable
+  // signal tied to a chat hidden from the owner's surfaces. The session's
+  // pinned flag keeps suppression on while exit clears the live toggle.
+  const sessionIncognito = useChatSessionStore(
+    (state) =>
+      state.sessions.get(state.currentSessionId || "")?.incognito ?? false
+  );
+  const incognitoEnabled =
+    (useIncognitoOptional()?.incognitoEnabled ?? false) || sessionIncognito;
   // Document sidebar state - managed internally to reduce prop drilling
   const documentSidebarVisible = useDocumentSidebarVisible();
   const selectedMessageForDocDisplay = useSelectedNodeForDocDisplay();
@@ -228,7 +243,7 @@ export default function MessageToolbar({
 
       <div
         data-testid="AgentMessage/toolbar"
-        className="flex md:flex-row justify-between items-center w-full transition-transform duration-300 ease-in-out transform opacity-100 pl-1"
+        className="flex justify-between items-center w-full transition-transform duration-300 ease-in-out transform opacity-100 pl-1"
       >
         <TooltipGroup>
           <div className="flex items-center">
@@ -262,28 +277,32 @@ export default function MessageToolbar({
               getHtmlContent={() => finalAnswerRef.current?.innerHTML || ""}
               data-testid="AgentMessage/copy-button"
             />
-            <SelectButton
-              icon={SvgThumbsUp}
-              onClick={() => handleFeedbackClick("like")}
-              variant="select-light"
-              state={isFeedbackTransient("like") ? "selected" : "empty"}
-              tooltip={
-                currentFeedback === "like" ? "Remove Like" : "Good Response"
-              }
-              data-testid="AgentMessage/like-button"
-            />
-            <SelectButton
-              icon={SvgThumbsDown}
-              onClick={() => handleFeedbackClick("dislike")}
-              variant="select-light"
-              state={isFeedbackTransient("dislike") ? "selected" : "empty"}
-              tooltip={
-                currentFeedback === "dislike"
-                  ? "Remove Dislike"
-                  : "Bad Response"
-              }
-              data-testid="AgentMessage/dislike-button"
-            />
+            {!incognitoEnabled && (
+              <>
+                <SelectButton
+                  icon={SvgThumbsUp}
+                  onClick={() => handleFeedbackClick("like")}
+                  variant="select-light"
+                  state={isFeedbackTransient("like") ? "selected" : "empty"}
+                  tooltip={
+                    currentFeedback === "like" ? "Remove Like" : "Good Response"
+                  }
+                  data-testid="AgentMessage/like-button"
+                />
+                <SelectButton
+                  icon={SvgThumbsDown}
+                  onClick={() => handleFeedbackClick("dislike")}
+                  variant="select-light"
+                  state={isFeedbackTransient("dislike") ? "selected" : "empty"}
+                  tooltip={
+                    currentFeedback === "dislike"
+                      ? "Remove Dislike"
+                      : "Bad Response"
+                  }
+                  data-testid="AgentMessage/dislike-button"
+                />
+              </>
+            )}
             {ttsEnabled && (
               <TTSButton
                 text={
@@ -292,23 +311,57 @@ export default function MessageToolbar({
               />
             )}
 
+            {/* Read-only model label for the shared view: no llmManager to
+                power the interactive selector, so surface which model answered. */}
+            {!llmManager && currentModelName && (
+              <OpenButton
+                disabled
+                icon={getModelIcon(
+                  currentModelProvider ?? "",
+                  currentModelName
+                )}
+              >
+                {currentModelName}
+              </OpenButton>
+            )}
+
             {onRegenerate &&
               messageId !== undefined &&
               parentMessage &&
               llmManager && (
                 <div data-testid="AgentMessage/regenerate">
-                  <LLMPopover
-                    llmManager={llmManager}
-                    currentModelName={currentModelName}
-                    onSelect={(modelName) => {
-                      const llmDescriptor = parseLlmDescriptor(modelName);
+                  <ModelSelector
+                    value={findModelConfigId(
+                      llmManager.llmProviders,
+                      llmManager.currentLlm.provider,
+                      currentModelName ?? llmManager.currentLlm.modelName
+                    )}
+                    renderTrigger={() => {
+                      const rawName =
+                        currentModelName ?? llmManager!.currentLlm.modelName;
+                      const mc = llmManager!.llmProviders
+                        ?.flatMap((p) => p.model_configurations)
+                        .find((m) => m.name === rawName);
+                      const displayName = mc?.effectiveDisplayName ?? rawName;
+                      return (
+                        <OpenButton icon={SvgRefreshCw} foldable>
+                          {displayName}
+                        </OpenButton>
+                      );
+                    }}
+                    onChange={(opt) => {
                       const regenerator = onRegenerate({
                         messageId,
                         parentMessage,
                       });
-                      regenerator(llmDescriptor);
+                      regenerator({
+                        name: opt.name,
+                        provider: opt.provider,
+                        modelName: opt.modelName,
+                      });
                     }}
-                    foldable
+                    temperatureManager={llmManager}
+                    reasoningManager={llmManager}
                   />
                 </div>
               )}

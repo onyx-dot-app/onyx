@@ -7,6 +7,39 @@ const INDEX_SETTINGS_URL = "/admin/configuration/index-settings";
 const EMBEDDING_PROVIDER_API = "**/api/admin/embedding/embedding-provider**";
 const TEST_EMBEDDING_API = "**/api/admin/embedding/test-embedding";
 const SET_NEW_SETTINGS_API = "**/api/search-settings/set-new-search-settings**";
+const UPDATE_INFERENCE_SETTINGS_API =
+  "**/api/search-settings/update-inference-settings**";
+const CURRENT_SEARCH_SETTINGS_API =
+  "**/api/search-settings/get-current-search-settings**";
+const SECONDARY_SEARCH_SETTINGS_API =
+  "**/api/search-settings/get-secondary-search-settings**";
+const LLM_PROVIDER_API = "**/api/llm/provider**";
+
+interface TestModelConfiguration {
+  id: number | null;
+  name: string;
+  custom_display_name?: string | null;
+  display_name?: string | null;
+  is_visible: boolean;
+  [key: string]: unknown;
+}
+
+interface TestLlmProvider {
+  model_configurations: TestModelConfiguration[];
+  [key: string]: unknown;
+}
+
+interface TestLlmProviderResponse {
+  providers: TestLlmProvider[];
+  [key: string]: unknown;
+}
+
+interface TestSearchSettings {
+  model_name: string;
+  enable_contextual_rag: boolean;
+  contextual_rag_model_configuration_id: number | null;
+  [key: string]: unknown;
+}
 
 // ---------------------------------------------------------------------------
 // API helpers
@@ -39,6 +72,28 @@ async function getCurrentSearchSettings(page: Page) {
   );
   expect(response.ok()).toBeTruthy();
   return response.json();
+}
+
+async function getLlmProviderResponse(
+  page: Page
+): Promise<TestLlmProviderResponse> {
+  const response = await page.request.get("/api/llm/provider");
+  expect(response.ok()).toBeTruthy();
+  return (await response.json()) as TestLlmProviderResponse;
+}
+
+function getVisibleLlmModels(
+  response: TestLlmProviderResponse
+): TestModelConfiguration[] {
+  return response.providers.flatMap((provider) =>
+    provider.model_configurations.filter(
+      (model) => model.is_visible && model.id !== null
+    )
+  );
+}
+
+function modelDisplayName(model: TestModelConfiguration): string {
+  return model.custom_display_name || model.display_name || model.name;
 }
 
 // ---------------------------------------------------------------------------
@@ -242,6 +297,109 @@ test.describe("Index Settings Page @exclusive", () => {
   });
 });
 
+test.describe("Index Settings — contextual LLM updates @exclusive", () => {
+  test.beforeEach(async ({ page }) => {
+    await page.context().clearCookies();
+    await loginAs(page, "admin");
+  });
+
+  test("applies a contextual LLM only to new and updated documents", async ({
+    page,
+  }) => {
+    const current = (await getCurrentSearchSettings(
+      page
+    )) as TestSearchSettings;
+    const llmProviderResponse = await getLlmProviderResponse(page);
+    const models = getVisibleLlmModels(llmProviderResponse);
+    test.skip(models.length === 0, "A visible LLM model is required");
+
+    const currentContextualModel = models[0]!;
+    const nextContextualModel: TestModelConfiguration = {
+      ...currentContextualModel,
+      id: currentContextualModel.id! + 1000000,
+      name: "forward-only-test-model",
+      custom_display_name: "Forward-only test model",
+    };
+    const mockedLlmProviderResponse: TestLlmProviderResponse = {
+      ...llmProviderResponse,
+      providers: llmProviderResponse.providers.map((provider, index) =>
+        index === 0
+          ? {
+              ...provider,
+              model_configurations: [
+                ...provider.model_configurations,
+                nextContextualModel,
+              ],
+            }
+          : provider
+      ),
+    };
+
+    let servedSettings: TestSearchSettings = {
+      ...current,
+      enable_contextual_rag: true,
+      contextual_rag_model_configuration_id: currentContextualModel.id,
+    };
+    let setNewRequestCount = 0;
+
+    await page.route(CURRENT_SEARCH_SETTINGS_API, async (route) => {
+      await route.fulfill({
+        status: 200,
+        body: JSON.stringify(servedSettings),
+      });
+    });
+    await page.route(SECONDARY_SEARCH_SETTINGS_API, async (route) => {
+      await route.fulfill({ status: 200, body: "null" });
+    });
+    await page.route(LLM_PROVIDER_API, async (route) => {
+      await route.fulfill({
+        status: 200,
+        body: JSON.stringify(mockedLlmProviderResponse),
+      });
+    });
+    await page.route(SET_NEW_SETTINGS_API, async (route) => {
+      setNewRequestCount += 1;
+      await route.fulfill({ status: 200, body: JSON.stringify({ id: 1 }) });
+    });
+
+    const updateBodyPromise = new Promise<Record<string, unknown>>(
+      (resolve) => {
+        void page.route(UPDATE_INFERENCE_SETTINGS_API, async (route) => {
+          const body = JSON.parse(
+            route.request().postData() ?? "{}"
+          ) as TestSearchSettings;
+          servedSettings = body;
+          resolve(body);
+          await route.fulfill({
+            status: 200,
+            body: JSON.stringify({
+              contextual_rag_model_configuration_id:
+                body.contextual_rag_model_configuration_id,
+            }),
+          });
+        });
+      }
+    );
+
+    const indexSettingsPage = new IndexSettingsPage(page);
+    await indexSettingsPage.goto();
+    await indexSettingsPage.stageContextualModel(
+      modelDisplayName(nextContextualModel)
+    );
+    await indexSettingsPage.expectContextualModelActions();
+    await indexSettingsPage.openForwardOnlyConfirmation();
+    await indexSettingsPage.expectForwardOnlyWarning();
+    await indexSettingsPage.confirmForwardOnlyUpdate();
+
+    const body = await updateBodyPromise;
+    expect(body.contextual_rag_model_configuration_id).toBe(
+      nextContextualModel.id
+    );
+    expect(body.model_name).toBe(current.model_name);
+    expect(setNewRequestCount).toBe(0);
+  });
+});
+
 // ---------------------------------------------------------------------------
 // Switchover strategy tests
 // ---------------------------------------------------------------------------
@@ -329,29 +487,25 @@ test.describe("Index Settings — switchover strategies @exclusive", () => {
     });
   }
 
-  test("toggling contextual retrieval stages a change and enables Apply & Re-index", async ({
+  test("toggling contextual retrieval without a model stages the change but blocks Apply & Re-index", async ({
     page,
   }) => {
-    let setNewSettingsCalled = false;
-
-    await page.route(SET_NEW_SETTINGS_API, async (route) => {
-      setNewSettingsCalled = true;
-      await route.fulfill({ status: 200, body: JSON.stringify({}) });
-    });
-
     await navigateToIndexSettings(page);
 
     const toggle = page.getByRole("switch", { name: /contextual retrieval/i });
     await expect(toggle).toBeVisible({ timeout: 10000 });
     await toggle.click();
 
-    // Any settings change (including non-model changes) always requires a full re-index
+    // Contextual Retrieval on with no model must stage the change but block the
+    // re-index — the port re-embeds via the LLM and would fail without one.
+    await expect(
+      page.getByText(/Select a Contextual Retrieval LLM/i)
+    ).toBeVisible({ timeout: 5000 });
+
+    // Apply & Re-index renders only when dirty, so its presence proves the change staged.
     const applyButton = page.getByRole("button", { name: "Apply & Re-index" });
     await expect(applyButton).toBeVisible({ timeout: 5000 });
-    await expect(applyButton).toBeEnabled();
-    await applyButton.click();
-
-    await expect.poll(() => setNewSettingsCalled, { timeout: 5000 }).toBe(true);
+    await expect(applyButton).toBeDisabled();
   });
 });
 

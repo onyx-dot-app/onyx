@@ -1,23 +1,26 @@
 from collections.abc import Generator
 from datetime import datetime
+from uuid import UUID
 
-from fastapi import APIRouter
-from fastapi import Depends
-from fastapi import HTTPException
-from fastapi import Response
+from fastapi import APIRouter, Depends, HTTPException, Response
 from fastapi.responses import StreamingResponse
 from pydantic import BaseModel
 from sqlalchemy.orm import Session
 
-from ee.onyx.db.usage_export import get_all_usage_reports
-from ee.onyx.db.usage_export import get_usage_report_data
-from ee.onyx.db.usage_export import UsageReportMetadata
+from ee.onyx.db.usage_export import (
+    UsageReportMetadata,
+    get_all_usage_reports,
+    get_usage_report_data,
+    usage_report_id_in_use,
+)
 from onyx.auth.permissions import require_permission
 from onyx.background.celery.versioned_apps.client import app as client_app
 from onyx.configs.constants import OnyxCeleryTask
 from onyx.db.engine.sql_engine import get_session
 from onyx.db.enums import Permission
 from onyx.db.models import User
+from onyx.error_handling.error_codes import OnyxErrorCode
+from onyx.error_handling.exceptions import OnyxError
 from onyx.file_store.constants import STANDARD_CHUNK_SIZE
 from shared_configs.contextvars import get_current_tenant_id
 
@@ -27,12 +30,14 @@ router = APIRouter()
 class GenerateUsageReportParams(BaseModel):
     period_from: str | None = None
     period_to: str | None = None
+    report_id: UUID | None = None
 
 
 @router.post("/admin/usage-report", status_code=204)
 def generate_report(
     params: GenerateUsageReportParams,
     user: User = Depends(require_permission(Permission.FULL_ADMIN_PANEL_ACCESS)),
+    db_session: Session = Depends(get_session),
 ) -> None:
     # Validate period parameters
     if params.period_from and params.period_to:
@@ -42,6 +47,12 @@ def generate_report(
         except ValueError as e:
             raise HTTPException(status_code=400, detail=str(e))
 
+    if params.report_id and usage_report_id_in_use(db_session, params.report_id):
+        raise OnyxError(
+            OnyxErrorCode.DUPLICATE_RESOURCE,
+            f"report_id {params.report_id} is already in use",
+        )
+
     tenant_id = get_current_tenant_id()
     client_app.send_task(
         OnyxCeleryTask.GENERATE_USAGE_REPORT_TASK,
@@ -50,6 +61,7 @@ def generate_report(
             "user_id": str(user.id) if user else None,
             "period_from": params.period_from,
             "period_to": params.period_to,
+            "report_id": str(params.report_id) if params.report_id else None,
         },
     )
 

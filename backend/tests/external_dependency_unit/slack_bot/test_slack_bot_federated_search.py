@@ -2,15 +2,14 @@
 # ruff: noqa: ARG005
 import os
 from typing import Any
-from unittest.mock import MagicMock
-from unittest.mock import Mock
-from unittest.mock import patch
+from unittest.mock import MagicMock, Mock, patch
 from uuid import uuid4
 
-from onyx.db.llm import update_default_provider
-from onyx.db.llm import upsert_llm_provider
-from onyx.server.manage.llm.models import LLMProviderUpsertRequest
-from onyx.server.manage.llm.models import ModelConfigurationUpsertRequest
+from onyx.db.llm import update_default_provider, upsert_llm_provider
+from onyx.server.manage.llm.models import (
+    LLMProviderUpsertRequest,
+    ModelConfigurationUpsertRequest,
+)
 
 # Set environment variables to disable model server for testing
 os.environ["DISABLE_MODEL_SERVER"] = "true"
@@ -23,16 +22,18 @@ from sqlalchemy.orm import Session
 
 from onyx.configs.constants import FederatedConnectorSource
 from onyx.context.search.federated.slack_search import fetch_and_cache_channel_metadata
-from onyx.db.models import DocumentSet
-from onyx.db.models import FederatedConnector
-from onyx.db.models import FederatedConnector__DocumentSet
-from onyx.db.models import LLMProvider
-from onyx.db.models import Persona
-from onyx.db.models import Persona__DocumentSet
-from onyx.db.models import Persona__Tool
-from onyx.db.models import SlackBot
-from onyx.db.models import SlackChannelConfig
-from onyx.db.models import User
+from onyx.db.models import (
+    DocumentSet,
+    FederatedConnector,
+    FederatedConnector__DocumentSet,
+    LLMProvider,
+    Persona,
+    Persona__DocumentSet,
+    Persona__Tool,
+    SlackBot,
+    SlackChannelConfig,
+    User,
+)
 from onyx.db.tools import get_builtin_tool
 from onyx.llm.constants import LlmProviderNames
 from onyx.onyxbot.slack.listener import process_message
@@ -119,10 +120,10 @@ def _create_mock_slack_client(
     )
 
     mock_users_info_response = Mock()
-    mock_users_info_response.__getitem__ = Mock(
-        side_effect=lambda key: {"ok": True}[key]
-    )
+    # A real SlackResponse carries the whole parsed body (including ``ok``) in
+    # ``.data``, and its subscript access reads from it.
     mock_users_info_response.data = {
+        "ok": True,
         "user": {
             "id": "U9876543210",
             "name": "testuser",
@@ -133,8 +134,11 @@ def _create_mock_slack_client(
                 "last_name": "User",
                 "email": "test@example.com",
             },
-        }
+        },
     }
+    mock_users_info_response.__getitem__ = Mock(
+        side_effect=mock_users_info_response.data.__getitem__
+    )
     mock_client.web_client.users_info = Mock(return_value=mock_users_info_response)
 
     mock_auth_test_response = {

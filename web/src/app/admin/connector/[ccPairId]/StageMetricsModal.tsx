@@ -1,6 +1,6 @@
 "use client";
 
-import Modal from "@/refresh-components/Modal";
+import { Modal } from "@opal/components";
 import { SvgBarChartSmall } from "@opal/icons";
 import StageMetricsPanel from "./stage-metrics/StageMetricsPanel";
 

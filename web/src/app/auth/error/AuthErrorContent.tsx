@@ -9,6 +9,10 @@ import { NEXT_PUBLIC_CLOUD_ENABLED } from "@/lib/constants";
 // Maps raw IdP/OAuth error codes to user-friendly messages.
 // If the message is a known code, we replace it; otherwise show it as-is.
 const ERROR_CODE_MESSAGES: Record<string, string> = {
+  OAUTH_USER_ALREADY_EXISTS:
+    "An account with this email already exists under a different sign-in method. Sign in the way you first did, or ask your admin to link this provider.",
+  LOGIN_BAD_CREDENTIALS:
+    "This account can't sign in. It may be deactivated. Contact your workspace admin.",
   access_denied: "Access was denied by your identity provider.",
   login_required: "You need to log in with your identity provider first.",
   consent_required:
@@ -75,7 +79,10 @@ function AuthErrorContent({ message: rawMessage }: AuthErrorContentProps) {
             <>
               If you continue to experience problems, please reach out to the
               Onyx team at{" "}
-              <a href="mailto:support@onyx.app" className="text-action-link-05">
+              <a
+                href="mailto:support@onyx.app"
+                className="text-action-selection-05"
+              >
                 support@onyx.app
               </a>
             </>

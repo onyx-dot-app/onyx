@@ -3,7 +3,7 @@
 import { MinimalAgent } from "@/lib/agents/types";
 import { buildAgentAvatarUrl } from "@/lib/agents/utils";
 import { SvgOnyxLogo } from "@opal/logos";
-import { useSettingsContext } from "@/providers/SettingsProvider";
+import { useSettings } from "@/lib/settings/hooks";
 import { DEFAULT_AVATAR_SIZE_PX, DEFAULT_AGENT_ID } from "@/lib/constants";
 import CustomAgentAvatar from "@/refresh-components/avatars/CustomAgentAvatar";
 import Image from "next/image";
@@ -18,10 +18,10 @@ export default function AgentAvatar({
   size = DEFAULT_AVATAR_SIZE_PX,
   ...props
 }: AgentAvatarProps) {
-  const settings = useSettingsContext();
+  const { enterprise: enterpriseSettings } = useSettings();
 
   if (agent.id === DEFAULT_AGENT_ID) {
-    return settings.enterpriseSettings?.use_custom_logo ? (
+    return enterpriseSettings?.use_custom_logo ? (
       <div
         className="aspect-square rounded-full overflow-hidden relative"
         style={{ height: size, width: size }}

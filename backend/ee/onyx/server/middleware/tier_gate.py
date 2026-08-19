@@ -20,20 +20,18 @@ handles GATED_ACCESS, seat limits, and the billing/auth allowlist.
 
 import asyncio
 import logging
-from collections.abc import Awaitable
-from collections.abc import Callable
+from collections.abc import Awaitable, Callable
 
-from fastapi import FastAPI
-from fastapi import Request
-from fastapi import Response
+from fastapi import FastAPI, Request, Response
 from fastapi.responses import JSONResponse
 
 from ee.onyx.configs.license_enforcement_config import (
     LICENSE_ENFORCEMENT_ALLOWED_PREFIXES,
+    PATH_PREFIX_MIN_TIER,
 )
-from ee.onyx.configs.license_enforcement_config import PATH_PREFIX_MIN_TIER
 from ee.onyx.utils.tier import get_tier
 from onyx.error_handling.error_codes import OnyxErrorCode
+from onyx.server.middleware.api_prefix import strip_api_prefix
 from onyx.server.settings.models import Tier
 from onyx.server.settings.tier_order import tier_at_least
 from shared_configs.contextvars import get_current_tenant_id
@@ -70,9 +68,7 @@ def add_tier_gate_middleware(app: FastAPI, logger: logging.LoggerAdapter) -> Non
         if not _SORTED_GATES:
             return await call_next(request)
 
-        path = request.url.path
-        if path.startswith("/api/"):
-            path = path[4:]
+        path = strip_api_prefix(request.url.path)
 
         if _is_allowed_path(path):
             return await call_next(request)

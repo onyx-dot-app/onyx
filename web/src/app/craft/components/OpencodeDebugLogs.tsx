@@ -3,8 +3,8 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { SvgCheck, SvgCopy, SvgTerminal, SvgTrash } from "@opal/icons";
 import { Button, InputTypeIn, Text } from "@opal/components";
-import Modal from "@/refresh-components/Modal";
-import { useSettingsContext } from "@/providers/SettingsProvider";
+import { Modal } from "@opal/components";
+import { useSettings } from "@/lib/settings/hooks";
 import { cn } from "@opal/utils";
 
 /**
@@ -115,7 +115,9 @@ function LogStreamPane({ open }: LogStreamPaneProps) {
   // Refs mirror the state inside the SSE reader's hot loop without
   // forcing it to re-bind on every state change.
   const followRef = useRef<boolean>(follow);
-  followRef.current = follow;
+  useEffect(() => {
+    followRef.current = follow;
+  }, [follow]);
 
   const appendLine = useCallback((text: string) => {
     const line: LogLine = {
@@ -485,10 +487,10 @@ interface OpencodeDebugLogsButtonProps {
 export default function OpencodeDebugLogsButton({
   folded = false,
 }: OpencodeDebugLogsButtonProps) {
-  const settings = useSettingsContext();
+  const settings = useSettings();
   const [open, setOpen] = useState(false);
 
-  if (settings?.settings?.opencode_debugging_enabled !== true) {
+  if (settings.opencode_debugging_enabled !== true) {
     return null;
   }
 

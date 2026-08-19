@@ -1,0 +1,145 @@
+{
+  "__inputs": [],
+  "title": "Onyx Chat Load Test — Correlation",
+  "uid": "onyx-chat-loadtest-correlation",
+  "annotations": { "list": [] },
+  "description": "Overlays Locust chat-path milestone latency / failure rate (from the loadtest Prometheus exporter) with server-side resource usage, so load and saturation can be read on one timeline. Templated: pick a Prometheus datasource and set $namespace / $workload to the Onyx deployment under test.",
+  "editable": true,
+  "graphTooltip": 1,
+  "schemaVersion": 39,
+  "tags": ["onyx", "loadtest", "locust"],
+  "templating": {
+    "list": [
+      {
+        "name": "datasource",
+        "label": "Prometheus",
+        "type": "datasource",
+        "query": "prometheus",
+        "current": {},
+        "hide": 0
+      },
+      {
+        "name": "namespace",
+        "label": "Namespace",
+        "type": "textbox",
+        "query": "onyx",
+        "current": { "text": "onyx", "value": "onyx" },
+        "hide": 0
+      },
+      {
+        "name": "workload",
+        "label": "Server workload (pod prefix)",
+        "type": "textbox",
+        "query": "onyx-api-server",
+        "current": { "text": "onyx-api-server", "value": "onyx-api-server" },
+        "hide": 0
+      },
+      {
+        "name": "milestone",
+        "label": "Milestone filter (regex)",
+        "type": "textbox",
+        "query": ".*:total_turn",
+        "current": { "text": ".*:total_turn", "value": ".*:total_turn" },
+        "hide": 0
+      }
+    ]
+  },
+  "time": { "from": "now-1h", "to": "now" },
+  "timepicker": {},
+  "panels": [
+    {
+      "title": "Locust users",
+      "type": "timeseries",
+      "datasource": { "type": "prometheus", "uid": "${datasource}" },
+      "gridPos": { "h": 6, "w": 12, "x": 0, "y": 0 },
+      "fieldConfig": { "defaults": { "custom": { "drawStyle": "line", "fillOpacity": 10 } } },
+      "targets": [
+        { "refId": "A", "expr": "locust_users", "legendFormat": "users" }
+      ]
+    },
+    {
+      "title": "Failure rate (%)",
+      "type": "timeseries",
+      "datasource": { "type": "prometheus", "uid": "${datasource}" },
+      "gridPos": { "h": 6, "w": 12, "x": 12, "y": 0 },
+      "fieldConfig": { "defaults": { "unit": "percent", "custom": { "drawStyle": "line", "fillOpacity": 10 } } },
+      "targets": [
+        {
+          "refId": "A",
+          "expr": "100 * sum(rate(locust_failures_total[1m])) / clamp_min(sum(rate(locust_requests_total[1m])), 1)",
+          "legendFormat": "failure %"
+        }
+      ]
+    },
+    {
+      "title": "Milestone latency p50 (ms)",
+      "type": "timeseries",
+      "datasource": { "type": "prometheus", "uid": "${datasource}" },
+      "gridPos": { "h": 8, "w": 12, "x": 0, "y": 6 },
+      "fieldConfig": { "defaults": { "unit": "ms", "custom": { "drawStyle": "line", "fillOpacity": 5 } } },
+      "targets": [
+        {
+          "refId": "A",
+          "expr": "locust_response_time_p50_milliseconds{name=~\"$milestone\"}",
+          "legendFormat": "{{name}}"
+        }
+      ]
+    },
+    {
+      "title": "Milestone latency p95 (ms)",
+      "type": "timeseries",
+      "datasource": { "type": "prometheus", "uid": "${datasource}" },
+      "gridPos": { "h": 8, "w": 12, "x": 12, "y": 6 },
+      "fieldConfig": { "defaults": { "unit": "ms", "custom": { "drawStyle": "line", "fillOpacity": 5 } } },
+      "targets": [
+        {
+          "refId": "A",
+          "expr": "locust_response_time_p95_milliseconds{name=~\"$milestone\"}",
+          "legendFormat": "{{name}}"
+        }
+      ]
+    },
+    {
+      "title": "Server CPU (cores) — $workload",
+      "type": "timeseries",
+      "datasource": { "type": "prometheus", "uid": "${datasource}" },
+      "gridPos": { "h": 8, "w": 12, "x": 0, "y": 14 },
+      "fieldConfig": { "defaults": { "unit": "none", "custom": { "drawStyle": "line", "fillOpacity": 10 } } },
+      "targets": [
+        {
+          "refId": "A",
+          "expr": "sum(rate(container_cpu_usage_seconds_total{namespace=\"$namespace\", pod=~\"$workload.*\", container!=\"\"}[1m])) by (pod)",
+          "legendFormat": "{{pod}}"
+        }
+      ]
+    },
+    {
+      "title": "Server memory (working set, MiB) — $workload",
+      "type": "timeseries",
+      "datasource": { "type": "prometheus", "uid": "${datasource}" },
+      "gridPos": { "h": 8, "w": 12, "x": 12, "y": 14 },
+      "fieldConfig": { "defaults": { "unit": "mbytes", "custom": { "drawStyle": "line", "fillOpacity": 10 } } },
+      "targets": [
+        {
+          "refId": "A",
+          "expr": "sum(container_memory_working_set_bytes{namespace=\"$namespace\", pod=~\"$workload.*\", container!=\"\"}) by (pod) / 1024 / 1024",
+          "legendFormat": "{{pod}}"
+        }
+      ]
+    },
+    {
+      "title": "Throughput (req/s) by milestone",
+      "type": "timeseries",
+      "datasource": { "type": "prometheus", "uid": "${datasource}" },
+      "gridPos": { "h": 8, "w": 24, "x": 0, "y": 22 },
+      "fieldConfig": { "defaults": { "unit": "reqps", "custom": { "drawStyle": "line", "fillOpacity": 5 } } },
+      "targets": [
+        {
+          "refId": "A",
+          "expr": "locust_current_rps{name=~\"$milestone\"}",
+          "legendFormat": "{{name}}"
+        }
+      ]
+    }
+  ]
+}

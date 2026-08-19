@@ -6,13 +6,14 @@ on every send_task call to prevent phantom task accumulation if the worker
 is down or slow.
 """
 
-from unittest.mock import MagicMock
-from unittest.mock import patch
+from unittest.mock import MagicMock, patch
 from uuid import uuid4
 
-from onyx.configs.constants import CELERY_USER_FILE_PROCESSING_TASK_EXPIRES
-from onyx.configs.constants import OnyxCeleryQueues
-from onyx.configs.constants import OnyxCeleryTask
+from onyx.configs.constants import (
+    CELERY_USER_FILE_PROCESSING_TASK_EXPIRES,
+    OnyxCeleryQueues,
+    OnyxCeleryTask,
+)
 from onyx.db.models import UserFile
 from onyx.db.projects import upload_files_to_user_files_with_indexing
 

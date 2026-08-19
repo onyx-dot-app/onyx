@@ -82,7 +82,7 @@ export default function ScheduleEditor({
   const tabEntries = Object.entries(tabContent);
 
   return (
-    <Section gap={0.5}>
+    <Section gap={2}>
       <Tabs
         value={mode}
         onValueChange={(value) => {
@@ -154,7 +154,7 @@ interface IntervalEditorProps {
 
 function IntervalEditor({ payload, onChange }: IntervalEditorProps) {
   return (
-    <Section gap={0.5}>
+    <Section gap={2}>
       <div className="flex items-center gap-2 flex-wrap">
         <Text font="main-ui-body" color="text-05">
           Every
@@ -211,7 +211,7 @@ function DailyWeeklyEditor({ payload, onChange }: DailyWeeklyEditorProps) {
       ? "Runs every day"
       : `Runs on ${selectedDays.join(", ")}`;
   return (
-    <Section gap={0.5}>
+    <Section gap={2}>
       <div className="flex items-center gap-2">
         <Text font="main-ui-body" color="text-05">
           At
@@ -252,7 +252,7 @@ function DailyWeeklyEditor({ payload, onChange }: DailyWeeklyEditorProps) {
                 className={cn(
                   "px-3 py-1 rounded-08 border text-sm transition-colors",
                   selected
-                    ? "bg-action-link-01 border-action-link-03 text-text-05"
+                    ? "bg-action-selection-01 border-action-selection-03 text-text-05"
                     : "bg-background-neutral-00 border-border-02 text-text-03 hover:bg-background-tint-01"
                 )}
               >

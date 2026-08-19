@@ -1,6 +1,7 @@
 "use client";
 import React, { ReactNode, useState } from "react";
 import { FiSettings } from "react-icons/fi";
+import { clickOnKeyDown } from "@opal/utils";
 
 interface CollapsibleSectionProps {
   children: ReactNode;
@@ -32,6 +33,11 @@ const CollapsibleSection: React.FC<CollapsibleSectionProps> = ({
       style={{ transition: "height 0.3s ease-out" }}
     >
       <div
+        role="button"
+        tabIndex={0}
+        aria-expanded={!isCollapsed}
+        aria-label={isCollapsed ? "Expand section" : "Collapse section"}
+        onKeyDown={clickOnKeyDown(toggleCollapse)}
         className={`
           cursor-pointer
           ${isCollapsed ? "h-6" : "pl-6 border-l-2  border-border"}

@@ -3,9 +3,7 @@ from __future__ import annotations
 import abc
 import contextvars
 from types import TracebackType
-from typing import Any
-from typing import Generic
-from typing import TypeVar
+from typing import Any, Generic, TypeVar
 
 from typing_extensions import TypedDict
 

@@ -3,60 +3,104 @@ import random
 import socket
 import time
 from enum import Enum
-from typing import Any
-from typing import cast
-from urllib.parse import urljoin
-from urllib.parse import urlparse
+from typing import Any, cast
+from urllib.parse import urljoin, urlparse
 
 import requests
 from bs4 import BeautifulSoup
-from playwright.sync_api import BrowserContext
-from playwright.sync_api import Playwright
-from playwright.sync_api import TimeoutError
+from playwright.sync_api import BrowserContext, Playwright, TimeoutError
+from pydantic import BaseModel, TypeAdapter
 from typing_extensions import override
 from urllib3.exceptions import MaxRetryError
 
-from onyx.configs.app_configs import INDEX_BATCH_SIZE
-from onyx.configs.app_configs import REQUEST_TIMEOUT_SECONDS
-from onyx.configs.app_configs import WEB_CONNECTOR_VALIDATE_URLS
+from onyx.configs.app_configs import INDEX_BATCH_SIZE, REQUEST_TIMEOUT_SECONDS
 from onyx.configs.constants import DocumentSource
-from onyx.connectors.exceptions import ConnectorValidationError
-from onyx.connectors.exceptions import CredentialExpiredError
-from onyx.connectors.exceptions import InsufficientPermissionsError
-from onyx.connectors.exceptions import UnexpectedValidationError
-from onyx.connectors.interfaces import GenerateDocumentsOutput
-from onyx.connectors.interfaces import GenerateSlimDocumentOutput
-from onyx.connectors.interfaces import LoadConnector
-from onyx.connectors.interfaces import SecondsSinceUnixEpoch
-from onyx.connectors.interfaces import SlimConnector
-from onyx.connectors.models import Document
-from onyx.connectors.models import HierarchyNode
-from onyx.connectors.models import SlimDocument
-from onyx.connectors.models import TextSection
+from onyx.connectors.exceptions import (
+    ConnectorValidationError,
+    CredentialExpiredError,
+    InsufficientPermissionsError,
+    UnexpectedValidationError,
+)
+from onyx.connectors.interfaces import (
+    GenerateDocumentsOutput,
+    GenerateSlimDocumentOutput,
+    LoadConnector,
+    SecondsSinceUnixEpoch,
+    SlimConnector,
+)
+from onyx.connectors.models import Document, HierarchyNode, SlimDocument, TextSection
 from onyx.file_processing.html_utils import web_html_cleanup
 from onyx.indexing.indexing_heartbeat import IndexingHeartbeatInterface
+from onyx.server.security.models import web_connector_ssrf_enforced
+from onyx.server.security.store import get_security_settings
 from onyx.utils.logger import setup_logger
 
 # Re-exported for backwards compatibility with existing tests/callers that
 # patch these names on `onyx.connectors.web.connector`.
-from onyx.utils.playwright_fetch import DEFAULT_HEADERS
-from onyx.utils.playwright_fetch import DEFAULT_USER_AGENT  # noqa: F401
-from onyx.utils.playwright_fetch import start_playwright
+from onyx.utils.playwright_fetch import (
+    DEFAULT_HEADERS,
+    DEFAULT_USER_AGENT,  # noqa: F401
+    start_playwright,
+)
 from onyx.utils.sitemap import list_pages_for_site
-from onyx.utils.web_content import extract_pdf_text
-from onyx.utils.web_content import is_pdf_resource
+from onyx.utils.web_content import extract_pdf_text, is_pdf_resource
 from shared_configs.configs import MULTI_TENANT
 
 logger = setup_logger()
 
 
+class UrlRewriteRule(BaseModel):
+    """A single URL prefix rewrite: any fetched URL starting with ``source``
+    has that prefix replaced by ``target`` before the document is stored."""
+
+    source: str
+    target: str
+
+
+_URL_REWRITES_ADAPTER = TypeAdapter(list[UrlRewriteRule])
+
+
+def _parse_url_rewrites(
+    raw_rewrites: list[UrlRewriteRule],
+) -> dict[str, str]:
+    """Collapse rewrite rules into a {source_prefix: target_prefix} dict.
+
+    Rules with an empty source or target (e.g. blank rows from the admin form)
+    are dropped; an empty source would otherwise match every URL.
+    """
+    rewrites: dict[str, str] = {}
+    for rule in raw_rewrites:
+        source, target = rule.source.strip(), rule.target.strip()
+        if source and target:
+            rewrites[source] = target
+    return rewrites
+
+
+def _rewrite_url(url: str, rewrites: dict[str, str]) -> str:
+    """Apply URL prefix rewrites. First matching prefix wins."""
+    for src_prefix, dst_prefix in rewrites.items():
+        if url.startswith(src_prefix):
+            return url.replace(src_prefix, dst_prefix, 1)
+    return url
+
+
 class ScrapeSessionContext:
     """Session level context for scraping"""
 
-    def __init__(self, base_url: str, to_visit: list[str]):
+    def __init__(
+        self,
+        base_url: str,
+        to_visit: list[str],
+        url_rewrites: dict[str, str] | None = None,
+    ):
         self.base_url = base_url
         self.to_visit = to_visit
+        self.url_rewrites = url_rewrites or {}
         self.visited_links: set[str] = set()
+        # Ids already emitted this run. Rewrite rules can map two fetched URLs
+        # onto the same storage id; only the first one wins (a duplicate id
+        # would overwrite the earlier document in the index).
+        self.emitted_doc_ids: set[str] = set()
         self.content_hashes: set[int] = set()
 
         self.at_least_one_doc: bool = False
@@ -114,7 +158,9 @@ def protected_url_check(url: str) -> None:
     - To be extra safe, all IPs associated with the URL must be global
     - This is to prevent misuse and not explicit attacks
     """
-    if not WEB_CONNECTOR_VALIDATE_URLS:
+    # The web connector is only guarded at the most restrictive SSRF level; at
+    # VALIDATE_LLM / DISABLED admin-configured connectors may reach private IPs.
+    if not web_connector_ssrf_enforced(get_security_settings().ssrf_protection_level):
         return
 
     parse = urlparse(url)
@@ -141,6 +187,10 @@ def protected_url_check(url: str) -> None:
 
 
 def check_internet_connection(url: str) -> None:
+    # SSRF guard on the fetch primitive itself, so no call site can reach an
+    # internal target. No-op unless SSRF protection is at its strictest level.
+    protected_url_check(url)
+
     try:
         # Use a more realistic browser-like request
         session = requests.Session()
@@ -237,6 +287,11 @@ def get_internal_links(
 
 
 def extract_urls_from_sitemap(sitemap_url: str) -> list[str]:
+    # SSRF guard. This fetch runs in __init__, before validation, so the check
+    # must live here. Placed before the try so it surfaces as the SSRF error
+    # rather than a wrapped sitemap-parse failure.
+    protected_url_check(sitemap_url)
+
     # Note: brotli compression is handled automatically by the requests library
     # as long as the brotli package is installed in the venv.
     try:
@@ -341,6 +396,7 @@ class WebConnector(LoadConnector, SlimConnector):
         mintlify_cleanup: bool = True,  # Mostly ok to apply to other websites as well
         batch_size: int = INDEX_BATCH_SIZE,
         scroll_before_scraping: bool = False,
+        url_rewrites: list[UrlRewriteRule] | None = None,
         **kwargs: Any,  # noqa: ARG002
     ) -> None:
         self.mintlify_cleanup = mintlify_cleanup
@@ -348,6 +404,9 @@ class WebConnector(LoadConnector, SlimConnector):
         self.recursive = False
         self.scroll_before_scraping = scroll_before_scraping
         self.web_connector_type = web_connector_type
+        # Config arrives as raw JSON (list[dict]); validate into rule models.
+        rules = _URL_REWRITES_ADAPTER.validate_python(url_rewrites or [])
+        self.url_rewrites = _parse_url_rewrites(rules)
         if web_connector_type == WEB_CONNECTOR_VALID_SETTINGS.RECURSIVE.value:
             self.recursive = True
             self.to_visit_list = [_ensure_valid_url(base_url)]
@@ -403,6 +462,13 @@ class WebConnector(LoadConnector, SlimConnector):
 
         result = ScrapeResult()
 
+        # The URL used for the stored document (id, link, semantic id). Fetching
+        # still uses initial_url; only what gets persisted is rewritten. Slim
+        # docs must use the same rewritten id or pruning would delete the docs.
+        # Recomputed after redirect resolution below so redirected pages persist
+        # under their canonical (final) URL.
+        storage_url = _rewrite_url(initial_url, session_ctx.url_rewrites)
+
         # Handle cookies for the URL
         _handle_cookies(session_ctx.playwright_context, initial_url)
 
@@ -419,10 +485,10 @@ class WebConnector(LoadConnector, SlimConnector):
         if is_pdf:
             if slim:
                 result.doc = Document(
-                    id=initial_url,
+                    id=storage_url,
                     sections=[],
                     source=DocumentSource.WEB,
-                    semantic_identifier=initial_url,
+                    semantic_identifier=storage_url,
                     metadata={},
                 )
                 return result
@@ -440,11 +506,11 @@ class WebConnector(LoadConnector, SlimConnector):
             # re-indexing. The content hash is the authoritative change signal for
             # web docs (see DocumentBase.content_hash).
             result.doc = Document(
-                id=initial_url,
-                sections=[TextSection(link=initial_url, text=page_text)],
+                id=storage_url,
+                sections=[TextSection(link=storage_url, text=page_text)],
                 source=DocumentSource.WEB,
-                semantic_identifier=initial_url.rstrip("/").split("/")[-1]
-                or initial_url,
+                semantic_identifier=storage_url.rstrip("/").split("/")[-1]
+                or storage_url,
                 metadata=metadata,
             )
 
@@ -482,6 +548,7 @@ class WebConnector(LoadConnector, SlimConnector):
             if final_url != initial_url:
                 protected_url_check(final_url)
                 initial_url = final_url
+                storage_url = _rewrite_url(initial_url, session_ctx.url_rewrites)
                 if initial_url in session_ctx.visited_links:
                     logger.info(
                         "%s: %s redirected to %s - already indexed",
@@ -552,10 +619,10 @@ class WebConnector(LoadConnector, SlimConnector):
 
             if slim:
                 result.doc = Document(
-                    id=initial_url,
+                    id=storage_url,
                     sections=[],
                     source=DocumentSource.WEB,
-                    semantic_identifier=initial_url,
+                    semantic_identifier=storage_url,
                     metadata={},
                 )
                 return result
@@ -598,10 +665,10 @@ class WebConnector(LoadConnector, SlimConnector):
             # branch above. The HTTP Last-Modified header is an unreliable change
             # signal for web content, so we rely on the content hash for dedup.
             result.doc = Document(
-                id=initial_url,
-                sections=[TextSection(link=initial_url, text=parsed_html.cleaned_text)],
+                id=storage_url,
+                sections=[TextSection(link=storage_url, text=parsed_html.cleaned_text)],
                 source=DocumentSource.WEB,
-                semantic_identifier=parsed_html.title or initial_url,
+                semantic_identifier=parsed_html.title or storage_url,
                 metadata={},
             )
         finally:
@@ -623,7 +690,9 @@ class WebConnector(LoadConnector, SlimConnector):
         base_url = self.to_visit_list[0]  # For the recursive case
         check_internet_connection(base_url)  # make sure we can connect to the base url
 
-        session_ctx = ScrapeSessionContext(base_url, self.to_visit_list)
+        session_ctx = ScrapeSessionContext(
+            base_url, self.to_visit_list, self.url_rewrites
+        )
         session_ctx.initialize()
 
         batch: list[Document | SlimDocument | HierarchyNode] = []
@@ -668,6 +737,17 @@ class WebConnector(LoadConnector, SlimConnector):
                         continue
 
                     if result.doc:
+                        if result.doc.id in session_ctx.emitted_doc_ids:
+                            logger.warning(
+                                "Skipping %s: rewritten document id %s was "
+                                "already emitted by another URL this run",
+                                initial_url,
+                                result.doc.id,
+                            )
+                            # Skip-and-move-on, not a transient failure: don't
+                            # burn the remaining retries re-scraping this URL.
+                            break
+                        session_ctx.emitted_doc_ids.add(result.doc.id)
                         batch.append(
                             SlimDocument(id=result.doc.id) if slim else result.doc
                         )
@@ -722,16 +802,11 @@ class WebConnector(LoadConnector, SlimConnector):
                 "No URL configured. Please provide at least one valid URL."
             )
 
-        if (
-            self.web_connector_type == WEB_CONNECTOR_VALID_SETTINGS.SITEMAP.value
-            or self.web_connector_type == WEB_CONNECTOR_VALID_SETTINGS.RECURSIVE.value
-        ):
-            return None
-
         # We'll just test the first URL for connectivity and correctness
         test_url = self.to_visit_list[0]
 
-        # Check that the URL is allowed and well-formed
+        # SSRF check runs for every connector type so an internal target is
+        # rejected at creation rather than at index time.
         try:
             protected_url_check(test_url)
         except ValueError as e:
@@ -742,7 +817,16 @@ class WebConnector(LoadConnector, SlimConnector):
             # Typically DNS or other network issues
             raise ConnectorValidationError(str(e))
 
-        # Make a quick request to see if we get a valid response
+        # Recursive/sitemap defer page fetches to index time; skip the connectivity
+        # probe for them (the SSRF check above still ran).
+        if (
+            self.web_connector_type == WEB_CONNECTOR_VALID_SETTINGS.SITEMAP.value
+            or self.web_connector_type == WEB_CONNECTOR_VALID_SETTINGS.RECURSIVE.value
+        ):
+            return None
+
+        # Make a quick request to see if we get a valid response. This re-runs the
+        # SSRF check internally (intentional, cheap defense-in-depth).
         try:
             check_internet_connection(test_url)
         except Exception as e:

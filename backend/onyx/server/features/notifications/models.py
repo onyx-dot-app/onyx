@@ -1,9 +1,9 @@
 from datetime import datetime
 
-from pydantic import BaseModel
-from pydantic import ConfigDict
+from pydantic import BaseModel, ConfigDict
 
 from onyx.configs.constants import NotificationType
+from onyx.db.enums import NotificationSeverity
 
 
 class NotificationResponse(BaseModel):
@@ -11,6 +11,7 @@ class NotificationResponse(BaseModel):
 
     id: int
     notif_type: NotificationType
+    severity: NotificationSeverity = NotificationSeverity.INFO
     dismissed: bool
     last_shown: datetime
     first_shown: datetime

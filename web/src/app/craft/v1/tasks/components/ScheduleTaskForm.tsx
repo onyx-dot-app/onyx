@@ -2,12 +2,17 @@
 
 import { useCallback, useMemo, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
-import { Button, Divider, InputTypeIn, Text } from "@opal/components";
-import InputTextArea from "@/refresh-components/inputs/InputTextArea";
+import { useSWRConfig } from "swr";
+import {
+  Button,
+  Divider,
+  InputTextArea,
+  InputTypeIn,
+  Text,
+} from "@opal/components";
 import { Disabled } from "@opal/core";
-import { SettingsLayouts, InputVertical } from "@opal/layouts";
+import { SettingsLayouts, InputVertical, toast } from "@opal/layouts";
 import * as GeneralLayouts from "@/layouts/general-layouts";
-import { toast } from "@/hooks/useToast";
 import { SvgClock } from "@opal/icons";
 import ScheduleEditor from "@/app/craft/v1/tasks/components/ScheduleEditor";
 import PreApprovalPicker from "@/app/craft/v1/tasks/components/PreApprovalPicker";
@@ -18,8 +23,11 @@ import {
 import EntryPickerPopover from "@/sections/input/EntryPickerPopover";
 import useUserSkills from "@/hooks/useUserSkills";
 import useUserExternalApps from "@/hooks/useUserExternalApps";
+import { useCraftMcpServers } from "@/lib/tools/hooks";
 import {
   detectSlashTrigger,
+  pickerEntryConnectionPath,
+  pickerEntryPromptPrefix,
   toPickerSections,
   type PickerEntry,
 } from "@/lib/skills/picker";
@@ -35,6 +43,7 @@ import {
   updateScheduledTask,
 } from "@/app/craft/v1/tasks/api";
 import { TASKS_PATH, taskDetailPath } from "@/app/craft/v1/tasks/constants";
+import { SWR_KEYS } from "@/lib/swr-keys";
 
 export interface ScheduleTaskFormInitial {
   /** ``null`` for create. */
@@ -44,6 +53,7 @@ export interface ScheduleTaskFormInitial {
   mode: EditorMode;
   payload: EditorPayload;
   preApprovedAppIds: number[];
+  preApprovedMcpServerIds: number[];
 }
 
 interface ScheduleTaskFormProps {
@@ -66,6 +76,7 @@ export default function ScheduleTaskForm({
   onBack,
 }: ScheduleTaskFormProps) {
   const router = useRouter();
+  const { mutate } = useSWRConfig();
   const [name, setName] = useState(initial.name);
   const [prompt, setPrompt] = useState(initial.prompt);
   const [mode, setMode] = useState<EditorMode>(initial.mode);
@@ -73,6 +84,9 @@ export default function ScheduleTaskForm({
   const [preApprovedAppIds, setPreApprovedAppIds] = useState<number[]>(
     initial.preApprovedAppIds
   );
+  const [preApprovedMcpServerIds, setPreApprovedMcpServerIds] = useState<
+    number[]
+  >(initial.preApprovedMcpServerIds);
   const [saving, setSaving] = useState(false);
   const [nameTouched, setNameTouched] = useState(false);
   const [promptTouched, setPromptTouched] = useState(false);
@@ -80,9 +94,11 @@ export default function ScheduleTaskForm({
   const promptTextareaRef = useRef<HTMLTextAreaElement>(null);
   const { data: skillsData } = useUserSkills();
   const { data: externalAppsData } = useUserExternalApps();
+  const { data: craftMcpData } = useCraftMcpServers();
   const pickerSections = useMemo(
-    () => toPickerSections(skillsData, externalAppsData),
-    [skillsData, externalAppsData]
+    () =>
+      toPickerSections(skillsData, externalAppsData, craftMcpData?.mcp_servers),
+    [skillsData, externalAppsData, craftMcpData]
   );
   const [skillPicker, setSkillPicker] = useState<{
     open: boolean;
@@ -131,32 +147,33 @@ export default function ScheduleTaskForm({
 
   const handleSkillPickerSelect = useCallback(
     (entry: PickerEntry) => {
-      if (entry.kind === "app" && !entry.authenticated) {
+      const connectionPath = pickerEntryConnectionPath(entry);
+      if (connectionPath) {
         setSkillPicker((s) => ({ ...s, open: false }));
-        router.push(`/craft/v1/apps?connect=${entry.slug}`);
+        router.push(connectionPath);
         return;
       }
-      setSkillPicker((prev) => {
-        if (!prev.open) return prev;
-        const replacement = `/${entry.slug} `;
-        const newPrompt =
-          prompt.slice(0, prev.slashIndex) +
-          replacement +
-          prompt.slice(prev.slashIndex + 1 + prev.query.length);
-        setPrompt(newPrompt);
+      if (!skillPicker.open) return;
 
-        const cursorPos = prev.slashIndex + replacement.length;
-        const textarea = promptTextareaRef.current;
-        if (textarea) {
-          requestAnimationFrame(() => {
-            textarea.focus();
-            textarea.setSelectionRange(cursorPos, cursorPos);
-          });
-        }
-        return { ...prev, open: false };
-      });
+      const replacement = `${pickerEntryPromptPrefix(entry)} `;
+      const newPrompt =
+        prompt.slice(0, skillPicker.slashIndex) +
+        replacement +
+        prompt.slice(skillPicker.slashIndex + 1 + skillPicker.query.length);
+      setPrompt(newPrompt);
+
+      const cursorPos = skillPicker.slashIndex + replacement.length;
+      const textarea = promptTextareaRef.current;
+      if (textarea) {
+        requestAnimationFrame(() => {
+          textarea.focus();
+          textarea.setSelectionRange(cursorPos, cursorPos);
+        });
+      }
+
+      setSkillPicker((prev) => (prev.open ? { ...prev, open: false } : prev));
     },
-    [prompt, router]
+    [prompt, router, skillPicker]
   );
 
   const compiled = compileLocalPayloadToUtcCron(mode, payload);
@@ -196,11 +213,16 @@ export default function ScheduleTaskForm({
             editor_mode: mode,
             editor_payload: storagePayload,
             pre_approved_app_ids: preApprovedAppIds,
+            pre_approved_mcp_server_ids: preApprovedMcpServerIds,
           };
           const updated: ScheduledTaskDetail = await updateScheduledTask(
             initial.taskId,
             body
           );
+          await mutate(SWR_KEYS.scheduledTask(updated.id), updated, {
+            revalidate: false,
+          });
+          await mutate(SWR_KEYS.scheduledTasks);
           toast.success("Scheduled task updated.");
           router.push(taskDetailPath(updated.id));
         } else {
@@ -211,8 +233,10 @@ export default function ScheduleTaskForm({
             editor_payload: storagePayload,
             run_immediately: runImmediately,
             pre_approved_app_ids: preApprovedAppIds,
+            pre_approved_mcp_server_ids: preApprovedMcpServerIds,
           };
           await createScheduledTask(body);
+          await mutate(SWR_KEYS.scheduledTasks);
           toast.success(
             runImmediately
               ? "Scheduled task created and queued."
@@ -233,8 +257,10 @@ export default function ScheduleTaskForm({
       isEdit,
       initial.taskId,
       mode,
+      mutate,
       payload,
       preApprovedAppIds,
+      preApprovedMcpServerIds,
       router,
       trimmedName,
       trimmedPrompt,
@@ -351,7 +377,7 @@ export default function ScheduleTaskForm({
           </InputVertical>
         </GeneralLayouts.Section>
 
-        <Divider paddingParallel="fit" paddingPerpendicular="fit" />
+        <Divider paddingParallel={0} paddingPerpendicular={0} />
 
         <GeneralLayouts.Section>
           <InputVertical title="Schedule">
@@ -365,16 +391,18 @@ export default function ScheduleTaskForm({
           </InputVertical>
         </GeneralLayouts.Section>
 
-        <Divider paddingParallel="fit" paddingPerpendicular="fit" />
+        <Divider paddingParallel={0} paddingPerpendicular={0} />
 
         <GeneralLayouts.Section>
           <InputVertical
-            title="Pre-approved apps"
-            description="Selected apps can act without pausing for approval while this task runs on its own. Note: an app you don't pre-approve will pause mid-run to ask for your approval. The run may stall or fail if you do not approve an action request."
+            title="Pre-approved apps and MCP servers"
+            description="Craft can use selected apps and MCP servers without pausing when this task runs unattended. Other approval requests pause the run and can cause it to fail."
           >
             <PreApprovalPicker
-              selectedIds={preApprovedAppIds}
-              onChange={setPreApprovedAppIds}
+              selectedAppIds={preApprovedAppIds}
+              selectedMcpServerIds={preApprovedMcpServerIds}
+              onAppChange={setPreApprovedAppIds}
+              onMcpServerChange={setPreApprovedMcpServerIds}
             />
           </InputVertical>
         </GeneralLayouts.Section>
@@ -391,5 +419,6 @@ export function defaultFormInitial(): ScheduleTaskFormInitial {
     mode: "interval",
     payload: { unit: "hours", every: 1 },
     preApprovedAppIds: [],
+    preApprovedMcpServerIds: [],
   };
 }

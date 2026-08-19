@@ -3,19 +3,17 @@ import hashlib
 import logging
 import re
 import uuid
-from collections.abc import Awaitable
-from collections.abc import Callable
-from datetime import datetime
-from datetime import timezone
+from collections.abc import Awaitable, Callable
+from datetime import datetime, timezone
 
-from fastapi import FastAPI
-from fastapi import Request
-from fastapi import Response
+from fastapi import FastAPI, Request, Response
 from fastapi.routing import APIRoute
 
-from shared_configs.contextvars import CURRENT_ENDPOINT_CONTEXTVAR
-from shared_configs.contextvars import CURRENT_TENANT_ID_CONTEXTVAR
-from shared_configs.contextvars import ONYX_REQUEST_ID_CONTEXTVAR
+from shared_configs.contextvars import (
+    CURRENT_ENDPOINT_CONTEXTVAR,
+    CURRENT_TENANT_ID_CONTEXTVAR,
+    ONYX_REQUEST_ID_CONTEXTVAR,
+)
 
 
 def add_onyx_tenant_id_middleware(
@@ -90,10 +88,11 @@ def _build_route_map(app: FastAPI) -> list[tuple[re.Pattern[str], str]]:
     Used by endpoint context middleware to resolve request paths to route
     templates, avoiding high-cardinality raw paths in metrics labels.
     """
-    route_map: list[tuple[re.Pattern[str], str]] = []
-    for route in app.routes:
-        if isinstance(route, APIRoute):
-            route_map.append((route.path_regex, route.path))
+    route_map: list[tuple[re.Pattern[str], str]] = [
+        (route.path_regex, route.path)
+        for route in app.routes
+        if isinstance(route, APIRoute)
+    ]
     return route_map
 
 

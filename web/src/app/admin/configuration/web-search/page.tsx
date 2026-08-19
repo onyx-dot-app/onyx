@@ -1,1 +1,1 @@
-export { default } from "@/refresh-pages/admin/WebSearchPage";
+export { default } from "@/views/admin/WebSearchPage";

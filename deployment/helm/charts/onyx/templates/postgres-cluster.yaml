@@ -1,6 +1,7 @@
 {{- /*
-CNPG Cluster CR. The CRDs live in crds/cnpg-crds.yaml (copied from the
-subchart) so Helm pre-installs them before templates — no hook needed.
+CNPG Cluster CR. The CRDs ship in the onyx-cnpg-crds subchart's crds/ dir
+(gated by postgresql.installCRDs, default follows postgresql.enabled) so Helm
+pre-installs them before templates — no hook needed.
 Name must differ from the operator Deployment (`<release>-<nameOverride>`)
 to avoid a ServiceAccount collision. POSTGRES_HOST in configmap.yaml must
 stay in sync: `<cluster-name>-rw`.

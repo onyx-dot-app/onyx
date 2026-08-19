@@ -6,7 +6,7 @@ import {
   CRAFT_OAUTH_COOKIE_NAME,
   CRAFT_APPS_PATH,
 } from "@/app/craft/v1/constants";
-import { processCookies } from "@/lib/userSS";
+import { processCookies } from "@/lib/users/svcSS";
 
 export const GET = async (request: NextRequest) => {
   const requestCookies = await cookies();

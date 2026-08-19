@@ -7,13 +7,15 @@ These tests verify the flow plumbing:
   from the stored flow.
 """
 
-from unittest.mock import MagicMock
-from unittest.mock import patch
+from unittest.mock import MagicMock, patch
 
 from onyx.db.enums import LLMModelFlowType
-from onyx.server.manage.llm.models import LLMProviderDescriptor
-from onyx.server.manage.llm.models import ModelConfigurationUpsertRequest
-from onyx.server.manage.llm.models import ModelConfigurationView
+from onyx.llm.models import ReasoningEffort
+from onyx.server.manage.llm.models import (
+    LLMProviderDescriptor,
+    ModelConfigurationUpsertRequest,
+    ModelConfigurationView,
+)
 
 # ModelConfigurationView.from_model — dynamic provider branch
 
@@ -79,6 +81,214 @@ class TestModelConfigurationViewFromModelDynamic:
         assert view.supports_reasoning is True
 
 
+# ModelConfigurationView.from_model — vision fallback (custom-config providers)
+
+
+class TestModelConfigurationViewVisionFallback:
+    """supports_image_input resolution in the dynamic/custom-config branch."""
+
+    # In DYNAMIC_LLM_PROVIDERS
+    STRICT_DYNAMIC_PROVIDER = "lm_studio"
+    # NOT in DYNAMIC_LLM_PROVIDERS — reached via use_stored_display_name
+    CUSTOM_CONFIG_PROVIDER = "litellm_proxy"
+
+    def _view(
+        self,
+        mc: MagicMock,
+        provider: str,
+        use_stored_display_name: bool,
+        litellm_vision: bool,
+    ) -> ModelConfigurationView:
+        with patch(
+            "onyx.server.manage.llm.models.litellm_thinks_model_supports_image_input",
+            return_value=litellm_vision,
+        ):
+            return ModelConfigurationView.from_model(
+                mc, provider, use_stored_display_name=use_stored_display_name
+            )
+
+    def test_stored_vision_flow_wins(self) -> None:
+        """Stored VISION flow → True without consulting the cost map."""
+        mc = _make_model_config(
+            name="gpt-4o",
+            display_name="GPT-4o",
+            flow_types=[LLMModelFlowType.CHAT, LLMModelFlowType.VISION],
+        )
+
+        view = self._view(mc, self.CUSTOM_CONFIG_PROVIDER, True, litellm_vision=False)
+
+        assert view.supports_image_input is True
+
+    def test_custom_config_falls_back_to_cost_map(self) -> None:
+        """No VISION flow but cost map knows the model → True (the fix)."""
+        mc = _make_model_config(
+            name="gpt-4o",
+            display_name="GPT-4o",
+            flow_types=[LLMModelFlowType.CHAT],
+        )
+
+        view = self._view(mc, self.CUSTOM_CONFIG_PROVIDER, True, litellm_vision=True)
+
+        assert view.supports_image_input is True
+
+    def test_strict_dynamic_provider_falls_back_to_cost_map(self) -> None:
+        """Dynamic/aggregator providers (e.g. Bifrost) also fall back to the cost
+        map when no VISION flow is stored — a model synced before the source
+        reported vision still resolves to True."""
+        mc = _make_model_config(
+            name="vertex/gemini-3-pro-image-preview",
+            display_name="Gemini 3 Pro Image Preview",
+            flow_types=[LLMModelFlowType.CHAT],
+        )
+
+        view = self._view(mc, self.STRICT_DYNAMIC_PROVIDER, False, litellm_vision=True)
+
+        assert view.supports_image_input is True
+
+    def test_strict_dynamic_provider_false_when_cost_map_unaware(self) -> None:
+        """Dynamic provider with no VISION flow and a cost map that doesn't know
+        the model → False (no spurious vision support)."""
+        mc = _make_model_config(
+            name="my-internal-model",
+            display_name="My Internal Model",
+            flow_types=[LLMModelFlowType.CHAT],
+        )
+
+        view = self._view(mc, self.STRICT_DYNAMIC_PROVIDER, False, litellm_vision=False)
+
+        assert view.supports_image_input is False
+
+    def test_custom_config_false_when_cost_map_unaware(self) -> None:
+        """No VISION flow and cost map doesn't know the model → False."""
+        mc = _make_model_config(
+            name="my-internal-model",
+            display_name="My Internal Model",
+            flow_types=[LLMModelFlowType.CHAT],
+        )
+
+        view = self._view(mc, self.CUSTOM_CONFIG_PROVIDER, True, litellm_vision=False)
+
+        assert view.supports_image_input is False
+
+    def test_deployment_alias_reveals_vision_support(self) -> None:
+        """The model row's own name is opaque; only the deployment alias,
+        left unpatched here, is what the real cost map recognizes."""
+        mc = _make_model_config(
+            name="friendly-deploy-6",
+            display_name="Friendly Deploy",
+            flow_types=[LLMModelFlowType.CHAT],
+        )
+
+        view = ModelConfigurationView.from_model(
+            mc,
+            self.CUSTOM_CONFIG_PROVIDER,
+            use_stored_display_name=True,
+            deployment_name="gpt-5.1",
+        )
+
+        assert view.supports_image_input is True
+
+
+# ModelConfigurationView.from_model — reasoning fallback (dynamic providers)
+
+
+class TestModelConfigurationViewReasoningFallback:
+    """supports_reasoning resolution in the dynamic/custom-config branch:
+    stored flow → LiteLLM cost map → name-substring heuristic."""
+
+    # In DYNAMIC_LLM_PROVIDERS
+    DYNAMIC_PROVIDER = "bifrost"
+
+    def _view(self, mc: MagicMock, litellm_reasoning: bool) -> ModelConfigurationView:
+        with patch(
+            "onyx.server.manage.llm.models.model_is_reasoning_model",
+            return_value=litellm_reasoning,
+        ):
+            return ModelConfigurationView.from_model(mc, self.DYNAMIC_PROVIDER)
+
+    def test_stored_reasoning_flow_wins(self) -> None:
+        """Stored REASONING flow → True without consulting the cost map."""
+        mc = _make_model_config(
+            name="friendly-chat-bot",
+            display_name="Friendly Chat Bot",
+            flow_types=[LLMModelFlowType.CHAT, LLMModelFlowType.REASONING],
+        )
+
+        view = self._view(mc, litellm_reasoning=False)
+
+        assert view.supports_reasoning is True
+
+    def test_falls_back_to_cost_map(self) -> None:
+        """No REASONING flow but the cost map knows the model → True (the fix);
+        vendor-prefixed IDs like this don't match the substring heuristic."""
+        mc = _make_model_config(
+            name="anthropic/claude-sonnet-4-5",
+            display_name="Claude Sonnet 4.5",
+            flow_types=[LLMModelFlowType.CHAT],
+        )
+
+        view = self._view(mc, litellm_reasoning=True)
+
+        assert view.supports_reasoning is True
+
+    def test_falls_back_to_name_heuristic_when_cost_map_unaware(self) -> None:
+        """No REASONING flow, cost map miss, but reasoning-named model → True."""
+        mc = _make_model_config(
+            name="DeepSeek-R1-Distill-Qwen-7B",
+            display_name="DeepSeek R1 Distill Qwen 7B",
+            flow_types=[LLMModelFlowType.CHAT],
+        )
+
+        view = self._view(mc, litellm_reasoning=False)
+
+        assert view.supports_reasoning is True
+
+    def test_false_when_no_flow_and_both_fallbacks_miss(self) -> None:
+        """No REASONING flow, cost map unaware, generic name → False."""
+        mc = _make_model_config(
+            name="openai/gpt-4o",
+            display_name="GPT-4o",
+            flow_types=[LLMModelFlowType.CHAT],
+        )
+
+        view = self._view(mc, litellm_reasoning=False)
+
+        assert view.supports_reasoning is False
+
+    def test_deployment_alias_reveals_reasoning_support(self) -> None:
+        """The model row's own name is opaque; only the deployment alias,
+        left unpatched here, is what the real registry recognizes."""
+        mc = _make_model_config(
+            name="friendly-deploy-3",
+            display_name="Friendly Deploy",
+            flow_types=[LLMModelFlowType.CHAT],
+        )
+
+        view = ModelConfigurationView.from_model(
+            mc, self.DYNAMIC_PROVIDER, deployment_name="gpt-5.1"
+        )
+
+        assert view.supports_reasoning is True
+
+    def test_unregistered_claude_alias_reasons_via_version_parse(self) -> None:
+        """A Claude deployment alias that misses both LiteLLM's registry and
+        the substring heuristic must still resolve True via the version
+        parse multi_llm.py's request builder already relies on."""
+        mc = _make_model_config(
+            name="foundry-deploy-10",
+            display_name="Foundry Deploy 10",
+            flow_types=[LLMModelFlowType.CHAT],
+        )
+
+        view = ModelConfigurationView.from_model(
+            mc,
+            self.DYNAMIC_PROVIDER,
+            deployment_name="prod-deployment-claude-5-opus",
+        )
+
+        assert view.supports_reasoning is True
+
+
 # ModelConfigurationView.from_model — static provider branch
 
 
@@ -87,6 +297,28 @@ class TestModelConfigurationViewFromModelStatic:
 
     # NOT in DYNAMIC_LLM_PROVIDERS
     STATIC_PROVIDER = "openai"
+
+    def test_distinguishes_persisted_limit_from_capability_enrichment(self) -> None:
+        persisted = self._patched_static_view(
+            _make_model_config(
+                name="gpt-4o",
+                display_name=None,
+                max_input_tokens=90_000,
+            )
+        )
+        inferred = self._patched_static_view(
+            _make_model_config(
+                name="gpt-4o",
+                display_name=None,
+                max_input_tokens=None,
+            )
+        )
+
+        assert persisted.max_input_tokens == 90_000
+        assert persisted.configured_max_input_tokens == 90_000
+        assert inferred.max_input_tokens == 128_000
+        assert inferred.configured_max_input_tokens is None
+        assert "configured_max_input_tokens" not in persisted.model_dump()
 
     def test_supports_reasoning_from_stored_flow(self) -> None:
         """Stored REASONING flow → True even when model_is_reasoning_model returns False."""
@@ -129,6 +361,118 @@ class TestModelConfigurationViewFromModelStatic:
         view = self._patched_static_view(mc, model_is_reasoning=False)
 
         assert view.supports_reasoning is False
+
+    def test_deployment_alias_reveals_reasoning_support(self) -> None:
+        """The model row's own name is opaque; only the deployment alias
+        (model_is_reasoning_model left unpatched) is what the registry knows."""
+        mc = _make_model_config(
+            name="foundry-deploy-3",
+            display_name=None,
+            flow_types=[LLMModelFlowType.CHAT],
+        )
+
+        with (
+            patch(
+                "onyx.server.manage.llm.models.get_max_input_tokens",
+                return_value=128000,
+            ),
+            patch(
+                "onyx.server.manage.llm.models.litellm_thinks_model_supports_image_input",
+                return_value=False,
+            ),
+            patch(
+                "onyx.llm.model_name_parser.parse_litellm_model_name",
+            ) as mock_parse,
+        ):
+            mock_parsed = MagicMock()
+            mock_parsed.display_name = mc.name
+            mock_parsed.provider_display_name = self.STATIC_PROVIDER
+            mock_parsed.vendor = None
+            mock_parsed.version = None
+            mock_parsed.region = None
+            mock_parse.return_value = mock_parsed
+
+            view = ModelConfigurationView.from_model(
+                mc, self.STATIC_PROVIDER, deployment_name="gpt-5.1"
+            )
+
+        assert view.supports_reasoning is True
+
+    def test_deployment_alias_reveals_vision_support(self) -> None:
+        """The model row's own name is opaque; only the deployment alias
+        (litellm_thinks_model_supports_image_input left unpatched) is what
+        the cost map recognizes."""
+        mc = _make_model_config(
+            name="foundry-deploy-7",
+            display_name=None,
+            flow_types=[LLMModelFlowType.CHAT],
+        )
+
+        with (
+            patch(
+                "onyx.server.manage.llm.models.get_max_input_tokens",
+                return_value=128000,
+            ),
+            patch(
+                "onyx.server.manage.llm.models.model_is_reasoning_model",
+                return_value=False,
+            ),
+            patch(
+                "onyx.llm.model_name_parser.parse_litellm_model_name",
+            ) as mock_parse,
+        ):
+            mock_parsed = MagicMock()
+            mock_parsed.display_name = mc.name
+            mock_parsed.provider_display_name = self.STATIC_PROVIDER
+            mock_parsed.vendor = None
+            mock_parsed.version = None
+            mock_parsed.region = None
+            mock_parse.return_value = mock_parsed
+
+            view = ModelConfigurationView.from_model(
+                mc, self.STATIC_PROVIDER, deployment_name="gpt-5.1"
+            )
+
+        assert view.supports_image_input is True
+
+    def test_unregistered_claude_alias_reasons_via_version_parse(self) -> None:
+        """Same gap as the dynamic branch's version above: a Claude alias
+        LiteLLM's registry and model_is_reasoning_model both miss (patched
+        False here) must still resolve True via the version parse."""
+        mc = _make_model_config(
+            name="foundry-deploy-11",
+            display_name=None,
+            flow_types=[LLMModelFlowType.CHAT],
+        )
+
+        with (
+            patch(
+                "onyx.server.manage.llm.models.get_max_input_tokens",
+                return_value=128000,
+            ),
+            patch(
+                "onyx.server.manage.llm.models.model_is_reasoning_model",
+                return_value=False,
+            ),
+            patch(
+                "onyx.llm.model_name_parser.parse_litellm_model_name",
+            ) as mock_parse,
+        ):
+            mock_parsed = MagicMock()
+            mock_parsed.display_name = mc.name
+            mock_parsed.provider_display_name = self.STATIC_PROVIDER
+            mock_parsed.vendor = None
+            mock_parsed.version = None
+            mock_parsed.region = None
+            mock_parse.return_value = mock_parsed
+
+            view = ModelConfigurationView.from_model(
+                mc,
+                self.STATIC_PROVIDER,
+                deployment_name="prod-deployment-claude-5-opus",
+            )
+
+        assert view.supports_reasoning is True
 
     def _patched_static_view(
         self,
@@ -258,6 +602,76 @@ class TestLLMProviderDescriptorRecommendedDefault:
         assert all(
             not m.is_recommended_default for m in descriptor.model_configurations
         )
+
+    def test_threads_provider_deployment_name_into_filter(self) -> None:
+        # The provider row's deployment alias must reach
+        # filter_model_configurations, or a model whose identity lives only
+        # in that alias would silently lose its resolved reasoning efforts.
+        provider_model = self._provider_model("azure")
+        provider_model.deployment_name = "gpt-5.1"
+        provider_model.model_configurations = []
+
+        with (
+            patch(
+                "onyx.server.manage.llm.models.filter_model_configurations",
+                return_value=[],
+            ) as mock_filter,
+            patch(
+                "onyx.llm.well_known_providers.llm_provider_options."
+                "fetch_default_model_for_provider",
+                return_value=None,
+            ),
+        ):
+            LLMProviderDescriptor.from_model(provider_model)
+
+        assert mock_filter.call_args.kwargs["deployment_name"] == "gpt-5.1"
+
+
+class TestSupportedReasoningEfforts:
+    """The picker offers exactly the levels the request builder can deliver, so
+    the view has to resolve them from the provider and its wire protocol."""
+
+    def test_openai_model_behind_a_gateway_offers_xhigh(self) -> None:
+        """Bifrost addresses models as "vendor/model". Reading the vendor off
+        the name is what keeps xhigh available here."""
+        view = ModelConfigurationView.from_model(
+            _make_model_config(name="openai/gpt-5.1", display_name="GPT-5.1"),
+            "bifrost",
+            custom_config={"bifrost_api_mode": "chat_completions"},
+        )
+
+        assert ReasoningEffort.XHIGH in view.supported_reasoning_efforts
+
+    def test_unknown_gateway_model_stops_at_high(self) -> None:
+        """LiteLLM's fallback mapping clamps xhigh, so it must not be offered."""
+        view = ModelConfigurationView.from_model(
+            _make_model_config(name="google/gemini-3-pro", display_name="Gemini 3 Pro"),
+            "bifrost",
+            custom_config={"bifrost_api_mode": "chat_completions"},
+        )
+
+        assert view.supported_reasoning_efforts[-1] is ReasoningEffort.HIGH
+
+    def test_static_provider_branch_populates_efforts(self) -> None:
+        """The LiteLLM-enriched branch answers too, not just the dynamic one."""
+        view = ModelConfigurationView.from_model(
+            _make_model_config(name="gpt-5.1", display_name=None), "openai"
+        )
+
+        assert ReasoningEffort.XHIGH in view.supported_reasoning_efforts
+
+    def test_deployment_alias_reveals_openai_family_and_xhigh(self) -> None:
+        """A custom provider (e.g. Azure AI Foundry) may carry the model
+        identity only in the deployment alias, while the model row's own
+        name is an opaque label. Mirrors the request builder's
+        model_identity_names handling in multi_llm.py."""
+        view = ModelConfigurationView.from_model(
+            _make_model_config(name="foundry-deploy-1", display_name="Deploy 1"),
+            "azure",
+            deployment_name="gpt-5.1",
+        )
+
+        assert ReasoningEffort.XHIGH in view.supported_reasoning_efforts
 
 
 def _make_model_config(

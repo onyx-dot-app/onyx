@@ -64,6 +64,18 @@ export interface ListOption extends Option {
   transform?: (values: string[]) => string[];
 }
 
+export interface StringPairListOption extends Option {
+  type: "string_pair_list";
+  // Object keys each row serializes to, e.g. { leftKey: "source", rightKey: "target" }.
+  leftKey: string;
+  rightKey: string;
+  default?: Record<string, string>[];
+  leftLabel: string;
+  rightLabel: string;
+  leftPlaceholder?: string;
+  rightPlaceholder?: string;
+}
+
 export interface TextOption extends Option {
   type: "text";
   default?: string;
@@ -100,6 +112,7 @@ export interface TabOption extends Option {
     fields: (
       | BooleanOption
       | ListOption
+      | StringPairListOption
       | TextOption
       | NumberOption
       | SelectOption
@@ -118,6 +131,7 @@ export interface ConnectionConfiguration {
   values: (
     | BooleanOption
     | ListOption
+    | StringPairListOption
     | TextOption
     | NumberOption
     | SelectOption
@@ -128,6 +142,7 @@ export interface ConnectionConfiguration {
   advanced_values: (
     | BooleanOption
     | ListOption
+    | StringPairListOption
     | TextOption
     | NumberOption
     | SelectOption
@@ -140,6 +155,23 @@ export interface ConnectionConfiguration {
     values: any,
     currentCredential: Credential<any> | null
   ) => boolean;
+}
+
+// Shared "Include Attachments" checkbox. Pair with an `include_attachments`
+// kwarg on the backend connector; see backend/onyx/connectors/README.md for
+// the convention, including how to pick the default.
+export function buildIncludeAttachmentsOption(
+  defaultValue: boolean
+): BooleanOption {
+  return {
+    type: "checkbox",
+    query: "Include attachments?",
+    label: "Include Attachments",
+    name: "include_attachments",
+    description:
+      "Enable processing of page attachments including images and documents",
+    default: defaultValue,
+  };
 }
 
 export const connectorConfigs: Record<
@@ -178,8 +210,73 @@ export const connectorConfigs: Record<
         name: "scroll_before_scraping",
         optional: true,
       },
+      {
+        type: "string_pair_list",
+        query: "Enter URL rewrite rules:",
+        label: "URL Rewrites",
+        name: "url_rewrites",
+        leftKey: "source",
+        rightKey: "target",
+        optional: true,
+        description:
+          "Rewrite document URLs before storing. Useful when crawling through an internal " +
+          "mirror while storing the canonical public links, for example " +
+          "https://internal-mirror.example.com \u2192 https://docs.example.com",
+        leftLabel: "Source URL prefix",
+        rightLabel: "Replacement prefix",
+        leftPlaceholder: "https://internal-mirror.example.com",
+        rightPlaceholder: "https://docs.example.com",
+        default: [],
+      },
     ],
     overrideDefaultFreq: 60 * 60 * 24,
+  },
+  lumapps: {
+    description: "Configure LumApps connector",
+    values: [
+      {
+        type: "text",
+        label: "API Base URL (cell host)",
+        name: "base_url",
+        optional: false,
+        description:
+          "Your LumApps cell/API host, e.g. https://go-cell-005.api.lumapps.com (not the docs site api.lumapps.com).",
+      },
+      {
+        type: "text",
+        label: "Organization ID",
+        name: "organization_id",
+        optional: false,
+        description: "Your LumApps organization id (numeric).",
+      },
+    ],
+    advanced_values: [
+      {
+        type: "list",
+        label: "Instance (site) IDs",
+        name: "instance_ids",
+        optional: true,
+        description:
+          "Restrict indexing to specific instance/site IDs. Leave empty to index all content visible to the service user.",
+      },
+      {
+        type: "list",
+        label: "Custom Content Type IDs",
+        name: "custom_content_types",
+        optional: true,
+        description:
+          "Restrict to specific custom content type IDs. Leave empty to index all content types.",
+      },
+      {
+        type: "text",
+        label: "Language",
+        name: "lang",
+        optional: true,
+        default: "en",
+        description:
+          "Language used for content title/body and metadata labels (ISO 639-1, e.g. en, fr).",
+      },
+    ],
   },
   github: {
     description: "Configure GitHub connector",
@@ -249,11 +346,21 @@ export const connectorConfigs: Record<
         label: "Include Documents?",
         name: "include_files",
         description:
-          "Index text-based documents (markdown, text, etc.) from the default branch of repositories",
+          "Index text-based documents (markdown, text, etc.) from repositories",
         optional: true,
       },
     ],
-    advanced_values: [],
+    advanced_values: [
+      {
+        type: "text",
+        query: "Enter the branch to index documents from:",
+        label: "Branch",
+        name: "branch",
+        optional: true,
+        description:
+          "Branch to index documents from (e.g. gh-pages). Leave blank to use each repository's default branch. Only applies when 'Include Documents?' is enabled. After changing this on an existing connector, trigger a re-index to pick up the new branch immediately.",
+      },
+    ],
   },
   testrail: {
     description: "Configure TestRail connector",
@@ -666,6 +773,7 @@ export const connectorConfigs: Record<
         ],
         defaultTab: "space",
       },
+      buildIncludeAttachmentsOption(true),
     ],
     advanced_values: [],
   },
@@ -1040,15 +1148,7 @@ export const connectorConfigs: Record<
           },
         ],
       },
-      {
-        type: "checkbox",
-        query: "Include attachments?",
-        label: "Include Attachments",
-        name: "include_attachments",
-        description:
-          "Enable processing of page attachments including images and documents",
-        default: false,
-      },
+      buildIncludeAttachmentsOption(false),
     ],
     advanced_values: [],
   },
@@ -1094,6 +1194,25 @@ export const connectorConfigs: Record<
         name: "channel_regex_enabled",
         description: `If enabled, we will treat the "channels" specified above as regular expressions. A channel's messages will be pulled in by the connector if the name of the channel fully matches any of the specified regular expressions.
 For example, specifying .*-support.* as a "channel" will cause the connector to include any channels with "-support" in the name.`,
+        optional: true,
+      },
+      {
+        type: "list",
+        query: "Enter channels to exclude:",
+        label: "Channels to Exclude",
+        name: "exclude_channels",
+        description: `Specify 0 or more channels to exclude. Exclusions are applied after the "Channels" filter above, so a channel matched by both is excluded. If no channels are specified, nothing is excluded.`,
+        optional: true,
+        // Slack Channels can only be lowercase
+        transform: (values) => values.map((value) => value.toLowerCase()),
+      },
+      {
+        type: "checkbox",
+        query: "Enable exclude channel regex?",
+        label: "Enable Exclude Channel Regex",
+        name: "exclude_channel_regex_enabled",
+        description: `If enabled, we will treat the "channels to exclude" specified above as regular expressions. A channel will be excluded if its name fully matches any of the specified regular expressions.
+For example, specifying .*-alerts as a "channel to exclude" will cause the connector to skip any channels ending in "-alerts".`,
         optional: true,
       },
       {
@@ -1343,6 +1462,32 @@ For example, specifying .*-support.* as a "channel" will cause the connector to 
     description: "Configure Linear connector",
     values: [],
     advanced_values: [],
+  },
+  box: {
+    description: "Configure Box connector",
+    values: [
+      {
+        type: "list",
+        query: "Enter folder IDs or URLs to index:",
+        label: "Folders",
+        name: "folder_ids",
+        description:
+          "Box folder IDs or folder URLs (e.g. https://app.box.com/folder/123456789) to index. " +
+          "Leave empty to index everything visible to the authenticated user.",
+        optional: true,
+      },
+    ],
+    advanced_values: [
+      {
+        type: "checkbox",
+        query: "Include web links:",
+        label: "Include Web Links",
+        name: "include_web_links",
+        description:
+          "Also index Box web links (bookmarks) as lightweight documents.",
+        optional: true,
+      },
+    ],
   },
   dropbox: {
     description: "Configure Dropbox connector",
@@ -1661,6 +1806,46 @@ For example, specifying .*-support.* as a "channel" will cause the connector to 
     values: [],
     advanced_values: [],
   },
+  braintrust: {
+    description: "Configure Braintrust connector",
+    values: [
+      {
+        type: "text",
+        query: "Enter the Braintrust project name to index:",
+        label: "Project Name",
+        name: "project_name",
+        optional: true,
+        description:
+          "Only index prompts, datasets, and experiments from this project. Leave empty to index the whole organization.",
+      },
+    ],
+    advanced_values: [
+      {
+        type: "number",
+        query: "Enter the experiment row lookback window in days:",
+        label: "Experiment Row Lookback (days)",
+        name: "experiment_row_lookback_days",
+        optional: true,
+        default: 30,
+        description:
+          "Only index per-row results for experiments created within this many days. Experiment summaries are always indexed. Set to 0 to index rows for all experiments.",
+      },
+    ],
+  },
+  canvas: {
+    description: "Configure Canvas connector",
+    values: [
+      {
+        type: "text",
+        query: "Enter the Canvas base URL:",
+        label: "Canvas Base URL",
+        name: "canvas_base_url",
+        optional: false,
+        description: "e.g. https://school.instructure.com",
+      },
+    ],
+    advanced_values: [],
+  },
   egnyte: {
     description: "Configure Egnyte connector",
     values: [
@@ -1848,13 +2033,21 @@ export function createConnectorInitialValues(
 }
 
 export function createConnectorValidationSchema(
-  connector: ConfigurableSources
+  connector: ConfigurableSources,
+  requireGroups: boolean = false
 ): Yup.ObjectSchema<Record<string, any>> {
   const configuration = connectorConfigs[connector];
 
   const object = Yup.object().shape({
     access_type: Yup.string().required("Access Type is required"),
     name: Yup.string().required("Connector Name is required"),
+    groups: Yup.array()
+      .of(Yup.number())
+      .when("access_type", ([accessType], schema) =>
+        requireGroups && accessType !== "sync"
+          ? schema.min(1, "Select at least one group you manage")
+          : schema
+      ),
     ...[...configuration.values, ...configuration.advanced_values].reduce(
       (acc, field) => {
         let schema: any =
@@ -1864,11 +2057,13 @@ export function createConnectorValidationSchema(
               ? Yup.array().of(Yup.string())
               : field.type === "multiselect"
                 ? Yup.array().of(Yup.string())
-                : field.type === "checkbox"
-                  ? Yup.boolean()
-                  : field.type === "file"
-                    ? Yup.mixed()
-                    : Yup.string();
+                : field.type === "string_pair_list"
+                  ? Yup.array().of(Yup.object())
+                  : field.type === "checkbox"
+                    ? Yup.boolean()
+                    : field.type === "file"
+                      ? Yup.mixed()
+                      : Yup.string();
 
         if (!field.optional) {
           schema = schema.required(`${field.label} is required`);
@@ -1931,9 +2126,15 @@ export interface ConnectorSnapshot {
   from_beginning?: boolean;
 }
 
+export interface UrlRewriteRule {
+  source: string;
+  target: string;
+}
+
 export interface WebConfig {
   base_url: string;
   web_connector_type?: "recursive" | "single" | "sitemap";
+  url_rewrites?: UrlRewriteRule[];
 }
 
 export interface GithubConfig {
@@ -1942,6 +2143,7 @@ export interface GithubConfig {
   include_prs: boolean;
   include_issues: boolean;
   include_files: boolean;
+  branch?: string;
 }
 
 export interface GitlabConfig {
@@ -1949,6 +2151,14 @@ export interface GitlabConfig {
   project_name: string;
   include_mrs: boolean;
   include_issues: boolean;
+}
+
+export interface LumAppsConfig {
+  base_url: string;
+  organization_id: string;
+  instance_ids?: string[];
+  custom_content_types?: string[];
+  lang?: string;
 }
 
 export interface BitbucketConfig {
@@ -1978,6 +2188,7 @@ export interface ConfluenceConfig {
   is_cloud?: boolean;
   index_recursively?: boolean;
   cql_query?: string;
+  include_attachments?: boolean;
 }
 
 export interface JiraConfig {
@@ -2016,6 +2227,10 @@ export interface AxeroConfig {
   spaces?: string[];
 }
 
+export interface CanvasConfig {
+  canvas_base_url: string;
+}
+
 export interface DrupalWikiConfig {
   base_url: string;
   spaces?: string[];
@@ -2029,6 +2244,8 @@ export interface SlackConfig {
   workspace: string;
   channels?: string[];
   channel_regex_enabled?: boolean;
+  exclude_channels?: string[];
+  exclude_channel_regex_enabled?: boolean;
   include_bot_messages?: boolean;
 }
 

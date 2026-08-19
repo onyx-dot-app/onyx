@@ -31,7 +31,8 @@ def test_persist_writes_correct_modes(tmp_path: Path) -> None:
 
     cert_path = tmp_path / "ca" / "ca.crt"
     key_path = tmp_path / "ca" / "ca.key"
-    # 0o644 cert so sandboxes mounting RO can read; 0o600 key, proxy-only.
+    # 0o644 cert so sandboxes mounting RO can read; 0o600 key so only root can
+    # read it when that same volume is mounted into Docker sandboxes.
     assert cert_path.stat().st_mode & 0o777 == 0o644
     assert key_path.stat().st_mode & 0o777 == 0o600
 

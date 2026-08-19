@@ -16,8 +16,7 @@ Cache Strategy:
   using only the SOURCE-type node as the ancestor
 """
 
-from typing import cast
-from typing import TYPE_CHECKING
+from typing import TYPE_CHECKING, cast
 
 from pydantic import BaseModel
 from redis.lock import Lock as RedisLock

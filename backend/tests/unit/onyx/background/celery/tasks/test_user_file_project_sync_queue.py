@@ -1,26 +1,21 @@
-from unittest.mock import MagicMock
-from unittest.mock import patch
+from unittest.mock import MagicMock, patch
 from uuid import uuid4
 
 import pytest
 
 from onyx.background.celery.tasks.user_file_processing.tasks import (
     _user_file_project_sync_queued_key,
-)
-from onyx.background.celery.tasks.user_file_processing.tasks import (
     check_for_user_file_project_sync,
-)
-from onyx.background.celery.tasks.user_file_processing.tasks import (
     enqueue_user_file_project_sync_task,
-)
-from onyx.background.celery.tasks.user_file_processing.tasks import (
     process_single_user_file_project_sync,
 )
-from onyx.configs.constants import CELERY_USER_FILE_PROJECT_SYNC_TASK_EXPIRES
-from onyx.configs.constants import OnyxCeleryPriority
-from onyx.configs.constants import OnyxCeleryQueues
-from onyx.configs.constants import OnyxCeleryTask
-from onyx.configs.constants import USER_FILE_PROJECT_SYNC_MAX_QUEUE_DEPTH
+from onyx.configs.constants import (
+    CELERY_USER_FILE_PROJECT_SYNC_TASK_EXPIRES,
+    USER_FILE_PROJECT_SYNC_MAX_QUEUE_DEPTH,
+    OnyxCeleryPriority,
+    OnyxCeleryQueues,
+    OnyxCeleryTask,
+)
 
 
 def _build_redis_mock_with_lock() -> tuple[MagicMock, MagicMock]:
@@ -46,7 +41,7 @@ def test_check_for_user_file_project_sync_applies_queue_backpressure(
 
     task_app = MagicMock()
     with patch.object(check_for_user_file_project_sync, "app", task_app):
-        check_for_user_file_project_sync.run(tenant_id="test-tenant")
+        check_for_user_file_project_sync.run(tenant_id="test-tenant")  # ty: ignore[invalid-argument-type]
 
     task_app.send_task.assert_not_called()
     lock.release.assert_called_once()
@@ -85,7 +80,7 @@ def test_check_for_user_file_project_sync_skips_duplicates(
 
     task_app = MagicMock()
     with patch.object(check_for_user_file_project_sync, "app", task_app):
-        check_for_user_file_project_sync.run(tenant_id="test-tenant")
+        check_for_user_file_project_sync.run(tenant_id="test-tenant")  # ty: ignore[invalid-argument-type]
 
     assert mock_enqueue.call_count == 2
     lock.release.assert_called_once()
@@ -155,8 +150,8 @@ def test_process_single_user_file_project_sync_clears_queued_guard_on_pickup(
 
     user_file_id = str(uuid4())
     process_single_user_file_project_sync.run(
-        user_file_id=user_file_id,
-        tenant_id="test-tenant",
+        user_file_id=user_file_id,  # ty: ignore[invalid-argument-type]
+        tenant_id="test-tenant",  # ty: ignore[invalid-argument-type]
     )
 
     redis_client.delete.assert_called_once_with(

@@ -1,23 +1,29 @@
 from __future__ import annotations
 
 from functools import cached_property
-from typing import Any
-from typing import Generic
-from typing import TYPE_CHECKING
-from typing import TypeVar
+from typing import TYPE_CHECKING, Any, Generic, TypeVar
 
-from pydantic import BaseModel
-from pydantic import Field
-from pydantic import field_validator
+from pydantic import BaseModel, Field, field_validator
 
 from onyx.db.enums import LLMModelFlowType
-from onyx.llm.utils import get_max_input_tokens
-from onyx.llm.utils import litellm_thinks_model_supports_image_input
-from onyx.llm.utils import model_is_reasoning_model
-from onyx.server.manage.llm.utils import DYNAMIC_LLM_PROVIDERS
-from onyx.server.manage.llm.utils import extract_vendor_from_model_name
-from onyx.server.manage.llm.utils import filter_model_configurations
-from onyx.server.manage.llm.utils import is_reasoning_model
+from onyx.llm.api_surfaces import resolve_api_surface
+from onyx.llm.constants import DYNAMIC_LLM_PROVIDERS
+from onyx.llm.model_capabilities import (
+    anthropic_supports_thinking,
+    get_max_input_tokens,
+    litellm_thinks_model_supports_image_input,
+    model_is_reasoning_model,
+    supported_reasoning_efforts,
+)
+from onyx.llm.model_capabilities import (
+    model_identity_names as resolve_model_identity_names,
+)
+from onyx.llm.models import ReasoningEffort
+from onyx.server.manage.llm.utils import (
+    extract_vendor_from_model_name,
+    filter_model_configurations,
+    is_reasoning_model,
+)
 
 if TYPE_CHECKING:
     from onyx.db.models import LLMProvider as LLMProviderModel
@@ -74,8 +80,6 @@ class LLMProviderDescriptor(BaseModel):
     ) -> "LLMProviderDescriptor":
         from onyx.llm.well_known_providers.llm_provider_options import (
             fetch_default_model_for_provider,
-        )
-        from onyx.llm.well_known_providers.llm_provider_options import (
             get_provider_display_name,
         )
 
@@ -85,6 +89,8 @@ class LLMProviderDescriptor(BaseModel):
             llm_provider_model.model_configurations,
             provider,
             use_stored_display_name=llm_provider_model.custom_config is not None,
+            custom_config=llm_provider_model.custom_config,
+            deployment_name=llm_provider_model.deployment_name,
         )
         default_model = fetch_default_model_for_provider(provider)
         for model_configuration in model_configurations:
@@ -140,7 +146,11 @@ class LLMProviderView(LLMProvider):
     def from_model(
         cls,
         llm_provider_model: "LLMProviderModel",
+        include_api_key: bool = True,
     ) -> "LLMProviderView":
+        # ``include_api_key=False`` skips the decrypt + credential-access audit
+        # for callers that only need catalog metadata (e.g. the Craft gateway
+        # model list, which never uses the real key — the proxy injects it).
         # Safely get groups - handle detached instance case
         try:
             groups = [group.id for group in llm_provider_model.groups]
@@ -155,15 +165,27 @@ class LLMProviderView(LLMProvider):
 
         provider = llm_provider_model.provider
 
+        api_key: str | None = None
+        if include_api_key and llm_provider_model.api_key:
+            # NOTE: this decrypts the stored LLM provider key (chat hot path).
+            # No user is in scope here, so attribution relies on
+            # request_id / client_ip context. Audit is best-effort and never
+            # raises into this read path.
+            from onyx.utils.credential_audit import emit_credential_access
+
+            emit_credential_access(
+                credential_type="llm_provider",
+                provider=provider,
+                row_id=llm_provider_model.id,
+                user_id=None,
+            )
+            api_key = llm_provider_model.api_key.get_value(apply_mask=False)
+
         return cls(
             id=llm_provider_model.id,
             name=llm_provider_model.name,
             provider=provider,
-            api_key=(
-                llm_provider_model.api_key.get_value(apply_mask=False)
-                if llm_provider_model.api_key
-                else None
-            ),
+            api_key=api_key,
             api_base=llm_provider_model.api_base,
             api_version=llm_provider_model.api_version,
             custom_config=llm_provider_model.custom_config,
@@ -176,6 +198,8 @@ class LLMProviderView(LLMProvider):
                 llm_provider_model.model_configurations,
                 provider,
                 use_stored_display_name=llm_provider_model.custom_config is not None,
+                custom_config=llm_provider_model.custom_config,
+                deployment_name=llm_provider_model.deployment_name,
             ),
         )
 
@@ -212,8 +236,16 @@ class ModelConfigurationView(BaseModel):
     name: str
     is_visible: bool
     max_input_tokens: int | None = None
+    # The persisted override/source value, before static-provider capability
+    # enrichment. Internal consumers use this to distinguish an intentional
+    # limit from a fallback inferred from the display model name.
+    configured_max_input_tokens: int | None = Field(default=None, exclude=True)
     supports_image_input: bool
     supports_reasoning: bool = False
+    # Effort levels this model tells apart, ascending. Read alongside
+    # supports_reasoning: an empty list on a reasoning model means the model
+    # takes no effort parameter. The model picker offers exactly these.
+    supported_reasoning_efforts: list[ReasoningEffort] = Field(default_factory=list)
     # True when this is the provider's recommended default model.
     is_recommended_default: bool = False
     display_name: str | None = None
@@ -229,7 +261,20 @@ class ModelConfigurationView(BaseModel):
         model_configuration_model: "ModelConfigurationModel",
         provider_name: str,
         use_stored_display_name: bool = False,
+        custom_config: dict[str, str] | None = None,
+        deployment_name: str | None = None,
     ) -> "ModelConfigurationView":
+        model_identity_names = resolve_model_identity_names(
+            model_configuration_model.name, deployment_name
+        )
+        # The admin's chosen wire protocol decides which reasoning parameters
+        # reach the model, so it decides which effort levels are selectable.
+        reasoning_efforts = supported_reasoning_efforts(
+            provider_name,
+            model_identity_names,
+            resolve_api_surface(provider_name, custom_config),
+        )
+
         # For dynamic providers (OpenRouter, Bedrock, Ollama) and custom-config
         # providers, use the display_name stored in DB. Skip LiteLLM parsing.
         if (
@@ -245,21 +290,39 @@ class ModelConfigurationView(BaseModel):
                 name=model_configuration_model.name,
                 is_visible=model_configuration_model.is_visible,
                 max_input_tokens=model_configuration_model.max_input_tokens,
+                configured_max_input_tokens=model_configuration_model.max_input_tokens,
+                # Dynamic/custom-config providers under-report vision; fall back
+                # to the LiteLLM cost map when no VISION flow is stored.
                 supports_image_input=(
                     LLMModelFlowType.VISION
                     in model_configuration_model.llm_model_flow_types
+                    or any(
+                        litellm_thinks_model_supports_image_input(name, provider_name)
+                        for name in model_identity_names
+                    )
                 ),
-                # Prefer the stored REASONING flow; fall back to a substring
-                # heuristic on model name/display name for legacy rows that
-                # were saved before the flow existed.
+                # Prefer the stored flow, then the Claude version parse, then
+                # the LiteLLM cost map, then a name/display-name substring
+                # heuristic. Mirrors multi_llm.py's is_reasoning.
                 supports_reasoning=(
                     LLMModelFlowType.REASONING
                     in model_configuration_model.llm_model_flow_types
-                    or is_reasoning_model(
-                        model_configuration_model.name,
-                        model_configuration_model.display_name or "",
+                    or any(
+                        anthropic_supports_thinking(name)
+                        for name in model_identity_names
+                    )
+                    or any(
+                        model_is_reasoning_model(name, provider_name)
+                        for name in model_identity_names
+                    )
+                    or any(
+                        is_reasoning_model(
+                            name, model_configuration_model.display_name or ""
+                        )
+                        for name in model_identity_names
                     )
                 ),
+                supported_reasoning_efforts=reasoning_efforts,
                 display_name=model_configuration_model.display_name,
                 custom_display_name=model_configuration_model.custom_display_name,
                 provider_display_name=None,  # Not needed for dynamic providers
@@ -296,23 +359,31 @@ class ModelConfigurationView(BaseModel):
                     model_provider=provider_name,
                 )
             ),
+            configured_max_input_tokens=model_configuration_model.max_input_tokens,
             supports_image_input=(
                 True
                 if LLMModelFlowType.VISION
                 in model_configuration_model.llm_model_flow_types
-                else litellm_thinks_model_supports_image_input(
-                    model_configuration_model.name, provider_name
+                else any(
+                    litellm_thinks_model_supports_image_input(name, provider_name)
+                    for name in model_identity_names
                 )
             ),
-            # Prefer the stored REASONING flow; fall back to LiteLLM-based
-            # detection for legacy rows that were saved before the flow existed.
+            # Prefer the stored flow, then the Claude version parse, then
+            # LiteLLM-based detection for legacy rows saved before the flow
+            # existed. Mirrors multi_llm.py's is_reasoning.
             supports_reasoning=(
                 LLMModelFlowType.REASONING
                 in model_configuration_model.llm_model_flow_types
-                or model_is_reasoning_model(
-                    model_configuration_model.name, provider_name
+                or any(
+                    anthropic_supports_thinking(name) for name in model_identity_names
+                )
+                or any(
+                    model_is_reasoning_model(name, provider_name)
+                    for name in model_identity_names
                 )
             ),
+            supported_reasoning_efforts=reasoning_efforts,
             # Populate display fields from parsed model name
             display_name=display_name,
             custom_display_name=model_configuration_model.custom_display_name,
@@ -340,7 +411,8 @@ class BedrockModelsRequest(BaseModel):
     aws_access_key_id: str | None = None
     aws_secret_access_key: str | None = None
     aws_bearer_token_bedrock: str | None = None
-    provider_name: str | None = None  # Optional: to save models to existing provider
+    # Existing provider id; resolves the stored key and syncs fetched models on edit
+    provider_id: int | None = None
 
 
 class BedrockFinalModelResponse(BaseModel):
@@ -352,7 +424,8 @@ class BedrockFinalModelResponse(BaseModel):
 
 class OllamaModelsRequest(BaseModel):
     api_base: str
-    provider_name: str | None = None  # Optional: to save models to existing provider
+    # Existing provider id; resolves the stored key and syncs fetched models on edit
+    provider_id: int | None = None
 
 
 class OllamaFinalModelResponse(BaseModel):
@@ -403,7 +476,8 @@ class OllamaModelDetails(BaseModel):
 class OpenRouterModelsRequest(BaseModel):
     api_base: str
     api_key: str
-    provider_name: str | None = None  # Optional: to save models to existing provider
+    # Existing provider id; resolves the stored key and syncs fetched models on edit
+    provider_id: int | None = None
 
 
 class OpenRouterModelDetails(BaseModel):
@@ -444,7 +518,8 @@ class LMStudioModelsRequest(BaseModel):
     api_base: str
     api_key: str | None = None
     api_key_changed: bool = False
-    provider_name: str | None = None  # Optional: to save models to existing provider
+    # Existing provider id; resolves the stored key and syncs fetched models on edit
+    provider_id: int | None = None
 
 
 class LMStudioFinalModelResponse(BaseModel):
@@ -475,6 +550,7 @@ class LLMProviderResponse(BaseModel, Generic[T]):
     providers: list[T]
     default_text: DefaultModel | None = None
     default_vision: DefaultModel | None = None
+    default_chat_naming: DefaultModel | None = None
 
     @classmethod
     def from_models(
@@ -482,11 +558,13 @@ class LLMProviderResponse(BaseModel, Generic[T]):
         providers: list[T],
         default_text: DefaultModel | None = None,
         default_vision: DefaultModel | None = None,
+        default_chat_naming: DefaultModel | None = None,
     ) -> LLMProviderResponse[T]:
         return cls(
             providers=providers,
             default_text=default_text,
             default_vision=default_vision,
+            default_chat_naming=default_chat_naming,
         )
 
 
@@ -503,7 +581,8 @@ class SyncModelEntry(BaseModel):
 class LitellmModelsRequest(BaseModel):
     api_key: str
     api_base: str
-    provider_name: str | None = None  # Optional: to save models to existing provider
+    # Existing provider id; resolves the stored key and syncs fetched models on edit
+    provider_id: int | None = None
 
 
 class LitellmModelDetails(BaseModel):
@@ -586,7 +665,8 @@ class LitellmFinalModelResponse(BaseModel):
 class BifrostModelsRequest(BaseModel):
     api_base: str
     api_key: str | None = None
-    provider_name: str | None = None  # Optional: to save models to existing provider
+    # Existing provider id; resolves the stored key and syncs fetched models on edit
+    provider_id: int | None = None
 
 
 class BifrostFinalModelResponse(BaseModel):
@@ -597,15 +677,53 @@ class BifrostFinalModelResponse(BaseModel):
     supports_reasoning: bool
 
 
+# Nebius Token Factory dynamic models fetch
+class NebiusTokenfactoryModelsRequest(BaseModel):
+    api_base: str
+    api_key: str | None = None
+    # Existing provider id; resolves the stored key and syncs fetched models on edit
+    provider_id: int | None = None
+
+
+class NebiusTokenfactoryFinalModelResponse(BaseModel):
+    name: str  # Model ID (e.g. "meta-llama/Llama-3.3-70B-Instruct")
+    display_name: str
+    max_input_tokens: int | None
+    supports_image_input: bool
+    supports_reasoning: bool
+    # Display-only metadata shown in the model picker (not persisted).
+    quantization: str | None = None
+    country_code: str | None = None
+    requests_per_minute: float | None = None
+    supported_features: list[str] = []
+
+
 # OpenAI Compatible dynamic models fetch
 class OpenAICompatibleModelsRequest(BaseModel):
     api_base: str
     api_key: str | None = None
-    provider_name: str | None = None  # Optional: to save models to existing provider
+    # Existing provider id; resolves the stored key and syncs fetched models on edit
+    provider_id: int | None = None
 
 
 class OpenAICompatibleFinalModelResponse(BaseModel):
     name: str  # Model ID (e.g. "meta-llama/Llama-3-8B-Instruct")
+    display_name: str  # Human-readable name from API
+    max_input_tokens: int | None
+    supports_image_input: bool
+    supports_reasoning: bool
+
+
+# Portkey dynamic models fetch
+class PortkeyModelsRequest(BaseModel):
+    api_base: str
+    api_key: str | None = None
+    # Existing provider id; resolves the stored key and syncs fetched models on edit
+    provider_id: int | None = None
+
+
+class PortkeyFinalModelResponse(BaseModel):
+    name: str  # Model ID (e.g. "gpt-4o", "claude-sonnet-5")
     display_name: str  # Human-readable name from API
     max_input_tokens: int | None
     supports_image_input: bool

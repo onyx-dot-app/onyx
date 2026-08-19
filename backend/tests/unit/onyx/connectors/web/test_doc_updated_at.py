@@ -10,13 +10,24 @@ rely on the content hash instead.
 
 from __future__ import annotations
 
-from unittest.mock import MagicMock
-from unittest.mock import patch
+from unittest.mock import MagicMock, patch
+
+import pytest
 
 from onyx.connectors.models import Document
-from onyx.connectors.web.connector import WEB_CONNECTOR_VALID_SETTINGS
-from onyx.connectors.web.connector import WebConnector
+from onyx.connectors.web.connector import WEB_CONNECTOR_VALID_SETTINGS, WebConnector
 from onyx.file_processing.html_utils import ParsedHTML
+
+
+@pytest.fixture(autouse=True)
+def _skip_web_connector_ssrf_check(monkeypatch: pytest.MonkeyPatch) -> None:
+    """This test crawls example.com and doesn't exercise SSRF. The default SSRF
+    level is VALIDATE_ALL, at which the web connector does a real DNS lookup per
+    fetch; neutralize the gate so the test stays hermetic (no network)."""
+    monkeypatch.setattr(
+        "onyx.connectors.web.connector.protected_url_check", lambda _url: None
+    )
+
 
 BASE_URL = "http://example.com"
 # A perfectly parseable Last-Modified value. If the connector ever reads it again,
@@ -30,8 +41,8 @@ def _make_page_mock() -> MagicMock:
     response = MagicMock()
     response.status = 200
     # The server DOES send Last-Modified — the connector must still ignore it.
-    response.header_value.side_effect = (
-        lambda h: LAST_MODIFIED if h == "Last-Modified" else None
+    response.header_value.side_effect = lambda h: (
+        LAST_MODIFIED if h == "Last-Modified" else None
     )
     page.goto.return_value = response
     page.content.return_value = "<html><body><p>static</p></body></html>"

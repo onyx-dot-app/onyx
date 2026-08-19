@@ -10,7 +10,7 @@ import SvgXOctagon from "@opal/icons/x-octagon";
 import type { IconFunctionComponent, RichStr } from "@opal/types";
 import { toPlainString } from "@opal/components/text/InlineMarkdown";
 import { cn } from "@opal/utils";
-import { useRef, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 
 // ---------------------------------------------------------------------------
 // Types
@@ -49,6 +49,16 @@ interface ContentMdProps {
   /** Optional description text below the title. */
   description?: string | RichStr;
 
+  /**
+   * Slot for a control/action (e.g. an input) rendered to the right of the
+   * title and description on desktop, and stacked between them on narrow
+   * viewports.
+   */
+  rightChildren?: React.ReactNode;
+
+  /** Clamp the description to N lines. Maps to Text's maxLines prop. */
+  descriptionMaxLines?: number;
+
   /** Enable inline editing of the title. */
   editable?: boolean;
 
@@ -66,6 +76,9 @@ interface ContentMdProps {
 
   /** Tag rendered beside the title. */
   tag?: TagProps;
+
+  /** Clamp the title to N lines with ellipsis. Omit to wrap freely. */
+  titleMaxLines?: number;
 
   /** Size preset. Default: `"main-ui"`. */
   sizePreset?: ContentMdSizePreset;
@@ -129,17 +142,25 @@ function ContentMd({
   icon: Icon,
   title,
   description,
+  rightChildren,
+  descriptionMaxLines,
   editable,
   onTitleChange,
   suffix,
   auxIcon,
   tag,
+  titleMaxLines,
   sizePreset = "main-ui",
   ref,
 }: ContentMdProps) {
   const [editing, setEditing] = useState(false);
   const [editValue, setEditValue] = useState(toPlainString(title));
   const inputRef = useRef<HTMLInputElement>(null);
+
+  // Move focus to the edit input as soon as editing starts.
+  useEffect(() => {
+    if (editing) inputRef.current?.focus();
+  }, [editing]);
 
   const config = CONTENT_MD_PRESETS[sizePreset];
 
@@ -155,7 +176,19 @@ function ContentMd({
   }
 
   return (
-    <div ref={ref} className="opal-content-md" data-opal-content>
+    <div
+      ref={ref}
+      className="opal-content-md"
+      data-opal-content
+      data-stacked={rightChildren ? true : undefined}
+      style={
+        rightChildren && Icon
+          ? ({
+              "--opal-content-md-desc-indent": config.descriptionIndent,
+            } as React.CSSProperties)
+          : undefined
+      }
+    >
       <div
         className="opal-content-md-header"
         data-editing={editing || undefined}
@@ -193,7 +226,6 @@ function ContentMd({
                 value={editValue}
                 onChange={(e) => setEditValue(e.target.value)}
                 size={1}
-                autoFocus
                 onFocus={(e) => e.currentTarget.select()}
                 onBlur={commit}
                 onKeyDown={(e) => {
@@ -210,7 +242,7 @@ function ContentMd({
             <Text
               font={config.titleFont}
               color="inherit"
-              maxLines={1}
+              maxLines={titleMaxLines}
               title={toPlainString(title)}
               onClick={editable ? startEditing : undefined}
             >
@@ -265,12 +297,25 @@ function ContentMd({
         </div>
       </div>
 
+      {rightChildren && (
+        <div className="opal-content-md-right-children">{rightChildren}</div>
+      )}
+
       {description && toPlainString(description) && (
         <div
           className="opal-content-md-description"
-          style={Icon ? { paddingLeft: config.descriptionIndent } : undefined}
+          style={
+            Icon && !rightChildren
+              ? { paddingLeft: config.descriptionIndent }
+              : undefined
+          }
         >
-          <Text font="secondary-body" color="text-03" as="p">
+          <Text
+            font="secondary-body"
+            color="text-03"
+            as="p"
+            maxLines={descriptionMaxLines}
+          >
             {description}
           </Text>
         </div>

@@ -5,6 +5,8 @@
  * Items are stored and rendered in chronological order as they arrive.
  */
 
+import type { RateLimitDetails } from "@/app/app/interfaces";
+
 export type ToolCallKind =
   | "search"
   | "read"
@@ -95,7 +97,27 @@ export type StreamItem =
   | { type: "text"; id: string; content: string; isStreaming: boolean }
   | { type: "thinking"; id: string; content: string; isStreaming: boolean }
   | { type: "tool_call"; id: string; toolCall: ToolCallState }
-  | { type: "todo_list"; id: string; todoList: TodoListState };
+  | { type: "todo_list"; id: string; todoList: TodoListState }
+  | {
+      type: "connect_app_request";
+      id: string;
+      requestId: string;
+      externalAppId: number;
+      reason: string | null;
+    }
+  | { type: "compaction"; id: string; summary: string | null }
+  | {
+      type: "error";
+      id: string;
+      content: string;
+      /** Set for usage rate-limit (429) errors — renders the same
+       * rate-limit banner as chat, with reset-time countdown. */
+      rateLimit?: RateLimitDetails;
+    };
+
+export interface ContextUsage {
+  usedTokens: number;
+}
 
 /**
  * Discriminated union of transient tabs that the side panel can render.
@@ -143,8 +165,12 @@ export interface SubagentTurn {
   prompt: string;
   /** Tool calls emitted by the subagent during this turn, keyed by ToolCallState.id. */
   toolCalls: ToolCallState[];
+  /** The subagent's reasoning stream for this turn (null until any arrives). */
+  thinking: string | null;
   /** The subagent's response for this turn (null until complete). */
   response: string | null;
+  /** FIFO stream items rendered with the same BuildMessageList path as parent chat. */
+  streamItems: StreamItem[];
 }
 
 export interface SubagentState {

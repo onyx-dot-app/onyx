@@ -4,11 +4,16 @@ from typing import Any
 import httpx
 import pytest
 
+from onyx.llm.api_surfaces import resolve_api_surface
 from onyx.llm.constants import LlmProviderNames
+from onyx.llm.model_capabilities import (
+    get_max_input_tokens,
+    litellm_thinks_model_supports_image_input,
+    model_identity_names,
+    model_is_reasoning_model,
+    supported_reasoning_efforts,
+)
 from onyx.llm.model_name_parser import parse_litellm_model_name
-from onyx.llm.utils import get_max_input_tokens
-from onyx.llm.utils import litellm_thinks_model_supports_image_input
-from onyx.llm.utils import model_is_reasoning_model
 from onyx.llm.well_known_providers.llm_provider_options import (
     fetch_default_model_for_provider,
 )
@@ -73,6 +78,14 @@ def assert_response_is_equivalent(
                 req.name, provider_name
             ),
             "supports_reasoning": model_is_reasoning_model(req.name, provider_name),
+            "supported_reasoning_efforts": [
+                effort.value
+                for effort in supported_reasoning_efforts(
+                    provider_name,
+                    model_identity_names(req.name, None),
+                    resolve_api_surface(provider_name, None),
+                )
+            ],
             "is_recommended_default": req.name
             == fetch_default_model_for_provider(provider_name),
             "display_name": display_name,
@@ -1133,14 +1146,13 @@ def test_default_model_persistence_and_update(
     6. Both admin and basic endpoints reflect the new default model
     7. Non-admin user sees the updated default model
     """
-    from onyx.auth.schemas import UserRole
 
     admin_user = UserManager.create(name="admin_user")
 
     # Create a non-admin user
     basic_user = UserManager.create(name="basic_user")
     # The first user is admin, subsequent users are basic by default
-    assert basic_user.role == UserRole.BASIC or basic_user.role != UserRole.ADMIN
+    assert not basic_user.is_admin
 
     provider_name = f"test-default-model-{uuid.uuid4()}"
     updated_default_model = "gpt-4o"
@@ -1393,13 +1405,12 @@ def test_multiple_providers_default_switching(
     6. Admin switches to a different provider that has a model with the same name
     7. Both users should see the new provider as default with the same model name
     """
-    from onyx.auth.schemas import UserRole
 
     admin_user = UserManager.create(name="admin_user")
 
     # Create a non-admin user
     basic_user = UserManager.create(name="basic_user")
-    assert basic_user.role == UserRole.BASIC or basic_user.role != UserRole.ADMIN
+    assert not basic_user.is_admin
 
     # We'll create two providers, both with a model named "gpt-4" to test the
     # scenario where different providers have models with the same name
@@ -1752,13 +1763,12 @@ def test_default_provider_and_vision_provider_selection(
     5. Verify both admin and basic users see correct default provider and vision provider
     6. Verify model configurations show correct image support capabilities
     """
-    from onyx.auth.schemas import UserRole
 
     admin_user = UserManager.create(name="admin_user")
 
     # Create a non-admin user
     basic_user = UserManager.create(name="basic_user")
-    assert basic_user.role == UserRole.BASIC or basic_user.role != UserRole.ADMIN
+    assert not basic_user.is_admin
 
     provider_1_name = f"test-mixed-models-{uuid.uuid4()}"
     provider_2_name = f"test-vision-only-{uuid.uuid4()}"
@@ -2135,13 +2145,12 @@ def test_all_three_provider_types_no_mixup(reset: None) -> None:  # noqa: ARG001
     6. Verify image gen config doesn't appear in LLM provider lists
     7. Verify LLM providers don't appear in image gen config list
     """
-    from onyx.auth.schemas import UserRole
 
     admin_user = UserManager.create(name="admin_user")
 
     # Create a non-admin user
     basic_user = UserManager.create(name="basic_user")
-    assert basic_user.role == UserRole.BASIC or basic_user.role != UserRole.ADMIN
+    assert not basic_user.is_admin
 
     # Provider names
     regular_provider_name = f"test-regular-provider-{uuid.uuid4()}"

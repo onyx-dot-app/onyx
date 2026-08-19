@@ -1,7 +1,7 @@
-"""Abstract base class and factory for sandbox operations.
+"""Abstract base class for sandbox operations.
 
 SandboxManager is the abstract interface for sandbox lifecycle management.
-Use get_sandbox_manager() to get the appropriate implementation based on SANDBOX_BACKEND.
+Use sandbox.factory.get_sandbox_manager() to get the implementation for SANDBOX_BACKEND.
 
 IMPORTANT: SandboxManager implementations must NOT interface with the database directly.
 All database operations should be handled by the caller (SessionManager, Celery tasks, etc.).
@@ -14,36 +14,43 @@ Architecture Note (User-Shared Sandbox Model):
 - terminate() destroys the entire sandbox (all sessions)
 """
 
-import threading
+import json
 import time
-from abc import ABC
-from abc import abstractmethod
-from collections.abc import Callable
-from collections.abc import Generator
+from abc import ABC, abstractmethod
+from collections.abc import Callable, Generator, Sequence
 from concurrent.futures import ThreadPoolExecutor
 from uuid import UUID
 
-from onyx.server.features.build.configs import SANDBOX_BACKEND
-from onyx.server.features.build.configs import SandboxBackend
-from onyx.server.features.build.sandbox.event_schema import AgentMessageChunk
-from onyx.server.features.build.sandbox.event_schema import AgentPlanUpdate
-from onyx.server.features.build.sandbox.event_schema import AgentThoughtChunk
-from onyx.server.features.build.sandbox.event_schema import CurrentModeUpdate
-from onyx.server.features.build.sandbox.event_schema import Error
-from onyx.server.features.build.sandbox.event_schema import PromptResponse
-from onyx.server.features.build.sandbox.event_schema import ToolCallProgress
-from onyx.server.features.build.sandbox.event_schema import ToolCallStart
-from onyx.server.features.build.sandbox.models import FatalWriteError
-from onyx.server.features.build.sandbox.models import FileSet
-from onyx.server.features.build.sandbox.models import FilesystemEntry
-from onyx.server.features.build.sandbox.models import LLMProviderConfig
-from onyx.server.features.build.sandbox.models import PushFailure
-from onyx.server.features.build.sandbox.models import PushResult
-from onyx.server.features.build.sandbox.models import RetriableWriteError
-from onyx.server.features.build.sandbox.models import SandboxInfo
-from onyx.server.features.build.sandbox.models import SnapshotResult
+from onyx.server.features.build.configs import TURN_BUDGET_FILE_NAME
+from onyx.server.features.build.sandbox.event_schema import (
+    AgentMessageChunk,
+    AgentPlanUpdate,
+    AgentThoughtChunk,
+    CurrentModeUpdate,
+    Error,
+    PromptResponse,
+    ToolCallProgress,
+    ToolCallStart,
+)
+from onyx.server.features.build.sandbox.models import (
+    CraftLLMProviderConfig,
+    CraftMCPServerConfig,
+    FatalWriteError,
+    FileSet,
+    FilesystemEntry,
+    PromptAttachment,
+    PushFailure,
+    PushResult,
+    RetriableWriteError,
+    SandboxInfo,
+    SnapshotResult,
+)
 from onyx.server.features.build.sandbox.serve_transport import _ServeMixin
 from onyx.server.features.build.sandbox.sse import SSEKeepalive
+from onyx.server.features.build.timeouts import (
+    BULK_TRANSFER_TIMEOUT_SECONDS,
+    TURN_FINAL_NOTICE_MARGIN_SECONDS,
+)
 from onyx.utils.logger import setup_logger
 
 logger = setup_logger()
@@ -91,10 +98,13 @@ class SandboxManager(_ServeMixin, ABC):
         └── sessions/
             ├── $session_id_1/         # Per-session workspace
             │   ├── outputs/           # Agent output for this session
-            │   │   └── web/           # Next.js app
+            │   │   └── web/           # Next.js app (scaffolded lazily by
+            │   │                      # start-webapp.sh, not at setup)
             │   ├── venv/              # Python virtual environment
             │   ├── .opencode/skills   # Symlink → managed/skills
             │   ├── AGENTS.md          # Agent instructions
+            │   ├── start-webapp.sh    # Bootstrap script, chmod 444 (present
+            │   │                      # when session has a port)
             │   └── attachments/
             └── $session_id_2/
                 └── ...
@@ -109,23 +119,24 @@ class SandboxManager(_ServeMixin, ABC):
     Use get_sandbox_manager() to get the appropriate implementation.
     """
 
+    supports_opencode_history_persistence: bool = False
+
     @abstractmethod
     def provision(
         self,
         sandbox_id: UUID,
         user_id: UUID,
         tenant_id: str,
-        llm_config: LLMProviderConfig,
-        onyx_pat: str | None = None,
-        *,
-        all_llm_configs: list[LLMProviderConfig] | None = None,
+        onyx_pat: str | None,
+        provisioning_attempt_number: int,
     ) -> SandboxInfo:
-        """Provision a new sandbox for a user.
+        """Provision a new sandbox for a user. Returns only once the sandbox
+        is RUNNING; every failure raises.
 
-        ``all_llm_configs``: the full set of LLM providers the user has
-        configured. K8s pre-loads each into opencode-serve's startup config
-        so per-prompt model overrides can cross providers without restarting
-        the pod. Defaults to ``[llm_config]`` (single-provider, back-compat).
+        Craft MCP servers and the gateway provider catalog are NOT registered
+        here — they live in the per-session ``opencode.json`` (see
+        ``setup_session_workspace`` / ``regenerate_session_config``) so a model
+        change or MCP-set change hot-reloads without a pod re-provision.
 
         Creates the sandbox container/directory with:
         - sessions/ directory for per-session workspaces
@@ -137,8 +148,12 @@ class SandboxManager(_ServeMixin, ABC):
             sandbox_id: Unique identifier for the sandbox
             user_id: User identifier who owns this sandbox
             tenant_id: Tenant identifier for multi-tenant isolation
-            llm_config: LLM provider configuration (for default config)
             onyx_pat: Raw PAT token to inject as ONYX_PAT env var in the sandbox
+            provisioning_attempt_number: This attempt's number; stamped onto
+                backend resources at creation so operators can attribute
+                orphans (never read programmatically — the attempt-number
+                condition on DB status writes is what blocks stale
+                attempts).
 
         Returns:
             SandboxInfo with the provisioned sandbox details
@@ -164,28 +179,35 @@ class SandboxManager(_ServeMixin, ABC):
         self,
         sandbox_id: UUID,
         session_id: UUID,
-        llm_config: LLMProviderConfig,
+        llm_config: CraftLLMProviderConfig,
         nextjs_port: int | None,
-        skills_section: str,
-        snapshot_path: str | None = None,
+        connectable_apps_section: str,
         user_name: str | None = None,
+        mcp_servers: Sequence[CraftMCPServerConfig] = (),
     ) -> None:
         """Set up a session workspace within an existing sandbox.
 
         Creates the per-session directory structure:
-        - sessions/$session_id/outputs/ (from snapshot or template)
+        - sessions/$session_id/outputs/
         - sessions/$session_id/venv/
         - sessions/$session_id/.opencode/skills (symlink → managed skills dir)
         - sessions/$session_id/AGENTS.md
         - sessions/$session_id/attachments/
+
+        Does NOT scaffold ``outputs/web`` or install/start the dev server.
+        When ``nextjs_port`` is given, writes an executable
+        ``sessions/$session_id/start-webapp.sh`` bootstrap script (see
+        :func:`nextjs_dev.build_webapp_bootstrap_script`) that the agent runs
+        later, purely locally, to lazily scaffold and start the webapp; no
+        server-side trigger is involved. Skipped entirely when
+        ``nextjs_port`` is None (headless callers).
 
         Args:
             sandbox_id: The sandbox ID (must be provisioned)
             session_id: The session ID for this workspace
             llm_config: LLM provider configuration (passed to AGENTS.md rendering)
             nextjs_port: Port for the Next.js dev server, or None for headless.
-            skills_section: Pre-rendered ``{{AVAILABLE_SKILLS_SECTION}}`` for AGENTS.md.
-            snapshot_path: Optional storage path to restore outputs from
+            connectable_apps_section: Pre-rendered ``{{CONNECTABLE_APPS_LIST}}`` (may be empty).
             user_name: User's name for personalization in AGENTS.md
 
         Raises:
@@ -198,7 +220,6 @@ class SandboxManager(_ServeMixin, ABC):
         self,
         sandbox_id: UUID,
         session_id: UUID,
-        nextjs_port: int | None = None,
     ) -> None:
         """Clean up a session workspace on session delete: stop the
         Next.js dev server and remove ``sessions/$session_id/``. Does NOT
@@ -207,7 +228,27 @@ class SandboxManager(_ServeMixin, ABC):
         Implementations MUST call ``self._close_session_buses(sandbox_id,
         session_id)`` — otherwise the per-session ``PodEventBus`` (reader
         thread + httpx connection) leaks until api_server restarts.
+
+        Raises when cleanup fails while the sandbox is reachable. A missing
+        sandbox is already clean and should be treated as success.
         """
+        ...
+
+    @abstractmethod
+    def regenerate_session_config(
+        self,
+        *,
+        sandbox_id: UUID,
+        session_id: UUID,
+        agent_provider: str | None,
+        agent_model: str | None,
+        nextjs_port: int | None,
+        connectable_apps_section: str,
+        user_name: str | None = None,
+        llm_config: CraftLLMProviderConfig | None = None,
+        mcp_servers: Sequence[CraftMCPServerConfig] = (),
+    ) -> None:
+        """Rewrite generated session configuration without replacing outputs."""
         ...
 
     @abstractmethod
@@ -247,21 +288,25 @@ class SandboxManager(_ServeMixin, ABC):
         sandbox_id: UUID,
         session_id: UUID,
         snapshot_storage_path: str,
-        tenant_id: str,
         nextjs_port: int | None,
-        llm_config: LLMProviderConfig,
-        skills_section: str,
+        llm_config: CraftLLMProviderConfig,
+        connectable_apps_section: str,
+        mcp_servers: Sequence[CraftMCPServerConfig] = (),
     ) -> None:
         """Restore a session workspace from a snapshot.
 
         For Kubernetes: Downloads and extracts the snapshot, regenerates config files.
         For Local: No-op since workspaces persist on disk (no snapshots).
 
+        When ``nextjs_port`` is given, always (re)writes ``start-webapp.sh``
+        with the new port (ports change across sleep/wake) and auto-starts
+        the dev server in the background, but only if the restored snapshot
+        actually contains a webapp (``outputs/web/package.json``).
+
         Args:
             sandbox_id: The sandbox ID
             session_id: The session ID to restore
             snapshot_storage_path: Path to the snapshot in storage
-            tenant_id: Tenant identifier for storage access
             nextjs_port: Port number for the NextJS dev server, or None to
                 skip starting it (e.g. headless scheduled-task fires).
             llm_config: LLM provider configuration (used to regenerate AGENTS.md)
@@ -270,6 +315,25 @@ class SandboxManager(_ServeMixin, ABC):
             RuntimeError: If snapshot restoration fails
         """
         ...
+
+    def create_opencode_history_snapshot(
+        self,
+        sandbox_id: UUID,
+        tenant_id: str,
+        timeout_seconds: float = BULK_TRANSFER_TIMEOUT_SECONDS,
+    ) -> bool:
+        """Snapshot sandbox-global opencode history if this backend supports it.
+
+        Returns False when opencode has not created any data yet. By default,
+        an empty live store leaves any existing durable archive untouched so idle
+        and recovery snapshots do not discard the last known history.
+        Callers must gate on ``supports_opencode_history_persistence`` before
+        invoking this optional capability.
+        """
+        _ = sandbox_id, tenant_id, timeout_seconds
+        raise NotImplementedError(
+            f"{type(self).__name__} does not support opencode history snapshots"
+        )
 
     @abstractmethod
     def session_workspace_exists(
@@ -310,11 +374,12 @@ class SandboxManager(_ServeMixin, ABC):
         ...
 
     @abstractmethod
-    def health_check(self, sandbox_id: UUID, timeout: float = 60.0) -> bool:
+    def health_check(self, sandbox_id: UUID, timeout: float) -> bool:
         """Check if the sandbox is healthy.
 
         Args:
             sandbox_id: The sandbox ID to check
+            timeout: Probe timeout, chosen by the caller for its path.
 
         Returns:
             True if sandbox is healthy, False otherwise
@@ -327,11 +392,14 @@ class SandboxManager(_ServeMixin, ABC):
         session_id: UUID,
         message: str,
         *,
+        attachments: list[PromptAttachment] | None = None,
         opencode_session_id: str | None = None,
         agent_provider: str | None = None,
         agent_model: str | None = None,
         on_opencode_session_resolved: Callable[[str], None] | None = None,
         should_interrupt: Callable[[], bool] | None = None,
+        should_abort_on_teardown: Callable[[], bool] | None = None,
+        turn_timeout_seconds: float | None = None,
     ) -> Generator[SandboxEvent, None, None]:
         """Stream typed sandbox events for one user message via
         opencode-serve.
@@ -351,8 +419,11 @@ class SandboxManager(_ServeMixin, ABC):
             opencode_session_id,
             agent_provider,
             agent_model,
+            attachments=attachments,
             on_opencode_session_resolved=on_opencode_session_resolved,
             should_interrupt=should_interrupt,
+            should_abort_on_teardown=should_abort_on_teardown,
+            turn_timeout_seconds=turn_timeout_seconds,
         )
 
     def send_subagent_message(
@@ -487,6 +558,59 @@ class SandboxManager(_ServeMixin, ABC):
             ValueError: If path is invalid
         """
         ...
+
+    def stamp_turn_deadline(
+        self,
+        sandbox_id: UUID,
+        session_id: UUID,
+        *,
+        soft_budget_seconds: int,
+        hard_cap_seconds: int,
+    ) -> None:
+        """Write the per-turn deadline stamp turn-budget.ts reads. Best-effort;
+        written at turn start, never restamped by continuations. ``stale_after``
+        self-invalidates the stamp past the hard cap so a failed next-turn
+        write leaves the plugin inert instead of nagging a fresh turn."""
+        now_ms = int(time.time() * 1000)
+        soft_ms = now_ms + soft_budget_seconds * 1000
+        hard_ms = now_ms + hard_cap_seconds * 1000
+        try:
+            self.write_sandbox_file(
+                sandbox_id,
+                f"sessions/{session_id}/{TURN_BUDGET_FILE_NAME}",
+                json.dumps(
+                    {
+                        "soft_deadline_epoch_ms": soft_ms,
+                        "final_deadline_epoch_ms": max(
+                            soft_ms, hard_ms - TURN_FINAL_NOTICE_MARGIN_SECONDS * 1000
+                        ),
+                        "stale_after_epoch_ms": hard_ms,
+                    }
+                ),
+            )
+        except Exception:
+            logger.warning(
+                "Failed to stamp turn deadline for session %s",
+                session_id,
+                exc_info=True,
+            )
+
+    def clear_turn_deadline(self, sandbox_id: UUID, session_id: UUID) -> None:
+        """Invalidate the stamp at normal turn end so a failed next-turn
+        restamp can't inherit it. Call only while holding the prompt slot — a
+        successor's fresh stamp must not be clobbered. Best-effort."""
+        try:
+            self.write_sandbox_file(
+                sandbox_id,
+                f"sessions/{session_id}/{TURN_BUDGET_FILE_NAME}",
+                "{}",
+            )
+        except Exception:
+            logger.warning(
+                "Failed to clear turn deadline for session %s",
+                session_id,
+                exc_info=True,
+            )
 
     @abstractmethod
     def get_upload_stats(
@@ -651,15 +775,15 @@ class SandboxManager(_ServeMixin, ABC):
         pptx_path: str,
         cache_dir: str,
     ) -> tuple[list[str], bool]:
-        """Convert PPTX to slide JPEG images for preview, with caching.
+        """Convert a PowerPoint file to slide JPEG images for preview, with caching.
 
-        Checks if cache_dir already has slides. If the PPTX is newer than the
+        Checks if cache_dir already has slides. If the presentation is newer than the
         cached images (or no cache exists), runs soffice -> pdftoppm pipeline.
 
         Args:
             sandbox_id: The sandbox ID
             session_id: The session ID
-            pptx_path: Relative path to the PPTX file within the session workspace
+            pptx_path: Relative path to the PowerPoint file within the session workspace
             cache_dir: Relative path for the cache directory
                        (e.g., "outputs/.pptx-preview/abc123")
 
@@ -672,60 +796,3 @@ class SandboxManager(_ServeMixin, ABC):
             ValueError: If file not found or conversion fails
         """
         ...
-
-    def ensure_nextjs_running(
-        self,
-        sandbox_id: UUID,
-        session_id: UUID,
-        nextjs_port: int,
-    ) -> None:
-        """Ensure the Next.js server is running for a session.
-
-        Default is a no-op — only meaningful for backends that manage Next.js
-        process lifecycles directly from the api_server side. The kubernetes
-        backend starts Next.js inside the sandbox pod at workspace setup, so
-        nothing further is needed.
-
-        Args:
-            sandbox_id: The sandbox ID
-            session_id: The session ID
-            nextjs_port: The port the Next.js server should be listening on
-        """
-
-
-# Singleton instance cache for the factory
-_sandbox_manager_instance: SandboxManager | None = None
-_sandbox_manager_lock = threading.Lock()
-
-
-def get_sandbox_manager() -> SandboxManager:
-    """Get the appropriate SandboxManager implementation based on SANDBOX_BACKEND.
-
-    Returns:
-        SandboxManager instance:
-        - KubernetesSandboxManager for kubernetes backend (production + dev kind)
-        - DockerSandboxManager for self-hosted docker-compose
-    """
-    global _sandbox_manager_instance
-
-    if _sandbox_manager_instance is None:
-        with _sandbox_manager_lock:
-            if _sandbox_manager_instance is None:
-                if SANDBOX_BACKEND == SandboxBackend.KUBERNETES:
-                    from onyx.server.features.build.sandbox.kubernetes.kubernetes_sandbox_manager import (
-                        KubernetesSandboxManager,
-                    )
-
-                    _sandbox_manager_instance = KubernetesSandboxManager()
-                    logger.info("Using KubernetesSandboxManager for sandbox operations")
-                elif SANDBOX_BACKEND == SandboxBackend.DOCKER:
-                    from onyx.server.features.build.sandbox.docker.docker_sandbox_manager import (
-                        DockerSandboxManager,
-                    )
-
-                    _sandbox_manager_instance = DockerSandboxManager()
-                    logger.info("Using DockerSandboxManager for sandbox operations")
-                else:
-                    raise ValueError(f"Unknown sandbox backend: {SANDBOX_BACKEND}")
-
-    return _sandbox_manager_instance

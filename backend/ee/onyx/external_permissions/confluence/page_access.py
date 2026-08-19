@@ -5,9 +5,9 @@ from onyx.access.models import ExternalAccess
 from onyx.access.utils import build_ext_group_name_for_onyx
 from onyx.configs.constants import DocumentSource
 from onyx.connectors.confluence.onyx_confluence import (
+    OnyxConfluence,
     get_user_email_from_username__server,
 )
-from onyx.connectors.confluence.onyx_confluence import OnyxConfluence
 from onyx.utils.logger import setup_logger
 
 logger = setup_logger()

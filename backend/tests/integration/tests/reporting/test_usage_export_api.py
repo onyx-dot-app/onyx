@@ -1,12 +1,9 @@
 import csv
 import os
 import time
-from datetime import datetime
-from datetime import timedelta
-from datetime import timezone
-from io import BytesIO
-from io import StringIO
-from uuid import UUID
+from datetime import datetime, timedelta, timezone
+from io import BytesIO, StringIO
+from uuid import UUID, uuid4
 from zipfile import ZipFile
 
 import pytest
@@ -37,19 +34,12 @@ class TestUsageExportAPI:
             persona_id=DEFAULT_PERSONA_ID,
         )
 
-        # Get initial list of reports
-        initial_response = client.get(
-            f"{API_SERVER_URL}/admin/usage-report",
-            headers=admin_user.headers,
-        )
-        assert initial_response.status_code == 200
-        initial_reports = initial_response.json()
-        initial_count = len(initial_reports)
+        report_id = uuid4()
 
         # Test generating a report without date filters (all time)
         response = client.post(
             f"{API_SERVER_URL}/admin/usage-report",
-            json={},
+            json={"report_id": str(report_id)},
             headers=admin_user.headers,
         )
         assert response.status_code == 204
@@ -57,7 +47,7 @@ class TestUsageExportAPI:
         # Wait for the new report to appear (with timeout)
         max_wait_time = 60  # seconds
         start_time = time.time()
-        current_reports = initial_reports
+        new_reports: list[dict] = []
 
         while time.time() - start_time < max_wait_time:
             check_response = client.get(
@@ -67,19 +57,23 @@ class TestUsageExportAPI:
             assert check_response.status_code == 200
             current_reports = check_response.json()
 
-            if len(current_reports) > initial_count:
-                # New report has been generated
+            new_reports = [
+                report
+                for report in current_reports
+                if str(report_id) in report["report_name"]
+            ]
+            if new_reports:
+                # The requested report has been generated
                 break
 
             time.sleep(2)
 
-        # Verify a new report was created
-        assert len(current_reports) > initial_count
-
-        # Find the new report (should be the first one since they're ordered by time)
-        new_report = current_reports[0]
+        # Verify the requested report was created
+        assert len(new_reports) == 1
+        new_report = new_reports[0]
         assert "report_name" in new_report
         assert new_report["report_name"].endswith(".zip")
+        assert str(report_id) in new_report["report_name"]
 
     def test_generate_usage_report_with_date_range(
         self,
@@ -295,6 +289,37 @@ class TestUsageExportAPI:
             file_names = zip_file.namelist()
             assert "chat_messages.csv" in file_names
             assert "users.csv" in file_names
+            assert "usage_by_user.csv" in file_names
+            assert "usage_report.pdf" in file_names
+
+            with zip_file.open("usage_report.pdf") as pdf_file:
+                pdf_bytes = pdf_file.read()
+            assert pdf_bytes.startswith(b"%PDF-")
+            assert len(pdf_bytes) > 1000
+
+            # Verify usage_by_user.csv has the expected columns. The seeded
+            # chat history doesn't record UserUsage rows, so there's no data
+            # to assert on, just the header shape.
+            with zip_file.open("usage_by_user.csv") as csv_file:
+                csv_content = csv_file.read().decode("utf-8")
+                csv_reader = csv.DictReader(StringIO(csv_content))
+                expected_columns = {
+                    "user_email",
+                    "day",
+                    "model",
+                    "flow",
+                    "provider",
+                    "incognito",
+                    "input_tokens",
+                    "output_tokens",
+                    "cache_read_tokens",
+                    "cache_creation_tokens",
+                    "cost_cents",
+                }
+                actual_columns = set(csv_reader.fieldnames or [])
+                assert expected_columns == actual_columns, (
+                    f"Expected columns {expected_columns}, but got {actual_columns}"
+                )
 
             # Verify chat_messages.csv has the expected columns
             with zip_file.open("chat_messages.csv") as csv_file:
@@ -410,7 +435,7 @@ class TestUsageExportAPI:
 
         # Generate multiple reports concurrently
         num_reports = 3
-        for i in range(num_reports):
+        for _i in range(num_reports):
             response = client.post(
                 f"{API_SERVER_URL}/admin/usage-report",
                 json={},

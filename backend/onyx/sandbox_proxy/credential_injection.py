@@ -4,10 +4,8 @@
 and asks each in turn whether it owns the request. The first one that claims
 renders its auth headers; the dispatcher writes them onto `flow.request` so the
 real secret never has to live in the sandbox pod. Resolution outcomes are
-explicit (`PASS_THROUGH` / `INJECTED` / `BLOCKED`) and the dispatcher never
-raises. The high-level `apply_or_block(flow, ctx)` does both the dispatch and
-the fail-closed 403 in one call; tests use `apply(flow, ctx)` when they want
-to inspect the outcome directly.
+explicit (`PASS_THROUGH` / `CLAIMED` / `INJECTED` / `BLOCKED`) and the
+dispatcher never raises.
 """
 
 from __future__ import annotations
@@ -17,10 +15,9 @@ from enum import Enum
 from typing import Protocol
 
 from mitmproxy import http
+from pydantic import BaseModel, ConfigDict
 
 from onyx.external_apps.matching.engine import AllMatchedActions
-from onyx.sandbox_proxy.errors import http_403
-from onyx.sandbox_proxy.errors import SandboxProxyError
 from onyx.sandbox_proxy.identity import ResolvedSandbox
 from onyx.utils.logger import setup_logger
 
@@ -28,7 +25,15 @@ logger = setup_logger()
 
 
 class CredentialUnavailableError(Exception):
-    """A resolver claimed a request but couldn't produce its credential."""
+    """A resolver claimed a request but couldn't produce its credential.
+
+    `sandbox_detail`, when set, is agent-facing 403-body prose — never secrets
+    or internal ids; the exception message itself is internal (logs only).
+    """
+
+    def __init__(self, message: str, *, sandbox_detail: str | None = None) -> None:
+        super().__init__(message)
+        self.sandbox_detail = sandbox_detail
 
 
 @dataclass(frozen=True)
@@ -51,8 +56,10 @@ class CredentialResolver(Protocol):
         """Cheap predicate: does this resolver own this request?
 
         Implementations should key off `request.host` (and `ctx.matched_actions` /
-        `ctx.sandbox.tenant_id` for per-context routing); they MUST NOT open
-        a DB session — that's `resolve()`'s job.
+        `ctx.sandbox.tenant_id` for per-context routing). Avoid opening a DB
+        session here — that's `resolve()`'s job; a resolver that must consult the
+        DB to decide ownership should serve `claims()` from a short-TTL cache
+        refreshed at most once per interval (see `MCPServerResolver`).
         """
         ...
 
@@ -63,8 +70,19 @@ class CredentialResolver(Protocol):
 
 class InjectionOutcome(Enum):
     PASS_THROUGH = "pass_through"
+    CLAIMED = "claimed"
     INJECTED = "injected"
     BLOCKED = "blocked"
+
+
+class InjectionResult(BaseModel):
+    """Outcome of one dispatch. `block_detail` is agent-facing prose for the
+    403 body, present only on BLOCKED when the resolver supplied one."""
+
+    model_config = ConfigDict(frozen=True)
+
+    outcome: InjectionOutcome
+    block_detail: str | None = None
 
 
 class CredentialInjectionDispatcher:
@@ -73,51 +91,55 @@ class CredentialInjectionDispatcher:
     def __init__(self, resolvers: list[CredentialResolver]) -> None:
         self._resolvers = list(resolvers)
 
-    def apply(self, flow: http.HTTPFlow, ctx: InjectionContext) -> InjectionOutcome:
+    def apply(self, flow: http.HTTPFlow, ctx: InjectionContext) -> InjectionResult:
         host = flow.request.host
         resolver = self._pick(flow.request, ctx)
         if resolver is None:
-            return InjectionOutcome.PASS_THROUGH
+            return InjectionResult(outcome=InjectionOutcome.PASS_THROUGH)
 
         resolver_name = type(resolver).__name__
         try:
             headers = resolver.resolve(flow.request, ctx)
         except CredentialUnavailableError as e:
             logger.warning(
-                "credential_injection.unavailable resolver=%s host=%s error=%s",
+                "credential_unavailable resolver=%s host=%s error=%r",
                 resolver_name,
                 host,
                 str(e),
             )
-            return InjectionOutcome.BLOCKED
+            return InjectionResult(
+                outcome=InjectionOutcome.BLOCKED, block_detail=e.sandbox_detail
+            )
         except Exception:
             logger.exception(
-                "credential_injection.resolver_error resolver=%s host=%s",
+                "credential_resolver_error resolver=%s host=%s",
                 resolver_name,
                 host,
             )
-            return InjectionOutcome.BLOCKED
+            return InjectionResult(outcome=InjectionOutcome.BLOCKED)
+
+        if not headers:
+            logger.debug(
+                "credential_claimed resolver=%s host=%s "
+                "header_count=%s header_names=%s",
+                resolver_name,
+                host,
+                0,
+                "-",
+            )
+            return InjectionResult(outcome=InjectionOutcome.CLAIMED)
 
         for name, value in headers.items():
             flow.request.headers[name] = value
         # Header NAMES only — never log the injected secret values.
-        logger.info(
-            "credential_injection.applied resolver=%s host=%s headers=%s",
+        logger.debug(
+            "credential_injected resolver=%s host=%s header_count=%s header_names=%s",
             resolver_name,
             host,
-            sorted(headers),
+            len(headers),
+            ",".join(sorted(headers)),
         )
-        return InjectionOutcome.INJECTED
-
-    def apply_or_block(self, flow: http.HTTPFlow, ctx: InjectionContext) -> None:
-        """Run `apply`; on `BLOCKED`, write a sandbox-visible 403 to `flow`.
-
-        The single seam most call sites want — they don't need to inspect the
-        outcome, just to fail closed on it. Tests that need to assert on the
-        outcome directly call `apply` instead.
-        """
-        if self.apply(flow, ctx) is InjectionOutcome.BLOCKED:
-            flow.response = http_403(SandboxProxyError.CREDENTIAL_ERROR)
+        return InjectionResult(outcome=InjectionOutcome.INJECTED)
 
     def _pick(
         self, request: http.Request, ctx: InjectionContext
@@ -129,7 +151,7 @@ class CredentialInjectionDispatcher:
             except Exception:
                 # One buggy resolver must not deny the others a chance.
                 logger.exception(
-                    "credential_injection.claims_error resolver=%s host=%s",
+                    "credential_claim_error resolver=%s host=%s",
                     type(resolver).__name__,
                     request.host,
                 )

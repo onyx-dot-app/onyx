@@ -6,7 +6,7 @@ import (
 	"strconv"
 	"strings"
 
-	tea "github.com/charmbracelet/bubbletea"
+	tea "charm.land/bubbletea/v2"
 	"github.com/onyx-dot-app/onyx/cli/internal/api"
 	"github.com/onyx-dot-app/onyx/cli/internal/browser"
 	"github.com/onyx-dot-app/onyx/cli/internal/config"
@@ -49,7 +49,7 @@ func handleSlashCommand(m Model, text string) (Model, tea.Cmd) {
 		return cmdNew(m)
 
 	case "/connectors":
-		url := strings.TrimRight(m.config.ServerURL, "/") + "/admin/indexing/status"
+		url := config.OnyxWebURL(m.config.ServerURL) + "/admin/indexing/status"
 		if browser.OpenBrowser(url) {
 			m.viewport.addInfo("Opened " + url + " in browser")
 		} else {
@@ -58,7 +58,7 @@ func handleSlashCommand(m Model, text string) (Model, tea.Cmd) {
 		return m, nil
 
 	case "/settings":
-		url := strings.TrimRight(m.config.ServerURL, "/") + "/app/settings/general"
+		url := config.OnyxWebURL(m.config.ServerURL) + "/app/settings/general"
 		if browser.OpenBrowser(url) {
 			m.viewport.addInfo("Opened " + url + " in browser")
 		} else {

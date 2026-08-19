@@ -9,7 +9,7 @@ import InputSelectField from "@/refresh-components/form/InputSelectField";
 import InputSelect from "@/refresh-components/inputs/InputSelect";
 import { Card, MessageCard } from "@opal/components";
 import { Section } from "@/layouts/general-layouts";
-import { InputDivider, InputPadder, InputVertical } from "@opal/layouts";
+import { InputDivider, InputPadder, InputVertical, toast } from "@opal/layouts";
 import {
   LLMProviderFormProps,
   LLMProviderName,
@@ -22,7 +22,7 @@ import {
   BaseLLMFormValues,
 } from "@/sections/modals/languageModels/utils";
 import { submitProvider } from "@/sections/modals/languageModels/svc";
-import { LLMProviderConfiguredSource } from "@/lib/analytics";
+import { LLMProviderConfiguredSource } from "@/lib/analytics/utils";
 import {
   ModelSelectionField,
   DisplayNameField,
@@ -30,8 +30,7 @@ import {
   ModalWrapper,
 } from "@/sections/modals/languageModels/shared";
 import { refreshLlmProviderCaches } from "@/lib/languageModels/cache";
-import { toast } from "@/hooks/useToast";
-import { useSettingsContext } from "@/providers/SettingsProvider";
+import { useSettings } from "@/lib/settings/hooks";
 
 const VERTEXAI_DEFAULT_LOCATION = "global";
 
@@ -63,8 +62,8 @@ function VertexAIModalInternals({
 }: VertexAIModalInternalsProps) {
   const formikProps = useFormikContext<VertexAIModalValues>();
   const authMethod = formikProps.values.custom_config?.vertex_auth_method;
-  const settingsContext = useSettingsContext();
-  const isMultiTenant = !settingsContext.settings.hooks_enabled;
+  const settings = useSettings();
+  const isMultiTenant = !settings.hooks_enabled;
 
   useEffect(() => {
     if (authMethod === AUTH_METHOD_WORKLOAD_IDENTITY) {
@@ -80,7 +79,7 @@ function VertexAIModalInternals({
   return (
     <>
       <InputPadder>
-        <Section gap={1}>
+        <Section gap={4}>
           {showAuthMethodSelector && (
             <InputVertical
               withLabel={FIELD_VERTEX_AUTH_METHOD}
@@ -140,7 +139,7 @@ function VertexAIModalInternals({
               title="Onyx will use the pod's ambient Google Cloud credentials (via google.auth.default). Ensure the Kubernetes ServiceAccount is bound to a GCP Service Account with access to Vertex AI."
             />
           </InputPadder>
-          <Card background="light" border="none" padding="sm">
+          <Card background="light" border="none" padding={2}>
             <InputVertical
               withLabel={FIELD_VERTEX_PROJECT}
               title="GCP Project ID"
@@ -181,6 +180,7 @@ export default function VertexAIModal({
   shouldMarkAsDefault,
   onOpenChange,
   onSuccess,
+  analyticsSource,
 }: LLMProviderFormProps) {
   const isOnboarding = variant === "onboarding";
   const { mutate } = useSWRConfig();
@@ -252,9 +252,11 @@ export default function VertexAIModal({
         };
 
         await submitProvider({
-          analyticsSource: isOnboarding
-            ? LLMProviderConfiguredSource.CHAT_ONBOARDING
-            : LLMProviderConfiguredSource.ADMIN_PAGE,
+          analyticsSource:
+            analyticsSource ??
+            (isOnboarding
+              ? LLMProviderConfiguredSource.CHAT_ONBOARDING
+              : LLMProviderConfiguredSource.ADMIN_PAGE),
           providerName: LLMProviderName.VERTEX_AI,
           values: submitValues,
           initialValues,

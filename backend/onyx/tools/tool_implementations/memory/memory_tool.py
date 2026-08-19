@@ -6,24 +6,23 @@ The memories are passed in via override_kwargs which contains the current list o
 memories that exist for the user.
 """
 
-from typing import Any
-from typing import cast
-from typing import Literal
+from typing import Any, Literal, cast
 
 from pydantic import BaseModel
 from typing_extensions import override
 
 from onyx.chat.emitter import Emitter
+from onyx.chat.incognito import current_turn_persists_content
 from onyx.llm.interfaces import LLM
 from onyx.secondary_llm_flows.memory_update import process_memory_update
 from onyx.server.query_and_chat.placement import Placement
-from onyx.server.query_and_chat.streaming_models import MemoryToolDelta
-from onyx.server.query_and_chat.streaming_models import MemoryToolStart
-from onyx.server.query_and_chat.streaming_models import Packet
+from onyx.server.query_and_chat.streaming_models import (
+    MemoryToolDelta,
+    MemoryToolStart,
+    Packet,
+)
 from onyx.tools.interface import Tool
-from onyx.tools.models import ChatMinimalTextMessage
-from onyx.tools.models import ToolCallException
-from onyx.tools.models import ToolResponse
+from onyx.tools.models import ChatMinimalTextMessage, ToolCallException, ToolResponse
 from onyx.tools.tool_implementations.memory.models import MemoryToolResponse
 from onyx.utils.logger import setup_logger
 
@@ -136,7 +135,8 @@ class MemoryTool(Tool[MemoryToolOverrideKwargs]):
             user_role=override_kwargs.user_role,
         )
 
-        logger.info("New memory to be added: %s", memory_text)
+        if current_turn_persists_content():
+            logger.info("New memory to be added: %s", memory_text)
 
         operation: Literal["add", "update"] = (
             "update" if index_to_replace is not None else "add"

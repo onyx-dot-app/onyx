@@ -76,3 +76,16 @@ export interface HierarchyBreadcrumbProps {
   onNavigateToRoot: () => void;
   onNavigateToNode: (node: HierarchyNodeSummary, index: number) => void;
 }
+
+// Search result type — includes source for icon display
+export interface HierarchyNodeSearchSummary {
+  id: number;
+  title: string;
+  link: string | null;
+  parent_id: number | null;
+  source: ValidSources;
+}
+
+export interface HierarchyNodeSearchResponse {
+  nodes: HierarchyNodeSearchSummary[];
+}

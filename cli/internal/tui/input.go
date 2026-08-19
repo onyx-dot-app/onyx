@@ -5,8 +5,8 @@ import (
 	"path/filepath"
 	"strings"
 
-	"github.com/charmbracelet/bubbles/textinput"
-	tea "github.com/charmbracelet/bubbletea"
+	"charm.land/bubbles/v2/textinput"
+	tea "charm.land/bubbletea/v2"
 )
 
 // slashCommand defines a slash command with its description.
@@ -58,7 +58,7 @@ func newInputModel() inputModel {
 }
 
 func (m inputModel) update(msg tea.Msg) (inputModel, tea.Cmd) {
-	if keyMsg, ok := msg.(tea.KeyMsg); ok {
+	if keyMsg, ok := msg.(tea.KeyPressMsg); ok {
 		return m.handleKey(keyMsg)
 	}
 
@@ -68,19 +68,19 @@ func (m inputModel) update(msg tea.Msg) (inputModel, tea.Cmd) {
 	return m, cmd
 }
 
-func (m inputModel) handleKey(msg tea.KeyMsg) (inputModel, tea.Cmd) {
-	switch msg.Type {
-	case tea.KeyUp:
+func (m inputModel) handleKey(msg tea.KeyPressMsg) (inputModel, tea.Cmd) {
+	switch msg.String() {
+	case "up":
 		if m.menuVisible && m.menuIndex > 0 {
 			m.menuIndex--
 			return m, nil
 		}
-	case tea.KeyDown:
+	case "down":
 		if m.menuVisible && m.menuIndex < len(m.menuItems)-1 {
 			m.menuIndex++
 			return m, nil
 		}
-	case tea.KeyTab:
+	case "tab":
 		if m.menuVisible && len(m.menuItems) > 0 {
 			cmd := m.menuItems[m.menuIndex].command
 			if argCommands[cmd] {
@@ -93,7 +93,7 @@ func (m inputModel) handleKey(msg tea.KeyMsg) (inputModel, tea.Cmd) {
 			m.menuVisible = false
 			return m, nil
 		}
-	case tea.KeyEnter:
+	case "enter":
 		if m.menuVisible && len(m.menuItems) > 0 {
 			cmd := m.menuItems[m.menuIndex].command
 			if argCommands[cmd] {
@@ -123,7 +123,7 @@ func (m inputModel) handleKey(msg tea.KeyMsg) (inputModel, tea.Cmd) {
 		m.menuVisible = false
 		return m, func() tea.Msg { return submitMsg{text: text} }
 
-	case tea.KeyEscape:
+	case "esc":
 		if m.menuVisible {
 			m.menuVisible = false
 			return m, nil

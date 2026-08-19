@@ -40,7 +40,9 @@ export function EditableValue({
           }}
           className="border bg-background-200 border-background-300 rounded-sm py-1 px-1 w-12 h-4 my-auto"
         />
-        <div
+        <button
+          type="button"
+          aria-label="Save"
           onClick={async () => {
             const success = await onSubmit(editedValue);
             if (success) {
@@ -50,14 +52,16 @@ export function EditableValue({
           className="cursor-pointer my-auto ml-2"
         >
           <SvgCheck size={16} className="text-green-700" />
-        </div>
+        </button>
       </div>
     );
   }
 
   return (
     <div className="h-full flex flex-col">
-      <div
+      <button
+        type="button"
+        aria-label="Edit"
         className="flex my-auto cursor-pointer hover:bg-accent-background-hovered rounded-sm"
         onClick={() => setIsOpen(true)}
       >
@@ -67,7 +71,7 @@ export function EditableValue({
         <div className="cursor-pointer ml-2 my-auto h-4">
           <FiEdit2 size={16} />
         </div>
-      </div>
+      </button>
     </div>
   );
 }

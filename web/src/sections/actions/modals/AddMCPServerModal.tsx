@@ -1,10 +1,11 @@
 "use client";
 
 import { useState } from "react";
+import useFocusOnMount from "@opal/hooks/useFocusOnMount";
 import { Formik, Form } from "formik";
 import * as Yup from "yup";
-import Modal from "@/refresh-components/Modal";
-import { InputVertical } from "@opal/layouts";
+import { Modal } from "@opal/components";
+import { InputVertical, toast } from "@opal/layouts";
 import InputTypeInField from "@/refresh-components/form/InputTypeInField";
 import InputTextAreaField from "@/refresh-components/form/InputTextAreaField";
 import { createMCPServer, updateMCPServer } from "@/lib/tools/mcpService";
@@ -13,13 +14,16 @@ import {
   MCPServerStatus,
   MCPServer,
 } from "@/lib/tools/interfaces";
-import { useModal } from "@/refresh-components/contexts/ModalContext";
+import { useModal } from "@opal/components";
+import { useUser } from "@/providers/UserProvider";
+import { hasPermission } from "@/lib/permissions";
+import { Permission } from "@/lib/types";
 import { Button, Divider } from "@opal/components";
-import { toast } from "@/hooks/useToast";
-import { ModalCreationInterface } from "@/refresh-components/contexts/ModalContext";
+import type { ModalCreationInterface } from "@opal/components";
 import { SvgCheckCircle, SvgServer, SvgUnplug } from "@opal/icons";
 import { Section } from "@/layouts/general-layouts";
 import Text from "@/refresh-components/texts/Text";
+import { IsPublicGroupSelector } from "@/components/IsPublicGroupSelector";
 
 interface AddMCPServerModalProps {
   skipOverlay?: boolean;
@@ -51,6 +55,9 @@ export default function AddMCPServerModal({
 }: AddMCPServerModalProps) {
   const { isOpen, toggle } = useModal();
   const [isSubmitting, setIsSubmitting] = useState(false);
+  const focusOnMount = useFocusOnMount<HTMLInputElement>();
+
+  const { permissions } = useUser();
 
   // Use activeServer from props
   const server = activeServer;
@@ -71,20 +78,30 @@ export default function AddMCPServerModal({
     name: server?.name || "",
     description: server?.description || "",
     server_url: server?.server_url || "",
+    is_public: server?.is_public ?? true,
+    groups: server?.groups ?? [],
+    users: server?.users ?? [],
   };
 
   const handleSubmit = async (values: MCPServerCreateRequest) => {
     setIsSubmitting(true);
 
+    // A public server has no group restriction.
+    const payload: MCPServerCreateRequest = {
+      ...values,
+      groups: values.is_public ? [] : values.groups,
+      users: values.is_public ? [] : values.users,
+    };
+
     try {
       if (isEditMode && server) {
         // Update existing server
-        await updateMCPServer(server.id, values);
+        await updateMCPServer(server.id, payload);
         toast.success("MCP Server updated successfully");
         await mutateMcpServers?.();
       } else {
         // Create new server
-        const createdServer = await createMCPServer(values);
+        const createdServer = await createMCPServer(payload);
 
         toast.success("MCP Server created successfully");
 
@@ -131,7 +148,7 @@ export default function AddMCPServerModal({
           validationSchema={validationSchema}
           onSubmit={handleSubmit}
         >
-          {({ isValid, dirty }) => (
+          {(formikProps) => (
             <Form>
               <Modal.Header
                 icon={SvgServer}
@@ -149,7 +166,7 @@ export default function AddMCPServerModal({
                   <InputTypeInField
                     name="name"
                     placeholder="Name your MCP server"
-                    autoFocus
+                    ref={focusOnMount}
                   />
                 </InputVertical>
 
@@ -165,7 +182,7 @@ export default function AddMCPServerModal({
                   />
                 </InputVertical>
 
-                <Divider paddingParallel="fit" paddingPerpendicular="fit" />
+                <Divider paddingParallel={0} paddingPerpendicular={0} />
 
                 <InputVertical
                   withLabel="server_url"
@@ -178,20 +195,34 @@ export default function AddMCPServerModal({
                   />
                 </InputVertical>
 
+                <Divider paddingParallel={0} paddingPerpendicular={0} />
+
+                {/* Access control: who can add this server's tools to agents.
+                    Self-gates on tier/role; no-op when groups are unavailable. */}
+                <IsPublicGroupSelector
+                  formikProps={formikProps}
+                  objectName="MCP server"
+                  isGlobalHolder={hasPermission(
+                    permissions,
+                    Permission.MANAGE_ACTIONS
+                  )}
+                  publicToWhom="Users"
+                />
+
                 {/* Authentication Status Section - Only show in edit mode when authenticated */}
                 {isEditMode &&
-                  server?.is_authenticated &&
+                  server?.user_can_authenticate &&
                   server?.status === MCPServerStatus.CONNECTED && (
                     <Section
                       flexDirection="row"
                       justifyContent="between"
                       alignItems="start"
-                      gap={1}
+                      gap={4}
                     >
-                      <Section gap={0.25} alignItems="start">
+                      <Section gap={1} alignItems="start">
                         <Section
                           flexDirection="row"
-                          gap={0.5}
+                          gap={2}
                           alignItems="center"
                           width="fit"
                         >
@@ -208,7 +239,7 @@ export default function AddMCPServerModal({
                       </Section>
                       <Section
                         flexDirection="row"
-                        gap={0.5}
+                        gap={2}
                         alignItems="center"
                         width="fit"
                       >
@@ -245,7 +276,9 @@ export default function AddMCPServerModal({
                   Cancel
                 </Button>
                 <Button
-                  disabled={isSubmitting || !isValid || !dirty}
+                  disabled={
+                    isSubmitting || !formikProps.isValid || !formikProps.dirty
+                  }
                   type="submit"
                 >
                   {isSubmitting

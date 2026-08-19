@@ -17,8 +17,7 @@ import pytest
 import uvicorn
 from fastapi.testclient import TestClient
 
-from tests.integration.common_utils.constants import API_SERVER_HOST
-from tests.integration.common_utils.constants import API_SERVER_PORT
+from tests.integration.common_utils.constants import API_SERVER_HOST, API_SERVER_PORT
 
 # Distinctive token tests assert on; the surrounding text is long enough to
 # exceed the small --max-output thresholds the truncation tests use.

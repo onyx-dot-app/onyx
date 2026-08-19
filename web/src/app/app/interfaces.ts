@@ -5,6 +5,7 @@ import {
   StreamStopReason,
 } from "@/lib/search/interfaces";
 import { Packet } from "./services/streamingModels";
+import { ReasoningEffortOverride } from "@/lib/languageModels/types";
 
 export type FeedbackType = "like" | "dislike";
 
@@ -59,6 +60,7 @@ export interface ChatSessionSummary {
   shared_status: ChatSessionSharedStatus;
   current_alternate_model: string | null;
   current_temperature_override: number | null;
+  current_reasoning_effort_override: ReasoningEffortOverride | null;
   highlights?: string[];
 }
 
@@ -142,6 +144,7 @@ export interface ChatSession {
   project_id: number | null;
   current_alternate_model: string;
   current_temperature_override: number | null;
+  current_reasoning_effort_override: ReasoningEffortOverride | null;
 }
 
 export interface SearchSession {
@@ -203,10 +206,15 @@ export interface BackendChatSession {
   time_updated: string;
   shared_status: ChatSessionSharedStatus;
   current_temperature_override: number | null;
+  current_reasoning_effort_override: ReasoningEffortOverride | null;
   current_alternate_model?: string;
 
   owner_name: string | null;
   packets: Packet[][];
+  // Set while a run is in flight and resumable via the resume-stream endpoint
+  current_run?: { run_id: number } | null;
+  // True for sessions pinned to an incognito record mode.
+  incognito?: boolean;
 }
 
 export function toChatSession(backend: BackendChatSession): ChatSession {
@@ -220,6 +228,8 @@ export function toChatSession(backend: BackendChatSession): ChatSession {
     project_id: null,
     current_alternate_model: backend.current_alternate_model ?? "",
     current_temperature_override: backend.current_temperature_override,
+    current_reasoning_effort_override:
+      backend.current_reasoning_effort_override,
   };
 }
 
@@ -295,6 +305,18 @@ export interface StreamingError {
   error_code?: string;
   is_retryable?: boolean;
   details?: Record<string, any>;
+}
+
+// error_code emitted by the backend usage rate-limiter (429). Branch on this to
+// show the dedicated usage-limit banner instead of the generic chat error.
+export const RATE_LIMITED_ERROR_CODE = "RATE_LIMITED";
+
+// Shape of StreamingError.details for a RATE_LIMITED error — mirrors the 429
+// JSON body so the banner can compute a human-friendly reset time.
+export interface RateLimitDetails {
+  scope?: string;
+  reset_at?: string; // ISO timestamp
+  retry_after_seconds?: number;
 }
 
 export interface InputPrompt {

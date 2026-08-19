@@ -2,7 +2,6 @@
 
 import React, { useState, useEffect } from "react";
 import "./loading.css";
-import { ThreeDots } from "react-loader-spinner";
 import { cn } from "@opal/utils";
 
 interface LoadingAnimationProps {
@@ -42,24 +41,5 @@ export const LoadingAnimation: React.FC<LoadingAnimationProps> = ({
         <span className="dots">{dots}</span>
       </span>
     </span>
-  );
-};
-
-export const ThreeDotsLoader = () => {
-  return (
-    <div className="flex my-auto">
-      <div className="mx-auto">
-        <ThreeDots
-          height="30"
-          width="50"
-          color="#3b82f6"
-          ariaLabel="grid-loading"
-          radius="12.5"
-          wrapperStyle={{}}
-          wrapperClass=""
-          visible={true}
-        />
-      </div>
-    </div>
   );
 };

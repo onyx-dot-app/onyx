@@ -10,6 +10,7 @@ import argparse
 import json
 import mimetypes
 import os
+import re
 import sys
 import urllib.error
 import urllib.parse
@@ -19,6 +20,9 @@ from typing import Any
 _BASE = "https://www.googleapis.com/drive/v3/"
 # Content uploads use a separate host path from the metadata/JSON API.
 _UPLOAD_BASE = "https://www.googleapis.com/upload/drive/v3/"
+# The Google Docs API lives on a different host than Drive; surgical edits to an
+# existing Doc (get structure / batchUpdate) go here, not through the Drive base.
+_DOCS_BASE = "https://docs.googleapis.com/v1/"
 _PAGE_SIZE = 100
 _DEFAULT_LIMIT = 100
 _HTTP_TIMEOUT_SECONDS = 180
@@ -71,6 +75,24 @@ def _seg(value: str) -> str:
     return urllib.parse.quote(value, safe="")
 
 
+_URL_ID_RE = re.compile(r"/(?:d|folders)/([A-Za-z0-9_-]+)")
+
+
+def _id_arg(value: str) -> str:
+    """Accept a bare id or a Drive/Docs URL — extracts the `/d/<id>` or
+    `/folders/<id>` path segment, or the `?id=` query parameter of share
+    links; agents paste full links."""
+    if "://" not in value:
+        return value
+    match = _URL_ID_RE.search(value)
+    if match:
+        return match.group(1)
+    query = urllib.parse.parse_qs(urllib.parse.urlparse(value).query)
+    if query.get("id"):
+        return query["id"][0]
+    return value
+
+
 def _url(base: str, path: str, params: dict[str, Any] | None = None) -> str:
     url = base + path
     if params:
@@ -104,6 +126,60 @@ def _req_bytes(path: str, params: dict[str, Any], max_bytes: int) -> tuple[bytes
     if len(data) > max_bytes:
         return data[:max_bytes], True
     return data, False
+
+
+def _req_docs(
+    path: str,
+    params: dict[str, Any] | None = None,
+    method: str = "GET",
+    body: dict[str, Any] | None = None,
+) -> dict[str, Any]:
+    """Call a Google Docs API endpoint (docs.googleapis.com, a different host
+    than Drive); return parsed JSON ({} on empty/204)."""
+    data = json.dumps(body).encode("utf-8") if body is not None else None
+    headers = {"Content-Type": "application/json; charset=utf-8"} if data else {}
+    req = urllib.request.Request(  # noqa: S310 — fixed https base url
+        _url(_DOCS_BASE, path, params), data=data, method=method, headers=headers
+    )
+    with urllib.request.urlopen(req, timeout=_HTTP_TIMEOUT_SECONDS) as resp:  # noqa: S310
+        raw = resp.read().decode("utf-8")
+    return json.loads(raw) if raw.strip() else {}
+
+
+def _doc_end_index(doc: dict[str, Any]) -> int:
+    """The end index of a document's body — the last structural element's
+    `endIndex`. Inserting text must target `endIndex - 1` to stay in range (the
+    final newline is not a valid insertion point past it)."""
+    content = doc.get("body", {}).get("content", []) or []
+    end = 1
+    for element in content:
+        if isinstance(element, dict) and "endIndex" in element:
+            end = element["endIndex"]
+    return end
+
+
+def _get_doc(
+    document_id: str, fields: str | None = None, include_tabs: bool = False
+) -> dict[str, Any]:
+    params: dict[str, Any] = {}
+    if fields:
+        # A mask without `tabs` would filter out the requested tab content.
+        if include_tabs and "tabs" not in fields:
+            fields += ",tabs"
+        params["fields"] = fields
+    # Without this a tabbed Doc's response `body` holds only the first tab.
+    if include_tabs:
+        params["includeTabsContent"] = "true"
+    return _req_docs(f"documents/{_seg(document_id)}", params=params or None)
+
+
+def _batch_update(document_id: str, requests: list[Any]) -> dict[str, Any]:
+    """POST a Docs `batchUpdate` with the given list of request objects."""
+    return _req_docs(
+        f"documents/{_seg(document_id)}:batchUpdate",
+        method="POST",
+        body={"requests": requests},
+    )
 
 
 def _upload(
@@ -295,7 +371,9 @@ def _build_parser() -> argparse.ArgumentParser:
     sp.add_argument("text", nargs="?", help="free-text query (fullText contains)")
     sp.add_argument("--name", help="filter: name contains")
     sp.add_argument("--mime", help="filter: exact mimeType")
-    sp.add_argument("--in", dest="parent", help="filter: files in this folder id")
+    sp.add_argument(
+        "--in", dest="parent", type=_id_arg, help="filter: files in this folder id"
+    )
     sp.add_argument(
         "--include-trashed",
         dest="include_trashed",
@@ -305,15 +383,15 @@ def _build_parser() -> argparse.ArgumentParser:
     with_common(sp)
 
     sp = sub.add_parser("list", help="list a folder's children")
-    sp.add_argument("folder_id")
+    sp.add_argument("folder_id", type=_id_arg)
     with_common(sp)
 
     sp = sub.add_parser("get", help="one file's metadata")
-    sp.add_argument("file_id")
+    sp.add_argument("file_id", type=_id_arg)
     sp.add_argument("--fields", default=_FILE_FIELDS, help="Drive fields selector")
 
     sp = sub.add_parser("read", help="read a file's contents as text")
-    sp.add_argument("file_id")
+    sp.add_argument("file_id", type=_id_arg)
     sp.add_argument("--mime", help="override export mimeType for native docs")
     sp.add_argument(
         "--max-bytes", dest="max_bytes", type=int, default=_DEFAULT_MAX_BYTES
@@ -325,14 +403,14 @@ def _build_parser() -> argparse.ArgumentParser:
     # --- writes (may prompt for approval) ---
     sp = sub.add_parser("create-folder", help="create a folder (write)")
     sp.add_argument("name")
-    sp.add_argument("--in", dest="parent", help="parent folder id")
+    sp.add_argument("--in", dest="parent", type=_id_arg, help="parent folder id")
 
     sp = sub.add_parser(
         "upload", help="upload a local file as a new Drive file (write)"
     )
     sp.add_argument("path", help="local file path to upload")
     sp.add_argument("--name", help="Drive file name (default: basename)")
-    sp.add_argument("--in", dest="parent", help="parent folder id")
+    sp.add_argument("--in", dest="parent", type=_id_arg, help="parent folder id")
     sp.add_argument("--as", dest="content_type", help="source content-type override")
     sp.add_argument(
         "--convert-to",
@@ -341,26 +419,83 @@ def _build_parser() -> argparse.ArgumentParser:
     )
 
     sp = sub.add_parser("replace", help="replace a file's contents (write)")
-    sp.add_argument("file_id")
+    sp.add_argument("file_id", type=_id_arg)
     sp.add_argument("path", help="local file path with the new contents")
     sp.add_argument("--as", dest="content_type", help="source content-type override")
 
     sp = sub.add_parser("update", help="update a file's metadata (write)")
-    sp.add_argument("file_id")
+    sp.add_argument("file_id", type=_id_arg)
     sp.add_argument("--name", help="new name")
-    sp.add_argument("--add-parent", dest="add_parent", help="folder id to add")
-    sp.add_argument("--remove-parent", dest="remove_parent", help="folder id to remove")
+    sp.add_argument(
+        "--add-parent", dest="add_parent", type=_id_arg, help="folder id to add"
+    )
+    sp.add_argument(
+        "--remove-parent",
+        dest="remove_parent",
+        type=_id_arg,
+        help="folder id to remove",
+    )
 
     sp = sub.add_parser("trash", help="move a file to the trash (write)")
-    sp.add_argument("file_id")
+    sp.add_argument("file_id", type=_id_arg)
 
     sp = sub.add_parser("delete", help="permanently delete a file (destructive)")
-    sp.add_argument("file_id")
+    sp.add_argument("file_id", type=_id_arg)
 
     sp = sub.add_parser("call", help="raw Drive request")
     sp.add_argument("method", choices=("GET", "POST", "PATCH", "PUT", "DELETE"))
     sp.add_argument("path", help="appended to drive/v3/")
     sp.add_argument("json_body", nargs="?", help="JSON object for the request body")
+
+    # --- Google Docs API (docs.googleapis.com) ---
+    sp = sub.add_parser(
+        "get-doc", help="get a Google Doc's structure (body content + indices)"
+    )
+    sp.add_argument("document_id", type=_id_arg)
+    sp.add_argument(
+        "--fields",
+        help="Docs fields selector, e.g. 'documentId,body,title' "
+        "(default: whole document)",
+    )
+    sp.add_argument(
+        "--tabs",
+        action="store_true",
+        help="include every tab's content under tabs[] "
+        "(a tabbed Doc's body holds only the first tab)",
+    )
+
+    sp = sub.add_parser(
+        "batch-update",
+        help="apply raw Docs batchUpdate requests to a Doc (write)",
+    )
+    sp.add_argument("document_id", type=_id_arg)
+    sp.add_argument(
+        "requests_json",
+        nargs="?",
+        help="JSON array of Docs request objects (e.g. insertText, "
+        "updateParagraphStyle, createParagraphBullets, deleteContentRange)",
+    )
+    sp.add_argument(
+        "--file",
+        dest="requests_file",
+        help="path to a file holding the JSON requests array (instead of inline)",
+    )
+
+    sp = sub.add_parser("insert-text", help="insert text at an index in a Doc (write)")
+    sp.add_argument("document_id", type=_id_arg)
+    sp.add_argument(
+        "--index", type=int, required=True, help="1-based character index to insert at"
+    )
+    sp.add_argument("--text", required=True, help="text to insert")
+
+    sp = sub.add_parser(
+        "append-text", help="append text to the end of a Doc's body (write)"
+    )
+    sp.add_argument("document_id", type=_id_arg)
+    sp.add_argument("--text", required=True, help="text to append")
+
+    sp = sub.add_parser("create-doc", help="create a new empty Google Doc (write)")
+    sp.add_argument("--title", required=True, help="title of the new document")
     return p
 
 
@@ -434,6 +569,47 @@ def _dispatch(a: argparse.Namespace) -> dict[str, Any]:
         )
         return {"ok": True, "deleted": True}
 
+    # --- Google Docs API ---
+    if a.cmd == "get-doc":
+        doc = _get_doc(
+            a.document_id, fields=getattr(a, "fields", None), include_tabs=a.tabs
+        )
+        return {"ok": True, "document": doc}
+
+    if a.cmd == "batch-update":
+        raw_requests = a.requests_json
+        if getattr(a, "requests_file", None):
+            with open(a.requests_file, encoding="utf-8") as fh:
+                raw_requests = fh.read()
+        if not raw_requests:
+            return {"ok": False, "error": "no_requests"}
+        try:
+            requests = json.loads(raw_requests)
+        except json.JSONDecodeError as e:
+            return {"ok": False, "error": f"invalid requests json: {e}"}
+        if not isinstance(requests, list):
+            return {"ok": False, "error": "requests_not_array"}
+        resp = _batch_update(a.document_id, requests)
+        return {"ok": True, "data": resp}
+
+    if a.cmd == "insert-text":
+        requests = [{"insertText": {"location": {"index": a.index}, "text": a.text}}]
+        resp = _batch_update(a.document_id, requests)
+        return {"ok": True, "data": resp}
+
+    if a.cmd == "append-text":
+        doc = _get_doc(a.document_id, fields="body(content(endIndex))")
+        end = _doc_end_index(doc)
+        # Insert just before the final newline of the body to stay in range.
+        index = max(1, end - 1)
+        requests = [{"insertText": {"location": {"index": index}, "text": a.text}}]
+        resp = _batch_update(a.document_id, requests)
+        return {"ok": True, "index": index, "data": resp}
+
+    if a.cmd == "create-doc":
+        doc = _req_docs("documents", method="POST", body={"title": a.title})
+        return {"ok": True, "document": doc}
+
     # `call` raw escape hatch
     parsed_body = None
     if a.json_body:
@@ -454,12 +630,26 @@ def main(argv: list[str]) -> int:
     except FileNotFoundError as e:
         print(f"file not found: {e.filename}", file=sys.stderr)
         return 2
+    except ValueError as e:
+        print(str(e), file=sys.stderr)
+        return 1
     except json.JSONDecodeError as e:
         print(f"Google Drive returned a non-JSON response: {e}", file=sys.stderr)
         return 1
     except urllib.error.HTTPError as e:
         detail = e.read().decode("utf-8", errors="replace")
-        print(f"HTTP {e.code} calling Google Drive: {detail}", file=sys.stderr)
+        url = getattr(e, "url", None) or e.filename or ""
+        is_docs = url.startswith(_DOCS_BASE)
+        api = "Google Docs" if is_docs else "Google Drive"
+        print(f"HTTP {e.code} calling {api}: {detail}", file=sys.stderr)
+        if e.code == 404 and not is_docs:
+            print(
+                "note: Drive answers 404 both for a missing id and for an "
+                "existing file the current grant cannot see. A Google Doc, "
+                "Sheet, or Slides file may still be reachable through its own "
+                "API (get-doc / gsheets_api.py / gslides_api.py).",
+                file=sys.stderr,
+            )
         return 1
     except urllib.error.URLError as e:
         print(f"network error calling Google Drive: {e.reason}", file=sys.stderr)

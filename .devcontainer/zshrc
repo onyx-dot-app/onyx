@@ -6,5 +6,11 @@ if [ -f /workspace/.venv/bin/activate ]; then
   . /workspace/.venv/bin/activate
 fi
 
+# Go: park the module cache under ~/.cache (a named volume, like GOCACHE's default
+# ~/.cache/go-build) so the dep trees in tools/ods and cli survive container recreation,
+# and put `go install` output on PATH.
+export GOMODCACHE="$HOME/.cache/go-mod"
+export PATH="$HOME/go/bin:$PATH"
+
 # Source host zshrc if bind-mounted
 [ -f ~/.zshrc.host ] && . ~/.zshrc.host

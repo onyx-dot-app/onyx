@@ -14,12 +14,14 @@ import {
 } from "react";
 import useSWR from "swr";
 import { errorHandlingFetcher, skipRetryOnAuthError } from "@/lib/fetcher";
-import type {
-  CategorizedFiles,
-  Project,
-  ProjectFile,
-  UserFileDeleteResult,
-} from "@/app/app/projects/projectsService";
+import {
+  UserFileStatus,
+  type CategorizedFiles,
+  type Project,
+  type ProjectDetails,
+  type ProjectFile,
+  type UserFileDeleteResult,
+} from "@/lib/projects/types";
 import {
   fetchProjects as svcFetchProjects,
   createProject as svcCreateProject,
@@ -30,24 +32,23 @@ import {
   getProjectInstructions as svcGetProjectInstructions,
   upsertProjectInstructions as svcUpsertProjectInstructions,
   getProjectDetails as svcGetProjectDetails,
-  ProjectDetails,
   renameProject as svcRenameProject,
   deleteProject as svcDeleteProject,
   deleteUserFile as svcDeleteUserFile,
   getUserFileStatuses as svcGetUserFileStatuses,
   unlinkFileFromProject as svcUnlinkFileFromProject,
   linkFileToProject as svcLinkFileToProject,
-  UserFileStatus,
-} from "@/app/app/projects/projectsService";
+} from "@/lib/projects/svc";
 import { useSearchParams } from "next/navigation";
 import { SEARCH_PARAM_NAMES } from "@/app/app/services/searchParams";
 import { useAppRouter } from "@/hooks/appNavigation";
 import { ChatFileType } from "@/app/app/interfaces";
-import { toast } from "@/hooks/useToast";
-import { useProjects } from "@/lib/hooks/useProjects";
-import { SettingsContext } from "@/providers/SettingsProvider";
+import { toast } from "@opal/layouts";
+import { useProjects } from "@/lib/projects/hooks";
+import { useSettings } from "@/lib/settings/hooks";
+import { useIncognitoOptional } from "@/providers/IncognitoProvider";
 
-export type { Project, ProjectFile } from "@/app/app/projects/projectsService";
+export type { Project, ProjectFile } from "@/lib/projects/types";
 
 // Helper to generate unique temp IDs
 const generateTempId = () => {
@@ -134,6 +135,14 @@ interface ProjectsProviderProps {
 export function ProjectsProvider({ children }: ProjectsProviderProps) {
   // Use SWR hook for projects list - no more SSR initial data
   const { projects, refreshProjects } = useProjects();
+  // Uploads made in an incognito chat are tied to its session so the server
+  // deletes them at teardown. Optional: falls back to disabled when no
+  // IncognitoProvider is mounted above.
+  const incognitoCtx = useIncognitoOptional();
+  const incognitoUploadsEnabled = incognitoCtx?.incognitoEnabled ?? false;
+  const incognitoSessionId = incognitoUploadsEnabled
+    ? (incognitoCtx?.incognitoSessionId ?? null)
+    : null;
   const [recentFiles, setRecentFiles] = useState<ProjectFile[]>([]);
   const [currentProjectDetails, setCurrentProjectDetails] =
     useState<ProjectDetails | null>(null);
@@ -145,6 +154,7 @@ export function ProjectsProvider({ children }: ProjectsProviderProps) {
   const [currentMessageFiles, setCurrentMessageFiles] = useState<ProjectFile[]>(
     []
   );
+  const currentMessageFilesRef = useRef<ProjectFile[]>([]);
   const pollIntervalRef = useRef<number | null>(null);
   const isPollingRef = useRef<boolean>(false);
   const [lastFailedFiles, setLastFailedFiles] = useState<ProjectFile[]>([]);
@@ -160,7 +170,8 @@ export function ProjectsProvider({ children }: ProjectsProviderProps) {
     new Map()
   );
   const route = useAppRouter();
-  const settingsContext = useContext(SettingsContext);
+  const settingsData = useSettings();
+  const userFileMaxUploadSizeMb = settingsData.user_file_max_upload_size_mb;
 
   // SWR-backed fetch for recent files. Deduplicates across all mounts and
   // handles React StrictMode double-invocation without firing duplicate requests.
@@ -350,7 +361,7 @@ export function ProjectsProvider({ children }: ProjectsProviderProps) {
       onSuccess?: (uploaded: CategorizedFiles) => void,
       onFailure?: (failedTempIds: string[]) => void
     ): Promise<ProjectFile[]> => {
-      const rawMax = settingsContext?.settings?.user_file_max_upload_size_mb;
+      const rawMax = userFileMaxUploadSizeMb;
 
       const oversizedFiles =
         rawMax && rawMax > 0
@@ -377,12 +388,14 @@ export function ProjectsProvider({ children }: ProjectsProviderProps) {
         createOptimisticFile(f, projectId)
       );
       const tempIdMap = getTempIdMap(validFiles, optimisticFiles);
-      setAllRecentFiles((prev) => [...optimisticFiles, ...prev]);
-      if (projectId) {
+      if (!incognitoUploadsEnabled) {
+        setAllRecentFiles((prev) => [...optimisticFiles, ...prev]);
+      }
+      if (projectId && !incognitoUploadsEnabled) {
         setAllCurrentProjectFiles((prev) => [...optimisticFiles, ...prev]);
         projectToUploadFilesMapRef.current.set(projectId, optimisticFiles);
       }
-      svcUploadFiles(validFiles, projectId, tempIdMap)
+      svcUploadFiles(validFiles, projectId, tempIdMap, incognitoSessionId)
         .then((uploaded) => {
           const uploadedFiles = uploaded.user_files || [];
           const tempIdToUploadedFileMap = new Map(
@@ -482,7 +495,9 @@ export function ProjectsProvider({ children }: ProjectsProviderProps) {
       refreshCurrentProjectDetails,
       refreshRecentFiles,
       removeOptimisticFilesByTempIds,
-      settingsContext,
+      userFileMaxUploadSizeMb,
+      incognitoUploadsEnabled,
+      incognitoUploadsEnabled,
     ]
   );
 
@@ -491,7 +506,12 @@ export function ProjectsProvider({ children }: ProjectsProviderProps) {
       files: File[],
       projectId?: number | null
     ): Promise<CategorizedFiles> => {
-      const uploaded: CategorizedFiles = await svcUploadFiles(files, projectId);
+      const uploaded: CategorizedFiles = await svcUploadFiles(
+        files,
+        projectId,
+        undefined,
+        incognitoSessionId
+      );
       const uploadedFiles = uploaded.user_files || [];
       // Track these uploaded file IDs for targeted polling
       if (uploadedFiles.length > 0) {
@@ -509,7 +529,13 @@ export function ProjectsProvider({ children }: ProjectsProviderProps) {
       await refreshRecentFiles();
       return uploaded;
     },
-    [currentProjectId, refreshCurrentProjectDetails, refreshRecentFiles]
+    [
+      currentProjectId,
+      refreshCurrentProjectDetails,
+      refreshRecentFiles,
+      incognitoUploadsEnabled,
+      incognitoUploadsEnabled,
+    ]
   );
 
   const getFilesInProject = useCallback(
@@ -526,8 +552,12 @@ export function ProjectsProvider({ children }: ProjectsProviderProps) {
     []
   );
 
+  useEffect(() => {
+    currentMessageFilesRef.current = currentMessageFiles;
+  }, [currentMessageFiles]);
+
   // Sync SWR-fetched recent files into local state. On first arrival, seed
-  // allRecentFiles as well; subsequent updates only touch recentFiles so the
+  // allRecentFiles as well. Subsequent updates only touch recentFiles so the
   // merge effect below can non-destructively apply them to allRecentFiles.
   useEffect(() => {
     if (!recentFilesData) return;
@@ -569,24 +599,51 @@ export function ProjectsProvider({ children }: ProjectsProviderProps) {
       isPollingRef.current = true;
       try {
         const statuses = await svcGetUserFileStatuses(ids);
-        if (!statuses || statuses.length === 0) return;
+        if (!statuses) return;
+        if (statuses.length === 0) {
+          // The server reports none of the REQUESTED files: they were deleted
+          // (e.g. incognito teardown). Drop only those, not ids registered
+          // while this request was in flight.
+          const requested = new Set(ids);
+          setTrackedUploadIds((prev) => {
+            const remaining = new Set<string>();
+            prev.forEach((id) => {
+              if (!requested.has(id)) remaining.add(id);
+            });
+            return remaining;
+          });
+          return;
+        }
 
         // Build maps for quick lookup
         const statusById = new Map(statuses.map((f) => [f.id, f]));
 
-        // Update currentMessageFiles inline based on polled statuses
+        // Newly-failed detection uses the last committed snapshot.
+        // setLastFailedFiles (it drives the failure toast downstream) must
+        // stay outside the state updater.
+        const currentMessageFilesSnapshot = currentMessageFilesRef.current;
+        const newlyFailedLocal: ProjectFile[] = [];
+        for (const f of currentMessageFilesSnapshot) {
+          const latest = statusById.get(f.id);
+          if (
+            latest &&
+            String(latest.status).toLowerCase() === "failed" &&
+            String(f.status).toLowerCase() !== "failed"
+          ) {
+            newlyFailedLocal.push(latest);
+          }
+        }
+
+        // Merge statuses into whatever the files are now. A snapshot here
+        // would clobber adds/removes that landed during the fetch.
         setCurrentMessageFiles((prev) => {
           let changed = false;
           const next: ProjectFile[] = [];
-          const newlyFailedLocal: ProjectFile[] = [];
           for (const f of prev) {
             const latest = statusById.get(f.id);
             if (latest) {
               const latestStatus = String(latest.status).toLowerCase();
               if (latestStatus === "failed") {
-                if (String(f.status).toLowerCase() !== "failed") {
-                  newlyFailedLocal.push(latest);
-                }
                 changed = true;
                 continue;
               }
@@ -602,11 +659,11 @@ export function ProjectsProvider({ children }: ProjectsProviderProps) {
             }
             next.push(f);
           }
-          if (newlyFailedLocal.length > 0) {
-            setLastFailedFiles(newlyFailedLocal);
-          }
-          return changed || next.length !== prev.length ? next : prev;
+          return changed ? next : prev;
         });
+        if (newlyFailedLocal.length > 0) {
+          setLastFailedFiles(newlyFailedLocal);
+        }
 
         // Update currentProjectDetails.files with latest statuses
         setCurrentProjectDetails((prev) => {
@@ -663,6 +720,13 @@ export function ProjectsProvider({ children }: ProjectsProviderProps) {
           } else if (s === "failed") {
             remaining.delete(f.id);
             newlyFailed.push(f);
+          }
+        }
+        // Requested ids the server no longer reports are deleted files: stop
+        // tracking them. Ids registered after this request went out stay.
+        for (const id of ids) {
+          if (!statusById.has(id)) {
+            remaining.delete(id);
           }
         }
         if (newlyFailed.length > 0) {

@@ -1,17 +1,17 @@
 import abc
-from collections.abc import Callable
-from collections.abc import Iterator
+from collections.abc import Callable, Iterator
 from typing import Any
 
 from pydantic import BaseModel
 
-from onyx.llm.model_response import ModelResponse
-from onyx.llm.model_response import ModelResponseStream
-from onyx.llm.models import LanguageModelInput
-from onyx.llm.models import ReasoningEffort
-from onyx.llm.models import ToolChoiceOptions
-from onyx.llm.tracing_wrap import wrap_invoke
-from onyx.llm.tracing_wrap import wrap_stream
+from onyx.llm.model_response import ModelResponse, ModelResponseStream
+from onyx.llm.models import (
+    LanguageModelInput,
+    ReasoningEffort,
+    ToolChoice,
+    ToolChoiceOptions,  # noqa: F401  # re-exported: onyx.chat imports it from here
+)
+from onyx.llm.tracing_wrap import wrap_invoke, wrap_stream
 from onyx.utils.logger import setup_logger
 
 logger = setup_logger()
@@ -20,6 +20,14 @@ logger = setup_logger()
 class LLMUserIdentity(BaseModel):
     user_id: str | None = None
     session_id: str | None = None
+
+
+class LlmRequestPolicy(BaseModel):
+    """Per-request policy an LLM call must carry (e.g. incognito retention
+    suppression). Merged after every other source so nothing overrides it."""
+
+    headers: dict[str, str] = {}
+    model_kwargs: dict[str, Any] = {}
 
 
 class LLMConfig(BaseModel):
@@ -79,12 +87,13 @@ class LLM(abc.ABC):
         self,
         prompt: LanguageModelInput,
         tools: list[dict] | None = None,
-        tool_choice: ToolChoiceOptions | None = None,
+        tool_choice: ToolChoice | None = None,
         structured_response_format: dict | None = None,
         timeout_override: int | None = None,
         max_tokens: int | None = None,
         reasoning_effort: ReasoningEffort = ReasoningEffort.AUTO,
         user_identity: LLMUserIdentity | None = None,
+        total_timeout_override: float | None = None,
     ) -> "ModelResponse":
         raise NotImplementedError
 
@@ -92,7 +101,7 @@ class LLM(abc.ABC):
         self,
         prompt: LanguageModelInput,
         tools: list[dict] | None = None,
-        tool_choice: ToolChoiceOptions | None = None,
+        tool_choice: ToolChoice | None = None,
         structured_response_format: dict | None = None,
         timeout_override: int | None = None,
         max_tokens: int | None = None,

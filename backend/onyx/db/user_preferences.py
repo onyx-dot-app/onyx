@@ -1,84 +1,25 @@
 from collections.abc import Sequence
 from uuid import UUID
 
-from sqlalchemy import Column
-from sqlalchemy import delete
-from sqlalchemy import desc
-from sqlalchemy import select
-from sqlalchemy import update
+from sqlalchemy import Column, delete, desc, select, update
 from sqlalchemy.orm import Session
 
-from onyx.auth.schemas import UserRole
-from onyx.db.enums import AccountType
-from onyx.db.enums import DefaultAppMode
-from onyx.db.enums import ThemePreference
-from onyx.db.models import AccessToken
-from onyx.db.models import Assistant__UserSpecificConfig
-from onyx.db.models import Memory
-from onyx.db.models import User
-from onyx.db.models import User__UserGroup
-from onyx.db.models import UserGroup
-from onyx.db.permissions import recompute_user_permissions__no_commit
-from onyx.db.users import assign_user_to_default_groups__no_commit
-from onyx.db.users import is_limited_user
-from onyx.server.manage.models import MemoryItem
-from onyx.server.manage.models import UserSpecificAssistantPreference
+from onyx.db.enums import AccountType, DefaultAppMode, ThemePreference
+from onyx.db.models import (
+    AccessToken,
+    Assistant__UserSpecificConfig,
+    Memory,
+    User,
+)
+from onyx.db.users import (
+    assign_user_to_default_groups__no_commit,
+    is_limited_user,
+    user_is_admin,
+)
+from onyx.server.manage.models import MemoryItem, UserSpecificAssistantPreference
 from onyx.utils.logger import setup_logger
 
 logger = setup_logger()
-
-
-_ROLE_TO_ACCOUNT_TYPE: dict[UserRole, AccountType] = {
-    UserRole.SLACK_USER: AccountType.BOT,
-    UserRole.EXT_PERM_USER: AccountType.EXT_PERM_USER,
-}
-
-
-def update_user_role(
-    user: User,
-    new_role: UserRole,
-    db_session: Session,
-) -> None:
-    """Update a user's role in the database.
-    Dual-writes account_type to keep it in sync with role and
-    reconciles default-group membership (Admin / Basic)."""
-    old_role = user.role
-    user.role = new_role
-    # Note: setting account_type to BOT or EXT_PERM_USER causes
-    # assign_user_to_default_groups__no_commit to early-return, which is
-    # intentional — these account types should not be in default groups.
-    if new_role in _ROLE_TO_ACCOUNT_TYPE:
-        user.account_type = _ROLE_TO_ACCOUNT_TYPE[new_role]
-    elif user.account_type in (AccountType.BOT, AccountType.EXT_PERM_USER):
-        # Upgrading from a non-web-login account type to a web role
-        user.account_type = AccountType.STANDARD
-
-    # Reconcile default-group membership when the role changes.
-    if old_role != new_role:
-        # Remove from all default groups first.
-        db_session.execute(
-            delete(User__UserGroup).where(
-                User__UserGroup.user_id == user.id,
-                User__UserGroup.user_group_id.in_(
-                    select(UserGroup.id).where(UserGroup.is_default.is_(True))
-                ),
-            )
-        )
-
-        # Re-assign to the correct default group.
-        # assign_user_to_default_groups__no_commit internally skips
-        # ANONYMOUS, BOT, and EXT_PERM_USER account types.
-        # Also skip limited users (no group assignment).
-        if not is_limited_user(user):
-            assign_user_to_default_groups__no_commit(
-                db_session,
-                user,
-                is_admin=(new_role == UserRole.ADMIN),
-            )
-
-        recompute_user_permissions__no_commit(user.id, db_session)
-
-    db_session.commit()
 
 
 def deactivate_user(
@@ -101,12 +42,14 @@ def activate_user(
     created while inactive or deactivated before the backfill migration.
     """
     user.is_active = True
-    # assign_user_to_default_groups__no_commit internally skips
-    # ANONYMOUS, BOT, and EXT_PERM_USER account types.
-    # Also skip limited users (no group assignment).
-    if not is_limited_user(user):
+    # That reconciliation is for STANDARD users only. A service account's groups
+    # are chosen at API-key creation, and is_limited_user won't exclude one that
+    # holds the derived write:chat, so reactivating a chat-only key would drop it
+    # into Basic and hand it the whole basic bundle.
+    # assign_user_to_default_groups__no_commit itself skips ANONYMOUS/BOT/EXT_PERM.
+    if not is_limited_user(user) and user.account_type != AccountType.SERVICE_ACCOUNT:
         assign_user_to_default_groups__no_commit(
-            db_session, user, is_admin=(user.role == UserRole.ADMIN)
+            db_session, user, is_admin=user_is_admin(user)
         )
     db_session.add(user)
     db_session.commit()
@@ -128,6 +71,23 @@ def get_latest_access_token_for_user(
     except Exception as e:
         logger.error("Error fetching AccessToken: %s", e)
         return None
+
+
+def update_users_craft_enabled(
+    user_ids: list[UUID],
+    craft_enabled: bool | None,
+    db_session: Session,
+) -> None:
+    """Admin-controlled per-user Craft override; None clears the override
+    (follow the workspace default)."""
+    if not user_ids:
+        return
+    db_session.execute(
+        update(User)
+        .where(User.id.in_(user_ids))  # ty: ignore[unresolved-attribute]
+        .values(craft_enabled=craft_enabled)
+    )
+    db_session.commit()
 
 
 def update_user_temperature_override_enabled(
@@ -210,6 +170,20 @@ def update_user_theme_preference(
         update(User)
         .where(User.id == user_id)  # ty: ignore[invalid-argument-type]
         .values(theme_preference=theme_preference)
+    )
+    db_session.commit()
+
+
+def update_user_language(
+    user_id: UUID,
+    language: str,
+    db_session: Session,
+) -> None:
+    """Update user's language setting."""
+    db_session.execute(
+        update(User)
+        .where(User.id == user_id)  # ty: ignore[invalid-argument-type]
+        .values(language=language)
     )
     db_session.commit()
 
@@ -305,20 +279,6 @@ def get_memories_for_user(
     return db_session.scalars(
         select(Memory).where(Memory.user_id == user_id).order_by(Memory.id.desc())
     ).all()
-
-
-def update_user_pinned_assistants(
-    user_id: UUID,
-    pinned_assistants: list[int],
-    db_session: Session,
-) -> None:
-    """Update user's pinned assistants list."""
-    db_session.execute(
-        update(User)
-        .where(User.id == user_id)  # ty: ignore[invalid-argument-type]
-        .values(pinned_assistants=pinned_assistants)
-    )
-    db_session.commit()
 
 
 def update_user_assistant_visibility(

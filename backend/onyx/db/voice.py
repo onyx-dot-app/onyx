@@ -1,12 +1,10 @@
 from typing import Any
 from uuid import UUID
 
-from sqlalchemy import select
-from sqlalchemy import update
+from sqlalchemy import select, update
 from sqlalchemy.orm import Session
 
-from onyx.db.models import User
-from onyx.db.models import VoiceProvider
+from onyx.db.models import User, VoiceProvider
 from onyx.error_handling.error_codes import OnyxErrorCode
 from onyx.error_handling.exceptions import OnyxError
 
@@ -87,7 +85,10 @@ def upsert_voice_provider(
     provider.name = name
     provider.provider_type = provider_type
     provider.api_base = api_base
-    provider.custom_config = custom_config
+    # None means "leave unchanged" (pass {} to clear) so partial writers can't
+    # wipe keys like speech_region.
+    if custom_config is not None:
+        provider.custom_config = custom_config
     provider.stt_model = stt_model
     provider.tts_model = tts_model
     provider.default_voice = default_voice

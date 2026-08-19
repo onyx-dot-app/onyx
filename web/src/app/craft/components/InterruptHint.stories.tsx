@@ -1,4 +1,4 @@
-import type { Meta, StoryObj } from "@storybook/react";
+import type { Meta, StoryObj } from "@storybook/react-vite";
 import InterruptHint from "@/app/craft/components/InterruptHint";
 
 const meta: Meta<typeof InterruptHint> = {
@@ -6,7 +6,6 @@ const meta: Meta<typeof InterruptHint> = {
   component: InterruptHint,
   tags: ["autodocs"],
   args: {
-    armed: false,
     interrupting: false,
   },
 };
@@ -14,15 +13,8 @@ const meta: Meta<typeof InterruptHint> = {
 export default meta;
 type Story = StoryObj<typeof InterruptHint>;
 
-/** At rest while streaming — teaches the double-Esc interrupt. */
+/** At rest while streaming — teaches the Esc interrupt. */
 export const Default: Story = {};
-
-/** After the first Esc — the first keycap lights; a second Esc interrupts. */
-export const Armed: Story = {
-  args: {
-    armed: true,
-  },
-};
 
 /** Interrupt requested, awaiting the turn to terminate. */
 export const Interrupting: Story = {

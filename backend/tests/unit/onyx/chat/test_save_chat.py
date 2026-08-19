@@ -10,13 +10,12 @@ from pytest import MonkeyPatch
 from onyx.chat import save_chat
 from onyx.chat.save_chat import _extract_referenced_file_descriptors
 from onyx.file_store.models import ChatFileType
-from onyx.tools.models import PythonExecutionFile
-from onyx.tools.models import ToolCallInfo
+from onyx.tools.models import PythonExecutionFile, ToolCallInfo
 
 
 def _make_tool_call_info(
     generated_files: list[PythonExecutionFile] | None = None,
-    tool_name: str = "python",
+    tool_name: str = "run_python",
 ) -> ToolCallInfo:
     return ToolCallInfo(
         parent_tool_call_id=None,

@@ -1,5 +1,5 @@
 import React from "react";
-import { ModalContentProps } from "@/refresh-components/Modal";
+import type { ModalContentProps } from "@opal/components";
 
 export interface PreviewContext {
   fileContent: string;
@@ -20,6 +20,10 @@ export interface PreviewVariant extends Required<
   matches: (semanticIdentifier: string | null, mimeType: string) => boolean;
   /** Whether the fetcher should read the blob as text. */
   needsTextContent: boolean;
+  /** Whether the fetcher should fetch backend-parsed content
+   * (`?parsed=true`, JSON) into fileContent instead of the raw blob text.
+   * Used for binary spreadsheet files. */
+  needsParsedContent?: boolean;
   /** Whether the variant renders on a code-style background (bg-background-code-01). */
   codeBackground: boolean;
   /** String shown below the title in the modal header. */

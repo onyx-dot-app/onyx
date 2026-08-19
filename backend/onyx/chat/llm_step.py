@@ -2,62 +2,69 @@ import json
 import re
 import time
 import uuid
-from collections.abc import Callable
-from collections.abc import Generator
-from collections.abc import Mapping
-from collections.abc import Sequence
+from collections.abc import Callable, Generator, Mapping, Sequence
 from html import unescape
-from typing import Any
-from typing import cast
+from typing import Any, cast
 
 from onyx.chat.chat_state import ChatStateContainer
 from onyx.chat.citation_processor import DynamicCitationProcessor
 from onyx.chat.emitter import Emitter
-from onyx.chat.models import ChatMessageSimple
-from onyx.chat.models import LlmStepResult
+from onyx.chat.incognito import current_turn_persists_content
+from onyx.chat.models import ChatMessageSimple, LlmStepResult
 from onyx.chat.tool_call_args_streaming import maybe_emit_argument_delta
-from onyx.configs.app_configs import ENABLE_AZURE_IMAGE_CAP
-from onyx.configs.app_configs import LOG_ONYX_MODEL_INTERACTIONS
-from onyx.configs.app_configs import PROMPT_CACHE_CHAT_HISTORY
+from onyx.configs.app_configs import (
+    ENABLE_AZURE_IMAGE_CAP,
+    LOG_ONYX_MODEL_INTERACTIONS,
+    PROMPT_CACHE_CHAT_HISTORY,
+)
 from onyx.configs.constants import MessageType
 from onyx.context.search.models import SearchDoc
 from onyx.file_store.models import ChatFileType
 from onyx.llm.constants import LlmProviderNames
-from onyx.llm.interfaces import LanguageModelInput
-from onyx.llm.interfaces import LLM
-from onyx.llm.interfaces import LLMConfig
-from onyx.llm.interfaces import LLMUserIdentity
-from onyx.llm.interfaces import ToolChoiceOptions
+from onyx.llm.interfaces import (
+    LLM,
+    LanguageModelInput,
+    LLMConfig,
+    LLMUserIdentity,
+    ToolChoiceOptions,
+)
 from onyx.llm.model_response import Delta
-from onyx.llm.models import AssistantMessage
-from onyx.llm.models import ChatCompletionMessage
-from onyx.llm.models import FunctionCall
-from onyx.llm.models import ImageContentPart
-from onyx.llm.models import ImageUrlDetail
-from onyx.llm.models import ReasoningEffort
-from onyx.llm.models import SystemMessage
-from onyx.llm.models import TextContentPart
-from onyx.llm.models import ToolCall
-from onyx.llm.models import ToolMessage
-from onyx.llm.models import UserMessage
+from onyx.llm.models import (
+    AssistantMessage,
+    ChatCompletionMessage,
+    FunctionCall,
+    ImageContentPart,
+    ImageUrlDetail,
+    ReasoningEffort,
+    SystemMessage,
+    TextContentPart,
+    ToolCall,
+    ToolMessage,
+    UserMessage,
+)
 from onyx.llm.prompt_cache.processor import process_with_prompt_cache
-from onyx.llm.utils import model_needs_formatting_reenabled
-from onyx.prompts.chat_prompts import CODE_BLOCK_MARKDOWN
-from onyx.prompts.chat_prompts import IMAGE_DROP_REMINDER
-from onyx.prompts.constants import SYSTEM_REMINDER_TAG_CLOSE
-from onyx.prompts.constants import SYSTEM_REMINDER_TAG_OPEN
+from onyx.llm.utils import model_needs_formatting_reenabled, model_supports_image_input
+from onyx.prompts.chat_prompts import (
+    CODE_BLOCK_MARKDOWN,
+    IMAGE_DROP_REMINDER,
+    NON_VISION_IMAGE_MARKER,
+)
+from onyx.prompts.constants import SYSTEM_REMINDER_TAG_CLOSE, SYSTEM_REMINDER_TAG_OPEN
 from onyx.server.query_and_chat.placement import Placement
-from onyx.server.query_and_chat.streaming_models import AgentResponseDelta
-from onyx.server.query_and_chat.streaming_models import AgentResponseStart
-from onyx.server.query_and_chat.streaming_models import CitationInfo
-from onyx.server.query_and_chat.streaming_models import Packet
-from onyx.server.query_and_chat.streaming_models import ReasoningDelta
-from onyx.server.query_and_chat.streaming_models import ReasoningDone
-from onyx.server.query_and_chat.streaming_models import ReasoningStart
+from onyx.server.query_and_chat.streaming_models import (
+    AgentResponseDelta,
+    AgentResponseStart,
+    CitationInfo,
+    Packet,
+    ReasoningDelta,
+    ReasoningDone,
+    ReasoningStart,
+)
 from onyx.tools.models import ToolCallKickoff
 from onyx.tools.tool_name import sanitize_tool_name
 from onyx.tracing.flows import LLMFlow
 from onyx.tracing.framework.create import generation_span
+from onyx.tracing.llm_utils import build_llm_model_config
 from onyx.utils.b64 import get_image_type_from_bytes
 from onyx.utils.jsonriver import Parser
 from onyx.utils.logger import setup_logger
@@ -376,6 +383,7 @@ def _extract_tool_call_kickoffs(
     turn_index: int,
     tab_index: int | None = None,
     sub_turn_index: int | None = None,
+    tab_index_start: int = 0,
 ) -> list[ToolCallKickoff]:
     """Extract ToolCallKickoff objects from the tool call map.
 
@@ -387,9 +395,10 @@ def _extract_tool_call_kickoffs(
         turn_index: The turn index for this set of tool calls
         tab_index: If provided, use this tab_index for all tool calls (otherwise auto-increment)
         sub_turn_index: The sub-turn index for nested tool calls
+        tab_index_start: First auto-assigned tab_index (default 0).
     """
     tool_calls: list[ToolCallKickoff] = []
-    tab_index_calculated = 0
+    tab_index_calculated = tab_index_start
     for tool_call_data in id_to_tool_call_map.values():
         if tool_call_data.get("id") and tool_call_data.get("name"):
             tool_args = _parse_tool_args_to_dict(tool_call_data.get("arguments"))
@@ -858,10 +867,27 @@ def translate_history_to_llm_format(
     last_cacheable_msg_idx = -1
     all_previous_msgs_cacheable = True
 
+    # History can contain images even when the current model cannot accept
+    # them (e.g. the user switched models mid-session). Sending them yields a
+    # provider 400, so replay a text marker instead. Admins can mark custom
+    # vision models with the VISION flow type to keep images flowing.
+    supports_image_input = True
+    if any(msg.message_type == MessageType.USER and msg.image_files for msg in history):
+        supports_image_input = model_supports_image_input(
+            llm_config.model_name,
+            llm_config.model_provider,
+            llm_config.deployment_name,
+        )
+
     # Per-request image cap (provider-aware). When the cap is enforced and
     # images are dropped, we emit a system-reminder UserMessage at the end of
     # the translated request — the same pattern MessageType.USER_REMINDER uses.
-    image_cap = resolve_image_cap(llm_config.model_provider)
+    # The cap bounds image payloads, so it only applies when images are
+    # actually sent — markers for a non-vision model are plain text and must
+    # never be capped away.
+    image_cap = (
+        resolve_image_cap(llm_config.model_provider) if supports_image_input else None
+    )
     keep_image_indices: set[tuple[int, int]] | None = None
     image_drop_notice: str | None = None
     if image_cap is not None:
@@ -921,6 +947,16 @@ def translate_history_to_llm_format(
                         keep_image_indices is not None
                         and (idx, img_idx) not in keep_image_indices
                     ):
+                        continue
+                    if not supports_image_input:
+                        content_parts.append(
+                            TextContentPart(
+                                type="text",
+                                text=NON_VISION_IMAGE_MARKER.format(
+                                    file_id=img_file.file_id
+                                ),
+                            )
+                        )
                         continue
                     try:
                         image_type = get_image_type_from_bytes(img_file.content)
@@ -995,7 +1031,9 @@ def translate_history_to_llm_format(
 
     # Apply model-specific formatting when translating to LLM format (e.g. OpenAI
     # reasoning models need CODE_BLOCK_MARKDOWN prefix for correct markdown generation)
-    if model_needs_formatting_reenabled(llm_config.model_name):
+    if model_needs_formatting_reenabled(
+        llm_config.model_name, llm_config.deployment_name
+    ):
         for i, m in enumerate(messages):
             if isinstance(m, SystemMessage):
                 messages[i] = SystemMessage(
@@ -1013,7 +1051,7 @@ def translate_history_to_llm_format(
             suffix=messages[last_cacheable_msg_idx + 1 :],
             continuation=False,
         )
-        assert isinstance(processed_messages, list)  # for mypy
+        assert isinstance(processed_messages, list)  # for type-checking
         messages = processed_messages
 
     return messages
@@ -1122,7 +1160,7 @@ def run_llm_step_pkt_generator(
     llm_msg_history = translate_history_to_llm_format(history, llm.config)
     has_reasoned = False
 
-    if LOG_ONYX_MODEL_INTERACTIONS:
+    if LOG_ONYX_MODEL_INTERACTIONS and current_turn_persists_content():
         logger.debug(
             "Message history:\n%s",
             _format_message_history_for_logging(llm_msg_history),
@@ -1139,20 +1177,23 @@ def run_llm_step_pkt_generator(
     actionable_chunk_count = 0
     empty_chunk_count = 0
     finish_reasons: set[str] = set()
+    terminal_finish_reason: str | None = None
     xml_tool_call_content_filter = _XmlToolCallContentFilter()
 
     processor_state: Any = None
 
     with generation_span(
         model=llm.config.model_name,
-        model_config={
-            "base_url": str(llm.config.api_base or ""),
+        model_config=build_llm_model_config(llm, LLMFlow.CHAT_RESPONSE)
+        | {
             "model_impl": "litellm",
-            "flow": LLMFlow.CHAT_RESPONSE.value,
         },
     ) as span_generation:
         span_generation.span_data.input = cast(
             Sequence[Mapping[str, Any]], llm_msg_history
+        )
+        span_generation.span_data.tools = cast(
+            Sequence[Mapping[str, Any]], tool_definitions
         )
         stream_start_time = time.monotonic()
         first_action_recorded = False
@@ -1285,6 +1326,7 @@ def run_llm_step_pkt_generator(
             finish_reason = packet.choice.finish_reason
             if finish_reason:
                 finish_reasons.add(str(finish_reason))
+                terminal_finish_reason = str(finish_reason)
             delta = packet.choice.delta
 
             # Weird behavior from some model providers, just log and ignore for now
@@ -1381,11 +1423,16 @@ def run_llm_step_pkt_generator(
                 for tool_call_delta in flush_delta.tool_calls:
                     _update_tool_call_with_delta(id_to_tool_call_map, tool_call_delta)
 
+        # Narration emitted before these tool calls occupies the base tab; start
+        # tool calls at the next tab so they render as their own group instead of
+        # merging with the narration (which would hide them in the chat area).
+        tab_index_start = 1 if (answer_start and not use_existing_tab_index) else 0
         tool_calls = _extract_tool_call_kickoffs(
             id_to_tool_call_map=id_to_tool_call_map,
             turn_index=turn_index,
             tab_index=tab_index if use_existing_tab_index else None,
             sub_turn_index=sub_turn_index,
+            tab_index_start=tab_index_start,
         )
         # Run the flush + recovery below while the span is still open, so the
         # span output recorded afterward reflects the answer the user received.
@@ -1479,7 +1526,7 @@ def run_llm_step_pkt_generator(
 
     # Note: Content (AgentResponseDelta) doesn't need an explicit end packet - OverallStop handles it
     # Tool calls are handled by tool execution code and emit their own packets (e.g., SectionEnd)
-    if LOG_ONYX_MODEL_INTERACTIONS:
+    if LOG_ONYX_MODEL_INTERACTIONS and current_turn_persists_content():
         logger.debug("Accumulated reasoning: %s", accumulated_reasoning)
         logger.debug("Accumulated answer: %s", accumulated_answer)
 
@@ -1514,6 +1561,7 @@ def run_llm_step_pkt_generator(
             answer=accumulated_answer if accumulated_answer else None,
             tool_calls=tool_calls if tool_calls else None,
             raw_answer=accumulated_raw_answer if accumulated_raw_answer else None,
+            finish_reason=terminal_finish_reason,
         ),
         has_reasoned,
     )

@@ -1,5 +1,6 @@
 import { Formik, Form } from "formik";
-import Modal from "@/refresh-components/Modal";
+import * as Yup from "yup";
+import { Modal } from "@opal/components";
 import { Button } from "@opal/components";
 import { InputVertical } from "@opal/layouts";
 import InputTypeInField from "@/refresh-components/form/InputTypeInField";
@@ -10,7 +11,7 @@ export interface EditPropertyModalProps {
   propertyDetails?: string;
   propertyName: string;
   propertyValue: string;
-  validationSchema: object;
+  validationSchema: Yup.AnySchema;
   onClose: () => void;
   onSubmit: (propertyName: string, propertyValue: string) => Promise<void>;
 }

@@ -1,44 +1,53 @@
-from datetime import datetime
-from datetime import timedelta
-from datetime import timezone
+from datetime import datetime, timedelta, timezone
 from typing import cast
 
-from fastapi import APIRouter
-from fastapi import Depends
-from fastapi import HTTPException
+from fastapi import APIRouter, Depends
 from sqlalchemy.orm import Session
 
-from onyx.auth.permissions import require_permission
-from onyx.auth.users import current_curator_or_admin_user
+from onyx.auth.permissions import has_permission, require_permission
 from onyx.background.celery.versioned_apps.client import app as client_app
 from onyx.background.indexing.models import IndexAttemptErrorPydantic
 from onyx.configs.app_configs import GENERATIVE_MODEL_ACCESS_CHECK_FREQ
-from onyx.configs.constants import DocumentSource
-from onyx.configs.constants import KV_GEN_AI_KEY_CHECK_TIME
-from onyx.configs.constants import OnyxCeleryPriority
-from onyx.configs.constants import OnyxCeleryTask
-from onyx.configs.constants import PUBLIC_API_TAGS
-from onyx.db.connector_credential_pair import get_connector_credential_pair_for_user
-from onyx.db.connector_credential_pair import update_connector_credential_pair_from_id
+from onyx.configs.constants import (
+    KV_GEN_AI_KEY_CHECK_TIME,
+    PUBLIC_API_TAGS,
+    DocumentSource,
+    OnyxCeleryPriority,
+    OnyxCeleryTask,
+)
+from onyx.db.connector_credential_pair import (
+    get_connector_credential_pair_for_user,
+    update_connector_credential_pair_from_id,
+    user_owns_groupless_cc_pair,
+)
 from onyx.db.engine.sql_engine import get_session
-from onyx.db.enums import ConnectorCredentialPairStatus
-from onyx.db.enums import Permission
-from onyx.db.feedback import fetch_docs_ranked_by_boost_for_user
-from onyx.db.feedback import update_document_boost_for_user
-from onyx.db.feedback import update_document_hidden_for_user
-from onyx.db.index_attempt import cancel_indexing_attempts_for_ccpair
-from onyx.db.index_attempt import get_index_attempt_errors_across_connectors
+from onyx.db.enums import (
+    ConnectorCredentialPairStatus,
+    Permission,
+    PermissionAuthority,
+)
+from onyx.db.feedback import (
+    fetch_docs_ranked_by_boost_for_user,
+    update_document_boost_for_user,
+    update_document_hidden_for_user,
+)
+from onyx.db.index_attempt import (
+    cancel_indexing_attempts_for_ccpair,
+    get_index_attempt_errors_across_connectors,
+)
 from onyx.db.models import User
+from onyx.error_handling.error_codes import OnyxErrorCode
+from onyx.error_handling.exceptions import OnyxError
 from onyx.file_store.file_store import get_default_file_store
 from onyx.key_value_store.factory import get_kv_store
 from onyx.key_value_store.interface import KvKeyNotFoundError
 from onyx.llm.factory import get_default_llm
 from onyx.llm.utils import test_llm
-from onyx.server.documents.models import ConnectorCredentialPairIdentifier
-from onyx.server.documents.models import PaginatedReturn
-from onyx.server.manage.models import BoostDoc
-from onyx.server.manage.models import BoostUpdateRequest
-from onyx.server.manage.models import HiddenUpdateRequest
+from onyx.server.documents.models import (
+    ConnectorCredentialPairIdentifier,
+    PaginatedReturn,
+)
+from onyx.server.manage.models import BoostDoc, BoostUpdateRequest, HiddenUpdateRequest
 from onyx.server.models import StatusResponse
 from onyx.utils.logger import setup_logger
 from shared_configs.contextvars import get_current_tenant_id
@@ -53,7 +62,7 @@ logger = setup_logger()
 def get_most_boosted_docs(
     ascending: bool,
     limit: int,
-    user: User = Depends(current_curator_or_admin_user),
+    user: User = Depends(require_permission(Permission.MANAGE_CONNECTORS)),
     db_session: Session = Depends(get_session),
 ) -> list[BoostDoc]:
     boost_docs = fetch_docs_ranked_by_boost_for_user(
@@ -78,7 +87,7 @@ def get_most_boosted_docs(
 @router.post("/admin/doc-boosts")
 def document_boost_update(
     boost_update: BoostUpdateRequest,
-    user: User = Depends(current_curator_or_admin_user),
+    user: User = Depends(require_permission(Permission.MANAGE_CONNECTORS)),
     db_session: Session = Depends(get_session),
 ) -> StatusResponse:
     update_document_boost_for_user(
@@ -93,7 +102,7 @@ def document_boost_update(
 @router.post("/admin/doc-hidden")
 def document_hidden_update(
     hidden_update: HiddenUpdateRequest,
-    user: User = Depends(current_curator_or_admin_user),
+    user: User = Depends(require_permission(Permission.MANAGE_CONNECTORS)),
     db_session: Session = Depends(get_session),
 ) -> StatusResponse:
     update_document_hidden_for_user(
@@ -107,7 +116,7 @@ def document_hidden_update(
 
 @router.get("/admin/genai-api-key/validate")
 def validate_existing_genai_api_key(
-    _: User = Depends(require_permission(Permission.FULL_ADMIN_PANEL_ACCESS)),
+    _: User = Depends(require_permission(Permission.MANAGE_LLMS)),
 ) -> None:
     # Only validate every so often
     kv_store = get_kv_store()
@@ -126,11 +135,11 @@ def validate_existing_genai_api_key(
     try:
         llm = get_default_llm(timeout=10)
     except ValueError:
-        raise HTTPException(status_code=404, detail="LLM not setup")
+        raise OnyxError(OnyxErrorCode.NOT_FOUND, "LLM not setup")
 
     error = test_llm(llm)
     if error:
-        raise HTTPException(status_code=400, detail=error)
+        raise OnyxError(OnyxErrorCode.VALIDATION_ERROR, error)
 
     # Mark check as successful
     curr_time = datetime.now(tz=timezone.utc)
@@ -140,7 +149,9 @@ def validate_existing_genai_api_key(
 @router.post("/admin/deletion-attempt", tags=PUBLIC_API_TAGS)
 def create_deletion_attempt_for_connector_id(
     connector_credential_pair_identifier: ConnectorCredentialPairIdentifier,
-    user: User = Depends(current_curator_or_admin_user),
+    user: User = Depends(
+        require_permission(Permission.MANAGE_CONNECTORS, allow_scope=True)
+    ),
     db_session: Session = Depends(get_session),
 ) -> None:
     tenant_id = get_current_tenant_id()
@@ -158,9 +169,17 @@ def create_deletion_attempt_for_connector_id(
     if cc_pair is None:
         error = f"Connector with ID '{connector_id}' and credential ID '{credential_id}' does not exist. Has it already been deleted?"
         logger.error(error)
-        raise HTTPException(
-            status_code=404,
-            detail=error,
+        raise OnyxError(OnyxErrorCode.CONNECTOR_NOT_FOUND, error)
+
+    # GATE 2: the fetch admits every pair in a managed group; delete is admin-only
+    # (index cleanup) except a groupless pair its creator made
+    is_admin = (
+        has_permission(user, Permission.MANAGE_CONNECTORS) is PermissionAuthority.GLOBAL
+    )
+    if not is_admin and not user_owns_groupless_cc_pair(cc_pair, db_session, user):
+        raise OnyxError(
+            OnyxErrorCode.INSUFFICIENT_PERMISSIONS,
+            "Deleting a shared connector is restricted to administrators.",
         )
 
     # Cancel any scheduled indexing attempts

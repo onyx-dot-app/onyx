@@ -1,9 +1,7 @@
 import copy
 import re
-from collections.abc import Generator
-from datetime import datetime
-from datetime import timedelta
-from datetime import timezone
+from collections.abc import Generator, Iterable
+from datetime import datetime, timedelta, timezone
 from typing import Any
 from urllib.parse import quote
 
@@ -12,51 +10,63 @@ from requests.exceptions import HTTPError
 from typing_extensions import override
 
 from onyx.access.models import ExternalAccess
-from onyx.configs.app_configs import CONFLUENCE_CONNECTOR_LABELS_TO_SKIP
-from onyx.configs.app_configs import CONFLUENCE_TIMEZONE_OFFSET
-from onyx.configs.app_configs import CONTINUE_ON_CONNECTOR_FAILURE
-from onyx.configs.app_configs import INDEX_BATCH_SIZE
+from onyx.configs.app_configs import (
+    CONFLUENCE_CONNECTOR_LABELS_TO_SKIP,
+    CONFLUENCE_TIMEZONE_OFFSET,
+    CONTINUE_ON_CONNECTOR_FAILURE,
+    INDEX_BATCH_SIZE,
+)
 from onyx.configs.constants import DocumentSource
-from onyx.connectors.confluence.access import get_all_space_permissions
-from onyx.connectors.confluence.access import get_page_restrictions
 from onyx.connectors.confluence.access import (
+    get_all_space_permissions,
+    get_page_restrictions,
     get_page_restrictions_with_per_ancestor_fetch,
 )
-from onyx.connectors.confluence.onyx_confluence import Confcloud77618Error
-from onyx.connectors.confluence.onyx_confluence import extract_text_from_confluence_html
-from onyx.connectors.confluence.onyx_confluence import OnyxConfluence
-from onyx.connectors.confluence.utils import build_confluence_document_id
-from onyx.connectors.confluence.utils import convert_attachment_to_content
-from onyx.connectors.confluence.utils import datetime_from_string
-from onyx.connectors.confluence.utils import update_param_in_path
-from onyx.connectors.confluence.utils import validate_attachment_filetype
+from onyx.connectors.confluence.onyx_confluence import (
+    Confcloud77618Error,
+    OnyxConfluence,
+    extract_text_from_confluence_html,
+)
+from onyx.connectors.confluence.utils import (
+    build_confluence_document_id,
+    convert_attachment_to_content,
+    datetime_from_string,
+    update_param_in_path,
+    validate_attachment_filetype,
+)
 from onyx.connectors.credentials_provider import OnyxStaticCredentialsProvider
 from onyx.connectors.cross_connector_utils.miscellaneous_utils import (
     is_atlassian_date_error,
 )
-from onyx.connectors.exceptions import ConnectorValidationError
-from onyx.connectors.exceptions import CredentialExpiredError
-from onyx.connectors.exceptions import InsufficientPermissionsError
-from onyx.connectors.exceptions import UnexpectedValidationError
-from onyx.connectors.interfaces import CheckpointedConnector
-from onyx.connectors.interfaces import CheckpointOutput
-from onyx.connectors.interfaces import ConnectorCheckpoint
-from onyx.connectors.interfaces import ConnectorFailure
-from onyx.connectors.interfaces import CredentialsConnector
-from onyx.connectors.interfaces import CredentialsProviderInterface
-from onyx.connectors.interfaces import GenerateSlimDocumentOutput
-from onyx.connectors.interfaces import Resolver
-from onyx.connectors.interfaces import SecondsSinceUnixEpoch
-from onyx.connectors.interfaces import SlimConnector
-from onyx.connectors.interfaces import SlimConnectorWithPermSync
-from onyx.connectors.models import BasicExpertInfo
-from onyx.connectors.models import ConnectorMissingCredentialError
-from onyx.connectors.models import Document
-from onyx.connectors.models import DocumentFailure
-from onyx.connectors.models import HierarchyNode
-from onyx.connectors.models import ImageSection
-from onyx.connectors.models import SlimDocument
-from onyx.connectors.models import TextSection
+from onyx.connectors.exceptions import (
+    ConnectorValidationError,
+    CredentialExpiredError,
+    InsufficientPermissionsError,
+    UnexpectedValidationError,
+)
+from onyx.connectors.interfaces import (
+    CheckpointedConnector,
+    CheckpointOutput,
+    ConnectorCheckpoint,
+    ConnectorFailure,
+    CredentialsConnector,
+    CredentialsProviderInterface,
+    GenerateSlimDocumentOutput,
+    Resolver,
+    SecondsSinceUnixEpoch,
+    SlimConnector,
+    SlimConnectorWithPermSync,
+)
+from onyx.connectors.models import (
+    BasicExpertInfo,
+    ConnectorMissingCredentialError,
+    Document,
+    DocumentFailure,
+    HierarchyNode,
+    ImageSection,
+    SlimDocument,
+    TextSection,
+)
 from onyx.db.enums import HierarchyNodeType
 from onyx.indexing.indexing_heartbeat import IndexingHeartbeatInterface
 from onyx.utils.logger import setup_logger
@@ -77,7 +87,11 @@ _ATTACHMENT_EXPANSION_FIELDS = [
     "version",
     "space",
     "metadata.labels",
+    "history",  # for history.createdDate
 ]
+# These slim-path sets are intentionally trimmed for perf (CONFCLOUD-77618);
+# `history` is added only to expose `history.createdDate` for doc_created_at
+# backfill on the slim path.
 # Fast path: page + ancestor restrictions inlined. Subject to
 # CONFCLOUD-77618 / 76424 on draft/trashed/outdated ancestors.
 _RESTRICTIONS_EXPANSION_FIELDS = [
@@ -86,6 +100,7 @@ _RESTRICTIONS_EXPANSION_FIELDS = [
     "restrictions.read.restrictions.group",
     "ancestors.restrictions.read.restrictions.user",
     "ancestors.restrictions.read.restrictions.group",
+    "history",  # for history.createdDate (doc_created_at backfill)
 ]
 # CONFCLOUD-77618 fallback: bare ancestors only; EE resolver fetches
 # each ancestor's restrictions via `restriction/byOperation`.
@@ -94,13 +109,19 @@ _PER_PAGE_RESTRICTIONS_EXPANSION_FIELDS = [
     "restrictions.read.restrictions.user",
     "restrictions.read.restrictions.group",
     "ancestors",
+    "history",  # for history.createdDate (doc_created_at backfill)
 ]
 # Pruning needs `space` + `ancestors` to populate hierarchy nodes and
 # parent ids; skipping them would flatten the graph. No restrictions
 # expand here, so CONFCLOUD-77618 can't fire.
-_PRUNING_EXPANSION_FIELDS = ["space", "ancestors"]
+_PRUNING_EXPANSION_FIELDS = [
+    "space",
+    "ancestors",
+    "history",  # for history.createdDate (doc_created_at backfill)
+]
 
 _SLIM_DOC_BATCH_SIZE = 5000
+_SLIM_ATTACHMENT_MAX_ATTEMPTS = 3
 
 # Confluence document_id is the page URL. Reindex inputs come from
 # IndexAttemptError rows (also URLs). Two URL shapes show up in the wild:
@@ -121,6 +142,11 @@ def _get_page_id(page: dict[str, Any], allow_missing: bool = False) -> str:
     if allow_missing and "id" not in page:
         return "unknown"
     return str(page["id"])
+
+
+def _http_status(e: HTTPError) -> int | None:
+    # NOTE: requests.Response is falsy for error statuses, so compare to None.
+    return e.response.status_code if e.response is not None else None
 
 
 class ConfluenceCheckpoint(ConnectorCheckpoint):
@@ -158,6 +184,9 @@ class ConfluenceConnector(
         labels_to_skip: list[str] = CONFLUENCE_CONNECTOR_LABELS_TO_SKIP,
         timezone_offset: float = CONFLUENCE_TIMEZONE_OFFSET,
         scoped_token: bool = False,
+        # default True: configs stored before this option existed must keep
+        # indexing attachments
+        include_attachments: bool = True,
     ) -> None:
         self.wiki_base = wiki_base
         self.is_cloud = is_cloud
@@ -169,6 +198,7 @@ class ConfluenceConnector(
         self.labels_to_skip = labels_to_skip
         self.timezone_offset = timezone_offset
         self.scoped_token = scoped_token
+        self.include_attachments = include_attachments
         self._confluence_client: OnyxConfluence | None = None
         self._low_timeout_confluence_client: OnyxConfluence | None = None
         self._fetched_titles: set[str] = set()
@@ -540,8 +570,10 @@ class ConfluenceConnector(
             # Extract labels
             labels = []
             if "metadata" in page and "labels" in page["metadata"]:
-                for label in page["metadata"]["labels"].get("results", []):
-                    labels.append(label.get("name", ""))
+                labels.extend(
+                    label.get("name", "")
+                    for label in page["metadata"]["labels"].get("results", [])
+                )
             if labels:
                 metadata["labels"] = labels
 
@@ -566,6 +598,7 @@ class ConfluenceConnector(
                 semantic_identifier=page_title,
                 metadata=metadata,
                 doc_updated_at=datetime_from_string(page["version"]["when"]),
+                doc_created_at=datetime_from_string(page["history"]["createdDate"]),
                 primary_owners=primary_owners if primary_owners else None,
                 parent_hierarchy_raw_node_id=parent_hierarchy_raw_node_id,
             )
@@ -596,6 +629,9 @@ class ConfluenceConnector(
         If there are valid attachments, the page itself is yielded as a hierarchy node
         (since attachments are children of the page in the hierarchy).
         """
+        if not self.include_attachments:
+            return [], []
+
         attachment_query = self._construct_attachment_query(
             _get_page_id(page), start, end
         )
@@ -636,10 +672,20 @@ class ConfluenceConnector(
                     attachment["title"],
                     page["title"],
                 )
-                # Attachment document id: use the download URL for stable identity
+                # Cloud's download link may be a filename-free REST URL.
                 try:
+                    attachment_url = (
+                        f"/download/attachments/{_get_page_id(page)}/{quote(attachment['title'])}"
+                        if self.is_cloud
+                        else attachment["_links"]["download"]
+                    )
+                    attachment_id = build_confluence_document_id(
+                        self.wiki_base, attachment["_links"]["webui"], self.is_cloud
+                    )
                     object_url = build_confluence_document_id(
-                        self.wiki_base, attachment["_links"]["download"], self.is_cloud
+                        self.wiki_base,
+                        attachment_url,
+                        self.is_cloud,
                     )
                 except Exception as e:
                     logger.warning(
@@ -678,19 +724,18 @@ class ConfluenceConnector(
                         )
                     labels: list[str] = []
                     if "metadata" in attachment and "labels" in attachment["metadata"]:
-                        for label in attachment["metadata"]["labels"].get(
-                            "results", []
-                        ):
-                            labels.append(label.get("name", ""))
+                        labels.extend(
+                            label.get("name", "")
+                            for label in attachment["metadata"]["labels"].get(
+                                "results", []
+                            )
+                        )
                     if labels:
                         attachment_metadata["labels"] = labels
                     page_url = page_url or build_confluence_document_id(
                         self.wiki_base, page["_links"]["webui"], self.is_cloud
                     )
                     attachment_metadata["parent_page_id"] = page_url
-                    attachment_id = build_confluence_document_id(
-                        self.wiki_base, attachment["_links"]["webui"], self.is_cloud
-                    )
 
                     primary_owners: list[BasicExpertInfo] | None = None
                     if "version" in attachment and "by" in attachment["version"]:
@@ -716,6 +761,9 @@ class ConfluenceConnector(
                             if attachment.get("version")
                             and attachment["version"].get("when")
                             else None
+                        ),
+                        doc_created_at=datetime_from_string(
+                            attachment["history"]["createdDate"]
                         ),
                         primary_owners=primary_owners,
                         parent_hierarchy_raw_node_id=attachment_parent_hierarchy_raw_id,
@@ -744,7 +792,7 @@ class ConfluenceConnector(
                     attachment_failures.append(
                         ConnectorFailure(
                             failed_document=DocumentFailure(
-                                document_id=object_url,
+                                document_id=attachment_id,
                                 document_link=object_url,
                             ),
                             failure_message=f"Failed to extract/summarize attachment {attachment['title']} for doc {object_url}",
@@ -752,43 +800,57 @@ class ConfluenceConnector(
                         )
                     )
         except HTTPError as e:
-            # If we get a 403 after all retries, the user likely doesn't have permission
-            # to access attachments on this page. Log and skip rather than failing the whole job.
+            # A 400/401/403 on the attachment query shouldn't fail the whole job:
+            # log, record a failure for the page, and continue.
+            status_code = _http_status(e)
             page_id = _get_page_id(page, allow_missing=True)
-            page_title = page.get("title", "unknown")
-            if e.response and e.response.status_code in [401, 403]:
-                failure_message_prefix = (
-                    "Invalid credentials (401)"
-                    if e.response.status_code == 401
-                    else "Permission denied (403)"
-                )
-                failure_message = (
-                    f"{failure_message_prefix} when fetching attachments for page '{page_title}' "
-                    f"(ID: {page_id}). The user may not have permission to query attachments on this page. "
-                    "Skipping attachments for this page."
-                )
-                logger.warning(failure_message)
-
-                # Build the page URL for the failure record
-                try:
-                    page_url = build_confluence_document_id(
-                        self.wiki_base, page["_links"]["webui"], self.is_cloud
+            page_ref = f"page '{page.get('title', 'unknown')}' (ID: {page_id})"
+            match status_code:
+                # Date errors are 400s but must propagate so load_from_checkpoint
+                # can retry the batch with an adjusted time offset.
+                case 400 if not is_atlassian_date_error(e):
+                    # Confluence Data Center intermittently rejects offset
+                    # pagination of attachment queries.
+                    failure_message = (
+                        f"Bad request (400) while paginating attachments for {page_ref}. "
+                        "Keeping the attachments retrieved so far and skipping the rest."
                     )
-                except Exception:
-                    page_url = f"page_id:{page_id}"
-
-                return [], [
-                    ConnectorFailure(
-                        failed_document=DocumentFailure(
-                            document_id=page_id,
-                            document_link=page_url,
-                        ),
-                        failure_message=failure_message,
-                        exception=e,
+                case 401 | 403:
+                    failure_message_prefix = (
+                        "Invalid credentials (401)"
+                        if status_code == 401
+                        else "Permission denied (403)"
                     )
-                ]
-            else:
-                raise
+                    failure_message = (
+                        f"{failure_message_prefix} when fetching attachments for {page_ref}. "
+                        "The user may not have permission to query attachments on this page. "
+                        "Skipping attachments for this page."
+                    )
+                    attachment_docs = []
+                    attachment_failures = []
+                case _:
+                    raise
+            logger.warning(failure_message)
+
+            # Build the page URL for the failure record
+            try:
+                page_url = build_confluence_document_id(
+                    self.wiki_base, page["_links"]["webui"], self.is_cloud
+                )
+            except Exception:
+                page_url = f"page_id:{page_id}"
+            attachment_failures.append(
+                ConnectorFailure(
+                    # Confluence document ids are page URLs; targeted reindex
+                    # extracts the page id from this field.
+                    failed_document=DocumentFailure(
+                        document_id=page_url,
+                        document_link=page_url,
+                    ),
+                    failure_message=failure_message,
+                    exception=e,
+                )
+            )
 
         return attachment_docs, attachment_failures
 
@@ -991,6 +1053,11 @@ class ConfluenceConnector(
                 ) or space_level_access.get(space_key)
             yield doc_or_failure
 
+            # Refetch attachments too
+            attachment_docs, attachment_failures = self._fetch_page_attachments(page)
+            yield from attachment_docs
+            yield from attachment_failures
+
         for doc_id, page_id in url_to_page_id.items():
             if page_id not in seen_page_ids:
                 yield ConnectorFailure(
@@ -1056,6 +1123,48 @@ class ConfluenceConnector(
             expand_per_page=True,
         )
 
+    def _retrieve_attachments_for_slim_page(
+        self,
+        page_id: str,
+        expand: str,
+        start: SecondsSinceUnixEpoch | None,
+        end: SecondsSinceUnixEpoch | None,
+    ) -> list[dict[str, Any]]:
+        """Fetch a page's attachments for the slim path, retrying Data
+        Center's intermittent pagination 400s (see _fetch_page_attachments).
+
+        Unlike the indexing path, partial results are never kept: pruning
+        deletes anything not enumerated, so a silently truncated enumeration
+        would delete validly indexed attachment docs. Enumerate fully or
+        raise.
+        """
+        attachment_query = self._construct_attachment_query(page_id, start, end)
+        attempts = 0
+        while True:
+            try:
+                return list(
+                    self.confluence_client.cql_paginate_all_expansions(
+                        cql=attachment_query,
+                        expand=expand,
+                        limit=_SLIM_DOC_BATCH_SIZE,
+                    )
+                )
+            except HTTPError as e:
+                attempts += 1
+                if (
+                    _http_status(e) != 400
+                    or is_atlassian_date_error(e)
+                    or attempts >= _SLIM_ATTACHMENT_MAX_ATTEMPTS
+                ):
+                    raise
+                logger.warning(
+                    "Bad request (400) while paginating attachments for page %s "
+                    "(attempt %d/%d); retrying.",
+                    page_id,
+                    attempts,
+                    _SLIM_ATTACHMENT_MAX_ATTEMPTS,
+                )
+
     def _retrieve_all_slim_docs(
         self,
         start: SecondsSinceUnixEpoch | None = None,
@@ -1082,8 +1191,7 @@ class ConfluenceConnector(
             )
 
         # Yield space hierarchy nodes first
-        for node in self._yield_space_hierarchy_nodes():
-            doc_metadata_list.append(node)
+        doc_metadata_list.extend(self._yield_space_hierarchy_nodes())
 
         # Per-page mode only: collapse shared ancestors to one GET each.
         ancestor_restrictions_cache: dict[str, dict[str, Any] | None] = {}
@@ -1118,8 +1226,7 @@ class ConfluenceConnector(
             limit=_SLIM_DOC_BATCH_SIZE,
         ):
             # Yield ancestor hierarchy nodes for this page
-            for node in self._yield_ancestor_hierarchy_nodes(page):
-                doc_metadata_list.append(node)
+            doc_metadata_list.extend(self._yield_ancestor_hierarchy_nodes(page))
 
             page_restrictions = page.get("restrictions") or {}
             page_space_key = page.get("space", {}).get("key")
@@ -1141,6 +1248,7 @@ class ConfluenceConnector(
                         if include_permissions
                         else None
                     ),
+                    doc_created_at=datetime_from_string(page["history"]["createdDate"]),
                     parent_hierarchy_raw_node_id=self._get_parent_hierarchy_raw_id(
                         page
                     ),
@@ -1150,18 +1258,16 @@ class ConfluenceConnector(
             # Attachments resolve from inline `restrictions` only; no
             # ancestor walk, so per-page mode is a no-op for them.
             page_hierarchy_node_yielded = False
-            attachment_query = self._construct_attachment_query(
-                _get_page_id(page), start, end
-            )
-            for attachment in self.confluence_client.cql_paginate_all_expansions(
-                cql=attachment_query,
-                expand=restrictions_expand,
-                limit=_SLIM_DOC_BATCH_SIZE,
-            ):
-                # If you skip images in the main indexing pass (allow_images
-                # is False), skip them here too. Otherwise the slim path emits
-                # a SlimDocument for an attachment the main path never produces
-                # a Document for, leaving a permanent chunk_count IS NULL row.
+            attachment_results: Iterable[dict[str, Any]] = ()
+            if self.include_attachments:
+                attachment_results = self._retrieve_attachments_for_slim_page(
+                    _get_page_id(page), restrictions_expand, start, end
+                )
+            for attachment in attachment_results:
+                # admission must mirror the main indexing pass
+                # (include_attachments + allow_images): extra slim docs become
+                # permanent chunk_count IS NULL rows, missing ones let pruning
+                # clean up docs the main pass no longer indexes
                 media_type = attachment.get("metadata", {}).get("mediaType", "")
                 if not self.allow_images and media_type.startswith("image/"):
                     continue
@@ -1204,6 +1310,9 @@ class ConfluenceConnector(
                             if include_permissions
                             else None
                         ),
+                        doc_created_at=datetime_from_string(
+                            attachment["history"]["createdDate"]
+                        ),
                         parent_hierarchy_raw_node_id=page_id,
                     )
                 )
@@ -1228,7 +1337,7 @@ class ConfluenceConnector(
             )
             first_space = next(spaces_iter, None)
         except HTTPError as e:
-            status_code = e.response.status_code if e.response else None
+            status_code = _http_status(e)
             if status_code == 401:
                 raise CredentialExpiredError(
                     "Invalid or expired Confluence credentials (HTTP 401)."

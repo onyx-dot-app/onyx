@@ -2,7 +2,7 @@
 
 import { useEffect } from "react";
 import { motion } from "motion/react";
-import { track, AnalyticsEvent } from "@/lib/analytics";
+import { track, AnalyticsEvent } from "@/lib/analytics/utils";
 import { OnyxLogoTypeIcon } from "@/components/icons/icons";
 import RefreshText from "@/refresh-components/texts/Text";
 import BigButton from "@/app/craft/components/BigButton";

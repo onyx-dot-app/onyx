@@ -1,9 +1,10 @@
+import ast
 import os
 import platform
 import shutil
 import subprocess
-from collections.abc import Callable
-from collections.abc import Generator
+from collections.abc import Callable, Generator
+from pathlib import Path
 from typing import Any
 from unittest.mock import patch
 
@@ -51,19 +52,22 @@ from fastapi.testclient import TestClient  # noqa: E402
 # Letting onyx.main load first means ee.onyx.main's back-reference to
 # onyx.main.get_application (defined at line 429, before line 706) resolves cleanly.
 import onyx.main  # noqa: E402, F401
-from onyx.auth.schemas import UserRole  # noqa: E402
 from onyx.background.celery.apps.client import celery_app  # noqa: E402
 from onyx.configs.constants import DocumentSource  # noqa: E402
-from onyx.db.engine.sql_engine import get_session_with_current_tenant  # noqa: E402
-from onyx.db.engine.sql_engine import SqlEngine  # noqa: E402
+from onyx.db.engine.sql_engine import (  # noqa: E402
+    SqlEngine,
+    get_session_with_current_tenant,
+)
 from onyx.db.search_settings import get_current_search_settings  # noqa: E402
 from onyx.utils.variable_functionality import (  # noqa: E402
     fetch_versioned_implementation,
 )
 from shared_configs.configs import MULTI_TENANT  # noqa: E402
 from tests.integration.common_utils import http_client  # noqa: E402
-from tests.integration.common_utils.constants import ADMIN_USER_NAME  # noqa: E402
-from tests.integration.common_utils.constants import GENERAL_HEADERS  # noqa: E402
+from tests.integration.common_utils.constants import (  # noqa: E402
+    ADMIN_USER_NAME,
+    GENERAL_HEADERS,
+)
 from tests.integration.common_utils.managers.api_key import APIKeyManager  # noqa: E402
 from tests.integration.common_utils.managers.document import (  # noqa: E402
     DocumentManager,
@@ -74,19 +78,26 @@ from tests.integration.common_utils.managers.image_generation import (  # noqa: 
 from tests.integration.common_utils.managers.llm_provider import (  # noqa: E402
     LLMProviderManager,
 )
-from tests.integration.common_utils.managers.user import build_email  # noqa: E402
-from tests.integration.common_utils.managers.user import DEFAULT_PASSWORD  # noqa: E402
-from tests.integration.common_utils.managers.user import UserManager  # noqa: E402
-from tests.integration.common_utils.reset import _seed_dev_license_if_set  # noqa: E402
-from tests.integration.common_utils.reset import reset_all  # noqa: E402
-from tests.integration.common_utils.reset import reset_all_multitenant  # noqa: E402
-from tests.integration.common_utils.test_models import DATestAPIKey  # noqa: E402
-from tests.integration.common_utils.test_models import (  # noqa: E402
-    DATestImageGenerationConfig,
+from tests.integration.common_utils.managers.user import (  # noqa: E402
+    DEFAULT_PASSWORD,
+    UserManager,
+    build_email,
 )
-from tests.integration.common_utils.test_models import DATestLLMProvider  # noqa: E402
-from tests.integration.common_utils.test_models import DATestUser  # noqa: E402
-from tests.integration.common_utils.test_models import SimpleTestDocument  # noqa: E402
+from tests.integration.common_utils.managers.user_group import (  # noqa: E402
+    UserGroupManager,
+)
+from tests.integration.common_utils.reset import (  # noqa: E402
+    _seed_dev_license_if_set,
+    reset_all,
+    reset_all_multitenant,
+)
+from tests.integration.common_utils.test_models import (  # noqa: E402
+    DATestAPIKey,
+    DATestImageGenerationConfig,
+    DATestLLMProvider,
+    DATestUser,
+    SimpleTestDocument,
+)
 from tests.integration.common_utils.vespa import vespa_fixture  # noqa: E402
 
 BASIC_USER_NAME = "basic_user"
@@ -159,10 +170,10 @@ _CELERY_WORKER_PROGRAMS: list[tuple[str, str]] = [
         "connector_pruning,connector_doc_permissions_sync,"
         "connector_external_group_sync,csv_generation,sandbox",
     ),
-    ("docprocessing", "docprocessing"),
+    ("docprocessing", "docprocessing,port"),
     (
         "user_file_processing",
-        "user_file_processing,user_file_project_sync,user_file_delete",
+        "user_file_processing,user_file_project_sync,user_file_delete,user_file_port",
     ),
     ("scheduled_tasks", "scheduled_tasks"),
     ("docfetching", "connector_doc_fetching"),
@@ -210,6 +221,22 @@ def _start_celery_workers(
     log_dir = os.path.join(BACKEND_DIR, "log")
     os.makedirs(log_dir, exist_ok=True)
 
+    # onyx isn't installed into the venv, and celery keeps the cwd on
+    # sys.path only transiently while importing the app (cwd_in_path). The
+    # indexing pipeline's spawn-context children (SimpleJobClient) inherit
+    # the worker's sys.path, so without a persistent entry they die with
+    # ModuleNotFoundError. PYTHONPATH pins it for the whole worker tree,
+    # mirroring the backend Dockerfile's `ENV PYTHONPATH=/app`.
+    _inherited_pythonpath = os.environ.get("PYTHONPATH")
+    worker_env = {
+        **os.environ,
+        "PYTHONPATH": (
+            f"{BACKEND_DIR}{os.pathsep}{_inherited_pythonpath}"
+            if _inherited_pythonpath
+            else BACKEND_DIR
+        ),
+    }
+
     processes: list[tuple[str, subprocess.Popen[bytes]]] = []
     log_handles: list[Any] = []
     for app_name, queues in _CELERY_WORKER_PROGRAMS:
@@ -231,6 +258,7 @@ def _start_celery_workers(
         proc = subprocess.Popen(
             cmd,
             cwd=BACKEND_DIR,
+            env=worker_env,
             stdout=log_file,
             stderr=subprocess.STDOUT,
             start_new_session=True,
@@ -253,6 +281,7 @@ def _start_celery_workers(
             "--loglevel=info",
         ],
         cwd=BACKEND_DIR,
+        env=worker_env,
         stdout=beat_log_file,
         stderr=subprocess.STDOUT,
         start_new_session=True,
@@ -360,7 +389,7 @@ def admin_user() -> DATestUser:
         user = UserManager.create(name=ADMIN_USER_NAME)
 
         # if there are other users for some reason, reset and try again
-        if not UserManager.is_role(user, UserRole.ADMIN):
+        if not UserManager.is_admin(user):
             print("Trying to reset")
             reset_all()
             user = UserManager.create(name=ADMIN_USER_NAME)
@@ -375,11 +404,11 @@ def admin_user() -> DATestUser:
                 email=build_email("admin_user"),
                 password=DEFAULT_PASSWORD,
                 headers=GENERAL_HEADERS,
-                role=UserRole.ADMIN,
+                is_admin=True,
                 is_active=True,
             )
         )
-        if not UserManager.is_role(user, UserRole.ADMIN):
+        if not UserManager.is_admin(user):
             reset_all()
             user = UserManager.create(name=ADMIN_USER_NAME)
             return user
@@ -394,16 +423,15 @@ def admin_user() -> DATestUser:
 @pytest.fixture
 def basic_user(
     # make sure the admin user exists first to ensure this new user
-    # gets the BASIC role
+    # lands in the Basic group rather than Admin
     admin_user: DATestUser,  # noqa: ARG001
 ) -> DATestUser:
     try:
         user = UserManager.create(name=BASIC_USER_NAME)
 
-        # Validate that the user has the BASIC role
-        if user.role != UserRole.BASIC:
+        if user.is_admin:
             raise RuntimeError(
-                f"Created user {BASIC_USER_NAME} does not have BASIC role"
+                f"Created user {BASIC_USER_NAME} unexpectedly has admin privileges"
             )
 
         return user
@@ -417,14 +445,15 @@ def basic_user(
                 email=build_email(BASIC_USER_NAME),
                 password=DEFAULT_PASSWORD,
                 headers=GENERAL_HEADERS,
-                role=UserRole.BASIC,
+                is_admin=False,
                 is_active=True,
             )
         )
 
-        # Validate that the logged-in user has the BASIC role
-        if not UserManager.is_role(user, UserRole.BASIC):
-            raise RuntimeError(f"User {BASIC_USER_NAME} does not have BASIC role")
+        if UserManager.is_admin(user):
+            raise RuntimeError(
+                f"User {BASIC_USER_NAME} unexpectedly has admin privileges"
+            )
 
         return user
 
@@ -466,8 +495,12 @@ def document_builder(admin_user: DATestUser) -> DocumentBuilderType:
     # HACK: Avoid importing generated OpenAPI client modules unless this fixture is used.
     from tests.integration.common_utils.managers.cc_pair import CCPairManager
 
+    admin_group = UserGroupManager.get_default(
+        user_performing_action=admin_user, name="Admin"
+    )
     api_key: DATestAPIKey = APIKeyManager.create(
         user_performing_action=admin_user,
+        group_ids=[admin_group.id],
     )
 
     # create connector
@@ -490,6 +523,78 @@ def document_builder(admin_user: DATestUser) -> DocumentBuilderType:
         return docs
 
     return _document_builder
+
+
+_INTEGRATION_DIR = Path(__file__).parent
+
+
+def _imports_mock(source: str) -> bool:
+    """Report whether the module imports unittest.mock, in any spelling.
+
+    Parsed rather than pattern-matched so that a docstring quoting the rule is
+    not mistaken for a violation, and so that a parenthesized import still
+    counts. It does not follow ``import unittest`` to a later ``unittest.mock``
+    attribute access; the check is a signpost, not a sandbox.
+    """
+    try:
+        tree = ast.parse(source)
+    except SyntaxError:
+        # pytest reports the syntax error itself; nothing useful to add here.
+        return False
+
+    for node in ast.walk(tree):
+        if isinstance(node, ast.Import):
+            if any(alias.name == "unittest.mock" for alias in node.names):
+                return True
+        elif isinstance(node, ast.ImportFrom):
+            if node.module == "unittest.mock":
+                return True
+            if node.module == "unittest" and any(
+                alias.name == "mock" for alias in node.names
+            ):
+                return True
+    return False
+
+
+def pytest_collection_modifyitems(items: list[pytest.Item]) -> None:
+    """Fail collection if an integration test mocks the code under test.
+
+    Integration tests are the black-box tier: they drive the product through its
+    real API and assert on observable behavior. Reaching inside with
+    ``unittest.mock`` turns them into external-dependency-unit tests wearing the
+    wrong hat, and that used to be caught only by a reviewer noticing the import.
+    """
+    offenders: set[str] = set()
+    checked: set[Path] = set()
+
+    for item in items:
+        path = getattr(item, "path", None)
+        if path is None or path in checked:
+            continue
+        checked.add(path)
+
+        try:
+            rel = path.relative_to(_INTEGRATION_DIR).as_posix()
+        except ValueError:
+            continue
+
+        try:
+            source = path.read_text(encoding="utf-8")
+        except OSError:
+            continue
+        if _imports_mock(source):
+            offenders.add(rel)
+
+    if offenders:
+        listed = "\n".join(f"  tests/integration/{name}" for name in sorted(offenders))
+        raise pytest.UsageError(
+            "Integration tests must not import unittest.mock — they drive the "
+            "product through its real API and cannot mock it:\n"
+            f"{listed}\n"
+            "Move the test to backend/tests/external_dependency_unit/ (where "
+            "mocking is allowed and functions are called directly), or rewrite "
+            "it to assert on observable API behavior."
+        )
 
 
 def pytest_runtest_logstart(

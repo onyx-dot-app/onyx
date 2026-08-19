@@ -1,14 +1,11 @@
 from __future__ import annotations
 
-from sqlalchemy import select
-from sqlalchemy import update
+from sqlalchemy import select, update
 from sqlalchemy.orm import Session
 
-from onyx.db.models import InternetContentProvider
-from onyx.db.models import InternetSearchProvider
+from onyx.db.models import InternetContentProvider, InternetSearchProvider
 from onyx.tools.tool_implementations.web_search.models import WebContentProviderConfig
-from shared_configs.enums import WebContentProviderType
-from shared_configs.enums import WebSearchProviderType
+from shared_configs.enums import WebContentProviderType, WebSearchProviderType
 
 
 def fetch_web_search_providers(db_session: Session) -> list[InternetSearchProvider]:

@@ -1,13 +1,12 @@
 "use client";
 
 import { adminSearch } from "./lib";
-import { MagnifyingGlass } from "@phosphor-icons/react";
 import { useState, useEffect, useCallback } from "react";
 import { OnyxDocument } from "@/lib/search/interfaces";
 import { buildDocumentSummaryDisplay } from "@/components/search/DocumentDisplay";
 import { Checkbox } from "@opal/components";
 import { updateHiddenStatus } from "../lib";
-import { toast } from "@/hooks/useToast";
+import { toast } from "@opal/layouts";
 import { getErrorMsg } from "@/lib/fetchUtils";
 import { ScoreSection } from "../ScoreEditor";
 import { useRouter } from "next/navigation";
@@ -19,7 +18,8 @@ import { SourceIcon } from "@/components/SourceIcon";
 import { Connector } from "@/lib/connectors/connectors";
 import { HorizontalFilters } from "@/components/filters/SourceSelector";
 import { InputTypeIn } from "@opal/components";
-import { ThreeDotsLoader } from "@/components/Loading";
+import SvgSimpleLoader from "@opal/icons/simple-loader";
+import { clickOnKeyDown } from "@opal/utils";
 
 const DocumentDisplay = ({
   document,
@@ -28,6 +28,18 @@ const DocumentDisplay = ({
   document: OnyxDocument;
   refresh: () => void;
 }) => {
+  async function toggleHidden() {
+    const response = await updateHiddenStatus(
+      document.document_id,
+      !document.hidden
+    );
+    if (response.ok) {
+      refresh();
+    } else {
+      toast.error(`Failed to update document - ${getErrorMsg(response)}`);
+    }
+  }
+
   return (
     <div
       key={document.document_id}
@@ -60,19 +72,11 @@ const DocumentDisplay = ({
           />
         </div>
         <div
-          onClick={async () => {
-            const response = await updateHiddenStatus(
-              document.document_id,
-              !document.hidden
-            );
-            if (response.ok) {
-              refresh();
-            } else {
-              toast.error(
-                `Failed to update document - ${getErrorMsg(response)}`
-              );
-            }
-          }}
+          role="button"
+          tabIndex={0}
+          aria-label={document.hidden ? "Unhide document" : "Hide document"}
+          onKeyDown={clickOnKeyDown(() => void toggleHidden())}
+          onClick={() => void toggleHidden()}
           className="px-1 py-0.5 bg-accent-background-hovered hover:bg-accent-background rounded-sm flex cursor-pointer select-none"
         >
           <div className="my-auto">
@@ -180,7 +184,6 @@ export function Explorer({
               event.preventDefault();
             }
           }}
-          role="textarea"
         />
 
         <HorizontalFilters
@@ -207,7 +210,11 @@ export function Explorer({
           })}
         </div>
       )}
-      {isLoading && <ThreeDotsLoader />}
+      {isLoading && (
+        <div className="flex justify-center py-12">
+          <SvgSimpleLoader className="h-6 w-6" />
+        </div>
+      )}
     </div>
   );
 }

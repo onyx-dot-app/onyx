@@ -3,8 +3,7 @@ from typing import Any
 from onyx.utils.logger import setup_logger
 
 from .create import get_current_span
-from .spans import Span
-from .spans import SpanError
+from .spans import Span, SpanError
 
 logger = setup_logger(__name__)
 

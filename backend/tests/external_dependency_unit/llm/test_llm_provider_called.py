@@ -9,27 +9,34 @@ from fastapi_users.password import PasswordHelper
 from sqlalchemy.orm import Session
 
 from onyx.db.enums import AccountType
-from onyx.db.llm import fetch_existing_llm_provider
-from onyx.db.llm import remove_llm_provider
-from onyx.db.llm import update_default_provider
-from onyx.db.llm import upsert_llm_provider
+from onyx.db.llm import (
+    fetch_existing_llm_provider,
+    remove_llm_provider,
+    update_default_provider,
+    upsert_llm_provider,
+)
 from onyx.db.models import User
-from onyx.db.models import UserRole
+from onyx.db.users import assign_user_to_default_groups__no_commit
 from onyx.llm.constants import LlmProviderNames
 from onyx.llm.override_models import LLMOverride
-from onyx.server.manage.llm.models import LLMProviderUpsertRequest
-from onyx.server.manage.llm.models import ModelConfigurationUpsertRequest
+from onyx.server.manage.llm.models import (
+    LLMProviderUpsertRequest,
+    ModelConfigurationUpsertRequest,
+)
 from onyx.server.query_and_chat.chat_backend import create_new_chat_session
-from onyx.server.query_and_chat.models import ChatSessionCreationRequest
-from onyx.server.query_and_chat.models import MessageResponseIDInfo
+from onyx.server.query_and_chat.models import (
+    ChatSessionCreationRequest,
+    MessageResponseIDInfo,
+)
 from tests.external_dependency_unit.answer.stream_test_assertions import (
     assert_answer_stream_part_correct,
 )
 from tests.external_dependency_unit.answer.stream_test_builder import StreamTestBuilder
-from tests.external_dependency_unit.answer.stream_test_utils import submit_query
-from tests.external_dependency_unit.answer.stream_test_utils import tokenise
-from tests.external_dependency_unit.mock_llm import LLMAnswerResponse
-from tests.external_dependency_unit.mock_llm import MockLLM
+from tests.external_dependency_unit.answer.stream_test_utils import (
+    submit_query,
+    tokenise,
+)
+from tests.external_dependency_unit.mock_llm import LLMAnswerResponse, MockLLM
 
 
 def _create_admin(db_session: Session) -> User:
@@ -46,10 +53,11 @@ def _create_admin(db_session: Session) -> User:
         is_active=True,
         is_superuser=True,
         is_verified=True,
-        role=UserRole.ADMIN,
         account_type=AccountType.STANDARD,
     )
     db_session.add(user)
+    db_session.flush()
+    assign_user_to_default_groups__no_commit(db_session, user, is_admin=True)
     db_session.commit()
     db_session.refresh(user)
     return user

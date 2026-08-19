@@ -2,15 +2,29 @@ package git
 
 import (
 	"encoding/json"
+	"errors"
 	"fmt"
 	"os"
 	"os/exec"
 	"path/filepath"
 	"strconv"
 	"strings"
+	"time"
 
 	log "github.com/sirupsen/logrus"
 )
+
+// PushHookHintDelay is how long a push with hooks enabled runs before HintAfter
+// tells the user how to skip them.
+const PushHookHintDelay = 10 * time.Second
+
+// HintAfter runs fn and logs hint if fn is still running after delay. Use it to
+// point at a faster flag when pre-push hooks make a command slow.
+func HintAfter(delay time.Duration, hint string, fn func() error) error {
+	timer := time.AfterFunc(delay, func() { log.Warn(hint) })
+	defer timer.Stop()
+	return fn()
+}
 
 // CheckGitHubCLI checks if the GitHub CLI is installed and exits with a helpful message if not
 func CheckGitHubCLI() {
@@ -61,6 +75,26 @@ func RunCommandVerboseOnError(args ...string) error {
 		fmt.Print(string(output))
 	}
 	return nil
+}
+
+// PushTag pushes a tag to origin, optionally with --force. Pre-push hooks are
+// skipped unless verify is true: a tag points at a commit that already passed
+// CI, and the hooks run over the whole delta since the previous tag, which is
+// slow and unrelated to the push.
+func PushTag(tag string, force, verify bool) error {
+	args := []string{"push"}
+	if !verify {
+		args = append(args, "--no-verify")
+	}
+	if force {
+		args = append(args, "-f")
+	}
+	args = append(args, "origin", tag)
+	if !verify {
+		return RunCommand(args...)
+	}
+	hint := "Push is slow because --verify runs the pre-push hooks over every commit since the previous tag. Re-run without --verify to skip them."
+	return HintAfter(PushHookHintDelay, hint, func() error { return RunCommand(args...) })
 }
 
 // GetCommitMessage gets the first line of a commit message
@@ -116,6 +150,39 @@ func RestoreStash(result *StashResult) {
 		log.Warnf("Failed to restore stashed changes (may have conflicts): %v", err)
 		log.Info("Your changes are still in the stash. Run 'git stash pop' to restore them manually.")
 	}
+}
+
+// IsAncestor reports whether ancestor is an ancestor of (or equal to)
+// descendant. Both arguments may be any commit-ish.
+func IsAncestor(ancestor, descendant string) (bool, error) {
+	cmd := exec.Command("git", "merge-base", "--is-ancestor", ancestor, descendant)
+	var stderr strings.Builder
+	cmd.Stderr = &stderr
+	err := cmd.Run()
+	if err == nil {
+		return true, nil
+	}
+	// Exit code 1 is the documented "not an ancestor" result; anything else
+	// (e.g. an unknown revision) is a real error.
+	var exitErr *exec.ExitError
+	if errors.As(err, &exitErr) && exitErr.ExitCode() == 1 {
+		return false, nil
+	}
+	if diagnostic := strings.TrimSpace(stderr.String()); diagnostic != "" {
+		return false, fmt.Errorf("git merge-base --is-ancestor %s %s failed: %w: %s", ancestor, descendant, err, diagnostic)
+	}
+	return false, fmt.Errorf("git merge-base --is-ancestor %s %s failed: %w", ancestor, descendant, err)
+}
+
+// IsShallowRepository reports whether the current repository is a shallow
+// clone.
+func IsShallowRepository() (bool, error) {
+	cmd := exec.Command("git", "rev-parse", "--is-shallow-repository")
+	output, err := cmd.Output()
+	if err != nil {
+		return false, fmt.Errorf("git rev-parse --is-shallow-repository failed: %w", err)
+	}
+	return strings.TrimSpace(string(output)) == "true", nil
 }
 
 // CommitExistsOnBranch checks if a commit exists on a branch
@@ -252,6 +319,60 @@ func ResolvePRToMergeCommit(prNumber string) (string, error) {
 		return "", fmt.Errorf("PR #%s has no merge commit (is it merged?)", prNumber)
 	}
 	return sha, nil
+}
+
+// ResolveCommitToPR resolves a commit SHA to the number of the PR that
+// introduced it (best-effort; the GitHub API returns associated PRs for a
+// commit). Returns an error if no associated PR is found.
+func ResolveCommitToPR(commitSHA string) (string, error) {
+	cmd := exec.Command("gh", "api", fmt.Sprintf("repos/{owner}/{repo}/commits/%s/pulls", commitSHA), "--jq", ".[0].number")
+	output, err := cmd.Output()
+	if err != nil {
+		if exitErr, ok := err.(*exec.ExitError); ok {
+			return "", fmt.Errorf("gh api commits/pulls failed: %w: %s", err, string(exitErr.Stderr))
+		}
+		return "", fmt.Errorf("gh api commits/pulls failed: %w", err)
+	}
+	prNumber := strings.TrimSpace(string(output))
+	if prNumber == "" || prNumber == "null" {
+		return "", fmt.Errorf("no associated PR found for commit %s", commitSHA)
+	}
+	return prNumber, nil
+}
+
+// cherryPickWorkflowFile is the workflow file name dispatched by --dispatch.
+const cherryPickWorkflowFile = "post-merge-beta-cherry-pick.yml"
+
+// DispatchCherryPickWorkflow triggers the post-merge beta cherry-pick workflow
+// via `gh workflow run`. mergeCommitSHA is required; prNumber and release are
+// optional (empty values are omitted). When dryRun is true the gh command is
+// logged but not executed.
+func DispatchCherryPickWorkflow(mergeCommitSHA, prNumber, release string, dryRun bool) error {
+	args := []string{
+		"workflow", "run", cherryPickWorkflowFile,
+		"-f", fmt.Sprintf("merge_commit_sha=%s", mergeCommitSHA),
+	}
+	if prNumber != "" {
+		args = append(args, "-f", fmt.Sprintf("pr_number=%s", prNumber))
+	}
+	if release != "" {
+		args = append(args, "-f", fmt.Sprintf("release=%s", release))
+	}
+
+	if dryRun {
+		log.Warnf("[DRY RUN] Would run: gh %s", strings.Join(args, " "))
+		return nil
+	}
+
+	cmd := exec.Command("gh", args...)
+	output, err := cmd.CombinedOutput()
+	if err != nil {
+		if len(output) > 0 {
+			return fmt.Errorf("%w: %s", err, strings.TrimSpace(string(output)))
+		}
+		return err
+	}
+	return nil
 }
 
 // RunCherryPickContinue runs git cherry-pick --continue --no-edit

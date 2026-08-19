@@ -3,16 +3,10 @@ from enum import Enum
 from typing import Any
 from uuid import UUID
 
-from pydantic import BaseModel
-from pydantic import model_validator
+from pydantic import BaseModel, model_validator
 
-from onyx.configs.constants import DocumentSource
-from onyx.configs.constants import MessageType
-from onyx.configs.constants import SessionType
-from onyx.context.search.models import BaseFilters
-from onyx.context.search.models import SavedSearchDoc
-from onyx.context.search.models import SearchDoc
-from onyx.context.search.models import Tag
+from onyx.configs.constants import DocumentSource, MessageType, SessionType
+from onyx.context.search.models import BaseFilters, SavedSearchDoc, SearchDoc, Tag
 from onyx.db.enums import ChatSessionSharedStatus
 from onyx.db.models import ChatSession
 from onyx.file_store.models import FileDescriptor
@@ -31,6 +25,7 @@ class MessageOrigin(str, Enum):
     SLACKBOT = "slackbot"
     WIDGET = "widget"
     DISCORDBOT = "discordbot"
+    MOBILE = "mobile"
     UNKNOWN = "unknown"
     UNSET = "unset"
 
@@ -74,11 +69,22 @@ class UpdateChatSessionTemperatureRequest(BaseModel):
     temperature_override: float
 
 
+class UpdateChatSessionReasoningRequest(BaseModel):
+    chat_session_id: UUID
+    reasoning_effort_override: str | None = None
+
+
 class ChatSessionCreationRequest(BaseModel):
     # If not specified, use Onyx default persona
     persona_id: int = 0
     description: str | None = None
     project_id: int | None = None
+    # Start the session incognito. Refused with an error when incognito is
+    # unavailable, never silently downgraded to an ordinary chat.
+    incognito: bool = False
+    # The id the client already used when uploading, so this session owns those
+    # files. Ignored unless incognito.
+    incognito_session_id: UUID | None = None
 
 
 class ChatFeedbackRequest(BaseModel):
@@ -192,6 +198,7 @@ class ChatSessionDetails(BaseModel):
     shared_status: ChatSessionSharedStatus
     current_alternate_model: str | None = None
     current_temperature_override: float | None = None
+    current_reasoning_effort_override: str | None = None
 
     @classmethod
     def from_model(cls, model: ChatSession) -> "ChatSessionDetails":
@@ -204,6 +211,7 @@ class ChatSessionDetails(BaseModel):
             shared_status=model.shared_status,
             current_alternate_model=model.current_alternate_model,
             current_temperature_override=model.temperature_override,
+            current_reasoning_effort_override=model.reasoning_effort_override,
         )
 
 
@@ -235,8 +243,8 @@ class ChatMessageDetail(BaseModel):
         self, *args: list, **kwargs: dict[str, Any]
     ) -> dict[str, Any]:
         initial_dict = super().model_dump(
-            mode="json",
             *args,
+            mode="json",
             **kwargs,  # ty: ignore[invalid-argument-type]
         )
         initial_dict["time_sent"] = self.time_sent.isoformat()
@@ -246,6 +254,12 @@ class ChatMessageDetail(BaseModel):
 class SetPreferredResponseRequest(BaseModel):
     user_message_id: int
     preferred_response_id: int
+
+
+class CurrentRunInfo(BaseModel):
+    """In-flight run whose stream buffer can be replayed/tailed."""
+
+    run_id: int
 
 
 class ChatSessionDetailResponse(BaseModel):
@@ -259,9 +273,16 @@ class ChatSessionDetailResponse(BaseModel):
     shared_status: ChatSessionSharedStatus
     current_alternate_model: str | None
     current_temperature_override: float | None
+    current_reasoning_effort_override: str | None
     deleted: bool = False
     owner_name: str | None = None
     packets: list[list[Packet]]
+    # Set while a run is in flight and resumable: cursor-0 replay+tail is
+    # available at /chat-session/{id}/resume-stream.
+    current_run: CurrentRunInfo | None = None
+    # True for sessions pinned to an incognito record mode, so a reload can
+    # restore the incognito UI state.
+    incognito: bool = False
 
 
 class AdminSearchRequest(BaseModel):
@@ -281,6 +302,7 @@ class ChatSessionSummary(BaseModel):
     shared_status: ChatSessionSharedStatus
     current_alternate_model: str | None = None
     current_temperature_override: float | None = None
+    current_reasoning_effort_override: str | None = None
 
 
 class ChatSessionGroup(BaseModel):

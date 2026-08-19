@@ -7,23 +7,32 @@ Verifies that:
 - celery_utils routing picks retrieve_all_slim_docs() for GoogleDriveConnector
 """
 
-from unittest.mock import MagicMock
-from unittest.mock import patch
+from unittest.mock import MagicMock, call, patch
 
 from google.auth.exceptions import RefreshError
 
+from onyx.access.models import ExternalAccess
 from onyx.background.celery.celery_utils import extract_ids_from_runnable_connector
 from onyx.connectors.google_drive.connector import GoogleDriveConnector
+from onyx.connectors.google_drive.doc_conversion import (
+    PermissionSyncContext,
+    build_slim_document,
+)
 from onyx.connectors.google_drive.file_retrieval import DriveFileFieldType
-from onyx.connectors.google_drive.models import DriveRetrievalStage
-from onyx.connectors.google_drive.models import GoogleDriveCheckpoint
-from onyx.connectors.google_drive.models import StageCompletion
+from onyx.connectors.google_drive.models import (
+    DriveRetrievalStage,
+    GoogleDriveCheckpoint,
+    StageCompletion,
+)
 from onyx.connectors.google_utils.resources import ImpersonationError
-from onyx.connectors.interfaces import SlimConnector
-from onyx.connectors.interfaces import SlimConnectorWithPermSync
+from onyx.connectors.interfaces import SlimConnector, SlimConnectorWithPermSync
 from onyx.connectors.models import SlimDocument
-from onyx.utils.threadpool_concurrency import ThreadSafeDict
-from onyx.utils.threadpool_concurrency import ThreadSafeSet
+from onyx.utils.threadpool_concurrency import ThreadSafeDict, ThreadSafeSet
+
+_ADMIN_EMAIL = "admin@example.com"
+_EXTERNAL_OWNER_EMAIL = "owner@external.example"
+_RETRIEVER_EMAIL = "retriever@example.com"
+_DOC_CONVERSION_MODULE = "onyx.connectors.google_drive.doc_conversion"
 
 
 def _make_done_checkpoint() -> GoogleDriveCheckpoint:
@@ -39,8 +48,103 @@ def _make_done_checkpoint() -> GoogleDriveCheckpoint:
 def _make_connector() -> GoogleDriveConnector:
     connector = GoogleDriveConnector(include_my_drives=True)
     connector._creds = MagicMock()
-    connector._primary_admin_email = "admin@example.com"
+    connector._primary_admin_email = _ADMIN_EMAIL
     return connector
+
+
+class TestBuildSlimDocumentPermissions:
+    def test_routes_owner_then_retriever_fallback(self) -> None:
+        creds = MagicMock()
+        owner_service = MagicMock()
+        retriever_service = MagicMock()
+        admin_service = MagicMock()
+        external_access = ExternalAccess.empty()
+        file = {
+            "id": "file-id",
+            "mimeType": "text/plain",
+            "webViewLink": "https://drive.google.com/file/d/file-id/view",
+            "owners": [{"emailAddress": _EXTERNAL_OWNER_EMAIL}],
+        }
+        permission_sync_context = PermissionSyncContext(
+            primary_admin_email=_ADMIN_EMAIL,
+            google_domain="example.com",
+        )
+
+        with (
+            patch(
+                f"{_DOC_CONVERSION_MODULE}.get_drive_service",
+                side_effect=[owner_service, admin_service, retriever_service],
+            ) as mock_get_drive_service,
+            patch(
+                f"{_DOC_CONVERSION_MODULE}._get_external_access_for_raw_gdrive_file",
+                return_value=external_access,
+            ) as mock_get_external_access,
+        ):
+            slim_document = build_slim_document(
+                creds,
+                file,
+                permission_sync_context,
+                _RETRIEVER_EMAIL,
+            )
+            fallback_drive_service_factory = mock_get_external_access.call_args.kwargs[
+                "fallback_drive_service_factory"
+            ]
+            assert fallback_drive_service_factory() is retriever_service
+
+        assert slim_document is not None
+        assert slim_document.external_access == external_access
+        assert mock_get_drive_service.call_args_list == [
+            call(creds, user_email=_EXTERNAL_OWNER_EMAIL),
+            call(creds, user_email=_ADMIN_EMAIL),
+            call(creds, user_email=_RETRIEVER_EMAIL),
+        ]
+        access_kwargs = mock_get_external_access.call_args.kwargs
+        assert access_kwargs["file"] == file
+        assert access_kwargs["company_domain"] == "example.com"
+        assert access_kwargs["retriever_drive_service"] is owner_service
+        assert access_kwargs["admin_drive_service"] is admin_service
+        assert access_kwargs["fallback_user_email"] == _RETRIEVER_EMAIL
+
+    def test_skips_retriever_fallback_when_retriever_owns_file(self) -> None:
+        creds = MagicMock()
+        owner_service = MagicMock()
+        admin_service = MagicMock()
+        file = {
+            "id": "file-id",
+            "mimeType": "text/plain",
+            "webViewLink": "https://drive.google.com/file/d/file-id/view",
+            "owners": [{"emailAddress": _RETRIEVER_EMAIL}],
+        }
+        permission_sync_context = PermissionSyncContext(
+            primary_admin_email=_ADMIN_EMAIL,
+            google_domain="example.com",
+        )
+
+        with (
+            patch(
+                f"{_DOC_CONVERSION_MODULE}.get_drive_service",
+                side_effect=[owner_service, admin_service],
+            ) as mock_get_drive_service,
+            patch(
+                f"{_DOC_CONVERSION_MODULE}._get_external_access_for_raw_gdrive_file",
+                return_value=ExternalAccess.empty(),
+            ) as mock_get_external_access,
+        ):
+            build_slim_document(
+                creds,
+                file,
+                permission_sync_context,
+                _RETRIEVER_EMAIL,
+            )
+            fallback_drive_service_factory = mock_get_external_access.call_args.kwargs[
+                "fallback_drive_service_factory"
+            ]
+            assert fallback_drive_service_factory() is None
+
+        assert mock_get_drive_service.call_args_list == [
+            call(creds, user_email=_RETRIEVER_EMAIL),
+            call(creds, user_email=_ADMIN_EMAIL),
+        ]
 
 
 class TestGoogleDriveSlimConnectorInterface:
@@ -65,7 +169,10 @@ class TestRetrieveAllSlimDocs:
     def test_does_not_call_extract_when_checkpoint_is_done(self) -> None:
         connector = _make_connector()
         slim_doc = MagicMock(
-            spec=SlimDocument, id="doc1", parent_hierarchy_raw_node_id=None
+            spec=SlimDocument,
+            id="doc1",
+            parent_hierarchy_raw_node_id=None,
+            doc_created_at=None,
         )
 
         with patch.object(
@@ -85,7 +192,10 @@ class TestRetrieveAllSlimDocs:
     ) -> None:
         connector = _make_connector()
         slim_doc = MagicMock(
-            spec=SlimDocument, id="doc1", parent_hierarchy_raw_node_id=None
+            spec=SlimDocument,
+            id="doc1",
+            parent_hierarchy_raw_node_id=None,
+            doc_created_at=None,
         )
         # Checkpoint starts at START, _extract advances it to DONE
         with patch.object(connector, "build_dummy_checkpoint") as mock_build:
@@ -116,7 +226,10 @@ class TestRetrieveAllSlimDocs:
     def test_yields_slim_documents(self) -> None:
         connector = _make_connector()
         slim_doc = MagicMock(
-            spec=SlimDocument, id="doc1", parent_hierarchy_raw_node_id=None
+            spec=SlimDocument,
+            id="doc1",
+            parent_hierarchy_raw_node_id=None,
+            doc_created_at=None,
         )
         start_checkpoint = GoogleDriveCheckpoint(
             retrieved_folder_and_drive_ids=set(),
@@ -149,7 +262,10 @@ class TestRetrieveAllSlimDocsPermSync:
     def test_calls_extract_with_include_permissions_true(self) -> None:
         connector = _make_connector()
         slim_doc = MagicMock(
-            spec=SlimDocument, id="doc1", parent_hierarchy_raw_node_id=None
+            spec=SlimDocument,
+            id="doc1",
+            parent_hierarchy_raw_node_id=None,
+            doc_created_at=None,
         )
         start_checkpoint = GoogleDriveCheckpoint(
             retrieved_folder_and_drive_ids=set(),
@@ -188,7 +304,10 @@ class TestCeleryUtilsRouting:
         not retrieve_all_slim_docs_perm_sync, for GoogleDriveConnector."""
         connector = _make_connector()
         slim_doc = MagicMock(
-            spec=SlimDocument, id="doc1", parent_hierarchy_raw_node_id=None
+            spec=SlimDocument,
+            id="doc1",
+            parent_hierarchy_raw_node_id=None,
+            doc_created_at=None,
         )
         with (
             patch.object(

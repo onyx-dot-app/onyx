@@ -28,6 +28,12 @@ export interface MultiModelResponseViewProps {
   onMessageSelection?: (nodeId: number) => void;
   /** Called whenever the set of hidden panel indices changes */
   onHiddenPanelsChange?: (hidden: Set<number>) => void;
+  /**
+   * Read-only mode for the shared view: every response stays equal-width and
+   * fully visible (no selection carousel), select/hide interactions are
+   * disabled, and nothing persists. The preferred response is still marked.
+   */
+  readOnly?: boolean;
 }
 
 // How many pixels of a non-preferred panel are visible at the viewport edge
@@ -70,11 +76,15 @@ export default function MultiModelResponseView({
   otherMessagesCanSwitchTo,
   onMessageSelection,
   onHiddenPanelsChange,
+  readOnly = false,
 }: MultiModelResponseViewProps) {
-  // Initialize preferredIndex from the backend's preferred_response_id when
-  // loading an existing conversation.
+  // Initialize preferredIndex from the backend's preferred_response_id. When a
+  // preferred response is picked the backend also points latest_child at it, so
+  // this marks the response the flow continued through. A turn the user never
+  // picked from (e.g. a final multi-model turn) has no preference and stays
+  // unhighlighted.
   const [preferredIndex, setPreferredIndex] = useState<number | null>(() => {
-    if (!parentMessage?.preferredResponseId) return null;
+    if (parentMessage?.preferredResponseId == null) return null;
     const match = responses.find(
       (r) => r.messageId === parentMessage.preferredResponseId
     );
@@ -92,28 +102,20 @@ export default function MultiModelResponseView({
   const [selectionExiting, setSelectionExiting] = useState(false);
   // Measures the overflow-hidden carousel container for responsive preferred-panel sizing.
   const [trackContainerW, setTrackContainerW] = useState(0);
-  const roRef = useRef<ResizeObserver | null>(null);
   const trackContainerElRef = useRef<HTMLDivElement | null>(null);
+  const [trackContainerEl, setTrackContainerEl] =
+    useState<HTMLDivElement | null>(null);
   const trackContainerRef = useCallback((el: HTMLDivElement | null) => {
     trackContainerElRef.current = el;
-    if (roRef.current) {
-      roRef.current.disconnect();
-      roRef.current = null;
-    }
-    if (!el) return;
-    const ro = new ResizeObserver(([entry]) => {
-      setTrackContainerW(entry?.contentRect.width ?? 0);
-    });
-    ro.observe(el);
-    setTrackContainerW(el.offsetWidth);
-    roRef.current = ro;
+    setTrackContainerEl(el);
   }, []);
 
   // Measures the preferred panel's height to cap non-preferred panels in selection mode.
   const [preferredPanelHeight, setPreferredPanelHeight] = useState<
     number | null
   >(null);
-  const preferredRoRef = useRef<ResizeObserver | null>(null);
+  const [preferredPanelEl, setPreferredPanelEl] =
+    useState<HTMLDivElement | null>(null);
   // Refs to each panel wrapper for height animation on deselect
   const panelElsRef = useRef<Map<number, HTMLDivElement>>(new Map());
 
@@ -138,21 +140,36 @@ export default function MultiModelResponseView({
     });
   }, [preferredPanelHeight, preferredIndex, hiddenPanels, responses]);
 
-  const preferredPanelRef = useCallback((el: HTMLDivElement | null) => {
-    if (preferredRoRef.current) {
-      preferredRoRef.current.disconnect();
-      preferredRoRef.current = null;
-    }
-    if (!el) {
+  useLayoutEffect(() => {
+    if (!trackContainerEl) return;
+    const ro = new ResizeObserver(([entry]) => {
+      setTrackContainerW(entry?.contentRect.width ?? 0);
+    });
+    ro.observe(trackContainerEl);
+    setTrackContainerW(trackContainerEl.offsetWidth);
+    return () => ro.disconnect();
+  }, [trackContainerEl]);
+
+  useLayoutEffect(() => {
+    if (!preferredPanelEl) {
       setPreferredPanelHeight(null);
       return;
     }
     const ro = new ResizeObserver(([entry]) => {
       setPreferredPanelHeight(entry?.contentRect.height ?? 0);
     });
-    ro.observe(el);
-    setPreferredPanelHeight(el.offsetHeight);
-    preferredRoRef.current = ro;
+    ro.observe(preferredPanelEl);
+    setPreferredPanelHeight(preferredPanelEl.offsetHeight);
+    return () => ro.disconnect();
+  }, [preferredPanelEl]);
+
+  useEffect(() => {
+    return () => {
+      if (deselectTimeoutRef.current !== null) {
+        clearTimeout(deselectTimeoutRef.current);
+        deselectTimeoutRef.current = null;
+      }
+    };
   }, []);
 
   const isGenerating = useMemo(
@@ -383,6 +400,7 @@ export default function MultiModelResponseView({
   );
 
   const isActivelySelected =
+    !readOnly &&
     preferredIndex !== null &&
     preferredIdx !== -1 &&
     !isGenerating &&
@@ -392,10 +410,12 @@ export default function MultiModelResponseView({
     if (isActivelySelected) setHasEnteredSelection(true);
   }, [isActivelySelected]);
 
-  // Use the selection layout once a preferred response has been chosen,
-  // even after deselect. Only fall through to generation layout before
-  // the first selection or during active streaming.
-  const showSelectionMode = isActivelySelected || hasEnteredSelection;
+  // Use the selection layout once a preferred response has been chosen, even
+  // after deselect. Only fall through to generation layout before the first
+  // selection or during active streaming. The read-only (shared) view stays in
+  // generation layout so every response is shown equal-width.
+  const showSelectionMode =
+    !readOnly && (isActivelySelected || hasEnteredSelection);
 
   // Trigger the slide-out animation one frame after a preferred panel is selected.
   // Uses isActivelySelected (not showSelectionMode) so re-selecting after a
@@ -418,6 +438,7 @@ export default function MultiModelResponseView({
       isPreferred: preferredIndex === response.modelIndex,
       isHidden: hiddenPanels.has(response.modelIndex),
       isNonPreferredInSelection: isNonPreferred,
+      readOnly,
       onSelect: () => handleSelectPreferred(response.modelIndex),
       onDeselect: handleDeselectPreferred,
       onToggleVisibility: () => toggleVisibility(response.modelIndex),
@@ -444,6 +465,7 @@ export default function MultiModelResponseView({
     [
       preferredIndex,
       hiddenPanels,
+      readOnly,
       handleSelectPreferred,
       handleDeselectPreferred,
       toggleVisibility,
@@ -539,7 +561,7 @@ export default function MultiModelResponseView({
                   } else {
                     panelElsRef.current.delete(r.modelIndex);
                   }
-                  if (isPref) preferredPanelRef(el);
+                  if (isPref) setPreferredPanelEl(el);
                 }}
                 style={{
                   width: `${selectionEntered ? finalW : startW}px`,

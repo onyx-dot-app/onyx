@@ -1,18 +1,29 @@
 {{- if eq (include "onyx.craftEnabled" .) "true" }}
 {{- $sandboxNs := .Values.configMap.SANDBOX_NAMESPACE | default "onyx-sandboxes" }}
+{{- $sandboxProxyServiceAccount := .Values.sandboxProxy.serviceAccount | default dict }}
+{{- $sandboxProxyServiceAccountAutomount := true }}
+{{- if hasKey $sandboxProxyServiceAccount "automount" }}
+{{- $sandboxProxyServiceAccountAutomount = $sandboxProxyServiceAccount.automount }}
+{{- end }}
+{{- $proxyServiceAccountAnnotations := $sandboxProxyServiceAccount.annotations | default dict }}
 apiVersion: v1
 kind: ServiceAccount
 metadata:
-  name: {{ include "onyx.fullname" . }}-sandbox-proxy
+  name: {{ include "onyx.resourceName" (list . "sandbox-proxy") }}
   labels:
     {{- include "onyx.labels" . | nindent 4 }}
     app.kubernetes.io/component: sandbox-proxy
+  {{- with $proxyServiceAccountAnnotations }}
+  annotations:
+    {{- toYaml . | nindent 4 }}
+  {{- end }}
+automountServiceAccountToken: {{ $sandboxProxyServiceAccountAutomount }}
 ---
 # CA Secret access, scoped to the single named Secret.
 apiVersion: rbac.authorization.k8s.io/v1
 kind: Role
 metadata:
-  name: {{ include "onyx.fullname" . }}-sandbox-proxy-ca
+  name: {{ include "onyx.resourceName" (list . "sandbox-proxy-ca") }}
   labels:
     {{- include "onyx.labels" . | nindent 4 }}
     app.kubernetes.io/component: sandbox-proxy
@@ -30,17 +41,17 @@ rules:
 apiVersion: rbac.authorization.k8s.io/v1
 kind: RoleBinding
 metadata:
-  name: {{ include "onyx.fullname" . }}-sandbox-proxy-ca
+  name: {{ include "onyx.resourceName" (list . "sandbox-proxy-ca") }}
   labels:
     {{- include "onyx.labels" . | nindent 4 }}
     app.kubernetes.io/component: sandbox-proxy
 subjects:
   - kind: ServiceAccount
-    name: {{ include "onyx.fullname" . }}-sandbox-proxy
+    name: {{ include "onyx.resourceName" (list . "sandbox-proxy") }}
     namespace: {{ .Release.Namespace }}
 roleRef:
   kind: Role
-  name: {{ include "onyx.fullname" . }}-sandbox-proxy-ca
+  name: {{ include "onyx.resourceName" (list . "sandbox-proxy-ca") }}
   apiGroup: rbac.authorization.k8s.io
 ---
 # Pod watch (informer) + CA ConfigMap write, both scoped to the
@@ -48,7 +59,7 @@ roleRef:
 apiVersion: rbac.authorization.k8s.io/v1
 kind: Role
 metadata:
-  name: {{ include "onyx.fullname" . }}-sandbox-proxy
+  name: {{ include "onyx.resourceName" (list . "sandbox-proxy") }}
   namespace: {{ $sandboxNs }}
   labels:
     {{- include "onyx.labels" . | nindent 4 }}
@@ -68,17 +79,17 @@ rules:
 apiVersion: rbac.authorization.k8s.io/v1
 kind: RoleBinding
 metadata:
-  name: {{ include "onyx.fullname" . }}-sandbox-proxy
+  name: {{ include "onyx.resourceName" (list . "sandbox-proxy") }}
   namespace: {{ $sandboxNs }}
   labels:
     {{- include "onyx.labels" . | nindent 4 }}
     app.kubernetes.io/component: sandbox-proxy
 subjects:
   - kind: ServiceAccount
-    name: {{ include "onyx.fullname" . }}-sandbox-proxy
+    name: {{ include "onyx.resourceName" (list . "sandbox-proxy") }}
     namespace: {{ .Release.Namespace }}
 roleRef:
   kind: Role
-  name: {{ include "onyx.fullname" . }}-sandbox-proxy
+  name: {{ include "onyx.resourceName" (list . "sandbox-proxy") }}
   apiGroup: rbac.authorization.k8s.io
 {{- end }}

@@ -149,7 +149,7 @@ export const FilterComponent = forwardRef<
             <DropdownMenuLabel className="px-2 py-1.5 text-xs text-muted-foreground">
               Access Type
             </DropdownMenuLabel>
-            <div onClick={(e) => e.stopPropagation()}>
+            <div role="presentation" onClick={(e) => e.stopPropagation()}>
               <DropdownMenuCheckboxItem
                 checked={selectedAccessTypes.includes("public")}
                 onCheckedChange={() => handleAccessTypeChange("public")}
@@ -183,7 +183,7 @@ export const FilterComponent = forwardRef<
             <DropdownMenuLabel className="px-2 py-1.5 text-xs text-muted-foreground">
               Last Status
             </DropdownMenuLabel>
-            <div onClick={(e) => e.stopPropagation()}>
+            <div role="presentation" onClick={(e) => e.stopPropagation()}>
               <DropdownMenuCheckboxItem
                 checked={selectedStatuses.includes("success")}
                 onCheckedChange={() => handleStatusChange("success")}
@@ -199,6 +199,14 @@ export const FilterComponent = forwardRef<
                 onSelect={(e) => e.preventDefault()}
               >
                 Failed
+              </DropdownMenuCheckboxItem>
+              <DropdownMenuCheckboxItem
+                checked={selectedStatuses.includes("interrupted")}
+                onCheckedChange={() => handleStatusChange("interrupted")}
+                className="flex items-center justify-between"
+                onSelect={(e) => e.preventDefault()}
+              >
+                Interrupted
               </DropdownMenuCheckboxItem>
               <DropdownMenuCheckboxItem
                 checked={selectedStatuses.includes("in_progress")}
@@ -236,6 +244,7 @@ export const FilterComponent = forwardRef<
               Document Count
             </DropdownMenuLabel>
             <div
+              role="presentation"
               className="flex items-center px-2 py-2 gap-2"
               onClick={(e) => e.stopPropagation()}
             >

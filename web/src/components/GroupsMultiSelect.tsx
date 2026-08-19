@@ -2,7 +2,7 @@ import { FormikProps } from "formik";
 import { Label } from "@/components/Field";
 import { useUserGroups } from "@/lib/hooks";
 import { useTierAtLeast } from "@/hooks/useTierAtLeast";
-import { Tier } from "@/interfaces/settings";
+import { Tier } from "@/lib/settings/types";
 import { GenericMultiSelect } from "@/components/GenericMultiSelect";
 
 export type GroupsMultiSelectFormType = {

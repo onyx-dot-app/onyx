@@ -3,7 +3,7 @@
 import { use, useEffect } from "react";
 import { useRouter } from "next/navigation";
 import { useAgent } from "@/lib/agents/hooks";
-import AgentEditorPage from "@/refresh-pages/AgentEditorPage";
+import AgentEditorPage from "@/views/AgentEditorPage";
 
 export interface PageProps {
   params: Promise<{ id: string }>;

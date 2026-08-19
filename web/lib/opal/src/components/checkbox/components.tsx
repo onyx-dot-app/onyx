@@ -4,6 +4,7 @@ import "@opal/components/checkbox/styles.css";
 import React, { useEffect, useRef, useState } from "react";
 import { cn } from "@opal/utils";
 import { SvgCheck, SvgMinus } from "@opal/icons";
+import type { WithoutStyles } from "@opal/types";
 
 // ---------------------------------------------------------------------------
 // Types
@@ -11,9 +12,8 @@ import { SvgCheck, SvgMinus } from "@opal/icons";
 
 type CheckboxState = "unchecked" | "checked" | "indeterminate";
 
-interface CheckboxProps extends Omit<
-  React.ComponentPropsWithoutRef<"input">,
-  "type" | "size"
+interface CheckboxProps extends WithoutStyles<
+  Omit<React.ComponentPropsWithoutRef<"input">, "type" | "size">
 > {
   checked?: boolean;
   defaultChecked?: boolean;
@@ -42,7 +42,6 @@ function CheckboxInner(
     onCheckedChange,
     indeterminate = false,
     disabled,
-    className,
     onChange,
     id,
     name,
@@ -112,7 +111,8 @@ function CheckboxInner(
         ref={inputRef}
         id={id}
         type="checkbox"
-        role="presentation"
+        aria-hidden="true"
+        tabIndex={-1}
         className="opal-checkbox-input"
         checked={checked}
         disabled={disabled}
@@ -129,7 +129,7 @@ function CheckboxInner(
         tabIndex={disabled ? -1 : 0}
         data-state={state}
         data-disabled={disabled || undefined}
-        className={cn("opal-checkbox-surface", className)}
+        className="opal-checkbox-surface"
         onClick={(e) => {
           if (!disabled && inputRef.current) {
             inputRef.current.click();

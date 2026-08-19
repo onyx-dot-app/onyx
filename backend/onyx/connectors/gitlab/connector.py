@@ -1,29 +1,34 @@
 import fnmatch
 import itertools
 from collections import deque
-from collections.abc import Iterable
-from collections.abc import Iterator
-from datetime import datetime
-from datetime import timezone
-from typing import Any
-from typing import TypeVar
+from collections.abc import Iterable, Iterator
+from datetime import datetime, timezone
+from typing import Any, TypeVar
 
 import gitlab
 import pytz
 from gitlab.v4.objects import Project
 
-from onyx.configs.app_configs import GITLAB_CONNECTOR_INCLUDE_CODE_FILES
-from onyx.configs.app_configs import INDEX_BATCH_SIZE
+from onyx.configs.app_configs import (
+    GITLAB_CONNECTOR_INCLUDE_CODE_FILES,
+    INDEX_BATCH_SIZE,
+)
 from onyx.configs.constants import DocumentSource
-from onyx.connectors.interfaces import GenerateDocumentsOutput
-from onyx.connectors.interfaces import LoadConnector
-from onyx.connectors.interfaces import PollConnector
-from onyx.connectors.interfaces import SecondsSinceUnixEpoch
-from onyx.connectors.models import BasicExpertInfo
-from onyx.connectors.models import ConnectorMissingCredentialError
-from onyx.connectors.models import Document
-from onyx.connectors.models import HierarchyNode
-from onyx.connectors.models import TextSection
+from onyx.connectors.cross_connector_utils.miscellaneous_utils import time_str_to_utc
+from onyx.connectors.interfaces import (
+    GenerateDocumentsOutput,
+    LoadConnector,
+    PollConnector,
+    SecondsSinceUnixEpoch,
+)
+from onyx.connectors.models import (
+    BasicExpertInfo,
+    ConnectorMissingCredentialError,
+    Document,
+    HierarchyNode,
+    TextSection,
+)
+from onyx.utils.datetime import datetime_to_utc
 from onyx.utils.logger import setup_logger
 
 T = TypeVar("T")
@@ -61,16 +66,30 @@ def get_author(author: Any) -> BasicExpertInfo:
     )
 
 
+def _gitlab_datetime_to_utc(value: Any) -> datetime | None:
+    """Normalize a GitLab timestamp to tz-aware UTC.
+
+    python-gitlab exposes REST attributes as raw JSON, so these arrive as
+    ISO-8601 strings; handle datetime values defensively too. Uses the shared
+    parser rather than a fixed format so whole-second timestamps (no fractional
+    part) don't raise.
+    """
+    if value is None:
+        return None
+    if isinstance(value, datetime):
+        return datetime_to_utc(value)
+    return time_str_to_utc(value)
+
+
 def _convert_merge_request_to_document(mr: Any) -> Document:
     doc = Document(
         id=mr.web_url,
         sections=[TextSection(link=mr.web_url, text=mr.description or "")],
         source=DocumentSource.GITLAB,
         semantic_identifier=mr.title,
-        # updated_at is UTC time but is timezone unaware, explicitly add UTC
-        # as there is logic in indexing to prevent wrong timestamped docs
-        # due to local time discrepancies with UTC
-        doc_updated_at=mr.updated_at.replace(tzinfo=timezone.utc),
+        doc_updated_at=_gitlab_datetime_to_utc(mr.updated_at),
+        # NOTE: doc_created_at population not yet verified against live data
+        doc_created_at=_gitlab_datetime_to_utc(mr.created_at),
         primary_owners=[get_author(mr.author)],
         metadata={"state": mr.state, "type": "MergeRequest"},
     )
@@ -83,10 +102,9 @@ def _convert_issue_to_document(issue: Any) -> Document:
         sections=[TextSection(link=issue.web_url, text=issue.description or "")],
         source=DocumentSource.GITLAB,
         semantic_identifier=issue.title,
-        # updated_at is UTC time but is timezone unaware, explicitly add UTC
-        # as there is logic in indexing to prevent wrong timestamped docs
-        # due to local time discrepancies with UTC
-        doc_updated_at=issue.updated_at.replace(tzinfo=timezone.utc),
+        doc_updated_at=_gitlab_datetime_to_utc(issue.updated_at),
+        # NOTE: doc_created_at population not yet verified against live data
+        doc_created_at=_gitlab_datetime_to_utc(issue.created_at),
         primary_owners=[get_author(issue.author)],
         metadata={"state": issue.state, "type": issue.type if issue.type else "Issue"},
     )

@@ -2,11 +2,11 @@
 
 import BackButton from "@/refresh-components/buttons/BackButton";
 import { ErrorCallout } from "@/components/ErrorCallout";
-import { ThreeDotsLoader } from "@/components/Loading";
+import { PageLoader } from "@opal/layouts";
 import { SourceIcon } from "@/components/SourceIcon";
 import { CCPairStatus, PermissionSyncStatus } from "@/components/Status";
-import { toast } from "@/hooks/useToast";
-import CredentialSection from "@/components/credentials/CredentialSection";
+import { toast } from "@opal/layouts";
+import CredentialSection from "@/lib/credentials/components/CredentialSection";
 import Text from "@/refresh-components/texts/Text";
 import {
   updateConnectorCredentialPairName,
@@ -66,10 +66,10 @@ import { useStatusChange } from "./useStatusChange";
 import { useReIndexModal } from "./ReIndexModal";
 import { Button } from "@opal/components";
 import { SvgSettings } from "@opal/icons";
-import { UserRole } from "@/lib/types";
 import { useUser } from "@/providers/UserProvider";
 import { resolveAllErrorsForCCPair } from "@/lib/targeted_reindex";
 import { SWR_KEYS } from "@/lib/swr-keys";
+import { can } from "@/lib/permissions/resource-actions";
 // synchronize these validations with the SQLAlchemy connector class until we have a
 // centralized schema for both frontend and backend
 const RefreshFrequencySchema = Yup.object().shape({
@@ -184,10 +184,7 @@ function Main({ ccPairId }: { ccPairId: number }) {
 
   const latestIndexAttempt = indexAttempts?.[0];
   const canManageInlineFileConnectorFiles =
-    ccPair?.connector.source === "file" &&
-    (ccPair.is_editable_for_current_user ||
-      (user?.role === UserRole.GLOBAL_CURATOR &&
-        ccPair.access_type === "public"));
+    ccPair?.connector.source === "file" && can(ccPair, "edit");
 
   const isResolvingErrors =
     (latestIndexAttempt?.status === "in_progress" ||
@@ -246,8 +243,10 @@ function Main({ ccPairId }: { ccPairId: number }) {
       setHasLoadedOnce(true);
     }
 
+    // Redirect only when the cc-pair is genuinely gone — a real 404 (deleted)
+    // or DELETING state — never on a transient poll error.
     if (
-      (hasLoadedOnce && (ccPairError || !ccPair)) ||
+      (hasLoadedOnce && ccPairError?.status === 404) ||
       (ccPair?.status === ConnectorCredentialPairStatus.DELETING &&
         !ccPair.connector)
     ) {
@@ -346,7 +345,7 @@ function Main({ ccPairId }: { ccPairId: number }) {
   };
 
   if (isLoadingCCPair || isLoadingIndexAttempts) {
-    return <ThreeDotsLoader />;
+    return <PageLoader />;
   }
 
   if (!ccPair || (!hasLoadedOnce && ccPairError)) {
@@ -475,14 +474,14 @@ function Main({ ccPairId }: { ccPairId: number }) {
         <div className="ml-2 overflow-hidden text-ellipsis whitespace-nowrap flex-1 mr-4">
           <EditableStringFieldDisplay
             value={ccPair.name}
-            isEditable={ccPair.is_editable_for_current_user}
+            isEditable={can(ccPair, "edit")}
             onUpdate={handleUpdateName}
             scale={2.1}
           />
         </div>
 
         <div className="ml-auto flex gap-x-2">
-          {ccPair.is_editable_for_current_user && (
+          {can(ccPair, "edit") && (
             <DropdownMenu>
               <DropdownMenuTrigger asChild>
                 <Button prominence="secondary" icon={SvgSettings}>
@@ -547,7 +546,7 @@ function Main({ ccPairId }: { ccPairId: number }) {
                     </span>
                   </DropdownMenuItemWithTooltip>
                 )}
-                {!isDeleting && (
+                {!isDeleting && can(ccPair, "delete") && (
                   <DropdownMenuItemWithTooltip
                     onClick={() => {
                       setShowDeleteConnectorConfirmModal(true);
@@ -605,12 +604,13 @@ function Main({ ccPairId }: { ccPairId: number }) {
             ) : (
               <>
                 We ran into some issues while processing some documents.{" "}
-                <b
-                  className="text-link cursor-pointer dark:text-blue-300"
+                <button
+                  type="button"
+                  className="text-link cursor-pointer dark:text-blue-300 font-bold"
                   onClick={() => setShowIndexAttemptErrors(true)}
                 >
                   View details.
-                </b>
+                </button>
               </>
             )}
           </AlertDescription>
@@ -688,22 +688,21 @@ function Main({ ccPairId }: { ccPairId: number }) {
         </div>
       </Card>
 
-      {credentialTemplates[ccPair.connector.source] &&
-        ccPair.is_editable_for_current_user && (
-          <>
-            <Title size="md" className="mt-10 mb-2">
-              Credential
-            </Title>
+      {credentialTemplates[ccPair.connector.source] && can(ccPair, "edit") && (
+        <>
+          <Title size="md" className="mt-10 mb-2">
+            Credential
+          </Title>
 
-            <div className="mt-2">
-              <CredentialSection
-                ccPair={ccPair}
-                sourceType={ccPair.connector.source}
-                refresh={() => refresh()}
-              />
-            </div>
-          </>
-        )}
+          <div className="mt-2">
+            <CredentialSection
+              ccPair={ccPair}
+              sourceType={ccPair.connector.source}
+              refresh={() => refresh()}
+            />
+          </div>
+        </>
+      )}
 
       {ccPair.connector.connector_specific_config &&
         Object.keys(ccPair.connector.connector_specific_config).length > 0 && (
@@ -754,8 +753,13 @@ function Main({ ccPairId }: { ccPairId: number }) {
                       pruneFreq={pruneFreq}
                       indexingStart={indexingStart}
                       refreshFreq={refreshFreq}
-                      onRefreshEdit={handleRefreshEdit}
-                      onPruningEdit={handlePruningEdit}
+                      // No handler => no pencil, matching the rest of this page's edits.
+                      onRefreshEdit={
+                        can(ccPair, "edit") ? handleRefreshEdit : undefined
+                      }
+                      onPruningEdit={
+                        can(ccPair, "edit") ? handlePruningEdit : undefined
+                      }
                     />
                   </div>
                 </Card>

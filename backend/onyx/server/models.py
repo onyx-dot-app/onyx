@@ -1,12 +1,9 @@
 import datetime
-from typing import Generic
-from typing import Optional
-from typing import TypeVar
+from typing import Generic, Optional, TypeVar
 from uuid import UUID
 
 from pydantic import BaseModel
 
-from onyx.auth.schemas import UserRole
 from onyx.db.enums import AccountType
 from onyx.db.models import User
 
@@ -40,8 +37,8 @@ class UserGroupInfo(BaseModel):
 class FullUserSnapshot(BaseModel):
     id: UUID
     email: str
-    role: UserRole
     account_type: AccountType
+    is_admin: bool = False
     is_active: bool
     password_configured: bool
     personal_name: str | None
@@ -49,6 +46,8 @@ class FullUserSnapshot(BaseModel):
     updated_at: datetime.datetime
     groups: list[UserGroupInfo]
     is_scim_synced: bool
+    # Per-user Craft override; None = follow the workspace default.
+    craft_enabled: bool | None
 
     @classmethod
     def from_user_model(
@@ -56,12 +55,13 @@ class FullUserSnapshot(BaseModel):
         user: User,
         groups: list[UserGroupInfo] | None = None,
         is_scim_synced: bool = False,
+        is_admin: bool = False,
     ) -> "FullUserSnapshot":
         return cls(
             id=user.id,
             email=user.email,
-            role=user.role,
             account_type=user.account_type,
+            is_admin=is_admin,
             is_active=user.is_active,
             password_configured=user.password_configured,
             personal_name=user.personal_name,
@@ -69,6 +69,7 @@ class FullUserSnapshot(BaseModel):
             updated_at=user.updated_at,
             groups=groups or [],
             is_scim_synced=is_scim_synced,
+            craft_enabled=user.craft_enabled,
         )
 
 

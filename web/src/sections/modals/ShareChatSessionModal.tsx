@@ -2,13 +2,12 @@
 
 import { useState } from "react";
 import { ChatSession, ChatSessionSharedStatus } from "@/app/app/interfaces";
-import { toast } from "@/hooks/useToast";
 import { useChatSessionStore } from "@/app/app/stores/useChatSessionStore";
 import { copyAll } from "@/app/app/message/copyingUtils";
 import { Section } from "@/layouts/general-layouts";
-import Modal from "@/refresh-components/Modal";
+import { Modal } from "@opal/components";
 import { Button, CopyButton, InputTypeIn, SelectCard } from "@opal/components";
-import { ContentAction } from "@opal/layouts";
+import { ContentAction, toast } from "@opal/layouts";
 import { SvgLink, SvgShare, SvgUsers } from "@opal/icons";
 import SvgCheck from "@opal/icons/check";
 import SvgLock from "@opal/icons/lock";
@@ -64,7 +63,7 @@ function PrivacyOption({
   return (
     <SelectCard
       state={selected ? "filled" : "empty"}
-      padding="sm"
+      padding={2}
       rounding="sm"
       border="none"
       onClick={onClick}
@@ -76,11 +75,14 @@ function PrivacyOption({
         icon={Icon}
         title={title}
         description={description}
-        padding="fit"
+        padding={0}
         color="interactive"
         rightChildren={
           selected ? (
-            <SvgCheck size={16} className="shrink-0 stroke-action-link-05" />
+            <SvgCheck
+              size={16}
+              className="shrink-0 stroke-action-selection-05"
+            />
           ) : undefined
         }
       />
@@ -180,7 +182,7 @@ export default function ShareChatSessionModal({
             justifyContent="start"
             alignItems="stretch"
             height="auto"
-            gap={0.25}
+            gap={1}
           >
             <PrivacyOption
               icon={SvgLock}

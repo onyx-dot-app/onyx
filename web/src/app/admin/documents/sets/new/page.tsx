@@ -3,19 +3,19 @@
 import { SettingsLayouts } from "@opal/layouts";
 import { ADMIN_ROUTES } from "@/lib/admin-routes";
 import { DocumentSetCreationForm } from "../DocumentSetCreationForm";
-import { useConnectorStatus, useUserGroups } from "@/lib/hooks";
-import { ThreeDotsLoader } from "@/components/Loading";
+import { useConnectorStatus } from "@/lib/hooks";
+import { PageLoader } from "@opal/layouts";
 import { ErrorCallout } from "@/components/ErrorCallout";
 import { useRouter } from "next/navigation";
 import { refreshDocumentSets } from "../hooks";
 import CardSection from "@/components/admin/CardSection";
-import { useVectorDbEnabled } from "@/providers/SettingsProvider";
+import { useSettings } from "@/lib/settings/hooks";
 
 const route = ADMIN_ROUTES.DOCUMENT_SETS;
 
 function Main() {
   const router = useRouter();
-  const vectorDbEnabled = useVectorDbEnabled();
+  const { vectorDbEnabled } = useSettings();
 
   const {
     data: ccPairs,
@@ -23,13 +23,10 @@ function Main() {
     error: ccPairsError,
   } = useConnectorStatus(30000, vectorDbEnabled);
 
-  // EE only
-  const { data: userGroups, isLoading: userGroupsIsLoading } = useUserGroups();
-
-  if ((vectorDbEnabled && isCCPairsLoading) || userGroupsIsLoading) {
+  if (vectorDbEnabled && isCCPairsLoading) {
     return (
       <div className="flex justify-center items-center min-h-[400px]">
-        <ThreeDotsLoader />
+        <PageLoader />
       </div>
     );
   }
@@ -48,7 +45,6 @@ function Main() {
       <CardSection>
         <DocumentSetCreationForm
           ccPairs={ccPairs ?? []}
-          userGroups={userGroups}
           onClose={() => {
             refreshDocumentSets();
             router.push("/admin/documents/sets");

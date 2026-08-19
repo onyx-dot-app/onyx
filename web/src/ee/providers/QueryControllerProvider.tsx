@@ -10,8 +10,8 @@ import {
 import { classifyQuery, searchDocuments } from "@/ee/lib/search/svc";
 import useAppFocus from "@/hooks/useAppFocus";
 import { useTierAtLeast } from "@/hooks/useTierAtLeast";
-import { Tier } from "@/interfaces/settings";
-import { useSettingsContext } from "@/providers/SettingsProvider";
+import { Tier } from "@/lib/settings/types";
+import { useIsSearchModeAvailable } from "@/lib/settings/hooks";
 import { useUser } from "@/providers/UserProvider";
 import {
   QueryControllerContext,
@@ -29,8 +29,7 @@ export function QueryControllerProvider({
 }: QueryControllerProviderProps) {
   const appFocus = useAppFocus();
   const businessTier = useTierAtLeast(Tier.BUSINESS);
-  const settings = useSettingsContext();
-  const { isSearchModeAvailable: searchUiEnabled } = settings;
+  const searchUiEnabled = useIsSearchModeAvailable();
   const { user } = useUser();
 
   // ── Merged query state (discriminated union) ──────────────────────────
@@ -62,14 +61,15 @@ export function QueryControllerProvider({
 
   const setAppMode = useCallback(
     (mode: AppMode) => {
-      if (!businessTier || !searchUiEnabled) return;
-      setState((prev) => {
-        if (prev.phase !== "idle") return prev;
-        appModeRef.current = mode;
-        return { phase: "idle", appMode: mode };
-      });
+      if (!businessTier || !searchUiEnabled || state.phase !== "idle") return;
+      appModeRef.current = mode;
+      // Re-check inside the updater: a phase transition queued in the same
+      // batch must not be rolled back to idle.
+      setState((prev) =>
+        prev.phase === "idle" ? { phase: "idle", appMode: mode } : prev
+      );
     },
-    [businessTier, searchUiEnabled]
+    [businessTier, searchUiEnabled, state.phase]
   );
 
   // ── Ancillary state ───────────────────────────────────────────────────

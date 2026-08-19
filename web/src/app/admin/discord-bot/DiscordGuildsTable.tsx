@@ -21,7 +21,7 @@ import {
   deleteGuildConfig,
   updateGuildConfig,
 } from "@/app/admin/discord-bot/lib";
-import { toast } from "@/hooks/useToast";
+import { toast } from "@opal/layouts";
 import { ConfirmEntityModal } from "@/sections/modals/ConfirmEntityModal";
 
 interface Props {

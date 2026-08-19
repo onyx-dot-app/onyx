@@ -20,10 +20,12 @@ import struct
 
 from onyx.cache.factory import get_cache_backend
 from onyx.cache.interface import CACHE_TRANSIENT_ERRORS
-from onyx.server.metrics.embedding import observe_query_embedding_cache_lookup
-from onyx.server.metrics.embedding import observe_query_embedding_cache_write
-from onyx.server.metrics.embedding import QueryEmbeddingCacheLookupOutcome
-from onyx.server.metrics.embedding import QueryEmbeddingCacheWriteOutcome
+from onyx.server.metrics.embedding import (
+    QueryEmbeddingCacheLookupOutcome,
+    QueryEmbeddingCacheWriteOutcome,
+    observe_query_embedding_cache_lookup,
+    observe_query_embedding_cache_write,
+)
 from onyx.utils.logger import setup_logger
 from shared_configs.enums import EmbeddingProvider
 from shared_configs.model_server_models import Embedding
@@ -225,7 +227,7 @@ def cache_query_embeddings(
 
     successes = 0
     errors = 0
-    for query, embedding in zip(queries, embeddings):
+    for query, embedding in zip(queries, embeddings, strict=True):
         key = _build_key(query, search_settings_id)
         try:
             packed = _safe_pack_or_none(embedding)

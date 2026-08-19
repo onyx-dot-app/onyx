@@ -1,12 +1,30 @@
-from datetime import datetime
-from datetime import timezone
+from collections.abc import Callable
+from datetime import datetime, timezone
 from typing import Any
-from unittest.mock import AsyncMock
-from unittest.mock import MagicMock
+from unittest.mock import AsyncMock, MagicMock
 
 import pytest
 
 from onyx.auth import users as users_module
+from onyx.server.security.models import SecuritySettings
+
+
+@pytest.fixture
+def stub_security_settings(
+    monkeypatch: pytest.MonkeyPatch,
+) -> Callable[..., SecuritySettings]:
+    """Patch ``users_module.get_security_settings`` to return a SecuritySettings
+    built from env defaults with the supplied field overrides applied."""
+    from onyx.server.security.store import _build_env_defaults
+
+    def _apply(**overrides: Any) -> SecuritySettings:
+        merged = _build_env_defaults().model_dump()
+        merged.update(overrides)
+        stubbed = SecuritySettings(**merged)
+        monkeypatch.setattr(users_module, "get_security_settings", lambda: stubbed)
+        return stubbed
+
+    return _apply
 
 
 def test_extract_email_requires_valid_format() -> None:
@@ -21,9 +39,10 @@ def test_extract_email_requires_valid_format() -> None:
 @pytest.mark.asyncio
 async def test_get_or_create_user_updates_expiry(
     monkeypatch: pytest.MonkeyPatch,
+    stub_security_settings: Callable[..., SecuritySettings],
 ) -> None:
     """Existing web-login users should be returned and their expiry synced."""
-    monkeypatch.setattr(users_module, "TRACK_EXTERNAL_IDP_EXPIRY", True)
+    stub_security_settings(track_external_idp_expiry=True)
     invited_checked: dict[str, str] = {}
 
     def mark_invited(value: str) -> None:
@@ -31,7 +50,7 @@ async def test_get_or_create_user_updates_expiry(
 
     domain_checked: dict[str, str] = {}
 
-    def mark_domain(value: str) -> None:
+    def mark_domain(value: str, **_kw: Any) -> None:
         domain_checked["email"] = value
 
     monkeypatch.setattr(users_module, "verify_email_is_invited", mark_invited)
@@ -43,7 +62,7 @@ async def test_get_or_create_user_updates_expiry(
     existing_user = MagicMock()
     existing_user.email = email
     existing_user.oidc_expiry = None
-    existing_user.role.is_web_login.return_value = True
+    existing_user.account_type.is_web_login.return_value = True
 
     manager_holder: dict[str, Any] = {}
 
@@ -60,7 +79,7 @@ async def test_get_or_create_user_updates_expiry(
     monkeypatch.setattr(users_module, "UserManager", StubUserManager)
     monkeypatch.setattr(
         users_module,
-        "SQLAlchemyUserAdminDB",
+        "SQLAlchemyUserDatabase",
         lambda *args, **kwargs: MagicMock(),  # noqa: ARG005
     )
 
@@ -82,9 +101,10 @@ async def test_get_or_create_user_updates_expiry(
 @pytest.mark.asyncio
 async def test_get_or_create_user_skips_inactive(
     monkeypatch: pytest.MonkeyPatch,
+    stub_security_settings: Callable[..., SecuritySettings],
 ) -> None:
     """Inactive users should not be re-authenticated via JWT."""
-    monkeypatch.setattr(users_module, "TRACK_EXTERNAL_IDP_EXPIRY", True)
+    stub_security_settings(track_external_idp_expiry=True)
     monkeypatch.setattr(users_module, "verify_email_is_invited", lambda _: None)
     monkeypatch.setattr(users_module, "verify_email_domain", lambda *_a, **_kw: None)
 
@@ -94,7 +114,7 @@ async def test_get_or_create_user_skips_inactive(
     existing_user = MagicMock()
     existing_user.email = email
     existing_user.is_active = False
-    existing_user.role.is_web_login.return_value = True
+    existing_user.account_type.is_web_login.return_value = True
 
     class StubUserManager:
         def __init__(self, _user_db: object) -> None:
@@ -108,7 +128,7 @@ async def test_get_or_create_user_skips_inactive(
     monkeypatch.setattr(users_module, "UserManager", StubUserManager)
     monkeypatch.setattr(
         users_module,
-        "SQLAlchemyUserAdminDB",
+        "SQLAlchemyUserDatabase",
         lambda *args, **kwargs: MagicMock(),  # noqa: ARG005
     )
 
@@ -122,9 +142,10 @@ async def test_get_or_create_user_skips_inactive(
 @pytest.mark.asyncio
 async def test_get_or_create_user_handles_race_conditions(
     monkeypatch: pytest.MonkeyPatch,
+    stub_security_settings: Callable[..., SecuritySettings],
 ) -> None:
     """If provisioning races, newly inactive users should still be blocked."""
-    monkeypatch.setattr(users_module, "TRACK_EXTERNAL_IDP_EXPIRY", True)
+    stub_security_settings(track_external_idp_expiry=True)
     monkeypatch.setattr(users_module, "verify_email_is_invited", lambda _: None)
     monkeypatch.setattr(users_module, "verify_email_domain", lambda *_a, **_kw: None)
 
@@ -134,7 +155,7 @@ async def test_get_or_create_user_handles_race_conditions(
     inactive_user = MagicMock()
     inactive_user.email = email
     inactive_user.is_active = False
-    inactive_user.role.is_web_login.return_value = True
+    inactive_user.account_type.is_web_login.return_value = True
 
     class StubUserManager:
         def __init__(self, _user_db: object) -> None:
@@ -156,7 +177,7 @@ async def test_get_or_create_user_handles_race_conditions(
     monkeypatch.setattr(users_module, "UserManager", StubUserManager)
     monkeypatch.setattr(
         users_module,
-        "SQLAlchemyUserAdminDB",
+        "SQLAlchemyUserDatabase",
         lambda *args, **kwargs: MagicMock(),  # noqa: ARG005
     )
 
@@ -170,6 +191,7 @@ async def test_get_or_create_user_handles_race_conditions(
 @pytest.mark.asyncio
 async def test_get_or_create_user_provisions_new_user(
     monkeypatch: pytest.MonkeyPatch,
+    stub_security_settings: Callable[..., SecuritySettings],
 ) -> None:
     """A brand new JWT user should be provisioned automatically."""
     email = "new-user@example.com"
@@ -177,9 +199,9 @@ async def test_get_or_create_user_provisions_new_user(
     created_user = MagicMock()
     created_user.email = email
     created_user.oidc_expiry = None
-    created_user.role.is_web_login.return_value = True
+    created_user.account_type.is_web_login.return_value = True
 
-    monkeypatch.setattr(users_module, "TRACK_EXTERNAL_IDP_EXPIRY", False)
+    stub_security_settings(track_external_idp_expiry=False)
     monkeypatch.setattr(users_module, "generate_password", lambda: "TempPass123!")
     monkeypatch.setattr(users_module, "verify_email_is_invited", lambda _: None)
     monkeypatch.setattr(users_module, "verify_email_domain", lambda *_a, **_kw: None)
@@ -203,7 +225,7 @@ async def test_get_or_create_user_provisions_new_user(
     monkeypatch.setattr(users_module, "UserManager", StubUserManager)
     monkeypatch.setattr(
         users_module,
-        "SQLAlchemyUserAdminDB",
+        "SQLAlchemyUserDatabase",
         lambda *args, **kwargs: MagicMock(),  # noqa: ARG005
     )
 

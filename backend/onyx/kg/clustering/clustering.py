@@ -4,31 +4,37 @@ from typing import cast
 
 from rapidfuzz.fuzz import ratio
 from redis.lock import Lock as RedisLock
-from sqlalchemy import func
-from sqlalchemy import text
+from sqlalchemy import func, text
 
 from onyx.configs.constants import CELERY_GENERIC_BEAT_LOCK_TIMEOUT
-from onyx.configs.kg_configs import KG_CLUSTERING_RETRIEVE_THRESHOLD
-from onyx.configs.kg_configs import KG_CLUSTERING_THRESHOLD
+from onyx.configs.kg_configs import (
+    KG_CLUSTERING_RETRIEVE_THRESHOLD,
+    KG_CLUSTERING_THRESHOLD,
+)
 from onyx.db.engine.sql_engine import get_session_with_current_tenant
-from onyx.db.entities import KGEntity
-from onyx.db.entities import KGEntityExtractionStaging
-from onyx.db.entities import merge_entities
-from onyx.db.entities import transfer_entity
-from onyx.db.kg_config import get_kg_config_settings
-from onyx.db.kg_config import validate_kg_settings
-from onyx.db.models import Document
-from onyx.db.models import KGEntityType
-from onyx.db.models import KGRelationshipExtractionStaging
-from onyx.db.models import KGRelationshipTypeExtractionStaging
-from onyx.db.relationships import transfer_relationship
-from onyx.db.relationships import transfer_relationship_type
-from onyx.db.relationships import upsert_relationship
-from onyx.db.relationships import upsert_relationship_type
+from onyx.db.entities import (
+    KGEntity,
+    KGEntityExtractionStaging,
+    merge_entities,
+    transfer_entity,
+)
+from onyx.db.kg_config import get_kg_config_settings, validate_kg_settings
+from onyx.db.models import (
+    Document,
+    KGEntityType,
+    KGRelationshipExtractionStaging,
+    KGRelationshipTypeExtractionStaging,
+)
+from onyx.db.relationships import (
+    transfer_relationship,
+    transfer_relationship_type,
+    upsert_relationship,
+    upsert_relationship_type,
+)
 from onyx.document_index.vespa.kg_interactions import (
     get_kg_vespa_info_update_requests_for_document,
+    update_kg_chunks_vespa_info,
 )
-from onyx.document_index.vespa.kg_interactions import update_kg_chunks_vespa_info
 from onyx.kg.models import KGGroundingType
 from onyx.kg.utils.formatting_utils import make_relationship_id
 from onyx.kg.utils.lock_utils import extend_lock
@@ -323,7 +329,7 @@ def kg_clustering(
     # Cluster and transfer grounded entities sequentially
     start_time = time.monotonic()
     i_batch = 0
-    for i_batch, untransferred_grounded_entities in enumerate(
+    for i_batch, untransferred_grounded_entities in enumerate(  # noqa: B007
         _get_batch_untransferred_grounded_entities(
             batch_size=processing_chunk_batch_size
         )
@@ -361,7 +367,7 @@ def kg_clustering(
     # Transfer the relationship types (no need to do in parallel as there's only a few)
     start_time = time.monotonic()
     i_batch = 0
-    for i_batch, relationship_types in enumerate(
+    for i_batch, relationship_types in enumerate(  # noqa: B007
         _get_batch_untransferred_relationship_types(
             batch_size=processing_chunk_batch_size
         )
@@ -384,7 +390,7 @@ def kg_clustering(
     # Transfer the relationships in parallel
     start_time = time.monotonic()
     i_batch = 0
-    for i_batch, relationships in enumerate(
+    for i_batch, relationships in enumerate(  # noqa: B007
         _get_batch_untransferred_relationships(batch_size=processing_chunk_batch_size)
     ):
         run_functions_tuples_in_parallel(
@@ -407,7 +413,7 @@ def kg_clustering(
     # Update vespa for each document
     start_time = time.monotonic()
     i_batch = 0
-    for i_batch, documents in enumerate(
+    for i_batch, documents in enumerate(  # noqa: B007
         _get_batch_kg_processed_documents(batch_size=processing_chunk_batch_size)
     ):
         batch_update_requests = run_functions_tuples_in_parallel(
@@ -416,7 +422,9 @@ def kg_clustering(
                 for document in documents
             ]
         )
-        for update_requests, document in zip(batch_update_requests, documents):
+        for update_requests, document in zip(
+            batch_update_requests, documents, strict=True
+        ):
             try:
                 update_kg_chunks_vespa_info(update_requests, index_name, tenant_id)
             except Exception as e:

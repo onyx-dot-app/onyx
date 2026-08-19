@@ -1,15 +1,10 @@
 import asyncio
-from collections.abc import AsyncGenerator
-from collections.abc import AsyncIterable
-from collections.abc import Iterable
-from datetime import datetime
-from datetime import timezone
-from typing import Any
-from typing import cast
+from collections.abc import AsyncGenerator, AsyncIterable, Iterable
+from datetime import datetime, timezone
+from typing import Any, cast
 
 from discord import Client
-from discord.channel import TextChannel
-from discord.channel import Thread
+from discord.channel import TextChannel, Thread
 from discord.enums import MessageType
 from discord.errors import LoginFailure
 from discord.flags import Intents
@@ -18,15 +13,19 @@ from discord.message import Message as DiscordMessage
 from onyx.configs.app_configs import INDEX_BATCH_SIZE
 from onyx.configs.constants import DocumentSource
 from onyx.connectors.exceptions import CredentialInvalidError
-from onyx.connectors.interfaces import GenerateDocumentsOutput
-from onyx.connectors.interfaces import LoadConnector
-from onyx.connectors.interfaces import PollConnector
-from onyx.connectors.interfaces import SecondsSinceUnixEpoch
-from onyx.connectors.models import ConnectorMissingCredentialError
-from onyx.connectors.models import Document
-from onyx.connectors.models import HierarchyNode
-from onyx.connectors.models import ImageSection
-from onyx.connectors.models import TextSection
+from onyx.connectors.interfaces import (
+    GenerateDocumentsOutput,
+    LoadConnector,
+    PollConnector,
+    SecondsSinceUnixEpoch,
+)
+from onyx.connectors.models import (
+    ConnectorMissingCredentialError,
+    Document,
+    HierarchyNode,
+    ImageSection,
+    TextSection,
+)
 from onyx.utils.logger import setup_logger
 
 logger = setup_logger()
@@ -53,8 +52,8 @@ def _convert_message_to_document(
     if isinstance(message.channel, TextChannel) and (
         channel_name := message.channel.name
     ):
-        metadata["Channel"] = channel_name  # ty: ignore[possibly-unresolved-reference]
-        semantic_substring += f" in Channel: #{channel_name}"  # ty: ignore[possibly-unresolved-reference]
+        metadata["Channel"] = channel_name
+        semantic_substring += f" in Channel: #{channel_name}"
 
     # Single messages dont have a title
     title = ""
@@ -83,6 +82,8 @@ def _convert_message_to_document(
         source=DocumentSource.DISCORD,
         semantic_identifier=semantic_identifier,
         doc_updated_at=message.edited_at,
+        # NOTE: doc_created_at population not yet verified against live data
+        doc_created_at=message.created_at,
         title=title,
         sections=(cast(list[TextSection | ImageSection], sections)),
         metadata=metadata,
@@ -265,12 +266,16 @@ def _manage_async_retrieval(
 class DiscordConnector(PollConnector, LoadConnector):
     def __init__(
         self,
-        server_ids: list[str] = [],
-        channel_names: list[str] = [],
+        server_ids: list[str] | None = None,
+        channel_names: list[str] | None = None,
         # YYYY-MM-DD
         start_date: str | None = None,
         batch_size: int = INDEX_BATCH_SIZE,
     ):
+        if channel_names is None:
+            channel_names = []
+        if server_ids is None:
+            server_ids = []
         self.batch_size = batch_size
         self.channel_names: list[str] = channel_names if channel_names else []
         self.server_ids: list[int] = (

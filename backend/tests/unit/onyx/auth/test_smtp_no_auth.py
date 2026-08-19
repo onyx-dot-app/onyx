@@ -5,8 +5,7 @@ and must not call `login()` when credentials are not configured — internal
 IP-whitelisted relays don't support either.
 """
 
-from unittest.mock import MagicMock
-from unittest.mock import patch
+from unittest.mock import MagicMock, patch
 
 import pytest
 
@@ -33,6 +32,7 @@ def _call_send(monkeypatch: pytest.MonkeyPatch, **overrides: object) -> MagicMoc
         "SMTP_USER": "u",
         "SMTP_PASS": "p",
         "SMTP_STARTTLS": True,
+        "EMAIL_ARCHIVE_BCC_ADDRESSES": (),
     }
     defaults.update(overrides)
     for name, value in defaults.items():
@@ -78,3 +78,25 @@ def test_unauthenticated_relay_skips_both(monkeypatch: pytest.MonkeyPatch) -> No
     session.starttls.assert_not_called()
     session.login.assert_not_called()
     session.send_message.assert_called_once()
+
+
+def test_archive_bcc_added_to_smtp_recipients_without_header(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    session = _call_send(
+        monkeypatch,
+        EMAIL_ARCHIVE_BCC_ADDRESSES=(
+            "archive@example.com",
+            "to@example.com",
+            "ARCHIVE@example.com",
+        ),
+    )
+
+    session.send_message.assert_called_once()
+    message = session.send_message.call_args.args[0]
+    assert message["Cc"] is None
+    assert message["Bcc"] is None
+    assert session.send_message.call_args.kwargs["to_addrs"] == [
+        "to@example.com",
+        "archive@example.com",
+    ]

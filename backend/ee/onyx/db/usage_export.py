@@ -1,8 +1,7 @@
 import uuid
 from collections.abc import Generator
 from datetime import datetime
-from typing import IO
-from typing import Optional
+from typing import IO, Optional
 
 from fastapi_users_db_sqlalchemy import UUID_ID
 from sqlalchemy import cast
@@ -10,13 +9,13 @@ from sqlalchemy.dialects.postgresql import UUID
 from sqlalchemy.orm import Session
 
 from ee.onyx.db.query_history import fetch_chat_sessions_eagerly_by_time
-from ee.onyx.server.reporting.usage_export_models import ChatMessageSkeleton
-from ee.onyx.server.reporting.usage_export_models import FlowType
-from ee.onyx.server.reporting.usage_export_models import UsageReportMetadata
+from ee.onyx.server.reporting.usage_export_models import (
+    ChatMessageSkeleton,
+    FlowType,
+    UsageReportMetadata,
+)
 from onyx.configs.constants import MessageType
-from onyx.db.models import ChatMessage
-from onyx.db.models import UsageReport
-from onyx.db.models import User
+from onyx.db.models import ChatMessage, UsageReport, User
 from onyx.file_store.file_store import get_default_file_store
 
 
@@ -131,6 +130,20 @@ def get_all_empty_chat_message_entries(
 
         # Update initial_time for the next iteration
         initial_time = time_created
+
+
+def usage_report_id_in_use(db_session: Session, report_id: uuid.UUID) -> bool:
+    """Checks whether a usage report already exists for the given report_id.
+
+    report_name is formatted as `{date}_{report_id}_usage_report.zip`, so a
+    substring match on report_id is sufficient to detect reuse.
+    """
+    return (
+        db_session.query(UsageReport)
+        .filter(UsageReport.report_name.contains(str(report_id)))
+        .first()
+        is not None
+    )
 
 
 def get_all_usage_reports(db_session: Session) -> list[UsageReportMetadata]:

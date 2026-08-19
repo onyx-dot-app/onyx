@@ -1,21 +1,22 @@
 from collections.abc import Iterator
-from typing import Any
-from typing import Callable
+from typing import Any, Callable
 from uuid import UUID
 
 from pydantic import BaseModel
 
 from onyx.configs.constants import MessageType
 from onyx.context.search.models import SearchDoc
-from onyx.file_store.models import ChatFileType
-from onyx.file_store.models import InMemoryChatFile
-from onyx.server.query_and_chat.models import MessageResponseIDInfo
-from onyx.server.query_and_chat.models import MultiModelMessageResponseIDInfo
-from onyx.server.query_and_chat.streaming_models import CitationInfo
-from onyx.server.query_and_chat.streaming_models import GeneratedImage
-from onyx.server.query_and_chat.streaming_models import Packet
-from onyx.tools.models import SearchToolUsage
-from onyx.tools.models import ToolCallKickoff
+from onyx.file_store.models import ChatFileType, InMemoryChatFile
+from onyx.server.query_and_chat.models import (
+    MessageResponseIDInfo,
+    MultiModelMessageResponseIDInfo,
+)
+from onyx.server.query_and_chat.streaming_models import (
+    CitationInfo,
+    GeneratedImage,
+    Packet,
+)
+from onyx.tools.models import SearchToolUsage, ToolCallKickoff
 from onyx.tools.tool_implementations.custom.base_tool_types import ToolResultType
 
 
@@ -36,6 +37,9 @@ class CustomToolResponse(BaseModel):
 
 class CreateChatSessionID(BaseModel):
     chat_session_id: UUID
+    # Echoes the pinned mode so the client can verify the server honored an
+    # incognito request. A server that omits it did not.
+    incognito: bool = False
 
 
 AnswerStreamPart = (
@@ -92,16 +96,22 @@ class ChatFullResponse(BaseModel):
     # Metadata
     message_id: int
     chat_session_id: UUID | None = None
+    # Echoes the pinned mode for newly-created sessions, like the streaming
+    # packet does. A server that omits it did not honor an incognito request.
+    incognito: bool = False
     error_msg: str | None = None
 
 
 class ChatLoadedFile(InMemoryChatFile):
     content_text: str | None
     token_count: int
+    # True while the user-file worker is still processing the file — its
+    # canonical plaintext (e.g. including image captions) doesn't exist yet.
+    content_pending: bool = False
 
     # Named distinctly from the base ``lazy_from_descriptor`` so the subclass
     # can require ``content_text`` / ``token_count`` without violating LSP on
-    # the override (ty/mypy correctly flag the broader subclass signature).
+    # the override (ty correctly flag the broader subclass signature).
     @classmethod
     def lazy_loaded(
         cls,
@@ -112,6 +122,7 @@ class ChatLoadedFile(InMemoryChatFile):
         content_text: str | None,
         token_count: int,
         loader: Callable[[], bytes],
+        content_pending: bool = False,
     ) -> "ChatLoadedFile":
         """Construct a ``ChatLoadedFile`` whose ``content`` bytes are loaded
         only on first access. ``content_text`` and ``token_count`` are passed
@@ -126,6 +137,7 @@ class ChatLoadedFile(InMemoryChatFile):
             filename=filename,
             content_text=content_text,
             token_count=token_count,
+            content_pending=content_pending,
         )
         install_lazy_content_loader(inst, loader)
         return inst
@@ -150,6 +162,10 @@ class ChatMessageSimple(BaseModel):
     message_type: MessageType
     # Only for USER type messages
     image_files: list[ChatLoadedFile] | None = None
+    # Portion of token_count contributed by image_files. Kept separate so
+    # budgeting can discount it when a non-vision model replays the images
+    # as text markers instead.
+    image_token_count: int = 0
     # Only for TOOL_CALL_RESPONSE type messages
     tool_call_id: str | None = None
     # For ASSISTANT messages with tool calls (OpenAI parallel tool calling format)
@@ -229,3 +245,7 @@ class LlmStepResult(BaseModel):
     # Raw LLM text before any display-oriented filtering/sanitization.
     # Used for fallback tool-call extraction when providers emit calls as text.
     raw_answer: str | None = None
+    # Terminal finish_reason from the stream, LiteLLM-normalized (e.g. "stop",
+    # "length", "tool_calls", "content_filter"). Lets downstream classification
+    # distinguish a model refusal from a genuinely empty provider response.
+    finish_reason: str | None = None

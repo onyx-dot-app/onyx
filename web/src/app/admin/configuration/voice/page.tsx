@@ -1,1 +1,1 @@
-export { default } from "@/refresh-pages/admin/VoicePage";
+export { default } from "@/views/admin/VoicePage";

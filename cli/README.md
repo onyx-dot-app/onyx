@@ -17,6 +17,9 @@ Or with uv:
 uv pip install onyx-cli
 ```
 
+Standalone binaries for Linux, macOS, and Windows (amd64/arm64) are also attached
+to each [`cli/v*` GitHub release](https://github.com/onyx-dot-app/onyx/releases?q=cli%2Fv).
+
 ## Setup
 
 Run the interactive chat TUI — on first launch it will guide you through setup:
@@ -31,7 +34,8 @@ Environment variables override config file values:
 
 | Variable | Required | Description |
 |----------|----------|-------------|
-| `ONYX_SERVER_URL` | No | Server URL (default: `https://cloud.onyx.app`) |
+| `ONYX_SERVER_URL` | No | Server origin or already-prefixed API base (default: `https://cloud.onyx.app`) |
+| `ONYX_API_PREFIX` | No | API path prefix (default: `/api`); set to empty for direct backend access |
 | `ONYX_PAT` | No | Personal access token for authentication (required if no config file) |
 | `ONYX_PERSONA_ID` | No | Default agent/persona ID |
 | `ONYX_STREAM_MARKDOWN` | No | Enable/disable progressive markdown rendering (true/false) |
@@ -127,6 +131,7 @@ When called without a TTY (e.g., by an AI agent or piped into another command), 
 - **Results to stdout**, progress/errors to stderr
 - **No ANSI codes** or interactive prompts
 - **`ask` output truncated** to 50000 bytes by default; full response saved to a temp file. Use `--max-output 0` to disable.
+- **`search` stdout stays valid JSON**: over the limit, whole results are dropped and a `truncation` object carries metadata plus the temp file path of the full response.
 
 ### Configuration
 
@@ -235,7 +240,16 @@ git tag cli/v0.1.0
 git push origin cli/v0.1.0
 ```
 
-The workflow builds wheels for: linux/amd64, linux/arm64, darwin/amd64, darwin/arm64, windows/amd64, windows/arm64.
+The workflow builds wheels for:
+
+- linux/amd64 manylinux
+- linux/amd64 musllinux
+- linux/arm64 manylinux
+- linux/arm64 musllinux
+- darwin/amd64
+- darwin/arm64
+- windows/amd64
+- windows/arm64
 
 ### Manual release
 
@@ -247,6 +261,11 @@ uv build --wheel
 
 # Cross-compile for a different platform
 GOOS=linux GOARCH=amd64 uv build --wheel
+
+# Build a musllinux-tagged Linux wheel for Alpine/musl environments
+GOOS=linux GOARCH=amd64 CGO_ENABLED=0 \
+  ONYX_CLI_WHEEL_PLATFORM_TAG=musllinux_1_2_x86_64 \
+  uv build --wheel
 
 # Upload to PyPI
 uv publish

@@ -63,6 +63,9 @@ function PasteTilePopover({
     };
   }, [updateRect]);
 
+  // Browser-only: measures the viewport and portals into document.body.
+  if (typeof window === "undefined") return null;
+
   const POPOVER_MAX_H = 340;
   const POPOVER_MAX_W = 400;
   const GAP = 4;
@@ -80,7 +83,7 @@ function PasteTilePopover({
       <div
         role="dialog"
         aria-label="Edit pasted text"
-        className="fixed z-50 bg-background-neutral-00 border border-border-01 rounded-08 shadow-02 p-1 max-w-[400px]"
+        className="fixed z-50 bg-background-neutral-00 border border-border-01 rounded-08 shadow-box-02 p-1 max-w-[400px]"
         style={{
           left: Math.max(GAP, left),
           ...(fitsBelow

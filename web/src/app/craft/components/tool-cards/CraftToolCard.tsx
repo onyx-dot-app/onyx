@@ -80,6 +80,13 @@ function verbWithCode(verb: string, code: string, suffix?: string): ReactNode {
  */
 function renderPrimary(toolCall: ToolCallState): ReactNode {
   if (toolCall.kind === "execute" && toolCall.command) {
+    if (toolCall.skillName && toolCall.description) {
+      return (
+        <Text font="main-ui-muted" color="text-04" nowrap>
+          {toolCall.description}
+        </Text>
+      );
+    }
     return verbWithCode("Running ", toolCall.command);
   }
   if (toolCall.kind === "search" && toolCall.description) {

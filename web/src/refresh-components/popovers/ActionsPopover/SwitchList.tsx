@@ -1,6 +1,7 @@
 "use client";
 
 import React, { useMemo, useState } from "react";
+import useFocusOnMount from "@opal/hooks/useFocusOnMount";
 import {
   Button,
   InputTypeIn,
@@ -45,6 +46,7 @@ export default function SwitchList({
   footer,
 }: SwitchListProps) {
   const [searchTerm, setSearchTerm] = useState("");
+  const focusOnMount = useFocusOnMount<HTMLInputElement>();
   const filteredItems = useMemo(() => {
     if (!searchTerm) return items;
     const searchLower = searchTerm.toLowerCase();
@@ -76,7 +78,7 @@ export default function SwitchList({
             placeholder={searchPlaceholder}
             value={searchTerm}
             onChange={(e) => setSearchTerm(e.target.value)}
-            autoFocus
+            ref={focusOnMount}
           />
         </div>,
 

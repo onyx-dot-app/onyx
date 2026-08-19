@@ -18,6 +18,10 @@ _ENDPOINT = "https://api.linear.app/graphql"
 _PAGE_SIZE = 100
 _DEFAULT_LIMIT = 100
 _IDENT_RE = re.compile(r"^[A-Za-z][A-Za-z0-9]*-\d+$")
+_UUID_RE = re.compile(
+    r"^[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-"
+    r"[0-9a-fA-F]{4}-[0-9a-fA-F]{12}$"
+)
 _HTTP_TIMEOUT_SECONDS = 180
 
 _ISSUE_FIELDS = """
@@ -102,6 +106,54 @@ def _issue_filter(a: argparse.Namespace) -> dict[str, Any]:
     return f
 
 
+def _build_issue_create_input(a: argparse.Namespace) -> dict[str, Any]:
+    """Map parsed args onto an IssueCreateInput dict, including only the keys
+    that were actually provided. Pure (no network): callers must resolve any
+    workflow-state *name* to a state id before calling this — pass the id via
+    ``a.state``.
+    """
+    inp: dict[str, Any] = {"teamId": a.team_id, "title": a.title}
+    if getattr(a, "description", None):
+        inp["description"] = a.description
+    if getattr(a, "assignee", None):
+        inp["assigneeId"] = a.assignee
+    if getattr(a, "project", None):
+        inp["projectId"] = a.project
+    if getattr(a, "state", None):
+        inp["stateId"] = a.state
+    if getattr(a, "priority", None) is not None:
+        inp["priority"] = a.priority
+    if getattr(a, "label", None):
+        inp["labelIds"] = list(a.label)
+    if getattr(a, "estimate", None) is not None:
+        inp["estimate"] = a.estimate
+    if getattr(a, "parent", None):
+        inp["parentId"] = a.parent
+    return inp
+
+
+def _resolve_state_id(team_id: str, state: str) -> str:
+    """Resolve a workflow-state reference to a state id. If ``state`` is already
+    a UUID it is returned as-is; otherwise it is treated as a name and matched
+    case-insensitively against the team's workflow states. Raises ValueError if
+    no matching state is found (or the lookup fails)."""
+    if _UUID_RE.match(state):
+        return state
+    q = "query($teamId:String!){ team(id:$teamId){ states { nodes { id name } } } }"
+    resp = _gql(q, {"teamId": team_id})
+    if resp.get("errors"):
+        raise ValueError(f"could not load workflow states: {resp['errors']}")
+    team = (resp.get("data") or {}).get("team") or {}
+    nodes = ((team.get("states") or {}).get("nodes")) or []
+    for node in nodes:
+        if (node.get("name") or "").lower() == state.lower():
+            return node["id"]
+    available = ", ".join(n.get("name", "") for n in nodes) or "(none)"
+    raise ValueError(
+        f"no workflow state named {state!r} for team {team_id}; available: {available}"
+    )
+
+
 def _emit(result: dict[str, Any], raw: bool) -> int:
     print(json.dumps(result if raw else _prune(result)))
     return 0 if result.get("ok") else 1
@@ -139,6 +191,16 @@ def _build_parser() -> argparse.ArgumentParser:
     sp.add_argument("title")
     sp.add_argument("--description")
     sp.add_argument("--assignee", help="user id")
+    sp.add_argument("--project", help="project id")
+    sp.add_argument("--state", help="workflow state name or id")
+    sp.add_argument("--priority", type=int, help="priority 0-4")
+    sp.add_argument(
+        "--label",
+        action="append",
+        help="label id (repeatable)",
+    )
+    sp.add_argument("--estimate", type=int, help="point estimate")
+    sp.add_argument("--parent", help="parent issue id")
 
     sp = sub.add_parser("comment", help="comment on an issue (write)")
     sp.add_argument("issue_id")
@@ -196,16 +258,17 @@ def _dispatch(a: argparse.Namespace) -> dict[str, Any]:
     if a.cmd == "projects":
         q = (
             "query($first:Int,$after:String){ projects(first:$first,after:$after)"
-            "{ nodes { id name state url } pageInfo { hasNextPage endCursor } } }"
+            "{ nodes { id name state url teams { nodes { id key name } } }"
+            " pageInfo { hasNextPage endCursor } } }"
         )
         return _paginate(q, {}, "projects", a.limit)
 
     if a.cmd == "create-issue":
-        inp: dict[str, Any] = {"teamId": a.team_id, "title": a.title}
-        if a.description:
-            inp["description"] = a.description
-        if a.assignee:
-            inp["assigneeId"] = a.assignee
+        # Resolve a workflow-state *name* to its id (network) before building the
+        # pure input; `_build_issue_create_input` itself stays network-free.
+        if a.state:
+            a.state = _resolve_state_id(a.team_id, a.state)
+        inp = _build_issue_create_input(a)
         q = (
             "mutation($input:IssueCreateInput!){ issueCreate(input:$input)"
             "{ success issue { id identifier url } } }"
@@ -242,6 +305,9 @@ def main(argv: list[str]) -> int:
     except json.JSONDecodeError as e:
         print(f"invalid variables: {e}", file=sys.stderr)
         return 2
+    except ValueError as e:
+        print(str(e), file=sys.stderr)
+        return 1
     except urllib.error.HTTPError as e:
         detail = e.read().decode("utf-8", errors="replace")
         print(f"HTTP {e.code} calling Linear: {detail}", file=sys.stderr)

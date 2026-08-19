@@ -4,23 +4,25 @@ Unit tests for the user registration workflow in UserManager.create().
 Tests cover:
 1. Disposable email validation (before tenant provisioning)
 2. Multi-tenant vs single-tenant invite logic
-3. SAML/OIDC SSO bypass behavior
-4. Empty whitelist vs populated whitelist scenarios
-5. Case-insensitive email matching for existing user checks
+3. Empty whitelist vs populated whitelist scenarios
+4. Case-insensitive email matching for existing user checks
 """
 
-from types import TracebackType
-from unittest.mock import AsyncMock
-from unittest.mock import MagicMock
-from unittest.mock import patch
+from collections.abc import Iterator
+from types import SimpleNamespace, TracebackType
+from typing import cast
+from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
+from fastapi.security import OAuth2PasswordRequestForm
 from fastapi_users import exceptions
 
 from onyx.auth.schemas import UserCreate
 from onyx.auth.users import UserManager
-from onyx.configs.constants import AuthType
+from onyx.db.enums import AccountType
+from onyx.error_handling.error_codes import OnyxErrorCode
 from onyx.error_handling.exceptions import OnyxError
+from onyx.server.utils import BasicAuthenticationError
 
 # Note: Only async test methods are marked with @pytest.mark.asyncio individually
 # to avoid warnings on synchronous tests
@@ -44,6 +46,7 @@ def mock_async_session() -> MagicMock:
     session.scalar = AsyncMock()
     session.commit = AsyncMock()
     session.rollback = AsyncMock()
+    session.run_sync = AsyncMock(return_value=None)
     return session
 
 
@@ -63,9 +66,17 @@ class _AsyncSessionContextManager:
         return False
 
 
+@pytest.fixture(autouse=True)
+def _no_pinned_persona_seeding() -> Iterator[None]:
+    """Seeding needs a real session; these tests only cover registration logic."""
+    with patch(
+        "onyx.auth.users.seed_pinned_personas_from_featured", new_callable=AsyncMock
+    ):
+        yield
+
+
 def _mock_user_manager_methods(user_manager: UserManager) -> None:
-    setattr(user_manager, "validate_password", AsyncMock())
-    setattr(user_manager, "_assign_default_pinned_assistants", AsyncMock())
+    user_manager.validate_password = AsyncMock()
 
 
 class TestDisposableEmailValidation:
@@ -140,14 +151,16 @@ class TestDisposableEmailValidation:
 
         # Verify domain validation was called
         mock_verify_domain.assert_called_once_with(
-            mock_user_create.email, is_registration=True
+            mock_user_create.email,
+            valid_email_domains=(),
+            is_registration=True,
         )
 
 
 class TestMultiTenantInviteLogic:
     """Test invite logic for multi-tenant environments."""
 
-    @patch("onyx.auth.users.SQLAlchemyUserAdminDB")
+    @patch("onyx.auth.users.SQLAlchemyUserDatabase")
     @patch("onyx.auth.users.is_disposable_email", return_value=False)
     @patch("onyx.auth.users.verify_email_domain")
     @patch("onyx.auth.users.fetch_ee_implementation_or_noop")
@@ -195,7 +208,7 @@ class TestMultiTenantInviteLogic:
         # Verify invite check was NOT called (user_count = 0)
         mock_verify_invited.assert_not_called()
 
-    @patch("onyx.auth.users.SQLAlchemyUserAdminDB")
+    @patch("onyx.auth.users.SQLAlchemyUserDatabase")
     @patch("onyx.auth.users.is_disposable_email", return_value=False)
     @patch("onyx.auth.users.verify_email_domain")
     @patch("onyx.auth.users.fetch_ee_implementation_or_noop")
@@ -294,57 +307,11 @@ class TestSingleTenantInviteLogic:
         mock_verify_invited.assert_called_once_with(mock_user_create.email)
 
 
-class TestSAMLOIDCBehavior:
-    """Test SSO (SAML/OIDC) bypass of invite whitelist."""
-
-    @pytest.mark.parametrize("auth_type", [AuthType.SAML, AuthType.OIDC])
-    @patch("onyx.auth.users.get_invited_users")
-    @patch("onyx.auth.users.workspace_invite_only_enabled", return_value=True)
-    @patch("onyx.auth.users.AUTH_TYPE")
-    def test_sso_bypasses_whitelist(
-        self,
-        mock_auth_type: MagicMock,
-        _mock_invite_only: MagicMock,
-        mock_get_invited: MagicMock,
-        auth_type: AuthType,
-    ) -> None:
-        """SAML/OIDC should bypass invite whitelist."""
-        from onyx.auth.users import verify_email_is_invited
-
-        # Setup
-        mock_auth_type.return_value = auth_type
-        mock_get_invited.return_value = ["allowed@example.com"]
-
-        # Execute - should not raise even with populated whitelist
-        with patch("onyx.auth.users.AUTH_TYPE", auth_type):
-            verify_email_is_invited("newuser@example.com")  # Should not raise
-
-    @patch("onyx.auth.users.get_invited_users")
-    @patch("onyx.auth.users.workspace_invite_only_enabled", return_value=True)
-    @patch("onyx.auth.users.AUTH_TYPE", AuthType.BASIC)
-    def test_basic_auth_enforces_whitelist(
-        self,
-        mock_get_invited: MagicMock,
-        _mock_invite_only: MagicMock,
-    ) -> None:
-        """Basic auth should enforce invite whitelist."""
-        from onyx.auth.users import verify_email_is_invited
-
-        # Setup
-        mock_get_invited.return_value = ["allowed@example.com"]
-
-        # Execute & Assert
-        with pytest.raises(OnyxError) as exc:
-            verify_email_is_invited("newuser@example.com")
-        assert exc.value.status_code == 403
-
-
 class TestWhitelistBehavior:
     """Test invite whitelist scenarios."""
 
     @patch("onyx.auth.users.workspace_invite_only_enabled", return_value=False)
     @patch("onyx.auth.users.get_invited_users")
-    @patch("onyx.auth.users.AUTH_TYPE", AuthType.BASIC)
     def test_empty_whitelist_allows_all(
         self,
         mock_get_invited: MagicMock,
@@ -361,7 +328,6 @@ class TestWhitelistBehavior:
 
     @patch("onyx.auth.users.workspace_invite_only_enabled", return_value=False)
     @patch("onyx.auth.users.get_invited_users")
-    @patch("onyx.auth.users.AUTH_TYPE", AuthType.BASIC)
     def test_invite_only_disabled_allows_non_invited_users(
         self,
         mock_get_invited: MagicMock,
@@ -375,7 +341,6 @@ class TestWhitelistBehavior:
 
     @patch("onyx.auth.users.workspace_invite_only_enabled", return_value=True)
     @patch("onyx.auth.users.get_invited_users")
-    @patch("onyx.auth.users.AUTH_TYPE", AuthType.BASIC)
     def test_whitelist_blocks_non_invited(
         self,
         mock_get_invited: MagicMock,
@@ -395,7 +360,6 @@ class TestWhitelistBehavior:
 
     @patch("onyx.auth.users.workspace_invite_only_enabled", return_value=True)
     @patch("onyx.auth.users.get_invited_users")
-    @patch("onyx.auth.users.AUTH_TYPE", AuthType.BASIC)
     def test_whitelist_allows_invited_case_insensitive(
         self,
         mock_get_invited: MagicMock,
@@ -489,7 +453,7 @@ class TestCaseInsensitiveEmailMatching:
     @patch("onyx.auth.users.fetch_ee_implementation_or_noop")
     @patch("onyx.auth.users.get_async_session_context_manager")
     @patch("onyx.auth.users.get_user_count", new_callable=AsyncMock)
-    @patch("onyx.auth.users.SQLAlchemyUserAdminDB")
+    @patch("onyx.auth.users.SQLAlchemyUserDatabase")
     @patch("onyx.auth.users.MULTI_TENANT", True)
     @patch("onyx.auth.users.CURRENT_TENANT_ID_CONTEXTVAR")
     @pytest.mark.asyncio
@@ -540,7 +504,9 @@ class TestCaseInsensitiveEmailMatching:
 
         # Verify flow
         mock_verify_domain.assert_called_once_with(
-            user_create.email, is_registration=True
+            user_create.email,
+            valid_email_domains=(),
+            is_registration=True,
         )
 
     @patch("onyx.auth.users.is_disposable_email")
@@ -549,7 +515,7 @@ class TestCaseInsensitiveEmailMatching:
     @patch("onyx.auth.users.get_async_session_context_manager")
     @patch("onyx.auth.users.get_user_count", new_callable=AsyncMock)
     @patch("onyx.auth.users.verify_email_is_invited")
-    @patch("onyx.auth.users.SQLAlchemyUserAdminDB")
+    @patch("onyx.auth.users.SQLAlchemyUserDatabase")
     @patch("onyx.auth.users.MULTI_TENANT", True)
     @patch("onyx.auth.users.CURRENT_TENANT_ID_CONTEXTVAR")
     @pytest.mark.asyncio
@@ -592,7 +558,9 @@ class TestCaseInsensitiveEmailMatching:
 
         # Verify flow
         mock_verify_domain.assert_called_once_with(
-            mock_user_create.email, is_registration=True
+            mock_user_create.email,
+            valid_email_domains=(),
+            is_registration=True,
         )
         mock_verify_invited.assert_called_once()  # Existing tenant = invite needed
 
@@ -626,16 +594,17 @@ class TestOAuthDottedGmail:
         mock_session_manager.return_value = _AsyncSessionContextManager(
             mock_async_session
         )
-        mock_fetch_ee.return_value = AsyncMock(return_value="test_tenant")
+        provision_tenant = AsyncMock(return_value="test_tenant")
+        mock_fetch_ee.side_effect = lambda _module, attribute, _default: (
+            provision_tenant if attribute == "get_or_provision_tenant" else MagicMock()
+        )
         mock_verify_domain.return_value = None
 
         user_manager = UserManager(MagicMock())
         _mock_user_manager_methods(user_manager)
-        setattr(user_manager, "on_after_register", AsyncMock())
-        setattr(
-            user_manager,
-            "get_by_oauth_account",
-            AsyncMock(side_effect=exceptions.UserNotExists()),
+        user_manager.on_after_register = AsyncMock()
+        user_manager.get_by_oauth_account = AsyncMock(
+            side_effect=exceptions.UserNotExists()
         )
 
         created_user = MagicMock(id="test-id", email=dotted_email)
@@ -662,3 +631,417 @@ class TestOAuthDottedGmail:
         assert mock_verify_domain.call_args_list
         for call in mock_verify_domain.call_args_list:
             assert call.kwargs.get("is_registration") is not True
+
+
+class TestOAuthNoAutoLinkExemptions:
+    """With auto-link off, a web-login row refuses a same-email login once it is
+    spoken for: a linked IdP (a second provider must not attach), a rename (a moved
+    address stops proving whose row it is), or deactivation. A row with none of
+    those is claimed. Placeholders skip the checks and are promoted instead."""
+
+    @staticmethod
+    def _unclaimed(**attrs: object) -> MagicMock:
+        """A row provisioned ahead of its owner: no IdP, original address, active.
+
+        Every attribute the guard reads is set explicitly. A bare MagicMock
+        attribute is truthy, which would silently invert the assertions here.
+        """
+        return MagicMock(
+            **{  # ty: ignore[invalid-argument-type]
+                "id": "user-id",
+                "email": "provisioned@corp.com",
+                "oauth_accounts": [],
+                "prior_emails": [],
+                "is_active": True,
+                "account_type": AccountType.STANDARD,
+                # Read by the offboarding tail of oauth_callback, not the guard.
+                "oidc_expiry": None,
+                **attrs,
+            }
+        )
+
+    @staticmethod
+    def _manager_with_existing(existing_user: MagicMock) -> UserManager:
+        user_manager = UserManager(MagicMock())
+        _mock_user_manager_methods(user_manager)
+        user_manager.on_after_register = AsyncMock()
+        user_manager.get_by_oauth_account = AsyncMock(
+            side_effect=exceptions.UserNotExists()
+        )
+        mock_user_db = MagicMock()
+        mock_user_db.get_by_email = AsyncMock(return_value=existing_user)
+        mock_user_db.get = AsyncMock(return_value=existing_user)
+        mock_user_db.add_oauth_account = AsyncMock(return_value=existing_user)
+        mock_user_db.update = AsyncMock(return_value=existing_user)
+        mock_user_db.session = MagicMock()
+        user_manager.user_db = mock_user_db
+        return user_manager
+
+    @pytest.mark.asyncio
+    # A placeholder is deactivated until its owner shows up, so the deactivated
+    # case is the one that matters: it must promote, not be turned away.
+    @pytest.mark.parametrize("is_active", [True, False], ids=["active", "deactivated"])
+    @patch("onyx.auth.users.MULTI_TENANT", False)
+    @patch("onyx.auth.users.verify_email_in_whitelist")
+    @patch("onyx.auth.users.verify_email_domain")
+    @patch("onyx.auth.users.fetch_ee_implementation_or_noop")
+    @patch("onyx.auth.users.get_async_session_context_manager")
+    @patch("onyx.auth.users.remove_user_from_invited_users")
+    @patch("onyx.auth.users.assign_user_to_default_groups__no_commit")
+    @patch("onyx.auth.users._upgrade_will_add_seat", return_value=False)
+    @patch("onyx.auth.users.get_session_with_current_tenant")
+    async def test_placeholder_promoted_without_auto_link(
+        self,
+        mock_sync_session_factory: MagicMock,
+        mock_will_add_seat: MagicMock,  # noqa: ARG002
+        mock_assign_groups: MagicMock,
+        mock_remove_invited: MagicMock,  # noqa: ARG002
+        mock_session_manager: MagicMock,
+        mock_fetch_ee: MagicMock,
+        mock_verify_domain: MagicMock,  # noqa: ARG002
+        mock_verify_whitelist: MagicMock,  # noqa: ARG002
+        is_active: bool,
+        mock_async_session: MagicMock,
+    ) -> None:
+        mock_session_manager.return_value = _AsyncSessionContextManager(
+            mock_async_session
+        )
+        provision_tenant = AsyncMock(return_value="test_tenant")
+        mock_fetch_ee.side_effect = lambda _module, attribute, _default: (
+            provision_tenant if attribute == "get_or_provision_tenant" else MagicMock()
+        )
+
+        placeholder = self._unclaimed(
+            id="placeholder-id",
+            email="synced@corp.com",
+            account_type=AccountType.EXT_PERM_USER,
+            is_active=is_active,
+        )
+        user_manager = self._manager_with_existing(placeholder)
+
+        sync_user = MagicMock(is_active=is_active)
+        mock_sync_db = MagicMock()
+        mock_sync_db.query.return_value.filter.return_value.first.return_value = (
+            sync_user
+        )
+        mock_sync_session_factory.return_value.__enter__ = MagicMock(
+            return_value=mock_sync_db
+        )
+        mock_sync_session_factory.return_value.__exit__ = MagicMock(return_value=False)
+
+        result = await user_manager.oauth_callback(
+            oauth_name="okta",
+            access_token="token",
+            account_id="acct-1",
+            account_email="synced@corp.com",
+            associate_by_email=False,
+            is_verified_by_default=True,
+        )
+
+        # The oauth account attaches instead of UserAlreadyExists, and the
+        # existing non-web-login upgrade block promotes the placeholder.
+        cast(AsyncMock, user_manager.user_db.add_oauth_account).assert_awaited_once()
+        assert sync_user.account_type == AccountType.STANDARD
+        assert sync_user.is_verified is True
+        # Promotion reactivates, so the web-login deactivation check must not
+        # short-circuit a placeholder before it reaches the upgrade.
+        assert sync_user.is_active is True
+        mock_assign_groups.assert_called_once()
+        mock_sync_db.commit.assert_called_once()
+        assert result is placeholder
+
+    @pytest.mark.asyncio
+    @patch("onyx.auth.users.MULTI_TENANT", False)
+    @patch("onyx.auth.users.verify_email_in_whitelist")
+    @patch("onyx.auth.users.verify_email_domain")
+    @patch("onyx.auth.users.fetch_ee_implementation_or_noop")
+    @patch("onyx.auth.users.get_async_session_context_manager")
+    @patch("onyx.auth.users.remove_user_from_invited_users")
+    async def test_unclaimed_row_is_claimed_by_first_login(
+        self,
+        mock_remove_invited: MagicMock,  # noqa: ARG002
+        mock_session_manager: MagicMock,
+        mock_fetch_ee: MagicMock,
+        mock_verify_domain: MagicMock,  # noqa: ARG002
+        mock_verify_whitelist: MagicMock,  # noqa: ARG002
+        mock_async_session: MagicMock,
+    ) -> None:
+        """The provisioned-ahead-of-its-owner case: SCIM, invite, any out-of-band
+        create. Nothing about the row is spoken for, so the login claims it."""
+        mock_session_manager.return_value = _AsyncSessionContextManager(
+            mock_async_session
+        )
+        mock_fetch_ee.return_value = AsyncMock(return_value="test_tenant")
+
+        provisioned = self._unclaimed()
+        user_manager = self._manager_with_existing(provisioned)
+
+        result = await user_manager.oauth_callback(
+            oauth_name="okta",
+            access_token="token",
+            account_id="acct-3",
+            account_email="provisioned@corp.com",
+            associate_by_email=False,
+        )
+
+        cast(AsyncMock, user_manager.user_db.add_oauth_account).assert_awaited_once()
+        assert result is provisioned
+
+    @pytest.mark.asyncio
+    @pytest.mark.parametrize(
+        "overrides",
+        [
+            # A second provider must not attach to a row an IdP already owns.
+            pytest.param({"oauth_accounts": [MagicMock()]}, id="already-linked"),
+            # A rename moved this row onto the address, so the address no longer
+            # proves whose row it is.
+            pytest.param({"prior_emails": ["old@corp.com"]}, id="renamed"),
+        ],
+    )
+    @patch("onyx.auth.users.MULTI_TENANT", False)
+    @patch("onyx.auth.users.verify_email_in_whitelist")
+    @patch("onyx.auth.users.verify_email_domain")
+    @patch("onyx.auth.users.fetch_ee_implementation_or_noop")
+    @patch("onyx.auth.users.get_async_session_context_manager")
+    @patch("onyx.auth.users.remove_user_from_invited_users")
+    async def test_spoken_for_row_is_rejected(
+        self,
+        mock_remove_invited: MagicMock,  # noqa: ARG002
+        mock_session_manager: MagicMock,
+        mock_fetch_ee: MagicMock,
+        mock_verify_domain: MagicMock,  # noqa: ARG002
+        mock_verify_whitelist: MagicMock,  # noqa: ARG002
+        overrides: dict[str, object],
+        mock_async_session: MagicMock,
+    ) -> None:
+        mock_session_manager.return_value = _AsyncSessionContextManager(
+            mock_async_session
+        )
+        mock_fetch_ee.return_value = AsyncMock(return_value="test_tenant")
+
+        user_manager = self._manager_with_existing(self._unclaimed(**overrides))
+
+        with pytest.raises(exceptions.UserAlreadyExists):
+            await user_manager.oauth_callback(
+                oauth_name="entra",
+                access_token="token",
+                account_id="acct-4",
+                account_email="provisioned@corp.com",
+                associate_by_email=False,
+            )
+
+        cast(AsyncMock, user_manager.user_db.add_oauth_account).assert_not_awaited()
+
+    @pytest.mark.asyncio
+    @patch("onyx.auth.users.MULTI_TENANT", False)
+    @patch("onyx.auth.users.verify_email_in_whitelist")
+    @patch("onyx.auth.users.verify_email_domain")
+    @patch("onyx.auth.users.fetch_ee_implementation_or_noop")
+    @patch("onyx.auth.users.get_async_session_context_manager")
+    @patch("onyx.auth.users.remove_user_from_invited_users")
+    async def test_deactivated_row_is_not_linked(
+        self,
+        mock_remove_invited: MagicMock,  # noqa: ARG002
+        mock_session_manager: MagicMock,
+        mock_fetch_ee: MagicMock,
+        mock_verify_domain: MagicMock,  # noqa: ARG002
+        mock_verify_whitelist: MagicMock,  # noqa: ARG002
+        mock_async_session: MagicMock,
+    ) -> None:
+        """Linking commits, so a deprovisioned row must come back unclaimed. The
+        caller's is_active gate is what turns this into a rejected login."""
+        mock_session_manager.return_value = _AsyncSessionContextManager(
+            mock_async_session
+        )
+        mock_fetch_ee.return_value = AsyncMock(return_value="test_tenant")
+
+        deactivated = self._unclaimed(is_active=False)
+        user_manager = self._manager_with_existing(deactivated)
+
+        result = await user_manager.oauth_callback(
+            oauth_name="okta",
+            access_token="token",
+            account_id="acct-5",
+            account_email="provisioned@corp.com",
+            associate_by_email=False,
+        )
+
+        cast(AsyncMock, user_manager.user_db.add_oauth_account).assert_not_awaited()
+        assert result is deactivated
+        assert result.is_active is False
+
+
+class TestPasswordAuthKillSwitch:
+    """Password auth off refuses the public register route (``safe=True``) and
+    password login, single-tenant only. SAML/JWT provisioning uses the default
+    ``safe=False`` and OAuth bypasses create(), so SSO users are still created
+    through their provider, and SSO login never reaches authenticate().
+    """
+
+    @pytest.mark.asyncio
+    @patch("onyx.auth.users.get_security_settings")
+    async def test_signup_disabled_blocks_public_registration(
+        self,
+        mock_get_settings: MagicMock,
+        mock_user_create: UserCreate,
+    ) -> None:
+        mock_get_settings.return_value = SimpleNamespace(
+            password_auth_enabled=False, valid_email_domains=()
+        )
+        user_manager = UserManager(MagicMock())
+
+        with pytest.raises(OnyxError) as exc:
+            await user_manager.create(mock_user_create, safe=True)
+
+        assert exc.value.error_code is OnyxErrorCode.REGISTRATION_DISABLED
+        assert exc.value.status_code == 403
+
+    @pytest.mark.asyncio
+    @patch("onyx.auth.users.is_disposable_email", return_value=False)
+    @patch("onyx.auth.users.verify_email_domain")
+    @patch("onyx.auth.users.get_security_settings")
+    async def test_signup_disabled_allows_sso_provisioning(
+        self,
+        mock_get_settings: MagicMock,
+        mock_verify_domain: MagicMock,
+        mock_is_disposable: MagicMock,  # noqa: ARG002
+        mock_user_create: UserCreate,
+    ) -> None:
+        """SSO-driven create() (safe=False) must NOT be blocked when signup is
+        off, otherwise SAML/JWT can never onboard a new user."""
+        mock_get_settings.return_value = SimpleNamespace(
+            password_auth_enabled=False, valid_email_domains=()
+        )
+        user_manager = UserManager(MagicMock())
+        _mock_user_manager_methods(user_manager)
+
+        try:
+            await user_manager.create(mock_user_create, safe=False)
+        except OnyxError as e:
+            assert e.error_code is not OnyxErrorCode.REGISTRATION_DISABLED
+        except Exception:
+            pass
+
+        # The guard let it through into domain validation instead of blocking.
+        mock_verify_domain.assert_called_once_with(
+            mock_user_create.email,
+            valid_email_domains=(),
+            is_registration=True,
+        )
+
+    @pytest.mark.asyncio
+    @patch("onyx.auth.users.is_disposable_email", return_value=False)
+    @patch("onyx.auth.users.verify_email_domain")
+    @patch("onyx.auth.users.get_security_settings")
+    async def test_signup_enabled_passes_the_guard(
+        self,
+        mock_get_settings: MagicMock,
+        mock_verify_domain: MagicMock,
+        mock_is_disposable: MagicMock,  # noqa: ARG002
+        mock_user_create: UserCreate,
+    ) -> None:
+        """With signup on, the public route proceeds past the guard."""
+        mock_get_settings.return_value = SimpleNamespace(
+            password_auth_enabled=True, valid_email_domains=()
+        )
+        user_manager = UserManager(MagicMock())
+        _mock_user_manager_methods(user_manager)
+
+        try:
+            await user_manager.create(mock_user_create, safe=True)
+        except Exception:
+            pass
+
+        mock_verify_domain.assert_called_once_with(
+            mock_user_create.email,
+            valid_email_domains=(),
+            is_registration=True,
+        )
+
+    @pytest.mark.asyncio
+    @patch("onyx.auth.users.MULTI_TENANT", True)
+    @patch("onyx.auth.users.is_disposable_email", return_value=False)
+    @patch("onyx.auth.users.verify_email_domain")
+    @patch("onyx.auth.users.get_security_settings")
+    async def test_multi_tenant_never_blocks_signup(
+        self,
+        mock_get_settings: MagicMock,
+        mock_verify_domain: MagicMock,
+        mock_is_disposable: MagicMock,  # noqa: ARG002
+        mock_user_create: UserCreate,
+    ) -> None:
+        """Multi-tenant reads ambient settings here, so the gate must not fire
+        even when the value says signup is off."""
+        mock_get_settings.return_value = SimpleNamespace(
+            password_auth_enabled=False, valid_email_domains=()
+        )
+        user_manager = UserManager(MagicMock())
+        _mock_user_manager_methods(user_manager)
+
+        try:
+            await user_manager.create(mock_user_create, safe=True)
+        except OnyxError as e:
+            assert e.error_code is not OnyxErrorCode.REGISTRATION_DISABLED
+        except Exception:
+            pass
+
+        mock_verify_domain.assert_called_once_with(
+            mock_user_create.email,
+            valid_email_domains=(),
+            is_registration=True,
+        )
+
+    @pytest.mark.asyncio
+    @patch("onyx.auth.users.emit_audit_event")
+    @patch("onyx.auth.users.fetch_ee_implementation_or_noop")
+    @patch("onyx.auth.users.get_security_settings")
+    async def test_login_disabled_raises_before_tenant_lookup(
+        self,
+        mock_get_settings: MagicMock,
+        mock_fetch_ee: MagicMock,
+        mock_emit_audit: MagicMock,  # noqa: ARG002
+    ) -> None:
+        mock_get_settings.return_value = SimpleNamespace(password_auth_enabled=False)
+        user_manager = UserManager(MagicMock())
+        credentials = OAuth2PasswordRequestForm(
+            username="user@example.com", password="pw"
+        )
+
+        with pytest.raises(BasicAuthenticationError) as exc:
+            await user_manager.authenticate(credentials)
+
+        assert exc.value.status_code == 403
+        assert exc.value.detail == "PASSWORD_LOGIN_DISABLED"
+        mock_fetch_ee.assert_not_called()
+
+    @pytest.mark.asyncio
+    @patch("onyx.auth.users.MULTI_TENANT", True)
+    @patch("onyx.auth.users.emit_audit_event")
+    @patch("onyx.auth.users.fetch_ee_implementation_or_noop")
+    @patch("onyx.auth.users.get_security_settings")
+    async def test_multi_tenant_never_blocks_login(
+        self,
+        mock_get_settings: MagicMock,
+        mock_fetch_ee: MagicMock,
+        mock_emit_audit: MagicMock,  # noqa: ARG002
+    ) -> None:
+        """Multi-tenant reads ambient settings here, so the gate must not fire
+        and authentication proceeds to the tenant lookup."""
+        mock_get_settings.return_value = SimpleNamespace(password_auth_enabled=False)
+        user_manager = UserManager(MagicMock())
+        credentials = OAuth2PasswordRequestForm(
+            username="user@example.com", password="pw"
+        )
+
+        try:
+            await user_manager.authenticate(credentials)
+        except BasicAuthenticationError as e:
+            assert e.detail != "PASSWORD_LOGIN_DISABLED"
+        except Exception:
+            pass
+
+        mock_fetch_ee.assert_called()
+        assert mock_fetch_ee.call_args_list[0].args[:2] == (
+            "onyx.db.user_tenant_mapping",
+            "get_tenant_id_for_email",
+        )

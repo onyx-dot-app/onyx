@@ -111,7 +111,6 @@ export const ReasoningRenderer: MessageRenderer<
   const [reasoningStartTime, setReasoningStartTime] = useState<number | null>(
     null
   );
-  const timeoutRef = useRef<NodeJS.Timeout | null>(null);
   const completionHandledRef = useRef(false);
 
   // Track when reasoning starts
@@ -124,35 +123,32 @@ export const ReasoningRenderer: MessageRenderer<
   // Handle reasoning completion with minimum duration
   useEffect(() => {
     if (
-      hasEnd &&
-      reasoningStartTime !== null &&
-      !completionHandledRef.current
+      !hasEnd ||
+      reasoningStartTime === null ||
+      completionHandledRef.current
     ) {
-      completionHandledRef.current = true;
-      const elapsedTime = Date.now() - reasoningStartTime;
-      const minimumThinkingDuration = animate ? THINKING_MIN_DURATION_MS : 0;
-
-      if (elapsedTime >= minimumThinkingDuration) {
-        // Enough time has passed, complete immediately
-        onComplete();
-      } else {
-        // Not enough time has passed, delay completion
-        const remainingTime = minimumThinkingDuration - elapsedTime;
-        timeoutRef.current = setTimeout(() => {
-          onComplete();
-        }, remainingTime);
-      }
+      return;
     }
-  }, [hasEnd, reasoningStartTime, animate, onComplete]);
 
-  // Cleanup timeout on unmount
-  useEffect(() => {
-    return () => {
-      if (timeoutRef.current) {
-        clearTimeout(timeoutRef.current);
+    const complete = () => {
+      if (!completionHandledRef.current) {
+        completionHandledRef.current = true;
+        onComplete();
       }
     };
-  }, []);
+
+    const elapsedTime = Date.now() - reasoningStartTime;
+    const minimumThinkingDuration = animate ? THINKING_MIN_DURATION_MS : 0;
+
+    if (elapsedTime >= minimumThinkingDuration) {
+      complete();
+      return;
+    }
+
+    const remainingTime = minimumThinkingDuration - elapsedTime;
+    const timeout = setTimeout(complete, remainingTime);
+    return () => clearTimeout(timeout);
+  }, [hasEnd, reasoningStartTime, animate, onComplete]);
 
   // Markdown renderer callback for ExpandableTextDisplay
   // Uses collapsed components (no spacing) in collapsed view, normal spacing in expanded modal

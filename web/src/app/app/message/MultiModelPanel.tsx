@@ -10,7 +10,7 @@ import AgentMessage, {
   AgentMessageProps,
 } from "@/app/app/message/messageComponents/AgentMessage";
 import { ErrorBanner } from "@/app/app/message/Resubmit";
-import { cn } from "@opal/utils";
+import { cn, clickOnKeyDown } from "@opal/utils";
 import { markdown } from "@opal/utils";
 
 export interface MultiModelPanelProps {
@@ -26,6 +26,8 @@ export interface MultiModelPanelProps {
   isHidden: boolean;
   /** Whether this is a non-preferred panel in selection mode (pushed off-screen) */
   isNonPreferredInSelection: boolean;
+  /** Read-only (shared) view: no select/hide controls, header is a static label */
+  readOnly?: boolean;
   /** Callback when user clicks this panel to select as preferred */
   onSelect: () => void;
   /** Callback to deselect this panel as preferred */
@@ -66,6 +68,7 @@ export default function MultiModelPanel({
   isPreferred,
   isHidden,
   isNonPreferredInSelection,
+  readOnly = false,
   onSelect,
   onDeselect,
   onToggleVisibility,
@@ -79,66 +82,94 @@ export default function MultiModelPanel({
 }: MultiModelPanelProps) {
   const ModelIcon = getModelIcon(provider, modelName);
 
-  const canSelect = !isHidden && !isPreferred && !isGenerating;
+  const canSelect = !isHidden && !isPreferred && !isGenerating && !readOnly;
 
   const handlePanelClick = useCallback(() => {
     if (canSelect) onSelect();
   }, [canSelect, onSelect]);
 
-  const header = (
-    <div
-      className={cn(
-        "rounded-12 transition-colors",
-        isPreferred ? "bg-background-tint-02" : "bg-background-tint-00",
-        canSelect && "cursor-pointer hover:bg-background-tint-02"
-      )}
-      onClick={handlePanelClick}
-    >
+  const headerClassName = cn(
+    "rounded-12 transition-colors",
+    isPreferred ? "bg-background-tint-02" : "bg-background-tint-00",
+    canSelect && "cursor-pointer hover:bg-background-tint-02"
+  );
+
+  const headerContent = (
+    <>
       <ContentAction
         sizePreset="main-ui"
         variant="body"
-        padding="lg"
+        padding={2}
         icon={ModelIcon}
         title={isHidden ? markdown(`~~${displayName}~~`) : displayName}
         rightChildren={
-          <div className="flex items-center gap-1 px-2">
-            {isPreferred && (
-              <>
-                <span className="text-action-link-05 shrink-0">
+          readOnly ? (
+            isPreferred ? (
+              <div className="flex items-center px-2">
+                <span className="text-action-selection-05 shrink-0">
                   <Text font="secondary-body" color="inherit" nowrap>
                     Preferred Response
                   </Text>
                 </span>
-                {onDeselect && (
-                  <Button
-                    prominence="tertiary"
-                    icon={SvgX}
-                    size="sm"
-                    onClick={(e) => {
-                      e.stopPropagation();
-                      onDeselect();
-                    }}
-                    tooltip="Deselect preferred response"
-                  />
-                )}
-              </>
-            )}
-            {!isPreferred && (
-              <Button
-                prominence="tertiary"
-                icon={isHidden ? SvgEyeOff : SvgX}
-                size="md"
-                onClick={(e) => {
-                  e.stopPropagation();
-                  onToggleVisibility();
-                }}
-                tooltip={isHidden ? "Show response" : "Hide response"}
-              />
-            )}
-          </div>
+              </div>
+            ) : undefined
+          ) : (
+            <div className="flex items-center gap-1 px-2">
+              {isPreferred && (
+                <>
+                  <span className="text-action-selection-05 shrink-0">
+                    <Text font="secondary-body" color="inherit" nowrap>
+                      Preferred Response
+                    </Text>
+                  </span>
+                  {onDeselect && (
+                    <Button
+                      prominence="tertiary"
+                      icon={SvgX}
+                      size="sm"
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        onDeselect();
+                      }}
+                      tooltip="Deselect preferred response"
+                    />
+                  )}
+                </>
+              )}
+              {!isPreferred && (
+                <Button
+                  prominence="tertiary"
+                  icon={isHidden ? SvgEyeOff : SvgX}
+                  size="md"
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    onToggleVisibility();
+                  }}
+                  tooltip={isHidden ? "Show response" : "Hide response"}
+                />
+              )}
+            </div>
+          )
         }
       />
+    </>
+  );
+
+  // The header holds its own buttons, so a selectable header stays a div with
+  // button semantics rather than a <button> wrapping a <button>.
+  const header = canSelect ? (
+    <div
+      className={headerClassName}
+      role="button"
+      tabIndex={0}
+      aria-label={`Select the ${displayName} response`}
+      onKeyDown={clickOnKeyDown(handlePanelClick)}
+      onClick={handlePanelClick}
+    >
+      {headerContent}
     </div>
+  ) : (
+    <div className={headerClassName}>{headerContent}</div>
   );
 
   // Hidden/collapsed panel — just the header row

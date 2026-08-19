@@ -3,7 +3,7 @@ import { DocumentSetSummary, Tag, ValidSources } from "@/lib/types";
 import { SourceMetadata } from "@/lib/search/interfaces";
 import { FiBook, FiBookmark, FiMap, FiX } from "react-icons/fi";
 import { SearchDateRangeSelector } from "@/components/dateRangeSelectors/SearchDateRangeSelector";
-import { DateRangePickerValue } from "@/components/dateRangeSelectors/AdminDateRangeSelector";
+import { DateRangePickerValue } from "@/refresh-components/DateRangePicker";
 import { listSourceMetadata } from "@/lib/sources";
 import { SourceIcon } from "@/components/SourceIcon";
 import { FilterDropdown } from "@/components/search/filtering/FilterDropdown";
@@ -36,7 +36,8 @@ export function SelectedBubble({
   onClick: () => void;
 }) {
   return (
-    <div
+    <button
+      type="button"
       className={
         "flex cursor-pointer items-center border border-border " +
         "py-1 my-1.5 rounded-lg px-2 w-fit hover:bg-accent-background-hovered"
@@ -45,7 +46,7 @@ export function SelectedBubble({
     >
       {children}
       <FiX className="ml-2" size={14} />
-    </div>
+    </button>
   );
 }
 

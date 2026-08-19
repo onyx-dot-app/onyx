@@ -5,20 +5,22 @@ from __future__ import annotations
 import logging
 import threading
 from datetime import datetime
-from typing import Any
-from typing import Optional
-from typing import Union
+from typing import Any, Optional, Union
 
 from langfuse import Langfuse
 from langfuse._client.span import LangfuseObservationWrapper
 
+from onyx.tracing.flows import IMAGE_FLOWS
 from onyx.tracing.framework.processor_interface import TracingProcessor
-from onyx.tracing.framework.span_data import AgentSpanData
-from onyx.tracing.framework.span_data import FunctionSpanData
-from onyx.tracing.framework.span_data import GenerationSpanData
-from onyx.tracing.framework.span_data import SpanData
+from onyx.tracing.framework.span_data import (
+    AgentSpanData,
+    FunctionSpanData,
+    GenerationSpanData,
+    SpanData,
+)
 from onyx.tracing.framework.spans import Span
 from onyx.tracing.framework.traces import Trace
+from onyx.tracing.incognito import suppresses_external_traces
 
 logger = logging.getLogger(__name__)
 
@@ -63,6 +65,8 @@ class LangfuseTracingProcessor(TracingProcessor):
         self._langfuse_span_ids: dict[
             str, str
         ] = {}  # framework_span_id -> langfuse_span.id
+        # Membership decides every later callback, immune to mid-trace changes.
+        self._suppressed_traces: set[str] = set()
 
     def _get_client(self) -> Langfuse:
         """Get or create Langfuse client."""
@@ -85,31 +89,50 @@ class LangfuseTracingProcessor(TracingProcessor):
             return data
 
     def _calculate_cost(self, data: GenerationSpanData) -> Optional[float]:
-        """Calculate LLM cost for this generation span."""
+        """Calculate LLM cost for this generation span (USD for Langfuse)."""
         try:
-            from onyx.llm.cost import calculate_llm_cost_cents
+            from onyx.llm.cost import compute_cost_cents
 
             usage = data.usage or {}
-            prompt_tokens = usage.get("prompt_tokens") or usage.get("input_tokens") or 0
-            completion_tokens = (
-                usage.get("completion_tokens") or usage.get("output_tokens") or 0
+            input_tokens = int(
+                usage.get("input_tokens") or usage.get("prompt_tokens") or 0
             )
+            output_tokens = int(
+                usage.get("output_tokens") or usage.get("completion_tokens") or 0
+            )
+            cache_read = int(usage.get("cache_read_input_tokens") or 0)
+            cache_creation = int(usage.get("cache_creation_input_tokens") or 0)
+            model_config = data.model_config or {}
+            provider = model_config.get("model_provider")
+            flow = model_config.get("flow")
+            if not data.model or (
+                not input_tokens and not output_tokens and flow not in IMAGE_FLOWS
+            ):
+                return None
 
-            if data.model and prompt_tokens and completion_tokens:
-                cost_cents = calculate_llm_cost_cents(
-                    model_name=data.model,
-                    prompt_tokens=int(prompt_tokens),
-                    completion_tokens=int(completion_tokens),
-                )
-                if cost_cents > 0:
-                    # Convert cents to dollars for Langfuse
-                    return cost_cents / 100.0
+            input_cents, output_cents = compute_cost_cents(
+                model=data.model,
+                provider=provider,
+                prompt_tokens=input_tokens,
+                completion_tokens=output_tokens,
+                cache_read_tokens=cache_read,
+                cache_creation_tokens=cache_creation,
+                flow=flow,
+                image_count=data.image_count or 1,
+            )
+            cost_cents = input_cents + output_cents
+            if cost_cents > 0:
+                return cost_cents / 100.0
         except Exception as e:
             logger.debug("Failed to calculate cost: %s", e)
         return None
 
     def on_trace_start(self, trace: Trace) -> None:
         """Called when a trace is started."""
+        if suppresses_external_traces():
+            with self._lock:
+                self._suppressed_traces.add(trace.trace_id)
+            return
         try:
             client = self._get_client()
             trace_meta = trace.export() or {}
@@ -147,6 +170,10 @@ class LangfuseTracingProcessor(TracingProcessor):
 
     def on_trace_end(self, trace: Trace) -> None:
         """Called when a trace is finished."""
+        with self._lock:
+            if trace.trace_id in self._suppressed_traces:
+                self._suppressed_traces.discard(trace.trace_id)
+                return
         try:
             with self._lock:
                 langfuse_span = self._trace_spans.pop(trace.trace_id, None)
@@ -176,6 +203,9 @@ class LangfuseTracingProcessor(TracingProcessor):
         agents run in parallel threads, and calling methods on span objects created
         in other threads can cause OpenTelemetry context issues.
         """
+        with self._lock:
+            if span.trace_id in self._suppressed_traces:
+                return
         try:
             data = span.span_data
             # Declare as Any since different code paths return different observation types
@@ -230,14 +260,14 @@ class LangfuseTracingProcessor(TracingProcessor):
                     model_parameters=self._get_model_parameters(data),
                 )
             elif isinstance(data, FunctionSpanData):
-                langfuse_span = client.start_observation(  # ty: ignore[no-matching-overload]
+                langfuse_span = client.start_observation(
                     trace_context=trace_context,
                     name=data.name,
                     as_type="tool",
                     metadata=trace_metadata,
                 )
             elif isinstance(data, AgentSpanData):
-                langfuse_span = client.start_observation(  # ty: ignore[no-matching-overload]
+                langfuse_span = client.start_observation(
                     trace_context=trace_context,
                     name=data.name,
                     as_type="agent",
@@ -249,7 +279,7 @@ class LangfuseTracingProcessor(TracingProcessor):
                     },
                 )
             else:
-                langfuse_span = client.start_observation(  # ty: ignore[no-matching-overload]
+                langfuse_span = client.start_observation(
                     trace_context=trace_context,
                     name=data.type if hasattr(data, "type") else "unknown",
                     as_type="span",
@@ -291,8 +321,13 @@ class LangfuseTracingProcessor(TracingProcessor):
                     update_kwargs["usage_details"] = usage
                 if cost is not None:
                     update_kwargs["cost_details"] = {"total": cost}
+                generation_metadata: dict[str, Any] = {}
                 if data.reasoning:
-                    update_kwargs["metadata"] = {"reasoning": data.reasoning}
+                    generation_metadata["reasoning"] = data.reasoning
+                if data.tools:
+                    generation_metadata["tools"] = data.tools
+                if generation_metadata:
+                    update_kwargs["metadata"] = generation_metadata
                 if data.time_to_first_action_seconds is not None:
                     update_kwargs["completion_start_time"] = _timestamp_from_maybe_iso(
                         span.started_at

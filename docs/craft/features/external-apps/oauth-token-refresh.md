@@ -73,7 +73,7 @@ loop), the Redis lock is the real in-process single-flight, not redundant.
 ## Changes (file-by-file — the PR review map)
 
 ### 1. Stamp absolute `expires_at` at write time
-- **`backend/onyx/server/features/build/api/external_apps_oauth_api.py`** — after
+- **`backend/onyx/server/features/build/external_apps/oauth.py`** — after
   `provider.extract_credentials(...)` in the callback, compute `expires_at` (UTC,
   from the response's `expires_in`) and merge it into the stored dict before
   `upsert_external_app_user_credential`. `extract_credentials` stays a pure

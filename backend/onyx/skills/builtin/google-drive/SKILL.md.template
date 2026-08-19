@@ -1,111 +1,58 @@
 ---
 name: google-drive
-description: Search, read, create, and edit the connected user's Google Drive via a light Drive API wrapper.
+description: Search, read, create, and edit the connected user's Google Drive — including Google Docs, Sheets, and Slides — via light API wrappers.
+cloud-description: Create, upload, and organize Google Drive files, and read or edit any Google Doc, Sheet, or Slides file by id, via light API wrappers.
 ---
 
 # Google Drive
 
-Call the Google Drive API as the connected user via the bundled helper. Reads run
-freely; writes (create / upload / edit / delete) may pause for the user to approve.
+Call the Google Drive, Docs, Sheets, and Slides APIs as the connected user via
+the bundled helpers. Reads run freely; writes (create / upload / edit / delete)
+may pause for the user to approve.
 
+{{#IF_CLOUD_SCOPE}}
+This deployment's Google Drive grant is per-file (`drive.file`). The Drive
+commands in [drive.md](drive.md) (`search`, `list`, `get`, `read`, `update`,
+`trash`, ...) only see files that Onyx itself created — through these helpers,
+in any session. Everything else in the user's Drive is invisible there, even
+files the user owns. Drive reports an invisible file as **HTTP 404 "File not
+found"** — never 403 — even though it exists. The Docs, Sheets, and Slides
+APIs are not per-file scoped; they reach any file of their type the user can
+open, by id. So:
+
+- For a Docs, Sheets, or Slides link or id, go straight to the per-API helper:
+  `get-doc` ([docs.md](docs.md)), `gsheets_api.py` ([sheets.md](sheets.md)), or
+  `gslides_api.py` ([slides.md](slides.md)) — they work even where
+  `gdrive_api.py read` answers 404.
+- An empty `search` result does not mean the file is absent — it may just be
+  outside the grant.
+- PDFs, folders, and other non-native files not created through Onyx are
+  unreachable; ask the user to attach the file to the session instead of
+  passing a link.
+
+{{/IF_CLOUD_SCOPE}}
 {{ACTION_AVAILABILITY_SECTION}}
 
-## Usage
+> **Path convention**: run helpers from the session workspace as
+> `python .opencode/skills/google-drive/<helper>.py <command> [args]`.
+> `python <helper>.py <command> -h` shows a command's flags.
 
-    python .opencode/skills/google-drive/gdrive_api.py <command> [args]
+## Quick Reference
 
-Read commands auto-paginate and prune empty fields. Pass `--raw` to skip pruning;
-`python gdrive_api.py <command> -h` shows a command's flags. Add `--shared-drives`
-to a search/list to include shared drives (My Drive only by default).
+| Task | Guide |
+|------|-------|
+| Find, read, upload, organize, or delete any Drive file | Read [drive.md](drive.md) — `gdrive_api.py` |
+| Surgically edit or create a Google Doc | Read [docs.md](docs.md) — `gdrive_api.py` Docs commands |
+| Read or write spreadsheet cells; create a Sheet | Read [sheets.md](sheets.md) — `gsheets_api.py` |
+| Read or edit a Slides deck | Read [slides.md](slides.md) — `gslides_api.py` |
 
-### Search files
-
-```
-python gdrive_api.py search "quarterly report" [--name NAME] [--mime MIME] \
-    [--in FOLDER_ID] [--include-trashed] [--limit N]
-```
-
-`search` with no positional text just lists recent files. Common `--mime` values:
-`application/vnd.google-apps.document` (Docs),
-`application/vnd.google-apps.spreadsheet` (Sheets),
-`application/vnd.google-apps.folder` (folders), `application/pdf`.
-
-### List a folder's children
-
-```
-python gdrive_api.py list <folder_id> [--limit N]
-```
-
-### One file's metadata
-
-```
-python gdrive_api.py get <file_id> [--fields "id,name,mimeType,..."]
-```
-
-### Read a file's contents (text)
-
-```
-python gdrive_api.py read <file_id> [--mime EXPORT_MIME] [--max-bytes N]
-```
-
-Google-native docs are **exported** to text automatically: Docs → markdown,
-Sheets → CSV (first sheet only), Slides → plain text. Other files are downloaded
-as-is and returned as UTF-8. Output is capped at `--max-bytes` (5 MB default).
-
-### Create a folder (write)
-
-```
-python gdrive_api.py create-folder "Reports" [--in PARENT_FOLDER_ID]
-```
-
-### Upload a file (write)
-
-```
-python gdrive_api.py upload <local_path> [--name NAME] [--in FOLDER_ID] \
-    [--as CONTENT_TYPE] [--convert-to GOOGLE_MIME]
-```
-
-Uploads a file you've produced in the workspace. To create a real **Google Doc**
-from generated markdown/HTML, pass `--convert-to
-application/vnd.google-apps.document` (Sheets:
-`application/vnd.google-apps.spreadsheet`); Drive converts the upload. Without
-`--convert-to` the file is stored as-is.
-
-### Replace a file's contents (write)
-
-```
-python gdrive_api.py replace <file_id> <local_path> [--as CONTENT_TYPE]
-```
-
-### Update metadata: rename / move (write)
-
-```
-python gdrive_api.py update <file_id> [--name NEW_NAME] \
-    [--add-parent FOLDER_ID] [--remove-parent FOLDER_ID]
-```
-
-### Trash or delete (write / destructive)
-
-```
-python gdrive_api.py trash <file_id>     # reversible
-python gdrive_api.py delete <file_id>    # permanent
-```
-
-Prefer `trash` over `delete` unless a permanent removal is explicitly requested.
-
-### Raw request (escape hatch)
-
-```
-python gdrive_api.py call GET "files?q=...&fields=..."
-python gdrive_api.py call PATCH "files/<id>" '{"starred": true}'
-```
-
-Appended to `https://www.googleapis.com/drive/v3/`; pass a JSON object body as the
-last argument for write methods.
+To just read a Google-native file as text, `gdrive_api.py read <file_id>` is
+enough (Docs → markdown, Sheets → CSV, Slides → plain text) — see
+[drive.md](drive.md). Open the per-API guides when you need structure, ids,
+indices, or edits.
 
 ## Output
 
-JSON on stdout. Search/list/drives return `{"ok": true, "items": [...], "count":
-N, "truncated": bool}`. `get` / create / upload / update / replace return `{"ok":
-true, "file": {...}}`. `read` returns `{"ok": true, "id", "name", "mimeType",
-"exportedAs", "truncated", "content"}`. Errors print to stderr and exit non-zero.
+Every helper prints JSON on stdout: `{"ok": true, ...}` with the payload under
+a command-specific key (each guide lists its shapes). Errors print to stderr
+and exit non-zero. Pass `--raw` to skip empty-field pruning.

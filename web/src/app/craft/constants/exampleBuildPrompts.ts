@@ -1,57 +1,141 @@
-/**
- * Example prompts for the Build Mode welcome screen.
- */
+import type { IconFunctionComponent } from "@opal/types";
+import {
+  SvgLineChartUp,
+  SvgBullhorn,
+  SvgCode,
+  SvgLightbulbSimple,
+} from "@opal/icons";
 
 export interface BuildPrompt {
   id: string;
-  /** Short summary shown on the button */
+  /** Sentence-length description shown in the expanded prompt list */
   summary: string;
   /** Full prompt text inserted into the input bar */
   fullText: string;
-  /** Optional image URL/path for visual display */
-  image?: string;
 }
 
-/**
- * Example prompts shown on the welcome screen.
- */
-export const exampleBuildPrompts: BuildPrompt[] = [
+export interface UseCaseDomain {
+  id: string;
+  label: string;
+  icon: IconFunctionComponent;
+  prompts: BuildPrompt[];
+}
+
+export const useCaseDomains: UseCaseDomain[] = [
   {
-    id: "default-1",
-    summary: "Analyze team productivity by month across my company",
-    fullText:
-      "Create a dashboard with the number of closed tickets per month. Split by priority and compare teams.",
-    image: "/craft_suggested_image_1.png",
+    id: "engineering",
+    label: "Engineering",
+    icon: SvgCode,
+    prompts: [
+      {
+        id: "eng-oncall",
+        summary:
+          "Track on-call rotations and post each week's schedule to Slack",
+        fullText:
+          "Spin up an on-call rotation tracker from PagerDuty and Slack. Every week send a message in Slack for who is on-call for the week.",
+      },
+      {
+        id: "eng-sprint-health",
+        summary: "Build a sprint health dashboard from your Linear cycle data",
+        fullText:
+          "Build a sprint health dashboard from your Linear cycle data.",
+      },
+      {
+        id: "eng-release-notes",
+        summary: "Generate release notes from a milestone's merged PRs",
+        fullText: "Generate release notes from this milestone's merged PRs.",
+      },
+    ],
   },
   {
-    id: "default-2",
-    summary:
-      "Visualize what my team did this month with interactive drill-downs",
-    fullText:
-      "What did my team work on this month? Create a dashboard that 1) shows the number of actions per activity, 2) shows the individual work items when I select something in the dashboard.",
-    image: "/craft_suggested_image_2.png",
+    id: "sales",
+    label: "Sales",
+    icon: SvgLineChartUp,
+    prompts: [
+      {
+        id: "sales-account-brief",
+        summary:
+          "Build a one-page account brief before every call from Salesforce, Slack, and Gong",
+        fullText:
+          "Build a one-page account brief before every call — from Salesforce, Slack, and Gong.",
+      },
+      {
+        id: "sales-winloss",
+        summary:
+          "Turn this quarter's closed-won deals into a win/loss dashboard",
+        fullText:
+          "Turn this quarter's closed-won deals into a win/loss dashboard.",
+      },
+      {
+        id: "sales-battlecard",
+        summary:
+          "Build a competitor battlecard from recent lost-deal call transcripts",
+        fullText:
+          "Build a competitor battlecard from recent lost-deal call transcripts.",
+      },
+      {
+        id: "sales-pipeline-tracker",
+        summary:
+          "Spin up a pipeline tracker that flags deals with no activity in 14 days",
+        fullText:
+          "Spin up a pipeline tracker that flags deals with no activity in 14 days.",
+      },
+    ],
   },
   {
-    id: "default-3",
-    summary: "Connect my backlog to recent customer conversations",
-    fullText:
-      "For each of my open Linear tickets, find at least 2 customers that have discussed related issues. Present the results in a dashboard table.",
-    image: "/craft_suggested_image_3.png",
+    id: "marketing",
+    label: "Marketing",
+    icon: SvgBullhorn,
+    prompts: [
+      {
+        id: "marketing-seo",
+        summary:
+          "Turn sales-call transcripts into an SEO keyword research report",
+        fullText:
+          "Turn sales-call transcripts into an SEO keyword research report.",
+      },
+      {
+        id: "marketing-customer-story",
+        summary:
+          "Assemble a customer-story one-pager from interview transcripts",
+        fullText:
+          "Assemble a customer-story one-pager from interview transcripts.",
+      },
+      {
+        id: "marketing-social-posts",
+        summary: "Draft on-brand social posts from this product launch doc",
+        fullText: "Draft on-brand social posts from this product launch doc.",
+      },
+    ],
   },
   {
-    id: "default-4",
-    summary:
-      "Surface the top pain points from this week's customer success calls",
-    fullText:
-      "Based on the customer calls this week, what are the 5 most important challenges? Create a table in a dashboard that shows the challenge and the customers that complained about it.",
-    image: "/craft_suggested_image_4.png",
-  },
-  {
-    id: "default-5",
-    summary:
-      "Compare and contrast which messaging resonates the most with our prospects",
-    fullText:
-      "If you look at the customer calls over the last 30 days, which part of our messaging seems to resonate the best, and appears to drive the most customer value? Generate a slide that effectively tells the story.",
-    image: "/craft_suggested_image_5.png",
+    id: "product",
+    label: "Product",
+    icon: SvgLightbulbSimple,
+    prompts: [
+      {
+        id: "product-daily-brief",
+        summary:
+          "Brief me on everything that happened across my projects today",
+        fullText:
+          "Brief me for the day — tell me everything that happened for every project I was working on.",
+      },
+      {
+        id: "product-prototype",
+        summary: "Turn this PRD into a clickable prototype to test with users",
+        fullText:
+          "Turn this PRD into a clickable prototype to test with users.",
+      },
+      {
+        id: "product-roadmap",
+        summary: "Spin up a roadmap tracker from your Linear projects",
+        fullText: "Spin up a roadmap tracker from your Linear projects.",
+      },
+      {
+        id: "product-feature-matrix",
+        summary: "Build a competitor feature-comparison matrix",
+        fullText: "Build a competitor feature-comparison matrix.",
+      },
+    ],
   },
 ];

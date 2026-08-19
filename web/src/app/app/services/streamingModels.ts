@@ -18,6 +18,7 @@ export enum PacketType {
   // Specific tool packets
   SEARCH_TOOL_START = "search_tool_start",
   SEARCH_TOOL_QUERIES_DELTA = "search_tool_queries_delta",
+  SEARCH_TOOL_FILTER_DELTA = "search_tool_filter_delta",
   SEARCH_TOOL_DOCUMENTS_DELTA = "search_tool_documents_delta",
   IMAGE_GENERATION_TOOL_START = "image_generation_start",
   IMAGE_GENERATION_TOOL_DELTA = "image_generation_final",
@@ -73,8 +74,14 @@ export enum PacketType {
 }
 
 export const CODE_INTERPRETER_TOOL_TYPES = {
+  // Legacy LLM-facing name; still present in sessions persisted before the
+  // rename (OpenAI reserves the function name "python" and rejects it).
   PYTHON: "python",
+  RUN_PYTHON: "run_python",
 } as const;
+
+export const isCodeInterpreterToolType = (toolType: string): boolean =>
+  (Object.values(CODE_INTERPRETER_TOOL_TYPES) as string[]).includes(toolType);
 
 // Basic Message Packets
 export interface MessageStart extends BaseObj {
@@ -129,6 +136,15 @@ export interface SearchToolStart extends BaseObj {
 export interface SearchToolQueriesDelta extends BaseObj {
   type: "search_tool_queries_delta";
   queries: string[];
+}
+
+export interface SearchToolFilterDelta extends BaseObj {
+  type: "search_tool_filter_delta";
+  // Connector/source values this search is scoped to (empty == all)
+  sources: string[];
+  // Applied time window as ISO datetime strings; either bound may be open-ended
+  time_filter_start?: string | null;
+  time_filter_end?: string | null;
 }
 
 export interface SearchToolDocumentsDelta extends BaseObj {
@@ -343,6 +359,13 @@ export type ChatObj = MessageStart | MessageDelta | MessageEnd;
 
 export type StopObj = Stop;
 
+// Connection keepalive emitted during silent stretches; carries no run state
+export interface ChatHeartbeat extends BaseObj {
+  type: "chat_heartbeat";
+}
+
+export type ChatHeartbeatObj = ChatHeartbeat;
+
 export type SectionEndObj = SectionEnd;
 
 export type TopLevelBranchingObj = TopLevelBranching;
@@ -353,6 +376,7 @@ export type PacketErrorObj = PacketError;
 export type SearchToolObj =
   | SearchToolStart
   | SearchToolQueriesDelta
+  | SearchToolFilterDelta
   | SearchToolDocumentsDelta
   | SectionEnd
   | PacketError;
@@ -439,6 +463,7 @@ export type ObjTypes =
   | NewToolObj
   | ReasoningObj
   | StopObj
+  | ChatHeartbeatObj
   | SectionEndObj
   | TopLevelBranchingObj
   | CitationObj

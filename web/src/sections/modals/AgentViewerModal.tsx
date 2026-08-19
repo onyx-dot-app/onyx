@@ -4,8 +4,8 @@ import { useCallback, useMemo, useState } from "react";
 import { useRouter } from "next/navigation";
 import type { Route } from "next";
 import { FullAgent } from "@/lib/agents/types";
-import { useModal } from "@/refresh-components/contexts/ModalContext";
-import Modal from "@/refresh-components/Modal";
+import { useModal } from "@opal/components";
+import { Modal } from "@opal/components";
 import { Section } from "@/layouts/general-layouts";
 import { Content, ContentAction, InputHorizontal } from "@opal/layouts";
 import Text from "@/refresh-components/texts/Text";
@@ -35,7 +35,7 @@ import { useProjectsContext } from "@/providers/ProjectsContext";
 import { FileCard } from "@/sections/cards/FileCard";
 import DocumentSetCard from "@/sections/cards/DocumentSetCard";
 import { getDisplayName } from "@/lib/languageModels/utils";
-import { useLLMProviders } from "@/hooks/useLanguageModels";
+import { useLLMProviders } from "@/lib/languageModels/hooks";
 import { Interactive } from "@opal/core";
 
 /**
@@ -57,12 +57,12 @@ function ViewerMCPServerCard({ server, tools }: ViewerMCPServerCardProps) {
       expanded={expanded}
       border="solid"
       rounding="lg"
-      padding="sm"
+      padding={2}
       expandedContent={
         tools.length > 0 ? (
           <div className="flex flex-col gap-2 p-2">
             {tools.map((tool) => (
-              <Section key={tool.id} padding={0.25}>
+              <Section key={tool.id} padding={1}>
                 <Content
                   title={tool.display_name}
                   description={tool.description}
@@ -81,7 +81,7 @@ function ViewerMCPServerCard({ server, tools }: ViewerMCPServerCardProps) {
         description={server.description}
         sizePreset="main-ui"
         variant="section"
-        padding="lg"
+        padding={2}
         rightChildren={
           <Button
             prominence="internal"
@@ -102,7 +102,7 @@ function ViewerMCPServerCard({ server, tools }: ViewerMCPServerCardProps) {
  */
 function ViewerOpenApiToolCard({ tool }: { tool: ToolSnapshot }) {
   return (
-    <Card border="solid" rounding="lg" padding="md">
+    <Card border="solid" rounding="lg" padding={4}>
       <Content
         icon={SvgActions}
         title={tool.display_name}
@@ -281,8 +281,8 @@ export default function AgentViewerModal({ agent }: AgentViewerModalProps) {
           {agent.description && <Text text03>{agent.description}</Text>}
 
           {/* Knowledge */}
-          <Divider paddingParallel="fit" paddingPerpendicular="fit" />
-          <Section gap={0.5} alignItems="start">
+          <Divider paddingParallel={0} paddingPerpendicular={0} />
+          <Section gap={2} alignItems="start">
             <Content
               title="Knowledge"
               sizePreset="main-content"
@@ -290,7 +290,7 @@ export default function AgentViewerModal({ agent }: AgentViewerModalProps) {
             />
             {hasKnowledge ? (
               <Section
-                gap={0.5}
+                gap={2}
                 flexDirection="row"
                 justifyContent="start"
                 wrap
@@ -315,7 +315,7 @@ export default function AgentViewerModal({ agent }: AgentViewerModalProps) {
             <SimpleCollapsible.Header title="Actions & Tools" />
             <SimpleCollapsible.Content>
               {hasActions ? (
-                <Section gap={0.5} alignItems="start">
+                <Section gap={2} alignItems="start">
                   {mcpServersWithTools.map(({ server, tools }) => (
                     <ViewerMCPServerCard
                       key={server.id}
@@ -334,11 +334,11 @@ export default function AgentViewerModal({ agent }: AgentViewerModalProps) {
           </SimpleCollapsible>
 
           {/* More Info (Collapsible) */}
-          <Divider paddingParallel="fit" paddingPerpendicular="fit" />
+          <Divider paddingParallel={0} paddingPerpendicular={0} />
           <SimpleCollapsible>
             <SimpleCollapsible.Header title="More Info" />
             <SimpleCollapsible.Content>
-              <Section gap={0.5} alignItems="start">
+              <Section gap={2} alignItems="start">
                 {agent.system_prompt && (
                   <Content
                     title="Instructions"
@@ -378,7 +378,7 @@ export default function AgentViewerModal({ agent }: AgentViewerModalProps) {
           {/* Prompt Reminders */}
           {agent.task_prompt && (
             <>
-              <Divider paddingParallel="fit" paddingPerpendicular="fit" />
+              <Divider paddingParallel={0} paddingPerpendicular={0} />
               <Content
                 title="Prompt Reminders"
                 description={agent.task_prompt}
@@ -391,7 +391,7 @@ export default function AgentViewerModal({ agent }: AgentViewerModalProps) {
           {/* Conversation Starters */}
           {agent.starter_messages && agent.starter_messages.length > 0 && (
             <>
-              <Divider paddingParallel="fit" paddingPerpendicular="fit" />
+              <Divider paddingParallel={0} paddingPerpendicular={0} />
               <Content
                 title="Conversation Starters"
                 sizePreset="main-content"

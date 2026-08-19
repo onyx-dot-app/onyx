@@ -17,6 +17,7 @@ export class AdminMcpServersPage {
   readonly descriptionInput: Locator;
   readonly serverUrlInput: Locator;
   readonly submitButton: Locator;
+  readonly accessControlSelector: Locator;
 
   // Auth modal
   readonly authMethodSelect: Locator;
@@ -37,6 +38,10 @@ export class AdminMcpServersPage {
     this.descriptionInput = page.locator("textarea#description");
     this.serverUrlInput = page.locator("input#server_url");
     this.submitButton = page.getByRole("button", { name: "Add Server" });
+    // BooleanFormField aria-label from "Make this MCP server Public?"
+    this.accessControlSelector = page.getByRole("checkbox", {
+      name: /make-this mcp server public/i,
+    });
 
     this.authMethodSelect = page.getByTestId("mcp-auth-method-select");
     this.apiTokenInput = page.locator('input[name="api_token"]');
@@ -69,16 +74,42 @@ export class AdminMcpServersPage {
     await expect(this.nameInput).toBeVisible();
   }
 
+  async expectAccessControlVisible(): Promise<void> {
+    await expect(this.accessControlSelector).toBeVisible();
+  }
+
   async fillServerDetails(details: {
     name: string;
     description?: string;
     url: string;
+    /** Restrict to this group. Required for a scoped manager: the backend
+     *  refuses a public server outside the groups they manage. */
+    group?: string;
   }): Promise<void> {
     await this.nameInput.fill(details.name);
     if (details.description) {
       await this.descriptionInput.fill(details.description);
     }
     await this.serverUrlInput.fill(details.url);
+    if (details.group) {
+      await this.restrictToGroup(details.group);
+    }
+  }
+
+  /** A global holder gets a Public toggle defaulting to on, which disables the
+   *  picker — untick it (the checkbox is 1x1, so click the label). A scoped
+   *  manager never sees the toggle; is_public is forced off for them. */
+  async restrictToGroup(group: string): Promise<void> {
+    const publicLabel = this.page
+      .getByText("Make this MCP Server Public?", { exact: false })
+      .first();
+    if (await publicLabel.isVisible().catch(() => false)) {
+      await publicLabel.click();
+    }
+    const search = this.page.getByTestId("groups-search-input");
+    await expect(search).toBeVisible({ timeout: 10_000 });
+    await search.click();
+    await this.page.getByText(group, { exact: true }).first().click();
   }
 
   /**

@@ -9,6 +9,7 @@ import {
   WEB_SEARCH_TOOL_ID,
 } from "@/app/app/components/tools/constants";
 import { useState, useEffect, useMemo, useCallback, useRef } from "react";
+import useFocusOnMount from "@opal/hooks/useFocusOnMount";
 import { Popover, PopoverMenu } from "@opal/components";
 import SwitchList, {
   SwitchListItem,
@@ -22,16 +23,17 @@ import {
 import { useForcedTools } from "@/lib/hooks/useForcedTools";
 import { useAgentPreferences } from "@/lib/agents/hooks";
 import { useUser } from "@/providers/UserProvider";
+import { hasPermission } from "@/lib/permissions";
 import { FilterManager, useSourcePreferences } from "@/lib/hooks";
 import { getSourceMetadata } from "@/lib/sources";
 import MCPApiKeyModal from "@/components/chat/MCPApiKeyModal";
-import { ValidSources } from "@/lib/types";
+import { Permission, ValidSources } from "@/lib/types";
 import { SourceMetadata } from "@/lib/search/interfaces";
 import { SourceIcon } from "@/components/SourceIcon";
 import { useAvailableTools } from "@/hooks/useAvailableTools";
 import useCCPairs from "@/hooks/useCCPairs";
-import { useLLMProviders } from "@/hooks/useLanguageModels";
-import { useVectorDbEnabled } from "@/providers/SettingsProvider";
+import { useLLMProviders } from "@/lib/languageModels/hooks";
+import { useSettings } from "@/lib/settings/hooks";
 import { InputTypeIn } from "@opal/components";
 import { useToolOAuthStatus } from "@/lib/hooks/useToolOAuthStatus";
 import LineItem from "@/refresh-components/buttons/LineItem";
@@ -78,6 +80,9 @@ const TOOL_DESCRIPTIONS: Record<string, string> = {
 };
 
 const DEFAULT_TOOL_DESCRIPTION = "This action is not configured yet.";
+
+// Stable fallback so absent preferences never churn dependent callbacks.
+const NO_DISABLED_TOOLS: number[] = [];
 
 function getToolTooltip(
   tool: ToolSnapshot,
@@ -173,6 +178,7 @@ export default function ActionsPopover({
     null
   );
   const [searchTerm, setSearchTerm] = useState("");
+  const focusOnMount = useFocusOnMount<HTMLInputElement>();
   // const [showFadeMask, setShowFadeMask] = useState(false);
   // const [showTopShadow, setShowTopShadow] = useState(false);
   const { selectedSources, setSelectedSources } = filterManager;
@@ -269,8 +275,8 @@ export default function ActionsPopover({
     setForcedToolIds([]);
   }, [selectedAgent.id, setForcedToolIds]);
 
-  const { isAdmin, isCurator } = useUser();
-  const vectorDbEnabled = useVectorDbEnabled();
+  const { isAdmin, permissions } = useUser();
+  const { vectorDbEnabled } = useSettings();
 
   const { tools: availableTools } = useAvailableTools();
   const { ccPairs } = useCCPairs(vectorDbEnabled);
@@ -281,30 +287,43 @@ export default function ActionsPopover({
   const hasNoConnectors = ccPairs.length === 0;
 
   const agentPreference = agentPreferences?.[selectedAgent.id];
-  const disabledToolIds = agentPreference?.disabled_tool_ids || [];
-  const toggleToolForCurrentAgent = (toolId: number) => {
-    const disabled = disabledToolIds.includes(toolId);
-    setSpecificAgentPreferences(selectedAgent.id, {
-      disabled_tool_ids: disabled
-        ? disabledToolIds.filter((id) => id !== toolId)
-        : [...disabledToolIds, toolId],
-    });
+  const disabledToolIds =
+    agentPreference?.disabled_tool_ids || NO_DISABLED_TOOLS;
+  const toggleToolForCurrentAgent = useCallback(
+    (toolId: number) => {
+      const disabled = disabledToolIds.includes(toolId);
+      setSpecificAgentPreferences(selectedAgent.id, {
+        disabled_tool_ids: disabled
+          ? disabledToolIds.filter((id) => id !== toolId)
+          : [...disabledToolIds, toolId],
+      });
 
-    // If we're disabling a tool that is currently forced, remove it from forced tools
-    if (!disabled && forcedToolIds.includes(toolId)) {
-      setForcedToolIds(forcedToolIds.filter((id) => id !== toolId));
-    }
-  };
+      // If we're disabling a tool that is currently forced, remove it from forced tools
+      if (!disabled && forcedToolIds.includes(toolId)) {
+        setForcedToolIds(forcedToolIds.filter((id) => id !== toolId));
+      }
+    },
+    [
+      disabledToolIds,
+      selectedAgent.id,
+      setSpecificAgentPreferences,
+      forcedToolIds,
+      setForcedToolIds,
+    ]
+  );
 
-  const toggleForcedTool = (toolId: number) => {
-    if (forcedToolIds.includes(toolId)) {
-      // If clicking on already forced tool, unforce it
-      setForcedToolIds([]);
-    } else {
-      // If clicking on a new tool, replace any existing forced tools with just this one
-      setForcedToolIds([toolId]);
-    }
-  };
+  const toggleForcedTool = useCallback(
+    (toolId: number) => {
+      if (forcedToolIds.includes(toolId)) {
+        // If clicking on already forced tool, unforce it
+        setForcedToolIds([]);
+      } else {
+        // If clicking on a new tool, replace any existing forced tools with just this one
+        setForcedToolIds([toolId]);
+      }
+    },
+    [forcedToolIds, setForcedToolIds]
+  );
 
   // Get internal search tool reference for auto-pin logic
   const internalSearchTool = useMemo(
@@ -420,16 +439,18 @@ export default function ActionsPopover({
 
     // Advertise to admin/curator users that they can connect an internal search tool
     // even if it's not available or has no connectors
-    if (tool.in_code_tool_id === SEARCH_TOOL_ID && (isAdmin || isCurator)) {
+    if (
+      tool.in_code_tool_id === SEARCH_TOOL_ID &&
+      hasPermission(permissions, Permission.MANAGE_CONNECTORS)
+    ) {
       return true;
     }
 
-    // Filter out internal search tool for non-admin/curator users when there are no connectors
+    // Filter out internal search tool for users without connector management when there are no connectors
     if (
       tool.in_code_tool_id === SEARCH_TOOL_ID &&
       hasNoConnectors &&
-      !isAdmin &&
-      !isCurator
+      !hasPermission(permissions, Permission.MANAGE_CONNECTORS)
     ) {
       return false;
     }
@@ -465,7 +486,7 @@ export default function ActionsPopover({
             const next = { ...prev } as any;
             servers.forEach((s: any) => {
               next[s.id as number] = {
-                isAuthenticated: !!s.user_authenticated || !!s.is_authenticated,
+                isAuthenticated: !!s.user_can_authenticate,
                 isLoading: false,
               };
             });
@@ -492,7 +513,8 @@ export default function ActionsPopover({
   // Handle MCP authentication
   const handleMCPAuthenticate = async (
     serverId: number,
-    authType: MCPAuthenticationType
+    authType: MCPAuthenticationType,
+    forceReauthentication = false
   ) => {
     if (authType === MCPAuthenticationType.OAUTH) {
       const updateLoadingState = (loading: boolean) => {
@@ -522,18 +544,19 @@ export default function ActionsPopover({
             server_id: serverId,
             return_path: window.location.pathname + window.location.search,
             include_resource_param: true,
+            force_reauthentication: forceReauthentication,
           }),
         });
 
-        if (response.ok) {
-          const { oauth_url } = await response.json();
-          window.location.href = oauth_url;
-        } else {
-          updateLoadingState(false);
+        if (!response.ok) {
+          throw new Error("Failed to start MCP OAuth");
         }
+        const { oauth_url } = await response.json();
+        window.location.href = oauth_url;
       } catch (error) {
         console.error("Error initiating OAuth:", error);
         updateLoadingState(false);
+        throw error;
       }
     }
   };
@@ -591,26 +614,45 @@ export default function ActionsPopover({
     }
   };
 
-  const handleServerAuthentication = (server: MCPServer) => {
+  const handleServerAuthentication = (
+    server: MCPServer,
+    forceReauthentication = false
+  ) => {
     const authType = server.auth_type;
     const performer = server.auth_performer;
+    const requiresHeaderValues =
+      (server.auth_template?.required_fields.length ?? 0) > 0;
 
+    if (!requiresHeaderValues && authType === MCPAuthenticationType.OAUTH) {
+      void handleMCPAuthenticate(
+        server.id,
+        MCPAuthenticationType.OAUTH,
+        forceReauthentication
+      ).catch(() => undefined);
+      return;
+    }
     if (
-      authType === MCPAuthenticationType.NONE ||
-      performer === MCPAuthenticationPerformer.ADMIN
+      !requiresHeaderValues &&
+      (authType === MCPAuthenticationType.NONE ||
+        performer === MCPAuthenticationPerformer.ADMIN)
     ) {
       return;
     }
-
-    if (authType === MCPAuthenticationType.OAUTH) {
-      handleMCPAuthenticate(server.id, MCPAuthenticationType.OAUTH);
-    } else if (authType === MCPAuthenticationType.API_TOKEN) {
+    if (requiresHeaderValues || authType === MCPAuthenticationType.API_TOKEN) {
       setMcpApiKeyModal({
         isOpen: true,
         serverId: server.id,
         serverName: server.name,
         authTemplate: server.auth_template,
-        onSuccess: () => {
+        onSuccess: async () => {
+          if (authType === MCPAuthenticationType.OAUTH) {
+            await handleMCPAuthenticate(
+              server.id,
+              MCPAuthenticationType.OAUTH,
+              forceReauthentication
+            );
+            return;
+          }
           // Update the authentication state after successful credential submission
           setMcpServerData((prev) => ({
             ...prev,
@@ -621,7 +663,7 @@ export default function ActionsPopover({
             },
           }));
         },
-        isAuthenticated: server.user_authenticated,
+        isAuthenticated: server.user_can_authenticate,
         existingCredentials: server.user_credentials,
       });
     }
@@ -661,10 +703,7 @@ export default function ActionsPopover({
     : undefined;
   const isActiveServerAuthenticated =
     selectedMcpServerData?.isAuthenticated ??
-    !!(
-      selectedMcpServer?.user_authenticated ||
-      selectedMcpServer?.is_authenticated
-    );
+    !!selectedMcpServer?.user_can_authenticate;
   const showActiveReauthRow =
     !!selectedMcpServer &&
     selectedMcpTools.length > 0 &&
@@ -706,7 +745,7 @@ export default function ActionsPopover({
 
   const handleFooterReauthClick = () => {
     if (selectedMcpServer) {
-      handleServerAuthentication(selectedMcpServer);
+      handleServerAuthentication(selectedMcpServer, true);
     }
   };
 
@@ -720,13 +759,11 @@ export default function ActionsPopover({
 
   const mcpFooter = showActiveReauthRow ? (
     <LineItem
+      disabled={selectedMcpServerData?.isLoading}
       onClick={handleFooterReauthClick}
       icon={selectedMcpServerData?.isLoading ? SvgSimpleLoader : SvgKey}
-      rightChildren={
-        <Button icon={SvgChevronRight} prominence="tertiary" size="sm" />
-      }
     >
-      Re-Authenticate
+      Re-authenticate
     </LineItem>
   ) : undefined;
 
@@ -837,7 +874,7 @@ export default function ActionsPopover({
           searchIcon
           value={searchTerm}
           onChange={(event) => setSearchTerm(event.target.value)}
-          autoFocus
+          ref={focusOnMount}
           variant="internal"
         />,
 
@@ -847,7 +884,10 @@ export default function ActionsPopover({
             const isToolAvailable = availableToolIdSet.has(tool.id);
             const isUnavailable =
               !isToolAvailable && tool.in_code_tool_id !== SEARCH_TOOL_ID;
-            const canAdminConfigure = isAdmin || isCurator;
+            const canAdminConfigure = hasPermission(
+              permissions,
+              Permission.MANAGE_ACTIONS
+            );
             const adminConfigureInfo =
               isUnavailable && canAdminConfigure
                 ? getAdminConfigureInfo(tool)
@@ -893,8 +933,7 @@ export default function ActionsPopover({
         // MCP Servers
         ...filteredMCPServers.map((server) => {
           const serverData = mcpServerData[server.id] || {
-            isAuthenticated:
-              !!server.user_authenticated || !!server.is_authenticated,
+            isAuthenticated: !!server.user_can_authenticate,
             isLoading: false,
           };
 
@@ -928,7 +967,7 @@ export default function ActionsPopover({
 
         null,
 
-        (isAdmin || isCurator) && (
+        hasPermission(permissions, Permission.MANAGE_ACTIONS) && (
           <LineItem href="/admin/actions" icon={SvgActions} key="more-actions">
             More Actions
           </LineItem>

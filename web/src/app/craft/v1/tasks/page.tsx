@@ -3,7 +3,7 @@
 import { useCallback, useMemo, useState } from "react";
 import useSWR from "swr";
 import { useRouter } from "next/navigation";
-import { SettingsLayouts } from "@opal/layouts";
+import { SettingsLayouts, toast } from "@opal/layouts";
 import { Section } from "@/layouts/general-layouts";
 import {
   Button,
@@ -14,8 +14,7 @@ import {
 } from "@opal/components";
 import { IllustrationContent } from "@opal/layouts";
 import SvgNoResult from "@opal/illustrations/no-result";
-import { toast } from "@/hooks/useToast";
-import ConfirmationModalLayout from "@/refresh-components/layouts/ConfirmationModalLayout";
+import { ConfirmationModalLayout } from "@opal/layouts";
 import {
   SvgClock,
   SvgPlus,
@@ -210,7 +209,7 @@ export default function ScheduledTasksListPage() {
             <SvgSimpleLoader className="h-6 w-6" />
           </div>
         ) : error ? (
-          <Section gap={0.5}>
+          <Section gap={2}>
             <Text font="main-ui-body" color="text-03">
               Failed to load scheduled tasks.
             </Text>

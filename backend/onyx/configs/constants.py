@@ -1,15 +1,14 @@
+import logging
 import os
 import platform
 import re
 import socket
-from enum import auto
-from enum import Enum
+from enum import Enum, auto
 
 ONYX_DEFAULT_APPLICATION_NAME = "Onyx"
 ONYX_DISCORD_URL = "https://discord.gg/4NA5SbzrWb"
 ONYX_UTM_SOURCE = "onyx_app"
 SLACK_USER_TOKEN_PREFIX = "xoxp-"
-SLACK_BOT_TOKEN_PREFIX = "xoxb-"
 ONYX_EMAILABLE_LOGO_MAX_DIM = 512
 
 # The mask_string() function in encryption.py uses "•" (U+2022 BULLET) to mask secrets.
@@ -22,8 +21,6 @@ SOURCE_TYPE = "source_type"
 # not be used for QA. For example, Google Drive file types which can't be parsed
 # are still useful as a search result but not for QA.
 IGNORE_FOR_QA = "ignore_for_qa"
-# NOTE: deprecated, only used for porting key from old system
-GEN_AI_API_KEY_STORAGE_KEY = "genai_api_key"
 PUBLIC_DOC_PAT = "PUBLIC"
 ID_SEPARATOR = ":;:"
 DEFAULT_BOOST = 0
@@ -39,7 +36,6 @@ PUBLIC_API_TAGS: list[str | Enum] = ["public"]
 FASTAPI_USERS_AUTH_COOKIE_NAME = (
     os.environ.get("AUTH_COOKIE_NAME") or "fastapiusersauth"
 )
-TENANT_ID_COOKIE_NAME = "onyx_tid"  # tenant id - for workaround cases
 ANONYMOUS_USER_COOKIE_NAME = "onyx_anonymous_user"
 
 # ID used in UserInfo API responses for anonymous users (not a UUID, just a string identifier)
@@ -60,13 +56,6 @@ INDEX_SEPARATOR = "==="
 # For File Connector Metadata override file
 ONYX_METADATA_FILENAME = ".onyx_metadata.json"
 
-# Messages
-DISABLED_GEN_AI_MSG = (
-    "Your System Admin has disabled the Generative AI functionalities of Onyx.\n"
-    "Please contact them if you wish to have this enabled.\n"
-    "You can still use Onyx as a search engine."
-)
-
 #####
 # Version Pattern Configs
 #####
@@ -79,14 +68,8 @@ DEFAULT_PERSONA_ID = 0
 DEFAULT_CC_PAIR_ID = 1
 
 
-CANCEL_CHECK_INTERVAL = 20
-DISPATCH_SEP_CHAR = "\n"
-FORMAT_DOCS_SEPARATOR = "\n\n"
-NUM_EXPLORATORY_DOCS = 15
 # Postgres connection constants for application_name
 POSTGRES_WEB_APP_NAME = "web"
-POSTGRES_INDEXER_APP_NAME = "indexer"
-POSTGRES_CELERY_APP_NAME = "celery"
 POSTGRES_CELERY_BEAT_APP_NAME = "celery_beat"
 POSTGRES_CELERY_WORKER_PRIMARY_APP_NAME = "celery_worker_primary"
 POSTGRES_CELERY_WORKER_LIGHT_APP_NAME = "celery_worker_light"
@@ -99,7 +82,6 @@ POSTGRES_CELERY_WORKER_USER_FILE_PROCESSING_APP_NAME = (
     "celery_worker_user_file_processing"
 )
 POSTGRES_CELERY_WORKER_SCHEDULED_TASKS_APP_NAME = "celery_worker_scheduled_tasks"
-POSTGRES_PERMISSIONS_APP_NAME = "permissions"
 POSTGRES_UNKNOWN_APP_NAME = "unknown"
 
 SSL_CERT_FILE = "bundle.pem"
@@ -108,8 +90,14 @@ DANSWER_API_KEY_PREFIX = "API_KEY__"
 DANSWER_API_KEY_DUMMY_EMAIL_DOMAIN = "onyxapikey.ai"
 UNNAMED_KEY_PLACEHOLDER = "Unnamed"
 DISCORD_SERVICE_API_KEY_NAME = "discord-bot-service"
+SLACK_SERVICE_ACCOUNT_NAME = "slack-bot-service"
+SLACK_SERVICE_ACCOUNT_EMAIL = (
+    f"{DANSWER_API_KEY_PREFIX}{SLACK_SERVICE_ACCOUNT_NAME}"
+    f"@{DANSWER_API_KEY_DUMMY_EMAIL_DOMAIN}"
+).lower()
 
 # Key-Value store keys
+KV_PASSWORD_AUTH_ENABLED_KEY = "password_auth_enabled_override"
 KV_REINDEX_KEY = "needs_reindexing"
 KV_UNSTRUCTURED_API_KEY = "unstructured_api_key"
 KV_USER_STORE_KEY = "INVITED_USERS"
@@ -117,10 +105,6 @@ KV_PENDING_USERS_KEY = "PENDING_USERS"
 KV_ANONYMOUS_USER_PREFERENCES_KEY = "anonymous_user_preferences"
 KV_ANONYMOUS_USER_PERSONALIZATION_KEY = "anonymous_user_personalization"
 KV_CRED_KEY = "credential_id_{}"
-KV_GMAIL_CRED_KEY = "gmail_app_credential"
-KV_GMAIL_SERVICE_ACCOUNT_KEY = "gmail_service_account_key"
-KV_GOOGLE_DRIVE_CRED_KEY = "google_drive_app_credential"
-KV_GOOGLE_DRIVE_SERVICE_ACCOUNT_KEY = "google_drive_service_account_key"
 KV_GEN_AI_KEY_CHECK_TIME = "genai_api_key_last_check_time"
 KV_SETTINGS_KEY = "onyx_settings"
 KV_CUSTOMER_UUID_KEY = "customer_uuid"
@@ -131,6 +115,10 @@ KV_KG_CONFIG_KEY = "kg_config"
 
 # NOTE: we use this timeout / 4 in various places to refresh a lock
 # might be worth separating this timeout into separate timeouts for each situation
+# One pass of the incognito cleanup sweep. Leftovers wait for the next pass
+# rather than holding the beat lock past its timeout.
+INCOGNITO_FILE_CLEANUP_BATCH = 200
+
 CELERY_GENERIC_BEAT_LOCK_TIMEOUT = 120
 
 CELERY_VESPA_SYNC_BEAT_LOCK_TIMEOUT = 120
@@ -167,7 +155,37 @@ CELERY_PRUNING_LOCK_TIMEOUT = 3600  # 1 hour (in seconds)
 
 CELERY_PERMISSIONS_SYNC_LOCK_TIMEOUT = 3600  # 1 hour (in seconds)
 
-CELERY_EXTERNAL_GROUP_SYNC_LOCK_TIMEOUT = 300  # 5 min
+# While this lock is held, duplicate dispatches for the same cc_pair exit
+# immediately. Deployments whose group syncs legitimately run for hours should
+# raise this toward the JOB_TIMEOUT crawl deadline (6h) so re-dispatches can't
+# stack concurrent crawls on one heavy worker; a worker that dies mid-sync
+# leaves the lock stuck for at most this TTL.
+# Non-positive values would break the guard (0 = a lock with no TTL that a
+# crashed worker leaves stuck forever; negatives fail acquisition), so clamp
+# bad overrides back to the default — loudly, since an operator who set a
+# long TTL needs to know their duplicate-crawl protection is NOT in effect.
+_EXTERNAL_GROUP_SYNC_LOCK_TIMEOUT_DEFAULT = 300
+_external_group_sync_lock_timeout_raw = os.environ.get(
+    "CELERY_EXTERNAL_GROUP_SYNC_LOCK_TIMEOUT"
+)
+try:
+    _external_group_sync_lock_timeout = (
+        int(_external_group_sync_lock_timeout_raw)
+        if _external_group_sync_lock_timeout_raw
+        else _EXTERNAL_GROUP_SYNC_LOCK_TIMEOUT_DEFAULT
+    )
+except ValueError:
+    _external_group_sync_lock_timeout = -1
+if _external_group_sync_lock_timeout > 0:
+    CELERY_EXTERNAL_GROUP_SYNC_LOCK_TIMEOUT: int = _external_group_sync_lock_timeout
+else:
+    logging.getLogger(__name__).warning(
+        "Ignoring invalid CELERY_EXTERNAL_GROUP_SYNC_LOCK_TIMEOUT=%r "
+        "(must be a positive integer of seconds); using the %ds default.",
+        _external_group_sync_lock_timeout_raw,
+        _EXTERNAL_GROUP_SYNC_LOCK_TIMEOUT_DEFAULT,
+    )
+    CELERY_EXTERNAL_GROUP_SYNC_LOCK_TIMEOUT = _EXTERNAL_GROUP_SYNC_LOCK_TIMEOUT_DEFAULT
 
 CELERY_USER_FILE_PROCESSING_LOCK_TIMEOUT = 30 * 60  # 30 minutes (in seconds)
 
@@ -197,8 +215,22 @@ CELERY_USER_FILE_PROJECT_SYNC_LOCK_TIMEOUT = 5 * 60  # 5 minutes (in seconds)
 # files are stuck in DELETING status and the beat keeps re-enqueuing them.
 CELERY_USER_FILE_DELETE_TASK_EXPIRES = 60  # 1 minute (in seconds)
 
+# Per-doc metadata-sync task expiry: bounds queue growth if consumers stall. An
+# expired task's doc stays needs_sync / secondary_only_sync_pending and is
+# re-enqueued on the next vespa-sync beat pass, so dropping it is safe.
+CELERY_DOCUMENT_SYNC_TASK_EXPIRES = 60 * 60  # 1 hour (in seconds)
+
 # Max queue depth before the delete beat stops enqueuing more delete tasks.
 USER_FILE_DELETE_MAX_QUEUE_DEPTH = 500
+
+# Chat-retention (TTL) cleanup tuning. Each delete task removes the oldest
+# CHAT_TTL_DELETE_BATCH_SIZE expired sessions and chains the next task, so
+# deletion drains one batch at a time on the light queue and interleaves with
+# the other light-queue work instead of running as one long task.
+CHAT_TTL_DELETE_BATCH_SIZE = 100
+# How long a queued delete task is valid before workers discard it. Bounds queue
+# growth; if a task expires the beat starts a fresh chain on its next run.
+CELERY_CHAT_TTL_DELETE_TASK_EXPIRES = 60 * 60  # 1 hour (in seconds)
 
 DANSWER_REDIS_FUNCTION_LOCK_PREFIX = "da_function_lock:"
 
@@ -235,6 +267,7 @@ class DocumentSource(str, Enum):
     GOOGLE_SITES = "google_sites"
     ZENDESK = "zendesk"
     LOOPIO = "loopio"
+    BOX = "box"
     DROPBOX = "dropbox"
     SHAREPOINT = "sharepoint"
     TEAMS = "teams"
@@ -262,6 +295,8 @@ class DocumentSource(str, Enum):
     IMAP = "imap"
     BITBUCKET = "bitbucket"
     TESTRAIL = "testrail"
+    BRAINTRUST = "braintrust"
+    LUMAPPS = "lumapps"
 
     # Special case just for integration tests
     MOCK_CONNECTOR = "mock_connector"
@@ -281,9 +316,6 @@ class FederatedConnectorSource(str, Enum):
         return None
 
 
-DocumentSourceRequiringTenantContext: list[DocumentSource] = [DocumentSource.FILE]
-
-
 class NotificationType(str, Enum):
     REINDEX = "reindex"
     PERSONA_SHARED = "persona_shared"
@@ -291,7 +323,9 @@ class NotificationType(str, Enum):
     RELEASE_NOTES = "release_notes"
     ASSISTANT_FILES_READY = "assistant_files_ready"
     FEATURE_ANNOUNCEMENT = "feature_announcement"
+    SYSTEM_ANNOUNCEMENT = "system_announcement"  # admin-authored site-wide banner
     CONNECTOR_REPEATED_ERRORS = "connector_repeated_errors"
+    CONNECTOR_INVALID = "connector_invalid"
     LICENSE_EXPIRY_WARNING = "license_expiry_warning"
     SCHEDULED_TASK_FAILED = "scheduled_task_failed"
     SCHEDULED_TASK_AWAITING_APPROVAL = "scheduled_task_awaiting_approval"
@@ -309,16 +343,6 @@ class BlobType(str, Enum):
 class DocumentIndexType(str, Enum):
     COMBINED = "combined"  # Vespa
     SPLIT = "split"  # Typesense + Qdrant
-
-
-class AuthType(str, Enum):
-    BASIC = "basic"
-    GOOGLE_OAUTH = "google_oauth"
-    OIDC = "oidc"
-    SAML = "saml"
-
-    # google auth and basic
-    CLOUD = "cloud"
 
 
 class QueryHistoryType(str, Enum):
@@ -377,6 +401,7 @@ class FileStoreType(str, Enum):
     S3 = "s3"
     POSTGRES = "postgres"
     GCS = "gcs"
+    AZURE = "azure"
 
 
 class FileOrigin(str, Enum):
@@ -388,6 +413,7 @@ class FileOrigin(str, Enum):
     GENERATED_REPORT = "generated_report"
     INDEXING_CHECKPOINT = "indexing_checkpoint"
     INDEXING_STAGING = "indexing_staging"
+    LOG_EXPORT = "log_export"
     PLAINTEXT_CACHE = "plaintext_cache"
     OTHER = "other"
     QUERY_HISTORY_CSV = "query_history_csv"
@@ -434,6 +460,10 @@ class OnyxCeleryQueues:
     CONNECTOR_HIERARCHY_FETCHING = "connector_hierarchy_fetching"
     CSV_GENERATION = "csv_generation"
 
+    # Chat retention (TTL) hard-deletion queue, consumed by the light worker.
+    # Kept off the primary "celery" queue so cleanup never starves check_for_indexing.
+    CHAT_TTL_DELETION = "chat_ttl_deletion"
+
     # User file processing queue
     USER_FILE_PROCESSING = "user_file_processing"
     USER_FILE_PROJECT_SYNC = "user_file_project_sync"
@@ -441,6 +471,13 @@ class OnyxCeleryQueues:
     # Document processing pipeline queue
     DOCPROCESSING = "docprocessing"
     CONNECTOR_DOC_FETCHING = "connector_doc_fetching"
+
+    # Reindex port queue (heavy PRESENT -> FUTURE re-embed; kept off the
+    # docprocessing queue so a migration doesn't starve live indexing)
+    PORT = "port"
+    # User-file reindex port; runs on the user-file worker with its own budget, so it
+    # never competes with the connector port or docprocessing.
+    USER_FILE_PORT = "user_file_port"
 
     # Monitoring queue
     MONITORING = "monitoring"
@@ -461,8 +498,11 @@ class OnyxRedisLocks:
     CHECK_PRUNE_BEAT_LOCK = "da_lock:check_prune_beat"
     CHECK_HIERARCHY_FETCHING_BEAT_LOCK = "da_lock:check_hierarchy_fetching_beat"
     CHECK_INDEXING_BEAT_LOCK = "da_lock:check_indexing_beat"
+    CHECK_PORT_BEAT_LOCK = "da_lock:check_port_beat"
     CHECK_CHECKPOINT_CLEANUP_BEAT_LOCK = "da_lock:check_checkpoint_cleanup_beat"
     CHECK_INDEX_ATTEMPT_CLEANUP_BEAT_LOCK = "da_lock:check_index_attempt_cleanup_beat"
+    CHECK_OLD_INDEX_RECLAIM_BEAT_LOCK = "da_lock:check_old_index_reclaim_beat"
+    OLD_INDEX_RECLAIM_LOCK_PREFIX = "da_lock:old_index_reclaim"
     CHECK_CONNECTOR_DOC_PERMISSIONS_SYNC_BEAT_LOCK = (
         "da_lock:check_connector_doc_permissions_sync_beat"
     )
@@ -472,7 +512,12 @@ class OnyxRedisLocks:
     OPENSEARCH_MIGRATION_BEAT_LOCK = "da_lock:opensearch_migration_beat"
     OPENSEARCH_VERIFY_INDEX_LOCK_PREFIX = "da_lock:opensearch_verify_index"
 
+    SECURITY_SETTINGS = "da_lock:security_settings"
+
     MONITOR_BACKGROUND_PROCESSES_LOCK = "da_lock:monitor_background_processes"
+    # In-flight marker: set while a chat-TTL cleanup chain is active (spanning
+    # its chained tasks) so the beat won't start a second chain per tenant.
+    CHAT_TTL_CHAIN_ACTIVE = "da_lock:chat_ttl_chain_active"
     CHECK_AVAILABLE_TENANTS_LOCK = "da_lock:check_available_tenants"
     CLOUD_PRE_PROVISION_TENANT_LOCK = "da_lock:pre_provision_tenant"
 
@@ -500,6 +545,7 @@ class OnyxRedisLocks:
     USER_FILE_PROJECT_SYNC_LOCK_PREFIX = "da_lock:user_file_project_sync"
     USER_FILE_PROJECT_SYNC_QUEUED_PREFIX = "da_lock:user_file_project_sync_queued"
     USER_FILE_DELETE_BEAT_LOCK = "da_lock:check_user_file_delete_beat"
+    INCOGNITO_FILE_CLEANUP_BEAT_LOCK = "da_lock:check_incognito_file_cleanup_beat"
     USER_FILE_DELETE_LOCK_PREFIX = "da_lock:user_file_delete"
     # Short-lived key set when a delete task is enqueued; cleared when the worker picks it up.
     # Prevents the beat from re-enqueuing the same file while a delete task is already queued.
@@ -510,7 +556,7 @@ class OnyxRedisLocks:
 
     # Sandbox cleanup
     CLEANUP_IDLE_SANDBOXES_BEAT_LOCK = "da_lock:cleanup_idle_sandboxes_beat"
-    CLEANUP_OLD_SNAPSHOTS_BEAT_LOCK = "da_lock:cleanup_old_snapshots_beat"
+    SESSION_CREATE_LOCK_PREFIX = "session_create"
 
 
 class OnyxRedisSignals:
@@ -583,9 +629,15 @@ class OnyxCeleryTask:
     PROCESS_SINGLE_USER_FILE_PROJECT_SYNC = "process_single_user_file_project_sync"
     CHECK_FOR_USER_FILE_DELETE = "check_for_user_file_delete"
     DELETE_SINGLE_USER_FILE = "delete_single_user_file"
+    CHECK_FOR_INCOGNITO_FILE_CLEANUP = "check_for_incognito_file_cleanup"
 
     # Targeted reindex
     TARGETED_REINDEX_TASK = "targeted_reindex_task"
+
+    # Reindex port (PRESENT -> FUTURE chunk copy)
+    RUN_PORT_ATTEMPT = "run_port_attempt"
+    RUN_USER_FILE_PORT_ATTEMPT = "run_user_file_port_attempt"
+    CHECK_FOR_PORT = "check_for_port"
 
     # Connector checkpoint cleanup
     CHECK_FOR_CHECKPOINT_CLEANUP = "check_for_checkpoint_cleanup"
@@ -595,10 +647,14 @@ class OnyxCeleryTask:
     CHECK_FOR_INDEX_ATTEMPT_CLEANUP = "check_for_index_attempt_cleanup"
     CLEANUP_INDEX_ATTEMPT = "cleanup_index_attempt"
 
+    # Old-index reclamation (post-reindex deletion of the now-PAST index)
+    CHECK_FOR_OLD_INDEX_RECLAIM = "check_for_old_index_reclaim"
+
     MONITOR_BACKGROUND_PROCESSES = "monitor_background_processes"
     MONITOR_CELERY_QUEUES = "monitor_celery_queues"
     MONITOR_PROCESS_MEMORY = "monitor_process_memory"
     CELERY_BEAT_HEARTBEAT = "celery_beat_heartbeat"
+    EMIT_VERSION_TELEMETRY = "emit_version_telemetry"
 
     CONNECTOR_PERMISSION_SYNC_GENERATOR_TASK = (
         "connector_permission_sync_generator_task"
@@ -625,21 +681,28 @@ class OnyxCeleryTask:
 
     GENERATE_USAGE_REPORT_TASK = "generate_usage_report_task"
 
+    # cloud SSO: re-resolve verified domains' DNS proof and re-project routing
+    REVALIDATE_SSO_DOMAINS_TASK = "revalidate_sso_domains_task"
+
     EVAL_RUN_TASK = "eval_run_task"
     SCHEDULED_EVAL_TASK = "scheduled_eval_task"
 
     EXPORT_QUERY_HISTORY_TASK = "export_query_history_task"
     EXPORT_QUERY_HISTORY_CLEANUP_TASK = "export_query_history_cleanup_task"
 
+    # Admin log export
+    EXPORT_LOGS_COLLECT_TASK = "export_logs_collect_task"
+    EXPORT_LOGS_CLEANUP_TASK = "export_logs_cleanup_task"
+
     # Hook execution log retention
     HOOK_EXECUTION_LOG_CLEANUP_TASK = "hook_execution_log_cleanup_task"
 
-    # License expiry tiered warnings
+    # License expiry monitoring and renewal
     CHECK_LICENSE_EXPIRY_NOTIFICATIONS = "check_license_expiry_notifications"
+    RECLAIM_LICENSE = "reclaim_license"
 
     # Sandbox cleanup
     CLEANUP_IDLE_SANDBOXES = "cleanup_idle_sandboxes"
-    CLEANUP_OLD_SNAPSHOTS = "cleanup_old_snapshots"
 
     # Scheduled tasks (Craft)
     SCHEDULED_TASKS_DISPATCH_DUE = "scheduled_tasks_dispatch_due"
@@ -670,9 +733,9 @@ REDIS_SOCKET_KEEPALIVE_OPTIONS[socket.TCP_KEEPCNT] = 3
 # platform where the attribute actually resolves, since ty analyzes one
 # platform at a time and can't model cross-platform conditional unused-ignores.
 if platform.system() == "Darwin":
-    REDIS_SOCKET_KEEPALIVE_OPTIONS[getattr(socket, "TCP_KEEPALIVE")] = 60
+    REDIS_SOCKET_KEEPALIVE_OPTIONS[getattr(socket, "TCP_KEEPALIVE")] = 60  # noqa: B009
 else:
-    REDIS_SOCKET_KEEPALIVE_OPTIONS[getattr(socket, "TCP_KEEPIDLE")] = 60
+    REDIS_SOCKET_KEEPALIVE_OPTIONS[getattr(socket, "TCP_KEEPIDLE")] = 60  # noqa: B009
 
 
 class OnyxCallTypes(str, Enum):
@@ -714,6 +777,7 @@ DocumentSourceDescription: dict[DocumentSource, str] = {
     DocumentSource.GOOGLE_SITES: "Website pages and content",
     DocumentSource.ZENDESK: "Support tickets and help articles",
     DocumentSource.LOOPIO: "RFP responses and content library",
+    DocumentSource.BOX: "Cloud-stored files and folders",
     DocumentSource.DROPBOX: "Cloud-stored files and folders",
     DocumentSource.SHAREPOINT: "Documents and team sites",
     DocumentSource.TEAMS: "Chat messages and channels",
@@ -738,4 +802,6 @@ DocumentSourceDescription: dict[DocumentSource, str] = {
     DocumentSource.DRUPAL_WIKI: "Knowledge base pages and content",
     DocumentSource.IMAP: "Email messages and threads",
     DocumentSource.TESTRAIL: "Test cases and QA management",
+    DocumentSource.BRAINTRUST: "LLM eval experiments, datasets, and prompts",
+    DocumentSource.LUMAPPS: "Intranet pages, news, and content",
 }

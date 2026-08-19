@@ -21,6 +21,7 @@ class TestSecret(StrEnum):
     __test__ = False
 
     OPENAI_API_KEY = "OPENAI_API_KEY"
+    ANTHROPIC_API_KEY = "ANTHROPIC_API_KEY"
     COHERE_API_KEY = "COHERE_API_KEY"
     AZURE_API_KEY = "AZURE_API_KEY"
     AZURE_API_URL = "AZURE_API_URL"
@@ -83,6 +84,14 @@ class TestSecret(StrEnum):
     BITBUCKET_WORKSPACE = "bitbucket-workspace"
     BITBUCKET_API_TOKEN = "bitbucket-api-token"
     FIREFLIES_API_KEY = "fireflies-api-key"
+    CANVAS_ADMIN_ACCESS_TOKEN = "canvas-admin-access-token"
+    CANVAS_TEACHER_ACCESS_TOKEN = "canvas-teacher-access-token"
+    CANVAS_STUDENT_ACCESS_TOKEN = "canvas-student-access-token"
+    BOX_CLIENT_ID = "box-client-id"
+    BOX_CLIENT_SECRET = "box-client-secret"
+    BOX_ENTERPRISE_ID = "box-enterprise-id"
+    BOX_USER_EMAIL = "box-user-email"
+    BOX_COLLABORATOR_EMAIL = "box-collaborator-email"
 
     @classmethod
     def aws_prefix(cls) -> str:

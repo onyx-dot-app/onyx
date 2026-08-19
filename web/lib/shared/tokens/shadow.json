@@ -1,0 +1,14 @@
+{
+  "shadow-box-00": {
+    "value": "0px 0px 2px 1px var(--shadow-01)",
+    "type": "string"
+  },
+  "shadow-box-01": {
+    "value": "0px 2px 12px 0px var(--shadow-02), 0px 0px 4px 1px var(--shadow-02)",
+    "type": "string"
+  },
+  "shadow-box-02": {
+    "value": "0px 2px 24px 0px var(--shadow-03), 0px 0px 12px 1px var(--shadow-03)",
+    "type": "string"
+  }
+}

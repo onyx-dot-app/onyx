@@ -65,11 +65,19 @@ K8s pulls `LLMProviderConfig` for every configured provider from the DB at provi
 
 Pick the second for this PR — it minimizes the surface area of the change. The first is a follow-up if/when Docker users actually need cross-provider per-prompt switching.
 
-### Snapshots already capture `.opencode-data`
+### Docker snapshots do not preserve opencode history today
 
-`SnapshotManager` (`backend/onyx/server/features/build/sandbox/manager/snapshot_manager.py`) tars from the sandbox container. The shared `/workspace` volume that holds `XDG_DATA_HOME=/workspace/.opencode-data` (set indirectly by `entrypoint.sh:35-38` — `WORKSPACE_DATA_HOME` then `export XDG_DATA_HOME="${XDG_DATA_HOME:-$WORKSPACE_DATA_HOME}"`) is already snapshotted by both backends. No snapshot-format change.
+Normal workspace snapshots capture per-session `outputs/` and `attachments/`
+only. They do not include opencode's sandbox-global data directory. The
+Kubernetes backend persists that history through separate sidecar
+`/opencode-history/*` endpoints, but Docker does not currently have an
+equivalent opencode-history persistence path.
 
-The K8s plan flagged "snapshot mid-turn could capture a half-written SQLite WAL" — same mitigation here. The Docker sidecar daemon doesn't exist, so the abort-before-tar logic lives in `DockerSandboxManager.create_snapshot` directly: call `OpencodeServeClient.abort` for any active session on the sandbox before invoking `tar`. Out of scope for this PR if `create_snapshot` is already not called mid-turn; verify and document.
+If Docker moves to `opencode serve`, preserve session history with a separate
+sandbox-level archive instead of putting opencode data into normal per-session
+workspace snapshots. The SQLite backup detail matters there: a live
+`opencode serve` process can have WAL state, so the archive should be created
+from a coherent SQLite backup rather than a raw mid-write file copy.
 
 ### Networking from api_server to sandbox container
 
@@ -128,10 +136,10 @@ Update `docs/craft/opencode-serve-migration.md` §"Migration phases" to note Doc
 ## Tests
 
 **External-dependency-unit** (`backend/tests/external_dependency_unit/craft/`):
-- New file `test_docker_sandbox_serve_streaming.py` — mirror `test_opencode_serve_streaming.py` but against a Docker-provisioned sandbox container. Asserts ordered event sequence from `send_message`. Use a no-tools prompt for determinism.
-- Update `test_kubernetes_sandbox_file_ops.py` if any imports churn from the base.py refactor.
+- `test_docker_sandbox_serve_streaming.py` keeps the direct transport/event matrix against a Docker-provisioned sandbox container. The Craft k8s lane now covers deployed API/Celery turn handoff through `backend/tests/integration/tests/craft/k8s/test_messages_api_k8s.py` instead of directly calling `KubernetesSandboxManager.send_message`.
+- Update `backend/tests/integration/tests/craft/k8s/test_kubernetes_sandbox_file_ops.py` if any imports churn from the base.py refactor.
 
-**Unit** (`backend/tests/unit/onyx/server/features/build/sandbox/`):
+**Unit** (`backend/tests/unit/onyx/server/features/craft/sandbox/`):
 - `test_docker_manager_config.py` — extend the env-allowlist assertion to include the four new serve env vars. Assert the OLD allowlist no longer matches (catches regressions in either direction).
 - New `test_docker_provision_opencode_secret.py` — assert password generation is per-provision and that `OPENCODE_CONFIG_CONTENT` is a valid `build_opencode_config` JSON.
 

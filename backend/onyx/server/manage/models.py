@@ -1,34 +1,28 @@
 import re
 from datetime import datetime
 from enum import Enum
-from typing import Any
-from typing import TYPE_CHECKING
+from typing import TYPE_CHECKING, Any
 
-from pydantic import BaseModel
-from pydantic import ConfigDict
-from pydantic import Field
-from pydantic import field_validator
-from pydantic import model_validator
+from pydantic import BaseModel, ConfigDict, Field, field_validator, model_validator
 
-from onyx.auth.schemas import UserRole
-from onyx.configs.app_configs import TRACK_EXTERNAL_IDP_EXPIRY
-from onyx.configs.constants import AuthType
+from onyx.auth.permissions import SCOPED_MANAGER_PERMISSIONS_EXPANDED
 from onyx.context.search.models import SavedSearchSettings
-from onyx.db.enums import DefaultAppMode
-from onyx.db.enums import ThemePreference
+from onyx.db.enums import (
+    AccountType,
+    DefaultAppMode,
+    SSOProviderType,
+    SupportedLanguage,
+    ThemePreference,
+)
 from onyx.db.memory import MAX_MEMORIES_PER_USER
-from onyx.db.models import AllowedAnswerFilters
-from onyx.db.models import ChannelConfig
+from onyx.db.models import AllowedAnswerFilters, ChannelConfig, User
 from onyx.db.models import SlackBot as SlackAppModel
 from onyx.db.models import SlackChannelConfig as SlackChannelConfigModel
 from onyx.db.models import StandardAnswer as StandardAnswerModel
 from onyx.db.models import StandardAnswerCategory as StandardAnswerCategoryModel
-from onyx.db.models import User
 from onyx.onyxbot.slack.config import VALID_SLACK_FILTERS
-from onyx.server.features.persona.models import FullPersonaSnapshot
-from onyx.server.features.persona.models import PersonaSnapshot
-from onyx.server.models import FullUserSnapshot
-from onyx.server.models import InvitedUserSnapshot
+from onyx.server.features.persona.models import FullPersonaSnapshot, PersonaSnapshot
+from onyx.server.models import FullUserSnapshot, InvitedUserSnapshot
 
 if TYPE_CHECKING:
     pass
@@ -46,20 +40,50 @@ class BulkInviteResponse(BaseModel):
     email_invite_status: EmailInviteStatus
 
 
+class UserPermissionsResponse(BaseModel):
+    # The user's global effective permissions (implication-expanded).
+    permissions: list[str]
+    # Whether the user manages any group, plus the ids of those groups — lets the
+    # frontend reveal manager nav. Not a security boundary (backend GATE 2 enforces).
+    is_manager: bool
+    managed_group_ids: list[int]
+
+
 class VersionResponse(BaseModel):
     backend_version: str
 
 
-class AuthTypeResponse(BaseModel):
-    auth_type: AuthType
+class SSOProviderOption(BaseModel):
+    # No sensitive config. Allowed domains stay server-side so the public login
+    # page does not enumerate the participating companies' domains.
+    name: str
+    display_name: str
+    provider_type: SSOProviderType
+    authorize_url: str
+
+
+class AuthConfigResponse(BaseModel):
+    # Cloud (multi-tenant) signup provisions a tenant and offers Google login.
+    multi_tenant: bool
     # specifies whether the current auth setup requires
     # users to have verified emails
     requires_verification: bool
     anonymous_user_enabled: bool | None = None
     password_min_length: int
+    password_max_length: int
+    password_require_uppercase: bool = False
+    password_require_lowercase: bool = False
+    password_require_digit: bool = False
+    password_require_special_char: bool = False
     # whether there are any users in the system
     has_users: bool = True
     oauth_enabled: bool = False
+    # Kill switch (single-tenant). UI hint only, the backend guards enforce.
+    password_auth_enabled: bool = True
+    # Enabled DB-backed SSO providers, one login button each. Empty on cloud and
+    # on instances with no provider rows, so the page falls back to the built-in
+    # password (and Google when oauth_enabled) login.
+    sso_providers: list[SSOProviderOption] = []
 
 
 class UserSpecificAssistantPreference(BaseModel):
@@ -74,13 +98,16 @@ class UserPreferences(BaseModel):
     hidden_assistants: list[int] = []
     visible_assistants: list[int] = []
     default_model: str | None = None
-    pinned_assistants: list[int] | None = None
+    # Always a list. A user with no pins has an empty one; there is no
+    # meaningful null here, and the frontend used to branch on it.
+    pinned_assistants: list[int] = []
     shortcut_enabled: bool | None = None
 
     # These will default to workspace settings on the frontend if not set
     auto_scroll: bool | None = None
     temperature_override_enabled: bool | None = None
     theme_preference: ThemePreference | None = None
+    language: str | None = None
     chat_background: str | None = None
     default_app_mode: DefaultAppMode = DefaultAppMode.CHAT
 
@@ -120,36 +147,53 @@ class TenantInfo(BaseModel):
     new_tenant: TenantSnapshot | None = None
 
 
+def _admin_capabilities(
+    effective_permissions: list[str], is_group_manager: bool
+) -> list[str]:
+    """Admin-area reach = effective tokens plus the scoped manager bundle when the user
+    manages any group. ``effective_permissions`` itself stays global-only, so org-wide
+    gates that read it still exclude managers. Affordance hint, never an authz input."""
+    caps = set(effective_permissions)
+    if is_group_manager:
+        caps |= SCOPED_MANAGER_PERMISSIONS_EXPANDED
+    return sorted(caps)
+
+
 class UserInfo(BaseModel):
     id: str
     email: str
     is_active: bool
     is_superuser: bool
     is_verified: bool
-    role: UserRole
+    account_type: AccountType = AccountType.STANDARD
     preferences: UserPreferences
     personalization: UserPersonalization = Field(default_factory=UserPersonalization)
-    oidc_expiry: datetime | None = None
-    current_token_created_at: datetime | None = None
-    current_token_expiry_length: int | None = None
+    token_expires_at: datetime | None = None
     is_cloud_superuser: bool = False
     team_name: str | None = None
     is_anonymous_user: bool | None = None
     password_configured: bool | None = None
     tenant_info: TenantInfo | None = None
+    effective_permissions: list[str] = Field(default_factory=list)
+    # True if the user manages any group — lets the client reveal manager nav.
+    # Not a security boundary (backend GATE 2 enforces scope).
+    is_group_manager: bool = False
+    # effective tokens plus the scoped bundle for a manager; drives admin-nav reveal
+    admin_capabilities: list[str] = Field(default_factory=list)
 
     @classmethod
     def from_model(
         cls,
         user: User,
-        current_token_created_at: datetime | None = None,
-        expiry_length: int | None = None,
+        *,
+        token_expires_at: datetime | None = None,
         is_cloud_superuser: bool = False,
         team_name: str | None = None,
         is_anonymous_user: bool | None = None,
         tenant_info: TenantInfo | None = None,
         assistant_specific_configs: UserSpecificAssistantPreferences | None = None,
         memories: list[MemoryItem] | None = None,
+        effective_permissions: list[str] | None = None,
     ) -> "UserInfo":
         return cls(
             id=str(user.id),
@@ -157,7 +201,7 @@ class UserInfo(BaseModel):
             is_active=user.is_active,
             is_superuser=user.is_superuser,
             is_verified=user.is_verified,
-            role=user.role,
+            account_type=user.account_type,
             password_configured=user.password_configured,
             preferences=(
                 UserPreferences(
@@ -165,11 +209,14 @@ class UserInfo(BaseModel):
                     chosen_assistants=user.chosen_assistants,
                     default_model=user.default_model,
                     hidden_assistants=user.hidden_assistants,
-                    pinned_assistants=user.pinned_assistants,
+                    pinned_assistants=[
+                        pinned.persona_id for pinned in user.pinned_personas
+                    ],
                     visible_assistants=user.visible_assistants,
                     auto_scroll=user.auto_scroll,
                     temperature_override_enabled=user.temperature_override_enabled,
                     theme_preference=user.theme_preference,
+                    language=user.language,
                     chat_background=user.chat_background,
                     default_app_mode=user.default_app_mode,
                     paste_as_tile=user.paste_as_tile,
@@ -180,16 +227,15 @@ class UserInfo(BaseModel):
                 )
             ),
             team_name=team_name,
-            # set to None if TRACK_EXTERNAL_IDP_EXPIRY is False so that we avoid cases
-            # where they previously had this set + used OIDC, and now they switched to
-            # basic auth are now constantly getting redirected back to the login page
-            # since their "oidc_expiry is old"
-            oidc_expiry=user.oidc_expiry if TRACK_EXTERNAL_IDP_EXPIRY else None,
-            current_token_created_at=current_token_created_at,
-            current_token_expiry_length=expiry_length,
+            token_expires_at=token_expires_at,
             is_cloud_superuser=is_cloud_superuser,
             is_anonymous_user=is_anonymous_user,
             tenant_info=tenant_info,
+            effective_permissions=effective_permissions or [],
+            is_group_manager=user.is_group_manager,
+            admin_capabilities=_admin_capabilities(
+                effective_permissions or [], user.is_group_manager
+            ),
             personalization=UserPersonalization(
                 name=user.personal_name or "",
                 role=user.personal_role or "",
@@ -205,14 +251,11 @@ class UserByEmail(BaseModel):
     user_email: str
 
 
-class UserRoleUpdateRequest(BaseModel):
-    user_email: str
-    new_role: UserRole
-    explicit_override: bool = False
-
-
-class UserRoleResponse(BaseModel):
-    role: str
+class UserCraftAccessUpdateRequest(BaseModel):
+    user_emails: list[str] = Field(min_length=1)
+    # True/False = explicit override; None = clear the override (follow the
+    # workspace default).
+    craft_enabled: bool | None
 
 
 class BoostDoc(BaseModel):
@@ -239,6 +282,10 @@ class AutoScrollRequest(BaseModel):
 
 class ThemePreferenceRequest(BaseModel):
     theme_preference: ThemePreference
+
+
+class LanguageRequest(BaseModel):
+    language: SupportedLanguage
 
 
 class DefaultAppModeRequest(BaseModel):

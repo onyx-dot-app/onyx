@@ -1,21 +1,24 @@
-from onyx.db.enums import EndpointPolicy
-from onyx.db.enums import ExternalAppType
+from onyx.db.enums import EndpointPolicy, ExternalAppType
 from onyx.db.models import ExternalApp
 from onyx.error_handling.error_codes import OnyxErrorCode
 from onyx.error_handling.exceptions import OnyxError
+from onyx.external_apps.models import (
+    ActionPolicyView,
+    BuiltInExternalAppDescriptor,
+    EndpointDescriptor,
+    OrgCredentialFieldDescriptor,
+)
 from onyx.external_apps.providers.actions import EndpointSpec
-from onyx.external_apps.providers.base import ExternalAppProvider
-from onyx.external_apps.providers.base import OnyxManagedExtApp
+from onyx.external_apps.providers.base import ExternalAppProvider, OnyxManagedExtApp
 from onyx.external_apps.providers.github import GitHubProvider
 from onyx.external_apps.providers.gmail import GmailProvider
 from onyx.external_apps.providers.google_calendar import GoogleCalendarProvider
 from onyx.external_apps.providers.google_drive import GoogleDriveProvider
+from onyx.external_apps.providers.hubspot import HubspotProvider
 from onyx.external_apps.providers.linear import LinearProvider
+from onyx.external_apps.providers.notion import NotionProvider
 from onyx.external_apps.providers.slack import SlackProvider
-from onyx.server.features.build.api.models import ActionPolicyView
-from onyx.server.features.build.api.models import BuiltInExternalAppDescriptor
-from onyx.server.features.build.api.models import EndpointDescriptor
-from onyx.server.features.build.api.models import OrgCredentialFieldDescriptor
+from shared_configs.configs import MULTI_TENANT
 
 _PROVIDER_CLASSES: list[type[ExternalAppProvider]] = [
     SlackProvider,
@@ -24,6 +27,8 @@ _PROVIDER_CLASSES: list[type[ExternalAppProvider]] = [
     GmailProvider,
     LinearProvider,
     GitHubProvider,
+    HubspotProvider,
+    NotionProvider,
 ]
 
 
@@ -57,13 +62,20 @@ def get_onyx_managed_provider(app_type: ExternalAppType) -> OnyxManagedExtApp | 
     return provider if isinstance(provider, OnyxManagedExtApp) else None
 
 
+def uses_cloud_scope(app_type: ExternalAppType) -> bool:
+    """Whether this app connects with Onyx's cloud OAuth client rather than
+    credentials the deployment owns. That client is verified with the upstream
+    provider, so providers narrow their scope there (see ``GoogleOAuthProvider``)
+    and the actions it can't cover drop out of the catalog."""
+    return MULTI_TENANT and get_onyx_managed_provider(app_type) is not None
+
+
 def get_provider_or_raise(app: ExternalApp) -> ExternalAppProvider:
     provider = get_provider_for_app(app)
     if provider is None:
         raise OnyxError(
             OnyxErrorCode.INVALID_INPUT,
-            f"No provider configured for app '{app.skill.name}' "
-            f"(app_type={app.app_type}).",
+            f"No provider configured for app '{app.name}' (app_type={app.app_type}).",
         )
     return provider
 
@@ -76,7 +88,6 @@ def _descriptor_for(
     return BuiltInExternalAppDescriptor(
         app_type=spec.app_type,
         name=spec.app_name,
-        description=descriptor.description,
         upstream_url_patterns=list(descriptor.upstream_url_patterns),
         auth_template=dict(descriptor.auth_template),
         required_org_credential_fields=[
@@ -96,15 +107,35 @@ def _descriptor_for(
                 description=e.description,
                 default_policy=e.default_policy,
             )
-            for e in spec.endpoint_catalog
+            for e in get_endpoint_catalog(spec.app_type)
         ],
     )
 
 
 def get_endpoint_catalog(app_type: ExternalAppType) -> list[EndpointSpec]:
-    """The action catalog for an app_type (empty for CUSTOM / unregistered)."""
+    """The action catalog for an app_type (empty for CUSTOM / unregistered),
+    minus the actions the OAuth grant in force can't cover. Every consumer
+    (admin view, policy resolution, the runtime gate) funnels through here, so
+    none of them can offer an action the grant won't authorize."""
     provider = PROVIDERS.get(app_type)
-    return list(provider.spec.endpoint_catalog) if provider is not None else []
+    if provider is None:
+        return []
+    catalog = provider.spec.endpoint_catalog
+    if uses_cloud_scope(app_type):
+        return [e for e in catalog if not e.requires_self_hosted_scope]
+    return list(catalog)
+
+
+def withheld_on_cloud(app_type: ExternalAppType) -> list[EndpointSpec]:
+    """The catalog actions this app cannot offer on cloud, where Onyx's own
+    OAuth client must avoid Google's restricted scopes — every endpoint marked
+    ``requires_self_hosted_scope``. Empty when the deployment uses its own
+    credentials."""
+    if not uses_cloud_scope(app_type):
+        return []
+    # uses_cloud_scope implies the provider is registered.
+    catalog = PROVIDERS[app_type].spec.endpoint_catalog
+    return [e for e in catalog if e.requires_self_hosted_scope]
 
 
 def effective_policy(
@@ -198,13 +229,3 @@ def fetch_onyx_managed_built_in_apps() -> list[BuiltInExternalAppDescriptor]:
         for cls in _PROVIDER_CLASSES
         if issubclass(cls, OnyxManagedExtApp)
     ]
-
-
-def fetch_built_in_app(app_type: ExternalAppType) -> BuiltInExternalAppDescriptor:
-    for cls in _PROVIDER_CLASSES:
-        if cls.spec.app_type == app_type:
-            return _descriptor_for(cls)
-    raise OnyxError(
-        OnyxErrorCode.NOT_FOUND,
-        f"No built-in app for app_type={app_type}.",
-    )

@@ -2,6 +2,7 @@ import { Agent } from "@/lib/agents/types";
 import { Credential } from "./connectors/credentials";
 import { Connector } from "./connectors/connectors";
 import { ConnectorCredentialPairStatus } from "@/app/admin/connector/[ccPairId]/types";
+import type { PermissionsOf } from "@/lib/permissions/resource-actions";
 
 export interface UserSpecificAgentPreference {
   disabled_tool_ids?: number[];
@@ -62,24 +63,35 @@ export enum AccountType {
   ANONYMOUS = "ANONYMOUS",
 }
 
-export enum UserRole {
-  LIMITED = "limited",
-  BASIC = "basic",
-  ADMIN = "admin",
-  CURATOR = "curator",
-  GLOBAL_CURATOR = "global_curator",
-  EXT_PERM_USER = "ext_perm_user",
-  SLACK_USER = "slack_user",
+export enum Permission {
+  BASIC_ACCESS = "basic",
+  READ_CONNECTORS = "read:connectors",
+  READ_DOCUMENT_SETS = "read:document_sets",
+  READ_AGENTS = "read:agents",
+  READ_USERS = "read:users",
+  READ_USER_GROUPS = "read:user_groups",
+  ADD_AGENTS = "add:agents",
+  MANAGE_AGENTS = "manage:agents",
+  MANAGE_DOCUMENT_SETS = "manage:document_sets",
+  MANAGE_CONNECTORS = "manage:connectors",
+  MANAGE_LLMS = "manage:llms",
+  READ_AGENT_ANALYTICS = "read:agent_analytics",
+  MANAGE_ACTIONS = "manage:actions",
+  READ_QUERY_HISTORY = "read:query_history",
+  MANAGE_USER_GROUPS = "manage:user_groups",
+  MANAGE_SKILLS = "manage:skills",
+  CREATE_USER_API_KEYS = "create:user_api_keys",
+  MANAGE_SERVICE_ACCOUNT_API_KEYS = "manage:service_account_api_keys",
+  MANAGE_BOTS = "manage:bots",
+  FULL_ADMIN_PANEL_ACCESS = "admin",
 }
 
-export const USER_ROLE_LABELS: Record<UserRole, string> = {
-  [UserRole.BASIC]: "Basic",
-  [UserRole.ADMIN]: "Admin",
-  [UserRole.GLOBAL_CURATOR]: "Global Curator",
-  [UserRole.CURATOR]: "Curator",
-  [UserRole.LIMITED]: "Limited",
-  [UserRole.EXT_PERM_USER]: "External Permissioned User",
-  [UserRole.SLACK_USER]: "Slack User",
+export const ACCOUNT_TYPE_LABELS: Record<AccountType, string> = {
+  [AccountType.STANDARD]: "Standard",
+  [AccountType.BOT]: "Slack Bot",
+  [AccountType.EXT_PERM_USER]: "External User",
+  [AccountType.SERVICE_ACCOUNT]: "Service Account",
+  [AccountType.ANONYMOUS]: "Anonymous",
 };
 
 export enum UserStatus {
@@ -96,27 +108,15 @@ export const USER_STATUS_LABELS: Record<UserStatus, string> = {
   [UserStatus.REQUESTED]: "Request to Join",
 };
 
-export const INVALID_ROLE_HOVER_TEXT: Partial<Record<UserRole, string>> = {
-  [UserRole.BASIC]: "Basic users can't perform any admin actions",
-  [UserRole.ADMIN]: "Admin users can perform all admin actions",
-  [UserRole.GLOBAL_CURATOR]:
-    "Global Curator users can perform admin actions for all groups they are a member of",
-  [UserRole.CURATOR]: "Curator role must be assigned in the Groups tab",
-  [UserRole.SLACK_USER]:
-    "This role is automatically assigned to users who only use Onyx via Slack",
-};
-
 export interface User {
   id: string;
   email: string;
   is_active: boolean;
   is_superuser: boolean;
   is_verified: boolean;
-  role: UserRole;
+  account_type: AccountType;
   preferences: UserPreferences;
-  current_token_created_at?: Date;
-  current_token_expiry_length?: number;
-  oidc_expiry?: Date;
+  token_expires_at?: string;
   is_cloud_superuser?: boolean;
   team_name: string | null;
   is_anonymous_user?: boolean;
@@ -128,6 +128,13 @@ export interface User {
   password_configured?: boolean;
   tenant_info?: TenantInfo | null;
   personalization?: UserPersonalization;
+  effective_permissions?: string[];
+  is_admin?: boolean;
+  // True if the user manages any group (drives manager nav visibility).
+  is_group_manager?: boolean;
+  // effective tokens plus the scoped manager bundle; source for coarse admin-reach
+  // checks (nav, page access). Server-computed so the client never re-derives policy.
+  admin_capabilities?: string[];
 }
 
 export interface TenantInfo {
@@ -152,7 +159,6 @@ export interface AllUsersResponse {
 export interface AcceptedUserSnapshot {
   id: string;
   email: string;
-  role: UserRole;
   is_active: boolean;
 }
 
@@ -175,6 +181,7 @@ export type ValidStatuses =
   | "success"
   | "completed_with_errors"
   | "canceled"
+  | "interrupted"
   | "failed"
   | "in_progress"
   | "not_started";
@@ -235,9 +242,15 @@ export const INDEX_ATTEMPT_STAGES = [
   "CHUNKING",
   "CONTEXTUAL_RAG",
   "EMBEDDING",
+  "DOC_LOCK_ACQUIRE_WAIT",
+  "ENRICHMENT_PREP",
   "VECTOR_DB_WRITE",
   "POST_INDEX_DB_UPDATE",
+  "COORD_LOCK_ACQUIRE_WAIT",
   "COORDINATION_UPDATE",
+  "FINALIZATION",
+  "GC_COLLECT",
+  "BATCH_UNACCOUNTED",
   "BATCH_TOTAL",
 ] as const;
 
@@ -297,6 +310,8 @@ export interface ConnectorIndexingStatusLite {
   last_status: ValidStatuses | null;
   last_success: string | null;
   is_editable: boolean;
+  // per-action affordance map for the requesting user (mirrors the write-side gate)
+  permissions: PermissionsOf<"CCPair">;
   docs_indexed: number;
   in_repeated_error_state: boolean;
   latest_index_attempt_docs_indexed: number | null;
@@ -443,6 +458,8 @@ export interface DocumentSetSummary {
   is_public: boolean;
   users: string[];
   groups: number[];
+  // per-action affordance map for the requesting user (mirrors the write-side gate)
+  permissions: PermissionsOf<"DocumentSet">;
   federated_connector_summaries: FederatedConnectorSummary[];
 }
 
@@ -531,13 +548,53 @@ export interface UserGroup {
   id: number;
   name: string;
   users: User[];
-  curator_ids: string[];
+  // ids of members who manage this group (drives the Make/Revoke Manager toggle)
+  manager_ids: string[];
   cc_pairs: CCPairDescriptor<any, any>[];
   document_sets: DocumentSetSummary[];
   personas: Agent[];
   is_up_to_date: boolean;
   is_up_for_deletion: boolean;
   is_default: boolean;
+  // Members may start incognito chats while the workspace availability
+  // setting is groups-only.
+  incognito_enabled: boolean;
+  // Server-stamped affordance map; fail-closed (absent = denied).
+  permissions?: PermissionsOf<"UserGroup">;
+}
+
+// Mirrors `IncognitoAvailability` in backend/onyx/server/security/models.py.
+export type IncognitoAvailability = "off" | "everyone" | "groups";
+
+// Mirrors `IncognitoRecordMode` in backend/onyx/db/enums.py.
+export type IncognitoRecordMode = "full_history" | "usage_only";
+
+// Mirrors `SSRFProtectionLevel` in backend/onyx/server/security/models.py.
+export type SSRFProtectionLevel =
+  | "validate_all"
+  | "validate_llm"
+  | "allow_private_network"
+  | "disabled";
+
+// Read shape of GET /admin/security: effective, env-merged settings. Every
+// field is concrete, the backend never returns null here (see
+// `SecuritySettings` in backend/onyx/server/security/models.py).
+export interface SecuritySettings {
+  user_directory_admin_only: boolean;
+  incognito_availability: IncognitoAvailability;
+  incognito_record_mode: IncognitoRecordMode;
+  track_external_idp_expiry: boolean;
+  ssrf_protection_level: SSRFProtectionLevel;
+  mask_credential_prefix: boolean;
+  llm_custom_config_env_injection: boolean;
+  valid_email_domains: string[];
+  password_min_length: number;
+  password_max_length: number;
+  password_require_uppercase: boolean;
+  password_require_lowercase: boolean;
+  password_require_digit: boolean;
+  password_require_special_char: boolean;
+  password_auth_enabled: boolean;
 }
 
 export enum ValidSources {
@@ -565,6 +622,7 @@ export enum ValidSources {
   UserFile = "user_file",
   GoogleSites = "google_sites",
   Loopio = "loopio",
+  Box = "box",
   Dropbox = "dropbox",
   Discord = "discord",
   Salesforce = "salesforce",
@@ -594,6 +652,9 @@ export enum ValidSources {
   Imap = "imap",
   Bitbucket = "bitbucket",
   TestRail = "testrail",
+  Braintrust = "braintrust",
+  Lumapps = "lumapps",
+  Canvas = "canvas",
 
   // Craft-specific sources
   CraftFile = "craft_file",
@@ -621,6 +682,8 @@ export const validAutoSyncSources = [
   ValidSources.GitHub,
   ValidSources.Sharepoint,
   ValidSources.Teams,
+  ValidSources.Canvas,
+  ValidSources.Box,
 ] as const;
 
 // Create a type from the array elements

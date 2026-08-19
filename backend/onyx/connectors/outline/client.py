@@ -2,8 +2,7 @@ from typing import Any
 
 import requests
 from requests.exceptions import ConnectionError as RequestsConnectionError
-from requests.exceptions import RequestException
-from requests.exceptions import Timeout
+from requests.exceptions import RequestException, Timeout
 
 from onyx.configs.app_configs import REQUEST_TIMEOUT_SECONDS
 

@@ -1,37 +1,38 @@
 import traceback
-from datetime import datetime
-from datetime import timezone
+from datetime import datetime, timezone
 from typing import Any
 
 from onyx.configs.constants import PUBLIC_DOC_PAT
 from onyx.document_index.interfaces_new import TenantState
 from onyx.document_index.opensearch.schema import DocumentChunk
-from onyx.document_index.vespa_constants import ACCESS_CONTROL_LIST
-from onyx.document_index.vespa_constants import BLURB
-from onyx.document_index.vespa_constants import BOOST
-from onyx.document_index.vespa_constants import CHUNK_CONTEXT
-from onyx.document_index.vespa_constants import CHUNK_ID
-from onyx.document_index.vespa_constants import CONTENT
-from onyx.document_index.vespa_constants import DOC_SUMMARY
-from onyx.document_index.vespa_constants import DOC_UPDATED_AT
-from onyx.document_index.vespa_constants import DOCUMENT_ID
-from onyx.document_index.vespa_constants import DOCUMENT_SETS
-from onyx.document_index.vespa_constants import EMBEDDINGS
-from onyx.document_index.vespa_constants import FULL_CHUNK_EMBEDDING_KEY
-from onyx.document_index.vespa_constants import HIDDEN
-from onyx.document_index.vespa_constants import IMAGE_FILE_NAME
-from onyx.document_index.vespa_constants import METADATA_LIST
-from onyx.document_index.vespa_constants import METADATA_SUFFIX
-from onyx.document_index.vespa_constants import PERSONAS
-from onyx.document_index.vespa_constants import PRIMARY_OWNERS
-from onyx.document_index.vespa_constants import SECONDARY_OWNERS
-from onyx.document_index.vespa_constants import SEMANTIC_IDENTIFIER
-from onyx.document_index.vespa_constants import SOURCE_LINKS
-from onyx.document_index.vespa_constants import SOURCE_TYPE
-from onyx.document_index.vespa_constants import TENANT_ID
-from onyx.document_index.vespa_constants import TITLE
-from onyx.document_index.vespa_constants import TITLE_EMBEDDING
-from onyx.document_index.vespa_constants import USER_PROJECT
+from onyx.document_index.vespa_constants import (
+    ACCESS_CONTROL_LIST,
+    BLURB,
+    BOOST,
+    CHUNK_CONTEXT,
+    CHUNK_ID,
+    CONTENT,
+    DOC_SUMMARY,
+    DOC_UPDATED_AT,
+    DOCUMENT_ID,
+    DOCUMENT_SETS,
+    EMBEDDINGS,
+    FULL_CHUNK_EMBEDDING_KEY,
+    HIDDEN,
+    IMAGE_FILE_NAME,
+    METADATA_LIST,
+    METADATA_SUFFIX,
+    PERSONAS,
+    PRIMARY_OWNERS,
+    SECONDARY_OWNERS,
+    SEMANTIC_IDENTIFIER,
+    SOURCE_LINKS,
+    SOURCE_TYPE,
+    TENANT_ID,
+    TITLE,
+    TITLE_EMBEDDING,
+    USER_PROJECT,
+)
 from onyx.utils.logger import setup_logger
 from shared_configs.configs import MULTI_TENANT
 

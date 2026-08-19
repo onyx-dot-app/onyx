@@ -33,11 +33,19 @@ export function parsePacket(raw: unknown): ParsedPacket {
   switch (packetType) {
     case "agent_message_chunk": // Live SSE
     case "agent_message": // DB-stored format
-      return { type: "text_chunk", text: extractText(p.content) };
+      return {
+        type: "text_chunk",
+        text: extractText(p.content),
+        ...extractRoutingMeta(p),
+      };
 
     case "agent_thought_chunk": // Live SSE
     case "agent_thought": // DB-stored format
-      return { type: "thinking_chunk", text: extractText(p.content) };
+      return {
+        type: "thinking_chunk",
+        text: extractText(p.content),
+        ...extractRoutingMeta(p),
+      };
 
     case "tool_call_start":
       return parseToolCallStart(p);
@@ -58,12 +66,63 @@ export function parsePacket(raw: unknown): ParsedPacket {
         sessionId: (p.session_id ?? "") as string,
       };
 
+    case "subagent_started":
+      return {
+        type: "subagent_started",
+        subagentSessionId: (p.subagent_session_id ??
+          p.subagentSessionId ??
+          "") as string,
+        parentSessionId: (p.parent_session_id ?? p.parentSessionId ?? null) as
+          | string
+          | null,
+      };
+
+    case "connect_app_request": {
+      const externalAppId = p.external_app_id;
+      if (
+        typeof externalAppId !== "number" ||
+        !Number.isSafeInteger(externalAppId) ||
+        externalAppId <= 0
+      ) {
+        return { type: "unknown" };
+      }
+      return {
+        type: "connect_app_request",
+        requestId: (p.request_id ?? "") as string,
+        externalAppId,
+        reason: (p.reason ?? null) as string | null,
+      };
+    }
+
+    case "context_usage":
+      return {
+        type: "context_usage",
+        usedTokens: Number(p.used_tokens ?? p.usedTokens ?? 0),
+      };
+
+    case "compaction":
+      return {
+        type: "compaction",
+        summary: (p.summary ?? null) as string | null,
+      };
+
     case "error":
       return { type: "error", message: (p.message ?? "") as string };
 
     default:
       return { type: "unknown" };
   }
+}
+
+function extractRoutingMeta(p: Record<string, unknown>): {
+  sessionId: string | null;
+  parentSessionId: string | null;
+} {
+  const meta = (p._meta as Record<string, unknown> | undefined) ?? {};
+  return {
+    sessionId: (meta.sessionId as string | undefined) ?? null,
+    parentSessionId: (meta.parentSessionId as string | undefined) ?? null,
+  };
 }
 
 // ─── Skill Detection ──────────────────────────────────────────────
@@ -83,6 +142,32 @@ function detectSkillName(
   // Match "namespace:skill" or "namespace.skill" patterns
   const match = rawName.match(/^(skills?|superpowers)[.:]([\w-]+)$/);
   return match?.[2] ?? null;
+}
+
+function detectSkillScript(command: string): string | null {
+  const match = command.match(/\.opencode\/skills\/([\w-]+)\//);
+  if (match?.[1]) return match[1];
+  // The github skill invokes the gh CLI directly rather than a bundled script.
+  // Any gh call in the sandbox authenticates through the github app's proxy
+  // injection, so attributing all of them to the skill is intentional.
+  if (/^gh\s/.test(command)) return "github";
+  return null;
+}
+
+function resolveSkillName(
+  p: Record<string, unknown>,
+  toolName: ToolName,
+  kind: ToolKind,
+  ri: Record<string, unknown> | null,
+  command: string
+): string | null {
+  return (
+    detectSkillName(p, toolName) ??
+    (toolName === "skill" && typeof ri?.name === "string"
+      ? (ri.name as string)
+      : null) ??
+    (kind === "execute" ? detectSkillScript(command) : null)
+  );
 }
 
 // ─── Tool Name Resolution ─────────────────────────────────────────
@@ -131,6 +216,7 @@ function resolveToolName(p: Record<string, unknown>): ToolName {
   if (rawKind === "edit" || rawKind === "delete" || rawKind === "move")
     return "edit";
   if (rawKind === "search") return "glob";
+  if (rawKind === "task") return "task";
   if (rawKind === "fetch") return "webfetch";
 
   return "unknown";
@@ -283,8 +369,10 @@ function buildDescription(
 ): string {
   // Task tool: spawns a subagent. Read as "Spawning subagent: <description>".
   if (toolName === "task") {
-    return rawDescription
-      ? `Spawning subagent: ${rawDescription}`
+    const taskDescription =
+      rawDescription || (typeof ri?.prompt === "string" ? ri.prompt : "");
+    return taskDescription
+      ? `Spawning subagent: ${sanitizePathsInText(taskDescription)}`
       : "Spawning subagent";
   }
   // Read/edit: show file path. For new-file writes, append a line count
@@ -299,9 +387,8 @@ function buildDescription(
       return filePath;
     }
   }
-  // Execute: use backend description
   if (kind === "execute") {
-    return sanitizePathsInText(rawDescription) || "Running command";
+    return sanitizePathsInText(rawDescription);
   }
   // Search: show pattern
   if (
@@ -478,6 +565,19 @@ function extractTaskOutput(ro: Record<string, unknown> | null): string | null {
   );
 }
 
+function extractTaskSessionId(
+  ro: Record<string, unknown> | null
+): string | null {
+  if (!ro?.output || typeof ro.output !== "string") return null;
+  const text = ro.output;
+  const taskIdMatch = text.match(/^task_id:\s*([^\s(]+)/m);
+  if (taskIdMatch?.[1]) return taskIdMatch[1];
+  const metadataMatch = text.match(
+    /<task_metadata>[\s\S]*?(?:session_id|task_id):\s*([^\s<]+)[\s\S]*?<\/task_metadata>/i
+  );
+  return metadataMatch?.[1] ?? null;
+}
+
 // ─── Artifact Parsing ─────────────────────────────────────────────
 
 function parseArtifact(p: Record<string, unknown>): ParsedArtifact {
@@ -500,7 +600,18 @@ function parseToolCallStart(p: Record<string, unknown>): ParsedToolCallStart {
   const toolName = resolveToolName(p);
   const rawKind = p.kind as string | null;
   const kind = resolveKind(toolName, rawKind);
+  const ri = getRawInput(p);
   const meta = (p._meta as Record<string, unknown> | undefined) ?? {};
+  const rawCommand = (ri?.command ??
+    (toolName === "task" ? ri?.prompt : undefined) ??
+    "") as string;
+  const rawDescription = (ri?.description ?? "") as string;
+  const rawFilePath = (ri?.file_path ??
+    ri?.filePath ??
+    ri?.path ??
+    "") as string;
+  const filePath = rawFilePath ? stripSessionPrefix(rawFilePath) : "";
+  const command = sanitizePathsInText(rawCommand);
   return {
     type: "tool_call_start",
     toolCallId: getToolCallId(p),
@@ -508,6 +619,12 @@ function parseToolCallStart(p: Record<string, unknown>): ParsedToolCallStart {
     kind,
     isTodo: toolName === "todowrite",
     title: buildTitle(toolName, kind, true),
+    description: buildDescription(toolName, kind, filePath, ri, rawDescription),
+    command,
+    skillName: resolveSkillName(p, toolName, kind, ri, command),
+    subagentType: (ri?.subagent_type ?? ri?.subagentType ?? null) as
+      | string
+      | null,
     sessionId: (meta.sessionId as string | undefined) ?? null,
     parentSessionId: (meta.parentSessionId as string | undefined) ?? null,
     subagentSessionId: (meta.subagentSessionId as string | undefined) ?? null,
@@ -598,14 +715,7 @@ function parseToolCallProgress(
     | null;
 
   // ── Skill detection ───────────────────────────────────────────
-  // Two shapes: (1) skill-namespaced tool calls with raw names like
-  // "skills.brainstorming" (toolName "unknown"); (2) the dedicated "skill"
-  // tool, whose invoked skill is in rawInput.name (e.g. "company-search").
-  const skillName =
-    detectSkillName(p, toolName) ??
-    (toolName === "skill" && typeof ri?.name === "string"
-      ? (ri.name as string)
-      : null);
+  const skillName = resolveSkillName(p, toolName, kind, ri, command);
   const taskOutput =
     toolName === "task" && status === "completed"
       ? extractTaskOutput(ro)
@@ -616,7 +726,8 @@ function parseToolCallProgress(
   const sessionId = (meta.sessionId as string | undefined) ?? null;
   const parentSessionId = (meta.parentSessionId as string | undefined) ?? null;
   const subagentSessionId =
-    (meta.subagentSessionId as string | undefined) ?? null;
+    (meta.subagentSessionId as string | undefined) ??
+    (toolName === "task" ? extractTaskSessionId(ro) : null);
 
   return {
     type: "tool_call_progress",

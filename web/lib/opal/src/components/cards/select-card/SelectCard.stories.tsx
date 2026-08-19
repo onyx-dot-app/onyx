@@ -1,4 +1,4 @@
-import type { Meta, StoryObj } from "@storybook/react";
+import type { Meta, StoryObj } from "@storybook/react-vite";
 import { SelectCard } from "@opal/components";
 import { Button } from "@opal/components";
 import { Content } from "@opal/layouts";
@@ -13,7 +13,7 @@ import {
 import { Interactive } from "@opal/core";
 
 const STATES = ["empty", "filled", "selected"] as const;
-const PADDING_VARIANTS = ["fit", "2xs", "xs", "sm", "md", "lg"] as const;
+const PADDING_VARIANTS = [0, 0.5, 1, 2, 4, 6] as const;
 const ROUNDING_VARIANTS = ["xs", "sm", "md", "lg"] as const;
 
 const meta = {

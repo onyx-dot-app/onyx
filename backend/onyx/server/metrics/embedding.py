@@ -9,12 +9,9 @@ from collections.abc import Generator
 from contextlib import contextmanager
 from enum import Enum
 
-from prometheus_client import Counter
-from prometheus_client import Gauge
-from prometheus_client import Histogram
+from prometheus_client import Counter, Gauge, Histogram
 
-from shared_configs.enums import EmbeddingProvider
-from shared_configs.enums import EmbedTextType
+from shared_configs.enums import EmbeddingProvider, EmbedTextType
 
 
 class QueryEmbeddingCacheLookupOutcome(str, Enum):

@@ -2,7 +2,8 @@
 
 import React from "react";
 import { cn } from "@opal/utils";
-import type { WithoutStyles } from "@opal/types";
+import type { Spacing, WithoutStyles } from "@opal/types";
+import { spacingToRem } from "@opal/shared";
 
 type FlexDirection = "row" | "column";
 type JustifyContent = "start" | "center" | "end" | "between";
@@ -46,11 +47,11 @@ interface SectionProps extends WithoutStyles<
   width?: Length;
   height?: Length;
 
-  gap?: number;
-  padding?: number;
+  /** Spacing between children, as a {@link Spacing} step (`N / 4` rem). @default 4 */
+  gap?: Spacing;
+  /** Inner padding, as a {@link Spacing} step (`N / 4` rem). @default 0 */
+  padding?: Spacing;
   wrap?: boolean;
-
-  dbg?: boolean;
 
   ref?: React.Ref<HTMLDivElement>;
 }
@@ -62,10 +63,9 @@ function Section({
   alignItems = "center",
   width = "full",
   height = "full",
-  gap = 1,
+  gap = 4,
   padding = 0,
   wrap,
-  dbg,
   ref,
   ...rest
 }: SectionProps) {
@@ -83,12 +83,11 @@ function Section({
         typeof height === "number" && "overflow-hidden",
 
         wrap && "flex-wrap",
-        dbg && "dbg-red",
         className
       )}
       style={{
-        gap: `${gap}rem`,
-        padding: `${padding}rem`,
+        gap: spacingToRem(gap),
+        padding: spacingToRem(padding),
         ...(typeof width === "number" && { width: `${width}rem` }),
         ...(typeof height === "number" && { height: `${height}rem` }),
       }}

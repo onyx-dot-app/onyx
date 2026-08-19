@@ -73,6 +73,7 @@ export interface ToolItemProps {
 
   // Handlers
   onToggle?: (enabled: boolean) => void;
+  canToggle?: boolean;
 
   // Optional styling
   className?: string;
@@ -87,6 +88,7 @@ const ToolItem: React.FC<ToolItemProps> = ({
   variant = "mcp",
   openApiMetadata,
   onToggle,
+  canToggle = true,
   className,
 }) => {
   const isMcpVariant = variant === "mcp";
@@ -226,7 +228,7 @@ const ToolItem: React.FC<ToolItemProps> = ({
             <Switch
               checked={isEnabled}
               onCheckedChange={onToggle}
-              disabled={!isAvailable}
+              disabled={!isAvailable || !canToggle}
               aria-label={`tool-toggle-${name}`}
             />
           </div>

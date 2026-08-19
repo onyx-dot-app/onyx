@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useEffect } from "react";
+import { useState } from "react";
 import { Button, Popover, Text } from "@opal/components";
 import { SvgLink, SvgCopy, SvgCheck, SvgX } from "@opal/icons";
 import { setSessionSharing } from "@/app/craft/services/apiServices";
@@ -106,13 +106,13 @@ export default function ShareButton({
         <Popover.Content side="bottom" align="end" width="lg" sideOffset={4}>
           <Section
             alignItems="stretch"
-            gap={0.25}
-            padding={0.25}
+            gap={1}
+            padding={1}
             width="full"
             height="fit"
           >
             {/* Scope options */}
-            <Section alignItems="stretch" gap={0.25} width="full">
+            <Section alignItems="stretch" gap={1} width="full">
               {SCOPE_OPTIONS.map((opt) => (
                 <div
                   key={opt.value}
@@ -135,7 +135,7 @@ export default function ShareButton({
                     description={opt.description}
                     sizePreset="main-ui"
                     variant="section"
-                    padding="sm"
+                    padding={1}
                   />
                 </div>
               ))}
@@ -147,8 +147,8 @@ export default function ShareButton({
                 <Section
                   flexDirection="row"
                   alignItems="center"
-                  gap={0.25}
-                  padding={0.25}
+                  gap={1}
+                  padding={1}
                   width="full"
                   height="fit"
                 >

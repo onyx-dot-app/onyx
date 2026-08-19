@@ -112,8 +112,8 @@ function SettingsHeader({
     <div
       ref={headerRef}
       className={cn(
-        "w-full bg-background-tint-01",
-        isSticky && "sticky top-0 z-settings-header",
+        "w-full",
+        isSticky && "sticky top-0 z-settings-header bg-background-tint-01",
         showBackButton && "md:pt-4"
       )}
     >
@@ -125,10 +125,10 @@ function SettingsHeader({
         </div>
       )}
 
-      <Spacer rem={2.5} />
+      <Spacer rem={3.25} />
 
       <div className="flex flex-col gap-6 px-4">
-        <div className="flex w-full justify-between">
+        <div className="flex w-full items-center justify-between">
           <div aria-label="admin-page-title">
             <Content
               icon={Icon}
@@ -147,7 +147,7 @@ function SettingsHeader({
       {divider ? (
         <>
           <Spacer rem={1.5} />
-          <Divider paddingParallel="md" paddingPerpendicular="fit" />
+          <Divider paddingParallel={4} paddingPerpendicular={0} />
         </>
       ) : (
         <Spacer rem={0.5} />

@@ -1,3 +1,46 @@
+# Installing the chart
+
+## Helm repository (default)
+
+```bash
+helm repo add onyx https://onyx-dot-app.github.io/onyx
+helm repo update
+helm install onyx onyx/onyx -n onyx --create-namespace
+```
+
+Chart tarballs are attached to GitHub releases named `helm/onyx-<version>`, and
+`index.yaml` on the `gh-pages` branch points at them. This is an implementation
+detail: the repository URL above does not change and `helm repo add`,
+`helm search repo` and `helm upgrade` all work as before.
+
+## OCI registry (alternative)
+
+The same chart is published to GHCR:
+
+```bash
+helm install onyx oci://ghcr.io/onyx-dot-app/charts/onyx \
+  --version 0.8.16 -n onyx --create-namespace
+```
+
+`helm repo add` does not accept `oci://` URLs, so an OCI install needs an
+explicit `--version`. There is no `helm repo update` or `helm search repo` for
+OCI and no helm command that lists the available versions. Read them from the
+`helm/onyx-<version>` [releases](https://github.com/onyx-dot-app/onyx/releases)
+or from the Helm repository index:
+
+```bash
+helm search repo onyx/onyx --versions   # needs `helm repo add` from above
+```
+
+To inspect one version before installing it:
+
+```bash
+helm show chart oci://ghcr.io/onyx-dot-app/charts/onyx --version 0.8.16
+```
+
+Both channels ship identical bytes from the same build. Use the Helm repository
+unless you specifically need OCI.
+
 # Recent chart changes (0.5.0)
 
 If you are upgrading from an earlier 0.4.x release, **read [MIGRATION.md](./MIGRATION.md) first.** The 0.5.0 release dropped the bundled Vespa subchart; chart 0.5.6 ships a guard that fails `helm upgrade` if the legacy `da-vespa` StatefulSet is still in the namespace so you don't lose the indexed data silently.
@@ -45,6 +88,22 @@ CRD and controller automatically as part of `helm install onyx onyx/onyx`.
 If you don't want the bundled Redis (recommended for production environments using
 managed Redis like AWS ElastiCache), see [Using an external Redis](#using-an-external-redis)
 below and set `redis.enabled: false` to skip the operator entirely.
+
+## Onyx Craft with Kubernetes sandboxes
+
+When `configMap.ENABLE_CRAFT="true"`, the target cluster must run Kubernetes
+`>= 1.33`. Craft Helm deployments provision Kubernetes sandbox pods; Docker
+is not a Helm deployment backend for Craft and `configMap.SANDBOX_BACKEND` is
+not a bypass for this requirement.
+
+Craft sandbox pods use native restartable init sidecar containers:
+`sandbox-init` runs and completes first, `sidecar` starts next as an
+`initContainers` entry with `restartPolicy: Always`, and the main `sandbox` app
+container starts after the sidecar's startup restore gate is ready.
+
+The chart fails during render/install on older clusters so the incompatibility
+is caught before sandbox provisioning. This guard does not apply to non-Craft
+installs.
 
 ## Using an external Redis
 
@@ -180,7 +239,7 @@ Other docker-compose-style values you should set deliberately:
 
 # Local testing
 
-> This section covers chart-maintainer testing; for the Onyx Craft local-kind developer workflow, see [docs/dev/local-kubernetes.md](/docs/dev/local-kubernetes.md).
+> This section covers chart-maintainer testing; for the Onyx Craft local-kind developer workflow, see [docs/craft/dev/local-kubernetes.md](/docs/craft/dev/local-kubernetes.md).
 
 ## One time setup
 * brew install kind
@@ -197,6 +256,11 @@ Other docker-compose-style values you should set deliberately:
 ## Output template to file and inspect
 * cd charts/onyx
 * helm template test-output . --set auth.opensearch.values.opensearch_admin_password='StrongPassword123!' > test-output.yaml
+* Craft Kubernetes sandbox version guard check:
+  * expect failure:
+    `helm template test-output . -f values-ci.yaml --kube-version 1.32.0 --show-only templates/craft-kubernetes-version-check.yaml`
+  * expect success:
+    `helm template test-output . -f values-ci.yaml --kube-version 1.33.0 --show-only templates/craft-kubernetes-version-check.yaml`
 
 ## Test the entire cluster manually
 * cd charts/onyx

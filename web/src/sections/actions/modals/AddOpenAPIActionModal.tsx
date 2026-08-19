@@ -2,15 +2,16 @@
 
 import { markdown } from "@opal/utils";
 import Link from "next/link";
-import Modal from "@/refresh-components/Modal";
+import { Modal } from "@opal/components";
 import Text from "@/refresh-components/texts/Text";
-import { InputVertical } from "@opal/layouts";
+import { InputVertical, toast } from "@opal/layouts";
 import InputTextAreaField from "@/refresh-components/form/InputTextAreaField";
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { CopyButton } from "@opal/components";
 import { Button, Divider } from "@opal/components";
 import { Hoverable } from "@opal/core";
 import { MethodSpec, ToolSnapshot } from "@/lib/tools/interfaces";
+import { can } from "@/lib/permissions/resource-actions";
 import {
   validateToolDefinition,
   createCustomTool,
@@ -19,10 +20,9 @@ import {
 import ToolItem from "@/sections/actions/ToolItem";
 import debounce from "lodash/debounce";
 import { DOCS_ADMINS_PATH } from "@/lib/constants";
-import { useModal } from "@/refresh-components/contexts/ModalContext";
+import { useModal } from "@opal/components";
 import { Formik, Form, useFormikContext } from "formik";
 import * as Yup from "yup";
-import { toast } from "@/hooks/useToast";
 import {
   SvgActions,
   SvgBracketCurly,
@@ -91,6 +91,11 @@ function FormContent({
   const [url, setUrl] = useState<string | undefined>(undefined);
 
   const isEditMode = Boolean(existingTool);
+  // Editing auth manages the action's OAuth config (owner-or-admin); gate on the same
+  // server-stamped capability as the card.
+  const canEditAuthentication = existingTool
+    ? can(existingTool, "authenticate")
+    : false;
 
   const handleFormat = useCallback(() => {
     if (!values.definition.trim()) {
@@ -271,17 +276,18 @@ function FormContent({
                   </Hoverable.Item>
                 </div>
               )}
-              <InputTextAreaField
-                name="definition"
-                rows={14}
-                placeholder="Enter your OpenAPI schema here"
-                className="font-main-ui-mono"
-              />
+              <div className="font-main-ui-mono">
+                <InputTextAreaField
+                  name="definition"
+                  rows={14}
+                  placeholder="Enter your OpenAPI schema here"
+                />
+              </div>
             </div>
           </Hoverable.Root>
         </InputVertical>
 
-        <Divider paddingParallel="fit" paddingPerpendicular="fit" />
+        <Divider paddingParallel={0} paddingPerpendicular={0} />
 
         {methodSpecs && methodSpecs.length > 0 ? (
           <>
@@ -299,8 +305,8 @@ function FormContent({
                 description="URL found in the schema. Only connect to servers you trust."
               />
             )}
-            <Divider paddingParallel="fit" paddingPerpendicular="fit" />
-            <Section gap={0.5}>
+            <Divider paddingParallel={0} paddingPerpendicular={0} />
+            <Section gap={2}>
               {methodSpecs.map((method) => (
                 <ToolItem
                   key={`${method.method}-${method.path}-${method.name}`}
@@ -329,12 +335,12 @@ function FormContent({
             flexDirection="row"
             justifyContent="between"
             alignItems="start"
-            gap={1}
+            gap={4}
           >
-            <Section gap={0.25} alignItems="start">
+            <Section gap={1} alignItems="start">
               <Section
                 flexDirection="row"
-                gap={0.5}
+                gap={2}
                 alignItems="center"
                 width="fit"
               >
@@ -353,7 +359,7 @@ function FormContent({
             </Section>
             <Section
               flexDirection="row"
-              gap={0.5}
+              gap={2}
               alignItems="center"
               width="fit"
             >
@@ -370,7 +376,12 @@ function FormContent({
                 }}
               />
               <Button
-                disabled={!onEditAuthentication}
+                disabled={!onEditAuthentication || !canEditAuthentication}
+                tooltip={
+                  !canEditAuthentication
+                    ? "Only the action's creator or an admin can manage authentication"
+                    : undefined
+                }
                 prominence="secondary"
                 type="button"
                 onClick={handleEditAuthenticationClick}

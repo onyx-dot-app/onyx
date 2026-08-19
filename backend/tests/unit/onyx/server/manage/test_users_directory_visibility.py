@@ -1,14 +1,20 @@
-from unittest.mock import MagicMock
-from unittest.mock import patch
+from unittest.mock import MagicMock, patch
 from uuid import uuid4
 
 import pytest
 
-from onyx.db.enums import AccountType
-from onyx.db.enums import Permission
+from onyx.db.enums import AccountType, Permission
 from onyx.error_handling.error_codes import OnyxErrorCode
 from onyx.error_handling.exceptions import OnyxError
-from onyx.server.manage.users import list_all_users_basic_info
+from onyx.server.manage.users import list_all_users_basic_info, verify_user_logged_in
+from onyx.server.security.models import SecuritySettings
+from onyx.server.security.store import _build_env_defaults
+
+
+def _settings(*, user_directory_admin_only: bool) -> SecuritySettings:
+    return _build_env_defaults().model_copy(
+        update={"user_directory_admin_only": user_directory_admin_only}
+    )
 
 
 def _fake_user(
@@ -21,8 +27,13 @@ def _fake_user(
     return user
 
 
-@patch("onyx.server.manage.users.USER_DIRECTORY_ADMIN_ONLY", True)
-def test_list_all_users_basic_info_blocks_non_admin_when_directory_restricted() -> None:
+@patch(
+    "onyx.server.manage.users.get_security_settings",
+    return_value=_settings(user_directory_admin_only=True),
+)
+def test_list_all_users_basic_info_blocks_non_admin_when_directory_restricted(
+    _mock_settings: MagicMock,
+) -> None:
     """With the flag on, a caller lacking READ_USERS cannot enumerate the directory."""
     user = MagicMock()
     user.effective_permissions = [Permission.BASIC_ACCESS.value]
@@ -37,10 +48,14 @@ def test_list_all_users_basic_info_blocks_non_admin_when_directory_restricted() 
     assert exc_info.value.error_code is OnyxErrorCode.INSUFFICIENT_PERMISSIONS
 
 
-@patch("onyx.server.manage.users.USER_DIRECTORY_ADMIN_ONLY", True)
+@patch(
+    "onyx.server.manage.users.get_security_settings",
+    return_value=_settings(user_directory_admin_only=True),
+)
 @patch("onyx.server.manage.users.get_all_users")
 def test_list_all_users_basic_info_allows_admin_when_directory_restricted(
     mock_get_all_users: MagicMock,
+    _mock_settings: MagicMock,
 ) -> None:
     """With the flag on, an admin (FULL_ADMIN_PANEL_ACCESS) still gets the directory."""
     admin = MagicMock()
@@ -56,10 +71,14 @@ def test_list_all_users_basic_info_allows_admin_when_directory_restricted(
     assert [u.email for u in result] == ["a@example.com"]
 
 
-@patch("onyx.server.manage.users.USER_DIRECTORY_ADMIN_ONLY", False)
+@patch(
+    "onyx.server.manage.users.get_security_settings",
+    return_value=_settings(user_directory_admin_only=False),
+)
 @patch("onyx.server.manage.users.get_all_users")
 def test_list_all_users_basic_info_allows_non_admin_when_flag_off(
     mock_get_all_users: MagicMock,
+    _mock_settings: MagicMock,
 ) -> None:
     """With the flag off (default), non-admin callers continue to get the directory."""
     basic = MagicMock()
@@ -77,3 +96,45 @@ def test_list_all_users_basic_info_allows_non_admin_when_flag_off(
 
     # BOT accounts are filtered out; human account is returned.
     assert [u.email for u in result] == ["human@example.com"]
+
+
+def test_me_service_account_skips_tenant_mapping_lookup() -> None:
+    """/me must not consult the tenant mapping for a multi-tenant service
+    account (its synthetic email has no UserTenantMapping row and the lookup
+    raises). team_name is the key's own tenant."""
+    user = _fake_user(
+        "API_KEY__key@abc123onyxapikey.ai",
+        account_type=AccountType.SERVICE_ACCOUNT,
+    )
+    user.oidc_expiry = None
+
+    with (
+        patch("onyx.server.manage.users.MULTI_TENANT", True),
+        patch(
+            "onyx.server.manage.users.get_current_tenant_id",
+            return_value="tenant_current",
+        ),
+        patch(
+            "onyx.server.manage.users.fetch_ee_implementation_or_noop",
+            side_effect=AssertionError(
+                "tenant mapping consulted for a service account"
+            ),
+        ),
+        patch(
+            "onyx.server.manage.users.fetch_versioned_implementation_with_fallback",
+            return_value=[],
+        ),
+        patch("onyx.server.manage.users.get_memories_for_user", return_value=[]),
+        patch(
+            "onyx.server.manage.users.get_security_settings",
+            return_value=_settings(user_directory_admin_only=False),
+        ),
+        patch("onyx.server.manage.users._get_token_expires_at", return_value=None),
+        patch("onyx.server.manage.users.UserInfo") as mock_user_info,
+    ):
+        verify_user_logged_in(request=MagicMock(), user=user, db_session=MagicMock())
+
+    kwargs = mock_user_info.from_model.call_args.kwargs
+    assert kwargs["team_name"] == "tenant_current"
+    assert kwargs["tenant_info"].new_tenant is None
+    assert kwargs["tenant_info"].invitation is None

@@ -1,17 +1,13 @@
-from unittest.mock import MagicMock
-from unittest.mock import patch
+from unittest.mock import MagicMock, patch
 
 from onyx.access.models import DocumentAccess
 from onyx.configs.constants import DocumentSource
-from onyx.connectors.models import Document
-from onyx.connectors.models import TextSection
-from onyx.document_index.interfaces_new import IndexingMetadata
-from onyx.document_index.interfaces_new import TenantState
+from onyx.connectors.models import Document, TextSection
+from onyx.document_index.interfaces_new import IndexingMetadata, TenantState
 from onyx.document_index.opensearch.opensearch_document_index import (
     OpenSearchDocumentIndex,
 )
-from onyx.indexing.models import ChunkEmbedding
-from onyx.indexing.models import DocMetadataAwareIndexChunk
+from onyx.indexing.models import ChunkEmbedding, DocMetadataAwareIndexChunk
 
 
 def _make_chunk(
@@ -187,8 +183,7 @@ def test_multiple_docs_each_under_limit_flush_per_doc() -> None:
     chunks = []
     for doc_idx in range(3):
         doc_id = f"doc_{doc_idx}"
-        for chunk_idx in range(50):
-            chunks.append(_make_chunk(doc_id, chunk_idx))
+        chunks.extend(_make_chunk(doc_id, chunk_idx) for chunk_idx in range(50))
 
     metadata = IndexingMetadata(
         doc_id_to_chunk_cnt_diff={

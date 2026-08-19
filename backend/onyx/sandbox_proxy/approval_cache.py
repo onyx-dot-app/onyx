@@ -7,19 +7,24 @@ here is best-effort over `CacheBackend`. Two lists:
   row; the chat-stream merger BLPOPs to emit the card on the live SSE
   stream. A miss degrades to the FE's next `/live` refetch.
 * `approval:wake:{approval_id}` — api-server RPUSHes when a decision is
-  recorded; the parked proxy BLPOPs to wake before `WAIT_TIMEOUT_S`.
+  recorded; the parked proxy BLPOPs to wake before the wait timeout.
 """
 
 import asyncio
+import time
 from collections.abc import Iterable
+from typing import TYPE_CHECKING
 from uuid import UUID
 
-from onyx.cache.interface import CacheBackend
-from onyx.db.enums import ApprovalDecision
+from onyx.cache.interface import CACHE_TRANSIENT_ERRORS, CacheBackend
+from onyx.db.enums import ApprovalDecision, GatedAppKind
+from onyx.external_apps.matching.engine import actions_requiring_approval
+from onyx.utils.logger import setup_logger
 
-# Max time the proxy parks on one approval; also the `/live` window
-# past which a `decision IS NULL` row is treated as orphaned.
-WAIT_TIMEOUT_S = 180
+if TYPE_CHECKING:
+    from onyx.db.models import ActionApproval
+
+logger = setup_logger()
 
 # Only need to outlive the gap between RPUSH and the consumer's BLPOP.
 ANNOUNCE_TTL_S = 60
@@ -38,8 +43,10 @@ def _wake_key(approval_id: UUID) -> str:
     return f"approval:wake:{approval_id}"
 
 
-def _session_grant_key(session_id: UUID, external_app_id: int, action_type: str) -> str:
-    return f"approval:session-grant:{session_id}:{external_app_id}:{action_type}"
+def _session_grant_key(
+    session_id: UUID, kind: GatedAppKind, target_id: int, action_type: str
+) -> str:
+    return f"approval:session-grant:{session_id}:{kind.value}:{target_id}:{action_type}"
 
 
 def announce_approval(approval_id: UUID, session_id: UUID, cache: CacheBackend) -> None:
@@ -50,12 +57,13 @@ def announce_approval(approval_id: UUID, session_id: UUID, cache: CacheBackend) 
 def cache_session_grant_actions(
     *,
     session_id: UUID,
-    external_app_id: int,
+    kind: GatedAppKind,
+    target_id: int,
     action_types: Iterable[str],
     source_approval_id: UUID,
     cache: CacheBackend,
 ) -> None:
-    """Cache the same app/action types for this BuildSession.
+    """Cache the same target/action types for this BuildSession.
 
     One key per action keeps matching simple and conservative: a future
     multi-action request is auto-approved only when every ASK action it invokes
@@ -63,16 +71,61 @@ def cache_session_grant_actions(
     """
     for action_type in set(action_types):
         cache.set(
-            _session_grant_key(session_id, external_app_id, action_type),
+            _session_grant_key(session_id, kind, target_id, action_type),
             str(source_approval_id),
             ex=SESSION_GRANT_TTL_S,
         )
 
 
+def hydrate_session_grants(
+    *,
+    session_id: UUID,
+    kind: GatedAppKind,
+    target_id: int,
+    rows: Iterable["ActionApproval"],
+    cache: CacheBackend | None,
+) -> set[str]:
+    """Union of ASK action types across persisted grant ``rows``, hydrating each
+    row's per-action grant keys as a side effect.
+
+    Hydration is best-effort: skipped when ``cache`` is ``None`` and
+    warned-and-continued on transient cache errors, so callers always get the
+    union back.
+    """
+    granted: set[str] = set()
+    per_row: list[tuple[UUID, list[str]]] = []
+    for row in rows:
+        action_types = actions_requiring_approval(row.actions)
+        granted.update(action_types)
+        per_row.append((row.approval_id, action_types))
+    if cache is not None:
+        try:
+            for source_approval_id, action_types in per_row:
+                cache_session_grant_actions(
+                    session_id=session_id,
+                    kind=kind,
+                    target_id=target_id,
+                    action_types=action_types,
+                    source_approval_id=source_approval_id,
+                    cache=cache,
+                )
+        except CACHE_TRANSIENT_ERRORS as e:
+            logger.warning(
+                "approval.session_grant_cache_hydrate_failed session_id=%s "
+                "target=%s:%s error=%s",
+                session_id,
+                kind.value,
+                target_id,
+                str(e),
+            )
+    return granted
+
+
 def cached_session_grants_cover(
     *,
     session_id: UUID,
-    external_app_id: int,
+    kind: GatedAppKind,
+    target_id: int,
     action_types: Iterable[str],
     cache: CacheBackend,
 ) -> bool:
@@ -85,7 +138,7 @@ def cached_session_grants_cover(
     if not unique_action_types:
         return False
     keys = [
-        _session_grant_key(session_id, external_app_id, action_type)
+        _session_grant_key(session_id, kind, target_id, action_type)
         for action_type in unique_action_types
     ]
     for key in keys:
@@ -100,22 +153,34 @@ async def wait_for_wake(
     approval_id: UUID, timeout_s: int, cache: CacheBackend
 ) -> ApprovalDecision | None:
     """Block for a decision. `None` on timeout/unparseable payload (caller re-reads the row)."""
-    result = await asyncio.to_thread(cache.blpop, [_wake_key(approval_id)], timeout_s)
-    if result is None:
+    if timeout_s <= 0:
         return None
-    _key, value = result
-    if isinstance(value, bytes):
-        value = value.decode()
-    try:
-        return ApprovalDecision(value)
-    except ValueError:
-        return None
+
+    deadline = time.monotonic() + timeout_s
+    while True:
+        remaining_s = deadline - time.monotonic()
+        if remaining_s <= 0:
+            return None
+
+        # `asyncio.to_thread` cannot cancel an in-flight BLPOP, so keep each
+        # blocking call short even when the overall wait is configured higher.
+        result = await asyncio.to_thread(cache.blpop, [_wake_key(approval_id)], 1)
+        if result is None:
+            continue
+
+        _key, value = result
+        if isinstance(value, bytes):
+            value = value.decode()
+        try:
+            return ApprovalDecision(value)
+        except ValueError:
+            return None
 
 
 def send_wake(
     approval_id: UUID, decision: ApprovalDecision, cache: CacheBackend
 ) -> None:
-    """Wake the parked proxy. A miss just means it waits out `WAIT_TIMEOUT_S`."""
+    """Wake the parked proxy. A miss just means it waits out the wait timeout."""
     cache.rpush(_wake_key(approval_id), decision.value)
     cache.expire(_wake_key(approval_id), WAKE_TTL_S)
 

@@ -2,6 +2,9 @@ dependencies:
 - name: cloudnative-pg
   repository: https://cloudnative-pg.github.io/charts
   version: 0.26.0
+- name: onyx-cnpg-crds
+  repository: file://../onyx-cnpg-crds
+  version: 0.1.0
 - name: opensearch
   repository: https://opensearch-project.github.io/helm-charts
   version: 3.6.0
@@ -19,6 +22,6 @@ dependencies:
   version: 5.4.0
 - name: code-interpreter
   repository: https://onyx-dot-app.github.io/python-sandbox/
-  version: 0.4.3
-digest: sha256:e3a28faa3b9274e7d70cbcb2d7e45685b028db6bad1b24425d4959ece89d7ca8
-generated: "2026-06-02T15:43:42.285202-07:00"
+  version: 0.4.6
+digest: sha256:9921b46a454cead472303a75a0c0c109691fabb2468739ecc51429f731314792
+generated: "2026-08-17T11:23:15.803513-07:00"

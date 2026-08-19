@@ -1,30 +1,33 @@
 from onyx.connectors.jira_service_management.connector import JiraServiceManagementConnector
 import importlib
-from typing import Any
-from typing import Type
+from typing import Any, Type
 
 from sqlalchemy.orm import Session
 
 from onyx.configs.app_configs import INTEGRATION_TESTS_MODE
 from onyx.configs.constants import DocumentSource
 from onyx.configs.llm_configs import get_image_extraction_and_analysis_enabled
-from onyx.connectors.credentials_provider import OnyxDBCredentialsProvider
-from onyx.connectors.exceptions import ConnectorValidationError
-from onyx.connectors.interfaces import BaseConnector
-from onyx.connectors.interfaces import CheckpointedConnector
-from onyx.connectors.interfaces import CredentialsConnector
-from onyx.connectors.interfaces import EventConnector
-from onyx.connectors.interfaces import LoadConnector
-from onyx.connectors.interfaces import PollConnector
+from onyx.connectors.capability_checks.recorder import (
+    record_blocking_validation_outcome,
+)
+from onyx.connectors.credentials_provider import build_db_credentials_provider
+from onyx.connectors.exceptions import ConnectorValidationError, ValidationError
+from onyx.connectors.interfaces import (
+    BaseConnector,
+    CheckpointedConnector,
+    CredentialsConnector,
+    EventConnector,
+    LoadConnector,
+    PollConnector,
+)
 from onyx.connectors.models import InputType
 from onyx.connectors.registry import CONNECTOR_CLASS_MAP
 from onyx.db.connector import fetch_connector_by_id
-from onyx.db.credentials import backend_update_credential_json
-from onyx.db.credentials import fetch_credential_by_id
-from onyx.db.enums import AccessType
+from onyx.db.credentials import backend_update_credential_json, fetch_credential_by_id
+from onyx.db.enums import AccessType, CapabilityCheckTrigger
 from onyx.db.models import Credential
 from onyx.file_store.staging import RawFileCallback
-from shared_configs.contextvars import get_current_tenant_id
+from onyx.utils.credential_audit import emit_credential_access
 
 
 class ConnectorMissingException(Exception):
@@ -106,7 +109,7 @@ def identify_connector_class(
 def instantiate_connector(
     db_session: Session,
     source: DocumentSource,
-    input_type: InputType,
+    input_type: InputType | None,
     connector_specific_config: dict[str, Any],
     credential: Credential,
     raw_file_callback: RawFileCallback | None = None,
@@ -116,11 +119,18 @@ def instantiate_connector(
     connector = connector_class(**connector_specific_config)
 
     if isinstance(connector, CredentialsConnector):
-        provider = OnyxDBCredentialsProvider(
-            get_current_tenant_id(), str(source), credential.id
-        )
+        provider = build_db_credentials_provider(source, credential.id)
         connector.set_credentials_provider(provider)
     else:
+        if credential.credential_json:
+            # Distinct decrypt site from OnyxDBCredentialsProvider (static /
+            # non-dynamic connectors load creds directly here), so this is not
+            # double-logged. Audit is best-effort and never raises.
+            emit_credential_access(
+                credential_type="connector",
+                provider=str(source),
+                row_id=credential.id,
+            )
         credential_json = (
             credential.credential_json.get_value(apply_mask=False)
             if credential.credential_json
@@ -145,6 +155,7 @@ def validate_ccpair_for_user(
     access_type: AccessType,
     db_session: Session,
     enforce_creation: bool = True,
+    trigger: CapabilityCheckTrigger = CapabilityCheckTrigger.CC_PAIR_VALIDATION,
 ) -> bool:
     if INTEGRATION_TESTS_MODE:
         return True
@@ -168,6 +179,25 @@ def validate_ccpair_for_user(
     if not credential:
         raise ValueError("Credential not found")
 
+    # Plain values for the closure: it runs inside exception handlers, where
+    # lazy ORM attribute loads can raise (e.g. ``PendingRollbackError``) and
+    # replace the exception being handled.
+    source = connector.source
+    connector_specific_config = connector.connector_specific_config
+
+    def _record_outcome(error: Exception | None, perm_sync_validated: bool) -> None:
+        # Best-effort scribe for the outcome below; never raises and never
+        # touches this function's session or semantics.
+        record_blocking_validation_outcome(
+            credential_id=credential_id,
+            connector_id=connector_id,
+            source=source,
+            trigger=trigger,
+            error=error,
+            perm_sync_validated=perm_sync_validated,
+            connector_specific_config=connector_specific_config,
+        )
+
     try:
         runnable_connector = instantiate_connector(
             db_session=db_session,
@@ -176,15 +206,19 @@ def validate_ccpair_for_user(
             connector_specific_config=connector.connector_specific_config,
             credential=credential,
         )
-    except ConnectorValidationError as e:
-        raise e
+        runnable_connector.validate_connector_settings()
+        if access_type == AccessType.SYNC:
+            runnable_connector.validate_perm_sync()
+    except ValidationError as e:
+        _record_outcome(e, perm_sync_validated=False)
+        raise
     except Exception as e:
+        # Record ``e`` itself: wrapping first would misreport an unexpected
+        # error as FAILED and erase the real ``error_type``.
+        _record_outcome(e, perm_sync_validated=False)
         if enforce_creation:
             raise ConnectorValidationError(str(e))
-        else:
-            return False
+        return False
 
-    runnable_connector.validate_connector_settings()
-    if access_type == AccessType.SYNC:
-        runnable_connector.validate_perm_sync()
+    _record_outcome(None, perm_sync_validated=access_type == AccessType.SYNC)
     return True

@@ -9,7 +9,7 @@ import {
 import SearchCard from "@/ee/sections/SearchCard";
 import { Divider, Pagination } from "@opal/components";
 import { EmptyMessageCard } from "@opal/components";
-import { IllustrationContent } from "@opal/layouts";
+import { IllustrationContent, toast } from "@opal/layouts";
 import SvgNoResult from "@opal/illustrations/no-result";
 import { getSourceMetadata } from "@/lib/sources";
 import { Tag, ValidSources } from "@/lib/types";
@@ -26,7 +26,6 @@ import useFilter from "@/hooks/useFilter";
 import { LineItemButton } from "@opal/components";
 import { useQueryController } from "@/providers/QueryControllerProvider";
 import { cn } from "@opal/utils";
-import { toast } from "@/hooks/useToast";
 
 // ============================================================================
 // Types
@@ -99,7 +98,9 @@ export default function SearchUI({ onDocumentClick }: SearchResultsProps) {
     const tags = overrides.tags !== undefined ? overrides.tags : selectedTags;
     const cutoff = time ? getTimeFilterDate(time) : null;
     return {
-      time_cutoff: cutoff?.toISOString() ?? null,
+      updated_at_range: cutoff
+        ? { start: cutoff.toISOString(), end: null }
+        : null,
       tags:
         tags.length > 0
           ? tags.map((t) => ({ tag_key: t.tag_key, tag_value: t.tag_value }))
@@ -114,7 +115,10 @@ export default function SearchUI({ onDocumentClick }: SearchResultsProps) {
   }, [results]);
 
   // Create a set for fast lookup of LLM-selected docs
-  const llmSelectedSet = new Set(llmSelectedDocIds ?? []);
+  const llmSelectedSet = useMemo(
+    () => new Set(llmSelectedDocIds ?? []),
+    [llmSelectedDocIds]
+  );
 
   // Filter and sort results
   const filteredAndSortedResults = useMemo(() => {
@@ -308,7 +312,7 @@ export default function SearchUI({ onDocumentClick }: SearchResultsProps) {
             </Popover>
           </div>
 
-          <Divider paddingParallel="fit" paddingPerpendicular="fit" />
+          <Divider paddingParallel={0} paddingPerpendicular={0} />
         </div>
 
         {!showEmpty && (
@@ -319,7 +323,7 @@ export default function SearchUI({ onDocumentClick }: SearchResultsProps) {
               </Text>
             </Section>
 
-            <Divider paddingParallel="fit" paddingPerpendicular="fit" />
+            <Divider paddingParallel={0} paddingPerpendicular={0} />
           </div>
         )}
       </div>
@@ -364,7 +368,7 @@ export default function SearchUI({ onDocumentClick }: SearchResultsProps) {
 
         {!showEmpty && (
           <div className="flex-1 min-h-0 overflow-y-auto flex flex-col gap-4 px-1">
-            <Section gap={0.25} height="fit">
+            <Section gap={1} height="fit">
               {sourcesWithMeta.map(({ source, meta, count }) => (
                 <LineItemButton
                   key={source}

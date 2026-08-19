@@ -7,7 +7,7 @@ import { SvgAddLines, SvgFilter, SvgMenu, SvgPlusCircle } from "@opal/icons";
 import MemoriesModal from "@/refresh-components/modals/MemoriesModal";
 import LineItem from "@/refresh-components/buttons/LineItem";
 import { Button } from "@opal/components";
-import { useCreateModal } from "@/refresh-components/contexts/ModalContext";
+import { useCreateModal } from "@opal/components";
 import { MemoryItem } from "@/lib/types";
 
 interface MemoriesProps {

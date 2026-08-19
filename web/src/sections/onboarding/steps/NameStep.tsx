@@ -9,10 +9,10 @@ import {
   OnboardingStep,
 } from "@/interfaces/onboarding";
 import InputAvatar from "@/refresh-components/inputs/InputAvatar";
-import { cn } from "@opal/utils";
+import { cn, clickOnKeyDown } from "@opal/utils";
 import IconButton from "@/refresh-components/buttons/IconButton";
 import { SvgCheckCircle, SvgEdit, SvgUser } from "@opal/icons";
-import { ContentAction } from "@opal/layouts";
+import { InputHorizontal } from "@opal/layouts";
 import { Hoverable } from "@opal/core";
 
 export interface NameStepProps {
@@ -39,21 +39,30 @@ const NameStep = React.memo(
     };
 
     const inputRef = useRef<HTMLInputElement>(null);
+
+    const handleEdit = () => {
+      setButtonActive(true);
+      goToStep(OnboardingStep.Name);
+    };
+
     return isActive ? (
       <div
         className={containerClasses}
-        onClick={() => inputRef.current?.focus()}
         role="group"
         aria-label="onboarding-name-step"
       >
-        <ContentAction
-          icon={SvgUser}
-          title="What should Onyx call you?"
-          description="We will display this name in the app."
-          sizePreset="main-ui"
-          variant="section"
-          padding="fit"
-          rightChildren={
+        {/* Pointer convenience only — the input is already keyboard reachable. */}
+        <div
+          role="presentation"
+          className="contents"
+          onClick={() => inputRef.current?.focus()}
+        >
+          <InputHorizontal
+            responsive
+            icon={SvgUser}
+            title="What should Onyx call you?"
+            description="We will display this name in the app."
+          >
             <InputTypeIn
               ref={inputRef}
               placeholder="Your name"
@@ -61,17 +70,15 @@ const NameStep = React.memo(
               onChange={(e) => updateName(e.target.value)}
               onKeyDown={handleKeyDown}
             />
-          }
-        />
+          </InputHorizontal>
+        </div>
       </div>
     ) : (
       <Hoverable.Root group="nameStep" width="full">
         <div
           className={containerClasses}
-          onClick={() => {
-            setButtonActive(true);
-            goToStep(OnboardingStep.Name);
-          }}
+          onClick={handleEdit}
+          onKeyDown={clickOnKeyDown(handleEdit)}
           aria-label="Edit display name"
           role="button"
           tabIndex={0}

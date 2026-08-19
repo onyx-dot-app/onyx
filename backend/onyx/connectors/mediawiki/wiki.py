@@ -4,26 +4,22 @@ import datetime
 import itertools
 import tempfile
 from collections.abc import Iterator
-from typing import Any
-from typing import cast
-from typing import ClassVar
+from typing import Any, ClassVar, cast
 
 import pywikibot.config
 import pywikibot.time
-from pywikibot import pagegenerators
-from pywikibot import textlib
+from pywikibot import pagegenerators, textlib
 
 from onyx.configs.app_configs import INDEX_BATCH_SIZE
 from onyx.configs.constants import DocumentSource
-from onyx.connectors.interfaces import GenerateDocumentsOutput
-from onyx.connectors.interfaces import LoadConnector
-from onyx.connectors.interfaces import PollConnector
-from onyx.connectors.interfaces import SecondsSinceUnixEpoch
+from onyx.connectors.interfaces import (
+    GenerateDocumentsOutput,
+    LoadConnector,
+    PollConnector,
+    SecondsSinceUnixEpoch,
+)
 from onyx.connectors.mediawiki.family import family_class_dispatch
-from onyx.connectors.models import Document
-from onyx.connectors.models import HierarchyNode
-from onyx.connectors.models import ImageSection
-from onyx.connectors.models import TextSection
+from onyx.connectors.models import Document, HierarchyNode, ImageSection, TextSection
 from onyx.utils.logger import setup_logger
 
 logger = setup_logger()

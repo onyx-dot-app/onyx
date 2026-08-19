@@ -1,0 +1,55 @@
+@reference "#reference.css";
+
+/* ---------------------------------------------------------------------------
+   InputTags (Figma Input/Tags)
+
+   Chips-in-input built on the .opal-input chrome and the editable Tag.
+   Overrides the wrapper's justify-between/items-center: wrapped tag rows
+   must pack from the top-left.
+   --------------------------------------------------------------------------- */
+
+.opal-input-tags {
+  @apply cursor-text items-start justify-start;
+  gap: 4px;
+  min-width: 160px;
+}
+
+.opal-input-tags[data-variant="disabled"] {
+  cursor: not-allowed;
+}
+
+.opal-input-tags-icon-container {
+  @apply flex shrink-0 items-center justify-center;
+  width: 24px;
+  height: 24px;
+  padding: 4px;
+}
+
+.opal-input-tags-icon {
+  @apply text-text-04;
+  width: 100%;
+  height: 100%;
+}
+
+.opal-input-tags-tags {
+  --opal-input-tags-row-height: 24px;
+  --opal-input-tags-row-gap: 4px;
+  --opal-input-tags-rows: 1;
+  @apply flex min-w-0 flex-1 flex-wrap content-center items-center;
+  gap: var(--opal-input-tags-row-gap);
+  min-height: calc(
+    var(--opal-input-tags-rows) * var(--opal-input-tags-row-height) +
+      (var(--opal-input-tags-rows) - 1) * var(--opal-input-tags-row-gap)
+  );
+}
+
+/* A multi-row field packs rows from the top. content-center would float a
+   single row into the middle of the box. */
+.opal-input-tags-tags[data-multi-row] {
+  align-content: flex-start;
+}
+
+.opal-input-tags-field {
+  @apply h-auto w-auto min-w-20 flex-1;
+  padding: 2px 4px;
+}

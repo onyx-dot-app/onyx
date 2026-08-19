@@ -1,16 +1,15 @@
 "use client";
 
 import { Fragment, useState, useRef, useEffect, useCallback } from "react";
-import Modal from "@/refresh-components/Modal";
+import { Modal } from "@opal/components";
 import { Section } from "@/layouts/general-layouts";
-import { InputTypeIn } from "@opal/components";
-import InputTextArea from "@/refresh-components/inputs/InputTextArea";
+import { InputTextArea, InputTypeIn } from "@opal/components";
 import Text from "@/refresh-components/texts/Text";
 import { Button, Divider } from "@opal/components";
 import CharacterCount from "@/refresh-components/CharacterCount";
 import TextSeparator from "@/refresh-components/TextSeparator";
-import { toast } from "@/hooks/useToast";
-import { useModalClose } from "@/refresh-components/contexts/ModalContext";
+import { toast } from "@opal/layouts";
+import { useModalClose } from "@opal/components";
 import { SvgAddLines, SvgMinusCircle, SvgPlusCircle } from "@opal/icons";
 import {
   useMemoryManager,
@@ -84,11 +83,11 @@ function MemoryItem({
         "rounded-08 w-full p-0.5 border border-transparent",
         "transition-colors ",
         isHighlighting &&
-          "bg-action-link-01 hover:bg-action-link-01 border-action-link-05 duration-700"
+          "bg-action-selection-01 hover:bg-action-selection-01 border-action-selection-05 duration-700"
       )}
     >
-      <Section gap={0.25} alignItems="start">
-        <Section flexDirection="row" alignItems="start" gap={0.5}>
+      <Section gap={1} alignItems="start">
+        <Section flexDirection="row" alignItems="start" gap={2}>
           <InputTextArea
             ref={textareaRef}
             placeholder="Type or paste in a personal note or memory"
@@ -114,7 +113,6 @@ function MemoryItem({
             maxRows={3}
             maxLength={MAX_MEMORY_LENGTH}
             resizable={false}
-            className="bg-background-tint-01 hover:bg-background-tint-00 focus-within:bg-background-tint-00"
           />
           <Button
             disabled={!memory.content.trim() && memory.isNew}
@@ -271,7 +269,7 @@ export default function MemoriesModal({
           description="Let Onyx reference these stored notes and memories in chats."
           onClose={close}
         >
-          <Section flexDirection="row" gap={0.5}>
+          <Section flexDirection="row" gap={2}>
             <InputTypeIn
               placeholder="Search..."
               value={searchQuery}
@@ -294,9 +292,9 @@ export default function MemoriesModal({
           </Section>
         </Modal.Header>
 
-        <Modal.Body padding={0.5}>
+        <Modal.Body padding={2}>
           {filteredMemories.length === 0 ? (
-            <Section alignItems="center" padding={2}>
+            <Section alignItems="center" padding={8}>
               <Text secondaryBody text03>
                 {searchQuery.trim()
                   ? "No memories match your search."
@@ -304,7 +302,7 @@ export default function MemoriesModal({
               </Text>
             </Section>
           ) : (
-            <Section gap={0.5}>
+            <Section gap={2}>
               {filteredMemories.map(({ memory, originalIndex }) => (
                 <Fragment key={memory.id}>
                   <MemoryItem
@@ -321,7 +319,7 @@ export default function MemoriesModal({
                     }}
                   />
                   {memory.isNew && (
-                    <Divider paddingParallel="fit" paddingPerpendicular="fit" />
+                    <Divider paddingParallel={0} paddingPerpendicular={0} />
                   )}
                 </Fragment>
               ))}

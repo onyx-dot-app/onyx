@@ -1,13 +1,13 @@
 import { SvgDownload, SvgKey, SvgRefreshCw } from "@opal/icons";
 import { Interactive, Hoverable } from "@opal/core";
 import { Section } from "@/layouts/general-layouts";
-import { Button } from "@opal/components";
+import { Button, InputTextArea } from "@opal/components";
+import useFocusOnMount from "@opal/hooks/useFocusOnMount";
 import Text from "@/refresh-components/texts/Text";
 import { CopyButton } from "@opal/components";
-import InputTextArea from "@/refresh-components/inputs/InputTextArea";
-import Modal, { BasicModalFooter } from "@/refresh-components/Modal";
-import ConfirmationModalLayout from "@/refresh-components/layouts/ConfirmationModalLayout";
-import { toast } from "@/hooks/useToast";
+import { BasicModalFooter, Modal } from "@opal/components";
+import { ConfirmationModalLayout } from "@opal/layouts";
+import { toast } from "@opal/layouts";
 import { downloadFile } from "@/lib/download";
 
 import type { ScimModalView } from "./interfaces";
@@ -46,6 +46,8 @@ export default function ScimModal({
   onRegenerate,
   onClose,
 }: ScimModalProps) {
+  const focusOnMount = useFocusOnMount<HTMLElement>();
+
   switch (view.kind) {
     case "regenerate":
       return (
@@ -63,7 +65,7 @@ export default function ScimModal({
             </Button>
           }
         >
-          <Section alignItems="start" gap={0.5}>
+          <Section alignItems="start" gap={2}>
             <Text as="p" text03>
               Your current SCIM token will be revoked and a new token will be
               generated. You will need to update the token on your identity
@@ -88,21 +90,28 @@ export default function ScimModal({
                 <Interactive.Stateless
                   onClick={() => copyToClipboard(view.rawToken)}
                 >
-                  <InputTextArea
-                    value={view.rawToken}
-                    readOnly
-                    autoResize
-                    resizable={false}
-                    rows={2}
-                    className="font-main-ui-mono break-all cursor-pointer [&_textarea]:cursor-pointer"
-                    rightSection={
-                      <div onClick={(e) => e.stopPropagation()}>
-                        <Hoverable.Item group="token" variant="appear-on-hover">
-                          <CopyButton getCopyText={() => view.rawToken} />
-                        </Hoverable.Item>
-                      </div>
-                    }
-                  />
+                  <div className="font-main-ui-mono break-all cursor-pointer [&_textarea]:cursor-pointer">
+                    <InputTextArea
+                      value={view.rawToken}
+                      variant="readOnly"
+                      autoResize
+                      resizable={false}
+                      rows={2}
+                      rightSection={
+                        <div
+                          role="presentation"
+                          onClick={(e) => e.stopPropagation()}
+                        >
+                          <Hoverable.Item
+                            group="token"
+                            variant="appear-on-hover"
+                          >
+                            <CopyButton getCopyText={() => view.rawToken} />
+                          </Hoverable.Item>
+                        </div>
+                      }
+                    />
+                  </div>
                 </Interactive.Stateless>
               </Hoverable.Root>
             </Modal.Body>
@@ -123,7 +132,7 @@ export default function ScimModal({
                 }
                 submit={
                   <Button
-                    autoFocus
+                    ref={focusOnMount}
                     onClick={() => copyToClipboard(view.rawToken)}
                   >
                     Copy Token

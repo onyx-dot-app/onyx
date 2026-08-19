@@ -40,7 +40,7 @@
 
 /* Container — structural box */
 .interactive-container {
-  @apply flex items-center justify-center overflow-clip;
+  @apply flex shrink-0 items-center justify-center overflow-clip;
 }
 .interactive-container[data-border="true"] {
   @apply border;

@@ -11,7 +11,7 @@
 ARG BASE_IMAGE_REGISTRY=docker.io
 FROM ${BASE_IMAGE_REGISTRY}/library/python:3.13-slim@sha256:b04b5d7233d2ad9c379e22ea8927cd1378cd15c60d4ef876c065b25ea8fb3bf3 AS builder
 
-COPY --from=ghcr.io/astral-sh/uv:0.9.9 /uv /uvx /bin/
+COPY --from=ghcr.io/astral-sh/uv:0.11.25@sha256:1e3808aa9023d0980e7c15b1fa7c1ac16ff35925780cf5c459858b2d693f01a9 /uv /uvx /bin/
 
 # System dependencies for compiling the Python wheels.
 # cmake/libxmlsec1-dev/pkg-config/gcc needed to compile native wheels (e.g. xmlsec)
@@ -35,7 +35,6 @@ RUN apt-get update && \
     apt-get clean
 
 # Install Python dependencies
-# Remove py which is pulled in by retry, py is not needed and is a CVE
 COPY ./requirements/default.txt /tmp/requirements.txt
 COPY ./requirements/ee.txt /tmp/ee-requirements.txt
 # requirements/*.txt are a complete, pre-resolved lock export, so --no-deps installs them as-is
@@ -45,7 +44,6 @@ COPY ./requirements/ee.txt /tmp/ee-requirements.txt
 RUN uv pip install --system --no-cache-dir --no-deps --require-hashes \
         -r /tmp/requirements.txt \
         -r /tmp/ee-requirements.txt && \
-    pip uninstall -y py && \
     # https://github.com/tornadoweb/tornado/issues/3107
     rm -f /usr/local/lib/python3.13/site-packages/tornado/test/test.key && \
     rm -rf ~/.cache/uv /tmp/*.txt
@@ -66,11 +64,6 @@ have a contract or agreement with DanswerAI, you are not permitted to use the En
 Edition features outside of personal development or testing purposes. Please reach out to \
 founders@onyx.app for more information. Please visit https://github.com/onyx-dot-app/onyx"
 
-# Build argument for Craft support (disabled by default)
-# Use --build-arg ENABLE_CRAFT=true to include Node.js and opencode CLI
-# ARGs do not cross build stages, so it must be redeclared here.
-ARG ENABLE_CRAFT=false
-
 # DO_NOT_TRACK is used to disable telemetry for Unstructured
 ENV ONYX_RUNNING_IN_DOCKER="true" \
     DO_NOT_TRACK="true" \
@@ -84,15 +77,13 @@ RUN groupadd -g 1001 onyx && \
     chown onyx:onyx /var/log/onyx
 
 # Install runtime system dependencies only (no build toolchain).
-# curl included just for users' convenience
 # zip for Vespa step further down
 # ca-certificates for HTTPS
 # libxmlsec1-openssl is the runtime counterpart to the build-time libxmlsec1-dev
-# postgresql-client for easy manual tests
-# procps so kubernetes exec sessions can use ps aux for debugging
+# Interactive debugging tools (curl, vim, nano, psql, ps) are deliberately absent to keep the
+# shipped image minimal; they live in the dev stage below, published with a -dev tag suffix.
 RUN apt-get update && \
     apt-get install -y \
-        curl \
         zip \
         ca-certificates \
         libgnutls30 \
@@ -100,32 +91,11 @@ RUN apt-get update && \
         libmount1 \
         libsmartcols1 \
         libuuid1 \
-        nano \
-        vim \
-        procps \
         libjemalloc2 \
         libxmlsec1-openssl \
         && \
     rm -rf /var/lib/apt/lists/* && \
     apt-get clean
-
-# Conditionally install Node.js 20 for Craft (required for Next.js)
-# Only installed when ENABLE_CRAFT=true
-RUN if [ "$ENABLE_CRAFT" = "true" ]; then \
-        echo "Installing Node.js 20 for Craft support..." && \
-        curl -fsSL https://deb.nodesource.com/setup_20.x | bash - && \
-        apt-get install -y nodejs && \
-        rm -rf /var/lib/apt/lists/*; \
-    fi
-
-# Conditionally install opencode CLI for Craft agent functionality
-# Only installed when ENABLE_CRAFT=true
-# TODO: download a specific, versioned release of the opencode CLI
-RUN if [ "$ENABLE_CRAFT" = "true" ]; then \
-        echo "Installing opencode CLI for Craft support..." && \
-        curl -fsSL https://opencode.ai/install | bash; \
-    fi
-ENV PATH="/root/.opencode/bin:${PATH}"
 
 # Copy the compiled Python packages and only the console scripts our services launch (api server,
 # celery workers/beat, alembic migrations, supervisord, Playwright). Both stages share the same base
@@ -148,16 +118,14 @@ COPY --from=builder \
 # removed for CVE surface reduction (requires --allow-remove-essential). It must be removed AFTER the
 # first `playwright install-deps`, because the font/X11 packages that install-deps pulls in run perl
 # scripts in their dpkg configure step. The second `playwright install-deps` then restores any
-# chromium runtime libs (libnss3, libnspr4, etc.) that autoremove swept up in the cascade.
+# chromium runtime libs (libnss3, libnspr4, etc.) that autoremove swept up in the cascade. The
+# runtime image stays perl-free from here on.
 RUN ln -s /usr/local/bin/supervisord /usr/bin/supervisord && \
     playwright install chromium && \
     playwright install-deps chromium && \
     apt-get remove -y --allow-remove-essential perl-base && \
     apt-get autoremove -y && \
     playwright install-deps chromium && \
-    # Re-install after autoremove: perl-base removal cascades through postgresql-client's
-    # perl dependency, sweeping it up. Install it here (post-autoremove) so it survives.
-    apt-get install -y postgresql-client && \
     rm -rf /var/lib/apt/lists/* && \
     apt-get clean
 
@@ -220,3 +188,28 @@ ENV LD_PRELOAD=libjemalloc.so.2
 # Default command which does nothing
 # This container is used by api server and background which specify their own CMD
 CMD ["tail", "-f", "/dev/null"]
+
+
+####################################################################################################
+# Dev stage
+#
+# Superset of the runtime image, published with a -dev tag suffix (e.g. v1.2.3-dev, latest-dev).
+# Adds interactive debugging conveniences that are deliberately excluded from the shipped image:
+# curl for poking APIs, postgresql-client for manual DB inspection (pulls perl-base back in,
+# acceptable here), procps so `ps aux` works in exec sessions, and the nano/vim editors.
+#
+# NOTE: as the last stage this is the default build target; builds of the shipped image must pin
+# --target runtime (release and CI workflows and the docker-compose build blocks all do).
+####################################################################################################
+FROM runtime AS dev
+
+RUN apt-get update && \
+    apt-get install -y \
+        curl \
+        nano \
+        postgresql-client \
+        procps \
+        vim \
+        && \
+    rm -rf /var/lib/apt/lists/* && \
+    apt-get clean

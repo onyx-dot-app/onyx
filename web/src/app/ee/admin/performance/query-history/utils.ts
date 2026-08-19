@@ -1,4 +1,4 @@
-import { DateRange } from "../../../../../components/dateRangeSelectors/AdminDateRangeSelector";
+import type { DateRange } from "@/refresh-components/DateRangePicker";
 import { START_QUERY_HISTORY_EXPORT_URL } from "./constants";
 
 export const withRequestId = (url: string, requestId: string): string =>

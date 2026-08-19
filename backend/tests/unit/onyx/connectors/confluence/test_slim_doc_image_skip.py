@@ -20,12 +20,14 @@ from onyx.connectors.models import SlimDocument
 _PAGE_CQL = "PAGE_CQL"
 _ATTACHMENT_CQL = "ATTACHMENT_CQL"
 
+_CREATED = {"createdDate": "2023-01-01T12:00:00.000+0000"}
 _PAGE = {
     "id": "111",
     "_links": {"webui": "/spaces/X/pages/111/Page"},
     "restrictions": {},
     "space": {"key": "X"},
     "ancestors": [],
+    "history": _CREATED,
 }
 _IMAGE_ATTACHMENT = {
     "title": "diagram.png",
@@ -35,6 +37,7 @@ _IMAGE_ATTACHMENT = {
     },
     "restrictions": {},
     "space": {"key": "X"},
+    "history": _CREATED,
 }
 _PDF_ATTACHMENT = {
     "title": "spec.pdf",
@@ -42,6 +45,7 @@ _PDF_ATTACHMENT = {
     "_links": {"webui": "/download/attachments/111/spec.pdf"},
     "restrictions": {},
     "space": {"key": "X"},
+    "history": _CREATED,
 }
 
 
@@ -94,9 +98,7 @@ def _collect_slim_doc_ids(connector: ConfluenceConnector) -> list[str]:
     ):
         ids: list[str] = []
         for batch in connector.retrieve_all_slim_docs():
-            for item in batch:
-                if isinstance(item, SlimDocument):
-                    ids.append(item.id)
+            ids.extend(item.id for item in batch if isinstance(item, SlimDocument))
     return ids
 
 

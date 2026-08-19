@@ -1,18 +1,20 @@
 import datetime
-from typing import Any
-from typing import Dict
-from typing import Optional
+from typing import Any, Dict, Optional
 
 import braintrust
 from braintrust import NOOP_SPAN
 
-from onyx.llm.cost import calculate_llm_cost_cents
+from onyx.llm.cost import compute_cost_cents
+from onyx.tracing.flows import IMAGE_FLOWS
+from onyx.tracing.incognito import suppresses_external_traces
 
 from .framework.processor_interface import TracingProcessor
-from .framework.span_data import AgentSpanData
-from .framework.span_data import FunctionSpanData
-from .framework.span_data import GenerationSpanData
-from .framework.span_data import SpanData
+from .framework.span_data import (
+    AgentSpanData,
+    FunctionSpanData,
+    GenerationSpanData,
+    SpanData,
+)
 from .framework.spans import Span
 from .framework.traces import Trace
 
@@ -71,8 +73,16 @@ class BraintrustTracingProcessor(TracingProcessor):
         self._last_output: Dict[str, Any] = {}
         self._trace_metadata: Dict[str, Dict[str, Any]] = {}
         self._span_names: Dict[str, str] = {}
+        # Traces suppressed at start. Membership decides every later callback,
+        # so an incognito flag change mid-trace cannot mismatch start/end state.
+        self._suppressed_traces: set[str] = set()
 
     def on_trace_start(self, trace: Trace) -> None:
+        # Incognito turns must leave no content in external tracing, so the
+        # whole trace is dropped, spans included.
+        if suppresses_external_traces():
+            self._suppressed_traces.add(trace.trace_id)
+            return
         trace_meta = trace.export() or {}
         metadata = trace_meta.get("metadata") or {}
         if metadata:
@@ -101,6 +111,9 @@ class BraintrustTracingProcessor(TracingProcessor):
         self._span_names[trace.trace_id] = trace.name
 
     def on_trace_end(self, trace: Trace) -> None:
+        if trace.trace_id in self._suppressed_traces:
+            self._suppressed_traces.discard(trace.trace_id)
+            return
         span: Any = self._spans.pop(trace.trace_id)
         self._trace_metadata.pop(trace.trace_id, None)
         self._span_names.pop(trace.trace_id, None)
@@ -164,12 +177,29 @@ class BraintrustTracingProcessor(TracingProcessor):
             ]
 
         model_name = span.span_data.model
-        if model_name and prompt_tokens is not None and completion_tokens is not None:
-            cost_cents = calculate_llm_cost_cents(
-                model_name=model_name,
-                prompt_tokens=prompt_tokens,
-                completion_tokens=completion_tokens,
+        model_config = span.span_data.model_config or {}
+        provider = model_config.get("model_provider")
+        flow = model_config.get("flow")
+        if model_name and (
+            prompt_tokens is not None
+            or completion_tokens is not None
+            or flow in IMAGE_FLOWS
+        ):
+            cache_read = int(usage.get("cache_read_input_tokens") or 0)
+            cache_creation = int(usage.get("cache_creation_input_tokens") or 0)
+            input_tokens = int(prompt_tokens or 0)
+            output_tokens = int(completion_tokens or 0)
+            input_cents, output_cents = compute_cost_cents(
+                model=model_name,
+                provider=provider,
+                prompt_tokens=input_tokens,
+                completion_tokens=output_tokens,
+                cache_read_tokens=cache_read,
+                cache_creation_tokens=cache_creation,
+                flow=flow,
+                image_count=span.span_data.image_count or 1,
             )
+            cost_cents = input_cents + output_cents
             if cost_cents > 0:
                 metrics["cost_cents"] = cost_cents
 
@@ -181,6 +211,16 @@ class BraintrustTracingProcessor(TracingProcessor):
         # Include reasoning in metadata if present
         if span.span_data.reasoning:
             metadata["reasoning"] = span.span_data.reasoning
+
+        # Request-shaping params from record_llm_request_params: requested
+        # reasoning effort plus the kwargs actually sent to the provider.
+        if span.span_data.request_params:
+            metadata["request_params"] = span.span_data.request_params
+
+        # Include the full tool catalog (name, description, parameters) offered
+        # to the model on this call, if any.
+        if span.span_data.tools:
+            metadata["tools"] = span.span_data.tools
 
         return {
             "input": span.span_data.input,
@@ -200,6 +240,8 @@ class BraintrustTracingProcessor(TracingProcessor):
             return {}
 
     def on_span_start(self, span: Span[SpanData]) -> None:
+        if span.trace_id in self._suppressed_traces:
+            return
         parent: Any = (
             self._spans[span.parent_id]
             if span.parent_id is not None
@@ -226,6 +268,8 @@ class BraintrustTracingProcessor(TracingProcessor):
         created_span.set_current()
 
     def on_span_end(self, span: Span[SpanData]) -> None:
+        if span.trace_id in self._suppressed_traces:
+            return
         s: Any = self._spans.pop(span.span_id)
         self._span_names.pop(span.span_id, None)
         event = dict(error=span.error, **self._log_data(span))

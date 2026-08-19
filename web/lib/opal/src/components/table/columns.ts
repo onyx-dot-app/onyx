@@ -7,6 +7,7 @@ import {
   type CellContext,
 } from "@tanstack/react-table";
 import type {
+  ColumnAlignment,
   ColumnWidth,
   QualifierContentType,
   OnyxQualifierColumn,
@@ -56,6 +57,9 @@ interface DataColumnConfig<TData, TValue> {
   icon?: (sorted: SortDirection) => IconFunctionComponent;
   /** Column weight for proportional distribution. @default 20 */
   weight?: number;
+  /** Explicit column ID. Derived from the accessor key; required for function accessors. */
+  id?: string;
+  alignment?: ColumnAlignment;
 }
 
 // ---------------------------------------------------------------------------
@@ -73,6 +77,7 @@ interface DisplayColumnConfig<TData> {
   width: ColumnWidth;
   /** Enable hiding. @default true */
   enableHiding?: boolean;
+  alignment?: ColumnAlignment;
 }
 
 // ---------------------------------------------------------------------------
@@ -102,6 +107,13 @@ interface TableColumnsBuilder<TData> {
   column<TKey extends DeepKeys<TData>>(
     accessor: TKey,
     config: DataColumnConfig<TData, DeepValue<TData, TKey>>
+  ): OnyxDataColumn<TData>;
+
+  /** Data column from an accessor function whose return value drives sorting and
+   *  search — use to make a column searchable by a derived value. Needs an `id`. */
+  column<TValue>(
+    accessor: (row: TData) => TValue,
+    config: DataColumnConfig<TData, TValue> & { id: string }
   ): OnyxDataColumn<TData>;
 
   /** Create a display (non-accessor) column. */
@@ -166,9 +178,13 @@ export function createTableColumns<TData>(): TableColumnsBuilder<TData> {
       };
     },
 
-    column<TKey extends DeepKeys<TData>>(
-      accessor: TKey,
-      config: DataColumnConfig<TData, DeepValue<TData, TKey>>
+    column(
+      // The accessor pulls an arbitrary cell value out of a caller-owned row.
+      // The value is opaque to the table and only handed back to the caller's
+      // own `cell` renderer, so `unknown` is the honest type here.
+      // oxlint-disable-next-line anti-slop/no-unknown-returns
+      accessor: DeepKeys<TData> | ((row: TData) => unknown),
+      config: DataColumnConfig<TData, any> & { id?: string }
     ): OnyxDataColumn<TData> {
       const {
         header,
@@ -178,9 +194,14 @@ export function createTableColumns<TData>(): TableColumnsBuilder<TData> {
         enableHiding = true,
         icon,
         weight = 20,
+        id: explicitId,
+        alignment,
       } = config;
 
+      const id = explicitId ?? (accessor as string);
+
       const def = helper.accessor(accessor as any, {
+        ...(typeof accessor === "function" ? { id } : {}),
         header,
         enableSorting,
         enableResizing,
@@ -193,17 +214,25 @@ export function createTableColumns<TData>(): TableColumnsBuilder<TData> {
 
       return {
         kind: "data",
-        id: accessor as string,
+        id,
         def,
         width: { weight, minWidth: Math.max(header.length * 8 + 40, 80) },
         icon,
+        alignment,
       };
     },
 
     displayColumn(
       config: DisplayColumnConfig<TData>
     ): OnyxDisplayColumn<TData> {
-      const { id, header, cell, width, enableHiding = true } = config;
+      const {
+        id,
+        header,
+        cell,
+        width,
+        enableHiding = true,
+        alignment,
+      } = config;
 
       const def: ColumnDef<TData, any> = helper.display({
         id,
@@ -219,6 +248,7 @@ export function createTableColumns<TData>(): TableColumnsBuilder<TData> {
         id,
         def,
         width,
+        alignment,
       };
     },
 

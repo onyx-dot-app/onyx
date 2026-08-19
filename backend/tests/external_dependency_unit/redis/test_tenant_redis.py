@@ -22,8 +22,7 @@ from uuid import uuid4
 import pytest
 from redis import Redis
 
-from onyx.redis.redis_pool import get_raw_redis_client
-from onyx.redis.redis_pool import redis_pool
+from onyx.redis.redis_pool import get_raw_redis_client, redis_pool
 from onyx.redis.tenant_redis_client import TenantRedisClient
 
 
@@ -132,6 +131,16 @@ class TestRoundTrip:
         tenant_redis.hset(key, "f1", "v1")
         tenant_redis.hset(key, "f2", "v2")
         assert tenant_redis.hmget(key, ["f1", "f2", "missing"]) == [
+            b"v1",
+            b"v2",
+            None,
+        ]
+
+    def test_set_mget(self, tenant_redis: TenantRedisClient) -> None:
+        first, second = _unique_key(), _unique_key()
+        tenant_redis.set(first, "v1")
+        tenant_redis.set(second, "v2")
+        assert tenant_redis.mget([first, second, _unique_key()]) == [
             b"v1",
             b"v2",
             None,

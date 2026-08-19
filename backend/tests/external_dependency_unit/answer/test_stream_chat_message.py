@@ -9,60 +9,62 @@ from sqlalchemy.orm import Session
 from onyx.chat.models import CreateChatSessionID
 from onyx.configs.constants import DocumentSource
 from onyx.server.query_and_chat.models import MessageResponseIDInfo
-from onyx.server.query_and_chat.streaming_models import AgentResponseStart
-from onyx.server.query_and_chat.streaming_models import GeneratedImage
-from onyx.server.query_and_chat.streaming_models import ImageGenerationFinal
-from onyx.server.query_and_chat.streaming_models import ImageGenerationToolHeartbeat
-from onyx.server.query_and_chat.streaming_models import ImageGenerationToolStart
-from onyx.server.query_and_chat.streaming_models import OpenUrlDocuments
-from onyx.server.query_and_chat.streaming_models import OpenUrlStart
-from onyx.server.query_and_chat.streaming_models import OpenUrlUrls
-from onyx.server.query_and_chat.streaming_models import OverallStop
-from onyx.server.query_and_chat.streaming_models import Packet
-from onyx.server.query_and_chat.streaming_models import ReasoningDone
-from onyx.server.query_and_chat.streaming_models import ReasoningStart
-from onyx.server.query_and_chat.streaming_models import SearchToolDocumentsDelta
-from onyx.server.query_and_chat.streaming_models import SearchToolQueriesDelta
-from onyx.server.query_and_chat.streaming_models import SearchToolStart
-from onyx.server.query_and_chat.streaming_models import SectionEnd
-from onyx.server.query_and_chat.streaming_models import TopLevelBranching
+from onyx.server.query_and_chat.streaming_models import (
+    AgentResponseStart,
+    GeneratedImage,
+    ImageGenerationFinal,
+    ImageGenerationToolHeartbeat,
+    ImageGenerationToolStart,
+    OpenUrlDocuments,
+    OpenUrlStart,
+    OpenUrlUrls,
+    OverallStop,
+    Packet,
+    ReasoningDone,
+    ReasoningStart,
+    SearchToolDocumentsDelta,
+    SearchToolQueriesDelta,
+    SearchToolStart,
+    SectionEnd,
+    TopLevelBranching,
+)
 from tests.external_dependency_unit.answer.conftest import ensure_default_llm_provider
 from tests.external_dependency_unit.answer.stream_test_assertions import (
     assert_answer_stream_part_correct,
 )
 from tests.external_dependency_unit.answer.stream_test_builder import StreamTestBuilder
-from tests.external_dependency_unit.answer.stream_test_utils import create_chat_session
 from tests.external_dependency_unit.answer.stream_test_utils import (
+    create_chat_session,
     create_packet_with_agent_response_delta,
-)
-from tests.external_dependency_unit.answer.stream_test_utils import (
     create_packet_with_reasoning_delta,
-)
-from tests.external_dependency_unit.answer.stream_test_utils import create_placement
-from tests.external_dependency_unit.answer.stream_test_utils import (
+    create_placement,
     mock_web_content_to_search_doc,
-)
-from tests.external_dependency_unit.answer.stream_test_utils import (
     mock_web_search_result_to_search_doc,
+    submit_query,
+    tokenise,
 )
-from tests.external_dependency_unit.answer.stream_test_utils import submit_query
-from tests.external_dependency_unit.answer.stream_test_utils import tokenise
 from tests.external_dependency_unit.conftest import create_test_user
-from tests.external_dependency_unit.mock_content_provider import MockWebContent
 from tests.external_dependency_unit.mock_content_provider import (
+    MockWebContent,
     use_mock_content_provider,
 )
 from tests.external_dependency_unit.mock_image_provider import (
     use_mock_image_generation_provider,
 )
-from tests.external_dependency_unit.mock_llm import LLMAnswerResponse
-from tests.external_dependency_unit.mock_llm import LLMReasoningResponse
-from tests.external_dependency_unit.mock_llm import LLMToolCallResponse
-from tests.external_dependency_unit.mock_llm import use_mock_llm
-from tests.external_dependency_unit.mock_search_pipeline import MockInternalSearchResult
-from tests.external_dependency_unit.mock_search_pipeline import use_mock_search_pipeline
-from tests.external_dependency_unit.mock_search_provider import MockWebSearchResult
-from tests.external_dependency_unit.mock_search_provider import use_mock_web_provider
+from tests.external_dependency_unit.mock_llm import (
+    LLMAnswerResponse,
+    LLMReasoningResponse,
+    LLMToolCallResponse,
+    use_mock_llm,
+)
+from tests.external_dependency_unit.mock_search_pipeline import (
+    MockInternalSearchResult,
+    use_mock_search_pipeline,
+)
+from tests.external_dependency_unit.mock_search_provider import (
+    MockWebSearchResult,
+    use_mock_web_provider,
+)
 
 
 def test_stream_chat_with_answer(

@@ -11,15 +11,16 @@ import type { ModelConfiguration } from "@/lib/languageModels/types";
 import * as Yup from "yup";
 import { useInitialValues } from "@/sections/modals/languageModels/utils";
 import { submitProvider } from "@/sections/modals/languageModels/svc";
-import { LLMProviderConfiguredSource } from "@/lib/analytics";
+import { LLMProviderConfiguredSource } from "@/lib/analytics/utils";
 import {
   APIKeyField,
   APIBaseField,
   DisplayNameField,
   ModelAccessField,
   ModalWrapper,
+  useApiBaseSubDescription,
 } from "@/sections/modals/languageModels/shared";
-import { useCustomProviderNames } from "@/hooks/useLanguageModels";
+import { useCustomProviderNames } from "@/lib/languageModels/hooks";
 import InputTypeInField from "@/refresh-components/form/InputTypeInField";
 import KeyValueInput, {
   KeyValue,
@@ -31,13 +32,13 @@ import Text from "@/refresh-components/texts/Text";
 import { Button, Card, EmptyMessageCard } from "@opal/components";
 import { SvgMinusCircle, SvgPlusCircle } from "@opal/icons";
 import { markdown } from "@opal/utils";
-import { toast } from "@/hooks/useToast";
 import { refreshLlmProviderCaches } from "@/lib/languageModels/cache";
 import {
   Content,
   InputDivider,
   InputPadder,
   InputVertical,
+  toast,
 } from "@opal/layouts";
 import { Section } from "@/layouts/general-layouts";
 
@@ -165,7 +166,7 @@ function ModelConfigurationList() {
           ))}
         </div>
       ) : (
-        <EmptyMessageCard title="No models added yet." padding="sm" />
+        <EmptyMessageCard title="No models added yet." padding={2} />
       )}
 
       <Button
@@ -241,9 +242,11 @@ export default function CustomModal({
   shouldMarkAsDefault,
   onOpenChange,
   onSuccess,
+  analyticsSource,
 }: LLMProviderFormProps) {
   const isOnboarding = variant === "onboarding";
   const { mutate } = useSWRConfig();
+  const apiBaseSubDescription = useApiBaseSubDescription();
 
   const onClose = () => onOpenChange?.(false);
 
@@ -263,6 +266,7 @@ export default function CustomModal({
         max_input_tokens: mc.max_input_tokens ?? null,
         supports_image_input: mc.supports_image_input,
         supports_reasoning: mc.supports_reasoning,
+        effectiveDisplayName: mc.effectiveDisplayName,
       })
     ) ?? [
       {
@@ -272,6 +276,7 @@ export default function CustomModal({
         max_input_tokens: null,
         supports_image_input: false,
         supports_reasoning: false,
+        effectiveDisplayName: "",
       },
     ],
     custom_config_list: existingLlmProvider?.custom_config
@@ -322,6 +327,7 @@ export default function CustomModal({
             max_input_tokens: mc.max_input_tokens ?? null,
             supports_image_input: mc.supports_image_input,
             supports_reasoning: false,
+            effectiveDisplayName: mc.display_name || mc.name,
           }));
 
         if (modelConfigurations.length === 0) {
@@ -336,9 +342,11 @@ export default function CustomModal({
         const customConfig = keyValueListToDict(values.custom_config_list);
 
         await submitProvider({
-          analyticsSource: isOnboarding
-            ? LLMProviderConfiguredSource.CHAT_ONBOARDING
-            : LLMProviderConfiguredSource.ADMIN_PAGE,
+          analyticsSource:
+            analyticsSource ??
+            (isOnboarding
+              ? LLMProviderConfiguredSource.CHAT_ONBOARDING
+              : LLMProviderConfiguredSource.ADMIN_PAGE),
           providerName: (values as Record<string, unknown>).provider as string,
           values: {
             ...values,
@@ -387,7 +395,7 @@ export default function CustomModal({
         subDescription="Paste your API key if your model provider requires authentication."
       />
 
-      <APIBaseField optional />
+      <APIBaseField optional subDescription={apiBaseSubDescription} />
 
       <InputPadder>
         <InputVertical
@@ -400,7 +408,7 @@ export default function CustomModal({
       </InputPadder>
 
       <InputPadder>
-        <Section gap={0.75}>
+        <Section gap={3}>
           <Content
             title="Environment Variables"
             description={markdown(
@@ -423,7 +431,7 @@ export default function CustomModal({
       )}
 
       <InputDivider />
-      <Section gap={0.5}>
+      <Section gap={2}>
         <InputPadder>
           <Content
             title="Models"
@@ -434,7 +442,7 @@ export default function CustomModal({
           />
         </InputPadder>
 
-        <Card padding="sm">
+        <Card padding={2}>
           <ModelConfigurationList />
         </Card>
       </Section>
