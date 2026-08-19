@@ -285,7 +285,7 @@ variable "cloudwatch_log_group_retention_in_days" {
 
 variable "enable_network_policy" {
   type        = bool
-  description = "Adopt the VPC CNI addon and enable Kubernetes NetworkPolicy enforcement. Off by default: the addon stays unmanaged and existing NetworkPolicies remain inert. Only enable per cluster once its policies are known-safe."
+  description = "Adopt the VPC CNI addon and turn on NetworkPolicy enforcement. Updates use resolve_conflicts_on_update = PRESERVE so out-of-band aws-node settings survive; the trade-off is that a cluster whose addon already sets enableNetworkPolicy=false explicitly keeps that value, and enforcement stays off. Check the addon's configuration_values after the first apply."
   default     = false
 }
 
