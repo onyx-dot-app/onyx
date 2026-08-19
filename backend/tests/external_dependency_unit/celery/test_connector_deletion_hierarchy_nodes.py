@@ -1,5 +1,6 @@
 """Connector deletion drops cc_pair join rows, then cleanup_unowned_hierarchy_nodes
-deletes nodes no remaining connector owns. SOURCE roots stay; shared nodes stay."""
+deletes nodes no remaining connector owns. SOURCE roots stay; shared nodes stay.
+Node persist and ownership links commit together so cleanup cannot delete a live node."""
 
 from uuid import uuid4
 
@@ -17,6 +18,7 @@ from onyx.db.hierarchy import (
     ensure_source_node_exists,
     get_all_hierarchy_nodes_for_source,
     get_hierarchy_node_by_raw_id,
+    persist_hierarchy_nodes_for_cc_pair,
     upsert_hierarchy_node_cc_pair_entries,
     upsert_hierarchy_nodes_batch,
 )
@@ -191,6 +193,36 @@ def test_deleting_connector_keeps_nodes_still_owned_by_another(
 
     assert deleted_raw_ids == [UNIQUE_NODE_ID]
     assert get_hierarchy_node_by_raw_id(db_session, UNIQUE_NODE_ID, TEST_SOURCE) is None
+    assert (
+        get_hierarchy_node_by_raw_id(db_session, SHARED_NODE_ID, TEST_SOURCE)
+        is not None
+    )
+
+    _cleanup_test_data(db_session)
+
+
+def test_persisted_nodes_survive_source_wide_orphan_cleanup(
+    db_session: Session,
+) -> None:
+    """Ownership links commit with the node, so orphan cleanup must keep it."""
+    _cleanup_test_data(db_session)
+    ensure_source_node_exists(db_session, TEST_SOURCE, commit=True)
+    cc_pair = _create_cc_pair(db_session)
+
+    persist_hierarchy_nodes_for_cc_pair(
+        db_session=db_session,
+        nodes=[_folder_node(SHARED_NODE_ID)],
+        source=TEST_SOURCE,
+        connector_id=cc_pair.connector_id,
+        credential_id=cc_pair.credential_id,
+        is_connector_public=False,
+        commit=True,
+    )
+
+    deleted_raw_ids, _reparented = cleanup_unowned_hierarchy_nodes(
+        db_session, TEST_SOURCE, commit=True
+    )
+    assert SHARED_NODE_ID not in deleted_raw_ids
     assert (
         get_hierarchy_node_by_raw_id(db_session, SHARED_NODE_ID, TEST_SOURCE)
         is not None

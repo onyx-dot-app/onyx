@@ -823,6 +823,43 @@ def upsert_hierarchy_node_cc_pair_entries(
         db_session.flush()
 
 
+def persist_hierarchy_nodes_for_cc_pair(
+    db_session: Session,
+    nodes: list[PydanticHierarchyNode],
+    source: DocumentSource,
+    connector_id: int,
+    credential_id: int,
+    is_connector_public: bool = False,
+    commit: bool = True,
+) -> list[HierarchyNode]:
+    """Upsert nodes and their cc_pair ownership links in one transaction.
+
+    Orphan cleanup deletes nodes with no join-table row. The node insert and
+    ownership insert must commit together so a concurrent cleanup cannot
+    remove a node before its link exists.
+    """
+    if not nodes:
+        return []
+
+    upserted = upsert_hierarchy_nodes_batch(
+        db_session=db_session,
+        nodes=nodes,
+        source=source,
+        commit=False,
+        is_connector_public=is_connector_public,
+    )
+    upsert_hierarchy_node_cc_pair_entries(
+        db_session=db_session,
+        hierarchy_node_ids=[n.id for n in upserted],
+        connector_id=connector_id,
+        credential_id=credential_id,
+        commit=False,
+    )
+    if commit:
+        db_session.commit()
+    return upserted
+
+
 def remove_stale_hierarchy_node_cc_pair_entries(
     db_session: Session,
     connector_id: int,

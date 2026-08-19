@@ -57,10 +57,9 @@ from onyx.db.enums import (
 )
 from onyx.db.hierarchy import (
     cleanup_unowned_hierarchy_nodes,
+    persist_hierarchy_nodes_for_cc_pair,
     remove_stale_hierarchy_node_cc_pair_entries,
     update_document_parent_hierarchy_nodes,
-    upsert_hierarchy_node_cc_pair_entries,
-    upsert_hierarchy_nodes_batch,
 )
 from onyx.db.models import ConnectorCredentialPair
 from onyx.db.models import HierarchyNode as DBHierarchyNode
@@ -633,24 +632,15 @@ def connector_pruning_generator_task(
 
             upserted_nodes: list[DBHierarchyNode] = []
             if extraction_result.hierarchy_nodes:
-                upserted_nodes = upsert_hierarchy_nodes_batch(
+                upserted_nodes = persist_hierarchy_nodes_for_cc_pair(
                     db_session=db_session,
                     nodes=extraction_result.hierarchy_nodes,
                     source=source,
-                    commit=False,
-                    is_connector_public=is_connector_public,
-                )
-
-                upsert_hierarchy_node_cc_pair_entries(
-                    db_session=db_session,
-                    hierarchy_node_ids=[n.id for n in upserted_nodes],
                     connector_id=connector_id,
                     credential_id=credential_id,
+                    is_connector_public=is_connector_public,
                     commit=False,
                 )
-
-                # Single commit so the FK reference in the join table can never
-                # outrun the parent hierarchy_node insert.
                 db_session.commit()
 
                 cache_entries = [

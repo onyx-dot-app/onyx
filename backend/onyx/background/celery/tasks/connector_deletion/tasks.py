@@ -62,11 +62,7 @@ from onyx.redis.redis_connector_delete import (
     RedisConnectorDelete,
     RedisConnectorDeletePayload,
 )
-from onyx.redis.redis_hierarchy import (
-    HierarchyNodeCacheEntry,
-    cache_hierarchy_nodes_batch,
-    evict_hierarchy_nodes_from_cache,
-)
+from onyx.redis.redis_hierarchy import invalidate_hierarchy_cache_for_source
 from onyx.redis.redis_pool import get_redis_client, get_redis_replica_client
 from onyx.redis.redis_tenant_work_gating import maybe_mark_tenant_active
 from onyx.redis.tenant_redis_client import TenantRedisClient
@@ -575,24 +571,17 @@ def monitor_connector_deletion_taskset(
                 db_session.delete(connector)
             db_session.commit()
 
-            try:
-                if deleted_raw_ids:
-                    evict_hierarchy_nodes_from_cache(r, source, deleted_raw_ids)
-                if reparented_nodes:
-                    cache_hierarchy_nodes_batch(
-                        r,
-                        source,
-                        [
-                            HierarchyNodeCacheEntry.from_db_model(node)
-                            for node in reparented_nodes
-                        ],
-                    )
-            except Exception:
-                task_logger.exception(
-                    "Connector deletion - failed to update hierarchy node cache: "
-                    f"cc_pair={cc_pair_id}"
-                )
             if deleted_raw_ids or reparented_nodes:
+                for attempt in range(3):
+                    try:
+                        invalidate_hierarchy_cache_for_source(r, source)
+                        break
+                    except Exception:
+                        if attempt == 2:
+                            task_logger.exception(
+                                "Connector deletion - failed to invalidate hierarchy node cache: "
+                                f"cc_pair={cc_pair_id}"
+                            )
                 task_logger.info(
                     f"Connector deletion hierarchy cleanup: cc_pair={cc_pair_id} "
                     f"nodes_deleted={len(deleted_raw_ids)} "
