@@ -35,10 +35,17 @@ async function setReasoningControl(
 
     await page.reload();
     await page.waitForLoadState("networkidle");
-    await expect(switchEl).toBeVisible({ timeout: 10000 });
 
-    lastState = (await switchEl.getAttribute("aria-checked")) === "true";
-    if (lastState === enabled) return;
+    // Auto-retrying, so a settings response that lands after the reload
+    // settles cannot report a false failure here.
+    try {
+      await expect(switchEl).toHaveAttribute("aria-checked", String(enabled), {
+        timeout: 10000,
+      });
+      return;
+    } catch {
+      lastState = (await switchEl.getAttribute("aria-checked")) === "true";
+    }
   }
 
   throw new Error(

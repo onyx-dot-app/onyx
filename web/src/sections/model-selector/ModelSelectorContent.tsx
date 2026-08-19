@@ -75,7 +75,11 @@ export function useModelDetailManagers(
   const settings = useSettings();
   const temperatureOverrideEnabled =
     user?.preferences?.temperature_override_enabled;
-  const reasoningOverrideEnabled = settings.reasoning_override_enabled ?? true;
+  // Fail closed while the settings fetch is in flight: the placeholder says
+  // enabled, which would flash the control into a workspace that withheld
+  // it. Temperature fails closed here too, by way of an undefined user.
+  const reasoningOverrideEnabled =
+    !settings.isLoading && (settings.reasoning_override_enabled ?? true);
   return useMemo(() => {
     const temperature =
       temperatureManager && temperatureOverrideEnabled
