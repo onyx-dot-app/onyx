@@ -3,6 +3,7 @@ monitor_process_memory.
 """
 
 from onyx.background.celery.tasks.monitoring.tasks import (
+    SUPERVISOR_PROCESS_TYPE_MAPPING,
     _match_supervisor_processes,
 )
 
@@ -29,19 +30,6 @@ LOG_REDIRECT_CMDLINE = (
 )
 SLACK_CMDLINE = "python onyx/onyxbot/slack/listener.py"
 
-CURRENT_PROCESS_TYPE_MAPPING = {
-    "--hostname=primary": "primary",
-    "--hostname=light": "light",
-    "--hostname=heavy": "heavy",
-    "--hostname=docprocessing": "docprocessing",
-    "--hostname=user_file_processing": "user_file_processing",
-    "--hostname=scheduled_tasks": "scheduled_tasks",
-    "--hostname=docfetching": "docfetching",
-    "--hostname=monitoring": "monitoring",
-    "versioned_apps.beat beat": "beat",
-    "slack/listener.py": "slack",
-}
-
 
 def test_matches_each_process_exactly_once() -> None:
     process_cmdlines = {
@@ -52,7 +40,7 @@ def test_matches_each_process_exactly_once() -> None:
     }
 
     supervisor_processes, duplicate_warnings = _match_supervisor_processes(
-        process_cmdlines, CURRENT_PROCESS_TYPE_MAPPING
+        process_cmdlines, SUPERVISOR_PROCESS_TYPE_MAPPING
     )
 
     assert supervisor_processes == {
@@ -77,7 +65,7 @@ def test_beat_watchdog_and_log_redirect_do_not_false_match_as_beat() -> None:
     }
 
     supervisor_processes, duplicate_warnings = _match_supervisor_processes(
-        process_cmdlines, CURRENT_PROCESS_TYPE_MAPPING
+        process_cmdlines, SUPERVISOR_PROCESS_TYPE_MAPPING
     )
 
     assert supervisor_processes == {1: "beat"}
@@ -93,7 +81,7 @@ def test_genuine_duplicate_is_still_reported() -> None:
     }
 
     supervisor_processes, duplicate_warnings = _match_supervisor_processes(
-        process_cmdlines, CURRENT_PROCESS_TYPE_MAPPING
+        process_cmdlines, SUPERVISOR_PROCESS_TYPE_MAPPING
     )
 
     assert supervisor_processes == {1: "primary"}
