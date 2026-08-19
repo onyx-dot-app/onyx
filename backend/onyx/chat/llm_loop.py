@@ -820,7 +820,7 @@ def run_llm_loop(
             msg.message_type == MessageType.USER and msg.image_files
             for msg in simple_chat_history
         ) and not model_supports_image_input(
-            llm.config.model_name, llm.config.model_provider
+            llm.config.model_name, llm.config.model_provider, llm.config.deployment_name
         )
         tool_choice: ToolChoiceOptions = ToolChoiceOptions.AUTO
         # Initialize gathered_documents with project files if present

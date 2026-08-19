@@ -3,15 +3,19 @@
 ## Overview
 This directory contains Terraform modules to provision the core AWS infrastructure for Onyx:
 
-- `vpc`: Creates a VPC with public/private subnets sized for EKS
-- `eks`: Provisions an Amazon EKS cluster, essential addons (EBS CSI, metrics server, cluster autoscaler), and optional IRSA for S3 access
-- `postgres`: Creates an Amazon RDS for PostgreSQL instance and returns a connection URL
-- `redis`: Creates an ElastiCache for Redis replication group
-- `s3`: Creates an S3 bucket and locks access to a provided S3 VPC endpoint
-- `opensearch`: Creates an Amazon OpenSearch domain for managed search workloads
+- `vpc`: Creates a VPC with public/private subnets sized for EKS, an optional S3 gateway endpoint, and VPC flow logs
+- `eks`: Provisions an Amazon EKS cluster, essential addons (EBS CSI, metrics server, cluster autoscaler), and optional IRSA for S3 and RDS access
+- `postgres`: Creates an Amazon RDS for PostgreSQL instance, CloudWatch alarms, and returns a connection URL
+- `redis`: Creates an ElastiCache for Redis replication group with CloudWatch alarms
+- `s3`: Creates an S3 bucket with versioning, encryption, lifecycle rules, and a scoped bucket policy
+- `opensearch`: Creates an Amazon OpenSearch domain for managed search workloads, with CloudWatch alarms
 - `onyx`: A higher-level composition that wires the above modules together for a complete, opinionated stack
 
 Use the `onyx` module if you want a working EKS + Postgres + Redis + S3 stack with sane defaults. Use the individual modules if you need more granular control.
+
+These are the same modules Onyx runs for its own managed deployments. The managed
+deployments add operational wiring on top (alert routing, secret management, log
+aggregation) but provision the underlying AWS infrastructure from exactly this code.
 
 ## Quickstart (copy/paste)
 The snippet below shows a minimal working example that:
@@ -22,7 +26,10 @@ The snippet below shows a minimal working example that:
 
 ```hcl
 locals {
-  region = "us-west-2"
+  region            = "us-west-2"
+  postgres_username = "pgusername"
+  # Supply this from a secret store or TF_VAR_ in anything but a scratch stack.
+  postgres_password = "your-postgres-password"
 }
 
 provider "aws" {
@@ -37,8 +44,8 @@ module "onyx" {
 
   region            = local.region
   name              = "onyx"            # used as a prefix and workspace-aware
-  postgres_username = "pgusername"
-  postgres_password = "your-postgres-password"
+  postgres_username = local.postgres_username
+  postgres_password = local.postgres_password
   # create_vpc    = true  # default true; set to false to use an existing VPC (see below)
 }
 
@@ -77,7 +84,7 @@ output "cluster_name" {
   value = module.onyx.cluster_name
 }
 output "postgres_connection_url" {
-  value     = module.onyx.postgres_connection_url
+  value     = "postgres://${urlencode(local.postgres_username)}:${urlencode(local.postgres_password)}@${module.onyx.postgres_address}:${module.onyx.postgres_port}/${module.onyx.postgres_db_name}"
   sensitive = true
 }
 output "redis_connection_url" {
@@ -187,52 +194,108 @@ module "onyx" {
 - Orchestrates `vpc`, `eks`, `postgres`, `redis`, and `s3`
 - Names resources using `name` and the current Terraform workspace
 - Exposes convenient outputs:
-  - `cluster_name`: EKS cluster name
-  - `postgres_connection_url` (sensitive): `postgres://...`
+  - `cluster_name`, `oidc_provider`, `oidc_provider_arn`, `workload_irsa_role_arn`
+  - `postgres_endpoint`, `postgres_port`, `postgres_db_name`, `postgres_username` (sensitive), `postgres_dbi_resource_id`
   - `redis_connection_url` (sensitive): hostname:port
+  - `opensearch_endpoint`, `opensearch_dashboard_endpoint`, `opensearch_domain_arn` (null unless `enable_opensearch`)
 
 Inputs (common):
 - `name` (default `onyx`), `region` (default `us-west-2`), `tags`
 - `size` (`small`/`medium`/`large`, default `medium`) — see "T-shirt sizing" above — plus per-setting overrides (`main_node_*`, `vespa_node_*`, `postgres_instance_type`, `postgres_storage_gb`, `redis_instance_type`, `opensearch_*`)
-- `postgres_username`, `postgres_password`
+- `postgres_username`, `postgres_password`, `postgres_multi_az`
+- `redis_auth_token`: required unless `enable_redis_iam_auth` is true, because the
+  Redis module enables transit encryption and AWS requires a token in that case
 - `create_vpc` (default true) or existing VPC details and `s3_vpc_endpoint_id`
+- `single_nat_gateway` (default false): one NAT gateway per AZ. Set true to trade AZ independence for cost
 - WAF controls such as `waf_allowed_ip_cidrs`, `waf_common_rule_set_count_rules`, rate limits, geo restrictions, and logging retention
 - Optional OpenSearch controls such as `enable_opensearch`, sizing, credentials, and log retention
+- `alarm_actions`: SNS topic ARNs for the CloudWatch alarms created by the data-plane modules. Empty (the default) leaves the alarms in place but notifying nothing
+- Optional extras: `enable_upload_bucket`, `enable_gpu_node`, `enable_network_policy`, `enable_craft`
 
 ### `vpc`
 - Builds a VPC sized for EKS with multiple private and public subnets
-- Outputs: `vpc_id`, `private_subnets`, `public_subnets`, `vpc_cidr_block`, `s3_vpc_endpoint_id`
+- Creates an S3 gateway VPC endpoint (`create_s3_vpc_endpoint`, default true)
+- Publishes VPC flow logs to CloudWatch with a minimal IAM role
+- Outputs: `vpc_id`, `private_subnets`, `public_subnets`, `vpc_cidr_block`, `nat_gateway_public_ips`, `s3_vpc_endpoint_id`
 
 ### `eks`
 - Creates the EKS cluster and node groups
 - Enables addons: EBS CSI driver, metrics server, cluster autoscaler
 - Optionally configures IRSA for S3 access to specified buckets
-- Outputs: `cluster_name`, `cluster_endpoint`, `cluster_certificate_authority_data`, `s3_access_role_arn` (if created)
+- Outputs: `cluster_name`, `cluster_endpoint`, `cluster_certificate_authority_data`,
+  `oidc_provider`, `oidc_provider_arn`, `cluster_security_group_id`, `node_security_group_id`,
+  and `workload_irsa_role_arn` / `workload_irsa_service_account_subjects` when `s3_bucket_names` is set
 
 Key inputs include:
 - `cluster_name`, `cluster_version` (default `1.33`)
 - `vpc_id`, `subnet_ids`
-- `public_cluster_enabled` (default true), `private_cluster_enabled` (default false)
-- `cluster_endpoint_public_access_cidrs` (optional)
+- `public_cluster_enabled` (default true), `private_cluster_enabled` (default true)
+- `cluster_endpoint_public_access_cidrs` (default `[]`). Empty denies all public API access. Set it when `public_cluster_enabled` is true and you need to reach the API server
 - `eks_managed_node_groups` (defaults include a main and a vespa-dedicated group with GP3 volumes)
 - `s3_bucket_names` (optional list). If set, creates an IRSA role and Kubernetes service account for S3 access
 
 ### `postgres`
 - Amazon RDS for PostgreSQL with parameterized instance size, storage, version
 - Accepts VPC/subnets and ingress CIDRs; returns a ready-to-use connection URL
+- Creates CloudWatch alarms for CPU, freeable memory, free storage, IOPS, and
+  connection count. Set `alarm_actions` to an SNS topic ARN to be notified;
+  leave it empty and the alarms exist but notify nothing
 
 ### `redis`
 - ElastiCache for Redis (transit encryption enabled by default)
-- Supports optional `auth_token` and instance sizing
+- Supports optional `auth_token`, IAM authentication, and instance sizing
+- Creates CloudWatch alarms for memory usage, engine CPU, and swap. Set
+  `alarm_actions` to route them to SNS
 - Outputs endpoint, port, and whether SSL is enabled
 
 ### `s3`
-- Creates an S3 bucket for file storage and scopes access to the provided S3 gateway VPC endpoint
+- Creates an S3 bucket for file storage with versioning, server-side encryption
+  (`aws:kms`, or `AES256` when anonymous read is enabled), a public access block,
+  and lifecycle rules for noncurrent versions, expiration, and IA transition
+- Attaches a bucket policy only when one is needed. Access can be scoped to an S3
+  gateway VPC endpoint (`s3_vpc_endpoint_id`), and optionally to source IPs or VPCs
+  (`allow_anonymous_read` with `allowed_source_ips` / `allowed_vpc_ids`)
 
 ### `opensearch`
 - Creates an Amazon OpenSearch domain inside the VPC
 - Supports custom subnets, security groups, fine-grained access control, encryption, and CloudWatch log publishing
+- Creates CloudWatch alarms for cluster status, node count, free storage, JVM
+  memory pressure, and write-blocked indices. Set `alarm_actions` to route them to SNS
 - Outputs domain endpoints, ARN, and the managed security group ID when it creates one
+
+## Upgrading from an earlier version of these modules
+
+These modules were realigned with the versions Onyx runs in production. If you
+applied an earlier revision, note the following before your next `terraform apply`.
+
+**Renamed resources are handled for you.** The modules ship `moved` blocks that
+relabel state in place, so the plan shows moves rather than destroy/create:
+
+| Module | Old address | New address |
+|---|---|---|
+| `s3` | `aws_s3_bucket.bucket` | `aws_s3_bucket.this` |
+| `s3` | `aws_s3_bucket_policy.bucket_policy` | `aws_s3_bucket_policy.anonymous_read[0]` |
+| `vpc` | `aws_vpc_endpoint.s3` | `aws_vpc_endpoint.s3[0]` |
+| `redis` | `aws_security_group.redis_sg` | `aws_security_group.redis_sg[0]` |
+| `postgres` | `aws_db_subnet_group.this` | `aws_db_subnet_group.this[0]` |
+| `postgres` | `aws_security_group.this` | `aws_security_group.this[0]` |
+
+**Review the plan before applying.** Expect in-place updates where the new
+modules add settings the old ones did not manage:
+- `s3` now manages versioning, encryption, a public access block, and lifecycle rules
+- `vpc` now creates flow logs and their IAM role
+- `postgres`, `redis`, and `opensearch` now create CloudWatch alarms
+- `postgres` now manages Multi-AZ (default false). If you enabled a standby
+  outside Terraform, set `postgres_multi_az = true` on the `onyx` module (or
+  `multi_az` on the `postgres` module) before applying, or the standby is removed
+- `eks` now enables the private API endpoint by default (`private_cluster_enabled`).
+  This is additive and does not remove public access
+
+**`cluster_endpoint_public_access_cidrs` now defaults to `[]`.** If you relied on
+the previous default, set the value explicitly before applying.
+
+**The Craft sandbox node group's key changed** from `craft_sandbox` to `sandbox`.
+A `moved` block handles the relabel, so the group is not recreated.
 
 ## Installing the Onyx Helm chart (after Terraform)
 Once the cluster is active, deploy application workloads via Helm. You can use the chart in `deployment/helm/charts/onyx`.

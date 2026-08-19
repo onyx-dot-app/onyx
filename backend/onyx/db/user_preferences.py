@@ -281,20 +281,6 @@ def get_memories_for_user(
     ).all()
 
 
-def update_user_pinned_assistants(
-    user_id: UUID,
-    pinned_assistants: list[int],
-    db_session: Session,
-) -> None:
-    """Update user's pinned assistants list."""
-    db_session.execute(
-        update(User)
-        .where(User.id == user_id)  # ty: ignore[invalid-argument-type]
-        .values(pinned_assistants=pinned_assistants)
-    )
-    db_session.commit()
-
-
 def update_user_assistant_visibility(
     user_id: UUID,
     hidden_assistants: list[int] | None,

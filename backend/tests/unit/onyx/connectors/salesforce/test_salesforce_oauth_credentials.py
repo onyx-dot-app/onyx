@@ -101,6 +101,7 @@ def test_salesforce_my_domain_url_accepts_canonical_hosts(
 @pytest.mark.parametrize(
     "url",
     [
+        "acme.my.salesforce.com",
         "http://acme.my.salesforce.com",
         "https://my.salesforce.com",
         "https://salesforce.com",

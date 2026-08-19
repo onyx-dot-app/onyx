@@ -57,7 +57,6 @@ from httpx_oauth.exceptions import GetIdEmailError
 from httpx_oauth.integrations.fastapi import OAuth2AuthorizeCallback
 from httpx_oauth.oauth2 import BaseOAuth2, GetAccessTokenError, OAuth2Token
 from pydantic import BaseModel
-from sqlalchemy import nulls_last, select
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import Session
@@ -135,8 +134,9 @@ from onyx.db.engine.sql_engine import (
     get_session_with_tenant,
 )
 from onyx.db.enums import AccountType, PatType, Permission
-from onyx.db.models import AccessToken, OAuthAccount, Persona, User
+from onyx.db.models import AccessToken, OAuthAccount, User
 from onyx.db.pat import resolve_pat
+from onyx.db.pinned_personas import seed_pinned_personas_from_featured
 from onyx.db.users import (
     assign_user_to_default_groups__no_commit,
     get_user_by_email,
@@ -833,40 +833,13 @@ class UserManager(UUIDIDMixin, BaseUserManager[User, uuid.UUID]):
                         user_id
                     )
                 if user_created:
-                    await self._assign_default_pinned_assistants(user, db_session)
+                    await seed_pinned_personas_from_featured(
+                        db_session=db_session, user=user
+                    )
                 remove_user_from_invited_users(user_create.email)
         finally:
             CURRENT_TENANT_ID_CONTEXTVAR.reset(token)
         return user
-
-    async def _assign_default_pinned_assistants(
-        self, user: User, db_session: AsyncSession
-    ) -> None:
-        if user.pinned_assistants is not None:
-            return
-
-        result = await db_session.execute(
-            select(Persona.id)
-            .where(
-                Persona.is_featured.is_(True),
-                Persona.is_public.is_(True),
-                Persona.is_listed.is_(True),
-                Persona.deleted.is_(False),
-            )
-            .order_by(
-                nulls_last(Persona.display_priority.asc()),
-                Persona.id.asc(),
-            )
-        )
-        default_persona_ids = list(result.scalars().all())
-        if not default_persona_ids:
-            return
-
-        await self.user_db.update(
-            user,
-            {"pinned_assistants": default_persona_ids},
-        )
-        user.pinned_assistants = default_persona_ids
 
     def _upgrade_user_to_standard__sync(
         self,
@@ -1091,7 +1064,9 @@ class UserManager(UUIDIDMixin, BaseUserManager[User, uuid.UUID]):
 
                     user = await self.user_db.create(user_dict)
                     await self.user_db.add_oauth_account(user, oauth_account_dict)
-                    await self._assign_default_pinned_assistants(user, db_session)
+                    await seed_pinned_personas_from_featured(
+                        db_session=db_session, user=user
+                    )
                     await self.on_after_register(user, request)
 
             else:
