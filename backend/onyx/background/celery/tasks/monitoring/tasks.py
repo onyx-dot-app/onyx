@@ -1058,6 +1058,26 @@ def _match_supervisor_processes(
     return supervisor_processes, duplicate_warnings
 
 
+# Map cmd line elements to more readable process names.
+# Keep in sync with the `command=`/`--hostname=` entries in
+# backend/supervisord.conf. The beat signature must be specific
+# enough to not also match the watchdog or log-redirect-handler
+# processes, whose cmdlines reference celery_beat.log / the beat
+# program name and would otherwise be misidentified as duplicates.
+SUPERVISOR_PROCESS_TYPE_MAPPING = {
+    "--hostname=primary": "primary",
+    "--hostname=light": "light",
+    "--hostname=heavy": "heavy",
+    "--hostname=docprocessing": "docprocessing",
+    "--hostname=user_file_processing": "user_file_processing",
+    "--hostname=scheduled_tasks": "scheduled_tasks",
+    "--hostname=docfetching": "docfetching",
+    "--hostname=monitoring": "monitoring",
+    "versioned_apps.beat beat": "beat",
+    "slack/listener.py": "slack",
+}
+
+
 @shared_task(  # ty: ignore[invalid-argument-type]
     name=OnyxCeleryTask.MONITOR_PROCESS_MEMORY,
     ignore_result=True,
@@ -1090,24 +1110,7 @@ def monitor_process_memory(self: Task, *, tenant_id: str) -> None:  # noqa: ARG0
         return
 
     try:
-        # Map cmd line elements to more readable process names.
-        # Keep in sync with the `command=`/`--hostname=` entries in
-        # backend/supervisord.conf. The beat signature must be specific
-        # enough to not also match the watchdog or log-redirect-handler
-        # processes, whose cmdlines reference celery_beat.log / the beat
-        # program name and would otherwise be misidentified as duplicates.
-        process_type_mapping = {
-            "--hostname=primary": "primary",
-            "--hostname=light": "light",
-            "--hostname=heavy": "heavy",
-            "--hostname=docprocessing": "docprocessing",
-            "--hostname=user_file_processing": "user_file_processing",
-            "--hostname=scheduled_tasks": "scheduled_tasks",
-            "--hostname=docfetching": "docfetching",
-            "--hostname=monitoring": "monitoring",
-            "versioned_apps.beat beat": "beat",
-            "slack/listener.py": "slack",
-        }
+        process_type_mapping = SUPERVISOR_PROCESS_TYPE_MAPPING
 
         # Find all python processes that are likely celery workers
         process_cmdlines: dict[int, str] = {}
