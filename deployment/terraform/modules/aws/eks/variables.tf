@@ -104,7 +104,7 @@ variable "enable_craft" {
 
   validation {
     condition     = !var.enable_craft || !contains(keys(var.eks_managed_node_groups), "sandbox")
-    error_message = "craft_enabled injects a node group under the key \"sandbox\", which eks_managed_node_groups already defines. Rename your group so the Craft group does not replace it."
+    error_message = "enable_craft injects a node group under the key \"sandbox\", which eks_managed_node_groups already defines. Rename your group so the Craft group does not replace it."
   }
 }
 
@@ -286,6 +286,6 @@ variable "enable_network_policy" {
 
 variable "vpc_cni_addon_version" {
   type        = string
-  description = "VPC CNI addon version to pin when enable_network_policy is true. Set to the cluster's currently-running version (aws eks describe-addon --cluster-name <cluster> --addon-name vpc-cni --query 'addon.addonVersion') to avoid an unintended CNI upgrade on adoption."
+  description = "VPC CNI addon version to pin when enable_network_policy is true. Set to the cluster's currently-running version (set CLUSTER_NAME, then: aws eks describe-addon --cluster-name \"$CLUSTER_NAME\" --addon-name vpc-cni --query 'addon.addonVersion') to avoid an unintended CNI upgrade on adoption."
   default     = "v1.20.4-eksbuild.2"
 }

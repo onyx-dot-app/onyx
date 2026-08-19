@@ -84,7 +84,7 @@ output "cluster_name" {
   value = module.onyx.cluster_name
 }
 output "postgres_connection_url" {
-  value     = "postgres://${local.postgres_username}:${local.postgres_password}@${module.onyx.postgres_endpoint}:${module.onyx.postgres_port}/${module.onyx.postgres_db_name}"
+  value     = "postgres://${urlencode(local.postgres_username)}:${urlencode(local.postgres_password)}@${module.onyx.postgres_endpoint}:${module.onyx.postgres_port}/${module.onyx.postgres_db_name}"
   sensitive = true
 }
 output "redis_connection_url" {
