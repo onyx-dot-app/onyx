@@ -35,6 +35,7 @@ from onyx.connectors.models import (
     IndexingDocument,
     Section,
     SectionType,
+    TabularSection,
     TextSection,
 )
 from onyx.db.connector_credential_pair import get_connector_credential_pair
@@ -728,14 +729,18 @@ def filter_documents(
 
 
 def _is_scanned_document(document: Document) -> bool:
-    """A document is 'scanned' if it has no text content (no TextSection with
-    non-empty text) but does have ImageSections."""
+    """A document is 'scanned' if it has no text or tabular content (no
+    TextSection with non-empty text, no TabularSection) but does have
+    ImageSections."""
     has_text = any(
         section.type == SectionType.TEXT and (section.text or "").strip()
         for section in document.sections
     )
+    has_tabular = any(
+        isinstance(section, TabularSection) for section in document.sections
+    )
     has_images = any(isinstance(section, ImageSection) for section in document.sections)
-    return not has_text and has_images
+    return not has_text and not has_tabular and has_images
 
 
 def process_image_sections(documents: list[Document]) -> list[IndexingDocument]:

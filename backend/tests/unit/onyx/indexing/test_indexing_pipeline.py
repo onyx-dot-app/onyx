@@ -977,6 +977,12 @@ class TestScannedDocumentDetection:
         doc = _make_image_doc("d5", [TextSection(text="", link=None)])
         assert _is_scanned_document(doc) is False
 
+        doc = _make_image_doc(
+            "d6",
+            [TabularSection(link="l", csv_file_id="csv-1"), ImageSection(image_file_id="img-1")],
+        )
+        assert _is_scanned_document(doc) is False
+
     def test_scanned_document_uses_ocr_prompt(self) -> None:
         """A document with only ImageSections must use SCANNED_DOCUMENT_SYSTEM_PROMPT."""
         doc = _make_image_doc("scan", [ImageSection(image_file_id="img-1")])
