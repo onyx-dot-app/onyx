@@ -696,11 +696,16 @@ export default function useChatController({
               if (live && live.preferredResponseId !== chosen.messageId) {
                 return;
               }
-              currentMessageTreeLocal = new Map(currentMessageTreeLocal);
-              currentMessageTreeLocal.set(
+              // Clear only the preference so the retry re-runs the PUT. The
+              // chain tip stays on the assumed response, keeping the failed
+              // follow-up reachable in the rendered chat.
+              const reverted = applyPreferredResponse(
+                currentMessageTreeLocal,
                 originalUserMessage.nodeId,
-                originalUserMessage
+                null
               );
+              if (!reverted) return;
+              currentMessageTreeLocal = reverted;
               updateSessionMessageTree(
                 frozenSessionId,
                 currentMessageTreeLocal
