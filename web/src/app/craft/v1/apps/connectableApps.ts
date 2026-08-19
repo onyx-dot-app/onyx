@@ -1,3 +1,5 @@
+import { useEffect, useState } from "react";
+import { useSearchParams } from "next/navigation";
 import type { IconFunctionComponent } from "@opal/types";
 import {
   ExternalAppUserResponse,
@@ -29,8 +31,25 @@ export type ConnectableKind = "app" | "mcp";
  * (e.g. the input-bar picker) and the page can't disagree on the contract. */
 export const CRAFT_APPS_TAB_PARAM = "tab";
 
+/** Tab order shared by the member and admin Apps pages. */
+export const KIND_ORDER: ConnectableKind[] = ["app", "mcp"];
+
 export function parseConnectableTab(value: string | null): ConnectableKind {
   return value === "mcp" ? "mcp" : "app";
+}
+
+/** Tab state that follows the deep-linkable `?tab=` param — including on a
+ * client-side navigation to the same page, which doesn't remount. */
+export function useConnectableTab(): [
+  ConnectableKind,
+  (tab: ConnectableKind) => void,
+] {
+  const urlTab = parseConnectableTab(
+    useSearchParams().get(CRAFT_APPS_TAB_PARAM)
+  );
+  const [tab, setTab] = useState<ConnectableKind>(urlTab);
+  useEffect(() => setTab(urlTab), [urlTab]);
+  return [tab, setTab];
 }
 
 // Normalized view of anything connectable on the Apps page — external apps and
