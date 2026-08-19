@@ -1,0 +1,380 @@
+// Package pycheck scans Python source for references to banned builtin
+// names. It is string- and comment-aware but deliberately not a parser:
+// string literal contents and comments never match, and a violation is
+// suppressed by an 'ods: ignore[rule]' marker in a comment on the same
+// physical line. Known limitation: expressions inside f-string replacement
+// fields are treated as string content and are not checked.
+package pycheck
+
+import (
+	"os"
+	"path/filepath"
+	"regexp"
+	"strings"
+
+	log "github.com/sirupsen/logrus"
+
+	"github.com/onyx-dot-app/onyx/tools/ods/internal/paths"
+)
+
+// BannedName forbids bare references to a builtin name in code context.
+// Attribute access ('obj.getattr') and longer identifiers ('__getattr__')
+// never match.
+type BannedName struct {
+	// Name is the banned identifier and also the rule name accepted by
+	// ignore markers, e.g. 'getattr' is suppressed by '# ods: ignore[getattr]'.
+	Name string
+	re   *regexp.Regexp
+}
+
+// NewBannedName creates a BannedName rule for the given identifier.
+func NewBannedName(name string) BannedName {
+	return BannedName{
+		Name: name,
+		re:   regexp.MustCompile(`\b` + regexp.QuoteMeta(name) + `\b`),
+	}
+}
+
+// ViolationLine is a single line that references the banned name.
+type ViolationLine struct {
+	LineNum int
+	Content string
+}
+
+// FileViolation groups the violations found in one file.
+type FileViolation struct {
+	RelPath        string
+	ViolationLines []ViolationLine
+}
+
+// stringState tracks an open string literal across physical lines.
+type stringState struct {
+	open   bool
+	quote  byte
+	triple bool
+}
+
+// scannedLine is the comment/string-aware decomposition of one physical line.
+type scannedLine struct {
+	// code is the source text with each string literal replaced by a single
+	// space and the comment removed.
+	code string
+	// comment is the text after the first '#' in code context.
+	comment string
+	// endsInString reports whether the line ends inside an open string
+	// literal, where appending a trailing comment would change the code.
+	endsInString bool
+}
+
+// scanLine splits one line into code and comment given the string state left
+// over from the previous line, and returns the state for the next line.
+func scanLine(line string, st stringState) (scannedLine, stringState) {
+	var code strings.Builder
+	comment := ""
+	i := 0
+	for i < len(line) {
+		if st.open {
+			c := line[i]
+			if c == '\\' {
+				// A backslash always consumes the next character, so an
+				// escaped quote never closes the literal. This holds for raw
+				// strings too: a backslash still blocks the closing quote.
+				i += 2
+				continue
+			}
+			if c == st.quote {
+				if !st.triple {
+					st = stringState{}
+					i++
+					continue
+				}
+				if i+2 < len(line) && line[i+1] == st.quote && line[i+2] == st.quote {
+					st = stringState{}
+					i += 3
+					continue
+				}
+			}
+			i++
+			continue
+		}
+		c := line[i]
+		if c == '#' {
+			comment = line[i+1:]
+			break
+		}
+		if c == '\'' || c == '"' {
+			// Replace the whole literal with one space so identifiers on
+			// either side cannot merge across it.
+			code.WriteByte(' ')
+			if i+2 < len(line) && line[i+1] == c && line[i+2] == c {
+				st = stringState{open: true, quote: c, triple: true}
+				i += 3
+			} else {
+				st = stringState{open: true, quote: c, triple: false}
+				i++
+			}
+			continue
+		}
+		code.WriteByte(c)
+		i++
+	}
+	if st.open && !st.triple && i == len(line) {
+		// A single-quoted literal survives the line break only when a
+		// trailing backslash escaped it, in which case the escape jumped
+		// past the end of the line above. Anything else is malformed
+		// source; close the literal so it cannot poison the rest of the
+		// file.
+		st = stringState{}
+	}
+	return scannedLine{code: code.String(), comment: comment, endsInString: st.open}, st
+}
+
+// ignoreMarkerPattern matches 'ods: ignore[rule1, rule2]' inside a comment.
+var ignoreMarkerPattern = regexp.MustCompile(`ods:\s*ignore\[([^\]]*)\]`)
+
+// suppressed reports whether the comment carries an ignore marker naming rule.
+func suppressed(comment string, rule string) bool {
+	for _, m := range ignoreMarkerPattern.FindAllStringSubmatch(comment, -1) {
+		for _, name := range strings.Split(m[1], ",") {
+			if strings.TrimSpace(name) == rule {
+				return true
+			}
+		}
+	}
+	return false
+}
+
+// matchesCode reports whether the scanned code text references the banned
+// name, excluding attribute access like 'obj.getattr'.
+func (r BannedName) matchesCode(code string) bool {
+	for _, loc := range r.re.FindAllStringIndex(code, -1) {
+		j := loc[0] - 1
+		for j >= 0 && (code[j] == ' ' || code[j] == '\t') {
+			j--
+		}
+		if j >= 0 && code[j] == '.' {
+			continue
+		}
+		return true
+	}
+	return false
+}
+
+// CheckContent scans Python source text and returns its violation lines.
+func CheckContent(content string, rule BannedName) []ViolationLine {
+	var violations []ViolationLine
+	var st stringState
+	for idx, line := range strings.Split(content, "\n") {
+		scanned, next := scanLine(line, st)
+		st = next
+		if !rule.matchesCode(scanned.code) || suppressed(scanned.comment, rule.Name) {
+			continue
+		}
+		violations = append(violations, ViolationLine{LineNum: idx + 1, Content: line})
+	}
+	return violations
+}
+
+// skipDirectories are directories that are never scanned.
+var skipDirectories = map[string]struct{}{
+	".venv":       {},
+	"venv":        {},
+	"__pycache__": {},
+}
+
+// isCheckablePythonFile reports whether the file should be scanned.
+func isCheckablePythonFile(filePath string) bool {
+	if !strings.HasSuffix(filePath, ".py") {
+		return false
+	}
+	for _, part := range strings.Split(filePath, string(os.PathSeparator)) {
+		if _, skip := skipDirectories[part]; skip {
+			return false
+		}
+	}
+	return true
+}
+
+// collectPythonFiles resolves the provided files and directories to the
+// Python files inside the backend directory.
+func collectPythonFiles(startPoints []string, backendDir string) ([]string, error) {
+	var collected []string
+	backendReal, err := filepath.Abs(backendDir)
+	if err != nil {
+		return nil, err
+	}
+
+	for _, p := range startPoints {
+		absPath, err := filepath.Abs(p)
+		if err != nil {
+			log.Debugf("Skipping path that cannot be resolved: %s", p)
+			continue
+		}
+
+		relPath, err := filepath.Rel(backendReal, absPath)
+		if err != nil || strings.HasPrefix(relPath, "..") {
+			log.Debugf("Skipping path outside backend directory: %s", p)
+			continue
+		}
+
+		info, err := os.Stat(absPath)
+		if err != nil {
+			log.Debugf("Skipping non-existent path: %s", p)
+			continue
+		}
+
+		if info.IsDir() {
+			err := filepath.Walk(absPath, func(path string, info os.FileInfo, err error) error {
+				if err != nil {
+					return nil // Skip files with errors.
+				}
+				if !info.IsDir() && isCheckablePythonFile(path) {
+					collected = append(collected, path)
+				}
+				return nil
+			})
+			if err != nil {
+				log.Debugf("Error walking directory %s: %v", absPath, err)
+			}
+		} else {
+			if isCheckablePythonFile(absPath) {
+				collected = append(collected, absPath)
+			}
+		}
+	}
+
+	return collected, nil
+}
+
+// targetFiles resolves providedPaths (or the whole backend when empty) to the
+// Python files to scan.
+func targetFiles(providedPaths []string) ([]string, string, error) {
+	backendDir, err := paths.BackendDir()
+	if err != nil {
+		return nil, "", err
+	}
+	startPoints := providedPaths
+	if len(startPoints) == 0 {
+		startPoints = []string{backendDir}
+	}
+	files, err := collectPythonFiles(startPoints, backendDir)
+	if err != nil {
+		return nil, "", err
+	}
+	return files, backendDir, nil
+}
+
+// relTo returns filePath relative to baseDir, falling back to filePath.
+func relTo(baseDir string, filePath string) string {
+	relPath, err := filepath.Rel(baseDir, filePath)
+	if err != nil {
+		return filePath
+	}
+	return relPath
+}
+
+// Check scans the provided paths (or the whole backend when none are given)
+// and returns the per-file violations of the rule.
+func Check(rule BannedName, providedPaths []string) ([]FileViolation, error) {
+	files, backendDir, err := targetFiles(providedPaths)
+	if err != nil {
+		return nil, err
+	}
+
+	var violations []FileViolation
+	for _, filePath := range files {
+		data, err := os.ReadFile(filePath)
+		if err != nil {
+			log.Errorf("Error reading %s: %v", filePath, err)
+			continue
+		}
+		lines := CheckContent(string(data), rule)
+		if len(lines) == 0 {
+			continue
+		}
+		violations = append(violations, FileViolation{
+			RelPath:        relTo(backendDir, filePath),
+			ViolationLines: lines,
+		})
+	}
+	return violations, nil
+}
+
+// AnnotateResult reports what Annotate changed and what it could not.
+type AnnotateResult struct {
+	AnnotatedLines int
+	AnnotatedFiles int
+	// ManualFiles holds violations that cannot be annotated mechanically:
+	// the line ends in a backslash continuation or inside an open string
+	// literal, where a trailing comment would change the code.
+	ManualFiles []FileViolation
+}
+
+// annotateFile appends the marker to every violating line of one file. It
+// returns the number of lines annotated and the violations that need manual
+// markers because a trailing comment would change the code there.
+func annotateFile(filePath string, rule BannedName, marker string) (int, []ViolationLine, error) {
+	info, err := os.Stat(filePath)
+	if err != nil {
+		return 0, nil, err
+	}
+	data, err := os.ReadFile(filePath)
+	if err != nil {
+		return 0, nil, err
+	}
+
+	lines := strings.Split(string(data), "\n")
+	var st stringState
+	var manual []ViolationLine
+	annotated := 0
+	for i, line := range lines {
+		scanned, next := scanLine(line, st)
+		st = next
+		if !rule.matchesCode(scanned.code) || suppressed(scanned.comment, rule.Name) {
+			continue
+		}
+		if scanned.endsInString || strings.HasSuffix(strings.TrimRight(scanned.code, " \t"), "\\") {
+			manual = append(manual, ViolationLine{LineNum: i + 1, Content: line})
+			continue
+		}
+		lines[i] = line + marker
+		annotated++
+	}
+
+	if annotated > 0 {
+		if err := os.WriteFile(filePath, []byte(strings.Join(lines, "\n")), info.Mode()); err != nil {
+			return 0, nil, err
+		}
+	}
+	return annotated, manual, nil
+}
+
+// Annotate appends an 'ods: ignore[rule]' marker to every violating line in
+// the provided paths (or the whole backend when none are given). Suppressed
+// lines are not violations, so a second run is a no-op.
+func Annotate(rule BannedName, providedPaths []string) (AnnotateResult, error) {
+	var result AnnotateResult
+	files, backendDir, err := targetFiles(providedPaths)
+	if err != nil {
+		return result, err
+	}
+
+	marker := "  # ods: ignore[" + rule.Name + "]"
+	for _, filePath := range files {
+		annotated, manual, err := annotateFile(filePath, rule, marker)
+		if err != nil {
+			return result, err
+		}
+		if annotated > 0 {
+			result.AnnotatedLines += annotated
+			result.AnnotatedFiles++
+		}
+		if len(manual) > 0 {
+			result.ManualFiles = append(result.ManualFiles, FileViolation{
+				RelPath:        relTo(backendDir, filePath),
+				ViolationLines: manual,
+			})
+		}
+	}
+	return result, nil
+}
