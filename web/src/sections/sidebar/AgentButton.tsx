@@ -1,17 +1,16 @@
 "use client";
 
-import React, { memo, useEffect, useRef } from "react";
+import React, { useEffect, useRef } from "react";
 import { MinimalAgent } from "@/lib/agents/types";
 import { usePinnedAgents, useActiveAgent } from "@/lib/agents/hooks";
 import { noProp } from "@/lib/utils";
-import { cn } from "@opal/utils";
-import { SidebarTab } from "@opal/components";
-import IconButton from "@/refresh-components/buttons/IconButton";
+import { SidebarTab, Button } from "@opal/components";
 import { useSortable } from "@dnd-kit/sortable";
 import { CSS } from "@dnd-kit/utilities";
 import useOnMount from "@/hooks/useOnMount";
 import AgentAvatar from "@/refresh-components/avatars/AgentAvatar";
 import { SvgX } from "@opal/icons";
+import { Hoverable } from "@opal/core";
 
 interface SortableItemProps {
   id: number;
@@ -65,21 +64,20 @@ export interface AgentButtonProps {
   agent: MinimalAgent;
 }
 
-const AgentButton = memo(({ agent }: AgentButtonProps) => {
+export default function AgentButton({ agent }: AgentButtonProps) {
   const activeAgent = useActiveAgent();
   const { pinnedAgents, togglePinnedAgent } = usePinnedAgents();
   const isActuallyPinned = pinnedAgents.some((a) => a.id === agent.id);
   const isCurrentAgent = activeAgent?.id === agent.id;
 
-  const handleClick = async () => {
-    if (!isActuallyPinned) {
-      await togglePinnedAgent(agent, true);
-    }
-  };
+  async function handleClick() {
+    if (isActuallyPinned) return;
+    await togglePinnedAgent(agent, true);
+  }
 
   return (
     <SortableItem id={agent.id}>
-      <div className="flex flex-col w-full h-full">
+      <Hoverable.Root group="AgentButton/unpin-agent">
         <SidebarTab
           key={agent.id}
           icon={() => <AgentAvatar agent={agent} />}
@@ -88,26 +86,22 @@ const AgentButton = memo(({ agent }: AgentButtonProps) => {
           selected={isCurrentAgent}
           rightChildren={
             // Hide unpin button for current agent since auto-pin would immediately re-pin
-            isCurrentAgent ? null : (
-              // TODO(@raunakab): migrate to opal Button once className/iconClassName is resolved
-              <IconButton
-                icon={
-                  SvgX /* We only show the unpin button for pinned agents */
-                }
-                internal
-                onClick={noProp(() => togglePinnedAgent(agent, false))}
-                className={cn("hidden group-hover/SidebarTab:flex")}
-                tooltip={"Unpin Agent"}
-              />
+            !isCurrentAgent && (
+              <Hoverable.Item group="AgentButton/unpin-agent">
+                <Button
+                  icon={SvgX}
+                  prominence="internal"
+                  size="sm"
+                  onClick={noProp(() => togglePinnedAgent(agent, false))}
+                  tooltip="Unpin Agent"
+                />
+              </Hoverable.Item>
             )
           }
         >
           {agent.name}
         </SidebarTab>
-      </div>
+      </Hoverable.Root>
     </SortableItem>
   );
-});
-AgentButton.displayName = "AgentButton";
-
-export default AgentButton;
+}
