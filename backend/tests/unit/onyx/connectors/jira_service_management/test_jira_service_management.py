@@ -3,22 +3,34 @@
 Mirrors the mocking conventions used by the existing Jira connector test
 suite (backend/tests/unit/onyx/connectors/jira/) — a MagicMock(spec=JIRA)
 client injected directly as `_jira_client`, no live credentials needed.
+Attribute access on the mock is narrowed with `cast(MagicMock, ...)`
+rather than `# ty: ignore` comments, matching that suite's own convention.
 """
 
 from collections.abc import Callable, Generator
-from typing import Any
+from typing import Any, cast
 from unittest.mock import MagicMock, patch
 
 import pytest
-from jira import JIRA
+from jira import JIRA, JIRAError
 from jira.resources import Issue
 
 from onyx.configs.constants import DocumentSource
-from onyx.connectors.exceptions import ConnectorValidationError
+from onyx.connectors.exceptions import (
+    ConnectorValidationError,
+    CredentialExpiredError,
+    InsufficientPermissionsError,
+    UnexpectedValidationError,
+)
 from onyx.connectors.jira_service_management.connector import (
     JiraServiceManagementConnector,
 )
-from onyx.connectors.models import ConnectorFailure, Document
+from onyx.connectors.models import (
+    ConnectorFailure,
+    ConnectorMissingCredentialError,
+    Document,
+    HierarchyNode,
+)
 from tests.unit.onyx.connectors.utils import load_everything_from_checkpoint_connector
 
 
@@ -101,6 +113,16 @@ def create_mock_issue() -> Callable[..., MagicMock]:
     return _create_mock_issue
 
 
+def _project_mock(connector: JiraServiceManagementConnector) -> MagicMock:
+    jira_client = cast(JIRA, connector._jira_client)
+    return cast(MagicMock, jira_client.project)
+
+
+def _search_issues_mock(connector: JiraServiceManagementConnector) -> MagicMock:
+    jira_client = cast(JIRA, connector._jira_client)
+    return cast(MagicMock, jira_client.search_issues)
+
+
 # --------------------------------------------------------------------------
 # validate_connector_settings: the one genuinely JSM-specific check
 # --------------------------------------------------------------------------
@@ -111,11 +133,12 @@ def test_validate_connector_settings_accepts_service_desk_project(
 ) -> None:
     project = MagicMock()
     project.projectTypeKey = "service_desk"
-    jsm_connector._jira_client.project.return_value = project  # ty: ignore[unresolved-attribute]
+    project_mock = _project_mock(jsm_connector)
+    project_mock.return_value = project
 
     jsm_connector.validate_connector_settings()  # should not raise
 
-    jsm_connector._jira_client.project.assert_called_once_with("ITSM")  # ty: ignore[unresolved-attribute]
+    project_mock.assert_called_once_with("ITSM")
 
 
 def test_validate_connector_settings_rejects_non_service_desk_project(
@@ -123,7 +146,7 @@ def test_validate_connector_settings_rejects_non_service_desk_project(
 ) -> None:
     project = MagicMock()
     project.projectTypeKey = "software"
-    jsm_connector._jira_client.project.return_value = project  # ty: ignore[unresolved-attribute]
+    _project_mock(jsm_connector).return_value = project
 
     with pytest.raises(ConnectorValidationError) as excinfo:
         jsm_connector.validate_connector_settings()
@@ -145,7 +168,7 @@ def test_validate_connector_settings_skips_project_type_check_when_unset(
 
     connector.validate_connector_settings()
 
-    mock_jira_client.project.assert_not_called()
+    cast(MagicMock, mock_jira_client.project).assert_not_called()
 
 
 def test_validate_connector_settings_missing_project_type_key_is_permissive(
@@ -155,9 +178,54 @@ def test_validate_connector_settings_missing_project_type_key_is_permissive(
     all, fail open rather than reject a possibly-valid project."""
     project = MagicMock()
     project.projectTypeKey = None
-    jsm_connector._jira_client.project.return_value = project  # ty: ignore[unresolved-attribute]
+    _project_mock(jsm_connector).return_value = project
 
     jsm_connector.validate_connector_settings()  # should not raise
+
+
+# --------------------------------------------------------------------------
+# validate_connector_settings: credential and API-error paths
+# --------------------------------------------------------------------------
+
+
+def test_validate_connector_settings_raises_when_no_credentials(
+    jira_base_url: str,
+) -> None:
+    """Calling validate_connector_settings() before load_credentials() must
+    fail with the standard missing-credential error, not an AttributeError
+    from calling .project() on a None client."""
+    connector = JiraServiceManagementConnector(
+        jira_base_url=jira_base_url, project_key="ITSM"
+    )
+
+    with pytest.raises(ConnectorMissingCredentialError):
+        connector.validate_connector_settings()
+
+
+@pytest.mark.parametrize(
+    "status_code,expected_exception,expected_message",
+    [
+        (401, CredentialExpiredError, "Jira credential appears to be expired"),
+        (403, InsufficientPermissionsError, "does not have sufficient permissions"),
+        (429, ConnectorValidationError, "rate-limits being exceeded"),
+        (404, UnexpectedValidationError, "Unexpected Jira error"),
+    ],
+)
+def test_validate_connector_settings_propagates_project_lookup_errors(
+    jsm_connector: JiraServiceManagementConnector,
+    status_code: int,
+    expected_exception: type[Exception],
+    expected_message: str,
+) -> None:
+    """A real API error while fetching the project (not just a wrong
+    project type) must surface as the same typed exception the base Jira
+    connector uses — inherited error-handling shouldn't get bypassed by
+    the single-call optimization in our override."""
+    _project_mock(jsm_connector).side_effect = JIRAError(status_code=status_code)
+
+    with pytest.raises(expected_exception) as excinfo:
+        jsm_connector.validate_connector_settings()
+    assert expected_message in str(excinfo.value)
 
 
 # --------------------------------------------------------------------------
@@ -170,8 +238,7 @@ def test_load_from_checkpoint_retags_document_source(
     create_mock_issue: Callable[..., MagicMock],
 ) -> None:
     mock_issue = create_mock_issue()
-    search_issues_mock = jsm_connector._jira_client.search_issues  # ty: ignore[unresolved-attribute]
-    search_issues_mock.return_value = [mock_issue]
+    _search_issues_mock(jsm_connector).return_value = [mock_issue]
 
     outputs = load_everything_from_checkpoint_connector(
         jsm_connector, 0, 10_000_000_000
@@ -193,8 +260,7 @@ def test_load_from_checkpoint_with_perm_sync_retags_document_source(
     create_mock_issue: Callable[..., MagicMock],
 ) -> None:
     mock_issue = create_mock_issue()
-    search_issues_mock = jsm_connector._jira_client.search_issues  # ty: ignore[unresolved-attribute]
-    search_issues_mock.return_value = [mock_issue]
+    _search_issues_mock(jsm_connector).return_value = [mock_issue]
 
     with patch(
         "onyx.connectors.jira_service_management.connector.JiraServiceManagementConnector._get_project_permissions",
@@ -220,8 +286,7 @@ def test_load_from_checkpoint_preserves_failures_and_checkpoint(
     to retag), and the final returned checkpoint must be the same object
     the parent JiraConnector produced — re-tagging shouldn't disturb it."""
     mock_issue = create_mock_issue()
-    search_issues_mock = jsm_connector._jira_client.search_issues  # ty: ignore[unresolved-attribute]
-    search_issues_mock.return_value = [mock_issue]
+    _search_issues_mock(jsm_connector).return_value = [mock_issue]
 
     checkpoint = jsm_connector.build_dummy_checkpoint()
     gen = jsm_connector.load_from_checkpoint(0, 10_000_000_000, checkpoint)
@@ -237,3 +302,115 @@ def test_load_from_checkpoint_preserves_failures_and_checkpoint(
     assert not any(isinstance(item, ConnectorFailure) for item in items)
     assert returned_checkpoint is not None
     assert returned_checkpoint.has_more is not None
+
+
+# --------------------------------------------------------------------------
+# Non-Document stream items and batch/error propagation
+# --------------------------------------------------------------------------
+
+
+def _drain(gen: Generator[Any, None, Any]) -> tuple[list[Any], Any]:
+    """Runs a load_from_checkpoint generator to completion, returning every
+    yielded item plus the final checkpoint from its return value."""
+    items: list[Any] = []
+    while True:
+        try:
+            items.append(next(gen))
+        except StopIteration as stop:
+            return items, stop.value
+
+
+def test_load_from_checkpoint_yields_hierarchy_node_untouched(
+    jsm_connector: JiraServiceManagementConnector,
+    create_mock_issue: Callable[..., MagicMock],
+) -> None:
+    """load_everything_from_checkpoint_connector (used by the other tests)
+    silently discards HierarchyNode items, so it can't prove _retag leaves
+    them alone. Drain the raw generator directly instead — the project
+    hierarchy node the parent yields ahead of the document must come
+    through with its real project fields, not be dropped or mutated."""
+    mock_issue = create_mock_issue()
+    _search_issues_mock(jsm_connector).return_value = [mock_issue]
+
+    checkpoint = jsm_connector.build_dummy_checkpoint()
+    items, _ = _drain(jsm_connector.load_from_checkpoint(0, 10_000_000_000, checkpoint))
+
+    hierarchy_nodes = [item for item in items if isinstance(item, HierarchyNode)]
+    assert len(hierarchy_nodes) == 1
+    assert hierarchy_nodes[0].raw_node_id == "ITSM"
+    assert hierarchy_nodes[0].raw_parent_id is None
+
+
+def test_load_from_checkpoint_yields_failure_untouched_on_processing_error(
+    jsm_connector: JiraServiceManagementConnector,
+    create_mock_issue: Callable[..., MagicMock],
+) -> None:
+    """When the parent's per-issue processing genuinely raises (not just
+    "no failures happened to occur" like the happy-path test covers), the
+    resulting ConnectorFailure must reach the caller untouched — _retag's
+    isinstance check must not accidentally swallow or reshape it."""
+    mock_issue = create_mock_issue(key="ITSM-500")
+    _search_issues_mock(jsm_connector).return_value = [mock_issue]
+
+    checkpoint = jsm_connector.build_dummy_checkpoint()
+    with patch(
+        "onyx.connectors.jira.connector.process_jira_issue",
+        side_effect=RuntimeError("boom"),
+    ):
+        items, _ = _drain(
+            jsm_connector.load_from_checkpoint(0, 10_000_000_000, checkpoint)
+        )
+
+    failures = [item for item in items if isinstance(item, ConnectorFailure)]
+    assert len(failures) == 1
+    assert failures[0].failed_document is not None
+    assert failures[0].failed_document.document_id == "ITSM-500"
+    assert "boom" in failures[0].failure_message
+    # The failure must not have been coerced into a fake Document.
+    assert not any(isinstance(item, Document) for item in items)
+
+
+def test_load_from_checkpoint_retags_every_document_in_a_batch(
+    jsm_connector: JiraServiceManagementConnector,
+    create_mock_issue: Callable[..., MagicMock],
+) -> None:
+    """All existing tests use a single mock issue, which can't catch a bug
+    where re-tagging only affects the first item in a page. Use three."""
+    issues = [
+        create_mock_issue(key="ITSM-1", summary="First"),
+        create_mock_issue(key="ITSM-2", summary="Second"),
+        create_mock_issue(key="ITSM-3", summary="Third"),
+    ]
+    _search_issues_mock(jsm_connector).return_value = issues
+
+    outputs = load_everything_from_checkpoint_connector(
+        jsm_connector, 0, 10_000_000_000
+    )
+    documents = [
+        item
+        for output in outputs
+        for item in output.items
+        if isinstance(item, Document)
+    ]
+
+    assert len(documents) == 3
+    assert {d.semantic_identifier.split(":")[0] for d in documents} == {
+        "ITSM-1",
+        "ITSM-2",
+        "ITSM-3",
+    }
+    assert all(d.source == DocumentSource.JIRA_SERVICE_MANAGEMENT for d in documents)
+
+
+def test_load_from_checkpoint_propagates_search_error_instead_of_swallowing_it(
+    jsm_connector: JiraServiceManagementConnector,
+) -> None:
+    """If the underlying Jira search itself fails (not a per-issue
+    processing error), that's a real validation/connectivity problem —
+    the wrapping generator must let it propagate, not catch it as part of
+    generic StopIteration handling and return an empty/silent result."""
+    _search_issues_mock(jsm_connector).side_effect = JIRAError(status_code=401)
+
+    checkpoint = jsm_connector.build_dummy_checkpoint()
+    with pytest.raises(CredentialExpiredError):
+        list(jsm_connector.load_from_checkpoint(0, 10_000_000_000, checkpoint))
