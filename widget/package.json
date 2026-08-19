@@ -20,7 +20,7 @@
     "dompurify": "^3.4.12",
     "lit": "^3.1.0",
     "marked": "^18.0.7",
-    "terser": "^5.49.0"
+    "terser": "^5.49.2"
   },
   "devDependencies": {
     "@types/node": "^26.1.2",
