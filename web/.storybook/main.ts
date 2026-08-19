@@ -16,6 +16,7 @@ const config: StorybookConfig = {
     "../src/refresh-components/**/*.stories.@(ts|tsx)",
     "../src/sections/**/*.stories.@(ts|tsx)",
     "../src/app/craft/**/*.stories.@(ts|tsx)",
+    "../src/views/**/*.stories.@(ts|tsx)",
   ],
   addons: [
     getAbsolutePath("@storybook/addon-themes"),
