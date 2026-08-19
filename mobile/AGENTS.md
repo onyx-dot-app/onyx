@@ -76,7 +76,8 @@ Web is different: web uses **Tailwind's default step scale**, where `p-6` = step
 ## Tests
 
 - Runner: `jest-expo`. Tests live in `__tests__/` (`src/**/__tests__/**/*.test.ts?(x)`). Gate with
-  `bun run typecheck`, `bun run lint`, `bunx jest`.
+  `bun run typecheck`, `bun run lint`, `bunx jest`. From any directory, `ods test mobile` runs the
+  same jest suite and installs `mobile/node_modules` first if it is missing.
 - **Import jest globals from `@jest/globals`** (`describe/it/expect/jest/beforeEach`) — the TS config
   carries no ambient test types. Put all imports first, then `jest.mock(...)` (babel hoists the mock;
   this also satisfies `import/first`).

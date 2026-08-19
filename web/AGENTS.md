@@ -648,3 +648,7 @@ export function useToast() { ... }
 - Run an e2e test with the repo-pinned Playwright: `cd web && bun run playwright <TEST_NAME>`
   (the `playwright` script expands to `playwright test`; avoid `bunx`/`npx`, which can silently
   fetch an unpinned version).
+- `ods test` runs either suite from any directory and keeps the pinned Playwright:
+  `ods test web` / `ods test e2e <TEST_NAME>`. A path picks the suite for you, so
+  `ods test web/src/lib/foo.test.ts` runs jest and `ods test web/tests/e2e/chat.spec.ts` runs
+  Playwright. Arguments after the first go to the runner.

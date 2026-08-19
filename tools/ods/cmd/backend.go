@@ -138,20 +138,8 @@ func runBackendService(name, module, port string, opts *BackendOptions) {
 
 	svcCmd := exec.Command("uv", uvicornArgs...)
 	svcCmd.Dir = backendDir
-	svcCmd.Stdout = os.Stdout
-	svcCmd.Stderr = os.Stderr
-	svcCmd.Stdin = os.Stdin
 	svcCmd.Env = mergedEnv
-
-	if err := svcCmd.Run(); err != nil {
-		var exitErr *exec.ExitError
-		if errors.As(err, &exitErr) {
-			if code := exitErr.ExitCode(); code != -1 {
-				os.Exit(code)
-			}
-		}
-		log.Fatalf("Failed to run %s: %v", name, err)
-	}
+	runChild(svcCmd, name)
 }
 
 // eeEnvDefaults returns env entries for EE and license enforcement settings.
