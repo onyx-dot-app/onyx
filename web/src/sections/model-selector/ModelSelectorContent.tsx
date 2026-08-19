@@ -32,6 +32,16 @@ import {
   llmOptionKey,
 } from "@/lib/languageModels/options";
 import { ReasoningEffortOverride } from "@/lib/languageModels/types";
+import {
+  ALL_REASONING_STOPS,
+  PaneSlider,
+  REASONING_STOP_LABELS,
+  SettingRow,
+  UNKNOWN_CONTEXT_TOOLTIP,
+  UNSUPPORTED_SETTING_TOOLTIP,
+  formatContextWindow,
+  maxReasoningStop,
+} from "@/sections/model-selector/setting-controls";
 import { useCurrentAgentLLMProviders } from "@/lib/languageModels/hooks";
 import { useUser } from "@/providers/UserProvider";
 import { useSettings } from "@/lib/settings/hooks";
@@ -98,56 +108,13 @@ export function useModelDetailManagers(
   ]);
 }
 
-const BASE_REASONING_STOPS: ReasoningEffortOverride[] = [
-  "off",
-  "low",
-  "medium",
-  "high",
-];
-
-/** Every stop the slider renders. Unsupported stops are greyed, never hidden. */
-const ALL_REASONING_STOPS: ReasoningEffortOverride[] = [
-  ...BASE_REASONING_STOPS,
-  "xhigh",
-];
-
-const REASONING_STOP_LABELS: Record<ReasoningEffortOverride, string> = {
-  off: "Off",
-  low: "Low",
-  medium: "Medium",
-  high: "High",
-  xhigh: "XHigh",
-};
-
-/**
- * Index of the highest stop the model supports. The backend resolves this from
- * the same code that builds the request, so the slider can never offer a level
- * the request would drop. An older backend sends nothing, so fall back to the
- * levels every reasoning model supports.
- */
+/** Highest stop this model supports, as a slider index. */
 function maxSupportedReasoningStop(option: LLMOption): number {
-  const supported = option.supportedReasoningEfforts;
-  if (!supported) return BASE_REASONING_STOPS.length - 1;
-  return Math.max(
-    -1,
-    ...supported.map((effort) => ALL_REASONING_STOPS.indexOf(effort))
-  );
-}
-
-function formatContextWindow(tokens: number): string {
-  if (tokens >= 1_000_000)
-    return `${(tokens / 1_000_000).toFixed(1).replace(/\.0$/, "")}M`;
-  return tokens >= 1000 ? `${Math.round(tokens / 1000)}K` : `${tokens}`;
+  return maxReasoningStop(option.supportedReasoningEfforts);
 }
 
 /** Fixed-height scroll box: the popover clips overflow instead of scrolling. */
 const DETAIL_PANE_HEIGHT_CLASS = "h-[352px]";
-
-const SLIDER_THUMB_CLASS =
-  "block size-3 rounded-full bg-background-neutral-00 shadow-[0_0_2px_1px_rgba(0,0,0,0.15)] focus:outline-none";
-const SLIDER_TRACK_CLASS =
-  "h-1.5 w-full overflow-hidden rounded bg-background-tint-02";
-const SLIDER_FILL_CLASS = "h-full bg-theme-primary-05";
 
 function EmptyIconSlot(props: IconProps) {
   return <div {...(props as any)} />;
@@ -167,120 +134,11 @@ function selectionIcon(selected: boolean): IconFunctionComponent {
   return selected ? SelectedCheckIcon : EmptyIconSlot;
 }
 
-interface PaneSliderProps {
-  value: number;
-  min: number;
-  max: number;
-  step: number;
-  disabled?: boolean;
-  onValueChange: (value: number) => void;
-  onValueCommit: (value: number) => void;
-}
-
-function PaneSlider({
-  value,
-  min,
-  max,
-  step,
-  disabled,
-  onValueChange,
-  onValueCommit,
-}: PaneSliderProps) {
-  return (
-    <SliderPrimitive.Root
-      className="relative flex h-7 w-full cursor-pointer touch-none select-none items-center"
-      value={[value]}
-      min={min}
-      max={max}
-      step={step}
-      disabled={disabled}
-      onValueChange={(vals) => vals[0] !== undefined && onValueChange(vals[0])}
-      onValueCommit={(vals) => vals[0] !== undefined && onValueCommit(vals[0])}
-    >
-      <SliderPrimitive.Track
-        className={cn(SLIDER_TRACK_CLASS, "relative grow")}
-      >
-        <SliderPrimitive.Range className={cn(SLIDER_FILL_CLASS, "absolute")} />
-      </SliderPrimitive.Track>
-      <SliderPrimitive.Thumb className={SLIDER_THUMB_CLASS} />
-    </SliderPrimitive.Root>
-  );
-}
-
-interface SettingRowProps {
-  icon: IconFunctionComponent;
-  title: string;
-  value?: string;
-  /** Shown when hovering the value readout. */
-  valueTooltip?: string;
-  caption: string;
-  disabled?: boolean;
-  /** Shown when hovering the row while disabled. */
-  disabledTooltip?: string;
-  children?: React.ReactNode;
-}
-
-function SettingRow({
-  icon: Icon,
-  title,
-  value,
-  valueTooltip,
-  caption,
-  disabled = false,
-  disabledTooltip,
-  children,
-}: SettingRowProps) {
-  return (
-    <Disabled disabled={disabled} tooltip={disabledTooltip} tooltipSide="top">
-      <Section
-        alignItems="stretch"
-        height="auto"
-        gap={0}
-        padding={1.5}
-        className="rounded-08"
-      >
-        <Section
-          flexDirection="row"
-          justifyContent="between"
-          height="auto"
-          gap={2}
-        >
-          <Section flexDirection="row" width="fit" height="auto" gap={2}>
-            <Section width={1.25} height={1.25} className="text-text-04">
-              <Icon size={16} />
-            </Section>
-            <Text font="main-ui-action">{title}</Text>
-          </Section>
-          {value !== undefined && (
-            <Tooltip tooltip={valueTooltip} side="top">
-              <Text font="secondary-mono" color="text-04">
-                {value}
-              </Text>
-            </Tooltip>
-          )}
-        </Section>
-        {children}
-        <Section alignItems="stretch" height="auto" className="mt-2">
-          <Text font="secondary-body" color="text-03">
-            {caption}
-          </Text>
-        </Section>
-      </Section>
-    </Disabled>
-  );
-}
-
 interface ModelDetailPaneProps {
   option: LLMOption;
   managers: ModelDetailManagers;
   onBack: () => void;
 }
-
-const UNSUPPORTED_SETTING_TOOLTIP =
-  "Modifying this setting is not supported for this model.";
-
-const UNKNOWN_CONTEXT_TOOLTIP =
-  "Context size is not available for this model. Chats still apply a token limit automatically.";
 
 function ModelDetailPane({ option, managers, onBack }: ModelDetailPaneProps) {
   // Backend pins temperature to 1 (or omits it) for reasoning models, so
