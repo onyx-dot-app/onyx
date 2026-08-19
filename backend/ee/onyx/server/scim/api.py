@@ -62,6 +62,8 @@ from ee.onyx.server.scim.schema_definitions import (
     USER_RESOURCE_TYPE,
     USER_SCHEMA_DEF,
 )
+from onyx.auth.permissions import get_effective_permissions
+from onyx.auth.users import is_user_curator_or_admin
 from onyx.db.engine.sql_engine import get_session
 from onyx.db.enums import AccountType, GrantSource, Permission
 from onyx.db.models import ScimToken, ScimUserMapping, User, UserGroup, UserRole
@@ -265,9 +267,13 @@ def _is_privileged_account(user: User) -> bool:
     SSO login associates by email, so the first login for a renamed account's
     new address claims it. Provisioning only ever grants basic access, so a
     token must not move an admin or group-manager account — nor adopt one,
-    which would put it under IdP control.
+    which would put it under IdP control. Group management can also be
+    granted by permission alone, so the role check is not enough.
     """
-    return user.role in (UserRole.ADMIN, UserRole.CURATOR, UserRole.GLOBAL_CURATOR)
+    permissions = get_effective_permissions(user)
+    return (
+        is_user_curator_or_admin(user) or Permission.MANAGE_USER_GROUPS in permissions
+    )
 
 
 class _UsernameChange(NamedTuple):

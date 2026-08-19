@@ -29,7 +29,7 @@ from ee.onyx.server.scim.models import (
 )
 from ee.onyx.server.scim.patch import ScimPatchError
 from ee.onyx.server.scim.providers.base import ScimProvider
-from onyx.db.enums import AccountType
+from onyx.db.enums import AccountType, Permission
 from onyx.db.models import UserRole
 from tests.unit.onyx.server.scim.conftest import (
     assert_scim_error,
@@ -1583,10 +1583,7 @@ class TestPrivilegedRename:
     ) -> None:
         """Adoption must not hand the IdP control of a privileged account."""
         user = make_db_user(email="old@mane.com")
-        admin = make_db_user(
-            email="admin@mane.com",
-            effective_permissions=[Permission.FULL_ADMIN_PANEL_ACCESS.value],
-        )
+        admin = make_db_user(email="admin@mane.com", role=UserRole.ADMIN)
         mock_dal.get_user.return_value = user
         mock_dal.get_user_by_email.return_value = admin
 
@@ -1611,7 +1608,10 @@ class TestPrivilegedRename:
         provider: ScimProvider,
     ) -> None:
         user = make_db_user(email="old@mane.com")
-        manager = make_db_user(email="manager@mane.com", is_group_manager=True)
+        manager = make_db_user(
+            email="manager@mane.com",
+            effective_permissions=[Permission.MANAGE_USER_GROUPS.value],
+        )
         mock_dal.get_user.return_value = user
         mock_dal.get_user_by_email.return_value = manager
 
