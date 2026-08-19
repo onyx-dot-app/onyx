@@ -52,7 +52,9 @@ export interface ReasoningManager {
   updateReasoningEffort: (effort: ReasoningEffortOverride | null) => void;
 }
 
-/** Managers powering the per-model detail pane. Rows always render, and an absent manager leaves its row disabled. */
+/** Managers powering the per-model detail pane. A manager is absent when the
+ * host offers no such control, or an admin withheld it; either way its row
+ * does not render. Capability limits disable a row instead. */
 export interface ModelDetailManagers {
   temperature?: TemperatureManager;
   reasoning?: ReasoningManager;
