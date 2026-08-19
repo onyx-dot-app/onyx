@@ -31,7 +31,7 @@ def test_custom_api_prefix_allowlist(monkeypatch: pytest.MonkeyPatch) -> None:
     assert tenant_tracking._is_path_allowed("/v2/chat") is False
 
 
-@pytest.mark.parametrize("path", ["/health", "/health/live", "/metrics"])
+@pytest.mark.parametrize("path", ["/health", "/health/ready", "/metrics"])
 def test_probe_paths_skip_tenant_resolution_under_api_prefix(
     monkeypatch: pytest.MonkeyPatch, path: str
 ) -> None:
