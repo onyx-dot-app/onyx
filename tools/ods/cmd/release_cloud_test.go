@@ -20,7 +20,7 @@ package cmd
 //	S8 shallow clone (even with --version)   -> error                           TestComputeCloudTag_shallowCloneErrors
 //	S9 --version override                    -> override base, counter fresh    TestComputeCloudTag_versionOverride
 //
-// Counter states (existing tags vs a base; nextCloudTag, TestNextCloudTag_countersPerBase):
+// Counter states (existing tags vs a base; nextSequencedTag, TestNextCloudTag_countersPerBase):
 //
 //	C1 no tags for the base                  -> cloud.0
 //	C2 gaps in counters                      -> max+1, gaps not refilled
@@ -37,6 +37,8 @@ package cmd
 //	E3 push rejected by origin               -> local tag rolled back           TestReleaseCloud_pushFailureRollsBackLocalTag
 //	E4 counter tag only on origin            -> fetched, counter continues      TestReleaseCloud_fetchesRemoteOnlyCounterTags
 //	E5 --version with leading zeroes         -> rejected before any git work    TestReleaseCloud_rejectsLeadingZeroVersion
+//
+// Validation of existing tags lives in release_check_test.go.
 
 import (
 	"os"
@@ -264,7 +266,7 @@ func TestNextCloudTag_countersPerBase(t *testing.T) {
 	}
 	for _, tc := range cases {
 		t.Run(tc.base, func(t *testing.T) {
-			tag, err := nextCloudTag(tc.base)
+			tag, err := nextSequencedTag(tc.base+"-cloud.", "")
 			if err != nil {
 				t.Fatalf("unexpected error: %v", err)
 			}

@@ -186,10 +186,19 @@ jobs:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: uv run --no-sync --with onyx-devtools ods audit --fail-on=critical
 
+  # Validate that a pushed release tag is versioned correctly, via
+  # `ods release --check`. A cloud tag must be the tag `ods release cloud`
+  # would have cut: its commit on origin/main, its base matching the release
+  # branches, its counter in sequence. A stable tag (vX.Y.Z) must sit on its
+  # release/vX.Y branch with the patch in sequence.
   check-version-tag:
+    needs: [determine-builds]
     runs-on: ubuntu-slim
     timeout-minutes: 10
-    if: ${{ !startsWith(github.ref_name, 'nightly-latest') && github.ref_name != 'edge' && github.event_name != 'workflow_dispatch' }}
+    # The nightly/edge guards are redundant with the tag-type outputs, but keep
+    # them so a bad output can never fail the check on tags it was never meant
+    # to cover.
+    if: ${{ (needs.determine-builds.outputs.is-cloud-tag == 'true' || needs.determine-builds.outputs.is-stable == 'true') && !startsWith(github.ref_name, 'nightly-latest') && github.ref_name != 'edge' && github.event_name != 'workflow_dispatch' }}
     steps:
       - name: Checkout
         uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # ratchet:actions/checkout@v6
@@ -204,9 +213,9 @@ jobs:
           # NOTE: This isn't caching much and zizmor suggests this could be poisoned, so disable.
           enable-cache: false
 
-      - name: Validate tag is versioned correctly
+      - name: Validate the tag is versioned correctly
         run: |
-          uv run --no-sync --with release-tag tag --check
+          uv run --no-sync --with onyx-devtools ods release --check --ref "$GITHUB_REF_NAME"
 
   notify-slack-on-tag-check-failure:
     needs:

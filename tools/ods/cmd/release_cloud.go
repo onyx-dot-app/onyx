@@ -23,6 +23,12 @@ type ReleaseCloudOptions struct {
 	Verify  bool
 }
 
+// cloudTagRe matches a well-formed cloud tag and captures its base version
+// (with the leading v) and its counter. Leading zeroes are rejected per SemVer
+// 2.0.0 item 2.
+var cloudTagRe = regexp.MustCompile(
+	`^(v(?:0|[1-9]\d*)\.(?:0|[1-9]\d*)\.(?:0|[1-9]\d*))-cloud\.(0|[1-9]\d*)$`)
+
 // NewReleaseCloudCommand creates the `ods release cloud` command.
 func NewReleaseCloudCommand() *cobra.Command {
 	opts := &ReleaseCloudOptions{}
@@ -40,6 +46,8 @@ stable and beta tags under semver. N is one past the highest existing counter
 for the same base, starting at 0.
 
 Pushing the tag triggers deployment.yml, which builds the cloud images.
+
+To validate an existing tag instead of cutting one, see "ods release --check".
 
 Example usage:
 
@@ -76,7 +84,7 @@ func releaseCloud(opts *ReleaseCloudOptions) error {
 	// Best-effort: a failure here only leaves the counter stale, which is safe.
 	// If the computed tag already exists on origin, the push (which is never
 	// forced) is rejected and rolled back.
-	if err := fetchCloudTags(); err != nil {
+	if err := fetchTags("v*-cloud.*"); err != nil {
 		log.Warnf("Could not fetch cloud tags (using local tags): %v", err)
 	}
 
@@ -123,6 +131,17 @@ func releaseCloud(opts *ReleaseCloudOptions) error {
 // branch on origin that does not contain the commit; the counter is one past
 // the highest existing "-cloud.N" tag for that base.
 func computeCloudTag(commitSHA, overrideVersion string) (string, error) {
+	base, err := computeCloudBase(commitSHA, overrideVersion)
+	if err != nil {
+		return "", err
+	}
+	return nextSequencedTag(base+"-cloud.", "")
+}
+
+// computeCloudBase returns the cloud base version (e.g. "v4.6.0") for
+// commitSHA: "v" + overrideVersion when given, else one minor past the newest
+// release branch on origin that does not contain the commit.
+func computeCloudBase(commitSHA, overrideVersion string) (string, error) {
 	// The ancestry checks below cannot be answered truthfully in a shallow
 	// clone; fail loudly instead.
 	shallow, err := git.IsShallowRepository()
@@ -153,14 +172,14 @@ func computeCloudTag(commitSHA, overrideVersion string) (string, error) {
 		log.Infof("Newest release branch not containing %.10s: release/%s -> cloud base %s", commitSHA, branchVersion, base)
 	}
 
-	return nextCloudTag(base)
+	return base, nil
 }
 
-// fetchCloudTags force-updates the local v*-cloud.* tags from origin. A fetch
-// refspec allows only one wildcard per side, so the matching tag names are
-// listed with ls-remote (which globs freely) and fetched by exact refspec.
-func fetchCloudTags() error {
-	out, err := exec.Command("git", "ls-remote", "--tags", "origin", "v*-cloud.*").Output()
+// fetchTags force-updates the local tags matching pattern from origin. A
+// fetch refspec allows only one wildcard per side, so the matching tag names
+// are listed with ls-remote (which globs freely) and fetched by exact refspec.
+func fetchTags(pattern string) error {
+	out, err := exec.Command("git", "ls-remote", "--tags", "origin", pattern).Output()
 	if err != nil {
 		if exitErr, ok := err.(*exec.ExitError); ok && len(exitErr.Stderr) > 0 {
 			return fmt.Errorf("git ls-remote failed: %w: %s", err, strings.TrimSpace(string(exitErr.Stderr)))
@@ -191,20 +210,26 @@ func fetchCloudTags() error {
 	return git.RunCommand(args...)
 }
 
-// nextCloudTag returns base + "-cloud.N" where N is one past the highest
-// existing counter for base among local tags (fetched from origin beforehand),
-// or 0 when none exist. Counters compare numerically: lexically "-cloud.9" >
-// "-cloud.10", which would compute a colliding tag. Tags of other bases and
-// tags whose suffix is not a plain integer are ignored.
-func nextCloudTag(base string) (string, error) {
-	out, err := exec.Command("git", "tag", "--list", base+"-cloud.*").Output()
+// nextSequencedTag returns prefix + N where N is one past the highest
+// existing counter among local tags named prefix + <integer> (fetched from
+// origin beforehand), or 0 when none exist. Counters compare numerically:
+// lexically ".9" > ".10", which would compute a colliding tag. Tags of other
+// prefixes and tags whose suffix is not a plain integer are ignored, as is
+// excludeTag (which lets a check recompute the sequence as if the checked tag
+// did not exist).
+func nextSequencedTag(prefix, excludeTag string) (string, error) {
+	out, err := exec.Command("git", "tag", "--list", prefix+"*").Output()
 	if err != nil {
 		return "", fmt.Errorf("git tag --list failed: %w", err)
 	}
-	counterRe := regexp.MustCompile(`^` + regexp.QuoteMeta(base) + `-cloud\.(\d+)$`)
+	counterRe := regexp.MustCompile(`^` + regexp.QuoteMeta(prefix) + `(\d+)$`)
 	next := 0
 	for _, line := range strings.Split(string(out), "\n") {
-		matches := counterRe.FindStringSubmatch(strings.TrimSpace(line))
+		tag := strings.TrimSpace(line)
+		if tag == excludeTag {
+			continue
+		}
+		matches := counterRe.FindStringSubmatch(tag)
 		if matches == nil {
 			continue
 		}
@@ -216,7 +241,7 @@ func nextCloudTag(base string) (string, error) {
 			next = n + 1
 		}
 	}
-	return fmt.Sprintf("%s-cloud.%d", base, next), nil
+	return fmt.Sprintf("%s%d", prefix, next), nil
 }
 
 // resolveCommit resolves a commit-ish to a full commit SHA.
