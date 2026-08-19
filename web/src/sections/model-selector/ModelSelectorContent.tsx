@@ -358,40 +358,43 @@ function ModelDetailPane({ option, managers, onBack }: ModelDetailPaneProps) {
         caption="Tokens limit for each session"
       />
 
-      <SettingRow
-        icon={SvgThermometer}
-        title="Temperature"
-        value={displayTemperature.toFixed(1)}
-        caption="How predictable or creative the model should respond"
-        disabled={!temperatureEnabled}
-        disabledTooltip={UNSUPPORTED_SETTING_TOOLTIP}
-      >
-        <PaneSlider
-          value={displayTemperature}
-          min={0}
-          max={maxTemperature}
-          step={0.01}
+      {/* A row is absent when an admin withheld the control, and greyed
+          when the model cannot honour it. Greying the former would claim
+          the model does not support a setting it does. */}
+      {temperatureManager && (
+        <SettingRow
+          icon={SvgThermometer}
+          title="Temperature"
+          value={displayTemperature.toFixed(1)}
+          caption="How predictable or creative the model should respond"
           disabled={!temperatureEnabled}
-          onValueChange={setLocalTemperature}
-          onValueCommit={(value) =>
-            temperatureManager?.updateTemperature(value)
-          }
-        />
-        <div className="flex flex-row items-center justify-between">
-          {["Deterministic", "Balanced", "Creative"].map((label, index) => (
-            <Text
-              key={label}
-              font="figure-small-value"
-              color={index === temperatureAnchor ? "text-04" : "text-02"}
-            >
-              {label}
-            </Text>
-          ))}
-        </div>
-      </SettingRow>
+          disabledTooltip={UNSUPPORTED_SETTING_TOOLTIP}
+        >
+          <PaneSlider
+            value={displayTemperature}
+            min={0}
+            max={maxTemperature}
+            step={0.01}
+            disabled={!temperatureEnabled}
+            onValueChange={setLocalTemperature}
+            onValueCommit={(value) =>
+              temperatureManager?.updateTemperature(value)
+            }
+          />
+          <div className="flex flex-row items-center justify-between">
+            {["Deterministic", "Balanced", "Creative"].map((label, index) => (
+              <Text
+                key={label}
+                font="figure-small-value"
+                color={index === temperatureAnchor ? "text-04" : "text-02"}
+              >
+                {label}
+              </Text>
+            ))}
+          </div>
+        </SettingRow>
+      )}
 
-      {/* Absent, not greyed, when an admin has turned reasoning off: a
-          disabled row would claim the model does not support it. */}
       {reasoningManager && (
         <SettingRow
           icon={SvgBarChart}
