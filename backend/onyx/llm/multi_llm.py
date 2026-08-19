@@ -1,4 +1,5 @@
 import copy
+import math
 import os
 import time
 from collections.abc import Iterator
@@ -59,7 +60,7 @@ from onyx.llm.models import (
     ToolChoiceOptions,
     resolve_reasoning_effort,
 )
-from onyx.llm.request_context import get_llm_mock_response
+from onyx.llm.request_context import get_llm_mock_response, set_llm_request_params
 from onyx.llm.utils import build_litellm_passthrough_kwargs
 from onyx.llm.well_known_providers.constants import VERTEX_LOCATION_KWARG
 from onyx.tracing.llm_utils import record_llm_request_params
@@ -124,6 +125,18 @@ def _merge_under(base: dict[str, Any], override: dict[str, Any]) -> dict[str, An
         else:
             merged[key] = value
     return merged
+
+
+def _json_safe(value: Any) -> Any:
+    """Drop NaN and Infinity. Postgres rejects them in JSONB, and these params
+    ride to the message row, so one would fail the commit that saves the answer."""
+    if isinstance(value, float) and not math.isfinite(value):
+        return None
+    if isinstance(value, dict):
+        return {k: _json_safe(v) for k, v in value.items()}
+    if isinstance(value, list):
+        return [_json_safe(v) for v in value]
+    return value
 
 
 def _rejection_names_strippable_kwargs(error: Exception, strippable: set[str]) -> bool:
@@ -992,18 +1005,20 @@ class LitellmLLM(LLM):
 
             for i, opts in enumerate(attempts):
                 # Last write wins: sent_kwargs holds what the returning (or
-                # final failing) attempt sent, reasoning_effort the requested
-                # intent.
-                record_llm_request_params(
-                    {
-                        "reasoning_effort": reasoning_effort.value,
-                        "max_tokens": max_tokens,
-                        "sent_kwargs": {
-                            k: opts[k]
-                            for k in sorted(_BEST_EFFORT_KWARG_KEYS & opts.keys())
-                        },
-                    }
-                )
+                # final failing) attempt sent, reasoning_effort the effective
+                # intent. One dict, two sinks, so they cannot drift.
+                request_params = {
+                    "model_name": self.config.model_name,
+                    "model_provider": self.config.model_provider,
+                    "reasoning_effort": reasoning_effort.value,
+                    "max_tokens": max_tokens,
+                    "sent_kwargs": {
+                        k: _json_safe(opts[k])
+                        for k in sorted(_BEST_EFFORT_KWARG_KEYS & opts.keys())
+                    },
+                }
+                record_llm_request_params(request_params)
+                set_llm_request_params(request_params)
                 try:
                     return _call_litellm(opts)
                 except BadRequestError as e:
