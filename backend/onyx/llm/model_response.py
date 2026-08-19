@@ -220,7 +220,11 @@ def from_litellm_model_response_stream(
     delta_data: dict[str, Any] = choice_data.get("delta") or {}
     parsed_delta = Delta(
         content=delta_data.get("content"),
-        reasoning_content=delta_data.get("reasoning_content"),
+        # Some OpenAI-compatible providers (e.g. recent vLLM versions) return
+        # reasoning under `reasoning` instead of `reasoning_content`.
+        reasoning_content=(
+            delta_data.get("reasoning_content") or delta_data.get("reasoning")
+        ),
         thinking_blocks=_parse_thinking_blocks(delta_data.get("thinking_blocks")),
         tool_calls=_parse_delta_tool_calls(delta_data.get("tool_calls")),
     )
@@ -257,7 +261,11 @@ def from_litellm_model_response(
         content=message_data.get("content"),
         role=message_data.get("role", "assistant"),
         tool_calls=parsed_tool_calls if parsed_tool_calls else None,
-        reasoning_content=message_data.get("reasoning_content"),
+        # Some OpenAI-compatible providers (e.g. recent vLLM versions) return
+        # reasoning under `reasoning` instead of `reasoning_content`.
+        reasoning_content=(
+            message_data.get("reasoning_content") or message_data.get("reasoning")
+        ),
         thinking_blocks=_parse_thinking_blocks(message_data.get("thinking_blocks")),
     )
 
