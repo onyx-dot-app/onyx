@@ -909,8 +909,8 @@ def reparent_orphaned_hierarchy_nodes(
 ) -> list[HierarchyNode]:
     """Re-parent hierarchy nodes whose parent_id is NULL to the SOURCE node.
 
-    After pruning deletes stale nodes, their former children get parent_id=NULL
-    via the SET NULL cascade. This function points them back to the SOURCE root.
+    After parent nodes are deleted, former children get parent_id=NULL via
+    SET NULL. This points them back to the SOURCE root.
 
     Returns the reparented HierarchyNode objects (with updated parent_id)
     so callers can refresh downstream caches.
@@ -937,3 +937,24 @@ def reparent_orphaned_hierarchy_nodes(
         db_session.flush()
 
     return orphans
+
+
+def cleanup_unowned_hierarchy_nodes(
+    db_session: Session,
+    source: DocumentSource,
+    commit: bool = True,
+) -> tuple[list[str], list[HierarchyNode]]:
+    """Delete nodes with no remaining cc_pair links; reparent leftover children.
+
+    SOURCE roots are kept. Call after join-table rows for a cc_pair are gone
+    (cc_pair delete CASCADE, or prune's stale-entry removal).
+
+    Returns (deleted raw_node_ids, reparented nodes) for cache updates.
+    """
+    deleted_raw_ids = delete_orphaned_hierarchy_nodes(db_session, source, commit=False)
+    reparented_nodes = reparent_orphaned_hierarchy_nodes(
+        db_session, source, commit=False
+    )
+    if commit:
+        db_session.commit()
+    return deleted_raw_ids, reparented_nodes
