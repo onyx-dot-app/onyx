@@ -102,3 +102,12 @@ func BackendDir() (string, error) {
 	}
 	return filepath.Join(root, "backend"), nil
 }
+
+// WebDir returns the web directory relative to the git root.
+func WebDir() (string, error) {
+	root, err := GitRoot()
+	if err != nil {
+		return "", err
+	}
+	return filepath.Join(root, "web"), nil
+}

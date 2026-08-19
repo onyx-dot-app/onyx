@@ -1,18 +1,16 @@
 package cmd
 
 import (
-	"bufio"
-	"errors"
-	"fmt"
 	"os"
 	"os/exec"
 	"path/filepath"
 	"strconv"
-	"strings"
 
 	log "github.com/sirupsen/logrus"
 	"github.com/spf13/cobra"
 
+	"github.com/onyx-dot-app/onyx/tools/ods/internal/backendenv"
+	"github.com/onyx-dot-app/onyx/tools/ods/internal/childproc"
 	"github.com/onyx-dot-app/onyx/tools/ods/internal/paths"
 	"github.com/onyx-dot-app/onyx/tools/ods/internal/portutil"
 )
@@ -114,11 +112,15 @@ func runBackendService(name, module, port string, opts *BackendOptions) {
 
 	port = resolvePort(port)
 
-	envFile := ensureBackendEnvFile(root)
-	fileVars := loadBackendEnvFile(envFile)
-
-	eeDefaults := eeEnvDefaults(opts.NoEE)
-	fileVars = append(fileVars, eeDefaults...)
+	envFile, err := backendenv.EnsureFile(root)
+	if err != nil {
+		log.Fatal(err)
+	}
+	fileVars, err := backendenv.Load(envFile)
+	if err != nil {
+		log.Fatal(err)
+	}
+	fileVars = append(fileVars, backendenv.EEDefaults(opts.NoEE)...)
 
 	backendDir := filepath.Join(root, "backend")
 
@@ -133,114 +135,11 @@ func runBackendService(name, module, port string, opts *BackendOptions) {
 	}
 	log.Debugf("Running in %s: uv %v", backendDir, uvicornArgs)
 
-	mergedEnv := mergeEnv(os.Environ(), fileVars)
+	mergedEnv := backendenv.Merge(os.Environ(), fileVars)
 	log.Debugf("Applied %d env vars from %s (shell takes precedence)", len(fileVars), envFile)
 
 	svcCmd := exec.Command("uv", uvicornArgs...)
 	svcCmd.Dir = backendDir
 	svcCmd.Env = mergedEnv
-	runChild(svcCmd, name)
-}
-
-// eeEnvDefaults returns env entries for EE and license enforcement settings.
-// These are appended to the file vars so they act as defaults — shell env
-// and .env file values still take precedence via mergeEnv.
-func eeEnvDefaults(noEE bool) []string {
-	if noEE {
-		return []string{
-			"ENABLE_PAID_ENTERPRISE_EDITION_FEATURES=false",
-		}
-	}
-	return []string{
-		"ENABLE_PAID_ENTERPRISE_EDITION_FEATURES=true",
-		"LICENSE_ENFORCEMENT_ENABLED=false",
-	}
-}
-
-// ensureBackendEnvFile copies env_template.txt to .env if .env doesn't exist.
-func ensureBackendEnvFile(root string) string {
-	vscodeDir := filepath.Join(root, ".vscode")
-	envFile := filepath.Join(vscodeDir, ".env")
-	templateFile := filepath.Join(vscodeDir, "env_template.txt")
-
-	if _, err := os.Stat(envFile); err != nil {
-		if !errors.Is(err, os.ErrNotExist) {
-			log.Fatalf("Failed to stat env file %s: %v", envFile, err)
-		}
-	} else {
-		log.Debugf("Using existing env file: %s", envFile)
-		return envFile
-	}
-
-	templateData, err := os.ReadFile(templateFile)
-	if err != nil {
-		log.Fatalf("Failed to read env template %s: %v", templateFile, err)
-	}
-
-	if err := os.MkdirAll(vscodeDir, 0755); err != nil {
-		log.Fatalf("Failed to create .vscode directory: %v", err)
-	}
-
-	if err := os.WriteFile(envFile, templateData, 0644); err != nil {
-		log.Fatalf("Failed to write env file %s: %v", envFile, err)
-	}
-
-	log.Infof("Created %s from template (review and fill in <REPLACE THIS> values)", envFile)
-	return envFile
-}
-
-// mergeEnv combines shell environment with file-based defaults. Shell values
-// take precedence — file entries are only added for keys not already present.
-func mergeEnv(shellEnv, fileVars []string) []string {
-	existing := make(map[string]bool, len(shellEnv))
-	for _, entry := range shellEnv {
-		if idx := strings.Index(entry, "="); idx > 0 {
-			existing[entry[:idx]] = true
-		}
-	}
-
-	merged := make([]string, len(shellEnv))
-	copy(merged, shellEnv)
-	for _, entry := range fileVars {
-		if idx := strings.Index(entry, "="); idx > 0 {
-			key := entry[:idx]
-			if !existing[key] {
-				merged = append(merged, entry)
-			} else {
-				log.Debugf("Env var %s already set in shell, skipping .env value", key)
-			}
-		}
-	}
-	return merged
-}
-
-// loadBackendEnvFile parses a .env file into KEY=VALUE entries suitable for
-// appending to os.Environ(). Blank lines and comments are skipped.
-func loadBackendEnvFile(path string) []string {
-	f, err := os.Open(path)
-	if err != nil {
-		log.Fatalf("Failed to open env file %s: %v", path, err)
-	}
-	defer func() { _ = f.Close() }()
-
-	var envVars []string
-	scanner := bufio.NewScanner(f)
-	for scanner.Scan() {
-		line := strings.TrimSpace(scanner.Text())
-		if line == "" || strings.HasPrefix(line, "#") {
-			continue
-		}
-		if idx := strings.Index(line, "="); idx > 0 {
-			key := strings.TrimSpace(line[:idx])
-			value := strings.TrimSpace(line[idx+1:])
-			value = strings.Trim(value, `"'`)
-			envVars = append(envVars, fmt.Sprintf("%s=%s", key, value))
-		}
-	}
-
-	if err := scanner.Err(); err != nil {
-		log.Fatalf("Failed to read env file %s: %v", path, err)
-	}
-
-	return envVars
+	childproc.Run(svcCmd, name)
 }

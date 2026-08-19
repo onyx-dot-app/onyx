@@ -11,6 +11,8 @@ import (
 	log "github.com/sirupsen/logrus"
 	"github.com/spf13/cobra"
 
+	"github.com/onyx-dot-app/onyx/tools/ods/internal/backendenv"
+	"github.com/onyx-dot-app/onyx/tools/ods/internal/childproc"
 	"github.com/onyx-dot-app/onyx/tools/ods/internal/paths"
 	"github.com/onyx-dot-app/onyx/tools/ods/internal/testsuite"
 )
@@ -115,10 +117,17 @@ func runPytestSuite(root string, suite *testsuite.Suite, suiteArgs []string, opt
 	}
 	pytestArgs = append(pytestArgs, suiteArgs...)
 
-	envVars := eeEnvDefaults(opts.NoEE)
+	envVars := backendenv.EEDefaults(opts.NoEE)
 	if suite.NeedsBackendEnv {
-		envFile := ensureBackendEnvFile(root)
-		envVars = append(loadBackendEnvFile(envFile), envVars...)
+		envFile, err := backendenv.EnsureFile(root)
+		if err != nil {
+			log.Fatal(err)
+		}
+		fileVars, err := backendenv.Load(envFile)
+		if err != nil {
+			log.Fatal(err)
+		}
+		envVars = append(fileVars, envVars...)
 		log.Debugf("Applied %d env vars from %s (shell takes precedence)", len(envVars), envFile)
 	}
 
@@ -131,8 +140,8 @@ func runPytestSuite(root string, suite *testsuite.Suite, suiteArgs []string, opt
 
 	pytestCmd := exec.Command("uv", pytestArgs...)
 	pytestCmd.Dir = suiteDir
-	pytestCmd.Env = mergeEnv(os.Environ(), envVars)
-	runChild(pytestCmd, "pytest")
+	pytestCmd.Env = backendenv.Merge(os.Environ(), envVars)
+	childproc.Run(pytestCmd, "pytest")
 }
 
 // runGoSuite runs a Go module's tests from the module directory, which is where
@@ -151,7 +160,7 @@ func runGoSuite(root string, suite *testsuite.Suite, suiteArgs []string) {
 
 	goCmd := exec.Command("go", goArgs...)
 	goCmd.Dir = suiteDir
-	runChild(goCmd, "go test")
+	childproc.Run(goCmd, "go test")
 }
 
 func runJestSuite(root string, suite *testsuite.Suite, suiteArgs []string) {
@@ -187,7 +196,7 @@ func runBunScript(root string, suite *testsuite.Suite, script string, suiteArgs 
 
 	bunCmd := exec.Command("bun", bunArgs...)
 	bunCmd.Dir = suiteDir
-	runChild(bunCmd, "bun")
+	childproc.Run(bunCmd, "bun")
 }
 
 // ensureNodeModules installs dependencies for a bun package that has none yet.
@@ -202,7 +211,7 @@ func ensureNodeModules(dir string) {
 	log.Infof("node_modules missing in %s, running bun install...", dir)
 	installCmd := exec.Command("bun", "install")
 	installCmd.Dir = dir
-	runChild(installCmd, "bun install")
+	childproc.Run(installCmd, "bun install")
 }
 
 func testHelpDescription() string {

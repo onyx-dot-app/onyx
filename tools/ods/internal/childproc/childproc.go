@@ -1,4 +1,8 @@
-package cmd
+// Package childproc runs a wrapped tool as a child process and gives the tool's
+// result back to whoever ran ods. Every ods command that fronts another tool —
+// uv, bun, go — needs the same behavior, so it lives here rather than in each
+// command.
+package childproc
 
 import (
 	"errors"
@@ -8,12 +12,12 @@ import (
 	log "github.com/sirupsen/logrus"
 )
 
-// runChild runs a wrapped tool with our stdio attached and does not return on
+// Run runs a wrapped tool with our stdio attached and does not return on
 // failure. The child's exit code becomes ours, so shell chains and CI see the
 // underlying tool's result, and stderr the child already printed is not
 // repeated. label names the tool in the message used when the process could
 // not be started at all.
-func runChild(c *exec.Cmd, label string) {
+func Run(c *exec.Cmd, label string) {
 	c.Stdout = os.Stdout
 	c.Stderr = os.Stderr
 	c.Stdin = os.Stdin

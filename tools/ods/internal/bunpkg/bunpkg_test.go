@@ -1,4 +1,4 @@
-package cmd
+package bunpkg
 
 import (
 	"os"
@@ -28,8 +28,8 @@ func TestNodeModulesNeedsInstall(t *testing.T) {
 	now := time.Now()
 
 	t.Run("missing node_modules", func(t *testing.T) {
-		webDir := t.TempDir()
-		needs, reason := nodeModulesNeedsInstall(webDir)
+		dir := t.TempDir()
+		needs, reason := NodeModulesNeedsInstall(dir)
 		if !needs {
 			t.Fatal("expected install for missing node_modules")
 		}
@@ -39,11 +39,11 @@ func TestNodeModulesNeedsInstall(t *testing.T) {
 	})
 
 	t.Run("empty node_modules", func(t *testing.T) {
-		webDir := t.TempDir()
-		if err := os.Mkdir(filepath.Join(webDir, "node_modules"), 0o755); err != nil {
+		dir := t.TempDir()
+		if err := os.Mkdir(filepath.Join(dir, "node_modules"), 0o755); err != nil {
 			t.Fatal(err)
 		}
-		needs, reason := nodeModulesNeedsInstall(webDir)
+		needs, reason := NodeModulesNeedsInstall(dir)
 		if !needs {
 			t.Fatal("expected install for empty node_modules")
 		}
@@ -53,34 +53,34 @@ func TestNodeModulesNeedsInstall(t *testing.T) {
 	})
 
 	t.Run("populated without stamp is stale", func(t *testing.T) {
-		webDir := t.TempDir()
-		writeFile(t, filepath.Join(webDir, "bun.lock"), "lock-v1")
-		writeFile(t, filepath.Join(webDir, "node_modules", "pkg", "index.js"), "")
-		needs, _ := nodeModulesNeedsInstall(webDir)
+		dir := t.TempDir()
+		writeFile(t, filepath.Join(dir, "bun.lock"), "lock-v1")
+		writeFile(t, filepath.Join(dir, "node_modules", "pkg", "index.js"), "")
+		needs, _ := NodeModulesNeedsInstall(dir)
 		if !needs {
 			t.Fatal("expected install when no stamp recorded")
 		}
 	})
 
 	t.Run("stamp matches lockfile", func(t *testing.T) {
-		webDir := t.TempDir()
-		writeFile(t, filepath.Join(webDir, "bun.lock"), "lock-v1")
-		writeFile(t, filepath.Join(webDir, "node_modules", "pkg", "index.js"), "")
-		writeLockStamp(webDir)
-		needs, reason := nodeModulesNeedsInstall(webDir)
+		dir := t.TempDir()
+		writeFile(t, filepath.Join(dir, "bun.lock"), "lock-v1")
+		writeFile(t, filepath.Join(dir, "node_modules", "pkg", "index.js"), "")
+		WriteLockStamp(dir)
+		needs, reason := NodeModulesNeedsInstall(dir)
 		if needs {
 			t.Fatalf("expected no install with matching stamp, got: %q", reason)
 		}
 	})
 
 	t.Run("lockfile changed after stamp", func(t *testing.T) {
-		webDir := t.TempDir()
-		writeFile(t, filepath.Join(webDir, "bun.lock"), "lock-v1")
-		writeFile(t, filepath.Join(webDir, "node_modules", "pkg", "index.js"), "")
-		writeLockStamp(webDir)
-		writeFile(t, filepath.Join(webDir, "bun.lock"), "lock-v2")
-		setMtime(t, filepath.Join(webDir, "bun.lock"), now)
-		needs, _ := nodeModulesNeedsInstall(webDir)
+		dir := t.TempDir()
+		writeFile(t, filepath.Join(dir, "bun.lock"), "lock-v1")
+		writeFile(t, filepath.Join(dir, "node_modules", "pkg", "index.js"), "")
+		WriteLockStamp(dir)
+		writeFile(t, filepath.Join(dir, "bun.lock"), "lock-v2")
+		setMtime(t, filepath.Join(dir, "bun.lock"), now)
+		needs, _ := NodeModulesNeedsInstall(dir)
 		if !needs {
 			t.Fatal("expected install after lockfile change")
 		}
@@ -90,25 +90,25 @@ func TestNodeModulesNeedsInstall(t *testing.T) {
 		// Sessions run as different users against the shared node_modules
 		// volume, so the previous stamp may not be writable — only
 		// replaceable via the directory. Simulate with a read-only stamp.
-		webDir := t.TempDir()
-		writeFile(t, filepath.Join(webDir, "bun.lock"), "lock-v2")
-		writeFile(t, filepath.Join(webDir, "node_modules", "pkg", "index.js"), "")
-		stampPath := filepath.Join(webDir, "node_modules", lockStampName)
+		dir := t.TempDir()
+		writeFile(t, filepath.Join(dir, "bun.lock"), "lock-v2")
+		writeFile(t, filepath.Join(dir, "node_modules", "pkg", "index.js"), "")
+		stampPath := filepath.Join(dir, "node_modules", lockStampName)
 		writeFile(t, stampPath, "stale-hash")
 		if err := os.Chmod(stampPath, 0o444); err != nil {
 			t.Fatal(err)
 		}
-		writeLockStamp(webDir)
-		needs, reason := nodeModulesNeedsInstall(webDir)
+		WriteLockStamp(dir)
+		needs, reason := NodeModulesNeedsInstall(dir)
 		if needs {
 			t.Fatalf("expected stamp to be replaced despite read-only file, got: %q", reason)
 		}
 	})
 
 	t.Run("no lockfile skips staleness check", func(t *testing.T) {
-		webDir := t.TempDir()
-		writeFile(t, filepath.Join(webDir, "node_modules", "pkg", "index.js"), "")
-		needs, _ := nodeModulesNeedsInstall(webDir)
+		dir := t.TempDir()
+		writeFile(t, filepath.Join(dir, "node_modules", "pkg", "index.js"), "")
+		needs, _ := NodeModulesNeedsInstall(dir)
 		if needs {
 			t.Fatal("expected no install without a lockfile to compare")
 		}
@@ -120,7 +120,7 @@ func TestLibNeedsBuild(t *testing.T) {
 	older := old.Add(-time.Hour)
 
 	t.Run("missing package is skipped", func(t *testing.T) {
-		needs, _ := libNeedsBuild(filepath.Join(t.TempDir(), "lib", "nope"))
+		needs, _ := LibNeedsBuild(filepath.Join(t.TempDir(), "lib", "nope"))
 		if needs {
 			t.Fatal("expected missing package to be skipped")
 		}
@@ -129,7 +129,7 @@ func TestLibNeedsBuild(t *testing.T) {
 	t.Run("missing dist", func(t *testing.T) {
 		pkgDir := t.TempDir()
 		writeFile(t, filepath.Join(pkgDir, "src", "index.ts"), "")
-		needs, reason := libNeedsBuild(pkgDir)
+		needs, reason := LibNeedsBuild(pkgDir)
 		if !needs {
 			t.Fatal("expected build for missing dist")
 		}
@@ -147,7 +147,7 @@ func TestLibNeedsBuild(t *testing.T) {
 		setMtime(t, src, older)
 		setMtime(t, filepath.Join(pkgDir, "src"), older)
 		setMtime(t, pkgDir, older)
-		needs, reason := libNeedsBuild(pkgDir)
+		needs, reason := LibNeedsBuild(pkgDir)
 		if needs {
 			t.Fatalf("expected no build when dist is fresh, got: %q", reason)
 		}
@@ -162,7 +162,7 @@ func TestLibNeedsBuild(t *testing.T) {
 		setMtime(t, dist, older)
 		setMtime(t, filepath.Join(pkgDir, "dist"), older)
 		setMtime(t, src, old)
-		needs, _ := libNeedsBuild(pkgDir)
+		needs, _ := LibNeedsBuild(pkgDir)
 		if !needs {
 			t.Fatal("expected build when a source is newer than dist")
 		}
@@ -179,7 +179,7 @@ func TestLibNeedsBuild(t *testing.T) {
 		setMtime(t, src, older)
 		setMtime(t, filepath.Join(pkgDir, "src"), older)
 		setMtime(t, pkgDir, older)
-		needs, reason := libNeedsBuild(pkgDir)
+		needs, reason := LibNeedsBuild(pkgDir)
 		if needs {
 			t.Fatalf("expected node_modules churn to be ignored, got: %q", reason)
 		}
