@@ -2,16 +2,13 @@ package cmd
 
 import (
 	"fmt"
-	"os/exec"
-	"regexp"
-	"strconv"
-	"strings"
 
 	log "github.com/sirupsen/logrus"
 	"github.com/spf13/cobra"
 
 	"github.com/onyx-dot-app/onyx/tools/ods/internal/git"
 	"github.com/onyx-dot-app/onyx/tools/ods/internal/prompt"
+	"github.com/onyx-dot-app/onyx/tools/ods/internal/release"
 )
 
 // ReleaseCloudOptions holds options for the release cloud command.
@@ -22,12 +19,6 @@ type ReleaseCloudOptions struct {
 	Yes     bool
 	Verify  bool
 }
-
-// cloudTagRe matches a well-formed cloud tag and captures its base version
-// (with the leading v) and its counter. Leading zeroes are rejected per SemVer
-// 2.0.0 item 2.
-var cloudTagRe = regexp.MustCompile(
-	`^(v(?:0|[1-9]\d*)\.(?:0|[1-9]\d*)\.(?:0|[1-9]\d*))-cloud\.(0|[1-9]\d*)$`)
 
 // NewReleaseCloudCommand creates the `ods release cloud` command.
 func NewReleaseCloudCommand() *cobra.Command {
@@ -72,7 +63,7 @@ Example usage:
 }
 
 func releaseCloud(opts *ReleaseCloudOptions) error {
-	if opts.Version != "" && !bareSemverRe.MatchString(opts.Version) {
+	if opts.Version != "" && !release.IsBareVersion(opts.Version) {
 		return fmt.Errorf("--version must be X.Y.Z with no leading v, got %q", opts.Version)
 	}
 
@@ -84,16 +75,16 @@ func releaseCloud(opts *ReleaseCloudOptions) error {
 	// Best-effort: a failure here only leaves the counter stale, which is safe.
 	// If the computed tag already exists on origin, the push (which is never
 	// forced) is rejected and rolled back.
-	if err := fetchTags("v*-cloud.*"); err != nil {
+	if err := release.FetchTags("v*-cloud.*"); err != nil {
 		log.Warnf("Could not fetch cloud tags (using local tags): %v", err)
 	}
 
-	sha, err := resolveCommit(opts.Ref)
+	sha, err := release.ResolveCommit(opts.Ref)
 	if err != nil {
 		return err
 	}
 
-	tag, err := computeCloudTag(sha, opts.Version)
+	tag, err := release.ComputeCloudTag(sha, opts.Version)
 	if err != nil {
 		return err
 	}
@@ -124,134 +115,4 @@ func releaseCloud(opts *ReleaseCloudOptions) error {
 	}
 	log.Infof("Pushed %s; deployment.yml will build the cloud images.", tag)
 	return nil
-}
-
-// computeCloudTag returns the next cloud tag for commitSHA. The base version is
-// "v" + overrideVersion when given, else one minor past the newest release
-// branch on origin that does not contain the commit; the counter is one past
-// the highest existing "-cloud.N" tag for that base.
-func computeCloudTag(commitSHA, overrideVersion string) (string, error) {
-	base, err := computeCloudBase(commitSHA, overrideVersion)
-	if err != nil {
-		return "", err
-	}
-	return nextSequencedTag(base+"-cloud.", "")
-}
-
-// computeCloudBase returns the cloud base version (e.g. "v4.6.0") for
-// commitSHA: "v" + overrideVersion when given, else one minor past the newest
-// release branch on origin that does not contain the commit.
-func computeCloudBase(commitSHA, overrideVersion string) (string, error) {
-	// The ancestry checks below cannot be answered truthfully in a shallow
-	// clone; fail loudly instead.
-	shallow, err := git.IsShallowRepository()
-	if err != nil {
-		return "", err
-	}
-	if shallow {
-		return "", fmt.Errorf("this is a shallow clone, so cloud tag computation cannot check branch ancestry")
-	}
-
-	onMain, err := git.IsAncestor(commitSHA, "origin/main")
-	if err != nil {
-		return "", err
-	}
-	if !onMain {
-		return "", fmt.Errorf("commit %s is not on origin/main; cloud releases are cut from main", commitSHA)
-	}
-
-	var base string
-	if overrideVersion != "" {
-		base = "v" + overrideVersion
-	} else {
-		branchVersion, err := findTargetReleaseVersion(commitSHA)
-		if err != nil {
-			return "", fmt.Errorf("failed to detect the base version from release branches (pass --version to override): %w", err)
-		}
-		base = branchVersion.nextMinorBase()
-		log.Infof("Newest release branch not containing %.10s: release/%s -> cloud base %s", commitSHA, branchVersion, base)
-	}
-
-	return base, nil
-}
-
-// fetchTags force-updates the local tags matching pattern from origin. A
-// fetch refspec allows only one wildcard per side, so the matching tag names
-// are listed with ls-remote (which globs freely) and fetched by exact refspec.
-func fetchTags(pattern string) error {
-	out, err := exec.Command("git", "ls-remote", "--tags", "origin", pattern).Output()
-	if err != nil {
-		if exitErr, ok := err.(*exec.ExitError); ok && len(exitErr.Stderr) > 0 {
-			return fmt.Errorf("git ls-remote failed: %w: %s", err, strings.TrimSpace(string(exitErr.Stderr)))
-		}
-		return fmt.Errorf("git ls-remote failed: %w", err)
-	}
-
-	refspecs := []string{}
-	for _, line := range strings.Split(string(out), "\n") {
-		// Each line is "<sha>\trefs/tags/<name>".
-		_, ref, found := strings.Cut(line, "\t")
-		if !found {
-			continue
-		}
-		ref = strings.TrimSpace(ref)
-		// Annotated tags list a second, peeled "<ref>^{}" entry; the plain ref
-		// covers it.
-		if strings.HasSuffix(ref, "^{}") {
-			continue
-		}
-		refspecs = append(refspecs, fmt.Sprintf("+%s:%s", ref, ref))
-	}
-	if len(refspecs) == 0 {
-		return nil
-	}
-
-	args := append([]string{"fetch", "--quiet", "origin"}, refspecs...)
-	return git.RunCommand(args...)
-}
-
-// nextSequencedTag returns prefix + N where N is one past the highest
-// existing counter among local tags named prefix + <integer> (fetched from
-// origin beforehand), or 0 when none exist. Counters compare numerically:
-// lexically ".9" > ".10", which would compute a colliding tag. Tags of other
-// prefixes and tags whose suffix is not a plain integer are ignored, as is
-// excludeTag (which lets a check recompute the sequence as if the checked tag
-// did not exist).
-func nextSequencedTag(prefix, excludeTag string) (string, error) {
-	out, err := exec.Command("git", "tag", "--list", prefix+"*").Output()
-	if err != nil {
-		return "", fmt.Errorf("git tag --list failed: %w", err)
-	}
-	counterRe := regexp.MustCompile(`^` + regexp.QuoteMeta(prefix) + `(\d+)$`)
-	next := 0
-	for _, line := range strings.Split(string(out), "\n") {
-		tag := strings.TrimSpace(line)
-		if tag == excludeTag {
-			continue
-		}
-		matches := counterRe.FindStringSubmatch(tag)
-		if matches == nil {
-			continue
-		}
-		n, err := strconv.Atoi(matches[1])
-		if err != nil {
-			continue
-		}
-		if n >= next {
-			next = n + 1
-		}
-	}
-	return fmt.Sprintf("%s%d", prefix, next), nil
-}
-
-// resolveCommit resolves a commit-ish to a full commit SHA.
-func resolveCommit(ref string) (string, error) {
-	out, err := exec.Command("git", "rev-parse", "--verify", ref+"^{commit}").Output()
-	if err != nil {
-		if exitErr, ok := err.(*exec.ExitError); ok && len(exitErr.Stderr) > 0 {
-			return "", fmt.Errorf("failed to resolve %q: %w: %s", ref, err, strings.TrimSpace(string(exitErr.Stderr)))
-		}
-		return "", fmt.Errorf("failed to resolve %q: %w", ref, err)
-	}
-	return strings.TrimSpace(string(out)), nil
 }

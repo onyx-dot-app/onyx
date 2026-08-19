@@ -189,8 +189,9 @@ jobs:
   # Validate that a pushed release tag is versioned correctly, via
   # `ods release --check`. A cloud tag must be the tag `ods release cloud`
   # would have cut: its commit on origin/main, its base matching the release
-  # branches, its counter in sequence. A stable tag (vX.Y.Z) must sit on its
-  # release/vX.Y branch with the patch in sequence.
+  # branches, its counter in sequence. Stable (vX.Y.Z) and beta
+  # (vX.Y.Z-beta.N) tags must sit on their release/vX.Y branch with the
+  # patch or counter in sequence; a beta must precede its stable release.
   #
   # Deliberately gated on the raw ref name, not on computed tag-type outputs:
   # a tag that is neither a valid cloud nor stable tag fails loudly here

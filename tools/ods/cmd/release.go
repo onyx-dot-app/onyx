@@ -1,14 +1,10 @@
 package cmd
 
 import (
-	"regexp"
-
 	"github.com/spf13/cobra"
-)
 
-// bareSemverRe matches a bare X.Y.Z version (no leading v). Leading zeroes are
-// rejected per SemVer 2.0.0 item 2.
-var bareSemverRe = regexp.MustCompile(`^(0|[1-9]\d*)\.(0|[1-9]\d*)\.(0|[1-9]\d*)$`)
+	"github.com/onyx-dot-app/onyx/tools/ods/internal/release"
+)
 
 // NewReleaseCommand creates the parent `ods release` command. Subcommands hang
 // off it (e.g. `ods release opal`) and cut releases of Onyx-published
@@ -31,6 +27,10 @@ tag:
   - A stable tag (vX.Y.Z) must sit on origin/release/vX.Y, its patch must be
     one past the highest existing vX.Y.* patch, and its predecessor must be an
     ancestor of the tagged commit.
+  - A beta tag (vX.Y.Z-beta.N) must sit on origin/release/vX.Y, its base must
+    not have shipped as a stable tag yet, its counter must be one past the
+    previous counter for that base, and its predecessor must be an ancestor of
+    the tagged commit.
 
 deployment.yml runs this against pushed release tags before building. --ref
 may name the tag directly; otherwise the single release tag pointing at --ref
@@ -40,14 +40,15 @@ Example usage:
 
     $ ods release --check
     $ ods release --check --ref v4.7.0-cloud.3
-    $ ods release --check --ref v4.6.2`,
+    $ ods release --check --ref v4.6.2
+    $ ods release --check --ref v4.7.0-beta.1`,
 		Args:         cobra.NoArgs,
 		SilenceUsage: true,
 		RunE: func(cmd *cobra.Command, args []string) error {
 			if !check {
 				return cmd.Help()
 			}
-			return checkReleaseTag(ref)
+			return release.CheckTag(ref)
 		},
 	}
 
