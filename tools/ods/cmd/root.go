@@ -54,6 +54,7 @@ func NewRootCommand() *cobra.Command {
 	cmd.AddCommand(NewDeployCommand())
 	cmd.AddCommand(NewOpenAPICommand())
 	cmd.AddCommand(NewComposeCommand())
+	cmd.AddCommand(NewCoverageCommand())
 	cmd.AddCommand(NewGenerateComposeCommand())
 	cmd.AddCommand(NewEnvCommand())
 	cmd.AddCommand(NewLogsCommand())
