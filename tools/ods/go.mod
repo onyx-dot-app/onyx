@@ -3,6 +3,7 @@ module github.com/onyx-dot-app/onyx/tools/ods
 go 1.26.4
 
 require (
+	github.com/charlievieth/fastwalk v1.0.14
 	github.com/gdamore/tcell/v2 v2.13.8
 	github.com/google/osv-scalibr v0.4.6-0.20260612031204-164402d9140e
 	github.com/google/osv-scanner/v2 v2.4.0
