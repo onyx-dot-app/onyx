@@ -64,6 +64,7 @@ class Settings(BaseModel):
     tier: Tier = Tier.COMMUNITY
 
     temperature_override_enabled: bool | None = True
+    reasoning_override_enabled: bool | None = True
     auto_scroll: bool | None = False
     query_history_type: QueryHistoryType | None = None
 
