@@ -135,6 +135,28 @@ repos:
         pass_filenames: true
         types_or: [python]
       - id: uv-run
+        alias: terraform-fmt
+        name: terraform fmt
+        # Applies hclwrite.Format, the routine `terraform fmt` itself uses, so
+        # the result matches terraform byte for byte without needing the
+        # binary on PATH. Replaces the pre-commit-terraform terraform_fmt hook.
+        # `ods fmt tf` and `ods lint tf` ship in onyx-devtools (tools/ods), and
+        # `--with=onyx-devtools` resolves the published wheel, so both hooks
+        # need an ods release before they can run. Tag `ods/` first.
+        args: ["--no-project", "--with=onyx-devtools", "ods", "fmt", "tf"]
+        pass_filenames: true
+        files: \.tf$
+      - id: uv-run
+        alias: terraform-public-safe
+        name: terraform public-safe values
+        # These modules are published but stay in sync with what Onyx runs, so
+        # an internal value can travel across by accident. Fails on account
+        # ids, access key ids, routable IPv4 CIDRs, and email addresses.
+        # Append '# public-safe: ok' to accept a line.
+        args: ["--no-project", "--with=onyx-devtools", "ods", "lint", "tf"]
+        pass_filenames: true
+        files: ^deployment/terraform/.*\.tf$
+      - id: uv-run
         alias: zizmor
         name: zizmor
         # Run zizmor in an isolated overlay (`--no-project --with`) so the hook
@@ -191,14 +213,19 @@ repos:
       - id: ripsecrets
         args:
           - --strict-ignore
+          # ripsecrets joins every pattern into one regex and runs it over the
+          # whole file, so `^`/`$` anchor to the start and end of the file, not
+          # a line -- an anchored pattern here silently matches nothing.
           - --additional-pattern
-          - ^sk-[A-Za-z0-9_\-]{20,}$
+          - sk-[A-Za-z0-9_\-]{20,}
 
   - repo: https://github.com/antonbabenko/pre-commit-terraform
     rev: d0e12caebb2ab0ee8bf98181c8bfe9702bca103d
     hooks:
-      - id: terraform_fmt
-        files: \.tf$
+      # terraform_fmt is replaced by `ods fmt tf` above, which needs no local
+      # terraform. terraform_validate stays: it resolves provider schemas via
+      # `terraform init`, so it catches wrong argument names and bad module
+      # references that no in-process HCL parser can see.
       - id: terraform_validate
         files: ^deployment/terraform/.*\.tf$
         args:
@@ -206,16 +233,6 @@ repos:
 
   - repo: local
     hooks:
-      # These modules are published but stay in sync with what Onyx runs, so an
-      # internal value can travel across by accident. See the script's docstring.
-      - id: terraform-public-safe
-        name: terraform public-safe values
-        description: "Fail on internal values (account ids, keys, routable IPs) in published Terraform"
-        language: system
-        entry: python3 deployment/terraform/scripts/check_public_safe.py
-        files: ^deployment/terraform/.*\.tf$
-        stages: [pre-commit]
-
       # Regenerate the baseline with `env_inventory.py --write-baseline`.
       - id: env-drift-baseline
         name: env drift baseline

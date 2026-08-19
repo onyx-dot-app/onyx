@@ -7,6 +7,7 @@ require (
 	github.com/gdamore/tcell/v2 v2.13.8
 	github.com/google/osv-scalibr v0.4.6-0.20260612031204-164402d9140e
 	github.com/google/osv-scanner/v2 v2.4.0
+	github.com/hashicorp/hcl/v2 v2.24.0
 	github.com/jmelahman/tag v0.5.2
 	github.com/ossf/osv-schema/bindings/go v0.0.0-20260424063704-83285ce2a866
 	github.com/sergi/go-diff v1.4.0
@@ -36,6 +37,7 @@ require (
 	github.com/agext/levenshtein v1.2.3 // indirect
 	github.com/anchore/go-lzo v0.1.0 // indirect
 	github.com/anchore/go-struct-converter v0.1.0 // indirect
+	github.com/apparentlymart/go-textseg/v15 v15.0.0 // indirect
 	github.com/ayoubfaouzi/pkcs7 v0.2.3 // indirect
 	github.com/bazelbuild/buildtools v0.0.0-20260319080235-05d2ebe49b0f // indirect
 	github.com/canonical/chisel-manifest v1.2.0 // indirect
@@ -80,6 +82,7 @@ require (
 	github.com/gobwas/glob v0.2.3 // indirect
 	github.com/gogo/protobuf v1.3.2 // indirect
 	github.com/golang/groupcache v0.0.0-20241129210726-2c02b8208cf8 // indirect
+	github.com/google/go-cmp v0.7.0 // indirect
 	github.com/google/go-containerregistry v0.20.7 // indirect
 	github.com/google/uuid v1.6.0 // indirect
 	github.com/ianlancetaylor/demangle v0.0.0-20260505044615-1ff4bf46051f // indirect
@@ -98,6 +101,7 @@ require (
 	github.com/mattn/go-shellwords v1.0.13 // indirect
 	github.com/micromdm/plist v0.2.2 // indirect
 	github.com/mitchellh/go-homedir v1.1.0 // indirect
+	github.com/mitchellh/go-wordwrap v1.0.1 // indirect
 	github.com/moby/buildkit v0.30.0 // indirect
 	github.com/moby/docker-image-spec v1.3.1 // indirect
 	github.com/ncruces/go-strftime v1.0.0 // indirect
@@ -137,6 +141,7 @@ require (
 	github.com/xeipuuv/gojsonschema v1.2.0 // indirect
 	github.com/xhit/go-str2duration/v2 v2.1.0 // indirect
 	github.com/yusufpapurcu/wmi v1.2.4 // indirect
+	github.com/zclconf/go-cty v1.16.3 // indirect
 	go.etcd.io/bbolt v1.4.3 // indirect
 	go.opentelemetry.io/auto/sdk v1.2.1 // indirect
 	go.opentelemetry.io/contrib/instrumentation/net/http/otelhttp v0.68.0 // indirect
