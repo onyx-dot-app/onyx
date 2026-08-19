@@ -101,41 +101,19 @@ const REASONING_STOP_LABELS: Record<ReasoningEffortOverride, string> = {
   xhigh: "XHigh",
 };
 
-/** Providers whose models can be true OpenAI models (responses API). */
-const TRUE_OPENAI_PROVIDERS = new Set(["openai", "azure", "litellm_proxy"]);
-
 /**
- * Approximates the backend's _parse_anthropic_model_version. Segments longer
- * than two digits are date snapshots, not minor versions, and parse as 0.
+ * Index of the highest stop the model supports. The backend resolves this from
+ * the same code that builds the request, so the slider can never offer a level
+ * the request would drop. An older backend sends nothing, so fall back to the
+ * levels every reasoning model supports.
  */
-function anthropicModelVersion(modelName: string): [number, number] | null {
-  const name = modelName.toLowerCase();
-  const claudeIndex = name.indexOf("claude");
-  if (claudeIndex === -1) return null;
-  const match = name.slice(claudeIndex).match(/\d+(?:[.-]\d+)?/);
-  if (!match) return null;
-  const parts = match[0].split(/[.-]/);
-  if (!parts[0]) return null;
-  const minor = parts[1] && parts[1].length <= 2 ? parseInt(parts[1], 10) : 0;
-  return [parseInt(parts[0], 10), minor];
-}
-
-/**
- * Display-side mirror of the backend capability checks: xhigh is supported by
- * true OpenAI models and by Anthropic adaptive-thinking models (Claude >= 4.7,
- * matching _anthropic_uses_adaptive_thinking). The backend clamps unsupported
- * levels or strips rejected reasoning params and retries, so an imperfect
- * match here degrades gracefully.
- */
-function modelSupportsXhigh(option: LLMOption): boolean {
-  const openAiXhigh =
-    TRUE_OPENAI_PROVIDERS.has(option.provider) &&
-    /^(gpt-|o\d)/i.test(option.modelName);
-  const claudeVersion = anthropicModelVersion(option.modelName);
-  const anthropicXhigh =
-    claudeVersion !== null &&
-    (claudeVersion[0] > 4 || (claudeVersion[0] === 4 && claudeVersion[1] >= 7));
-  return openAiXhigh || anthropicXhigh;
+function maxSupportedReasoningStop(option: LLMOption): number {
+  const supported = option.supportedReasoningEfforts;
+  if (!supported) return BASE_REASONING_STOPS.length - 1;
+  return Math.max(
+    -1,
+    ...supported.map((effort) => ALL_REASONING_STOPS.indexOf(effort))
+  );
 }
 
 function formatContextWindow(tokens: number): string {
@@ -292,16 +270,17 @@ function ModelDetailPane({ option, managers, onBack }: ModelDetailPaneProps) {
   const temperatureManager = managers.temperature;
   const reasoningManager = managers.reasoning;
   const temperatureEnabled = !option.supportsReasoning && !!temperatureManager;
-  const reasoningEnabled = option.supportsReasoning && !!reasoningManager;
+  // A reasoning model with no supported levels takes no effort parameter at
+  // all (e.g. o1-mini), so the row stays disabled.
+  const maxSupportedStop = maxSupportedReasoningStop(option);
+  const reasoningEnabled =
+    option.supportsReasoning && !!reasoningManager && maxSupportedStop >= 0;
 
-  // Supported stops are always a prefix of ALL_REASONING_STOPS. The slider
-  // spans all stops for uniform geometry and clamps input to the max
-  // supported index.
-  const maxSupportedStop =
-    (modelSupportsXhigh(option)
-      ? ALL_REASONING_STOPS.length
-      : BASE_REASONING_STOPS.length) - 1;
-  const clampStop = (stop: number) => Math.min(stop, maxSupportedStop);
+  // The slider spans all stops for uniform geometry and clamps input to the
+  // max supported index. The lower bound keeps the disabled no-levels case on
+  // a valid stop.
+  const clampStop = (stop: number) =>
+    Math.max(0, Math.min(stop, maxSupportedStop));
 
   const [localTemperature, setLocalTemperature] = useState(
     temperatureManager?.temperature ?? 0.5

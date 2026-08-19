@@ -907,7 +907,9 @@ def update_default_vision_provider(
     if provider is None:
         raise ValueError(f"LLM Provider with id={provider_id} does not exist")
 
-    if not model_supports_image_input(vision_model, provider.provider):
+    if not model_supports_image_input(
+        vision_model, provider.provider, provider.deployment_name
+    ):
         raise ValueError(
             f"Model '{vision_model}' for provider '{provider.provider} does not support image input"
         )
