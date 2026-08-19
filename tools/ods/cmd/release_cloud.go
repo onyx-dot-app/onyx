@@ -130,9 +130,9 @@ func releaseCloud(opts *ReleaseCloudOptions) (string, error) {
 	return tag, nil
 }
 
-// announceCloudRun looks up the deployment.yml run triggered by pushing tag
-// and prints its URL. The lookup is best-effort: the tag is already pushed and
-// the build runs regardless, so failures only warn.
+// announceCloudRun looks up the deployment.yml run triggered by pushing tag and
+// prints its URL. The lookup is best-effort: the tag is already pushed and the
+// build runs regardless, so failures only warn.
 func announceCloudRun(tag string) {
 	log.Info("Looking up the deployment run...")
 	run, err := waitForNewRun(onyxRepo, deploymentWorkflowFile, "push", tag, 0)
