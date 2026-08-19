@@ -7,6 +7,10 @@ from unittest.mock import MagicMock, Mock, patch
 
 import pytest
 
+from onyx.configs.app_configs import (
+    IMAGE_SUMMARIZATION_SYSTEM_PROMPT,
+    SCANNED_DOCUMENT_SYSTEM_PROMPT,
+)
 from onyx.connectors.models import (
     Document,
     DocumentSource,
@@ -23,6 +27,7 @@ from onyx.indexing.chunker import Chunker
 from onyx.indexing.embedder import DefaultIndexingEmbedder
 from onyx.indexing.indexing_pipeline import (
     _apply_document_ingestion_hook,
+    _is_scanned_document,
     add_contextual_summaries,
     filter_documents,
     get_docs_to_update,
@@ -908,6 +913,130 @@ class TestProcessImageSections:
         # allow_failures=True → None result → fallback text
         assert sections[1].text == "[Error processing image]"
         assert sections[2].text == "summary-of-ok2"
+
+
+class TestScannedDocumentDetection:
+    """Validate _is_scanned_document classification and per-document prompt
+    routing (scanned -> OCR prompt, text-bearing -> summarization prompt)."""
+
+    def _run(
+        self,
+        documents: list[Document],
+        image_map: dict[str, bytes],
+        summarize_side_effect: Any = None,
+    ) -> list[Any]:
+        """Helper that patches all external deps and calls process_image_sections."""
+        if summarize_side_effect is None:
+
+            def summarize_side_effect(
+                **kwargs: Any,
+            ) -> str:
+                return f"summary-of-{kwargs['context_name']}"
+
+        with (
+            patch(
+                f"{_PATCH_PREFIX}.get_image_extraction_and_analysis_enabled",
+                return_value=True,
+            ),
+            patch(
+                f"{_PATCH_PREFIX}.get_default_llm_with_vision",
+                return_value=MagicMock(),
+            ),
+            patch(
+                f"{_PATCH_PREFIX}.get_default_file_store",
+                return_value=_mock_file_store(image_map),
+            ),
+            patch(
+                f"{_PATCH_PREFIX}.summarize_image_with_error_handling",
+                side_effect=summarize_side_effect,
+            ),
+        ):
+            return process_image_sections(documents)
+
+    def test_is_scanned_document_helper(self) -> None:
+        """_is_scanned_document classifies a document as scanned iff it has
+        ImageSections and no TextSection with non-empty text."""
+        doc = _make_image_doc("d1", [ImageSection(image_file_id="img-1")])
+        assert _is_scanned_document(doc) is True
+
+        doc = _make_image_doc(
+            "d2",
+            [TextSection(text="", link=None), ImageSection(image_file_id="img-2")],
+        )
+        assert _is_scanned_document(doc) is True
+
+        doc = _make_image_doc(
+            "d3",
+            [TextSection(text="hello", link=None), ImageSection(image_file_id="img-3")],
+        )
+        assert _is_scanned_document(doc) is False
+
+        doc = _make_image_doc("d4", [TextSection(text="hello", link=None)])
+        assert _is_scanned_document(doc) is False
+
+        doc = _make_image_doc("d5", [TextSection(text="", link=None)])
+        assert _is_scanned_document(doc) is False
+
+    def test_scanned_document_uses_ocr_prompt(self) -> None:
+        """A document with only ImageSections must use SCANNED_DOCUMENT_SYSTEM_PROMPT."""
+        doc = _make_image_doc("scan", [ImageSection(image_file_id="img-1")])
+        image_map = {"img-1": b"data"}
+
+        captured_prompts: list[str] = []
+
+        def _capture_prompt(**kwargs: Any) -> str:
+            captured_prompts.append(kwargs["system_prompt"])
+            return f"summary-of-{kwargs['context_name']}"
+
+        self._run([doc], image_map, summarize_side_effect=_capture_prompt)
+
+        assert captured_prompts[0] == SCANNED_DOCUMENT_SYSTEM_PROMPT
+
+    def test_document_with_text_uses_retrieval_prompt(self) -> None:
+        """A document with a non-empty TextSection + ImageSections must use
+        IMAGE_SUMMARIZATION_SYSTEM_PROMPT."""
+        doc = _make_image_doc(
+            "text",
+            [TextSection(text="body", link=None), ImageSection(image_file_id="img-1")],
+        )
+        image_map = {"img-1": b"data"}
+
+        captured_prompts: list[str] = []
+
+        def _capture_prompt(**kwargs: Any) -> str:
+            captured_prompts.append(kwargs["system_prompt"])
+            return f"summary-of-{kwargs['context_name']}"
+
+        self._run([doc], image_map, summarize_side_effect=_capture_prompt)
+
+        assert captured_prompts[0] == IMAGE_SUMMARIZATION_SYSTEM_PROMPT
+
+    def test_mixed_batch_uses_correct_prompt_per_document(self) -> None:
+        """A batch with one scanned and one text-bearing document must route
+        each to its own prompt. Uses a dict keyed by context_name because
+        images are summarized in parallel and call order is non-deterministic."""
+        scanned_doc = _make_image_doc("scan", [ImageSection(image_file_id="img-scan")])
+        text_doc = _make_image_doc(
+            "text",
+            [
+                TextSection(text="body", link=None),
+                ImageSection(image_file_id="img-text"),
+            ],
+        )
+        image_map = {"img-scan": b"a", "img-text": b"b"}
+
+        captured_prompts: dict[str, str] = {}
+
+        def _capture_prompt(**kwargs: Any) -> str:
+            captured_prompts[kwargs["context_name"]] = kwargs["system_prompt"]
+            return f"summary-of-{kwargs['context_name']}"
+
+        self._run(
+            [scanned_doc, text_doc], image_map, summarize_side_effect=_capture_prompt
+        )
+
+        assert captured_prompts["img-scan"] == SCANNED_DOCUMENT_SYSTEM_PROMPT
+        assert captured_prompts["img-text"] == IMAGE_SUMMARIZATION_SYSTEM_PROMPT
 
 
 # ---------------------------------------------------------------------------
