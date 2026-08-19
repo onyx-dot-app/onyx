@@ -4,6 +4,8 @@ import (
 	"bytes"
 	"fmt"
 	"os"
+	"runtime"
+	"sync"
 
 	"github.com/hashicorp/hcl/v2"
 	"github.com/hashicorp/hcl/v2/hclsyntax"
@@ -14,6 +16,30 @@ import (
 type FormatResult struct {
 	Path    string
 	Changed bool
+}
+
+// FormatFiles formats every file concurrently, bounded by GOMAXPROCS, and
+// returns one result per input file in the same order as files. Each file is
+// parsed and rewritten independently, so there is no reason to pay for that
+// work one file at a time.
+func FormatFiles(files []string, write bool) ([]FormatResult, []error) {
+	results := make([]FormatResult, len(files))
+	errs := make([]error, len(files))
+
+	sem := make(chan struct{}, runtime.GOMAXPROCS(0))
+	var wg sync.WaitGroup
+	for i, file := range files {
+		wg.Add(1)
+		sem <- struct{}{}
+		go func(i int, file string) {
+			defer wg.Done()
+			defer func() { <-sem }()
+			results[i], errs[i] = FormatFile(file, write)
+		}(i, file)
+	}
+	wg.Wait()
+
+	return results, errs
 }
 
 // FormatFile canonicalises one Terraform file.
