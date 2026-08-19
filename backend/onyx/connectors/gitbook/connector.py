@@ -46,137 +46,309 @@ class GitbookApiClient:
         return self.get(f"/spaces/{space_id}/content/page/{page_id}")
 
 
-def _extract_text_from_document(document: dict[str, Any]) -> str:
-    """Extract text content from GitBook document structure by parsing the document nodes
-    into markdown format."""
+_HEADING_PREFIXES = {
+    "heading-1": "#",
+    "heading-2": "##",
+    "heading-3": "###",
+    "heading-4": "####",
+    "heading-5": "#####",
+    "heading-6": "######",
+}
+_LIST_TYPES = {"list-unordered", "list-ordered", "list-tasks"}
 
-    def parse_leaf(leaf: dict[str, Any]) -> str:
-        text = leaf.get("text", "")
-        leaf.get("marks", [])
-        return text
 
-    def parse_text_node(node: dict[str, Any]) -> str:
-        text = ""
-        for leaf in node.get("leaves", []):
-            text += parse_leaf(leaf)
-        return text
+def _render_leaves(text_node: dict[str, Any]) -> str:
+    return "".join(
+        leaf.get("text", "")
+        for leaf in text_node.get("leaves", [])
+        if isinstance(leaf, dict)
+    )
 
-    def parse_block_node(node: dict[str, Any]) -> str:
-        block_type = node.get("type", "")
-        result = ""
 
-        if block_type == "heading-1":
-            text = "".join(parse_text_node(n) for n in node.get("nodes", []))
-            result = f"# {text}\n\n"
+def _render_inline(node: dict[str, Any]) -> str:
+    """Render an inline node (link, inline math, emoji, ...) to plain text."""
+    inline_type = node.get("type", "")
+    data = node.get("data") or {}
+    text = _render_inline_nodes(node.get("nodes", []))
 
-        elif block_type == "heading-2":
-            text = "".join(parse_text_node(n) for n in node.get("nodes", []))
-            result = f"## {text}\n\n"
+    if inline_type == "link":
+        ref = data.get("ref") or {}
+        url = ref.get("url", "") if isinstance(ref, dict) else ""
+        if url and text:
+            return f"[{text}]({url})"
+        return text or url
+    if inline_type in ("math", "inline-math"):
+        return str(data.get("formula", "")) or text
+    if inline_type == "emoji":
+        code = data.get("code", "")
+        if isinstance(code, str) and code:
+            try:
+                return "".join(chr(int(part, 16)) for part in code.split("-"))
+            except ValueError:
+                pass
+    return text
 
-        elif block_type == "heading-3":
-            text = "".join(parse_text_node(n) for n in node.get("nodes", []))
-            result = f"### {text}\n\n"
 
-        elif block_type == "heading-4":
-            text = "".join(parse_text_node(n) for n in node.get("nodes", []))
-            result = f"#### {text}\n\n"
+def _render_inline_nodes(nodes: list[Any]) -> str:
+    """Render the mixed text/inline children of a paragraph-like node."""
+    parts: list[str] = []
+    for node in nodes:
+        if not isinstance(node, dict):
+            continue
+        if node.get("object") == "inline":
+            parts.append(_render_inline(node))
+        elif "leaves" in node:
+            parts.append(_render_leaves(node))
+        else:
+            parts.append(_render_inline_nodes(node.get("nodes", [])))
+    return "".join(parts)
 
-        elif block_type == "heading-5":
-            text = "".join(parse_text_node(n) for n in node.get("nodes", []))
-            result = f"##### {text}\n\n"
 
-        elif block_type == "heading-6":
-            text = "".join(parse_text_node(n) for n in node.get("nodes", []))
-            result = f"###### {text}\n\n"
+def _render_fragments(node: dict[str, Any], depth: int) -> str:
+    """Fragments hold out-of-band content: image captions, expandable titles/bodies, etc.
+    Table cell fragments are rendered by _render_table instead."""
+    result = ""
+    for fragment in node.get("fragments", []):
+        if isinstance(fragment, dict):
+            result += _render_blocks(fragment.get("nodes", []), depth)
+    return result
 
-        elif block_type == "list-unordered":
-            for list_item in node.get("nodes", []):
-                paragraph = list_item.get("nodes", [])[0]
-                text = "".join(parse_text_node(n) for n in paragraph.get("nodes", []))
-                result += f"* {text}\n"
-            result += "\n"
 
-        elif block_type == "paragraph":
-            text = "".join(parse_text_node(n) for n in node.get("nodes", []))
-            result = f"{text}\n\n"
+def _render_children(node: dict[str, Any], depth: int) -> str:
+    return _render_blocks(node.get("nodes", []), depth) + _render_fragments(node, depth)
 
-        elif block_type == "list-tasks":
-            for task_item in node.get("nodes", []):
-                checked = task_item.get("data", {}).get("checked", False)
-                paragraph = task_item.get("nodes", [])[0]
-                text = "".join(parse_text_node(n) for n in paragraph.get("nodes", []))
-                checkbox = "[x]" if checked else "[ ]"
-                result += f"- {checkbox} {text}\n"
-            result += "\n"
 
-        elif block_type == "code":
-            for code_line in node.get("nodes", []):
-                if code_line.get("type") == "code-line":
-                    text = "".join(
-                        parse_text_node(n) for n in code_line.get("nodes", [])
-                    )
-                    result += f"{text}\n"
-            result += "\n"
+def _quote_lines(text: str) -> str:
+    stripped = text.strip("\n")
+    if not stripped:
+        return ""
+    return (
+        "".join(f"> {line}\n" if line else ">\n" for line in stripped.split("\n"))
+        + "\n"
+    )
 
-        elif block_type == "blockquote":
-            for quote_node in node.get("nodes", []):
-                if quote_node.get("type") == "paragraph":
-                    text = "".join(
-                        parse_text_node(n) for n in quote_node.get("nodes", [])
-                    )
-                    result += f"> {text}\n"
-            result += "\n"
 
-        elif block_type == "table":
-            records = node.get("data", {}).get("records", {})
-            definition = node.get("data", {}).get("definition", {})
-            view = node.get("data", {}).get("view", {})
+def _render_list(node: dict[str, Any], depth: int) -> str:
+    list_type = node.get("type", "")
+    indent = "  " * depth
+    result = ""
 
-            columns = view.get("columns", [])
+    for position, item in enumerate(node.get("nodes", []), start=1):
+        if not isinstance(item, dict):
+            continue
 
-            header_cells = []
-            for col_id in columns:
-                col_def = definition.get(col_id, {})
-                header_cells.append(col_def.get("title", ""))
+        if list_type == "list-ordered":
+            marker = f"{position}. "
+        elif list_type == "list-tasks":
+            checked = bool((item.get("data") or {}).get("checked", False))
+            marker = "- [x] " if checked else "- [ ] "
+        else:
+            marker = "* "
 
-            result = "| " + " | ".join(header_cells) + " |\n"
-            result += "|" + "---|" * len(header_cells) + "\n"
+        marker_text = ""
+        marker_consumed = False
+        nested: list[dict[str, Any]] = []
+        for child in item.get("nodes", []):
+            if not isinstance(child, dict):
+                continue
+            if not marker_consumed and child.get("type") == "paragraph":
+                marker_text = _render_inline_nodes(child.get("nodes", [])).strip()
+                marker_consumed = True
+            else:
+                nested.append(child)
 
-            sorted_records = sorted(
-                records.items(), key=lambda x: x[1].get("orderIndex", "")
+        result += f"{indent}{marker}{marker_text}\n"
+        for child in nested:
+            if child.get("type") in _LIST_TYPES:
+                result += _render_list(child, depth + 1)
+            else:
+                rendered = _render_block(child, depth + 1).strip("\n")
+                for line in rendered.split("\n"):
+                    if line:
+                        result += f"{indent}  {line}\n"
+
+    if depth == 0 and result:
+        result += "\n"
+    return result
+
+
+def _escape_table_cell(text: str) -> str:
+    lines = [line.strip() for line in text.replace("|", "\\|").split("\n")]
+    return "<br>".join(line for line in lines if line)
+
+
+def _table_select_label(value: str, col_def: dict[str, Any]) -> str:
+    options = col_def.get("options")
+    if isinstance(options, list):
+        for option in options:
+            if isinstance(option, dict) and option.get("id") == value:
+                return str(option.get("label") or option.get("title") or value)
+    elif isinstance(options, dict):
+        option = options.get(value)
+        if isinstance(option, dict):
+            return str(option.get("label") or option.get("title") or value)
+        if isinstance(option, str):
+            return option
+    return value
+
+
+def _render_table_cell(
+    value: Any,
+    col_def: dict[str, Any],
+    fragments_by_id: dict[str, dict[str, Any]],
+) -> str:
+    if value is None:
+        return ""
+    if isinstance(value, bool):
+        return "true" if value else "false"
+    if isinstance(value, (int, float)):
+        return str(value)
+    if isinstance(value, str):
+        fragment = fragments_by_id.get(value)
+        if fragment is not None:
+            return _escape_table_cell(_render_blocks(fragment.get("nodes", []), 0))
+        col_type = str(col_def.get("type", ""))
+        if col_type == "select":
+            return _escape_table_cell(_table_select_label(value, col_def))
+        # an unresolved string in a fragment-backed table (or a text column)
+        # is an opaque fragment id, not content
+        if fragments_by_id or col_type == "text":
+            return ""
+        return _escape_table_cell(value)
+    if isinstance(value, dict):
+        # content-ref cells: only URL refs carry human-readable content
+        ref = value if "kind" in value else value.get("ref") or {}
+        url = ref.get("url", "") if isinstance(ref, dict) else ""
+        return _escape_table_cell(str(url)) if url else ""
+    if isinstance(value, list):
+        rendered = [_render_table_cell(v, col_def, fragments_by_id) for v in value]
+        return ", ".join(part for part in rendered if part)
+    return ""
+
+
+def _render_table(node: dict[str, Any]) -> str:
+    data = node.get("data") or {}
+    records = data.get("records") or {}
+    definition = data.get("definition") or {}
+    view = data.get("view") or {}
+
+    columns = [
+        col
+        for col in (view.get("columns") or list(definition.keys()))
+        if isinstance(col, str)
+    ]
+    if not columns or not isinstance(records, dict):
+        # unrecognized table shape: surface all cell fragments as plain text
+        return _render_fragments(node, 0)
+
+    fragments_by_id: dict[str, dict[str, Any]] = {}
+    for fragment in node.get("fragments", []):
+        if isinstance(fragment, dict) and isinstance(fragment.get("fragment"), str):
+            fragments_by_id[fragment["fragment"]] = fragment
+
+    header = [
+        _escape_table_cell(str((definition.get(col) or {}).get("title", "")))
+        for col in columns
+    ]
+    result = "| " + " | ".join(header) + " |\n"
+    result += "|" + "---|" * len(header) + "\n"
+
+    sorted_records = sorted(
+        (
+            (record_id, record)
+            for record_id, record in records.items()
+            if isinstance(record, dict)
+        ),
+        key=lambda kv: str(kv[1].get("orderIndex", "")),
+    )
+    for _record_id, record in sorted_records:
+        values = record.get("values") or {}
+        cells = [
+            _render_table_cell(
+                values.get(col), definition.get(col) or {}, fragments_by_id
             )
+            for col in columns
+        ]
+        result += "| " + " | ".join(cells) + " |\n"
 
-            for _record_id, record_data in sorted_records:
-                values = record_data.get("values", {})
-                row_cells = []
-                for col_id in columns:
-                    fragment_id = values.get(col_id, "")
-                    fragment_text = ""
-                    for fragment in node.get("fragments", []):
-                        if fragment.get("fragment") == fragment_id:
-                            for frag_node in fragment.get("nodes", []):
-                                if frag_node.get("type") == "paragraph":
-                                    fragment_text = "".join(
-                                        parse_text_node(n)
-                                        for n in frag_node.get("nodes", [])
-                                    )
-                                    break
-                    row_cells.append(fragment_text)
-                result += "| " + " | ".join(row_cells) + " |\n"
+    return result + "\n"
 
-            result += "\n"
-        return result
 
+def _render_block(node: dict[str, Any], depth: int) -> str:
+    block_type = node.get("type", "")
+    data = node.get("data") or {}
+
+    if "leaves" in node:
+        text = _render_leaves(node).strip()
+        return f"{text}\n\n" if text else ""
+
+    if block_type in _HEADING_PREFIXES:
+        text = _render_inline_nodes(node.get("nodes", [])).strip()
+        return f"{_HEADING_PREFIXES[block_type]} {text}\n\n" if text else ""
+
+    if block_type == "paragraph":
+        text = _render_inline_nodes(node.get("nodes", [])).strip()
+        return f"{text}\n\n" if text else ""
+
+    if block_type in _LIST_TYPES:
+        return _render_list(node, depth)
+
+    if block_type == "code":
+        syntax = str(data.get("syntax", ""))
+        lines = [
+            _render_inline_nodes(line.get("nodes", []))
+            for line in node.get("nodes", [])
+            if isinstance(line, dict) and line.get("type") == "code-line"
+        ]
+        return f"```{syntax}\n" + "\n".join(lines) + "\n```\n\n"
+
+    if block_type == "blockquote":
+        return _quote_lines(_render_children(node, depth))
+
+    if block_type == "hint":
+        style = str(data.get("style", ""))
+        label = f"[!{style.upper()}]\n" if style else ""
+        return _quote_lines(label + _render_children(node, depth).strip("\n"))
+
+    if block_type == "tabs-item":
+        title = str(data.get("title", ""))
+        return (f"**{title}**\n\n" if title else "") + _render_children(node, depth)
+
+    if block_type == "table":
+        return _render_table(node)
+
+    if block_type == "embed":
+        url = str(data.get("url", ""))
+        caption = _render_fragments(node, depth)
+        return (f"{url}\n\n" if url else "") + caption
+
+    if block_type in ("math", "math-block"):
+        formula = str(data.get("formula", ""))
+        return f"{formula}\n\n" if formula else ""
+
+    if block_type == "divider":
+        return "---\n\n"
+
+    # containers (tabs, expandable, columns, images, files, ...) and unknown
+    # blocks: render children and fragments so no text silently disappears
+    inner = _render_children(node, depth)
+    if not inner and block_type:
+        logger.debug("GitBook block type %s produced no text", block_type)
+    return inner
+
+
+def _render_blocks(nodes: list[Any], depth: int) -> str:
+    return "".join(
+        _render_block(node, depth) for node in nodes if isinstance(node, dict)
+    )
+
+
+def _extract_text_from_document(document: dict[str, Any]) -> str:
+    """Extract text content from GitBook document structure by rendering the
+    document nodes into markdown."""
     if not document or "document" not in document:
         return ""
-
-    markdown = ""
-    nodes = document["document"].get("nodes", [])
-
-    for node in nodes:
-        markdown += parse_block_node(node)
-
-    return markdown
+    return _render_blocks(document["document"].get("nodes", []), 0)
 
 
 def _parse_page_timestamp(raw: str | None) -> datetime | None:
@@ -201,12 +373,14 @@ def _convert_page_to_document(
     page_id = page["id"]
     page_content = client.get_page_content(space_id, page_id)
 
+    text = _extract_text_from_document(page_content)
+
     return Document(
         id=f"gitbook-{space_id}-{page_id}",
         sections=[
             TextSection(
                 link=page.get("urls", {}).get("app", ""),
-                text=_extract_text_from_document(page_content),
+                text=text,
             )
         ],
         source=DocumentSource.GITBOOK,
