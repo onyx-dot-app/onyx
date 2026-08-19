@@ -105,9 +105,18 @@ export default function MultiModelPanel({
     !selectionDisabled &&
     !readOnly;
 
-  const handlePanelClick = useCallback(() => {
-    if (canSelect) onSelect();
-  }, [canSelect, onSelect]);
+  // Whole-card select. Interactive descendants keep their own behavior, and a
+  // click that ends a text selection never counts as a pick.
+  const handleCardClick = useCallback(
+    (e: React.MouseEvent) => {
+      const target = e.target as HTMLElement;
+      if (target.closest('button, a, [role="button"], input, textarea, select'))
+        return;
+      if (window.getSelection()?.toString()) return;
+      onSelect();
+    },
+    [onSelect]
+  );
 
   const headerClassName = cn(
     "rounded-12 transition-colors",
@@ -135,6 +144,7 @@ export default function MultiModelPanel({
               </div>
             ) : undefined
           ) : (
+            // raw-ok: ContentAction rightChildren slot row, Section's inline gap/padding fight the px-2 chip alignment
             <div className="flex items-center gap-1 px-2">
               {isPreferred && (
                 <>
@@ -156,6 +166,20 @@ export default function MultiModelPanel({
                     />
                   )}
                 </>
+              )}
+              {canSelect && (
+                <span className="opacity-0 group-hover/mm-panel:opacity-100 no-hover:opacity-100 transition-opacity">
+                  <Button
+                    prominence="tertiary"
+                    size="sm"
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      onSelect();
+                    }}
+                  >
+                    Select This Response
+                  </Button>
+                </span>
               )}
               {!isPreferred && (
                 <Button
@@ -184,8 +208,8 @@ export default function MultiModelPanel({
       role="button"
       tabIndex={0}
       aria-label={`Select the ${displayName} response`}
-      onKeyDown={clickOnKeyDown(handlePanelClick)}
-      onClick={handlePanelClick}
+      onKeyDown={clickOnKeyDown(onSelect)}
+      onClick={onSelect}
     >
       {headerContent}
     </div>
@@ -234,9 +258,19 @@ export default function MultiModelPanel({
   }
 
   return (
-    // raw-ok: panel column, min-w-0 shrink semantics no Section width preset provides
-    <div className="flex flex-col gap-3 min-w-0 rounded-16">
-      {headerWithNav}
+    // oxlint-disable-next-line jsx-a11y/click-events-have-key-events, jsx-a11y/no-static-element-interactions -- raw-ok: panel column with min-w-0 shrink semantics no Section preset provides, and the card click is a pointer-only convenience while the header carries the focusable role=button
+    <div
+      className={cn(
+        "group/mm-panel flex flex-col gap-3 min-w-0 rounded-16 transition-colors",
+        canSelect && "cursor-pointer hover:bg-background-tint-01"
+      )}
+      onClick={canSelect ? handleCardClick : undefined}
+    >
+      {/* Sticky keeps the model and select affordance in view while the
+          response scrolls. The solid backdrop stops body text showing through. */}
+      <div className="sticky top-0 z-10 bg-background-neutral-00 rounded-12">
+        {headerWithNav}
+      </div>
       {errorMessage ? (
         <div className="p-4">
           <ErrorBanner
