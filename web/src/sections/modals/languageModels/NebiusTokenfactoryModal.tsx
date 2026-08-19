@@ -59,13 +59,15 @@ function NebiusTokenfactoryModalInternals({
     if (error) {
       throw new Error(error);
     }
-    formikProps.setFieldValue(
-      "model_configurations",
-      mergeFetchedModelConfigurations(
+    // Functional form: an edit made while the fetch was in flight must not be
+    // reverted by the snapshot this handler closed over.
+    formikProps.setValues((prev) => ({
+      ...prev,
+      model_configurations: mergeFetchedModelConfigurations(
         models,
-        formikProps.values.model_configurations
-      )
-    );
+        prev.model_configurations
+      ),
+    }));
   };
 
   // When editing a saved provider, the models load from the DB without the
@@ -84,13 +86,13 @@ function NebiusTokenfactoryModalInternals({
     })
       .then(({ models }) => {
         if (models.length > 0) {
-          setFieldValue(
-            "model_configurations",
-            mergeFetchedModelConfigurations(
+          formikProps.setValues((prev) => ({
+            ...prev,
+            model_configurations: mergeFetchedModelConfigurations(
               models,
-              formikProps.values.model_configurations
-            )
-          );
+              prev.model_configurations
+            ),
+          }));
         }
       })
       .catch(() => undefined);

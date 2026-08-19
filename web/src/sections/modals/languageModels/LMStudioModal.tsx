@@ -64,13 +64,15 @@ function LMStudioModalInternals({
     if (data.error) {
       throw new Error(data.error);
     }
-    formikProps.setFieldValue(
-      "model_configurations",
-      mergeFetchedModelConfigurations(
+    // Functional form: an edit made while the fetch was in flight must not be
+    // reverted by the snapshot this handler closed over.
+    formikProps.setValues((prev) => ({
+      ...prev,
+      model_configurations: mergeFetchedModelConfigurations(
         data.models,
-        formikProps.values.model_configurations
-      )
-    );
+        prev.model_configurations
+      ),
+    }));
   };
 
   return (

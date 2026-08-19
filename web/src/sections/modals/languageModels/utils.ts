@@ -3,7 +3,9 @@ import {
   type LLMProviderView,
   type WellKnownLLMProviderDescriptor,
   type ModelConfiguration,
+  type ReasoningEffortOverride,
 } from "@/lib/languageModels/types";
+import { ALL_REASONING_STOPS } from "@/sections/model-selector/setting-controls";
 import * as Yup from "yup";
 import { useWellKnownLLMProvider } from "@/lib/languageModels/hooks";
 
@@ -21,7 +23,7 @@ function buildModelConfigurations(
   wellKnownModels.forEach((m) => modelMap.set(m.name, m));
   existingModels.forEach((m) => modelMap.set(m.name, m));
 
-  return Array.from(modelMap.values());
+  return Array.from(modelMap.values()).map(clampModelSettings);
 }
 
 /** Shared initial values for all LLM provider forms (both onboarding and admin). */
@@ -125,6 +127,22 @@ export interface BaseLLMFormValues {
   custom_config?: Record<string, string>;
 }
 
+/** Bound stored policy by current capability, which can shrink after a save. */
+function clampModelSettings(model: ModelConfiguration): ModelConfiguration {
+  const supported = model.supported_reasoning_efforts;
+  if (!supported || supported.length === 0) return model;
+  const highest = supported[supported.length - 1]!;
+  const rank = (effort: ReasoningEffortOverride) =>
+    ALL_REASONING_STOPS.indexOf(effort);
+  const bound = (effort: ReasoningEffortOverride | null | undefined) =>
+    effort && rank(effort) > rank(highest) ? highest : effort;
+  return {
+    ...model,
+    reasoning_effort_max: bound(model.reasoning_effort_max),
+    reasoning_effort_default: bound(model.reasoning_effort_default),
+  };
+}
+
 // ─── mergeFetchedModelConfigurations ──────────────────────────────────────
 
 /**
@@ -133,19 +151,29 @@ export interface BaseLLMFormValues {
  *
  * - If the form has no models yet (first fetch / onboarding), the fetched
  *   list is returned as-is so each provider's own default `is_visible` applies.
- * - Otherwise, models that already exist in the form keep their prior
- *   `is_visible` value, and newly-discovered models are added unselected so
- *   the user can opt-in explicitly.
+ * - Otherwise, models that already exist in the form keep their prior unsaved
+ *   edits (visibility, rename, admin settings), and newly-discovered models are
+ *   added unselected so the user can opt-in explicitly.
  */
 export function mergeFetchedModelConfigurations(
   fetched: ModelConfiguration[],
   existing: ModelConfiguration[]
 ): ModelConfiguration[] {
-  if (existing.length === 0) return fetched;
+  if (existing.length === 0) return fetched.map(clampModelSettings);
   const priorByName = new Map(existing.map((m) => [m.name, m]));
-  return fetched.map((model) => {
+  return fetched.map((fetchedModel) => {
+    const model = clampModelSettings(fetchedModel);
     const prior = priorByName.get(model.name);
-    return { ...model, is_visible: prior ? prior.is_visible : false };
+    if (!prior) return { ...model, is_visible: false };
+    // Unsaved edits live only in form state, so a refetch has to carry them.
+    return clampModelSettings({
+      ...model,
+      is_visible: prior.is_visible,
+      custom_display_name: prior.custom_display_name,
+      reasoning_effort_max: prior.reasoning_effort_max,
+      reasoning_effort_default: prior.reasoning_effort_default,
+      temperature_default: prior.temperature_default,
+    });
   });
 }
 

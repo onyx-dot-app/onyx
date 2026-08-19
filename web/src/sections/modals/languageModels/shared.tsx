@@ -5,7 +5,7 @@ import { Formik, Form, useFormikContext } from "formik";
 import type { FormikConfig } from "formik";
 import { cn } from "@opal/utils";
 import { markdown } from "@opal/utils";
-import { Interactive } from "@opal/core";
+import { Hoverable, Interactive } from "@opal/core";
 import { useTierAtLeast } from "@/hooks/useTierAtLeast";
 import { Tier } from "@/lib/settings/types";
 import { useAgents } from "@/lib/agents/hooks";
@@ -32,8 +32,13 @@ import {
   InputHorizontal,
   InputPadder,
   InputVertical,
+  Section as OpalSection,
   toast,
 } from "@opal/layouts";
+import {
+  ModelSettingsPopover,
+  type ModelSettingsPatch,
+} from "@/sections/modals/languageModels/ModelSettingsPopover";
 import {
   SvgArrowExchange,
   SvgChevronDown,
@@ -521,6 +526,7 @@ interface ModelRowProps {
   isAutoMode: boolean;
   onToggleVisibility: (visible: boolean) => void;
   onRename: (value: string | undefined) => void;
+  onSettingsChange: (patch: ModelSettingsPatch) => void;
 }
 
 /**
@@ -541,6 +547,7 @@ function ModelRow({
   isAutoMode,
   onToggleVisibility,
   onRename,
+  onSettingsChange,
 }: ModelRowProps) {
   const displayName =
     model.custom_display_name || model.display_name || model.name;
@@ -550,18 +557,31 @@ function ModelRow({
   const toggleVisibility = isAutoMode
     ? undefined
     : () => onToggleVisibility(!model.is_visible);
+  // The row is clickable, but it also hosts real buttons (rename, settings).
+  // Their clicks, including ones the browser synthesizes from Enter, must not
+  // toggle the model.
+  const toggleFromRow = toggleVisibility
+    ? (e: React.MouseEvent) => {
+        if ((e.target as HTMLElement).closest("button")) return;
+        toggleVisibility();
+      }
+    : undefined;
 
   return (
-    <div data-model-name={model.name}>
+    <Hoverable.Root group="model-row" data-model-name={model.name}>
       <Interactive.Stateful
         variant="select-heavy"
         state={isSelected ? "selected" : "empty"}
-        onClick={toggleVisibility}
+        onClick={toggleFromRow}
         role={toggleVisibility ? "button" : undefined}
         tabIndex={toggleVisibility ? 0 : undefined}
         onKeyDown={
           toggleVisibility
             ? (e: React.KeyboardEvent) => {
+                // Only the row itself. React bubbles events from portaled
+                // children too, so a key inside the settings popover would
+                // otherwise toggle the model.
+                if (e.target !== e.currentTarget) return;
                 if (e.key === "Enter" || e.key === " ") {
                   e.preventDefault();
                   toggleVisibility();
@@ -579,7 +599,22 @@ function ModelRow({
               icon={() => <Checkbox checked={isSelected} />}
               title={displayName}
               description={buildModelDescription(model)}
-              rightChildren={modelRightChildren(model)}
+              rightChildren={
+                <OpalSection
+                  flexDirection="row"
+                  width="fit"
+                  height="auto"
+                  gap={1}
+                >
+                  {modelRightChildren(model)}
+                  <Hoverable.Item group="model-row" variant="appear-on-hover">
+                    <ModelSettingsPopover
+                      model={model}
+                      onChange={onSettingsChange}
+                    />
+                  </Hoverable.Item>
+                </OpalSection>
+              }
               editable
               onTitleChange={(newTitle) => onRename(newTitle || undefined)}
               padding={0}
@@ -587,7 +622,7 @@ function ModelRow({
           </div>
         </Interactive.Container>
       </Interactive.Stateful>
-    </div>
+    </Hoverable.Root>
   );
 }
 
@@ -635,6 +670,13 @@ export function ModelSelectionField({
   function setVisibility(modelName: string, visible: boolean) {
     const updated = models.map((m) =>
       m.name === modelName ? { ...m, is_visible: visible } : m
+    );
+    formikProps.setFieldValue("model_configurations", updated);
+  }
+
+  function setModelSettings(modelName: string, patch: ModelSettingsPatch) {
+    const updated = models.map((m) =>
+      m.name === modelName ? { ...m, ...patch } : m
     );
     formikProps.setFieldValue("model_configurations", updated);
   }
@@ -725,6 +767,9 @@ export function ModelSelectionField({
                       }
                       onRename={(value) =>
                         setCustomDisplayName(model.name, value)
+                      }
+                      onSettingsChange={(patch) =>
+                        setModelSettings(model.name, patch)
                       }
                     />
                   ))}

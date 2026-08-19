@@ -25,6 +25,10 @@ export interface ModelConfiguration {
    * case the picker falls back to the levels every reasoning model supports.
    */
   supported_reasoning_efforts?: ReasoningEffortOverride[];
+  /** Admin policy: what is permitted, vs what the model can do above. */
+  reasoning_effort_max?: ReasoningEffortOverride | null;
+  reasoning_effort_default?: ReasoningEffortOverride | null;
+  temperature_default?: number | null;
   /** Display-only metadata surfaced in the model picker (Nebius TokenFactory). */
   quantization?: string | null;
   country_code?: string | null;
