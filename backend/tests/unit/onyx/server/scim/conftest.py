@@ -60,6 +60,7 @@ def mock_dal() -> Generator[MagicMock, None, None]:
         dal.get_user_by_email.return_value = None
         dal.get_user_mapping_by_user_id.return_value = None
         dal.get_user_mapping_by_external_id.return_value = None
+        dal.get_user_mapping_by_scim_username.return_value = None
         dal.list_users.return_value = ([], 0)
         # Group defaults
         dal.get_group.return_value = None

@@ -248,6 +248,30 @@ class TestCreateUser:
         mock_dal.create_user_mapping.assert_called_once()
         mock_dal.commit.assert_called_once()
 
+    def test_duplicate_scim_username_returns_409(
+        self,
+        mock_db_session: MagicMock,
+        mock_token: MagicMock,
+        mock_dal: MagicMock,
+        provider: ScimProvider,
+    ) -> None:
+        """A userName already provisioned conflicts even when its account
+        email has diverged from it."""
+        mock_dal.get_user_by_email.return_value = None
+        mock_dal.get_user_mapping_by_scim_username.return_value = make_user_mapping(
+            scim_username="New@Example.com"
+        )
+
+        result = create_user(
+            user_resource=make_scim_user(userName="new@example.com"),
+            _token=mock_token,
+            provider=provider,
+            db_session=mock_db_session,
+        )
+
+        assert_scim_error(result, 409)
+        mock_dal.add_user.assert_not_called()
+
     @patch("ee.onyx.server.scim.api._check_seat_availability", return_value=None)
     def test_duplicate_scim_managed_email_returns_409(
         self,
@@ -1316,6 +1340,9 @@ class TestRenameCollisionAdoption:
         assert args[0] is user
         assert kwargs["email"] is None
         assert kwargs["is_active"] is False
+        # The mapping's userName must not be rewritten either, or a nulled
+        # collision row would re-collide on its email fallback.
+        assert mock_dal.sync_user_external_id.call_args.kwargs["scim_username"] is None
 
     def test_put_adoption_allowed_for_admin_source(
         self,
@@ -1407,6 +1434,105 @@ class TestRenameCollisionAdoption:
 
         assert_scim_error(result, 403)
         mock_seats.assert_called_once()
+
+    def test_put_blank_username_returns_400(
+        self,
+        mock_db_session: MagicMock,
+        mock_token: MagicMock,
+        mock_dal: MagicMock,
+        provider: ScimProvider,
+    ) -> None:
+        """A whitespace-only userName must not blank the email or mapping."""
+        user = make_db_user(email="old@mane.com", is_active=True)
+        mock_dal.get_user.return_value = user
+
+        result = replace_user(
+            user_id=str(user.id),
+            user_resource=make_scim_user(userName="   ", active=True),
+            _token=mock_token,
+            provider=provider,
+            db_session=mock_db_session,
+        )
+
+        assert_scim_error(result, 400)
+        mock_dal.update_user.assert_not_called()
+
+    def test_put_rename_onto_provisioned_username_returns_409(
+        self,
+        mock_db_session: MagicMock,
+        mock_token: MagicMock,
+        mock_dal: MagicMock,
+        provider: ScimProvider,
+    ) -> None:
+        """A userName another mapping already holds conflicts even when that
+        mapping's account email has diverged from it."""
+        user = make_db_user(email="old@mane.com", is_active=True)
+        mock_dal.get_user.return_value = user
+        mock_dal.get_user_mapping_by_scim_username.return_value = make_user_mapping(
+            user_id=uuid4(), scim_username="Taken@mane.com"
+        )
+
+        result = replace_user(
+            user_id=str(user.id),
+            user_resource=make_scim_user(userName="taken@mane.com", active=True),
+            _token=mock_token,
+            provider=provider,
+            db_session=mock_db_session,
+        )
+
+        assert_scim_error(result, 409)
+        mock_dal.update_user.assert_not_called()
+
+    @patch("ee.onyx.server.scim.api.is_unique_violation", return_value=True)
+    def test_put_rename_reconcile_race_returns_409(
+        self,
+        mock_is_unique: MagicMock,  # noqa: ARG002
+        mock_db_session: MagicMock,
+        mock_token: MagicMock,
+        mock_dal: MagicMock,
+        provider: ScimProvider,
+    ) -> None:
+        """The email reconcile inside update_user can autoflush a concurrent
+        rename into a unique violation. It must return 409, not 500."""
+        user = make_db_user(email="old@mane.com", is_active=True)
+        mock_dal.get_user.return_value = user
+        mock_dal.update_user.side_effect = IntegrityError("dup", {}, Exception())
+
+        result = replace_user(
+            user_id=str(user.id),
+            user_resource=make_scim_user(userName="new@mane.com", active=True),
+            _token=mock_token,
+            provider=provider,
+            db_session=mock_db_session,
+        )
+
+        assert_scim_error(result, 409)
+
+    @patch("ee.onyx.server.scim.api.is_unique_violation", return_value=True)
+    def test_put_rename_commit_race_returns_409(
+        self,
+        mock_is_unique: MagicMock,  # noqa: ARG002
+        mock_db_session: MagicMock,
+        mock_token: MagicMock,
+        mock_dal: MagicMock,
+        provider: ScimProvider,
+    ) -> None:
+        """A concurrent rename can slip past the lookup and hit the unique
+        index at commit. It must return a clean 409, not a 500."""
+        user = make_db_user(email="old@mane.com", is_active=True)
+        mock_dal.get_user.return_value = user
+        mock_dal.commit.side_effect = IntegrityError("dup", {}, Exception())
+
+        result = replace_user(
+            user_id=str(user.id),
+            user_resource=make_scim_user(userName="new@mane.com", active=True),
+            _token=mock_token,
+            provider=provider,
+            db_session=mock_db_session,
+        )
+
+        assert_scim_error(result, 409)
+        mock_dal.rollback.assert_called_once()
 
     def test_put_rename_onto_mapped_bot_returns_409(
         self,

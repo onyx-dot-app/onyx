@@ -165,6 +165,16 @@ class ScimDAL(DAL):
             select(ScimUserMapping).where(ScimUserMapping.user_id == user_id)
         )
 
+    def get_user_mapping_by_scim_username(
+        self, scim_username: str
+    ) -> ScimUserMapping | None:
+        """Look up a user mapping by the provisioned userName (case-insensitive)."""
+        return self._session.scalar(
+            select(ScimUserMapping).where(
+                func.lower(ScimUserMapping.scim_username) == scim_username.lower()
+            )
+        )
+
     def list_user_mappings(
         self,
         start_index: int = 1,
@@ -302,11 +312,12 @@ class ScimDAL(DAL):
         if scim_filter:
             attr = scim_filter.attribute.lower()
             if attr == "username":
-                # arg-type: fastapi-users types User.email as str, not a column expression
-                # assignment: union return type widens but query is still Select[tuple[User]]
+                # userName matches the provisioned userName, so IdP matching
+                # survives the email diverging from it (identity decoupling).
+                # Legacy mappings without one fall back to the email.
                 query = _apply_scim_string_op(
                     query,
-                    User.email,  # ty: ignore[invalid-argument-type]
+                    func.coalesce(ScimUserMapping.scim_username, User.email),
                     scim_filter,
                 )
             elif attr == "active":
