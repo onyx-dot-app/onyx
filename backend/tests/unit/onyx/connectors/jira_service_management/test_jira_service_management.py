@@ -301,13 +301,20 @@ def test_load_from_checkpoint_with_perm_sync_retags_document_source(
     assert documents[0].source == DocumentSource.JIRA_SERVICE_MANAGEMENT
 
 
-def test_load_from_checkpoint_preserves_failures_and_checkpoint(
+def test_load_from_checkpoint_returns_valid_checkpoint_on_clean_run(
     jsm_connector: JiraServiceManagementConnector,
     create_mock_issue: Callable[..., MagicMock],
 ) -> None:
-    """ConnectorFailure items must pass through untouched (no source field
-    to retag), and the final returned checkpoint must be the same object
-    the parent JiraConnector produced — re-tagging shouldn't disturb it."""
+    """On a clean run (no processing errors), the final returned checkpoint
+    must be the same well-formed object the parent JiraConnector produced —
+    re-tagging shouldn't disturb it — and no spurious ConnectorFailure
+    should appear just because _retag ran over the stream.
+
+    (Genuine failure pass-through — a ConnectorFailure surviving _retag
+    untouched when the parent's processing actually errors — is exercised
+    separately by test_load_from_checkpoint_yields_failure_untouched_on_processing_error;
+    this test never triggers a failure, so it can't and doesn't stand in
+    for that coverage.)"""
     mock_issue = create_mock_issue()
     _search_issues_mock(jsm_connector).return_value = [mock_issue]
 
