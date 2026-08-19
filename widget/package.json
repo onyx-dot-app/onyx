@@ -23,7 +23,7 @@
     "terser": "^5.49.0"
   },
   "devDependencies": {
-    "@types/node": "^26.1.1",
+    "@types/node": "^26.1.2",
     "typescript": "^7.0.2",
     "vite": "^8.1.5"
   }
