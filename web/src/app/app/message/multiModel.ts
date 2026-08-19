@@ -83,6 +83,30 @@ export function getUnresolvedMultiModelTurn(
   return responses ? { userMessage: lastUserMsg, responses } : null;
 }
 
+// The model of the most recent preferred response before `excludeNodeId`'s
+// turn, or null when no earlier turn has a preference.
+function findPriorPreferredModel(
+  chain: Message[],
+  messageTree: Map<number, Message>,
+  excludeNodeId: number
+): string | null {
+  const priorUserMsg = [...chain]
+    .reverse()
+    .find(
+      (m) =>
+        m.type === "user" &&
+        m.nodeId !== excludeNodeId &&
+        m.preferredResponseId != null
+    );
+  if (!priorUserMsg) return null;
+  const priorPreferred = (priorUserMsg.childrenNodeIds ?? [])
+    .map((id) => messageTree.get(id))
+    .find((child) => child?.messageId === priorUserMsg.preferredResponseId);
+  return (
+    priorPreferred?.overridden_model || priorPreferred?.modelDisplayName || null
+  );
+}
+
 // The response a send assumes as preferred: the prior turn's preferred model
 // when it answered this turn too, else the first model (right-most panel,
 // last child). Errored responses can't continue the chain, never assumed.
@@ -94,30 +118,39 @@ export function chooseImplicitPreferred(
   const candidates = turn.responses.filter(
     (r) => r.type === "assistant" && r.messageId != null
   );
-  if (candidates.length === 0) return null;
+  const priorModel = findPriorPreferredModel(
+    chain,
+    messageTree,
+    turn.userMessage.nodeId
+  );
+  const match = priorModel
+    ? candidates.find(
+        (r) => (r.overridden_model || r.modelDisplayName) === priorModel
+      )
+    : undefined;
+  return match ?? candidates.at(-1) ?? null;
+}
 
-  for (let i = chain.length - 1; i >= 0; i--) {
-    const msg = chain[i];
-    if (
-      !msg ||
-      msg.type !== "user" ||
-      msg.nodeId === turn.userMessage.nodeId ||
-      msg.preferredResponseId == null
-    ) {
-      continue;
-    }
-    const priorPreferred = (msg.childrenNodeIds ?? [])
-      .map((id) => messageTree.get(id))
-      .find((child) => child?.messageId === msg.preferredResponseId);
-    const priorModel =
-      priorPreferred?.overridden_model || priorPreferred?.modelDisplayName;
-    if (!priorModel) continue;
-    const match = candidates.find(
-      (r) => (r.overridden_model || r.modelDisplayName) === priorModel
-    );
-    if (match) return match;
-    break;
-  }
-
-  return candidates[candidates.length - 1] ?? null;
+// preferredResponseId and latestChildNodeId move together, as in the backend's
+// set_preferred_response. A disagreeing local chain walk breaks the next send.
+// Null clears the preference and leaves the chain tip alone.
+export function applyPreferredResponse(
+  tree: Map<number, Message>,
+  userNodeId: number,
+  response: Pick<Message, "messageId" | "nodeId"> | null
+): Map<number, Message> | null {
+  const userMsg = tree.get(userNodeId);
+  if (!userMsg) return null;
+  const updated = new Map(tree);
+  updated.set(
+    userNodeId,
+    response
+      ? {
+          ...userMsg,
+          preferredResponseId: response.messageId,
+          latestChildNodeId: response.nodeId,
+        }
+      : { ...userMsg, preferredResponseId: undefined }
+  );
+  return updated;
 }

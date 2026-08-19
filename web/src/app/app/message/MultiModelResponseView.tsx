@@ -15,6 +15,7 @@ import { RegenerationFactory } from "@/app/app/message/messageComponents/AgentMe
 import MultiModelPanel from "@/app/app/message/MultiModelPanel";
 import { MultiModelResponse } from "@/app/app/message/interfaces";
 import { setPreferredResponse } from "@/app/app/services/lib";
+import { applyPreferredResponse } from "@/app/app/message/multiModel";
 import { useChatSessionStore } from "@/app/app/stores/useChatSessionStore";
 import { cn } from "@opal/utils";
 
@@ -78,11 +79,9 @@ export default function MultiModelResponseView({
   onHiddenPanelsChange,
   readOnly = false,
 }: MultiModelResponseViewProps) {
-  // preferredIndex mirrors the tree's preferred_response_id. When a preferred
-  // response is picked the backend also points latest_child at it, so this
-  // marks the response the flow continued through. A turn the user never
-  // picked from (e.g. a final multi-model turn) has no preference and stays
-  // unhighlighted.
+  // preferredIndex mirrors the tree's preferred_response_id, which the backend
+  // pairs with latest_child: it marks the response the flow continued through.
+  // A turn never picked from (e.g. a final multi-model turn) stays unhighlighted.
   const preferredIndexFromTree = useMemo(() => {
     if (parentMessage?.preferredResponseId == null) return null;
     const match = responses.find(
@@ -261,10 +260,6 @@ export default function MultiModelResponseView({
       const response = responses.find((r) => r.modelIndex === modelIndex);
       if (!response) return;
 
-      // Persist preferred response + sync `latestChildNodeId`. Backend's
-      // `set_preferred_response` updates `latest_child_message_id`; if the
-      // frontend chain walk disagrees, the next follow-up fails with
-      // "not on the latest mainline".
       if (parentMessage?.messageId && response.messageId && currentSessionId) {
         setPreferredResponse(parentMessage.messageId, response.messageId).catch(
           (err) => console.error("Failed to persist preferred response:", err)
@@ -273,17 +268,10 @@ export default function MultiModelResponseView({
         const tree = useChatSessionStore
           .getState()
           .sessions.get(currentSessionId)?.messageTree;
-        if (tree) {
-          const userMsg = tree.get(parentMessage.nodeId);
-          if (userMsg) {
-            const updated = new Map(tree);
-            updated.set(parentMessage.nodeId, {
-              ...userMsg,
-              preferredResponseId: response.messageId,
-              latestChildNodeId: response.nodeId,
-            });
-            updateSessionMessageTree(currentSessionId, updated);
-          }
+        const updated =
+          tree && applyPreferredResponse(tree, parentMessage.nodeId, response);
+        if (updated) {
+          updateSessionMessageTree(currentSessionId, updated);
         }
       }
     },
@@ -362,21 +350,16 @@ export default function MultiModelResponseView({
         restoreScroll();
       }
 
-      // Clear preferredResponseId in the local tree so input bar re-gates
+      // Clear preferredResponseId in the local tree so the next send assumes
+      // a preference again
       if (parentMessage && currentSessionId) {
         const tree = useChatSessionStore
           .getState()
           .sessions.get(currentSessionId)?.messageTree;
-        if (tree) {
-          const userMsg = tree.get(parentMessage.nodeId);
-          if (userMsg) {
-            const updated = new Map(tree);
-            updated.set(parentMessage.nodeId, {
-              ...userMsg,
-              preferredResponseId: undefined,
-            });
-            updateSessionMessageTree(currentSessionId, updated);
-          }
+        const updated =
+          tree && applyPreferredResponse(tree, parentMessage.nodeId, null);
+        if (updated) {
+          updateSessionMessageTree(currentSessionId, updated);
         }
       }
     }, 450);

@@ -21,8 +21,8 @@ function buildMessage(overrides: Partial<Message>): Message {
   };
 }
 
-// Builds a multi-model turn: one assistant response per entry of `models`,
-// in panel layout order (first model last).
+// Builds a multi-model turn: one response per entry of `models`, in panel
+// layout order (first model last).
 function buildTurn(
   tree: Map<number, Message>,
   models: (string | { model: string; type: "error" })[],
@@ -64,9 +64,7 @@ function buildTurn(
 
 // The production chain walk, so tests exercise the same traversal onSubmit
 // feeds the helpers.
-function chainOf(tree: Map<number, Message>): Message[] {
-  return getLatestMessageChain(tree);
-}
+const chainOf = getLatestMessageChain;
 
 beforeEach(() => {
   nextNodeId = 1;
