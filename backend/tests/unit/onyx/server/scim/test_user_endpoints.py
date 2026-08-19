@@ -1246,6 +1246,77 @@ class TestRenameCollisionAdoption:
         mock_dal.reassign_user_mapping.assert_called_once_with(stale_mapping, clean.id)
         mock_dal.deactivate_user.assert_called_once_with(stale)
 
+    def test_patch_username_in_any_key_casing_still_resolves(
+        self,
+        mock_db_session: MagicMock,
+        mock_token: MagicMock,
+        mock_dal: MagicMock,
+        provider: ScimProvider,
+    ) -> None:
+        """Path-less values carry userName under any casing (extra='allow')."""
+        stale, clean, stale_mapping = self._stale_and_clean(mock_dal)
+        patch_req = ScimPatchRequest(
+            Operations=[
+                ScimPatchOperation(
+                    op=ScimPatchOperationType.REPLACE,
+                    value={"UserName": "ralf@mane.com", "active": True},
+                )
+            ]
+        )
+
+        result = patch_user(
+            user_id=str(stale.id),
+            patch_request=patch_req,
+            _token=mock_token,
+            provider=provider,
+            db_session=mock_db_session,
+        )
+
+        resource = parse_scim_user(result)
+        assert resource.id == str(clean.id)
+        mock_dal.reassign_user_mapping.assert_called_once_with(stale_mapping, clean.id)
+
+    def test_patch_without_username_op_never_resolves_a_rename(
+        self,
+        mock_db_session: MagicMock,
+        mock_token: MagicMock,
+        mock_dal: MagicMock,
+        provider: ScimProvider,
+    ) -> None:
+        """A PATCH that does not touch userName must not act on a stored
+        scim_username that has drifted from the email (no adoption, no 409)."""
+        user = make_db_user(email="current@mane.com", is_active=True)
+        drifted_owner = make_db_user(email="drifted@mane.com", is_active=True)
+        mapping = make_user_mapping(user_id=user.id, scim_username="drifted@mane.com")
+        mock_dal.get_user.return_value = user
+        mock_dal.get_user_by_email.return_value = drifted_owner
+        mock_dal.get_user_mapping_by_user_id.side_effect = lambda uid: (
+            mapping if uid == user.id else None
+        )
+        patch_req = ScimPatchRequest(
+            Operations=[
+                ScimPatchOperation(
+                    op=ScimPatchOperationType.REPLACE, path="active", value=False
+                )
+            ]
+        )
+
+        result = patch_user(
+            user_id=str(user.id),
+            patch_request=patch_req,
+            _token=mock_token,
+            provider=provider,
+            db_session=mock_db_session,
+        )
+
+        parse_scim_user(result)
+        mock_dal.reassign_user_mapping.assert_not_called()
+        mock_dal.deactivate_user.assert_not_called()
+        args, kwargs = mock_dal.update_user.call_args
+        assert args[0] is user
+        assert kwargs["email"] is None
+        assert kwargs["is_active"] is False
+
     def test_put_adoption_allowed_for_admin_source(
         self,
         mock_db_session: MagicMock,

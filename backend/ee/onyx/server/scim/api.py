@@ -38,7 +38,9 @@ from ee.onyx.server.scim.models import (
     ScimListResponse,
     ScimMappingFields,
     ScimName,
+    ScimPatchOperation,
     ScimPatchRequest,
+    ScimPatchResourceValue,
     ScimServiceProviderConfig,
     ScimUserResource,
 )
@@ -330,6 +332,26 @@ def _apply_username_change(
         )
 
     return _UsernameChange(user, requested_username)
+
+
+def _patch_sets_username(operations: list[ScimPatchOperation]) -> bool:
+    """Whether a PATCH carries a userName value, by path or path-less resource.
+
+    Mirrors ``_apply_user_replace``: path-less values may carry userName under
+    any key casing (``extra="allow"``), so inspect the dumped keys, not the
+    canonical field.
+    """
+    for op in operations:
+        path = (op.path or "").lower()
+        if path == "username":
+            return True
+        if not path and isinstance(op.value, ScimPatchResourceValue):
+            if any(
+                key.lower() == "username"
+                for key in op.value.model_dump(exclude_unset=True)
+            ):
+                return True
+    return False
 
 
 def _assign_default_groups_or_error(
@@ -822,10 +844,16 @@ def patch_user(
         return _scim_error_response(e.status, e.detail)
 
     requested_username = patched.userName.strip()
-    resolved = _apply_username_change(dal, user, requested_username)
-    if isinstance(resolved, ScimJSONResponse):
-        return resolved
-    user, new_email, seat_freed = resolved
+    # Resolve a rename only when the PATCH itself carried userName. A patch
+    # that touches other fields must not act on a stored scim_username that
+    # has drifted from the email.
+    new_email: str | None = None
+    seat_freed = False
+    if _patch_sets_username(patch_request.Operations):
+        resolved = _apply_username_change(dal, user, requested_username)
+        if isinstance(resolved, ScimJSONResponse):
+            return resolved
+        user, new_email, seat_freed = resolved
 
     # Apply changes back to the DB model. A seat is consumed when the user
     # becomes active (reactivation) or when a shadow EXT_PERM_USER is promoted
