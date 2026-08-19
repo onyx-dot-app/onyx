@@ -208,7 +208,7 @@ func TestNextSequencedTag_countersPerBase(t *testing.T) {
 		"v4.7.0-cloud.9", "v4.7.0-cloud.10", // Numeric vs lexical ordering.
 		"v4.9.0-beta.1", "v4.9.0", // Same-base non-cloud tags.
 		"v4.10.0-cloud.5",                                         // Base that v4.1.0 prefixes.
-		"v4.12.0-cloud", "v4.12.0-cloud.abc", "v4.12.0-cloud.1.2", // Malformed suffixes.
+		"v4.12.0-cloud", "v4.12.0-cloud.abc", "v4.12.0-cloud.1.2", "v4.12.0-cloud.007", // Malformed suffixes.
 	} {
 		gittest.Git(t, work, "tag", tag, sha)
 	}

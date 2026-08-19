@@ -20,6 +20,7 @@ package release
 //	T4 no release/vX.Y branch on origin      -> error                          TestCheckTag_missingBranchErrors
 //	T5 patch out of sequence (skip or stale) -> error                          TestCheckTag_stableOutOfSequenceErrors
 //	T6 predecessor not an ancestor           -> error                          TestCheckTag_predecessorNotAncestorErrors
+//	T7 tag fetch from origin fails           -> error, no local fallback       TestCheckTag_fetchFailureErrors
 //
 // Beta tag states:
 //
@@ -201,6 +202,23 @@ func TestCheckTag_predecessorNotAncestorErrors(t *testing.T) {
 	// Postcondition.
 	if err == nil || !strings.Contains(err.Error(), "not an ancestor") {
 		t.Errorf("expected a predecessor-not-ancestor error, got %v", err)
+	}
+}
+
+func TestCheckTag_fetchFailureErrors(t *testing.T) {
+	// Precondition: a tag that would pass the check, but an unreachable
+	// origin. Unlike a cut, a check must not fall back to local tags: a stale
+	// view could pass an out-of-sequence tag.
+	repo := gittest.SetupReleaseBranchRepo(t)
+	gittest.Git(t, repo.Work, "tag", "v4.4.3", repo.PreCutSHA)
+	gittest.Git(t, repo.Work, "remote", "set-url", "origin", t.TempDir())
+
+	// Under test.
+	err := CheckTag("v4.4.3")
+
+	// Postcondition.
+	if err == nil || !strings.Contains(err.Error(), "failed to fetch") {
+		t.Errorf("expected a fetch failure error, got %v", err)
 	}
 }
 

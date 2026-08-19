@@ -67,7 +67,8 @@ func tagExists(tag string) bool {
 // existing counter among local tags named prefix + <integer> (fetched from
 // origin beforehand), or 0 when none exist. Counters compare numerically:
 // lexically ".9" > ".10", which would compute a colliding tag. Tags of other
-// prefixes and tags whose suffix is not a plain integer are ignored, as is
+// prefixes and tags whose suffix is not a plain integer (including
+// leading-zero counters, rejected per SemVer 2.0.0 item 2) are ignored, as is
 // excludeTag (which lets a check recompute the sequence as if the checked tag
 // did not exist).
 func nextSequencedTag(prefix, excludeTag string) (string, error) {
@@ -75,7 +76,7 @@ func nextSequencedTag(prefix, excludeTag string) (string, error) {
 	if err != nil {
 		return "", fmt.Errorf("git tag --list failed: %w", err)
 	}
-	counterRe := regexp.MustCompile(`^` + regexp.QuoteMeta(prefix) + `(\d+)$`)
+	counterRe := regexp.MustCompile(`^` + regexp.QuoteMeta(prefix) + `(0|[1-9]\d*)$`)
 	next := 0
 	for _, line := range strings.Split(string(out), "\n") {
 		tag := strings.TrimSpace(line)

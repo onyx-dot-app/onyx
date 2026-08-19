@@ -61,10 +61,10 @@ func checkCloudTag(tag string) error {
 	if err := git.RunCommand("fetch", "--quiet", "--force", "origin", "+refs/heads/main:refs/remotes/origin/main"); err != nil {
 		return fmt.Errorf("failed to fetch origin/main: %w", err)
 	}
-	// Best-effort: stale local tags can only mis-report the sequence, which
-	// the error message makes visible.
+	// Unlike a cut (where origin rejects a colliding push), a check has no
+	// backstop: stale local tags could pass an out-of-sequence tag.
 	if err := FetchTags("v*-cloud.*"); err != nil {
-		log.Warnf("Could not fetch cloud tags (using local tags): %v", err)
+		return fmt.Errorf("failed to fetch cloud tags: %w", err)
 	}
 
 	base := cloudTagRe.FindStringSubmatch(tag)[1]
@@ -106,10 +106,10 @@ func checkStableTag(tag string) error {
 		return fmt.Errorf("failed to parse the patch number of %s: %w", tag, err)
 	}
 
-	// Best-effort, as for cloud tags: stale local tags can only mis-report
-	// the sequence, which the error message makes visible.
+	// Unlike a cut (where origin rejects a colliding push), a check has no
+	// backstop: stale local tags could pass an out-of-sequence tag.
 	if err := FetchTags(fmt.Sprintf("v%s.*", minor)); err != nil {
-		log.Warnf("Could not fetch v%s.* tags (using local tags): %v", minor, err)
+		return fmt.Errorf("failed to fetch v%s.* tags: %w", minor, err)
 	}
 
 	sha, err := ResolveCommit(tag)
@@ -154,9 +154,11 @@ func checkBetaTag(tag string) error {
 		return fmt.Errorf("failed to parse the counter of %s: %w", tag, err)
 	}
 
-	// Best-effort: covers the base's betas and the stable base tag itself.
+	// Covers the base's betas and the stable base tag itself. Unlike a cut
+	// (where origin rejects a colliding push), a check has no backstop:
+	// stale local tags could pass an out-of-sequence tag.
 	if err := FetchTags(base + "*"); err != nil {
-		log.Warnf("Could not fetch %s* tags (using local tags): %v", base, err)
+		return fmt.Errorf("failed to fetch %s* tags: %w", base, err)
 	}
 
 	sha, err := ResolveCommit(tag)

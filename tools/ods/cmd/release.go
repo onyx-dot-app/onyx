@@ -1,6 +1,8 @@
 package cmd
 
 import (
+	"fmt"
+
 	"github.com/spf13/cobra"
 
 	"github.com/onyx-dot-app/onyx/tools/ods/internal/release"
@@ -46,6 +48,11 @@ Example usage:
 		SilenceUsage: true,
 		RunE: func(cmd *cobra.Command, args []string) error {
 			if !check {
+				// A lone --ref would otherwise print help and exit 0, hiding
+				// a mistyped check invocation from CI.
+				if cmd.Flags().Changed("ref") {
+					return fmt.Errorf("--ref requires --check")
+				}
 				return cmd.Help()
 			}
 			return release.CheckTag(ref)
