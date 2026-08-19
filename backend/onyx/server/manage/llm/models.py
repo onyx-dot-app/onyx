@@ -3,9 +3,11 @@ from __future__ import annotations
 from functools import cached_property
 from typing import TYPE_CHECKING, Any, Generic, TypeVar
 
-from pydantic import BaseModel, Field, field_validator
+from pydantic import BaseModel, Field, field_validator, model_validator
 
 from onyx.db.enums import LLMModelFlowType
+from onyx.error_handling.error_codes import OnyxErrorCode
+from onyx.error_handling.exceptions import OnyxError
 from onyx.llm.api_surfaces import resolve_api_surface
 from onyx.llm.constants import DYNAMIC_LLM_PROVIDERS
 from onyx.llm.model_capabilities import (
@@ -18,7 +20,11 @@ from onyx.llm.model_capabilities import (
 from onyx.llm.model_capabilities import (
     model_identity_names as resolve_model_identity_names,
 )
-from onyx.llm.models import ReasoningEffort
+from onyx.llm.models import (
+    ReasoningEffort,
+    parse_user_selectable_reasoning_effort,
+    reasoning_effort_exceeds,
+)
 from onyx.server.manage.llm.utils import (
     extract_vendor_from_model_name,
     filter_model_configurations,
@@ -30,6 +36,14 @@ if TYPE_CHECKING:
     from onyx.db.models import ModelConfiguration as ModelConfigurationModel
 
 T = TypeVar("T", "LLMProviderDescriptor", "LLMProviderView", "VisionProviderResponse")
+
+# Admin-controlled per-model settings, as they are named on both the upsert
+# request and the model_configuration row.
+MODEL_SETTINGS_FIELDS = (
+    "reasoning_effort_max",
+    "reasoning_effort_default",
+    "temperature_default",
+)
 
 
 class CustomProviderOption(BaseModel):
@@ -212,6 +226,61 @@ class ModelConfigurationUpsertRequest(BaseModel):
     supports_reasoning: bool | None = None
     display_name: str | None = None  # For dynamic providers, from source API
     custom_display_name: str | None = None  # Admin-specified override
+    reasoning_effort_max: ReasoningEffort | None = None
+    reasoning_effort_default: ReasoningEffort | None = None
+    temperature_default: float | None = None
+
+    @field_validator("reasoning_effort_max", "reasoning_effort_default", mode="before")
+    @classmethod
+    def _validate_reasoning_effort(cls, value: Any) -> Any:
+        # AUTO has no rank and would break the clamp, and an unset column
+        # already means AUTO. Enums are checked too, not just strings.
+        if value is None:
+            return value
+        try:
+            return parse_user_selectable_reasoning_effort(
+                value.value if isinstance(value, ReasoningEffort) else value
+            )
+        except ValueError as e:
+            raise OnyxError(OnyxErrorCode.BAD_REQUEST, str(e))
+
+    @field_validator("temperature_default")
+    @classmethod
+    def _validate_temperature(cls, value: float | None) -> float | None:
+        if value is not None and not 0 <= value <= 2:
+            raise OnyxError(
+                OnyxErrorCode.BAD_REQUEST,
+                f"temperature_default must be between 0 and 2, got {value}",
+            )
+        return value
+
+    @model_validator(mode="after")
+    def _validate_default_within_max(self) -> "ModelConfigurationUpsertRequest":
+        if (
+            self.reasoning_effort_default is not None
+            and self.reasoning_effort_max is not None
+            and reasoning_effort_exceeds(
+                self.reasoning_effort_default, self.reasoning_effort_max
+            )
+        ):
+            raise OnyxError(
+                OnyxErrorCode.BAD_REQUEST,
+                "reasoning_effort_default cannot exceed reasoning_effort_max",
+            )
+        return self
+
+    def provided_model_settings(self) -> dict[str, Any]:
+        """The admin settings this request actually carried.
+
+        An omitted field must leave the stored value alone, so absent is kept
+        distinct from an explicit null. Without this, any client that predates
+        these fields would clear an admin's cap on its next provider save.
+        """
+        return {
+            field: getattr(self, field)
+            for field in MODEL_SETTINGS_FIELDS
+            if field in self.model_fields_set
+        }
 
     @classmethod
     def from_model(
@@ -228,6 +297,9 @@ class ModelConfigurationUpsertRequest(BaseModel):
             ),
             display_name=model_configuration_model.display_name,
             custom_display_name=model_configuration_model.custom_display_name,
+            reasoning_effort_max=model_configuration_model.reasoning_effort_max,
+            reasoning_effort_default=model_configuration_model.reasoning_effort_default,
+            temperature_default=model_configuration_model.temperature_default,
         )
 
 
@@ -246,6 +318,12 @@ class ModelConfigurationView(BaseModel):
     # supports_reasoning: an empty list on a reasoning model means the model
     # takes no effort parameter. The model picker offers exactly these.
     supported_reasoning_efforts: list[ReasoningEffort] = Field(default_factory=list)
+    # Admin policy for this model. Null means unset, so nothing is imposed.
+    # supported_reasoning_efforts answers what the model can do, these answer
+    # what an admin permits of it.
+    reasoning_effort_max: ReasoningEffort | None = None
+    reasoning_effort_default: ReasoningEffort | None = None
+    temperature_default: float | None = None
     # True when this is the provider's recommended default model.
     is_recommended_default: bool = False
     display_name: str | None = None
@@ -323,6 +401,9 @@ class ModelConfigurationView(BaseModel):
                     )
                 ),
                 supported_reasoning_efforts=reasoning_efforts,
+                reasoning_effort_max=model_configuration_model.reasoning_effort_max,
+                reasoning_effort_default=model_configuration_model.reasoning_effort_default,
+                temperature_default=model_configuration_model.temperature_default,
                 display_name=model_configuration_model.display_name,
                 custom_display_name=model_configuration_model.custom_display_name,
                 provider_display_name=None,  # Not needed for dynamic providers
@@ -384,6 +465,9 @@ class ModelConfigurationView(BaseModel):
                 )
             ),
             supported_reasoning_efforts=reasoning_efforts,
+            reasoning_effort_max=model_configuration_model.reasoning_effort_max,
+            reasoning_effort_default=model_configuration_model.reasoning_effort_default,
+            temperature_default=model_configuration_model.temperature_default,
             # Populate display fields from parsed model name
             display_name=display_name,
             custom_display_name=model_configuration_model.custom_display_name,

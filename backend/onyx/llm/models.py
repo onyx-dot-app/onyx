@@ -67,6 +67,52 @@ def parse_user_selectable_reasoning_effort(value: str) -> ReasoningEffort:
     return effort
 
 
+# Ascending order of how much thinking each level asks for. AUTO has no rank:
+# it names a deferred choice, not an amount, so callers resolve it first.
+_REASONING_EFFORT_RANK: dict[ReasoningEffort, int] = {
+    ReasoningEffort.OFF: 0,
+    ReasoningEffort.LOW: 1,
+    ReasoningEffort.MEDIUM: 2,
+    ReasoningEffort.HIGH: 3,
+    ReasoningEffort.XHIGH: 4,
+}
+
+
+def reasoning_effort_exceeds(effort: ReasoningEffort, cap: ReasoningEffort) -> bool:
+    """Whether `effort` asks for more thinking than `cap` allows."""
+    return _REASONING_EFFORT_RANK[effort] > _REASONING_EFFORT_RANK[cap]
+
+
+def resolve_reasoning_effort(
+    requested: ReasoningEffort,
+    default: ReasoningEffort | None,
+    maximum: ReasoningEffort | None,
+) -> ReasoningEffort:
+    """Settle a request against the admin's per-model default and cap.
+
+    Sources are tried in order and the first concrete one wins, so inserting
+    another tier later (a per-user default, say) is a one-line change. The cap
+    is applied last and unconditionally, which is what makes it a cap: no
+    client, stale UI, or direct API call can get past it.
+
+    AUTO must be concretized before clamping. It maps to medium downstream
+    (see OPENAI_REASONING_EFFORT), so an unresolved AUTO under a cap of LOW
+    would quietly ask for more than the cap allows.
+    """
+    for candidate in (requested, default):
+        if candidate is not None and candidate != ReasoningEffort.AUTO:
+            effort = candidate
+            break
+    else:
+        if maximum is None:
+            return ReasoningEffort.AUTO
+        effort = ReasoningEffort.MEDIUM
+
+    if maximum is not None and reasoning_effort_exceeds(effort, maximum):
+        return maximum
+    return effort
+
+
 # OpenAI reasoning effort mapping
 # Note: OpenAI API does not support "auto" - valid values are: none, minimal, low, medium, high, xhigh
 OPENAI_REASONING_EFFORT: dict[ReasoningEffort, str] = {
