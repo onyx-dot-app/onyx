@@ -65,10 +65,7 @@ from onyx.db.enums import (
     IndexingStatus,
     IndexModelStatus,
 )
-from onyx.db.hierarchy import (
-    upsert_hierarchy_node_cc_pair_entries,
-    upsert_hierarchy_nodes_batch,
-)
+from onyx.db.hierarchy import persist_hierarchy_nodes_for_cc_pair
 from onyx.db.index_attempt import (
     create_index_attempt_error,
     get_index_attempt,
@@ -1023,20 +1020,13 @@ def cache_and_upsert_hierarchy_nodes(
         hierarchy_node_batch
     )
     with get_session_with_current_tenant() as db_session:
-        upserted_nodes = upsert_hierarchy_nodes_batch(
+        upserted_nodes = persist_hierarchy_nodes_for_cc_pair(
             db_session=db_session,
             nodes=hierarchy_node_batch_cleaned,
             source=db_connector.source,
-            commit=True,
-            is_connector_public=is_connector_public,
-        )
-
-        upsert_hierarchy_node_cc_pair_entries(
-            db_session=db_session,
-            hierarchy_node_ids=[n.id for n in upserted_nodes],
             connector_id=db_connector.id,
             credential_id=db_credential.id,
-            commit=True,
+            is_connector_public=is_connector_public,
         )
 
         # Cache in Redis for fast ancestor resolution during doc processing
