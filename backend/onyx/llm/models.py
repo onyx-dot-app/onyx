@@ -67,8 +67,7 @@ def parse_user_selectable_reasoning_effort(value: str) -> ReasoningEffort:
     return effort
 
 
-# Ascending order of how much thinking each level asks for. AUTO has no rank:
-# it names a deferred choice, not an amount, so callers resolve it first.
+# AUTO has no rank: it defers a choice rather than naming an amount.
 _REASONING_EFFORT_RANK: dict[ReasoningEffort, int] = {
     ReasoningEffort.OFF: 0,
     ReasoningEffort.LOW: 1,
@@ -90,14 +89,11 @@ def resolve_reasoning_effort(
 ) -> ReasoningEffort:
     """Settle a request against the admin's per-model default and cap.
 
-    Sources are tried in order and the first concrete one wins, so inserting
-    another tier later (a per-user default, say) is a one-line change. The cap
-    is applied last and unconditionally, which is what makes it a cap: no
-    client, stale UI, or direct API call can get past it.
+    Ordered chain, first concrete source wins, so another tier (a per-user
+    default) is a one-line insert. The cap applies last and unconditionally.
 
-    AUTO must be concretized before clamping. It maps to medium downstream
-    (see OPENAI_REASONING_EFFORT), so an unresolved AUTO under a cap of LOW
-    would quietly ask for more than the cap allows.
+    AUTO is concretized before clamping because it maps to medium downstream,
+    which would quietly exceed a cap of LOW.
     """
     for candidate in (requested, default):
         if candidate is not None and candidate != ReasoningEffort.AUTO:

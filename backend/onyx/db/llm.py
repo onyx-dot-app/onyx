@@ -34,6 +34,7 @@ from onyx.server.manage.llm.models import (
     LLMProviderUpsertRequest,
     LLMProviderView,
     SyncModelEntry,
+    ensure_default_within_max,
 )
 from onyx.utils.logger import setup_logger
 from shared_configs.enums import EmbeddingProvider
@@ -324,6 +325,16 @@ def upsert_llm_provider(
 
         existing = existing_by_name.get(model_config.name)
         if existing:
+            # Validate what the row ends up with, not just what was sent.
+            model_settings = model_config.provided_model_settings()
+            ensure_default_within_max(
+                model_settings.get(
+                    "reasoning_effort_default", existing.reasoning_effort_default
+                ),
+                model_settings.get(
+                    "reasoning_effort_max", existing.reasoning_effort_max
+                ),
+            )
             update_model_configuration__no_commit(
                 db_session=db_session,
                 model_configuration_id=existing.id,
@@ -332,7 +343,7 @@ def upsert_llm_provider(
                 max_input_tokens=model_config.max_input_tokens,
                 display_name=model_config.display_name,
                 custom_display_name=model_config.custom_display_name,
-                model_settings=model_config.provided_model_settings(),
+                model_settings=model_settings,
             )
         else:
             insert_new_model_configuration__no_commit(

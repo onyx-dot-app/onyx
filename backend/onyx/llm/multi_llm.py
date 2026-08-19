@@ -710,9 +710,8 @@ class LitellmLLM(LLM):
         if stream and not is_vertex_model_rejecting_stream_options:
             optional_kwargs["stream_options"] = {"include_usage": True}
 
-        # Settle the caller's request against the admin's per-model policy
-        # before anything reads it, so every branch below and the tracing
-        # record all see the same effort the provider will.
+        # Settle before anything reads it, so every branch below and tracing
+        # see the same effort the provider will.
         reasoning_effort = resolve_reasoning_effort(
             reasoning_effort,
             self.config.reasoning_effort_default,

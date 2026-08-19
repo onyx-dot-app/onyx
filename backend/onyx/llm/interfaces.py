@@ -40,8 +40,7 @@ class LLMConfig(BaseModel):
     deployment_name: str | None = None
     custom_config: dict[str, str] | None = None
     max_input_tokens: int
-    # Admin-configured per-model reasoning policy. Carried here so it applies to
-    # every invoke path, not just chat. See resolve_reasoning_effort.
+    # Here rather than in the chat loop, so every invoke path gets it.
     reasoning_effort_default: ReasoningEffort | None = None
     reasoning_effort_max: ReasoningEffort | None = None
     # This disables the "model_" protected namespace for pydantic

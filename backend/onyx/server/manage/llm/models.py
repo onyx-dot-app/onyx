@@ -37,13 +37,30 @@ if TYPE_CHECKING:
 
 T = TypeVar("T", "LLMProviderDescriptor", "LLMProviderView", "VisionProviderResponse")
 
-# Admin-controlled per-model settings, as they are named on both the upsert
-# request and the model_configuration row.
+# Named identically on the upsert request and the model_configuration row.
 MODEL_SETTINGS_FIELDS = (
     "reasoning_effort_max",
     "reasoning_effort_default",
     "temperature_default",
 )
+
+
+def ensure_default_within_max(
+    default: ReasoningEffort | None, maximum: ReasoningEffort | None
+) -> None:
+    """Reject a policy whose default the cap would immediately override.
+
+    Pass the values that end up STORED, not just those a request carried.
+    """
+    if (
+        default is not None
+        and maximum is not None
+        and reasoning_effort_exceeds(default, maximum)
+    ):
+        raise OnyxError(
+            OnyxErrorCode.BAD_REQUEST,
+            "reasoning_effort_default cannot exceed reasoning_effort_max",
+        )
 
 
 class CustomProviderOption(BaseModel):
@@ -233,8 +250,7 @@ class ModelConfigurationUpsertRequest(BaseModel):
     @field_validator("reasoning_effort_max", "reasoning_effort_default", mode="before")
     @classmethod
     def _validate_reasoning_effort(cls, value: Any) -> Any:
-        # AUTO has no rank and would break the clamp, and an unset column
-        # already means AUTO. Enums are checked too, not just strings.
+        # AUTO has no rank and an unset column already means it. Enums too.
         if value is None:
             return value
         try:
@@ -256,26 +272,14 @@ class ModelConfigurationUpsertRequest(BaseModel):
 
     @model_validator(mode="after")
     def _validate_default_within_max(self) -> "ModelConfigurationUpsertRequest":
-        if (
-            self.reasoning_effort_default is not None
-            and self.reasoning_effort_max is not None
-            and reasoning_effort_exceeds(
-                self.reasoning_effort_default, self.reasoning_effort_max
-            )
-        ):
-            raise OnyxError(
-                OnyxErrorCode.BAD_REQUEST,
-                "reasoning_effort_default cannot exceed reasoning_effort_max",
-            )
+        ensure_default_within_max(
+            self.reasoning_effort_default, self.reasoning_effort_max
+        )
         return self
 
     def provided_model_settings(self) -> dict[str, Any]:
-        """The admin settings this request actually carried.
-
-        An omitted field must leave the stored value alone, so absent is kept
-        distinct from an explicit null. Without this, any client that predates
-        these fields would clear an admin's cap on its next provider save.
-        """
+        """The settings this request carried. Absent stays distinct from an
+        explicit null, so an older client cannot clear an admin's cap."""
         return {
             field: getattr(self, field)
             for field in MODEL_SETTINGS_FIELDS
@@ -318,9 +322,8 @@ class ModelConfigurationView(BaseModel):
     # supports_reasoning: an empty list on a reasoning model means the model
     # takes no effort parameter. The model picker offers exactly these.
     supported_reasoning_efforts: list[ReasoningEffort] = Field(default_factory=list)
-    # Admin policy for this model. Null means unset, so nothing is imposed.
-    # supported_reasoning_efforts answers what the model can do, these answer
-    # what an admin permits of it.
+    # supported_reasoning_efforts is what the model can do, these are what the
+    # admin permits of it. Null means unset.
     reasoning_effort_max: ReasoningEffort | None = None
     reasoning_effort_default: ReasoningEffort | None = None
     temperature_default: float | None = None

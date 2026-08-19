@@ -361,9 +361,7 @@ def llm_from_provider(
             llm_provider=llm_provider, model_name=model_name
         )
     )
-    # An explicit temperature is a session override and wins. Otherwise fall
-    # back to the admin's per-model default, then to GEN_AI_TEMPERATURE in
-    # get_llm.
+    # Session override wins, else the model default, else GEN_AI_TEMPERATURE.
     if temperature is None and model_configuration:
         temperature = model_configuration.temperature_default
     # Resolved here, not at the call site: the caller hands policy as a

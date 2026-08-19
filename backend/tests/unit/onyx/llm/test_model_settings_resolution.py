@@ -8,7 +8,10 @@ import pytest
 from onyx.error_handling.exceptions import OnyxError
 from onyx.llm.models import ReasoningEffort, UserMessage, resolve_reasoning_effort
 from onyx.llm.multi_llm import LitellmLLM
-from onyx.server.manage.llm.models import ModelConfigurationUpsertRequest
+from onyx.server.manage.llm.models import (
+    ModelConfigurationUpsertRequest,
+    ensure_default_within_max,
+)
 
 _SENTINEL = object()
 
@@ -220,6 +223,32 @@ class TestUpsertValidation:
                 reasoning_effort_max=ReasoningEffort.LOW,
                 reasoning_effort_default=ReasoningEffort.HIGH,
             )
+
+    def test_merged_policy_is_what_gets_validated(self) -> None:
+        """A partial update lowering only the cap must still be checked against
+        the default already stored, or the row ends up with a default the cap
+        silently overrides."""
+        stored_default = ReasoningEffort.HIGH
+        incoming = ModelConfigurationUpsertRequest(
+            name="gpt-5.1", is_visible=True, reasoning_effort_max=ReasoningEffort.LOW
+        ).provided_model_settings()
+
+        with pytest.raises(OnyxError):
+            ensure_default_within_max(
+                incoming.get("reasoning_effort_default", stored_default),
+                incoming.get("reasoning_effort_max", None),
+            )
+
+    def test_merged_policy_accepts_a_consistent_partial_update(self) -> None:
+        stored_default = ReasoningEffort.LOW
+        incoming = ModelConfigurationUpsertRequest(
+            name="gpt-5.1", is_visible=True, reasoning_effort_max=ReasoningEffort.HIGH
+        ).provided_model_settings()
+
+        ensure_default_within_max(
+            incoming.get("reasoning_effort_default", stored_default),
+            incoming.get("reasoning_effort_max", None),
+        )
 
     def test_default_equal_to_max_allowed(self) -> None:
         request = ModelConfigurationUpsertRequest(
