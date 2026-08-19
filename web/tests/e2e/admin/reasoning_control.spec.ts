@@ -27,8 +27,6 @@ async function openFirstModelDetailPane(page: Page): Promise<boolean> {
   const settingsButton = popover
     .getByRole("button", { name: /settings$/ })
     .first();
-    .getByRole("button", { name: /settings$/ })
-    .first();
   if (!(await settingsButton.isVisible().catch(() => false))) return false;
 
   await settingsButton.click();
