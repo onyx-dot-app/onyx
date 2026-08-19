@@ -94,7 +94,7 @@ _UNREADY_AFTER_SECONDS = 10.0
 
 # Tracks when the threadpool was first observed saturated, so brief queueing
 # under bursty load does not flip readiness. Only ever touched from the event
-# loop inside `healthcheck`, with no await between the read and the write.
+# loop inside `readiness`, with no await between the read and the write.
 #
 # The window is sampled at probe frequency, not observed continuously, so a pool
 # that drains and re-saturates between two probes reads as continuously
@@ -105,7 +105,7 @@ _UNREADY_AFTER_SECONDS = 10.0
 # background sampler, which is not worth an always-on loop per process.
 _SATURATED_SINCE: float | None = None
 
-# Probes can hit /health many times a second, so log only when readiness
+# Probes can hit /health/ready many times a second, so log only when readiness
 # changes. Logging every not-ready probe would flood the log with one line per
 # probe per replica, and add synchronous I/O exactly when the server is already
 # out of capacity.
@@ -132,15 +132,15 @@ def _threadpool_saturation() -> tuple[bool, dict[str, float]]:
 
 # response_model=None only disables schema inference for the Response union
 # below. It does not declare a response model.
-@router.get("/health", tags=PUBLIC_API_TAGS, response_model=None)
-async def healthcheck() -> StatusResponse[dict[str, float]] | JSONResponse:
+@router.get("/health/ready", tags=PUBLIC_API_TAGS, response_model=None)
+async def readiness() -> StatusResponse[dict[str, float]] | JSONResponse:
     """Readiness probe. Wire this to readinessProbe and to load balancers.
 
     Sync endpoints run in the anyio threadpool, so a saturated pool means the
     server cannot serve real traffic even though the event loop still turns.
     This handler stays async on purpose: a sync handler would borrow a token of
     the pool it is measuring, adding load exactly when there is none to spare,
-    and would queue rather than answer. Liveness lives at /health/live.
+    and would queue rather than answer. Liveness lives at /health.
     """
     global _SATURATED_SINCE, _REPORTED_NOT_READY
 
@@ -184,13 +184,14 @@ async def healthcheck() -> StatusResponse[dict[str, float]] | JSONResponse:
     )
 
 
-@router.get("/health/live", tags=PUBLIC_API_TAGS)
-async def liveness() -> StatusResponse:
+@router.get("/health", tags=PUBLIC_API_TAGS)
+async def healthcheck() -> StatusResponse:
     """Liveness probe. Answers only "is this process still running".
 
     Deliberately checks nothing else. Liveness failures restart the container,
     and saturation is load-induced and correlated across replicas, so gating
-    restarts on it would turn a slowdown into an outage. Use /health for that.
+    restarts on it would turn a slowdown into an outage. Use /health/ready for
+    that.
     """
     return StatusResponse(success=True, message="ok")
 

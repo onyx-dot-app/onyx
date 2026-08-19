@@ -576,20 +576,20 @@ api:
 
   # Optional health probes.
   #
-  # Match the path to the probe. /health reports not-ready once the request
+  # Match the path to the probe. /health/ready reports not-ready once the request
   # threadpool is saturated, which is what should pull a pod out of the Service.
-  # /health/live only reports that the process is up. Do NOT put /health on the
+  # /health only reports that the process is up. Do NOT put /health/ready on the
   # liveness probe: saturation is load-induced and hits every replica at once,
   # so restarting on it turns a slowdown into an outage.
   #
   # Example:
   # readinessProbe:
   #   httpGet:
-  #     path: /health
+  #     path: /health/ready
   #     port: api-server-port
   # livenessProbe:
   #   httpGet:
-  #     path: /health/live
+  #     path: /health
   #     port: api-server-port
   startupProbe: {}
   readinessProbe: {}

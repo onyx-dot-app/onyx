@@ -1,4 +1,4 @@
-"""Unit tests for the /health readiness and /health/live liveness endpoints."""
+"""Unit tests for the /health/ready readiness and /health liveness endpoints."""
 
 import asyncio
 from collections.abc import Iterator
@@ -31,7 +31,7 @@ def _limiter(borrowed: float, total: float, waiting: int) -> MagicMock:
     return limiter
 
 
-def _healthcheck(
+def _readiness(
     borrowed: float, total: float, waiting: int, now: float
 ) -> get_state.StatusResponse[dict[str, float]] | JSONResponse:
     """Run the readiness handler against a fixed pool state and clock."""
@@ -43,14 +43,14 @@ def _healthcheck(
         ),
         patch.object(get_state.time, "monotonic", return_value=now),
     ):
-        return asyncio.run(get_state.healthcheck())
+        return asyncio.run(get_state.readiness())
 
 
 def _ready(
     borrowed: float, total: float, waiting: int, now: float
 ) -> get_state.StatusResponse[dict[str, float]]:
     """Run the readiness handler and assert it reported ready."""
-    response = _healthcheck(borrowed, total, waiting, now)
+    response = _readiness(borrowed, total, waiting, now)
     assert not isinstance(response, JSONResponse)
     return response
 
@@ -83,9 +83,9 @@ def test_brief_saturation_does_not_flip_readiness() -> None:
 
 
 def test_sustained_saturation_reports_not_ready() -> None:
-    _healthcheck(borrowed=40, total=40, waiting=5, now=100.0)
+    _readiness(borrowed=40, total=40, waiting=5, now=100.0)
 
-    response = _healthcheck(
+    response = _readiness(
         borrowed=40,
         total=40,
         waiting=5,
@@ -100,8 +100,8 @@ def test_sustained_saturation_reports_not_ready() -> None:
 
 def test_recovery_between_samples_restarts_the_timer() -> None:
     """A healthy sample clears the latch, so the grace window starts over."""
-    _healthcheck(borrowed=40, total=40, waiting=5, now=100.0)
-    _healthcheck(borrowed=10, total=40, waiting=0, now=105.0)
+    _readiness(borrowed=40, total=40, waiting=5, now=100.0)
+    _readiness(borrowed=10, total=40, waiting=0, now=105.0)
     assert get_state._SATURATED_SINCE is None
 
     # Long past the original window, but this is a fresh saturation streak.
@@ -114,9 +114,9 @@ def test_recovery_between_samples_restarts_the_timer() -> None:
 def test_not_ready_is_logged_once_per_streak() -> None:
     """Probes are frequent, so only readiness changes may write to the log."""
     with patch.object(get_state, "logger") as mock_logger:
-        _healthcheck(borrowed=40, total=40, waiting=5, now=100.0)
+        _readiness(borrowed=40, total=40, waiting=5, now=100.0)
         for offset in range(3):
-            _healthcheck(
+            _readiness(
                 borrowed=40,
                 total=40,
                 waiting=5,
@@ -125,22 +125,22 @@ def test_not_ready_is_logged_once_per_streak() -> None:
 
         assert mock_logger.warning.call_count == 1
 
-        _healthcheck(borrowed=0, total=40, waiting=0, now=200.0)
-        _healthcheck(borrowed=0, total=40, waiting=0, now=201.0)
+        _readiness(borrowed=0, total=40, waiting=0, now=200.0)
+        _readiness(borrowed=0, total=40, waiting=0, now=201.0)
 
         assert mock_logger.notice.call_count == 1
 
 
 def test_liveness_stays_up_while_saturated() -> None:
     """Liveness must never fail on load, or saturation restarts every replica."""
-    _healthcheck(borrowed=40, total=40, waiting=5, now=100.0)
-    _healthcheck(
+    _readiness(borrowed=40, total=40, waiting=5, now=100.0)
+    _readiness(
         borrowed=40,
         total=40,
         waiting=5,
         now=100.0 + get_state._UNREADY_AFTER_SECONDS,
     )
 
-    response = asyncio.run(get_state.liveness())
+    response = asyncio.run(get_state.healthcheck())
 
     assert response.success is True
