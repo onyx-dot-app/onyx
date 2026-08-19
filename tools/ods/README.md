@@ -327,9 +327,12 @@ ods check-lazy-imports
 
 ### `fmt` - Format Sources
 
+Also available as `ods format`.
+
 #### `fmt tf` - Format Terraform
 
-Rewrite Terraform files into the canonical HCL style.
+Rewrite Terraform files into the canonical HCL style. Also available as
+`ods fmt terraform`.
 
 ```shell
 ods fmt tf [paths...]
@@ -369,7 +372,8 @@ is how the `terraform-fmt` pre-commit hook gates a commit.
 
 #### `lint tf` - Check Published Terraform
 
-Check published Terraform modules for values that must stay internal.
+Check published Terraform modules for values that must stay internal. Also
+available as `ods lint terraform`.
 
 ```shell
 ods lint tf [paths...]

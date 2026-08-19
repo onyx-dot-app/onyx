@@ -14,8 +14,9 @@ import (
 // NewFmtCommand creates the fmt command group.
 func NewFmtCommand() *cobra.Command {
 	cmd := &cobra.Command{
-		Use:   "fmt",
-		Short: "Format repository sources",
+		Use:     "fmt",
+		Aliases: []string{"format"},
+		Short:   "Format repository sources",
 	}
 	cmd.AddCommand(newFmtTerraformCommand())
 	return cmd
