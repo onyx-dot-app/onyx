@@ -102,6 +102,9 @@ def make_db_user(**kwargs: Any) -> MagicMock:
     user.personal_name = kwargs.get("personal_name", "Test User")
     # A bare MagicMock never equals an AccountType, so shadow detection would miss.
     user.account_type = kwargs.get("account_type", AccountType.STANDARD)
+    # Real values so privilege predicates (`in`, bool) work on the mock.
+    user.effective_permissions = kwargs.get("effective_permissions", [])
+    user.is_group_manager = kwargs.get("is_group_manager", False)
     return user
 
 

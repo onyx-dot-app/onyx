@@ -29,7 +29,7 @@ from ee.onyx.server.scim.models import (
 )
 from ee.onyx.server.scim.patch import ScimPatchError
 from ee.onyx.server.scim.providers.base import ScimProvider
-from onyx.db.enums import AccountType
+from onyx.db.enums import AccountType, Permission
 from tests.unit.onyx.server.scim.conftest import (
     assert_scim_error,
     make_db_user,
@@ -1055,3 +1055,539 @@ class TestSeatLock:
         """Lock id must be deterministic and differ across tenants."""
         assert seat_lock_id_for_tenant("t1") == seat_lock_id_for_tenant("t1")
         assert seat_lock_id_for_tenant("t1") != seat_lock_id_for_tenant("t2")
+
+
+# Entra ID's soft-delete rename: 32-hex objectId prefixed to the original UPN.
+_TOMBSTONE_HEX = "283405f5083e4780b861a7d42f2522c2"
+
+
+def _rename_patch(username: str, active: bool | None = None) -> ScimPatchRequest:
+    value: dict[str, object] = {"userName": username}
+    if active is not None:
+        value["active"] = active
+    return ScimPatchRequest(
+        Operations=[ScimPatchOperation(op=ScimPatchOperationType.REPLACE, value=value)]
+    )
+
+
+class TestEntraTombstoneRename:
+    """Entra syncs a soft-deleted user's objectId-prefixed UPN as userName.
+    The email must survive; only the mapping records what the IdP sent."""
+
+    def test_put_tombstone_keeps_email(
+        self,
+        mock_db_session: MagicMock,
+        mock_token: MagicMock,
+        mock_dal: MagicMock,
+        provider: ScimProvider,
+    ) -> None:
+        user = make_db_user(email="ralf@mane.com", is_active=True)
+        mock_dal.get_user.return_value = user
+        tombstone = f"{_TOMBSTONE_HEX}ralf@mane.com"
+
+        result = replace_user(
+            user_id=str(user.id),
+            user_resource=make_scim_user(userName=tombstone, active=False),
+            _token=mock_token,
+            provider=provider,
+            db_session=mock_db_session,
+        )
+
+        resource = parse_scim_user(result)
+        assert resource.userName == tombstone
+        _, kwargs = mock_dal.update_user.call_args
+        assert kwargs["email"] is None
+        assert kwargs["is_active"] is False
+        assert (
+            mock_dal.sync_user_external_id.call_args.kwargs["scim_username"]
+            == tombstone
+        )
+
+    def test_patch_tombstone_keeps_email(
+        self,
+        mock_db_session: MagicMock,
+        mock_token: MagicMock,
+        mock_dal: MagicMock,
+        provider: ScimProvider,
+    ) -> None:
+        user = make_db_user(email="ralf@mane.com", is_active=True)
+        mock_dal.get_user.return_value = user
+        tombstone = f"{_TOMBSTONE_HEX}ralf@mane.com"
+
+        result = patch_user(
+            user_id=str(user.id),
+            patch_request=_rename_patch(tombstone, active=False),
+            _token=mock_token,
+            provider=provider,
+            db_session=mock_db_session,
+        )
+
+        parse_scim_user(result)
+        _, kwargs = mock_dal.update_user.call_args
+        assert kwargs["email"] is None
+        assert kwargs["is_active"] is False
+
+    def test_put_tombstone_of_admin_deprovision_not_blocked(
+        self,
+        mock_db_session: MagicMock,
+        mock_token: MagicMock,
+        mock_dal: MagicMock,
+        provider: ScimProvider,
+    ) -> None:
+        """Deprovisioning an admin must not trip the privileged-rename guard."""
+        user = make_db_user(
+            email="admin@mane.com",
+            is_active=True,
+            effective_permissions=[Permission.FULL_ADMIN_PANEL_ACCESS.value],
+        )
+        mock_dal.get_user.return_value = user
+        tombstone = f"{_TOMBSTONE_HEX}admin@mane.com"
+
+        result = replace_user(
+            user_id=str(user.id),
+            user_resource=make_scim_user(userName=tombstone, active=False),
+            _token=mock_token,
+            provider=provider,
+            db_session=mock_db_session,
+        )
+
+        parse_scim_user(result)
+        _, kwargs = mock_dal.update_user.call_args
+        assert kwargs["email"] is None
+
+    def test_put_hex_prefix_of_other_address_is_real_rename(
+        self,
+        mock_db_session: MagicMock,
+        mock_token: MagicMock,
+        mock_dal: MagicMock,
+        provider: ScimProvider,
+    ) -> None:
+        """A hex prefix only counts as a tombstone of the CURRENT email."""
+        user = make_db_user(email="ralf@mane.com", is_active=True)
+        mock_dal.get_user.return_value = user
+        renamed = f"{_TOMBSTONE_HEX}other@mane.com"
+
+        result = replace_user(
+            user_id=str(user.id),
+            user_resource=make_scim_user(userName=renamed, active=True),
+            _token=mock_token,
+            provider=provider,
+            db_session=mock_db_session,
+        )
+
+        parse_scim_user(result)
+        _, kwargs = mock_dal.update_user.call_args
+        assert kwargs["email"] == renamed
+
+
+class TestRenameCollisionAdoption:
+    """A rename onto an address that an unmanaged account already owns adopts
+    that account (mirror of the POST adoption path) instead of failing."""
+
+    def _stale_and_clean(
+        self, mock_dal: MagicMock, **stale_kwargs: object
+    ) -> tuple[MagicMock, MagicMock, MagicMock]:
+        stale = make_db_user(
+            email=f"{_TOMBSTONE_HEX}ralf@mane.com", is_active=False, **stale_kwargs
+        )
+        clean = make_db_user(email="ralf@mane.com", is_active=True)
+        stale_mapping = make_user_mapping(user_id=stale.id)
+        mock_dal.get_user.return_value = stale
+        mock_dal.get_user_by_email.return_value = clean
+        mock_dal.get_user_mapping_by_user_id.side_effect = lambda uid: (
+            stale_mapping if uid == stale.id else None
+        )
+        return stale, clean, stale_mapping
+
+    def test_put_adopts_unmanaged_account(
+        self,
+        mock_db_session: MagicMock,
+        mock_token: MagicMock,
+        mock_dal: MagicMock,
+        provider: ScimProvider,
+    ) -> None:
+        stale, clean, stale_mapping = self._stale_and_clean(mock_dal)
+
+        result = replace_user(
+            user_id=str(stale.id),
+            user_resource=make_scim_user(userName="ralf@mane.com", active=True),
+            _token=mock_token,
+            provider=provider,
+            db_session=mock_db_session,
+        )
+
+        resource = parse_scim_user(result)
+        assert resource.id == str(clean.id)
+        mock_dal.reassign_user_mapping.assert_called_once_with(stale_mapping, clean.id)
+        mock_dal.deactivate_user.assert_called_once_with(stale)
+        args, kwargs = mock_dal.update_user.call_args
+        assert args[0] is clean
+        assert kwargs["email"] is None
+
+    def test_patch_adopts_unmanaged_account(
+        self,
+        mock_db_session: MagicMock,
+        mock_token: MagicMock,
+        mock_dal: MagicMock,
+        provider: ScimProvider,
+    ) -> None:
+        stale, clean, stale_mapping = self._stale_and_clean(mock_dal)
+
+        result = patch_user(
+            user_id=str(stale.id),
+            patch_request=_rename_patch("ralf@mane.com", active=True),
+            _token=mock_token,
+            provider=provider,
+            db_session=mock_db_session,
+        )
+
+        resource = parse_scim_user(result)
+        assert resource.id == str(clean.id)
+        mock_dal.reassign_user_mapping.assert_called_once_with(stale_mapping, clean.id)
+        mock_dal.deactivate_user.assert_called_once_with(stale)
+
+    def test_patch_username_in_any_key_casing_still_resolves(
+        self,
+        mock_db_session: MagicMock,
+        mock_token: MagicMock,
+        mock_dal: MagicMock,
+        provider: ScimProvider,
+    ) -> None:
+        """Path-less values carry userName under any casing (extra='allow')."""
+        stale, clean, stale_mapping = self._stale_and_clean(mock_dal)
+        patch_req = ScimPatchRequest(
+            Operations=[
+                ScimPatchOperation(
+                    op=ScimPatchOperationType.REPLACE,
+                    value={"UserName": "ralf@mane.com", "active": True},
+                )
+            ]
+        )
+
+        result = patch_user(
+            user_id=str(stale.id),
+            patch_request=patch_req,
+            _token=mock_token,
+            provider=provider,
+            db_session=mock_db_session,
+        )
+
+        resource = parse_scim_user(result)
+        assert resource.id == str(clean.id)
+        mock_dal.reassign_user_mapping.assert_called_once_with(stale_mapping, clean.id)
+
+    def test_patch_without_username_op_never_resolves_a_rename(
+        self,
+        mock_db_session: MagicMock,
+        mock_token: MagicMock,
+        mock_dal: MagicMock,
+        provider: ScimProvider,
+    ) -> None:
+        """A PATCH that does not touch userName must not act on a stored
+        scim_username that has drifted from the email (no adoption, no 409)."""
+        user = make_db_user(email="current@mane.com", is_active=True)
+        drifted_owner = make_db_user(email="drifted@mane.com", is_active=True)
+        mapping = make_user_mapping(user_id=user.id, scim_username="drifted@mane.com")
+        mock_dal.get_user.return_value = user
+        mock_dal.get_user_by_email.return_value = drifted_owner
+        mock_dal.get_user_mapping_by_user_id.side_effect = lambda uid: (
+            mapping if uid == user.id else None
+        )
+        patch_req = ScimPatchRequest(
+            Operations=[
+                ScimPatchOperation(
+                    op=ScimPatchOperationType.REPLACE, path="active", value=False
+                )
+            ]
+        )
+
+        result = patch_user(
+            user_id=str(user.id),
+            patch_request=patch_req,
+            _token=mock_token,
+            provider=provider,
+            db_session=mock_db_session,
+        )
+
+        parse_scim_user(result)
+        mock_dal.reassign_user_mapping.assert_not_called()
+        mock_dal.deactivate_user.assert_not_called()
+        args, kwargs = mock_dal.update_user.call_args
+        assert args[0] is user
+        assert kwargs["email"] is None
+        assert kwargs["is_active"] is False
+
+    def test_put_adoption_allowed_for_admin_source(
+        self,
+        mock_db_session: MagicMock,
+        mock_token: MagicMock,
+        mock_dal: MagicMock,
+        provider: ScimProvider,
+    ) -> None:
+        """Adoption is not a rename of the privileged account — allow it."""
+        stale, clean, _ = self._stale_and_clean(
+            mock_dal,
+            effective_permissions=[Permission.FULL_ADMIN_PANEL_ACCESS.value],
+        )
+
+        result = replace_user(
+            user_id=str(stale.id),
+            user_resource=make_scim_user(userName="ralf@mane.com", active=True),
+            _token=mock_token,
+            provider=provider,
+            db_session=mock_db_session,
+        )
+
+        resource = parse_scim_user(result)
+        assert resource.id == str(clean.id)
+        mock_dal.deactivate_user.assert_called_once_with(stale)
+
+    @patch("ee.onyx.server.scim.api._check_seat_availability")
+    def test_put_adoption_swap_is_seat_neutral(
+        self,
+        mock_seats: MagicMock,
+        mock_db_session: MagicMock,
+        mock_token: MagicMock,
+        mock_dal: MagicMock,
+        provider: ScimProvider,
+    ) -> None:
+        """Deactivating the active source frees the seat the adopted inactive
+        target needs, so a tenant at capacity must not 403."""
+        mock_seats.return_value = "No seats"
+        stale = make_db_user(email="old@mane.com", is_active=True)
+        clean = make_db_user(email="ralf@mane.com", is_active=False)
+        stale_mapping = make_user_mapping(user_id=stale.id)
+        mock_dal.get_user.return_value = stale
+        mock_dal.get_user_by_email.return_value = clean
+        mock_dal.get_user_mapping_by_user_id.side_effect = lambda uid: (
+            stale_mapping if uid == stale.id else None
+        )
+
+        result = replace_user(
+            user_id=str(stale.id),
+            user_resource=make_scim_user(userName="ralf@mane.com", active=True),
+            _token=mock_token,
+            provider=provider,
+            db_session=mock_db_session,
+        )
+
+        resource = parse_scim_user(result)
+        assert resource.id == str(clean.id)
+        mock_seats.assert_not_called()
+
+    @patch("ee.onyx.server.scim.api._check_seat_availability")
+    def test_put_adoption_of_ext_perm_source_still_checks_seats(
+        self,
+        mock_seats: MagicMock,
+        mock_db_session: MagicMock,
+        mock_token: MagicMock,
+        mock_dal: MagicMock,
+        provider: ScimProvider,
+    ) -> None:
+        """An active EXT_PERM source holds no seat, so its deactivation frees
+        none and reactivating the adopted target must still be checked."""
+        mock_seats.return_value = "No seats"
+        stale = make_db_user(
+            email="old@mane.com",
+            is_active=True,
+            account_type=AccountType.EXT_PERM_USER,
+        )
+        clean = make_db_user(email="ralf@mane.com", is_active=False)
+        mock_dal.get_user.return_value = stale
+        mock_dal.get_user_by_email.return_value = clean
+        mock_dal.get_user_mapping_by_user_id.return_value = None
+
+        result = replace_user(
+            user_id=str(stale.id),
+            user_resource=make_scim_user(userName="ralf@mane.com", active=True),
+            _token=mock_token,
+            provider=provider,
+            db_session=mock_db_session,
+        )
+
+        assert_scim_error(result, 403)
+        mock_seats.assert_called_once()
+
+    def test_put_rename_onto_mapped_bot_returns_409(
+        self,
+        mock_db_session: MagicMock,
+        mock_token: MagicMock,
+        mock_dal: MagicMock,
+        provider: ScimProvider,
+    ) -> None:
+        """A mapped collision is a conflict no matter the account type."""
+        user = make_db_user(email="old@mane.com")
+        bot = make_db_user(email="bot@mane.com", account_type=AccountType.BOT)
+        mock_dal.get_user.return_value = user
+        mock_dal.get_user_by_email.return_value = bot
+        mock_dal.get_user_mapping_by_user_id.side_effect = lambda uid: (
+            make_user_mapping(user_id=uid) if uid == bot.id else None
+        )
+
+        result = replace_user(
+            user_id=str(user.id),
+            user_resource=make_scim_user(userName="bot@mane.com", active=True),
+            _token=mock_token,
+            provider=provider,
+            db_session=mock_db_session,
+        )
+
+        assert_scim_error(result, 409)
+
+    def test_put_rename_onto_bot_account_is_not_adopted(
+        self,
+        mock_db_session: MagicMock,
+        mock_token: MagicMock,
+        mock_dal: MagicMock,
+        provider: ScimProvider,
+    ) -> None:
+        """System accounts must never come under IdP control via adoption."""
+        user = make_db_user(email="old@mane.com", is_active=True)
+        bot = make_db_user(email="bot@mane.com", account_type=AccountType.BOT)
+        mock_dal.get_user.return_value = user
+        mock_dal.get_user_by_email.return_value = bot
+
+        result = replace_user(
+            user_id=str(user.id),
+            user_resource=make_scim_user(userName="bot@mane.com", active=True),
+            _token=mock_token,
+            provider=provider,
+            db_session=mock_db_session,
+        )
+
+        parse_scim_user(result)
+        mock_dal.reassign_user_mapping.assert_not_called()
+        mock_dal.deactivate_user.assert_not_called()
+        args, _ = mock_dal.update_user.call_args
+        assert args[0] is user
+
+    def test_put_rename_onto_ext_perm_shadow_stays_a_rename(
+        self,
+        mock_db_session: MagicMock,
+        mock_token: MagicMock,
+        mock_dal: MagicMock,
+        provider: ScimProvider,
+    ) -> None:
+        """EXT_PERM shadows are merged by email reconciliation, not adopted."""
+        user = make_db_user(email="old@mane.com", is_active=True)
+        shadow = make_db_user(
+            email="ralf@mane.com", account_type=AccountType.EXT_PERM_USER
+        )
+        mock_dal.get_user.return_value = user
+        mock_dal.get_user_by_email.return_value = shadow
+
+        result = replace_user(
+            user_id=str(user.id),
+            user_resource=make_scim_user(userName="ralf@mane.com", active=True),
+            _token=mock_token,
+            provider=provider,
+            db_session=mock_db_session,
+        )
+
+        parse_scim_user(result)
+        mock_dal.reassign_user_mapping.assert_not_called()
+        mock_dal.deactivate_user.assert_not_called()
+        args, kwargs = mock_dal.update_user.call_args
+        assert args[0] is user
+        assert kwargs["email"] == "ralf@mane.com"
+
+    def test_put_rename_onto_scim_managed_account_returns_409(
+        self,
+        mock_db_session: MagicMock,
+        mock_token: MagicMock,
+        mock_dal: MagicMock,
+        provider: ScimProvider,
+    ) -> None:
+        user = make_db_user(email="old@mane.com")
+        other = make_db_user(email="taken@mane.com")
+        mock_dal.get_user.return_value = user
+        mock_dal.get_user_by_email.return_value = other
+        mock_dal.get_user_mapping_by_user_id.side_effect = lambda uid: (
+            make_user_mapping(user_id=uid) if uid == other.id else None
+        )
+
+        result = replace_user(
+            user_id=str(user.id),
+            user_resource=make_scim_user(userName="taken@mane.com", active=True),
+            _token=mock_token,
+            provider=provider,
+            db_session=mock_db_session,
+        )
+
+        assert_scim_error(result, 409)
+
+
+class TestPrivilegedRename:
+    """A SCIM token must not move an admin or group-manager account onto a
+    different address — the address could then be claimed via first login."""
+
+    def test_put_admin_rename_returns_403(
+        self,
+        mock_db_session: MagicMock,
+        mock_token: MagicMock,
+        mock_dal: MagicMock,
+        provider: ScimProvider,
+    ) -> None:
+        user = make_db_user(
+            email="admin@mane.com",
+            effective_permissions=[Permission.FULL_ADMIN_PANEL_ACCESS.value],
+        )
+        mock_dal.get_user.return_value = user
+
+        result = replace_user(
+            user_id=str(user.id),
+            user_resource=make_scim_user(userName="moved@mane.com", active=True),
+            _token=mock_token,
+            provider=provider,
+            db_session=mock_db_session,
+        )
+
+        assert_scim_error(result, 403)
+        mock_dal.update_user.assert_not_called()
+
+    def test_patch_group_manager_rename_returns_403(
+        self,
+        mock_db_session: MagicMock,
+        mock_token: MagicMock,
+        mock_dal: MagicMock,
+        provider: ScimProvider,
+    ) -> None:
+        user = make_db_user(email="manager@mane.com", is_group_manager=True)
+        mock_dal.get_user.return_value = user
+
+        result = patch_user(
+            user_id=str(user.id),
+            patch_request=_rename_patch("moved@mane.com"),
+            _token=mock_token,
+            provider=provider,
+            db_session=mock_db_session,
+        )
+
+        assert_scim_error(result, 403)
+        mock_dal.update_user.assert_not_called()
+
+    def test_put_admin_without_rename_is_allowed(
+        self,
+        mock_db_session: MagicMock,
+        mock_token: MagicMock,
+        mock_dal: MagicMock,
+        provider: ScimProvider,
+    ) -> None:
+        user = make_db_user(
+            email="admin@mane.com",
+            is_active=True,
+            effective_permissions=[Permission.FULL_ADMIN_PANEL_ACCESS.value],
+        )
+        mock_dal.get_user.return_value = user
+
+        result = replace_user(
+            user_id=str(user.id),
+            user_resource=make_scim_user(userName="admin@mane.com", active=False),
+            _token=mock_token,
+            provider=provider,
+            db_session=mock_db_session,
+        )
+
+        parse_scim_user(result)
+        _, kwargs = mock_dal.update_user.call_args
+        assert kwargs["is_active"] is False

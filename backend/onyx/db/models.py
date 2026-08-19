@@ -3300,6 +3300,11 @@ class ChatMessage(Base):
     # The display name of the model that generated this assistant message
     model_display_name: Mapped[str | None] = mapped_column(String, nullable=True)
 
+    # Requested reasoning effort plus the kwargs actually sent to the provider.
+    request_params: Mapped[dict[str, Any] | None] = mapped_column(
+        postgresql.JSONB(), nullable=True
+    )
+
     # What does this message contain
     reasoning_tokens: Mapped[str | None] = mapped_column(Text, nullable=True)
     message: Mapped[str] = mapped_column(Text)
@@ -3671,6 +3676,25 @@ class ModelConfiguration(Base):
     # Admin-specified override for the display name. When set, this takes precedence
     # over both display_name and the LiteLLM-derived name everywhere in the UI.
     custom_display_name: Mapped[str | None] = mapped_column(String, nullable=True)
+
+    # Never store AUTO in either column, an unset value already means AUTO.
+    reasoning_effort_max: Mapped[ReasoningEffort | None] = mapped_column(
+        Enum(
+            ReasoningEffort,
+            native_enum=False,
+            values_callable=lambda x: [e.value for e in x],
+        ),
+        nullable=True,
+    )
+    reasoning_effort_default: Mapped[ReasoningEffort | None] = mapped_column(
+        Enum(
+            ReasoningEffort,
+            native_enum=False,
+            values_callable=lambda x: [e.value for e in x],
+        ),
+        nullable=True,
+    )
+    temperature_default: Mapped[float | None] = mapped_column(Float, nullable=True)
 
     llm_provider: Mapped["LLMProvider"] = relationship(
         "LLMProvider",

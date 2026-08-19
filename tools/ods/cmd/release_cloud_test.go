@@ -3,10 +3,14 @@ package cmd
 // Command states for releaseCloud. Tag computation and validation are tested
 // in internal/release; these tests pin the command-level flow.
 //
-//	E1 dry run                               -> prints tag, creates nothing     TestReleaseCloud_dryRunCreatesNothing
-//	E2 real run                              -> tag on origin at origin/main    TestReleaseCloud_tagsOriginMainHead
-//	E3 push rejected by origin               -> local tag rolled back           TestReleaseCloud_pushFailureRollsBackLocalTag
-//	E4 counter tag only on origin            -> fetched, counter continues      TestReleaseCloud_fetchesRemoteOnlyCounterTags
+//	E1 dry run                               -> prints tag, creates nothing,
+//	                                            returns no pushed tag           TestReleaseCloud_dryRunCreatesNothing
+//	E2 real run                              -> tag on origin at origin/main,
+//	                                            tag name returned               TestReleaseCloud_tagsOriginMainHead
+//	E3 push rejected by origin               -> local tag rolled back,
+//	                                            returns no pushed tag           TestReleaseCloud_pushFailureRollsBackLocalTag
+//	E4 counter tag only on origin            -> fetched, counter continues,
+//	                                            tag name returned               TestReleaseCloud_fetchesRemoteOnlyCounterTags
 //	E5 --version with leading zeroes         -> rejected before any git work    TestReleaseCloud_rejectsLeadingZeroVersion
 
 import (
@@ -23,11 +27,14 @@ func TestReleaseCloud_dryRunCreatesNothing(t *testing.T) {
 	repo := gittest.SetupReleaseBranchRepo(t)
 
 	// Under test.
-	err := releaseCloud(&ReleaseCloudOptions{Ref: "origin/main", DryRun: true, Yes: true})
+	tag, err := releaseCloud(&ReleaseCloudOptions{Ref: "origin/main", DryRun: true, Yes: true})
 
 	// Postcondition.
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
+	}
+	if tag != "" {
+		t.Errorf("dry run must return no pushed tag, got %q", tag)
 	}
 	if gittest.TagExists(repo.Work, "v4.6.0-cloud.0") || gittest.TagExists(repo.Origin, "v4.6.0-cloud.0") {
 		t.Error("dry run must not create the tag")
@@ -39,11 +46,14 @@ func TestReleaseCloud_tagsOriginMainHead(t *testing.T) {
 	repo := gittest.SetupReleaseBranchRepo(t)
 
 	// Under test.
-	err := releaseCloud(&ReleaseCloudOptions{Ref: "origin/main", Yes: true})
+	tag, err := releaseCloud(&ReleaseCloudOptions{Ref: "origin/main", Yes: true})
 
 	// Postcondition.
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
+	}
+	if tag != "v4.6.0-cloud.0" {
+		t.Errorf("expected pushed tag v4.6.0-cloud.0, got %q", tag)
 	}
 	taggedSHA := gittest.Git(t, repo.Origin, "rev-parse", "refs/tags/v4.6.0-cloud.0^{commit}")
 	if taggedSHA != repo.PostCutSHA {
@@ -61,11 +71,14 @@ func TestReleaseCloud_fetchesRemoteOnlyCounterTags(t *testing.T) {
 	gittest.Git(t, repo.Work, "tag", "-d", "v4.6.0-cloud.3")
 
 	// Under test.
-	err := releaseCloud(&ReleaseCloudOptions{Ref: "origin/main", Yes: true})
+	tag, err := releaseCloud(&ReleaseCloudOptions{Ref: "origin/main", Yes: true})
 
 	// Postcondition.
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
+	}
+	if tag != "v4.6.0-cloud.4" {
+		t.Errorf("expected pushed tag v4.6.0-cloud.4, got %q", tag)
 	}
 	if !gittest.TagExists(repo.Origin, "v4.6.0-cloud.4") {
 		t.Error("expected v4.6.0-cloud.4 on origin")
@@ -79,7 +92,7 @@ func TestReleaseCloud_rejectsLeadingZeroVersion(t *testing.T) {
 
 	// Under test and postcondition.
 	for _, version := range []string{"04.6.0", "4.06.0", "4.6.00"} {
-		err := releaseCloud(&ReleaseCloudOptions{Ref: "origin/main", Version: version, DryRun: true, Yes: true})
+		_, err := releaseCloud(&ReleaseCloudOptions{Ref: "origin/main", Version: version, DryRun: true, Yes: true})
 		if err == nil || !strings.Contains(err.Error(), "--version must be X.Y.Z") {
 			t.Errorf("expected validation error for %q, got %v", version, err)
 		}
@@ -95,11 +108,14 @@ func TestReleaseCloud_pushFailureRollsBackLocalTag(t *testing.T) {
 	}
 
 	// Under test.
-	err := releaseCloud(&ReleaseCloudOptions{Ref: "origin/main", Yes: true})
+	tag, err := releaseCloud(&ReleaseCloudOptions{Ref: "origin/main", Yes: true})
 
 	// Postcondition.
 	if err == nil || !strings.Contains(err.Error(), "failed to push") {
 		t.Errorf("expected push failure, got %v", err)
+	}
+	if tag != "" {
+		t.Errorf("failed push must return no pushed tag, got %q", tag)
 	}
 	if gittest.TagExists(repo.Work, "v4.6.0-cloud.0") {
 		t.Error("local tag must be rolled back after a failed push")

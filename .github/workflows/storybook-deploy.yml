@@ -20,6 +20,8 @@ on:
       - "web/.storybook/**"
       - "web/src/app/craft/components/tool-cards/**"
       - "web/src/app/craft/components/approvals/**"
+      - "web/src/app/craft/v1/apps/admin/**"
+      - "web/src/views/admin/ExternalAppsPage/**"
       - "web/package.json"
       - "web/bun.lock"
 permissions:

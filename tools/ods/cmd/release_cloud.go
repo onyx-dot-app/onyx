@@ -38,6 +38,10 @@ for the same base, starting at 0.
 
 Pushing the tag triggers deployment.yml, which builds the cloud images.
 
+After the push, the command looks up the triggered deployment run via the gh
+CLI and prints its URL. The lookup is best-effort: if gh is missing or the
+run cannot be found, the release still succeeds.
+
 To validate an existing tag instead of cutting one, see "ods release --check".
 
 Example usage:
@@ -49,7 +53,12 @@ Example usage:
 		Args:         cobra.NoArgs,
 		SilenceUsage: true,
 		RunE: func(cmd *cobra.Command, args []string) error {
-			return releaseCloud(opts)
+			tag, err := releaseCloud(opts)
+			if err != nil || tag == "" {
+				return err
+			}
+			announceCloudRun(tag)
+			return nil
 		},
 	}
 
@@ -62,15 +71,18 @@ Example usage:
 	return cmd
 }
 
-func releaseCloud(opts *ReleaseCloudOptions) error {
+// releaseCloud computes and pushes the next cloud tag. It returns the pushed
+// tag name, or an empty string when nothing was pushed (dry run, declined
+// prompt, or any failure).
+func releaseCloud(opts *ReleaseCloudOptions) (string, error) {
 	if opts.Version != "" && !release.IsBareVersion(opts.Version) {
-		return fmt.Errorf("--version must be X.Y.Z with no leading v, got %q", opts.Version)
+		return "", fmt.Errorf("--version must be X.Y.Z with no leading v, got %q", opts.Version)
 	}
 
 	// Deployment tags must be cut against origin's current state.
 	log.Info("Fetching main and cloud tags from origin...")
 	if err := git.RunCommand("fetch", "--quiet", "--force", "origin", "+refs/heads/main:refs/remotes/origin/main"); err != nil {
-		return fmt.Errorf("failed to fetch origin/main: %w", err)
+		return "", fmt.Errorf("failed to fetch origin/main: %w", err)
 	}
 	// Best-effort: a failure here only leaves the counter stale, which is safe.
 	// If the computed tag already exists on origin, the push (which is never
@@ -81,29 +93,29 @@ func releaseCloud(opts *ReleaseCloudOptions) error {
 
 	sha, err := release.ResolveCommit(opts.Ref)
 	if err != nil {
-		return err
+		return "", err
 	}
 
 	tag, err := release.ComputeCloudTag(sha, opts.Version)
 	if err != nil {
-		return err
+		return "", err
 	}
 
 	if opts.DryRun {
 		log.Warnf("[DRY RUN] Would tag %.10s as %s and push", sha, tag)
 		fmt.Println(tag)
-		return nil
+		return "", nil
 	}
 
 	if !opts.Yes {
 		if !prompt.Confirm(fmt.Sprintf("Tag %.10s as %s and push to trigger the cloud build? (Y/n): ", sha, tag)) {
 			log.Info("Exiting...")
-			return nil
+			return "", nil
 		}
 	}
 
 	if err := git.RunCommand("tag", tag, sha); err != nil {
-		return fmt.Errorf("failed to create tag %s: %w", tag, err)
+		return "", fmt.Errorf("failed to create tag %s: %w", tag, err)
 	}
 	if err := git.PushTag(tag, false, opts.Verify); err != nil {
 		// Roll back the local tag so the command stays retryable after a failed
@@ -111,8 +123,23 @@ func releaseCloud(opts *ReleaseCloudOptions) error {
 		if delErr := git.RunCommand("tag", "-d", tag); delErr != nil {
 			log.Warnf("Also failed to delete local tag %s; remove it before retrying: %v", tag, delErr)
 		}
-		return fmt.Errorf("failed to push tag %s: %w", tag, err)
+		return "", fmt.Errorf("failed to push tag %s: %w", tag, err)
 	}
 	log.Infof("Pushed %s; deployment.yml will build the cloud images.", tag)
-	return nil
+	return tag, nil
+}
+
+// announceCloudRun looks up the deployment.yml run triggered by pushing tag and
+// prints its URL. The lookup is best-effort: the tag is already pushed and the
+// build runs regardless, so failures only warn.
+func announceCloudRun(tag string) {
+	log.Info("Looking up the deployment run...")
+	run, err := waitForNewRun(onyxRepo, deploymentWorkflowFile, "push", tag, 0)
+	if err != nil {
+		log.Warnf("Could not find the deployment run for %s: %v", tag, err)
+		log.Warnf("Find it at https://github.com/%s/actions/workflows/%s", onyxRepo, deploymentWorkflowFile)
+		return
+	}
+	log.Infof("Deployment run: %s", run.URL)
+	fmt.Println(run.URL)
 }
