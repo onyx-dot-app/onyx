@@ -69,8 +69,8 @@ variable "main_node_subnet_ids" {
 
 variable "main_node_min_size" {
   type        = number
-  description = "Minimum number of nodes in the main node group. The cluster-autoscaler will not scale below this, so raise it to guarantee always-on baseline capacity for bursty workloads."
-  default     = 1
+  description = "Minimum number of nodes in the main node group. The cluster-autoscaler will not scale below this, so raise it to guarantee always-on baseline capacity for bursty workloads. Null keeps the node-group default."
+  default     = null
 }
 
 variable "vespa_node_disk_size_gb" {
@@ -81,14 +81,19 @@ variable "vespa_node_disk_size_gb" {
 
 variable "main_node_max_size" {
   type        = number
-  description = "Maximum number of nodes the main node group may scale up to."
-  default     = 5
+  description = "Maximum number of nodes the main node group may scale up to. Null keeps the node-group default."
+  default     = null
 }
 
 variable "enable_gpu_node" {
   type        = bool
   description = "Whether to create a dedicated, tainted GPU node group for the embedding model server. Opt-in per customer."
   default     = false
+
+  validation {
+    condition     = !var.enable_gpu_node || !contains(keys(var.eks_managed_node_groups), "gpu")
+    error_message = "enable_gpu_node injects a node group under the key \"gpu\", which eks_managed_node_groups already defines. Rename your group so the GPU group does not replace it."
+  }
 }
 
 variable "gpu_node_instance_types" {

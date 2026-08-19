@@ -26,8 +26,13 @@ output "workload_irsa_service_account_subjects" {
 }
 
 output "postgres_endpoint" {
-  description = "RDS endpoint hostname"
+  description = "RDS endpoint in host:port form, as returned by AWS"
   value       = module.postgres.endpoint
+}
+
+output "postgres_address" {
+  description = "RDS hostname without the port, for callers building their own connection string"
+  value       = module.postgres.address
 }
 
 output "postgres_port" {

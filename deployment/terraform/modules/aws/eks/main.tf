@@ -174,9 +174,9 @@ module "eks" {
       # node group at creation (the upstream module defaults desired to 1 and
       # ignores changes to it after create).
       k == "main" ? {
-        min_size     = var.main_node_min_size
-        max_size     = var.main_node_max_size
-        desired_size = try(v.desired_size, var.main_node_min_size)
+        min_size     = coalesce(var.main_node_min_size, v.min_size)
+        max_size     = coalesce(var.main_node_max_size, v.max_size)
+        desired_size = try(v.desired_size, coalesce(var.main_node_min_size, v.min_size))
       } : {},
       # Disk override for the Vespa/document-index node; null keeps the map
       # default. Merge preserves any other device mappings on the group.
