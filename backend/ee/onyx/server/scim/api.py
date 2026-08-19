@@ -11,6 +11,8 @@ require a valid SCIM bearer token.
 
 from __future__ import annotations
 
+import re
+from typing import NamedTuple
 from uuid import UUID
 
 from fastapi import APIRouter, Depends, FastAPI, Query, Request, Response
@@ -20,7 +22,11 @@ from sqlalchemy import func
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
 
-from ee.onyx.db.license import acquire_seat_lock, check_seat_availability
+from ee.onyx.db.license import (
+    acquire_seat_lock,
+    check_seat_availability,
+    user_counts_toward_seats,
+)
 from ee.onyx.db.scim import ScimDAL
 from ee.onyx.server.scim.auth import ScimAuthError, verify_scim_token
 from ee.onyx.server.scim.filtering import parse_scim_filter
@@ -232,6 +238,98 @@ def _is_ext_perm_user(user: User) -> bool:
     (BASIC/ADMIN) are left untouched so we never demote an admin.
     """
     return user.account_type == AccountType.EXT_PERM_USER
+
+
+# Entra ID frees a soft-deleted user's UPN by prefixing the 32-hex objectId.
+_ENTRA_TOMBSTONE_PREFIX = re.compile(r"[0-9a-f]{32}", re.IGNORECASE)
+
+
+def _is_entra_tombstone_rename(current_email: str, new_email: str) -> bool:
+    """Whether *new_email* is Entra's soft-delete rename of *current_email*.
+
+    Entra syncs the objectId-prefixed UPN as userName when a user is
+    soft-deleted. Writing it over the email would orphan the account, so
+    callers keep the email and only record the userName on the mapping.
+    """
+    match = _ENTRA_TOMBSTONE_PREFIX.match(new_email)
+    return (
+        match is not None and new_email[match.end() :].lower() == current_email.lower()
+    )
+
+
+def _is_privileged_account(user: User) -> bool:
+    """Whether renaming *user* must be refused.
+
+    SSO login associates by email, so the first login for a renamed account's
+    new address claims it. Provisioning only ever grants basic access, so a
+    token must not move an admin or group-manager account.
+    """
+    return user_is_admin(user) or user.is_group_manager
+
+
+class _UsernameChange(NamedTuple):
+    """Outcome of a userName change: the account to update, the email to set
+    (None = keep the current one), and whether adoption freed a seat."""
+
+    user: User
+    email: str | None
+    seat_freed: bool = False
+
+
+def _apply_username_change(
+    dal: ScimDAL, user: User, requested_username: str
+) -> _UsernameChange | ScimJSONResponse:
+    """Apply a userName change, resolving it to the account it describes.
+
+    Beyond a plain rename, four cases are handled:
+
+    - An Entra soft-delete tombstone userName never overwrites the email.
+    - A rename onto another SCIM-managed account's address is a conflict (409).
+    - A rename onto an address an unmanaged STANDARD account already owns
+      adopts that account (mirror of the POST adoption path): the mapping
+      moves to it and the stale source account is deactivated. Without this,
+      an IdP restoring a user whose address was re-claimed via SSO login
+      retries the collision error forever. Only STANDARD targets qualify:
+      EXT_PERM shadows fall through so ``reconcile_user_email__no_commit``
+      merges them into the renamed user, and BOT / service / anonymous
+      accounts must never come under IdP control.
+    - A rename of an admin or group manager is rejected (403).
+    """
+    if requested_username.lower() == user.email.lower():
+        return _UsernameChange(user, requested_username)
+
+    if _is_entra_tombstone_rename(user.email, requested_username):
+        logger.info(
+            "SCIM userName for %s is an Entra soft-delete tombstone; keeping email",
+            user.email,
+        )
+        return _UsernameChange(user, None)
+
+    other = dal.get_user_by_email(requested_username)
+    if other and other.id != user.id:
+        if dal.get_user_mapping_by_user_id(other.id):
+            return _scim_error_response(
+                409, f"User with email {requested_username} already exists"
+            )
+        if other.account_type == AccountType.STANDARD:
+            mapping = dal.get_user_mapping_by_user_id(user.id)
+            if mapping:
+                dal.reassign_user_mapping(mapping, other.id)
+            seat_freed = user_counts_toward_seats(user)
+            dal.deactivate_user(user)
+            logger.info(
+                "SCIM rename to %s adopted the existing account; deactivated stale %s",
+                requested_username,
+                user.email,
+            )
+            return _UsernameChange(other, None, seat_freed)
+
+    if _is_privileged_account(user):
+        return _scim_error_response(
+            403, "Cannot move an admin or group manager address"
+        )
+
+    return _UsernameChange(user, requested_username)
 
 
 def _assign_default_groups_or_error(
@@ -624,12 +722,19 @@ def replace_user(
         return result
     user = result
 
+    scim_username = user_resource.userName.strip()
+    resolved = _apply_username_change(dal, user, scim_username)
+    if isinstance(resolved, ScimJSONResponse):
+        return resolved
+    user, new_email, seat_freed = resolved
+
     # Handle activation (need seat check) / deactivation. Promoting a shadow
     # EXT_PERM_USER also consumes a seat, so self-heal any that the IdP
-    # re-syncs after being adopted while still in the shadow role.
+    # re-syncs after being adopted while still in the shadow role. An adoption
+    # that deactivated an active source is seat-neutral, so no check.
     promote = _is_ext_perm_user(user)
     is_reactivation = user_resource.active and not user.is_active
-    if user_resource.active and (is_reactivation or promote):
+    if user_resource.active and (is_reactivation or promote) and not seat_freed:
         seat_error = _check_seat_availability(dal)
         if seat_error:
             return _scim_error_response(403, seat_error)
@@ -638,7 +743,7 @@ def replace_user(
 
     dal.update_user(
         user,
-        email=user_resource.userName.strip(),
+        email=new_email,
         is_active=user_resource.active,
         personal_name=personal_name,
         account_type=AccountType.STANDARD if promote else None,
@@ -654,7 +759,6 @@ def replace_user(
             return error
 
     new_external_id = user_resource.externalId
-    scim_username = user_resource.userName.strip()
     fields = _fields_from_resource(user_resource)
     dal.sync_user_external_id(
         user.id,
@@ -717,18 +821,29 @@ def patch_user(
     except ScimPatchError as e:
         return _scim_error_response(e.status, e.detail)
 
+    requested_username = patched.userName.strip()
+    resolved = _apply_username_change(dal, user, requested_username)
+    if isinstance(resolved, ScimJSONResponse):
+        return resolved
+    user, new_email, seat_freed = resolved
+
     # Apply changes back to the DB model. A seat is consumed when the user
     # becomes active (reactivation) or when a shadow EXT_PERM_USER is promoted
-    # to a real STANDARD account on re-sync.
+    # to a real STANDARD account on re-sync. An adoption that deactivated an
+    # active source is seat-neutral, so no check.
     promote = _is_ext_perm_user(user)
     is_reactivation = patched.active and not user.is_active
-    if patched.active and (patched.active != user.is_active or promote):
+    if (
+        patched.active
+        and (patched.active != user.is_active or promote)
+        and not seat_freed
+    ):
         seat_error = _check_seat_availability(dal)
         if seat_error:
             return _scim_error_response(403, seat_error)
 
     # Track the scim_username — if userName was patched, update it
-    new_scim_username = patched.userName.strip() if patched.userName else None
+    new_scim_username = requested_username or None
 
     # If displayName was explicitly patched (different from the original), use
     # it as personal_name directly.  Otherwise, derive from name components.
@@ -740,10 +855,11 @@ def patch_user(
 
     dal.update_user(
         user,
+        # Unlike PUT, PATCH skips an unchanged address: PUT's pass-through is
+        # what re-runs email reconciliation (EXT_PERM shadow merging) on a
+        # full replace.
         email=(
-            patched.userName.strip()
-            if patched.userName.strip().lower() != user.email.lower()
-            else None
+            new_email if new_email and new_email.lower() != user.email.lower() else None
         ),
         is_active=patched.active if patched.active != user.is_active else None,
         personal_name=personal_name,
