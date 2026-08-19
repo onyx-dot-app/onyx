@@ -1,8 +1,13 @@
 import json
 import os
 from typing import Any
+from unittest.mock import MagicMock
 
-from onyx.connectors.gitbook.connector import _extract_text_from_document
+from onyx.connectors.gitbook.connector import (
+    GitbookApiClient,
+    _convert_page_to_document,
+    _extract_text_from_document,
+)
 
 
 def _load_fixture() -> dict[str, Any]:
@@ -235,6 +240,29 @@ def test_unknown_block_type_falls_back_to_children() -> None:
 
     assert "must not disappear" in text
     assert "fragment text kept" in text
+
+
+def test_page_description_prepended_once() -> None:
+    client = MagicMock(spec=GitbookApiClient)
+    client.get_page_content.return_value = _document([_paragraph("body text")])
+    page = {
+        "id": "page1",
+        "title": "Titled page",
+        "description": "A short description",
+    }
+
+    document = _convert_page_to_document(client, "space1", page)
+
+    text = document.sections[0].text
+    assert text is not None
+    assert text.startswith("A short description\n\nbody text")
+    assert text.count("A short description") == 1
+
+    # no description -> body only, no stray separator
+    client.get_page_content.return_value = _document([_paragraph("body text")])
+    bare = _convert_page_to_document(client, "space1", {"id": "page2", "title": "T"})
+    assert bare.sections[0].text is not None
+    assert bare.sections[0].text.startswith("body text")
 
 
 def test_legacy_formats_unchanged() -> None:
