@@ -423,12 +423,12 @@ vulnerabilities. With no selector flags, all sources are audited.
 
 Accepted advisories are suppressed via an allowlist fetched from S3 at runtime
 (`s3://onyx-internal-tools/audit/ignores.json` by default), so a release can be
-unblocked without a code change. The command exits non-zero when an unignored
-finding at or above `--fail-on` (default `critical`) remains, which is how it
-gates deploys.
+unblocked without a code change. The command exits `1` when an unignored finding
+at or above `--fail-on` (default `critical`) remains, which is how it gates
+deploys, and `2` when the audit could not complete.
 
 ```shell
-ods audit [--web] [--python] [--dependabot] [--format text[,json][,sarif]] [--fail-on critical|high|moderate|low] [--ignore-url s3://...]
+ods audit [--web] [--python] [--dependabot] [--format text[,json][,sarif]] [--fail-on critical|high|moderate|low] [--ignore-url s3://...] [--quiet]
 ```
 
 `--format` takes a comma-separated list. The machine-readable formats (`json`,
@@ -440,6 +440,12 @@ when the gate fails, a runbook explaining how to resolve or suppress each
 finding) to the terminal. A lone format always goes to stdout, so
 `--format=sarif > audit.sarif` is unchanged. At most one machine-readable format
 may be requested.
+
+`--quiet` (`-q`) writes nothing at all — no report, no warnings — and reports the
+verdict through the exit code only. Use it when a script wants the verdict and
+not the text, e.g. a pre-push hook or a shell condition. It overrides `--format`.
+The two failure codes stay distinct under `--quiet`, so a caller can tell a
+failed gate (`1`) from a failed run (`2`).
 
 **Examples:**
 
@@ -455,6 +461,9 @@ ods audit --python --format=sarif > audit.sarif
 
 # SARIF to a file for upload, readable report to the log (used by CI gates)
 ods audit --format=sarif,text > audit.sarif
+
+# Exit code only, no output (scripts and hooks)
+if ! ods audit --quiet; then echo "audit gate failed"; fi
 ```
 
 #### Managing the allowlist

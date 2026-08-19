@@ -2,6 +2,7 @@ package audit
 
 import (
 	"errors"
+	"io"
 	"log/slog"
 	"os"
 	"strconv"
@@ -19,6 +20,12 @@ func init() {
 	// to stdout via our own reporters. Warn+ keeps routine Info scan chatter out
 	// and never collides with a --format=json/sarif report on stdout.
 	osvscanner.SetLogger(slog.NewTextHandler(os.Stderr, &slog.HandlerOptions{Level: slog.LevelWarn}))
+}
+
+// SilenceLogger drops everything osv-scanner logs. Used by the --quiet gate,
+// where only the exit code is meaningful.
+func SilenceLogger() {
+	osvscanner.SetLogger(slog.NewTextHandler(io.Discard, nil))
 }
 
 // osvBaseURL is the canonical OSV.dev vulnerability page prefix.

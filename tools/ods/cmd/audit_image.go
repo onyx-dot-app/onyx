@@ -14,6 +14,7 @@ type AuditImageOptions struct {
 	Format    string
 	FailOn    string
 	IgnoreURL string
+	Quiet     bool
 }
 
 // newAuditImageCommand creates the `ods audit image` subcommand.
@@ -39,8 +40,8 @@ feed a SARIF upload and still print a readable report to the log:
 
   ods audit image "$IMAGE" --format=sarif,text > image-audit.sarif
 
-Exits non-zero when an unignored finding at or above --fail-on remains, which is
-how it gates deploys.`,
+Exits 1 when an unignored finding at or above --fail-on remains, which is how it
+gates deploys, and 2 when the audit could not complete.`,
 		Args: cobra.ExactArgs(1),
 		Run: func(cmd *cobra.Command, args []string) {
 			runAuditImage(args[0], opts)
@@ -50,14 +51,18 @@ how it gates deploys.`,
 	cmd.Flags().StringVar(&opts.Format, "format", "text", "Output format(s), comma-separated: text, json, sarif (e.g. sarif,text)")
 	cmd.Flags().StringVar(&opts.FailOn, "fail-on", "critical", "Minimum severity that fails the audit: critical, high, moderate, or low")
 	cmd.Flags().StringVar(&opts.IgnoreURL, "ignore-url", audit.DefaultIgnoreURL, "S3 URL of the advisory allowlist")
+	cmd.Flags().BoolVarP(&opts.Quiet, "quiet", "q", false, "Write nothing; report the verdict through the exit code only")
 
 	return cmd
 }
 
 func runAuditImage(ref string, opts *AuditImageOptions) {
+	stdout, stderr := auditWriters(opts.Quiet)
+
 	failOn := audit.ParseSeverity(opts.FailOn)
 	if failOn == audit.SeverityUnknown {
-		log.Fatalf("Invalid --fail-on %q (want critical, high, moderate, or low)", opts.FailOn)
+		log.Errorf("Invalid --fail-on %q (want critical, high, moderate, or low)", opts.FailOn)
+		os.Exit(exitAuditError)
 	}
 
 	result, err := audit.RunImage(audit.ImageOptions{
@@ -65,15 +70,16 @@ func runAuditImage(ref string, opts *AuditImageOptions) {
 		Format:    opts.Format,
 		FailOn:    failOn,
 		IgnoreURL: opts.IgnoreURL,
-		Stdout:    os.Stdout,
-		Stderr:    os.Stderr,
+		Stdout:    stdout,
+		Stderr:    stderr,
 	})
 	if err != nil {
-		log.Fatalf("Image audit failed: %v", err)
+		log.Errorf("Image audit failed: %v", err)
+		os.Exit(exitAuditError)
 	}
 
 	if len(result.Blocking) > 0 {
 		log.Errorf("%d finding(s) at or above %s severity must be resolved or suppressed", len(result.Blocking), failOn)
-		os.Exit(1)
+		os.Exit(exitAuditFindings)
 	}
 }
