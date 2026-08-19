@@ -41,7 +41,11 @@ import {
   UNSUPPORTED_SETTING_TOOLTIP,
   formatContextWindow,
   maxReasoningStop,
+  reasoningStopIndex,
 } from "@/sections/model-selector/setting-controls";
+
+const ADMIN_LIMITED_SETTING_TOOLTIP =
+  "Your admin limits this model to a lower reasoning level.";
 import { useCurrentAgentLLMProviders } from "@/lib/languageModels/hooks";
 import { useUser } from "@/providers/UserProvider";
 import { useSettings } from "@/lib/settings/hooks";
@@ -55,6 +59,8 @@ export interface TemperatureManager {
   temperature: number;
   updateTemperature: (value: number) => void;
   maxTemperature: number;
+  /** False when `temperature` is just a fallback, not a user's choice. */
+  hasTemperatureOverride: boolean;
 }
 
 export interface ReasoningManager {
@@ -148,7 +154,11 @@ function ModelDetailPane({ option, managers, onBack }: ModelDetailPaneProps) {
   const temperatureEnabled = !option.supportsReasoning && !!temperatureManager;
   // A reasoning model with no supported levels takes no effort parameter at
   // all (e.g. o1-mini), so the row stays disabled.
-  const maxSupportedStop = maxSupportedReasoningStop(option);
+  const capabilityStop = maxSupportedReasoningStop(option);
+  // An admin cap narrows what the model can do to what users may request.
+  const adminCapStop = reasoningStopIndex(option.reasoningEffortMax);
+  const maxSupportedStop =
+    adminCapStop >= 0 ? Math.min(capabilityStop, adminCapStop) : capabilityStop;
   const reasoningEnabled =
     option.supportsReasoning && !!reasoningManager && maxSupportedStop >= 0;
 
@@ -158,13 +168,19 @@ function ModelDetailPane({ option, managers, onBack }: ModelDetailPaneProps) {
   const clampStop = (stop: number) =>
     Math.max(0, Math.min(stop, maxSupportedStop));
 
-  const [localTemperature, setLocalTemperature] = useState(
-    temperatureManager?.temperature ?? 0.5
+  // The manager always reports a concrete number, so the admin default is only
+  // reachable by asking whether the session actually pinned one.
+  const [localTemperature, setLocalTemperature] = useState(() =>
+    temperatureManager?.hasTemperatureOverride
+      ? temperatureManager.temperature
+      : (option.temperatureDefault ?? temperatureManager?.temperature ?? 0.5)
   );
   // A stored level the model doesn't support (e.g. xhigh after switching
   // models) displays clamped to the highest supported stop.
   const storedStop = ALL_REASONING_STOPS.indexOf(
-    reasoningManager?.reasoningEffort ?? "medium"
+    reasoningManager?.reasoningEffort ??
+      option.reasoningEffortDefault ??
+      "medium"
   );
   const [localEffortStop, setLocalEffortStop] = useState(
     clampStop(
@@ -299,7 +315,11 @@ function ModelDetailPane({ option, managers, onBack }: ModelDetailPaneProps) {
                 >
                   <Disabled
                     disabled={reasoningEnabled && index > maxSupportedStop}
-                    tooltip={UNSUPPORTED_SETTING_TOOLTIP}
+                    tooltip={
+                      index > capabilityStop
+                        ? UNSUPPORTED_SETTING_TOOLTIP
+                        : ADMIN_LIMITED_SETTING_TOOLTIP
+                    }
                     tooltipSide="top"
                   >
                     <Text

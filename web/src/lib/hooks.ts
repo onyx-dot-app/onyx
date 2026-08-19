@@ -433,6 +433,8 @@ export interface LlmManager {
   updateImageFilesPresent: (present: boolean) => void;
   activeAgent: MinimalAgent | null;
   maxTemperature: number;
+  /** False when `temperature` is just a fallback, not a user's choice. */
+  hasTemperatureOverride: boolean;
   llmProviders: LLMProviderDescriptor[] | undefined;
   isLoadingProviders: boolean;
   hasAnyProvider: boolean;
@@ -1005,6 +1007,11 @@ export function useLlmManager(
     updateImageFilesPresent,
     activeAgent: activeAgent ?? null,
     maxTemperature,
+    // Covers the window where the user just moved the slider and the session
+    // write has not landed yet.
+    hasTemperatureOverride:
+      temperatureExplicitlySet ||
+      currentChatSession?.current_temperature_override != null,
     llmProviders,
     isLoadingProviders:
       isLoadingAllProviders ||
