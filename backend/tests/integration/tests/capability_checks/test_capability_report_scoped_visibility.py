@@ -22,7 +22,12 @@ from onyx.connectors.capability_checks.recorder import (
     record_blocking_validation_outcome,
 )
 from onyx.connectors.models import InputType
-from onyx.db.enums import AccessType, CapabilityCheckTrigger, Permission
+from onyx.db.enums import (
+    AccessType,
+    CapabilityCheckTrigger,
+    CapabilityReportRunStatus,
+    Permission,
+)
 from tests.integration.common_utils.constants import API_SERVER_URL
 from tests.integration.common_utils.http_client import client
 from tests.integration.common_utils.managers.cc_pair import CCPairManager
@@ -33,6 +38,12 @@ from tests.integration.common_utils.managers.user_group import UserGroupManager
 from tests.integration.common_utils.test_models import DATestUser, DATestUserGroup
 
 _CONNECTOR_CONFIG: dict[str, Any] = {"channels": ["general"]}
+
+_MOCK_CONFIG: dict[str, Any] = {
+    "mock_server_host": "localhost",
+    # A closed local port: instantiation fails fast without leaving the host.
+    "mock_server_port": 9,
+}
 
 _REPORTS_FOR_SOURCE_URL = f"{API_SERVER_URL}/manage/admin/credential/capability-reports"
 
@@ -95,6 +106,10 @@ def _get_report(
     )
     response.raise_for_status()
     return response.json()
+
+
+def _check_url(credential_id: int) -> str:
+    return f"{API_SERVER_URL}/manage/admin/credential/{credential_id}/capability-check"
 
 
 @pytest.mark.skipif(
@@ -286,3 +301,107 @@ def test_managed_pairing_is_readable_without_credential_visibility(
     listing_response.raise_for_status()
     listed_connector_ids = {row["connector_id"] for row in listing_response.json()}
     assert connector.id in listed_connector_ids
+
+
+@pytest.mark.skipif(
+    os.environ.get("ENABLE_PAID_ENTERPRISE_EDITION_FEATURES", "").lower() != "true",
+    reason="Scoped group managers are enterprise only",
+)
+def test_scoped_manager_cannot_trigger_foreign_pairings(
+    admin_user: DATestUser,
+) -> None:
+    # Precondition. Mirrors the read test on the trigger side, on the mock
+    # source so the one legitimately enqueued run needs no external service.
+    suffix = uuid4().hex[:8]
+    manager = UserManager.create(name=f"trigger_manager_{suffix}")
+    managed_group = UserGroupManager.create(
+        name=f"trigger_managed_{suffix}",
+        user_ids=[manager.id],
+        cc_pair_ids=[],
+        user_performing_action=admin_user,
+    )
+    foreign_group = UserGroupManager.create(
+        name=f"trigger_foreign_{suffix}",
+        user_ids=[],
+        cc_pair_ids=[],
+        user_performing_action=admin_user,
+    )
+    UserGroupManager.wait_for_sync(
+        user_groups_to_check=[managed_group, foreign_group],
+        user_performing_action=admin_user,
+    )
+    set_manager_response = UserGroupManager.set_manager(
+        user_group=managed_group,
+        user=manager,
+        is_manager=True,
+        user_performing_action=admin_user,
+    )
+    assert set_manager_response.status_code == 200
+    # Group edits mark the group as syncing; cc-pair creation refuses to
+    # relate a group mid-sync, so wait again before pairing.
+    UserGroupManager.wait_for_sync(
+        user_groups_to_check=[managed_group, foreign_group],
+        user_performing_action=admin_user,
+    )
+    credential = CredentialManager.create(
+        source=DocumentSource.MOCK_CONNECTOR,
+        admin_public=True,
+        curator_public=False,
+        groups=[],
+        user_performing_action=manager,
+    )
+    in_group_connector = ConnectorManager.create(
+        source=DocumentSource.MOCK_CONNECTOR,
+        input_type=InputType.POLL,
+        connector_specific_config=_MOCK_CONFIG,
+        user_performing_action=admin_user,
+    )
+    foreign_connector = ConnectorManager.create(
+        source=DocumentSource.MOCK_CONNECTOR,
+        input_type=InputType.POLL,
+        connector_specific_config=_MOCK_CONFIG,
+        user_performing_action=admin_user,
+    )
+    orphan_connector = ConnectorManager.create(
+        source=DocumentSource.MOCK_CONNECTOR,
+        input_type=InputType.POLL,
+        connector_specific_config=_MOCK_CONFIG,
+        user_performing_action=admin_user,
+    )
+    CCPairManager.create(
+        connector_id=in_group_connector.id,
+        credential_id=credential.id,
+        access_type=AccessType.PRIVATE,
+        groups=[managed_group.id],
+        user_performing_action=admin_user,
+    )
+    CCPairManager.create(
+        connector_id=foreign_connector.id,
+        credential_id=credential.id,
+        access_type=AccessType.PRIVATE,
+        groups=[foreign_group.id],
+        user_performing_action=admin_user,
+    )
+
+    # Under test and postcondition. Hidden pairings reject with the same shape
+    # as a nonexistent connector, and nothing gets marked RUNNING.
+    for connector_id in (foreign_connector.id, orphan_connector.id):
+        response = client.post(
+            _check_url(credential.id),
+            json={"connector_id": connector_id},
+            headers=manager.headers,
+        )
+        assert response.status_code == 404
+        assert response.json()["error_code"] == "CONNECTOR_NOT_FOUND"
+        assert _get_report(credential.id, connector_id, admin_user) is None
+
+    # The manager's own group's pairing triggers normally.
+    response = client.post(
+        _check_url(credential.id),
+        json={"connector_id": in_group_connector.id},
+        headers=manager.headers,
+    )
+    response.raise_for_status()
+    accepted = response.json()
+    assert accepted["run_status"] == CapabilityReportRunStatus.RUNNING.value
+    assert accepted["connector_id"] == in_group_connector.id

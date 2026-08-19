@@ -131,7 +131,8 @@ def trigger_capability_check(
 
     Accepted-style: the run happens on a worker and the caller polls the GET;
     the previous report stays readable meanwhile. A run already RUNNING within
-    the staleness bound makes this a no-op returning the standing row.
+    the staleness bound makes this a no-op returning the standing row. A
+    connector-scoped trigger requires the pairing to be visible to the caller.
     """
     # GATE 2 for ``allow_scope``: the user-filtered fetch is the visibility
     # check, and an unknown credential is indistinguishable from an
@@ -150,10 +151,16 @@ def trigger_capability_check(
         )
     if request.connector_id is not None:
         connector = fetch_connector_by_id(request.connector_id, db_session)
-        if connector is None:
+        # GATE 2 for the connector scope, mirroring the report reads: one
+        # shape for missing and inaccessible, so neither connector existence
+        # nor pairing membership leaks. The source check stays behind it.
+        if connector is None or not _connector_pairing_visible(
+            db_session, request.connector_id, credential_id, user
+        ):
             raise OnyxError(
                 OnyxErrorCode.CONNECTOR_NOT_FOUND,
-                f"Connector {request.connector_id} does not exist.",
+                f"Connector {request.connector_id} does not exist or is not "
+                "accessible.",
             )
         if connector.source != credential.source:
             raise OnyxError(
