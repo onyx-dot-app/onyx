@@ -194,10 +194,10 @@ class JiraServiceManagementConnector(
                 response.raise_for_status()
                 data = response.json()
 
-                values = data.get("values", [])
+             values = data.get("values", [])
                 for comment in values:
                     body = comment.get("body", "")
-                    if body:
+                    if body and comment.get("public", False):
                         comments.append(body)
 
                 if data.get("isLastPage", True) or not values:
