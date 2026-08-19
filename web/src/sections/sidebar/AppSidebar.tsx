@@ -89,6 +89,7 @@ import { dismissNotification } from "@/lib/notifications/api";
 import AccountPopover from "@/sections/sidebar/AccountPopover";
 import ChatSearchCommandMenu from "@/sections/sidebar/ChatSearchCommandMenu";
 import { useQueryController } from "@/providers/QueryControllerProvider";
+import { DEFAULT_AGENT_ID } from "@/lib/constants";
 
 // Visible-agents = pinned-agents + current-agent (if current-agent not in pinned-agents)
 // OR Visible-agents = pinned-agents (if current-agent in pinned-agents)
@@ -356,7 +357,14 @@ export default function AppSidebar() {
 
       let newPinnedAgents: MinimalAgent[];
 
-      if (activeAgent && !currentAgentIsPinned) {
+      // The Assistant is excluded: it is the active agent in plain chat but is
+      // never in `visibleAgents`, so pinning it here would persist an agent the
+      // sidebar cannot show.
+      if (
+        activeAgent &&
+        activeAgent.id !== DEFAULT_AGENT_ID &&
+        !currentAgentIsPinned
+      ) {
         // This is the case in which the user is dragging the UNPINNED agent and moving it to somewhere else in the list.
         // This is an indication that we WANT to pin this agent!
         if (activeIndex === visibleAgentIds.length - 1) {
