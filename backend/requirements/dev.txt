@@ -1177,13 +1177,13 @@ numpy==2.4.1 \
     #   contourpy
     #   matplotlib
     #   voyageai
-onyx-devtools==0.12.0 \
-    --hash=sha256:4a15c5289427aec3bfafc1013ad36de64e59e0ce2010beffaba236f3055d9c56 \
-    --hash=sha256:5bdc968423f491360b7b7c8c8db31314f85ff7ce04fc70e4c7ba9cdb892a6016 \
-    --hash=sha256:8bae933e0e99148d52acd6f9156b89af44d35f1f8e06f1e4facdab46972988ae \
-    --hash=sha256:a92eafc66010f369aee59b5f68dfa546ef23f1b20a7d927b1d0af8aac79431a3 \
-    --hash=sha256:dfd2127e2ee1a5f02e6cf85c22d99e8cb7790d63cc39cedd8911bd708f9c1680 \
-    --hash=sha256:fd06ad6b889842f6ea46cbd58cdd34e180182f5dc31d9fd264c746fefe4565be
+onyx-devtools==0.12.1 \
+    --hash=sha256:0a3a8f0705dd57d59c1afc2ec90613e8aa5ff09ccf134c8a3132dee39b083158 \
+    --hash=sha256:44d9a9c5396262cfcebd7dc7e912550dc090cb438effb3c927120bac64d59320 \
+    --hash=sha256:b614b5ee6010eed1e37be621287419e45cf95e77d1d00161070fdbd33897a89d \
+    --hash=sha256:e7f97da305f82132d7b7802edb945fcfd51440ac7307b8585bba2782be423533 \
+    --hash=sha256:f2187855d1d588ecf459eb39693efd8cc92dd0ac618128487ff966286ddea540 \
+    --hash=sha256:fcab4b4acd6894d97de5fbd959c9a2dd0b3f4990ab4499364e30f6d5d0a9c65f
 openai==2.38.0 \
     --hash=sha256:798694c6cf74145541fda94325b6f8f72d8e1fd0262cc137c8d728177a6a4ce3 \
     --hash=sha256:ec6661c57b2dcc47414a767e6e3335c7ed3d19c9696999283a3c82e95c756a3c
