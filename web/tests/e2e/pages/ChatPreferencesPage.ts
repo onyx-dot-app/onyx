@@ -14,7 +14,6 @@ export class ChatPreferencesPage {
   readonly title: Locator;
   readonly modifyPromptButton: Locator;
   readonly retentionField: Locator;
-  readonly reasoningControlSwitch: Locator;
 
   constructor(page: Page) {
     this.page = page;
@@ -23,7 +22,6 @@ export class ChatPreferencesPage {
     this.retentionField = page
       .locator("label")
       .filter({ hasText: "Keep Chat History" });
-    this.reasoningControlSwitch = page.locator("#reasoning_override_enabled");
   }
 
   // ---------------------------------------------------------------------------
@@ -271,40 +269,6 @@ export class ChatPreferencesPage {
     }
     await this.selectRetentionPreset("Forever");
     await this.expectToast("Settings updated");
-  }
-
-  // ---------------------------------------------------------------------------
-  // Reasoning Control
-  // ---------------------------------------------------------------------------
-
-  /**
-   * Set the "Reasoning Control" switch, waiting on the settings PATCH itself.
-   *
-   * The toast is deliberately not the sync point here: this runs in teardown
-   * and back to back within a test, where a toast left over from an earlier
-   * save satisfies the wait without proving this click reached the server.
-   */
-  async setReasoningControl(enabled: boolean): Promise<void> {
-    await expect(this.reasoningControlSwitch).toBeVisible();
-    const current =
-      await this.reasoningControlSwitch.getAttribute("aria-checked");
-    if (current === String(enabled)) return;
-
-    const saved = this.page.waitForResponse(
-      (response) =>
-        response.url().includes("/api/admin/settings") &&
-        response.request().method() === "PATCH"
-    );
-    await this.reasoningControlSwitch.click();
-    expect((await saved).ok()).toBe(true);
-    await this.expectReasoningControl(enabled);
-  }
-
-  async expectReasoningControl(enabled: boolean): Promise<void> {
-    await expect(this.reasoningControlSwitch).toHaveAttribute(
-      "aria-checked",
-      String(enabled)
-    );
   }
 
   // ---------------------------------------------------------------------------
