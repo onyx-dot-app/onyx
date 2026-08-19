@@ -260,11 +260,12 @@ def _is_entra_tombstone_rename(current_email: str, new_email: str) -> bool:
 
 
 def _is_privileged_account(user: User) -> bool:
-    """Whether renaming *user* must be refused.
+    """Whether *user* must stay outside a rename's reach, as source or target.
 
     SSO login associates by email, so the first login for a renamed account's
     new address claims it. Provisioning only ever grants basic access, so a
-    token must not move an admin or group-manager account.
+    token must not move an admin or group-manager account — nor adopt one,
+    which would put it under IdP control.
     """
     return user_is_admin(user) or user.is_group_manager
 
@@ -295,7 +296,8 @@ def _apply_username_change(
       EXT_PERM shadows fall through so ``reconcile_user_email__no_commit``
       merges them into the renamed user, and BOT / service / anonymous
       accounts must never come under IdP control.
-    - A rename of an admin or group manager is rejected (403).
+    - A rename of an admin or group manager, or onto one (adoption would
+      hand the token control of the target), is rejected (403).
     """
     if requested_username.lower() == user.email.lower():
         return _UsernameChange(user, requested_username)
@@ -314,6 +316,10 @@ def _apply_username_change(
                 409, f"User with email {requested_username} already exists"
             )
         if other.account_type == AccountType.STANDARD:
+            if _is_privileged_account(other):
+                return _scim_error_response(
+                    403, "Cannot adopt an admin or group manager account"
+                )
             mapping = dal.get_user_mapping_by_user_id(user.id)
             if mapping:
                 dal.reassign_user_mapping(mapping, other.id)

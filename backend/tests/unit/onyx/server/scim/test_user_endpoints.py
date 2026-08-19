@@ -1519,7 +1519,9 @@ class TestRenameCollisionAdoption:
 
 class TestPrivilegedRename:
     """A SCIM token must not move an admin or group-manager account onto a
-    different address — the address could then be claimed via first login."""
+    different address — the address could then be claimed via first login —
+    nor adopt one via rename collision, which would put it under IdP
+    control."""
 
     def test_put_admin_rename_returns_403(
         self,
@@ -1564,6 +1566,60 @@ class TestPrivilegedRename:
         )
 
         assert_scim_error(result, 403)
+        mock_dal.update_user.assert_not_called()
+
+    def test_put_rename_onto_admin_account_returns_403(
+        self,
+        mock_db_session: MagicMock,
+        mock_token: MagicMock,
+        mock_dal: MagicMock,
+        provider: ScimProvider,
+    ) -> None:
+        """Adoption must not hand the IdP control of a privileged account."""
+        user = make_db_user(email="old@mane.com")
+        admin = make_db_user(
+            email="admin@mane.com",
+            effective_permissions=[Permission.FULL_ADMIN_PANEL_ACCESS.value],
+        )
+        mock_dal.get_user.return_value = user
+        mock_dal.get_user_by_email.return_value = admin
+
+        result = replace_user(
+            user_id=str(user.id),
+            user_resource=make_scim_user(userName="admin@mane.com", active=True),
+            _token=mock_token,
+            provider=provider,
+            db_session=mock_db_session,
+        )
+
+        assert_scim_error(result, 403)
+        mock_dal.reassign_user_mapping.assert_not_called()
+        mock_dal.deactivate_user.assert_not_called()
+        mock_dal.update_user.assert_not_called()
+
+    def test_patch_rename_onto_group_manager_returns_403(
+        self,
+        mock_db_session: MagicMock,
+        mock_token: MagicMock,
+        mock_dal: MagicMock,
+        provider: ScimProvider,
+    ) -> None:
+        user = make_db_user(email="old@mane.com")
+        manager = make_db_user(email="manager@mane.com", is_group_manager=True)
+        mock_dal.get_user.return_value = user
+        mock_dal.get_user_by_email.return_value = manager
+
+        result = patch_user(
+            user_id=str(user.id),
+            patch_request=_rename_patch("manager@mane.com"),
+            _token=mock_token,
+            provider=provider,
+            db_session=mock_db_session,
+        )
+
+        assert_scim_error(result, 403)
+        mock_dal.reassign_user_mapping.assert_not_called()
+        mock_dal.deactivate_user.assert_not_called()
         mock_dal.update_user.assert_not_called()
 
     def test_put_admin_without_rename_is_allowed(
