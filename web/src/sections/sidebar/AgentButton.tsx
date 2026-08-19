@@ -1,6 +1,6 @@
 "use client";
 
-import React, { memo } from "react";
+import React, { memo, useEffect, useRef } from "react";
 import { MinimalAgent } from "@/lib/agents/types";
 import { usePinnedAgents, useActiveAgent } from "@/lib/agents/hooks";
 import { noProp } from "@/lib/utils";
@@ -23,6 +23,14 @@ function SortableItem({ id, children }: SortableItemProps) {
   const { attributes, listeners, setNodeRef, transform, isDragging } =
     useSortable({ id });
 
+  // Releasing a drag still fires a click, and the tab underneath is a link, so
+  // the drop navigated. Remember that a drag happened and swallow that one
+  // click; the flag clears on the next press, which leaves plain clicks alone.
+  const dragged = useRef(false);
+  useEffect(() => {
+    if (isDragging) dragged.current = true;
+  }, [isDragging]);
+
   if (!isMounted) {
     return <div className="flex items-center group">{children}</div>;
   }
@@ -36,6 +44,16 @@ function SortableItem({ id, children }: SortableItemProps) {
       }}
       {...attributes}
       {...listeners}
+      // Capture phase: these run before the listeners spread above, so dnd-kit
+      // still sees the press, and the click never reaches the link.
+      onPointerDownCapture={() => {
+        dragged.current = false;
+      }}
+      onClickCapture={(event) => {
+        if (!dragged.current) return;
+        event.preventDefault();
+        event.stopPropagation();
+      }}
       className="flex items-center group"
     >
       {children}
