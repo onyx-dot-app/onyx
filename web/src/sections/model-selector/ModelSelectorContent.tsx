@@ -34,6 +34,7 @@ import {
 import { ReasoningEffortOverride } from "@/lib/languageModels/types";
 import { useCurrentAgentLLMProviders } from "@/lib/languageModels/hooks";
 import { useUser } from "@/providers/UserProvider";
+import { useSettings } from "@/lib/settings/hooks";
 import {
   Collapsible,
   CollapsibleContent,
@@ -51,33 +52,50 @@ export interface ReasoningManager {
   updateReasoningEffort: (effort: ReasoningEffortOverride | null) => void;
 }
 
-/** Managers powering the per-model detail pane. Rows always render, and an absent manager leaves its row disabled. */
+/** Managers powering the per-model detail pane. A manager is absent when the
+ * host offers no such control, or an admin withheld it; either way its row
+ * does not render. Capability limits disable a row instead. */
 export interface ModelDetailManagers {
   temperature?: TemperatureManager;
   reasoning?: ReasoningManager;
 }
 
 /**
- * Builds the detail-pane managers for a selector host. Temperature is gated
- * on user.preferences.temperature_override_enabled. The result is undefined
- * when no block would render.
+ * Builds the detail-pane managers for a selector host. Each block is gated by
+ * an admin setting: temperature on user.preferences.temperature_override_enabled
+ * (a merge of the workspace setting and an unused per-user column), reasoning on
+ * the workspace setting directly. The result is undefined when no block would
+ * render, which also hides the drill-in affordance.
  */
 export function useModelDetailManagers(
   temperatureManager?: TemperatureManager,
   reasoningManager?: ReasoningManager
 ): ModelDetailManagers | undefined {
   const { user } = useUser();
+  const settings = useSettings();
   const temperatureOverrideEnabled =
     user?.preferences?.temperature_override_enabled;
+  // Fail closed while the settings fetch is in flight: the placeholder says
+  // enabled, which would flash the control into a workspace that withheld
+  // it. Temperature fails closed here too, by way of an undefined user.
+  const reasoningOverrideEnabled =
+    !settings.isLoading && (settings.reasoning_override_enabled ?? true);
   return useMemo(() => {
     const temperature =
       temperatureManager && temperatureOverrideEnabled
         ? temperatureManager
         : undefined;
-    return temperature || reasoningManager
-      ? { temperature, reasoning: reasoningManager }
-      : undefined;
-  }, [temperatureManager, reasoningManager, temperatureOverrideEnabled]);
+    const reasoning =
+      reasoningManager && reasoningOverrideEnabled
+        ? reasoningManager
+        : undefined;
+    return temperature || reasoning ? { temperature, reasoning } : undefined;
+  }, [
+    temperatureManager,
+    reasoningManager,
+    temperatureOverrideEnabled,
+    reasoningOverrideEnabled,
+  ]);
 }
 
 const BASE_REASONING_STOPS: ReasoningEffortOverride[] = [
@@ -346,97 +364,104 @@ function ModelDetailPane({ option, managers, onBack }: ModelDetailPaneProps) {
         caption="Tokens limit for each session"
       />
 
-      <SettingRow
-        icon={SvgThermometer}
-        title="Temperature"
-        value={displayTemperature.toFixed(1)}
-        caption="How predictable or creative the model should respond"
-        disabled={!temperatureEnabled}
-        disabledTooltip={UNSUPPORTED_SETTING_TOOLTIP}
-      >
-        <PaneSlider
-          value={displayTemperature}
-          min={0}
-          max={maxTemperature}
-          step={0.01}
+      {/* A row is absent when an admin withheld the control, and greyed
+          when the model cannot honour it. Greying the former would claim
+          the model does not support a setting it does. */}
+      {temperatureManager && (
+        <SettingRow
+          icon={SvgThermometer}
+          title="Temperature"
+          value={displayTemperature.toFixed(1)}
+          caption="How predictable or creative the model should respond"
           disabled={!temperatureEnabled}
-          onValueChange={setLocalTemperature}
-          onValueCommit={(value) =>
-            temperatureManager?.updateTemperature(value)
-          }
-        />
-        <div className="flex flex-row items-center justify-between">
-          {["Deterministic", "Balanced", "Creative"].map((label, index) => (
-            <Text
-              key={label}
-              font="figure-small-value"
-              color={index === temperatureAnchor ? "text-04" : "text-02"}
-            >
-              {label}
-            </Text>
-          ))}
-        </div>
-      </SettingRow>
-
-      <SettingRow
-        icon={SvgBarChart}
-        title="Reasoning Level"
-        value={effortLabel}
-        caption="How much thinking the model should perform before answering"
-        disabled={!reasoningEnabled}
-        disabledTooltip={UNSUPPORTED_SETTING_TOOLTIP}
-      >
-        <PaneSlider
-          value={localEffortStop}
-          min={0}
-          max={ALL_REASONING_STOPS.length - 1}
-          step={1}
-          disabled={!reasoningEnabled}
-          onValueChange={(value) => setLocalEffortStop(clampStop(value))}
-          onValueCommit={(value) => {
-            const effort = ALL_REASONING_STOPS[clampStop(value)];
-            if (effort) reasoningManager?.updateReasoningEffort(effort);
-          }}
-        />
-        {/* Labels anchor at the slider's index/lastStop fractions so they
-              line up with the stops. End labels align to the row edges to
-              avoid overflow. */}
-        <div className="relative h-4 w-full">
-          {ALL_REASONING_STOPS.map((stop, index) => {
-            const lastStop = ALL_REASONING_STOPS.length - 1;
-            return (
-              <div
-                key={stop}
-                className={cn(
-                  "absolute top-0",
-                  index === lastStop
-                    ? "-translate-x-full"
-                    : index > 0 && "-translate-x-1/2"
-                )}
-                style={{ left: `${(index / lastStop) * 100}%` }}
+          disabledTooltip={UNSUPPORTED_SETTING_TOOLTIP}
+        >
+          <PaneSlider
+            value={displayTemperature}
+            min={0}
+            max={maxTemperature}
+            step={0.01}
+            disabled={!temperatureEnabled}
+            onValueChange={setLocalTemperature}
+            onValueCommit={(value) =>
+              temperatureManager?.updateTemperature(value)
+            }
+          />
+          <div className="flex flex-row items-center justify-between">
+            {["Deterministic", "Balanced", "Creative"].map((label, index) => (
+              <Text
+                key={label}
+                font="figure-small-value"
+                color={index === temperatureAnchor ? "text-04" : "text-02"}
               >
-                <Disabled
-                  disabled={reasoningEnabled && index > maxSupportedStop}
-                  tooltip={UNSUPPORTED_SETTING_TOOLTIP}
-                  tooltipSide="top"
+                {label}
+              </Text>
+            ))}
+          </div>
+        </SettingRow>
+      )}
+
+      {reasoningManager && (
+        <SettingRow
+          icon={SvgBarChart}
+          title="Reasoning Level"
+          value={effortLabel}
+          caption="How much thinking the model should perform before answering"
+          disabled={!reasoningEnabled}
+          disabledTooltip={UNSUPPORTED_SETTING_TOOLTIP}
+        >
+          <PaneSlider
+            value={localEffortStop}
+            min={0}
+            max={ALL_REASONING_STOPS.length - 1}
+            step={1}
+            disabled={!reasoningEnabled}
+            onValueChange={(value) => setLocalEffortStop(clampStop(value))}
+            onValueCommit={(value) => {
+              const effort = ALL_REASONING_STOPS[clampStop(value)];
+              if (effort) reasoningManager?.updateReasoningEffort(effort);
+            }}
+          />
+          {/* Labels anchor at the slider's index/lastStop fractions so they
+                line up with the stops. End labels align to the row edges to
+                avoid overflow. */}
+          <div className="relative h-4 w-full">
+            {ALL_REASONING_STOPS.map((stop, index) => {
+              const lastStop = ALL_REASONING_STOPS.length - 1;
+              return (
+                <div
+                  key={stop}
+                  className={cn(
+                    "absolute top-0",
+                    index === lastStop
+                      ? "-translate-x-full"
+                      : index > 0 && "-translate-x-1/2"
+                  )}
+                  style={{ left: `${(index / lastStop) * 100}%` }}
                 >
-                  <Text
-                    font="figure-small-value"
-                    color={
-                      reasoningEnabled && index === localEffortStop
-                        ? "text-04"
-                        : "text-02"
-                    }
-                    nowrap
+                  <Disabled
+                    disabled={reasoningEnabled && index > maxSupportedStop}
+                    tooltip={UNSUPPORTED_SETTING_TOOLTIP}
+                    tooltipSide="top"
                   >
-                    {REASONING_STOP_LABELS[stop]}
-                  </Text>
-                </Disabled>
-              </div>
-            );
-          })}
-        </div>
-      </SettingRow>
+                    <Text
+                      font="figure-small-value"
+                      color={
+                        reasoningEnabled && index === localEffortStop
+                          ? "text-04"
+                          : "text-02"
+                      }
+                      nowrap
+                    >
+                      {REASONING_STOP_LABELS[stop]}
+                    </Text>
+                  </Disabled>
+                </div>
+              );
+            })}
+          </div>
+        </SettingRow>
+      )}
     </div>
   );
 }

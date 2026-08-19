@@ -32,6 +32,7 @@ export interface Settings {
   application_status: ApplicationStatus;
   auto_scroll: boolean;
   temperature_override_enabled: boolean;
+  reasoning_override_enabled?: boolean;
   query_history_type: QueryHistoryType;
 
   // Visibility-only: hides the sidebar page; query-history APIs + recording stay on.
