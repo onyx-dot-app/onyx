@@ -44,7 +44,7 @@
 
 /* Group focus — any focusable descendant of the Root receives keyboard focus,
    revealing all group items (same behavior as hover). */
-[data-hover-group]:focus-within
+[data-hover-group]:has(:focus-visible)
   .hoverable-item[data-hoverable-variant="appear-on-hover"]:not(
     [data-hoverable-local]
   ) {
@@ -88,7 +88,7 @@
 }
 
 /* Group focus */
-[data-hover-group]:focus-within
+[data-hover-group]:has(:focus-visible)
   .hoverable-item[data-hoverable-variant="appear-on-rest"]:not(
     [data-hoverable-local]
   ) {
@@ -155,21 +155,21 @@
 }
 
 /* Group focus */
-[data-hover-group]:focus-within
+[data-hover-group]:has(:focus-visible)
   .hoverable-replace-rest:not([data-hoverable-local]) {
   display: none;
 }
-[data-hover-group]:focus-within
+[data-hover-group]:has(:focus-visible)
   .hoverable-replace-hover:not([data-hoverable-local]) {
   display: contents;
 }
 
 /* Local focus */
-.hoverable-replace:focus-within
+.hoverable-replace:has(:focus-visible)
   > .hoverable-replace-rest[data-hoverable-local="true"] {
   display: none;
 }
-.hoverable-replace:focus-within
+.hoverable-replace:has(:focus-visible)
   > .hoverable-replace-hover[data-hoverable-local="true"] {
   display: contents;
 }

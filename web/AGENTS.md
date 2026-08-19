@@ -213,7 +213,9 @@ primary input cannot hover (touch), items are always shown in their revealed sta
 stay reachable on mobile.
 
 - **`Hoverable.Root`** — Wraps a hover group. Renders a container with a `data-hover-group`
-  attribute; CSS `:hover`/`:focus-within` on it reveals descendant items.
+  attribute; CSS `:hover`/`:has(:focus-visible)` on it reveals descendant items. Focus reveals
+  only where a focus ring is warranted, so a mouse press on a link or button does not leave the
+  items stuck open after the pointer moves away.
 - **`Hoverable.Item`** — Marks an element that should appear on hover. Supports two modes:
   - **Group mode** (`group` prop provided): visibility driven by CSS `:hover` on the
     `Hoverable.Root` ancestor.
