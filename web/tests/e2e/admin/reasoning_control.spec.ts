@@ -10,9 +10,19 @@ import { ChatPreferencesPage } from "@tests/e2e/pages/ChatPreferencesPage";
 async function openFirstModelDetailPane(page: Page): Promise<boolean> {
   await page.goto("/app");
   await page.waitForLoadState("networkidle");
-  await page.getByTestId("model-selector").click();
 
-  const settingsButton = page
+  // The pill, not the wrapper: `model-selector` is a plain container and
+  // clicking it opens nothing. Mirrors `getModelSelectorTrigger` in
+  // utils/chatActions, which takes the last button for the same reason - the
+  // first one is "Add Model".
+  await page.getByTestId("model-selector").locator("button").last().click();
+  const popover = page.locator('[role="dialog"]');
+  await expect(popover).toBeVisible({ timeout: 10000 });
+
+  // Scoped to the popover so no page-level control can satisfy it. This button
+  // renders only when some detail control survives its admin gate, so absence
+  // is the both-disabled case rather than a lookup failure.
+  const settingsButton = popover
     .getByRole("button", { name: /settings$/ })
     .first();
   if (!(await settingsButton.isVisible().catch(() => false))) return false;
