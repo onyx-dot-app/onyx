@@ -29,7 +29,10 @@ class PdfImageRef(BaseModel):
     page_index: int
     width: int
     height: int
-    is_stencil_mask: bool
+    # True when another image uses this one as its /Mask or /SMask. A
+    # standalone painted stencil (signature, line art) is content and stays
+    # False.
+    is_transparency_mask: bool
 
 
 class PdfImageFilter(ABC):
@@ -40,11 +43,11 @@ class PdfImageFilter(ABC):
         """Return why the image should be skipped, or None to keep it."""
 
 
-class StencilMaskFilter(PdfImageFilter):
-    """Skips ``/ImageMask`` stencils: transparency masks for sibling images."""
+class TransparencyMaskFilter(PdfImageFilter):
+    """Skips masks another image paints through; they are not content."""
 
     def exclude_reason(self, ref: PdfImageRef) -> str | None:
-        return "stencil mask" if ref.is_stencil_mask else None
+        return "transparency mask" if ref.is_transparency_mask else None
 
 
 class MinDimensionFilter(PdfImageFilter):
@@ -60,7 +63,7 @@ class MinDimensionFilter(PdfImageFilter):
 
 
 _DEFAULT_FILTERS: tuple[PdfImageFilter, ...] = (
-    StencilMaskFilter(),
+    TransparencyMaskFilter(),
     MinDimensionFilter(MIN_EMBEDDED_IMAGE_DIMENSION_PX),
 )
 
@@ -105,7 +108,10 @@ def _iter_xobject_image_refs(
     page_index: int,
     seen_images: set[Any],
     seen_forms: set[Any],
+    mask_refs: set[Any],
 ) -> Iterator[PdfImageRef]:
+    from pypdf.generic import IndirectObject
+
     # Iterative: Form XObjects can nest arbitrarily deep.
     stack: list[tuple[Any, list[str]]] = [(resources, [])]
     while stack:
@@ -116,12 +122,22 @@ def _iter_xobject_image_refs(
         xobjects = _resolve(resources.get("/XObject"))
         if xobjects is None:
             continue
+        # First pass: record which images are used as another image's
+        # transparency mask, so a sibling pair resolves regardless of order.
+        entries: list[tuple[str, Any, Any]] = []
         for name in xobjects:
             try:
                 obj = xobjects[name]
-                subtype = obj.get("/Subtype")
+                subtype = _resolve(obj.get("/Subtype"))
             except Exception:
                 continue
+            entries.append((name, obj, subtype))
+            if subtype == "/Image":
+                for mask_key in ("/Mask", "/SMask"):
+                    mask_ref = obj.get(mask_key)
+                    if isinstance(mask_ref, IndirectObject):
+                        mask_refs.add(mask_ref)
+        for name, obj, subtype in entries:
             if subtype == "/Image":
                 if not _first_visit(obj, seen_images):
                     continue
@@ -130,7 +146,9 @@ def _iter_xobject_image_refs(
                     page_index=page_index,
                     width=_to_int(obj.get("/Width")),
                     height=_to_int(obj.get("/Height")),
-                    is_stencil_mask=bool(_resolve(obj.get("/ImageMask", False))),
+                    is_transparency_mask=(
+                        getattr(obj, "indirect_reference", None) in mask_refs
+                    ),
                 )
             elif subtype == "/Form":
                 if not _first_visit(obj, seen_forms):
@@ -180,9 +198,9 @@ def _iter_inline_image_refs(page: Any, page_index: int) -> Iterator[PdfImageRef]
             page_index=page_index,
             width=_to_int(settings.get("/W", settings.get("/Width"))),
             height=_to_int(settings.get("/H", settings.get("/Height"))),
-            is_stencil_mask=bool(
-                _resolve(settings.get("/IM", settings.get("/ImageMask", False)))
-            ),
+            # An inline image cannot be referenced by another image, so a
+            # painted inline stencil is content.
+            is_transparency_mask=False,
         )
         inline_index += 1
 
@@ -190,15 +208,21 @@ def _iter_inline_image_refs(page: Any, page_index: int) -> Iterator[PdfImageRef]
 def iter_pdf_image_refs(reader: Any) -> Iterator[PdfImageRef]:
     """Yield one ref per unique embedded image, on the first page that
     references it. Shared resource dictionaries and nested forms would
-    otherwise multiply the count by pages times nesting depth."""
+    otherwise multiply the count by pages times nesting depth.
+
+    Inline images inside Form XObject content streams are not enumerated:
+    pypdf never parses form streams, so no ``page.images`` locator exists
+    for them and extraction could not decode them anyway.
+    """
     seen_images: set[Any] = set()
     seen_forms: set[Any] = set()
     seen_resources: set[Any] = set()
+    mask_refs: set[Any] = set()
     for page_index, page in enumerate(reader.pages):
         resources = _resolve(page.get("/Resources"))
         if resources is not None and _first_visit(resources, seen_resources):
             yield from _iter_xobject_image_refs(
-                resources, page_index, seen_images, seen_forms
+                resources, page_index, seen_images, seen_forms, mask_refs
             )
         yield from _iter_inline_image_refs(page, page_index)
 

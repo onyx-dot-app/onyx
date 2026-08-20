@@ -5,14 +5,17 @@ Run from this directory: ``uv run python generate_image_fixtures.py``
 The fixtures exercise the embedded-image enumeration and filtering rules in
 ``onyx.file_processing.pdf_image_utils``:
 
-- with_image.pdf        one content image (32x32)
-- shredded_strips.pdf   one content image + 1px scanline strips (producer
-                        artifact: figures shredded into thousands of strips)
-- stencil_mask.pdf      one content image + an /ImageMask stencil companion
-- shared_resources.pdf  three pages sharing one resource dict, plus a nested
-                        Form XObject referencing the same image object
-- inline_image.pdf      one content-sized inline (BI/ID/EI) image + one tiny
-                        inline image
+- with_image.pdf          one content image (32x32)
+- shredded_strips.pdf     one content image + 1px scanline strips (producer
+                          artifact: figures shredded into thousands of strips)
+- stencil_mask.pdf        one content image that uses an /ImageMask stencil
+                          as its /Mask
+- standalone_stencil.pdf  one painted /ImageMask stencil referenced by no
+                          other image (content, e.g. a scanned signature)
+- shared_resources.pdf    three pages sharing one resource dict, plus a
+                          nested Form XObject referencing the same image
+- inline_image.pdf        one content-sized inline (BI/ID/EI) image + one
+                          tiny inline image
 """
 
 import zlib
@@ -99,12 +102,19 @@ def make_shredded_strips(out_dir: Path) -> None:
 
 
 def make_stencil_mask(out_dir: Path) -> None:
+    writer = PdfWriter()
+    page = writer.add_blank_page(width=200, height=200)
+    mask = writer._add_object(_stencil_mask_stream(CONTENT_PX, CONTENT_PX))
+    image = _rgb_image_stream(CONTENT_PX, CONTENT_PX, (30, 30, 200))
+    image[NameObject("/Mask")] = mask
+    _attach_images(writer, page, {"/Img1": writer._add_object(image), "/Mask1": mask})
+    writer.write(out_dir / "stencil_mask.pdf")
+
+
+def make_standalone_stencil(out_dir: Path) -> None:
     _single_page_pdf(
-        out_dir / "stencil_mask.pdf",
-        {
-            "/Img1": _rgb_image_stream(CONTENT_PX, CONTENT_PX, (30, 30, 200)),
-            "/Mask1": _stencil_mask_stream(CONTENT_PX, CONTENT_PX),
-        },
+        out_dir / "standalone_stencil.pdf",
+        {"/Stencil1": _stencil_mask_stream(CONTENT_PX, CONTENT_PX)},
     )
 
 
@@ -162,6 +172,7 @@ def generate_all(out_dir: Path) -> None:
     make_with_image(out_dir)
     make_shredded_strips(out_dir)
     make_stencil_mask(out_dir)
+    make_standalone_stencil(out_dir)
     make_shared_resources(out_dir)
     make_inline_image(out_dir)
 

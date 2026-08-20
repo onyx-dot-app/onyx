@@ -5,7 +5,7 @@ Tests cover:
 - pdf_to_text: convenience wrapper
 - is_pdf_protected: password protection detection
 - count_pdf_embedded_images + the shared image filter chain (dedup by object
-  identity, stencil masks, sub-content-size artifacts, inline images)
+  identity, transparency masks, sub-content-size artifacts, inline images)
 
 Fixture PDFs live in ./fixtures/ and are pre-built so the test layer has no
 dependency on pypdf internals; the image-bearing ones are regenerated with
@@ -19,7 +19,7 @@ from pathlib import Path
 import pytest
 from pypdfium2 import PdfiumError
 
-from onyx.file_processing import extract_file_text
+from onyx.file_processing import extract_file_text, pdf_image_utils
 from onyx.file_processing.extract_file_text import pdf_to_text, read_pdf_file
 from onyx.file_processing.password_validation import is_pdf_protected
 from onyx.file_processing.pdf_image_utils import count_pdf_embedded_images
@@ -233,15 +233,30 @@ class TestCountPdfEmbeddedImages:
 
 class TestPdfImageFiltering:
     """Count and extraction share one filter chain: unique image objects
-    only, minus stencil masks and sub-content-size artifacts."""
+    only, minus transparency masks and sub-content-size artifacts."""
+
+    @pytest.fixture(autouse=True)
+    def _pin_filter_thresholds(self, monkeypatch: pytest.MonkeyPatch) -> None:
+        """Isolate from an env-overridden MIN_EMBEDDED_IMAGE_DIMENSION_PX."""
+        monkeypatch.setattr(
+            pdf_image_utils,
+            "_DEFAULT_FILTERS",
+            (
+                pdf_image_utils.TransparencyMaskFilter(),
+                pdf_image_utils.MinDimensionFilter(16),
+            ),
+        )
 
     @pytest.mark.parametrize(
         "fixture",
         [
             # 1 content image + 30 one-px-tall scanline strips
             "shredded_strips.pdf",
-            # 1 content image + a content-sized /ImageMask stencil
+            # 1 content image + the /ImageMask stencil it uses as its /Mask
             "stencil_mask.pdf",
+            # 1 painted /ImageMask stencil no other image references — real
+            # content (e.g. a scanned signature), so it must survive
+            "standalone_stencil.pdf",
             # 1 image referenced by 3 pages plus a nested form (6 references)
             "shared_resources.pdf",
             # one content-sized and one 4x4 inline (BI/ID/EI) image
