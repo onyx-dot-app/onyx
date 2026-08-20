@@ -14,6 +14,7 @@ from ee.onyx.server.user_group.models import (
 from onyx.auth.permissions import (
     NON_TOGGLEABLE_PERMISSIONS,
     get_effective_permissions,
+    has_global_permission,
     has_permission,
     resolve_effective_permissions,
 )
@@ -582,6 +583,8 @@ def add_users_to_user_group(
         )
 
     _check_user_group_is_modifiable(db_user_group)
+    # gate here too: the no-op early return below skips update_user_group's copy
+    _assert_default_group_update_allowed(user, db_user_group, attaching_cc_pairs=False)
 
     current_user_ids = [user.id for user in db_user_group.users]
     current_user_ids_set = set(current_user_ids)
@@ -633,6 +636,31 @@ def _assert_no_privilege_amplification(
             OnyxErrorCode.INSUFFICIENT_PERMISSIONS,
             "You can't add members to a group that grants permissions you don't "
             "hold: " + ", ".join(sorted(permission.value for permission in excess)),
+        )
+
+
+def _assert_default_group_update_allowed(
+    user: User,
+    db_user_group: UserGroup,
+    *,
+    attaching_cc_pairs: bool,
+) -> None:
+    """Members are all a default group has, and only a full admin may change them. Lives
+    here because both write paths reach it, and because connectors ride in the same PATCH
+    payload as membership — there is no group-side connector route to guard, unlike agents
+    and document sets."""
+    if not db_user_group.is_default:
+        return
+
+    if not has_global_permission(user, Permission.FULL_ADMIN_PANEL_ACCESS):
+        raise OnyxError(
+            OnyxErrorCode.INSUFFICIENT_PERMISSIONS,
+            "Only administrators can change the membership of a default system group.",
+        )
+    if attaching_cc_pairs:
+        raise OnyxError(
+            OnyxErrorCode.CONFLICT,
+            "A default system group holds only members, so it can't take connectors.",
         )
 
 
@@ -736,6 +764,9 @@ def update_user_group(
 
     current_cc_pair_ids = set(_current_cc_pair_ids(db_user_group))
     requested_cc_pair_ids = set(user_group_update.cc_pair_ids)
+    _assert_default_group_update_allowed(
+        user, db_user_group, attaching_cc_pairs=bool(requested_cc_pair_ids)
+    )
     _assert_group_update_within_scope(
         db_session,
         user,

@@ -21,6 +21,7 @@ from onyx.db.models import (
 from onyx.db.models import LLMProvider as LLMProviderModel
 from onyx.db.models import Tool as ToolModel
 from onyx.db.persona import get_raw_personas_for_user
+from onyx.db.user_group import assert_not_shared_with_default_group
 from onyx.llm.utils import model_supports_image_input
 from onyx.llm.well_known_providers.auto_update_models import LLMRecommendations
 from onyx.server.manage.embedding.models import (
@@ -43,6 +44,8 @@ def update_group_llm_provider_relationships__no_commit(
     group_ids: list[int] | None,
     db_session: Session,
 ) -> None:
+    assert_not_shared_with_default_group(db_session, group_ids or [])
+
     # Delete existing relationships
     db_session.query(LLMProvider__UserGroup).filter(
         LLMProvider__UserGroup.llm_provider_id == llm_provider_id

@@ -1,8 +1,21 @@
 /** API helpers for the Groups pages. */
 
+import type { ScopedMutator } from "swr";
 import { SWR_KEYS } from "@/lib/swr-keys";
 
 const USER_GROUP_URL = SWR_KEYS.adminUserGroups;
+
+/**
+ * Refresh both group-list caches. These pages read the include_default key, but the users
+ * and connector pages read the plain one, so a rename, membership edit or delete has to
+ * reach both or they keep serving a stale name or a group that no longer exists.
+ */
+async function refreshGroupLists(mutate: ScopedMutator): Promise<void> {
+  await Promise.all([
+    mutate(SWR_KEYS.adminUserGroups),
+    mutate(SWR_KEYS.adminUserGroupsWithDefault),
+  ]);
+}
 
 // Logs an unparseable body — without it a proxy's HTML 502 is indistinguishable from a
 // clean API error at the call site.
@@ -303,6 +316,7 @@ async function setGroupManager(
 }
 
 export {
+  refreshGroupLists,
   renameGroup,
   createGroup,
   updateGroup,

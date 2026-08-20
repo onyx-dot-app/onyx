@@ -15,6 +15,7 @@ from onyx.db.models import (
     DocumentByConnectorCredentialPair,
     User,
 )
+from onyx.db.user_group import assert_not_shared_with_default_group
 from onyx.server.documents.models import CredentialBase
 from onyx.utils.logger import setup_logger
 
@@ -63,6 +64,8 @@ def _relate_credential_to_user_groups__no_commit(
     credential_id: int,
     user_group_ids: list[int],
 ) -> None:
+    assert_not_shared_with_default_group(db_session, user_group_ids)
+
     credential_user_groups = [
         Credential__UserGroup(
             credential_id=credential_id,
