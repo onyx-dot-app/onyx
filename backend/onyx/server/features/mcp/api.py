@@ -816,6 +816,14 @@ async def _connect_oauth(
                 "Known-provider OAuth mode requires a non-empty client_id",
             )
 
+        if credentials_usable and not request.force_reauthentication:
+            return MCPUserOAuthConnectResponse(
+                server_id=server_id,
+                status="already_authenticated",
+                authorization_url=None,
+                redirect_url=request.return_path,
+            )
+
         oauth_result = start_known_provider_oauth_flow(
             mcp_server=mcp_server,
             user_id=str(user.id),
