@@ -1,6 +1,7 @@
 import threading
 from collections.abc import Callable
 from dataclasses import dataclass
+from typing import Any
 from uuid import UUID
 
 from pydantic import BaseModel
@@ -55,6 +56,8 @@ class ChatStateContainer:
         self.is_clarification: bool = False
         # Pre-answer processing time (time before answer starts) in seconds
         self.pre_answer_processing_time: float | None = None
+        # Per-model: the outcome is persisted from whichever thread claims it.
+        self.request_params: dict[str, Any] | None = None
         # Note: LLM cost tracking is now handled in multi_llm.py
         # Search doc collection - maps dedup key to SearchDoc for all docs from tool calls
         self._all_search_docs: dict[SearchDocKey, SearchDoc] = {}
@@ -75,6 +78,16 @@ class ChatStateContainer:
         """Set the answer tokens from the final answer generation."""
         with self._lock:
             self.answer_tokens = answer
+
+    def set_request_params(self, request_params: dict[str, Any] | None) -> None:
+        """Set the request params the answer generation sent to the provider."""
+        with self._lock:
+            self.request_params = request_params
+
+    def get_request_params(self) -> dict[str, Any] | None:
+        """Thread-safe getter for request_params."""
+        with self._lock:
+            return self.request_params
 
     def set_citation_mapping(self, citation_to_doc: CitationMapping) -> None:
         """Set the citation mapping from citation processor."""

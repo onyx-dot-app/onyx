@@ -1982,6 +1982,7 @@ def llm_loop_completion_handle(
     # direct attribute access is not thread-safe — use the provided getters.
     answer_tokens = state_container.get_answer_tokens()
     reasoning_tokens = state_container.get_reasoning_tokens()
+    request_params = state_container.get_request_params()
     citation_to_doc = state_container.get_citation_to_doc()
     tool_calls = state_container.get_tool_calls()
     is_clarification = state_container.get_is_clarification()
@@ -2028,6 +2029,7 @@ def llm_loop_completion_handle(
         save_chat_turn(
             message_text=final_answer,
             reasoning_tokens=reasoning_tokens,
+            request_params=request_params,
             citation_to_doc=citation_to_doc,
             tool_calls=tool_calls,
             all_search_docs=all_search_docs,
