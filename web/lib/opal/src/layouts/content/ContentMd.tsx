@@ -257,7 +257,15 @@ function ContentMd({
               color="inherit"
               maxLines={titleMaxLines}
               title={toPlainString(title)}
-              onClick={editable ? startEditing : undefined}
+              onClick={
+                editable
+                  ? // Starting an edit must not double as a click on the parent row.
+                    (e: React.MouseEvent) => {
+                      e.stopPropagation();
+                      startEditing();
+                    }
+                  : undefined
+              }
             >
               {title}
             </Text>
