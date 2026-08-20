@@ -166,28 +166,31 @@ class TestEffortReachesTheProvider:
 class TestProvidedModelSettings:
     """An omitted field must not clear a stored setting."""
 
-    def test_omitted_settings_are_not_written(self) -> None:
+    def test_omitted_settings_are_not_provided(self) -> None:
         """The rolling-deploy case: a client predating these fields saves a
         provider, and the admin's cap must survive it."""
         request = ModelConfigurationUpsertRequest(name="gpt-5.1", is_visible=True)
-        assert request.provided_model_settings() == {}
+        assert not request.reasoning_effort_max_provided
+        assert not request.reasoning_effort_default_provided
+        assert not request.temperature_default_provided
 
-    def test_explicit_null_clears(self) -> None:
+    def test_explicit_null_is_provided(self) -> None:
         """Distinct from omission: this is an admin resetting to auto."""
         request = ModelConfigurationUpsertRequest(
             name="gpt-5.1", is_visible=True, reasoning_effort_max=None
         )
-        assert request.provided_model_settings() == {"reasoning_effort_max": None}
+        assert request.reasoning_effort_max_provided
+        assert request.reasoning_effort_max is None
+        assert not request.reasoning_effort_default_provided
 
-    def test_only_carried_fields_are_returned(self) -> None:
+    def test_set_value_is_provided(self) -> None:
         request = ModelConfigurationUpsertRequest(
             name="gpt-5.1",
             is_visible=True,
             reasoning_effort_max=ReasoningEffort.HIGH,
         )
-        assert request.provided_model_settings() == {
-            "reasoning_effort_max": ReasoningEffort.HIGH
-        }
+        assert request.reasoning_effort_max_provided
+        assert request.reasoning_effort_max is ReasoningEffort.HIGH
 
 
 class TestUpsertValidation:
@@ -231,23 +234,30 @@ class TestUpsertValidation:
         stored_default = ReasoningEffort.HIGH
         incoming = ModelConfigurationUpsertRequest(
             name="gpt-5.1", is_visible=True, reasoning_effort_max=ReasoningEffort.LOW
-        ).provided_model_settings()
+        )
+        merged_default = (
+            incoming.reasoning_effort_default
+            if incoming.reasoning_effort_default_provided
+            else stored_default
+        )
 
         with pytest.raises(OnyxError):
-            ensure_default_within_max(
-                incoming.get("reasoning_effort_default", stored_default),
-                incoming.get("reasoning_effort_max", None),
-            )
+            ensure_default_within_max(merged_default, incoming.reasoning_effort_max)
 
     def test_merged_policy_accepts_a_consistent_partial_update(self) -> None:
         stored_default = ReasoningEffort.LOW
         incoming = ModelConfigurationUpsertRequest(
             name="gpt-5.1", is_visible=True, reasoning_effort_max=ReasoningEffort.HIGH
-        ).provided_model_settings()
+        )
+        merged_default = (
+            incoming.reasoning_effort_default
+            if incoming.reasoning_effort_default_provided
+            else stored_default
+        )
 
         ensure_default_within_max(
-            incoming.get("reasoning_effort_default", stored_default),
-            incoming.get("reasoning_effort_max", None),
+            merged_default,
+            incoming.reasoning_effort_max,
         )
 
     def test_default_equal_to_max_allowed(self) -> None:

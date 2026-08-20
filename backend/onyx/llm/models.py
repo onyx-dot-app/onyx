@@ -95,10 +95,10 @@ def resolve_reasoning_effort(
     AUTO is concretized before clamping because it maps to medium downstream,
     which would quietly exceed a cap of LOW.
     """
-    for candidate in (requested, default):
-        if candidate is not None and candidate != ReasoningEffort.AUTO:
-            effort = candidate
-            break
+    if requested != ReasoningEffort.AUTO:
+        effort = requested
+    elif default is not None and default != ReasoningEffort.AUTO:
+        effort = default
     else:
         if maximum is None:
             return ReasoningEffort.AUTO

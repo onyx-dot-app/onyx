@@ -37,13 +37,6 @@ if TYPE_CHECKING:
 
 T = TypeVar("T", "LLMProviderDescriptor", "LLMProviderView", "VisionProviderResponse")
 
-# Named identically on the upsert request and the model_configuration row.
-MODEL_SETTINGS_FIELDS = (
-    "reasoning_effort_max",
-    "reasoning_effort_default",
-    "temperature_default",
-)
-
 
 def ensure_default_within_max(
     default: ReasoningEffort | None, maximum: ReasoningEffort | None
@@ -277,14 +270,19 @@ class ModelConfigurationUpsertRequest(BaseModel):
         )
         return self
 
-    def provided_model_settings(self) -> dict[str, Any]:
-        """The settings this request carried. Absent stays distinct from an
-        explicit null, so an older client cannot clear an admin's cap."""
-        return {
-            field: getattr(self, field)
-            for field in MODEL_SETTINGS_FIELDS
-            if field in self.model_fields_set
-        }
+    # Provided distinguishes an omitted field from an explicit null, so an
+    # older client that omits the settings cannot clear an admin's cap.
+    @property
+    def reasoning_effort_max_provided(self) -> bool:
+        return "reasoning_effort_max" in self.model_fields_set
+
+    @property
+    def reasoning_effort_default_provided(self) -> bool:
+        return "reasoning_effort_default" in self.model_fields_set
+
+    @property
+    def temperature_default_provided(self) -> bool:
+        return "temperature_default" in self.model_fields_set
 
     @classmethod
     def from_model(
