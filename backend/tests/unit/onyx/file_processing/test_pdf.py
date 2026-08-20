@@ -4,11 +4,15 @@ Tests cover:
 - read_pdf_file: text extraction, metadata, encrypted PDFs, image extraction
 - pdf_to_text: convenience wrapper
 - is_pdf_protected: password protection detection
+- count_pdf_embedded_images + the shared image filter chain (dedup by object
+  identity, stencil masks, sub-content-size artifacts, inline images)
 
 Fixture PDFs live in ./fixtures/ and are pre-built so the test layer has no
-dependency on pypdf internals (pypdf.generic).
+dependency on pypdf internals; the image-bearing ones are regenerated with
+./fixtures/generate_image_fixtures.py.
 """
 
+import importlib.util
 from io import BytesIO
 from pathlib import Path
 
@@ -16,12 +20,9 @@ import pytest
 from pypdfium2 import PdfiumError
 
 from onyx.file_processing import extract_file_text
-from onyx.file_processing.extract_file_text import (
-    count_pdf_embedded_images,
-    pdf_to_text,
-    read_pdf_file,
-)
+from onyx.file_processing.extract_file_text import pdf_to_text, read_pdf_file
 from onyx.file_processing.password_validation import is_pdf_protected
+from onyx.file_processing.pdf_image_utils import count_pdf_embedded_images
 from onyx.utils.process_isolation import IsolatedProcessCrashed
 
 FIXTURES = Path(__file__).parent / "fixtures"
@@ -225,6 +226,45 @@ class TestCountPdfEmbeddedImages:
         pdf.seek(42)
         count_pdf_embedded_images(pdf, cap=10)
         assert pdf.tell() == 42
+
+
+# ── embedded-image filtering ─────────────────────────────────────────────
+
+
+class TestPdfImageFiltering:
+    """Count and extraction share one filter chain: unique image objects
+    only, minus stencil masks and sub-content-size artifacts."""
+
+    @pytest.mark.parametrize(
+        "fixture",
+        [
+            # 1 content image + 30 one-px-tall scanline strips
+            "shredded_strips.pdf",
+            # 1 content image + a content-sized /ImageMask stencil
+            "stencil_mask.pdf",
+            # 1 image referenced by 3 pages plus a nested form (6 references)
+            "shared_resources.pdf",
+            # one content-sized and one 4x4 inline (BI/ID/EI) image
+            "inline_image.pdf",
+        ],
+    )
+    def test_only_the_content_image_survives(self, fixture: str) -> None:
+        assert count_pdf_embedded_images(_load(fixture), cap=500) == 1
+        _, _, images = read_pdf_file(_load(fixture), extract_images=True)
+        assert len(images) == 1
+
+    def test_fixture_generator_runs(self, tmp_path: Path) -> None:
+        """The checked-in fixtures are a cache; regenerating them keeps the
+        generator's pypdf usage covered so a pypdf bump fails loudly here."""
+        spec = importlib.util.spec_from_file_location(
+            "generate_image_fixtures", FIXTURES / "generate_image_fixtures.py"
+        )
+        assert spec is not None and spec.loader is not None
+        module = importlib.util.module_from_spec(spec)
+        spec.loader.exec_module(module)
+        module.generate_all(tmp_path)
+        regenerated = BytesIO((tmp_path / "shredded_strips.pdf").read_bytes())
+        assert count_pdf_embedded_images(regenerated, cap=500) == 1
 
 
 # ── pdf_to_text ──────────────────────────────────────────────────────────

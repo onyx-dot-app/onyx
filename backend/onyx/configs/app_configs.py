@@ -1542,13 +1542,22 @@ MAX_FILE_SIZE_BYTES = int(
 # with thousands of embedded images can OOM the user-file-processing worker
 # because every image is decoded with PIL and then sent to the vision LLM.
 # Enforced both at upload time (rejects the file) and during extraction
-# (defense-in-depth: caps the number of images materialized).
+# (defense-in-depth: caps the number of images materialized). For PDFs the
+# count is of unique images that pass the content filters in
+# onyx/file_processing/pdf_image_utils.py.
 #
 # Clamped to >= 0; a negative env value would turn upload validation into
 # always-fail and extraction into always-stop, which is never desired. 0
 # disables image extraction entirely, which is a valid (if aggressive) setting.
 MAX_EMBEDDED_IMAGES_PER_FILE = max(
     0, int(os.environ.get("MAX_EMBEDDED_IMAGES_PER_FILE") or 500)
+)
+
+# Embedded PDF images narrower or shorter than this (px) are treated as
+# rendering artifacts (scanline strips, spacers, gradient tiles), not content,
+# and are skipped by both upload-time counting and extraction. 0 disables.
+MIN_EMBEDDED_IMAGE_DIMENSION_PX = max(
+    0, int(os.environ.get("MIN_EMBEDDED_IMAGE_DIMENSION_PX") or 16)
 )
 
 # Maximum embedded images allowed across all files in a single upload batch.
