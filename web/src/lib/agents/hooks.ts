@@ -25,32 +25,6 @@ import { useSettings } from "@/lib/settings/hooks";
 import useChatSessions from "@/hooks/useChatSessions";
 import { buildUpdateAgentPreferenceUrl } from "./utils";
 
-// ── Data fetching ─────────────────────────────────────────────────────────────
-
-/**
- * Fetches the full list of agents visible to the current user.
- * Results are deduplicated for 60 s and not revalidated on focus to avoid
- * redundant round-trips across the app.
- */
-export function useAgents() {
-  const { data, error, mutate } = useSWR<MinimalAgent[]>(
-    SWR_KEYS.agents,
-    errorHandlingFetcher,
-    {
-      revalidateOnFocus: false,
-      revalidateIfStale: false,
-      dedupingInterval: 60000,
-    }
-  );
-
-  return {
-    agents: data ?? [],
-    isLoading: !error && !data,
-    error,
-    refresh: mutate,
-  };
-}
-
 /**
  * Fetches a single agent by ID. Passing null skips the request entirely,
  * which is useful when the agent ID isn't known yet.
@@ -73,114 +47,6 @@ export function useAgent(agentId: number | null) {
     refresh: mutate,
   };
 }
-
-/**
- * Fetches agents for the admin panel. Supports optional server-side
- * pagination — when pageNum and pageSize are both provided, the response is
- * paginated and totalItems reflects the full count; otherwise all agents are
- * returned in a flat array.
- */
-export function useAdminAgents(
-  includeDeleted = false,
-  getEditable = false,
-  includeDefault = false,
-  pageNum?: number,
-  pageSize?: number
-) {
-  const usePagination = pageNum !== undefined && pageSize !== undefined;
-
-  const url = usePagination
-    ? buildApiPath(SWR_KEYS.adminAgents, {
-        include_deleted: includeDeleted,
-        get_editable: getEditable,
-        include_default: includeDefault,
-        page_num: pageNum,
-        page_size: pageSize,
-      })
-    : buildApiPath(SWR_KEYS.adminPersona, {
-        include_deleted: includeDeleted,
-        get_editable: getEditable,
-      });
-
-  const { data, error, isLoading, mutate } = useSWR<
-    Agent[] | PaginatedAgentsResponse
-  >(url, errorHandlingFetcher);
-
-  const agents = usePagination
-    ? (data as PaginatedAgentsResponse)?.items || []
-    : (data as Agent[]) || [];
-
-  const totalItems = usePagination
-    ? (data as PaginatedAgentsResponse)?.total_items || 0
-    : agents.length;
-
-  return { agents, totalItems, error, isLoading, refresh: mutate };
-}
-
-// ── Pinned agents ─────────────────────────────────────────────────────────────
-
-/**
- * Manages the user's pinned agent list with optimistic local state.
- * When the user has no explicit pins, falls back to featured agents
- * (excluding the default agent at id=0).
- */
-export function usePinnedAgents() {
-  const { user, refreshUser } = useUser();
-  const { agents, isLoading: isLoadingAgents } = useAgents();
-
-  const [localPinnedAgents, setLocalPinnedAgents] = useState<MinimalAgent[]>(
-    []
-  );
-
-  const serverPinnedAgents = useMemo(() => {
-    if (agents.length === 0) return [];
-    const pinnedIds = user?.preferences.pinned_assistants;
-    if (pinnedIds === null || pinnedIds === undefined) {
-      return agents.filter(
-        (agent) => agent.is_featured && agent.id !== DEFAULT_AGENT_ID
-      );
-    }
-    return pinnedIds
-      .map((id) => agents.find((agent) => agent.id === id))
-      .filter((agent): agent is MinimalAgent => !!agent);
-  }, [agents, user?.preferences.pinned_assistants]);
-
-  useEffect(() => {
-    if (agents.length > 0) {
-      setLocalPinnedAgents(serverPinnedAgents);
-    }
-  }, [serverPinnedAgents, agents.length]);
-
-  const togglePinnedAgent = useCallback(
-    async (agent: MinimalAgent, shouldPin: boolean) => {
-      const newPinned = shouldPin
-        ? [...localPinnedAgents, agent]
-        : localPinnedAgents.filter((a) => a.id !== agent.id);
-      setLocalPinnedAgents(newPinned);
-      await pinAgents(newPinned.map((a) => a.id));
-      refreshUser();
-    },
-    [localPinnedAgents, refreshUser]
-  );
-
-  const updatePinnedAgents = useCallback(
-    async (newPinnedAgents: MinimalAgent[]) => {
-      setLocalPinnedAgents(newPinnedAgents);
-      await pinAgents(newPinnedAgents.map((a) => a.id));
-      refreshUser();
-    },
-    [refreshUser]
-  );
-
-  return {
-    pinnedAgents: localPinnedAgents,
-    togglePinnedAgent,
-    updatePinnedAgents,
-    isLoading: isLoadingAgents,
-  };
-}
-
-// ── Agent resolution ──────────────────────────────────────────────────────────
 
 /**
  * The agent this chat is running on. There is no agent-less chat — every
@@ -253,6 +119,147 @@ export function useActiveAgent(): MinimalAgent | undefined {
 }
 
 /**
+ * Fetches agents for the admin panel.
+ *
+ * Supplying both `pageNum` and `pageSize` selects a different endpoint, not
+ * just a different query: paginated reads hit `/api/admin/agents` and report
+ * the full count in `totalItems`, while unpaginated reads hit
+ * `/api/admin/persona` and return every agent, with `totalItems` reduced to
+ * the array length.
+ *
+ * `includeDefault` only reaches the paginated endpoint. Unpaginated callers
+ * pass it and it is silently dropped.
+ */
+export function useAdminAgents(
+  includeDeleted = false,
+  getEditable = false,
+  includeDefault = false,
+  pageNum?: number,
+  pageSize?: number
+) {
+  const usePagination = pageNum !== undefined && pageSize !== undefined;
+
+  const url = usePagination
+    ? buildApiPath(SWR_KEYS.adminAgents, {
+        include_deleted: includeDeleted,
+        get_editable: getEditable,
+        include_default: includeDefault,
+        page_num: pageNum,
+        page_size: pageSize,
+      })
+    : buildApiPath(SWR_KEYS.adminPersona, {
+        include_deleted: includeDeleted,
+        get_editable: getEditable,
+      });
+
+  const { data, error, isLoading, mutate } = useSWR<
+    Agent[] | PaginatedAgentsResponse
+  >(url, errorHandlingFetcher);
+
+  const agents = usePagination
+    ? (data as PaginatedAgentsResponse)?.items || []
+    : (data as Agent[]) || [];
+
+  const totalItems = usePagination
+    ? (data as PaginatedAgentsResponse)?.total_items || 0
+    : agents.length;
+
+  return { agents, totalItems, error, isLoading, refresh: mutate };
+}
+
+/**
+ * Fetches the full list of agents visible to the current user.
+ * Results are deduplicated for 60 s and not revalidated on focus to avoid
+ * redundant round-trips across the app.
+ */
+export function useAgents() {
+  const { data, error, mutate } = useSWR<MinimalAgent[]>(
+    SWR_KEYS.agents,
+    errorHandlingFetcher,
+    {
+      revalidateOnFocus: false,
+      revalidateIfStale: false,
+      dedupingInterval: 60000,
+    }
+  );
+
+  return {
+    agents: data ?? [],
+    isLoading: !error && !data,
+    error,
+    refresh: mutate,
+  };
+}
+
+/**
+ * The agents pinned to the sidebar, and the writes that reorder or toggle them.
+ *
+ * A user who has never pinned anything gets the featured agents instead, minus
+ * the Assistant, which the sidebar never renders. That is a display fallback,
+ * not a saved list: it disappears the moment the user pins anything.
+ *
+ * Writes apply locally before the server confirms. That optimistic copy lives
+ * per hook instance rather than in shared state, so between a toggle and the
+ * user refresh that follows it, two components calling this hook can briefly
+ * disagree about what is pinned.
+ */
+export function usePinnedAgents() {
+  const { user, refreshUser } = useUser();
+  const { agents, isLoading: isLoadingAgents } = useAgents();
+
+  const [localPinnedAgents, setLocalPinnedAgents] = useState<MinimalAgent[]>(
+    []
+  );
+
+  const serverPinnedAgents = useMemo(() => {
+    if (agents.length === 0) return [];
+    const pinnedIds = user?.preferences.pinned_assistants;
+    if (pinnedIds === null || pinnedIds === undefined) {
+      return agents.filter(
+        (agent) => agent.is_featured && agent.id !== DEFAULT_AGENT_ID
+      );
+    }
+    return pinnedIds
+      .map((id) => agents.find((agent) => agent.id === id))
+      .filter((agent): agent is MinimalAgent => !!agent);
+  }, [agents, user?.preferences.pinned_assistants]);
+
+  useEffect(() => {
+    if (agents.length > 0) {
+      setLocalPinnedAgents(serverPinnedAgents);
+    }
+  }, [serverPinnedAgents, agents.length]);
+
+  const togglePinnedAgent = useCallback(
+    async (agent: MinimalAgent, shouldPin: boolean) => {
+      const newPinned = shouldPin
+        ? [...localPinnedAgents, agent]
+        : localPinnedAgents.filter((a) => a.id !== agent.id);
+      setLocalPinnedAgents(newPinned);
+      await pinAgents(newPinned.map((a) => a.id));
+      refreshUser();
+    },
+    [localPinnedAgents, refreshUser]
+  );
+
+  const updatePinnedAgents = useCallback(
+    async (newPinnedAgents: MinimalAgent[]) => {
+      setLocalPinnedAgents(newPinnedAgents);
+      await pinAgents(newPinnedAgents.map((a) => a.id));
+      refreshUser();
+    },
+    [refreshUser]
+  );
+
+  return {
+    pinnedAgents: localPinnedAgents,
+    togglePinnedAgent,
+    updatePinnedAgents,
+    isLoading: isLoadingAgents,
+  };
+}
+
+/**
  * Where "New Session" goes.
  *
  * Normally a bare new chat, which lands on the Assistant. With
@@ -268,12 +275,14 @@ export function useNewSessionHref(): string {
   return `/app?${SEARCH_PARAM_NAMES.AGENT_ID}=${activeAgent.id}`;
 }
 
-// ── Agent preferences ─────────────────────────────────────────────────────────
-
 /**
- * Fetches and updates per-user preferences for each agent (e.g. temperature
- * overrides, custom instructions). Applies an optimistic local update before
- * the server confirms to keep the UI responsive.
+ * Per-user, per-agent preferences — currently only which of an agent's tools
+ * the user has turned off.
+ *
+ * Writes apply locally first, then revalidate. A failed write is logged and
+ * swallowed rather than surfaced, so the optimistic value stands until the
+ * revalidation replaces it; callers wanting to report a failure need their own
+ * write path.
  */
 export function useAgentPreferences() {
   const { data, mutate } = useSWR<UserSpecificAgentPreferences>(
@@ -317,8 +326,15 @@ export function useAgentPreferences() {
   };
 }
 
-// ── Agent Labels ──────────────────────────────────────────────────────────────
-
+/**
+ * The agent label catalogue, plus create, rename, and delete.
+ *
+ * Reads come from the shared `/api/persona/labels` list; writes go to the
+ * admin routes and are therefore admin-only. Each mutation patches the cached
+ * list without revalidating, so a rejected request leaves the cache untouched
+ * rather than rolled back — callers get the raw `Response` to check, except
+ * `createLabel`, which returns null on failure.
+ */
 export function useAgentLabels() {
   const { mutate } = useSWRConfig();
   const { data: labels, error } = useSWR<AgentLabel[]>(
