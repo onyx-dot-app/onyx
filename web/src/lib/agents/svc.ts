@@ -131,6 +131,21 @@ export async function listAgent(
   }
 }
 
+/**
+ * Replaces the user's full ordered list of pinned agents. The order of the
+ * array determines sidebar display order. Throws on failure.
+ */
+export async function pinAgents(pinnedAgentIds: number[]): Promise<void> {
+  const res = await fetch(`/api/user/pinned-assistants`, {
+    method: "PATCH",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ ordered_assistant_ids: pinnedAgentIds }),
+  });
+  if (!res.ok) {
+    throw new Error("Failed to update pinned assistants");
+  }
+}
+
 // Sharing
 
 export interface AgentShareUpdatePayload {
@@ -225,7 +240,7 @@ export async function removeSelfFromAgentShares(
   }
 }
 
-// Display Order (admin)
+// Admin
 
 /**
  * Bulk-updates display order for agents in the admin panel. Used after
@@ -243,22 +258,5 @@ export async function updateAgentDisplayOrder(
     throw new Error(
       await parseErrorDetail(res, "Failed to update agent order")
     );
-  }
-}
-
-// Pinned agents
-
-/**
- * Replaces the user's full ordered list of pinned agents. The order of the
- * array determines sidebar display order. Throws on failure.
- */
-export async function pinAgents(pinnedAgentIds: number[]): Promise<void> {
-  const res = await fetch(`/api/user/pinned-assistants`, {
-    method: "PATCH",
-    headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({ ordered_assistant_ids: pinnedAgentIds }),
-  });
-  if (!res.ok) {
-    throw new Error("Failed to update pinned assistants");
   }
 }
