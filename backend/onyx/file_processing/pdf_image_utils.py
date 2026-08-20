@@ -5,9 +5,10 @@ enumerator and filter chain, so they can never disagree. Enumeration reads
 only metadata; pixel data is decoded solely for extracted images.
 """
 
+from abc import ABC, abstractmethod
 from collections import Counter
 from collections.abc import Iterator
-from typing import IO, Any, Protocol
+from typing import IO, Any
 
 from pydantic import BaseModel
 
@@ -31,22 +32,22 @@ class PdfImageRef(BaseModel):
     is_stencil_mask: bool
 
 
-class PdfImageFilter(Protocol):
+class PdfImageFilter(ABC):
     """Decides whether an enumerated image is content or an artifact."""
 
+    @abstractmethod
     def exclude_reason(self, ref: PdfImageRef) -> str | None:
         """Return why the image should be skipped, or None to keep it."""
-        ...
 
 
-class StencilMaskFilter:
+class StencilMaskFilter(PdfImageFilter):
     """Skips ``/ImageMask`` stencils: transparency masks for sibling images."""
 
     def exclude_reason(self, ref: PdfImageRef) -> str | None:
         return "stencil mask" if ref.is_stencil_mask else None
 
 
-class MinDimensionFilter:
+class MinDimensionFilter(PdfImageFilter):
     """Skips images under ``min_px`` in either dimension: scanline strips,
     spacers, and gradient tiles, which carry no readable content."""
 
