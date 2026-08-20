@@ -7,6 +7,11 @@ import requests
 
 from onyx.configs.app_configs import INDEX_BATCH_SIZE, REQUEST_TIMEOUT_SECONDS
 from onyx.configs.constants import DocumentSource
+from onyx.connectors.cross_connector_utils.rate_limit_wrapper import rl_requests
+from onyx.connectors.exceptions import (
+    CredentialExpiredError,
+    InsufficientPermissionsError,
+)
 from onyx.connectors.interfaces import (
     GenerateDocumentsOutput,
     LoadConnector,
@@ -37,9 +42,16 @@ class GitbookApiClient:
         }
 
         url = urljoin(GITBOOK_API_BASE, endpoint.lstrip("/"))
-        response = requests.get(
+        # rl_requests waits and retries on 429 (honoring Retry-After)
+        response = rl_requests.get(
             url, headers=headers, params=params, timeout=REQUEST_TIMEOUT_SECONDS
         )
+        if response.status_code == 401:
+            raise CredentialExpiredError("GitBook access token is invalid or expired")
+        if response.status_code == 403:
+            raise InsufficientPermissionsError(
+                "GitBook access token lacks permission for this content"
+            )
         response.raise_for_status()
         return response.json()
 
@@ -483,9 +495,23 @@ class GitbookConnector(LoadConnector, PollConnector):
                     if end and last_modified > end:
                         continue
 
-                current_batch.append(
-                    _convert_page_to_document(self.client, self.space_id, page)
-                )
+                try:
+                    document = _convert_page_to_document(
+                        self.client, self.space_id, page
+                    )
+                except requests.HTTPError as e:
+                    status = e.response.status_code if e.response is not None else None
+                    # only link/group pages without fetchable content 404; any
+                    # other error must fail the run rather than drop pages
+                    if status == 404:
+                        logger.warning(
+                            "Skipping GitBook page %s: no fetchable content (HTTP 404)",
+                            page.get("id"),
+                        )
+                        continue
+                    raise
+
+                current_batch.append(document)
 
                 if len(current_batch) >= self.batch_size:
                     yield current_batch
