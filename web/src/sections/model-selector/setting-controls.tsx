@@ -71,6 +71,8 @@ interface PaneSliderProps {
   max: number;
   step: number;
   disabled?: boolean;
+  /** 16px-tall variant matching the mock's popover sliders. */
+  compact?: boolean;
   onValueChange: (value: number) => void;
   onValueCommit: (value: number) => void;
 }
@@ -81,12 +83,16 @@ export function PaneSlider({
   max,
   step,
   disabled,
+  compact,
   onValueChange,
   onValueCommit,
 }: PaneSliderProps) {
   return (
     <SliderPrimitive.Root
-      className="relative flex h-7 w-full cursor-pointer touch-none select-none items-center"
+      className={cn(
+        "relative flex w-full cursor-pointer touch-none select-none items-center",
+        compact ? "h-4" : "h-7"
+      )}
       value={[value]}
       min={min}
       max={max}

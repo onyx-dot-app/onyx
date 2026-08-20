@@ -10,7 +10,7 @@ import SvgXOctagon from "@opal/icons/x-octagon";
 import type { IconFunctionComponent, RichStr } from "@opal/types";
 import { toPlainString } from "@opal/components/text/InlineMarkdown";
 import { cn } from "@opal/utils";
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useRef, useState, useImperativeHandle } from "react";
 
 // ---------------------------------------------------------------------------
 // Types
@@ -39,6 +39,10 @@ interface ContentMdPresetConfig {
   descriptionIndent: string;
 }
 
+export interface ContentMdEditHandle {
+  startEditing: () => void;
+}
+
 interface ContentMdProps {
   /** Optional icon component. */
   icon?: IconFunctionComponent;
@@ -61,6 +65,12 @@ interface ContentMdProps {
 
   /** Enable inline editing of the title. */
   editable?: boolean;
+
+  /** Hide the built-in pencil, for callers that trigger editing externally. */
+  hideEditButton?: boolean;
+
+  /** Handle for starting a title edit from an external control. */
+  editHandle?: React.Ref<ContentMdEditHandle>;
 
   /** Called when the user commits an edit. */
   onTitleChange?: (newTitle: string) => void;
@@ -152,6 +162,8 @@ function ContentMd({
   titleMaxLines,
   sizePreset = "main-ui",
   ref,
+  hideEditButton,
+  editHandle,
 }: ContentMdProps) {
   const [editing, setEditing] = useState(false);
   const [editValue, setEditValue] = useState(toPlainString(title));
@@ -168,6 +180,7 @@ function ContentMd({
     setEditValue(toPlainString(title));
     setEditing(true);
   }
+  useImperativeHandle(editHandle, () => ({ startEditing }), [title]);
 
   function commit() {
     const value = editValue.trim();
@@ -277,7 +290,7 @@ function ContentMd({
 
           {tag && <Tag {...tag} />}
 
-          {editable && !editing && (
+          {editable && !editing && !hideEditButton && (
             <div
               className={cn(
                 "opal-content-md-edit-button",

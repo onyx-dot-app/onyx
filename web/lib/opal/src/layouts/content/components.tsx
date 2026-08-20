@@ -15,6 +15,7 @@ import {
 } from "@opal/layouts/content/ContentLg";
 import {
   ContentMd,
+  type ContentMdEditHandle,
   type ContentMdProps,
 } from "@opal/layouts/content/ContentMd";
 import type { TagProps } from "@opal/components";
@@ -53,6 +54,12 @@ interface ContentBaseProps {
 
   /** Enable inline editing of the title. */
   editable?: boolean;
+
+  /** Hide the built-in pencil, for callers that trigger editing externally. */
+  hideEditButton?: boolean;
+
+  /** Handle for starting a title edit from an external control. */
+  editHandle?: React.Ref<ContentMdEditHandle>;
 
   /** Called when the user commits an edit. */
   onTitleChange?: (newTitle: string) => void;

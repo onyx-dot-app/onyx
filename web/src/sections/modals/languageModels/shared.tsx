@@ -55,6 +55,8 @@ import {
 import SvgOnyxLogo from "@opal/logos/onyx-logo";
 import { Card, EmptyMessageCard } from "@opal/components";
 import { ContentAction } from "@opal/layouts";
+import type { ContentMdEditHandle } from "@opal/layouts/content/ContentMd";
+import { SvgEdit } from "@opal/icons";
 import AgentAvatar from "@/refresh-components/avatars/AgentAvatar";
 import useUsers from "@/hooks/useUsers";
 import { Modal } from "@opal/components";
@@ -549,6 +551,7 @@ function ModelRow({
   onRename,
   onSettingsChange,
 }: ModelRowProps) {
+  const editHandle = useRef<ContentMdEditHandle>(null);
   const displayName =
     model.custom_display_name || model.display_name || model.name;
   // In auto mode every model is shown, so the row is always "selected" and the
@@ -562,7 +565,10 @@ function ModelRow({
   // toggle the model.
   const toggleFromRow = toggleVisibility
     ? (e: React.MouseEvent) => {
-        if ((e.target as HTMLElement).closest("button")) return;
+        const interactive = (e.target as HTMLElement).closest(
+          'button, input, textarea, [contenteditable="true"]'
+        );
+        if (interactive) return;
         toggleVisibility();
       }
     : undefined;
@@ -591,11 +597,12 @@ function ModelRow({
         }
       >
         <Interactive.Container width="full" size="fit" rounding="md">
-          <div className="w-full p-2">
+          <div className="w-full p-1.5">
             <ContentAction
               color="interactive"
               variant="section"
               sizePreset="main-ui"
+              center
               icon={() => <Checkbox checked={isSelected} />}
               title={displayName}
               description={buildModelDescription(model)}
@@ -608,6 +615,18 @@ function ModelRow({
                 >
                   {modelRightChildren(model)}
                   <Hoverable.Item group="model-row" variant="appear-on-hover">
+                    <Button
+                      icon={SvgEdit}
+                      prominence="internal"
+                      size="sm"
+                      tooltip="Rename"
+                      onClick={(e: React.MouseEvent) => {
+                        e.stopPropagation();
+                        editHandle.current?.startEditing();
+                      }}
+                    />
+                  </Hoverable.Item>
+                  <Hoverable.Item group="model-row" variant="appear-on-hover">
                     <ModelSettingsPopover
                       model={model}
                       onChange={onSettingsChange}
@@ -616,6 +635,8 @@ function ModelRow({
                 </OpalSection>
               }
               editable
+              hideEditButton
+              editHandle={editHandle}
               onTitleChange={(newTitle) => onRename(newTitle || undefined)}
               padding={0}
             />
