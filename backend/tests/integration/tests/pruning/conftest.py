@@ -1,4 +1,4 @@
-"""Fixtures for the web search integration suite."""
+"""Fixtures for the pruning integration suite."""
 
 import pytest
 
@@ -9,5 +9,5 @@ from tests.integration.common_utils.playwright_browser import (
 
 @pytest.fixture(scope="session", autouse=True)
 def _install_playwright() -> None:
-    """These tests exercise OnyxWebCrawler's Playwright fallback."""
+    """test_web_pruning indexes with the WEB connector, which uses Playwright."""
     install_chromium_headless_shell()
