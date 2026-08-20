@@ -108,7 +108,7 @@ tree**, so the PR branch must be checked out — a run on `main` says nothing
 about the bump.
 
 **If it exits non-zero, STOP.** Don't enqueue and don't try to work out whether
-the finding came from this bump or was already on `main` Report the advisory ids
+the finding came from this bump or was already on `main`. Report the advisory ids
 and let the user say how to proceed.
 
 Then, once clean:
