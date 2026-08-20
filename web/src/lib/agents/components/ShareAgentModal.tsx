@@ -121,7 +121,7 @@ async function refreshAgentShareCaches(agentId: number) {
   ]);
 }
 
-export default function ShareAgentModal({
+export function ShareAgentModal({
   agentId,
   draftShares = null,
   groupIds = [],

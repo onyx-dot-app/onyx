@@ -168,7 +168,7 @@ function AgentChatInput({ agent, onSubmit }: AgentChatInputProps) {
 export interface AgentViewerModalProps {
   agent: FullAgent;
 }
-export default function AgentViewerModal({ agent }: AgentViewerModalProps) {
+export function AgentViewerModal({ agent }: AgentViewerModalProps) {
   const agentViewerModal = useModal();
   const router = useRouter();
   const { allRecentFiles } = useProjectsContext();

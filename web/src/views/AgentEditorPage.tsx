@@ -93,9 +93,7 @@ import {
 import { useTierAtLeast } from "@/hooks/useTierAtLeast";
 import { Tier } from "@/lib/settings/types";
 import { ConfirmationModalLayout } from "@opal/layouts";
-import ShareAgentModal, {
-  ShareDraftState,
-} from "@/lib/agents/components/ShareAgentModal";
+import { ShareAgentModal, type ShareDraftState } from "@/lib/agents/components";
 import AgentKnowledgePane from "@/sections/knowledge/AgentKnowledgePane";
 import { Permission, ValidSources } from "@/lib/types";
 import { useSettings } from "@/lib/settings/hooks";
