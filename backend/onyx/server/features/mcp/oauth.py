@@ -201,40 +201,11 @@ def _absolute_token_expiry(tokens: OAuthToken) -> float | None:
     return time.time() + tokens.expires_in - TOKEN_EXPIRY_BUFFER_SECONDS
 
 
-async def _refresh_mcp_oauth_token_if_expired(
-    mcp_server: MCPServer,
-    connection_config_id: int,
-) -> str | None:
-    """Refresh an SSE-transport MCP server's OAuth token via the same
-    `OAuthClientProvider`/`OnyxTokenStorage` every other MCP OAuth path uses
-    (see `make_oauth_provider`) — the SDK's own httpx.Auth refresh can't run
-    over an open SSE stream, so this drives the provider's refresh step
-    directly instead of the full httpx.Auth flow. That gets client-auth-method
-    handling (`client_secret_basic` vs. `client_secret_post`) and token
-    persistence for free, instead of a second implementation to keep in sync.
-
-    Returns the `Authorization` header to use now, or `None` with no opinion
-    (no refresh token / client info) — caller falls back to its own header.
-    Raises on failure; caller treats that as non-fatal.
-    """
-    provider = make_oauth_provider(
-        mcp_server,
-        connection_config_id,
-        None,
-    )
-    tokens = await provider.refresh_access_token_if_expired()
-    if tokens is None:
-        return None
-    return f"{tokens.token_type} {tokens.access_token}"
-
-
 def refresh_mcp_oauth_token_if_expired(
     mcp_server: MCPServer,
     connection_config_id: int,
 ) -> str | None:
-    """Sync entry point for `_refresh_mcp_oauth_token_if_expired`, single-flighted
-    per connection-config row (via `cache_shared_lock`) so two racing refreshes
-    can't redeem — and burn — the same rotating refresh token.
+    """Refresh an MCP OAuth token, single-flighted per connection config.
 
     On contention the loser waits out the in-flight refresh (the wait outlasts a
     refresh POST) and returns the winner's freshly persisted header. Only if the
@@ -249,9 +220,17 @@ def refresh_mcp_oauth_token_if_expired(
             wait_for_lock_s=_REFRESH_LOCK_WAIT_S,
             logger=logger,
         ):
-            return run_async_sync_no_cancel(
-                _refresh_mcp_oauth_token_if_expired(mcp_server, connection_config_id)
+            provider = make_oauth_provider(
+                mcp_server,
+                connection_config_id,
+                None,
             )
+            tokens = run_async_sync_no_cancel(
+                provider.refresh_access_token_if_expired()
+            )
+            if tokens is None:
+                return None
+            return f"{tokens.token_type} {tokens.access_token}"
     except MCPRefreshSuperseded:
         logger.info("mcp_token_refresh.superseded config_id=%s", connection_config_id)
         return _persisted_auth_header(connection_config_id)
