@@ -1,9 +1,12 @@
-export { AgentButton, type AgentButtonProps } from "./AgentButton";
-export { NoAgentModal } from "./NoAgentModal";
-export { MoveCustomAgentChatModal } from "./MoveCustomAgentChatModal";
-export { AgentViewerModal } from "./AgentViewerModal";
+export {
+  AgentButton,
+  type AgentButtonProps,
+} from "@/lib/agents/components/AgentButton";
+export { NoAgentModal } from "@/lib/agents/components/NoAgentModal";
+export { MoveCustomAgentChatModal } from "@/lib/agents/components/MoveCustomAgentChatModal";
+export { AgentViewerModal } from "@/lib/agents/components/AgentViewerModal";
 export {
   ShareAgentModal,
   type ShareAgentModalProps,
   type ShareDraftState,
-} from "./ShareAgentModal";
+} from "@/lib/agents/components/ShareAgentModal";
