@@ -7,12 +7,11 @@ import useShareableGroups, {
 } from "@/hooks/useShareableGroups";
 import useShareableUsers from "@/hooks/useShareableUsers";
 import { toast } from "@opal/layouts";
-import { useAgent } from "@/lib/agents/hooks";
+import { useAgent, useUpdateAgentShares } from "@/lib/agents/hooks";
 import type { FullAgent, PersonaSharePermission } from "@/lib/agents/types";
 import {
   removeSelfFromAgentShares,
   transferAgentOwnership,
-  updateAgentShares,
 } from "@/lib/agents/svc";
 import { SWR_KEYS } from "@/lib/swr-keys";
 import { Permission, type MinimalUserSnapshot } from "@/lib/types";
@@ -55,8 +54,6 @@ import {
   TransferOwnershipTarget,
   TransferOwnershipView,
 } from "@/sections/modals/TransferOwnershipView";
-import { useTierAtLeast } from "@/hooks/useTierAtLeast";
-import { Tier } from "@/lib/settings/types";
 
 type ShareModalView = "share" | "transfer";
 
@@ -143,7 +140,7 @@ export default function ShareAgentModal({
   });
   const { data: shareableGroupsData } = useShareableGroups();
   const { isAdmin, user: currentUser, adminCapabilities } = useUser();
-  const isPaidEnterpriseFeaturesEnabled = useTierAtLeast(Tier.BUSINESS);
+  const updateAgentShares = useUpdateAgentShares();
 
   const shareableUsers = shareableUsersData ?? [];
   const transferableUsers = transferableUsersData ?? [];
@@ -431,27 +428,23 @@ export default function ShareAgentModal({
         return;
       }
 
-      const error = await updateAgentShares(
-        agentId,
-        {
-          group_shares: effectiveState.groupShares
-            .filter((share) => share.group_id !== agent?.owner_group?.id)
-            .map((share) => ({
-              group_id: share.group_id,
-              permission: share.permission,
-            })),
-          is_public: effectiveState.isPublic,
-          label_ids: labelIds.length > 0 ? labelIds : undefined,
-          public_permission: effectiveState.publicPermission,
-          user_shares: effectiveState.userShares
-            .filter((share) => share.user.id !== agent?.owner?.id)
-            .map((share) => ({
-              permission: share.permission,
-              user_id: share.user.id,
-            })),
-        },
-        isPaidEnterpriseFeaturesEnabled
-      );
+      const error = await updateAgentShares(agentId, {
+        group_shares: effectiveState.groupShares
+          .filter((share) => share.group_id !== agent?.owner_group?.id)
+          .map((share) => ({
+            group_id: share.group_id,
+            permission: share.permission,
+          })),
+        is_public: effectiveState.isPublic,
+        label_ids: labelIds.length > 0 ? labelIds : undefined,
+        public_permission: effectiveState.publicPermission,
+        user_shares: effectiveState.userShares
+          .filter((share) => share.user.id !== agent?.owner?.id)
+          .map((share) => ({
+            permission: share.permission,
+            user_id: share.user.id,
+          })),
+      });
 
       if (error) {
         toast.error(error);

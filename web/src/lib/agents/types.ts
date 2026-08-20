@@ -36,6 +36,21 @@ export interface AgentLabel {
 
 export type PersonaSharePermission = "EDITOR" | "VIEWER";
 
+/** The shares to write for an agent. Omitted fields are left untouched. */
+export interface AgentShareUpdatePayload {
+  user_shares?: {
+    user_id: string;
+    permission: PersonaSharePermission;
+  }[];
+  group_shares?: {
+    group_id: number;
+    permission: PersonaSharePermission;
+  }[];
+  is_public?: boolean;
+  public_permission?: PersonaSharePermission;
+  label_ids?: number[];
+}
+
 export type PersonaAccessLevel = "OWNER" | "EDITOR" | "VIEWER";
 
 export type PersonaSharingStatus = "PRIVATE" | "SHARED" | "PUBLIC";

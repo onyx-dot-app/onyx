@@ -5,6 +5,7 @@ import { useState, useEffect, useMemo, useCallback } from "react";
 import { SWR_KEYS } from "@/lib/swr-keys";
 import {
   AgentLabel,
+  AgentShareUpdatePayload,
   FullAgent,
   MinimalAgent,
   Agent,
@@ -16,7 +17,9 @@ import {
 } from "@/lib/types";
 import { errorHandlingFetcher } from "@/lib/fetcher";
 import { buildApiPath } from "@/lib/urlBuilder";
-import { pinAgents } from "@/lib/agents/svc";
+import { pinAgents, updateAgentShares } from "@/lib/agents/svc";
+import { useTierAtLeast } from "@/hooks/useTierAtLeast";
+import { Tier } from "@/lib/settings/types";
 import { useUser } from "@/providers/UserProvider";
 import { useSearchParams } from "next/navigation";
 import { SEARCH_PARAM_NAMES } from "@/app/app/services/searchParams";
@@ -412,4 +415,38 @@ export function useAgentLabels() {
     updateLabel,
     deleteLabel,
   };
+}
+
+/**
+ * Writes an agent's shares, dropping group shares the current plan does not
+ * allow rather than letting the caller decide.
+ *
+ * Group sharing needs a paid plan. That is a policy question, so it is answered
+ * here once instead of at each call site — the two callers previously derived
+ * it differently and could disagree. Returns an error string, a notice when
+ * group shares were dropped, or null.
+ */
+export function useUpdateAgentShares() {
+  const canShareWithGroups = useTierAtLeast(Tier.BUSINESS);
+
+  return useCallback(
+    async (
+      agentId: number,
+      payload: AgentShareUpdatePayload
+    ): Promise<string | null> => {
+      const dropped =
+        !canShareWithGroups && (payload.group_shares?.length ?? 0) > 0;
+
+      const error = await updateAgentShares(
+        agentId,
+        dropped ? { ...payload, group_shares: undefined } : payload
+      );
+      if (error) return error;
+
+      return dropped
+        ? "Group sharing requires a paid plan; group shares were not applied."
+        : null;
+    },
+    [canShareWithGroups]
+  );
 }

@@ -1,7 +1,7 @@
 import {
+  AgentShareUpdatePayload,
   AgentUpsertParameters,
   AgentUpsertRequest,
-  PersonaSharePermission,
 } from "@/lib/agents/types";
 
 /**
@@ -148,48 +148,25 @@ export async function pinAgents(pinnedAgentIds: number[]): Promise<void> {
 
 // Sharing
 
-export interface AgentShareUpdatePayload {
-  user_shares?: {
-    user_id: string;
-    permission: PersonaSharePermission;
-  }[];
-  group_shares?: {
-    group_id: number;
-    permission: PersonaSharePermission;
-  }[];
-  is_public?: boolean;
-  public_permission?: PersonaSharePermission;
-  label_ids?: number[];
-}
-
+/**
+ * Writes an agent's shares verbatim. Whether the caller is allowed to set
+ * `group_shares` is a plan question, so it is decided before the payload gets
+ * here — see {@link useUpdateAgentShares}, which is what callers should use.
+ * Returns an error string, or null on success.
+ */
 export async function updateAgentShares(
   agentId: number,
-  payload: AgentShareUpdatePayload,
-  isPaidEnterpriseFeaturesEnabled: boolean
+  payload: AgentShareUpdatePayload
 ): Promise<string | null> {
-  const groupSharesDiscarded =
-    !isPaidEnterpriseFeaturesEnabled &&
-    !!payload.group_shares &&
-    payload.group_shares.length > 0;
-
   try {
     const res = await fetch(`/api/persona/${agentId}/share`, {
       method: "PATCH",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({
-        ...payload,
-        group_shares: isPaidEnterpriseFeaturesEnabled
-          ? payload.group_shares
-          : undefined,
-      }),
+      body: JSON.stringify(payload),
       credentials: "include",
     });
 
-    if (res.ok) {
-      return groupSharesDiscarded
-        ? "Group sharing is an enterprise-only feature; group shares were not applied."
-        : null;
-    }
+    if (res.ok) return null;
 
     return await parseErrorDetail(res, "Failed to update agent shares");
   } catch {

@@ -84,14 +84,8 @@ import useFilter from "@/hooks/useFilter";
 import EnabledCount from "@/refresh-components/EnabledCount";
 import { useAppRouter } from "@/hooks/appNavigation";
 import { isDateInFuture } from "@/lib/dateUtils";
-import {
-  deleteAgent,
-  parseErrorDetail,
-  listAgent,
-  updateAgentShares,
-} from "@/lib/agents/svc";
-import { useTierAtLeast } from "@/hooks/useTierAtLeast";
-import { Tier } from "@/lib/settings/types";
+import { deleteAgent, parseErrorDetail, listAgent } from "@/lib/agents/svc";
+import { useUpdateAgentShares } from "@/lib/agents/hooks";
 import { ConfirmationModalLayout } from "@opal/layouts";
 import ShareAgentModal, {
   ShareDraftState,
@@ -560,7 +554,7 @@ export default function AgentEditorPage({
     ? can(existingAgent, "feature")
     : hasPermission(permissions, Permission.MANAGE_AGENTS);
   const { vectorDbEnabled } = useSettings();
-  const businessTier = useTierAtLeast(Tier.BUSINESS);
+  const updateAgentShares = useUpdateAgentShares();
 
   const agentDraftStorageKey = draftKey("agent-editor", "new");
   const clearAgentDraftRef = useRef<(() => void) | null>(null);
@@ -1010,22 +1004,18 @@ export default function AgentEditorPage({
       // agent existed (the create payload only carries viewer-level ids)
       if (!existingAgent && values.shared_draft) {
         const draft = values.shared_draft;
-        const shareError = await updateAgentShares(
-          agent.id,
-          {
-            user_shares: draft.userShares.map((share) => ({
-              user_id: share.user.id,
-              permission: share.permission,
-            })),
-            group_shares: draft.groupShares.map((share) => ({
-              group_id: share.group_id,
-              permission: share.permission,
-            })),
-            is_public: draft.isPublic,
-            public_permission: draft.publicPermission,
-          },
-          businessTier
-        );
+        const shareError = await updateAgentShares(agent.id, {
+          user_shares: draft.userShares.map((share) => ({
+            user_id: share.user.id,
+            permission: share.permission,
+          })),
+          group_shares: draft.groupShares.map((share) => ({
+            group_id: share.group_id,
+            permission: share.permission,
+          })),
+          is_public: draft.isPublic,
+          public_permission: draft.publicPermission,
+        });
         if (shareError) {
           toast.error(`Agent created, but sharing failed: ${shareError}`);
         }
