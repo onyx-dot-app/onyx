@@ -47,6 +47,7 @@ import {
   saveTokenLimits,
   saveGroupPermissions,
   setGroupManager,
+  refreshGroupLists,
 } from "./svc";
 import { SWR_KEYS } from "@/lib/swr-keys";
 import SharedGroupResources from "@/views/admin/GroupsPage/SharedGroupResources";
@@ -266,7 +267,7 @@ function EditGroupPage({ groupId }: EditGroupPageProps) {
       setPendingManagerIds((prev) => new Set(prev).add(userId));
       try {
         await setGroupManager(groupId, userId, makeManager);
-        await mutate(SWR_KEYS.adminUserGroupsWithDefault);
+        await refreshGroupLists(mutate);
         toast.success(makeManager ? "Manager assigned" : "Manager revoked");
       } catch (err) {
         console.error("Failed to update manager:", err);
@@ -452,7 +453,7 @@ function EditGroupPage({ groupId }: EditGroupPageProps) {
       initialAgentIdsRef.current = selectedAgentIds;
       initialDocSetIdsRef.current = selectedDocSetIds;
 
-      mutate(SWR_KEYS.adminUserGroupsWithDefault);
+      refreshGroupLists(mutate);
       mutate(SWR_KEYS.userGroupTokenRateLimit(groupId));
       if (canEditPermissions) {
         mutate(SWR_KEYS.userGroupPermissions(groupId));
@@ -473,7 +474,7 @@ function EditGroupPage({ groupId }: EditGroupPageProps) {
     setIsDeleting(true);
     try {
       await deleteGroup(groupId);
-      mutate(SWR_KEYS.adminUserGroupsWithDefault);
+      refreshGroupLists(mutate);
       toast.success(`Group "${group?.name}" deleted`);
       router.push("/admin/groups");
     } catch (e) {
