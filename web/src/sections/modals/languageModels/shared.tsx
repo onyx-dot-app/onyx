@@ -569,11 +569,15 @@ function ModelRow({
   const toggleVisibility = isAutoMode
     ? undefined
     : () => onToggleVisibility(!model.is_visible);
+  // A click that blurs and commits an inline rename reaches the row after the
+  // edit input unmounts, so the input's presence is sampled at pointerdown.
+  const renamingAtPointerDown = useRef(false);
   // The row is clickable, but it also hosts real buttons (rename, settings).
   // Their clicks, including ones the browser synthesizes from Enter, must not
   // toggle the model.
   const toggleFromRow = toggleVisibility
     ? (e: React.MouseEvent) => {
+        if (renamingAtPointerDown.current) return;
         const interactive = (e.target as HTMLElement).closest(
           'button, input, textarea, [contenteditable="true"]'
         );
@@ -591,6 +595,10 @@ function ModelRow({
       <Interactive.Stateful
         variant="select-heavy"
         state={isSelected ? "selected" : "empty"}
+        onPointerDownCapture={(e: React.PointerEvent) => {
+          renamingAtPointerDown.current =
+            e.currentTarget.querySelector("input") != null;
+        }}
         onClick={toggleFromRow}
         role={toggleVisibility ? "button" : undefined}
         tabIndex={toggleVisibility ? 0 : undefined}
