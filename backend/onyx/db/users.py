@@ -1,9 +1,11 @@
+import hashlib
+import struct
 from collections.abc import Callable, Sequence
 from typing import Any
 from uuid import UUID
 
 from fastapi_users.password import PasswordHelper
-from sqlalchemy import Select, case, delete, func, literal, select, update
+from sqlalchemy import Select, case, delete, func, literal, select, text, update
 from sqlalchemy.dialects.postgresql import insert as pg_insert
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session, lazyload, selectinload
@@ -40,11 +42,16 @@ from onyx.error_handling.exceptions import OnyxError
 from onyx.server.models import UserGroupInfo
 from onyx.utils.logger import setup_logger
 from onyx.utils.variable_functionality import fetch_ee_implementation_or_noop
+from shared_configs.contextvars import get_current_tenant_id
 
 logger = setup_logger()
 
 DEFAULT_ADMIN_GROUP_NAME = "Admin"
 DEFAULT_BASIC_GROUP_NAME = "Basic"
+
+# tenant-hashed so tenants don't block each other and the id can't collide with
+# the other advisory locks in the codebase
+_ADMIN_MEMBERSHIP_LOCK_NAMESPACE = "onyx_admin_membership_lock"
 
 
 def is_limited_user(user: User) -> bool:
@@ -145,6 +152,29 @@ def another_admin_survives(
     return db_session.scalar(stmt) is not None
 
 
+def _admin_membership_lock_id(tenant_id: str) -> int:
+    digest = hashlib.sha256(
+        f"{_ADMIN_MEMBERSHIP_LOCK_NAMESPACE}:{tenant_id}".encode()
+    ).digest()
+    # pg_advisory_xact_lock takes a signed 8-byte int.
+    return struct.unpack("q", digest[:8])[0]
+
+
+def _lock_admin_membership(db_session: Session) -> None:
+    """Serialize admin removals tenant-wide; released on the caller's commit.
+
+    Unlocked, two admins demoting each other concurrently each read the other as
+    the surviving admin and both commit, leaving zero. The caller must delete
+    inside the same transaction so check and write are one critical section."""
+    # Bounded wait: a wedged holder should fail fast, not hang the request.
+    db_session.execute(text("SET LOCAL lock_timeout = '10s'"))
+    db_session.execute(
+        text("SELECT pg_advisory_xact_lock(:lock_id)"),
+        {"lock_id": _admin_membership_lock_id(get_current_tenant_id())},
+    )
+    db_session.execute(text("SET LOCAL lock_timeout = DEFAULT"))
+
+
 def assert_admin_access_survives_removal(
     db_session: Session,
     actor: User,
@@ -162,6 +192,8 @@ def assert_admin_access_survives_removal(
             OnyxErrorCode.INVALID_INPUT,
             "You can't remove yourself from the admin group. Ask another admin to do it.",
         )
+
+    _lock_admin_membership(db_session)
 
     if not another_admin_survives(db_session, group_id, removed_user_ids):
         raise OnyxError(
