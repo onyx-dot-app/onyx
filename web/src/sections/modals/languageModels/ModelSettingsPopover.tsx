@@ -1,6 +1,6 @@
 "use client";
 
-import { useCallback, useState } from "react";
+import { useState } from "react";
 import { Button, Popover, Text, Tooltip } from "@opal/components";
 import { SvgBarChart, SvgCode, SvgSliders, SvgThermometer } from "@opal/icons";
 import { Section } from "@opal/layouts";
@@ -148,12 +148,6 @@ export function ModelSettingsPopover({
   onChange,
 }: ModelSettingsPopoverProps) {
   const [open, setOpen] = useState(false);
-  // Portal into the dialog. Left on body, the popover sits outside the modal's
-  // focus scope and a click inside it reads as a click outside the modal.
-  const [container, setContainer] = useState<HTMLElement | null>(null);
-  const anchorRef = useCallback((el: HTMLElement | null) => {
-    setContainer(el?.closest<HTMLElement>('[role="dialog"]') ?? null);
-  }, []);
 
   const supportedStop = maxReasoningStop(model.supported_reasoning_efforts);
   // No supported levels means the model takes no effort parameter at all.
@@ -203,10 +197,12 @@ export function ModelSettingsPopover({
   }
 
   return (
-    <Popover open={open} onOpenChange={setOpen}>
+    // A modal popover keeps clicks and focus inside it away from the host
+    // dialog's dismiss and focus-trap layers, without portaling into the
+    // dialog box, which gave the dialog its own scrollbar.
+    <Popover open={open} onOpenChange={setOpen} modal>
       <Popover.Trigger asChild>
         <Button
-          ref={anchorRef}
           icon={SvgSliders}
           prominence="internal"
           size="sm"
@@ -214,7 +210,7 @@ export function ModelSettingsPopover({
           onClick={(e: React.MouseEvent) => e.stopPropagation()}
         />
       </Popover.Trigger>
-      <Popover.Content width="fit" container={container} align="end">
+      <Popover.Content width="fit" align="end">
         <Section alignItems="stretch" width={17} height="auto" gap={0.25}>
           {/* raw-ok: mock header needs 10px/8px asymmetric padding, and Section silences px-* */}
           <div className="flex w-full flex-col justify-center px-2.5 py-2">
