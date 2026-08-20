@@ -1,7 +1,5 @@
 import ast
 import os
-import platform
-import shutil
 import subprocess
 from collections.abc import Callable, Generator
 from pathlib import Path
@@ -126,26 +124,6 @@ def _run_migrations() -> None:
         os.path.join(BACKEND_DIR, cfg.get_main_option("script_location") or "alembic"),
     )
     command.upgrade(cfg, "head")
-
-
-@pytest.fixture(scope="session", autouse=True)
-def _install_playwright(_run_migrations: None) -> None:  # noqa: ARG001
-    # web_search tests exercise OnyxWebCrawler's Playwright fallback. The
-    # devcontainer ships the apt deps; download the chromium binary here so
-    # the version tracks the lockfile's playwright-python. Playwright has no
-    # ubuntu26.04 build yet, so pin to the binary-compatible 24.04 build.
-    # Skipped in onyx-lite (no web_search) and where Playwright isn't on PATH.
-    if os.getenv("DISABLE_VECTOR_DB", "false").lower() == "true":
-        return
-
-    if shutil.which("playwright") is None:
-        return
-
-    machine = platform.machine().lower()
-    pw_arch = "x64" if machine in ("x86_64", "amd64") else "arm64"
-    env = os.environ.copy()
-    env["PLAYWRIGHT_HOST_PLATFORM_OVERRIDE"] = f"ubuntu24.04-{pw_arch}"
-    subprocess.run(["playwright", "install", "chromium"], env=env, check=True)
 
 
 @pytest.fixture(scope="session", autouse=True)
@@ -317,7 +295,6 @@ def _start_celery_workers(
 def _test_client(
     initialize_db: None,  # noqa: ARG001
     _start_celery_workers: None,  # noqa: ARG001
-    _install_playwright: None,  # noqa: ARG001
 ) -> Generator[TestClient, None, None]:
     # In-process api_server. Use the versioned dispatcher so MT / EE
     # builds get ee.onyx.main.get_application — that's the one that
