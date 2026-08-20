@@ -12,8 +12,10 @@ import (
 	"path/filepath"
 	"sort"
 	"strings"
+	"sync"
 	"time"
 
+	"github.com/charlievieth/fastwalk"
 	log "github.com/sirupsen/logrus"
 	"github.com/spf13/cobra"
 
@@ -239,7 +241,9 @@ func libNeedsBuild(pkgDir string) (bool, string) {
 // directories named in excludeDirs and hidden entries.
 func newestMtime(root string, excludeDirs map[string]bool) (time.Time, error) {
 	var newest time.Time
-	err := filepath.WalkDir(root, func(path string, d fs.DirEntry, err error) error {
+	// fastwalk runs the callback on several goroutines, so guard the running max.
+	var mu sync.Mutex
+	err := fastwalk.Walk(nil, root, func(path string, d fs.DirEntry, err error) error {
 		if err != nil {
 			return err
 		}
@@ -254,9 +258,11 @@ func newestMtime(root string, excludeDirs map[string]bool) (time.Time, error) {
 		if err != nil {
 			return err
 		}
+		mu.Lock()
 		if info.ModTime().After(newest) {
 			newest = info.ModTime()
 		}
+		mu.Unlock()
 		return nil
 	})
 	return newest, err

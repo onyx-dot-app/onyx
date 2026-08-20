@@ -325,6 +325,95 @@ Check that specified modules are only lazily imported (used for keeping backend 
 ods check-lazy-imports
 ```
 
+### `fmt` - Format Sources
+
+Also available as `ods format`.
+
+#### `fmt tf` - Format Terraform
+
+Rewrite Terraform files into the canonical HCL style. Also available as
+`ods fmt terraform`.
+
+```shell
+ods fmt tf [paths...]
+```
+
+This applies the same formatter as `terraform fmt`, so the output matches
+terraform byte for byte, but no terraform binary is needed. A file that does not
+parse is reported and left alone.
+
+Files and directories may be given to limit the run. With no arguments, the
+whole repository is scanned. Vendored trees (`.terraform`, `node_modules`,
+`.venv`) are always skipped.
+
+**Flags:**
+
+| Flag | Default | Description |
+|------|---------|-------------|
+| `--check` | `false` | Report unformatted files without rewriting them |
+
+**Examples:**
+
+```shell
+# Format every .tf file in the repository
+ods fmt tf
+
+# Format one subtree
+ods fmt tf deployment/terraform
+
+# Report unformatted files, change nothing
+ods fmt tf --check
+```
+
+The command exits non-zero when a file was rewritten or failed to parse, which
+is how the `terraform-fmt` pre-commit hook gates a commit.
+
+### `lint` - Run Linters
+
+#### `lint tf` - Check Published Terraform
+
+Check published Terraform modules for values that must stay internal. Also
+available as `ods lint terraform`.
+
+```shell
+ods lint tf [paths...]
+```
+
+The modules under `deployment/terraform` are published, but they stay in sync
+with the infrastructure Onyx runs. That makes it easy to carry an internal value
+across by accident -- an office IP in a variable default is the case this check
+was written for.
+
+The check looks for objective patterns only:
+
+| Rule | Fails on |
+|------|----------|
+| `access_key` | AWS access key ids (`AKIA…`, `ASIA…`) |
+| `email` | Email addresses |
+| `cidr` | Routable IPv4 CIDRs; private and reserved ranges pass |
+| `account_id` | 12-digit values that look like AWS account ids |
+
+It cannot screen for customer names, because listing them here would leak them;
+that stays a review step.
+
+Add a trailing `# public-safe: ok` comment to accept a specific line.
+
+Files and directories may be given to limit the check. With no arguments,
+`deployment/terraform` is scanned.
+
+**Examples:**
+
+```shell
+# Check all published modules
+ods lint tf
+
+# Check one subtree
+ods lint tf deployment/terraform/modules/aws
+
+# Check a single file
+ods lint tf deployment/terraform/modules/aws/vpc/main.tf
+```
+
 ### `audit` - Audit Dependencies for Vulnerabilities
 
 Scan the JavaScript (`bun.lock`) and Python (`uv.lock`) lockfiles via
