@@ -1,4 +1,5 @@
 from datetime import datetime, timezone
+from enum import StrEnum
 from typing import Any
 from urllib.parse import urljoin
 
@@ -46,15 +47,51 @@ class GitbookApiClient:
         return self.get(f"/spaces/{space_id}/content/page/{page_id}")
 
 
+class BlockType(StrEnum):
+    """GitBook document block types the renderer handles explicitly.
+
+    Types not listed here fall back to rendering children and fragments."""
+
+    HEADING_1 = "heading-1"
+    HEADING_2 = "heading-2"
+    HEADING_3 = "heading-3"
+    HEADING_4 = "heading-4"
+    HEADING_5 = "heading-5"
+    HEADING_6 = "heading-6"
+    PARAGRAPH = "paragraph"
+    LIST_UNORDERED = "list-unordered"
+    LIST_ORDERED = "list-ordered"
+    LIST_TASKS = "list-tasks"
+    CODE = "code"
+    CODE_LINE = "code-line"
+    BLOCKQUOTE = "blockquote"
+    HINT = "hint"
+    TABS_ITEM = "tabs-item"
+    TABLE = "table"
+    EMBED = "embed"
+    MATH = "math"
+    MATH_BLOCK = "math-block"
+    DIVIDER = "divider"
+
+
+class InlineType(StrEnum):
+    LINK = "link"
+    MATH = "math"
+    INLINE_MATH = "inline-math"
+    EMOJI = "emoji"
+
+
 _HEADING_PREFIXES = {
-    "heading-1": "#",
-    "heading-2": "##",
-    "heading-3": "###",
-    "heading-4": "####",
-    "heading-5": "#####",
-    "heading-6": "######",
+    BlockType.HEADING_1: "#",
+    BlockType.HEADING_2: "##",
+    BlockType.HEADING_3: "###",
+    BlockType.HEADING_4: "####",
+    BlockType.HEADING_5: "#####",
+    BlockType.HEADING_6: "######",
 }
-_LIST_TYPES = {"list-unordered", "list-ordered", "list-tasks"}
+_LIST_TYPES = frozenset(
+    {BlockType.LIST_UNORDERED, BlockType.LIST_ORDERED, BlockType.LIST_TASKS}
+)
 
 
 def _render_leaves(text_node: dict[str, Any]) -> str:
@@ -71,15 +108,15 @@ def _render_inline(node: dict[str, Any]) -> str:
     data = node.get("data") or {}
     text = _render_inline_nodes(node.get("nodes", []))
 
-    if inline_type == "link":
+    if inline_type == InlineType.LINK:
         ref = data.get("ref") or {}
         url = ref.get("url", "") if isinstance(ref, dict) else ""
         if url and text:
             return f"[{text}]({url})"
         return text or url
-    if inline_type in ("math", "inline-math"):
+    if inline_type in (InlineType.MATH, InlineType.INLINE_MATH):
         return str(data.get("formula", "")) or text
-    if inline_type == "emoji":
+    if inline_type == InlineType.EMOJI:
         code = data.get("code", "")
         if isinstance(code, str) and code:
             try:
@@ -137,9 +174,9 @@ def _render_list(node: dict[str, Any], depth: int) -> str:
         if not isinstance(item, dict):
             continue
 
-        if list_type == "list-ordered":
+        if list_type == BlockType.LIST_ORDERED:
             marker = f"{position}. "
-        elif list_type == "list-tasks":
+        elif list_type == BlockType.LIST_TASKS:
             checked = bool((item.get("data") or {}).get("checked", False))
             marker = "- [x] " if checked else "- [ ] "
         else:
@@ -151,7 +188,7 @@ def _render_list(node: dict[str, Any], depth: int) -> str:
         for child in item.get("nodes", []):
             if not isinstance(child, dict):
                 continue
-            if not marker_consumed and child.get("type") == "paragraph":
+            if not marker_consumed and child.get("type") == BlockType.PARAGRAPH:
                 marker_text = _render_inline_nodes(child.get("nodes", [])).strip()
                 marker_consumed = True
             else:
@@ -287,47 +324,47 @@ def _render_block(node: dict[str, Any], depth: int) -> str:
         text = _render_inline_nodes(node.get("nodes", [])).strip()
         return f"{_HEADING_PREFIXES[block_type]} {text}\n\n" if text else ""
 
-    if block_type == "paragraph":
+    if block_type == BlockType.PARAGRAPH:
         text = _render_inline_nodes(node.get("nodes", [])).strip()
         return f"{text}\n\n" if text else ""
 
     if block_type in _LIST_TYPES:
         return _render_list(node, depth)
 
-    if block_type == "code":
+    if block_type == BlockType.CODE:
         syntax = str(data.get("syntax", ""))
         lines = [
             _render_inline_nodes(line.get("nodes", []))
             for line in node.get("nodes", [])
-            if isinstance(line, dict) and line.get("type") == "code-line"
+            if isinstance(line, dict) and line.get("type") == BlockType.CODE_LINE
         ]
         return f"```{syntax}\n" + "\n".join(lines) + "\n```\n\n"
 
-    if block_type == "blockquote":
+    if block_type == BlockType.BLOCKQUOTE:
         return _quote_lines(_render_children(node, depth))
 
-    if block_type == "hint":
+    if block_type == BlockType.HINT:
         style = str(data.get("style", ""))
         label = f"[!{style.upper()}]\n" if style else ""
         return _quote_lines(label + _render_children(node, depth).strip("\n"))
 
-    if block_type == "tabs-item":
+    if block_type == BlockType.TABS_ITEM:
         title = str(data.get("title", ""))
         return (f"**{title}**\n\n" if title else "") + _render_children(node, depth)
 
-    if block_type == "table":
+    if block_type == BlockType.TABLE:
         return _render_table(node)
 
-    if block_type == "embed":
+    if block_type == BlockType.EMBED:
         url = str(data.get("url", ""))
         caption = _render_fragments(node, depth)
         return (f"{url}\n\n" if url else "") + caption
 
-    if block_type in ("math", "math-block"):
+    if block_type in (BlockType.MATH, BlockType.MATH_BLOCK):
         formula = str(data.get("formula", ""))
         return f"{formula}\n\n" if formula else ""
 
-    if block_type == "divider":
+    if block_type == BlockType.DIVIDER:
         return "---\n\n"
 
     # containers (tabs, expandable, columns, images, files, ...) and unknown
