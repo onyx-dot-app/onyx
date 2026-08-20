@@ -12,7 +12,7 @@ import AgentAvatar from "@/refresh-components/avatars/AgentAvatar";
 import type { Agent } from "@/lib/agents/types";
 import { useAdminAgents } from "@/lib/agents/hooks";
 import AgentRowActions from "@/views/admin/AgentsPage/AgentRowActions";
-import { updateAgentDisplayPriorities } from "@/lib/agents/svc";
+import { updateAgentDisplayOrder } from "@/lib/agents/svc";
 import { SvgUser } from "@opal/icons";
 import { DEFAULT_PAGE_SIZE } from "@/lib/constants";
 import { Section } from "@/layouts/general-layouts";
@@ -131,7 +131,7 @@ export default function AgentsTable() {
     changedOrders: Record<string, number>
   ) {
     try {
-      await updateAgentDisplayPriorities(changedOrders);
+      await updateAgentDisplayOrder(changedOrders);
       refresh();
     } catch (err) {
       toast.error(

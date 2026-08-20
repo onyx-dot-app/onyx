@@ -50,7 +50,7 @@ export async function parseErrorDetail(res: Response, fallback: string) {
   }
 }
 
-// ── Agent CRUD ───────────────────────────────────────────────────────────────
+// Agent CRUD
 
 /**
  * Creates a new agent. Returns the raw Response so the caller can read the
@@ -72,10 +72,10 @@ export async function createAgent(
  * inspect the updated fields.
  */
 export async function updateAgent(
-  id: number,
+  agentId: number,
   params: AgentUpsertParameters
 ): Promise<Response> {
-  return fetch(`/api/persona/${id}`, {
+  return fetch(`/api/persona/${agentId}`, {
     method: "PATCH",
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify(buildAgentUpsertRequest(params)),
@@ -94,65 +94,44 @@ export async function deleteAgent(agentId: number): Promise<void> {
   }
 }
 
-/**
- * Uploads an agent avatar image. Returns the server-assigned file ID on
- * success, or null if the upload fails.
- */
-export async function uploadFile(file: File): Promise<string | null> {
-  const formData = new FormData();
-  formData.append("file", file);
-  const res = await fetch("/api/admin/persona/upload-image", {
-    method: "POST",
-    body: formData,
+/** Flips the agent's featured status. Admin-only. Throws on failure. */
+export async function featureAgent(
+  agentId: number,
+  shouldFeature: boolean
+): Promise<void> {
+  const res = await fetch(`/api/admin/persona/${agentId}/featured`, {
+    method: "PATCH",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ is_featured: shouldFeature }),
     credentials: "include",
   });
   if (!res.ok) {
-    return null;
+    throw new Error(
+      await parseErrorDetail(res, "Failed to toggle featured status")
+    );
   }
-  return ((await res.json()) as { file_id: string }).file_id;
 }
-
-// ── Sharing & visibility ─────────────────────────────────────────────────────
 
 /**
- * Updates the agent's sharing settings (users, groups, public flag, labels).
- * Group sharing is EE-only — groupIds are silently dropped when enterprise
- * features are disabled. Returns an error string on failure, null on success.
+ * Flips the agent's listed status. Unlisted agents are hidden from the
+ * explore list but remain accessible via direct link. Throws on failure.
  */
-export async function updateAgentSharedStatus(
+export async function listAgent(
   agentId: number,
-  userIds: string[],
-  groupIds: number[],
-  isPublic: boolean | undefined,
-  isPaidEnterpriseFeaturesEnabled: boolean,
-  labelIds?: number[]
-): Promise<string | null> {
-  const groupSharesDiscarded =
-    !isPaidEnterpriseFeaturesEnabled && groupIds.length > 0;
-
-  try {
-    const res = await fetch(`/api/persona/${agentId}/share`, {
-      method: "PATCH",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({
-        user_ids: userIds,
-        group_ids: isPaidEnterpriseFeaturesEnabled ? groupIds : undefined,
-        is_public: isPublic,
-        label_ids: labelIds,
-      }),
-    });
-    if (res.ok) {
-      return groupSharesDiscarded
-        ? "Group sharing is an enterprise-only feature; groups were not added."
-        : null;
-    }
-    return (
-      ((await res.json()) as { detail?: string }).detail ?? "Unknown error"
-    );
-  } catch {
-    return "Network error. Please check your connection and try again.";
+  shouldList: boolean
+): Promise<void> {
+  const res = await fetch(`/api/admin/persona/${agentId}/listed`, {
+    method: "PATCH",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ is_listed: shouldList }),
+    credentials: "include",
+  });
+  if (!res.ok) {
+    throw new Error(await parseErrorDetail(res, "Failed to toggle visibility"));
   }
 }
+
+// Sharing
 
 export interface AgentShareUpdatePayload {
   user_shares?: {
@@ -171,6 +150,8 @@ export interface AgentShareUpdatePayload {
 export async function updateAgentShares(
   agentId: number,
   payload: AgentShareUpdatePayload,
+  // Passed in rather than read here: this is a plain async service function,
+  // so it cannot call the hook that answers it.
   isPaidEnterpriseFeaturesEnabled: boolean
 ): Promise<string | null> {
   const groupSharesDiscarded =
@@ -246,73 +227,13 @@ export async function removeSelfFromAgentShares(
   }
 }
 
-// ── Featured / listed / display priority ─────────────────────────────────────
-
-/**
- * Sets the agent's featured status. Admin-only endpoint.
- * Returns an error string on failure, null on success.
- */
-export async function updateAgentFeaturedStatus(
-  agentId: number,
-  isFeatured: boolean
-): Promise<string | null> {
-  try {
-    const res = await fetch(`/api/admin/persona/${agentId}/featured`, {
-      method: "PATCH",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ is_featured: isFeatured }),
-    });
-    if (res.ok) return null;
-    return (
-      ((await res.json()) as { detail?: string }).detail ?? "Unknown error"
-    );
-  } catch {
-    return "Network error. Please check your connection and try again.";
-  }
-}
-
-/** Flips the agent's featured status. Admin-only. Throws on failure. */
-export async function toggleAgentFeatured(
-  agentId: number,
-  currentlyFeatured: boolean
-): Promise<void> {
-  const res = await fetch(`/api/admin/persona/${agentId}/featured`, {
-    method: "PATCH",
-    headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({ is_featured: !currentlyFeatured }),
-    credentials: "include",
-  });
-  if (!res.ok) {
-    throw new Error(
-      await parseErrorDetail(res, "Failed to toggle featured status")
-    );
-  }
-}
-
-/**
- * Flips the agent's listed status. Unlisted agents are hidden from the
- * explore list but remain accessible via direct link. Throws on failure.
- */
-export async function toggleAgentListed(
-  agentId: number,
-  currentlyListed: boolean
-): Promise<void> {
-  const res = await fetch(`/api/admin/persona/${agentId}/listed`, {
-    method: "PATCH",
-    headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({ is_listed: !currentlyListed }),
-    credentials: "include",
-  });
-  if (!res.ok) {
-    throw new Error(await parseErrorDetail(res, "Failed to toggle visibility"));
-  }
-}
+// Display Order (admin)
 
 /**
  * Bulk-updates display order for agents in the admin panel. Used after
  * drag-and-drop reordering. Throws on failure.
  */
-export async function updateAgentDisplayPriorities(
+export async function updateAgentDisplayOrder(
   displayPriorityMap: Record<string, number>
 ): Promise<void> {
   const res = await fetch("/api/admin/agents/display-priorities", {
@@ -327,7 +248,7 @@ export async function updateAgentDisplayPriorities(
   }
 }
 
-// ── Pinned agents ─────────────────────────────────────────────────────────────
+// Pinned agents
 
 /**
  * Replaces the user's full ordered list of pinned agents. The order of the

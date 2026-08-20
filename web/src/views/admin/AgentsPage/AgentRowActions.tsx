@@ -21,11 +21,7 @@ import { ConfirmationModalLayout } from "@opal/layouts";
 import Text from "@/refresh-components/texts/Text";
 import { toast } from "@opal/layouts";
 import { useRouter } from "next/navigation";
-import {
-  deleteAgent,
-  toggleAgentFeatured,
-  toggleAgentListed,
-} from "@/lib/agents/svc";
+import { deleteAgent, featureAgent, listAgent } from "@/lib/agents/svc";
 import type { Agent } from "@/lib/agents/types";
 import type { Route } from "next";
 import ShareAgentModal from "@/sections/modals/ShareAgentModal";
@@ -128,7 +124,7 @@ export default function AgentRowActions({
                 aria-label="Re-list Agent"
                 onClick={() =>
                   handleAction(
-                    () => toggleAgentListed(agent.id, agent.is_listed),
+                    () => listAgent(agent.id, !agent.is_listed),
                     () => {}
                   )
                 }
@@ -189,7 +185,7 @@ export default function AgentRowActions({
                           setUnlistOpen(true);
                         } else {
                           handleAction(
-                            () => toggleAgentListed(agent.id, agent.is_listed),
+                            () => listAgent(agent.id, !agent.is_listed),
                             () => {}
                           );
                         }
@@ -286,7 +282,7 @@ export default function AgentRowActions({
               disabled={isSubmitting}
               onClick={() => {
                 handleAction(
-                  () => toggleAgentFeatured(agent.id, agent.is_featured),
+                  () => featureAgent(agent.id, !agent.is_featured),
                   () => setFeaturedOpen(false)
                 );
               }}
@@ -318,7 +314,7 @@ export default function AgentRowActions({
               disabled={isSubmitting}
               onClick={() => {
                 handleAction(
-                  () => toggleAgentListed(agent.id, agent.is_listed),
+                  () => listAgent(agent.id, !agent.is_listed),
                   () => setUnlistOpen(false)
                 );
               }}

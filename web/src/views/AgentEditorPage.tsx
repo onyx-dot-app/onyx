@@ -87,7 +87,7 @@ import { isDateInFuture } from "@/lib/dateUtils";
 import {
   deleteAgent,
   parseErrorDetail,
-  toggleAgentListed,
+  listAgent,
   updateAgentShares,
 } from "@/lib/agents/svc";
 import { useTierAtLeast } from "@/hooks/useTierAtLeast";
@@ -602,7 +602,7 @@ export default function AgentEditorPage({
     if (!existingAgent) return;
     setIsTogglingListed(true);
     try {
-      await toggleAgentListed(existingAgent.id, existingAgent.is_listed);
+      await listAgent(existingAgent.id, !existingAgent.is_listed);
       refreshAgent?.();
       await refreshAgents();
     } catch (error) {
