@@ -124,10 +124,10 @@ test.describe("Disable Default Agent Setting @exclusive", () => {
   test("new session button uses current agent when setting is enabled", async ({
     page,
   }) => {
-    // First enable the setting
-    await setDisableDefaultAssistantSetting(page, true);
-
-    // Navigate to app and create a new assistant to ensure there's one besides the default
+    // Create the agent before enabling the setting, not after. With the setting
+    // on and nothing but the default agent available, there is no agent to chat
+    // with and /app correctly refuses to render one - which puts the UI that
+    // creates agents out of reach.
     await page.goto("/app");
     const agentName = `Test Assistant ${Date.now()}`;
     await createAgent(page, {
@@ -145,6 +145,11 @@ test.describe("Disable Default Agent Setting @exclusive", () => {
     if (agentIdMatch) {
       createdAssistantId = Number(agentIdMatch[1]);
     }
+
+    await setDisableDefaultAssistantSetting(page, true);
+
+    // The helper leaves the browser on the admin page, which has no app sidebar.
+    await page.goto("/app");
 
     // Click the "New Session" button
     const newSessionButton = page.locator(
