@@ -192,8 +192,9 @@ def _authorize_group_token_rate_limit_write(
     allows many-to-many; defensively, if a limit ever spans groups (a mutation hits all of them),
     require the caller to manage every one, not just the group_id in the URL.
 
-    A default group carries no limits, so this path refuses it outright."""
-    assert_group_config_is_editable(db_session, group_id, "set token limits on")
+    A default group carries no limits, so this path refuses it outright — but only after
+    the scope gate, or the conflict would tell an out-of-scope caller which ids are
+    default groups."""
     assert_within_scope(
         user,
         db_session,
@@ -202,6 +203,7 @@ def _authorize_group_token_rate_limit_write(
         requested_group_ids=[group_id],
         is_non_public=True,
     )
+    assert_group_config_is_editable(db_session, group_id, "set token limits on")
     try:
         scope, group_ids = get_token_rate_limit_scope_and_group_ids(
             db_session, rate_limit_id
