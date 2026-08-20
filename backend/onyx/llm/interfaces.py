@@ -40,6 +40,9 @@ class LLMConfig(BaseModel):
     deployment_name: str | None = None
     custom_config: dict[str, str] | None = None
     max_input_tokens: int
+    # Here rather than in the chat loop, so every invoke path gets it.
+    reasoning_effort_default: ReasoningEffort | None = None
+    reasoning_effort_max: ReasoningEffort | None = None
     # This disables the "model_" protected namespace for pydantic
     model_config = {"protected_namespaces": ()}
 

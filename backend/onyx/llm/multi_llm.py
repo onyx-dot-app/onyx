@@ -57,6 +57,7 @@ from onyx.llm.models import (
     OPENAI_REASONING_EFFORT,
     NamedToolChoice,
     ToolChoiceOptions,
+    resolve_reasoning_effort,
 )
 from onyx.llm.request_context import get_llm_mock_response
 from onyx.llm.utils import build_litellm_passthrough_kwargs
@@ -412,6 +413,8 @@ class LitellmLLM(LLM):
         extra_headers: dict[str, str] | None = None,
         extra_body: dict | None = LITELLM_EXTRA_BODY,
         model_kwargs: dict[str, Any] | None = None,
+        reasoning_effort_default: ReasoningEffort | None = None,
+        reasoning_effort_max: ReasoningEffort | None = None,
     ):
         # Timeout in seconds for each socket read operation (i.e., max time between
         # receiving data chunks/tokens). This is NOT a total request timeout - a
@@ -431,6 +434,8 @@ class LitellmLLM(LLM):
         self._custom_llm_provider = custom_llm_provider
         self._max_input_tokens = max_input_tokens
         self._custom_config = custom_config
+        self._reasoning_effort_default = reasoning_effort_default
+        self._reasoning_effort_max = reasoning_effort_max
 
         self._api_surface = resolve_api_surface(model_provider, custom_config)
 
@@ -704,6 +709,14 @@ class LitellmLLM(LLM):
 
         if stream and not is_vertex_model_rejecting_stream_options:
             optional_kwargs["stream_options"] = {"include_usage": True}
+
+        # Settle before anything reads it, so every branch below and tracing
+        # see the same effort the provider will.
+        reasoning_effort = resolve_reasoning_effort(
+            reasoning_effort,
+            self.config.reasoning_effort_default,
+            self.config.reasoning_effort_max,
+        )
 
         # Note, there is a reasoning_effort parameter in LiteLLM but it is completely jank and does not work for any
         # of the major providers. Not setting it sets it to OFF.
@@ -1030,6 +1043,8 @@ class LitellmLLM(LLM):
             deployment_name=self._deployment_name,
             custom_config=self._custom_config,
             max_input_tokens=self._max_input_tokens,
+            reasoning_effort_default=self._reasoning_effort_default,
+            reasoning_effort_max=self._reasoning_effort_max,
         )
 
     def _uses_isolated_client(self) -> bool:
