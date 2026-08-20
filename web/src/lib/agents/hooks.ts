@@ -120,9 +120,16 @@ export function useAdminAgents(
 // ── Pinned agents ─────────────────────────────────────────────────────────────
 
 /**
- * Manages the user's pinned agent list with optimistic local state.
- * When the user has no explicit pins, falls back to featured agents
- * (excluding the default agent at id=0).
+ * The agents pinned to the sidebar, and the writes that reorder or toggle them.
+ *
+ * A user with no pins has none — there is no featured-agent fallback here.
+ * Featured agents reach a new user by seeding their pins at account creation,
+ * server-side, so by the time this reads them they are ordinary pins.
+ *
+ * Writes apply locally before the server confirms. That optimistic copy lives
+ * per hook instance rather than in shared state, so between a toggle and the
+ * user refresh that follows it, two components calling this hook can briefly
+ * disagree about what is pinned.
  */
 export function usePinnedAgents() {
   const { user, refreshUser } = useUser();
@@ -134,10 +141,7 @@ export function usePinnedAgents() {
 
   const serverPinnedAgents = useMemo(() => {
     if (agents.length === 0) return [];
-    const pinnedIds = user?.preferences.pinned_assistants;
-    if (pinnedIds === null || pinnedIds === undefined) {
-      return agents.filter((agent) => agent.is_featured && agent.id !== 0);
-    }
+    const pinnedIds = user?.preferences.pinned_assistants ?? [];
     return pinnedIds
       .map((id) => agents.find((agent) => agent.id === id))
       .filter((agent): agent is MinimalAgent => !!agent);
@@ -196,10 +200,10 @@ export function usePinnedAgents() {
  *    on screen came from the session's agent, and the URL's would mislabel
  *    them.
  * 2. the Assistant, when eligible — the plain-chat default
- * 3. the first pinned agent, which for a user with no pins of their own is the
- *    first *featured* agent. This is what "Set featured agents to help new
- *    users get started" means: with the Assistant disabled, steps 1 and 2 both
- *    miss and featured agents are what a new user lands on.
+ * 3. the first pinned agent. A new user's pins are seeded from the featured
+ *    agents at account creation, which is what "Set featured agents to help new
+ *    users get started" means — by the time this runs they are ordinary pins.
+ *    A user who has unpinned everything has nothing here and falls to step 4.
  * 4. anything eligible
  *
  * "Always Start with an Agent" (`disable_default_assistant`) is a constraint,
